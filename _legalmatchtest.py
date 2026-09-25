@@ -164,11 +164,11 @@ class DeedPlacementTests(unittest.TestCase):
     def test_condo_unit_building_and_phase(self):
         unit = dict(sub='SAMPLE TOWERS CONDO', legal='CONDO UNIT NO 104 BLDG 7', block='', plat='11542/2022')
         spaced = dict(unit, legal='CONDO UNIT PH 07 BLDG 7')
-        self.assertEqual(title([mortgage(**unit), rec('7', '6/1/2023', 'A', 'B', **unit)])['legal_matched_deeds'], ['7/1'])
-        self.assertEqual(title([mortgage(**spaced), rec('7', '6/1/2023', 'A', 'B', **spaced)])['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(title(folio_pair(**unit) + [rec('7', '6/1/2023', 'A', 'B', **unit)])['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(title(folio_pair(**spaced) + [rec('7', '6/1/2023', 'A', 'B', **spaced)])['legal_matched_deeds'], ['7/1'])
         # 'PH07' and 'PH 07' are one unit written two ways: a person decides, and it is never
         # reported as a different parcel (which would drop it from the conveyance warning).
-        got = title([mortgage(**spaced), rec('7', '6/1/2023', 'A', 'B', **dict(unit, legal='CONDO UNIT PH07 BLDG 7'))])
+        got = title(folio_pair(**spaced) + [rec('7', '6/1/2023', 'A', 'B', **dict(unit, legal='CONDO UNIT PH07 BLDG 7'))])
         self.assertEqual(got['unanchored_deeds'][0]['status'], 'legal_description_match_required')
         self.assertIn('differ only in spacing', got['unanchored_deeds'][0]['legal_match']['reason'])
         for legal, status in (('CONDO UNIT NO 105 BLDG 7', 'legal_description_differs'),
@@ -216,18 +216,28 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['possible_later_conveyances'], ['7/1'])
         self.assertEqual(got['current_deed_status'], 'possibly_conveyed_later')
 
-    def test_a_placement_resting_on_one_index_row_says_so(self):
+    def test_one_folio_record_alone_never_places_a_deed_either(self):
+        # Nothing downstream gates on how a deed was placed: its grantee is contacted like any
+        # owner. One index row is one keystroke, so it raises the question and a person answers.
         rows = [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
-        self.assertTrue(any('only one record filed under this folio states' in g
-                            for g in title(rows)['gaps']))
-        corroborated = folio_pair() + rows[1:]
-        self.assertFalse(any('only one record filed under this folio states' in g
-                             for g in title(corroborated)['gaps']))
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], [])
+        self.assertIn('only one record', got['unanchored_deeds'][0]['legal_match']['reason'])
+        self.assertEqual(title(folio_pair() + rows[1:])['legal_matched_deeds'], ['7/1'])
 
     def test_the_same_legal_written_two_ways_is_still_one_yardstick(self):
-        rows = [mortgage(), mortgage(block='012', plat='053-0900'),
+        rows = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE',
+                               block='012', plat='053-0900'),
                 rec('7', '6/1/2023', 'A', 'B')]
         self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+
+    def test_one_instrument_returned_twice_is_not_two_records_agreeing(self):
+        self.assertIs(T.parcel_legal_reference([mortgage(), dict(mortgage())], FOLIO)[0]['corroborated'], False)
+        self.assertIs(T.parcel_legal_reference(folio_pair(), FOLIO)[0]['corroborated'], True)
+
+    def test_a_unit_written_as_two_numbers_settles_nothing(self):
+        for legal in ('CONDO UNIT NO 104 & 105 BLDG 7', 'CONDO UNIT NO 10 5'):
+            self.assertTrue(T.index_legal(rec('1', '', '', '', legal=legal, block=''))['unparsed'], legal)
 
     def test_a_lot_with_no_block_on_either_side_names_no_parcel(self):
         got = title([mortgage(block=''), rec('7', '6/1/2023', 'A', 'B', block='')])
@@ -294,12 +304,12 @@ class PresentTitleTests(unittest.TestCase):
         self.assertTrue(any('every deed party was recovered' in g and 'official_records/7-1' in g
                             for g in title(rows)['gaps']))
 
-    def test_present_title_holds_a_deed_placed_on_a_single_index_row(self):
+    def test_present_title_holds_a_deed_no_one_could_place(self):
         thin = MPT.present_title({'title_parties': title(
             [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')])})
-        self.assertIs(thin['ownership']['legal_description_corroborated'], False)
-        self.assertTrue(any('only one record filed under the folio states' in h
-                            for h in thin['held_because']))
+        self.assertIsNone(thin['ownership']['legal_description_corroborated'])
+        self.assertEqual(thin['ownership']['legal_description_match_required'], ['7/1'])
+        self.assertTrue(any('need legal-description matching' in h for h in thin['held_because']))
 
 
 if __name__ == '__main__':

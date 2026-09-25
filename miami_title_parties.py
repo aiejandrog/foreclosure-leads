@@ -408,6 +408,11 @@ def _parse_body(body, out):
                 return False
             out['block'] = out['block'] or in_text
         else:
+            if re.fullmatch(r'\d+\s+\d+', found.get('unit') or ''):
+                # 'UNIT 104 105' (the index writes '104 & 105', and the punctuation is gone by
+                # here) is units 104 and 105, or unit 104105 with a stray space, and the index
+                # does not say which. Either reading can rule a real conveyance out.
+                return False
             out.update({k: v for k, v in found.items() if v})
         return True
     return False
@@ -437,8 +442,10 @@ def parcel_legal_reference(models, folio):
         legal = index_legal(model)
         if not legal or legal['see_document'] or legal['unparsed'] or not _kind(legal):
             continue
-        found.setdefault(_signature(legal), (legal, []))[1].append(
-            '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE')))
+        book_page = '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE'))
+        records = found.setdefault(_signature(legal), (legal, []))[1]
+        if book_page not in records:      # the same instrument can come back twice in one search
+            records.append(book_page)
     if not found:
         return None, 'no record filed under this folio carries a complete index legal description'
     if len(found) > 1:
@@ -471,12 +478,15 @@ def compare_legal(reference, legal, reference_gap=None):
     block, or the condo unit with its building and phase, agree exactly. 'differs' only on a
     positive disagreement. Everything else is 'needs_person', with the reason."""
     def result(verdict, why, basis=None):
-        if verdict == 'differs' and not (reference or {}).get('corroborated'):
-            # One index record is one clerk keystroke. It may raise the question, but it may not
-            # answer it against the deed: ruling a deed out drops it from the warning that the
-            # owner may already have conveyed, and that warning is the expensive one to lose.
+        if verdict in ('differs', 'matched') and not (reference or {}).get('corroborated'):
+            # One index record is one clerk keystroke, and nothing downstream gates on how a deed
+            # was placed: its grantee is contacted like any owner, and a deed ruled out drops from
+            # the warning that the owner may already have conveyed. Neither is worth one typo, so
+            # a single record raises the question and a person answers it.
             verdict, why = 'needs_person', ('only one record filed under this folio carries a '
-                                            'legal description, and it disagrees: %s' % why)
+                                            'legal description%s' % (': ' + why if why else
+                                                                     ', and it agrees: ' + (basis or '')))
+            basis = None
         return {'verdict': verdict, 'reason': why, 'basis': basis,
                 'reference_record': (reference or {}).get('from_record'),
                 'deed_index_legal': ' / '.join(x for x in ((legal or {}).get('subdivision'),
