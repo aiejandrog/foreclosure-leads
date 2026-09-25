@@ -114,8 +114,12 @@ def _iso_date(us):
     return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
 
 _BKSTART = re.compile(r'suggestion of bankruptcy|notice of bankruptcy', re.I)   # a new petition, not the stay acting
-_BKSTAYREL = re.compile(r'relief from (?:the )?(?:automatic )?stay|lift\w* (?:the )?(?:automatic )?stay|'
-                        r'stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', re.I)
+# Stay relief with no bankruptcy word: "relief from stay" and anything naming the AUTOMATIC stay.
+# A bare "Order Lifting Stay" is left out: the state court stays its own case too (mediation,
+# abatement), and lifting that says nothing about a bankruptcy.
+_BKSTAYREL = re.compile(r'relief from (?:the )?(?:automatic )?stay|'
+                        r'(?:lift|terminat|annul|vacat)\w* (?:of )?(?:the )?automatic stay|'
+                        r'automatic stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', re.I)
 _BKREINSTATE = re.compile(r'reinstat', re.I)       # only ever read on a line already about a bankruptcy
 
 def _bk_lines(dks):
@@ -140,7 +144,7 @@ def _bk_lines(dks):
             continue
         if _BKREINSTATE.search(tx):
             opens.append((iso, nums, False))           # the case is back: its stay is live again
-        elif _BKCLOSE.search(tx):
+        elif _BKCLOSE.search(tx) or _BKSTAYREL.search(tx):
             closes.append((iso, nums))
         else:
             opens.append((iso, nums, bool(_BKSTART.search(t))))  # 'CANCELLED PER BANKRUPTCY' = the stay acting

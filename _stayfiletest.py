@@ -278,6 +278,10 @@ try:
     check('a MORTGAGE reinstatement is not a bankruptcy',
           _stay({'docketDescrition': 'Emergency Motion to Cancel Sale', 'eventDate': '09/24/2026',
                  'comments': 'reinstatement amount 230283.71'}) == (False, '', ''))
+    check("lifting the state court's own stay (mediation, abatement) never ends a bankruptcy stay",
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Lifting Stay of Proceedings'))[0] is True)
+    check('an order terminating the automatic stay ends it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Terminating Automatic Stay'))[0] is False)
     check('relief from the automatic stay still ends it with no bankruptcy word on the line',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
     # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to
