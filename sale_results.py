@@ -43,6 +43,7 @@ Run:  python sale_results.py                      # window: sales in the last 7 
 """
 import argparse
 import datetime
+import functools
 import glob
 import json
 import os
@@ -136,45 +137,59 @@ def _date_spans(text):
 
 # A docket line can name dates that are not the sale: a notice of sale reciting the surplus-claim
 # deadline ('... SURPLUS CLAIMS MUST BE FILED BY 12/01/2026'), an objection deadline, a hearing
-# set or continued. Taking the latest date on the line as the sale date pushed a sale days away
-# months out, which dropped it off the urgent lane and out of Call Mode.
+# set or continued. Taking the latest date on the line as the new sale date pushed a sale days
+# away months out, which dropped it off the urgent lane and out of Call Mode.
 #
-# The rule is deliberately narrow, so everything else reads exactly as before: a date is dropped
-# only when the words before it (back to the previous date, within its own part of the line) hold
-# a claim / surplus / objection / hearing / deadline word and no sale-SETTING phrase, in either
-# order ('RESET PER HEARING TO 10/26' and 'HEARING HELD; SALE RESET FOR 10/26' are both a sale).
-# A setting phrase is the shape a new sale date is written in ('Sale Date:', 'SALE OF', 'RESET
-# ... TO', 'NEW SALE', 'RESALE'), never a bare 'the sale': the surplus sentence talks about the
-# sale ('... WITHIN 60 DAYS AFTER THE SALE, 11/30/2026') without setting one. Known ambiguity, left
-# on the old side: 'HEARING RESET TO 11/05' keeps its date, because 'CANCELLED PER HEARING, RESET TO
-# 11/09' is written the same way and is a sale.
+# Two readings per date, both kept narrow so the clerk's own wording reads as before:
+#   bound     the words right before it set a sale: 'Sale Date:', 'SALE OF', 'SALE WILL BE HELD
+#             ON', 'NEW SALE', 'RESALE', 'RESET/RESCHEDULED ... TO/FOR' ('the [judicial] sale' is
+#             not one: the surplus sentence says 'AFTER THE SALE, 11/30' and 'THE SALE DATE, 11/30').
+#   deadline  its sentence (between '.' / ';' marks, before AND after the date) holds a claim,
+#             surplus, objection, hearing or deadline word.
+# A date is a sale date unless it is a deadline date that is not bound. A date with neither
+# reading is kept, exactly as before ('RESCHEDULED DUE TO BANKRUPTCY 11/09/2026').
 _DEADLINE_WORD = re.compile(r'\bclaim(?:s|ed|ing|ant|ants)?\b|\bsurplus\b|\bdeadlines?\b|'
                             r'\bhearings?\b|\bobjections?\b', re.I)
-_SETS_SALE = re.compile(r'\bsale\s+(?:date|of|on|set|scheduled|for|to)\b|\bnew\s+sale\b|\bre-?sale\b|'
-                        r'\breset\b|\breschedul|\bauction\s+(?:date|of|on|for)\b', re.I)
+_BOUND = re.compile(
+    r'(?:(?P<sale>\b(?:re-?)?sale\b)(?:\s+date)?(?:\s+(?:of|on|is|to|for|set\s+for|'
+    r'(?:will\s+be\s+)?held\s+on|re(?:set|scheduled)\s+(?:to|for)))?'
+    r'|\bnew\s+sale(?:\s+date)?'
+    r'|(?<!hearing )(?<!hearings )(?<!objection )(?<!objections )(?<!deadline )(?<!deadlines )(?<!claim )(?<!claims )'
+    r'\b(?:reset|rescheduled?)\b[^.;]{0,40}?\b(?:to|for|on)'
+    r')[\s:\[\(\-]*$', re.I)
+_THE_SALE = re.compile(r'\bthe\s+(?:[a-z]+\s+)?$', re.I)
+_SENTENCE = re.compile(r'[.;]')
 
 
-def _line_dates(*parts):
-    """(sale dates, every date) written in these parts of a docket line (description, comment), in
-    reading order. Each part is read on its own, so a docket title says nothing about a date in the
-    comment. See _DEADLINE_WORD."""
+@functools.lru_cache(maxsize=4096)
+def _line_dates(desc, cmt=''):
+    """(sale dates, every date) written on a docket line, in reading order. Description and comment
+    are read on their own, so a docket title ('... and Certificate of Service') says nothing about a
+    date in the comment. See _DEADLINE_WORD / _BOUND."""
     keep, every = [], []
-    for text in parts:
-        text = text or ''
+    for text in (desc or '', cmt or ''):
         prev_end = 0
         for start, end, d in _date_spans(text):
-            ctx = text[prev_end:start]
-            prev_end = end
             every.append(d)
-            if _DEADLINE_WORD.search(ctx) and not _SETS_SALE.search(ctx):
+            ctx = text[prev_end:start]
+            bound = _BOUND.search(ctx)
+            if bound and bound.group('sale') and _THE_SALE.search(ctx[:bound.start('sale')]):
+                bound = None             # 'AFTER THE (JUDICIAL) SALE, 11/30' talks about the sale
+            prev_end = end
+            cut = [m.end() for m in _SENTENCE.finditer(text, 0, start)]
+            nxt = _SENTENCE.search(text, end)
+            sentence = text[cut[-1] if cut else 0:start] + ' ' + text[end:nxt.start() if nxt else len(text)]
+            if _DEADLINE_WORD.search(sentence) and not bound:
                 continue
             keep.append(d)
     return keep, every
 
 
-def _sale_dates_in(*parts):
-    """The dates on a docket line that name a SALE (see _line_dates)."""
-    return _line_dates(*parts)[0]
+def _cancelled_after(text, day):
+    """True when the line says cancel/postpone AFTER its last mention of `day` ('SALE OF 09/28/2026
+    CANCELLED'), as opposed to before it ('08/17/2026 CANCELLED AND RESET FOR 09/28/2026')."""
+    ends = [e for _s, e, d in _date_spans(text) if d == day]
+    return bool(ends) and bool(re.search(r'cancel|postpon', text[ends[-1]:], re.I))
 
 
 def _money(text):
@@ -272,7 +287,10 @@ def classify(dockets, sale, today=None, listed=None):
         # ('Order Cancelling Foreclosure Sale :: Sale Date: AUGUST 17, 2026 AND RESET FOR SEPTEMBER
         # 28, 2026' SET the 09-28 sale; a line naming this date AND a later one cancelled it.)
         _ds, _all = _line_dates(desc, cmt)
-        if (sale in _ds and not any(x > sale for x in _ds) and d < sale and not is_motion
+        # (a hearing or claim deadline later on the line does not make it a cancellation, but
+        # 'SALE OF <this date> CANCELLED' does)
+        if (sale in _ds and not any(x > sale for x in _ds) and not _cancelled_after(cmt, sale)
+                and d < sale and not is_motion
                 and (_RESET.search(t) or _NOTICE_SALE.search(desc))):
             cancel, new_date, pending = None, None, []
             continue
@@ -329,8 +347,7 @@ def classify(dockets, sale, today=None, listed=None):
         if _CANCEL.search(t) and d <= sale + datetime.timedelta(days=1):
             # a line whose only dates are a hearing or a deadline still says which sale it was
             # about when those dates are all earlier than this one, as it did before the filter
-            _cd = _ds or _all
-            if _cd and sale not in _cd and not any(x > sale for x in _cd):
+            if _all and sale not in _all and not any(x > sale for x in _all):
                 continue                 # it names an earlier sale date, not this one
             cancel = (d, desc, cmt)
             pending = []                 # the ask was granted (or the clerk pulled the sale anyway)
@@ -364,7 +381,9 @@ def classify(dockets, sale, today=None, listed=None):
             if _all:
                 _setting.append((d, max(_ds) if _ds else None))
         if _setting:
-            _last = max(_setting, key=lambda x: x[0])
+            # same-day ties: a line naming a sale date outranks one naming only a deadline, so the
+            # verdict does not depend on how the feed orders one day's entries
+            _last = max(_setting, key=lambda x: (x[0], x[1] is not None, x[1] or x[0]))
             if _last[1] and _last[1] > sale:
                 cancel, new_date = (_last[0], 'docket sets a later sale date', ''), _last[1]
                 res['ev'].append({'d': _last[0].isoformat(), 'x': 'newest sale-setting line names %s' % _last[1].strftime('%m/%d/%Y')})
