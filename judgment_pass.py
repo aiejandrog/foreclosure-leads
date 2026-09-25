@@ -73,20 +73,20 @@ def _with_cached_ocr(row, base):
         return row
     try:
         digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-    except OSError:
+    except (OSError, TypeError):
         # The stored PDF is not reachable here (a report run on another machine): the free OCR
         # cannot be looked up, so amount pages may be missing. Marked, never silent.
-        return dict(row, _ocr_unreachable=True)
+        return dict(row, _ocr_unreachable='pdf')
     try:
         saved = json.loads((Path(base) / 'timeline-ocr' / (digest + '-ocr300-v1.json'))
                            .read_text(encoding='utf-8'))
     except (OSError, ValueError):
         # No cache means the pass never OCR'd it, so OCR-only amount pages are unknown here.
-        return dict(row, _ocr_unreachable=True)
+        return dict(row, _ocr_unreachable='cache')
     row = copy.deepcopy(row)
     if any(str(p.get('page')) not in (saved.get('pages') or {}) for p in targets):
         # supplement() checkpoints page by page: a pass killed mid-document leaves a partial cache.
-        row['_ocr_unreachable'] = True
+        row['_ocr_unreachable'] = 'cache'
     for page in (row.get('reading') or {}).get('pages', []):
         got = (saved.get('pages') or {}).get(str(page.get('page')))
         if got:
@@ -211,7 +211,13 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         docket_mtime = (Path(base) / 'inventory.json').stat().st_mtime
     except OSError:
         docket_mtime = None
-    if timeline is not None and timeline_mtime is not None and docket_mtime is not None \
+    if timeline is None:
+        # Nothing read the judgment bodies or checked their attachments, so no target the docket
+        # index alone suggests is a finding. The pass builds it.
+        out.update(state='timeline_missing', detail='no readable timeline on disk: run the pass '
+                   'for this case')
+        return out
+    if timeline_mtime is not None and docket_mtime is not None \
             and timeline_mtime < docket_mtime:
         # The docket was refreshed after the timeline was built (a rebuild that failed part-way):
         # its controlling judgment and checks may predate a new vacatur or satisfaction.
@@ -251,7 +257,7 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                 r'UncertainPaidCall|APIStatus|APIConnection|RateLimit|Timeout|overloaded|'
                 r'InternalServer|ServiceUnavailable|Connection|Error code: (?:429|5\d\d)', reason):
             stuck_pages.setdefault(ref, set()).add(gap.get('page'))
-        elif re.search(r'budget|cap or reader stop|paid_read_not_selected|NotConfigured|'
+        elif re.search(r'budget|cap or reader stop|NotConfigured|'
                        r'not configured|ANTHROPIC_API_KEY|SDK is not installed|Authentication|'
                        r'PermissionDenied|Error code: 40[13]|PyMuPDF is not installed', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
@@ -279,7 +285,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         detail = DS.pipeline_load(Path(base) / key) or {}
         # Amount pages the free OCR found after the purchase are new pages to buy.
         fresh = set(pages) - set(detail.get('selected_pages') or pages)
-        return len(((rebuy.get(ref) or set()) | fresh) - (stuck_pages.get(ref) or set()))
+        # A capped page the current OCR no longer selects is not one the reader would buy.
+        return len((((rebuy.get(ref) or set()) & set(pages)) | fresh)
+                   - (stuck_pages.get(ref) or set()))
 
     need = []          # (is_target, pages) for every amount-bearing row with pages left to buy
     target_amount_rows = 0
@@ -304,8 +312,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                           if str(g.get('entry_id') or '') == target})
     # Only the judgment's own documents decide a verdict. Another filing without its OCR can hide
     # pages the reader buys first, so it only makes the price a floor, and the note says so.
-    if any(r.get('_ocr_unreachable') for r in order + held
-           if str(r.get('entry_ref') or '') == target):
+    why_unseen = {r.get('_ocr_unreachable') for r in order + held
+                  if str(r.get('entry_ref') or '') == target} - {None, False}
+    if why_unseen:
         out['ocr_unreachable'] = True
         # The judgment's own OCR-only pages are unseen, so both of its counts are floors.
         out['price_is_floor'] = out['whole_case_is_floor'] = True
@@ -321,10 +330,14 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             notes.append('free OCR missing for a filing read before the judgment: its pages are not '
                      'in the price, so pages to the judgment is a floor')
     if out.get('ocr_unreachable'):
-        notes.append('the free OCR for a judgment document is not reachable here (stored PDF or '
-                     'its OCR cache missing), so OCR-only amount pages are unknown: on another '
-                     'machine, report from the pass machine; on the pass machine, the stored '
-                     'PDF is missing and needs downloading again')
+        if 'pdf' in why_unseen:
+            notes.append('a judgment document\'s stored PDF is not reachable here, so its '
+                         'OCR-only amount pages are unknown: report from the pass machine; if this '
+                         'is the pass machine, the PDF needs downloading again')
+        if 'cache' in why_unseen:
+            notes.append('the pass has not OCR\'d every page of a judgment document (it arrived '
+                         'after the case was built, or a pass stopped mid-document): the next '
+                         'pass more than 20h after this case\'s last build fills it in')
     if any(t for t, _ in need):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
@@ -349,11 +362,6 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         # page of it is unread, and the timeline has no gap on it. One total agreeing while
         # another fails, or a judgment read with no total at all, is not this.
         out['state'] = 'verified'
-        if timeline is None:
-            # Nothing read the judgment's bodies or checked its attachments: no verdict, whatever
-            # evidence an earlier run left on disk.
-            out['state'] = 'timeline_missing'
-            notes.append('no timeline on disk: run the pass for this case')
     elif target_amount_rows:
         out['state'] = 'read_not_verified'
         if any(c.get('ok') for c in target_checks):
@@ -434,7 +442,10 @@ def plan(runner, entries, today, log):
         case = entry['case']
         try:
             tpath = timeline_path(runner, case)
-            timeline = DS.pipeline_load(tpath)
+            try:
+                timeline = DS.pipeline_load(tpath)
+            except ValueError:            # a truncated write: no timeline, not an unreadable case
+                timeline = None
             row = assess(case, DS.pipeline_folder(runner.COUNTY, case), timeline, today.isoformat(),
                          tpath.stat().st_mtime if timeline is not None else None)
         except Exception as exc:                  # one unreadable case never costs the report
@@ -443,8 +454,7 @@ def plan(runner, entries, today, log):
         auction = _auction(entry)
         row['sale'] = auction.isoformat() if auction else None
         err_at = (log.get('error_at') or {}).get(case)
-        rebuilt = (err_at is not None and row.get('state') != 'timeline_missing'
-                   and _mtime(timeline_path(runner, case)) > err_at)
+        rebuilt = err_at is not None and _mtime(timeline_path(runner, case)) > err_at
         if case in (log.get('errors') or {}) and not rebuilt:
             # Another tool (run_documents --backfill --timeline) may rebuild the case later.
             row['pass_error'] = log['errors'][case]

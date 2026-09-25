@@ -50,7 +50,12 @@ class Assess(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    NO_TIMELINE = object()
+
     def run_assess(self, docs, timeline=None):
+        # A built timeline with no controlling judgment unless a test gives one.
+        timeline = {'judgments': {}} if timeline is None else timeline
+        timeline = None if timeline is self.NO_TIMELINE else timeline
         with mock.patch('document_prioritizer.prioritize', return_value=_plan(docs)):
             return JP.assess(CASE, self.base, timeline, '2026-09-25')
 
@@ -107,12 +112,12 @@ class Assess(unittest.TestCase):
         # the later one vacated: the earlier operative one is the target
         with mock.patch('document_prioritizer.prioritize', return_value=_plan(
                 docs, {'4': ('operative', 'judgment'), '9': ('vacated', 'judgment')})):
-            got = JP.assess(CASE, self.base, None, '2026-09-25')
+            got = JP.assess(CASE, self.base, {'judgments': {}}, '2026-09-25')
         self.assertEqual(got['target_entry'], '4')
         # every judgment vacated: no target at all, never 'verified' on a dead one
         with mock.patch('document_prioritizer.prioritize', return_value=_plan(
                 docs, {'4': ('vacated', 'judgment'), '9': ('satisfied', 'judgment')})):
-            got = JP.assess(CASE, self.base, None, '2026-09-25')
+            got = JP.assess(CASE, self.base, {'judgments': {}}, '2026-09-25')
         self.assertEqual(got['state'], 'no_operative_judgment')
 
     def test_every_document_of_the_target_counts(self):
@@ -206,7 +211,7 @@ class Assess(unittest.TestCase):
         ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
                'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
         with mock.patch('judgment_money.verify_document', return_value=ok):
-            got = self.run_assess([('9', 'final_judgment', True, [])])
+            got = self.run_assess([('9', 'final_judgment', True, [])], self.NO_TIMELINE)
         self.assertEqual(got['state'], 'timeline_missing')
 
     def test_rejected_document_stops_the_whole_document(self):
@@ -246,7 +251,7 @@ class Assess(unittest.TestCase):
         plan = _plan([('9', 'final_judgment', True, [])])
         plan['judgments']['controlling_entry'] = '9'
         with mock.patch('document_prioritizer.prioritize', return_value=plan):
-            got = JP.assess(CASE, self.base, None, '2026-09-25')
+            got = JP.assess(CASE, self.base, {'judgments': {}}, '2026-09-25')
         # the plan's reconciliation is docket-index metadata: it never establishes a controlling one
         self.assertEqual(got['target_basis'], 'latest_operative')
         self.assertIn('no controlling judgment established', got['detail'])
@@ -435,6 +440,26 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])],
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual((got['state'], got['pages_to_judgment']), ('judgment_held_by_docket_plan', 0))
+
+    def test_capped_page_no_longer_selected_is_not_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')     # current amount pages: 1 and 2
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Amount page not read; cap or reader stop'},
+                                        {'page': 3, 'reason': 'Amount page not read; cap or reader stop'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['pages_to_judgment'], 1)
+
+    def test_corrupt_timeline_is_missing_not_unreadable(self):
+        runner = mock.Mock(COUNTY='MIAMI-DADE')
+        tpath = self.base / 't.json'
+        tpath.write_text('{')
+        with mock.patch.object(JP, 'timeline_path', return_value=tpath), \
+                mock.patch.object(JP, 'evidence_rate', return_value=(None, 0)), \
+                mock.patch('document_store.pipeline_folder', return_value=str(self.base)), \
+                mock.patch('document_prioritizer.prioritize',
+                           return_value=_plan([('9', 'final_judgment', True, [])])):
+            rows, _, _ = JP.plan(runner, [{'case': CASE}], date(2026, 9, 25), {})
+        self.assertEqual(rows[0]['state'], 'timeline_missing')
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [
