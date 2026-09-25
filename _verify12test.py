@@ -606,6 +606,45 @@ _fd20 = CD._b({'conf': 'ok', 'ftype': 'MORTGAGE', 'first_est': 300000, 'liens': 
 check("dossier b: an old chain with no stored judgment does not claim the listing has none",
       _fd20['basis'] == 'the judgment was not stored with this chain', _fd20)
 
+# review round 21
+_wv = RL.analyze([deed, rec('LIEN', '5/5/2019', '31100', '1', 5000, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('WAIVER OF LIEN', '3/3/2020', '31300', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('RELEASE OF LIEN', '9/9/2021', '32000', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a City waiver beside the City's lien does not stop the lien taking its release",
+      _wv['code_open'] == 0 and [o['st'] for o in _wv['other'] if o['doc'] == 'LIEN'] == ['RELEASED'], _wv['other'])
+_pw = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '5', 5000, 'TESTER OWNER', first='CAPITAL ONE BANK USA NA',
+                            folio='', subdiV_NAME=''),
+                  rec('SATISFACTION OF JUDGMENT', '9/9/2023', '34000', '5', 0, 'TESTER OWNER', first='CAPITAL ONE BANK USA NA',
+                      folio='', subdiV_NAME=''),
+                  rec('NOTICE - NOT', '4/4/2022', '33600', '23', 48000, 'OWNER TESTER', first='INTERNAL REVENUE SERVICE',
+                      folio='', subdiV_NAME=''),
+                  rec('CERTIFICATE OF RELEASE OF FEDERAL TAX LIEN', '6/6/2024', '34500', '2', 0, 'OWNER TESTER',
+                      first='INTERNAL REVENUE SERVICE', folio='', subdiV_NAME='')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a paid money judgment and a released federal tax lien, neither on a folio, are released by their own releases",
+      _pw['code_open'] == 0 and _pw['irs_open'] == 0, _pw['other'])
+_pn = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '5', 5000, 'TESTER OWNER', first='CAPITAL ONE BANK USA NA',
+                            folio='', subdiV_NAME=''),
+                  rec('SATISFACTION OF JUDGMENT', '9/9/2023', '34000', '5', 0, 'TESTER MARIA', first='CAPITAL ONE BANK USA NA',
+                      folio='', subdiV_NAME='')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a namesake's satisfaction off the parcel never frees the owner's money judgment", _pn['code_open'] == 5000, _pn['other'])
+_nm = RL._lay_lien_rows({'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 50, 'mtg_open_unpriced': 0,
+                         'liens': [{'d': '2/1/2008', 'amt': 300000, 'st': 'OPEN', 'bp': '26100/11'}]},
+                        {'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 10, 'other': [], 'mtg_open_unpriced': 1,
+                         'liens': [{'d': '2/1/2015', 'amt': 80000, 'st': 'OPEN', 'bp': '29000/5', '_dt': 'x'}]})
+check("a narrower re-read keeps the mortgages it found that the old search did not, and its unpriced count",
+      [l['bp'] for l in _nm['liens']] == ['26100/11', '29000/5'] and _nm['mtg_open_unpriced'] == 1
+      and _nm['surv'] == 80000 and '_dt' not in _nm['liens'][1] and ES.state_of(_nm) == 'unpriced', _nm)
+for _ix in ('PEREZ A', 'PEREZ ANTONIO'):
+    _mi = RL.analyze([deed, rec('NOTICE - NOT', '4/4/2022', '33600', '23', 48000, _ix, first='INTERNAL REVENUE SERVICE',
+                                folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOSE A PEREZ')
+    check("%r may be JOSE A PEREZ: the owner's own middle initial counts" % _ix, _mi['irs_open'] == 48000, _mi['other'])
+_mi = RL.analyze([deed, rec('NOTICE - NOT', '4/4/2022', '33600', '23', 48000, 'PEREZ MARIA', first='INTERNAL REVENUE SERVICE',
+                            folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOSE A PEREZ')
+check("'PEREZ MARIA' is still a namesake of JOSE A PEREZ", _mi['irs_open'] == 0, _mi['other'])
+
 # review round 17: an own claim the old total never held is not taken out of it
 _o = {}
 RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 3000},

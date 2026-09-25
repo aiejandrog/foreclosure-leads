@@ -292,6 +292,13 @@ def _lay_lien_rows(old, new):
     for k in ('second_fc', 'second_fc_unsure'):
         if new.get(k):
             out[k] = new[k]
+    # a re-read only ADDS: a mortgage the new read found that the old one did not is kept too
+    _have = {str(l.get('bp') or '') for l in out.get('liens') or [] if isinstance(l, dict)}
+    out['liens'] = list(out.get('liens') or []) + [
+        {k: v for k, v in l.items() if not k.startswith('_')} for l in new.get('liens') or []
+        if isinstance(l, dict) and l.get('bp') and str(l['bp']) not in _have
+        and str(l.get('st') or 'OPEN').upper() == 'OPEN']
+    out['mtg_open_unpriced'] = max(old.get('mtg_open_unpriced') or 0, new.get('mtg_open_unpriced') or 0)
     # the listing's judgment and whether the new search hit the county's cap describe this read too
     if new.get('judgment'):
         out['judgment'] = new['judgment']
@@ -822,7 +829,10 @@ def _owner_words(owner):
     if not sp[1]:
         return ('co', re.sub(r'[^A-Z0-9]', '', sp[0].upper()))
     given = re.findall(r'[A-Z0-9]+', sp[1].upper().replace("'", ''))    # MARIA-JOSE -> MARIA, as tokens split
-    return ('person', sp[0].upper().strip('.'), given[0], tuple(g for g in given if len(g) > 1)) if given else None
+    # split_owner drops single letters; the owner's own middle initial ('JOSE A PEREZ') is kept apart,
+    # so 'PEREZ A' or 'PEREZ ANTONIO' may still be this owner, never a namesake
+    inits = tuple(sorted({t for t in re.findall(r'[A-Z]+', owner.upper().replace("'", '')) if len(t) == 1}))
+    return ('person', sp[0].upper().strip('.'), given[0], tuple(g for g in given if len(g) > 1), inits) if given else None
 
 
 def _names_owner(party, owners, strict=False):
@@ -861,6 +871,9 @@ def _maybe_owner(party, owners):
         ok, rest = _surname_given(party, words)
         given = set(re.findall(r'[A-Z0-9]+', words[2].replace("'", ''))) | set(words[3] if len(words) > 3 else ())
         inits = {t for t in rest if len(t) == 1}
+        mids = set(words[4] if len(words) > 4 else ())
+        if ok and mids and ({t[:1] for t in rest} & mids):
+            return True                                     # the owner's middle initial, or a name it starts
         # any of the owner's given names (a middle name too: 'PEREZ ANTONIO' may be JOSE ANTONIO PEREZ)
         # or any of their initials
         if ok and (not rest or given & set(rest) or {g[:1] for g in given} & inits):
@@ -1141,16 +1154,21 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             return False
         _rel_seen.add(k)
         return True
+    def _rel_names_owner(r):
+        return _ow is not None and (_names_owner(r.get('firsT_PARTY'), _ow, strict=True)
+                                    or _names_owner(r.get('seconD_PARTY'), _ow, strict=True))
+    def _rel_here(r):
+        # on this folio, or in its subdivision AND naming the owner: a neighbour's is not ours
+        return (norm_folio(r.get('foliO_NUMBER', '')) == fol
+                or (_here(r) and (_ow is None or _rel_names_owner(r))))
+    # (date, parties, on this parcel?). One that is not on the parcel but names the owner strictly can
+    # free only a PERSON-WIDE lien (see the pairing below): a paid tax lien carries no folio either.
     unref_rel = [((_parse_recd((r.get('reC_DATE', '') or '')[:10])),
-                  {_pnorm(r.get('firsT_PARTY')), _pnorm(r.get('seconD_PARTY'))} - {''})
+                  {_pnorm(r.get('firsT_PARTY')), _pnorm(r.get('seconD_PARTY'))} - {''}, _rel_here(r))
                  for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
                  and re.search(r'LIEN|JUDG|WARRANT', (r.get('doC_TYPE', '') or '').upper())
                  and not re.search(r'MORTGAGE|PARTIAL', (r.get('doC_TYPE', '') or '').upper())
-                 and (norm_folio(r.get('foliO_NUMBER', '')) == fol           # on this folio, or in its
-                      or (_here(r) and (_ow is None                           # subdivision AND naming the
-                                        or _names_owner(r.get('firsT_PARTY'), _ow, strict=True)   # owner: a
-                                        or _names_owner(r.get('seconD_PARTY'), _ow, strict=True))))  # neighbour's
-                                                                                          # is not ours
+                 and (_rel_here(r) or _rel_names_owner(r))
                  and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())
                  and _first_copy(r)]
     other = []
@@ -1251,25 +1269,34 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # pair the releases that point nowhere with the liens of their own holder, one to one
     _used = set()                                           # a release frees one lien, whoever holds it
     for h in sorted({o['_holder'] for o in other if o['_holder']}):
-        mine = sorted((o for o in other if o['_holder'] == h and o['st'] == 'OPEN' and not o.get('own_case')
-                       and o['kind'] != 'lis_pendens' and _parse_recd(o['d'])),
+        # only rows that would be COUNTED: a waiver, a financing statement or a notice that is no claim
+        # never needs a release, and must not stop the holder's real lien from taking one
+        _all = sorted((o for o in other if o['_holder'] == h and o['st'] == 'OPEN' and not o.get('own_case')
+                       and o['kind'] != 'lis_pendens' and _parse_recd(o['d'])
+                       and not _NOT_CLAIM_DOC_RE.search(o['_doc'])
+                       and not (o['kind'] == 'other' and not _CLAIM_DOC_RE.search(o['_doc']))),
                       key=lambda o: _parse_recd(o['d']))
-        rels = sorted((d, k) for k, (d, ps) in enumerate(unref_rel) if d and h in ps and k not in _used)
-        if not mine or not rels:
-            continue
-        left, i, took = list(rels), 0, []
-        for o in mine:                                      # oldest lien takes the oldest release on/after it
-            j = next((k for k, (d, _) in enumerate(left) if d >= _parse_recd(o['d'])), None)
-            if j is None:
-                break
-            took.append(left.pop(j)[1]); i += 1
-        if i == len(mine):
-            _used.update(took)
-            for o in mine:
-                o['st'] = 'RELEASED'; o['released_by'] = 'unreferenced release, one per lien'
-        else:
-            for o in mine:
-                o['release_unmatched'] = len(rels)          # releases seen, too few to say which lien
+        # a lien on the parcel takes a release on the parcel; a person-wide one (a tax lien, a money
+        # judgment, no folio) also takes a release that names the owner, wherever it is indexed
+        for mine, ok in (([o for o in _all if o['anchor'] != 'person'], lambda p: p),
+                         ([o for o in _all if o['anchor'] == 'person'], lambda p: True)):
+            rels = sorted((d, k) for k, (d, ps, here) in enumerate(unref_rel)
+                          if d and h in ps and k not in _used and ok(here))
+            if not mine or not rels:
+                continue
+            left, i, took = list(rels), 0, []
+            for o in mine:                                  # oldest lien takes the oldest release on/after it
+                j = next((k for k, (d, _) in enumerate(left) if d >= _parse_recd(o['d'])), None)
+                if j is None:
+                    break
+                took.append(left.pop(j)[1]); i += 1
+            if i == len(mine):
+                _used.update(took)
+                for o in mine:
+                    o['st'] = 'RELEASED'; o['released_by'] = 'unreferenced release, one per lien'
+            else:
+                for o in mine:
+                    o['release_unmatched'] = len(rels)      # releases seen, too few to say which lien
     for row in other:
         row.pop('_holder', None)
         _full = row.pop('_doc', row['doc'])
