@@ -188,12 +188,13 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
 
-    def test_rejected_key_is_priced(self):
+    def test_rejected_key_is_not_priced(self):
+        # which call raised it is unknown; after a reservation the ledger refuses the page
         ref = _row(self.base, '9', '$1.00', 'j')
         _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'AuthenticationError: Error code: 401'}])
         with mock.patch('judgment_money.verify_document', return_value=[]):
             got = self.run_assess([('9', 'final_judgment', True, [])])
-        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('read_not_verified', 0))
 
     def test_stuck_page_on_the_judgment_blocks_verified(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -475,7 +476,7 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])],
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual(got['state'], 'read_not_verified')
-        self.assertIn('shows no printed total', got['detail'])
+        self.assertIn('no printed total was', got['detail'])
         self.assertNotIn('does not reproduce', got['detail'])
 
     def test_cache_entry_on_a_non_target_page_is_ignored(self):
@@ -593,6 +594,7 @@ class Assess(unittest.TestCase):
 
     def test_undated_final_judgment_is_held_not_absent(self):
         plan = _plan([('9', 'final_judgment', False, ['entry_date_unknown'])])
+        plan['documents'][0]['date'] = None
         plan['judgments'] = {'judgments': []}             # the reconciliation dropped it
         with mock.patch('document_prioritizer.prioritize', return_value=plan):
             got = JP.assess(CASE, self.base, {'judgments': {}}, '2026-09-25')
@@ -614,7 +616,38 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])],
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual(got['state'], 'read_not_verified')
-        self.assertIn('shows no printed total', got['detail'])
+        self.assertIn('no printed total was', got['detail'])
+
+    def test_future_dated_judgment_is_not_held(self):
+        plan = _plan([('9', 'final_judgment', False, ['future_entry_not_current_evidence'])])
+        plan['judgments'] = {'judgments': []}
+        with mock.patch('document_prioritizer.prioritize', return_value=plan):
+            got = JP.assess(CASE, self.base, {'judgments': {}}, '2026-09-25')
+        self.assertEqual(got['state'], 'no_judgment_on_docket')
+
+    def test_hold_wins_over_missing_ocr(self):
+        _row(self.base, '9', '$1.00', 'j')
+        path = next(p for p in self.base.glob('*.json') if len(p.stem) == 64)
+        row = json.loads(path.read_text()); row['manifest']['path'] = 'C:/elsewhere/doc.pdf'
+        path.write_text(json.dumps(row))
+        got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])],
+                              {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'judgment_held_by_docket_plan')
+
+    def test_document_without_amount_pages_is_outside_the_verdict(self):
+        # read_amounts, the timeline's own verifier, never loads its evidence either
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        row = {'source_ref': 'court:9:2', 'manifest': {'sha256': 'h9b'},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'no dollars'}]}}
+        (self.base / (hashlib.sha256(b'j2').hexdigest() + '.json')).write_text(json.dumps(row))
+        _buy(self.base, 'court:9:2', '9', gaps=[{'page': 1, 'reason': 'Vision returned unreadable'}])
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'verified')
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [

@@ -231,8 +231,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     recon = timeline.get('judgments') or plan.get('judgments')
     target, why = _target(recon, controlling)
     if target is None:
+        # Undated only: a judgment dated after as_of is not current, not held.
         held_fj = [d for d in plan['documents'] if d.get('kind') == 'final_judgment'
-                   and not d.get('eligible_for_acquisition')]
+                   and not d.get('eligible_for_acquisition') and not d.get('date')]
         if why == 'no_judgment_on_docket' and held_fj:
             # The reconciliation drops an undated final judgment; the docket plan holds it.
             fj = max(held_fj, key=lambda d: _entry_order(d['entry_id']))
@@ -254,18 +255,21 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     #   nothing releases a reservation whose call raised, so the next run's cached_read refuses
     #   that page as an UncertainPaidCall. The page needs a person, and so does an
     #   UncertainPaidCall itself. read_document carries on to the document's other pages.
-    # - The cap, the reader's stop, or a setup failure raised before any reservation (no key, no
-    #   SDK, a rejected key, no PDF renderer): paying on a fixed setup buys the page.
+    #   A rejected key or permission (401/403) counts here too: the message does not say whether
+    #   count_tokens or messages.create raised it, and under-pricing beats a read the ledger refuses.
+    # - The cap, the reader's stop, or a setup failure raised before any client call (no key, no
+    #   SDK, no PDF renderer): paying on a fixed setup buys the page.
     rebuy, stuck_docs, stuck_pages = {}, set(), {}
     for gap in bought['gaps']:
         ref, reason = gap.get('source_ref'), str(gap.get('reason') or '')
         if reason.startswith('Vision returned unreadable') or re.search(
                 r'UncertainPaidCall|APIStatus|APIConnection|RateLimit|Timeout|overloaded|'
-                r'InternalServer|ServiceUnavailable|Connection|Error code: (?:429|5\d\d)', reason):
+                r'InternalServer|ServiceUnavailable|Connection|Authentication|PermissionDenied|'
+                r'Error code: (?:40[13]|429|5\d\d)', reason):
             stuck_pages.setdefault(ref, set()).add(gap.get('page'))
         elif re.search(r'budget|cap or reader stop|NotConfigured|'
-                       r'not configured|ANTHROPIC_API_KEY|SDK is not installed|Authentication|'
-                       r'PermissionDenied|Error code: 40[13]|PyMuPDF is not installed', reason, re.I):
+                       r'not configured|ANTHROPIC_API_KEY|SDK is not installed|'
+                       r'PyMuPDF is not installed', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
         elif re.match(r'[A-Za-z_]\w*: ', reason):
             # Any other exception read_document caught per page ('TypeName: message'): it moves
@@ -356,8 +360,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                              + (' (another one does)' if any(c.get('ok') for c in target_checks)
                                 else ''))
         if unchecked:
-            out_notes.append('a document of the judgment was read and shows no printed total '
-                             'to check')
+            out_notes.append('a document of the judgment was read and no printed total was '
+                             'recognised on it to check')
         if t_stuck_pages:
             out_notes.append('a page could not be read (unreadable, a paid call that failed, '
                              'or an error that repeats); paying again does not re-read it')
@@ -402,14 +406,14 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             out['gaps_block_verified'] = True
             notes.extend(known)
             notes.append('a paid read alone will not verify it')
-    elif out.get('ocr_unreachable'):
-        # Without the free OCR, amount pages may be missing from every count below.
-        out['state'] = 'report_on_pass_machine'
-    elif held_unread:
+    elif held_unread:  # the hold blocks the read whatever the OCR shows
         # Part of the judgment carries amount pages the reader defers: never verified, never
         # priced. The fix is the docket entry.
         out['state'] = 'judgment_held_by_docket_plan'
         notes.insert(0, held_why() + ': unread amount pages the reader defers')
+    elif out.get('ocr_unreachable'):
+        # Without the free OCR, amount pages may be missing from every count below.
+        out['state'] = 'report_on_pass_machine'
     elif target_gaps:
         out['state'] = 'judgment_incomplete'
         notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
