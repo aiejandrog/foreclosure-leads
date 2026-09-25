@@ -103,23 +103,27 @@ def build_title_parties(models, documents, docket, folio):
     def day(value):
         return value.date() if value else None
     taken = {day(d['date_parsed']) for d in deeds}
-    # Verdicts are keyed by position, not by book and page: Miami-Dade indexes one deed as
-    # several rows when it carries several legals, so two candidates can share a source_ref and
-    # must not overwrite each other. Of those rows, one matching row places the deed; its
-    # siblings are then dropped rather than reported as a second deed at the same book and page.
-    verdicts = [None if conflict else compare_legal(reference, index_legal(model), reference_gap)
-                for model, _row, _printed, _own, conflict, _pages in candidates]
-    matched_refs = {row['source_ref'] for (_m, row, *_), v in zip(candidates, verdicts)
-                    if v and v['verdict'] == 'matched'}
+    # One instrument, however many index rows it has: Miami-Dade indexes a deed as several rows
+    # when it carries several legals, and two rows of one instrument are not two deeds. Each row
+    # is judged on its own, then the rows of an instrument collapse to one — the row that matched
+    # the parcel if any did, else the first — so a sibling row can neither be reported as a second
+    # deed at the same book and page nor make its own instrument's day ambiguous.
+    judged = [(c, None if c[4] else compare_legal(reference, index_legal(c[0]), reference_gap))
+              for c in candidates]
+    rows_by_ref = {}
+    for candidate, verdict in judged:
+        ref = candidate[1]['source_ref']
+        kept = rows_by_ref.get(ref)
+        if kept is None or ((kept[1] or {}).get('verdict') != 'matched'
+                            and (verdict or {}).get('verdict') == 'matched'):
+            rows_by_ref[ref] = (candidate, verdict)
+    judged = list(rows_by_ref.values())
     matched_days = {}
-    for ref in matched_refs:
-        when = day(next(row['date_parsed'] for _m, row, *_ in candidates if row['source_ref'] == ref))
-        matched_days[when] = matched_days.get(when, 0) + 1
-    placed = set()
-    for (model, row, printed, own_folio, conflict, pages), verdict in zip(candidates, verdicts):
+    for (_m, row, *_), verdict in judged:
+        if verdict and verdict['verdict'] == 'matched':
+            matched_days[day(row['date_parsed'])] = matched_days.get(day(row['date_parsed']), 0) + 1
+    for (model, row, printed, own_folio, conflict, pages), verdict in judged:
         ref = row['source_ref']
-        if ref in matched_refs and (verdict is None or verdict['verdict'] != 'matched'):
-            continue          # another index row for this same instrument matched the parcel
         if not conflict:
             if verdict['verdict'] == 'matched' and not row['date_parsed']:
                 verdict = dict(verdict, verdict='needs_person', basis=None,
@@ -132,8 +136,6 @@ def build_title_parties(models, documents, docket, folio):
                 verdict = dict(verdict, verdict='needs_person', basis=None,
                                reason='its legal description matches the parcel but another deed '
                                       'on the parcel is recorded the same day')
-            if verdict['verdict'] == 'matched' and ref in placed:
-                continue      # a sibling row for this instrument already placed it
             if verdict['verdict'] == 'matched':
                 # The clerk's own index puts this deed on the same lot/block/plat (or condo
                 # unit) as the records it filed under this parcel's folio. That is the check a
@@ -142,7 +144,6 @@ def build_title_parties(models, documents, docket, folio):
                             'folio; index names and bounded explicit-role extraction do not '
                             'establish that every deed party was recovered.' % (ref, verdict['basis']))
                 taken.add(day(row['date_parsed']))
-                placed.add(ref)
                 deeds.append(dict(row, anchored_by='legal_description', legal_match=verdict))
                 continue
         gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)

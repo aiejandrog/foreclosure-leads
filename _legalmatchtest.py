@@ -358,7 +358,26 @@ class DeedPlacementTests(unittest.TestCase):
     def test_a_duplicated_index_row_is_not_two_deeds_on_one_day(self):
         rows = folio_pair() + [rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
                                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
-        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(got['unanchored_deeds'], [])
+
+    def test_a_re_recorded_deed_does_not_question_itself(self):
+        # Grantor and grantee overlap on a correcting re-record, so a duplicate row left in the
+        # unanchored list would read as the owner conveying to someone after the current deed.
+        rows = folio_pair() + [rec('9', '5/1/2021', 'OWNER PERSON', 'OWNER PERSON'),
+                               rec('9', '5/1/2021', 'OWNER PERSON', 'OWNER PERSON')]
+        got = title(rows)
+        self.assertEqual(got['current_deed_candidate']['book_page'], '9/1')
+        self.assertEqual(got['current_deed_status'], 'candidate')
+        self.assertEqual(got['possible_later_conveyances'], [])
+
+    def test_sibling_rows_with_different_dates_collapse_to_the_one_that_matched(self):
+        rows = folio_pair() + [rec('9', '', 'O', 'B', legal='LOT 15'),
+                               rec('9', '5/1/2021', 'O', 'B')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['9/1'])
+        self.assertEqual(got['unanchored_deeds'], [])
 
     def test_disagreeing_folio_records_give_no_yardstick(self):
         rows = [mortgage(), rec('6', '1/1/2020', 'X', 'Y', FOLIO, 'MORTGAGE', legal='LOT 15'),
