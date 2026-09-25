@@ -14,15 +14,39 @@ from pathlib import Path
 
 import case_verdict as CV
 
+# The CLI is run as a subprocess, so the path must not depend on the working directory.
+MODULE = Path(CV.__file__).resolve()
+
+
+def judgment_row(entry_id='232820355', status='operative', satisfaction='no_satisfaction_found',
+                 role='judgment', reason=''):
+    # reconcile_judgments' real per-judgment shape (miami_case_timeline :677). `status` is not
+    # always 'operative': that function's `operative` list also holds 'partially_vacated', and
+    # `satisfaction` can be 'partially_satisfied'.
+    return {'entry_id': entry_id, 'date': '2026-08-14', 'title': 'FINAL JUDGMENT OF FORECLOSURE',
+            'role': role, 'status': status, 'by': [], 'satisfaction': satisfaction,
+            'reason': reason}
+
 
 def timeline(case, kind='judgment_entered', reason=None, controlling='232820355',
              controlling_reason='one operative judgment after amendments, vacaturs and satisfactions',
-             stay=None, history=(), checks=(), attachments=(), sale_held=None, gaps=()):
+             stay=None, history=(), checks=(), attachments=(), sale_held=None, gaps=(),
+             judgments=None, duplicates=(), sale_date=None, sale_outcome=None):
     status = {'kind': kind, 'evidence': [], 'reason': reason or ''}
+    if sale_date:
+        status['sale_date'] = sale_date
+    if sale_outcome:
+        status['sale_outcome'] = sale_outcome
+    # The producer always writes a row per final judgment beside `controlling_entry`; a fixture with
+    # an empty list is not a shape build_timeline can produce, and treating it as one is how this
+    # suite came to pass while `status`/`satisfaction` on the controlling judgment went unread.
+    rows = list(judgments) if judgments is not None else (
+        [judgment_row(controlling)] if controlling else [])
     return {'case': case, 'county': 'MIAMI-DADE', 'as_of': '2026-09-24',
             'status': status,
             'judgments': {'controlling_entry': controlling, 'controlling_reason': controlling_reason,
-                          'judgments': [], 'unmatched': []},
+                          'judgments': rows, 'unmatched': [],
+                          'docket_duplicates_inferred': list(duplicates)},
             'stay_in_effect': stay, 'stay_history': list(history),
             'sale_held': sale_held,
             'amount_vision': {'amount_checks': list(checks)},
@@ -93,8 +117,14 @@ class PilotVerdictTests(unittest.TestCase):
         # "conflicted; amount incomplete. Stay #93, no relief order found, vs amended judgment #140
         #  and sale notice #143 for 2026-09-28. $785,670.31 does not verify: the judgment's own
         #  printed interest subtotal $225,243.83 is $0.60 below its eight yearly rows."
+        # The producer does NOT write kind='sale_scheduled' here. miami_case_timeline :494 forces
+        # kind 'unclear' with this exact reason when an unresolved stay is followed by sale
+        # activity, which is how this case's contradiction actually reaches the file. The first
+        # version of this test asserted on a shape the pipeline cannot produce.
         r = CV.assess(timeline(
-            '2018-026274-CA-01', kind='sale_scheduled', controlling='232632335', stay=True,
+            '2018-026274-CA-01', kind='unclear', controlling='232632335', stay=True,
+            reason='Later foreclosure activity conflicts with an unresolved bankruptcy stay; no '
+                   'relief identified.',
             history=[{'entry_id': '93', 'event': 'stayed'}],
             # judgment_money's `difference` is signed: rows above minus the printed subtotal, so
             # this case's real output is -0.60, not 0.60 (_moneytest pins (30.0, 2, 30.6, -0.6)).
@@ -103,7 +133,7 @@ class PilotVerdictTests(unittest.TestCase):
                                              'difference': -0.60}])],
             attachments=[read_attachment('232632335')]))
         self.assertEqual(r['verdict'], 'conflicted')
-        self.assertTrue(any('stay is in effect while the docket shows a sale' in c
+        self.assertTrue(any('Later foreclosure activity conflicts' in c
                             for c in r['conflicts']), r['conflicts'])
         self.assertTrue(any('$225,243.83'.replace(',', '') in c.replace(',', '')
                             for c in r['conflicts']), r['conflicts'])
@@ -326,14 +356,30 @@ class AbsentEvidenceTests(unittest.TestCase):
                                    attachments=[read_attachment()]))
             self.assertEqual(r['verdict'], 'incomplete', kind)
 
-    def test_every_kind_on_the_allowlist_is_a_real_miami_case_timeline_kind(self):
-        # The allowlist is only safe while it matches the producer's vocabulary.
+    def test_every_kind_on_the_allowlist_is_one_miami_case_timeline_can_emit(self):
+        # The allowlist is only safe while it matches the producer's vocabulary. The first version
+        # of this test looked for MCT._TRANSITIONS, which does not exist (the mapping is a local
+        # named `statuses`), so it always fell through to grepping the source for the quoted string:
+        # a check that passes on an unrelated mention, depends on the working directory, and cannot
+        # see a kind the producer GAINED. _transition() is the producer, so ask it directly.
         import miami_case_timeline as MCT
-        known = set(MCT._TRANSITIONS.values()) if hasattr(MCT, '_TRANSITIONS') else None
-        if known is None:
-            source = Path('miami_case_timeline.py').read_text(encoding='utf-8')
-            known = {k for k in CV.SETTLED_KINDS + CV.SALE_KINDS if "'%s'" % k in source}
-            self.assertEqual(known, set(CV.SETTLED_KINDS + CV.SALE_KINDS))
+        docket_kinds = ('complaint', 'amended_complaint', 'final_judgment', 'notice_of_sale',
+                        'order_resetting_sale', 'order_cancelling_sale', 'suggestion_of_bankruptcy',
+                        'stay', 'notice_of_voluntary_dismissal', 'order_of_dismissal',
+                        'satisfaction', 'certificate_of_sale', 'certificate_of_title',
+                        'stay_reinstated', 'vacatur')
+        emitted = set()
+        for kind in docket_kinds:
+            change = MCT._transition({'kind': kind, 'entry_id': '1', 'date': '2026-01-01',
+                                      'operative_text': '', 'description': '', 'comments': '',
+                                      'sale_passages': [], 'calendar_event': False})
+            if change:
+                emitted.add(change['kind'])
+        self.assertIn('judgment_entered', emitted, 'this test no longer drives the producer')
+        self.assertEqual(set(CV.SETTLED_KINDS + CV.SALE_KINDS) - emitted, set(),
+                         'case_verdict vouches for a kind miami_case_timeline does not emit')
+        self.assertEqual(emitted - set(CV.SETTLED_KINDS) - {'unclear', 'active_pre_judgment'}, set(),
+                         'miami_case_timeline emits a kind case_verdict has never heard of')
         for kind in CV.SALE_KINDS:
             self.assertIn(kind, CV.SETTLED_KINDS)
 
@@ -415,11 +461,14 @@ class CliTests(unittest.TestCase):
             folder = Path(folder)
             for case, kw in (('2024-014878-CA-01', {'checks': [ok_check()],
                                                     'attachments': [read_attachment()]}),
-                             ('2018-026274-CA-01', {'kind': 'sale_scheduled', 'controlling': '140',
+                             ('2018-026274-CA-01', {'kind': 'unclear', 'controlling': '140',
                                                     'stay': True,
+                                                    'reason': 'Later foreclosure activity conflicts '
+                                                              'with an unresolved bankruptcy stay; '
+                                                              'no relief identified.',
                                                     'history': [{'entry_id': '93',
                                                                  'event': 'stayed'}],
-                                                    'checks': [failed_check()],
+                                                    'checks': [failed_check(entry_id='140')],
                                                     'attachments': [read_attachment('140')]})):
                 (folder / (case + '.json')).write_text(
                     json.dumps({'case': case, 'complete': False, 'open_gaps': []}))
@@ -428,7 +477,7 @@ class CliTests(unittest.TestCase):
             # A dossier with no timeline saved yet is reported as skipped, never as a verdict.
             (folder / 'no-timeline-yet.json').write_text(json.dumps({'case': 'Z'}))
 
-            proc = subprocess.run([sys.executable, '-u', 'case_verdict.py', '--dossiers',
+            proc = subprocess.run([sys.executable, '-u', str(MODULE), '--dossiers',
                                    str(folder)], capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn('supported 1', proc.stdout)
@@ -440,9 +489,179 @@ class CliTests(unittest.TestCase):
             self.assertIn('| Case | Verdict |', (folder / 'case-verdicts.md').read_text())
 
     def test_it_asks_for_an_input_rather_than_guessing(self):
-        proc = subprocess.run([sys.executable, 'case_verdict.py'], capture_output=True, text=True)
+        proc = subprocess.run([sys.executable, str(MODULE)], capture_output=True, text=True)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn('--dossiers', proc.stderr)
+
+
+class SecondReviewTests(unittest.TestCase):
+    """The independent review of #66's first commit. Every test here fails on that commit.
+
+    The first round fixed absent STRUCTURE reading as agreement. These are absent SEMANTICS: data
+    that is present, well-shaped, and says the evidence does not support the judgment - which the
+    module was not reading at all.
+    """
+
+    def test_two_totals_that_both_verify_but_disagree_are_conflicted(self):
+        # verify_document returns one check per stated grand total (judgment_money :457) and
+        # document_vision appends one grand total PER PAGE (:263). A judgment printing a different
+        # total on two pages therefore yields two checks that both verify, and that read as
+        # "amount verified to the cent".
+        r = CV.assess(timeline('X', checks=[ok_check(amount=1746032.70),
+                                            ok_check(source_ref='court:232820355:1',
+                                                     amount=955000.00)],
+                               attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'conflicted')
+        self.assertTrue(any('two different totals' in c for c in r['conflicts']), r['conflicts'])
+        self.assertTrue(any('955,000.00' in c and '1,746,032.70' in c for c in r['conflicts']))
+
+    def test_the_verified_amount_is_in_the_verdict_and_on_the_report(self):
+        # The column this report replaces IS the amount. The first version recorded only that
+        # something verified, and named the source_ref, so the figure never reached the page.
+        r = CV.assess(timeline('X', checks=[ok_check()], attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'supported')
+        self.assertEqual(r['judgment_amount'], 1746032.70)
+        self.assertIn('$1,746,032.70', CV.render_markdown([r]))
+        self.assertIn('| Amount |', CV.render_markdown([r]))
+
+    def test_a_failed_check_saved_before_the_subtotal_key_existed_says_so(self):
+        # run_case_timeline started saving disagreeing_subtotals in this PR, and
+        # keep_cached_amounts copies an older check verbatim. On every timeline already on the
+        # desktop, 2018-026274's $0.60 contradiction degraded silently to "not read".
+        check = failed_check(entry_id='232820355')
+        check.pop('disagreeing_subtotals')
+        r = CV.assess(timeline('X', checks=[check], attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'incomplete')
+        self.assertTrue(any('kept no subtotal detail' in m for m in r['missing']), r['missing'])
+        self.assertTrue(any('re-run the timeline' in m for m in r['missing']))
+
+    def test_a_total_with_no_matching_printed_total_row_is_named(self):
+        check = failed_check(entry_id='232820355')
+        check['reason'] = CV.TOTAL_ROW_DISAGREES
+        r = CV.assess(timeline('X', checks=[check], attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'incomplete')
+        self.assertTrue(any('no printed total row on that page matches it' in m
+                            for m in r['missing']), r['missing'])
+
+    def test_an_inferred_unread_duplicate_judgment_holds_the_case(self):
+        # reconcile_judgments (:681) reaches ONE operative judgment by inferring that a
+        # login-walled same-day entry is the same judgment listed twice - "(inferred, not read)".
+        # The uniqueness of the controlling judgment is what "supported" is scoped to.
+        r = CV.assess(timeline('X', duplicates=['79'], checks=[ok_check()],
+                               attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'incomplete')
+        self.assertTrue(any('inferred to be a duplicate without being read' in m
+                            for m in r['missing']), r['missing'])
+
+    def test_a_passed_sale_date_with_no_certificate_holds_the_case(self):
+        # miami_case_timeline (:508) keeps kind 'sale_scheduled' and records the outcome; its own
+        # reason says "whether a sale occurred is unknown".
+        for outcome in CV.UNSETTLED_SALE_OUTCOMES:
+            r = CV.assess(timeline('X', kind='sale_scheduled', sale_date='2026-01-05',
+                                   sale_outcome=outcome, checks=[ok_check()],
+                                   attachments=[read_attachment()]))
+            self.assertEqual(r['verdict'], 'incomplete', outcome)
+            self.assertTrue(any(outcome in m for m in r['missing']), r['missing'])
+
+    def test_a_partly_vacated_or_partly_satisfied_judgment_holds_the_case(self):
+        # reconcile_judgments' `operative` list includes 'partially_vacated' (:753), and
+        # satisfaction can be 'partially_satisfied'. Both were reported as a clean verified amount.
+        for row in (judgment_row(status='partially_vacated',
+                                 reason='vacatur 99 (cited date); limited to one defendant'),
+                    judgment_row(satisfaction='partially_satisfied')):
+            r = CV.assess(timeline('X', judgments=[row], checks=[ok_check()],
+                                   attachments=[read_attachment()]))
+            self.assertEqual(r['verdict'], 'incomplete', row)
+        r = CV.assess(timeline('X', judgments=[judgment_row(status='partially_vacated')],
+                               checks=[ok_check()], attachments=[read_attachment()]))
+        self.assertTrue(any('partially_vacated' in m for m in r['missing']), r['missing'])
+
+    def test_no_reconciliation_row_for_the_controlling_judgment_holds_the_case(self):
+        r = CV.assess(timeline('X', judgments=[judgment_row('999')], checks=[ok_check()],
+                               attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'incomplete')
+        self.assertTrue(any('no record for the controlling judgment' in m for m in r['missing']))
+
+    def test_a_stay_over_a_sale_still_on_the_calendar_is_conflicted(self):
+        # The kind-only rule was close to unreachable: when an unresolved stay is followed by sale
+        # activity the producer rewrites kind to 'unclear' (:494), and a stay filed after the sale
+        # notice leaves kind 'stayed_by_bankruptcy'. The sale_date survives both.
+        r = CV.assess(timeline('X', kind='stayed_by_bankruptcy', stay=True,
+                               sale_date='2026-09-28',
+                               history=[{'entry_id': '93', 'event': 'stayed'}],
+                               checks=[ok_check()], attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'conflicted')
+        self.assertTrue(any('2026-09-28' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_judgments_or_amount_vision_block_of_the_wrong_type_does_not_raise(self):
+        for key in ('judgments', 'amount_vision'):
+            for value in ('oops', [], 42, None, ['x']):
+                t = timeline('X', checks=[ok_check()], attachments=[read_attachment()])
+                t[key] = value
+                self.assertEqual(CV.assess(t)['verdict'], 'incomplete', (key, value))
+
+    def test_one_unreadable_saved_case_does_not_lose_the_others(self):
+        # main() had no per-case guard, so a single malformed timeline raised and no report was
+        # written at all - for a module whose whole purpose is an unattended report.
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            good = timeline('GOOD', checks=[ok_check()], attachments=[read_attachment()])
+            (folder / 'GOOD.json').write_text(json.dumps({'case': 'GOOD', 'open_gaps': []}))
+            (folder / 'GOOD-timeline.json').write_text(json.dumps(good))
+            bad = timeline('BAD', checks=[ok_check()], attachments=[read_attachment()])
+            bad['coverage'] = {'attachments': [['not', 'a', 'dict']]}
+            bad['judgments'] = {'controlling_entry': '1', 'judgments': 'not a list'}
+            (folder / 'BAD.json').write_text(json.dumps({'case': 'BAD'}))
+            (folder / 'BAD-timeline.json').write_text(json.dumps(bad))
+            proc = subprocess.run([sys.executable, '-u', str(MODULE), '--dossiers', str(folder)],
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            rows = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertIn('GOOD', [r['case'] for r in rows])
+
+    def test_a_rerun_does_not_read_its_own_report_as_a_case(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text(json.dumps(
+                timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
+            for _ in range(2):
+                proc = subprocess.run([sys.executable, '-u', str(MODULE), '--dossiers',
+                                       str(folder)], capture_output=True, text=True)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn('case-verdicts', proc.stdout.split('SKIPPED')[-1]
+                             if 'SKIPPED' in proc.stdout else '')
+
+    def test_out_goes_through_the_output_path_guard(self):
+        # Every other writer in this chain routes through case_review.output_path, which refuses a
+        # path outside paths.DEALFLOW_DIR and anything under OneDrive (CLAUDE.md's Known Folder
+        # Move rule). --out was taking a raw path.
+        import case_review
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text(json.dumps(
+                timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
+            proc = subprocess.run([sys.executable, '-u', str(MODULE), '--dossiers', str(folder),
+                                   '--out', str(folder / 'report.json')],
+                                  capture_output=True, text=True)
+            guarded = None
+            try:
+                guarded = case_review.output_path(str(folder / 'report.json'))
+            except Exception:
+                # The guard refuses the path; the CLI must refuse it too, not write it anyway.
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertIn('refused --out', proc.stdout)
+                self.assertNotIn('Traceback', proc.stderr)
+                self.assertFalse((folder / 'report.json').exists())
+            if guarded is not None:
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertTrue(Path(guarded).exists())
+
+    def test_more_than_twenty_dossier_gaps_says_how_many_were_dropped(self):
+        r = CV.assess(timeline('X', checks=[ok_check()], attachments=[read_attachment()]),
+                      {'open_gaps': ['gap %d' % i for i in range(25)]})
+        self.assertTrue(any('5 more open gap(s)' in n for n in r['notes']), r['notes'])
 
 
 if __name__ == '__main__':
