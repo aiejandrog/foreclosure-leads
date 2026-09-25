@@ -319,6 +319,21 @@ try:
     check('an order vacating the order of dismissal reopens the case',
           _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
                 NOF('01/31/2024', 'Order Vacating Order of Dismissal, Chapter 13'))[0] is True)
+    # Greptile's third round on #60: a grant is read for what it grants.
+    check('an order granting a continuance of the relief hearing does not end the stay',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Motion for Continuance of Relief from Stay Hearing'))[0] is True)
+    check('denying reinstatement while granting a motion to vacate a hearing leaves the case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Reinstate Chapter 13 Case and Granting Motion to Vacate Hearing'))[0] is False)
+    check('an order denying a motion to vacate the dismissal leaves the case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Vacate Order of Dismissal, Chapter 13'))[0] is False)
+    check('an order granting a motion to vacate the dismissal reopens the case',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Granting Motion to Vacate Order of Dismissal, Chapter 13'))[0] is True)
+    check('a continuance of the hearing on a motion to reinstate leaves the case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Granting Continuance of Hearing on Motion to Reinstate Chapter 13 Case'))[0] is False)
     check('relief from the automatic stay still ends it with no bankruptcy word on the line',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
     # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to

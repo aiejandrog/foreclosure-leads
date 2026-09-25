@@ -132,12 +132,18 @@ _BKREINSTATE = re.compile(r'reinstat|vacat\w*\s+(?:the\s+)?(?:order\s+(?:of\s+)?
 _BKASK = re.compile(r'\bmotion\b|\brequest\b|\bapplication\b|notice of hearing', re.I)
 _BKDENIED = re.compile(r'\b(?:deny|denie[sd]|denying|denial of)\s+(?:(?!and\b)\w+\s+){0,3}?'
                        r'(?:motion|request|dismiss|relief|lift|terminat|annul|vacat|discharg|reinstat)', re.I)
+# What a grant is OF: the words between "granting" and the thing, up to four, never across an "and"
+# and never through a procedural step, so "Granting Motion for Continuance of Relief from Stay
+# Hearing" grants a continuance, not relief. A reinstatement's object is the case or the dismissal
+# itself: "Granting Motion to Vacate Hearing" vacates a hearing, not the dismissal.
+_GRANTOF = r'\bgrant\w*\s+(?:(?!and\b|continu|postpon|reschedul|extend|extens|hearing|conference|shorten|expedit)\w+\s+){0,4}?'
+_UNDISMISS = r'\s+(?:the\s+)?(?:order\s+(?:of\s+)?)?dismiss'    # after a form of "vacate"
 _BKDONE = {   # what an order says when it does the thing: granted, or the verb in its done form
-    'close': re.compile(r'\bgrant\w*\s+(?:(?!and\b)\w+\s+){0,4}?(?:dismiss|relief|lift|terminat|annul|discharg)|'
+    'close': re.compile(_GRANTOF + r'(?:dismiss|relief|lift|terminat|annul|discharg)|'
                         r'\b(?:order|judgment)\b.*?\b(?:dismissing|dismissed|terminating|terminated|lifting|lifted|'
                         r'annulling|annulled|discharging|discharged)\b', re.I),
-    'reinstate': re.compile(r'\bgrant\w*\s+(?:(?!and\b)\w+\s+){0,4}?(?:reinstat|vacat)|'
-                            r'\b(?:order|judgment)\b.*?\b(?:reinstating|reinstated|vacating|vacated)\b', re.I),
+    'reinstate': re.compile(_GRANTOF + r'(?:reinstat|vacat\w*' + _UNDISMISS + r')|'
+                            r'\b(?:order|judgment)\b.*?\b(?:reinstating|reinstated|vacat(?:ing|ed)' + _UNDISMISS + r')', re.I),
 }
 
 
