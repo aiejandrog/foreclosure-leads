@@ -44,7 +44,7 @@ def rec(doc, date, bk, pg, amt=0, second='OWNER TESTER', first='OWNER TESTER', f
 
 
 deed = rec('DEED', '2/1/2008', '26100', '10', 0, 'OWNER TESTER', first='PRIOR SELLER')
-mtg = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, PLAINTIFF, intangible=834)       # $417,000 face
+mtg = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, PLAINTIFF, intangible=700)       # $350,000 face
 city1 = rec('LIEN', '5/5/2019', '31100', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI')
 city2 = rec('LIEN', '6/6/2020', '31900', '2', 0, 'OWNER TESTER', first='CITY OF MIAMI')
 city3 = rec('LIEN', '7/7/2021', '32500', '3', 1500, 'CITY OF MIAMI', first='OWNER TESTER')
@@ -59,13 +59,13 @@ assn_lp = rec('LIS PENDENS', '3/3/2025', '34900', '7', 0, 'OWNER TESTER',
 warrant = rec('WARRANT', '4/4/2011', '27400', '8', 2200, 'OWNER TESTER',
               first='STATE OF FLORIDA DEPARTMENT OF REVENUE', folio='')
 own_lp = rec('LIS PENDENS', '1/10/2024', '34000', '9', 0, 'OWNER TESTER', first=PLAINTIFF)
-own_fj_vacated = rec('JUDGMENT', '5/5/2025', '34932', '1256', 1022358, 'OWNER TESTER', first=PLAINTIFF)
+own_fj_vacated = rec('JUDGMENT', '5/5/2025', '34999', '1999', 987654, 'OWNER TESTER', first=PLAINTIFF)
 elsewhere = rec('LIEN', '2/2/2020', '31700', '1', 900, 'OWNER TESTER', first='CITY OF HOMESTEAD',
                 folio='3099999999999', subdiV_NAME='ELSEWHERE')
 
 models = [deed, mtg, city1, city2, city3, city_rel, wasd, wasd_rel, assn_lp, warrant, own_lp,
           own_fj_vacated, elsewhere]
-res = RL.analyze(models, FOLIO, 1022358.91, ftype='MORTGAGE', plaintiff=PLAINTIFF)
+res = RL.analyze(models, FOLIO, 987654.32, ftype='MORTGAGE', plaintiff=PLAINTIFF)
 other = {r['bp']: r for r in res['other']}
 
 # ---- defect 1: what the search found reaches the chain
@@ -88,18 +88,18 @@ check("a lien on another parcel of the same owner stays out", '31700/1' not in o
 # ---- defect 7: the case's own filings are this case, not another claim
 check("the case's own lis pendens is marked this case", other['34000/9'].get('own_case') is True)
 check("the case's own (vacated) final judgment is marked this case and never summed",
-      other['34932/1256'].get('own_case') is True and res['code_open'] == 1500)
-_noplaintiff = RL.analyze(models, FOLIO, 1022358.91, ftype='MORTGAGE')
+      other['34999/1999'].get('own_case') is True and res['code_open'] == 1500)
+_noplaintiff = RL.analyze(models, FOLIO, 987654.32, ftype='MORTGAGE')
 check('without the plaintiff, a lender judgment is still a money judgment (unchanged behaviour)',
-      _noplaintiff['code_open'] == 1500 + 1022358, _noplaintiff['code_open'])
+      _noplaintiff['code_open'] == 1500 + 987654, _noplaintiff['code_open'])
 
 # ---- defect 2: the debt is the judgment
 check('the chain keeps the recorded face apart from the judgment',
-      res['first_face'] == 417000 and res['judgment'] == 1022358.91 and res['first_bp'] == '26100/11',
+      res['first_face'] == 350000 and res['judgment'] == 987654.32 and res['first_bp'] == '26100/11',
       (res['first_face'], res['judgment'], res['first_bp']))
 b = CD._b(res)
 check('dossier b prices the foreclosed debt at the judgment, not the face',
-      b['foreclosed_debt']['amount'] == 1022358.91 and b['foreclosed_debt']['recorded_face'] == 417000,
+      b['foreclosed_debt']['amount'] == 987654.32 and b['foreclosed_debt']['recorded_face'] == 350000,
       b['foreclosed_debt'])
 check('dossier b lists the other instruments with the own-case ones marked',
       len(b['other_instruments']) == len(res['other'])
@@ -130,7 +130,7 @@ check('coverage_documented refuses parcel_found False even on a hand-built chain
       not ES.coverage_documented(dict(empty, parcel_found=False)))
 
 # ---- defect 4: the dossier applies the lender rule
-lender_empty = RL.analyze([deed], FOLIO, 358247.93, ftype='MORTGAGE', plaintiff=PLAINTIFF)
+lender_empty = RL.analyze([deed], FOLIO, 123456.78, ftype='MORTGAGE', plaintiff=PLAINTIFF)
 d = CD._d(lender_empty, {'status': 'empty'})
 check('dossier d: a lender foreclosure with no mortgage found is not VERIFIED CLEAR',
       d['eqstate'] == 'none' and 'lender is foreclosing' in d['verdict'], (d['eqstate'], d['verdict']))
@@ -170,6 +170,12 @@ _bank_ca_old = dict(empty, ftype='MORTGAGE', other=[{'own_case': True, 'kind': '
                                                       'party': 'SYNTHETIC BANK NATIONAL ASSOCIATION'}])
 check("dossier d: a bank's 'National Association' is still a lender",
       CD._d(_bank_ca_old, {'status': 'empty'})['eqstate'] == 'none')
+for _ct, _want in (('Mortgage/Other', 'none'), ('Bank/Mortgage', 'none'), ('HOA/Condo', 'clear'),
+                   ('Govt/Code', 'clear'), ('Other', 'none'), ('', 'none')):
+    check("dossier d: a circuit chain typed %r reads %s" % (_ct, _want),
+          CD._d(dict(empty, ftype='MORTGAGE', case_type=_ct), {'status': 'empty'})['eqstate'] == _want)
+check("the board's lender rule counts a 'Mortgage/Other' foreclosure",
+      ES.state_of(empty, {'ctype': 'Mortgage/Other'}) == 'none')
 _hoa_b = CD._b(dict(empty, judgment=12000))
 check("dossier b: an association case shows its judgment as the foreclosed debt, with no mortgage face",
       (_hoa_b['foreclosed_debt'] or {}).get('amount') == 12000

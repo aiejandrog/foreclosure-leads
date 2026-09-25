@@ -30,6 +30,8 @@ import equity_state
 
 SCHEMA_VERSION = 1
 # An association plaintiff (records_liens' own pattern), never a bank's "National Association".
+# foreclosure_leads.classify's case types that name a plaintiff who is NOT a lender.
+_NOT_LENDER_TYPES = ('HOA', 'GOVT', 'TAX')
 _ASSN_PARTY = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b|HOMEOWNERS?|CONDOMINIUM|PROPERTY\s+OWNERS?', re.I)
 SECTIONS = ('a_filed', 'b_indexed', 'c_documents', 'd_picture')
 
@@ -270,15 +272,19 @@ def _d(chain, section_c, lead=None):
     # 2025-013918 read VERIFIED CLEAR on a 7-record search that missed the mortgage being
     # foreclosed). The board applies that rule with the lead; the dossier used to call state_of
     # without one, so it never did. With no lead, the chain's stored case type (records_liens
-    # writes the lead's) decides. Only a chain written before that falls back to its court: a
-    # circuit case is taken as a lender's unless the chain's own filings name an association.
-    # Associations do file in circuit court, so that fallback can only move CLEAR down, never up.
+    # writes the lead's) decides: a lender's type applies the rule, an association's, a
+    # government's or a tax deed's does not. Any other type, or a chain written before the type
+    # was stored, falls back to its court: a circuit case is taken as a lender's unless the chain's
+    # own filings name an association. That fallback can only move CLEAR down, never up.
     if lead is None and isinstance(chain, dict):
+        ct = str(chain.get('case_type') or '')
         own_assn = any(isinstance(o, dict) and o.get('own_case') and _ASSN_PARTY.search(o.get('party') or '')
                        for o in (chain.get('other') or []))
-        if chain.get('case_type'):
-            lead = {'case_type': chain['case_type']}
-        elif chain.get('ftype') == 'MORTGAGE' and not own_assn:
+        if ct in equity_state.LENDER_CASE_TYPES:
+            lead = {'case_type': ct}
+        elif ct.upper().startswith(_NOT_LENDER_TYPES) or own_assn:
+            lead = {'case_type': ct or 'HOA/Condo'}        # an association, a government or a tax deed
+        elif chain.get('ftype') == 'MORTGAGE':
             lead = {'case_type': equity_state.LENDER_CASE_TYPES[0]}
     state = equity_state.state_of(chain, lead)
     verdict = equity_state.LABEL[state]

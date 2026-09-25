@@ -61,7 +61,10 @@ SHORT = {'clear': 'CLEAR', 'priced': 'VERIFIED', 'unpriced': 'CEILING',
 
 
 # A lender is foreclosing on this parcel: there IS a mortgage, whatever the recorded search found.
-LENDER_CASE_TYPES = ('Bank/Mortgage',)
+# 'Mortgage/Other' is a mortgage foreclosure whose plaintiff foreclosure_leads.classify could not
+# name as a bank (a private lender, a trust): still a mortgage being foreclosed. Counting it can
+# only move a CLEAR down to UNVERIFIED, never up.
+LENDER_CASE_TYPES = ('Bank/Mortgage', 'Mortgage/Other')
 LENDER_OWN_CASE_WHY = ('UNVERIFIED — a lender is foreclosing on this parcel, but the recorded search '
                        'found no open mortgage; the chain missed it')
 
