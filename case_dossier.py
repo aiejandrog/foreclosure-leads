@@ -32,7 +32,9 @@ SCHEMA_VERSION = 1
 # An association plaintiff (records_liens' own pattern), never a bank's "National Association".
 # foreclosure_leads.classify's case types that name a plaintiff who is NOT a lender.
 _NOT_LENDER_TYPES = ('HOA', 'GOVT', 'TAX')
-_ASSN_PARTY = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b|HOMEOWNERS?|CONDOMINIUM|PROPERTY\s+OWNERS?', re.I)
+# Narrower than records_liens' association words on purpose: MASTER and COMMUNITY also name banks
+# ("COMMUNITY BANK"), and a lender read as an association would lift a CLEAR it must not.
+_ASSN_PARTY = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b|HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|PROPERTY\s+OWNERS?', re.I)
 SECTIONS = ('a_filed', 'b_indexed', 'c_documents', 'd_picture')
 
 

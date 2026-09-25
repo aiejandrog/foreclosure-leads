@@ -114,7 +114,16 @@ check('open liens with no published amount keep the verdict off VERIFIED',
       ES.state_of(res) == 'unpriced', ES.state_of(res))
 _lead = {}
 ES.apply(_lead, res)
-check('the ceiling counts those liens', _lead.get('eqopen', 0) >= 2, _lead)
+check('the ceiling counts those liens', _lead.get('eqoth', 0) >= 2, _lead)
+_mix = {}
+ES.apply(_mix, {'conf': 'ok', 'nrec': 9, 'second_fc': None, 'other_open_unpriced': 1,
+                'liens': [{'amt': 90000, 'st': 'SATISFIED'}, {'amt': 150000, 'st': 'OPEN'}]})
+check('the ceiling counts open mortgages and unpriced liens apart, never a satisfied one',
+      _mix.get('eqstate') == 'unpriced' and _mix.get('eqopen') == 1 and _mix.get('eqoth') == 1, _mix)
+_lonly = {}
+ES.apply(_lonly, {'conf': 'ok', 'nrec': 9, 'second_fc': None, 'other_open_unpriced': 1, 'liens': []})
+check('a ceiling with no mortgage never claims one was recorded',
+      'mortgage' not in _lonly['eqstate_why'].lower() and not _lonly.get('eqopen') and _lonly.get('eqoth') == 1, _lonly)
 
 # ---- defect 3: a capped or wrong-person search can never be clear
 empty = RL.analyze([deed], FOLIO, 12000, ftype='HOA')
@@ -166,6 +175,9 @@ _hoa_ca_old = dict(empty, ftype='MORTGAGE', other=[{'own_case': True, 'kind': 'l
                                                      'party': 'TEST GARDENS CONDOMINIUM ASSOCIATION INC'}])
 check("dossier d: an older circuit chain whose own filing names an association is not taken as a lender's",
       CD._d(_hoa_ca_old, {'status': 'empty'})['eqstate'] == 'clear')
+check("dossier d: an older circuit chain whose own filing names a CONDO is not taken as a lender's",
+      CD._d(dict(empty, ftype='MORTGAGE', other=[{'own_case': True, 'kind': 'lis_pendens', 'party': 'PALM TEST CONDO INC'}]),
+            {'status': 'empty'})['eqstate'] == 'clear')
 _bank_ca_old = dict(empty, ftype='MORTGAGE', other=[{'own_case': True, 'kind': 'lis_pendens',
                                                       'party': 'SYNTHETIC BANK NATIONAL ASSOCIATION'}])
 check("dossier d: a bank's 'National Association' is still a lender",
@@ -184,6 +196,53 @@ check("dossier b: an association case shows its judgment as the foreclosed debt,
 _bw = {'conf': 'ok', 'liens': [], 'nrec': 3}
 check('dossier b: a chain with no judgment key takes it from the lead',
       (CD._b(_bw, {'judgment': '$88,500.10'})['foreclosed_debt'] or {}).get('amount') == 88500.10)
+
+# ---- review on #62: namesakes, the owner's own name, unreferenced releases, a sibling plaintiff
+_ns = RL.analyze([deed, rec('WARRANT', '4/4/2021', '33000', '1', 0, 'MARIA TESTER',
+                            first='STATE OF FLORIDA DEPARTMENT OF REVENUE', folio='', subdiV_NAME=''),
+                  rec('JUDGMENT', '4/4/2021', '33000', '2', 0, 'TESTER MARIA', first='LVNV FUNDING LLC', folio='', subdiV_NAME='')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a namesake's tax warrant and judgment (surname-only search) never reach this owner's chain",
+      _ns['other'] == [] and _ns['other_open_unpriced'] == 0, _ns['other'])
+_ns2 = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '2', 9000, 'TESTER, OWNER Q', first='LVNV FUNDING LLC', folio='', subdiV_NAME='')],
+                  FOLIO, 12000, ftype='HOA', owner='OWNER Q TESTER')
+check("the owner's own person-wide judgment still rides, in the clerk's surname-first order",
+      _ns2['code_open'] == 9000, (_ns2['other'], _ns2['code_open']))
+_vl = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '3', 9000, 'VILLA JUAN', first='LVNV FUNDING LLC', folio='', subdiV_NAME=''),
+                  rec('LIEN', '5/5/2021', '33000', '4', 700, 'VILLA JUAN', first='CITY OF MIAMI')],
+                 FOLIO, 12000, ftype='HOA', owner='JUAN VILLA')
+check("an owner named VILLA: a debt buyer's judgment is a judgment, not an association's lien",
+      [o['kind'] for o in _vl['other']] == ['judgment', 'code'] and _vl['code_open'] == 9700
+      and _vl['hoa_open'] == 0, (_vl['other'], _vl['code_open'], _vl['hoa_open']))
+check("an owner named VILLA: the creditor is read from the other side",
+      [o['party'] for o in _vl['other']] == ['LVNV FUNDING LLC', 'CITY OF MIAMI'], _vl['other'])
+_rel1 = rec('RELEASE OF LIEN', '9/9/2023', '34000', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI')
+_l1 = rec('LIEN', '3/3/2021', '33000', '5', 400, 'OWNER TESTER', first='CITY OF MIAMI')
+_l2 = rec('LIEN', '3/3/2022', '33500', '6', 600, 'OWNER TESTER', first='CITY OF MIAMI')
+_u1 = RL.analyze([deed, _l1, _rel1], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('a release naming no book/page releases the one lien of its holder recorded before it',
+      _u1['other'][0]['st'] == 'RELEASED' and _u1['code_open'] == 0, _u1['other'])
+_u2 = RL.analyze([deed, _l1, _l2, _rel1], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('one unreferenced release and two liens: neither is released, both flagged',
+      [o['st'] for o in _u2['other']] == ['OPEN', 'OPEN'] and _u2['code_open'] == 1000
+      and all(o.get('release_unmatched') == 1 for o in _u2['other']), _u2['other'])
+_rel0 = rec('RELEASE OF LIEN', '1/1/2020', '32000', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI')
+_u3 = RL.analyze([deed, _l1, _rel0], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('a release recorded before the lien never releases it', _u3['other'][0]['st'] == 'OPEN', _u3['other'])
+_u4 = RL.analyze([deed, _l1, rec('SATISFACTION OF MORTGAGE', '9/9/2023', '34000', '2', 0, 'OWNER TESTER',
+                                 first='CITY OF MIAMI')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a mortgage satisfaction never releases a lien", _u4['other'][0]['st'] == 'OPEN', _u4['other'])
+_sib = RL.analyze([deed, rec('LIEN', '3/3/2025', '34950', '1', 0, 'OWNER TESTER',
+                             first='VILLAGES OF KENDALL MASTER ASSOCIATION INC')],
+                  FOLIO, 12000, ftype='HOA', plaintiff='VILLAGES OF KENDALL HOMEOWNERS ASSOCIATION INC',
+                  owner='OWNER TESTER', case='2025-000001-CC-05')
+check("a sibling association sharing the plaintiff's first words is another claim, not this case",
+      not _sib['other'][0].get('own_case') and _sib['other_open_unpriced'] == 1, _sib['other'])
+_old_j = RL.analyze([deed, rec('JUDGMENT', '5/5/2016', '30000', '1', 4000, 'OWNER TESTER', first=PLAINTIFF, folio='', subdiV_NAME='')],
+                    FOLIO, 250000, ftype='MORTGAGE', plaintiff=PLAINTIFF, owner='OWNER TESTER',
+                    case='2024-000001-CA-01')
+check("the plaintiff's judgment from years before this case was filed is another claim",
+      not _old_j['other'][0].get('own_case') and _old_j['code_open'] == 4000, _old_j['other'])
 
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
@@ -243,7 +302,7 @@ _fake_cs.balance = lambda: _fake_cs.bal[0]
 _real_cs = sys.modules.get('captcha_solver')
 sys.modules['captcha_solver'] = _fake_cs
 try:
-    RL._SPEND.update(cap=0.01, submits=0, bal0=10.0, bal=None, stopped='')
+    RL._SPEND.update(cap=0.01, submits=0, bal0=10.0, prior=0.0, ledger=None, stopped='')
     RL.fetch_via_turnstile(('OWNERX', ''))
     RL.fetch_via_turnstile(('OWNERY', ''))
     check('--max-spend $0.01 submits three solves at $0.0033 and refuses the fourth',
@@ -251,23 +310,25 @@ try:
           (len(_fake_cs.calls), RL._SPEND))
     del _fake_cs.calls[:]
     _fake_cs.bal[0] = '8.99'
-    RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, bal=None, stopped='')
+    RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, prior=0.0, ledger=None, stopped='')
     for _i in range(10):
         RL.fetch_via_turnstile(('OWNERZ', ''))
     check('--max-spend stops at the 20-solve balance check when the account fell by the cap',
           len(_fake_cs.calls) == 20 and 'balance' in RL._SPEND['stopped'], (len(_fake_cs.calls), RL._SPEND))
     del _fake_cs.calls[:]
     _fake_cs.bal[0] = None
-    RL._SPEND.update(cap=1.00, submits=20, bal0=10.0, bal=None, stopped='')
+    RL._SPEND.update(cap=1.00, submits=20, bal0=10.0, prior=0.0, ledger=None, stopped='')
     RL.fetch_via_turnstile(('OWNERW', ''))
     check('--max-spend stops paying when the balance can no longer be read', _fake_cs.calls == [], RL._SPEND)
-    RL._SPEND.update(cap=None, submits=0, bal0=None, bal=None, stopped='')
+    RL._SPEND.update(cap=None, submits=0, bal0=None, prior=0.0, ledger=None, stopped='')
     RL.fetch_via_turnstile(('OWNERV', ''))
     check('without --max-spend the solver behaves as before (three tries, counted)',
           len(_fake_cs.calls) == 3 and RL._SPEND['submits'] == 3)
 
-    for _bad in (['--repull'], ['--repull', '--max-spend', '6'], ['--max-spend', '0'],
-                 ['--repull', '--cached-only', '--max-spend', '1']):
+    _led = os.path.join(_tmp, 'spend.json')
+    for _bad in (['--repull'], ['--repull', '--max-spend', '1'], ['--repull', '--max-spend', '6', '--spend-ledger', _led],
+                 ['--max-spend', '0'], ['--spend-ledger', _led],
+                 ['--repull', '--cached-only', '--max-spend', '1', '--spend-ledger', _led]):
         sys.argv = ['records_liens.py'] + _bad
         try:
             with contextlib.redirect_stderr(io.StringIO()):
@@ -295,8 +356,13 @@ try:
         RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
                                         time=__import__('time').time)
         _rp = io.StringIO()
-        sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066']
+        sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066', '--spend-ledger', _led]
         with contextlib.redirect_stdout(_rp):
+            RL.main()
+        _n1 = len(_fake_cs.calls)
+        _rp2 = io.StringIO()
+        sys.argv = ['records_liens.py', '--repull', '--max-spend', '5', '--spend-ledger', _led]
+        with contextlib.redirect_stdout(_rp2):
             RL.main()
     finally:
         for k, v in _saved.items():
@@ -305,16 +371,20 @@ try:
     _rp = _rp.getvalue()
     _after = json.load(open(os.path.join(_tmp, 'records_liens.json')))
     check('--repull submits no more solves than the cap allows', len(_fake_cs.calls) == 2, (_fake_cs.calls, _rp[-600:]))
-    check('--repull tries Camoufox before paying', _spent2 == ['camoufox'], _spent2)
+    check('--repull opens Camoufox before paying, once per run', _spent2 == ['camoufox', 'camoufox'], _spent2)
     check('--repull names the leads the cap left unpulled', 'not pulled: spend cap' in _rp and '2 not pulled because of the cap' in _rp and 'reached the $0.0066 cap' in _rp, _rp[-600:])
     check('--repull reports the actual charge from the account balance', 'ACTUAL CHARGE: balance $10.0000' in _rp, _rp[-400:])
     check('--repull never overwrites a chain it could not re-read', _after == _before, (_before, _after))
+    _ledj = json.load(open(_led))
+    check('--spend-ledger: a second run gets only what the first left, and cannot raise the cap',
+          _n1 == 2 and len(_fake_cs.calls) == 2 and _ledj['cap'] == 0.0066 and _ledj['counted_usd'] == 0.0066
+          and len(_ledj['runs']) == 2 and _ledj['runs'][1]['solves'] == 0, (_n1, _fake_cs.calls, _ledj, _rp2.getvalue()[-300:]))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs
     else:
         sys.modules.pop('captcha_solver', None)
-    RL._SPEND.update(cap=None, submits=0, bal0=None, bal=None, stopped='')
+    RL._SPEND.update(cap=None, submits=0, bal0=None, prior=0.0, ledger=None, stopped='')
 
 print('\nOK: 0 failure(s)' if not FAILS else '\nFAIL: %d failure(s)' % len(FAILS))
 sys.exit(1 if FAILS else 0)

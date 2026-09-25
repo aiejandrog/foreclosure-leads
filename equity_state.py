@@ -52,7 +52,7 @@ FACT = ('clear', 'priced')
 LABEL = {
     'clear':     'VERIFIED CLEAR — chain traced, no surviving mortgage found',
     'priced':    'VERIFIED — surviving debt traced and priced',
-    'unpriced':  'CEILING ONLY — mortgage(s) recorded, surviving total not established',
+    'unpriced':  'CEILING ONLY — recorded debt found, surviving total not established',
     'none':      'UNVERIFIED — the recorded chain could not be established',
     'unchecked': 'NOT CHECKED — no recorded chain pulled for this lead yet',
 }
@@ -169,8 +169,14 @@ def apply(lead, chain):
             # how many instruments we know survive but cannot total. PB reports the count itself;
             # a part-priced list from any county has to be counted here, or the lead renders a
             # CEILING of 0 and reads like a clear one.
-            _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
-            lead['eqopen'] = ((chain.get('mtg_open_unpriced') or 0) or len(_liens)) + (chain.get('other_open_unpriced') or 0)
+            # eqopen counts MORTGAGES still open (a satisfied one is history, not a ceiling); the
+            # open city, association and tax liens with no published amount are eqoth, so the
+            # board can say which kind of debt it cannot total.
+            _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)
+                      and str(l.get('st') or 'OPEN').upper() != 'SATISFIED']
+            lead['eqopen'] = (chain.get('mtg_open_unpriced') or 0) or len(_liens)
+            if chain.get('other_open_unpriced'):
+                lead['eqoth'] = chain.get('other_open_unpriced')
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure

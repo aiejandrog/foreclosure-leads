@@ -7387,8 +7387,13 @@ function _doorVerified(r){
   // exactly like a fact. Only 'clear'/'priced' are facts; everything else must say so out loud.
   var _eqs = r.eqstate || 'unchecked';
   if(r.value > 0 && !r.ju){
-    if(_eqs === 'unpriced')
-      fails.push('EQUITY IS A CEILING — ' + (r.eqopen||'?') + ' mortgage(s) recorded, county publishes no amounts; ask the owner what they owe');
+    if(_eqs === 'unpriced'){
+      // eqopen = open mortgages; eqoth = open city/association/tax liens with no published amount
+      var _ceil = [];
+      if(r.eqopen) _ceil.push(r.eqopen + ' open mortgage(s)');
+      if(r.eqoth) _ceil.push(r.eqoth + ' open lien(s) with no published amount');
+      fails.push('EQUITY IS A CEILING — ' + (_ceil.join(' + ') || 'recorded debt') + ' not totalled; ask the owner what they owe');
+    }
     else if(_eqs === 'none')
       fails.push('EQUITY UNVERIFIED — recorded chain could not be established' + (r.eqrecs ? ' ('+r.eqrecs+' records searched)' : ''));
     else if(_eqs === 'unchecked')

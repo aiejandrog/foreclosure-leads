@@ -152,10 +152,12 @@ def records_by_qs(qs):
 # reached 2Captcha, but one owner can cost three solves (tries=3) and the defendant fallback adds two
 # more owners, so it was never a spend figure and nothing stopped at a number. --max-spend now counts
 # every submitted solve at the measured owner-search price and refuses the next one that would pass
-# the cap; the account balance is re-read every 20 solves in case the price moved.
+# the cap; the account balance is re-read every 20 solves in case the price moved. --spend-ledger
+# makes the cap a TOTAL across runs: a second run against the same ledger gets only what is left,
+# and can lower the ledger's cap but never raise it.
 PAID_SOLVE_USD = 0.0033          # measured per owner-search token, 2026-09 (2Captcha lists ~$0.003)
 MAX_SPEND_CEILING = 5.00         # the most any one run may be given, whatever --max-spend says
-_SPEND = {'cap': None, 'submits': 0, 'bal0': None, 'bal': None, 'stopped': ''}
+_SPEND = {'cap': None, 'submits': 0, 'bal0': None, 'prior': 0.0, 'ledger': None, 'stopped': ''}
 
 
 def _usd(x):
@@ -178,7 +180,7 @@ def _may_submit():
         return True
     if _SPEND['stopped']:
         return False
-    if (_SPEND['submits'] + 1) * PAID_SOLVE_USD > cap + 1e-9:
+    if _SPEND['prior'] + (_SPEND['submits'] + 1) * PAID_SOLVE_USD > cap + 1e-9:
         _SPEND['stopped'] = 'counted solves reached the $%s cap' % _usd(cap)
         return False
     if _SPEND['submits'] and _SPEND['submits'] % 20 == 0:
@@ -186,11 +188,40 @@ def _may_submit():
         if b is None:
             _SPEND['stopped'] = '2Captcha balance could not be re-read'
             return False
-        _SPEND['bal'] = b
-        if _SPEND['bal0'] - b + PAID_SOLVE_USD > cap + 1e-9:
+        if _SPEND['prior'] + _SPEND['bal0'] - b + PAID_SOLVE_USD > cap + 1e-9:
             _SPEND['stopped'] = 'the account balance fell by the $%s cap' % _usd(cap)
             return False
     return True
+
+
+def _ledger_open(path, cap):
+    """(cap, already counted) from a --spend-ledger file; the smaller cap wins."""
+    try:
+        led = json.load(open(path, encoding='utf-8'))
+    except FileNotFoundError:
+        led = {}
+    if not isinstance(led, dict):
+        raise ValueError('spend ledger %s is not a JSON object' % path)
+    cap = min(cap, float(led.get('cap', cap)))
+    return cap, float(led.get('counted_usd', 0) or 0), led
+
+
+def _ledger_save(charged=None, final=False):
+    path = _SPEND['ledger']
+    if not path:
+        return
+    run = _SPEND['submits'] * PAID_SOLVE_USD
+    total = _SPEND['prior'] + max(run, charged or 0)
+    led = dict(_SPEND.get('led') or {}, cap=_SPEND['cap'], counted_usd=round(total, 4))
+    if final:
+        led['runs'] = list(led.get('runs') or []) + [{'at': time.strftime('%Y-%m-%d %H:%M'),
+                                                     'solves': _SPEND['submits'], 'counted_usd': round(run, 4),
+                                                     'charged_usd': None if charged is None else round(charged, 4)}]
+        _SPEND['led'] = led
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(led, f, indent=1)
+    os.replace(tmp, path)
 
 
 def fetch_via_turnstile(owner_lf, tries=3):
@@ -215,6 +246,7 @@ def fetch_via_turnstile(owner_lf, tries=3):
         if not _may_submit():
             return None
         _SPEND['submits'] += 1                  # counted on submit: a failed solve may still bill
+        _ledger_save()                          # before the solve, so a crash cannot forget it
         tok = solve_turnstile(TS_SITE_KEY, OR_BASE)
         if not tok:
             continue
@@ -531,12 +563,38 @@ def clear_undocumented(res, case=''):
             and not ('nrec' in res and 'second_fc' in res and 'mtg_open_unpriced' in res))
 
 
-def analyze(models, folio, judgment, ftype='', plaintiff=''):
+def _owner_words(owner):
+    """The words a party string must carry to name the searched owner, or None when unknown.
+    A person needs the surname and the first given name as whole words (the clerk writes
+    'PEREZ JOHN A' or 'PEREZ, JOHN'); a company needs its whole name."""
+    owner = re.sub(r'\s*\(defendant\)\s*$', '', owner or '', flags=re.I).strip()
+    sp = split_owner(owner) if owner else None
+    if not sp:
+        return None
+    if not sp[1]:
+        return ('co', re.sub(r'[^A-Z0-9]', '', sp[0].upper()))
+    return ('person', sp[0].upper().strip('.'), sp[1].split()[0].upper().strip('.'))
+
+
+def _names_owner(party, words):
+    if not words or not party:
+        return False
+    up = party.upper()
+    if words[0] == 'co':
+        return bool(words[1]) and words[1] in re.sub(r'[^A-Z0-9]', '', up)
+    toks = set(re.findall(r'[A-Z0-9\-\']+', up))
+    return words[1] in toks and words[2] in toks
+
+
+def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
     ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd.
     plaintiff = this case's plaintiff, so the case's OWN lis pendens and judgments (a vacated one
-    included) are shown as this case and never counted as another claim."""
+    included) are shown as this case and never counted as another claim.
+    owner = the name that was searched: the clerk search is by SURNAME ONLY, so a person-wide row
+    (tax warrant, money judgment) with no parcel anchor rides only when it names this owner.
+    case = this case's number: its own filings cannot predate the year it was filed."""
     fol = norm_folio(folio)
     if not fol:
         return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
@@ -723,18 +781,36 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
     released_bp.discard(('', ''))
     _pnorm = lambda x: _inst(re.sub(r'[.,]', ' ', x or ''))    # "PNC BANK, N.A." and "PNC BANK NA" agree
     _pl = _pnorm(plaintiff)
+    _ow = _owner_words(owner)
+    _cy = re.match(r'\s*(\d{4})-', case or '')
+    _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):
         # A name that normalizes short ("PNC BANK" -> "PNC") must match exactly; a containment
-        # test on three letters would call every party with "PNC" in it the plaintiff.
+        # test on three letters would call every party with "PNC" in it the plaintiff. Containment,
+        # not a shared prefix: a truncated index name is contained in the full one, while a sibling
+        # association ("VILLAGES OF KENDALL MASTER" vs "... HOMEOWNERS") shares only a prefix.
         if len(_pl) < 2:
             return False
         for p in parties:
             q = _pnorm(p)
             if not q:
                 continue
-            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q[:12] == _pl[:12] or q in _pl or _pl in q)):
+            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q in _pl or _pl in q)):
                 return True
         return False
+    def _before_case(d):
+        # a recording from before the year this case was filed cannot be one of its own filings
+        dt = _parse_recd(d)
+        return bool(_case_year and dt and dt.year < _case_year)
+    # A release that names no book/page. One City release used to release EVERY City lien by name;
+    # now a lien falls only to a release that points at it, or, for releases that point nowhere, when
+    # its holder has at least one such release on or after each of its liens (paired one to one).
+    # Fewer releases than liens and none of them is released: which one was paid is not knowable.
+    unref_rel = [((_parse_recd((r.get('reC_DATE', '') or '')[:10])),
+                  {_pnorm(r.get('firsT_PARTY')), _pnorm(r.get('seconD_PARTY'))} - {''})
+                 for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
+                 and 'MORTGAGE' not in (r.get('doC_TYPE', '') or '').upper()        # a loan's, not a lien's
+                 and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())]
     other = []
     hoa_open = code_open = irs_open = 0
     other_unpriced = 0
@@ -746,26 +822,34 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
         bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
         p1, p2 = r.get('firsT_PARTY') or '', r.get('seconD_PARTY') or ''
         both = p1 + ' | ' + p2
+        # The index puts the lienor on either side, and one side is the owner: read the creditor
+        # from the OTHER side, or an owner named VILLA or COUNTY files their own debts as an
+        # association's or a city's. Both sides only when neither names the owner (a prior owner).
+        o1, o2 = _names_owner(p1, _ow), _names_owner(p2, _ow)
+        cred = p2 if (o1 and not o2) else (p1 if (o2 and not o1) else both)
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         sd = (r.get('subdiV_NAME') or '').strip().upper()
         on_parcel = bool((rf and rf == fol) or (subj_subdiv and sd == subj_subdiv))
         if 'LIS PENDENS' in doc:
             kind = 'lis_pendens'
-        elif _IRS_RE.search(both):
+        elif _IRS_RE.search(cred):
             kind = 'irs'
-        elif _DOR_RE.search(both) or re.search(r'\bWARRANTS?\b', doc):   # a tax warrant, never a WARRANTY deed
+        elif _DOR_RE.search(cred) or re.search(r'\bWARRANTS?\b', doc):   # a tax warrant, never a WARRANTY deed
             kind = 'state_tax'
-        elif _HOA_DOC_RE.search(both) or _ASSN_DOC_RE.search(both):
+        elif _HOA_DOC_RE.search(cred) or _ASSN_DOC_RE.search(cred):
             kind = 'association'
-        elif _CODE_RE.search(both):
+        elif _CODE_RE.search(cred):
             kind = 'code'
         elif 'JUDGMENT' in doc:
             kind = 'judgment'
         else:
             kind = 'other'
         person_wide = kind in ('irs', 'state_tax', 'judgment')
-        if not (on_parcel or person_wide):
-            continue                                        # another property of the same owner
+        if not on_parcel:
+            if not person_wide:
+                continue                                    # another property of the same owner
+            if _ow is not None and not (o1 or o2):
+                continue                                    # a namesake: the search is by surname only
         # One instrument, one row (co-owner copies). Marked seen only once a copy is KEPT: a copy
         # indexed to another folio must not hide this parcel's copy of the same recording.
         ident = (('bp',) + bp) if all(bp) else (
@@ -774,19 +858,45 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
             if ident in seen_other:
                 continue
             seen_other.add(ident)
-        own_case = _is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
+        own_case = (_is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
+                    and not _before_case(r.get('reC_DATE', '')))
         amt = num(r.get('consideratioN_1')) or num(r.get('amount'))
         released = all(bp) and bp in released_bp
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'doc': doc[:40], 'kind': kind,
-               'party': (p1 if _is_plaintiff(p1) or _CREDITOR_RE.search(p1) else p2)[:40],
+               'party': (cred if cred is not both else
+                         (p1 if _is_plaintiff(p1) or _CREDITOR_RE.search(p1) else p2))[:40],
                'parties': both[:90], 'bp': r.get('reC_BOOKPAGE', '') or '/'.join(bp),
                'amt': round(amt) if amt > 0 else None,
                'st': 'RELEASED' if released else 'OPEN',
                'anchor': 'folio' if (rf and rf == fol) else ('subdivision' if on_parcel else 'person')}
         if own_case:
             row['own_case'] = True                          # this foreclosure's own filing: never a claim
+        row['_holder'] = _pnorm(cred if cred is not both else row['party'])
         other.append(row)
-        if released or own_case or kind in ('lis_pendens', 'other'):
+    # pair the releases that point nowhere with the liens of their own holder, one to one
+    for h in {o['_holder'] for o in other if o['_holder']}:
+        mine = sorted((o for o in other if o['_holder'] == h and o['st'] == 'OPEN' and not o.get('own_case')
+                       and o['kind'] not in ('lis_pendens', 'other') and _parse_recd(o['d'])),
+                      key=lambda o: _parse_recd(o['d']))
+        rels = sorted(d for d, ps in unref_rel if d and h in ps)
+        if not mine or not rels:
+            continue
+        left, i = list(rels), 0
+        for o in mine:                                      # oldest lien takes the oldest release on/after it
+            j = next((k for k, d in enumerate(left) if d >= _parse_recd(o['d'])), None)
+            if j is None:
+                break
+            left.pop(j); i += 1
+        if i == len(mine):
+            for o in mine:
+                o['st'] = 'RELEASED'; o['released_by'] = 'unreferenced release, one per lien'
+        else:
+            for o in mine:
+                o['release_unmatched'] = len(rels)          # releases seen, too few to say which lien
+    for row in other:
+        row.pop('_holder', None)
+        kind = row['kind']
+        if row['st'] == 'RELEASED' or row.get('own_case') or kind in ('lis_pendens', 'other'):
             continue
         if not row['amt']:
             other_unpriced += 1                             # found, open, amount not published: a count
@@ -850,6 +960,9 @@ def main():
     ap.add_argument('--max-spend', type=float, default=None,
                     help="hard dollar cap on 2Captcha solves this run (at most $%.2f); each submitted "
                          "solve counts ~$%s and the run stops paying at the cap" % (MAX_SPEND_CEILING, PAID_SOLVE_USD))
+    ap.add_argument('--spend-ledger', default='',
+                    help="JSON file that makes --max-spend a total across runs (what earlier runs "
+                         "spent is subtracted; the cap in the file can be lowered, never raised)")
     ap.add_argument('--no-camoufox', action='store_true',
                     help="skip the free Camoufox token mint and go straight to 2Captcha "
                          "(escape hatch for the day the county stops issuing tokens to it)")
@@ -858,11 +971,16 @@ def main():
     a = ap.parse_args()
     if a.max_spend is not None and not (0 < a.max_spend <= MAX_SPEND_CEILING):
         ap.error('--max-spend must be above 0 and at most %.2f' % MAX_SPEND_CEILING)
-    if a.repull and a.max_spend is None:
-        ap.error('--repull pays for searches; give it a --max-spend')
+    if a.repull and (a.max_spend is None or not a.spend_ledger):
+        ap.error('--repull pays for searches; give it a --max-spend and a --spend-ledger')
+    if a.spend_ledger and a.max_spend is None:
+        ap.error('--spend-ledger needs a --max-spend')
     if a.repull and a.cached_only:
         ap.error('--repull and --cached-only contradict each other')
-    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, bal=None, stopped='')
+    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, prior=0.0, ledger=None, led=None, stopped='')
+    if a.spend_ledger:
+        _SPEND['cap'], _SPEND['prior'], _SPEND['led'] = _ledger_open(a.spend_ledger, a.max_spend)
+        _SPEND['ledger'] = a.spend_ledger
     if a.repull:
         a.reanalyze = True                                    # same chains, same keep rule, but it may mint
     elif a.reanalyze:
@@ -1007,7 +1125,8 @@ def main():
 
     # One Camoufox for the whole batch, opened only when there is actually something to mint.
     cf_cm = cf_browser = None
-    need_mint = any((r.get('owner_clean', '') or '').strip() not in qs_cache for r in picked)
+    # --repull: a cached token may have expired, and finding that out must not skip the free mint
+    need_mint = a.repull or any((r.get('owner_clean', '') or '').strip() not in qs_cache for r in picked)
     if need_mint and not a.cached_only and not a.no_camoufox:
         cf_cm, cf_browser = camoufox_session()
         print('  camoufox: %s' % ('ready (free Turnstile tokens)' if cf_browser
@@ -1019,7 +1138,8 @@ def main():
             _SPEND['stopped'] = '2Captcha balance could not be read at the start'
             print('  2captcha: balance unreadable, so no paid solves this run (free paths only)')
         else:
-            print(f"  2captcha: balance ${_SPEND['bal0']:.4f}; this run stops paying at ${_usd(_SPEND['cap'])}")
+            print(f"  2captcha: balance ${_SPEND['bal0']:.4f}; cap ${_usd(_SPEND['cap'])}"
+                  + (f", ${_SPEND['prior']:.4f} already spent against {a.spend_ledger}" if a.spend_ledger else ''))
 
     done = hits = cf_free = paid = kept = capped = 0
     try:
@@ -1111,7 +1231,8 @@ def main():
                 else:
                     print(f"  --  {case:22} {oc:26} (no records / blocked)")
                 continue
-            res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '')
+            res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '',
+                          owner=_searched, case=case)
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
@@ -1157,6 +1278,9 @@ def main():
         b1 = _balance() if _SPEND['bal0'] is not None else None
         print(f"     2captcha cap ${_usd(_SPEND['cap'])}: {_SPEND['submits']} solve(s) submitted, "
               f"~${_SPEND['submits'] * PAID_SOLVE_USD:.3f} counted")
+        if _SPEND['ledger']:
+            _ledger_save(charged=(_SPEND['bal0'] - b1) if b1 is not None else None, final=True)
+            print(f"     ledger {_SPEND['ledger']}: ${_SPEND['led']['counted_usd']:.4f} of ${_usd(_SPEND['cap'])} used")
         if b1 is not None:
             print(f"     ACTUAL CHARGE: balance ${_SPEND['bal0']:.4f} -> ${b1:.4f} = ${_SPEND['bal0'] - b1:.4f} "
                   f"(account-wide: anything else solving at the same time counts too)")
