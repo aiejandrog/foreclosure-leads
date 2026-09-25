@@ -56,9 +56,11 @@ def _with_cached_ocr(row, base):
     import copy
     manifest = row.get('manifest') or {}
     path = manifest.get('path') or manifest.get('pdf_path') or row.get('path')
+    if not path:
+        return row                     # no stored file at all: the pass could not OCR it either
     try:
         digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-    except (OSError, TypeError):
+    except OSError:
         # The stored PDF is not reachable here (a report run on another machine): the free OCR
         # cannot be looked up, so amount pages may be missing. Marked, never silent.
         return dict(row, _ocr_unreachable=True)
@@ -146,6 +148,21 @@ def _entry_order(entry_id):
     return (0, int(text), '') if text.isdigit() else (1, 0, text)
 
 
+def _every_document_checked(target, checks, order, done):
+    """Every bought amount document of the target produced at least one exact-cents check."""
+    import miami_timeline_amounts as amounts
+    checked = {c.get('source_ref') for c in checks}
+    for row in order:
+        if str(row.get('entry_ref') or '') != target:
+            continue
+        if not amounts.amount_page_numbers(row.get('reading') or {}):
+            continue
+        key = 'amount-vision-' + hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest() + '.json'
+        if key in done and row.get('source_ref') not in checked:
+            return False
+    return True
+
+
 def assess(case, base, timeline, as_of, timeline_mtime=None):
     """One case's state from disk. -> dict with 'state' and the page counts a paid read needs.
 
@@ -200,12 +217,15 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     rebuy, stuck_docs, stuck_pages = {}, set(), {}
     for gap in bought['gaps']:
         ref, reason = gap.get('source_ref'), str(gap.get('reason') or '')
-        if re.search(r'not a PDF|contains no pages|DocumentRejected|uncertain', reason, re.I):
-            stuck_docs.add(ref)
-        elif reason.startswith('Vision returned unreadable'):
+        if reason.startswith('Vision returned unreadable'):
             stuck_pages.setdefault(ref, set()).add(gap.get('page'))
-        else:
+        elif re.search(r'budget|cap or reader stop|paid_read_not_selected|APIStatus|APIConnection|'
+                       r'RateLimit|Timeout|overloaded|NotConfigured|not configured', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
+        else:
+            # Anything unrecognised (a rejected or missing file, an uncertain paid call) is taken
+            # to repeat: under-pricing a case beats promising a read that cannot happen.
+            stuck_docs.add(ref)
     done = {Path(f).name for f in bought['evidence_files']}
     # Only the rows the paid reader would walk get the (hash-keyed, whole-file) OCR lookup.
     order = [_with_cached_ocr(r, base) for r in DP.timeline_read_order(plan, rows)['order']]
@@ -213,8 +233,6 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     target_amount_rows = 0
     for row in order:
         is_target = str(row.get('entry_ref') or '') == target
-        if is_target and row.get('_ocr_unreachable'):
-            out['ocr_unreachable'] = True
         pages = amounts.amount_page_numbers(row.get('reading') or {})
         if not pages:
             continue
@@ -233,6 +251,12 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             continue
         need.append((is_target, len(pages)))
     notes = [out['detail']] if out.get('detail') else []
+    # The timeline's own gaps on the target entry: a missing attachment, a page neither text nor
+    # OCR could read, pages never assessed. Any of them means an amount page may be unseen.
+    target_gaps = sorted({str(g.get('kind')) for g in (timeline or {}).get('gaps') or []
+                          if str(g.get('entry_id') or '') == target})
+    if any(r.get('_ocr_unreachable') for r in order):
+        out['ocr_unreachable'] = True
     if out.get('ocr_unreachable'):
         notes.append('stored PDF not reachable here, so free-OCR amount pages were not looked up: '
                      'run the report on the machine that ran the pass')
@@ -240,9 +264,17 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
                    pages_all=sum(n for _, n in need))
-    elif target_checks and all(c.get('ok') for c in target_checks):
-        # Every printed total on every document of the target reproduces to the cent, and no
-        # amount page of it is left unread. One total agreeing while another fails is not this.
+    elif out.get('ocr_unreachable'):
+        # Without the free OCR, amount pages may be missing from every count below.
+        out['state'] = 'report_on_pass_machine'
+    elif target_gaps:
+        out['state'] = 'judgment_incomplete'
+        notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
+    elif (target_checks and all(c.get('ok') for c in target_checks)
+          and _every_document_checked(target, target_checks, order, done)):
+        # Every printed total on every document of the target reproduces to the cent, no amount
+        # page of it is unread, and the timeline has no gap on it. One total agreeing while
+        # another fails, or a judgment read with no total at all, is not this.
         out['state'] = 'verified'
     elif target_amount_rows:
         out['state'] = 'read_not_verified'
@@ -271,6 +303,15 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     return out
 
 
+def _docket_newer(runner, case):
+    import document_store as DS
+    try:
+        return ((Path(DS.pipeline_folder(runner.COUNTY, case)) / 'inventory.json').stat().st_mtime
+                > Path(timeline_path(runner, case)).stat().st_mtime)
+    except OSError:
+        return False
+
+
 def run_pass(runner, entries, today, collect, log, limit=None, save=None):
     import run_case_timeline as RCT
     done = errors = skipped = 0
@@ -280,6 +321,7 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
         case = entry['case']
         last = (log.get('built') or {}).get(case) or {}
         if (built_recently(timeline_path(runner, case))
+                and not _docket_newer(runner, case)
                 and (last.get('collect') or not collect)
                 and time.time() - float(last.get('at') or 0) < FRESH_HOURS * 3600):
             skipped += 1
@@ -340,7 +382,7 @@ def render(rows, skipped_ids, rate, sample, today):
     names = [w[0] for w in windows] + ['sale passed', 'no sale date']
     states = ['verified', 'needs_paid_read', 'read_not_verified', 'judgment_not_fetched',
               'judgment_held_by_docket_plan', 'judgment_without_amount_page',
-              'timeline_older_than_docket',
+              'timeline_older_than_docket', 'judgment_incomplete', 'report_on_pass_machine',
               'no_operative_judgment', 'no_judgment_on_docket', 'docket_incomplete', 'no_docket',
               'unreadable_on_disk']
     lines = ['# Miami judgment amounts: court-copy state and read plan (%s)' % today.isoformat(), '',
@@ -370,6 +412,9 @@ def render(rows, skipped_ids, rate, sample, today):
     lines += ['', '"read_not_verified": the judgment was already read in full and its figures do not '
               'reproduce its printed total to the cent; paying again buys the same answer, so it '
               'needs a person or the paid clerk copy, not another read.']
+    lines += ['', 'Prices assume the paid run goes through run_documents --backfill --timeline --vision, '
+              'whose checkpoint ledger serves pages it already bought at $0. A run through another '
+              'ledger re-bills them; the "whole case" column is the ceiling for that.']
     lines += ['', '"Pages to the judgment" is what the paid reader sends in its own order '
               '(controlling orders first, then judgments newest first) until it reaches the '
               'judgment. "Whole case" is every amount page it would read with an unlimited share.',

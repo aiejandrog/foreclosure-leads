@@ -211,6 +211,56 @@ class Assess(unittest.TestCase):
             got = JP.assess(CASE, self.base, None, '2026-09-25')
         self.assertEqual(got['target_basis'], 'controlling')
 
+    def test_timeline_gap_on_the_judgment_blocks_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        timeline = {'judgments': {'controlling_entry': '9'},
+                    'gaps': [{'entry_id': '9', 'kind': 'missing_attachments'}]}
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])], timeline)
+        self.assertEqual(got['state'], 'judgment_incomplete')
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'verified')
+
+    def test_document_read_without_a_total_blocks_verified(self):
+        ref1 = _row(self.base, '9', '$1.00', 'j1')
+        row2 = {'source_ref': 'court:9:2', 'manifest': {'sha256': 'h9'},
+                'reading': {'pages': [{'page': 1, 'text': 'Total $9.99'}]}}
+        (self.base / (hashlib.sha256(b'j2').hexdigest() + '.json')).write_text(json.dumps(row2))
+        _buy(self.base, ref1, '9')
+        _buy(self.base, 'court:9:2', '9')
+        path = self.base / ('amount-vision-' + hashlib.sha256(b'court:9:2').hexdigest() + '.json')
+        detail = json.loads(path.read_text()); detail['selected_pages'] = [1]
+        path.write_text(json.dumps(detail))
+        ok = {'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+              'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}
+        calls = iter([[ok], []])                 # doc 1 verifies, doc 2 has no printed total
+        with mock.patch('judgment_money.verify_document', side_effect=lambda *a: next(calls)):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_unrecognised_failure_is_not_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'FileNotFoundError: no such file'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_unreachable_pdf_withholds_every_verdict_but_a_price(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        path = next(p for p in self.base.glob('*.json') if len(p.stem) == 64)
+        row = json.loads(path.read_text()); row['manifest']['path'] = 'C:/elsewhere/doc.pdf'
+        path.write_text(json.dumps(row))
+        _buy(self.base, ref, '9')
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'report_on_pass_machine')
+
     def test_repeatable_failure_is_not_priced(self):
         ref = _row(self.base, '9', '$1.00', 'j')
         _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Stored content is not a PDF'}])
