@@ -28,7 +28,7 @@ def _instrument(model):
     """The clerk's own key for one recorded instrument: book and page. None when the index row
     carries neither, which names no instrument and so is never the same one as another row."""
     book, page = model.get('reC_BOOK'), model.get('reC_PAGE')
-    return '%s/%s' % (book, page) if book or page else None
+    return '%s/%s' % (book, page) if book and page else None
 
 
 def _folio(value):
@@ -494,6 +494,9 @@ def parcel_legal_reference(models, folio):
         book_page = _instrument(model)
         if book_page and book_page in records:   # one instrument can come back twice in a search
             continue
+        # A row naming no instrument cannot be told apart from another one, so it can be read but
+        # never counted as a second record corroborating the first.
+        uncountable = not book_page
         book_page = book_page or '(no book or page)'
         combined = dict(legal) if merged is None else _merge_legal(merged, legal)
         if combined is None:
@@ -502,7 +505,7 @@ def parcel_legal_reference(models, folio):
         merged = combined
         records.append(book_page)
         for field in _COMPARED + ('lots',):
-            if legal[field]:
+            if legal[field] and not uncountable:
                 stated[field] = stated.get(field, 0) + 1
     if merged is None:
         return None, ('this lead carries no folio, so no record can be read as the parcel\'s'

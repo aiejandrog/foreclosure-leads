@@ -25,9 +25,9 @@ def mortgage(folio=FOLIO, **kw):
     return rec('5', '3/1/2019', 'OWNER PERSON', 'SAMPLE BANK', folio, 'MORTGAGE', **kw)
 
 
-def unkeyed(date, grantor, grantee, folio='', **kw):
-    """An index row carrying neither book nor page: it names no instrument."""
-    row = rec(None, date, grantor, grantee, folio, **kw)
+def unkeyed(date, grantor, grantee, folio='', book=None, **kw):
+    """An index row with no page, so it names no instrument: a book alone is not one."""
+    row = rec(book, date, grantor, grantee, folio, **kw)
     row['reC_PAGE'] = None
     return row
 
@@ -399,6 +399,19 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual([p['name'] for p in chain['current_deed_candidate']['parties']],
                          ['MID PERSON', 'OWNER PERSON'])
         self.assertEqual(chain['chain_of_title'][0]['link'], 'continuous')
+
+    def test_a_book_with_no_page_is_not_an_instrument(self):
+        # Every row in one book with no page used to share a key, so the later deed was dropped
+        # as a duplicate and the prior grantee was reported as the owner.
+        got = title([unkeyed('1/1/2015', 'A PERSON', 'B PERSON', FOLIO, book='100'),
+                     unkeyed('1/1/2022', 'B PERSON', 'C PERSON', FOLIO, book='100')])
+        self.assertEqual([p['name'] for p in got['current_deed_candidate']['parties']],
+                         ['B PERSON', 'C PERSON'])
+
+    def test_a_row_naming_no_instrument_never_corroborates_itself(self):
+        row = mortgage()
+        row['reC_PAGE'] = None
+        self.assertIs(T.parcel_legal_reference([row, dict(row)], FOLIO)[0]['corroborated'], False)
 
     def test_an_anchored_row_with_no_book_and_page_hides_no_other_deed(self):
         # Both rows name no instrument, so neither collapses into the other: the folio-less deed
