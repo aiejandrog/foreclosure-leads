@@ -1715,11 +1715,19 @@ def _run(a, ap):
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
+                elif (a.repull and case in out and paid > _paid0 and not _def_blocked and not _free_miss):
+                    # every name was asked the paid way and answered, and none reached this parcel (an
+                    # owner name too short to search leaves only the defendants): marked, never paid
+                    # for again
+                    kept += 1
+                    print(f"  ..  {case:22} {oc:26} paid searches answered, none on this parcel; old chain kept")
+                    out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
+                    json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                 else:
                     print(f"  --  {case:22} {oc:26} (no records / blocked)")
-                    # never marked here: the owner's search was not answered (a 503, a dead browser, an
-                    # unsolved captcha), so nothing was found out and a later run retries. A search the
-                    # clerk answered with nothing on this parcel is marked below, as 'old chain kept'.
+                    # never marked here: a search was not answered (a 503, a dead browser, an unsolved
+                    # captcha) or was only asked for free, so a later run retries. A search the clerk
+                    # answered with nothing on this parcel is marked below, as 'old chain kept'.
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)

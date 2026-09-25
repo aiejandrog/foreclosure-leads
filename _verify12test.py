@@ -1233,10 +1233,13 @@ try:
                {'Case #': '2099-000703-CA-01', 'owner_clean': 'UMA FREEMISS', 'Folio': FOLIO, 'judgment': 1,
                 'defendants': 'Roe, Rick'},
                {'Case #': '2099-000704-CA-01', 'owner_clean': 'ANN OWNERX', 'Folio': FOLIO, 'judgment': 1,
-                'defendants': 'Roe, Rick'}], open(os.path.join(_t7, 'leads_final.json'), 'w'))
+                'defendants': 'Roe, Rick'},
+               {'Case #': '2099-000705-CA-01', 'owner_clean': 'MADONNA', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Poe, Pat'}], open(os.path.join(_t7, 'leads_final.json'), 'w'))
     json.dump({'2099-000701-CA-01': {'conf': 'ok', 'liens': [], 'searched_as': 'JANE DOE (defendant)'},
                '2099-000702-CA-01': dict(_mtg_chain, wider_repull='flagged earlier'), '2099-000703-CA-01': _mtg_chain,
-               '2099-000704-CA-01': dict(_mtg_chain, wider_repull='flagged earlier')},
+               '2099-000704-CA-01': dict(_mtg_chain, wider_repull='flagged earlier'),
+               '2099-000705-CA-01': dict(_mtg_chain, wider_repull='flagged earlier')},
               open(os.path.join(_t7, 'records_liens.json'), 'w'))
     open(os.path.join(_t7, 'gen_records_qs.py'), 'w').write('')
     _cf7, _paid7, _o7 = [], [], []
@@ -1279,6 +1282,10 @@ try:
     check("--repull: an owner's paid search the clerk never answered marks nothing, whatever a defendant's found",
           not any(_o['2099-000704-CA-01'].get('repull_tried') for _o in _o7)
           and _o7[1]['2099-000704-CA-01'].get('wider_repull') and _paid7.count(('OWNERX', 'ANN')) == 2, (_paid7, _o7))
+    check("--repull: an owner name too short to search, whose defendants' paid searches were answered off the parcel, "
+          "is marked and never paid for again",
+          _o7[0]['2099-000705-CA-01'].get('repull_tried') and _o7[1]['2099-000705-CA-01']['liens'] == _mtg_chain['liens']
+          and _paid7.count(('POE', 'PAT')) == 1, (_paid7, _o7[1]['2099-000705-CA-01']))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs
