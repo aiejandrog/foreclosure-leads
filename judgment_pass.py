@@ -259,8 +259,15 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     # OCR could read, pages never assessed. Any of them means an amount page may be unseen.
     target_gaps = sorted({str(g.get('kind')) for g in (timeline or {}).get('gaps') or []
                           if str(g.get('entry_id') or '') == target})
-    if any(r.get('_ocr_unreachable') for r in order):
+    # Only the judgment's own documents decide a verdict. Another filing without its OCR can hide
+    # pages the reader buys first, so it only makes the price a floor, and the note says so.
+    if any(r.get('_ocr_unreachable') for r in order
+           if str(r.get('entry_ref') or '') == target):
         out['ocr_unreachable'] = True
+    elif any(r.get('_ocr_unreachable') for r in order):
+        out['price_is_floor'] = True
+        notes.append('free OCR missing for a filing read before the judgment: its pages are not '
+                     'in the price, so pages to the judgment is a floor')
     if out.get('ocr_unreachable'):
         notes.append('the free OCR for a document is not reachable here (stored PDF or its OCR '
                      'cache missing), so OCR-only amount pages are unknown: re-run the pass for '

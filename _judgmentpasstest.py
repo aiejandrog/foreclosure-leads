@@ -270,6 +270,22 @@ class Assess(unittest.TestCase):
         got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'report_on_pass_machine')
 
+    def test_unrelated_filing_without_ocr_does_not_hide_a_verdict(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        pdf = self.base / 'other.pdf'
+        pdf.write_bytes(b'%PDF other')
+        row = {'source_ref': 'court:5:1', 'manifest': {'sha256': 'h5', 'path': str(pdf)},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'order'}]}}
+        (self.base / (hashlib.sha256(b'o').hexdigest() + '.json')).write_text(json.dumps(row))
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('5', 'vacatur', True, []), ('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'verified')
+        self.assertTrue(got['price_is_floor'])
+
     def test_repeatable_failure_is_not_priced(self):
         ref = _row(self.base, '9', '$1.00', 'j')
         _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Stored content is not a PDF'}])
