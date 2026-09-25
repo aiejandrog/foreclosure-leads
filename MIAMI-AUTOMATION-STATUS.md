@@ -88,8 +88,22 @@ every dispositive event it could not link to a judgment, which a satisfaction ci
 recording date rather than the judgment's normally is. Each left a satisfied, vacated, dismissed or
 sold case reading `supported` with the amount vouched for to the cent; the verdict now names both. The
 producer-side halves are reported, not changed: `_FILED_ABOUT_RE` swallowing a bare "Notice of Filing
-<dispositive document>", and `_target` finding no target whenever a satisfaction's text cites any
-unrelated date. Reading the fields the producer already saves is the cheaper fix and invents nothing.
+<dispositive document>", `_target` finding no target whenever a satisfaction's text cites any unrelated
+date, and `scope_of`'s bare `\bonly\b` turning a whole-action dismissal into a limited-scope one.
+Reading the fields the producer already saves is the cheaper fix and invents nothing. A third such
+field is `limited_scope` on a dismissal: `_transition` declines to move the status for one, and unlike
+a limited-scope satisfaction - which `reconcile_judgments` records as `partially_satisfied` - nothing
+reconciles a dismissal, so a voluntarily dismissed action read `supported` with the status still
+`judgment_entered`.
+
+**One limit of the amount column, and it is not closable here.** An amount check names a docket ENTRY,
+not a document: `run_case_timeline` :53 takes `entry_ref` from the middle segment of
+`court:<entry>:<document>`, so every attachment filed under the judgment's entry produces checks
+carrying the judgment's entry id. An Affidavit of Indebtedness filed as a second attachment has its own
+additive table and its own grand total, and that total was printed as the judgment's amount "verified
+to the cent". Nothing in a saved timeline says which attachment on an entry is the judgment, so where
+the entry carries more than one read document the verdict now says the figure cannot be tied to the
+judgment itself rather than vouching for it.
 
 **The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry

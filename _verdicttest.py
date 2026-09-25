@@ -1915,5 +1915,119 @@ class EleventhReviewTests(unittest.TestCase):
 
 
 
+class TwelfthReviewTests(unittest.TestCase):
+    """The twelfth review caught a REGRESSION this branch introduced one commit earlier, plus two
+    false `supported` paths on axes eleven rounds had not touched - the amount attribution and a
+    third unread producer field - and a new gap of my own that would have held routine dockets.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    OPEN = EleventhReviewTests.OPEN
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+
+    def test_the_docket_index_never_outranks_a_read_document(self):
+        # THE REGRESSION. _relabelled was narrowed to hold only when the lost DOCUMENT label decides
+        # something, but _producer_labels still fell back to index_kind - so where the document's
+        # label is harmless and the index's is deciding, nothing held the case and the weaker label
+        # was used. An order DENYING a motion to cancel a sale, indexed "Order Cancelling Foreclosure
+        # Sale", closed a live sale under a Chapter 13 stay: `supported`, amount vouched to the cent.
+        t = self.built(self.OPEN + [
+            (3, 'Notice of Foreclosure Sale', 'sale set for 09/28/2026', '07/01/2026', ''),
+            (4, 'Suggestion of Bankruptcy', 'Chapter 13 case no. 26-11111', '07/15/2026', ''),
+            (5, 'Order Cancelling Foreclosure Sale', '', '08/01/2026', 'Hearing')],
+            pages={'2': self.JUDGMENT_PAGE,
+                   '5': 'ORDER DENYING MOTION TO CANCEL FORECLOSURE SALE'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '5')
+        self.assertEqual((entry['kind'], entry['kind_source'], entry['index_kind']),
+                         ('hearing', 'document', 'order_cancelling_sale'))
+        self.assertEqual(CV._producer_labels(entry), ('order_on_motion',))
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+        self.assertTrue(any('3' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_reason_never_calls_a_denied_motion_a_notice_of_sale(self):
+        # The mirror: index 'Notice of Foreclosure Sale' over a document that is an order denying an
+        # unrelated motion printed "which the docket classifies as notice_of_sale", which the
+        # producer contradicts - it classified the entry off the document.
+        t = self.built(self.OPEN + [
+            (4, 'Suggestion of Bankruptcy', 'Chapter 13 case no. 26-11111', '07/15/2026', ''),
+            (5, 'Notice of Foreclosure Sale', '', '08/01/2026', 'Hearing')],
+            pages={'2': self.JUDGMENT_PAGE,
+                   '5': 'ORDER DENYING MOTION FOR PROTECTIVE ORDER'})
+        r = CV.assess(t)
+        self.assertFalse(any('notice_of_sale' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_an_amount_off_another_attachment_is_not_the_judgments(self):
+        # A check names an ENTRY, not a document (run_case_timeline :53), so an Affidavit of
+        # Indebtedness filed as a second attachment on the judgment entry had its own grand total
+        # printed as the judgment amount "verified to the cent".
+        t = self.built(self.OPEN, pages={'2': self.JUDGMENT_PAGE})
+        t['amount_vision'] = {'amount_checks': [ok_check('2', 'court:2:2', 412880.00)]}
+        t['coverage'] = {'attachments': [dict(read_attachment('2'), document='court:2:1'),
+                                         dict(read_attachment('2'), document='court:2:2')],
+                         'complete': False}
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
+        self.assertTrue(any('names the entry rather than the document' in m for m in r['missing']),
+                        r['missing'])
+
+    def test_one_read_document_on_the_entry_leaves_the_amount_alone(self):
+        # The ordinary case must not gap: one document, no ambiguity about what the figure came off.
+        t = self.built(self.OPEN, pages={'2': self.JUDGMENT_PAGE})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_a_dismissal_the_run_read_as_limited_is_named(self):
+        # limited_scope is written on every entry (:367) and _transition declines to move the status
+        # for a limited-scope dismissal (:234). A limited-scope SATISFACTION is caught, because
+        # reconcile_judgments records partially_satisfied; a dismissal has no such backstop, so a
+        # whole action voluntarily dismissed read `supported` with status judgment_entered.
+        for title, body in (
+                ('Notice of Voluntary Dismissal',
+                 'NOTICE OF VOLUNTARY DISMISSAL\nPlaintiff hereby dismisses this action, reserving '
+                 'only its right to refile.'),
+                ('Order of Dismissal',
+                 'ORDER OF DISMISSAL\nThis cause is dismissed as to Defendants JOHN SMITH and '
+                 'UNKNOWN TENANT #1 only.')):
+            t = self.built(self.OPEN + [(6, title, '', '08/01/2026', '')],
+                           pages={'2': self.JUDGMENT_PAGE, '6': body})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '6')
+            self.assertIs(entry['limited_scope'], True, title)
+            r = CV.assess(t)
+            self.assertNotEqual(r['verdict'], 'supported', (title, r['supported_by'], r['notes']))
+            self.assertTrue(any('6' in m and 'dismissal' in m for m in r['missing']),
+                            (title, r['missing']))
+
+    def test_a_judgment_copy_under_a_covering_title_does_not_hold_the_case(self):
+        # final_judgment is in _DISPOSITIVE_BODIES, so a motion, a proposed judgment, a memorandum
+        # and a status report carrying a judgment copy all set attached_document_kind - and the
+        # eleventh round's reader held every one of them forever. The producer's own rule is that
+        # such a copy is an exhibit; it can only mean "a judgment exists", which is already read.
+        for title in ('Motion for Summary Judgment', 'Notice of Filing Proposed Final Judgment',
+                      'Request for Judicial Notice', 'Memorandum of Law', 'Status Report'):
+            t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                            (3, title, '', '03/01/2026', ''),
+                            (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')],
+                           pages={'2': self.JUDGMENT_PAGE,
+                                  '3': 'FINAL JUDGMENT OF FORECLOSURE\nIT IS ADJUDGED that '
+                                       'plaintiff recover $1,746,032.70'})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '3')
+            self.assertEqual(entry.get('attached_document_kind'), 'final_judgment', title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing'], r['conflicts']))
+
+    def test_a_document_the_run_never_reached_is_not_no_document(self):
+        # document_coverage :20 defines not_enumerated as the attachment list itself not being
+        # obtained, and :169 emits it saying how many documents the docket claims. Printing "has no
+        # document to read" told the reader the opposite of what the producer saved.
+        self.assertNotIn('not_enumerated', CV.NO_IMAGE)
+        self.assertIn('not_enumerated', CV.NOT_REACHED)
+        r = CV.assess(timeline('X', checks=[ok_check()],
+                               attachments=[dict(read_attachment(), state='not_enumerated')]))
+        self.assertFalse(any('no document to read' in m for m in r['missing']), r['missing'])
+        self.assertTrue(any('never reached' in m for m in r['missing']), r['missing'])
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

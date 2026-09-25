@@ -55,12 +55,17 @@ NAMES = {
     'login_walled': {'miami_case_timeline': ('login_required', 'login_required_likely'),
                      'document_coverage': ('restricted', 'restricted_likely')},
     'no_image': {'miami_case_timeline': ('no_image_indexed', 'not_fetched', 'missing_attachments'),
-                 'document_coverage': ('county_no_document', 'not_enumerated')},
+                 'document_coverage': ('county_no_document',)},
+    # document_coverage :20 defines not_enumerated as "the entry's attachment list itself could not
+    # be obtained", and :169 emits it saying how many documents the docket claims. A document exists
+    # and was not reached, which is the opposite of having none to read.
+    'not_reached': {'document_coverage': ('not_enumerated',)},
     'part_read': {'miami_case_timeline': ('unreadable_pages', 'unassessed_pages'),
                   'document_coverage': ('read_partial',)},
 }
 LOGIN_WALLED = NAMES['login_walled']['document_coverage'] + NAMES['login_walled']['miami_case_timeline']
 NO_IMAGE = NAMES['no_image']['document_coverage'] + NAMES['no_image']['miami_case_timeline']
+NOT_REACHED = NAMES['not_reached']['document_coverage']
 PART_READ = NAMES['part_read']['document_coverage'] + NAMES['part_read']['miami_case_timeline']
 
 # miami_case_timeline sets status kind 'unclear' for nine different reasons. Three are evidence
@@ -209,8 +214,20 @@ def _producer_labels(entry):
     """
     kind = entry.get('kind')
     if kind == 'hearing' and entry.get('calendar_event'):
-        # The override fired and took the real label with it. index_kind is the only survivor; the
-        # document-read label, if there was one, is not saved anywhere.
+        # The override fired and took the real label with it.
+        if entry.get('kind_source') == 'document':
+            # What it took was the DOCUMENT's label, and that is recoverable: :360 sets
+            # operative_text to the very title line _body_kind classified. Falling back to
+            # index_kind here was a regression that reopened this module's worst case - an order
+            # DENYING a motion to cancel a sale, indexed "Order Cancelling Foreclosure Sale", closed
+            # a live sale under a Chapter 13 stay and returned `supported` (twelfth review). The
+            # producer also saves index_agrees=False on exactly these entries.
+            recovered = _classify(entry.get('operative_text'))
+            if recovered:
+                return (recovered,)
+        # 'docket_text' means kind WAS index_kind, so the index is the real label. 'document_passage'
+        # (:377) overwrote operative_text, so nothing is recoverable - and _relabelled holds that
+        # branch unconditionally.
         return tuple(k for k in (entry.get('index_kind'),) if k) or ('hearing',)
     return tuple(k for k in (kind,) if k)
 
@@ -805,6 +822,9 @@ def assess(timeline, dossier=None):
             missing.append("the controlling judgment's filing is behind the clerk's login (%s)" % state)
         elif state in NO_IMAGE:
             missing.append("the controlling judgment's filing has no document to read (%s)" % state)
+        elif state in NOT_REACHED:
+            missing.append("the controlling judgment's filing has a document the run never reached "
+                           '(%s)' % state)
         elif state in PART_READ:
             missing.append("the controlling judgment's filing was only partly read (%s)" % state)
         elif state != 'read':
@@ -827,6 +847,26 @@ def assess(timeline, dossier=None):
     # The timeline's OWN gaps (budget_exhausted, amount_page_unreadable,
     # inventory_completeness_unknown and the rest) reached the report only where they happened to
     # change a coverage state. They are the run saying what it could not do, so they are named.
+    # An amount check names an ENTRY, not a document: run_case_timeline :53 sets entry_ref from the
+    # middle segment of `court:<entry>:<document>`, so every attachment filed under the judgment's
+    # docket entry produces checks carrying the judgment's entry_id. An Affidavit of Indebtedness
+    # filed as a second attachment - a shape miami_case_timeline :159 names by hand - has its own
+    # additive table and its own grand total, and that total was printed as the judgment's amount
+    # "verified to the cent" with nothing to tell a reader but the document number in a source ref
+    # (twelfth review). Where the entry carries only one read document there is no ambiguity; where
+    # it carries more, which one the figure came off is not in this file.
+    if verified:
+        # document_coverage :166 names the document on each row as `document`, carrying the
+        # source_ref string; rows for an entry with no document reached carry None.
+        read_docs = {str(r.get('document') or '') for r in mine if r.get('state') == 'read'}
+        read_docs.discard('')
+        if len(read_docs) > 1:
+            missing.append('the amount is verified on %s, but the judgment\'s docket entry carries '
+                           '%d read documents and a check names the entry rather than the document, '
+                           'so whether the figure was read off the judgment itself is not settled in '
+                           'this file'
+                           % (', '.join(sorted(str(c.get('source_ref') or '?') for c in verified)),
+                              len(read_docs)))
     # Two fields the producer writes and, until the eleventh review, nothing in the repo read. Both
     # are one line here and both were a false `supported` with the amount vouched for "to the cent".
     #
@@ -840,11 +880,35 @@ def assess(timeline, dossier=None):
         if not isinstance(entry, dict):
             continue
         attached = entry.get('attached_document_kind')
-        if attached in DECIDING_KINDS:
+        # final_judgment is deliberately excluded. It is in _DISPOSITIVE_BODIES, so a motion for
+        # summary judgment, a proposed judgment, a memorandum or a status report carrying a judgment
+        # copy all set this key - and holding on those made routine dockets incomplete for good
+        # (twelfth review; miami_case_timeline :272 names three real pilot entries of this shape).
+        # The producer's own rule is that such a copy is an exhibit, and a judgment body under a
+        # covering title can only mean "a judgment exists", which reconcile_judgments already read.
+        # The other five dispositive bodies genuinely move the posture.
+        if attached in DECIDING_KINDS and attached != 'final_judgment':
             missing.append('entry %s is titled as a filing about something else, and the document '
                            'under it reads as %s, which the run therefore did not fold into the '
                            "case's posture; whether it decides this case is not settled in this file"
                            % (entry.get('entry_id') or '?', attached))
+    # limited_scope / dismissed_parties (:367) on a DISMISSAL. _transition returns None for a
+    # limited-scope dismissal (:234), so the status never moves - and unlike a limited-scope
+    # satisfaction, which reconcile_judgments records as partially_satisfied and which this module
+    # already reads, nothing reconciles a dismissal. A whole action voluntarily dismissed read
+    # `supported` with status judgment_entered (twelfth review). scope_of (:569) sets limited off a
+    # bare `\bonly\b` near `dismiss`, with no party named, which is reported and not changed.
+    for entry in _rows(timeline, 'entries'):
+        if not isinstance(entry, dict) or not entry.get('limited_scope'):
+            continue
+        if not set(_producer_labels(entry)) & {'notice_of_voluntary_dismissal', 'order_of_dismissal'}:
+            continue
+        parties = [str(x) for x in _rows(entry, 'dismissed_parties')]
+        missing.append('entry %s is a dismissal the run read as limited in scope%s, so it did not '
+                       "move the case's posture; what it dismisses is not settled in this file"
+                       % (entry.get('entry_id') or '?',
+                          ' (as to %s)' % ', '.join(parties[:5]) if parties else
+                          ' and it names no party'))
     # unmatched (:756): reconcile_judgments' own list of dispositive events it could not link to a
     # judgment. A satisfaction citing the mortgage's recording date rather than the judgment's - the
     # ordinary shape - lands here (_target, :793), and an unmatched satisfaction left the judgment
