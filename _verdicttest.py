@@ -2474,5 +2474,87 @@ class SeventeenthReviewTests(unittest.TestCase):
 
 
 
+class EighteenthReviewTests(unittest.TestCase):
+    """Both holes were in the gate the round before added, on the one posture that gate could not
+    reach: `unknown` was reported on every kind, but it was never COMPUTED for a live sale.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    NOTICE = (145, 'Notice of Foreclosure Sale on 12/28/2026', '', '06/20/2026', '')
+
+    def case(self, extra):
+        return self.built(self.JUDGED + list(extra), controlling='140',
+                          pages={'140': self.JUDGMENT_PAGE})
+
+    def test_an_unlabelled_cancellation_of_a_live_sale_is_named(self):
+        # _sale_state returned 'live' off the bare status kind before any path that computes
+        # 'unknown'. classify leaves "Notice of Cancellation of Foreclosure Sale" as 'other' and
+        # _transition has no entry for 'other', so the entry produces no transition and the status is
+        # no evidence about it - the same argument the previous round used for reporting `unknown`.
+        t = self.case([self.NOTICE,
+                       (151, 'Notice of Cancellation of Foreclosure Sale', '', '07/11/2026', '')])
+        self.assertEqual(t['status']['kind'], 'sale_scheduled')
+        self.assertEqual(CV._sale_state(t, t['status'], 'sale_scheduled')[0], 'unknown')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if '151' in m], r['missing'])
+
+    def test_an_unlabelled_reschedule_of_a_live_sale_is_named(self):
+        # The same hole with the sale moved rather than cancelled: the report vouched for a posture
+        # whose sale date the docket's own later entry contradicts.
+        t = self.case([self.NOTICE,
+                       (155, 'Notice of Rescheduled Foreclosure Sale on 10/05/2026', '',
+                        '08/01/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+
+    def test_knowing_less_is_never_the_supported_case(self):
+        # The inversion. With a LABELLED cancellation between the notice and the unlabelled
+        # rescheduling the case was already incomplete; removing it - knowing strictly less - made the
+        # same entry invisible.
+        labelled = self.case([self.NOTICE, (150, 'Order Cancelling Foreclosure Sale', '',
+                                            '07/10/2026', ''),
+                              (155, 'Notice of Rescheduled Foreclosure Sale on 10/05/2026', '',
+                               '08/01/2026', '')])
+        bare = self.case([self.NOTICE, (155, 'Notice of Rescheduled Foreclosure Sale on 10/05/2026',
+                                        '', '08/01/2026', '')])
+        self.assertEqual(CV.assess(labelled)['verdict'], CV.assess(bare)['verdict'])
+
+    def test_a_resale_noticed_after_a_certificate_is_still_not_a_clean_bill(self):
+        # The previous round's `completed` exclusion discarded EVERY later unlabelled sale-worded
+        # entry, which is wider than its own justification (the clerk's proceeds handling) and
+        # reopened the shape the seventh review fixed for the phrasing classify does label.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/20/2026', ''),
+                       (146, 'Bid Amount', '', '07/20/2026', ''),
+                       (150, 'Certificate of Sale', '', '07/21/2026', ''),
+                       (155, 'Notice of Rescheduled Foreclosure Sale for 12/28/2026', '',
+                        '08/01/2026', '')])
+        self.assertEqual(t['status']['kind'], 'sold')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if '155' in m], r['missing'])
+
+    def test_the_clerks_proceeds_entries_still_close_a_completed_sale(self):
+        # Contract 5, and what separates the two: the producer's own date parser. A proceeds entry
+        # prints no sale date after the certificate; a rescheduled-sale notice does.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/20/2026', ''),
+                       (146, 'Bid Amount', '', '07/20/2026', ''),
+                       (150, 'Certificate of Sale', '', '07/21/2026', ''),
+                       (151, 'Certificate of Title', '', '08/05/2026', ''),
+                       (160, 'Disbursement of Sale Proceeds', '', '08/10/2026', ''),
+                       (161, 'Surplus Funds from Sale', '', '08/12/2026', '')])
+        self.assertEqual(CV._sale_state(t, t['status'], 'sold'), ('none', None))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_a_live_sale_with_nothing_unlabelled_after_it_is_still_supported(self):
+        t = self.case([self.NOTICE])
+        self.assertEqual(CV._sale_state(t, t['status'], 'sale_scheduled')[0], 'live')
+        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

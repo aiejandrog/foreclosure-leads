@@ -457,8 +457,27 @@ def _sale_state(timeline, status, kind):
         return 'live', ('the clerk posted sale-day bid and deposit entries on %s and no '
                         'certificate of sale has followed' % held['date'])
     if kind in SALE_LIVE_STATUS_KINDS:
+        # The same test the `opening` branch below applies, and for the same reason: an unlabelled
+        # sale-worded entry newer than anything the producer labelled may BE the cancellation or a
+        # rescheduling, and classify leaves both of those phrasings 'other'. Returning 'live' off the
+        # bare status kind skipped it, so on the one posture where a later unread entry matters most -
+        # the live sale itself - the gap was unreachable, and a docket where strictly LESS was known
+        # read `supported` where the same entry after a LABELLED cancellation read incomplete
+        # (eighteenth review).
+        later = _later_unlabelled(closing_date)
+        if later:
+            return 'unknown', ('%s, so whether that sale still stands cannot be told from this file'
+                               % _unlabelled_phrase(later))
         return 'live', 'the docket status is %r' % (kind,)
     if status.get('sale_date') and closing_date < str(status['sale_date']):
+        # Only reachable if the producer ever writes sale_date on a status kind outside
+        # SALE_LIVE_STATUS_KINDS; _transition writes it only for 'sale_scheduled' today, so the
+        # branch above wins. Guarded the same way rather than left as the one unguarded path.
+        later = _later_unlabelled(closing_date)
+        if later:
+            return 'unknown', ('%s, so whether the sale on the calendar for %s still stands cannot '
+                               'be told from this file'
+                               % (_unlabelled_phrase(later), status['sale_date']))
         return 'live', 'a sale is on the calendar for %s' % status['sale_date']
     if opening is not None:
         # A cancellation or certificate on the SAME DAY closes it: the docket gives dates, not
@@ -490,7 +509,16 @@ def _sale_state(timeline, status, kind):
     # would read every completed sale as unknown for good (seventeenth review). A cancellation, or
     # nothing at all, leaves room for a later notice; a certificate does not.
     completed = closing is not None and set(_producer_labels(closing)) & set(CERTIFICATE_KINDS)
-    later = [] if completed else _later_unlabelled(closing_date)
+    later = _later_unlabelled(closing_date)
+    if completed:
+        # A certificate means THAT sale completed, and what follows it is the clerk's proceeds
+        # handling - "Disbursement of Sale Proceeds", "Surplus Funds from Sale" - which carries the
+        # word and classifies as 'other'. Discarding every later entry went further than that
+        # argument and suppressed a RESALE noticed after the certificate, which the seventh review
+        # had already fixed for the phrasing classify does label (eighteenth review). The producer's
+        # own date parser separates them: a proceeds entry prints no sale date after the certificate,
+        # a rescheduled-sale notice does.
+        later = [e for e in later if any(d > closing_date for d in _sale_dates_of(e))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))

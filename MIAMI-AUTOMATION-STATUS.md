@@ -155,7 +155,17 @@ rescheduling flipped identical evidence from `incomplete` to `supported`. `unkno
 every kind, with the completed-sale case excluded inside `_sale_state` by the producer's own
 certificate label: a cancellation leaves room for a later notice, a certificate does not, and the
 clerk's "Disbursement of Sale Proceeds" and "Surplus Funds from Sale" both classify as `'other'` and
-both carry the word, so without that exclusion every completed sale would read `incomplete` for good.
+both carry the word. That exclusion went wider than its own argument for one round and suppressed a
+RESALE noticed after the certificate; the producer's own date parser separates the two, since a
+proceeds entry prints no sale date after the certificate and a rescheduled-sale notice does.
+
+The round after that closed the last hole of the same kind: `unknown` was reported on every status
+kind but never COMPUTED for a live sale, because `_sale_state` returned `live` off the bare status kind
+before any path that looks for an unlabelled sale-worded entry. So on the one posture where a later
+unread entry matters most - the live sale itself - a docket where strictly LESS was known read
+`supported`: a notice of sale followed by "Notice of Cancellation of Foreclosure Sale" or a
+rescheduling to a different date, both of which `classify` leaves `'other'`, while the same entry after
+a LABELLED cancellation order was already `incomplete` (eighteenth review).
 
 The same round closed the other half of the eighth review's defect. `_transition` takes the sale date
 from `sale_passages` - the docket line plus the body lines of READ pages - and falls back to the
