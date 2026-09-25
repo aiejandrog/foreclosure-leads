@@ -87,7 +87,15 @@ def build_title_parties(models, documents, docket, folio):
     # Second pass, because whether a legal-matched deed may join the chain depends on the dates
     # already in it: an undated deed, or two deeds on one day, stop a current deed being chosen
     # for the parcel at all, and a deed the index placed here never costs that much.
-    taken = {d['date_parsed'] for d in deeds}
+    # A recording date may carry a time, so days are compared as days: two deeds on one day are
+    # ambiguous whether or not the index timed one of them.
+    def day(value):
+        return value.date() if value else None
+    taken = {day(d['date_parsed']) for d in deeds}
+    matched_days = {}
+    for model, row, *_ in candidates:
+        if compare_legal(reference, index_legal(model), reference_gap)['verdict'] == 'matched':
+            matched_days[day(row['date_parsed'])] = matched_days.get(day(row['date_parsed']), 0) + 1
     for model, row, printed, own_folio, target, pages in candidates:
         ref = row['source_ref']
         conflict = bool(own_folio and own_folio != target) or bool(printed - {target, ''})
@@ -98,7 +106,10 @@ def build_title_parties(models, documents, docket, folio):
                 verdict = dict(verdict, verdict='needs_person', basis=None,
                                reason='its legal description matches the parcel but the index '
                                       'gives it no readable recording date')
-            elif verdict['verdict'] == 'matched' and row['date_parsed'] in taken:
+            elif verdict['verdict'] == 'matched' and (day(row['date_parsed']) in taken
+                                                      or matched_days[day(row['date_parsed'])] > 1):
+                # Whichever of two same-day deeds comes first in the county's answer must not
+                # decide who the board calls the owner, so neither is placed.
                 verdict = dict(verdict, verdict='needs_person', basis=None,
                                reason='its legal description matches the parcel but another deed '
                                       'on the parcel is recorded the same day')
@@ -106,10 +117,13 @@ def build_title_parties(models, documents, docket, folio):
                 # The clerk's own index puts this deed on the same lot/block/plat (or condo
                 # unit) as the records it filed under this parcel's folio. That is the check a
                 # person did by hand; anything short of an exact match still goes to one.
-                gaps.append('%s: anchored by the clerk index legal description (%s), not by '
+                gaps.append('%s: anchored by the clerk index legal description (%s)%s, not by '
                             'folio; index names and bounded explicit-role extraction do not '
-                            'establish that every deed party was recovered.' % (ref, verdict['basis']))
-                taken.add(row['date_parsed'])
+                            'establish that every deed party was recovered.'
+                            % (ref, verdict['basis'],
+                               '' if reference.get('corroborated') else
+                               ', which only one record filed under this folio states'))
+                taken.add(day(row['date_parsed']))
                 deeds.append(dict(row, anchored_by='legal_description', legal_match=verdict))
                 continue
         gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)

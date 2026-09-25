@@ -192,14 +192,31 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['legal_matched_deeds'], [])
         self.assertIn('names no parcel', got['unanchored_deeds'][0]['legal_match']['reason'])
 
-    def test_two_matching_deeds_on_one_day_never_cost_the_current_deed(self):
+    def test_two_matching_deeds_on_one_day_place_neither(self):
+        # Whichever the county listed first must not decide who the board calls the owner.
         rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
                 rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
                 rec('8', '6/1/2023', 'OWNER PERSON', 'OTHER LLC')]
         got = title(rows)
-        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
-        self.assertEqual(got['current_deed_candidate']['book_page'], '7/1')
+        self.assertEqual(got['legal_matched_deeds'], [])
+        self.assertEqual(got['current_deed_candidate']['book_page'], '2/1')
+        self.assertEqual([d['book_page'] for d in got['unanchored_deeds']], ['7/1', '8/1'])
+        self.assertEqual(got['possible_later_conveyances'], ['7/1', '8/1'])
+
+    def test_a_recording_time_does_not_hide_a_same_day_deed(self):
+        rows = [mortgage(), rec('2', '6/1/2023 10:00:00 AM', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], [])
         self.assertIn('same day', got['unanchored_deeds'][0]['legal_match']['reason'])
+
+    def test_a_placement_resting_on_one_index_row_says_so(self):
+        rows = [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        self.assertTrue(any('only one record filed under this folio states' in g
+                            for g in title(rows)['gaps']))
+        corroborated = folio_pair() + rows[1:]
+        self.assertFalse(any('only one record filed under this folio states' in g
+                             for g in title(corroborated)['gaps']))
 
     def test_the_same_legal_written_two_ways_is_still_one_yardstick(self):
         rows = [mortgage(), mortgage(block='012', plat='053-0900'),
