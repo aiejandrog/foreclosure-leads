@@ -307,10 +307,31 @@ check('sale dates: a hearing, then the sale reset, keeps the reset',
       S._sale_dates_in('SALE OF 9/28/2026 CANCELLED; HEARING HELD; SALE RESET FOR 11/09/2026') == [D(2026, 9, 28), D(2026, 11, 9)])
 # scheduling verbs move hearings too: the thing named decides, not the verb
 for _txt in ('SALE OF 10/1/2026; HEARING ON OBJECTIONS SET FOR 11/5/2026', 'SALE OF 10/1/2026; HEARING CONTINUED TO 11/5/2026',
-             'SALE OF 10/1/2026; RESPONSE RESCHEDULED TO 11/5/2026'):
+         ):
     check('sale dates: %s' % _txt, S._sale_dates_in(_txt) == [D(2026, 10, 1)], S._sale_dates_in(_txt))
 check('sale dates: a docket title is its own part',
       S._sale_dates_in('Notice of Sale and Certificate of Service', '11/09/2026') == [D(2026, 11, 9)])
+# round 3: a reset after a hearing/response word, other surplus wording, resale, a service-only notice
+for _txt, _want in [('Sale Date: SEPTEMBER 28, 2026 AND RESET PER HEARING TO OCTOBER 26, 2026', [D(2026, 9, 28), D(2026, 10, 26)]),
+                    ('RESCHEDULED AFTER HEARING TO 10/26/2026', [D(2026, 10, 26)]),
+                    ('CANCELLED PER HEARING, RESET TO 11/09/2026', [D(2026, 11, 9)]),
+                    ('SALE CANCELLED PER PLAINTIFF RESPONSE, RESET TO 11/09/2026', [D(2026, 11, 9)]),
+                    ('SALE CANCELLED; HEARING ON OBJECTIONS; RESALE 11/09/2026', [D(2026, 11, 9)]),
+                    ('SALE OF 10/1/2026. SURPLUS FROM THE FORECLOSURE SALE MUST BE CLAIMED BY 11/30/2026', [D(2026, 10, 1)]),
+                    ('SALE OF 10/1/2026. CLAIM WITHIN 60 DAYS OF THE SALE, 11/30/2026', [D(2026, 10, 1)]),
+                    ('SALE OF 10/1/2026. SURPLUS WITHIN 60 DAYS AFTER  THE\nJUDICIAL SALE 11/30/2026', [D(2026, 10, 1)])]:
+    check('sale dates: %r' % _txt, S._sale_dates_in(_txt) == _want, S._sale_dates_in(_txt))
+v = S.classify([e('09/20/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: SEPTEMBER 28, 2026 AND RESET PER HEARING TO OCTOBER 26, 2026')],
+               '09/28/2026', D(2026, 9, 24))
+check('reset "per hearing": moved to 10/26', v['st'] == 'reset' and v.get('nd') == '2026-10-26', v)
+v = S.classify([e('09/20/2026', 'Mortgage Foreclosure Sale Cancelled', 'CANCELLED PER HEARING, RESET TO 11/09/2026')], '09/28/2026', D(2026, 9, 24))
+check('clerk cancel "per hearing, reset to": moved to 11/09', v['st'] == 'reset' and v.get('nd') == '2026-11-09', v)
+v = S.classify([e('03/15/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: APRIL 6, 2026 AND RESET FOR DECEMBER 7, 2026'),
+                e('07/01/2026', 'Notice of Sale', 'HEARING 07/15/2026')], '09/28/2026', D(2026, 9, 24))
+check('stale scan: a newer notice naming only a hearing date is still the newest word', v['st'] == 'scheduled', v)
+v = S.classify([e('03/15/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: APRIL 6, 2026 AND RESET FOR DECEMBER 7, 2026'),
+                e('07/01/2026', 'Notice of Sale', 'CERTIFICATE OF SERVICE MAILED 07/01/2026')], '09/28/2026', D(2026, 9, 24))
+check('stale scan: a service date on the newest notice reads as before', v['st'] == 'scheduled', v)
 check('sale dates: DISCLAIMER is not a claim', S._sale_dates_in('SALE OF 10/1/2026 DISCLAIMER 10/20/2026') == [D(2026, 10, 1), D(2026, 10, 20)])
 v = S.classify([e('09/10/2026', 'Notice of Sale', 'SALE OF 10/1/2026; HEARING ON OBJECTIONS SET FOR 11/5/2026')], '10/01/2026', D(2026, 9, 25))
 check('hearing "set for" on the notice: the sale stays 10/01', v['st'] == 'scheduled' and 'nd' not in v, v)
