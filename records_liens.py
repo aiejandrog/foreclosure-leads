@@ -189,7 +189,8 @@ def _may_submit():
             # asleep past the stale age and another run took the ledger over: its total is not ours
             _SPEND['stopped'] = 'another run took over the spend ledger'
             return False
-    if _SPEND['prior'] + (_SPEND['submits'] + 1) * PAID_SOLVE_USD > cap + 1e-9:
+    unit = _SPEND.get('unit') or PAID_SOLVE_USD
+    if _SPEND['prior'] + (_SPEND['submits'] + 1) * unit > cap + 1e-9:
         _SPEND['stopped'] = 'counted solves reached the $%s cap' % _usd(cap)
         return False
     if _SPEND['submits'] and _SPEND['submits'] % 20 == 0:
@@ -197,7 +198,10 @@ def _may_submit():
         if b is None:
             _SPEND['stopped'] = '2Captcha balance could not be re-read'
             return False
-        if _SPEND['prior'] + _SPEND['bal0'] - b + PAID_SOLVE_USD > cap + 1e-9:
+        # the balance says what a solve really costs: count every later one at that price, so the
+        # 19 solves before the next re-read cannot run past the cap on a stale estimate
+        _SPEND['unit'] = unit = max(PAID_SOLVE_USD, (_SPEND['bal0'] - b) / _SPEND['submits'])
+        if _SPEND['prior'] + max(_SPEND['bal0'] - b, _SPEND['submits'] * unit) + unit > cap + 1e-9:
             _SPEND['stopped'] = 'the account balance fell by the $%s cap' % _usd(cap)
             return False
     return True
@@ -298,7 +302,7 @@ def _ledger_save(charged=None, final=False):
     if not path:
         return
     _lock_touch()
-    run = _SPEND['submits'] * PAID_SOLVE_USD
+    run = _SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD)
     total = _SPEND['prior'] + max(run, charged or 0)
     led = dict(_SPEND.get('led') or {}, cap=_SPEND['cap'], counted_usd=round(total, 4))
     if final:
@@ -1219,7 +1223,8 @@ def main():
         ap.error('--spend-ledger needs a --max-spend')
     if a.repull and a.cached_only:
         ap.error('--repull and --cached-only contradict each other')
-    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, prior=0.0, ledger=None, led=None, stopped='')
+    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, prior=0.0, ledger=None, led=None, stopped='',
+                  unit=PAID_SOLVE_USD)
     _lock = None
     if a.spend_ledger and not a.dry_run:
         _lock = _ledger_lock(a.spend_ledger)
@@ -1549,6 +1554,11 @@ def _run(a, ap):
                     print(f"  ++  {case:22} {oc:26} lien rows added; the earlier search's mortgages kept")
                 else:
                     res = dict(_old or {}, **res)            # keep keys other steps wrote (chain_note)
+                    if _old:
+                        # the mortgages agree, but the new search may still be narrower on liens (a
+                        # spouse's judgment the surname-only search found): a total never goes down
+                        for _k in ('hoa_open', 'code_open', 'irs_open'):
+                            res[_k] = max(_old.get(_k) or 0, res.get(_k) or 0)
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
             done += 1

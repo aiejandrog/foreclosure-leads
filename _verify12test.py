@@ -487,6 +487,7 @@ _leads = [{'Case #': '2099-000100-CA-01', 'owner_clean': 'OWNER W', 'Folio': FOL
 json.dump(_leads, open(os.path.join(_tmp, 'leads_final.json'), 'w'))
 _chains0 = {c['Case #']: {'conf': 'ok', 'liens': [], 'chain_note': 'kept'} for c in _leads}
 _chains0['2099-000100-CA-01'] = dict(_wide)
+_chains0['2099-000101-CA-01']['code_open'] = 12000      # a spouse's judgment the wider old search found
 json.dump(_chains0, open(os.path.join(_tmp, 'records_liens.json'), 'w'))
 json.dump({'OWNER A': 'tokA', 'JOHN QUINCY TESTER': 'tokDEAD', 'OWNER D': 'tokEMPTY', 'OWNER W': 'tokA'},
           open(os.path.join(_tmp, 'records_qs.json'), 'w'))
@@ -519,6 +520,8 @@ _out = json.load(open(os.path.join(_tmp, 'records_liens.json')))
 check('--reanalyze re-runs a cached chain from its cached token and adds the lien rows',
       len(_out['2099-000101-CA-01'].get('other', [])) == 1 and _out['2099-000101-CA-01']['other_open_unpriced'] == 1)
 check('--reanalyze keeps keys other steps wrote', _out['2099-000101-CA-01'].get('chain_note') == 'kept')
+check('--reanalyze never lowers a lien total the old chain carried', _out['2099-000101-CA-01'].get('code_open') == 12000,
+      _out['2099-000101-CA-01'].get('code_open'))
 check("--reanalyze never drops a mortgage a wider earlier search found; it only adds the lien rows",
       _out['2099-000100-CA-01']['liens'] == _wide['liens'] and 'other' in _out['2099-000100-CA-01']
       and _out['2099-000100-CA-01'].get('mtg_kept'), _out['2099-000100-CA-01'])
@@ -558,6 +561,17 @@ try:
     RL._SPEND.update(cap=1.00, submits=20, bal0=10.0, prior=0.0, ledger=None, stopped='')
     RL.fetch_via_turnstile(('OWNERW', ''))
     check('--max-spend stops paying when the balance can no longer be read', _fake_cs.calls == [], RL._SPEND)
+    # the real price is above the counted $0.0033: the cap learns it at the first re-read
+    del _fake_cs.calls[:]
+    _fake_cs.balance = lambda: '%.4f' % (10.0 - 0.0045 * len(_fake_cs.calls))
+    RL._SPEND.update(cap=0.50, submits=0, bal0=10.0, prior=0.0, stopped='', unit=RL.PAID_SOLVE_USD)
+    for _i in range(100):
+        RL.fetch_via_turnstile(('OWNERP', ''))
+    check('a solve dearer than counted: the cap learns the real price and real spend stays under it',
+          0.0045 * len(_fake_cs.calls) <= 0.50 + 1e-9 and len(_fake_cs.calls) > 100, (len(_fake_cs.calls), RL._SPEND))
+    _fake_cs.balance = lambda: _fake_cs.bal[0]
+    del _fake_cs.calls[:]
+    RL._SPEND.update(unit=RL.PAID_SOLVE_USD)
     _real_save = RL._ledger_save
     RL._ledger_save = lambda *a, **k: RL._SPEND.update(stopped='the spend ledger could not be written')
     RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, prior=0.0, ledger='x', stopped='')
