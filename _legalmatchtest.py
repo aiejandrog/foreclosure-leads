@@ -237,8 +237,23 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertIsNone(gap)
         self.assertEqual((reference['plat'], reference['block'], reference['corroborated']),
                          ('53/900', '12', False))
+        self.assertEqual(reference['uncorroborated'], ['plat', 'block'])
         kept = title([mortgage(), blank, rec('7', '6/1/2023', 'A', 'B')])['unanchored_deeds'][0]
-        self.assertIn('only one record', kept['legal_match']['reason'])
+        self.assertIn("only one record filed under this folio states this parcel's plat, block",
+                      kept['legal_match']['reason'])
+
+    def test_a_spelling_of_the_subdivision_does_not_disable_the_parcel(self):
+        spelled = rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE',
+                      sub='SAMPLE GROVE SECTION 2')
+        rows = [mortgage(), spelled, rec('7', '6/1/2023', 'A', 'B')]
+        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+
+    def test_the_clerks_trailing_time_slice_is_a_date(self):
+        rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023 1', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(got['current_deed_candidate']['book_page'], '7/1')
 
     def test_a_tract_and_a_unit_under_one_folio_disagree(self):
         rows = [rec('5', '3/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='TRACT 6', block='', plat=''),

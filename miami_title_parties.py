@@ -34,6 +34,15 @@ def _date(value):
             return datetime.strptime(str(value or ''), fmt)
         except ValueError:
             pass
+    # The clerk also emits a trailing time slice ('2/1/2002 1'), which records_liens._parse_recd
+    # documents. Without this the deed reads as undated, and an undated deed suppresses the
+    # parcel's current deed candidate entirely.
+    head = str(value or '').split(' ')[0]
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(head, fmt)
+        except ValueError:
+            pass
     return None
 
 
@@ -458,8 +467,9 @@ def parcel_legal_reference(models, folio):
     # Corroborated means two records state the same thing, field by field. Two records that merge
     # because one is blank where the other is filled in leave that field resting on one keystroke,
     # and the blank fields here are plat and block: the ones a match turns on.
-    corroborated = all(stated.get(f, 0) > 1 for f in _COMPARED + ('lots',) if merged[f])
-    return dict(merged, from_record=records[0], corroborated=corroborated), None
+    thin = [f for f in _COMPARED + ('lots',) if merged[f] and stated.get(f, 0) < 2]
+    return dict(merged, from_record=records[0], corroborated=not thin,
+                uncorroborated=[{'lots': 'lot number'}.get(f, f) for f in thin]), None
 
 
 _LEGAL_FIELDS = ('plat', 'block', 'unit', 'building', 'phase', 'tract', 'subdivision')
@@ -482,7 +492,10 @@ def _merge_legal(a, b):
     out = dict(a)
     for field in _LEGAL_FIELDS:
         if a[field] and b[field] and _num(a[field]) != _num(b[field]):
-            return None
+            # The subdivision name is not one of these: no verdict rests on it, and 'SEC 2'
+            # against 'SECTION 2' would disable the matcher for the parcel over a spelling.
+            if field in _COMPARED:
+                return None
         out[field] = a[field] or b[field]
     return out
 
@@ -515,9 +528,10 @@ def compare_legal(reference, legal, reference_gap=None):
             # was placed: its grantee is contacted like any owner, and a deed ruled out drops from
             # the warning that the owner may already have conveyed. Neither is worth one typo, so
             # a single record raises the question and a person answers it.
-            verdict, why = 'needs_person', ('only one record filed under this folio carries a '
-                                            'legal description%s' % (': ' + why if why else
-                                                                     ', and it agrees: ' + (basis or '')))
+            thin = ', '.join((reference or {}).get('uncorroborated') or ()) or 'legal description'
+            verdict, why = 'needs_person', ('only one record filed under this folio states this '
+                                            'parcel\'s %s%s' % (thin, ': ' + why if why else
+                                                                ', and it agrees: ' + (basis or '')))
             basis = None
         return {'verdict': verdict, 'reason': why, 'basis': basis,
                 'reference_record': (reference or {}).get('from_record'),
