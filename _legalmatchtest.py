@@ -400,6 +400,18 @@ class DeedPlacementTests(unittest.TestCase):
                          ['MID PERSON', 'OWNER PERSON'])
         self.assertEqual(chain['chain_of_title'][0]['link'], 'continuous')
 
+    def test_a_deed_already_in_the_chain_is_not_also_an_unplaced_deed(self):
+        # The instrument is indexed once under this parcel's folio and once without it (or under
+        # another parcel's). It used to appear as the current deed AND as a deed recorded the
+        # same day as itself, which questioned its own ownership.
+        anchored = rec('30000', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', FOLIO)
+        for sibling in (rec('30000', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', '9999999999999'),
+                        rec('30000', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')):
+            got = title([mortgage(), anchored, sibling])
+            self.assertEqual(got['current_deed_candidate']['book_page'], '30000/1')
+            self.assertEqual(got['unanchored_deeds'], [])
+            self.assertEqual(got['current_deed_status'], 'candidate')
+
     def test_the_county_answer_order_never_decides_the_verdict(self):
         # One instrument indexed twice: one row under another parcel's folio, one that can still
         # be compared. Whichever came back first used to decide whether the owner's possible

@@ -120,7 +120,10 @@ def build_title_parties(models, documents, docket, folio):
     # the parcel if any did, else the first — so a sibling row can neither be reported as a second
     # deed at the same book and page nor make its own instrument's day ambiguous.
     judged = [(c, None if c[4] else compare_legal(reference, index_legal(c[0]), reference_gap))
-              for c in candidates]
+              # An instrument already in the chain under this parcel's folio is not also an
+              # unplaced deed: another of its index rows carrying no folio, or another parcel's,
+              # would otherwise be reported as a second deed recorded the same day as itself.
+              for c in candidates if _instrument(c[0]) not in anchored_refs]
     rows_by_ref = {}
     for position, (candidate, verdict) in enumerate(judged):
         # An index row with no book and page names no instrument, so it collapses with nothing.
