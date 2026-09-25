@@ -25,6 +25,13 @@ def mortgage(folio=FOLIO, **kw):
     return rec('5', '3/1/2019', 'OWNER PERSON', 'SAMPLE BANK', folio, 'MORTGAGE', **kw)
 
 
+def folio_pair(**kw):
+    """Two records filed under the parcel's folio saying the same legal. One record alone can
+    raise a question about a deed but never rule it out, so a test that means 'differs' needs the
+    parcel's legal corroborated."""
+    return [mortgage(**kw), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE', **kw)]
+
+
 def title(rows):
     return T.build_title_parties(rows, [], {'parties': [
         {'partyName': 'OWNER PERSON', 'partyTypeDesc': 'DEFENDANT'}]}, FOLIO)
@@ -110,8 +117,8 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertTrue(any('not by folio' in g for g in got['gaps']))
 
     def test_the_owners_deed_of_another_lot_is_kept_as_another_parcel(self):
-        rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
-                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', legal='LOT 15')]
+        rows = folio_pair() + [rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                               rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', legal='LOT 15')]
         got = title(rows)
         kept = got['unanchored_deeds'][0]
         self.assertEqual(kept['status'], 'legal_description_differs')
@@ -120,7 +127,7 @@ class DeedPlacementTests(unittest.TestCase):
 
     def test_another_block_or_plat_differs(self):
         for kw in ({'block': '13'}, {'plat': '53/910'}):
-            got = title([mortgage(), rec('7', '6/1/2023', 'A', 'B', **kw)])
+            got = title(folio_pair() + [rec('7', '6/1/2023', 'A', 'B', **kw)])
             self.assertEqual(got['unanchored_deeds'][0]['status'], 'legal_description_differs', kw)
 
     def test_see_doc_overlap_and_one_sided_block_stay_with_a_person(self):
@@ -169,8 +176,30 @@ class DeedPlacementTests(unittest.TestCase):
                               ('CONDO UNIT NO 104 BLDG 8', 'legal_description_differs'),
                               ('CONDO UNIT NO 104', 'legal_description_match_required'),
                               ('CONDO UNIT NO 10 4 BLDG 7', 'legal_description_match_required')):
-            got = title([mortgage(**unit), rec('7', '6/1/2023', 'A', 'B', **dict(unit, legal=legal))])
+            got = title(folio_pair(**unit) + [rec('7', '6/1/2023', 'A', 'B', **dict(unit, legal=legal))])
             self.assertEqual(got['unanchored_deeds'][0]['status'], status, legal)
+
+    def test_one_folio_record_alone_never_rules_a_deed_out(self):
+        # The parcel's legal rests on a single index row, so a disagreement is a question about
+        # that row as much as about the deed, and the deed keeps its conveyance warning.
+        rows = [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', legal='LOT 15')]
+        kept = title(rows)['unanchored_deeds'][0]
+        self.assertEqual(kept['status'], 'legal_description_match_required')
+        self.assertIn('only one record', kept['legal_match']['reason'])
+
+    def test_a_block_of_zero_is_the_index_saying_no_block(self):
+        got = title(folio_pair(block='0') + [rec('7', '6/1/2023', 'A', 'B', block='0')])
+        self.assertEqual(got['legal_matched_deeds'], [])
+        self.assertIn('names no parcel', got['unanchored_deeds'][0]['legal_match']['reason'])
+
+    def test_two_matching_deeds_on_one_day_never_cost_the_current_deed(self):
+        rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
+                rec('8', '6/1/2023', 'OWNER PERSON', 'OTHER LLC')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(got['current_deed_candidate']['book_page'], '7/1')
+        self.assertIn('same day', got['unanchored_deeds'][0]['legal_match']['reason'])
 
     def test_the_same_legal_written_two_ways_is_still_one_yardstick(self):
         rows = [mortgage(), mortgage(block='012', plat='053-0900'),

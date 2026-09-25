@@ -54,10 +54,7 @@ def build_title_parties(models, documents, docket, folio):
     docs = {d.get('source_ref'): d for d in documents or [] if isinstance(d, dict)}
     deeds, unanchored, flags = [], [], []
     reference, reference_gap = parcel_legal_reference(models, folio)
-    folio_dates = {_date(m.get('reC_DATE')) for m in models or []
-                   if _folio(m.get('foliO_NUMBER')) == _folio(folio)
-                   and re.search(r'\b(DEED|CERTIFICATE OF TITLE)\b', str(m.get('doC_TYPE') or ''), re.I)
-                   and not re.search(r'TAX|MORTGAGE|TRUST DEED', str(m.get('doC_TYPE') or ''), re.I)}
+    candidates = []
     for model in models or []:
         label = str(model.get('doC_TYPE') or '')
         if not re.search(r'\b(DEED|CERTIFICATE OF TITLE)\b', label, re.I):
@@ -74,55 +71,58 @@ def build_title_parties(models, documents, docket, folio):
             r'\b(?:folio|parcel(?:\s+(?:id|identification))?)\s*(?:number|no\.?|#)?\s*:?\s*([\d-]{10,20})',
             p.get('text') or '', re.I)}
         anchored = bool(target and ((own_folio == target) or (not own_folio and printed == {target})))
-        parties = _deed_parties(model, doc, ref, book_page, pages)
-        if not anchored:
-            # A deed with no folio is not an irrelevant deed: condo units, older instruments and
-            # clerk certificates are often indexed without one. Keep it, with its parties and
-            # whatever legal description it prints, for legal-description matching. It never
-            # becomes the current deed on its own. A deed whose own folio names another parcel is
-            # kept too, marked as such, so the omission is visible rather than silent.
-            conflict = bool(own_folio and own_folio != target) or bool(printed - {target, ''})
-            verdict = None
-            if not conflict:
-                verdict = compare_legal(reference, index_legal(model), reference_gap)
-                if verdict['verdict'] == 'matched' and not _date(model.get('reC_DATE')):
-                    # An undated deed in the chain nulls the current-deed selection for every
-                    # deed. A deed the index placed here, not the county, never costs that much.
-                    verdict = dict(verdict, verdict='needs_person', basis=None,
-                                   reason='its legal description matches the parcel but the index '
-                                          'gives it no readable recording date')
-                if verdict['verdict'] == 'matched' and _date(model.get('reC_DATE')) in folio_dates:
-                    # Same reason, same rule: two deeds on one day stop a current deed being
-                    # chosen, and a folio-anchored deed should not lose its place to this one.
-                    verdict = dict(verdict, verdict='needs_person', basis=None,
-                                   reason='its legal description matches the parcel but it is '
-                                          'recorded the same day as a deed filed under the folio')
-                if verdict['verdict'] == 'matched':
-                    # The clerk's own index puts this deed on the same lot/block/plat (or condo
-                    # unit) as the records it filed under this parcel's folio. That is the check a
-                    # person did by hand; anything short of an exact match still goes to one.
-                    gaps.append('%s: anchored by the clerk index legal description (%s), not by '
-                                'folio; index names and bounded explicit-role extraction do not '
-                                'establish that every deed party was recovered.' % (ref, verdict['basis']))
-                    deeds.append({'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),
-                                  'doc_type':label,'parties':parties,'anchored_by':'legal_description',
-                                  'legal_match':verdict,'date_parsed':_date(model.get('reC_DATE'))})
-                    continue
-            gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)
-            unanchored.append({'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),
-                               'doc_type':label,'parties':parties,
-                               'status':('folio_conflict' if conflict else
-                                         'legal_description_differs' if verdict['verdict'] == 'differs' else
-                                         'legal_description_match_required'),
-                               'legal_match':verdict,
-                               'index_folio':own_folio or None,'printed_folios':sorted(f for f in printed if f),
-                               'subdivision':str(model.get('subdiV_NAME') or '').strip() or None,
-                               'legal_description':_legal_description(pages),
-                               'read':bool(pages),'date_parsed':_date(model.get('reC_DATE'))})
+        row = {'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),'doc_type':label,
+               'parties':_deed_parties(model, doc, ref, book_page, pages),
+               'date_parsed':_date(model.get('reC_DATE'))}
+        if anchored:
+            gaps.append('%s: index names and bounded explicit-role extraction do not establish that every deed party was recovered.' % ref)
+            deeds.append(row)
             continue
-        gaps.append('%s: index names and bounded explicit-role extraction do not establish that every deed party was recovered.' % ref)
-        deeds.append({'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),
-                      'doc_type':label,'parties':parties,'date_parsed':_date(model.get('reC_DATE'))})
+        # A deed with no folio is not an irrelevant deed: condo units, older instruments and
+        # clerk certificates are often indexed without one. Keep it, with its parties and
+        # whatever legal description it prints, for legal-description matching. It never
+        # becomes the current deed on its own. A deed whose own folio names another parcel is
+        # kept too, marked as such, so the omission is visible rather than silent.
+        candidates.append((model, row, printed, own_folio, target, pages))
+    # Second pass, because whether a legal-matched deed may join the chain depends on the dates
+    # already in it: an undated deed, or two deeds on one day, stop a current deed being chosen
+    # for the parcel at all, and a deed the index placed here never costs that much.
+    taken = {d['date_parsed'] for d in deeds}
+    for model, row, printed, own_folio, target, pages in candidates:
+        ref = row['source_ref']
+        conflict = bool(own_folio and own_folio != target) or bool(printed - {target, ''})
+        verdict = None
+        if not conflict:
+            verdict = compare_legal(reference, index_legal(model), reference_gap)
+            if verdict['verdict'] == 'matched' and not row['date_parsed']:
+                verdict = dict(verdict, verdict='needs_person', basis=None,
+                               reason='its legal description matches the parcel but the index '
+                                      'gives it no readable recording date')
+            elif verdict['verdict'] == 'matched' and row['date_parsed'] in taken:
+                verdict = dict(verdict, verdict='needs_person', basis=None,
+                               reason='its legal description matches the parcel but another deed '
+                                      'on the parcel is recorded the same day')
+            if verdict['verdict'] == 'matched':
+                # The clerk's own index puts this deed on the same lot/block/plat (or condo
+                # unit) as the records it filed under this parcel's folio. That is the check a
+                # person did by hand; anything short of an exact match still goes to one.
+                gaps.append('%s: anchored by the clerk index legal description (%s), not by '
+                            'folio; index names and bounded explicit-role extraction do not '
+                            'establish that every deed party was recovered.' % (ref, verdict['basis']))
+                taken.add(row['date_parsed'])
+                deeds.append(dict(row, anchored_by='legal_description', legal_match=verdict))
+                continue
+        gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)
+        unanchored.append(dict(row,
+                               status=('folio_conflict' if conflict else
+                                       'legal_description_differs' if verdict['verdict'] == 'differs' else
+                                       'legal_description_match_required'),
+                               legal_match=verdict,
+                               index_folio=own_folio or None,
+                               printed_folios=sorted(f for f in printed if f),
+                               subdivision=str(model.get('subdiV_NAME') or '').strip() or None,
+                               legal_description=_legal_description(pages),
+                               read=bool(pages)))
     return _assemble(deeds, unanchored, gaps, flags, documents, docket)
 
 
@@ -322,7 +322,8 @@ def index_legal(model):
     legal that continues in the document, so the row is marked and never auto-matched."""
     sub = _tokens(model.get('subdiV_NAME'))
     desc = _tokens(model.get('legaL_DESCRIPTION'))
-    block = re.sub(r'[^A-Z0-9]', '', str(model.get('blocK_NO') or '').upper()) or None
+    block = re.sub(r'[^A-Z0-9]', '', str(model.get('blocK_NO') or '').upper()).lstrip('0')
+    block = block or None      # '0' is the index's "no block", as '0/0' is its "no plat"
     plat = _plat(model.get('plaT_BOOKPAGE'))
     if not (sub or desc or block or plat):
         return None
@@ -416,14 +417,15 @@ def parcel_legal_reference(models, folio):
         legal = index_legal(model)
         if not legal or legal['see_document'] or legal['unparsed'] or not _kind(legal):
             continue
-        found.setdefault(_signature(legal), (legal, '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE'))))
+        found.setdefault(_signature(legal), (legal, []))[1].append(
+            '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE')))
     if not found:
         return None, 'no record filed under this folio carries a complete index legal description'
     if len(found) > 1:
         return None, ('records filed under this folio carry %d different index legal descriptions (%s)'
-                      % (len(found), ', '.join(sorted(bp for _, bp in found.values()))))
-    legal, book_page = next(iter(found.values()))
-    return dict(legal, from_record=book_page), None
+                      % (len(found), ', '.join(sorted(r[0] for _, r in found.values()))))
+    legal, records = next(iter(found.values()))
+    return dict(legal, from_record=records[0], corroborated=len(records) > 1), None
 
 
 def _num(value):
@@ -449,6 +451,12 @@ def compare_legal(reference, legal, reference_gap=None):
     block, or the condo unit with its building and phase, agree exactly. 'differs' only on a
     positive disagreement. Everything else is 'needs_person', with the reason."""
     def result(verdict, why, basis=None):
+        if verdict == 'differs' and not (reference or {}).get('corroborated'):
+            # One index record is one clerk keystroke. It may raise the question, but it may not
+            # answer it against the deed: ruling a deed out drops it from the warning that the
+            # owner may already have conveyed, and that warning is the expensive one to lose.
+            verdict, why = 'needs_person', ('only one record filed under this folio carries a '
+                                            'legal description, and it disagrees: %s' % why)
         return {'verdict': verdict, 'reason': why, 'basis': basis,
                 'reference_record': (reference or {}).get('from_record'),
                 'deed_index_legal': ' / '.join(x for x in ((legal or {}).get('subdivision'),
