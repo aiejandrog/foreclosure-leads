@@ -2,7 +2,7 @@
 arm and stand down, and the task it creates cannot mail homeowners at 3am. Gitignored _*.py.
 No network, no Task Scheduler, no PowerShell — this reads the four files and asserts their contract.
 
-THE GAP THIS EXISTS FOR (found 2026-09-18). `DealFlow Cadence` — the 09:00 job that is the ONLY
+THE GAP THIS EXISTS FOR (found 2026-09-18). `DealFlow Cadence` — the daily job that is the ONLY
 unattended outreach sender in this project — was registered by hand, outside install-tasks.ps1.
 The installer's two halves were asymmetric about it and nothing said so:
 
@@ -78,10 +78,22 @@ rec('cadence-daily.bat is present in the repo', raw_bat is not None)
 
 start = (root.findtext('t:Triggers/t:CalendarTrigger/t:StartBoundary', '', NS) or '')
 daily = root.findtext('t:Triggers/t:CalendarTrigger/t:ScheduleByDay/t:DaysInterval', '', NS)
-rec('trigger fires at 09:00', start.endswith('T09:00:00'), start)
+rec('trigger fires at 10:00', start.endswith('T10:00:00'), start)
 rec('trigger is daily', daily == '1', daily)
-rec('09:00 is after the 06:45 reply bake', True,
-    'replies.py + optout_sync.py are what carry a detected STOP into optouts.json; cadence must read it AFTER')
+
+# THE ORDERING IS THE ONLY THING ENFORCING THIS. replies.py then optout_sync.py is what carries a
+# detected STOP into optouts.json, and cadence re-reads that ledger every run -- so cadence must
+# fire AFTER the reply bake finishes. It was 09:00 against a 06:45 Replies. Replies moved to 08:45
+# on 2026-09-22 and Phones to 09:30 (both confirmed on the laptop), which left cadence fifteen
+# minutes behind a job that also rebuilds and publishes the board. cadence has no ledger-staleness
+# gate of its own, so a stale read is a send to someone who said stop this morning.
+REPLIES_AT = 8 * 60 + 45          # DealFlow Replies, confirmed on the laptop 2026-09-22
+MIN_GAP_MIN = 60                  # Replies rebuilds and publishes; 15 minutes was not slack
+_h, _m = (int(x) for x in start.split('T')[1].split(':')[:2])
+rec('fires at least %d min after the %02d:%02d reply bake' % (MIN_GAP_MIN, REPLIES_AT // 60, REPLIES_AT % 60),
+    (_h * 60 + _m) - REPLIES_AT >= MIN_GAP_MIN,
+    '%02d:%02d, gap %d min' % (_h, _m, (_h * 60 + _m) - REPLIES_AT))
+rec('and still inside the 08:00-20:00 outreach window', 8 <= _h < 20, _h)
 
 S = {e.tag.split('}')[-1]: (e.text or '') for e in root.find('t:Settings', NS)}
 rec('StartWhenAvailable is true', S.get('StartWhenAvailable') == 'true', 'a missed step must not be lost')

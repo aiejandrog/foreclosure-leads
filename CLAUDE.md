@@ -151,7 +151,7 @@ An export wins over a template of the same task name. **A new task goes in `task
 one in `tasks/` and it exists only on the box that made it.
 
 That split exists because of `DealFlow Cadence`. It is the only **unattended** outreach sender in
-the project (09:00 daily, `cadence.py` over SMTP, real email to homeowners) and for three weeks it
+the project (10:00 daily, `cadence.py` over SMTP, real email to homeowners) and for three weeks it
 was registered by hand, outside the installer. `-DisableLocal` caught it — that path enumerates live
 tasks by name match — but `-Enable` walked `tasks/*.xml` only, so **disarming was complete and
 arming was not**: every handoff done exactly as documented left outreach off, silently. Closed
