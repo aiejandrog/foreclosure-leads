@@ -53,6 +53,7 @@ def build_title_parties(models, documents, docket, folio):
     gaps = ['Recorded deed inventory and OCS party pagination completeness are unverified; present title remains unknown.']
     docs = {d.get('source_ref'): d for d in documents or [] if isinstance(d, dict)}
     deeds, unanchored, flags = [], [], []
+    reference, reference_gap = parcel_legal_reference(models, folio)
     for model in models or []:
         label = str(model.get('doC_TYPE') or '')
         if not re.search(r'\b(DEED|CERTIFICATE OF TITLE)\b', label, re.I):
@@ -77,10 +78,26 @@ def build_title_parties(models, documents, docket, folio):
             # becomes the current deed on its own. A deed whose own folio names another parcel is
             # kept too, marked as such, so the omission is visible rather than silent.
             conflict = bool(own_folio and own_folio != target) or bool(printed - {target, ''})
+            verdict = None
+            if not conflict:
+                verdict = compare_legal(reference, index_legal(model), reference_gap)
+                if verdict['verdict'] == 'matched':
+                    # The clerk's own index puts this deed on the same lot/block/plat (or condo
+                    # unit) as the records it filed under this parcel's folio. That is the check a
+                    # person did by hand; anything short of an exact match still goes to one.
+                    gaps.append('%s: anchored by the clerk index legal description (%s), not by folio.'
+                                % (ref, verdict['basis']))
+                    deeds.append({'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),
+                                  'doc_type':label,'parties':parties,'anchored_by':'legal_description',
+                                  'legal_match':verdict,'date_parsed':_date(model.get('reC_DATE'))})
+                    continue
             gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)
             unanchored.append({'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),
                                'doc_type':label,'parties':parties,
-                               'status':'folio_conflict' if conflict else 'legal_description_match_required',
+                               'status':('folio_conflict' if conflict else
+                                         'legal_description_differs' if verdict['verdict'] == 'differs' else
+                                         'legal_description_match_required'),
+                               'legal_match':verdict,
                                'index_folio':own_folio or None,'printed_folios':sorted(f for f in printed if f),
                                'subdivision':str(model.get('subdiV_NAME') or '').strip() or None,
                                'legal_description':_legal_description(pages),
@@ -205,6 +222,7 @@ def _assemble(deeds, unanchored, gaps, flags, documents, docket):
     def public(d):
         return {k:v for k,v in d.items() if k!='date_parsed'} if d else None
     return {'status':'unknown','current_deed_candidate':public(current),
+            'legal_matched_deeds':[d['book_page'] for d in ordered if d.get('anchored_by') == 'legal_description'],
             'current_deed_status':('none' if not current else
                                    'possibly_conveyed_later' if later else 'candidate'),
             'possible_later_conveyances':later,
@@ -236,6 +254,168 @@ def _legal_description(pages):
             if match:
                 return {'page':page.get('page'), 'passage':re.sub(r'\s+', ' ', match.group(0)).strip()[:300]}
     return None
+
+
+def _tokens(text):
+    return re.sub(r'[^A-Z0-9]+', ' ', str(text or '').upper()).strip()
+
+
+def _lots(text):
+    """'LOTS 38 THRU 40 LOTS 1 THRU 3' -> {'38','39','40','1','2','3'}. None when any piece is not a
+    plain lot number (a part of a lot, a metes-and-bounds call), which only a person can compare.
+    The index's punctuation is already gone by here, so runs and ranges are read token by token."""
+    tokens = re.sub(r'\bLOTS?\b', ' ', text).split()
+    lots, i = set(), 0
+    while i < len(tokens):
+        token = tokens[i]
+        if i + 2 < len(tokens) and tokens[i + 1] == 'THRU':
+            low, high = token, tokens[i + 2]
+            if not (low.isdigit() and high.isdigit()):
+                return None
+            if not 0 <= int(high) - int(low) <= 200:
+                return None
+            lots.update(str(n) for n in range(int(low), int(high) + 1))
+            i += 3
+            continue
+        # 'LOT 24 A' is a PART of lot 24, not lots 24 and A: a bare letter is only a lot of its
+        # own when it is the whole description ('LOT B'), never alongside another lot.
+        if not re.fullmatch(r'\d+[A-Z]?', token) and not (re.fullmatch(r'[A-Z]', token) and len(tokens) == 1):
+            return None
+        lots.add(token.lstrip('0') or '0')
+        i += 1
+    return lots or None
+
+
+def index_legal(model):
+    """The clerk index's own structured legal for one recorded instrument: subdivision, the free
+    legal field ('LOT 14', 'CONDO UNIT NO 107 BLDG 7', 'LOTS 3 & 4 SEE DOC'), block and plat
+    book/page. None when the index carries none of them. 'SEE DOC' means the index shortened a
+    legal that continues in the document, so the row is marked and never auto-matched."""
+    sub = _tokens(model.get('subdiV_NAME'))
+    desc = _tokens(model.get('legaL_DESCRIPTION'))
+    block = re.sub(r'[^A-Z0-9]', '', str(model.get('blocK_NO') or '').upper()) or None
+    plat = re.sub(r'\s', '', str(model.get('plaT_BOOKPAGE') or ''))
+    plat = None if re.fullmatch(r'[0/-]*', plat) else plat
+    if not (sub or desc or block or plat):
+        return None
+    out = {'subdivision': sub or None, 'description': desc or None, 'block': block, 'plat': plat,
+           'lots': None, 'unit': None, 'building': None, 'phase': None, 'tract': None,
+           'see_document': bool(re.search(r'\bSEE DOC', desc)), 'unparsed': False}
+    body = re.sub(r'\bSEE DOC\w*', ' ', desc)
+    lot = re.search(r'\bLOTS?\s+(.+?)(?=\s+BLK\b|$)', body)
+    unit = re.search(r'\b(?:UNIT|PARCEL)\s+(?:NO\s+)?(.+?)(?=\s+(?:BLDG|BUILDING|PH|PHASE)\b|$)', body)
+    tract = re.search(r'\bTR(?:ACT)?\s+([A-Z0-9]+)\s*$', body)
+    if lot:
+        # 'WINSTON PARK UNIT THREE LOT 9' names a subdivision unit, not a condo unit.
+        out['lots'] = _lots(lot.group(1))
+        out['unparsed'] = out['lots'] is None
+    elif unit:
+        out['unit'] = unit.group(1).strip()
+        bldg = re.search(r'\b(?:BLDG|BUILDING)\s+(?:NO\s+)?([A-Z0-9]+)', body)
+        phase = re.search(r'\b(?:PH|PHASE)\s+([A-Z0-9]+)', body[unit.end():])
+        out['building'] = bldg.group(1) if bldg else None
+        out['phase'] = phase.group(1) if phase else None
+    elif tract:
+        out['tract'] = tract.group(1)
+    elif desc:
+        out['unparsed'] = True
+    return out
+
+
+def _kind(legal):
+    return ('lot' if legal.get('lots') else 'unit' if legal.get('unit') else
+            'tract' if legal.get('tract') else None)
+
+
+def _signature(legal):
+    return (legal['plat'], legal['block'], tuple(sorted(legal['lots'] or ())), legal['unit'],
+            legal['building'], legal['phase'], legal['tract'],
+            None if legal['plat'] else legal['subdivision'])
+
+
+def parcel_legal_reference(models, folio):
+    """What the clerk index says this parcel's legal is, from the instruments it filed under the
+    parcel's folio. Returns (reference, gap). No reference when none carries a complete legal, or
+    when two of them disagree: the index is then not a safe yardstick and a person compares."""
+    target = _folio(folio)
+    found = {}
+    for model in models or []:
+        if not target or _folio(model.get('foliO_NUMBER')) != target:
+            continue
+        legal = index_legal(model)
+        if not legal or legal['see_document'] or legal['unparsed'] or not _kind(legal):
+            continue
+        found.setdefault(_signature(legal), (legal, '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE'))))
+    if not found:
+        return None, 'no record filed under this folio carries a complete index legal description'
+    if len(found) > 1:
+        return None, ('records filed under this folio carry %d different index legal descriptions (%s)'
+                      % (len(found), ', '.join(sorted(bp for _, bp in found.values()))))
+    legal, book_page = next(iter(found.values()))
+    return dict(legal, from_record=book_page), None
+
+
+def _same(a, b):
+    """'exact' | 'spacing' (same characters, different spacing: a person decides) | 'differs'."""
+    if a == b:
+        return 'exact'
+    return 'spacing' if str(a).replace(' ', '') == str(b).replace(' ', '') else 'differs'
+
+
+def compare_legal(reference, legal, reference_gap=None):
+    """Compare one unanchored deed's index legal with the parcel's. 'matched' only when the plat
+    book/page (or, with no plat on either side, the subdivision name) agrees and the lots with the
+    block, or the condo unit with its building and phase, agree exactly. 'differs' only on a
+    positive disagreement. Everything else is 'needs_person', with the reason."""
+    def result(verdict, why, basis=None):
+        return {'verdict': verdict, 'reason': why, 'basis': basis,
+                'reference_record': (reference or {}).get('from_record'),
+                'deed_index_legal': ' / '.join(x for x in ((legal or {}).get('subdivision'),
+                                                           (legal or {}).get('description'),
+                                                           'BLK %s' % legal['block'] if (legal or {}).get('block') else None,
+                                                           'PB %s' % legal['plat'] if (legal or {}).get('plat') else None) if x) or None}
+    if not reference:
+        return result('needs_person', reference_gap or 'no parcel legal description to compare against')
+    if not legal:
+        return result('needs_person', 'the index carries no legal description for this deed')
+    if legal['see_document'] or legal['unparsed']:
+        return result('needs_person', 'the index legal continues in the document (SEE DOC) or is not a plain lot or unit')
+    if reference['plat'] and legal['plat']:
+        if reference['plat'] != legal['plat']:
+            return result('differs', 'plat book/page %s is not the parcel\'s %s' % (legal['plat'], reference['plat']))
+        place = 'plat %s' % legal['plat']
+    elif reference['subdivision'] and reference['subdivision'] == legal['subdivision']:
+        place = 'subdivision %s' % legal['subdivision']
+    else:
+        return result('needs_person', 'no plat book/page on both sides and the subdivision names do not agree')
+    kind = _kind(legal)
+    if kind != _kind(reference):
+        return result('needs_person', 'the deed describes a %s and the parcel a %s' % (kind, _kind(reference)))
+    if kind == 'lot':
+        if reference['block'] != legal['block']:
+            if reference['block'] and legal['block']:
+                return result('differs', 'block %s is not the parcel\'s block %s' % (legal['block'], reference['block']))
+            return result('needs_person', 'only one side names a block')
+        if legal['lots'] == reference['lots']:
+            return result('matched', None, '%s, block %s, lot(s) %s' % (place, legal['block'] or 'none',
+                                                                         ', '.join(sorted(legal['lots']))))
+        if legal['lots'] & reference['lots']:
+            return result('needs_person', 'the deed\'s lots overlap the parcel\'s but are not the same lots')
+        return result('differs', 'lot(s) %s are not the parcel\'s lot(s) %s'
+                      % (', '.join(sorted(legal['lots'])), ', '.join(sorted(reference['lots']))))
+    field = 'unit' if kind == 'unit' else 'tract'
+    same = _same(reference[field], legal[field])
+    if same == 'differs':
+        return result('differs', '%s %s is not the parcel\'s %s %s' % (field, legal[field], field, reference[field]))
+    if same == 'spacing':
+        return result('needs_person', '%s %s and %s differ only in spacing' % (field, legal[field], reference[field]))
+    for extra in ('building', 'phase'):
+        if reference[extra] != legal[extra]:
+            if reference[extra] and legal[extra]:
+                return result('differs', '%s %s is not the parcel\'s %s %s' % (extra, legal[extra], extra, reference[extra]))
+            return result('needs_person', 'only one side names a %s' % extra)
+    return result('matched', None, '%s, %s %s' % (place, field, legal[field]) +
+                  ''.join(', %s %s' % (x, legal[x]) for x in ('building', 'phase') if legal[x]))
 
 
 def chain_of_title(ordered):

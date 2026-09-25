@@ -4,8 +4,8 @@ Priority 6 of the Miami automation goal. Title discovery already collects the de
 name searches; what was missing is one place that says, for the parcel today:
 
   OWNERSHIP  the current deed candidate, its status ('candidate', 'possibly_conveyed_later',
-             'none'), the chain-of-title links behind it, and the deeds that still need a legal
-             description match. Always a candidate; the status field of the report stays 'unknown'.
+             'none'), the chain-of-title links behind it, the deeds placed on the parcel by the
+             clerk index's legal description, and the deeds that still need a person to match one. Always a candidate; the status field of the report stays 'unknown'.
   ENTITIES   for an entity grantee, what Sunbiz says (sunbiz_entities), with no title or contact
              authority attached. An entity-only owner is never call-ready on this evidence.
   CLAIMS     every recorded money claim or encumbrance the searches returned, each with:
@@ -68,6 +68,12 @@ def present_title(report, entities=None):
         'legal_description_match_required': [d['book_page'] for d in unanchored
                                              if d.get('status') == 'legal_description_match_required'],
         'folio_conflicts_kept': [d['book_page'] for d in unanchored if d.get('status') == 'folio_conflict'],
+        # Placed by the clerk index's lot/block/plat or condo unit rather than a folio: matched ones
+        # joined the deed chain above; differing ones describe another parcel and are kept visible.
+        'legal_description_matched': title.get('legal_matched_deeds') or [],
+        'legal_description_differs': [d['book_page'] for d in unanchored
+                                      if d.get('status') == 'legal_description_differs'],
+        'anchored_by': current.get('anchored_by') or ('folio' if current else None),
         'basis': ('Newest folio-anchored deed in what was searched and stored. Deed inventory '
                   'completeness is unverified; this is a candidate, not a title finding.'),
     }
