@@ -164,6 +164,53 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
 
+    def test_transient_failure_is_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'APIStatusError: overloaded'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_rejected_document_stops_the_whole_document(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'Stored content is not a PDF'},
+                                        {'page': 2, 'reason': 'Amount page not read; cap or reader stop'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_one_total_ok_another_failing_is_not_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        base = {'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [], 'components': [],
+                'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}
+        with mock.patch('judgment_money.verify_document',
+                        return_value=[dict(base, ok=True), dict(base, ok=False)]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'read_not_verified')
+        self.assertIn('another does not', got['detail'])
+
+    def test_verified_waits_for_newly_found_amount_pages(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        path = self.base / ('amount-vision-' + hashlib.sha256(ref.encode()).hexdigest() + '.json')
+        detail = json.loads(path.read_text())
+        detail['selected_pages'] = [2]
+        path.write_text(json.dumps(detail))
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'needs_paid_read')
+
+    def test_plan_controlling_used_without_a_timeline(self):
+        _row(self.base, '9', '$1.00', 'j')
+        plan = _plan([('9', 'final_judgment', True, [])])
+        plan['judgments']['controlling_entry'] = '9'
+        with mock.patch('document_prioritizer.prioritize', return_value=plan):
+            got = JP.assess(CASE, self.base, None, '2026-09-25')
+        self.assertEqual(got['target_basis'], 'controlling')
+
     def test_repeatable_failure_is_not_priced(self):
         ref = _row(self.base, '9', '$1.00', 'j')
         _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Stored content is not a PDF'}])
@@ -184,7 +231,8 @@ class Assess(unittest.TestCase):
     def test_on_disk_but_held_by_plan(self):
         _row(self.base, '9', '$1.00', 'j')
         got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])])
-        self.assertEqual((got['state'], got['detail']), ('judgment_held_by_docket_plan', 'entry_date_unknown'))
+        self.assertEqual(got['state'], 'judgment_held_by_docket_plan')
+        self.assertTrue(got['detail'].startswith('entry_date_unknown'))
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [

@@ -58,9 +58,14 @@ def _with_cached_ocr(row, base):
     path = manifest.get('path') or manifest.get('pdf_path') or row.get('path')
     try:
         digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except (OSError, TypeError):
+        # The stored PDF is not reachable here (a report run on another machine): the free OCR
+        # cannot be looked up, so amount pages may be missing. Marked, never silent.
+        return dict(row, _ocr_unreachable=True)
+    try:
         saved = json.loads((Path(base) / 'timeline-ocr' / (digest + '-ocr300-v1.json'))
                            .read_text(encoding='utf-8'))
-    except (OSError, TypeError, ValueError):
+    except (OSError, ValueError):
         return row
     row = copy.deepcopy(row)
     for page in (row.get('reading') or {}).get('pages', []):
@@ -151,8 +156,6 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     import miami_timeline_amounts as amounts
     import run_case_timeline as RCT
     out = {'case': case, 'pages_to_judgment': 0, 'pages_all': 0}
-    controlling = str(((timeline or {}).get('judgments') or {}).get('controlling_entry') or '')
-    out['controlling_entry'] = controlling or None
     inventory = DS.pipeline_load(Path(base) / 'inventory.json')
     if inventory is None:
         out['state'] = 'no_docket'
@@ -173,6 +176,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         out.update(state='timeline_older_than_docket',
                    detail='re-run the pass for this case before trusting any verdict')
         return out
+    controlling = str(((timeline or {}).get('judgments') if timeline is not None
+                       else plan.get('judgments') or {}).get('controlling_entry') or '')
+    out['controlling_entry'] = controlling or None
     # The timeline's reconciliation read the bodies (a vacatur citing its judgment's date, an
     # image-less same-day twin); the plan's is the docket index alone. Prefer the timeline's.
     recon = (timeline or {}).get('judgments') or plan.get('judgments')
@@ -186,67 +192,82 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                          % why.replace('latest_', 'latest '))
     rows = RCT.load_rows(base)
     bought = RCT.read_amounts(rows, base)
-    if any(c.get('ok') and str(c.get('entry_id')) == target for c in bought['amount_checks']):
-        out['state'] = 'verified'
-        return out
-    # Pages a re-run would actually bill: a page the reader never reached (cap, error). A page it
-    # read and called unreadable is a ledger-cache hit at $0 with the same answer, so not priced.
-    rebuy = {}
-    stuck = set()
+    target_checks = [c for c in bought['amount_checks'] if str(c.get('entry_id')) == target]
+    # Classify every recorded gap. A rejected render or an uncertain paid call repeats at $0 and
+    # the reader stops the document there, so that whole document needs a person. An unreadable
+    # page repeats from the ledger cache: that page needs a person. Anything else (the cap, the
+    # reader's stop, a transient API or network error, a missing key) is a page paying buys.
+    rebuy, stuck_docs, stuck_pages = {}, set(), {}
     for gap in bought['gaps']:
-        reason = str(gap.get('reason') or '')
-        # Only a page the cap or the reader's stop never reached is bought by paying again. An
-        # unreadable page, a rejected render or an uncertain paid call repeats at $0: a person.
-        if re.search(r'budget|cap or reader stop|paid_read_not_selected', reason):
-            rebuy.setdefault(gap.get('source_ref'), set()).add(gap.get('page'))
+        ref, reason = gap.get('source_ref'), str(gap.get('reason') or '')
+        if re.search(r'not a PDF|contains no pages|DocumentRejected|uncertain', reason, re.I):
+            stuck_docs.add(ref)
+        elif reason.startswith('Vision returned unreadable'):
+            stuck_pages.setdefault(ref, set()).add(gap.get('page'))
         else:
-            stuck.add(gap.get('source_ref'))
+            rebuy.setdefault(ref, set()).add(gap.get('page'))
     done = {Path(f).name for f in bought['evidence_files']}
     # Only the rows the paid reader would walk get the (hash-keyed, whole-file) OCR lookup.
     order = [_with_cached_ocr(r, base) for r in DP.timeline_read_order(plan, rows)['order']]
     need = []          # (is_target, pages) for every amount-bearing row with pages left to buy
     target_amount_rows = 0
     for row in order:
+        is_target = str(row.get('entry_ref') or '') == target
+        if is_target and row.get('_ocr_unreachable'):
+            out['ocr_unreachable'] = True
         pages = amounts.amount_page_numbers(row.get('reading') or {})
         if not pages:
             continue
-        is_target = str(row.get('entry_ref') or '') == target
         target_amount_rows += is_target
-        key = 'amount-vision-' + hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest() + '.json'
+        ref = row.get('source_ref')
+        key = 'amount-vision-' + hashlib.sha256(str(ref).encode()).hexdigest() + '.json'
         if key in done:
+            if ref in stuck_docs:
+                continue
             detail = DS.pipeline_load(Path(base) / key) or {}
             # Amount pages the free OCR found after the purchase are new pages to buy.
             fresh = set(pages) - set(detail.get('selected_pages') or pages)
-            left = (rebuy.get(row.get('source_ref')) or set()) | fresh
+            left = ((rebuy.get(ref) or set()) | fresh) - (stuck_pages.get(ref) or set())
             if left:
                 need.append((is_target, len(left)))
-            elif is_target and row.get('source_ref') in stuck:
-                out['detail'] = 'a read of the judgment failed in a way paying again repeats'
             continue
         need.append((is_target, len(pages)))
+    notes = [out['detail']] if out.get('detail') else []
+    if out.get('ocr_unreachable'):
+        notes.append('stored PDF not reachable here, so free-OCR amount pages were not looked up: '
+                     'run the report on the machine that ran the pass')
     if any(t for t, _ in need):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
                    pages_all=sum(n for _, n in need))
+    elif target_checks and all(c.get('ok') for c in target_checks):
+        # Every printed total on every document of the target reproduces to the cent, and no
+        # amount page of it is left unread. One total agreeing while another fails is not this.
+        out['state'] = 'verified'
     elif target_amount_rows:
-        # Every amount page of the target was read in full and the figures still do not reproduce
-        # the printed total to the cent: paying again buys the same answer.
         out['state'] = 'read_not_verified'
+        if any(c.get('ok') for c in target_checks):
+            notes.append('one printed total reproduces and another does not')
+        if any(r in stuck_docs or stuck_pages.get(r) for r in
+               {c.get('source_ref') for c in target_checks} | stuck_docs):
+            notes.append('a read failed in a way paying again repeats')
     else:
         doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
         if not fetched:
-            out.update(state='judgment_not_fetched',
-                       detail=','.join(doc.get('gaps') or []) or 'not_downloaded')
+            out['state'] = 'judgment_not_fetched'
+            notes.insert(0, ','.join(doc.get('gaps') or []) or 'not_downloaded')
         elif not doc.get('eligible_for_acquisition'):
             # On disk, but the docket plan holds the entry (undated, no image count), so the paid
             # reader defers it. The fix is the docket entry, not another download.
-            out.update(state='judgment_held_by_docket_plan',
-                       detail=','.join(doc.get('gaps') or []) or 'not_eligible')
+            out['state'] = 'judgment_held_by_docket_plan'
+            notes.insert(0, ','.join(doc.get('gaps') or []) or 'not_eligible')
         else:
             # Fetched, but no page carries a printed dollar figure the free reads could see: a
             # paid read would have nothing selected. Named, never counted as verified.
             out['state'] = 'judgment_without_amount_page'
+    if notes:
+        out['detail'] = '; '.join(notes)
     return out
 
 
@@ -303,7 +324,9 @@ def plan(runner, entries, today, log):
 
 def render(rows, skipped_ids, rate, sample, today):
     per_page = rate if rate is not None else FALLBACK_USD_PER_PAGE
-    basis = ('average of %d amount pages already bought ($%.4f/page)' % (sample, rate)
+    basis = ('average of the %d billed pages recorded in the evidence now on disk ($%.4f/page; a '
+             'later re-run served from the ledger cache records $0 and drops out of this sample)'
+             % (sample, rate)
              if rate is not None else
              'no bought evidence on disk; the 09-22 measurement, $%.4f/page' % FALLBACK_USD_PER_PAGE)
     windows = [('next 7 days', 7), ('8-30 days', 30), ('31+ days', 10 ** 6)]
@@ -402,9 +425,14 @@ def main(argv=None):
               % (done, skipped, errors, log_path))
     rows, rate, sample = plan(runner, entries, today, log)
     report = render(rows, skipped_ids, rate, sample, today)
-    md = out_dir / ('JUDGMENT-PLAN-%s.md' % today.isoformat())
+    # A --days run is a subset: its own file, so it never overwrites the full plan.
+    stem = 'JUDGMENT-PLAN-%s%s' % (today.isoformat(),
+                                   '-next%dd' % args.days if args.days is not None else '')
+    if args.days is not None:
+        report = report.replace('\n\n', '\n\nSubset: only sales in the next %d days.\n\n' % args.days, 1)
+    md = out_dir / (stem + '.md')
     md.write_text(report, encoding='utf-8')
-    (out_dir / ('JUDGMENT-PLAN-%s.json' % today.isoformat())).write_text(
+    (out_dir / (stem + '.json')).write_text(
         json.dumps({'rows': rows, 'usd_per_page': rate, 'rate_sample_pages': sample}, indent=2),
         encoding='utf-8')
     print(report.split('\n## Every case')[0])
