@@ -159,6 +159,18 @@ class OwnCaseTests(unittest.TestCase):
         self.assertEqual(len(out['potential_title_party_claims']), 1)
         self.assertEqual(out['own_case_instruments'], [])
 
+    def test_an_own_case_filing_on_the_parcel_is_not_a_parcel_candidate(self):
+        # Greptile on #61: a folio-matched own-case judgment still reached parcel_candidates, which
+        # present title turns into claims, and found_under_other_names.
+        import document_walk as W
+        tc = W.this_case_of({'raw': {}, 'entries': [{'metadata': {'bookAndPage': '34932 / 1256'}}]})
+        model = dict(self.judgment('34932', '1256', 'SOMEONE ELSE'), foliO_NUMBER='30-5913-002-0010')
+        out = W.run_name_searches([{'name': 'OWNER', 'why': 'title'}], W.RecordIndex(),
+                                  self.Searcher([model]), '3059130020010', owner_models=[],
+                                  this_case=tc)
+        self.assertEqual(len(out['own_case_instruments']), 1)
+        self.assertEqual((out['parcel_candidates'], out['found_under_other_names']), ([], []))
+
     def test_the_same_plaintiffs_separate_action_stays_a_claim(self):
         # Greptile on #61: the plaintiff's judgment in another action, recorded nowhere near this
         # case's judgment, must not be hidden as this case's own.

@@ -679,9 +679,12 @@ def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models
             }
             basis = own_case_basis(model, this_case)
             if basis:
+                # This foreclosure's own filing is not a candidate encumbrance on the parcel, and
+                # not something the owner search missed (Greptile on #61).
                 row.update(own_case=True, this_case=basis)
                 own.append(row)
-            elif money_claim:
+                continue
+            if money_claim:
                 claims.append(dict(row, attachment_status='unknown',
                     identity_status='search_result_only', satisfaction_status='unknown'))
             if exact:
