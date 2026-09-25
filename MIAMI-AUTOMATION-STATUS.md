@@ -181,6 +181,32 @@ discriminator. Feeding the parser less than the producer gave it made a resale w
 printed inside the document, and a rescheduling with no parseable date anywhere, both read `supported`
 after a certificate. `sale_passages` was a producer field nothing in the repo read (nineteenth review).
 
+The notice floor was still not enough, because the routine paperwork of a noticed sale is filed AFTER
+the notice - a statement of amounts due in the run-up, a bid at the sale itself - so no date floor
+reaches it. Those branches ask one narrow question, whether an entry could BE the cancellation or the
+rescheduling of the sale now on the calendar, and every phrasing they exist for says so in words, so
+they now require them (`cancel`, `vacat`, `withdraw`, `reset`, `reschedul`, `continu`, `postpon`). The
+final branch, which asks about a FRESH notice after a cancellation, is deliberately not filtered
+(twentieth review).
+
+**A judgment superseded by one filed under a covering title.** `_FILED_ABOUT_RE`'s bare `notice\b`
+matches "Notice of Filing Amended Final Judgment of Foreclosure", so the producer moves the real label
+to `attached_document_kind` and leaves `kind` as `notice_of_filing`. `_transition` has no entry for that
+kind and `reconcile_judgments` keys on `kind == 'final_judgment'` (:672), so the superseded judgment
+stays `operative` and controlling and the verdict vouched for the OLD figure to the cent with the
+amendment named nowhere. `attached_document_kind == 'final_judgment'` is still excluded - a judgment
+body on page 1 of a motion, memorandum or status report is an exhibit, and holding those made routine
+dockets `incomplete` for good (twelfth review) - unless the entry's own words match the producer's own
+`_REPLACES`, which is the test `reconcile_judgments` itself uses for a replacement (twentieth review).
+
+**The report prints the posture and the cutoff.** `dismissed`, `sold` and `sale_cancelled` are all
+`SETTLED_KINDS` and the producer folds none of them into the judgment row or the amount, so all three
+are `supported` under this module's scope - and all three printed as a clean row with a judgment amount
+beside them and nothing on the page saying the foreclosure was over. A `sold` case means a third party
+holds the certificate of title. `docket_status` was in the JSON and not in the table; it now has a
+column, and the run's `as_of` is printed under the title, since several gap strings say "this run's
+as_of" and a replay at an old cutoff otherwise reads like a run made today.
+
 The same round closed the other half of the eighth review's defect. `_transition` takes the sale date
 from `sale_passages` - the docket line plus the body lines of READ pages - and falls back to the
 entry's own date only for a calendar event (:264). A notice of sale whose description carries no

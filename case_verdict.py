@@ -188,6 +188,10 @@ _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
 # a document behind the county login, which is the ordinary case for a sale notice. The clerk's
 # proceeds entries after a completed sale carry neither word.
 _RESET_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*)\b', re.I)
+# What an entry must say to be a candidate for CLOSING or MOVING the sale now on the calendar. The
+# question those branches ask is narrow, and every phrasing they exist for carries one of these.
+_CLOSING_WORD_RE = re.compile(r'\b(?:cancel\w*|vacat\w*|withdraw\w*|reset|reschedul\w*|'
+                              r'continu\w*|postpon\w*)\b', re.I)
 # Entry kinds that RAISE a stay (miami_case_timeline :469, :553). Relief, dismissal and discharge
 # are stay-ENDING events: one of those dated after the run's as_of says nothing about the stay state
 # at as_of, and counting them made a clean case incomplete.
@@ -427,8 +431,19 @@ def _sale_state(timeline, status, kind):
             unlabelled.append(entry)
     closing_date = str((closing or {}).get('date') or '')
 
-    def _later_unlabelled(floor):
-        return [e for e in unlabelled if str(e.get('date') or '') >= str(floor or '')]
+    def _later_unlabelled(floor, may_close_it=False):
+        out = [e for e in unlabelled if str(e.get('date') or '') >= str(floor or '')]
+        if may_close_it:
+            # The LIVE branches ask one question: could this entry BE the cancellation or the
+            # rescheduling of the sale now on the calendar? The phrasings this scan exists for all
+            # carry one of these words - "Notice of Cancellation of Foreclosure Sale" (eighteenth
+            # review), "Notice of Rescheduled Foreclosure Sale" (seventeenth). The routine paperwork
+            # of a noticed sale does not, and it is filed AFTER the notice, so the date floor cannot
+            # reach it: "Statement of Amounts Due at Sale" and "Plaintiff's Bid at Sale" held the
+            # ordinary live-lead docket incomplete (twentieth review). The final branch below asks a
+            # different question - a FRESH notice after a cancellation - and is not filtered.
+            out = [e for e in out if _CLOSING_WORD_RE.search(_index_text(e))]
+        return out
 
     # The floor for the LIVE-sale branches. Those ask whether an unlabelled entry might be the
     # cancellation or the rescheduling of the sale now on the calendar, so an entry dated BEFORE the
@@ -480,7 +495,7 @@ def _sale_state(timeline, status, kind):
         # the live sale itself - the gap was unreachable, and a docket where strictly LESS was known
         # read `supported` where the same entry after a LABELLED cancellation read incomplete
         # (eighteenth review).
-        later = _later_unlabelled(live_floor)
+        later = _later_unlabelled(live_floor, may_close_it=True)
         if later:
             return 'unknown', ('%s, so whether that sale still stands cannot be told from this file'
                                % _unlabelled_phrase(later))
@@ -489,7 +504,7 @@ def _sale_state(timeline, status, kind):
         # Only reachable if the producer ever writes sale_date on a status kind outside
         # SALE_LIVE_STATUS_KINDS; _transition writes it only for 'sale_scheduled' today, so the
         # branch above wins. Guarded the same way rather than left as the one unguarded path.
-        later = _later_unlabelled(live_floor)
+        later = _later_unlabelled(live_floor, may_close_it=True)
         if later:
             return 'unknown', ('%s, so whether the sale on the calendar for %s still stands cannot '
                                'be told from this file'
@@ -504,7 +519,7 @@ def _sale_state(timeline, status, kind):
             # "Notice of Cancellation of Foreclosure Sale" is one the classifier leaves as 'other'.
             # So the sale state is unknown, not live: claiming a conflict here would be the same
             # guess in the opposite direction.
-            later = _later_unlabelled(opening.get('date'))
+            later = _later_unlabelled(opening.get('date'), may_close_it=True)
             if later:
                 return 'unknown', ('entry %s is classified as a notice of sale, and %s, so whether '
                                    'that sale still stands cannot be told from this file' % (
@@ -563,6 +578,23 @@ def _classify(text):
         return miami_case_timeline.classify(str(text))
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return None
+
+
+def _replaces(entry):
+    """True when this entry's own docket words say it REPLACES an earlier judgment.
+
+    miami_case_timeline._REPLACES is the same regex reconcile_judgments uses at :674 to give a
+    final_judgment row role='replacement', so nothing is classified here that the producer does not
+    classify the same way.
+    """
+    text = _index_text(entry)
+    if not text.strip():
+        return False
+    try:
+        import miami_case_timeline
+        return bool(miami_case_timeline._REPLACES.search(text))
+    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
+        return False
 
 
 def _sale_dates_of(entry):
@@ -1060,7 +1092,14 @@ def assess(timeline, dossier=None):
         # The producer's own rule is that such a copy is an exhibit, and a judgment body under a
         # covering title can only mean "a judgment exists", which reconcile_judgments already read.
         # The other five dispositive bodies genuinely move the posture.
-        if attached in DECIDING_KINDS and attached != 'final_judgment':
+        # ... unless the entry's own words say the document REPLACES a judgment. "Notice of Filing
+        # Amended Final Judgment of Foreclosure" is not an exhibit: it is the thing that supersedes
+        # the judgment whose amount this verdict vouches for, and the producer folds it in nowhere -
+        # _transition has no entry for notice_of_filing, and reconcile_judgments keys on
+        # kind == 'final_judgment' (:672), so the superseded judgment stays operative and controlling.
+        # A case read `supported` with the OLD figure verified to the cent and the amendment named
+        # nowhere on the page (twentieth review). The test is the producer's own _REPLACES.
+        if attached in DECIDING_KINDS and (attached != 'final_judgment' or _replaces(entry)):
             missing.append('entry %s is titled as a filing about something else, and the document '
                            'under it reads as %s, which the run therefore did not fold into the '
                            "case's posture; whether it decides this case is not settled in this file"
@@ -1209,9 +1248,19 @@ def render_markdown(rows, skipped=(), broken=()):
     # The stay column is not decoration. The first version of this report rendered only
     # conflicts/missing/supported_by, so 2023-020247 - supported, with a bankruptcy stay in effect -
     # printed as a clean row with nothing anywhere on the page saying a stay was in force.
-    out = ['# Case verdicts', '',
-           '| Case | Verdict | Judgment | Amount | Bankruptcy stay | Why |',
-           '|---|---|---|---|---|---|']
+    # The posture column is not decoration either, for the same reason. A dismissed, sold or
+    # sale-cancelled case is `supported` under this module's scope - the producer folds none of those
+    # into the judgment row or the amount - so all three printed as a clean row with a judgment
+    # amount beside them and nothing on the page saying the foreclosure was over. A `sold` case means
+    # a third party holds the certificate of title (twentieth review).
+    as_of = sorted({str(r.get('as_of') or '') for r in rows} - {''})
+    out = ['# Case verdicts', '']
+    if as_of:
+        # Several gap strings say "this run's as_of", and a replay at an old cutoff otherwise reads
+        # exactly like a run made today.
+        out += ['Evidence as of %s.' % ', '.join(as_of), '']
+    out += ['| Case | Verdict | Posture | Judgment | Amount | Bankruptcy stay | Why |',
+            '|---|---|---|---|---|---|---|']
     for row in sorted(rows, key=lambda r: (REVIEW_ORDER.index(r['verdict']), str(r.get('case')))):
         why = (row['conflicts'] + row['missing'] + row['supported_by']) or ['-']
         # Three reasons fit a table cell; the rest must still be counted. This is the human-facing
@@ -1219,8 +1268,9 @@ def render_markdown(rows, skipped=(), broken=()):
         shown = '; '.join(w.replace('|', '/') for w in why[:3])
         if len(why) > 3:
             shown += '; +%d more, in the JSON' % (len(why) - 3)
-        out.append('| %s | %s | %s | %s | %s | %s |' % (
-            row.get('case') or '?', row['verdict'], row.get('controlling_judgment') or '-',
+        out.append('| %s | %s | %s | %s | %s | %s | %s |' % (
+            row.get('case') or '?', row['verdict'], row.get('docket_status') or '?',
+            row.get('controlling_judgment') or '-',
             _amount_word(row.get('judgment_amount')),
             _stay_word(row.get('stay_in_effect'), row.get('stay_history_count'),
                        row.get('bankruptcy_entry_count')),

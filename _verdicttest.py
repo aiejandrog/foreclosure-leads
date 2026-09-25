@@ -2644,5 +2644,95 @@ class NineteenthReviewTests(unittest.TestCase):
 
 
 
+class TwentiethReviewTests(unittest.TestCase):
+    """A judgment superseded by one filed under a covering title, the report dropping the one field
+    that says the foreclosure is over, and the live-sale gate still holding routine sale paperwork.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (82, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $105,000.00'
+    AMENDED = 'AMENDED FINAL JUDGMENT OF FORECLOSURE\nTOTAL $225,000.00'
+    NOTICE = (140, 'Notice of Foreclosure Sale set for 10/28/2026', '', '06/01/2026', '')
+
+    def case(self, extra, pages=None):
+        pg = {'82': self.PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + list(extra), controlling='82', amount=105000.00, pages=pg)
+
+    def test_an_amended_judgment_under_a_covering_title_is_named(self):
+        # _FILED_ABOUT_RE's bare `notice\b` matches "Notice of Filing ...", so the producer moves the
+        # real label to attached_document_kind and leaves kind 'notice_of_filing'. _transition has no
+        # entry for that kind and reconcile_judgments keys on kind == 'final_judgment' (:672), so the
+        # superseded judgment stays operative and controlling - and the verdict vouched for the OLD
+        # figure to the cent with the amendment named nowhere on the page.
+        t = self.case([(140, 'Notice of Filing Amended Final Judgment of Foreclosure', '',
+                        '06/01/2026', '')], pages={'140': self.AMENDED})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertEqual((entry['kind'], entry['attached_document_kind']),
+                         ('notice_of_filing', 'final_judgment'))
+        self.assertEqual([(r['entry_id'], r['status']) for r in t['judgments']['judgments']],
+                         [('82', 'operative')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+
+    def test_a_judgment_copy_filed_as_an_exhibit_still_reads_supported(self):
+        # The twelfth review's calibration, which is why final_judgment is excluded at all: a judgment
+        # body on page 1 of a motion, memorandum, status report or proposed order is an exhibit, and
+        # holding those made routine dockets incomplete for good. None of these carries a _REPLACES
+        # word, which is the producer's own test for a replacement.
+        for title in ('Notice of Filing Proposed Final Judgment', 'Memorandum of Law',
+                      'Status Report', 'Request for Judicial Notice', 'Motion for Summary Judgment',
+                      'Affidavit of Indebtedness', 'Notice of Filing Final Judgment'):
+            t = self.case([(140, title, '', '06/01/2026', '')], pages={'140': self.AMENDED})
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
+
+    def test_routine_sale_paperwork_after_the_notice_does_not_hold_the_docket(self):
+        # The previous round floored these branches at the notice, but the routine paperwork of a
+        # noticed sale is filed AFTER it - a statement of amounts due in the run-up, a bid at the sale
+        # itself - so the floor never reached them and the ordinary live-lead shape stayed incomplete.
+        # The branches ask whether an entry could BE the cancellation or the rescheduling, so they now
+        # require the words that would say so.
+        t = self.case([self.NOTICE,
+                       (141, 'Statement of Amounts Due at Sale', '', '06/05/2026', ''),
+                       (142, "Plaintiff's Bid at Sale", '', '06/06/2026', '')])
+        self.assertEqual(t['status']['kind'], 'sale_scheduled')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_a_cancellation_or_rescheduling_after_the_notice_is_still_caught(self):
+        # The seventeenth and eighteenth rounds' cases, which the new filter must not lose.
+        for title in ('Notice of Cancellation of Foreclosure Sale',
+                      'Notice of Rescheduled Foreclosure Sale on 12/28/2026'):
+            r = CV.assess(self.case([self.NOTICE, (165, title, '', '06/20/2026', '')]))
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if '165' in m], (title, r['missing']))
+
+    def test_the_report_prints_the_posture_and_the_cutoff(self):
+        # dismissed, sold and sale_cancelled are all SETTLED_KINDS, and the producer folds none of
+        # them into the judgment row or the amount, so all three are `supported` under this module's
+        # scope - and all three printed as a clean row with a judgment amount beside them and nothing
+        # on the page saying the foreclosure was over. A `sold` case means a third party holds the
+        # certificate of title. Same defect the stay column exists to fix.
+        rows = []
+        for extra, kind in (([(160, 'Order of Dismissal', '', '06/01/2026', '')], 'dismissed'),
+                            ([(160, 'Notice of Foreclosure Sale on 04/01/2026', '', '03/01/2026', ''),
+                              (161, 'Certificate of Title', '', '04/10/2026', '')], 'sold')):
+            t = self.case(extra)
+            self.assertEqual(t['status']['kind'], kind)
+            row = CV.assess(t)
+            self.assertEqual(row['verdict'], 'supported', (kind, row['missing']))
+            rows.append(dict(row, case=kind))
+        report = CV.render_markdown(rows)
+        self.assertIn('| Case | Verdict | Posture |', report)
+        for kind in ('dismissed', 'sold'):
+            line = next(l for l in report.split('\n') if l.startswith('| %s |' % kind))
+            self.assertIn('| %s |' % kind, line.split('supported')[1], line)
+        self.assertIn('Evidence as of 2026-09-23.', report)
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
