@@ -2219,5 +2219,95 @@ class FourteenthReviewTests(unittest.TestCase):
 
 
 
+class FifteenthReviewTests(unittest.TestCase):
+    """Two false `supported` paths, both where a producer bound this module had already noticed on the
+    gap-RAISING side was still missing on the gap-SUPPRESSING side, or where the producer's own net for
+    undated entries has a hole this module did not cover.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+
+    HELD = [(1, 'Complaint', '', '2026-01-05', ''),
+            (140, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+            (170, 'Bid Amount', '', '08/10/2026', ''),
+            (171, 'Mortgage Foreclosure Deposit', '', '08/10/2026', '')]
+
+    def held(self, extra=(), as_of='2026-09-01'):
+        return self.built(list(self.HELD) + list(extra), as_of=as_of, controlling='140',
+                          pages={'140': self.JUDGMENT_PAGE})
+
+    def test_a_certificate_after_the_cutoff_does_not_close_a_sale_held_before_it(self):
+        # sale_held bounds its money-row scan by as_of (:544) and its certificate scan (:550) does
+        # NOT, so a certificate dated after the run's own cutoff sets sale_held['certificate'].
+        # Reading that bare field as "the sale closed" suppressed the held-sale gap entirely.
+        t = self.held([(300, 'Certificate of Title', '', '10/05/2026', '')])
+        self.assertEqual((t['sale_held'] or {}).get('certificate'), '300',
+                         'the producer must still record the later certificate')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        line = [m for m in r['missing'] if 'sale was held' in m]
+        self.assertTrue(line, r['missing'])
+        self.assertIn('300', line[0])
+        self.assertIn('as_of', line[0])
+        self.assertFalse(any('did not take in' in m for m in r['missing']),
+                         'the summary DID take that certificate in')
+
+    def test_the_same_sale_under_a_live_stay_conflicts(self):
+        # The worst variant: the stay-against-sale contradiction was downgraded all the way to
+        # `supported` because _sale_state read the same bare certificate field.
+        t = self.held([(200, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '', '08/20/2026', ''),
+                       (300, 'Certificate of Title', '', '10/05/2026', '')])
+        self.assertTrue(t['stay_in_effect'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['conflicts'], r['missing']))
+        self.assertTrue(any('08-10' in c or '2026-08-10' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_certificate_at_the_cutoff_still_closes_the_sale(self):
+        # The mirror. A certificate dated within the window closes the day as it always did.
+        t = self.held([(300, 'Certificate of Title', '', '08/20/2026', '')])
+        r = CV.assess(t)
+        self.assertFalse(any('sale was held' in m for m in r['missing']), r['missing'])
+
+    def test_an_undated_money_row_over_a_read_judgment_is_not_supported(self):
+        # _transition has no entry for sale_bid or sale_deposit (:250), so build_timeline's undated
+        # net (:505) does not cover them, and _labelled drops undated rows because every producer
+        # summary it mirrors does. Nothing was left to raise this.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (146, 'Bid Amount', '', '', '')],
+                       controlling='140', pages={'140': self.JUDGMENT_PAGE})
+        self.assertEqual(t['status']['kind'], 'judgment_entered')
+        self.assertIsNone(t['sale_held'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        line = [m for m in r['missing'] if 'could not date it' in m]
+        self.assertTrue(line, r['missing'])
+        self.assertIn('146', line[0])
+
+    def test_an_undated_limited_scope_satisfaction_is_not_supported(self):
+        # _transition returns None for a limited-scope satisfaction (:248) and reconcile_judgments
+        # skips undated entries (:673), so the judgment stayed operative / no_satisfaction_found and
+        # the status never moved: `supported` over a partial satisfaction of the controlling judgment.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (150, 'Partial Satisfaction of Judgment as to Defendant JOHN DOE', '', '', '')],
+                       controlling='140', pages={'140': self.JUDGMENT_PAGE})
+        row = next(e for e in t['entries'] if e['entry_id'] == '150')
+        self.assertEqual((row['kind'], row['limited_scope'], row['date']), ('satisfaction', True, None))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if 'could not date it' in m and '150' in m],
+                        r['missing'])
+
+    def test_a_dated_ordinary_docket_is_untouched_by_the_undated_sweep(self):
+        # Contract 5: the sweep must add nothing to a docket whose entries all carry dates.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '06/10/2026', '')],
+                       controlling='140', pages={'140': self.JUDGMENT_PAGE})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

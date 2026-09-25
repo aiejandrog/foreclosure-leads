@@ -122,6 +122,24 @@ emptied a gap check for one commit: an undated "Notice of Rescheduled Foreclosur
 classifier does not label, stopped raising the unlabelled-sale gap and a case under a live bankruptcy
 stay read `supported` (fourteenth review).
 
+Two more of each half were open a round later. `sale_held` bounds its money-row scan by the cutoff
+(:544) and its certificate scan (:550) does not, so a certificate dated after the run's own `as_of`
+sets `sale_held['certificate']`; reading that bare field suppressed the held-sale gap and a sale the
+clerk held before the cutoff, under a live stay, read `supported`. And the producer's one net for
+undated entries - :505 forces status `unclear` - covers only the kinds `_transition` recognises, which
+excludes `sale_bid` and `sale_deposit` (not in its map) and a limited-scope satisfaction or dismissal
+(returned `None` at :248), while `reconcile_judgments` :673 skips every undated entry. An undated "Bid
+Amount" over a read judgment, and an undated partial satisfaction of that judgment, both read
+`supported` with nothing in `missing`. Each now raises a gap naming the entry and the label it carries
+(fifteenth review).
+
+**Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
+whole status when any undated dispositive entry exists, including a status already carrying one of the
+three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
+undated dispositive entry therefore reaches `case_verdict` with reason "Undated dispositive entry
+prevents reliable chronology", so the verdict is `incomplete` on a file that also holds a
+contradiction. `case_verdict` restates the producer faithfully; the loss is upstream.
+
 **The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry
 whose OCS eventType is a hearing loses its real label, and every summary the producer builds afterwards

@@ -249,6 +249,28 @@ def _after_cutoff(entry, as_of):
     return bool(date) and date > str(as_of or '9999-99-99')
 
 
+def _certificate_at_cutoff(timeline, held):
+    """-> (the held sale's certificate entry as of the run's cutoff, the one excluded for being later).
+
+    `sale_held` bounds its money-row scan by the run's as_of (miami_case_timeline :544); its
+    certificate scan (:550) does NOT - it only requires a date at or after the held sale, and
+    build_timeline keeps post-as_of entries in `entries`. So a certificate dated AFTER the run's own
+    cutoff sets sale_held['certificate'], and reading that bare field as "the sale closed" suppressed
+    the held-sale gap: a sale the clerk held before the cutoff, under a live bankruptcy stay, read
+    `supported` with nothing on the page saying a sale had been held (fifteenth review). The missing
+    bound was already known where this module RAISES a gap (see _labelled below); the half that
+    SUPPRESSES one was not.
+    """
+    ident = (held or {}).get('certificate')
+    if ident is None:
+        return None, None
+    row = next((e for e in _rows(timeline, 'entries')
+                if isinstance(e, dict) and str(e.get('entry_id')) == str(ident)), None)
+    if row is not None and _after_cutoff(row, timeline.get('as_of')):
+        return None, ident
+    return ident, None
+
+
 def _labelled(timeline, kinds, since=None):
     """-> the entries the producer gave one of `kinds`, read through _producer_labels.
 
@@ -416,14 +438,22 @@ def _sale_state(timeline, status, kind):
                                % ('y' if len(money) == 1 else 'ies',
                                   ', '.join(str(e.get('entry_id') or '?') for e in money[:5]),
                                   'ies' if len(money) == 1 else 'y'))
-    if (isinstance(held, dict) and held.get('date') and not held.get('certificate')
+    cert, late_cert = _certificate_at_cutoff(timeline, held)
+    if (isinstance(held, dict) and held.get('date') and not cert
             and closing_date < str(held['date'])):
-        if _labelled(timeline, CERTIFICATE_KINDS, since=held['date']):
+        if [e for e in _labelled(timeline, CERTIFICATE_KINDS, since=held['date'])
+                if not _after_cutoff(e, as_of)]:
             # The summary says no certificate; an entry carries a certificate label the summary did
             # not take in. Saying either is a claim this file does not support.
             return 'unknown', ('the run\'s held-sale summary for %s records no certificate while a '
                                'docket entry carries a certificate label it did not take in'
                                % held['date'])
+        if late_cert is not None:
+            # The summary DID take this certificate in, so the wording above would be false. What is
+            # true is that the only certificate for the sale is dated after this run's cutoff.
+            return 'live', ('the clerk posted sale-day bid and deposit entries on %s and the only '
+                            "certificate the run found for that sale is entry %s, dated after this "
+                            "run's as_of" % (held['date'], late_cert))
         return 'live', ('the clerk posted sale-day bid and deposit entries on %s and no '
                         'certificate of sale has followed' % held['date'])
     if kind in SALE_LIVE_STATUS_KINDS:
@@ -675,7 +705,9 @@ def assess(timeline, dossier=None):
     # block ends "the sale can still be vacated", which is not a posture to vouch for.
     held = timeline.get('sale_held') if isinstance(timeline.get('sale_held'), dict) else {}
     money = _labelled(timeline, SALE_MONEY_KINDS)
-    certificates = _labelled(timeline, CERTIFICATE_KINDS, since=held.get('date'))
+    cert_at_cutoff, late_cert = _certificate_at_cutoff(timeline, held)
+    certificates = [c for c in _labelled(timeline, CERTIFICATE_KINDS, since=held.get('date'))
+                    if not _after_cutoff(c, timeline.get('as_of'))]
     # Only a CERTIFICATE closes a held sale. An order cancelling a sale filed after the clerk posted
     # bids says nothing about whether that sale was held, and SALE_CLOSING_KINDS carries one.
     closing_for_money = _labelled(timeline, CERTIFICATE_KINDS)
@@ -690,8 +722,15 @@ def assess(timeline, dossier=None):
                        % ('y' if len(money) == 1 else 'ies',
                           ', '.join(str(e.get('entry_id') or '?') for e in money[:5]),
                           'ies' if len(money) == 1 else 'y'))
-    elif held.get('date') and not held.get('certificate') and outcome not in UNSETTLED_SALE_OUTCOMES:
-        if certificates:
+    elif held.get('date') and not cert_at_cutoff and outcome not in UNSETTLED_SALE_OUTCOMES:
+        if late_cert is not None:
+            # The summary took this certificate in, so the "did not take in" wording below would be
+            # false; what is true is that it is dated outside the window this run reports on.
+            missing.append("the clerk's sale-day bid and deposit entries say a sale was held on %s "
+                           'and the only certificate the run found for it is entry %s, dated after '
+                           "this run's as_of, so what became of the sale at the cutoff is not in "
+                           'this file' % (held['date'], late_cert))
+        elif certificates:
             missing.append("the run's held-sale summary for %s records no certificate while entr%s "
                            '%s carr%s a certificate label it did not take in, so what became of the '
                            'sale is not settled in this file'
@@ -916,6 +955,25 @@ def assess(timeline, dossier=None):
                            'under it reads as %s, which the run therefore did not fold into the '
                            "case's posture; whether it decides this case is not settled in this file"
                            % (entry.get('entry_id') or '?', attached))
+    # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
+    # one net for these - :505 forces status 'unclear' for every undated entry `_transition`
+    # recognises - and `_transition` returns None for exactly the kinds that then reach nothing else:
+    # sale_bid and sale_deposit are not in its map at all (:250), and a limited-scope satisfaction or
+    # dismissal is returned None at :248. reconcile_judgments (:673) skips every undated entry, so an
+    # undated satisfaction never reaches the judgment row either, and _labelled drops undated rows
+    # because every producer summary it mirrors does. That left no check at all: an undated "Bid
+    # Amount" over a read judgment, and an undated partial satisfaction OF that judgment, both read
+    # `supported` with missing empty (fifteenth review). This is the policy _after_cutoff already
+    # states - an entry with no date is more unknown, not less.
+    for entry in _rows(timeline, 'entries'):
+        if not isinstance(entry, dict) or entry.get('date'):
+            continue
+        lost = sorted(set(_producer_labels(entry)) & set(DECIDING_KINDS))
+        if lost:
+            missing.append('entry %s carries the %s label and the run could not date it, so every '
+                           'summary built from the docket chronology left it out; what it decides is '
+                           'not settled in this file'
+                           % (entry.get('entry_id') or '?', ', '.join(lost)))
     # limited_scope / dismissed_parties (:367) on a DISMISSAL. _transition returns None for a
     # limited-scope dismissal (:234), so the status never moves - and unlike a limited-scope
     # satisfaction, which reconcile_judgments records as partially_satisfied and which this module
