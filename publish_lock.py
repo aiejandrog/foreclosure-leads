@@ -15,10 +15,14 @@ published 714 phones over the same board. The gates would have refused both; nei
 them at the time. The expensive part was not the one bad board: the bad publish became
 origin/main, so it moved the baseline every later publish_guard run compared against.
 
-The 2026-09-22 shape of the same hazard: DEALFLOW Refresh fires 05:30 and the measured chain runs
-3h08m, so it is still rebuilding at 06:45 when DealFlow Replies fires - and run-replies-daily.bat
-rebuilds and pushes the board too. Moving triggers apart (Phones 06:00 -> 09:30 on 2026-09-22) is
-the workaround. This file is the fix.
+How it looked on 2026-09-22, the morning this file was written: DEALFLOW Refresh fires 05:30 and
+its measured chain runs 3h08m, so it was still rebuilding at 06:45 when DealFlow Replies fired -
+and run-replies-daily.bat rebuilds and pushes the board too. That morning the triggers were moved
+apart, Replies 06:45 -> 08:45 and Phones 06:00 -> 09:30, and the INSTALLED times are now the ones
+in CLAUDE.md's publish table, not the ones in this paragraph. Read them there; a time written into
+a source comment is a time that goes stale the next time someone opens Task Scheduler. Moving the
+triggers was the workaround, and it holds only while every run finishes inside its slot - Refresh
+has measured 2h11m, 2h49m, 3h08m and about 4h. This file is the fix.
 
 WHAT IT GUARDS, AND WHAT IT DOES NOT
 

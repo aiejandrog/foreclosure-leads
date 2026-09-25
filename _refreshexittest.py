@@ -112,8 +112,10 @@ rec('the codes are contiguous from 1', used == list(range(1, max(used) + 1)) if 
 print('\n-- the publish lock is taken before any work and dropped on every exit --')
 # 2026-09-22: five .bat files rebuild docs/ and push it and none of them took a lock, so the only
 # thing keeping two apart was the clock on their triggers. THIS file is the one that makes the
-# collision likely - its measured chain runs 3h08m from 05:30, so it is still building when
-# DealFlow Replies fires at 06:45 and run-replies-daily.bat rebuilds and pushes the same two paths.
+# collision likely - its measured chain runs 3h08m from 05:30 and has run to about 4h, so it can
+# still be building when DealFlow Replies fires and run-replies-daily.bat rebuilds and pushes the
+# same two paths. The installed trigger times live in CLAUDE.md's publish table, deliberately not
+# here: a time copied into a comment is stale the next time someone opens Task Scheduler.
 # _batsyntaxtest.py owns the wiring invariant across all five; these are the parts specific to the
 # nightly, where the ordering against net_ready.py and the RUNEXIT ladder both matter.
 lock_i = [i for i, l in enumerate(lines) if 'publish_lock.py acquire' in l]
