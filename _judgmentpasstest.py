@@ -280,7 +280,7 @@ class Assess(unittest.TestCase):
         digest = hashlib.sha256(b'%PDF fake').hexdigest()
         (self.base / 'timeline-ocr').mkdir()
         (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
-            {'pages': {'1': {'outcome': 'ocr_text', 'text': 'none'}}}))
+            {'sha256': digest, 'pages': {'1': {'outcome': 'ocr_text', 'text': 'none'}}}))
         row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
                'reading': {'pages': [{'page': n, 'outcome': 'text', 'text': 'x'} for n in (1, 2)]}}
         self.assertTrue(JP._with_cached_ocr(row, self.base)['_ocr_unreachable'])
@@ -477,7 +477,7 @@ class Assess(unittest.TestCase):
         digest = hashlib.sha256(b'%PDF fake').hexdigest()
         (self.base / 'timeline-ocr').mkdir()
         (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
-            {'pages': {'1': {'outcome': 'ocr_text', 'text': 'x'},
+            {'sha256': digest, 'pages': {'1': {'outcome': 'ocr_text', 'text': 'x'},
                        '2': {'outcome': 'ocr_text', 'text': 'Total $5.00'}}}))
         row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
                'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'x'},
@@ -488,6 +488,50 @@ class Assess(unittest.TestCase):
     def test_report_only_refuses_pass_flags(self):
         with self.assertRaises(SystemExit):
             JP.main(['--report-only', '--collect'])
+
+    def test_stale_capped_gap_owes_a_free_rerun(self):
+        ref = _row(self.base, '9', 'no dollars', 'j')    # amount page now: 2 only
+        _buy(self.base, ref, '9', gaps=[{'page': 3, 'reason': 'Amount page not read; cap or reader stop'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 0))
+
+    def test_priced_case_with_timeline_gaps_is_flagged(self):
+        _row(self.base, '9', '$1.00', 'j')
+        got = self.run_assess([('9', 'final_judgment', True, [])],
+                              {'judgments': {'controlling_entry': '9'},
+                               'gaps': [{'entry_id': '9', 'kind': 'missing_attachments'}]})
+        self.assertEqual(got['state'], 'needs_paid_read')
+        self.assertTrue(got['gaps_block_verified'])
+
+    def test_read_with_checks_but_no_amount_page_now_is_read_not_verified(self):
+        ref = _row(self.base, '9', 'no dollars', 'j', total_page=False)
+        _buy(self.base, ref, '9')
+        bad = [{'ok': False, 'amount': 1, 'page': 2, 'reason': 'x', 'pages': [], 'run': [],
+                'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=bad):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_missing_file_is_not_called_a_failed_paid_call(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'FileNotFoundError: gone'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertIn('could not read a document', got['detail'])
+        self.assertNotIn('paid call failed', got['detail'])
+
+    def test_cache_for_another_file_is_ignored(self):
+        pdf = self.base / 'doc.pdf'
+        pdf.write_bytes(b'%PDF fake')
+        digest = hashlib.sha256(b'%PDF fake').hexdigest()
+        (self.base / 'timeline-ocr').mkdir()
+        (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
+            {'sha256': 'other', 'pages': {'1': {'outcome': 'ocr_text', 'text': 'x'}}}))
+        row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'x'}]}}
+        self.assertEqual(JP._with_cached_ocr(row, self.base)['_ocr_unreachable'], 'cache')
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [
@@ -523,7 +567,7 @@ class Assess(unittest.TestCase):
         digest = hashlib.sha256(b'%PDF fake').hexdigest()
         (self.base / 'timeline-ocr').mkdir()
         (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
-            {'pages': {'1': {'outcome': 'ocr_text', 'text': 'Total $270,322.07'}}}))
+            {'sha256': digest, 'pages': {'1': {'outcome': 'ocr_text', 'text': 'Total $270,322.07'}}}))
         row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
                'reading': {'pages': [{'page': 1, 'outcome': 'text',
                                       'text': 'no dollar sign in the text layer'}]}}

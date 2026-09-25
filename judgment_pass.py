@@ -80,6 +80,8 @@ def _with_cached_ocr(row, base):
     try:
         saved = json.loads((Path(base) / 'timeline-ocr' / (digest + '-ocr300-v1.json'))
                            .read_text(encoding='utf-8'))
+        if saved.get('sha256') != digest:
+            raise ValueError('cache for another file')     # supplement() discards it too
     except (OSError, ValueError):
         # No cache means the pass never OCR'd it, so OCR-only amount pages are unknown here.
         return dict(row, _ocr_unreachable='cache')
@@ -282,18 +284,22 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     held_refs = {r.get('source_ref') for r in held}
 
     def pages_left(row, pages):
+        """-> (pages to buy, whether a paid-reader run is owed even at $0)."""
         ref = row.get('source_ref')
         key = 'amount-vision-' + hashlib.sha256(str(ref).encode()).hexdigest() + '.json'
         if key not in done:
-            return len(pages)
+            return len(pages), True
         if ref in stuck_docs:
-            return 0
+            return 0, False
         detail = DS.pipeline_load(Path(base) / key) or {}
         # Amount pages the free OCR found after the purchase are new pages to buy.
         fresh = set(pages) - set(detail.get('selected_pages') or pages)
-        # A capped page the current OCR no longer selects is not one the reader would buy.
-        return len((((rebuy.get(ref) or set()) & set(pages)) | fresh)
-                   - (stuck_pages.get(ref) or set()))
+        # A capped page the current OCR no longer selects is not one the reader would buy, but
+        # its gap still sits in the evidence and fails every check until a run rewrites it; that
+        # run re-reads the bought pages from its ledger at $0.
+        rebuy_now = rebuy.get(ref) or set()
+        left = len(((rebuy_now & set(pages)) | fresh) - (stuck_pages.get(ref) or set()))
+        return left, bool(left or rebuy_now - set(pages))
 
     need = []          # (is_target, pages) for every amount-bearing row with pages left to buy
     target_amount_rows = 0
@@ -304,10 +310,10 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         if not pages:
             continue
         target_amount_rows += is_target
-        left = pages_left(row, pages)
+        left, owed = pages_left(row, pages)
         if row.get('source_ref') in held_refs:
-            held_unread = held_unread or bool(left)
-        elif left:
+            held_unread = held_unread or owed
+        elif owed:
             need.append((is_target, left))
     notes = [out['detail']] if out.get('detail') else []
     target_doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
@@ -352,6 +358,11 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
                    pages_all=sum(n for _, n in need))
+        if target_gaps:
+            # Paying buys the amount pages but not these: the case stays judgment_incomplete.
+            out['gaps_block_verified'] = True
+            notes.append('timeline gaps on the judgment (%s): a paid read alone will not verify it'
+                         % ', '.join(target_gaps))
     elif out.get('ocr_unreachable'):
         # Without the free OCR, amount pages may be missing from every count below.
         out['state'] = 'report_on_pass_machine'
@@ -370,7 +381,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         # page of it is unread, and the timeline has no gap on it. One total agreeing while
         # another fails, or a judgment read with no total at all, is not this.
         out['state'] = 'verified'
-    elif target_amount_rows:
+    elif target_amount_rows or target_checks:
+        # A read with checks counts even if today's OCR no longer shows its amount pages.
         out['state'] = 'read_not_verified'
         checked = {c.get('source_ref') for c in target_checks}
         if any(not c.get('ok') for c in target_checks):
@@ -381,9 +393,12 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                          str(r).encode()).hexdigest() + '.json' in done]
         if unchecked:
             notes.append('a document of the judgment was read and shows no printed total to check')
-        if any(r in stuck_docs or stuck_pages.get(r) for r in target_refs):
+        if any(stuck_pages.get(r) for r in target_refs):
             notes.append('a page came back unreadable or a paid call failed; paying again '
                          'does not re-read it')
+        if any(r in stuck_docs for r in target_refs):
+            notes.append('the reader could not read a document (a missing or rejected file, or '
+                         'an unrecognised failure): see its evidence gaps')
     else:
         doc = target_doc
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
@@ -529,6 +544,10 @@ def render(rows, skipped_ids, rate, sample, today):
                         ' or more (%d case%s missing free OCR)' % (floors, '' if floors == 1 else 's')
                         if floors else '', pa, '+' if whole else '', pa * per_page,
                         ' or more' if whole else ''))
+    blocked = sum(1 for r in rows if r['state'] == 'needs_paid_read' and r.get('gaps_block_verified'))
+    if blocked:
+        lines += ['', '%d of the priced cases also have timeline gaps on the judgment: paying buys '
+                  'their amount pages but will not verify them (their Note names the gaps).' % blocked]
     lines += ['', '"read_not_verified": the judgment was read as far as a paid run can take it, and '
               'its figures do not reproduce its printed total to the cent, or a document shows no '
               'printed total, or a page came back unreadable, or a paid call failed with its '
@@ -548,7 +567,7 @@ def render(rows, skipped_ids, rate, sample, today):
             r['pages_to_judgment'] if r['state'] == 'needs_paid_read' else '',
             '; '.join(x for x in (r.get('detail'), r.get('pass_error') and
                                   'last pass error ' + r['pass_error']) if x)
-            .replace('|', '/')[:200]))
+            .replace('|', '/').replace('\r', ' ').replace('\n', ' ')[:200]))
     return '\n'.join(lines) + '\n'
 
 
