@@ -1598,6 +1598,7 @@ def _run(a, ap):
             models = None
             _paid0 = paid
             _def_blocked = False
+            _free_miss = False     # a name only a free search answered, and it missed: its paid search never ran
             try:
                 import stub_resolve as _sr
                 _co = _sr.people_from(r.get('defendants') or '')
@@ -1671,6 +1672,7 @@ def _run(a, ap):
                 # defendant): try the defendants too, and fall back to this result if they fail
                 _owner_models, models = models, None
                 _owner_src = _src
+                _free_miss = _free_miss or _src != 'paid'
             if models is None and not a.cached_only:
                 _sp0 = split_owner(oc)
                 # the paid search asks for the SURNAME only, so a spouse's paid search after the
@@ -1701,6 +1703,8 @@ def _run(a, ap):
                         _src = 'paid'
                         _def_blocked = _def_blocked or models is None
                     if models is not None and a.repull and not _parcel_in(models, folio):
+                        if _src != 'paid' and _sp[0].upper() not in _paid_sn:
+                            _free_miss = True                 # this surname was never asked the paid way
                         models = None                         # not this parcel either; next defendant
                     if models is not None:
                         _searched = _nm + ' (defendant)'
@@ -1734,8 +1738,8 @@ def _run(a, ap):
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
                     kept += 1
                     print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
-                    if a.repull and not _def_blocked and _src == 'paid':
-                        # the paid surname search was answered and reached nothing on this parcel:
+                    if a.repull and not _def_blocked and not _free_miss and _src == 'paid':
+                        # every name's paid surname search was answered and none reached this parcel:
                         # marked, never paid for again. A defendant the clerk never answered leaves
                         # it for a later run.
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
@@ -1753,10 +1757,11 @@ def _run(a, ap):
                     # a defendant's name) than this re-read. It stands whole; the new lien rows are
                     # listed beside it, not counted, and the chain waits for a wider search.
                     out[case] = _lay_lien_rows(_old, res)
-                    if a.repull and _src == 'paid':
-                        # the widest search there is came back narrower: never paid for again. A
-                        # free re-read (cached token, Camoufox) only flags it, and the next --repull
-                        # goes straight to the paid surname search.
+                    if a.repull and _src == 'paid' and not _def_blocked and not _free_miss:
+                        # the widest search there is came back narrower, and every other name was
+                        # asked the paid way and answered: never paid for again. Anything less (a free
+                        # re-read, a name only Camoufox answered, a search the clerk never answered)
+                        # only flags it, and the next --repull goes straight to the paid surname search.
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
                     merged += 1
                     print(f"  ++  {case:22} {oc:26} narrower re-read: earlier chain kept, "

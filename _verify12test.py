@@ -1224,6 +1224,55 @@ try:
           _o6[0].get('wider_repull') and not _o6[0].get('repull_tried'), _o6[0])
     check("--repull: the paid surname search that also misses it marks it, and it is never paid for again",
           _o6[1].get('repull_tried') and _cf6 == [('MISSED', 'BEA')] and _paid6 == [('MISSED', 'BEA')], (_cf6, _paid6, _o6))
+    # a defendant only Camoufox answered, or one the clerk never answered, is not a paid answer for every name
+    _t7 = tempfile.mkdtemp()
+    json.dump([{'Case #': '2099-000701-CA-01', 'owner_clean': 'ZOE MISSED', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Doe, Jane'},
+               {'Case #': '2099-000702-CA-01', 'owner_clean': 'YAN OTHERZ', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Doetwo, Jane; Roe, Rick'},
+               {'Case #': '2099-000703-CA-01', 'owner_clean': 'UMA FREEMISS', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Roe, Rick'}], open(os.path.join(_t7, 'leads_final.json'), 'w'))
+    json.dump({'2099-000701-CA-01': {'conf': 'ok', 'liens': [], 'searched_as': 'JANE DOE (defendant)'},
+               '2099-000702-CA-01': dict(_mtg_chain, wider_repull='flagged earlier'), '2099-000703-CA-01': _mtg_chain},
+              open(os.path.join(_t7, 'records_liens.json'), 'w'))
+    open(os.path.join(_t7, 'gen_records_qs.py'), 'w').write('')
+    _cf7, _paid7, _o7 = [], [], []
+    def _ft7(sp, tries=3):
+        _paid7.append(tuple(sp))
+        return {('DOETWO', 'JANE'): None, ('ROE', 'RICK'): [deed, city1]}.get(tuple(sp), [_far])
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                           'camoufox_session', 'camoufox_qs', 'mint_and_fetch', 'time')}
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_t7, 'leads_final.json'), os.path.join(_t7, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_t7, 'records_qs.json'), _t7
+        RL.records_by_qs = lambda qs: [_far] if qs == 'tokD' else None
+        RL.fetch_via_turnstile = _ft7
+        RL.camoufox_session = lambda: (contextlib.nullcontext(), object())
+        RL.camoufox_qs = lambda browser, sp: _cf7.append(tuple(sp)) or ('tokD' if tuple(sp) in (('DOE', 'JANE'), ('FREEMISS', 'UMA')) else None)
+        RL.mint_and_fetch = lambda *a, **k: None
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        for _ in range(2):
+            json.dump({}, open(os.path.join(_t7, 'records_qs.json'), 'w'))
+            sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.05', '--spend-ledger', os.path.join(_t7, 's.json')]
+            with contextlib.redirect_stdout(io.StringIO()):
+                RL.main()
+            _o7.append(json.load(open(os.path.join(_t7, 'records_liens.json'))))
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    _a7, _b7 = _o7[0]['2099-000701-CA-01'], _o7[0]['2099-000702-CA-01']
+    check("--repull: the owner's paid miss does not mark a chain whose defendant only Camoufox answered",
+          not _a7.get('repull_tried') and _a7.get('wider_repull') and _paid7[:4] == [('MISSED', 'ZOE'), ('OTHERZ', 'YAN'), ('DOETWO', 'JANE'), ('ROE', 'RICK')], (_paid7, _a7))
+    check("--repull: the next run pays for that defendant's surname, and only then marks the chain",
+          _o7[1]['2099-000701-CA-01'].get('repull_tried') and _paid7.count(('DOE', 'JANE')) == 1, (_paid7, _o7[1]))
+    check("--repull: a narrower answer beside a defendant search the clerk never answered marks nothing",
+          not _b7.get('repull_tried') and _b7.get('wider_repull') and _b7['liens'] == _mtg_chain['liens']
+          and ('DOETWO', 'JANE') in _paid7, (_paid7, _b7))
+    check("--repull: a narrower paid answer for a defendant marks nothing while the owner was only asked for free",
+          not _o7[0]['2099-000703-CA-01'].get('repull_tried') and _o7[0]['2099-000703-CA-01'].get('wider_repull')
+          and _o7[1]['2099-000703-CA-01'].get('repull_tried') and _paid7.count(('FREEMISS', 'UMA')) == 1, (_paid7, _o7))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs
