@@ -121,6 +121,19 @@ _BKSTAYREL = re.compile(r'relief from (?:the )?(?:automatic )?stay|'
                         r'(?:lift|terminat|annul|vacat)\w* (?:of )?(?:the )?automatic stay|'
                         r'automatic stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', re.I)
 _BKREINSTATE = re.compile(r'reinstat', re.I)       # only ever read on a line already about a bankruptcy
+# A dismissal, stay relief or reinstatement counts only once it is ORDERED. A motion, request or
+# hearing notice asking for one is not granted until an order says so, and an order DENYING one is
+# the opposite. "Order Denying Confirmation and Dismissing Chapter 13 Case" denies something else
+# and does dismiss, so the denied thing is read up to the first "and".
+_BKASK = re.compile(r'\bmotion\b|\brequest\b|\bapplication\b|notice of hearing', re.I)
+_BKGRANT = re.compile(r'\bgrant', re.I)
+_BKDENIED = re.compile(r'\b(?:deny|denie[sd]|denying|denial of)\s+(?:(?!and\b)\w+\s+){0,3}?'
+                       r'(?:motion|request|relief|dismiss|lift|terminat|annul|vacat|discharg|reinstat)', re.I)
+
+
+def _bk_not_ordered(tx):
+    """True when a closing or reinstating line only asks for it, or denies it."""
+    return bool(_BKDENIED.search(tx)) or (bool(_BKASK.search(tx)) and not _BKGRANT.search(tx))
 
 def _bk_lines(dks):
     """(opens, closes) of the bankruptcy lines on a docket. opens are (ISO date, federal case numbers
@@ -142,6 +155,9 @@ def _bk_lines(dks):
     for iso, t, tx, nums in rows:
         if not (_BKFILE.search(t) or _BANKR.search(tx) or _BKSTAYREL.search(tx) or (nums & known)):
             continue
+        if _BKREINSTATE.search(tx) or _BKCLOSE.search(tx) or _BKSTAYREL.search(tx):
+            if _bk_not_ordered(tx):
+                continue                               # asked for or denied: the case stands as it was
         if _BKREINSTATE.search(tx):
             opens.append((iso, nums, False))           # the case is back: its stay is live again
         elif _BKCLOSE.search(tx) or _BKSTAYREL.search(tx):

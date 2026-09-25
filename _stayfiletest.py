@@ -282,6 +282,29 @@ try:
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Lifting Stay of Proceedings'))[0] is True)
     check('an order terminating the automatic stay ends it',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Terminating Automatic Stay'))[0] is False)
+    # Greptile on #60: a request is not an order, and a denied order is the opposite of one.
+    check('a motion to terminate the automatic stay does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Motion to Terminate the Automatic Stay'))[0] is True)
+    check('a motion for relief from stay, and its hearing notice, do not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Motion for Relief from Stay'),
+                CLOSE('03/05/2026', 'Notice of Hearing on Motion for Relief from Stay'))[0] is True)
+    check('an order DENYING relief from stay does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Denying Motion for Relief from Automatic Stay'))[0] is True)
+    check('an order denying relief from stay, with no motion named, does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Denying Relief from Automatic Stay'))[0] is True)
+    check('an order denying reinstatement, with no motion named, leaves the dismissed case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Reinstatement of Chapter 13 Case'))[0] is False)
+    check('an order GRANTING a motion for relief from stay ends it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Agreed Order Granting Motion for Relief from Stay'))[0] is False)
+    check('a trustee motion to dismiss the chapter 13 case does not end the stay',
+          _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', "Trustee's Motion to Dismiss Chapter 13 Case"))[0] is True)
+    check('an order denying reinstatement leaves the dismissed case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Reinstate Chapter 13 Case'))[0] is False)
+    check('a motion to reinstate, not yet ruled on, leaves the dismissed case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Motion to Reinstate Chapter 13 Case'))[0] is False)
     check('relief from the automatic stay still ends it with no bankruptcy word on the line',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
     # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to
