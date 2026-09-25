@@ -316,6 +316,25 @@ def refresh_saved_report(report, rows, seeds):
     return result
 
 
+def _cache_only(name):
+    raise LookupError('report-only: Sunbiz not queried and no fresh cached record')
+
+
+def present_title_for(report, sunbiz=False, network=True, cache_file=None):
+    """Attach the present-title summary. Sunbiz is consulted only with --sunbiz, and a
+    report-only run reads the cache and never the registry."""
+    import miami_present_title as MPT
+    import sunbiz_entities as SE
+    entities = None
+    if sunbiz:
+        current = (report.get('title_parties') or {}).get('current_deed_candidate') or {}
+        names = [p['name'] for p in current.get('parties') or []
+                 if p.get('role') == 'grantee' and SE.kind_of(p['name']) == 'sunbiz_entity']
+        entities = SE.resolve_owners(names, lookup=None if network else _cache_only,
+                                     cache_file=cache_file or SE._cache_path())
+    return MPT.present_title(report, entities)
+
+
 def validate_case(case):
     if not re.fullmatch(r'20\d{2}-\d{6}-(?:CA|CC)-\d{2}', case):
         raise ValueError('Expected a Miami civil case identifier')
@@ -335,6 +354,8 @@ def main(argv=None):
     parser.add_argument('--vision-max-spend', type=float, required=True)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--report-only', action='store_true', help='reconcile saved private evidence without network or spending')
+    parser.add_argument('--sunbiz', action='store_true',
+                        help='look up entity owners on Sunbiz (free public registry; cache only with --report-only)')
     args = parser.parse_args(argv)
     for cap in (args.captcha_max_spend, args.vision_max_spend):
         if not math.isfinite(cap) or cap <= 0:
@@ -363,6 +384,7 @@ def main(argv=None):
             report.update(owner=entry['owner'], folio=entry['folio'])
             rows, seeds = stored_evidence(entry['case'])
             report = refresh_saved_report(report, rows, seeds)
+            report['present_title'] = present_title_for(report, args.sunbiz, network=False)
             report['vision_actual_usd'] = vision_state['actual_usd']
             report['vision_reserved_usd'] = sum(vision_state['reserved'].values())
             report['vision_budget_scope'] = 'shared title-discovery run, not per-case spend'
@@ -386,6 +408,7 @@ def main(argv=None):
                 report['captcha'] = budget.report()
                 report['captcha_gaps'] = case_search_gaps(report, searcher.gaps)
                 report['gaps'].extend(str(g) for g in report['captcha_gaps'])
+                report['present_title'] = present_title_for(report, args.sunbiz)
                 DS.pipeline_write(private / (entry['case'] + '.json'), report)
                 path = RD.dossier_path('MIAMI-DADE', entry['case'])
                 old = RD._load(path, {'case':entry['case'], 'county':'MIAMI-DADE', 'complete':False})
