@@ -612,6 +612,16 @@ def _replaces(entry):
         return False
 
 
+def _row_satisfied(row):
+    """True when the producer marked this judgment row satisfied, in either of the two fields it uses.
+
+    `satisfaction` carries satisfied / partially_satisfied, and `status` carries 'satisfied' when the
+    reconciliation moved the row itself. Only the producer's own states are read.
+    """
+    state = str((row or {}).get('satisfaction') or 'no_satisfaction_found')
+    return state != 'no_satisfaction_found' or (row or {}).get('status') == 'satisfied'
+
+
 def _cover_subject(entry):
     """-> the producer's own label for what a COVER-titled entry is about, or None.
 
@@ -893,6 +903,28 @@ def assess(timeline, dossier=None):
             missing.append('the controlling judgment is %s; no satisfaction found is not proof of '
                            'an open balance, and a partial one is not proof of scope'
                            % record.get('satisfaction'))
+    # A satisfaction linked to a judgment row that is NOT the controlling one. reconcile_judgments
+    # attaches it to the judgment whose date the entry's text CITES (_target :783 filters by role,
+    # not by status), and writes the satisfaction onto that row alone (:741). So a satisfaction citing
+    # the SUPERSEDED judgment's date marks that row satisfied and leaves the controlling row
+    # 'no_satisfaction_found' - and _judgment_record reads only the controlling row while `unmatched`
+    # holds only the satisfactions with no target at all. The middle case reached nothing: a docket
+    # with an original judgment, an amended one, and a satisfaction citing the original read
+    # `supported` with the amount vouched to the cent, while the SAME satisfaction on a docket with
+    # one judgment - strictly less known - read incomplete. The limited-scope variant is quieter
+    # still: _transition returns None, so even the posture word stays judgment_entered (twenty-third
+    # review). This suite asserted the opposite as settled fact, so no fixture ever built the shape.
+    for row in _rows(judgments, 'judgments'):
+        if (not isinstance(row, dict) or row.get('entry_id') == entry_id
+                or _row_satisfied(row) is False):
+            continue
+        missing.append('the reconciliation records judgment entry %s in this case as %s, and it is '
+                       'not the controlling judgment, so what was satisfied is not settled in this '
+                       'file (%s)'
+                       % (row.get('entry_id') or '?',
+                          str(row.get('satisfaction') or row.get('status') or 'in an unrecorded '
+                              'state'),
+                          str(row.get('reason') or 'no reason recorded')))
 
     # --- the bankruptcy stay -------------------------------------------------------------------
     stay = timeline.get('stay_in_effect')
@@ -1203,6 +1235,21 @@ def assess(timeline, dossier=None):
                        % (entry.get('entry_id') or '?',
                           ' (as to %s)' % ', '.join(parties[:5]) if parties else
                           ' and it names no party'))
+    # nonbankruptcy_stay (:209): classify's label for an order about a stay with no bankruptcy words.
+    # `grep` finds it in the producer and nowhere else - no _transition entry, not in stay_history's
+    # kinds, not in sale_held's, never in reconcile_judgments - so the producer folds it into no
+    # posture at all. And because the producer DID label it, _sale_state's unlabelled scan cannot see
+    # it either: an "Order Staying Foreclosure Sale" after a notice of sale left the status
+    # `sale_scheduled` and the case `supported`, over a court order staying that very sale. The entry
+    # fell between labelled and consumed (twenty-third review).
+    for entry in _rows(timeline, 'entries'):
+        if (not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of'))
+                or 'nonbankruptcy_stay' not in _producer_labels(entry)):
+            continue
+        missing.append('entry %s is an order the run labelled nonbankruptcy_stay, a kind '
+                       'miami_case_timeline folds into no posture, so what it stays - and whether it '
+                       'reaches this case or a sale on the calendar - is not settled in this file'
+                       % (entry.get('entry_id') or '?'))
     # unmatched (:756): reconcile_judgments' own list of dispositive events it could not link to a
     # judgment. A satisfaction citing the mortgage's recording date rather than the judgment's - the
     # ordinary shape - lands here (_target, :793), and an unmatched satisfaction left the judgment

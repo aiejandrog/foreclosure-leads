@@ -230,6 +230,25 @@ opened, and on a title whose read document is an actual certificate of service i
 what the producer saved. That is CLAUDE.md's own rule: document metadata and keyword signals must never
 be represented as documents read (twenty-second review).
 
+**A satisfaction attached to a judgment row that is not the controlling one.** `reconcile_judgments`
+writes a satisfaction onto the judgment whose date the entry's text CITES (`_target` :783 filters by
+role, not by status) and onto that row alone (:741). `_judgment_record` read only the controlling row
+and the `unmatched` sweep held only satisfactions with no target at all, so the middle case reached
+nothing: an original judgment, an amended one, and a satisfaction citing the original's date read
+`supported` with the amount vouched to the cent, while the same satisfaction on a docket carrying one
+judgment - strictly less known - was already `incomplete`. The limited-scope variant was quieter still,
+since `_transition` returns None for it and even the posture word stayed `judgment_entered`. The test
+suite asserted the opposite as settled fact ("a limited-scope satisfaction is caught, because
+reconcile_judgments records partially_satisfied"), which is why no fixture ever built the shape; that
+comment is corrected (twenty-third review).
+
+**`nonbankruptcy_stay`.** `classify` (:209) labels an order about a stay with no bankruptcy words, and
+nothing else in the repo reads that label: no `_transition` entry, not in `stay_history`'s kinds, not in
+`sale_held`'s, never in `reconcile_judgments`. And because the producer DID label it, `_sale_state`'s
+unlabelled scan could not see it either, so an "Order Staying Foreclosure Sale" filed after a notice of
+sale left the status `sale_scheduled` and the case `supported`, over a court order staying that very
+sale. The entry fell between labelled and consumed; it now raises a gap naming the producer's own label.
+
 **The report prints the posture and the cutoff.** `dismissed`, `sold` and `sale_cancelled` are all
 `SETTLED_KINDS` and the producer folds none of them into the judgment row or the amount, so all three
 are `supported` under this module's scope - and all three printed as a clean row with a judgment amount

@@ -2885,5 +2885,86 @@ class TwentySecondReviewTests(unittest.TestCase):
 
 
 
+class TwentyThirdReviewTests(unittest.TestCase):
+    """A satisfaction the reconciliation attached to a judgment row that is not the controlling one,
+    and a label the producer assigns and then folds into nothing.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    OLD_PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $900,000.00'
+    TWO_JUDGMENTS = [(1, 'Complaint', '', '01/05/2025', ''),
+                     (50, 'Final Judgment of Foreclosure', '', '01/10/2025', ''),
+                     (82, 'Amended Final Judgment of Foreclosure', '', '06/10/2026', '')]
+
+    def case(self, extra):
+        return self.built(self.TWO_JUDGMENTS + list(extra), controlling='82',
+                          pages={'82': self.PAGE, '50': self.OLD_PAGE})
+
+    def test_a_satisfaction_of_a_superseded_judgment_is_named(self):
+        # reconcile_judgments attaches a satisfaction to the judgment whose date the entry CITES
+        # (_target :783 filters by role, not status) and writes it onto that row alone (:741). So the
+        # controlling row stays 'no_satisfaction_found', _judgment_record reads only that row, and
+        # `unmatched` holds only satisfactions with no target at all - the middle case reached nothing.
+        for title in ('Satisfaction of Judgment', 'Certificate of Redemption',
+                      'Partial Satisfaction of Judgment as to Defendant JOHN SMITH'):
+            t = self.case([(90, title, 'Satisfaction of the Final Judgment of Foreclosure entered '
+                                       '01/10/2025', '08/14/2026', '')])
+            row = next(r for r in t['judgments']['judgments'] if r['entry_id'] == '50')
+            self.assertTrue(row['satisfaction'] != 'no_satisfaction_found'
+                            or row['status'] == 'satisfied', (title, row))
+            self.assertEqual(next(r for r in t['judgments']['judgments']
+                                  if r['entry_id'] == '82')['satisfaction'],
+                             'no_satisfaction_found', title)
+            self.assertEqual(t['judgments'].get('unmatched'), [], title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if 'judgment entry 50' in m],
+                            (title, r['missing']))
+
+    def test_the_limited_scope_variant_does_not_even_move_the_posture(self):
+        # The quieter half: _transition returns None for a limited-scope satisfaction (:247), so the
+        # status stays judgment_entered and nothing on the page - not even the posture word - said a
+        # partial satisfaction had been filed.
+        t = self.case([(90, 'Partial Satisfaction of Judgment as to Defendant JOHN SMITH',
+                        'Satisfaction of the Final Judgment of Foreclosure entered 01/10/2025',
+                        '08/14/2026', '')])
+        self.assertEqual(t['status']['kind'], 'judgment_entered')
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_two_judgments_with_no_satisfaction_still_read_supported(self):
+        # Contract 5: the sweep fires only where the producer itself marked a row satisfied.
+        r = CV.assess(self.case([]))
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_a_docket_duplicate_twin_is_not_swept_as_satisfied(self):
+        # The other multi-row shape in this suite. The twin carries no satisfaction, so the new sweep
+        # must stay silent and the existing duplicate rule must still decide it.
+        r = CV.assess(pilot('2024-014878-CA-01', '232820355', checks=[ok_check()],
+                            attachments=[read_attachment('232820355')]))
+        self.assertFalse([m for m in r['missing'] if 'what was satisfied' in m], r['missing'])
+
+    def test_an_order_staying_the_sale_is_named(self):
+        # classify emits nonbankruptcy_stay for `order.*stay` with no bankruptcy words (:209), and
+        # nothing else in the repo reads it: no _transition entry, not in stay_history's kinds, not in
+        # sale_held's, never in reconcile_judgments. And because the producer DID label it,
+        # _sale_state's unlabelled scan cannot see it. So the status stayed sale_scheduled and the case
+        # read supported over a court order staying that very sale.
+        for title in ('Order Staying Foreclosure Sale',
+                      'Order Granting Motion to Stay Foreclosure Sale',
+                      'Order Staying Case Pending Appeal'):
+            t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                            (82, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                            (90, 'Notice of Foreclosure Sale set for 12/28/2026', '', '07/01/2026', ''),
+                            (91, title, '', '08/01/2026', '')],
+                           controlling='82', pages={'82': self.PAGE})
+            self.assertEqual(next(e for e in t['entries']
+                                  if e['entry_id'] == '91')['kind'], 'nonbankruptcy_stay', title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if 'nonbankruptcy_stay' in m],
+                            (title, r['missing']))
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
