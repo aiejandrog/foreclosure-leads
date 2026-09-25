@@ -570,7 +570,7 @@ class TokenBudgetTest(unittest.TestCase):
         import gen_records_qs as G
         import records_liens as R
         real_mint, real_split = G.mint_qs, R.split_owner
-        G.mint_qs = lambda lf: result
+        G.mint_qs = lambda lf, **kw: result
         R.split_owner = lambda oc: ('SMITH', 'JANE')
         self.addCleanup(lambda: (setattr(G, 'mint_qs', real_mint),
                                  setattr(R, 'split_owner', real_split)))
@@ -608,7 +608,7 @@ class TokenBudgetTest(unittest.TestCase):
         import records_liens as R
         real_mint, real_split = G.mint_qs, R.split_owner
 
-        def boom(lf):
+        def boom(lf, **kw):
             raise RuntimeError('2captcha down')
         G.mint_qs, R.split_owner = boom, lambda oc: ('SMITH', 'JANE')
         try:
@@ -622,7 +622,7 @@ class TokenBudgetTest(unittest.TestCase):
         import gen_records_qs as G
         real = G.mint_qs
 
-        def never(lf):
+        def never(lf, **kw):
             raise AssertionError('mint_qs must not be reached with --token-budget 0')
         G.mint_qs = never
         try:
@@ -1019,6 +1019,48 @@ class OwnStampTest(unittest.TestCase):
         self.assertEqual(fetched, [])
         self.assertEqual(report['documents_fetched'], 0)
         self.assertEqual(report['unresolved'], [])
+
+    def test_an_exhibit_copys_page_stamps_are_one_instrument(self):
+        # 12-case verification defect 8, 2025-023462: a court filing's mortgage exhibit carries
+        # the mortgage's own stamp on every page and was logged as ten instruments. own_spans()
+        # cannot see it: the filing is a court document, not an Official Records fetch.
+        stamps = ['CFN 20240512345 BOOK 34472 PAGE %d' % p for p in range(1351, 1361)]
+        row = row_citing('court:231000001:1', ['MOTION FOR FINAL JUDGMENT'] + stamps
+                         + ['Assignment recorded in Official Records Book 35000, Page 12'])
+        skipped = []
+        cites = W.pending_citations([row], W.own_spans([row]), skipped)
+        self.assertEqual([(c['book'], c['page_no']) for c in cites],
+                         [('34472', '1351'), ('35000', '12')])
+        self.assertEqual(len(skipped), 9)
+        self.assertTrue(all('page stamp' in s['reason'] for s in skipped))
+        self.assertNotIn(('34472', '1352'), {(c['book'], c['page_no']) for c in
+                                             CD.build('C1', 'MIAMI-DADE', documents=[row])
+                                             ['c_documents']['cited_but_not_fetched']})
+
+    def test_two_real_citations_of_one_book_are_not_a_stamp_run(self):
+        row = row_citing('court:231000001:1', ['Mortgage in OR Book 34472 Page 1351',
+                                               'recorded in OR Book 34472 Page 1900'])
+        self.assertEqual(len(W.pending_citations([row], set())), 2)
+
+    def test_a_condominium_declaration_recital_is_not_followed(self):
+        # 2023-013492 logged its condominium declaration 13491/2403 as an instrument to fetch.
+        row = row_citing('court:231000002:1', [
+            'Unit 5, according to the Declaration of Condominium thereof, recorded in Official '
+            'Records Book 13491, Page 2403'])
+        skipped = []
+        self.assertEqual(W.pending_citations([row], set(), skipped), [])
+        self.assertIn('declaration', skipped[0]['reason'])
+
+    def test_a_mortgage_sharing_a_line_with_a_plat_recital_is_still_followed(self):
+        # Greptile on #61: the passage is the whole OCR line, so a plat recital earlier on it must
+        # not make a separate mortgage citation read as a recital.
+        row = row_citing('court:231000003:1', [
+            'Lot 3, according to the plat thereof recorded in Plat Book 50, Page 3; subject to the '
+            'mortgage recorded in Official Records Book 34472, Page 1351'])
+        skipped = []
+        pending = W.pending_citations([row], set(), skipped)
+        self.assertIn(('34472', '1351'), [(c.get('book'), c.get('page_no')) for c in pending])
+        self.assertNotIn('34472', [s['book'] for s in skipped])
 
     def test_the_dry_run_cli_suppresses_the_same_stamps_walk_does(self):
         # The regression this guards: walk() seeded the seen-set with own_spans and main() passed

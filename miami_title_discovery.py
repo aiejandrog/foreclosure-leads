@@ -145,7 +145,7 @@ def investigate(entry, searcher, document_limit=30):
     index.add_models(models)
     queue = DocumentQueue()
     fetched = 0
-    searched = set()
+    searched, failed = set(), set()
     searches = []
     try:
         # Fixed point over newly recovered deed parties. Bound work, not claimed coverage.
@@ -177,9 +177,13 @@ def investigate(entry, searcher, document_limit=30):
             plan = [p for p in discovery_names(entry, title) if p['name'] not in searched]
             if not plan:
                 break
-            report = W.run_name_searches(plan, index, capture, folio, owner_models=owner_models)
+            report = W.run_name_searches(plan, index, capture, folio, owner_models=owner_models,
+                                         this_case=W.this_case_of(inventory))
             searches.append(report)
+            # A failed or unreached search is not retried in a later round (each try can mint a
+            # paid token), but it never counts as searched either (Greptile on #61).
             searched.update(p['name'] for p in plan)
+            failed.update(failed_searches(report))
             known = {W.key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in models}
             for records in capture.results.values():
                 for model in records:
@@ -188,9 +192,10 @@ def investigate(entry, searcher, document_limit=30):
                         known.add(key)
                         models.append(model)
         title = TP.build_title_parties(models, rows, inventory.get('raw'), folio)
-        for party in title['search_names']:
-            if party['name'] not in searched:
-                gaps.append(party['name'] + ': unknown; discovery-round limit left name unsearched.')
+        unsearched = [party['name'] for party in title['search_names'] if party['name'] not in searched]
+        for name in unsearched:
+            gaps.append(name + ': unknown; discovery-round limit left name unsearched.')
+        unsearched += sorted(failed - set(unsearched))
         CD.classify_documents(rows, case)
         new_rows, citations = W.walk(case, rows, models=models, collector=collector,
             queue=queue, ocr=DS.winocr, index=index, depth=3,
@@ -215,6 +220,8 @@ def investigate(entry, searcher, document_limit=30):
         for party in title['search_names']:
             if party['name'] not in searched:
                 gaps.append(party['name'] + ': unknown; citation-discovered name needs another search pass.')
+                if party['name'] not in unsearched:
+                    unsearched.append(party['name'])
         from miami_claim_evidence import enrich_claims
         searches = enrich_claims(searches, capture.results, rows)
         for search in searches:
@@ -235,6 +242,7 @@ def investigate(entry, searcher, document_limit=30):
             'title_parties':title, 'other_name_searches':searches,
             'citations':citations, 'gaps':list(dict.fromkeys(gaps)),
             'owner_baseline_records':None if owner_models is None else len(owner_models),
+            **search_coverage(owner_models, searches, models, folio, unsearched),
             'stored_instruments_absent_from_owner_query':[
                 {'book':m.get('reC_BOOK'), 'page_no':m.get('reC_PAGE'),
                  'doc_type':m.get('doC_TYPE'), 'recorded_date':m.get('reC_DATE'),
@@ -243,6 +251,30 @@ def investigate(entry, searcher, document_limit=30):
             'private_search_results':capture.results,
             'vision_actual_usd':0.0,
             'vision_note':'Existing OCR/vision reused; new documents use local OCR. Unreadable content remains unknown.'}
+
+
+def failed_searches(report):
+    """Names a run_name_searches report tried and got nothing back for: an error, or no token."""
+    return {row['name'] for row in (report or {}).get('searched', [])
+            if row.get('outcome') in ('error', 'not_reached')}
+
+
+def search_coverage(owner_models, searches, models, folio, unsearched):
+    """12-case verification defect 3: what keeps a title search from reading as complete.
+
+    `search_capped` when the owner search or any name search hit the county's 500-record page,
+    `parcel_found` False when no returned record carries this folio (2024-009959's search found
+    a different person), and the names the three discovery rounds left unsearched (2025-023462).
+    Raising the round limit or paging past 500 costs owner-search tokens; that is Alex's call.
+    """
+    import records_liens as RL
+    capped = (owner_models is not None and len(owner_models) >= 500) or any(
+        (row.get('records') or 0) >= 500 for report in searches for row in report.get('searched', []))
+    target = RL.norm_folio(folio) if folio else ''
+    return {'search_capped': bool(capped),
+            'parcel_found': any(RL.norm_folio(m.get('foliO_NUMBER')) == target for m in models)
+                            if target else None,
+            'names_left_unsearched': list(unsearched)}
 
 
 def attach_report(dossier, report):
@@ -316,6 +348,25 @@ def refresh_saved_report(report, rows, seeds):
     return result
 
 
+def _cache_only(name):
+    raise LookupError('report-only: Sunbiz not queried and no fresh cached record')
+
+
+def present_title_for(report, sunbiz=False, network=True, cache_file=None):
+    """Attach the present-title summary. Sunbiz is consulted only with --sunbiz, and a
+    report-only run reads the cache and never the registry."""
+    import miami_present_title as MPT
+    import sunbiz_entities as SE
+    entities = None
+    if sunbiz:
+        current = (report.get('title_parties') or {}).get('current_deed_candidate') or {}
+        names = [p['name'] for p in current.get('parties') or []
+                 if p.get('role') == 'grantee' and SE.kind_of(p['name']) == 'sunbiz_entity']
+        entities = SE.resolve_owners(names, lookup=None if network else _cache_only,
+                                     cache_file=cache_file or SE._cache_path())
+    return MPT.present_title(report, entities)
+
+
 def validate_case(case):
     if not re.fullmatch(r'20\d{2}-\d{6}-(?:CA|CC)-\d{2}', case):
         raise ValueError('Expected a Miami civil case identifier')
@@ -335,6 +386,8 @@ def main(argv=None):
     parser.add_argument('--vision-max-spend', type=float, required=True)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--report-only', action='store_true', help='reconcile saved private evidence without network or spending')
+    parser.add_argument('--sunbiz', action='store_true',
+                        help='look up entity owners on Sunbiz (free public registry; cache only with --report-only)')
     args = parser.parse_args(argv)
     for cap in (args.captcha_max_spend, args.vision_max_spend):
         if not math.isfinite(cap) or cap <= 0:
@@ -363,6 +416,7 @@ def main(argv=None):
             report.update(owner=entry['owner'], folio=entry['folio'])
             rows, seeds = stored_evidence(entry['case'])
             report = refresh_saved_report(report, rows, seeds)
+            report['present_title'] = present_title_for(report, args.sunbiz, network=False)
             report['vision_actual_usd'] = vision_state['actual_usd']
             report['vision_reserved_usd'] = sum(vision_state['reserved'].values())
             report['vision_budget_scope'] = 'shared title-discovery run, not per-case spend'
@@ -386,6 +440,7 @@ def main(argv=None):
                 report['captcha'] = budget.report()
                 report['captcha_gaps'] = case_search_gaps(report, searcher.gaps)
                 report['gaps'].extend(str(g) for g in report['captcha_gaps'])
+                report['present_title'] = present_title_for(report, args.sunbiz)
                 DS.pipeline_write(private / (entry['case'] + '.json'), report)
                 path = RD.dossier_path('MIAMI-DADE', entry['case'])
                 old = RD._load(path, {'case':entry['case'], 'county':'MIAMI-DADE', 'complete':False})

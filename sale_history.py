@@ -26,6 +26,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 
 import requests
 
@@ -58,7 +59,10 @@ _DEFT = re.compile(r'defendant|mortgagor|\bowner\b', re.I)
 
 _MOTION = re.compile(r'\bmotion\b', re.I)
 _DENY = re.compile(r'deny|denied|denial', re.I)
-_BANKR = re.compile(r'bankrupt', re.I)
+# 'bankrupt', or the chapter / petition words a bankruptcy order uses without it. 12-case
+# verification 2026-09-24, defect 9: orders arrive on the state docket as "Notice of Filing: ..."
+# and name the chapter ("Order Reinstating Chapter 13 Case") rather than the word bankruptcy.
+_BANKR = re.compile(r'bankrupt|\bchapter\s*(?:7|11|12|13)\b|\bch\.?\s*(?:7|11|12|13)\b|voluntary petition', re.I)
 # DISTINCT bankruptcy filings — Jose's strongest staller screen ("they've already done 3-4
 # bankruptcies, they know the game"), and a signal the sale-cancel scan is structurally blind to:
 # a Suggestion/Notice of Bankruptcy line never contains the word 'sale', and the automatic stay
@@ -109,31 +113,148 @@ def _iso_date(us):
     m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (us or '').strip())
     return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
 
-def _bk_stay(dks):
-    """(active, latest_filing_iso, lifted_iso). A bankruptcy filing line (or a sale cancelled PER
-    the stay) opens; a dismissal / discharge / stay-relief line closes. Active = the newest opening
-    has no closing on/after it. Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
-    DISMISSAL' contains 'filing' but closes).
-    lifted_iso = the court date the LAST stay closed (when none is active) — the door signal: the
-    owner's shield just dropped, the sale is about to be reset, and contact is legal again. The
-    freshest-dismissed leads are the most rescuable calls on the board."""
-    opens, closes = [], []
+_BKSTART = re.compile(r'suggestion of bankruptcy|notice of bankruptcy', re.I)   # a new petition, not the stay acting
+# Stay relief with no bankruptcy word: "relief from stay" and anything naming the AUTOMATIC stay.
+# A bare "Order Lifting Stay" is left out: the state court stays its own case too (mediation,
+# abatement), and lifting that says nothing about a bankruptcy.
+_BKSTAYREL = re.compile(r'relief from (?:the )?(?:automatic )?stay|'
+                        r'(?:lift|terminat|annul|vacat)\w* (?:of )?(?:the )?automatic stay|'
+                        r'automatic stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', re.I)
+# A reinstatement, or an order vacating a dismissal: the case is back. Only ever read on a line
+# already about a bankruptcy.
+_BKREINSTATE = re.compile(r'reinstat|vacat\w*\s+(?:the\s+)?(?:order\s+(?:of\s+)?)?dismiss', re.I)
+# A dismissal, stay relief or reinstatement counts only once it is ORDERED. A motion, request or
+# hearing notice asking for one is not granted until an order says so, and an order DENYING one is
+# the opposite. A line that also orders the thing itself ("Order Granting Motion to Dismiss Chapter
+# 13 Case and Denying Motion for Rehearing", "Order Dismissing Chapter 13 Case on Trustee's Motion")
+# still counts. The object of a grant or denial is read up to the first "and", so "Order Denying
+# Confirmation and Dismissing Chapter 13 Case" denies confirmation and dismisses.
+_BKASK = re.compile(r'\bmotion\b|\brequest\b|\bapplication\b|notice of hearing', re.I)
+_BKDENIED = re.compile(r'\b(?:deny|denie[sd]|denying|denial of)\s+(?:(?!and\b)\w+\s+){0,3}?'
+                       r'(?:motion|request|dismiss|relief|lift|terminat|annul|vacat|discharg|reinstat)', re.I)
+# What a grant is OF: the words between "granting" and the thing, up to four, never across an "and"
+# and never through a procedural step, so "Granting Motion for Continuance of Relief from Stay
+# Hearing" grants a continuance, not relief. A reinstatement's object is the case or the dismissal
+# itself: "Granting Motion to Vacate Hearing" vacates a hearing, not the dismissal.
+_GRANTOF = r'\bgrant\w*\s+(?:(?!and\b|continu|postpon|reschedul|extend|extens|hearing|conference|shorten|expedit)\w+\s+){0,4}?'
+_UNDISMISS = r'\s+(?:the\s+)?(?:order\s+(?:of\s+)?)?dismiss'    # after a form of "vacate"
+_BKDONE = {   # what an order says when it does the thing: granted, or the verb in its done form
+    'close': re.compile(_GRANTOF + r'(?:dismiss|relief|lift|terminat|annul|discharg)|'
+                        r'\b(?:order|judgment)\b.*?\b(?:dismissing|dismissed|terminating|terminated|lifting|lifted|'
+                        r'annulling|annulled|discharging|discharged)\b', re.I),
+    'reinstate': re.compile(_GRANTOF + r'(?:reinstat|vacat\w*' + _UNDISMISS + r')|'
+                            r'\b(?:order|judgment)\b.*?\b(?:reinstating|reinstated|vacat(?:ing|ed)' + _UNDISMISS + r')', re.I),
+}
+
+
+def _bk_not_ordered(tx, kind):
+    """True when a closing (kind 'close') or reinstating ('reinstate') line only asks for it, or
+    denies it, and does not itself order it."""
+    if _BKDONE[kind].search(tx):
+        return False
+    return bool(_BKDENIED.search(tx) or _BKASK.search(tx))
+
+
+def _bk_lines(dks):
+    """(opens, closes) of the bankruptcy lines on a docket. opens are (ISO date, federal case numbers
+    cited, starts-a-petition); closes are (ISO date, case numbers). Closing lines are checked FIRST
+    ('Notice of Filing: ...ORDER OF DISMISSAL' contains 'filing' but closes)."""
+    rows = []
     for e in dks or []:
         t = (e.get('docketDescrition') or e.get('docketDescription') or '')
         tx = t + ' ' + (e.get('comments') or '')
         iso = _iso_date(e.get('eventDate'))
-        if not iso:
+        if iso:
+            rows.append((iso, t, tx, frozenset(_BKNUM.findall(tx))))
+    # A line is about a bankruptcy only when it says so: a filing line, the bankruptcy / chapter
+    # words, stay relief, or a federal case number an earlier bankruptcy line already cited. A bare
+    # "Order of Dismissal" or "Voluntary Dismissal" is about this lawsuit (a defendant, a motion)
+    # and used to close a live stay (12-case verification 2026-09-24, defect 9).
+    known = frozenset().union(*[n for _, t, tx, n in rows if _BKFILE.search(t) or _BANKR.search(tx)])
+    opens, closes = [], []
+    for iso, t, tx, nums in rows:
+        if not (_BKFILE.search(t) or _BANKR.search(tx) or _BKSTAYREL.search(tx) or (nums & known)):
             continue
-        if _BKCLOSE.search(tx):
-            closes.append(iso)
-        elif _BKFILE.search(t) or _BANKR.search(tx):
-            opens.append(iso)                          # 'CANCELLED PER BANKRUPTCY' = the stay acting
+        kind = ('reinstate' if _BKREINSTATE.search(tx) else
+                'close' if (_BKCLOSE.search(tx) or _BKSTAYREL.search(tx)) else '')
+        if kind and _bk_not_ordered(tx, kind):
+            continue                                   # asked for or denied: the case stands as it was
+        if kind == 'reinstate':
+            opens.append((iso, nums, False))           # the case is back: its stay is live again
+        elif kind == 'close':
+            closes.append((iso, nums))
+        else:
+            opens.append((iso, nums, bool(_BKSTART.search(t))))  # 'CANCELLED PER BANKRUPTCY' = the stay acting
+    return opens, closes
+
+
+def _bk_events(dks):
+    """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket."""
+    opens, closes = _bk_lines(dks)
+    return [o[0] for o in opens], [c[0] for c in closes]
+
+
+def _bk_cases(dks):
+    """The bankruptcy CASES on a docket, oldest first: [(start ISO, case numbers, close ISO or '')].
+    A petition line (suggestion / notice of bankruptcy) starts a new case unless it cites only
+    numbers one case already has, or is a second numberless petition on the same day. Any
+    other bankruptcy line (a stay order, a sale cancelled per bankruptcy, a reinstatement) is the
+    current case acting; a line citing a different federal case number is a different case, unless
+    that number belongs to an earlier case, in which case it is that earlier case acting.
+    A case is closed by a closing line dated on or after its LAST line (a reinstatement reopens it):
+    one citing its number counts whatever its date; one citing no number counts only before the
+    next case starts, and never for cases filed on the same day as another; a numbered one on a
+    numberless case counts in that window when the number belongs to no other case."""
+    opens, closes = _bk_lines(dks)
+    cases = []                                         # [start, numbers, last line, line dates]
+    for d, n, st in sorted(opens, key=lambda o: o[0]):
+        cur = cases[-1] if cases else None
+        own = [c for c in cases if n and n & c[1]]
+        if own and (not st or n <= own[-1][1]):
+            cur = own[-1]                              # a line for a case we already have
+        elif (cur is None or (n and cur[1] and not (n & cur[1]))
+                or (st and not (n and n <= cur[1]) and not (not n and d == cur[0]))):
+            cases.append([d, set(n), d, {d}])
+            continue
+        cur[1] |= n; cur[2] = d; cur[3].add(d)
+    out = []
+    for i, (st, nums, last, dates) in enumerate(cases):
+        end = min([c[0] for c in cases if c[0] > st] or ['9999-99-99'])
+        shared = sum(1 for c in cases if c[0] == st) > 1
+        others = set().union(*[c[1] for j, c in enumerate(cases) if j != i]) - nums
+        hits = [d for d, n in closes if d >= last and (
+            (n & nums) if n and nums else
+            (d < end and not (n & others)) if n else
+            (d < end and not shared))]
+        out.append((st, frozenset(nums), max(hits or ['']), frozenset(dates)))
+    return out
+
+
+def _stay_end(cases, since):
+    """Close date of the stay made of the case holding a line dated `since` and every case started
+    after it ('' while any of them is open, or when no line on this docket is dated `since`: a
+    stay ends only on a read that still shows the line that opened it)."""
+    held = [c[0] for c in cases if since in c[3]]
+    if not held:
+        return ''
+    ends = [c[2] for c in cases if c[0] >= min(held) or since in c[3]]
+    return max(ends) if all(ends) else ''
+
+
+def _bk_stay(dks):
+    """(active, latest_filing_iso, lifted_iso). A bankruptcy filing line (or a sale cancelled PER
+    the stay) opens; a dismissal / discharge / stay-relief line closes. Active = a case started on
+    the newest petition date has no closing line of its own (_bk_cases), so an OLDER case's late
+    dismissal never ends a newer one.
+    lifted_iso = the court date the LAST stay closed (when none is active) — the door signal: the
+    owner's shield just dropped, the sale is about to be reset, and contact is legal again. The
+    freshest-dismissed leads are the most rescuable calls on the board."""
+    opens, _ = _bk_events(dks)
     if not opens:
         return False, '', ''
     latest = max(opens)
-    active = not closes or max(closes) < latest
-    lifted = '' if active else max(c for c in closes if c >= latest)
-    return active, latest, lifted
+    lifted = _stay_end(_bk_cases(dks), latest)
+    return not lifted, latest, lifted
 
 
 def _bk_active(dks):
@@ -209,6 +330,11 @@ def main():
                          'path: yesterday\'s stay flags beat shipping the board with the compliance '
                          'layer stripped (the 2026-07-21 hole: [1b/5] published 67 stay-active leads '
                          'with live outreach buttons).')
+    ap.add_argument('--near-days', type=float, default=14.0,
+                    help='a lead whose auction is this many days away or fewer is re-read on the short TTL')
+    ap.add_argument('--near-ttl-hours', type=float, default=20.0,
+                    help='TTL for near-sale leads: a bankruptcy filed days before the sale is the most '
+                         'common one, and a 7-day-old read cannot see it')
     ap.add_argument('--refresh-bk', action='store_true',
                     help='force-refetch every BK-relevant entry (active stay or any BK count) ignoring TTL')
     a = ap.parse_args()
@@ -220,6 +346,18 @@ def main():
     cache = _load_cache()
     now = time.time()
     ttl = a.ttl_days * 86400
+    near_ttl = a.near_ttl_hours * 3600
+
+    def _days_to_sale(r):
+        try:
+            t = datetime.strptime((r.get('AuctionDate') or '').strip()[:10], '%m/%d/%Y').timestamp()
+        except ValueError:
+            return None
+        return (t - now) / 86400.0
+
+    def _near(r):
+        d = _days_to_sale(r)
+        return d is not None and -1 <= d <= a.near_days
     session = requests.Session()
     session.headers.update({'User-Agent': UA, 'Referer': CLERK + '/ocs/'})
 
@@ -229,7 +367,11 @@ def main():
     # normal steady state: once the cache is warm, a run legitimately fetches nothing. They still
     # have to be written to disk — see the write guard at the bottom.
     applied = 0
-    for r in leads:
+    # NEAR SALES FIRST, ON A SHORT TTL (sweep of all Miami leads, 2026-09-24): three 09-28 sales had
+    # a suggestion of bankruptcy filed 09-22 to 09-24, and a 7-day TTL let a read from the week before
+    # stand until the sale. A petition is most likely in the days before an auction, so those leads
+    # are re-read every run and fetched before the --limit budget runs out on distant ones.
+    for r in sorted(leads, key=lambda r: not _near(r)):
         case = (r.get('Case #') or '').strip()
         if a.case and case != a.case:
             continue
@@ -237,7 +379,7 @@ def main():
         if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
             continue
         ent = cache.get(case)
-        _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < ttl
+        _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < (near_ttl if _near(r) else ttl)
         _bkforce = a.refresh_bk and ent and (ent.get('a') or ent.get('b'))
         # cache-only: TRUST any structurally-compatible entry (v4+ carries the BK fields) — the
         # point is a fetch-free apply so the early-publish never ships without the compliance layer.
@@ -266,13 +408,43 @@ def main():
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
             bkact, bkd, lifted = _bk_stay(dks)
+            # A STAY WE ALREADY HOLD ENDS ONLY ON THE SAME EVIDENCE THAT OPENED IT. The prior stay is
+            # the cached one or, when the cache entry is gone, the flag on the row itself. It is cleared
+            # only when this read shows a bankruptcy filing on or after the prior filing date AND a
+            # closing line of its own for every case from that filing on (_bk_cases). An empty or short answer, a
+            # closing line with no filing line, an older stay's closure, or a prior date we cannot
+            # read all keep the stay: a wrongly kept stay costs a call, a wrongly cleared one is a
+            # §362 contact.
+            _prev = ent if isinstance(ent, dict) else {}
+            if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
+                _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
+                _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
+                # _bk_stay answers for the NEWEST case only; a newer case closing says nothing
+                # about ours. The stay ends only when ours and every case filed after it each show
+                # their own closing line (_bk_cases), and the lift date is the last of those.
+                _end = _stay_end(_bk_cases(dks), _piso) if _piso else ''
+                if _piso and bkd and bkd >= _piso and lifted and _end:
+                    lifted = max(_end, lifted)
+                else:
+                    # still active: drop any lift date from an OLDER closed stay in this read, since
+                    # the board's gates read a lift date as "contact is legal again"
+                    bkact, bkd, lifted = True, _pbd or bkd, ''
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'
             r['sale_survived'] = surv; r['sale_scheduled'] = sched
             if who: r['sale_who'] = who
             if bk: r['sale_bk'] = bk
-            if bkact: r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+            if bkact:
+                r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+                r.pop('sale_stay_lifted', None)      # gates read a lift date as "contact is legal"
+            else:
+                # A LIVE READ saying no stay is active overrides a flag already on the row. Since
+                # 2026-09-24 foreclosure_leads.main() writes the cached stays into leads_final.json
+                # before this step runs, so a stay the docket now shows lifted would otherwise stay
+                # on the row (and gate the lead) until the next scrape. Only a successful fetch
+                # clears; a failed one (dks None) and a cache hit never do.
+                r.pop('sale_bk_active', None); r.pop('sale_bk_date', None)
             if lifted: r['sale_stay_lifted'] = lifted
             cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk,
                            'a': bkact, 'bd': bkd, 'sl': lifted, 't': now, 'v': CACHE_VER}

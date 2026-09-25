@@ -19,19 +19,24 @@ def saved_vision_candidates(detail, expected_source_ref):
         return []
     if any(not isinstance(f, dict) or not f.get('page') for f in figures):
         return []
-    for page in {f['page'] for f in figures if f.get('kind') == 'subtotal'}:
-        if not labeled_sum_check([f for f in figures if f['page'] == page], None)['ok']:
-            return []
+    import judgment_money as JM
+    read_pages = {JM._page_no(p) for p in pages}
     results = []
-    for total in detail.get('grand_totals') or []:
-        if not isinstance(total, dict) or not total.get('page'):
-            return []
-        check = labeled_sum_check([f for f in figures if f['page'] == total['page']], total.get('amount'))
-        if not check['ok'] or total.get('amount') is None:
+    totals = detail.get('grand_totals') or []
+    if any(not isinstance(t, dict) or not t.get('page') or t.get('amount') is None
+           for t in totals):
+        return []
+    # The same check every other path uses: one run of rows ending at the total, which may start
+    # on an earlier read page, rates and credits kept, subtotal membership exact.
+    for total, check in zip(totals, JM.verify_document(figures, totals, read_pages)):
+        if not check['ok']:
             return []
         results.append({'amount':total['amount'],'page':total['page'],
             'sum_check':True,'sum_check_components':check['components'],
-            'sum_check_reason':check['reason'],'text_source':'vision','verified':False,
+            'sum_check_reason':check['reason'],'sum_check_rows':check['component_rows'],
+            'sum_check_credits':check['credits'],'sum_check_rates':check['rates'],
+            'sum_check_subtotals':check['subtotals'],'sum_check_pages':check['pages'],
+            'sum_check_run':check['run'],'text_source':'vision','verified':False,
             'passage':total.get('passage') or 'grand total transcribed from the page image',
             'source_ref':expected_source_ref,'evidence_status':'saved_read_rechecked_not_fresh_vision'})
     return results

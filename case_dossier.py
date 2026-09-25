@@ -132,6 +132,9 @@ def _c(documents):
                                'saved_to': d.get('vision_path')}
                               if d.get('vision_figures') is not None else None),
             'cites_instruments': d.get('cited_instruments') or [],
+            # Whether the paid second reader was pointed at this document, and why or why not.
+            # document_prioritizer.recorded_read_order decides this before any money is spent.
+            'paid_read': d.get('paid_read'),
         })
     status = 'present' if read else ('fetched_unread' if documents else 'empty')
     return _section(
@@ -143,10 +146,14 @@ def _c(documents):
         page_verified=sum(1 for d in documents if d.get('page_count_verified')),
         # Every book/page the read documents point at. An owner-name search never sees a lien
         # recorded against a prior owner or a misspelt name; the document that references it does.
+        # Not an exhibit's page stamps after its first page, nor a declaration or plat recital
+        # (12-case verification, defect 8).
         cited_but_not_fetched=[c for d in documents for c in (d.get('cited_instruments') or [])
                                if not c.get('fetched')
                                and document_classify.key_of(c.get('book'), c.get('page_no'))
-                               not in document_classify.own_spans(documents)],
+                               not in document_classify.own_spans(documents)
+                               and not document_classify.not_followed_reason(
+                                   c, document_classify.stamp_run_pages(d.get('cited_instruments')))],
         # Court papers from the owner's OTHER lawsuits, kept out of everything above and listed
         # here. They are real and they are about this person; they are not about this case.
         other_actions=[{'source_ref': d.get('source_ref'),
@@ -264,6 +271,10 @@ def build(case, county, inventory=None, chain=None, documents=None, walk=None):
         if not row['page_count_verified']:
             gaps.append('%s: page count never verified against the recording index'
                         % row['source_ref'])
+        for page, why in sorted(((row.get('second_reader') or {}).get('errors') or {}).items(),
+                                key=lambda kv: str(kv[0])):
+            if str(why).startswith(('budget', 'UncertainPaidCall')):
+                gaps.append('%s: page %s not bought - %s' % (row['source_ref'], page, why))
     for row in c.get('other_actions') or []:
         gaps.append('%s is a document in %s, not this case, so this case\'s judgment has still '
                     'not been read' % (row['source_ref'], ', '.join(row['belongs_to']) or '?'))
