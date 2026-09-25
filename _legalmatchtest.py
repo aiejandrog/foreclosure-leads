@@ -372,6 +372,25 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['current_deed_status'], 'candidate')
         self.assertEqual(got['possible_later_conveyances'], [])
 
+    def test_folio_anchored_sibling_rows_are_one_deed_too(self):
+        # One instrument indexed under two legals used to read as two deeds recorded the same
+        # day, which selects no current deed at all and leaves the parcel with no owner.
+        first = rec('3', '1/1/2020', 'SELLER', 'OWNER PERSON', FOLIO)
+        got = title([first, dict(first, legaL_DESCRIPTION='LOT 15')])
+        self.assertEqual(got['current_deed_candidate']['book_page'], '3/1')
+        self.assertFalse(any('Same-date deeds' in g for g in got['gaps']))
+
+    def test_rows_with_no_book_and_page_are_not_one_instrument(self):
+        def unkeyed(date, grantor, grantee, **kw):
+            row = rec(None, date, grantor, grantee, **kw)
+            row['reC_PAGE'] = None
+            return row
+        got = title(folio_pair() + [unkeyed('1/1/2020', 'A PERSON', 'B PERSON', legal='LOT 15'),
+                                    unkeyed('2/1/2020', 'C PERSON', 'D PERSON', legal='LOT 16')])
+        self.assertEqual(len(got['unanchored_deeds']), 2)
+        self.assertEqual({p['name'] for d in got['unanchored_deeds'] for p in d['parties']},
+                         {'A PERSON', 'B PERSON', 'C PERSON', 'D PERSON'})
+
     def test_sibling_rows_with_different_dates_collapse_to_the_one_that_matched(self):
         rows = folio_pair() + [rec('9', '', 'O', 'B', legal='LOT 15'),
                                rec('9', '5/1/2021', 'O', 'B')]

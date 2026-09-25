@@ -24,6 +24,13 @@ def name_key(value):
     return re.sub(r'[^A-Z0-9]+', ' ', value).strip()
 
 
+def _instrument(model):
+    """The clerk's own key for one recorded instrument: book and page. None when the index row
+    carries neither, which names no instrument and so is never the same one as another row."""
+    book, page = model.get('reC_BOOK'), model.get('reC_PAGE')
+    return '%s/%s' % (book, page) if book or page else None
+
+
 def _folio(value):
     return re.sub(r'\D', '', str(value or '')).lstrip('0')
 
@@ -64,7 +71,7 @@ def build_title_parties(models, documents, docket, folio):
     docs = {d.get('source_ref'): d for d in documents or [] if isinstance(d, dict)}
     deeds, unanchored, flags = [], [], []
     reference, reference_gap = parcel_legal_reference(models, folio)
-    candidates = []
+    candidates, anchored_refs = [], set()
     for model in models or []:
         label = str(model.get('doC_TYPE') or '')
         if not re.search(r'\b(DEED|CERTIFICATE OF TITLE)\b', label, re.I):
@@ -85,6 +92,9 @@ def build_title_parties(models, documents, docket, folio):
                'parties':_deed_parties(model, doc, ref, book_page, pages),
                'date_parsed':_date(model.get('reC_DATE'))}
         if anchored:
+            if _instrument(model) in anchored_refs:
+                continue      # another index row for this same instrument is already in the chain
+            anchored_refs.add(_instrument(model))
             gaps.append('%s: index names and bounded explicit-role extraction do not establish that every deed party was recovered.' % ref)
             deeds.append(row)
             continue
@@ -111,8 +121,9 @@ def build_title_parties(models, documents, docket, folio):
     judged = [(c, None if c[4] else compare_legal(reference, index_legal(c[0]), reference_gap))
               for c in candidates]
     rows_by_ref = {}
-    for candidate, verdict in judged:
-        ref = candidate[1]['source_ref']
+    for position, (candidate, verdict) in enumerate(judged):
+        # An index row with no book and page names no instrument, so it collapses with nothing.
+        ref = _instrument(candidate[0]) or position
         kept = rows_by_ref.get(ref)
         if kept is None or ((kept[1] or {}).get('verdict') != 'matched'
                             and (verdict or {}).get('verdict') == 'matched'):
