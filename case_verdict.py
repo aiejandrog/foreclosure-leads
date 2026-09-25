@@ -179,7 +179,13 @@ CERTIFICATE_KINDS = ('certificate_of_sale', 'certificate_of_title')
 # 'hearing' is the override a calendar eventType forces onto anything but a notice of sale (:383).
 # An entry the producer DID label is explained by its label - the petition that names the sale it
 # stays is not an unclassified sale entry, which is how a docket with no sale on it read incomplete.
-UNLABELLED_KINDS = ('other', 'hearing')
+# The producer's own COVER labels: what classify returns for a filing titled ABOUT something else
+# when nobody opened the document ("A notice ABOUT a judgment is not the judgment", :146). They name
+# the envelope and not the subject, so for the sale scan they are exactly as unlabelled as 'other' -
+# and leaving them out is how a cover-titled notice of sale read `supported` while the same notice
+# under its own title read incomplete (twenty-first review).
+COVER_KINDS = ('notice_of_filing', 'certificate_of_service', 'affidavit')
+UNLABELLED_KINDS = ('other', 'hearing') + COVER_KINDS
 # Only to notice that the classifier left a sale-worded entry unlabelled, which is reported as a
 # gap. Never to decide that a sale IS or IS NOT scheduled - see _sale_state.
 _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
@@ -595,6 +601,29 @@ def _replaces(entry):
         return bool(miami_case_timeline._REPLACES.search(text))
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return False
+
+
+def _cover_subject(entry):
+    """-> the producer's own label for what a COVER-titled entry is about, or None.
+
+    attached_document_kind exists only when the producer OPENED the document (:353). When it did not -
+    the ordinary case for a login-walled filing - classify falls back to a cover label, and that label
+    names the envelope: notice_of_filing, certificate_of_service, affidavit. So the unread half of the
+    covering-title defect reached no check at all, and the docket where LESS was known read `supported`
+    while the read half read incomplete (twenty-first review). This strips the cover head with the
+    producer's own _FILED_ABOUT_RE and re-runs the producer's own classifier on the rest: no new
+    classification, just the producer's two functions composed the way the producer composes them when
+    it does have the document.
+    """
+    text = _index_text(entry).strip()
+    if not text:
+        return None
+    try:
+        import miami_case_timeline
+        match = miami_case_timeline._FILED_ABOUT_RE.match(text)
+    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
+        return None
+    return _classify(text[match.end():]) if match else None
 
 
 def _sale_dates_of(entry):
@@ -1099,6 +1128,17 @@ def assess(timeline, dossier=None):
         # kind == 'final_judgment' (:672), so the superseded judgment stays operative and controlling.
         # A case read `supported` with the OLD figure verified to the cent and the amendment named
         # nowhere on the page (twentieth review). The test is the producer's own _REPLACES.
+        if attached is None and set(_producer_labels(entry)) & set(COVER_KINDS):
+            # The unread half. The sale-calendar kinds are deliberately left out: they route through
+            # _sale_state's unlabelled scan instead, which carries the live_floor and closing-word
+            # guards three rounds were spent calibrating, and raising an unconditional gap for them
+            # held the routine live-lead docket (an "Affidavit of Publication of Notice of
+            # Foreclosure Sale" beside a live notice) incomplete.
+            subject = _cover_subject(entry)
+            if (subject in DECIDING_KINDS
+                    and subject not in SALE_NOTICE_KINDS + ('order_cancelling_sale',)
+                    and (subject != 'final_judgment' or _replaces(entry))):
+                attached = subject
         if attached in DECIDING_KINDS and (attached != 'final_judgment' or _replaces(entry)):
             missing.append('entry %s is titled as a filing about something else, and the document '
                            'under it reads as %s, which the run therefore did not fold into the '

@@ -2734,5 +2734,82 @@ class TwentiethReviewTests(unittest.TestCase):
 
 
 
+class TwentyFirstReviewTests(unittest.TestCase):
+    """The UNREAD half of the covering-title defect. The twentieth round fixed it for a filing whose
+    document the run opened; when nobody opened it the producer writes a COVER label instead of
+    attached_document_kind, and that reached no check in this module at all.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')]
+
+    def case(self, extra):
+        return self.built(self.JUDGED + list(extra), controlling='2', pages={'2': self.PAGE})
+
+    def test_a_dispositive_filing_under_an_unread_cover_is_named(self):
+        # attached_document_kind exists only when the producer OPENED the document (:353). Otherwise
+        # classify falls back to a cover label - notice_of_filing, certificate_of_service, affidavit -
+        # which names the envelope, and _transition has no entry for any of them, reconcile_judgments
+        # keys on kind == 'final_judgment' (:672), and none is in DECIDING_KINDS or was in
+        # UNLABELLED_KINDS. So every one of these read `supported` with the amount vouched to the cent.
+        for title in ('Notice of Filing Satisfaction of Judgment',
+                      'Notice of Filing Order Vacating Final Judgment of Foreclosure',
+                      'Notice of Filing Order of Dismissal',
+                      'Notice of Filing Certificate of Title',
+                      'Certificate of Service of Satisfaction of Judgment',
+                      'Affidavit of Satisfaction of Judgment'):
+            t = self.case([(3, title, '', '07/01/2026', '')])
+            entry = next(e for e in t['entries'] if e['entry_id'] == '3')
+            self.assertIsNone(entry.get('attached_document_kind'),
+                              'the fixture must be the UNREAD shape: %s' % title)
+            self.assertIn(entry['kind'], CV.COVER_KINDS, title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if '3' in m], (title, r['missing']))
+
+    def test_a_sale_under_an_unread_cover_reaches_the_sale_reader(self):
+        # The sale-calendar subjects route through _sale_state's unlabelled scan rather than an
+        # unconditional gap, so they keep the live_floor and closing-word guards three rounds were
+        # spent calibrating. Either way the case must not read supported.
+        for title in ('Notice of Filing Notice of Foreclosure Sale',
+                      'Notice of Filing Order Rescheduling Foreclosure Sale'):
+            r = CV.assess(self.case([(3, title, '', '07/01/2026', '')]))
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+
+    def test_the_docket_where_less_is_known_is_not_the_supported_one(self):
+        # The recurring inversion, stated as a test: the same entry with its document READ was already
+        # incomplete, so the unread version must not be the clean bill.
+        unread = self.case([(3, 'Notice of Filing Satisfaction of Judgment', '', '07/01/2026', '')])
+        read = self.built(self.JUDGED + [(3, 'Notice of Filing Satisfaction of Judgment', '',
+                                          '07/01/2026', '')], controlling='2',
+                          pages={'2': self.PAGE,
+                                 '3': 'SATISFACTION OF JUDGMENT\nThe judgment entered 06/10/2026 is '
+                                      'satisfied.'})
+        self.assertEqual(next(e for e in read['entries']
+                              if e['entry_id'] == '3')['attached_document_kind'], 'satisfaction')
+        self.assertEqual(CV.assess(unread)['verdict'], CV.assess(read)['verdict'])
+
+    def test_routine_cover_titled_filings_still_read_supported(self):
+        # Contract 5. classify is the discriminator, and on these it lands on proposed_order,
+        # affidavit, summons_service, notice_of_filing or other - none of them deciding.
+        for title in ('Notice of Filing Proposed Final Judgment',
+                      'Notice of Filing Affidavit of Diligent Search', 'Notice of Appearance',
+                      'Notice of Dropping Party', 'Certificate of Service',
+                      'Notice of Filing Return of Service', 'Affidavit of Attorney Fees'):
+            r = CV.assess(self.case([(3, title, '', '07/01/2026', '')]))
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
+
+    def test_a_live_sale_beside_its_publication_affidavit_still_reads_supported(self):
+        # The shape that decided sale subjects go through _sale_state rather than a bare gap: an
+        # "Affidavit of Publication of Notice of Foreclosure Sale" is the routine paperwork of a
+        # noticed sale, and an unconditional gap on a cover-titled sale subject held it.
+        r = CV.assess(self.case([
+            (4, 'Notice of Foreclosure Sale on 12/28/2026', '', '07/01/2026', ''),
+            (5, 'Affidavit of Publication of Notice of Foreclosure Sale', '', '07/10/2026', '')]))
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

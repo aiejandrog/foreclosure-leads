@@ -199,6 +199,20 @@ body on page 1 of a motion, memorandum or status report is an exhibit, and holdi
 dockets `incomplete` for good (twelfth review) - unless the entry's own words match the producer's own
 `_REPLACES`, which is the test `reconcile_judgments` itself uses for a replacement (twentieth review).
 
+That covered only the half where the run OPENED the document. `attached_document_kind` is written only
+then (:353); when nobody opened the filing - the ordinary case behind the county login - `classify`
+falls back to a COVER label, `notice_of_filing` / `certificate_of_service` / `affidavit`, which names
+the envelope and not the subject. None of those is in `DECIDING_KINDS`, none was in `UNLABELLED_KINDS`,
+`_transition` has no entry for any of them and `reconcile_judgments` keys on `kind == 'final_judgment'`,
+so the unread half reached no check at all: a cover-titled satisfaction, vacatur, dismissal, certificate
+of title or notice of sale read `supported` with the amount vouched to the cent, while the very same
+entry with its document read was already `incomplete`. The docket where LESS was known was the clean
+bill again. `_cover_subject` now strips the cover head with the producer's own `_FILED_ABOUT_RE` and
+re-runs the producer's own `classify` on the rest - the two functions composed the way the producer
+composes them when it does have the document - and the cover labels joined `UNLABELLED_KINDS` so a
+cover-titled SALE subject routes through `_sale_state`'s scan and keeps the floors and closing-word
+guards three rounds were spent calibrating (twenty-first review).
+
 **The report prints the posture and the cutoff.** `dismissed`, `sold` and `sale_cancelled` are all
 `SETTLED_KINDS` and the producer folds none of them into the judgment row or the amount, so all three
 are `supported` under this module's scope - and all three printed as a clean row with a judgment amount
