@@ -304,7 +304,9 @@ def _ledger_save(charged=None, final=False):
     _lock_touch()
     run = _SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD)
     total = _SPEND['prior'] + max(run, charged or 0)
-    led = dict(_SPEND.get('led') or {}, cap=_SPEND['cap'], counted_usd=round(total, 4))
+    led = dict(_SPEND.get('led') or {}, cap=_SPEND['cap'], counted_usd=round(total, 4),
+               unit_usd=round(max(float((_SPEND.get('led') or {}).get('unit_usd') or 0),
+                                  _SPEND.get('unit') or PAID_SOLVE_USD), 6))
     if final:
         led['runs'] = list(led.get('runs') or []) + [{'at': time.strftime('%Y-%m-%d %H:%M'),
                                                      'solves': _SPEND['submits'], 'counted_usd': round(run, 4),
@@ -711,14 +713,17 @@ def _surname_given(party, words):
 
 
 def _maybe_owner(party, owners):
-    """Could this be the owner, indexed short? The surname plus the first name, its initial, or no
+    """Could this be the owner, indexed short? The surname plus any given name, any initial, or no
     given name at all. ('SMITH J' may be JOHN SMITH; 'SMITH MARIA' is not.)"""
     for words in owners or ():
         if words[0] != 'person':
             continue
         ok, rest = _surname_given(party, words)
-        first = (re.findall(r'[A-Z0-9]+', words[2].replace("'", '')) or [''])[0]
-        if ok and (not rest or first in rest or first[:1] in [t for t in rest if len(t) == 1]):
+        given = set(re.findall(r'[A-Z0-9]+', words[2].replace("'", ''))) | set(words[3] if len(words) > 3 else ())
+        inits = {t for t in rest if len(t) == 1}
+        # any of the owner's given names (a middle name too: 'PEREZ ANTONIO' may be JOSE ANTONIO PEREZ)
+        # or any of their initials
+        if ok and (not rest or given & set(rest) or {g[:1] for g in given} & inits):
             return True
     return False
 
@@ -1236,6 +1241,9 @@ def main():
         if a.spend_ledger:
             _SPEND['cap'], _SPEND['prior'], _SPEND['led'] = _ledger_open(a.spend_ledger, a.max_spend)
             _SPEND['ledger'] = a.spend_ledger
+            # the dearest price an earlier run saw a solve really cost, so this run counts at it from
+            # its first solve rather than learning it again 20 solves in
+            _SPEND['unit'] = max(PAID_SOLVE_USD, float(_SPEND['led'].get('unit_usd') or 0))
         _run(a, ap)
     finally:
         _SPEND['lock'] = None

@@ -355,6 +355,10 @@ _assoc = RL.analyze([deed, rec('CLAIM OF LIEN', '1/1/2024', '34000', '57', 9000,
                     FOLIO, 4000, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION PHASE II INC',
                     owner='OWNER TESTER', case='2024-000001-CC-05')
 check("'... ASSOC' is a whole name too", not _assoc['other'][0].get('own_case') and _assoc['hoa_open'] == 9000, _assoc['other'])
+_mid = RL.analyze([rec('DEED', '2/1/2008', '26100', '10', 0, 'PEREZ JOSE A', first='PRIOR SELLER'),
+                   rec('JUDGMENT', '3/3/2022', '33500', '58', 18400, 'PEREZ ANTONIO', first='MIDLAND CREDIT MANAGEMENT INC',
+                       folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOSE ANTONIO PEREZ')
+check("a judgment filed under the owner's MIDDLE name is the owner's", _mid['code_open'] == 18400, _mid['other'])
 for _ini in ('SMITH J', 'SMITH'):
     _irs = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '55', 40000, 'INTERNAL REVENUE SERVICE', first=_ini,
                                  folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOHN SMITH')
@@ -572,6 +576,17 @@ try:
     _fake_cs.balance = lambda: _fake_cs.bal[0]
     del _fake_cs.calls[:]
     RL._SPEND.update(unit=RL.PAID_SOLVE_USD)
+    _lu = os.path.join(_tmp, 'unit.json')
+    json.dump({'cap': 5.0, 'counted_usd': 4.95, 'unit_usd': 0.005}, open(_lu, 'w'))
+    _c, _p, _l = RL._ledger_open(_lu, 5.0)
+    RL._SPEND.update(cap=_c, prior=_p, led=_l, submits=0, bal0=10.0, stopped='', ledger=None,
+                     unit=max(RL.PAID_SOLVE_USD, float(_l.get('unit_usd') or 0)))
+    for _i in range(30):
+        RL.fetch_via_turnstile(('OWNERQ', ''))
+    check('--spend-ledger: a later run counts at the price an earlier run learned, from its first solve',
+          len(_fake_cs.calls) == 10, len(_fake_cs.calls))
+    del _fake_cs.calls[:]
+    RL._SPEND.update(unit=RL.PAID_SOLVE_USD, prior=0.0, led=None)
     _real_save = RL._ledger_save
     RL._ledger_save = lambda *a, **k: RL._SPEND.update(stopped='the spend ledger could not be written')
     RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, prior=0.0, ledger='x', stopped='')
@@ -688,6 +703,7 @@ try:
     os.remove(_a1)
     check('--spend-ledger: a second paying run cannot start while one holds the ledger',
           _locked and len(_fake_cs.calls) == _n2)
+    check('--spend-ledger: the ledger keeps the price a solve really cost', float(json.load(open(_led)).get('unit_usd', 0)) >= RL.PAID_SOLVE_USD)
     check('--spend-ledger: a second run gets only what the first left, and cannot raise the cap',
           _n1 == 2 and len(_fake_cs.calls) == 2 and _ledj['cap'] == 0.0066 and _ledj['counted_usd'] == 0.0066
           and len(_ledj['runs']) == 2 and _ledj['runs'][1]['solves'] == 0, (_n1, _fake_cs.calls, _ledj, _rp2.getvalue()[-300:]))
