@@ -25,9 +25,10 @@ rem  at different times of day was the whole mechanism. This chain runs 3h08m me
 rem  still building when DealFlow Replies fires, and run-replies-daily.bat publishes too. On
 rem  2026-09-15 two runners published one minute apart and the poorer board became origin/main,
 rem  which moved the baseline every later publish_guard compared against.
-rem  rc=9 is the "another publishing runner holds the lock" code, and it exits WITHOUT releasing:
-rem  the lock is not ours to drop. Released once at :end, on every other exit path. See
-rem  publish_lock.py for the stale-lock budget and the fail direction.
+rem  rc=9 is the "lock not obtained" code - another publishing runner holds it, or the lock is
+rem  unusable, and publish_lock.py prints which. Either way it exits WITHOUT releasing: the lock is
+rem  not ours to drop. Released once at :end, on every other exit path. See publish_lock.py for the
+rem  stale-lock budget and the fail direction.
 python -u publish_lock.py acquire refresh-dealflow.bat >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo     ^!^! PUBLISH LOCK not obtained - see leads-run.log for which. Nothing ran.
@@ -55,8 +56,8 @@ rem  `goto :end` without touching RUNEXIT, so a publish_guard block - a content 
 rem  thing healthcheck does not grade - ended the run at rc=0 with "health OK" on the console. Every
 rem  other fault in this list was given a code precisely so the morning could not lie; these two
 rem  were the hole left in that work.
-rem  9 = another publishing runner on this machine holds the publish lock, so this run refused
-rem  before doing anything. It is NOT part of the RUNEXIT ladder on purpose: RUNEXIT is this run's
+rem  9 = the publish lock was not obtained - another publishing runner on this machine holds it, or
+rem  the lock is unusable - so this run refused before doing anything. It is NOT part of the RUNEXIT ladder on purpose: RUNEXIT is this run's
 rem  verdict, and a run that never started has no verdict to carry. Added 2026-09-22 - see
 rem  publish_lock.py.
 set "RUNEXIT=0"

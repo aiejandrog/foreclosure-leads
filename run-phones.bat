@@ -15,8 +15,8 @@ echo ==== phones run %date% %time% ====
 rem  PUBLISH LOCK, and ahead of the skip-trace spend for the same reason repo_guard is: a run that
 rem  is going to refuse should not pay the provider first. This is the MANUAL twin of
 rem  run-phones-nightly.bat and it is the likeliest of the five to be double-clicked while the
-rem  nightly chain is still going - the 05:30 refresh runs 3h08m measured. rc=9 = another publishing
-rem  runner holds the lock; it exits WITHOUT releasing, because the lock is not ours to drop.
+rem  nightly chain is still going - the 05:30 refresh runs 3h08m measured. rc=9 = the lock was not
+rem  obtained, held or unusable; it exits WITHOUT releasing, because the lock is not ours to drop.
 rem  Unlike the four unattended runners these lines go to the CONSOLE, not a log, because this file
 rem  is hand-run and the person is looking at the window. NEXIT funnels every exit below here to
 rem  :end so the lock is released on failures too, and that is where the single `pause` now lives.

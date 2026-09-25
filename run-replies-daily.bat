@@ -162,8 +162,8 @@ rem  `endlocal & exit /b` on one line: both halves are parsed before endlocal di
 if "%MIRRORFAIL%"=="1" (endlocal & exit /b 5)
 endlocal & exit /b 0
 
-rem  BELOW THE FINAL EXIT ON PURPOSE - control must not fall into it. rc=9 = another publishing
-rem  runner held the lock, so the board was not rebuilt or pushed. NO RELEASE here: the lock is the
+rem  BELOW THE FINAL EXIT ON PURPOSE - control must not fall into it. rc=9 = the publish lock was not
+rem  obtained, held or unusable, so the board was not rebuilt or pushed. NO RELEASE here: the lock is the
 rem  other runner's and dropping it would be worse than the race it was stopping. The scan and the
 rem  opt-out sync above this ran normally, which is why this is a degraded morning and not a failed
 rem  one - but it is still not rc=0, because the live board did not move.

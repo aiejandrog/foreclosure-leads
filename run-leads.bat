@@ -15,8 +15,9 @@ if errorlevel 1 exit /b 1
 rem  PUBLISH LOCK NEXT. Five .bat files here rebuild docs/ and push it and none of them used to
 rem  check whether another was already mid-run; the trigger times were the whole mechanism. This
 rem  one is the manual weekly refresh, so it is the one most likely to be double-clicked while the
-rem  nightly chain is still running. rc=9 = another runner holds the lock. It exits WITHOUT
-rem  releasing - the lock is not ours to drop. Released once at :done. See publish_lock.py.
+rem  nightly chain is still running. rc=9 = the lock was not obtained, held or unusable, and the log
+rem  lines say which. It exits WITHOUT releasing - the lock is not ours to drop. Released once at
+rem  :done. See publish_lock.py.
 python -u publish_lock.py acquire run-leads.bat >> leads-run.log 2>&1
 if errorlevel 1 (
   echo     ^!^! PUBLISH LOCK not obtained - see leads-run.log for which. Nothing ran.

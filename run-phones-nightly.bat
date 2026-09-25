@@ -31,8 +31,8 @@ echo ==== phones-nightly %STAMP% ==== >> "%LOG%"
 rem  PUBLISH LOCK. Five .bat files here rebuild docs/ and push it, and until 2026-09-22 the only
 rem  thing keeping two of them apart was the clock on their triggers. THIS file is half of the
 rem  measured collision: on 2026-09-15 at 19:11 run-replies-daily.bat published 709 phones over a
-rem  live 1,148, and one minute later this job published 714 over the same board. rc=9 = another
-rem  publishing runner holds the lock. It exits WITHOUT releasing - the lock is not ours to drop -
+rem  live 1,148, and one minute later this job published 714 over the same board. rc=9 = the lock was
+rem  not obtained, held or unusable. It exits WITHOUT releasing - the lock is not ours to drop -
 rem  and writes the status file, because rc=9 with a stale green status file is the rc=0-while-broken
 rem  pattern this project has paid for three times. See publish_lock.py.
 python -u publish_lock.py acquire run-phones-nightly.bat >> "%LOG%" 2>&1
