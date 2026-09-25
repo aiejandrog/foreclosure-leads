@@ -453,8 +453,21 @@ for _p, _w in (('GARCIA LOPEZ MARIA', 'MARIA GARCIA-LOPEZ'), ("O'BRIEN KATHLEEN"
                ('OBRIEN KATHLEEN', "KATHLEEN O'BRIEN")):
     check('%r names the owner %r' % (_p, _w), RL._names_owner(_p, [RL._owner_words(_w)]))
 check("an association suing in circuit court is an association's case: the first mortgage survives",
-      RL._fc_type('2024-000009-CA-01', 'HOA/Condo') == 'HOA' and RL._fc_type('2024-000009-CA-01', 'Bank/Mortgage') == 'MORTGAGE')
-_hca = CD._b(dict(res, ftype='MORTGAGE', case_type='HOA/Condo', judgment=60000))['foreclosed_debt']
+      RL._fc_type('2024-000009-CA-01', 'HOA/Condo', 'PALM TEST CONDOMINIUM ASSOCIATION INC') == 'HOA'
+      and RL._fc_type('2024-000009-CA-01', 'HOA/Condo') == 'HOA'
+      and RL._fc_type('2024-000009-CA-01', 'Bank/Mortgage') == 'MORTGAGE')
+for _pl in ('FEDERAL NATIONAL MORTGAGE ASSOCIATION', 'GOVERNMENT NATIONAL MORTGAGE ASSOCIATION',
+            'COMMUNITY LOAN SERVICING LLC', 'FIRST COMMUNITY BANK'):
+    check("a lender classify() typed 'HOA/Condo' (%s) still forecloses the mortgage in circuit court" % _pl,
+          RL._fc_type('2024-000009-CA-01', 'HOA/Condo', _pl) == 'MORTGAGE')
+_fn = RL.analyze([deed, rec('MORTGAGE', '2/1/2008', '26100', '11', 300000, 'OWNER TESTER', first='SOME LENDER')],
+                 FOLIO, 320000, ftype=RL._fc_type('2025-012345-CA-01', 'HOA/Condo', 'FEDERAL NATIONAL MORTGAGE ASSOCIATION'),
+                 plaintiff='FEDERAL NATIONAL MORTGAGE ASSOCIATION', owner='OWNER TESTER')
+check("Fannie Mae's circuit case never counts the loan it forecloses as a surviving senior", not _fn.get('surv'), _fn)
+_fnb = CD._b(dict(res, ftype='MORTGAGE', case_type='HOA/Condo', judgment=60000))['foreclosed_debt']
+check("dossier b: a lender typed 'HOA/Condo' by classify is not called an association's case",
+      'survives' not in (_fnb.get('note') or ''), _fnb)
+_hca = CD._b(dict(res, ftype='HOA', case_type='HOA/Condo', judgment=60000))['foreclosed_debt']
 check("dossier b: a circuit association case never names the first mortgage as the foreclosed debt",
       _hca['recorded_face'] is None and _hca['instrument'] is None and 'survives' in (_hca.get('note') or ''), _hca)
 
@@ -485,6 +498,39 @@ check("so a namesake's satisfaction on a re-read keeps the old chain's open loan
       RL._mortgages_narrower({'liens': [{'bp': '29900/101', 'st': 'OPEN', 'amt': 280000}]}, _rd))
 check("a lost second foreclosure is narrower", RL._mortgages_narrower({'liens': [], 'second_fc': {'case': 'x'}},
                                                                      {'liens': [], 'second_fc': None}))
+
+# ---- review round 16: a re-read of an OLD analyzer's chain does not keep its known over-counts
+_bankfj = RL.analyze([deed, rec('JUDGMENT', '5/5/2024', '34932', '1256', 987654, 'OWNER TESTER', first=PLAINTIFF)],
+                     FOLIO, 987654, ftype='MORTGAGE', plaintiff=PLAINTIFF, owner='OWNER TESTER', case='2024-014878-CA-01')
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 987654}, _bankfj, _o)
+check("a re-read drops the case's own final judgment the old analyzer summed, even when the old search never said how wide",
+      _bankfj['other'][0].get('own_case') and _o['code_open'] == 0 and not _o.get('lien_totals_kept'), (_bankfj['other'], _o))
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'nrec': 2, 'hoa_open': 15000}, dict(_bankfj, nrec=2, hoa_open=0), _o)
+check("a re-read as wide as the old search replaces an old analyzer's lien totals", _o['hoa_open'] == 0, _o)
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'nrec': 40, 'code_open': 5000}, dict(_bankfj, nrec=2, other=[]), _o)
+check("a narrower re-read keeps an old analyzer's larger total, and says so",
+      _o['code_open'] == 5000 and _o.get('lien_totals_kept'), _o)
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'nrec': 40, 'code_open': 5000, 'other': []},
+                      dict(_bankfj, nrec=2), _o)
+check("a narrower re-read of a chain the new rules wrote keeps the larger total without a legacy note",
+      _o['code_open'] == 5000 and not _o.get('lien_totals_kept'), _o)
+_flsrc16 = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read()
+check("the board keeps netting an association's judgment when a re-read kept an old analyzer's total",
+      _flsrc16.count("'other' in rlh and not rlh.get('lien_totals_kept')") == 1
+      and _flsrc16.count("'other' in _h and not _h.get('lien_totals_kept')") == 1)
+_bfc = {'Case #': '2099-000900-CC-01', 'ctype': 'HOA/Condo', 'orsecond': {'party': 'ABC BANK NA'}}
+ES.apply(_bfc, {'conf': 'ok', 'nrec': 30, 'second_fc': None, 'liens': [], 'other_open_unpriced': 1})
+check("a ceiling made only by an amountless lien is still demoted beside a lender's separate foreclosure",
+      _bfc['eqstate'] == 'unpriced' and ES.demote_for_bank_fc(_bfc) and _bfc['eqstate'] == 'none'
+      and _bfc.get('eqbankfc'), _bfc)
+_bfc2 = {'Case #': '2099-000901-CC-01', 'ctype': 'HOA/Condo', 'orsecond': {'party': 'ABC BANK NA'}}
+ES.apply(_bfc2, {'conf': 'ok', 'nrec': 30, 'second_fc': None, 'liens': [], 'mtg_open_unpriced': 1})
+check("an unpriced MORTGAGE ceiling is not re-labelled by the separate-case rule", not ES.demote_for_bank_fc(_bfc2)
+      and _bfc2['eqstate'] == 'unpriced', _bfc2)
 
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
@@ -725,12 +771,16 @@ try:
                 'defendants': 'Tester, John'},
                {'Case #': '2099-000202-CA-01', 'owner_clean': 'ANN NOTHING', 'Folio': FOLIO, 'judgment': 1},
                {'Case #': '2099-000203-CA-01', 'owner_clean': 'JOHN NEWOWNER', 'Folio': FOLIO, 'judgment': 1},
-               {'Case #': '2099-000204-CA-01', 'owner_clean': 'JANE PARTIAL', 'Folio': FOLIO, 'judgment': 1}],
+               {'Case #': '2099-000204-CA-01', 'owner_clean': 'JANE PARTIAL', 'Folio': FOLIO, 'judgment': 1},
+               {'Case #': '2099-000205-CA-01', 'owner_clean': 'ZED BLOCKED', 'Folio': FOLIO, 'judgment': 1},
+               {'Case #': '2099-000206-CA-01', 'owner_clean': 'BOB OWNERZ', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Blockedsn, Carl'}],
               open(os.path.join(_t2, 'leads_final.json'), 'w'))
     _mtg_chain = {'conf': 'ok', 'liens': [{'d': '2/1/2008', 'amt': 350000, 'st': 'OPEN', 'bp': '26100/11'}],
                   'searched_as': 'JANE DOE (defendant)'}
     json.dump({'2099-000201-CA-01': {'conf': 'ok', 'liens': []}, '2099-000202-CA-01': {'conf': 'ok', 'liens': []},
-               '2099-000203-CA-01': _mtg_chain, '2099-000204-CA-01': _mtg_chain},
+               '2099-000203-CA-01': _mtg_chain, '2099-000204-CA-01': _mtg_chain,
+               '2099-000205-CA-01': {'conf': 'ok', 'liens': []}, '2099-000206-CA-01': {'conf': 'ok', 'liens': []}},
               open(os.path.join(_t2, 'records_liens.json'), 'w'))
     json.dump({'BOB OWNERZ': 'tokOTHER', 'JOHN NEWOWNER': 'tokDEEDONLY', 'JANE PARTIAL': 'tokSATONLY'},
               open(os.path.join(_t2, 'records_qs.json'), 'w'))
@@ -743,7 +793,9 @@ try:
     def _ft(sp, tries=3):
         _asked.append(sp)
         # the owner's fresh search comes back too, just not on this parcel
-        return [deed, city1] if sp == ('TESTER', 'JOHN') else ([_far] if sp == ('OWNERZ', 'BOB') else None)
+        # ANN NOTHING's search is answered with no records; ZED BLOCKED's and CARL BLOCKEDSN's never are
+        return ([deed, city1] if sp == ('TESTER', 'JOHN') else [_far] if sp == ('OWNERZ', 'BOB')
+                else [] if sp == ('NOTHING', 'ANN') else None)
     _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
                                            'camoufox_session', 'mint_and_fetch', 'time')}
     try:
@@ -775,6 +827,11 @@ try:
           _o2['2099-000203-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000203-CA-01'])
     check('--repull marks a chain it paid to search and found nothing for, and never pays for it again',
           _o2['2099-000202-CA-01'].get('repull_tried') and _asked.count(('NOTHING', 'ANN')) == 1, (_asked, _o2))
+    check('--repull never marks a chain whose search the clerk never answered: the next run tries again',
+          not _o2['2099-000205-CA-01'].get('repull_tried') and _asked.count(('BLOCKED', 'ZED')) == 2, (_asked, _o2))
+    check("--repull never marks a chain whose defendant's search the clerk never answered",
+          not _o2['2099-000206-CA-01'].get('repull_tried') and _asked.count(('BLOCKEDSN', 'CARL')) == 2,
+          (_asked, _o2['2099-000206-CA-01']))
     # one surname, one query: the clerk searches the SURNAME, so a spouse or the owner's own longer
     # name is the same search; and a cap that stops the defendant search leaves the chain unmarked
     _t3 = tempfile.mkdtemp()
@@ -819,6 +876,40 @@ try:
     check('--repull never marks a chain whose defendant search the cap stopped',
           not _o3['2099-000302-CA-01'].get('repull_tried') and 'not fully searched: spend cap' in _out3.getvalue(),
           (_asked3, _o3, _out3.getvalue()[-400:]))
+    # Camoufox fills the FIRST name too, so a spouse with the owner's surname is a different free search
+    _t4 = tempfile.mkdtemp()
+    json.dump([{'Case #': '2099-000401-CA-01', 'owner_clean': 'JOHN PEREZ', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Perez, John; Perez, Maria'}], open(os.path.join(_t4, 'leads_final.json'), 'w'))
+    json.dump({'2099-000401-CA-01': {'conf': 'ok', 'liens': []}}, open(os.path.join(_t4, 'records_liens.json'), 'w'))
+    json.dump({}, open(os.path.join(_t4, 'records_qs.json'), 'w'))
+    open(os.path.join(_t4, 'gen_records_qs.py'), 'w').write('')
+    _cfq, _paid4 = [], []
+    def _cf4(browser, sp):
+        _cfq.append(sp)
+        return {('PEREZ', 'JOHN'): 'tokJ', ('PEREZ', 'MARIA'): 'tokM'}.get(tuple(sp))
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                           'camoufox_session', 'camoufox_qs', 'mint_and_fetch', 'time')}
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_t4, 'leads_final.json'), os.path.join(_t4, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_t4, 'records_qs.json'), _t4
+        RL.records_by_qs = lambda qs: {'tokJ': [_far], 'tokM': [deed, city1]}.get(qs)
+        RL.fetch_via_turnstile = lambda sp, tries=3: _paid4.append(sp)
+        RL.camoufox_session = lambda: (contextlib.nullcontext(), object())
+        RL.camoufox_qs = _cf4
+        RL.mint_and_fetch = lambda *a, **k: None
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066', '--spend-ledger', os.path.join(_t4, 's.json')]
+        with contextlib.redirect_stdout(io.StringIO()):
+            RL.main()
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    _o4 = json.load(open(os.path.join(_t4, 'records_liens.json')))['2099-000401-CA-01']
+    check("--repull asks free Camoufox for a spouse with the owner's surname: first names differ there",
+          ('PEREZ', 'MARIA') in [tuple(x) for x in _cfq] and _o4.get('searched_as') == 'MARIA PEREZ (defendant)'
+          and not _paid4, (_cfq, _paid4, _o4))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs

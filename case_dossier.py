@@ -91,10 +91,12 @@ def _b(chain, lead=None):
     # judgment was stored on it (Broward, Palm Beach, older Miami) takes it from the lead.
     judgment = chain.get('judgment') or _money((lead or {}).get('judgment'))
     face = chain.get('first_face', chain.get('first_est'))
-    # a circuit-court case can still be an association's: its stored case type says so
+    # a circuit-court case can still be an association's: records_liens types it HOA when the case type
+    # AND the plaintiff both say so. The case type alone is not enough: classify() calls Fannie Mae an
+    # association, and a lender's case must still name the mortgage it forecloses.
     _ct = str(chain.get('case_type') or '').upper()
-    assn = chain.get('ftype') == 'HOA' or _ct.startswith('HOA')
-    lender = chain.get('ftype') == 'MORTGAGE' and not _ct.startswith(_NOT_LENDER_TYPES)
+    assn = chain.get('ftype') == 'HOA'
+    lender = chain.get('ftype') == 'MORTGAGE' and not _ct.startswith(('GOVT', 'TAX'))
     if judgment:
         foreclosed = {'amount': judgment, 'basis': 'auction listing final judgment',
                       'recorded_face': (face or None) if lender else None,

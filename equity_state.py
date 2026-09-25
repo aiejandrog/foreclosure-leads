@@ -159,6 +159,9 @@ def apply(lead, chain):
     lead['eqstate_why'] = LABEL[st]
     if st == 'none' and lender_foreclosure(lead) and state_of(chain) == 'clear':
         lead['eqstate_why'] = LENDER_OWN_CASE_WHY
+    if st == 'unpriced' and _state_of(chain, lead) == 'clear':
+        lead['eqmtgclear'] = True    # the MORTGAGE verdict was clear; only an amountless lien made it
+                                     # a ceiling, so a lender's separate case still demotes it
     if isinstance(chain, dict):
         # how hard did we look? an operator deserves to see 30-records-examined vs 0.
         if chain.get('nrec') is not None:
@@ -229,7 +232,8 @@ def bank_fc_evidence(lead):
 
 def demote_for_bank_fc(lead):
     """Call AFTER the merge has attached orsecond / sib. Returns True when it demoted."""
-    if not isinstance(lead, dict) or lead.get('eqstate') != 'clear':
+    if not isinstance(lead, dict) or not (lead.get('eqstate') == 'clear' or
+                                          (lead.get('eqstate') == 'unpriced' and lead.get('eqmtgclear'))):
         return False
     what = bank_fc_evidence(lead)
     if not what:

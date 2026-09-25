@@ -234,14 +234,40 @@ def _mortgages_narrower(old, new):
 _LIEN_KEYS = ('other', 'other_open_unpriced', 'case_type', 'searched_as')
 
 
+def _carry_lien_totals(old, new, out):
+    """A lien total never goes down on a narrower re-read (a spouse's judgment the surname-only search
+    found). But a chain the old analyzer wrote (no 'other' rows) summed this case's own judgment, the
+    plaintiff association's own claim of lien and notices into these totals: the error this re-read
+    exists to fix. When the re-read examined at least as many records as the old search said it did,
+    its totals stand. Otherwise (narrower, or an old chain that never said) the larger figure is kept,
+    less what the re-read shows was this case's own claim, and the chain says so."""
+    out.pop('lien_totals_kept', None)
+    legacy = 'other' not in old
+    if legacy and old.get('nrec') and (new.get('nrec') or 0) >= old['nrec']:
+        for k in ('hoa_open', 'code_open', 'irs_open'):
+            out[k] = new.get(k) or 0
+        return
+    own = {'hoa_open': 0, 'code_open': 0, 'irs_open': 0}
+    if legacy:
+        for o in new.get('other') or []:
+            if isinstance(o, dict) and o.get('own_case') and o.get('amt'):
+                k = ('irs_open' if o.get('kind') in ('irs', 'state_tax') else
+                     'hoa_open' if o.get('kind') == 'association' else 'code_open')
+                own[k] += o['amt']
+    for k in own:
+        out[k] = max((old.get(k) or 0) - own[k], new.get(k) or 0)
+    if legacy and any(out[k] > (new.get(k) or 0) for k in own):
+        out['lien_totals_kept'] = ('lien totals from the earlier, wider search (%s records) kept; they may '
+                                   'include this case\'s own judgment' % (old.get('nrec') or '?'))
+
+
 def _lay_lien_rows(old, new):
-    """The old chain with the new read's lien rows on it. Each lien total takes the larger figure."""
+    """The old chain with the new read's lien rows on it. Each lien total per _carry_lien_totals."""
     out = dict(old)
     for k in _LIEN_KEYS:
         if k in new:
             out[k] = new[k]
-    for k in ('hoa_open', 'code_open', 'irs_open'):
-        out[k] = max(old.get(k) or 0, new.get(k) or 0)
+    _carry_lien_totals(old, new, out)
     out['mtg_kept'] = ("mortgages from the earlier search (searched as %s); the %s re-read did not reach "
                        "all of them" % (old.get('searched_as') or old.get('owner') or '?', time.strftime('%Y-%m-%d')))
     return out
@@ -552,13 +578,19 @@ def mint_and_fetch(owner_lf, budget=70, persist=False):
 
 
 # ---- parse the chain: open vs satisfied, isolate the surviving junior --------------------------
-def _fc_type(case, case_type=''):
+def _fc_type(case, case_type='', plaintiff=''):
     """HOA/county-court (whole 1st mortgage survives) vs circuit mortgage foreclosure. Miami-Dade case format
     uses -CA- (circuit) / -CC- (county); also handle the Broward-style CACE/COCE prefixes defensively.
     An association suing in CIRCUIT court (a large arrears claim) is still an association's case: the
-    lead's own case_type says so, and the first mortgage survives its sale just the same."""
+    lead's own case_type says so, and the first mortgage survives its sale just the same. The case type
+    alone is not enough: foreclosure_leads.classify types Fannie Mae, Ginnie Mae and "COMMUNITY" lenders
+    'HOA/Condo', and a lender read as an association counts the loan it forecloses as a survivor. So a
+    plaintiff that reads as a lender (_FC_LENDER_RE: MORTGAGE, FEDERAL, BANK, LOAN, SERVICING, ...) keeps its
+    circuit case a mortgage foreclosure, unless it names homeowners or a condominium outright."""
     if str(case_type or '').upper().startswith('HOA'):
-        return 'HOA'
+        p = str(plaintiff or '')
+        if not _FC_LENDER_RE.search(p) or _FC_OWNERS_RE.search(p):
+            return 'HOA'
     c = (case or '').upper()
     if '-CA-' in c or c.startswith('CACE'): return 'MORTGAGE'
     if '-CC-' in c or c.startswith(('COCE', 'CONO', 'COWE', 'COSO')): return 'HOA'
@@ -588,6 +620,8 @@ _FC_LENDER_RE = re.compile(r'BANK|MORTGAGE|MTGE|LOAN|FINANC|SAVING|CREDIT|FUNDIN
                            r'HOUSING AND URBAN|SECRETARY OF HOUSING|\bHUD\b|LENDING', re.I)
 _FC_ASSN_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|COMMUNITY|PROPERTY\s+OWNERS?|'
                          r'TOWNHO|MAINTENANCE|(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
+# words only an owners' association uses (not COMMUNITY or MASTER, which banks use too)
+_FC_OWNERS_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|PROPERTY\s+OWNERS?|TOWNHO', re.I)
 BANK_FC_YEARS = 5
 
 
@@ -1431,6 +1465,8 @@ def _run(a, ap):
             folio = r.get('Folio', '') or r.get('year_folio', '')
             judg = num(r.get('judgment'))
             models = None
+            _paid0 = paid
+            _def_blocked = False
             try:
                 import stub_resolve as _sr
                 _co = _sr.people_from(r.get('defendants') or '')
@@ -1496,14 +1532,14 @@ def _run(a, ap):
                 _owner_models, models = models, None
             if models is None and not a.cached_only:
                 _sp0 = split_owner(oc)
-                _asked_sn = {_sp0[0].upper()} if _sp0 else set()
+                # the paid search asks for the SURNAME only, so a spouse's paid search after the
+                # owner's is the same query; Camoufox fills the first name too, so it is not
+                _paid_sn = {_sp0[0].upper()} if _sp0 and paid > _paid0 else set()
+                _def_blocked = False                          # a defendant search the clerk never answered
                 for _last, _first in _co[:2]:
                     _nm = '%s %s' % (_first, _last)          # split_owner wants FIRST ... LAST
                     if _nm.strip().upper() == oc.strip().upper():
                         continue                              # already tried as the owner
-                    if (split_owner(_nm) or ('',))[0].upper() in _asked_sn:
-                        continue                              # the clerk searches the SURNAME: same query
-                    _asked_sn.add((split_owner(_nm) or ('',))[0].upper())
                     _sp = split_owner(_nm)
                     if not _sp:
                         continue
@@ -1516,9 +1552,11 @@ def _run(a, ap):
                             models = records_by_qs(_qs)
                             if models is not None:
                                 cf_free += 1
-                    if models is None:
+                    if models is None and _sp[0].upper() not in _paid_sn:
+                        _paid_sn.add(_sp[0].upper())
                         paid += 1
                         models = fetch_via_turnstile(_sp)
+                        _def_blocked = _def_blocked or models is None
                     if models is not None and a.repull and not _parcel_in(models, folio):
                         models = None                         # not this parcel either; next defendant
                     if models is not None:
@@ -1532,11 +1570,11 @@ def _run(a, ap):
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
                 else:
                     print(f"  --  {case:22} {oc:26} (no records / blocked)")
-                    if a.repull and out.get(case) and not _SPEND['stopped']:
-                        out[case]['repull_tried'] = time.strftime('%Y-%m-%d')   # paid once, found nothing
-                        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+                    # never marked here: the owner's search was not answered (a 503, a dead browser, an
+                    # unsolved captcha), so nothing was found out and a later run retries. A search the
+                    # clerk answered with nothing on this parcel is marked below, as 'old chain kept'.
                 continue
-            res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type')), plaintiff=r.get('plaintiff') or '',
+            res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
@@ -1553,7 +1591,9 @@ def _run(a, ap):
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
                     kept += 1
                     print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
-                    if a.repull:
+                    if a.repull and not _def_blocked:
+                        # the searches were answered and none reached this parcel: marked, never paid
+                        # for again. A defendant the clerk never answered leaves it for a later run.
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
                         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                     continue
@@ -1565,12 +1605,11 @@ def _run(a, ap):
                     merged += 1
                     print(f"  ++  {case:22} {oc:26} lien rows added; the earlier search's mortgages kept")
                 else:
+                    _new = res
                     res = dict(_old or {}, **res)            # keep keys other steps wrote (chain_note)
                     if _old:
-                        # the mortgages agree, but the new search may still be narrower on liens (a
-                        # spouse's judgment the surname-only search found): a total never goes down
-                        for _k in ('hoa_open', 'code_open', 'irs_open'):
-                            res[_k] = max(_old.get(_k) or 0, res.get(_k) or 0)
+                        # the mortgages agree, but the new search may still be narrower on liens
+                        _carry_lien_totals(_old, _new, res)
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
             done += 1
