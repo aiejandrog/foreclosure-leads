@@ -194,9 +194,12 @@ rec('cadence\'s legacy fallback runs the guard before handing the message to smt
 # mail_guard's own promise literally -- "the message was NOT sent and the step was NOT consumed" --
 # because it skips both `sent += 1` and the step advance, leaving the touch due for the next run.
 _loop_body = src_c.split('    for c, s in active.items():', 1)[1].split('    if smtp:', 1)[0]
+# Split defensively: if the guard is ever removed, the assertion above already fails, and this
+# one must report a FAIL of its own rather than crashing the suite on an empty slice. A traceback
+# reads as a broken test; the whole point here is that it reads as a broken send path.
+_after_guard = _fallback.split('_MG.check(subj, body, ', 1)[1] if '_MG.check(subj, body, ' in _fallback else ''
 rec('...and SKIPS the lead rather than raising, so one bad row cannot abort the batch',
-    'continue' in _fallback.split('_MG.check(subj, body, ', 1)[1]
-    and '_MG.assert_sendable(' not in _fallback)
+    'continue' in _after_guard and '_MG.assert_sendable(' not in _fallback)
 rec('...which is required, because no send in that loop is wrapped in try/except',
     not re.search(r'try:\s*\n\s*(mid = _ss\._smtp_send|smtp\.send_message)', _loop_body))
 # The skip has to land BEFORE the counter and the step advance, or a refused touch would be
