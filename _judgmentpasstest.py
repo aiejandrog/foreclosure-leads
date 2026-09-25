@@ -261,6 +261,15 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'report_on_pass_machine')
 
+    def test_readable_pdf_without_ocr_cache_is_marked(self):
+        pdf = self.base / 'doc.pdf'
+        pdf.write_bytes(b'%PDF fake')
+        row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'no dollars'}]}}
+        (self.base / (hashlib.sha256(b'j').hexdigest() + '.json')).write_text(json.dumps(row))
+        got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'report_on_pass_machine')
+
     def test_repeatable_failure_is_not_priced(self):
         ref = _row(self.base, '9', '$1.00', 'j')
         _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Stored content is not a PDF'}])
@@ -366,6 +375,12 @@ class Pass(unittest.TestCase):
         self.assertEqual(got, (1, 2, 0))
         self.assertEqual([c.args[0] for c in build.call_args_list], ['c'])
         self.assertEqual(log['errors'], {'a': 'old'})    # a skip is no news: the error stays
+        # a failed rebuild is not skipped next time, even though its file is fresh
+        with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
+                mock.patch.object(JP, 'built_recently', return_value=True), \
+                mock.patch('run_case_timeline.timeline_case', side_effect=RuntimeError('x')):
+            JP.run_pass(runner, entries[:1], date(2026, 9, 25), True, log)
+        self.assertNotIn('a', log['built'])
         # --collect re-does a case built without it; --limit 0 works nothing
         with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
                 mock.patch.object(JP, 'built_recently', return_value=True), \

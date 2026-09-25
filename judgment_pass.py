@@ -68,7 +68,11 @@ def _with_cached_ocr(row, base):
         saved = json.loads((Path(base) / 'timeline-ocr' / (digest + '-ocr300-v1.json'))
                            .read_text(encoding='utf-8'))
     except (OSError, ValueError):
-        return row
+        # supplement() OCRs every text/embedded page; no cache means the pass never did, so
+        # OCR-only amount pages are unknown here. Marked like an unreachable file.
+        targets = [p for p in (row.get('reading') or {}).get('pages', [])
+                   if p.get('outcome') == 'text' or p.get('text_source') == 'embedded']
+        return dict(row, _ocr_unreachable=True) if targets else row
     row = copy.deepcopy(row)
     for page in (row.get('reading') or {}).get('pages', []):
         got = (saved.get('pages') or {}).get(str(page.get('page')))
@@ -258,8 +262,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     if any(r.get('_ocr_unreachable') for r in order):
         out['ocr_unreachable'] = True
     if out.get('ocr_unreachable'):
-        notes.append('stored PDF not reachable here, so free-OCR amount pages were not looked up: '
-                     'run the report on the machine that ran the pass')
+        notes.append('the free OCR for a document is not reachable here (stored PDF or its OCR '
+                     'cache missing), so OCR-only amount pages are unknown: re-run the pass for '
+                     'this case on the machine that runs it')
     if any(t for t, _ in need):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
@@ -333,6 +338,9 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
             (log.get('errors') or {}).pop(case, None)
         except Exception as exc:                              # one case never stops the pass
             errors += 1
+            # timeline_case writes its file before it finishes: a fresh file after a failure is
+            # not a finished case, so the next pass must not skip it.
+            (log.get('built') or {}).pop(case, None)
             log.setdefault('errors', {})[case] = '%s %s: %s' % (
                 date.today().isoformat(), type(exc).__name__, str(exc)[:200])
         log['last'] = case
