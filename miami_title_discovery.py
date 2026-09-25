@@ -145,7 +145,7 @@ def investigate(entry, searcher, document_limit=30):
     index.add_models(models)
     queue = DocumentQueue()
     fetched = 0
-    searched = set()
+    searched, failed = set(), set()
     searches = []
     try:
         # Fixed point over newly recovered deed parties. Bound work, not claimed coverage.
@@ -180,7 +180,10 @@ def investigate(entry, searcher, document_limit=30):
             report = W.run_name_searches(plan, index, capture, folio, owner_models=owner_models,
                                          this_case=W.this_case_of(inventory))
             searches.append(report)
+            # A failed or unreached search is not retried in a later round (each try can mint a
+            # paid token), but it never counts as searched either (Greptile on #61).
             searched.update(p['name'] for p in plan)
+            failed.update(failed_searches(report))
             known = {W.key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in models}
             for records in capture.results.values():
                 for model in records:
@@ -192,6 +195,7 @@ def investigate(entry, searcher, document_limit=30):
         unsearched = [party['name'] for party in title['search_names'] if party['name'] not in searched]
         for name in unsearched:
             gaps.append(name + ': unknown; discovery-round limit left name unsearched.')
+        unsearched += sorted(failed - set(unsearched))
         CD.classify_documents(rows, case)
         new_rows, citations = W.walk(case, rows, models=models, collector=collector,
             queue=queue, ocr=DS.winocr, index=index, depth=3,
@@ -247,6 +251,12 @@ def investigate(entry, searcher, document_limit=30):
             'private_search_results':capture.results,
             'vision_actual_usd':0.0,
             'vision_note':'Existing OCR/vision reused; new documents use local OCR. Unreadable content remains unknown.'}
+
+
+def failed_searches(report):
+    """Names a run_name_searches report tried and got nothing back for: an error, or no token."""
+    return {row['name'] for row in (report or {}).get('searched', [])
+            if row.get('outcome') in ('error', 'not_reached')}
 
 
 def search_coverage(owner_models, searches, models, folio, unsearched):

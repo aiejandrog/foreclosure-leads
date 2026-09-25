@@ -1,5 +1,6 @@
 """Synthetic integration contracts for the opt-in Miami title investigation."""
 import unittest
+from datetime import date
 import miami_title_discovery as T
 
 
@@ -107,6 +108,13 @@ class NameDedupeTests(unittest.TestCase):
         self.assertEqual((got['search_capped'], got['parcel_found']), (False, True))
 
 
+    def test_a_failed_name_search_is_reported_unsearched(self):
+        # Greptile on #61: a name whose search errored or got no token read as searched.
+        report = {'searched': [{'name': 'A', 'outcome': 'searched'}, {'name': 'B', 'outcome': 'error'},
+                               {'name': 'C', 'outcome': 'not_reached'}]}
+        self.assertEqual(T.failed_searches(report), {'B', 'C'})
+
+
 class OwnCaseTests(unittest.TestCase):
     """12-case verification defect 7: 2024-014878's own vacated judgment 34932/1256 was a claim."""
 
@@ -127,7 +135,8 @@ class OwnCaseTests(unittest.TestCase):
                 'foliO_NUMBER': '', 'firsT_PARTY': first, 'seconD_PARTY': second}
 
     def test_this_cases_judgment_is_marked_own_case_not_a_claim(self):
-        this_case = {'plaintiffs': ['WILMINGTON SAVINGS FUND SOCIETY FSB'], 'book_pages': set()}
+        this_case = {'plaintiffs': ['WILMINGTON SAVINGS FUND SOCIETY FSB'], 'book_pages': set(),
+                     'judgment_dates': [date(2024, 12, 20)], 'filed': date(2024, 3, 1)}
         out = self.search([self.judgment('34932', '1256', 'WILMINGTON SAVINGS FUND SOCIETY'),
                         self.judgment('30000', '1', 'CITY OF MIAMI')], this_case)
         self.assertEqual([(c['book'], c['page_no']) for c in out['potential_title_party_claims']],
@@ -144,10 +153,34 @@ class OwnCaseTests(unittest.TestCase):
         self.assertEqual(out['potential_title_party_claims'], [])
 
     def test_a_different_lender_sharing_only_generic_words_is_still_a_claim(self):
-        this_case = {'plaintiffs': ['U S BANK NATIONAL ASSOCIATION'], 'book_pages': set()}
+        this_case = {'plaintiffs': ['U S BANK NATIONAL ASSOCIATION'], 'book_pages': set(),
+                     'judgment_dates': [date(2024, 12, 20)], 'filed': date(2024, 3, 1)}
         out = self.search([self.judgment('30000', '2', 'PNC BANK NATIONAL ASSOCIATION')], this_case)
         self.assertEqual(len(out['potential_title_party_claims']), 1)
         self.assertEqual(out['own_case_instruments'], [])
+
+    def test_the_same_plaintiffs_separate_action_stays_a_claim(self):
+        # Greptile on #61: the plaintiff's judgment in another action, recorded nowhere near this
+        # case's judgment, must not be hidden as this case's own.
+        this_case = {'plaintiffs': ['WILMINGTON SAVINGS FUND SOCIETY FSB'], 'book_pages': set(),
+                     'judgment_dates': [date(2022, 6, 1)], 'filed': date(2021, 3, 1)}
+        out = self.search([self.judgment('34932', '1256', 'WILMINGTON SAVINGS FUND SOCIETY')], this_case)
+        self.assertEqual(out['own_case_instruments'], [])
+        self.assertEqual(len(out['potential_title_party_claims']), 1)
+
+    def test_this_cases_lis_pendens_is_dated_by_the_first_docket_entry(self):
+        import document_walk as W
+        tc = W.this_case_of({'raw': {}, 'entries': [
+            {'metadata': {'eventDate': '2024-03-01', 'docketDescription': 'Complaint'}},
+            {'metadata': {'eventDate': '2024-12-20', 'docketDescription': 'Final Judgment of Foreclosure'}}]})
+        self.assertEqual((tc['filed'], tc['judgment_dates']), (date(2024, 3, 1), [date(2024, 12, 20)]))
+        tc['plaintiffs'] = ['WILMINGTON SAVINGS FUND SOCIETY FSB']
+        lp = dict(self.judgment('34100', '10', 'WILMINGTON SAVINGS FUND SOCIETY'),
+                  doC_TYPE='LIS PENDENS', reC_DATE='3/4/2024')
+        old_lp = dict(lp, reC_BOOK='28000', reC_DATE='5/5/2012')
+        self.assertEqual(W.own_case_basis(lp, tc), 'plaintiff_party')
+        self.assertIsNone(W.own_case_basis(old_lp, tc))
+        self.assertIsNone(W.own_case_basis(dict(lp, reC_DATE=''), tc))
 
 
 if __name__ == '__main__':

@@ -1051,6 +1051,17 @@ class OwnStampTest(unittest.TestCase):
         self.assertEqual(W.pending_citations([row], set(), skipped), [])
         self.assertIn('declaration', skipped[0]['reason'])
 
+    def test_a_mortgage_sharing_a_line_with_a_plat_recital_is_still_followed(self):
+        # Greptile on #61: the passage is the whole OCR line, so a plat recital earlier on it must
+        # not make a separate mortgage citation read as a recital.
+        row = row_citing('court:231000003:1', [
+            'Lot 3, according to the plat thereof recorded in Plat Book 50, Page 3; subject to the '
+            'mortgage recorded in Official Records Book 34472, Page 1351'])
+        skipped = []
+        pending = W.pending_citations([row], set(), skipped)
+        self.assertIn(('34472', '1351'), [(c.get('book'), c.get('page_no')) for c in pending])
+        self.assertNotIn('34472', [s['book'] for s in skipped])
+
     def test_the_dry_run_cli_suppresses_the_same_stamps_walk_does(self):
         # The regression this guards: walk() seeded the seen-set with own_spans and main() passed
         # an empty set, so `--dry-run` reported seven citations on a case with one. Two paths

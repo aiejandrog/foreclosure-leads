@@ -540,28 +540,58 @@ def _distinct_party(name):
 
 
 def this_case_of(inventory):
-    """What marks a recorded instrument as this foreclosure's own: the plaintiff's names and the
-    book/page the docket says its own filings were recorded at."""
+    """What marks a recorded instrument as this foreclosure's own: the plaintiff's names, the
+    book/page the docket says its own filings were recorded at, the docket's judgment dates and
+    the date of its first entry (when its lis pendens is recorded)."""
+    import document_prioritizer as DP
     import miami_judgment as MJ
     raw = (inventory or {}).get('raw') or {}
-    pages = set()
+    pages, judgments, dates = set(), set(), []
     for entry in (inventory or {}).get('entries') or []:
-        m = re.search(r'(\d{3,6})\D+(\d{1,5})', str((entry.get('metadata') or {}).get('bookAndPage') or ''))
+        meta = entry.get('metadata') or {}
+        m = re.search(r'(\d{3,6})\D+(\d{1,5})', str(meta.get('bookAndPage') or ''))
         if m:
             pages.add(key_of(m.group(1), m.group(2)))
-    return {'plaintiffs': MJ.plaintiffs_of(raw), 'book_pages': pages}
+        when = DP._record_date(meta.get('eventDate'))
+        if not when:
+            continue
+        dates.append(when)
+        text = '%s %s' % (meta.get('docketDescrition') or meta.get('docketDescription') or '',
+                          meta.get('comments') or '')
+        if DP.classify(text) == 'final_judgment':
+            judgments.add(when)
+    return {'plaintiffs': MJ.plaintiffs_of(raw), 'book_pages': pages,
+            'judgment_dates': sorted(judgments), 'filed': min(dates) if dates else None}
+
+
+def _recorded_with_this_case(model, this_case):
+    """A plaintiff-party instrument is this case's only when it was recorded where this case would
+    record it: a judgment near a docket judgment date, a lis pendens near the case's first entry.
+    The same plaintiff's separate action against the owner stays a claim (Greptile on #61)."""
+    import document_prioritizer as DP
+    recorded = DP._record_date(model.get('reC_DATE'))
+    if not recorded:
+        return False
+    before, after = DP.RECORDING_WINDOW_BEFORE, DP.RECORDING_WINDOW_AFTER
+    if re.search(r'LIS PENDENS', str(model.get('doC_TYPE') or ''), re.I):
+        filed = this_case.get('filed')
+        return bool(filed) and filed - before <= recorded <= filed + after
+    return any(d - before <= recorded <= d + after for d in this_case.get('judgment_dates') or ())
 
 
 def own_case_basis(model, this_case):
     """'docket_book_page', 'plaintiff_party' or None. A judgment or lis pendens the docket itself
-    recorded, or one between this case's plaintiff and anyone, is this foreclosure's own filing
-    (2024-014878's vacated judgment 34932/1256 was counted as a claim: 12-case verification,
-    defect 7). A lender name that is only generic words never matches."""
+    recorded, or one between this case's plaintiff and anyone recorded when this case would record
+    it, is this foreclosure's own filing (2024-014878's vacated judgment 34932/1256 was counted as
+    a claim: 12-case verification, defect 7). A lender name that is only generic words never
+    matches."""
     if not this_case:
         return None
     if key_of(model.get('reC_BOOK'), model.get('reC_PAGE')) in (this_case.get('book_pages') or ()):
         return 'docket_book_page'
     if not re.search(r'JUDGMENT|LIS PENDENS', str(model.get('doC_TYPE') or ''), re.I):
+        return None
+    if not _recorded_with_this_case(model, this_case):
         return None
     for plaintiff in this_case.get('plaintiffs') or ():
         want = _distinct_party(plaintiff)

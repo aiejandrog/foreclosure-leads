@@ -69,9 +69,9 @@ Fixed in the follow-up (main code):
 
 | Defect | Fix |
 |---|---|
-| D8 exhibit page stamps and a condominium declaration followed as instruments | a run of stamps that steps with the pages is one instrument, its first page; declaration and plat recitals are not followed. Both are listed in the walk's `not_followed` and left out of the dossier's `cited_but_not_fetched` |
-| D7 and the D6 root: this case's own judgment counted as a claim | `document_walk.run_name_searches(this_case=...)` moves a judgment or lis pendens recorded at a docket book/page, or between this case's plaintiff and anyone, into `own_case_instruments` with `own_case` and `this_case`. Lender names made only of generic words never match |
-| D3 capped or wrong-parcel searches | title discovery reports `search_capped`, `parcel_found` and `names_left_unsearched`. The three rounds and the 500 cap stay: raising them costs owner-search tokens and waits for Alex |
+| D8 exhibit page stamps and a condominium declaration followed as instruments | a run of stamps that steps with the pages is one instrument, its first page; declaration and plat recitals are not followed (only the text leading to a citation decides, so a mortgage on the same line is still followed). Both are listed in the walk's `not_followed` and left out of the dossier's `cited_but_not_fetched` |
+| D7 and the D6 root: this case's own judgment counted as a claim | `document_walk.run_name_searches(this_case=...)` moves a judgment or lis pendens recorded at a docket book/page, or between this case's plaintiff and anyone and recorded near a docket judgment date (a lis pendens near the first docket entry), into `own_case_instruments` with `own_case` and `this_case`. Lender names made only of generic words never match |
+| D3 capped or wrong-parcel searches | title discovery reports `search_capped`, `parcel_found` and `names_left_unsearched` (a name whose search failed counts as unsearched). The three rounds and the 500 cap stay: raising them costs owner-search tokens and waits for Alex |
 
 Still open: D13's paid read of 2025-023462's recorded copy while its court copy had text. The
 recorded-copy reader (`miami_judgment.run`) cannot see the court copies yet; checking that needs

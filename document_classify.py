@@ -410,11 +410,29 @@ def stamp_run_pages(cites):
     return extra
 
 
+# Words that start a citation of their own. A recital earlier on the line does not describe a
+# citation that one of these introduces.
+_OWN_INSTRUMENT_RE = re.compile(r'mortgage|lien|judgment|lis\s+pendens|assignment|notice|claim|'
+                                r'certificate|deed|satisfaction|release|agreement|;', re.I)
+
+
+def _recital_leads_to(cite):
+    """True when a declaration or plat recital is what introduces THIS citation. A passage is the
+    whole OCR line, so a plat recital and a separate mortgage on one line share it (Greptile on
+    #61): only the text between the recital and this citation's book number decides."""
+    passage = cite.get('passage') or ''
+    book = str(cite.get('book') or '').lstrip('0')
+    at = re.search(r'(?<!\d)0*%s(?!\d)' % re.escape(book), passage) if book else None
+    before = passage[:at.start()] if at else ''
+    recitals = list(_RECITAL_RE.finditer(before))
+    return bool(recitals) and not _OWN_INSTRUMENT_RE.search(before[recitals[-1].end():])
+
+
 def not_followed_reason(cite, stamps=()):
     """Why a citation is not a lead to fetch, or '' when it is one."""
     if key_of(cite.get('book'), cite.get('page_no')) in stamps:
         return 'page stamp of an exhibit copy; its first page is the instrument'
-    if _RECITAL_RE.search(cite.get('passage') or ''):
+    if _recital_leads_to(cite):
         return 'declaration or plat recital, not an encumbrance'
     return ''
 
