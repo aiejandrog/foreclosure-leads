@@ -20,9 +20,12 @@ Measured on 2026-09-22, the second day of the ramp: each warming alias is allowe
 is separately sending 15 warm-up messages, so its true volume is up to 20 while every cap in the
 system reads at most 5. That is not a bug in either half -- it is the sum nobody was printing.
 
-READ-ONLY. This module opens two files and prints. It sends nothing, writes nothing, and imports
-`send_server` only for its cap arithmetic (side-effect free: send_server binds a port only under
-`if __name__ == '__main__'`, which is the same reason cadence.py imports it).
+READ-ONLY. This module opens two files for reading and prints. It sends nothing and writes no file.
+It imports `send_server` only for its cap arithmetic (side-effect free: send_server binds a port
+only under `if __name__ == '__main__'`, which is the same reason cadence.py imports it). One
+caveat, so the claim is exact: importing `warmup` runs `paths.out()` at its module scope, which
+does `makedirs(~/DEALFLOW, exist_ok=True)` -- so an import can create that directory. No file is
+written into it, and it is the sanctioned non-OneDrive output dir.
 
 Run:  python ramp_status.py              today, per alias
       python ramp_status.py --days 14    plus what the caps do over the next 14 days
@@ -66,28 +69,51 @@ def cold_today(alias, day):
 
 
 def warm_today(alias, day):
-    """Messages warmup.py recorded for this alias today. None when the log is absent."""
+    """Messages warmup.py recorded for this alias today. None when the log is absent or unreadable.
+
+    Shape-checked at every level, for the same reason cold_today is: warmup._save_log rewrites this
+    file with a non-atomic json.dump after every individual sendmail, so an interrupted warm-up run
+    is the ordinary way it goes half-written. A traceback here would take down a read-only report
+    over a file it does not own, and a 0 would be the lie this module exists to avoid.
+    """
     if not os.path.exists(WARMUP_LOG):
         return None
     try:
         log = json.load(open(WARMUP_LOG, encoding='utf-8'))
+        if not isinstance(log, dict):
+            return None
+        days = log.get('days')
+        if not isinstance(days, dict):
+            return None
+        today = days.get(day.isoformat())
+        if not isinstance(today, dict):
+            return 0 if today is None else None
+        sent = today.get(alias)
+        if sent is None:
+            return 0
+        if not isinstance(sent, (list, tuple, dict)):
+            return None
+        return len(sent)
     except Exception:
         return None
-    return len((log.get('days') or {}).get(day.isoformat(), {}).get(alias, []))
 
 
 def _n(v):
     return '?' if v is None else str(v)
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description='True per-alias daily send volume, both ledgers.')
     ap.add_argument('--days', type=int, default=0, metavar='N',
                     help='also project the caps N days forward')
     ap.add_argument('--date', default='', metavar='YYYY-MM-DD', help='report a past day instead')
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
 
-    day = dt.date.fromisoformat(a.date) if a.date else dt.date.today()
+    try:
+        day = dt.date.fromisoformat(a.date) if a.date else dt.date.today()
+    except ValueError:
+        print('--date wants YYYY-MM-DD, got %r' % a.date)
+        return 2
     cfg = _SS._load_senders()
     main_addr = str((cfg.get('lanes') or {}).get('default') or '').lower()
     wu_day = _WU.day_number(day)
@@ -101,6 +127,10 @@ def main():
     print('DEALFLOW send volume - %s' % day)
     print('  senders.json ramp day %d (ramp_start %s) | warmup.py day %d, quota %d/alias'
           % (ramp_day, cfg.get('ramp_start'), wu_day, wu_quota))
+    if not cfg:
+        print('  !! senders.json is missing or unreadable - EVERY cap below reads 0 and the')
+        print('     projection is meaningless. senders.json is tracked in git, so this is a')
+        print('     broken hand-edit, not a machine difference. Fix it before reading on.')
     if not os.path.exists(SENT_LEDGER):
         print('  !! mail_sent.json not on this machine - cold counts unknown, shown as "?".')
     if not os.path.exists(WARMUP_LOG):
@@ -108,7 +138,7 @@ def main():
     print()
 
     addrs = [main_addr] + [x for x in _WU.ALIASES if x != main_addr] if main_addr else list(_WU.ALIASES)
-    for x in sorted(set((cfg.get('lanes') or {}).values())):
+    for x in sorted(set(v for v in (cfg.get('lanes') or {}).values() if isinstance(v, str))):
         if x and x.lower() not in addrs:
             addrs.append(x.lower())
 

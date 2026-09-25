@@ -41,7 +41,9 @@
     rebuilds and publishes the board, so this moved to 10:00 with it. If Replies ever moves again,
     MOVE THIS TOO: cadence has no ledger-staleness gate of its own (send_server./send refuses an
     optouts.json older than 2 days; cadence does not), so the ordering is the only thing enforcing
-    it. _taskinstalltest.py asserts the gap.
+    it. _taskinstalltest.py asserts the gap against a REPLIES_AT constant IN THE TEST - the live
+    Replies trigger is in gitignored desktop-setup/tasks/, so the suite catches an edit to this
+    file and cannot catch Replies moving. Move both together.
 -->
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>

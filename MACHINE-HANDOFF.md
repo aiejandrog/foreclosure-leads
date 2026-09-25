@@ -325,8 +325,16 @@ morning. It sat at 09:00 against a 06:45 Replies. When Replies moved to 08:45 th
 fifteen-minute gap on a job that also rebuilds and publishes the board, so cadence moved to 10:00.
 **If Replies moves again, move cadence too** — cadence has no ledger-staleness gate of its own
 (`send_server./send` refuses an `optouts.json` older than 2 days; cadence does not), so this
-ordering is the only thing enforcing it. `_taskinstalltest.py` asserts the gap, so shortening it
-fails there rather than in a morning's mail.
+ordering is the only thing enforcing it. `_taskinstalltest.py` asserts the gap against a
+`REPLIES_AT` constant **in the test**, because the Replies trigger lives in gitignored
+`desktop-setup/tasks/` and the repo cannot read it. So the suite catches someone editing this
+template to an earlier hour; it cannot catch someone moving *Replies* later in Task Scheduler.
+Both numbers have to move together, and the live one is only ever known by enumerating (§1).
+
+Cadence at 10:00 also sits 30 minutes behind DEALFLOW Phones at 09:30 — less slack than the 60
+minutes required behind Replies. That is deliberate and not the same risk: Phones does not write
+`optouts.json`, and cadence publishes nothing and takes no publish lock, so an overlap costs
+contention, not a send against a half-written ledger.
 
 `tasks/` is gitignored: a Windows export embeds the exporting machine's principal SID and user
 paths, so those definitions travel in the transfer bundle. `task-templates/` is the tracked,
@@ -355,9 +363,16 @@ outside the repo because the log carries homeowner email addresses.
 **`warmup.py` does not write `mail_sent.json`, and that is correct** — warm-up mail goes to
 company-owned mailboxes, so counting it as outreach would corrupt every reply and bounce rate here.
 But every cap in the project meters off that one ledger, so an alias's real daily volume is not
-visible anywhere. `python ramp_status.py` adds the two back together; `--days N` also prints the
-date the cold ramp first matches the warm-up quota, which is the first day stopping BSG Warmup
-does not cut a warming alias's volume. Read-only.
+visible anywhere. `python ramp_status.py` adds the two back together. Read-only.
+
+`--days N` also prints the date the cold ramp **cap** first matches the warm-up quota (2026-09-28).
+**That is not the date to stop BSG Warmup.** `senders.json` ramps by calendar day from `ramp_start`,
+so the cap climbs whether or not one message was sent, and the 2026-09-23 warm-up audit found no
+live cold path to either warming alias — desktop bridge deleted, laptop bridge bounce-blocked at
+20.2%, Cadence registered on neither machine. Stopping warm-up on 09-28 would drop each alias
+**15 → 0**, not 15 → 20: the one direction a warming domain must not move, which is the thing this
+sentence used to exist to prevent. Stop per alias only once the tool's **cold** column shows real
+sends at or above the warm-up quota for five days running with bounce under 3%, then taper.
 
 A runner audit still has to **enumerate** tasks rather than trust any list in this file — see §1.
 
