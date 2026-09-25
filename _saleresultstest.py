@@ -318,5 +318,11 @@ _o = [c for c, _, _ in S.read_order(_win, _res, _T)]
 check('read order: hot first, never-read, oldest, freshest last; today\'s skipped',
       _o == ['PAST', 'HOT', 'FAR-NEW', 'FAR-OLD', 'NEAR-FRESH'], _o)
 
+check('coverage gap: never read, another sale, and a 4-day-old read count; fresh ones do not',
+      S.coverage_gap({'A': (D(2026, 10, 1), None), 'B': (D(2026, 10, 2), None), 'C': (D(2026, 10, 3), None),
+                      'E': (D(2026, 10, 4), None)},
+                     {'B': {'sale': '2026-09-30', 'ts': '2026-09-25'}, 'C': {'sale': '2026-10-03', 'ts': '2026-09-21'},
+                      'E': {'sale': '2026-10-04', 'ts': '2026-09-22'}}, _T) == 3)
+
 print('\n%d failed' % len(FAIL) if FAIL else '\nall passed')
 sys.exit(1 if FAIL else 0)

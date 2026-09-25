@@ -484,12 +484,17 @@ HOT_BEHIND, HOT_AHEAD = 2, 3     # sales this close to today are re-read every n
 
 
 def read_order(win, res, today):
-    """Which window cases to read tonight, in order. A night's budget (DEADLINE_S) covers roughly
-    half of a 200-case window, so nearest-first alone re-read the same near half every night and
-    never reached sales 2-4 weeks out. Order: sales within HOT_BEHIND days back / HOT_AHEAD days
-    ahead first (a result or a last-minute motion lands there), then everything else by how old
-    its verdict is (never read first), nearest sale breaking ties. Cases already read today for
-    the same sale are skipped."""
+    """Which window cases to read tonight, in order. A night's budget (DEADLINE_S) does not cover a
+    200-case window, and nearest-first alone re-read the same near half every night, so sales 2-4
+    weeks out were never read. Order: sales within HOT_BEHIND days back / HOT_AHEAD days ahead
+    first (a result or a last-minute motion lands there), then everything else by how old its
+    verdict is (never read first), nearest sale breaking ties. Cases already read today for the
+    same sale are skipped.
+
+    What this guarantees is that no case starves, not a fixed cycle: the hot cases take their
+    share every night, so the rest are covered in (cold cases / (reads per night - hot cases))
+    nights. A verdict older than MAX_AGE_DAYS is hidden rather than shown stale, and main()
+    prints coverage_gap() so a window that outgrows the budget shows up in the refresh log."""
     stamp = today.isoformat()
     out = []
     for c, (d, seen) in win.items():
@@ -503,6 +508,18 @@ def read_order(win, res, today):
         out.append((0 if hot else 1, 0 if hot else -age, abs(dist), c, d, seen))
     out.sort()
     return [(c, d, seen) for _, _, _, c, d, seen in out]
+
+
+def coverage_gap(win, res, today):
+    """Window cases with no verdict the board would show (none, another sale's, or older than
+    MAX_AGE_DAYS). Above 0 night after night means the budget is short for the window."""
+    n = 0
+    for c, (d, _) in win.items():
+        v = res.get(c) or {}
+        ts = _to_date(v.get('ts'))
+        if v.get('sale') != d.isoformat() or not ts or (today - ts).days > MAX_AGE_DAYS:
+            n += 1
+    return n
 
 
 def _pull(case):
@@ -610,6 +627,10 @@ def main():
         del res[c]
     _save(res)
     print('sale results: %d read, %d failed, %d on file -> sale_results.json' % (ok, fail, len(res)))
+    gap = coverage_gap(win, res, today)
+    if gap:
+        print('sale results: %d of %d window case(s) have no current verdict and show no chip; if this '
+              'stays above 0 night after night, raise SALE_RESULTS_DEADLINE (now %ds)' % (gap, len(win), DEADLINE_S))
     report(res, today)
     return 0
 
