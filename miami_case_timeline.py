@@ -92,9 +92,10 @@ class _StayCases:
         unnamed = [c for c in self.open if not c['numbers']]
         if nums and unnamed and not self._find(self.closed, nums):
             # A number first cited after a numberless filing may be that case or a second
-            # petition (Greptile on #65). Both stay open, linked: a numberless closing line
-            # closes the pair, and a close naming only the number leaves the unnamed one open
-            # and unknown, never "no stay" on a guess.
+            # petition (Greptile on #65). Both stay open, linked by 'maybe'. A numberless closing
+            # line cannot say which it ends, so it is ambiguous like any close with two open; a
+            # close naming only the number leaves the unnamed one open and unknown. "No stay"
+            # takes a closing line for each, never a guess that they were one.
             unnamed[-1]['maybe'] = unnamed[-1].get('maybe', set()) | nums
             self.open.append({'numbers': set(nums)})
             return
@@ -109,7 +110,7 @@ class _StayCases:
     def end(self, text):
         nums = self.numbers(text)
         hit = self._find(self.open, nums) if nums else []
-        if not hit and not nums and len(self._groups()) == 1:
+        if not hit and not nums and len(self.open) == 1:
             hit = list(self.open)
         if not hit and nums and len(self.open) == 1 and not self.open[0]['numbers']:
             hit = list(self.open)
@@ -121,17 +122,6 @@ class _StayCases:
             self.closed.append(case)
         if not self.open:
             self.ambiguous = False
-
-    def _groups(self):
-        """Open cases, with a numberless case and the numbers it may be counted as one."""
-        groups = [[c] for c in self.open if not c.get('maybe')]
-        for c in self.open:
-            if c.get('maybe'):
-                linked = [g for g in groups if any(o['numbers'] & c['maybe'] for o in g)]
-                for g in linked:
-                    groups.remove(g)
-                groups.append([c] + [o for g in linked for o in g])
-        return groups
 
     def in_effect(self):
         if self.ambiguous and self.open:

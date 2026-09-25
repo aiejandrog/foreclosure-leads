@@ -616,10 +616,26 @@ class ReconciliationTests(unittest.TestCase):
         self.assertIsNone(r['stay_in_effect'])
         self.assertEqual(r['status']['kind'], 'unclear')
 
-    def test_a_numberless_dismissal_closes_the_linked_filings(self):
+    def test_a_numberless_dismissal_of_linked_filings_is_unknown(self):
+        # Greptile on #65: closing the linked pair on one numberless line reads two possible
+        # petitions as dismissed by one order.
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
                  entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
                  entry(4, 'Order dismissing bankruptcy')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_linked_filings_each_closed_read_as_no_stay(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order dismissing bankruptcy'),
+                 entry(5, 'Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertIsNone(r['stay_in_effect'])
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order dismissing bankruptcy'),
+                 entry(5, 'Order Dismissing Chapter 13 Case No. 26-11111'),
+                 entry(6, 'Order dismissing bankruptcy')])
         self.assertFalse(r['stay_in_effect'])
 
     def test_the_numberless_filing_closes_on_its_own_later_dismissal(self):
