@@ -88,6 +88,10 @@ def _with_cached_ocr(row, base):
         # supplement() checkpoints page by page: a pass killed mid-document leaves a partial cache.
         row['_ocr_unreachable'] = 'cache'
     for page in (row.get('reading') or {}).get('pages', []):
+        # Only the pages supplement() would OCR: a stale cache entry on another page is not one
+        # the paid reader would select.
+        if page.get('outcome') != 'text' and page.get('text_source') != 'embedded':
+            continue
         got = (saved.get('pages') or {}).get(str(page.get('page')))
         if got:
             page['supplemental_ocr'] = got
@@ -202,8 +206,16 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     if inventory is None:
         out['state'] = 'no_docket'
         return out
+    if timeline is None:
+        # Nothing read the judgment bodies or checked their attachments, so no target the docket
+        # index alone suggests is a finding. The pass builds it.
+        out.update(state='timeline_missing', detail='no readable timeline on disk: run the pass '
+                   'for this case')
+        return out
     try:
-        plan = DP.prioritize(case, inventory, as_of)
+        # As of the day the timeline was built, so the read order and the timeline's own
+        # reconciliation see the same docket (a pass may cross midnight before the report).
+        plan = DP.prioritize(case, inventory, str(timeline.get('as_of') or as_of)[:10])
     except ValueError as exc:
         out.update(state='docket_incomplete', detail=str(exc)[:200])
         return out
@@ -211,12 +223,6 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         docket_mtime = (Path(base) / 'inventory.json').stat().st_mtime
     except OSError:
         docket_mtime = None
-    if timeline is None:
-        # Nothing read the judgment bodies or checked their attachments, so no target the docket
-        # index alone suggests is a finding. The pass builds it.
-        out.update(state='timeline_missing', detail='no readable timeline on disk: run the pass '
-                   'for this case')
-        return out
     if timeline_mtime is not None and docket_mtime is not None \
             and timeline_mtime < docket_mtime:
         # The docket was refreshed after the timeline was built (a rebuild that failed part-way):
@@ -226,11 +232,11 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         return out
     # Only the timeline, which read the bodies, can establish a controlling judgment. The docket
     # plan's reconciliation is index metadata (it says controlling_judgment_established False).
-    controlling = str(((timeline or {}).get('judgments') or {}).get('controlling_entry') or '')
+    controlling = str((timeline.get('judgments') or {}).get('controlling_entry') or '')
     out['controlling_entry'] = controlling or None
     # The timeline's reconciliation read the bodies (a vacatur citing its judgment's date, an
     # image-less same-day twin); the plan's is the docket index alone. Prefer the timeline's.
-    recon = (timeline or {}).get('judgments') or plan.get('judgments')
+    recon = timeline.get('judgments') or plan.get('judgments')
     target, why = _target(recon, controlling)
     if target is None:
         out['state'] = why
@@ -304,11 +310,15 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         elif left:
             need.append((is_target, left))
     notes = [out['detail']] if out.get('detail') else []
+    target_doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
+
+    def held_why():
+        return ','.join(target_doc.get('gaps') or []) or 'not_eligible'
     target_refs = {r.get('source_ref') for r in order + held
                    if str(r.get('entry_ref') or '') == target}
     # The timeline's own gaps on the target entry: a missing attachment, a page neither text nor
     # OCR could read, pages never assessed. Any of them means an amount page may be unseen.
-    target_gaps = sorted({str(g.get('kind')) for g in (timeline or {}).get('gaps') or []
+    target_gaps = sorted({str(g.get('kind')) for g in timeline.get('gaps') or []
                           if str(g.get('entry_id') or '') == target})
     # Only the judgment's own documents decide a verdict. Another filing without its OCR can hide
     # pages the reader buys first, so it only makes the price a floor, and the note says so.
@@ -349,9 +359,7 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         # Part of the judgment carries amount pages the reader defers: never verified, never
         # priced. The fix is the docket entry.
         out['state'] = 'judgment_held_by_docket_plan'
-        doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
-        notes.insert(0, (','.join(doc.get('gaps') or []) or 'not_eligible')
-                     + ': unread amount pages the reader defers')
+        notes.insert(0, held_why() + ': unread amount pages the reader defers')
     elif target_gaps:
         out['state'] = 'judgment_incomplete'
         notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
@@ -364,13 +372,20 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         out['state'] = 'verified'
     elif target_amount_rows:
         out['state'] = 'read_not_verified'
-        if any(c.get('ok') for c in target_checks):
-            notes.append('one printed total reproduces and another does not')
+        checked = {c.get('source_ref') for c in target_checks}
+        if any(not c.get('ok') for c in target_checks):
+            notes.append('a printed total does not reproduce to the cent'
+                         + (' (another one does)' if any(c.get('ok') for c in target_checks) else ''))
+        unchecked = [r for r in target_refs if r not in checked and r not in stuck_docs
+                     and not stuck_pages.get(r) and 'amount-vision-' + hashlib.sha256(
+                         str(r).encode()).hexdigest() + '.json' in done]
+        if unchecked:
+            notes.append('a document of the judgment was read and shows no printed total to check')
         if any(r in stuck_docs or stuck_pages.get(r) for r in target_refs):
             notes.append('a page came back unreadable or a paid call failed; paying again '
                          'does not re-read it')
     else:
-        doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
+        doc = target_doc
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
         if not fetched:
             out['state'] = 'judgment_not_fetched'
@@ -379,7 +394,7 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             # On disk, but the docket plan holds the entry (undated, no image count), so the paid
             # reader defers it. The fix is the docket entry, not another download.
             out['state'] = 'judgment_held_by_docket_plan'
-            notes.insert(0, ','.join(doc.get('gaps') or []) or 'not_eligible')
+            notes.insert(0, held_why())
         else:
             # Fetched, but no page carries a printed dollar figure the free reads could see: a
             # paid read would have nothing selected. Named, never counted as verified.
@@ -515,10 +530,10 @@ def render(rows, skipped_ids, rate, sample, today):
                         if floors else '', pa, '+' if whole else '', pa * per_page,
                         ' or more' if whole else ''))
     lines += ['', '"read_not_verified": the judgment was read as far as a paid run can take it, and '
-              'its figures do not reproduce its printed total to the cent, or a page came back '
-              'unreadable, or a paid call failed with its outcome unknown (the reader never '
-              'repeats one). Paying again does not change it: it needs a person or the paid clerk '
-              'copy, not another read.']
+              'its figures do not reproduce its printed total to the cent, or a document shows no '
+              'printed total, or a page came back unreadable, or a paid call failed with its '
+              'outcome unknown (the reader never repeats one); the note says which. Paying again '
+              'does not change it: it needs a person or the paid clerk copy, not another read.']
     lines += ['', 'Prices assume the paid run goes through run_documents --backfill --timeline --vision, '
               'whose checkpoint ledger serves pages it already bought at $0. A run through another '
               'ledger re-bills them; the "whole case" column is the ceiling for that.']
@@ -547,6 +562,8 @@ def main(argv=None):
     parser.add_argument('--report-only', action='store_true', help='skip the pass; plan from disk')
     parser.add_argument('--leads-file', help='default leads_final.json')
     args = parser.parse_args(argv)
+    if args.report_only and (args.collect or args.limit is not None):
+        parser.error('--report-only runs no pass: --collect and --limit do nothing with it')
     import case_review
     import run_documents as runner
     today = date.today()

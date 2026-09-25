@@ -231,7 +231,7 @@ class Assess(unittest.TestCase):
                         return_value=[dict(base, ok=True), dict(base, ok=False)]):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'read_not_verified')
-        self.assertIn('another does not', got['detail'])
+        self.assertIn('(another one does)', got['detail'])
 
     def test_verified_waits_for_newly_found_amount_pages(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -460,6 +460,34 @@ class Assess(unittest.TestCase):
                            return_value=_plan([('9', 'final_judgment', True, [])])):
             rows, _, _ = JP.plan(runner, [{'case': CASE}], date(2026, 9, 25), {})
         self.assertEqual(rows[0]['state'], 'timeline_missing')
+
+    def test_read_without_a_total_says_so(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+        self.assertIn('shows no printed total', got['detail'])
+        self.assertNotIn('does not reproduce', got['detail'])
+
+    def test_cache_entry_on_a_non_target_page_is_ignored(self):
+        pdf = self.base / 'doc.pdf'
+        pdf.write_bytes(b'%PDF fake')
+        digest = hashlib.sha256(b'%PDF fake').hexdigest()
+        (self.base / 'timeline-ocr').mkdir()
+        (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
+            {'pages': {'1': {'outcome': 'ocr_text', 'text': 'x'},
+                       '2': {'outcome': 'ocr_text', 'text': 'Total $5.00'}}}))
+        row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'x'},
+                                     {'page': 2, 'outcome': 'ocr_text', 'text': 'no dollars'}]}}
+        got = JP._with_cached_ocr(row, self.base)
+        self.assertNotIn('supplemental_ocr', got['reading']['pages'][1])
+
+    def test_report_only_refuses_pass_flags(self):
+        with self.assertRaises(SystemExit):
+            JP.main(['--report-only', '--collect'])
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [
