@@ -49,7 +49,7 @@ class UnanchoredDeedTests(unittest.TestCase):
         self.assertEqual(got['possible_later_conveyances'], ['7/1'])
         self.assertEqual(got['comparison_status'], 'unknown_possible_later_conveyance')
         self.assertTrue(any('may already have conveyed' in g for g in got['gaps']))
-        self.assertIn('OWNER PERSON is an anchored-deed grantee', got['unanchored_deeds'][0]['chain_link'])
+        self.assertIn('OWNER PERSON is a folio-anchored deed grantee', got['unanchored_deeds'][0]['chain_link'])
 
     def test_earlier_unanchored_deed_does_not_question_the_current_deed(self):
         rows = [deed('2', '1/1/2020', 'SELLER', 'OWNER PERSON'),

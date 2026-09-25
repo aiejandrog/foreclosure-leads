@@ -248,6 +248,19 @@ class DeedPlacementTests(unittest.TestCase):
         rows = [mortgage(), spelled, rec('7', '6/1/2023', 'A', 'B')]
         self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
 
+    def test_the_date_forms_the_clerk_actually_emits(self):
+        for value in ('6/1/2023 1', '06-01-2023', '2023-06-01'):
+            rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                    rec('7', value, 'OWNER PERSON', 'BUYER LLC')]
+            self.assertEqual(title(rows)['current_deed_candidate']['book_page'], '7/1', value)
+
+    def test_lot_zero_is_the_index_saying_no_lot(self):
+        self.assertTrue(T.index_legal(rec('1', '', '', '', legal='LOT 0'))['unparsed'])
+
+    def test_a_lead_with_no_folio_says_so(self):
+        self.assertEqual(T.parcel_legal_reference([mortgage()], '')[1],
+                         "this lead carries no folio, so no record can be read as the parcel's")
+
     def test_the_clerks_trailing_time_slice_is_a_date(self):
         rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
                 rec('7', '6/1/2023 1', 'OWNER PERSON', 'BUYER LLC')]
@@ -346,10 +359,15 @@ class PresentTitleTests(unittest.TestCase):
         rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
                 rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
                 rec('8', '6/1/2024', 'OTHER', 'SOMEONE', legal='LOT 2')]
-        got = MPT.present_title({'title_parties': title(rows), 'owner': 'OWNER PERSON'})
+        got_title = title(rows)
+        got = MPT.present_title({'title_parties': got_title, 'owner': 'OWNER PERSON'})
         own = got['ownership']
         self.assertEqual((own['deed'], own['anchored_by']), ('7/1', 'legal_description'))
         self.assertEqual(own['legal_description_matched'], ['7/1'])
+        placed = next(n for n in got_title['search_names'] if n['name'] == 'BUYER LLC')
+        self.assertEqual(placed['why'], 'legal-description-placed deed grantee')
+        anchored = next(n for n in got_title['search_names'] if n['name'] == 'SELLER')
+        self.assertEqual(anchored['why'], 'folio-anchored deed grantor')
         self.assertEqual(own['legal_description_differs'], ['8/1'])
         self.assertEqual(own['legal_description_match_required'], [])
         self.assertFalse(any('legal-description matching' in h for h in got['held_because']))

@@ -34,11 +34,12 @@ def _date(value):
             return datetime.strptime(str(value or ''), fmt)
         except ValueError:
             pass
-    # The clerk also emits a trailing time slice ('2/1/2002 1'), which records_liens._parse_recd
-    # documents. Without this the deed reads as undated, and an undated deed suppresses the
-    # parcel's current deed candidate entirely.
-    head = str(value or '').split(' ')[0]
-    for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+    # The clerk also emits a trailing time slice ('2/1/2002 1') and a dashed form, both of which
+    # records_liens._parse_recd accepts. Without these the deed reads as undated, and an undated
+    # deed suppresses the parcel's current deed candidate entirely.
+    parts = str(value or '').split()
+    head = parts[0].strip() if parts else ''
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m-%d-%Y'):
         try:
             return datetime.strptime(head, fmt)
         except ValueError:
@@ -103,16 +104,20 @@ def build_title_parties(models, documents, docket, folio):
         return value.date() if value else None
     taken = {day(d['date_parsed']) for d in deeds}
     matched_days = {}
+    verdicts = {}
     for model, row, _printed, _own, conflict, _pages in candidates:
         # A deed whose folio names another parcel can never be placed here, so it does not make
         # a day ambiguous for one that can.
-        if not conflict and compare_legal(reference, index_legal(model), reference_gap)['verdict'] == 'matched':
+        if conflict:
+            continue
+        verdicts[row['source_ref']] = compare_legal(reference, index_legal(model), reference_gap)
+        if verdicts[row['source_ref']]['verdict'] == 'matched':
             matched_days[day(row['date_parsed'])] = matched_days.get(day(row['date_parsed']), 0) + 1
     for model, row, printed, own_folio, conflict, pages in candidates:
         ref = row['source_ref']
         verdict = None
         if not conflict:
-            verdict = compare_legal(reference, index_legal(model), reference_gap)
+            verdict = verdicts[ref]
             if verdict['verdict'] == 'matched' and not row['date_parsed']:
                 verdict = dict(verdict, verdict='needs_person', basis=None,
                                reason='its legal description matches the parcel but the index '
@@ -222,12 +227,14 @@ def _assemble(deeds, unanchored, gaps, flags, documents, docket):
                         % (link['to'], link['to_grantors'], link['from'], link['from_grantees']))
     anchored_roles = {}
     for d in ordered:
+        how = 'legal-description-placed deed' if d.get('anchored_by') == 'legal_description' else 'folio-anchored deed'
         for p in d['parties']:
-            anchored_roles.setdefault(name_key(p['name']), set()).add(p['role'])
+            anchored_roles.setdefault(name_key(p['name']), set()).add((how, p['role']))
     later = []
     for d in unanchored:
-        d['chain_link'] = sorted({'%s is an anchored-deed %s' % (p['name'], role)
-                                  for p in d['parties'] for role in anchored_roles.get(name_key(p['name']), ())})
+        d['chain_link'] = sorted({'%s is a %s %s' % (p['name'], how, role)
+                                  for p in d['parties']
+                                  for how, role in anchored_roles.get(name_key(p['name']), ())})
         grantors = {name_key(p['name']) for p in d['parties'] if p['role'] == 'grantor'}
         # Same day counts: the index times some recordings and not others, so a conveyance
         # recorded the day the current deed was cannot be ordered against it and is a question.
@@ -259,11 +266,14 @@ def _assemble(deeds, unanchored, gaps, flags, documents, docket):
                               'death_established':False,'status':'identity_sensitive_unresolved'})
     search_names = []
     seen = set()
+    placed = {d['source_ref'] for d in selected if d.get('anchored_by') == 'legal_description'}
     for p in title_parties:
         key = name_key(p['name'])
         if key and key not in seen:
             seen.add(key)
-            search_names.append({'name':p['name'],'why':'anchored deed '+p['role'],
+            search_names.append({'name':p['name'],
+                                 'why':('%s deed %s' % ('legal-description-placed' if
+                                        p['evidence']['source_ref'] in placed else 'folio-anchored', p['role'])),
                                  'source_ref':p['evidence']['source_ref']})
     def public(d):
         return {k:v for k,v in d.items() if k!='date_parsed'} if d else None
@@ -330,7 +340,9 @@ def _lots(text):
         # own when it is the whole description ('LOT B'), never alongside another lot.
         if not re.fullmatch(r'\d+[A-Z]?', token) and not (re.fullmatch(r'[A-Z]', token) and len(tokens) == 1):
             return None
-        lots.add(token.lstrip('0') or '0')
+        if not token.strip('0'):
+            return None           # 'LOT 0' is the index's "no lot", as '0/0' is its "no plat"
+        lots.add(token.lstrip('0'))
         i += 1
     return lots or None
 
@@ -463,7 +475,9 @@ def parcel_legal_reference(models, folio):
             if legal[field]:
                 stated[field] = stated.get(field, 0) + 1
     if merged is None:
-        return None, 'no record filed under this folio carries a complete index legal description'
+        return None, ('this lead carries no folio, so no record can be read as the parcel\'s'
+                      if not target else
+                      'no record filed under this folio carries a complete index legal description')
     # Corroborated means two records state the same thing, field by field. Two records that merge
     # because one is blank where the other is filled in leave that field resting on one keystroke,
     # and the blank fields here are plat and block: the ones a match turns on.
