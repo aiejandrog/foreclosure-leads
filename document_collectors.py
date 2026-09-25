@@ -339,6 +339,19 @@ def judgment_candidates(inventory):
     return out
 
 
+def links_uncounted_document(meta):
+    """Does this docket entry link a document while counting none?
+
+    OCS lists some entries with eventType "Judgment", numberOfDocuments 0 and a document link
+    (encID). All five of these that verify-12 fetched on 2026-09-24 (2022-012065 231731957 and
+    231732332, 2024-009959 231457423, 2023-020247 224020224, 2025-018660 231147826) answered with
+    the login 'Redirect' row: a document the county holds behind its login, not "no document".
+    """
+    count = meta.get('numberOfDocuments')
+    return (count in (0, None, '0') and bool(meta.get('encID'))
+            and str(meta.get('eventType') or '').strip().lower() == 'judgment')
+
+
 def collect_case_documents(county, case, records=None):
     from document_store import pipeline_folder as folder, pipeline_write as write, pipeline_report as report
     from document_queue import DocumentQueue
@@ -348,9 +361,11 @@ def collect_case_documents(county, case, records=None):
     jobs = []
     for entry in inventory['entries']:
         count = entry['expected_documents']
-        if count == 0:
+        if count == 0 and not links_uncounted_document(entry['metadata']):
             entry['inventory_status'] = 'county_reports_no_document'
             continue
+        # A linked document the docket does not count is asked for: the county's answer (its
+        # login page, or a count that disagrees) is recorded as a gap instead of "no document".
         try:
             attachments = client.attachments(case, entry['metadata'])
             entry['attachments'] = attachments

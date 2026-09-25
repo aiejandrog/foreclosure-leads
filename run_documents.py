@@ -77,10 +77,10 @@ THE NIGHTLY LINE is refresh-dealflow.bat's [2e/5] stage, after the [2b/5] record
     if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
 
 It does nothing until DEALFLOW_DOCS=1 is set; setting it is the decision to spend up to $1.00 a
-night on vision reads. --token-budget stays 0 (no paid owner-search tokens) until #53 routes token
-minting through PaidCutoffSolver; raising it is a separate change and then needs
---captcha-max-spend. --max-minutes 20 starts no new case after twenty minutes, so a slow clerk
-cannot hold the board rebuild behind it. --limit 25 with oldest-dossier-first ordering cycles every
+night on vision reads. --token-budget stays 0 (no paid owner-search tokens). #53 now routes token
+minting through PaidCutoffSolver, so raising it is possible, but it is a separate one-line change
+that must add --captcha-max-spend and needs the owner's go on the spend. --max-minutes 20 starts
+no new case after twenty minutes, so a slow clerk cannot hold the board rebuild behind it. --limit 25 with oldest-dossier-first ordering cycles every
 live Miami lead. Each night also writes dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no
 token, read, judgments found, judgments SATISFIED, and the commonest open gaps.
 
@@ -224,8 +224,16 @@ def summarize(dossiers):
             'per_case': rows}
 
 
-def mint_token(owner, qs_cache):
+def mint_token(owner, qs_cache, ladder=None):
     """Mint one Official Records search token for `owner` and cache it. Returns (token, reason).
+
+    `ladder` is run_owner_tokens.TokenLadder over a captcha_cost_cutoff.PaidCutoffSolver: cached
+    token, then the free browser session, and only then ONE paid solve, under the 300-submission
+    ceiling and the real-balance cutoff. main() always supplies it when --token-budget is above 0.
+    Until 2026-09-23 this called gen_records_qs.mint_qs with the default solver and three tries,
+    so the nightly's paid captcha path had no balance check and retried a solve whose charge was
+    unknown. A CutoffStopped from the ladder is NOT swallowed here: it ends paid minting for the
+    whole run, which is run_case's job to record.
 
     WHY THIS IS A FLAG AND NOT THE DEFAULT
     `gen_records_qs.py` fills `records_qs.json` nightly, 40 owners a run under an 8-minute
@@ -248,8 +256,14 @@ def mint_token(owner, qs_cache):
     split = R.split_owner((owner or '').strip())
     if not split:
         return None, 'no cached token, and the owner name could not be split for a search'
+    from captcha_cost_cutoff import CutoffStopped
     try:
-        token, hits = G.mint_qs(split)
+        if ladder is not None:
+            token, hits = ladder.search_token(owner, split)
+        else:
+            token, hits = G.mint_qs(split, tries=1)
+    except CutoffStopped:
+        raise
     except Exception as exc:
         return None, 'token mint failed: %s: %s' % (type(exc).__name__, str(exc)[:140])
     if not token:
@@ -278,13 +292,24 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
     token = qs_cache.get(owner)
     minted = None
     if not token and token_budget is not None and token_budget.get('left', 0) > 0:
-        token, minted = mint_token(owner, qs_cache)
-        token_budget['left'] -= 1
+        from captcha_cost_cutoff import CutoffStopped
+        try:
+            token, minted = mint_token(owner, qs_cache, ladder=token_budget.get('ladder'))
+            token_budget['left'] -= 1
+        except CutoffStopped as stop:
+            # The cutoff, the 300 ceiling or an unsettled charge: no further paid minting this run.
+            token, minted = None, 'captcha cutoff stopped paid minting for this run: %s' % stop
+            token_budget['left'] = 0
+            token_budget['stopped'] = str(stop)
         token_budget['spent'] = token_budget.get('spent', 0) + 1
     report, rows = None, []
     inventory = None
     models = []
     walk_report = None
+    # This case's share of the vision cap. With a CaseAllocator no case can spend a share another
+    # still-pending case has not used (document_case_budget); a plain Budget is passed through.
+    case_budget = (vision_budget.for_case(case) if hasattr(vision_budget, 'for_case')
+                   else vision_budget)
     if token:
         import records_liens
         models = records_liens.records_by_qs(token) or []
@@ -292,7 +317,7 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
             # Nightly runs keep done jobs; explicit --case runs deliberately re-read.
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
                             keep_images=keep_images, gray_cutoff=gray_cutoff, resume=resume,
-                            vision_budget=vision_budget, reuse_done=reuse_done)
+                            vision_budget=case_budget, reuse_done=reuse_done)
             rows = report['documents']
             inventory = report.get('_inventory')
         except Exception as exc:
@@ -342,6 +367,10 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
             if name_searcher is not None:
                 name_searcher.close()
         walk_report['name_search'] = plan
+    if hasattr(vision_budget, 'finish'):
+        # Paid reading for this case is over: what it left unspent is now borrowable by the cases
+        # still pending, and not before.
+        vision_budget.finish(case)
     if interpreter is not None and budget is not None:
         _interpret(rows, interpreter, budget)
     dossier = case_dossier.build(case, COUNTY, inventory=inventory, chain=entry.get('chain'),
@@ -448,6 +477,13 @@ def main(argv=None):
     parser.add_argument('--backfill', action='store_true',
                         help='resumable pass over EVERY Miami lead; requires explicit vision cap')
     parser.add_argument('--leads-file', help='backfill input snapshot (default leads_final.json)')
+    parser.add_argument('--timeline', action='store_true',
+                        help='backfill: after each case\'s documents, build its whole-case docket '
+                             'timeline (run_case_timeline) in the same checkpoint and the same '
+                             'per-case vision share')
+    parser.add_argument('--collect-dockets', action='store_true',
+                        help='backfill --timeline: refresh each case\'s full OCS docket first '
+                             '(free; without it a case with no saved docket is a named gap)')
     parser.add_argument('--retry-gaps', action='store_true',
                         help='backfill: retry finished attempts with outstanding gaps')
     parser.add_argument('--no-ocr', action='store_true', help='do not OCR scanned pages')
@@ -489,6 +525,12 @@ def main(argv=None):
                         help='start no new case after this many minutes (0 = no limit). The '
                              'nightly line sets it so a slow clerk cannot push the board rebuild '
                              'and publish that run after this stage back by hours')
+    parser.add_argument('--captcha-max-spend', type=float, default=None,
+                        help='required with --token-budget: the real-balance captcha cutoff in '
+                             'dollars, at most 1.50, enforced by captcha_cost_cutoff against the '
+                             'account balance. It is cumulative on its ledger and cannot be raised.')
+    parser.add_argument('--captcha-state', default='captcha/run_documents-captcha.json',
+                        help='captcha ledger under DEALFLOW_DIR (default %(default)s)')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     if args.backfill:
@@ -502,8 +544,8 @@ def main(argv=None):
             return document_backfill.run(args, sys.modules[__name__])
         except (OSError, ValueError, RuntimeError) as exc:
             parser.exit(2, 'backfill stopped: %s\n' % type(exc).__name__)
-    if args.leads_file or args.retry_gaps:
-        parser.error('--leads-file and --retry-gaps require --backfill')
+    if args.leads_file or args.retry_gaps or args.timeline or args.collect_dockets:
+        parser.error('--leads-file, --retry-gaps, --timeline and --collect-dockets require --backfill')
     if args.vision_max_spend is None:
         args.vision_max_spend = 1.00  # Preserve the existing nightly default.
     try:
@@ -536,6 +578,7 @@ def main(argv=None):
             parser.exit(2, '--vision needs a positive --vision-max-spend\n')
         import document_interpreter
         import document_vision
+        # Split into per-case shares below, once the roster is known.
         vision_budget = document_interpreter.Budget(args.vision_max_spend)
         try:
             document_vision.VisionReader().client()
@@ -547,6 +590,10 @@ def main(argv=None):
     # attempt before anyone noticed. A missing input that makes a whole night useless is an exit
     # here, not a per-case reason in 349 dossiers.
     if args.token_budget > 0:          # gen_records_qs.mint_qs solves through 2Captcha only
+        cap = args.captcha_max_spend
+        if cap is None or not math.isfinite(cap) or not 0 < cap <= 1.50:
+            parser.exit(2, '--token-budget needs --captcha-max-spend (dollars, above 0, at most '
+                           '1.50). Paid captcha runs only under the real-balance cutoff.\n')
         import captcha_solver
         if not captcha_solver.has_key():
             parser.exit(2, '--token-budget needs a 2Captcha key (captcha.key in '
@@ -591,9 +638,29 @@ def main(argv=None):
                      'yes' if entry['chain'] else 'no'))
         return 0
 
+    if vision_budget is not None:
+        from document_backfill import PersistentBudget
+        from document_case_budget import CaseAllocator, MemoryState
+        vision_budget = CaseAllocator(PersistentBudget(args.vision_max_spend, MemoryState()),
+                                      [entry['case'] for entry in picked])
     ocr = None if args.no_ocr else DS.winocr
-    queue = DocumentQueue()
     token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
+    captcha_state = solver = None
+    if token_budget:
+        import captcha_solver
+        from captcha_cost_cutoff import PaidCutoffSolver
+        from document_backfill import State
+        from run_owner_tokens import TokenLadder
+        ledger = case_review.output_path(args.captcha_state)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        captcha_state = State(ledger).__enter__()
+        try:
+            solver = PaidCutoffSolver(captcha_state, args.captcha_max_spend, captcha_solver._key())
+        except ValueError as exc:
+            captcha_state.__exit__(None, None, None)
+            parser.exit(2, 'captcha cutoff refused: %s\n' % exc)
+        token_budget['ladder'] = TokenLadder(qs_cache, solver)
+    queue = DocumentQueue()
     written = read_ok = 0
     dossiers = []
     started = time.monotonic()
@@ -620,6 +687,15 @@ def main(argv=None):
             _print_case(dossier)
     finally:
         queue.close()
+        if captcha_state is not None:
+            from captcha_cost_cutoff import CutoffStopped
+            token_budget['ladder'].close()
+            try:
+                token_budget['captcha_balance'] = solver.finish()
+            except CutoffStopped as stop:
+                token_budget['captcha_balance'] = {'balance_check_failed': True,
+                                                   'reason': str(stop)}
+            captcha_state.__exit__(None, None, None)
     print('run_documents: %d dossier(s) written, %d document(s) actually read.'
           % (written, read_ok))
     if dossiers:
@@ -634,11 +710,14 @@ def main(argv=None):
     if budget:
         print('  interpretation spend: $%.4f of $%.2f' % (budget.spent, budget.limit))
     if vision_budget:
-        print('  second-reader spend: $%.4f of $%.2f' % (vision_budget.spent,
-                                                         vision_budget.limit))
+        print('  second-reader spend: $%.4f of $%.2f (%d case share(s) of $%.4f)'
+              % (vision_budget.budget.spent, vision_budget.budget.limit,
+                 len(vision_budget.batch['roster']), vision_budget.batch['share']))
     if token_budget:
-        print('  search tokens minted: %d of %d allowed'
-              % (token_budget['spent'], args.token_budget))
+        print('  search tokens attempted: %d of %d allowed; captcha %s%s'
+              % (token_budget['spent'], args.token_budget,
+                 json.dumps(token_budget.get('captcha_balance')),
+                 ('; STOPPED: ' + token_budget['stopped']) if token_budget.get('stopped') else ''))
     if written and not read_ok:
         print('  NOTE: no document was read. On Miami scans that means OCR did not run or did '
               'not return text — every dossier section c is honestly empty.')

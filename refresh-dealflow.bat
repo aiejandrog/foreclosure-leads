@@ -224,9 +224,9 @@ rem  moving Palm Beach coverage.
 if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
 
 echo [2e/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
-rem  run_documents.py's documented nightly line, with --token-budget 0: no paid owner-search tokens
-rem  from here until #53 routes run_documents' token minting through PaidCutoffSolver. Raising it is
-rem  a separate one-line change. Setting DEALFLOW_DOCS=1 is the decision to spend up to $1.00 a
+rem  run_documents.py's documented nightly line, with --token-budget 0: no paid owner-search tokens.
+rem  #53 routes token minting through PaidCutoffSolver, so raising it is a separate one-line change
+rem  that must add --captcha-max-spend and needs the owner's go. Setting DEALFLOW_DOCS=1 is the decision to spend up to $1.00 a
 rem  night on vision reads; it is off until someone sets it on purpose. Exit code deliberately
 rem  unread: a document stage failing must never stop or mark the board rebuild.
 rem  --max-minutes 20: no new case starts after twenty minutes, so a slow clerk cannot delay the rebuild.

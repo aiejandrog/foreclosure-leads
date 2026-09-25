@@ -37,6 +37,7 @@ import document_collectors as DC
 import document_store as DS
 import document_vision as DV
 import document_interpreter as DI
+import judgment_money as JM
 from document_queue import DocumentQueue
 
 COUNTY = 'MIAMI-DADE'
@@ -90,12 +91,13 @@ def _is_case_court_paper(row, plaintiff_keys):
 
 # Money as a US court writes it. The decimals are required: "$500" in a judgment is nearly always
 # a fee or a cost, while the total carries cents. This is a CANDIDATE extractor, not a reader.
-MONEY_RE = re.compile(r'\$\s?([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})')
+MONEY_RE = re.compile(r'\$\s*([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})')
 # The labels a judgment's total actually carries. "GRAND TOTAL:" is on the pilot document and was
 # missing from the first version of this list, which is half of why a correctly-OCR'd $14,698.60
 # came out "not established"; the other half was that its value sat fifteen lines below it.
 TOTAL_RE = re.compile(r'\b(total\s+(?:sum|amount|indebtedness|due)|grand\s+total|amount\s+due|'
-                      r'there\s+is\s+due|total\s+judgment|total\s*:|'
+                      r'there\s+is\s+due|total\s+judgment|total\s*:|(?:amended|final)\s+total\b|'
+                      r'total\s+including\b|'
                       r'judgment\s+is\s+(?:hereby\s+)?entered)', re.I)
 
 
@@ -118,7 +120,7 @@ TOTAL_RE = re.compile(r'\b(total\s+(?:sum|amount|indebtedness|due)|grand\s+total
 # only admissible if the arithmetic below corroborates it.
 
 # A line that is nothing but a money figure: an entry in a value column.
-_ONLY_MONEY_RE = re.compile(r'^[\s|:.]*\$?\s?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})[\s|.]*$')
+_ONLY_MONEY_RE = JM.ONLY_MONEY_RE
 
 
 def _money_on(line):
@@ -147,40 +149,22 @@ def _column_blocks(lines):
 
     -> [(label_line_indexes, [values])]
     """
-    blocks = []
-    index, count = 0, len(lines)
-    while index < count:
-        if not _ONLY_MONEY_RE.match(lines[index]):
-            index += 1
-            continue
-        start = index
-        values = []
-        while index < count:
-            match = _ONLY_MONEY_RE.match(lines[index])
-            if match:
-                values.append(float(match.group(1).replace(',', '')))
-            elif lines[index].strip():
-                break
-            index += 1
-        labels = []
-        back = start - 1
-        while back >= 0:
-            line = lines[back]
-            if _ONLY_MONEY_RE.match(line):
-                break
-            if line.strip():
-                labels.append(back)
-            back -= 1
-        labels.reverse()
-        blocks.append((labels, values))
-    return blocks
+    return [(labels, [value for _, value in values])
+            for labels, values in JM.column_blocks(lines)]
 
 
-def column_values(lines):
-    """-> ({label line index: (value, how)}, [notes]) for the label/value columns on a page."""
+def column_values(lines, text_layer=False):
+    """-> ({label line index: (value, how)}, [notes]) for the label/value columns on a page.
+
+    `text_layer`: the page is an embedded text layer, where one figure under several lines is
+    labelled by the line above it and the lines it runs on from (JM.label_span), as in text_rows."""
     pairs, notes = {}, []
     for labels, values in _column_blocks(lines):
         if not labels or not values:
+            continue
+        if text_layer and len(values) == 1 and len(labels) > 1:
+            first, _ = JM.label_span(lines, labels)
+            pairs[first] = (abs(values[0]), 'column_pairing')
             continue
         if len(labels) == len(values):
             for label, value in zip(labels, values):
@@ -209,6 +193,13 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
 
     Returns {'ok', 'components', 'reason'}. `ok` False never means "the total is wrong" — it means
     "the document does not corroborate it", which is all that can honestly be said.
+
+    NO LONGER ADMITS ANYTHING (priority 2, 2026-09-24). Up to six of up to twenty-four figures is
+    ~134,000 combinations, enough to hit a five-figure total to the cent by coincidence, and it
+    never knew which figure was which. Every candidate is now checked by
+    judgment_money.verify_text_total: one contiguous run of labelled rows ending at the total,
+    every row in it counted, exact cents. This stays for callers that only want to see whether
+    some figures happen to add up.
     """
     others = [v for v in pool if 0 < v < total]
     seen, unique = set(), []
@@ -232,65 +223,9 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
 
 
 def labeled_sum_check(rows, total):
-    """Validate typed vision rows. Labels never decide which amounts to sum."""
-    components = []
-
-    def fail(reason):
-        return {'ok': False, 'components': [float(v) for v in components], 'reason': reason}
-
-    def cents(value):
-        amount = Decimal(str(value))
-        if not amount.is_finite() or amount != amount.quantize(Decimal('0.01')):
-            raise ValueError('not an exact cent amount')
-        return amount
-
-    try:
-        stated = cents(total) if total is not None else None
-        rates, charges, subtotals, totals, ids = set(), {}, [], [], set()
-        for row in rows:
-            # Guard only: label text never chooses a kind. A mis-typed charge
-            # equal to a printed daily/percentage rate requires review.
-            label = str(row.get('label') or '')
-            for value in re.findall(r'\$?([\d,]+(?:\.\d+)?)\s*(?:/\s*day\b|per\s+(?:day|diem)\b|%)', label, re.I):
-                rates.add(Decimal(value.replace(',', '')))
-            for value in re.findall(r'per\s+diem\s*:\s*\$?([\d,]+(?:\.\d+)?)', label, re.I):
-                rates.add(Decimal(value.replace(',', '')))
-            kind, identifier = row.get('kind'), row.get('id')
-            if (kind not in ('charge', 'rate', 'subtotal', 'total')
-                    or not isinstance(identifier, str) or not identifier or identifier in ids
-                    or row.get('confident') is not True):
-                return fail('missing/duplicate id, missing kind, or uncertain figure; review required')
-            ids.add(identifier)
-            if kind == 'rate':
-                rate = Decimal(str(row.get('amount')))
-                if not rate.is_finite():
-                    return fail('invalid rate')
-                rates.add(rate)
-                continue
-            amount = cents(row.get('amount'))
-            if kind == 'subtotal':
-                subtotals.append((amount, row.get('item_ids')))
-            elif kind == 'total':
-                totals.append(amount)
-            else:
-                charges[identifier] = amount
-                components.append(amount)
-        if any(amount in rates for amount in components):
-            return fail('charge equals a stated rate; review required')
-        if stated is not None and (not totals or any(amount != stated for amount in totals)):
-            return fail('missing or disagreeing kind=total')
-        for amount, members in subtotals:
-            if (not isinstance(members, list) or not members
-                    or any(not isinstance(m, str) or m not in charges for m in members)
-                    or len(members) != len(set(members))
-                    or sum(charges[m] for m in members) != amount):
-                return fail('printed subtotal lacks valid members or disagrees with its own items')
-        if stated is not None and (not components or sum(components) != stated):
-            return fail('all labeled additive items do not equal the stated total to the cent')
-    except (InvalidOperation, ValueError, TypeError):
-        return fail('invalid or sub-cent monetary figure')
-    return {'ok': True, 'components': [float(v) for v in components],
-            'reason': 'all labeled additive items sum exactly to stated total; subtotals agree'}
+    """Validate typed vision rows as ONE table: every row counts. Labels never decide which
+    amounts to sum. The contract itself lives in judgment_money.check_all."""
+    return JM.check_all(JM.vision_rows(rows), total)
 
 
 def admissible(candidate):
@@ -320,7 +255,9 @@ def judgment_amount_candidates(reading):
     decides whether it may be spoken as the amount.
     """
     out = []
-    pool = document_money(reading)
+    rows = JM.text_rows(reading, TOTAL_RE)
+    read_pages = {JM._page_no(p.get('page')) for p in reading['pages']
+                  if p['outcome'] in ('text', 'ocr_text')}
     for page in reading['pages']:
         # 'text' and 'ocr_text' only. A page that is still `needs_ocr` contributes NOTHING —
         # its `text` is empty by construction, and the stamp that used to sit there is parked in
@@ -329,25 +266,42 @@ def judgment_amount_candidates(reading):
         if page['outcome'] not in ('text', 'ocr_text'):
             continue
         lines = (page.get('text') or '').splitlines()
-        pairs, notes = column_values(lines)
+        pairs, notes = column_values(lines, text_layer=page['outcome'] == 'text')
+        number = JM._page_no(page['page'])
+        # A bare "TOTAL" closing a table of SUBTOTALs (judgment_money._bare_totals) is offered too.
+        closing = {r['line'] for r in rows if r['page'] == number and r['kind'] == 'total'
+                   and r.get('note', '').startswith('bare TOTAL')}
         for index, line in enumerate(lines):
-            if not TOTAL_RE.search(line):
+            if not TOTAL_RE.search(line) and index not in closing:
                 continue
             found = [(value, 'same_line', line) for value in _money_on(line)]
             if not found and index in pairs:
                 value, how = pairs[index]
                 found = [(value, how, line.strip() + '  ->  ' + '${:,.2f}'.format(value))]
             for value, how, passage in found:
-                check = sum_check(pool, value)
-                out.append({'amount': value, 'page': page['page'],
-                            'passage': passage.strip()[:300],
-                            'source': 'document_text', 'match': how,
-                            'text_source': page.get('text_source'), 'verified': False,
-                            'sum_check': check['ok'],
-                            'sum_check_reason': check['reason'],
-                            'sum_check_components': check['components'],
-                            'column_notes': notes if how == 'tail_figure' else []})
+                check = JM.verify_text_total(rows, JM._page_no(page['page']), index, value,
+                                             read_pages)
+                out.append(dict({'amount': value, 'page': page['page'],
+                                 'passage': passage.strip()[:300],
+                                 'source': 'document_text', 'match': how,
+                                 'text_source': page.get('text_source'), 'verified': False,
+                                 'column_notes': notes if how == 'tail_figure' else []},
+                                **_check_fields(check)))
     return out + composed_candidates(reading, out)
+
+
+def _check_fields(check):
+    """The judgment_money result as candidate fields. Rates, credits and subtotal membership are
+    kept so a reviewer sees exactly which printed rows made the total, and which were rates."""
+    return {'sum_check': check['ok'], 'sum_check_reason': check['reason'],
+            'sum_check_components': check['components'],
+            'sum_check_rows': check.get('component_rows') or [],
+            'sum_check_credits': check.get('credits') or [],
+            'sum_check_rates': check.get('rates') or [],
+            'sum_check_subtotals': check.get('subtotals') or [],
+            'sum_check_pages': check.get('pages') or [],
+            'sum_check_run': check.get('run'),
+            'sum_check_disagreeing_subtotals': check.get('disagreeing_subtotals') or []}
 
 
 # A judgment that states its parts and never states their sum. The 2026-09-22 read of
@@ -541,29 +495,63 @@ def vision_candidates(path, reading, budget, reader=None, out_dir=None):
         wanted = sorted({page['page'] for page in reading['pages']
                          if page['outcome'] in ('ocr_text', 'needs_ocr')})[:2]
     detail = DV.read_document(path, wanted, budget, reader=reader, out_dir=out_dir)
-    subtotal_failures = []
-    for page_no in {f['page'] for f in detail['figures'] if f.get('kind') == 'subtotal'}:
-        checked = labeled_sum_check([f for f in detail['figures'] if f['page'] == page_no], None)
-        if not checked['ok']:
-            subtotal_failures.append('page %s: %s' % (page_no, checked['reason']))
+    checks = JM.verify_document(detail['figures'], detail['grand_totals'], set(detail['pages']))
+    # A cost table that runs across a page break totals on a page whose own rows cannot reproduce
+    # it. Buy the page before, once, when OCR shows money on it; the same check then decides
+    # whether the run that crosses the break adds up.
+    before = continuation_pages(reading, detail, checks)
+    if before and not detail['errors']:
+        more = DV.read_document(path, before, budget, reader=reader, out_dir=out_dir)
+        detail['pages'].update(more['pages'])
+        detail['figures'] = sorted(detail['figures'] + more['figures'],
+                                   key=lambda f: JM._page_no(f.get('page')))
+        detail['grand_totals'] = sorted(detail['grand_totals'] + more['grand_totals'],
+                                        key=lambda t: JM._page_no(t.get('page')))
+        detail['usd'] = round(detail['usd'] + more['usd'], 6)
+        detail['errors'].update(more['errors'])
+        detail['continuation_pages'] = before
+        checks = JM.verify_document(detail['figures'], detail['grand_totals'],
+                                    set(detail['pages']))
     out = []
-    for total in detail['grand_totals']:
-        # Vision returns labels: never let the legacy OCR subset search override
-        # a rejected full table. Do not mix figures from different pages.
-        page_rows = [f for f in detail['figures'] if f['page'] == total['page']]
-        check = labeled_sum_check(page_rows, total['amount'])
-        if subtotal_failures:
-            check = {'ok': False, 'components': [], 'reason': '; '.join(subtotal_failures)}
-        page_detail = detail.get('pages', {}).get(total['page'], {})
-        if page_detail.get('unreadable') or detail.get('errors'):
-            check = {'ok': False, 'components': [], 'reason': 'vision has unresolved reading errors'}
-        out.append({'amount': total['amount'], 'page': total['page'],
-                    'passage': 'grand total transcribed from the page image',
-                    'source': 'page_image', 'match': 'vision_grand_total',
-                    'text_source': 'vision', 'verified': False,
-                    'sum_check': check['ok'], 'sum_check_reason': check['reason'],
-                    'sum_check_components': check['components'], 'column_notes': []})
+    for total, check in zip(detail['grand_totals'], checks):
+        unreadable = [p for p in (check.get('pages') or [total['page']])
+                      if (detail.get('pages', {}).get(p) or {}).get('unreadable')]
+        if unreadable or detail.get('errors'):
+            check = dict(check, ok=False, reason='vision has unresolved reading errors')
+        out.append(dict({'amount': total['amount'], 'page': total['page'],
+                         'passage': 'grand total transcribed from the page image',
+                         'source': 'page_image', 'match': 'vision_grand_total',
+                         'text_source': 'vision', 'verified': False, 'column_notes': []},
+                        **_check_fields(check)))
     return out, detail
+
+
+def _page_has_money(page):
+    text = '\n'.join((page.get('text') or '', page.get('provisional_ocr_text') or '',
+                      (page.get('supplemental_ocr') or {}).get('text') or ''))
+    return bool(re.search(r'\$\s?\d[\d,]*\.\d{2}', text))
+
+
+def continuation_pages(reading, detail, checks):
+    """Pages to buy because a total's table may start on them. -> sorted page numbers.
+
+    Only the page directly before a total whose own page did not reproduce it, only when that
+    page was not already read or refused, and only when its text shows a money figure: selection
+    before paying, not a second pass over the document.
+    """
+    by_page = {JM._page_no(p.get('page')): p for p in reading.get('pages') or []}
+    out = set()
+    for check in checks:
+        # Either the run or a subtotal may need the rows that end the page before.
+        if check['ok'] or not str(check['reason']).startswith(('no contiguous run',
+                                                               'printed subtotal')):
+            continue
+        prior = JM._page_no(check.get('page')) - 1
+        page = by_page.get(prior)
+        if (prior >= 1 and page is not None and prior not in detail['pages']
+                and prior not in detail['errors'] and _page_has_money(page)):
+            out.add(prior)
+    return sorted(out)
 
 
 def _save_vision(row, detail):
@@ -790,7 +778,7 @@ PIPELINE_VERSION = 10
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         judgments_only=False, keep_images=False, gray_cutoff=None, resume=False,
-        vision_budget=None, vision_reader=None, reuse_done=False):
+        vision_budget=None, vision_reader=None, reuse_done=False, as_of=None):
     inventory = enumerate_case(case, collector=collector)
     records = list(records or [])
     # INDEX EVERY ROW WE WERE HANDED, before the judgment filter throws most of them away.
@@ -833,18 +821,86 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
                 if document_walk.key_of(c['book'], c['page_no']) not in own]
     except Exception:
         pass                       # citations are an addition; they never fail a pilot run
-    candidates = [c for row in rows if not is_satisfaction_row(row)
+    # WHOSE INSTRUMENT IS IT. A name search returns other people's judgments too, and before
+    # 2026-09-24 every figure read off any of them could become "the judgment amount": on
+    # 2025-018660 a 2011 judgment against another person set $3,037.43 and "no outstanding debt"
+    # while the real judgment is $270,322.07 (verify-12 defect 5). The same free test that decides
+    # what the paid reader may buy now decides which figures may stand for this case. The others
+    # are still read and reported, under judgment_amount_other_instruments.
+    import document_prioritizer as DP
+    plan, plan_gap = None, None
+    try:
+        plan = DP.prioritize(case, inventory, as_of or datetime.now().date().isoformat())
+    except ValueError as exc:
+        plan_gap = str(exc)
+    by_ref = {}
+    for record in records:
+        by_ref.setdefault('official_records/%s-%s' % (record.get('reC_BOOK'), record.get('reC_PAGE')),
+                          record)
+    judgment_dates = DP.docket_judgment_dates(plan)
+    for row in rows:
+        if row.get('reading'):
+            row['case_tie'] = DP.case_tie(case, row, by_ref.get(row.get('source_ref')),
+                                          judgment_dates, plaintiffs=plaintiffs)
+        else:
+            row['case_tie'] = {'tier': None, 'reason': 'no_stored_reading'}
+    candidates = [c for row in rows if not is_satisfaction_row(row) and _tied(row)
                   for c in (row.get('amount_candidates') or [])]
+    other_instruments = [{'source_ref': row.get('source_ref'), 'amount': c.get('amount'),
+                          'sum_check': bool(c.get('sum_check')),
+                          'reason': row['case_tie'].get('reason'),
+                          'detail': row['case_tie'].get('detail')}
+                         for row in rows if not is_satisfaction_row(row) and not _tied(row)
+                         for c in (row.get('amount_candidates') or [])]
     tried = [t for row in rows for t in (row.get('gray_cutoffs_tried') or [])]
 
-    # The second reader, and ONLY when the first one's figures did not add up. If OCR produced a
-    # total the document's line items reproduce, there is nothing left to buy.
+    # SELECTION BEFORE SPENDING. The paid reader used to walk `rows` in the order the owner-name
+    # search returned them, so on the 2026-09-23 five-case pilot the first case bought pages of
+    # historical and other-lawsuit judgments until the approval ran out, before it reached its own
+    # current judgment. recorded_read_order ranks from free facts (docket judgment dates, the case
+    # number printed on the page, the recording date, the case year) and names every row it will
+    # not pay for, with the reason. It decides what to BUY first, never which judgment controls.
+    selection = None
+    if vision_budget is not None:
+        selection = DP.recorded_read_order(case, rows, records, plan)
+        selection['plan_gap'] = plan_gap
+        selected_refs = {r['source_ref'] for r in selection['order']}
+        for item in selection['deferred']:
+            for row in rows:
+                if row.get('source_ref') == item['source_ref']:
+                    row['paid_read'] = dict(item, selected=False)
+        for item in selection['order']:
+            item['row']['paid_read'] = {'selected': True, 'tier': item['tier'],
+                                        'recorded': item['recorded'],
+                                        'docket_judgment_date': item['docket_judgment_date'],
+                                        'later_orders': item['later_orders']}
+        # Only a corroborated figure on a SELECTED document makes the second reader unnecessary. A
+        # corroborated total on another lawsuit's judgment is not this case's amount, and letting it
+        # switch the reader off would leave the real one unread.
+        already = any(c.get('sum_check') for row in rows
+                      if row.get('source_ref') in selected_refs
+                      for c in (row.get('amount_candidates') or []))
     vision = None
-    if vision_budget is not None and not any(c.get('sum_check') for c in candidates):
-        vision = {'pages_read': 0, 'usd': 0.0, 'documents': [], 'pages': []}
-        for row in rows:
-            if row.get('status') != 'stored' or not row.get('reading') or is_satisfaction_row(row):
-                continue
+    if vision_budget is not None and not already:
+        vision = {'pages_read': 0, 'usd': 0.0, 'documents': [], 'pages': [],
+                  'selection': {'order': [{k: v for k, v in r.items() if k != 'row'}
+                                          for r in selection['order']],
+                                'deferred': selection['deferred'],
+                                'docket_judgment_dates': selection['docket_judgment_dates'],
+                                'plan_gap': selection['plan_gap'],
+                                'basis': selection['basis']},
+                  'not_read_budget': []}
+        for position, item in enumerate(selection['order']):
+            row = item['row']
+            if getattr(vision_budget, 'exhausted', False):
+                # This case's share is spent. Every selected document not yet bought is a named
+                # gap, in selection order, so a reader sees exactly what the money did not reach.
+                for rest in selection['order'][position:]:
+                    rest['row']['vision_figures'] = []
+                    rest['row']['vision_errors'] = {'*': 'budget_exhausted: this case\'s vision '
+                                                         'share was spent before this document'}
+                    vision['not_read_budget'].append(rest['source_ref'])
+                break
             found, detail = vision_candidates(
                 row['path'], row['reading'], vision_budget, reader=vision_reader,
                 out_dir=row.get('images_dir'))
@@ -863,7 +919,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
             # actually transcribed or to tell a bad read from an honest "no total on this page".
             # A metered reader whose output is not persisted is money spent on nothing.
             _save_vision(row, detail)
-            candidates.extend(found)
+            candidates.extend(found)      # selected rows are tied to this case (tier 0 or 1)
             vision['pages_read'] += len(detail['pages'])
             vision['usd'] = round(vision['usd'] + detail['usd'], 6)
             # Per PAGE, not just per document. A nightly cap set from a per-document total is
@@ -905,6 +961,8 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         # arithmetic does not corroborate is not "the judgment amount" anywhere in this report.
         'judgment_amount_agreed': agreed_amount([c for c in candidates if admissible(c)]),
         'judgment_amount_rejected': [c for c in candidates if not admissible(c)],
+        # Figures on instruments nothing ties to this case: read, reported, never this case's.
+        'judgment_amount_other_instruments': other_instruments,
         'judgment_amount_status': 'unverified_extraction',
         'gray_cutoffs_tried': tried,
         'vision': vision,
@@ -934,6 +992,12 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     # before anything is written to disk.
     report['_inventory'] = inventory
     return report
+
+
+def _tied(row):
+    """Is this stored row tied to the case (prints its number, or recorded near a docket judgment)?
+    A row with no `case_tie` at all is not: an untested instrument never sets a case's amount."""
+    return (row.get('case_tie') or {}).get('tier') in (0, 1)
 
 
 def strip_readings(report):
@@ -1003,6 +1067,8 @@ def corroborated_figures(report):
     """Each figure the document's own line items reproduced, with the PDF and page it came off."""
     out = []
     for row in report.get('documents', []):
+        if not _tied(row):
+            continue
         for c in row.get('amount_candidates') or []:
             if not c.get('sum_check'):
                 continue
@@ -1038,7 +1104,7 @@ def judgment_for_analyze(report, allow_ocr=False):
     """
     good = [r for r in report.get('documents', [])
             if r.get('page_count_verified') and r.get('read_status') == 'read'
-            and not is_satisfaction_row(r)]
+            and not is_satisfaction_row(r) and _tied(r)]
     candidates = [c for r in good for c in (r.get('amount_candidates') or [])]
     if allow_ocr:
         # The escape hatch gets a guard. A scanned figure is admissible only when the page's own

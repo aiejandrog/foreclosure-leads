@@ -129,11 +129,35 @@ def write_timeline(dossier_path, timeline, markdown):
     return {'json': str(json_path), 'markdown': str(md_path)}
 
 
-def read_amounts(rows, base, budget=None):
-    """Reuse hash-bound private evidence; paid selection requires an explicit budget."""
+def read_amounts(rows, base, budget=None, plan=None):
+    """Reuse hash-bound private evidence; paid selection requires an explicit budget.
+
+    Paid reads follow the docket plan (document_prioritizer.timeline_read_order), not the order the
+    evidence files sort in on disk, and stop at this case's share of the cap: every document the
+    share did not reach is a named `budget_exhausted` gap rather than a silent omission.
+    """
+    import judgment_money as JM
     import miami_timeline_amounts as amounts
-    result = {'figures': [], 'gaps': [], 'evidence_files': []}
+    result = {'figures': [], 'gaps': [], 'evidence_files': [], 'amount_checks': []}
+    kinds = {str(d.get('entry_id')): d.get('kind') for d in (plan or {}).get('documents') or []}
+    if budget is not None:
+        import document_prioritizer as DP
+        selection = DP.timeline_read_order(plan, rows)
+        result['selection'] = {'order': [r.get('source_ref') for r in selection['order']],
+                               'deferred': selection['deferred']}
+        result['gaps'].extend(dict(item, reason='paid_read_not_selected: ' + item['reason'])
+                              for item in selection['deferred']
+                              if amounts.amount_page_numbers(
+                                  next((r.get('reading') or {} for r in rows
+                                        if r.get('source_ref') == item['source_ref']), {})))
+        rows = selection['order']
     for row in rows:
+        if budget is not None and getattr(budget, 'exhausted', False):
+            if amounts.amount_page_numbers(row.get('reading') or {}):
+                result['gaps'].append({'source_ref': row.get('source_ref'),
+                                       'reason': 'budget_exhausted: this case\'s vision share '
+                                                 'was spent before this document'})
+            continue
         current_hash = ((row.get('manifest') or {}).get('source_sha256') or
                         (row.get('manifest') or {}).get('sha256'))
         key = hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest()
@@ -146,6 +170,9 @@ def read_amounts(rows, base, budget=None):
             detail = dict(detail)
         else:
             if not amounts.amount_page_numbers(row.get('reading') or {}):
+                gap = no_amount_text_gap(row, kinds.get(str(row.get('entry_ref') or '')))
+                if gap:
+                    result['gaps'].append(gap)
                 continue
             detail = amounts.assess_amount_pages(row, budget)
         detail['source_ref'] = row.get('source_ref')
@@ -156,12 +183,86 @@ def read_amounts(rows, base, budget=None):
             DS.pipeline_write(path, detail)
         result['evidence_files'].append(str(path))
         result['gaps'].extend(dict(gap, source_ref=row.get('source_ref')) for gap in detail.get('gaps', []))
+        # The one exact-cents check (judgment_money): a figure inside a run of printed rows that
+        # reproduces the document's own printed total is 'in_verified_table'. That is arithmetic
+        # agreement on one filing, never an award, an open balance or an equity input.
+        checks = JM.verify_document(detail.get('figures') or [], detail.get('grand_totals') or [],
+                                    {JM._page_no(p) for p in (detail.get('pages') or {})})
+        if detail.get('gaps') or detail.get('errors'):
+            checks = [dict(c, ok=False, reason='amount pages have unresolved reading gaps')
+                      for c in checks]
+        in_table = {r['gid'] for c in checks if c['ok'] for r in c['component_rows']}
+        result.setdefault('amount_checks', []).extend(
+            {'source_ref': row.get('source_ref'), 'entry_id': detail['entry_id'],
+             'amount': c['amount'], 'page': c['page'], 'ok': c['ok'], 'reason': c['reason'],
+             'pages': c['pages'], 'run': c['run'], 'components': c['components'],
+             'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals']}
+            for c in checks)
         result['figures'].extend(dict(figure, source_ref=row.get('source_ref'),
             document_key=detail['document_key'], document_hash=detail['document_hash'],
-            entry_id=detail['entry_id'], verification_status='unverified',
+            entry_id=detail['entry_id'],
+            verification_status=('in_verified_table'
+                                 if 'p%d:%s' % (JM._page_no(figure.get('page')), figure.get('id'))
+                                 in in_table else 'unverified'),
             interpretation='Vision-extracted amount; not an accepted judgment or equity input')
             for figure in detail.get('figures', []))
     return result
+
+
+_AMOUNT_KINDS = ('final_judgment', 'judgment')
+
+
+def no_amount_text_gap(row, kind):
+    """A judgment whose pages carry no dollar text is a gap, not "no amount" (Greptile on #53):
+    its money page may be a scan OCR could not read, or a watermark. Other filings with no dollar
+    text are not gaps; most have no amount."""
+    import document_coverage as COV
+    # Only the judgment itself must state an amount; a motion for summary judgment need not.
+    if kind not in _AMOUNT_KINDS:
+        return None
+    pages = (row.get('reading') or {}).get('pages') or []
+    unread = [p.get('page') for p in pages if not COV.page_is_read(p)]
+    return {'source_ref': row.get('source_ref'),
+            'reason': ('amount_page_unreadable: no dollar text found and %d of %d page(s) unread '
+                       '(%s)' % (len(unread), len(pages), ', '.join(str(p) for p in unread[:8]))
+                       if unread or not pages else
+                       'amount_text_not_found: every page was read and none carries a dollar figure')}
+
+
+def keep_cached_amounts(paid, cached):
+    """Put back the saved figures of documents the paid pass did not read.
+
+    The paid pass reads only the documents it selects, up to this case's share. A document it
+    deferred or never reached keeps the figures its saved, hash-checked evidence already gives
+    (Greptile on #53: they vanished from the final timeline). Its 'not selected' or
+    'budget exhausted' gap is dropped, because the saved evidence answers it."""
+    read = set(paid.get('evidence_files') or [])
+    kept = {}
+    for path in cached.get('evidence_files') or []:
+        if path not in read:
+            kept[path] = None
+    if not kept:
+        return paid
+    refs = {f.get('source_ref') for f in cached.get('figures') or []} | {
+        c.get('source_ref') for c in cached.get('amount_checks') or []}
+    refs = {r for r in refs if _evidence_path_of(r, cached) in kept}
+    out = dict(paid)
+    out['evidence_files'] = list(paid.get('evidence_files') or []) + list(kept)
+    out['figures'] = list(paid.get('figures') or []) + [
+        f for f in cached.get('figures') or [] if f.get('source_ref') in refs]
+    out['amount_checks'] = list(paid.get('amount_checks') or []) + [
+        c for c in cached.get('amount_checks') or [] if c.get('source_ref') in refs]
+    out['gaps'] = [g for g in paid.get('gaps') or []
+                   if not (g.get('source_ref') in refs and str(g.get('reason') or '').startswith(
+                       ('paid_read_not_selected', 'budget_exhausted')))] + [
+        g for g in cached.get('gaps') or [] if g.get('source_ref') in refs]
+    return out
+
+
+def _evidence_path_of(source_ref, cached):
+    key = hashlib.sha256(str(source_ref).encode()).hexdigest()
+    return next((p for p in cached.get('evidence_files') or []
+                 if Path(p).name == 'amount-vision-' + key + '.json'), None)
 
 
 def summary_counts(rows, timeline):
@@ -177,6 +278,92 @@ def summary_counts(rows, timeline):
             'pending_types': dict(Counter(p.get('type', 'unknown') for p in timeline.get('pending', [])))}
 
 
+def recorded_copies(case):
+    """Stored Official Records documents for this case, each with the kind its own text reads
+    as and its recording date: the pool an unreadable court filing's public copy can come from."""
+    import document_classify
+    out = []
+    for manifest, reading in DS.stored_documents(COUNTY, case):
+        ref = str(manifest.get('source_ref') or '')
+        if not ref.startswith('official_records/'):
+            continue
+        out.append({'source_ref': ref, 'reading': reading,
+                    'recorded_date': (manifest.get('record_key') or {}).get('rec_date'),
+                    'kind': document_classify.classify(reading).get('kind')})
+    return out
+
+
+def case_coverage(case, inventory, rows, timeline):
+    import document_coverage
+    return document_coverage.coverage(inventory, rows, timeline.get('entries'),
+                                      recorded_copies(case), case)
+
+
+def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, ledger=None,
+                  cap=None):
+    """One case's whole-case timeline: acquire, free reading, then (with `shared`, a
+    document_case_budget.CaseAllocator) paid amount reads within this case's share.
+
+    The one per-case body behind both this command and `run_documents --backfill --timeline`, so
+    the orchestrated run and the standalone run cannot drift apart. -> (timeline, paths)
+    """
+    import miami_case_timeline
+    import miami_timeline_ocr
+    import document_prioritizer
+    import run_documents
+    as_of = as_of.isoformat() if hasattr(as_of, 'isoformat') else str(as_of)
+    budget = shared.for_case(case) if shared is not None else None
+    inventory, rows = acquire(case, collect=collect,
+                              docket_cache=docket_cache or Path(__file__).with_name('dockets.json'))
+    base = DS.pipeline_folder(COUNTY, case)
+    rows = [miami_timeline_ocr.supplement(row, base / 'timeline-ocr') for row in rows]
+    timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
+    timeline['source_comparison'] = inventory.get('source_comparison')
+    timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+    # Preserve the free whole-case analysis even if a paid reader fails.
+    if ledger is not None:
+        timeline['vision_budget'] = budget_snapshot(ledger, cap)
+    timeline['counts'] = summary_counts(rows, timeline)
+    cached_amounts = read_amounts(rows, base)
+    if cached_amounts['evidence_files']:
+        timeline['amount_vision'] = cached_amounts
+        timeline.setdefault('gaps', []).extend(cached_amounts['gaps'])
+        timeline.setdefault('amounts', []).extend(cached_amounts['figures'])
+        if cached_amounts['gaps']:
+            timeline['coverage_complete'] = False
+    write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
+                   miami_case_timeline.render_markdown(timeline))
+    if budget is not None:
+        # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
+        timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
+        timeline['source_comparison'] = inventory.get('source_comparison')
+        timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+        try:
+            plan = document_prioritizer.prioritize(case, inventory, as_of)
+        except ValueError:
+            plan = None      # every row is then deferred as not_in_docket_plan
+        amounts = keep_cached_amounts(read_amounts(rows, base, budget, plan=plan), cached_amounts)
+        shared.finish(case)
+        timeline['amount_vision'] = amounts
+        timeline.setdefault('gaps', []).extend(amounts['gaps'])
+        timeline.setdefault('amounts', []).extend(amounts['figures'])
+        if amounts['gaps']:
+            timeline['coverage_complete'] = False
+    spending = (budget_snapshot(ledger, cap) if ledger is not None
+                else {'status': 'free_run', 'paid_requests_this_command': 0})
+    if budget is not None:
+        spending['paid_requests_this_command'] = budget.calls
+        spending['case_share'] = shared.report(case)
+    timeline['vision_budget'] = spending
+    timeline['counts'] = summary_counts(rows, timeline)
+    paths = write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
+                           miami_case_timeline.render_markdown(timeline))
+    print(json.dumps({'case': case, 'status': timeline.get('status'), 'files': paths,
+                      'counts': timeline['counts'], 'source_comparison': timeline.get('source_comparison'),
+                      'vision_budget': spending}), flush=True)
+    return timeline, paths
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', action='append', required=True)
@@ -184,65 +371,38 @@ def main(argv=None):
     parser.add_argument('--docket-cache', type=Path, default=Path(__file__).with_name('dockets.json'),
                         help='Compact cache to compare only; never used to build timeline')
     parser.add_argument('--as-of', default=date.today().isoformat(), type=date.fromisoformat)
-    parser.add_argument('--vision-max-spend', required=True, type=float,
-                        help='Existing shared cumulative cap, at most $1')
+    parser.add_argument('--vision-max-spend', type=float, default=None,
+                        help='Existing shared cumulative cap, at most $1. Required with --vision; '
+                             'without --vision it is optional and only reported')
     parser.add_argument('--vision', action='store_true', help='Read only amount-bearing pages within shared cap')
     args = parser.parse_args(argv)
     import case_review
-    import run_documents
-    import miami_case_timeline
     try:
         cases = list(dict.fromkeys(validate_case(case) for case in args.case))
         ledger = case_review.output_path('title_discovery/vision-budget.json')
-        spending = budget_snapshot(ledger, args.vision_max_spend)
-        if args.vision_max_spend > 1:
+        if args.vision_max_spend is None or args.vision_max_spend == 0:
+            # A free run: nothing is authorized, so there is no cap to observe against.
+            if args.vision:
+                raise ValueError('--vision needs a positive --vision-max-spend')
+            ledger, args.vision_max_spend = None, None
+            spending = {}
+        else:
+            spending = budget_snapshot(ledger, args.vision_max_spend)
+        if (args.vision_max_spend or 0) > 1:
             raise ValueError('This run is authorized for at most $1 cumulative vision spend')
         if args.vision and spending['status'] != 'observed':
             raise ValueError('Existing shared vision ledger required; refusing to reset cumulative spend')
     except ValueError as exc:
         parser.error(str(exc))
     from document_backfill import State, PersistentBudget
+    from document_case_budget import CaseAllocator
     with (State(ledger) if args.vision else nullcontext()) as state:
-        budget = PersistentBudget(args.vision_max_spend, state) if args.vision else None
+        # One share per named case: the first case cannot spend what the others were given.
+        shared = (CaseAllocator(PersistentBudget(args.vision_max_spend, state), cases)
+                  if args.vision else None)
         for case in cases:
-            inventory, rows = acquire(case, collect=args.collect, docket_cache=args.docket_cache)
-            import miami_timeline_ocr
-            base = DS.pipeline_folder(COUNTY, case)
-            rows = [miami_timeline_ocr.supplement(row, base / 'timeline-ocr') for row in rows]
-            timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
-            timeline['source_comparison'] = inventory.get('source_comparison')
-            # Preserve the free whole-case analysis even if a paid reader fails.
-            timeline['vision_budget'] = budget_snapshot(ledger, args.vision_max_spend)
-            timeline['counts'] = summary_counts(rows, timeline)
-            cached_amounts = read_amounts(rows, base)
-            if cached_amounts['evidence_files']:
-                timeline['amount_vision'] = cached_amounts
-                timeline.setdefault('gaps', []).extend(cached_amounts['gaps'])
-                timeline.setdefault('amounts', []).extend(cached_amounts['figures'])
-                if cached_amounts['gaps']:
-                    timeline['coverage_complete'] = False
-            write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
-                           miami_case_timeline.render_markdown(timeline))
-            if budget is not None:
-                # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
-                timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
-                timeline['source_comparison'] = inventory.get('source_comparison')
-                amounts = read_amounts(rows, DS.pipeline_folder(COUNTY, case), budget)
-                timeline['amount_vision'] = amounts
-                timeline.setdefault('gaps', []).extend(amounts['gaps'])
-                timeline.setdefault('amounts', []).extend(amounts['figures'])
-                if amounts['gaps']:
-                    timeline['coverage_complete'] = False
-            spending = budget_snapshot(ledger, args.vision_max_spend)
-            if budget is not None:
-                spending['paid_requests_this_command'] = budget.calls
-            timeline['vision_budget'] = spending
-            timeline['counts'] = summary_counts(rows, timeline)
-            paths = write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
-                                   miami_case_timeline.render_markdown(timeline))
-            print(json.dumps({'case': case, 'status': timeline.get('status'), 'files': paths,
-                              'counts': timeline['counts'], 'source_comparison': timeline.get('source_comparison'),
-                              'vision_budget': spending}), flush=True)
+            timeline_case(case, args.as_of, collect=args.collect, docket_cache=args.docket_cache,
+                          shared=shared, ledger=ledger, cap=args.vision_max_spend)
     return 0
 
 

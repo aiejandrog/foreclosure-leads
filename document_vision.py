@@ -165,15 +165,21 @@ def _parse_assessment(text):
 
 
 def _amount(value):
+    """A printed amount as a float. "(1,200.00)" is how a judgment prints a credit, so a figure
+    wrapped in parentheses keeps its sign instead of silently becoming a charge."""
     if value is None:
         return None
-    match = _NUM_RE.search(str(value).replace('$', ''))
+    text = str(value).replace('$', '')
+    match = _NUM_RE.search(text)
     if not match:
         return None
     try:
-        return float(match.group(0).replace(',', ''))
+        amount = float(match.group(0).replace(',', ''))
     except ValueError:
         return None
+    if amount > 0 and re.match(r'^\s*\(\s*-?[0-9][0-9,]*(?:\.[0-9]+)?\s*\)\s*$', text):
+        amount = -amount
+    return amount
 
 
 def _parse(text):
