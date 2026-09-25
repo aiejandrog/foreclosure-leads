@@ -127,7 +127,7 @@ try:
                               {'docketDescrition': 'Sale Cancelled', 'comments': 'CANCELLED PER BANKRUPTCY', 'eventDate': '03/10/2026'},
                               DISMISS('06/01/2026', '26-11111')],          # the stay acting, then its own dismissal
         '2099-000021-CA-01': [BK('03/01/2026'), {'docketDescrition': 'Notice of Bankruptcy', 'eventDate': '03/01/2026'},
-                              DISMISS('06/01/2026')],                      # two petition lines one day, one case
+                              CLOSE('06/01/2026', 'Order Dismissing Bankruptcy Case')],  # two petition lines one day, one case
         '2099-000022-CA-01': [BK('03/01/2026', '26-11111'), BK('08/01/2026', '26-33333'),
                               DISMISS('09/15/2026', '26-11111')],          # same as 18, but no stay held yet
         '2099-000023-CA-01': [BK('03/01/2026', '26-11111'), BK('05/01/2026', '26-22222'), BK('08/01/2026', '26-33333'),
@@ -234,6 +234,141 @@ try:
           on('2099-000025-CA-01') and _cache_now['2099-000025-CA-01'].get('a') is True)
     check('an older case reinstated after the newer one closed is active again',
           on('2099-000026-CA-01') and _cache_now['2099-000026-CA-01'].get('a') is True)
+    # DEFECT 9 (12-case verification 2026-09-24): bankruptcy orders reach the state docket as
+    # "Notice of Filing: ..." and name the chapter, not the word bankruptcy. The shapes it takes:
+    NOF = lambda d, t, c='': {'docketDescrition': 'Notice of Filing: ' + t, 'eventDate': d, 'comments': c}
+    _stay = lambda *rows: SH._bk_stay(list(rows))
+    check('a chapter 13 dismissal filed as a Notice of Filing ends the stay',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'))[0] is False)
+    check('a chapter 13 REINSTATEMENT after that dismissal makes the stay active again',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Reinstating Chapter 13 Case'))[0] is True)
+    check('a reinstatement naming only the federal case number counts too',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Case 23-17967'),
+                NOF('01/31/2024', 'Order Granting Motion to Reinstate Case 23-17967'))[0] is True)
+    check('a dismissal naming only the federal case number ends that stay',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Case 23-17967'))[0] is False)
+    check('an order vacating the dismissal and reinstating the case is a reinstatement, not a dismissal',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Vacating Dismissal and Reinstating Chapter 13 Case'))[0] is True)
+    # The clerk's own entries on 2018-026274-CA-01 (events 209208510 and 209744732, code NFILCV),
+    # copied verbatim from the raw docket by the desktop session: the description is the bare
+    # "Notice of Filing:" and the order is only in the comments. The first comment never says
+    # "bankruptcy", so only the chapter words find it.
+    RAW = lambda d, c: {'docketCode': 'NFILCV', 'docketDescrition': 'Notice of Filing:', 'eventDate': d, 'comments': c}
+    _dismissed = RAW('01/12/2024', 'ORDER DENYING CONFIRMATION AND DISMISSING CHAPTER 13 CASE')
+    _reinstated = RAW('02/02/2024', 'copy Order Reinstating Chapter 13 Bankruptcy')
+    check("the clerk's verbatim chapter 13 dismissal notice ends the stay",
+          _stay(BK('06/15/2023', '23-17967'), _dismissed)[0] is False)
+    check("the clerk's verbatim reinstatement notice brings the stay back",
+          _stay(BK('06/15/2023', '23-17967'), _dismissed, _reinstated)[0] is True)
+    check('a voluntary chapter 13 petition filed as a Notice of Filing opens a stay',
+          _stay(NOF('02/01/2026', 'Voluntary Petition Chapter 13'))[0] is True)
+    check('a bare dismissal of a defendant never ends a bankruptcy stay',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Voluntary Dismissal as to Defendant Unknown Tenant'))[0] is True)
+    # 2025-012246-CA-01 (sweep of all Miami leads, 2026-09-24), verbatim from the fresh docket: the
+    # foreclosure court's agreed order DENYING a motion to dismiss the foreclosure, with no bankruptcy
+    # number on it, read as the stay's dismissal and left a 10-05 sale callable under a live petition.
+    _sg = lambda c: {'docketCode': 'SGBK', 'docketDescrition': 'Suggestion of Bankruptcy', 'eventDate': '09/30/2025', 'comments': c}
+    check('an order denying a motion to dismiss the foreclosure never ends a bankruptcy stay',
+          _stay(_sg('AMENDED BKC: 25-20935-RAM'), _sg('NO BANKRUPTCY CASE NUMBER'),
+                {'docketCode': 'NCHRCV', 'docketDescrition': 'Notice of Cancellation of Hearing', 'eventDate': '02/17/2026', 'comments': ''},
+                {'docketCode': 'ODMDCV', 'docketDescrition': 'Order Denying Motion to Dismiss', 'eventDate': '02/17/2026',
+                 'comments': 'AGREED ORDER DENYING MOTION TO DISMISS'})[0] is True)
+    check('a MORTGAGE reinstatement is not a bankruptcy',
+          _stay({'docketDescrition': 'Emergency Motion to Cancel Sale', 'eventDate': '09/24/2026',
+                 'comments': 'reinstatement amount 230283.71'}) == (False, '', ''))
+    check("lifting the state court's own stay (mediation, abatement) never ends a bankruptcy stay",
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Lifting Stay of Proceedings'))[0] is True)
+    check('an order terminating the automatic stay ends it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Terminating Automatic Stay'))[0] is False)
+    # Greptile on #60: a request is not an order, and a denied order is the opposite of one.
+    check('a motion to terminate the automatic stay does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Motion to Terminate the Automatic Stay'))[0] is True)
+    check('a motion for relief from stay, and its hearing notice, do not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Motion for Relief from Stay'),
+                CLOSE('03/05/2026', 'Notice of Hearing on Motion for Relief from Stay'))[0] is True)
+    check('an order DENYING relief from stay does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Denying Motion for Relief from Automatic Stay'))[0] is True)
+    check('an order denying relief from stay, with no motion named, does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Denying Relief from Automatic Stay'))[0] is True)
+    check('an order denying reinstatement, with no motion named, leaves the dismissed case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Reinstatement of Chapter 13 Case'))[0] is False)
+    check('an order GRANTING a motion for relief from stay ends it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Agreed Order Granting Motion for Relief from Stay'))[0] is False)
+    check('a trustee motion to dismiss the chapter 13 case does not end the stay',
+          _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', "Trustee's Motion to Dismiss Chapter 13 Case"))[0] is True)
+    check('an order denying reinstatement leaves the dismissed case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Reinstate Chapter 13 Case'))[0] is False)
+    check('a motion to reinstate, not yet ruled on, leaves the dismissed case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Motion to Reinstate Chapter 13 Case'))[0] is False)
+    # Greptile's second round on #60: an order that does the thing counts even when it names a motion.
+    check('an order dismissing the case and denying another motion still ends the stay',
+          _stay(BK('02/01/2026', '26-11111'),
+                NOF('03/01/2026', 'Order Granting Motion to Dismiss Chapter 13 Case and Denying Motion for Rehearing'))[0] is False)
+    check("an order dismissing the case on the trustee's motion ends the stay",
+          _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', "Order Dismissing Chapter 13 Case on Trustee's Motion"))[0] is False)
+    check('an order continuing the hearing on a relief motion does not end the stay',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Motion to Continue Hearing on Motion for Relief from Stay'))[0] is True)
+    check('an order denying reinstatement of a dismissed case leaves it closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Reinstate Dismissed Chapter 13 Case'))[0] is False)
+    check('an order vacating the order of dismissal reopens the case',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Vacating Order of Dismissal, Chapter 13'))[0] is True)
+    # Greptile's third round on #60: a grant is read for what it grants.
+    check('an order granting a continuance of the relief hearing does not end the stay',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Motion for Continuance of Relief from Stay Hearing'))[0] is True)
+    check('denying reinstatement while granting a motion to vacate a hearing leaves the case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Reinstate Chapter 13 Case and Granting Motion to Vacate Hearing'))[0] is False)
+    check('an order denying a motion to vacate the dismissal leaves the case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Vacate Order of Dismissal, Chapter 13'))[0] is False)
+    check('an order granting a motion to vacate the dismissal reopens the case',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Granting Motion to Vacate Order of Dismissal, Chapter 13'))[0] is True)
+    check('a continuance of the hearing on a motion to reinstate leaves the case closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Granting Continuance of Hearing on Motion to Reinstate Chapter 13 Case'))[0] is False)
+    check('relief from the automatic stay still ends it with no bankruptcy word on the line',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
+    # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to
+    # 09-24 on 09-28 sales, under a 7-day TTL a read from the week before stood until the auction.
+    _nt = tempfile.mkdtemp()
+    _now = __import__('time').time()
+    _ad = lambda days: __import__('time').strftime('%m/%d/%Y', __import__('time').localtime(_now + days * 86400))
+    _old = {'s': 0, 'n': 1, 'd': 0, 'w': '', 'b': 0, 'a': False, 'bd': '', 'sl': '', 't': _now - 3 * 86400, 'v': SH.CACHE_VER}
+    json.dump({'2099-000031-CA-01': dict(_old), '2099-000032-CA-01': dict(_old)},
+              open(os.path.join(_nt, 'sale_history_cache.json'), 'w'))
+    json.dump([{'Case #': '2099-000032-CA-01', 'AuctionDate': _ad(30)},       # far sale, fresh read
+               {'Case #': '2099-000033-CA-01', 'AuctionDate': _ad(40)},       # far sale, never read
+               {'Case #': '2099-000031-CA-01', 'AuctionDate': _ad(4)},        # near sale, fresh read
+               {'Case #': '2099-000034-CA-01', 'AuctionDate': _ad(5)}],       # near sale, never read
+              open(os.path.join(_nt, 'leads_final.json'), 'w'))
+    _fetched = []
+    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time')}
+    try:
+        SH.HERE = _nt; SH.CACHE = os.path.join(_nt, 'sale_history_cache.json')
+        SH._fetch = lambda session, case: _fetched.append(case) or [BK(_ad(-1)[:10])]
+        SH.time = types.SimpleNamespace(time=__import__('time').time, sleep=lambda s: None)
+        sys.argv = ['sale_history.py', '--limit', '2']
+        SH.main()
+    finally:
+        for k, v in _sh.items():
+            setattr(SH, k, v)
+        sys.argv = _argv
+    _near = {r['Case #']: r for r in json.load(open(os.path.join(_nt, 'leads_final.json')))}
+    check('a near sale is re-read although its cached read is 3 days old, and shows the new stay',
+          '2099-000031-CA-01' in _fetched and _near['2099-000031-CA-01'].get('sale_bk_active') is True, _fetched)
+    check('a far sale keeps its 3-day-old read (7-day TTL)', '2099-000032-CA-01' not in _fetched, _fetched)
+    check('near sales are fetched before the --limit budget reaches distant ones',
+          sorted(_fetched) == ['2099-000031-CA-01', '2099-000034-CA-01'], _fetched)
+    check('the leads file keeps its order', list(_near) == ['2099-000032-CA-01', '2099-000033-CA-01',
+                                                              '2099-000031-CA-01', '2099-000034-CA-01'], list(_near))
     check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
           on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())
