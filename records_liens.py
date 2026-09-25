@@ -258,8 +258,9 @@ def _carry_lien_totals(old, new, out):
                 _d = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', str(o.get('d') or ''))
                 if _tr and _d and '%s-%02d-%02d' % (_d.group(3), int(_d.group(1)), int(_d.group(2))) > _tr:
                     continue
-                k = ('irs_open' if o.get('kind') in ('irs', 'state_tax') else
-                     'hoa_open' if o.get('kind') == 'association' else 'code_open')
+                k = o.get('old_bucket')
+                if k not in own:
+                    continue                                # the old analyzer never summed it
                 own[k] += o['amt']
                 if k == 'hoa_open' and re.search(r'\bLIEN\b', str(o.get('doc') or ''), re.I) \
                         and not re.search(r'JUDG|LIS PENDENS', str(o.get('doc') or ''), re.I):
@@ -286,6 +287,18 @@ def _lay_lien_rows(old, new):
         if k in new:
             out[k] = new[k]
     _carry_lien_totals(old, new, out)
+    # a lender's foreclosure the new read found is news, whatever else it missed
+    for k in ('second_fc', 'second_fc_unsure'):
+        if new.get(k):
+            out[k] = new[k]
+    # the case's type decides what survives: a circuit association case the old analyzer read as a
+    # bank's keeps its mortgages, but the whole first now survives the association's sale
+    if new.get('ftype') and new.get('ftype') != old.get('ftype'):
+        out['ftype'] = new['ftype']
+        _op = [l for l in out.get('liens') or [] if isinstance(l, dict) and l.get('amt')
+               and str(l.get('st') or 'OPEN').upper() == 'OPEN']
+        _sv = _surv_of(_op, new['ftype'], new.get('judgment') or old.get('judgment') or 0)
+        out.update(_sv, first_face=_sv['first_est'], open_count=len(_op))
     out['mtg_kept'] = ("mortgages from the earlier search (searched as %s); the %s re-read did not reach "
                        "all of them" % (old.get('searched_as') or old.get('owner') or '?', time.strftime('%Y-%m-%d')))
     return out
@@ -733,6 +746,65 @@ _NOT_GIVEN = frozenset(('AND', 'HW', 'WF', 'HUSB', 'WIFE', 'ET', 'AL', 'ETAL', '
                         'MR', 'MRS', 'MS', 'DR', 'REV', 'LIV', 'LIVING', 'TRUST', 'REVOCABLE', 'FAMILY'))
 
 
+# THE OLD ANALYZER'S COUNTING, kept only to say where it summed a row (origin/main before #62): a
+# re-read of a chain it wrote may take this case's own filing out of that total and no other.
+_LEG_IRS = re.compile(r'INTERNAL\s+REV|UNITED\s+STATES|\bIRS\b', re.I)
+_LEG_CODE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|PACE|CLEAN ENERGY', re.I)
+_LEG_HOA = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|TOWNHO|MAINTENANCE', re.I)
+_LEG_ASSN = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
+_LEG_DOC = re.compile(r'^(LIEN|JUDGMENT|NOTICE|CLAIM|CERT|FINANCING STATEMENT)', re.I)
+
+
+def _legacy_norm(s):
+    s = re.sub(r'\b(NA|N A|INC|CORP|CO|LLC|LP|USA|TRUST|COMPANY|OF|THE|AND|ASSN|ASSOC|ASSOCIATION)\b', '', (s or '').upper())
+    return re.sub(r'[^A-Z]', '', s)
+
+
+def _legacy_bucket(r, on_parcel, sats):
+    """'irs_open' / 'hoa_open' / 'code_open' where the old analyzer summed this record, or None."""
+    doc = (r.get('doC_TYPE', '') or '').upper().strip()
+    if not _LEG_DOC.match(doc) or num(r.get('consideratioN_1')) <= 0:
+        return None
+    party = r.get('seconD_PARTY') or ''
+    h = _legacy_norm(party)
+    if h and h in sats:
+        return None
+    if _LEG_IRS.search(party):
+        return 'irs_open'
+    if _LEG_HOA.search(party) or _LEG_ASSN.search(party):
+        return 'hoa_open' if on_parcel else None
+    if _LEG_CODE.search(party):
+        return 'code_open' if on_parcel else None
+    return 'code_open' if 'JUDGMENT' in doc else None
+
+
+def _surv_of(opens, ftype, judgment):
+    """What survives the sale, from the OPEN priced mortgages. Kept apart from analyze() so a re-read
+    that keeps an older search's mortgages can re-settle them when the case's type changed."""
+    junior = first_amt = surv = surv_first = 0
+    juniors_post = 0
+    first_bp = ''
+    if opens:
+        if ftype == 'HOA':                             # HOA sale: the WHOLE first mortgage survives
+            surv = sum(o['amt'] for o in opens)
+            surv_first = max(o['amt'] for o in opens)
+        else:
+            anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
+            fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
+            first_amt = fore['amt']
+            first_bp = fore.get('bp') or ''
+            junior = surv = sum(o['amt'] for o in opens if o is not fore)
+            # DATES COMPARE AS DATES. `o['d']` is 'M/D/YYYY' straight from the clerk — '1/10/2006'
+            # sorts lexically ABOVE '10/31/2006', so string comparison silently classified 1-Jan
+            # loans as "recorded AFTER" 10-Oct loans and swapped seniors with juniors in the
+            # reconciliation the browser trusts. Falling back to the raw string only when parsing
+            # fails means an unreadable date can never claim to be newer than a real one.
+            fd = _parse_recd(fore['d'])
+            juniors_post = sum(o['amt'] for o in opens if o is not fore and _parse_recd(o['d']) and fd and _parse_recd(o['d']) >= fd)
+    return {'junior': junior, 'first_est': first_amt, 'surv': surv, 'surv_first': surv_first,
+            'juniors_post': juniors_post, 'first_bp': first_bp}
+
+
 def _owner_words(owner):
     """The words a party string must carry to name the searched owner, or None when unknown.
     A person needs the surname and the first given name as whole words (the clerk writes
@@ -947,26 +1019,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     unpriced_open = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'OPEN')
     liens = [o for o in liens if not o.get('_nopx')]
     opens = [o for o in liens if o['st'] == 'OPEN']
-    junior = first_amt = surv = surv_first = 0
-    juniors_post = 0
-    first_bp = ''
-    if opens:
-        if ftype == 'HOA':                             # HOA sale: the WHOLE first mortgage survives
-            surv = sum(o['amt'] for o in opens)
-            surv_first = max(o['amt'] for o in opens)
-        else:
-            anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
-            fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
-            first_amt = fore['amt']
-            first_bp = fore.get('bp') or ''
-            junior = surv = sum(o['amt'] for o in opens if o is not fore)
-            # DATES COMPARE AS DATES. `o['d']` is 'M/D/YYYY' straight from the clerk — '1/10/2006'
-            # sorts lexically ABOVE '10/31/2006', so string comparison silently classified 1-Jan
-            # loans as "recorded AFTER" 10-Oct loans and swapped seniors with juniors in the
-            # reconciliation the browser trusts. Falling back to the raw string only when parsing
-            # fails means an unreadable date can never claim to be newer than a real one.
-            fd = _parse_recd(fore['d'])
-            juniors_post = sum(o['amt'] for o in opens if o is not fore and _parse_recd(o['d']) and fd and _parse_recd(o['d']) >= fd)
+    _sv = _surv_of(opens, ftype, judgment)
+    junior, first_amt, surv, surv_first = _sv['junior'], _sv['first_est'], _sv['surv'], _sv['surv_first']
+    juniors_post, first_bp = _sv['juniors_post'], _sv['first_bp']
     # --- open non-mortgage liens (kimi: feeds the deal-modal HOA / code / IRS prefills) ------------
     # Every lien, judgment, lis pendens and tax warrant the search returned on this parcel is a ROW
     # in `other`, priced or not, so a reader sees what was found rather than a total that silently
@@ -1029,6 +1084,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 for g in toks:
                     if len(g) > 1 and g not in _sn and g not in _NOT_GIVEN and not g.isdigit():
                         _ow.append(('person', _o0[1], g))
+    _legacy_sats = {_legacy_norm(r.get('seconD_PARTY')) for r in models
+                    if re.search(r'SATISFACTION|RELEASE', (r.get('doC_TYPE', '') or '').upper())}
     _cy = re.match(r'\s*(\d{4})-', case or '')
     _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):
@@ -1169,6 +1226,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                'anchor': 'folio' if (rf and rf == fol) else ('subdivision' if on_parcel else 'person')}
         if own_case:
             row['own_case'] = True                          # this foreclosure's own filing: never a claim
+            _ob = _legacy_bucket(r, on_parcel, _legacy_sats)
+            if _ob:
+                row['old_bucket'] = _ob                     # where the pre-2026-09-25 analyzer summed it
         row['_doc'] = doc                                   # untruncated, for the counting filter
         # untruncated creditor name; when neither side names the owner and neither reads as a
         # creditor, there is no holder to pair a release with (it could be the owner's own name)
@@ -1670,12 +1730,12 @@ def _run(a, ap):
         # paid counts owners that reached fetch_via_turnstile; each of those is a 2Captcha solve
         # (~$0.003) that a free Camoufox token would have avoided.
         print(f"     token source: {cf_free} free (camoufox) / {paid} owner search(es) sent to 2captcha, "
-              f"{_SPEND['submits']} solve(s) submitted  ~${_SPEND['submits'] * PAID_SOLVE_USD:.3f} spent, "
+              f"{_SPEND['submits']} solve(s) submitted  ~${_SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD):.3f} spent, "
               f"~${cf_free * PAID_SOLVE_USD:.3f} avoided")
     if _SPEND['cap'] is not None:
         b1 = _balance() if _SPEND['bal0'] is not None else None
         print(f"     2captcha cap ${_usd(_SPEND['cap'])}: {_SPEND['submits']} solve(s) submitted, "
-              f"~${_SPEND['submits'] * PAID_SOLVE_USD:.3f} counted")
+              f"~${_SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD):.3f} counted")
         if _SPEND['ledger']:
             _ledger_save(charged=(_SPEND['bal0'] - b1) if b1 is not None else None, final=True)
             print(f"     ledger {_SPEND['ledger']}: ${_SPEND['led']['counted_usd']:.4f} of ${_usd(_SPEND['cap'])} used")

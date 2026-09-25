@@ -529,7 +529,8 @@ check("the board stops netting only when the chain took the association's own cl
       and not FLD._hoa_own_out({'other': [{'kind': 'association', 'amt': 12000}]})
       and not FLD._hoa_own_out({'other': []}) and _flsrc16.count('if _hoa_own_out(') == 2)
 # review round 18: a kept total the own claim was taken out of is netted once, not twice
-_oc = {'own_case': True, 'kind': 'association', 'amt': 9000, 'd': '3/1/2024', 'doc': 'CLAIM OF LIEN', 'st': 'OPEN'}
+_oc = {'own_case': True, 'kind': 'association', 'amt': 9000, 'd': '3/1/2024', 'doc': 'CLAIM OF LIEN', 'st': 'OPEN',
+       'old_bucket': 'hoa_open'}
 _lr = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80, 'traced': '2025-06-01'},
                         {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30, 'other': [_oc]})
 check("a kept association total with the plaintiff's claim taken out is not netted against the judgment again",
@@ -543,6 +544,46 @@ _lr3 = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 
                           'other': [dict(_oc, doc='FINAL JUDGMENT', amt=9500, d='3/1/2025')]})
 check("a kept association total that still holds the plaintiff's claim keeps the netting",
       _lr3.get('hoa_own_in') and not FLD._hoa_own_out(_lr3), _lr3)
+
+# review round 19: an own filing comes out of the bucket the OLD analyzer summed it in, and only then
+_r19 = RL.analyze([deed, rec('LIEN - LIE', '5/5/2020', '31500', '1', 15000, 'CITY OF MIAMI', first='OWNER TESTER'),
+                   rec('JUDGMENT - JUD', '5/5/2023', '33900', '1', 12000, 'SUNSET TEST CONDOMINIUM ASSOCIATION INC',
+                       first='OWNER TESTER', folio='', subdiV_NAME='')],
+                  FOLIO, 12000, ftype='HOA', plaintiff='SUNSET TEST CONDOMINIUM ASSOCIATION INC', owner='OWNER TESTER',
+                  case='2023-000555-CC-05')
+_j19 = [o for o in _r19['other'] if o.get('own_case')]
+check("the association's own off-parcel judgment is marked where the old analyzer left it: nowhere",
+      _j19 and 'old_bucket' not in _j19[0], _r19['other'])
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 15000, 'nrec': 14},
+                      {'conf': 'ok', 'liens': [], 'code_open': 0, 'nrec': 3, 'other': _j19}, _o)
+check("a narrower re-read never takes the association's judgment out of the City's $15,000",
+      _o['code_open'] == 15000, _o)
+_r19b = RL.analyze([deed, rec('JUDGMENT - JUD', '5/5/2023', '33900', '1', 12000, 'OWNER TESTER',
+                              first='SUNSET TEST CONDOMINIUM ASSOCIATION INC')],
+                   FOLIO, 12000, ftype='HOA', plaintiff='SUNSET TEST CONDOMINIUM ASSOCIATION INC', owner='OWNER TESTER',
+                   case='2023-000555-CC-05')
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 12000, 'nrec': 14},
+                      dict(_r19b, nrec=3), _o)
+check("the association's own judgment the old analyzer put in code_open comes out of code_open",
+      [o.get('old_bucket') for o in _r19b['other'] if o.get('own_case')] == ['code_open'] and _o['code_open'] == 0,
+      (_r19b['other'], _o))
+_lp19 = RL.analyze([deed, rec('LIS PENDENS - LIS', '5/5/2023', '33900', '2', 12000, 'SUNSET TEST CONDOMINIUM ASSOCIATION INC',
+                               first='OWNER TESTER')],
+                   FOLIO, 12000, ftype='HOA', plaintiff='SUNSET TEST CONDOMINIUM ASSOCIATION INC', owner='OWNER TESTER',
+                   case='2023-000555-CC-05')
+check("the case's own lis pendens was never in an old total, so it never comes out of one",
+      [o for o in _lp19['other'] if o.get('own_case')] and
+      not any(o.get('old_bucket') for o in _lp19['other']), _lp19['other'])
+_ca = {'conf': 'ok', 'ftype': 'MORTGAGE', 'judgment': 60000, 'nrec': 20, 'second_fc': None,
+       'liens': [{'d': '2/1/2008', 'amt': 300000, 'st': 'OPEN', 'bp': '26100/11'}], 'surv': 0, 'surv_first': 0,
+       'first_est': 300000, 'open_count': 1}
+_lr19 = RL._lay_lien_rows(_ca, {'conf': 'ok', 'ftype': 'HOA', 'liens': [], 'nrec': 5, 'other': [],
+                                'second_fc': {'party': 'SOME BANK NA'}, 'judgment': 60000})
+check("a kept mortgage re-settles when the case turns out to be an association's: the whole first survives",
+      _lr19['ftype'] == 'HOA' and _lr19['surv'] == 300000 and _lr19['surv_first'] == 300000, _lr19)
+check("a lender's foreclosure the narrower re-read found is kept", _lr19.get('second_fc'), _lr19)
 
 # review round 17: an own claim the old total never held is not taken out of it
 _o = {}
