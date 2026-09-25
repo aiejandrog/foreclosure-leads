@@ -17,7 +17,7 @@ import sale_results as S
 
 
 def saledates(*parts):
-    return S._line_dates(*parts)[0]
+    return list(S._line_dates(*parts)[0])
 
 D = datetime.date
 FAIL = []
@@ -396,6 +396,25 @@ _tie = [e('03/15/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: APRIL 6
 _a = S.classify(_tie, '09/28/2026', D(2026, 9, 24))
 _b = S.classify([_tie[0], _tie[2], _tie[1]], '09/28/2026', D(2026, 9, 24))
 check('stale scan: same-day order does not change the verdict', _a['st'] == _b['st'] == 'reset' and _a.get('nd') == _b.get('nd') == '2026-11-09', (_a, _b))
+
+# round 5
+def _cl(lines, sale='09/28/2026', today=D(2026, 9, 24)):
+    return S.classify([e(*x) for x in lines], sale, today)
+v = _cl([('09/20/2026', 'Order Rescheduling Foreclosure Sale', 'SALE OF 09/28/2026 RESCHEDULED; OBJECTIONS DUE 10/15/2026')])
+check('r5: "SALE OF <this> RESCHEDULED" + deadline: not scheduled', v['st'] == 'cancelled' and 'nd' not in v, v)
+v = _cl([('09/20/2026', 'Mortgage Foreclosure Sale Cancelled', 'SALE CANCELLED AND RESCHEDULED 11/09/2026, OBJECTIONS DUE 11/01/2026')])
+check('r5: bare "RESCHEDULED <date>" binds', v['st'] == 'reset' and v.get('nd') == '2026-11-09', v)
+v = _cl([('08/20/2026', 'Mortgage Foreclosure Sale Cancelled', ''),
+         ('09/10/2026', 'Notice of Sale', 'THE SALE WILL BE HELD ON 10/20/2026 SURPLUS CLAIMS WITHIN 60 DAYS')])
+check('r5: "THE SALE WILL BE HELD ON" still sets the sale', v['st'] == 'reset' and v.get('nd') == '2026-10-20', v)
+v = _cl([('08/16/2026', 'Mortgage Foreclosure Sale Cancelled', 'SALE OF 08/17/2026 CANCELLED; HEARING ON MOTION 10/15/2026')])
+check('r5: an earlier sale\'s cancel with a later hearing: this sale still scheduled', v['st'] == 'scheduled', v)
+for _txt in ('HEARING ON MOTION RESET TO 11/05/2026', 'HEARING WAS RESET TO 11/05/2026', 'RESET FOR HEARING ON 11/05/2026',
+             'SALE CANCELLED; PLAINTIFF RESPONSE DUE 10/15/2026', 'SALE CANCELLED; MOTION TO VACATE 10/15/2026'):
+    check('r5 dropped: %s' % _txt, saledates(_txt) == [], saledates(_txt))
+v = _cl([('09/20/2026', 'Notice of Sale 09/28/2026', 'CANCELLED; HEARING 10/15/2026')])
+check('r5: this sale date in the title, CANCELLED in the comment: not scheduled', v['st'] == 'cancelled', v)
+check('r5: cached results are immutable', isinstance(S._line_dates('SALE OF 10/1/2026')[0], tuple))
 
 # window
 w = S.window_cases(D(2026, 9, 24),
