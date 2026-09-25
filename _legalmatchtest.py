@@ -62,6 +62,17 @@ class IndexLegalParseTests(unittest.TestCase):
             self.assertTrue(got['unparsed'], legal)
             self.assertEqual((got['lots'], got['unit']), (None, None), legal)
 
+    def test_a_share_or_a_piece_named_before_the_lot_is_not_the_lot(self):
+        for legal in ('W2 LOT 14', 'N 1/2 LOT 14', 'UNDIVIDED 1/2 INT LOT 14'):
+            self.assertTrue(T.index_legal(rec('1', '', '', '', legal=legal))['unparsed'], legal)
+        for legal in ('SAMPLE GROVE LOT 14', 'WINSTON PARK UNIT THREE LOT 9'):
+            self.assertTrue(T.index_legal(rec('1', '', '', '', legal=legal))['lots'], legal)
+
+    def test_one_plat_written_two_ways_is_one_plat(self):
+        self.assertEqual([T.index_legal(rec('1', '', '', '', plat=p))['plat']
+                          for p in ('53/900', '053-0900', '53 / 900')], ['53/900'] * 3)
+        self.assertIsNone(T.index_legal(rec('1', '', '', '', plat='0/0'))['plat'])
+
     def test_block_bearing_forms_still_read(self):
         for legal, lots, block in (('LOTS 1 AND 2 BLOCK 12', {'1', '2'}, '12'),
                                    ('LOT 14 BLK 27 F', {'14'}, '27F'),
@@ -152,6 +163,24 @@ class DeedPlacementTests(unittest.TestCase):
                               ('CONDO UNIT NO 10 4 BLDG 7', 'legal_description_match_required')):
             got = title([mortgage(**unit), rec('7', '6/1/2023', 'A', 'B', **dict(unit, legal=legal))])
             self.assertEqual(got['unanchored_deeds'][0]['status'], status, legal)
+
+    def test_the_same_legal_written_two_ways_is_still_one_yardstick(self):
+        rows = [mortgage(), mortgage(block='012', plat='053-0900'),
+                rec('7', '6/1/2023', 'A', 'B')]
+        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+
+    def test_a_lot_with_no_block_on_either_side_names_no_parcel(self):
+        got = title([mortgage(block=''), rec('7', '6/1/2023', 'A', 'B', block='')])
+        self.assertEqual(got['legal_matched_deeds'], [])
+        self.assertIn('names no parcel', got['unanchored_deeds'][0]['legal_match']['reason'])
+
+    def test_an_undated_matching_deed_never_costs_the_current_deed(self):
+        rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['current_deed_candidate']['book_page'], '2/1')
+        self.assertEqual(got['unanchored_deeds'][0]['legal_match']['verdict'], 'needs_person')
+        self.assertEqual(got['possible_later_conveyances'], ['7/1'])
 
     def test_disagreeing_folio_records_give_no_yardstick(self):
         rows = [mortgage(), rec('6', '1/1/2020', 'X', 'Y', FOLIO, 'MORTGAGE', legal='LOT 15'),

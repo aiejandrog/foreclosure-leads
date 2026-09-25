@@ -81,6 +81,12 @@ def build_title_parties(models, documents, docket, folio):
             verdict = None
             if not conflict:
                 verdict = compare_legal(reference, index_legal(model), reference_gap)
+                if verdict['verdict'] == 'matched' and not _date(model.get('reC_DATE')):
+                    # An undated deed in the chain nulls the current-deed selection for every
+                    # deed. A deed the index placed here, not the county, never costs that much.
+                    verdict = dict(verdict, verdict='needs_person', basis=None,
+                                   reason='its legal description matches the parcel but the index '
+                                          'gives it no readable recording date')
                 if verdict['verdict'] == 'matched':
                     # The clerk's own index puts this deed on the same lot/block/plat (or condo
                     # unit) as the records it filed under this parcel's folio. That is the check a
@@ -287,6 +293,15 @@ def _lots(text):
     return lots or None
 
 
+def _plat(value):
+    """'53/900', '053-0900' and '53 / 900' are one plat book and page. None when the index carries
+    no plat (it writes '0/0'), or writes something that is not two numbers."""
+    parts = [p for p in re.split(r'[^0-9A-Z]+', str(value or '').upper()) if p]
+    if len(parts) != 2 or not all(p.strip('0') for p in parts):
+        return None
+    return '/'.join(p.lstrip('0') for p in parts)
+
+
 def index_legal(model):
     """The clerk index's own structured legal for one recorded instrument: subdivision, the free
     legal field ('LOT 14', 'CONDO UNIT NO 107 BLDG 7', 'LOTS 3 & 4 SEE DOC'), block and plat
@@ -295,8 +310,7 @@ def index_legal(model):
     sub = _tokens(model.get('subdiV_NAME'))
     desc = _tokens(model.get('legaL_DESCRIPTION'))
     block = re.sub(r'[^A-Z0-9]', '', str(model.get('blocK_NO') or '').upper()) or None
-    plat = re.sub(r'\s', '', str(model.get('plaT_BOOKPAGE') or ''))
-    plat = None if re.fullmatch(r'[0/-]*', plat) else plat
+    plat = _plat(model.get('plaT_BOOKPAGE'))
     if not (sub or desc or block or plat):
         return None
     out = {'subdivision': sub or None, 'description': desc or None, 'block': block, 'plat': plat,
@@ -321,6 +335,13 @@ _UNIT_TAIL = re.compile(r'(?:NO\s+)?(?P<unit>[A-Z0-9]+(?:\s+[A-Z0-9]+)?)'
 _TRACT_TAIL = re.compile(r'(?P<tract>[A-Z0-9]+)')
 
 
+# What may stand before LOT / UNIT and still leave a plain lot or unit: the subdivision's own
+# words. A digit, a direction or a share ('W2 LOT 14', 'N 1 2 LOT 14', 'UNDIVIDED 1 2 INT LOT 14')
+# means the deed conveys a piece of it, so the row goes to a person.
+_PREFIX_RE = re.compile(r'(?:[A-Z]{2,}\s+)*$')
+_SHARE_RE = re.compile(r'\b(UNDIVIDED|INT|INTEREST|HALF|QUARTER|[NSEW]|NE|NW|SE|SW)\b')
+
+
 def _parse_body(body, out):
     """Fill out['lots'|'unit'|'building'|'phase'|'tract'] from the index legal text. True when the
     text was read in full as one plain lot or unit; False leaves the row for a person."""
@@ -333,7 +354,12 @@ def _parse_body(body, out):
         # 'WINSTON PARK UNIT THREE LOT 9' names a subdivision unit, not a condo unit, so LOT is
         # tried before UNIT; a tail that does not consume cleanly moves on to the next keyword.
         start = re.search(anchor, body)
-        tail = start and tail_re.fullmatch(body[start.end():].strip())
+        if not start:
+            continue
+        prefix = body[:start.start()]
+        if not _PREFIX_RE.fullmatch(prefix) or _SHARE_RE.search(prefix):
+            return False
+        tail = tail_re.fullmatch(body[start.end():].strip())
         if not tail:
             continue
         found = tail.groupdict()
@@ -355,9 +381,10 @@ def _kind(legal):
 
 
 def _signature(legal):
-    return (legal['plat'], legal['block'], tuple(sorted(legal['lots'] or ())), legal['unit'],
-            legal['building'], legal['phase'], legal['tract'],
-            None if legal['plat'] else legal['subdivision'])
+    # Normalized, so one parcel's records writing block '12' and '012' are one legal and not two
+    # disagreeing ones, which would leave the parcel with no reference at all.
+    return tuple(_num(legal[k]) for k in ('plat', 'block', 'unit', 'building', 'phase', 'tract')) + (
+        tuple(sorted(legal['lots'] or ())), None if legal['plat'] else legal['subdivision'])
 
 
 def parcel_legal_reference(models, folio):
@@ -439,8 +466,11 @@ def compare_legal(reference, legal, reference_gap=None):
             if reference['block'] and legal['block']:
                 return result('differs', 'block %s is not the parcel\'s block %s' % (legal['block'], reference['block']))
             return result('needs_person', 'only one side names a block')
+        if not legal['block']:
+            # A plat has a lot 14 in every block, so a lot number with no block names no parcel.
+            return result('needs_person', 'neither side names a block, so the lot number alone names no parcel')
         if legal['lots'] == reference['lots']:
-            return result('matched', None, '%s, block %s, lot(s) %s' % (place, legal['block'] or 'none',
+            return result('matched', None, '%s, block %s, lot(s) %s' % (place, legal['block'],
                                                                          ', '.join(sorted(legal['lots']))))
         if legal['lots'] & reference['lots']:
             return result('needs_person', 'the deed\'s lots overlap the parcel\'s but are not the same lots')
