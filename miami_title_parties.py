@@ -83,7 +83,8 @@ def build_title_parties(models, documents, docket, folio):
         # whatever legal description it prints, for legal-description matching. It never
         # becomes the current deed on its own. A deed whose own folio names another parcel is
         # kept too, marked as such, so the omission is visible rather than silent.
-        candidates.append((model, row, printed, own_folio, target, pages))
+        conflict = bool(own_folio and own_folio != target) or bool(printed - {target, ''})
+        candidates.append((model, row, printed, own_folio, conflict, pages))
     # Second pass, because whether a legal-matched deed may join the chain depends on the dates
     # already in it: an undated deed, or two deeds on one day, stop a current deed being chosen
     # for the parcel at all, and a deed the index placed here never costs that much.
@@ -93,12 +94,13 @@ def build_title_parties(models, documents, docket, folio):
         return value.date() if value else None
     taken = {day(d['date_parsed']) for d in deeds}
     matched_days = {}
-    for model, row, *_ in candidates:
-        if compare_legal(reference, index_legal(model), reference_gap)['verdict'] == 'matched':
+    for model, row, _printed, _own, conflict, _pages in candidates:
+        # A deed whose folio names another parcel can never be placed here, so it does not make
+        # a day ambiguous for one that can.
+        if not conflict and compare_legal(reference, index_legal(model), reference_gap)['verdict'] == 'matched':
             matched_days[day(row['date_parsed'])] = matched_days.get(day(row['date_parsed']), 0) + 1
-    for model, row, printed, own_folio, target, pages in candidates:
+    for model, row, printed, own_folio, conflict, pages in candidates:
         ref = row['source_ref']
-        conflict = bool(own_folio and own_folio != target) or bool(printed - {target, ''})
         verdict = None
         if not conflict:
             verdict = compare_legal(reference, index_legal(model), reference_gap)
@@ -487,14 +489,15 @@ def compare_legal(reference, legal, reference_gap=None):
         if _num(reference['plat']) != _num(legal['plat']):
             return result('differs', 'plat book/page %s is not the parcel\'s %s' % (legal['plat'], reference['plat']))
         place = 'plat %s' % legal['plat']
-    elif reference['plat'] or legal['plat']:
-        # One side names a plat book/page and the other does not, so the subdivision name is all
-        # they share, and a name is not a parcel: 'SAMPLE GROVE' plats more than one of them.
-        return result('needs_person', 'only one side names a plat book/page')
-    elif reference['subdivision'] and reference['subdivision'] == legal['subdivision']:
-        place = 'subdivision %s' % legal['subdivision']
+    elif reference['subdivision'] and reference['subdivision'] != legal['subdivision']:
+        return result('differs', 'subdivision %s is not the parcel\'s %s'
+                      % (legal['subdivision'], reference['subdivision']))
     else:
-        return result('needs_person', 'no plat book/page on either side and the subdivision names do not agree')
+        # Without a plat book and page on BOTH sides there is nothing that names one piece of
+        # ground: Miami repeats subdivision names, and lot and block numbers repeat across plats,
+        # so an agreeing name and lot can still be another parcel. A person compares.
+        return result('needs_person', 'the plat book and page is missing on one side or both, and '
+                                      'a subdivision name alone names more than one plat')
     kind, parcel_kind = _kind(legal), _kind(reference)
     if not kind:
         return result('needs_person', 'the index names no lot, unit or tract for this deed')

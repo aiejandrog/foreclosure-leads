@@ -140,18 +140,15 @@ class DeedPlacementTests(unittest.TestCase):
             self.assertEqual(kept['legal_match']['verdict'], 'needs_person', kw)
             self.assertEqual(got['possible_later_conveyances'], ['7/1'], kw)
 
-    def test_no_plat_falls_back_to_the_exact_subdivision_name_only(self):
-        same = title([mortgage(plat=''), rec('7', '6/1/2023', 'A', 'B', plat='')])
-        self.assertEqual(same['legal_matched_deeds'], ['7/1'])
-        other = title([mortgage(plat=''), rec('7', '6/1/2023', 'A', 'B', plat='', sub='SAMPLE GROVE 2ND ADDN')])
-        self.assertEqual(other['unanchored_deeds'][0]['status'], 'legal_description_match_required')
-
-    def test_a_plat_on_only_one_side_is_never_settled_by_the_subdivision_name(self):
-        for ref_plat, deed_plat in (('', '99/1'), ('53/900', '')):
+    def test_a_subdivision_name_never_stands_in_for_a_plat(self):
+        # Miami repeats subdivision names and lot numbers repeat across plats, so an agreeing
+        # name is not a parcel, whether one side names a plat or neither does.
+        for ref_plat, deed_plat in (('', ''), ('', '99/1'), ('53/900', '')):
             got = title([mortgage(plat=ref_plat), rec('7', '6/1/2023', 'A', 'B', plat=deed_plat)])
             self.assertEqual(got['legal_matched_deeds'], [], (ref_plat, deed_plat))
-            self.assertEqual(got['unanchored_deeds'][0]['legal_match']['reason'],
-                             'only one side names a plat book/page')
+            self.assertIn('plat book and page', got['unanchored_deeds'][0]['legal_match']['reason'])
+        other = title(folio_pair(plat='') + [rec('7', '6/1/2023', 'A', 'B', plat='', sub='SAMPLE GROVE 2ND ADDN')])
+        self.assertEqual(other['unanchored_deeds'][0]['status'], 'legal_description_differs')
 
     def test_leading_zeros_are_not_a_difference(self):
         rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
@@ -243,6 +240,14 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['current_deed_candidate']['book_page'], '2/1')
         self.assertIn('same day', got['unanchored_deeds'][0]['legal_match']['reason'])
         self.assertEqual(got['unanchored_deeds'][0]['status'], 'legal_description_match_required')
+
+    def test_a_deed_on_another_parcel_does_not_make_a_day_ambiguous(self):
+        rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
+                rec('8', '6/1/2023', 'OTHER', 'SOMEONE', '9999999999999')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(got['unanchored_deeds'][0]['status'], 'folio_conflict')
 
     def test_disagreeing_folio_records_give_no_yardstick(self):
         rows = [mortgage(), rec('6', '1/1/2020', 'X', 'Y', FOLIO, 'MORTGAGE', legal='LOT 15'),

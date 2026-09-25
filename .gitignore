@@ -23,6 +23,8 @@ _*.py
 !_moneytest.py
 !_coveragetest.py
 !_presenttitletest.py
+# _legalmatchtest: index-legal parsing and deed-to-parcel matching on synthetic Miami index rows.
+!_legalmatchtest.py
 !_rankingtest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
@@ -527,5 +529,3 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
-# _legalmatchtest: index-legal parsing and deed-to-parcel matching on synthetic Miami index rows.
-!_legalmatchtest.py
