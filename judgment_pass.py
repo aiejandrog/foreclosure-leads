@@ -33,8 +33,7 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-CASE_RE = re.compile(r'\d{4}-\d{6}-(?:CA-01|CC-\d{2})')
-JUDGMENT_KINDS = ('final_judgment', 'judgment')
+CASE_RE = re.compile(r'\d{4}-\d{6}-(?:CA-01|CC-\d{2})')   # run_case_timeline.validate_case's
 # Measured 2026-09-22 on the desktop: $0.045 per judgment once page selection sent two pages.
 # Used only when no bought evidence is on disk to average; the report says which it used.
 FALLBACK_USD_PER_PAGE = 0.0225
@@ -50,7 +49,20 @@ def _auction(entry):
 
 
 def _vision_key(source_ref):
+    # run_case_timeline.read_amounts names its evidence file amount-vision-<this>.json.
     return hashlib.sha256(str(source_ref).encode()).hexdigest()
+
+
+def _bought(path, row):
+    """The saved amount read for this exact document, or None. Bound to the document hash the way
+    read_amounts binds it: a re-downloaded filing is not already bought."""
+    import document_store as DS
+    detail = DS.pipeline_load(path) if Path(path).exists() else None
+    current = ((row.get('manifest') or {}).get('source_sha256') or
+               (row.get('manifest') or {}).get('sha256'))
+    if not detail or not current or detail.get('document_hash') != current:
+        return None
+    return detail
 
 
 def load_entries(runner, leads_file=None):
@@ -86,11 +98,27 @@ def evidence_rate(root):
             detail = json.loads(path.read_text(encoding='utf-8'))
         except (OSError, ValueError):
             continue
-        sent = len(detail.get('selected_pages') or [])
-        if sent and detail.get('usd'):
-            usd += float(detail['usd'])
-            pages += sent
+        # Only pages that were actually billed: a page cut off by the cap, an errored page or a
+        # ledger-cache hit at $0 is not a price sample.
+        for result in (detail.get('pages') or {}).values():
+            cost = float((result or {}).get('usd') or 0)
+            if cost > 0:
+                usd += cost
+                pages += 1
     return (usd / pages, pages) if pages else (None, 0)
+
+
+def _target(plan, controlling):
+    """The judgment whose amount counts: the controlling entry when the timeline established one,
+    else the latest dated final judgment on the docket. Never 'any judgment': an older, amended or
+    vacated one verifying proves nothing about the current debt."""
+    import run_case_timeline as RCT
+    if controlling:
+        return controlling
+    dated = sorted((d['date'], str(d['entry_id'])) for d in plan['documents']
+                   if d['kind'] in RCT._AMOUNT_KINDS and d.get('date')
+                   and 'future_entry_not_current_evidence' not in (d.get('gaps') or []))
+    return dated[-1][1] if dated else None
 
 
 def assess(case, base, timeline, as_of):
@@ -112,57 +140,68 @@ def assess(case, base, timeline, as_of):
     except ValueError as exc:
         out.update(state='docket_incomplete', detail=str(exc)[:200])
         return out
-    kinds = {str(d['entry_id']): d['kind'] for d in plan['documents']}
-    judgment_entries = {e for e, k in kinds.items() if k in JUDGMENT_KINDS}
-    target = {controlling} if controlling else judgment_entries
-    verified = [c for c in checks if c.get('ok') and str(c.get('entry_id')) in target]
-    if verified:
-        out.update(state='verified', amount_entry=str(verified[0]['entry_id']))
-        return out
-    if not judgment_entries:
+    target = _target(plan, controlling)
+    if target is None:
         out['state'] = 'no_judgment_on_docket'
         return out
+    out['target_entry'] = target
+    if any(c.get('ok') and str(c.get('entry_id')) == target for c in checks):
+        out['state'] = 'verified'
+        return out
     rows = RCT.load_rows(base)
-    fetched = {str(r.get('entry_ref') or '') for r in rows}
-    walled = [d for d in plan['documents'] if d['kind'] in JUDGMENT_KINDS
-              and (not d['eligible_for_acquisition'] or str(d['entry_id']) not in fetched)]
     order = DP.timeline_read_order(plan, rows)['order']
-    reached = False
+    reached = bought_unverified = False
     for row in order:
         pages = amounts.amount_page_numbers(row.get('reading') or {})
         if not pages:
             continue
-        cached = Path(base) / ('amount-vision-' + _vision_key(row.get('source_ref')) + '.json')
-        if cached.exists():
+        is_target = str(row.get('entry_ref') or '') == target
+        detail = _bought(Path(base) / ('amount-vision-' + _vision_key(row.get('source_ref')) + '.json'),
+                         row)
+        if detail is not None and not detail.get('gaps'):
+            if is_target and not reached:
+                # Read in full and still no exact-cents agreement: paying again buys the same answer.
+                reached = bought_unverified = True
             continue
         out['pages_all'] += len(pages)
         if not reached:
             out['pages_to_judgment'] += len(pages)
-            if str(row.get('entry_ref') or '') in target:
-                reached = True
-    if reached:
+            reached = is_target
+    if bought_unverified:
+        out['state'] = 'read_not_verified'
+        out['pages_to_judgment'] = 0
+    elif reached:
         out['state'] = 'needs_paid_read'
-    elif walled:
-        out.update(state='judgment_not_fetched',
-                   detail=','.join(sorted({g for d in walled for g in (d['gaps'] or ['not_downloaded'])})))
     else:
-        # A judgment was fetched but no page of it carries a printed dollar figure the free OCR
-        # could see: a paid read would have nothing selected. Named, never counted as verified.
-        out['state'] = 'judgment_without_amount_page'
+        doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
+        fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
+        if not fetched or not doc.get('eligible_for_acquisition'):
+            out.update(state='judgment_not_fetched',
+                       detail=','.join(doc.get('gaps') or []) or 'not_downloaded')
+        else:
+            # Fetched, but no page carries a printed dollar figure the free OCR could see: a paid
+            # read would have nothing selected. Named, never counted as verified.
+            out['state'] = 'judgment_without_amount_page'
+    if out['state'] != 'needs_paid_read':
+        out['pages_all'] = 0
     return out
 
 
-def run_pass(runner, entries, today, collect, log):
+def run_pass(runner, entries, today, collect, log, limit=None):
     import run_case_timeline as RCT
     done = errors = skipped = 0
     for entry in entries:
+        if limit and done + errors >= limit:     # --limit counts cases worked, not cases skipped
+            break
         case = entry['case']
         if built_recently(timeline_path(runner, case)):
             skipped += 1
+            (log.get('errors') or {}).pop(case, None)
             continue
         try:
             RCT.timeline_case(case, today, collect=collect)   # shared=None: no API client, $0
             done += 1
+            (log.get('errors') or {}).pop(case, None)
         except Exception as exc:                              # one case never stops the pass
             errors += 1
             log.setdefault('errors', {})[case] = '%s: %s' % (type(exc).__name__, str(exc)[:200])
@@ -177,8 +216,12 @@ def plan(runner, entries, today, log):
     rows = []
     for entry in entries:
         case = entry['case']
-        timeline = DS.pipeline_load(timeline_path(runner, case))
-        row = assess(case, DS.pipeline_folder(runner.COUNTY, case), timeline, today.isoformat())
+        try:
+            timeline = DS.pipeline_load(timeline_path(runner, case))
+            row = assess(case, DS.pipeline_folder(runner.COUNTY, case), timeline, today.isoformat())
+        except Exception as exc:                  # one unreadable case never costs the report
+            row = {'case': case, 'state': 'unreadable_on_disk', 'pages_to_judgment': 0,
+                   'pages_all': 0, 'detail': '%s: %s' % (type(exc).__name__, str(exc)[:160])}
         auction = _auction(entry)
         row['sale'] = auction.isoformat() if auction else None
         if case in (log.get('errors') or {}):
@@ -201,8 +244,9 @@ def render(rows, skipped_ids, rate, sample, today):
             return 'sale passed'
         return next(name for name, limit in windows if days <= limit)
     names = [w[0] for w in windows] + ['sale passed', 'no sale date']
-    states = ['verified', 'needs_paid_read', 'judgment_not_fetched', 'judgment_without_amount_page',
-              'no_judgment_on_docket', 'docket_incomplete', 'no_docket']
+    states = ['verified', 'needs_paid_read', 'read_not_verified', 'judgment_not_fetched',
+              'judgment_without_amount_page', 'no_judgment_on_docket', 'docket_incomplete',
+              'no_docket', 'unreadable_on_disk']
     lines = ['# Miami judgment amounts: court-copy state and read plan (%s)' % today.isoformat(), '',
              'Built from files on disk after a $0 docket pass. Case numbers only; no names. '
              '"verified" means the court copy\'s line items reproduce its printed total to the cent '
@@ -211,7 +255,7 @@ def render(rows, skipped_ids, rate, sample, today):
     for state in states:
         counts = [sum(1 for r in rows if r['state'] == state and window(r) == n) for n in names]
         lines.append('| %s | %s | %d |' % (state, ' | '.join(map(str, counts)), sum(counts)))
-    lines += ['', 'Tax-deed IDs with no court docket, left out: %d' % len(skipped_ids), '']
+    lines += ['', 'Tax-deed IDs with no court docket, left out (all sale dates): %d' % len(skipped_ids), '']
     lines += ['## Price to read the rest', '', 'Rate: ' + basis + '.', '',
               '| Sales | Cases | Pages to the judgment | Cost | Pages, whole case | Cost |',
               '|---|---|---|---|---|---|']
@@ -223,6 +267,9 @@ def render(rows, skipped_ids, rate, sample, today):
         pa = sum(r['pages_all'] for r in need)
         lines.append('| %s | %d | %d | $%.2f | %d | $%.2f |'
                      % (name, len(need), pj, pj * per_page, pa, pa * per_page))
+    lines += ['', '"read_not_verified": the judgment was already read in full and its figures do not '
+              'reproduce its printed total to the cent; paying again buys the same answer, so it '
+              'needs a person or the paid clerk copy, not another read.']
     lines += ['', '"Pages to the judgment" is what the paid reader sends in its own order '
               '(controlling orders first, then judgments newest first) until it reaches the '
               'judgment. "Whole case" is every amount page it would read with an unlimited share.',
@@ -264,9 +311,8 @@ def main(argv=None):
     print('judgment_pass: %d docketed Miami cases, %d tax-deed IDs left out; $0: no API client, '
           'no token mints, no captcha' % (len(entries), len(skipped_ids)))
     if not args.report_only:
-        todo = entries[:args.limit] if args.limit else entries
         try:
-            done, skipped, errors = run_pass(runner, todo, today, args.collect, log)
+            done, skipped, errors = run_pass(runner, entries, today, args.collect, log, args.limit)
         finally:
             log_path.write_text(json.dumps(log, indent=2), encoding='utf-8')
         print('  pass: %d built, %d built in the last 20h, %d errors (log %s)'

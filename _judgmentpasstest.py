@@ -12,17 +12,23 @@ import judgment_pass as JP
 CASE = '2025-000001-CA-01'
 
 
-def _row(base, entry, text, name):
+def _row(base, entry, text, name, total_page=True):
     ref = 'court:%s:1' % entry
-    row = {'source_ref': ref, 'manifest': {'sha256': 'h' + entry},
-           'reading': {'pages': [{'page': 1, 'text': text}, {'page': 2, 'text': 'Total $1,234.56'}]}}
+    pages = [{'page': 1, 'text': text}] + ([{'page': 2, 'text': 'Total $1,234.56'}] if total_page else [])
+    row = {'source_ref': ref, 'manifest': {'sha256': 'h' + entry}, 'reading': {'pages': pages}}
     (Path(base) / (hashlib.sha256(name.encode()).hexdigest() + '.json')).write_text(json.dumps(row))
     return ref
 
 
 def _plan(docs):
-    return {'documents': [dict(entry_id=e, kind=k, eligible_for_acquisition=ok, gaps=g)
+    return {'documents': [dict(entry_id=e, kind=k, eligible_for_acquisition=ok, gaps=g,
+                               date='2026-01-%02d' % int(e))
                           for e, k, ok, g in docs]}
+
+
+def _buy(base, ref, entry, gaps=()):
+    (Path(base) / ('amount-vision-' + JP._vision_key(ref) + '.json')).write_text(
+        json.dumps({'document_hash': 'h' + entry, 'gaps': list(gaps)}))
 
 
 class Assess(unittest.TestCase):
@@ -61,9 +67,34 @@ class Assess(unittest.TestCase):
         got = self.run_assess(docs)
         self.assertEqual((got['state'], got['pages_to_judgment'], got['pages_all']),
                          ('needs_paid_read', 4, 4))
-        (self.base / ('amount-vision-' + JP._vision_key(ref) + '.json')).write_text('{}')
+        _buy(self.base, ref, '9')
         got = self.run_assess(docs)
-        self.assertEqual(got['pages_all'], 2)            # the bought judgment is not priced again
+        # read in full, still not verified: named, not priced again, not 'no amount page'
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('read_not_verified', 0))
+
+    def test_stale_or_partial_purchase_is_priced(self):
+        ref = _row(self.base, '9', 'judgment $2.00', 'j')
+        (self.base / ('amount-vision-' + JP._vision_key(ref) + '.json')).write_text(
+            json.dumps({'document_hash': 'OLD', 'gaps': []}))
+        got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 2))
+        _buy(self.base, ref, '9', gaps=[{'page': 2}])
+        got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'needs_paid_read')
+
+    def test_without_controlling_only_latest_judgment_counts(self):
+        timeline = {'judgments': {'controlling_entry': None},
+                    'amount_vision': {'amount_checks': [{'entry_id': '4', 'ok': True}]}}
+        _row(self.base, '9', '$5.00', 'a')
+        got = self.run_assess([('4', 'final_judgment', True, []), ('9', 'final_judgment', True, [])],
+                              timeline)
+        self.assertEqual((got['state'], got['target_entry']), ('needs_paid_read', '9'))
+
+    def test_walled_reason_is_the_targets_own(self):
+        _row(self.base, '9', 'no dollars here', 'j', total_page=False)
+        got = self.run_assess([('4', 'final_judgment', False, ['no_image_count_established']),
+                               ('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'judgment_without_amount_page')
 
     def test_login_walled_judgment_named(self):
         got = self.run_assess([('9', 'final_judgment', False, ['no_image_count_established'])])
@@ -76,14 +107,17 @@ class Assess(unittest.TestCase):
 
 
 class Rate(unittest.TestCase):
-    def test_average_over_bought_pages(self):
+    def test_average_over_billed_pages_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp) / 'case'
             d.mkdir()
-            (d / 'amount-vision-a.json').write_text(json.dumps({'selected_pages': [1, 2], 'usd': 0.05}))
-            (d / 'amount-vision-b.json').write_text(json.dumps({'selected_pages': [1], 'usd': 0.01}))
+            # three pages selected, the cap stopped after one: one billed page, not three
+            (d / 'amount-vision-a.json').write_text(json.dumps(
+                {'selected_pages': [1, 2, 3], 'usd': 0.03, 'pages': {'1': {'usd': 0.03}}}))
+            (d / 'amount-vision-b.json').write_text(json.dumps(
+                {'selected_pages': [1, 2], 'pages': {'1': {'usd': 0.01}, '2': {'usd': 0}}}))
             rate, n = JP.evidence_rate(tmp)
-            self.assertEqual(n, 3)
+            self.assertEqual(n, 2)
             self.assertAlmostEqual(rate, 0.02)
             self.assertEqual(JP.evidence_rate(Path(tmp) / 'none'), (None, 0))
 
@@ -97,6 +131,20 @@ class Fresh(unittest.TestCase):
         self.assertFalse(JP.built_recently('/nonexistent/timeline.json'))
 
 
+class Pass(unittest.TestCase):
+    def test_limit_counts_worked_cases_and_clears_old_errors(self):
+        runner = mock.Mock(COUNTY='MIAMI-DADE')
+        entries = [{'case': c} for c in ('a', 'b', 'c', 'd')]
+        log = {'errors': {'a': 'old', 'c': 'old'}}
+        with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
+                mock.patch.object(JP, 'built_recently', side_effect=lambda c: c in ('a', 'b')), \
+                mock.patch('run_case_timeline.timeline_case') as build:
+            got = JP.run_pass(runner, entries, date(2026, 9, 25), False, log, limit=1)
+        self.assertEqual(got, (1, 2, 0))
+        self.assertEqual([c.args[0] for c in build.call_args_list], ['c'])
+        self.assertEqual(log['errors'], {})
+
+
 class Render(unittest.TestCase):
     def test_prices_and_windows(self):
         rows = [{'case': CASE, 'sale': '2026-09-28', 'state': 'needs_paid_read',
@@ -106,7 +154,7 @@ class Render(unittest.TestCase):
         out = JP.render(rows, ['2026A00001'], 0.02, 10, date(2026, 9, 25))
         self.assertIn('| next 7 days | 1 | 3 | $0.06 | 5 | $0.10 |', out)
         self.assertIn('| verified | 0 | 0 | 1 | 0 | 0 | 1 |', out)
-        self.assertIn('left out: 1', out)
+        self.assertIn('(all sale dates): 1', out)
 
 
 if __name__ == '__main__':
