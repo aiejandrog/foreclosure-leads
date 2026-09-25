@@ -928,7 +928,7 @@ class FourthReviewTests(unittest.TestCase):
                             (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
             r = CV.assess(t)
             self.assertEqual(r['verdict'], 'incomplete', (phrasing, r))
-            self.assertTrue(any('classifier did not label' in m for m in r['missing']),
+            self.assertTrue(any('labelled neither a sale notice' in m for m in r['missing']),
                             (phrasing, r['missing']))
             self.assertEqual(r['conflicts'], [], phrasing)
 
@@ -1288,14 +1288,22 @@ class SixthReviewTests(unittest.TestCase):
 
     def test_a_sale_with_a_certificate_of_title_is_not_going_ahead(self):
         # A petition filed after the sale completed and title issued is ordinary, not a
-        # contradiction, and sale_held already records the certificate.
-        r = CV.assess(timeline('X', kind='sold', stay=True,
-                               history=[{'entry_id': '180', 'event': 'stayed'}],
-                               sale_held={'date': '2026-07-20', 'evidence': ['160', '161'],
-                                          'certificate': '170', 'bankruptcy_same_day': [],
-                                          'bankruptcy_order': None},
-                               checks=[ok_check()], attachments=[read_attachment()]))
+        # contradiction. This was pinned by a hand-made `sale_held` for one round: a sale_held block
+        # is DERIVED from sale_bid / sale_deposit entries, so it cannot exist on a docket that has
+        # none, and with the producible docket built the behaviour it claimed was reversed. Drive
+        # the producer - the clerk's money rows and the certificate are docket entries like any other.
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                        (145, 'Notice of Foreclosure Sale on 07/20/2026', '06/20/2026'),
+                        (160, 'Bid Amount', '07/20/2026'),
+                        (161, 'Mortgage Foreclosure Deposit', '07/20/2026'),
+                        (170, 'Certificate of Title', '07/30/2026'),
+                        (180, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '08/15/2026')])
+        self.assertEqual((t['sale_held'] or {}).get('certificate'), '170')
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
         self.assertFalse(any('sale going ahead' in c for c in r['conflicts']), r['conflicts'])
+        self.assertEqual(r['verdict'], 'supported', (r['conflicts'], r['missing']))
 
     def test_a_dossier_that_will_not_parse_is_reported(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -1307,6 +1315,128 @@ class SixthReviewTests(unittest.TestCase):
             self.assertIn('UNREADABLE', proc.stdout)
             report = json.loads((folder / 'case-verdicts.json').read_text())
             self.assertTrue(any('A.json' in n for n in report['no_verdict']['unreadable']))
+
+
+class SeventhReviewTests(unittest.TestCase):
+    """The seventh independent review found four reachable wrong verdicts in the sale rule the sixth
+    round redesigned - two of them the false `supported` over a live stay the whole redesign was for.
+    Every case here drives miami_case_timeline.build_timeline: three of the previous four rounds'
+    false claims came from a fixture carrying a shape the producer cannot write, and one of THIS
+    round's findings was a test pinned by a hand-made `sale_held` that cannot exist.
+    """
+    @staticmethod
+    def built(entries, as_of='2026-09-23', controlling='140', amount=500000.00):
+        """entries are (id, description, comments, date) - the producer classifies on both."""
+        import miami_case_timeline as T
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'expected_documents': 0,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text,
+                          'comments': comments}}
+            for n, text, comments, d in entries], 'pagination_verified': True}, [], as_of)
+        t['judgments'] = {'controlling_entry': controlling, 'controlling_reason':
+                          'one operative judgment after amendments, vacaturs and satisfactions',
+                          'judgments': [judgment_row(controlling)],
+                          'docket_duplicates_inferred': []}
+        t['amount_vision'] = {'amount_checks': [ok_check(controlling, 'court:%s:1' % controlling,
+                                                        amount)]}
+        t['coverage'] = {'attachments': [read_attachment(controlling)], 'complete': False}
+        return t
+
+    OPEN = [(100, 'Complaint', '', '01/05/2026'),
+            (140, 'Final Judgment of Foreclosure', '', '06/10/2026')]
+    PETITION = (180, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '', '08/15/2026')
+
+    def test_a_resale_noticed_after_a_certificate_is_not_a_clean_bill(self):
+        # `sale_held` describes only the MOST RECENT held sale (sale_held: `day = max(...)`), so
+        # returning 'none' on its certificate hid every sale noticed afterwards. A sale held in
+        # March, a certificate, an order of resale, a new notice for December and then a Chapter 13
+        # read `supported` with the judgment amount printed as verified.
+        t = self.built(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale on 03/02/2026', '', '02/01/2026'),
+            (160, 'Bid Amount', '', '03/02/2026'),
+            (161, 'Mortgage Foreclosure Deposit', '', '03/02/2026'),
+            (170, 'Certificate of Sale', '', '03/05/2026'),
+            (175, 'Order Granting Plaintiff Motion for Resale', '', '04/01/2026'),
+            (178, 'Notice of Foreclosure Sale on 12/28/2026', '', '05/01/2026'),
+            self.PETITION])
+        self.assertEqual((t['sale_held'] or {}).get('certificate'), '170')
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+        self.assertTrue(any('178' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_sale_worded_only_in_the_clerks_comments_is_not_invisible(self):
+        # build_timeline classifies on description + comments (:345). Reading `description` alone
+        # meant an entry whose sale wording is in the comments was neither labelled a sale notice nor
+        # flagged unlabelled - it fell out of the rule entirely, and a live sale under a stay read
+        # `supported`. Both halves of this shape are in _casetimelinetest (:362, :461).
+        t = self.built(self.OPEN + [
+            (145, 'Notice:', 'OF FORECLOSURE SALE SET FOR 12/28/2026 AT 9:00 A.M.', '07/01/2026'),
+            self.PETITION])
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertNotEqual(r['verdict'], 'supported', (r['notes'], r['supported_by']))
+        self.assertTrue(any('145' in m for m in r['missing']) or
+                        any('145' in c for c in r['conflicts']), r)
+
+    def test_a_certificate_of_title_ends_the_sale_without_the_clerks_money_rows(self):
+        # sale_held is None whenever the clerk's `Bid Amount` / `Mortgage Foreclosure Deposit` rows
+        # are absent, so the derived block was the ONLY thing stopping a certificate from reading as
+        # a sale going ahead - and a notice plus a certificate of title plus a later petition came
+        # back `conflicted` over a sale that is finished and titled.
+        for certificate in ('Certificate of Title', 'Certificate of Sale'):
+            t = self.built(self.OPEN + [
+                (145, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/20/2026'),
+                (170, certificate, '', '07/30/2026'),
+                self.PETITION])
+            self.assertIsNone(t['sale_held'], certificate)
+            self.assertIs(t['stay_in_effect'], True)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (certificate, r['conflicts'], r['missing']))
+
+    def test_a_classified_entry_is_never_reported_as_unclassified(self):
+        # The `unknown` phrase said the later entries "mention a sale without being classified". A
+        # certificate of sale IS classified, so that told the human the opposite of what the producer
+        # saved - and every printed reason in this module is meant to be the producer's own state.
+        src = MODULE.read_text()
+        self.assertNotIn('without being classified', src)
+        self.assertIn('labelled neither a sale notice nor ', src)
+
+    def test_the_stays_own_words_are_not_an_unresolved_sale(self):
+        # The unlabelled check ran on every kind but the three sale kinds, so a petition whose
+        # docket description names the sale it stays counted as an unclassified sale entry: a docket
+        # with no sale notice anywhere on it came back `incomplete`. Only the kinds classify uses
+        # when it did not recognise the entry can be unlabelled.
+        for text in ('Suggestion of Bankruptcy Chapter 13 case 26-12345; foreclosure sale stayed',
+                     'Notice of Reinstatement of Automatic Stay; foreclosure sale stayed'):
+            t = self.built(self.OPEN + [(150, text, '', '08/01/2026')])
+            self.assertIs(t['stay_in_effect'], True)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (text, r['missing'], r['conflicts']))
+
+    def test_a_hearing_entry_that_mentions_a_sale_is_still_a_gap(self):
+        # The producer overwrites kind with 'hearing' for anything on a calendar eventType except a
+        # notice of sale (:383), so 'hearing' has to stay in the unlabelled set: gating the check on
+        # 'other' alone would have dropped an order resetting a sale carried on a hearing event.
+        import miami_case_timeline as T
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'expected_documents': 0,
+             'metadata': dict({'eventID': n, 'eventDate': d, 'docketDescrition': text}, **extra)}
+            for n, text, d, extra in [
+                (100, 'Complaint', '01/05/2026', {}),
+                (140, 'Final Judgment of Foreclosure', '06/10/2026', {}),
+                (145, 'Order Resetting Foreclosure Sale', '07/01/2026', {'eventType': 'Hearing'}),
+                (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026', {})]],
+            'pagination_verified': True}, [], '2026-09-23')
+        self.assertEqual(next(e['kind'] for e in t['entries'] if e['entry_id'] == '145'), 'hearing')
+        t['judgments'] = {'controlling_entry': '140', 'controlling_reason': 'one operative judgment',
+                          'judgments': [judgment_row('140')], 'docket_duplicates_inferred': []}
+        t['amount_vision'] = {'amount_checks': [ok_check('140', 'court:140:1', 500000.00)]}
+        t['coverage'] = {'attachments': [read_attachment('140')], 'complete': False}
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
+        self.assertTrue(any('145' in m for m in r['missing']), r['missing'])
+
 
 
 if __name__ == '__main__':

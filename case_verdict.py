@@ -151,9 +151,20 @@ def _judgment_record(judgments, entry_id):
     return next((r for r in rows if isinstance(r, dict) and r.get('entry_id') == entry_id), None)
 
 
-# Docket entry kinds that put a sale on the calendar, and the one that takes it off.
+# Docket entry kinds that put a sale on the calendar, and the ones that take it off. Both lists are
+# miami_case_timeline.classify's own labels (:193-203). certificate_of_sale and certificate_of_title
+# were missing from the closing list until the seventh review: a notice of sale followed by a
+# certificate of title read as a sale still going ahead, and under a stay that is a false conflict.
 SALE_NOTICE_KINDS = ('notice_of_sale', 'order_resetting_sale')
-SALE_CANCELLED_KIND = 'order_cancelling_sale'
+SALE_CLOSING_KINDS = ('order_cancelling_sale', 'certificate_of_sale', 'certificate_of_title')
+# Status kinds that say a sale is on the calendar NOW. 'sold' is not one of them: it is what a
+# certificate produces, and a completed sale is not a sale going ahead.
+SALE_LIVE_STATUS_KINDS = ('sale_scheduled',)
+# The kinds classify uses when it did NOT recognise the entry: 'other' is its fallthrough (:223) and
+# 'hearing' is the override a calendar eventType forces onto anything but a notice of sale (:383).
+# An entry the producer DID label is explained by its label - the petition that names the sale it
+# stays is not an unclassified sale entry, which is how a docket with no sale on it read incomplete.
+UNLABELLED_KINDS = ('other', 'hearing')
 # Only to notice that the classifier left a sale-worded entry unlabelled, which is reported as a
 # gap. Never to decide that a sale IS or IS NOT scheduled - see _sale_state.
 _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
@@ -163,10 +174,21 @@ _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
 BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')
 
 
+def _index_text(entry):
+    """The text the PRODUCER classifies on: description + comments (miami_case_timeline :345).
+
+    Reading `description` alone was a false clean bill: a clerk who files a stub description
+    ("Notice:") and puts "OF FORECLOSURE SALE SET FOR 12/28/2026" in the comments produced an entry
+    that was neither labelled a sale notice nor flagged as unlabelled, so a live sale under a stay
+    vanished from the file entirely (_casetimelinetest :362, :461 carry both real shapes).
+    """
+    return ' '.join(str(entry.get(k) or '') for k in ('description', 'comments'))
+
+
 def _sale_state(timeline, status, kind):
     """-> ('live'|'unknown'|'none', phrase) for the sale the docket is running.
 
-    THIS MODULE DOES NOT CLASSIFY DOCKET ENTRIES. Six review rounds on this one question all went
+    THIS MODULE DOES NOT CLASSIFY DOCKET ENTRIES. Seven review rounds on this one question all went
     the same way: reading status['sale_date'] missed a stay filed after the notice (the producer's
     loop does `status = change`, :503, and the bankruptcy branch builds a fresh dict with no sale
     date); reading entry kinds missed "Notice of Rescheduled Foreclosure Sale", which classify
@@ -179,77 +201,93 @@ def _sale_state(timeline, status, kind):
 
     So it reads only the producer's own labels, and where those cannot answer, it says so:
 
-      live     the producer itself says a sale is running - its status kind, or a sale it recorded
-               as held with no certificate yet, or an entry IT classified as a sale notice with no
-               entry IT classified as a cancellation on or after it.
+      live     the producer itself says a sale is running - its status kind, a sale it recorded as
+               held with no certificate yet, or an entry IT labelled a sale notice that no entry IT
+               labelled a cancellation or a certificate closes.
       unknown  the docket has sale-worded entries the classifier left unlabelled, so whether a sale
                is pending is not answerable from this file. A gap, never a contradiction.
-      none     no sale evidence of either kind.
+      none     no sale evidence of either kind, or the newest thing the producer labelled ends a
+               sale.
+
+    Two things here ARE this module's own, and the contract above is overstated without them: the
+    ordering of the producer's labels by date, and a `\bsale\b` scan of the text the producer itself
+    classifies on. The scan can only raise a gap - it never opens or closes a sale - and the ordering
+    compares two of the producer's own labels and nothing else.
+
+    Nothing here short-circuits on a derived summary: `sale_held` describes only the most recent held
+    sale (`sale_held`, `day = max(...)`), so returning on its certificate hid a resale noticed after
+    it, and that was a false clean bill over a live stay.
     """
-    held = timeline.get('sale_held')
-    if isinstance(held, dict) and held.get('date'):
-        if held.get('certificate'):
-            # The sale completed and title issued. A bankruptcy filed afterwards is ordinary, not a
-            # contradiction, so this is not a live sale.
-            return 'none', None
-        return 'live', ('the clerk posted sale-day bid and deposit entries on %s and no '
-                        'certificate of sale has followed' % held['date'])
-    if kind in SALE_KINDS:
-        return 'live', 'the docket status is %r' % (kind,)
-    if status.get('sale_date'):
-        return 'live', 'a sale is on the calendar for %s' % status['sale_date']
-    notice, cancelled, unlabelled = None, None, []
+    opening = closing = None
+    unlabelled = []
     for entry in _rows(timeline, 'entries'):
         if not isinstance(entry, dict):
             continue
         entry_kind = entry.get('kind')
-        if entry_kind == SALE_CANCELLED_KIND:
-            cancelled = _newer(cancelled, entry)
+        if entry_kind in SALE_CLOSING_KINDS:
+            closing = _newer(closing, entry)
         elif entry_kind in SALE_NOTICE_KINDS:
-            notice = _newer(notice, entry)
-        elif _SALE_WORD_RE.search(str(entry.get('description') or '')):
+            opening = _newer(opening, entry)
+        elif entry_kind in UNLABELLED_KINDS and _SALE_WORD_RE.search(_index_text(entry)):
             # The classifier saw the word and did not label the entry. That is a limit of the
             # classifier, not evidence either way, and it is not this module's to resolve.
             unlabelled.append(entry)
-    if notice is not None:
-        # A cancellation on the SAME DAY counts: the docket gives dates, not times, so a notice and
-        # a cancellation on one day cannot be ordered, and reporting "no later cancellation" over a
-        # docket that carries one is the claim that cannot be defended.
-        if cancelled is not None and str(cancelled.get('date') or '') >= str(notice.get('date') or ''):
-            return 'none', None
-        # An unlabelled sale-worded entry dated on or after the notice may BE the cancellation -
-        # "Notice of Cancellation of Foreclosure Sale" is one the classifier leaves as 'other'. So
-        # the sale state is unknown, not live: claiming a conflict here would be the same guess in
-        # the opposite direction.
-        later = [e for e in unlabelled
-                 if str(e.get('date') or '') >= str(notice.get('date') or '')]
-        if later:
-            return 'unknown', ('entry %s is classified as a notice of sale, and %d later docket '
-                               'entr%s mention a sale without being classified (entr%s %s), so '
-                               'whether that sale still stands cannot be told from this file' % (
-                                   notice.get('entry_id') or '?', len(later),
-                                   'y does' if len(later) == 1 else 'ies do',
-                                   'y' if len(later) == 1 else 'ies',
-                                   ', '.join(str(e.get('entry_id') or '?') for e in later[:5])))
-        if True:
-            dates = _sale_dates_of(notice)
+    closing_date = str((closing or {}).get('date') or '')
+
+    def _later_unlabelled(floor):
+        return [e for e in unlabelled if str(e.get('date') or '') >= str(floor or '')]
+
+    held = timeline.get('sale_held')
+    if (isinstance(held, dict) and held.get('date') and not held.get('certificate')
+            and closing_date < str(held['date'])):
+        return 'live', ('the clerk posted sale-day bid and deposit entries on %s and no '
+                        'certificate of sale has followed' % held['date'])
+    if kind in SALE_LIVE_STATUS_KINDS:
+        return 'live', 'the docket status is %r' % (kind,)
+    if status.get('sale_date') and closing_date < str(status['sale_date']):
+        return 'live', 'a sale is on the calendar for %s' % status['sale_date']
+    if opening is not None:
+        # A cancellation or certificate on the SAME DAY closes it: the docket gives dates, not
+        # times, so a notice and a closing entry on one day cannot be ordered, and reporting "no
+        # later cancellation" over a docket that carries one is the claim that cannot be defended.
+        if closing_date < str(opening.get('date') or ''):
+            # An unlabelled sale-worded entry dated on or after the notice may BE the cancellation -
+            # "Notice of Cancellation of Foreclosure Sale" is one the classifier leaves as 'other'.
+            # So the sale state is unknown, not live: claiming a conflict here would be the same
+            # guess in the opposite direction.
+            later = _later_unlabelled(opening.get('date'))
+            if later:
+                return 'unknown', ('entry %s is classified as a notice of sale, and %s, so whether '
+                                   'that sale still stands cannot be told from this file' % (
+                                       opening.get('entry_id') or '?', _unlabelled_phrase(later)))
+            dates = _sale_dates_of(opening)
             return 'live', ('entry %s, which the docket classifies as a notice of sale (%s%s), '
-                            'with no cancellation on or after it' % (
-                                notice.get('entry_id') or '?', notice.get('date') or 'undated',
+                            'with no cancellation or certificate on or after it' % (
+                                opening.get('entry_id') or '?', opening.get('date') or 'undated',
                                 '; sale date %s' % ', '.join(dates) if dates else ''))
-    if unlabelled:
-        return 'unknown', ('%d docket entr%s mention a sale that the classifier did not label as a '
-                           'sale notice or cancellation (entr%s %s), so whether a sale is pending '
-                           'cannot be told from this file' % (
-                               len(unlabelled), 'y does' if len(unlabelled) == 1 else 'ies do',
-                               'y' if len(unlabelled) == 1 else 'ies',
-                               ', '.join(str(e.get('entry_id') or '?') for e in unlabelled[:5])))
+    # Either the newest labelled sale event ends a sale, or there was never one. In both cases an
+    # unlabelled sale-worded entry after it could be a fresh notice this module cannot read.
+    later = _later_unlabelled(closing_date)
+    if later:
+        return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
+                           % _unlabelled_phrase(later))
     return 'none', None
+
+
+def _unlabelled_phrase(entries):
+    """Says what is true of these entries: the producer gave them no sale label. It does NOT say
+    they are unclassified - a certificate of sale is classified, and calling it unclassified told
+    the human the opposite of what the producer saved."""
+    return ('%d docket entr%s mention a sale that the classifier labelled neither a sale notice nor '
+            'a cancellation (entr%s %s)' % (
+                len(entries), 'y does' if len(entries) == 1 else 'ies do',
+                'y' if len(entries) == 1 else 'ies',
+                ', '.join(str(e.get('entry_id') or '?') for e in entries[:5])))
 
 
 def _sale_dates_of(entry):
     """The sale dates the entry's own docket words print, via the producer's own parser."""
-    text = ' '.join(str(entry.get(k) or '') for k in ('description', 'comments'))
+    text = _index_text(entry)
     if not text.strip():
         return []
     try:

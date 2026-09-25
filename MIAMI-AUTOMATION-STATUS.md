@@ -49,21 +49,26 @@ shared spending controls. This is not complete.
 2024-009959's and 2022-012065's amounts were first produced by an agent transcribing pages; they now
 come from the saved text and OCR alone. The verdict column was written from the code's output by
 hand until 2026-09-25; `case_verdict.assess` now emits it, and `_verdicttest.PilotVerdictTests`
-pins these five words to the states this table cites - with two limits stated below, because an
-earlier version of this paragraph claimed more than the tests establish.
+pins these five words to the states this table cites - with three limits stated below, because
+earlier versions of this paragraph twice claimed more than the tests establish.
 
-The sale under a stay is the other. Whether a foreclosure sale is currently scheduled is a
+The sale under a stay is the first. Whether a foreclosure sale is currently scheduled is a
 classification job, and `case_verdict` does not do classification: it answers live / unknown / none
 from `miami_case_timeline`'s own labels, and where the classifier left a sale-worded entry
 unlabelled - it labels "Notice of Foreclosure Sale" but not "Notice of Rescheduled Foreclosure Sale"
 - the answer is "unknown", which holds the case as a gap. So a stayed case reads conflicted only when
-the docket itself says a sale is running, and a phrasing nobody anticipated produces a gap rather than
-a wrong verdict in either direction. Three earlier attempts here each broke the opposite way: by
+the docket itself says a sale is running. Four earlier attempts here each broke the opposite way: by
 status field (missed a stay filed after the notice), by entry kind (missed the rescheduled phrasings),
-and by regex over the entry's words (counted the judgment's own "shall sell the property", the
-petition asking the court to stop the sale, and unruled motions and denials).
+by regex over the entry's words (counted the judgment's own "shall sell the property", the petition
+asking the court to stop the sale, and unruled motions and denials), and by reading only the labels of
+the entries while short-circuiting on the derived `sale_held` summary - which hid a resale noticed
+after a certificate, and read an entry's `description` where the producer classifies on description
+plus the clerk's comments. Both of those were reachable false clean bills over a live stay; an
+earlier version of this paragraph claimed no wrong verdict in either direction was reachable, which
+is a claim the tests cannot establish and this one does not make. What the tests do establish is that
+each phrasing they carry lands on a gap rather than a verdict.
 
-2018-026274's amount reason is the first of them. The $0.60 breakdown in the row below is what the console
+2018-026274's amount reason is the second. The $0.60 breakdown in the row below is what the console
 printed on the run that found it, and it does NOT reach a saved timeline: `verify_document` builds its
 rows through `vision_rows`, which marks every row `explicit`, and `_resolve_subtotal` never returns
 None for an explicit row, so the notes `disagreeing_subtotals` is collected from are never written on
