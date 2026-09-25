@@ -242,6 +242,10 @@ class BudgetStopTests(unittest.TestCase):
             {'complete': False, 'open_gaps': ['court:1:1: page 3 not bought - budget: '
                                               'budget_exhausted: next page could cost $0.0550']}),
             'budget')
+        # Greptile on #65: a share spent before the document is worded "budget_exhausted:".
+        self.assertEqual(BF._documents_step_status(
+            {'complete': False, 'open_gaps': ["court:1:1: page * not bought - budget_exhausted: "
+                                              "this case's vision share was spent"]}), 'budget')
         # Greptile on #65: the walk's document cap and --token-budget say "budget" too.
         for other in ("walk stopped: budget: 12 document(s) is this run's cap, reached at hop 2",
                       'no cached search token for this owner, and --token-budget is 0'):
@@ -373,6 +377,55 @@ class OrchestrationTests(unittest.TestCase):
             dossier = json.loads((Path(folder) / (ROSTER[0] + '.json')).read_text())
         self.assertEqual(runs, {'documents': 4, 'timeline': 4})
         self.assertTrue(any(str(g).startswith('timeline: ') for g in dossier['open_gaps']))
+
+    def test_a_timeline_stopped_by_the_share_is_redone_the_same_day(self):
+        runs = {'timeline': 0}
+
+        def process(entry, qs, **kwargs):
+            return {'complete': True, 'open_gaps': []}
+
+        def timeline(case, as_of, **kw):
+            runs['timeline'] += 1
+            return {'coverage_complete': False, 'status': {'kind': 'judgment_entered'},
+                    'judgments': {}, 'gaps': [
+                        {'source_ref': 'x', 'reason': "budget_exhausted: this case's vision share "
+                                                     'was spent before this document'},
+                        {'source_ref': 'y', 'page': 2, 'reason': 'budget: budget_exhausted: next'}]}, {}
+
+        with tempfile.TemporaryDirectory() as folder:
+            self.run_backfill(folder, process, timeline)
+            state = json.loads((Path(folder) / '_backfill_state.json').read_text())
+            self.assertEqual(state['cases'][ROSTER[0]]['steps']['timeline']['status'], 'budget')
+            self.assertEqual(state['cases'][ROSTER[0]]['status'], 'budget_paused')
+            self.run_backfill(folder, process, timeline)
+        self.assertEqual(runs['timeline'], 4)
+
+    def test_a_crash_writing_the_new_dossier_leaves_no_timeline_checkpoint(self):
+        # Greptile on #65: the checkpoint was dropped after the write, so a crash between them
+        # kept the old "done" over the new dossier.
+        from unittest.mock import patch
+
+        def process(entry, qs, **kwargs):
+            return {'complete': False, 'open_gaps': ['court:1:1: page count never verified']}
+
+        def timeline(case, as_of, **kw):
+            return {'coverage_complete': True, 'gaps': [], 'status': {'kind': 'judgment_entered'},
+                    'judgments': {}}, {}
+
+        real = BF.DS._atomic_write_text
+
+        def dies_on_the_dossier(path, text):
+            if str(path).endswith(ROSTER[0] + '.json'):
+                raise KeyboardInterrupt('killed')
+            return real(path, text)
+
+        with tempfile.TemporaryDirectory() as folder:
+            self.run_backfill(folder, process, timeline)
+            with patch.object(BF.DS, '_atomic_write_text', side_effect=dies_on_the_dossier):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.run_backfill(folder, process, timeline, ['--retry-gaps'])
+            state = json.loads((Path(folder) / '_backfill_state.json').read_text())
+        self.assertNotIn('timeline', state['cases'][ROSTER[0]]['steps'])
 
     def test_a_case_with_no_saved_docket_is_a_named_gap(self):
         def process(entry, qs, **kwargs):

@@ -607,10 +607,32 @@ class ReconciliationTests(unittest.TestCase):
                  entry(4, 'Notice of Filing: Order Dismissing Chapter 13 Case No. 26-11111')])
         self.assertTrue(r['stay_in_effect'])
 
-    def test_a_number_cited_later_names_the_numberless_case(self):
+    def test_a_number_cited_later_may_be_a_second_petition(self):
+        # Greptile on #65: naming the numberless case with a later number meant dismissing that
+        # number ended the numberless filing too, which may be a different bankruptcy.
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
                  entry(3, 'Order staying action, automatic stay, Bankruptcy Case No. 26-11111'),
                  entry(4, 'Notice of Filing: Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_a_numberless_dismissal_closes_the_linked_filings(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order dismissing bankruptcy')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_the_numberless_filing_closes_on_its_own_later_dismissal(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order Dismissing Chapter 13 Case No. 26-11111'),
+                 entry(5, 'Order dismissing bankruptcy')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_a_dismissal_naming_a_number_closes_the_only_numberless_filing(self):
+        # One start filing is one petition in evidence; its dismissal supplies the number.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order Dismissing Chapter 13 Case No. 26-11111')])
         self.assertFalse(r['stay_in_effect'])
 
     def test_a_numberless_dismissal_with_two_open_bankruptcies_is_unknown(self):
