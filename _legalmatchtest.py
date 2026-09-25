@@ -346,6 +346,15 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['current_deed_candidate']['legal_match']['deed_index_legal'],
                          'SAMPLE GROVE / LOT 14 / BLK 12 / PB 53/900')
 
+    def test_one_instrument_indexed_under_another_parcels_folio_too(self):
+        # One of the rows for this instrument carries a foreign folio and another matches by
+        # legal description. Reading the foreign row's (absent) verdict used to crash the case.
+        rows = folio_pair() + [rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', '9999999999999'),
+                               rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(got['unanchored_deeds'], [])
+
     def test_a_duplicated_index_row_is_not_two_deeds_on_one_day(self):
         rows = folio_pair() + [rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
                                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]

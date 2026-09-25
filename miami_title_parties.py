@@ -118,7 +118,7 @@ def build_title_parties(models, documents, docket, folio):
     placed = set()
     for (model, row, printed, own_folio, conflict, pages), verdict in zip(candidates, verdicts):
         ref = row['source_ref']
-        if ref in matched_refs and verdict['verdict'] != 'matched':
+        if ref in matched_refs and (verdict is None or verdict['verdict'] != 'matched'):
             continue          # another index row for this same instrument matched the parcel
         if not conflict:
             if verdict['verdict'] == 'matched' and not row['date_parsed']:
