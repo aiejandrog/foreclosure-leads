@@ -57,8 +57,19 @@ def timeline(case, kind='judgment_entered', reason=None, controlling='232820355'
     # suite came to pass while `status`/`satisfaction` on the controlling judgment went unread.
     rows = list(judgments) if judgments is not None else (
         [judgment_row(controlling)] if controlling else [])
+    # A real saved timeline always has entries, and for a stayed case the sale state is read from
+    # them, so a fixture with entries=() is a shape build_timeline cannot write - which is how the
+    # pilot cases' sale rule went untested through three rewrites. The default is the smallest real
+    # docket: a complaint and the controlling judgment, neither of which mentions a sale.
+    rows_of_docket = list(entries) if entries else (
+        [{'entry_id': '1', 'kind': 'complaint', 'date': '2026-01-05',
+          'description': 'Complaint', 'operative_text': 'Complaint', 'comments': ''}]
+        + ([{'entry_id': str(controlling), 'kind': 'final_judgment', 'date': '2026-06-10',
+             'description': 'Final Judgment of Foreclosure',
+             'operative_text': 'FINAL JUDGMENT OF FORECLOSURE', 'comments': ''}]
+           if controlling else []))
     return {'case': case, 'county': 'MIAMI-DADE', 'as_of': '2026-09-24',
-            'status': status, 'entries': list(entries),
+            'status': status, 'entries': rows_of_docket,
             'judgments': {'controlling_entry': controlling, 'controlling_reason': controlling_reason,
                           'judgments': rows, 'unmatched': [],
                           'docket_duplicates_inferred': list(duplicates)},
@@ -668,7 +679,7 @@ class SecondReviewTests(unittest.TestCase):
                                          'date': '2026-11-10'}],
                                checks=[ok_check()], attachments=[read_attachment()]))
         self.assertEqual(r['verdict'], 'conflicted')
-        self.assertTrue(any('a sale on the docket (entry 120' in c for c in r['conflicts']),
+        self.assertTrue(any('entry 120' in c and 'notice of sale' in c for c in r['conflicts']),
                         r['conflicts'])
 
     def test_a_cancelled_sale_under_a_stay_is_not_a_contradiction(self):
@@ -891,25 +902,35 @@ class FourthReviewTests(unittest.TestCase):
         t['coverage'] = {'attachments': [read_attachment(controlling)], 'complete': False}
         return t
 
-    def test_a_rescheduled_sale_notice_under_a_stay_is_still_conflicted(self):
+    def test_a_sale_notice_the_classifier_labels_conflicts_with_a_stay(self):
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                        (145, 'Notice of Foreclosure Sale on 12/28/2026', '07/01/2026'),
+                        (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '08/01/2026')])
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+        self.assertTrue(any('sale going ahead' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_sale_phrasing_the_classifier_misses_is_a_gap_not_a_guess(self):
         # classify labels "Notice of Foreclosure Sale" but leaves "Notice of RESCHEDULED Foreclosure
         # Sale", "Amended Notice of Rescheduled Foreclosure Sale" and "Notice of Resetting
-        # Foreclosure Sale" as kind 'other'. Reading the kind alone let a one-word difference in the
-        # clerk's phrasing flip a live 11 USC 362 stay over a pending sale from conflicted to
-        # supported. Those entries still carry sale_passages.
-        for phrasing in ('Notice of Foreclosure Sale on 12/28/2026',
-                         'Notice of Rescheduled Foreclosure Sale on 12/28/2026',
+        # Foreclosure Sale" as kind 'other'. Two earlier rounds tried to classify those here - first
+        # by kind (missed them, false supported), then by regex over the entry's words (matched
+        # motions, objections and denials, false supported AND false conflicted). This module does
+        # not classify dockets. An unlabelled sale-worded entry means the answer is not in the file.
+        for phrasing in ('Notice of Rescheduled Foreclosure Sale on 12/28/2026',
                          'Amended Notice of Rescheduled Foreclosure Sale on 12/28/2026',
                          'Notice of Resetting Foreclosure Sale on 12/28/2026'):
             t = self.built([(100, 'Complaint', '01/05/2026'),
                             (140, 'Final Judgment of Foreclosure', '06/10/2026'),
                             (145, phrasing, '07/01/2026'),
-                            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345',
-                             '08/01/2026')])
-            self.assertIs(t['stay_in_effect'], True, phrasing)
+                            (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
             r = CV.assess(t)
-            self.assertEqual(r['verdict'], 'conflicted', (phrasing, r['missing'], r['notes']))
-            self.assertTrue(any('sale going ahead' in c for c in r['conflicts']), phrasing)
+            self.assertEqual(r['verdict'], 'incomplete', (phrasing, r))
+            self.assertTrue(any('classifier did not label' in m for m in r['missing']),
+                            (phrasing, r['missing']))
+            self.assertEqual(r['conflicts'], [], phrasing)
 
     def test_a_bankruptcy_the_stay_history_never_saw_is_not_a_clean_docket(self):
         # build_timeline drops an entry with no date, or a date after as_of, before building
@@ -1008,7 +1029,10 @@ class FourthReviewTests(unittest.TestCase):
 
 
 class FifthReviewTests(unittest.TestCase):
-    """Findings from the fifth independent review. Every test fails on 8d67734.
+    """Findings from the fifth independent review. Seven of these nine fail on 8d67734.
+
+    (An earlier version of this docstring said "every test fails on 8d67734", and a reviewer checked:
+    two of them pass on the parent. The claim is corrected rather than the tests dropped.)
 
     The theme: the round-4 fix over-corrected. Reading `sale_passages` turned "this text contains
     the word sale" into "a sale is scheduled", so every stayed case with a read judgment reported the
@@ -1066,20 +1090,15 @@ class FifthReviewTests(unittest.TestCase):
         r = CV.assess(t)
         self.assertEqual(r['conflicts'], [], r['conflicts'])
 
-    def test_a_real_notice_of_sale_under_a_stay_is_still_conflicted(self):
-        # The round-4 finding must stay fixed: the phrasings classify sets to kind 'other' are
-        # recognised from the entry's own docket description.
-        for phrasing in ('Notice of Foreclosure Sale on 12/28/2026',
-                         'Notice of Rescheduled Foreclosure Sale on 12/28/2026',
-                         'Amended Notice of Rescheduled Foreclosure Sale on 12/28/2026',
-                         'Notice of Resetting Foreclosure Sale on 12/28/2026'):
-            t = self.with_judgment_body([(100, 'Complaint', '01/05/2026'),
-                                         (140, 'Final Judgment of Foreclosure', '06/10/2026'),
-                                         (145, phrasing, '07/01/2026'),
-                                         (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
-            r = CV.assess(t)
-            self.assertEqual(r['verdict'], 'conflicted', (phrasing, r['missing'], r['notes']))
-            self.assertTrue(any('entry 145' in c for c in r['conflicts']), (phrasing, r['conflicts']))
+    def test_a_labelled_notice_of_sale_under_a_stay_is_still_conflicted(self):
+        # The round-4 finding must stay fixed for the phrasing the producer does label.
+        t = self.with_judgment_body([(100, 'Complaint', '01/05/2026'),
+                                     (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                                     (145, 'Notice of Foreclosure Sale on 12/28/2026', '07/01/2026'),
+                                     (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+        self.assertTrue(any('entry 145' in c for c in r['conflicts']), r['conflicts'])
 
     def test_a_cancellation_the_producer_calls_other_still_cancels(self):
         # "Notice of Cancellation of Foreclosure Sale" classifies as kind 'other'. Testing only
@@ -1152,6 +1171,142 @@ class FifthReviewTests(unittest.TestCase):
             report = json.loads((folder / 'case-verdicts.json').read_text())
             self.assertEqual(report['verdicts'], [])
             self.assertTrue(report['no_verdict']['no_timeline_saved'])
+
+
+class SixthReviewTests(unittest.TestCase):
+    """Findings from the sixth independent review.
+
+    Its two disqualifying findings were both in the sale rule, which had now been rewritten three
+    times and broken in a different direction each time. The response was not a fourth regex: this
+    module's contract is to RESTATE what other modules computed, and deciding whether a sale is
+    scheduled is a classification job. `_sale_state` now answers live / unknown / none from the
+    producer's own labels, and "unknown" is a gap - so neither a false conflict nor a false clean
+    bill is reachable through a phrasing nobody anticipated.
+    """
+
+    built = staticmethod(FourthReviewTests.__dict__['built'].__func__)
+    with_judgment_body = staticmethod(FifthReviewTests.__dict__['with_judgment_body'].__func__)
+
+    BASE = [(100, 'Complaint', '01/05/2026'),
+            (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+            (145, 'Notice of Foreclosure Sale on 12/28/2026', '07/01/2026')]
+    STAY = (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '08/01/2026')
+
+    def test_a_motion_or_denial_about_the_sale_never_clears_a_stay(self):
+        # Matching 'sale' + 'cancel|vacate' on the entry's own words treated an order DENYING a
+        # motion to cancel, an unruled motion, and an objection as cancellations - and because
+        # cancellation was tested first, each printed 'supported' over a live 11 USC 362 stay with a
+        # real notice of sale on the docket.
+        for phrasing in ('Order Denying Defendants Motion to Cancel Foreclosure Sale',
+                         'Motion to Cancel Foreclosure Sale',
+                         'Defendants Objection to Foreclosure Sale and Motion to Vacate the Sale',
+                         'Notice of Hearing on Motion to Cancel Foreclosure Sale'):
+            t = self.built(self.BASE + [(147, phrasing, '07/10/2026'), self.STAY])
+            r = CV.assess(t)
+            self.assertNotEqual(r['verdict'], 'supported', (phrasing, r))
+            self.assertFalse(any('nothing here clears anyone' in n and not r['conflicts']
+                                 and not r['missing'] for n in r['notes']), phrasing)
+
+    def test_an_order_cancelling_and_resetting_is_a_sale_not_a_cancellation(self):
+        # The producer classifies this as order_resetting_sale and it carries a NEW sale date. The
+        # cancel-first rule threw both away and printed 'supported'.
+        t = self.built(self.BASE + [(147, 'Order Cancelling and Resetting Foreclosure Sale to '
+                                          '03/15/2027', '07/10/2026'), self.STAY])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', r)
+        self.assertTrue(any('sale going ahead' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_stay_document_passage_is_not_a_sale_on_the_docket(self):
+        # operative_text is BODY text on three producer paths - a stay-carrier entry takes it from
+        # the bankruptcy order's own passage (:379), a judgment from its first-page title plus
+        # uppercase continuation lines (:364), and a cancellation gets body reasons appended (:387).
+        # Reading operative_text therefore reproduced the round-5 bug: the stay itself, and the
+        # judgment itself, counted as "a sale on the docket". Only `description` is read now, and
+        # only to notice an unlabelled entry.
+        import miami_case_timeline as T
+        docs = [{'entry_ref': '150', 'source_ref': 'court:150:1',
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text_source': 'embedded',
+                                        'chars': 200,
+                                        'text': 'ORDER REINSTATING CHAPTER 13 CASE\nThe automatic '
+                                                'stay is hereby reinstated as to the foreclosure '
+                                                'sale reset for December 28, 2026.'}]},
+                 'manifest': {'document_key': 'k'}}]
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'expected_documents': 0,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text}}
+            for n, text, d in [(100, 'Complaint', '01/05/2026'),
+                               (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                               (145, 'Notice of Foreclosure Sale on 12/28/2026', '07/01/2026'),
+                               (147, 'Order Cancelling Foreclosure Sale', '07/20/2026'),
+                               (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')]],
+            'pagination_verified': True}, docs, '2026-09-23')
+        t['judgments'] = {'controlling_entry': '140', 'controlling_reason':
+                          'one operative judgment after amendments, vacaturs and satisfactions',
+                          'judgments': [judgment_row('140')], 'docket_duplicates_inferred': []}
+        t['amount_vision'] = {'amount_checks': [ok_check('140', 'court:140:1', 500000.00)]}
+        t['coverage'] = {'attachments': [read_attachment('140')], 'complete': False}
+        r = CV.assess(t)
+        # The sale was cancelled by entry 147, after the notice. The stay's own document must not
+        # put it back.
+        self.assertFalse(any('150' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_an_unruled_motion_cannot_resurrect_a_cancelled_sale(self):
+        t = self.built(self.BASE + [(147, 'Order Cancelling Foreclosure Sale', '07/10/2026'),
+                                    (149, 'Plaintiff Motion to Reschedule Foreclosure Sale',
+                                     '07/20/2026'), self.STAY])
+        r = CV.assess(t)
+        self.assertFalse(any('no cancellation on or after it' in c for c in r['conflicts']),
+                         r['conflicts'])
+
+    def test_a_cancellation_on_the_same_day_as_the_notice_counts(self):
+        t = self.built(self.BASE + [(146, 'Order Cancelling Foreclosure Sale', '07/01/2026'),
+                                    self.STAY])
+        r = CV.assess(t)
+        self.assertFalse(any('no cancellation on or after it' in c for c in r['conflicts']),
+                         r['conflicts'])
+
+    def test_a_relief_order_after_the_cutoff_is_not_a_fresh_petition(self):
+        # BANKRUPTCY_KINDS had included relief, dismissal and discharge - stay-ENDING events. One of
+        # those dated after the run's as_of says nothing about the stay state at as_of, and it made a
+        # clean case incomplete.
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (110, 'Suggestion of Bankruptcy Chapter 7', '02/01/2026'),
+                        (120, 'Order Granting Relief from Bankruptcy Stay', '03/01/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                        (160, 'Order Granting Relief from Bankruptcy Stay', '12/01/2026')])
+        r = CV.assess(t)
+        self.assertFalse(any('never took in' in m for m in r['missing']), r['missing'])
+
+    def test_a_petition_after_the_cutoff_is_still_a_gap(self):
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (110, 'Suggestion of Bankruptcy Chapter 7', '02/01/2026'),
+                        (120, 'Order Granting Relief from Bankruptcy Stay', '03/01/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                        (160, 'Suggestion of Bankruptcy Chapter 13 case 26-99999', '12/01/2026')])
+        r = CV.assess(t)
+        self.assertTrue(any('160' in m and 'never took in' in m for m in r['missing']), r['missing'])
+
+    def test_a_sale_with_a_certificate_of_title_is_not_going_ahead(self):
+        # A petition filed after the sale completed and title issued is ordinary, not a
+        # contradiction, and sale_held already records the certificate.
+        r = CV.assess(timeline('X', kind='sold', stay=True,
+                               history=[{'entry_id': '180', 'event': 'stayed'}],
+                               sale_held={'date': '2026-07-20', 'evidence': ['160', '161'],
+                                          'certificate': '170', 'bankruptcy_same_day': [],
+                                          'bankruptcy_order': None},
+                               checks=[ok_check()], attachments=[read_attachment()]))
+        self.assertFalse(any('sale going ahead' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_dossier_that_will_not_parse_is_reported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text('{ not json')
+            (folder / 'A-timeline.json').write_text(json.dumps(
+                timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
+            proc = run_cli('--dossiers', folder, dealflow=folder)
+            self.assertIn('UNREADABLE', proc.stdout)
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertTrue(any('A.json' in n for n in report['no_verdict']['unreadable']))
 
 
 if __name__ == '__main__':

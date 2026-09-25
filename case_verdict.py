@@ -154,84 +154,109 @@ def _judgment_record(judgments, entry_id):
 # Docket entry kinds that put a sale on the calendar, and the one that takes it off.
 SALE_NOTICE_KINDS = ('notice_of_sale', 'order_resetting_sale')
 SALE_CANCELLED_KIND = 'order_cancelling_sale'
-# The entry's OWN docket description decides whether it schedules or cancels a sale. NOT
-# `sale_passages`: miami_case_timeline (:384) appends every BODY line matching
-# sale|sell|auction|reset|reschedul to that list, ungated by kind, and a Florida final judgment of
-# foreclosure always orders the clerk to sell - so reading sale_passages made the controlling
-# judgment itself, and even a bankruptcy petition asking the court to stop the sale, count as "a sale
-# on the docket". Every stayed case then reported the same conflict, which buried the real
-# 2018-026274 contradiction and made "supported with a stay in effect" unreachable.
+# Only to notice that the classifier left a sale-worded entry unlabelled, which is reported as a
+# gap. Never to decide that a sale IS or IS NOT scheduled - see _sale_state.
 _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
-_SALE_SET_RE = re.compile(r'\b(?:notice|resett?ing|reset|reschedul\w*)\b|\border\s+of\s+sale\b', re.I)
-# Cancelled, vacated, denied, struck or withdrawn: not a sale the docket is running.
-_SALE_OFF_RE = re.compile(r'\b(?:cancel\w*|vacat\w*|den(?:y|ies|ied|ying)|withdraw\w*|strik\w*|'
-                          r'struck|stayed)\b', re.I)
-_SALE_CANCEL_RE = re.compile(r'\b(?:cancel\w*|vacat\w*)\b', re.I)
-# Entry kinds that put a bankruptcy on the docket (miami_case_timeline :462, :553).
-BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated', 'relief_from_stay',
-                    'bankruptcy_dismissed', 'bankruptcy_discharged')
+# Entry kinds that RAISE a stay (miami_case_timeline :469, :553). Relief, dismissal and discharge
+# are stay-ENDING events: one of those dated after the run's as_of says nothing about the stay state
+# at as_of, and counting them made a clean case incomplete.
+BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')
 
 
-def _sale_on_the_docket(timeline, status, kind):
-    """-> a phrase naming the sale the docket is running, or None.
+def _sale_state(timeline, status, kind):
+    """-> ('live'|'unknown'|'none', phrase) for the sale the docket is running.
 
-    THE STATUS DICT IS NOT A SOURCE FOR THIS. miami_case_timeline's loop does `status = change`
-    (:503), and _transition builds a fresh dict for a bankruptcy entry (:258) with no sale_date, so
-    a stay filed AFTER a notice of sale destroys the scheduled date - and the rewrite to 'unclear'
-    at :495 drops it too. The previous version of this function read status['sale_date'] and was
-    pinned by a fixture carrying kind 'stayed_by_bankruptcy' WITH a sale_date, a combination the
-    producer cannot write. The result was `supported` on a case with a live 11 USC 362 stay over a
-    sale still on the calendar.
+    THIS MODULE DOES NOT CLASSIFY DOCKET ENTRIES. Six review rounds on this one question all went
+    the same way: reading status['sale_date'] missed a stay filed after the notice (the producer's
+    loop does `status = change`, :503, and the bankruptcy branch builds a fresh dict with no sale
+    date); reading entry kinds missed "Notice of Rescheduled Foreclosure Sale", which classify
+    labels 'other'; reading `sale_passages` matched the judgment's own "shall sell the property" and
+    the petition asking the court to stop the sale; reading the entry's own words with a regex
+    counted unruled motions, objections and denials as dispositive in both directions. Each patch
+    broke the opposite way, because deciding whether a sale is scheduled is a classification job -
+    and this module's contract (see the docstring) is to RESTATE what other modules computed, never
+    to compute a state of its own.
 
-    The saved `entries` list survives all of that, so the notice of sale is read from there.
+    So it reads only the producer's own labels, and where those cannot answer, it says so:
+
+      live     the producer itself says a sale is running - its status kind, or a sale it recorded
+               as held with no certificate yet, or an entry IT classified as a sale notice with no
+               entry IT classified as a cancellation on or after it.
+      unknown  the docket has sale-worded entries the classifier left unlabelled, so whether a sale
+               is pending is not answerable from this file. A gap, never a contradiction.
+      none     no sale evidence of either kind.
     """
     held = timeline.get('sale_held')
     if isinstance(held, dict) and held.get('date'):
-        return 'the clerk posted sale-day bid and deposit entries on %s' % held['date']
-    if held:
-        return 'the clerk posted sale-day bid and deposit entries'
-    notice, cancelled = None, None
+        if held.get('certificate'):
+            # The sale completed and title issued. A bankruptcy filed afterwards is ordinary, not a
+            # contradiction, so this is not a live sale.
+            return 'none', None
+        return 'live', ('the clerk posted sale-day bid and deposit entries on %s and no '
+                        'certificate of sale has followed' % held['date'])
+    if kind in SALE_KINDS:
+        return 'live', 'the docket status is %r' % (kind,)
+    if status.get('sale_date'):
+        return 'live', 'a sale is on the calendar for %s' % status['sale_date']
+    notice, cancelled, unlabelled = None, None, []
     for entry in _rows(timeline, 'entries'):
         if not isinstance(entry, dict):
             continue
-        # Cancellation is tested FIRST, and by the same kind of rule as the notice: "Notice of
-        # Cancellation of Foreclosure Sale" classifies as kind 'other', and an asymmetric test read
-        # it as the newest sale notice and called a cancelled sale one going ahead.
-        if _cancels_a_sale(entry):
+        entry_kind = entry.get('kind')
+        if entry_kind == SALE_CANCELLED_KIND:
             cancelled = _newer(cancelled, entry)
-        elif _schedules_a_sale(entry):
+        elif entry_kind in SALE_NOTICE_KINDS:
             notice = _newer(notice, entry)
-    if notice is not None and not (cancelled is not None
-                                  and str(cancelled.get('date') or '') > str(notice.get('date') or '')):
-        dates = _sale_dates_of(notice)
-        return 'a sale on the docket (entry %s, %s%s) with no later cancellation' % (
-            notice.get('entry_id') or '?', notice.get('date') or 'undated',
-            '; sale date %s' % ', '.join(dates) if dates else '')
-    if kind in SALE_KINDS:
-        return 'the docket status is %r' % (kind,)
-    if status.get('sale_date'):
-        return 'a sale is on the calendar for %s' % status['sale_date']
-    return None
+        elif _SALE_WORD_RE.search(str(entry.get('description') or '')):
+            # The classifier saw the word and did not label the entry. That is a limit of the
+            # classifier, not evidence either way, and it is not this module's to resolve.
+            unlabelled.append(entry)
+    if notice is not None:
+        # A cancellation on the SAME DAY counts: the docket gives dates, not times, so a notice and
+        # a cancellation on one day cannot be ordered, and reporting "no later cancellation" over a
+        # docket that carries one is the claim that cannot be defended.
+        if cancelled is not None and str(cancelled.get('date') or '') >= str(notice.get('date') or ''):
+            return 'none', None
+        # An unlabelled sale-worded entry dated on or after the notice may BE the cancellation -
+        # "Notice of Cancellation of Foreclosure Sale" is one the classifier leaves as 'other'. So
+        # the sale state is unknown, not live: claiming a conflict here would be the same guess in
+        # the opposite direction.
+        later = [e for e in unlabelled
+                 if str(e.get('date') or '') >= str(notice.get('date') or '')]
+        if later:
+            return 'unknown', ('entry %s is classified as a notice of sale, and %d later docket '
+                               'entr%s mention a sale without being classified (entr%s %s), so '
+                               'whether that sale still stands cannot be told from this file' % (
+                                   notice.get('entry_id') or '?', len(later),
+                                   'y does' if len(later) == 1 else 'ies do',
+                                   'y' if len(later) == 1 else 'ies',
+                                   ', '.join(str(e.get('entry_id') or '?') for e in later[:5])))
+        if True:
+            dates = _sale_dates_of(notice)
+            return 'live', ('entry %s, which the docket classifies as a notice of sale (%s%s), '
+                            'with no cancellation on or after it' % (
+                                notice.get('entry_id') or '?', notice.get('date') or 'undated',
+                                '; sale date %s' % ', '.join(dates) if dates else ''))
+    if unlabelled:
+        return 'unknown', ('%d docket entr%s mention a sale that the classifier did not label as a '
+                           'sale notice or cancellation (entr%s %s), so whether a sale is pending '
+                           'cannot be told from this file' % (
+                               len(unlabelled), 'y does' if len(unlabelled) == 1 else 'ies do',
+                               'y' if len(unlabelled) == 1 else 'ies',
+                               ', '.join(str(e.get('entry_id') or '?') for e in unlabelled[:5])))
+    return 'none', None
 
 
-def _entry_text(entry):
-    """The entry's own docket words - description, title, clerk comments. Never document body lines."""
-    return ' '.join(str(entry.get(k) or '') for k in ('description', 'operative_text', 'comments'))
-
-
-def _schedules_a_sale(entry):
-    if entry.get('kind') in SALE_NOTICE_KINDS:
-        return True
-    text = _entry_text(entry)
-    return bool(_SALE_WORD_RE.search(text) and _SALE_SET_RE.search(text)
-                and not _SALE_OFF_RE.search(text))
-
-
-def _cancels_a_sale(entry):
-    if entry.get('kind') == SALE_CANCELLED_KIND:
-        return True
-    text = _entry_text(entry)
-    return bool(_SALE_WORD_RE.search(text) and _SALE_CANCEL_RE.search(text))
+def _sale_dates_of(entry):
+    """The sale dates the entry's own docket words print, via the producer's own parser."""
+    text = ' '.join(str(entry.get(k) or '') for k in ('description', 'comments'))
+    if not text.strip():
+        return []
+    try:
+        import miami_case_timeline
+        return [d for d in (miami_case_timeline._sale_dates([text]) or []) if d]
+    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
+        return []
 
 
 def _newer(current, entry):
@@ -240,16 +265,6 @@ def _newer(current, entry):
     return entry if str(entry.get('date') or '') >= str(current.get('date') or '') else current
 
 
-def _sale_dates_of(entry):
-    """The sale dates the entry's own docket words print, via the producer's own parser."""
-    text = _entry_text(entry)
-    if not text.strip():
-        return []
-    try:
-        import miami_case_timeline
-        return [d for d in (miami_case_timeline._sale_dates([text]) or []) if d]
-    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
-        return []
 
 
 def _bankruptcy_entries(timeline):
@@ -434,14 +449,16 @@ def assess(timeline, dossier=None):
     history = _rows(timeline, 'stay_history')
     if stay is True:
         # A well-evidenced stay is not a contradiction, and the status table's 2023-020247 is
-        # "supported" with one in effect. A stay in effect while the docket moves a sale IS one:
+        # "supported" with one in effect. A stay in effect while the docket runs a sale IS one:
         # 2018-026274, stay #93 with no relief order, against an amended judgment and a sale notice
-        # for the same month. 'sold' counts too - a stay over a completed sale is at least as
-        # contradictory as one over a scheduled sale.
-        sale = _sale_on_the_docket(timeline, status, kind)
-        if sale:
+        # for the same month. Where the file cannot say which of those it is, that is a gap - not a
+        # contradiction and not a clean bill.
+        state, sale = _sale_state(timeline, status, kind)
+        if state == 'live':
             conflicts.append('a bankruptcy stay is in effect while the docket shows a sale going '
                              'ahead (%s); no relief order was identified' % sale)
+        elif state == 'unknown':
+            missing.append('a bankruptcy stay is in effect and %s' % sale)
         else:
             notes.append('a bankruptcy stay is in effect; nothing here clears anyone to be '
                          'contacted')
@@ -731,7 +748,7 @@ def _load(path, required=False):
 def for_saved_case(dossier_path):
     """-> the verdict for one saved dossier, or None when it has no whole-case timeline yet."""
     path = Path(dossier_path)
-    dossier = _load(path)
+    dossier = _load(path, required=True)
     timeline = _load(path.with_name(path.stem + '-timeline.json'), required=True)
     if not isinstance(timeline, dict):
         return None
