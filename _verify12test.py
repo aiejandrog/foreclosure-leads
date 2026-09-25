@@ -322,8 +322,33 @@ check("a neighbour's release in the same subdivision never frees the owner's lie
       _nb['other'][0]['st'] == 'OPEN' and _nb['code_open'] == 400, _nb['other'])
 _won = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '14', 20000, 'SMITH BOB', first='TESTER OWNER',
                              folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
-check("a person-against-person judgment is never summed as the owner's debt (it may be one they won)",
-      _won['code_open'] == 0 and _won['other_open_unpriced'] == 1 and _won['other'][0].get('direction_unknown'), _won['other'])
+check("a person-against-person judgment is flagged (the owner may have won it) but still summed: too much debt, never too little",
+      _won['code_open'] == 20000 and _won['other'][0].get('direction_unknown'), _won['other'])
+_citi = RL.analyze([deed, rec('JUDGMENT', '3/3/2022', '33500', '50', 15000, 'TESTER OWNER', first='CITIBANK NA')],
+                   FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a CITIBANK NA judgment against the owner is summed", _citi['code_open'] == 15000, _citi['other'])
+_rel2 = rec('RELEASE OF LIEN', '8/8/2021', '32800', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI')
+_dup = RL.analyze([deed, rec('LIEN', '5/5/2019', '31100', '51', 5000, 'OWNER TESTER', first='CITY OF MIAMI'),
+                   rec('LIEN', '6/6/2020', '31900', '52', 7000, 'OWNER TESTER', first='CITY OF MIAMI'),
+                   _rel2, dict(_rel2, seconD_PARTY='TESTER MARIA')],
+                  FOLIO, 12000, ftype='HOA', owner='OWNER TESTER', co_owners=[('TESTER', 'MARIA')])
+check("two index copies of ONE release are one release: it frees neither of two liens",
+      [o['st'] for o in _dup['other']] == ['OPEN', 'OPEN'] and _dup['code_open'] == 12000, _dup['other'])
+_long_pl = RL.analyze([deed, rec('CLAIM OF LIEN', '1/1/2024', '34000', '53', 9000, 'OWNER TESTER',
+                                 first='SUNSET HOMEOWNERS ASSOCIATION INC')],
+                      FOLIO, 4000, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION PHASE II INC',
+                      owner='OWNER TESTER', case='2024-000001-CC-05')
+check("a whole sibling name that is a prefix of the plaintiff's is still the sibling's claim",
+      not _long_pl['other'][0].get('own_case') and _long_pl['hoa_open'] == 9000, _long_pl['other'])
+_trunc = RL.analyze([deed, rec('CLAIM OF LIEN', '1/1/2024', '34000', '54', 9000, 'OWNER TESTER',
+                               first='SUNSET HOMEOWNERS ASSOCIATION PHA')],
+                    FOLIO, 4000, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION PHASE II INC',
+                    owner='OWNER TESTER', case='2024-000001-CC-05')
+check("an index name cut short is still the plaintiff's", _trunc['other'][0].get('own_case') is True, _trunc['other'])
+for _ini in ('SMITH J', 'SMITH'):
+    _irs = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '55', 40000, 'INTERNAL REVENUE SERVICE', first=_ini,
+                                 folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOHN SMITH')
+    check("the owner's IRS lien indexed as %r is kept" % _ini, _irs['irs_open'] == 40000, _irs['other'])
 _dlc = RL.analyze([deed, rec('FEDERAL TAX LIEN', '4/4/2021', '33000', '15', 3000, 'DE LA CRUZ MARIA',
                              first='INTERNAL REVENUE SERVICE', folio='', subdiV_NAME='')],
                   FOLIO, 12000, ftype='HOA', owner='JUAN PEREZ', co_owners=[('DE LA CRUZ', 'MARIA')])
@@ -489,6 +514,21 @@ try:
     RL._SPEND.update(cap=1.00, submits=20, bal0=10.0, prior=0.0, ledger=None, stopped='')
     RL.fetch_via_turnstile(('OWNERW', ''))
     check('--max-spend stops paying when the balance can no longer be read', _fake_cs.calls == [], RL._SPEND)
+    _real_save = RL._ledger_save
+    RL._ledger_save = lambda *a, **k: RL._SPEND.update(stopped='the spend ledger could not be written')
+    RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, prior=0.0, ledger='x', stopped='')
+    RL.fetch_via_turnstile(('OWNERU', ''))
+    RL._ledger_save = _real_save
+    check('a ledger that cannot be written stops the solve it would have recorded', _fake_cs.calls == [], _fake_cs.calls)
+    RL._SPEND.update(ledger=None)
+    _lkf = os.path.join(_tmp, 'lost.json.lock')
+    open(_lkf, 'w').write('someone else')
+    RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, prior=0.0, stopped='', lock=_lkf, lock_id='me')
+    RL.fetch_via_turnstile(('OWNERT', ''))
+    check('a run whose ledger lock was taken over stops paying', _fake_cs.calls == [] and 'took over' in RL._SPEND['stopped'],
+          RL._SPEND)
+    RL._SPEND.update(lock=None, stopped='')
+    os.remove(_lkf)
     RL._SPEND.update(cap=None, submits=0, bal0=None, prior=0.0, ledger=None, stopped='')
     RL.fetch_via_turnstile(('OWNERV', ''))
     check('without --max-spend the solver behaves as before (three tries, counted)',
@@ -598,11 +638,15 @@ try:
     _t2 = tempfile.mkdtemp()
     json.dump([{'Case #': '2099-000201-CA-01', 'owner_clean': 'BOB OWNERZ', 'Folio': FOLIO, 'judgment': 1,
                 'defendants': 'Tester, John'},
-               {'Case #': '2099-000202-CA-01', 'owner_clean': 'ANN NOTHING', 'Folio': FOLIO, 'judgment': 1}],
+               {'Case #': '2099-000202-CA-01', 'owner_clean': 'ANN NOTHING', 'Folio': FOLIO, 'judgment': 1},
+               {'Case #': '2099-000203-CA-01', 'owner_clean': 'JOHN NEWOWNER', 'Folio': FOLIO, 'judgment': 1}],
               open(os.path.join(_t2, 'leads_final.json'), 'w'))
-    json.dump({'2099-000201-CA-01': {'conf': 'ok', 'liens': []}, '2099-000202-CA-01': {'conf': 'ok', 'liens': []}},
+    _mtg_chain = {'conf': 'ok', 'liens': [{'d': '2/1/2008', 'amt': 350000, 'st': 'OPEN', 'bp': '26100/11'}],
+                  'searched_as': 'JANE DOE (defendant)'}
+    json.dump({'2099-000201-CA-01': {'conf': 'ok', 'liens': []}, '2099-000202-CA-01': {'conf': 'ok', 'liens': []},
+               '2099-000203-CA-01': _mtg_chain},
               open(os.path.join(_t2, 'records_liens.json'), 'w'))
-    json.dump({'BOB OWNERZ': 'tokOTHER'}, open(os.path.join(_t2, 'records_qs.json'), 'w'))
+    json.dump({'BOB OWNERZ': 'tokOTHER', 'JOHN NEWOWNER': 'tokDEEDONLY'}, open(os.path.join(_t2, 'records_qs.json'), 'w'))
     open(os.path.join(_t2, 'gen_records_qs.py'), 'w').write('')
     _far = rec('DEED', '1/1/2010', '20000', '1', folio='3099999999999', subdiV_NAME='ELSEWHERE')
     _asked = []
@@ -615,7 +659,7 @@ try:
     try:
         RL.LEADS, RL.OUT = os.path.join(_t2, 'leads_final.json'), os.path.join(_t2, 'records_liens.json')
         RL.QS_CACHE, RL.HERE = os.path.join(_t2, 'records_qs.json'), _t2
-        RL.records_by_qs = lambda qs: [_far] if qs == 'tokOTHER' else None
+        RL.records_by_qs = lambda qs: [_far] if qs == 'tokOTHER' else ([deed] if qs == 'tokDEEDONLY' else None)
         RL.fetch_via_turnstile = _ft
         RL.camoufox_session = lambda: (None, None)
         RL.mint_and_fetch = lambda *a, **k: None
@@ -634,6 +678,8 @@ try:
     check('--repull searches the defendant when the owner name misses the parcel',
           ('TESTER', 'JOHN') in _asked and 'other' in _o2['2099-000201-CA-01']
           and _o2['2099-000201-CA-01'].get('searched_as') == 'JOHN TESTER (defendant)', (_asked, _o2['2099-000201-CA-01']))
+    check("--repull never replaces a chain's mortgages with a narrower search that shows none",
+          _o2['2099-000203-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000203-CA-01'])
     check('--repull marks a chain it paid to search and found nothing for, and never pays for it again',
           _o2['2099-000202-CA-01'].get('repull_tried') and _asked.count(('NOTHING', 'ANN')) == 1, (_asked, _o2))
     # one surname, one query: the clerk searches the SURNAME, so a spouse or the owner's own longer

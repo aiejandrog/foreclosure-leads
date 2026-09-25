@@ -180,6 +180,15 @@ def _may_submit():
         return True
     if _SPEND['stopped']:
         return False
+    if _SPEND.get('lock'):
+        try:
+            mine = open(_SPEND['lock'], encoding='utf-8').read() == _SPEND.get('lock_id')
+        except OSError:
+            mine = False
+        if not mine:
+            # asleep past the stale age and another run took the ledger over: its total is not ours
+            _SPEND['stopped'] = 'another run took over the spend ledger'
+            return False
     if _SPEND['prior'] + (_SPEND['submits'] + 1) * PAID_SOLVE_USD > cap + 1e-9:
         _SPEND['stopped'] = 'counted solves reached the $%s cap' % _usd(cap)
         return False
@@ -300,6 +309,8 @@ def fetch_via_turnstile(owner_lf, tries=3):
             return None
         _SPEND['submits'] += 1                  # counted on submit: a failed solve may still bill
         _ledger_save()                          # before the solve, so a crash cannot forget it
+        if _SPEND['stopped']:
+            return None                         # the ledger could not be written: no unrecorded solve
         tok = solve_turnstile(TS_SITE_KEY, OR_BASE)
         if not tok:
             continue
@@ -652,6 +663,34 @@ def _names_owner(party, owners, strict=False):
     return False
 
 
+def _surname_given(party, words):
+    """(surname present?, the other name tokens) of a party string against one person's words."""
+    toks = re.findall(r'[A-Z0-9]+', (party or '').upper().replace("'", ''))
+    sn = re.findall(r'[A-Z0-9]+', words[1].replace("'", ''))
+    if not sn or not all(w in toks for w in sn):
+        return False, []
+    return True, [t for t in toks if t not in sn]
+
+
+def _maybe_owner(party, owners):
+    """Could this be the owner, indexed short? The surname plus the first name, its initial, or no
+    given name at all. ('SMITH J' may be JOHN SMITH; 'SMITH MARIA' is not.)"""
+    for words in owners or ():
+        if words[0] != 'person':
+            continue
+        ok, rest = _surname_given(party, words)
+        first = (re.findall(r'[A-Z0-9]+', words[2].replace("'", '')) or [''])[0]
+        if ok and (not rest or first in rest or first[:1] in [t for t in rest if len(t) == 1]):
+            return True
+    return False
+
+
+def _other_person(party, owners):
+    """The owner's surname with a different given name only: a namesake, not the owner."""
+    return any(w[0] == 'person' and _surname_given(party, w)[0] and _surname_given(party, w)[1]
+               for w in owners or ()) and not _maybe_owner(party, owners)
+
+
 def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=()):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
@@ -880,7 +919,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             q = _pnorm(p)
             if not q:
                 continue
-            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and _pl.startswith(q)):
+            # an index name that ENDS in a legal suffix is whole, not cut short: it must match exactly
+            # ("SUNSET HOMEOWNERS ASSOCIATION INC" is not "... ASSOCIATION PHASE II INC")
+            whole = re.search(r'\b(?:INC|LLC|CORP|CO|LTD|LP|ASSN|ASSOCIATION|NA|N A|FSB|TRUST)\.?\s*$',
+                              re.sub(r'[.,]', ' ', p or '').upper().strip())
+            if q == _pl or (not whole and len(_pl) >= 5 and len(q) >= 5 and _pl.startswith(q)):
                 return True
         return False
     def _own_judgment(doc, amt, d):
@@ -898,6 +941,18 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # Only a release that says it is of a lien, judgment or warrant (a plain SATISFACTION is how the
     # index files a mortgage payoff), never a partial one, and only one indexed to THIS parcel: a
     # release of the same City's lien on the owner's other house must not free this one.
+    _rel_seen = set()
+    def _first_copy(r):
+        # co-owner and AKA copies of ONE release are one release, not one per copy
+        k = ((str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
+             if str(r.get('reC_BOOK', '')).strip() and str(r.get('reC_PAGE', '')).strip()
+             else ('cfn', str(r.get('cfN_MASTER_ID') or '').strip()) if r.get('cfN_MASTER_ID') else None)
+        if k is None:
+            return True
+        if k in _rel_seen:
+            return False
+        _rel_seen.add(k)
+        return True
     unref_rel = [((_parse_recd((r.get('reC_DATE', '') or '')[:10])),
                   {_pnorm(r.get('firsT_PARTY')), _pnorm(r.get('seconD_PARTY'))} - {''})
                  for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
@@ -908,7 +963,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                                         or _names_owner(r.get('firsT_PARTY'), _ow, strict=True)   # owner: a
                                         or _names_owner(r.get('seconD_PARTY'), _ow, strict=True))))  # neighbour's
                                                                                           # is not ours
-                 and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())]
+                 and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())
+                 and _first_copy(r)]
     other = []
     hoa_open = code_open = irs_open = 0
     other_unpriced = 0
@@ -948,7 +1004,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if not on_parcel:
             if not person_wide:
                 continue                                    # another property of the same owner
-            if _ow is not None and not (o1 or o2):
+            if _ow is not None and not (o1 or o2) and (_other_person(p1, _ow) or _other_person(p2, _ow)) \
+                    and not (_maybe_owner(p1, _ow) or _maybe_owner(p2, _ow)):
                 continue                                    # a namesake: the search is by surname only
         # One instrument, one row (co-owner copies). Marked seen only once a copy is KEPT: a copy
         # indexed to another folio must not hide this parcel's copy of the same recording.
@@ -996,7 +1053,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if (kind == 'judgment' and not own_case and cred is not both
                 and not COMPANY_RE.search(cred) and not _CREDITOR_RE.search(cred)):
             # person against person: the index does not say who won, and a judgment the OWNER won is
-            # money owed to them. Counted as a debt we cannot size, never summed into one.
+            # money owed to them. Flagged for a reader, but still SUMMED: too much debt, never too little.
             row['direction_unknown'] = True
         other.append(row)
     # pair the releases that point nowhere with the liens of their own holder, one to one
@@ -1030,7 +1087,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if _NOT_CLAIM_DOC_RE.search(_full) or (kind == 'other' and not _CLAIM_DOC_RE.search(_full)):
             continue                                        # a notice, a title certificate, a financing
                                                             # statement, a waiver: shown, never counted
-        if not row['amt'] or row.get('direction_unknown'):
+        if not row['amt']:
             other_unpriced += 1                             # found, open, amount not published: a count
             continue
         if kind in ('irs', 'state_tax'):
@@ -1417,7 +1474,9 @@ def _run(a, ap):
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
-                if out.get(case) and not (res.get('nrec') and res.get('parcel_found')):
+                _had = [l for l in ((out.get(case) or {}).get('liens') or []) if isinstance(l, dict)]
+                _lost = a.repull and _had and not res.get('liens') and not res.get('mtg_open_unpriced')
+                if out.get(case) and (not (res.get('nrec') and res.get('parcel_found')) or _lost):
                     if a.repull and _SPEND['stopped']:
                         # the cap stopped the search part-way (the defendants were never asked):
                         # not a finding, and not marked, so a later run with budget can finish it
@@ -1426,8 +1485,12 @@ def _run(a, ap):
                         continue
                     # The cached token came back empty, or no longer carries this folio: that is a
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
+                    # --repull: a fresh search that shows none of the mortgages the old chain had (a
+                    # chain first found through a defendant's surname) is a narrower search, not a payoff
                     kept += 1
-                    print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
+                    print(f"  ..  {case:22} {oc:26} re-read found "
+                          + ("none of the old chain's mortgages" if _lost else "nothing on this parcel")
+                          + "; old chain kept")
                     if a.repull:
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
                         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
