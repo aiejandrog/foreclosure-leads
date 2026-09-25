@@ -106,7 +106,9 @@ rec('warmup does not write the outreach ledger', 'mail_sent' not in io.open(
     os.path.join(HERE, 'warmup.py'), encoding='utf-8').read().split('"""')[2],
     'only the docstring mentions it, to say it does not')
 
-# the crossover is the date the recommendation turns on, so it is pinned
+# the crossover is cap arithmetic off two checked-in constants, so it is pinned. it is NOT
+# the date to stop BSG Warmup: the 2026-09-23 audit found no live cold path, so the cap
+# climbing past the quota does not mean real volume did. see ramp_status.py's own output.
 cross = None
 for i in range(60):
     d = DAY + dt.timedelta(days=i)

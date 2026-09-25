@@ -152,9 +152,14 @@ def main():
                      'cold ahead' if lo >= wq else 'warm-up ahead'))
         print()
         if crossover:
-            print('  The cold ramp first matches or passes the warm-up quota on %s.' % crossover)
-            print('  That is the first date on which stopping BSG Warmup does not cut an alias\'s')
-            print('  daily volume, which is the thing a warming domain must not see go backwards.')
+            print('  The cold ramp CAP first matches or passes the warm-up quota on %s.' % crossover)
+            print('  That is a date on the calendar, not a measurement. The ramp climbs from')
+            print('  ramp_start whether or not a single message was sent, so the cap reaching 15')
+            print('  says nothing about real cold volume. Audit 2026-09-23 found no live cold path')
+            print('  to these aliases at all - so stopping BSG Warmup on this date would have')
+            print('  dropped each alias 15 -> 0, not 15 -> 20.')
+            print('  Stop warm-up per alias only after the cold column above shows >= the warm-up')
+            print('  quota in REAL sends for five days running, with bounce under 3%, then taper.')
         else:
             print('  The cold ramp does not reach the warm-up quota inside this window.')
     return 0
