@@ -92,9 +92,10 @@ def build_title_parties(models, documents, docket, folio):
                'parties':_deed_parties(model, doc, ref, book_page, pages),
                'date_parsed':_date(model.get('reC_DATE'))}
         if anchored:
-            if _instrument(model) in anchored_refs:
+            key = _instrument(model)
+            if key and key in anchored_refs:
                 continue      # another index row for this same instrument is already in the chain
-            anchored_refs.add(_instrument(model))
+            anchored_refs.add(key)
             gaps.append('%s: index names and bounded explicit-role extraction do not establish that every deed party was recovered.' % ref)
             deeds.append(row)
             continue
@@ -125,8 +126,14 @@ def build_title_parties(models, documents, docket, folio):
         # An index row with no book and page names no instrument, so it collapses with nothing.
         ref = _instrument(candidate[0]) or position
         kept = rows_by_ref.get(ref)
-        if kept is None or ((kept[1] or {}).get('verdict') != 'matched'
-                            and (verdict or {}).get('verdict') == 'matched'):
+        # Rank the rows so the county's answer order cannot decide the outcome: a row that
+        # matched the parcel wins, then a row that can still be compared, and a row ruled out by
+        # another parcel's folio last, because that status drops the deed from the conveyance
+        # warning and a sibling row says the instrument names this parcel too.
+        def rank(entry):
+            return (1 if (entry[1] or {}).get('verdict') == 'matched' else
+                    2 if entry[1] is not None else 3)
+        if kept is None or rank((candidate, verdict)) < rank(kept):
             rows_by_ref[ref] = (candidate, verdict)
     judged = list(rows_by_ref.values())
     matched_days = {}

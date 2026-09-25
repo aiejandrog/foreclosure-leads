@@ -25,6 +25,13 @@ def mortgage(folio=FOLIO, **kw):
     return rec('5', '3/1/2019', 'OWNER PERSON', 'SAMPLE BANK', folio, 'MORTGAGE', **kw)
 
 
+def unkeyed(date, grantor, grantee, folio='', **kw):
+    """An index row carrying neither book nor page: it names no instrument."""
+    row = rec(None, date, grantor, grantee, folio, **kw)
+    row['reC_PAGE'] = None
+    return row
+
+
 def folio_pair(**kw):
     """Two records filed under the parcel's folio saying the same legal. One record alone can
     raise a question about a deed but never rule it out, so a test that means 'differs' needs the
@@ -381,15 +388,29 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertFalse(any('Same-date deeds' in g for g in got['gaps']))
 
     def test_rows_with_no_book_and_page_are_not_one_instrument(self):
-        def unkeyed(date, grantor, grantee, **kw):
-            row = rec(None, date, grantor, grantee, **kw)
-            row['reC_PAGE'] = None
-            return row
         got = title(folio_pair() + [unkeyed('1/1/2020', 'A PERSON', 'B PERSON', legal='LOT 15'),
                                     unkeyed('2/1/2020', 'C PERSON', 'D PERSON', legal='LOT 16')])
         self.assertEqual(len(got['unanchored_deeds']), 2)
         self.assertEqual({p['name'] for d in got['unanchored_deeds'] for p in d['parties']},
                          {'A PERSON', 'B PERSON', 'C PERSON', 'D PERSON'})
+        # The same on the folio-anchored path: two such deeds are a chain, not one deed.
+        chain = title([unkeyed('1/1/2020', 'SELLER', 'MID PERSON', folio=FOLIO),
+                       unkeyed('1/1/2022', 'MID PERSON', 'OWNER PERSON', folio=FOLIO)])
+        self.assertEqual([p['name'] for p in chain['current_deed_candidate']['parties']],
+                         ['MID PERSON', 'OWNER PERSON'])
+        self.assertEqual(chain['chain_of_title'][0]['link'], 'continuous')
+
+    def test_the_county_answer_order_never_decides_the_verdict(self):
+        # One instrument indexed twice: one row under another parcel's folio, one that can still
+        # be compared. Whichever came back first used to decide whether the owner's possible
+        # conveyance was reported at all.
+        current = rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO)
+        foreign = rec('9', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', '9999999999999')
+        comparable = rec('9', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', legal='LOT 15 SEE DOC')
+        for rows in ([foreign, comparable], [comparable, foreign]):
+            got = title([mortgage(), current] + rows)
+            self.assertEqual(got['current_deed_status'], 'possibly_conveyed_later', rows[0]['foliO_NUMBER'])
+            self.assertEqual(got['possible_later_conveyances'], ['9/1'])
 
     def test_sibling_rows_with_different_dates_collapse_to_the_one_that_matched(self):
         rows = folio_pair() + [rec('9', '', 'O', 'B', legal='LOT 15'),
