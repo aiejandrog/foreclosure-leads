@@ -2811,5 +2811,79 @@ class TwentyFirstReviewTests(unittest.TestCase):
 
 
 
+class TwentySecondReviewTests(unittest.TestCase):
+    """The producer's own two cover regexes disagree on one head, and the sentence the unread half
+    printed claimed a document had been read.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')]
+
+    def case(self, title, pages=None):
+        pg = {'2': self.PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + [(3, title, '', '07/01/2026', '')], controlling='2', pages=pg)
+
+    def test_the_producers_two_cover_regexes_still_disagree(self):
+        # The fix exists because classify (:158) lists `certificate of filing` as a cover head and
+        # _FILED_ABOUT_RE (:275) does not. If the producer ever aligns them this test says so, and the
+        # local fallback can go.
+        import miami_case_timeline as T
+        line = 'Certificate of Filing Satisfaction of Judgment'
+        self.assertIn(T.classify(line), CV.COVER_KINDS)
+        self.assertIsNone(T._FILED_ABOUT_RE.match(line),
+                          'the producer now matches this head; drop _CERT_FILING_RE')
+
+    def test_a_dispositive_filing_under_a_certificate_of_filing_is_named(self):
+        # classify gave these a COVER label, so the unread-cover branch ran - and _cover_subject could
+        # not strip the head, so no gap was raised at all. The bankruptcy row is the worst: the report
+        # printed "none on the docket" over a live Chapter 13.
+        for title in ('Certificate of Filing Satisfaction of Judgment',
+                      'Certificate of Filing Order Vacating Final Judgment',
+                      'Certificate of Filing Order of Dismissal',
+                      'Certificate of Filing Certificate of Title',
+                      'Certificate of Filing Suggestion of Bankruptcy Chapter 13 Case No. '
+                      '26-11111-LMI',
+                      'Certificate of Filing Notice of Voluntary Dismissal',
+                      'Amended Certificate of Filing Satisfaction of Judgment'):
+            t = self.case(title)
+            self.assertIn(next(e for e in t['entries'] if e['entry_id'] == '3')['kind'],
+                          CV.COVER_KINDS, title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if 'entry 3' in m], (title, r['missing']))
+
+    def test_routine_certificate_of_filing_entries_still_read_supported(self):
+        for title in ('Certificate of Filing Proposed Final Judgment',
+                      'Certificate of Filing Affidavit of Diligent Search',
+                      'Certificate of Filing Return of Service', 'Certificate of Filing',
+                      'Certificate of Service'):
+            r = CV.assess(self.case(title))
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
+
+    def test_the_unread_half_never_says_a_document_was_read(self):
+        # Nobody opened it - the county may index no image at all - and the label came from the docket
+        # TITLE through the producer's classifier. CLAUDE.md's own rule: document metadata and keyword
+        # signals must never be represented as documents read.
+        r = CV.assess(self.case('Notice of Filing Satisfaction of Judgment'))
+        line = next(m for m in r['missing'] if 'entry 3' in m)
+        self.assertIn('own docket title names', line)
+        self.assertIn('nobody opened it', line)
+        self.assertNotIn('the document under it reads', line)
+
+    def test_the_read_half_still_says_the_document_reads_as(self):
+        # And where a document WAS opened, the sentence stays the producer's own claim.
+        t = self.case('Notice of Filing Satisfaction of Judgment',
+                      pages={'3': 'SATISFACTION OF JUDGMENT\nThe judgment entered 06/10/2026 is '
+                                  'satisfied.'})
+        self.assertEqual(next(e for e in t['entries']
+                              if e['entry_id'] == '3')['attached_document_kind'], 'satisfaction')
+        r = CV.assess(t)
+        self.assertTrue([m for m in r['missing'] if 'the document under it reads as satisfaction' in m],
+                        r['missing'])
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

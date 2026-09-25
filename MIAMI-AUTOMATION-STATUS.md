@@ -213,6 +213,23 @@ composes them when it does have the document - and the cover labels joined `UNLA
 cover-titled SALE subject routes through `_sale_state`'s scan and keeps the floors and closing-word
 guards three rounds were spent calibrating (twenty-first review).
 
+One cover head still escaped, because the producer's own two functions disagree about it: `classify`
+(:158) lists `certificate of (?:service|mailing|compliance|filing)` and `_FILED_ABOUT_RE` (:275) leaves
+`filing` out. So "Certificate of Filing Satisfaction of Judgment" got a cover label from one and no
+match from the other, the head was never stripped, and a satisfied, vacated, dismissed, sold or bankrupt
+case read `supported` - with the stay column printing "none on the docket" over a live Chapter 13.
+Fixed in `case_verdict` with a fallback for that one head, deliberately not in the producer: adding
+`filing` to `_FILED_ABOUT_RE` would move the READ half's posture too, which is a producer decision with
+its own blast radius. The misalignment is **reported and not changed**, and a test fails if the producer
+ever aligns them, so the local fallback can then go.
+
+The two halves also print different sentences now. On the unread half nobody opened anything - the
+county may index no image at all - and the label comes from the docket TITLE through the producer's
+classifier, so "the document under it reads as" told the reader a satisfaction of judgment had been
+opened, and on a title whose read document is an actual certificate of service it said the opposite of
+what the producer saved. That is CLAUDE.md's own rule: document metadata and keyword signals must never
+be represented as documents read (twenty-second review).
+
 **The report prints the posture and the cutoff.** `dismissed`, `sold` and `sale_cancelled` are all
 `SETTLED_KINDS` and the producer folds none of them into the judgment row or the amount, so all three
 are `supported` under this module's scope - and all three printed as a clean row with a judgment amount
@@ -238,6 +255,13 @@ three evidence-vs-evidence contradiction reasons. A docket with both a same-date
 undated dispositive entry therefore reaches `case_verdict` with reason "Undated dispositive entry
 prevents reliable chronology", so the verdict is `incomplete` on a file that also holds a
 contradiction. `case_verdict` restates the producer faithfully; the loss is upstream.
+
+`attached_document_kind` discards the document's own title (:357 does
+`attached, body_kind, title = body_kind, None, None`), so a bare "Notice of Filing" whose document reads
+AMENDED FINAL JUDGMENT OF FORECLOSURE saves only `attached_document_kind='final_judgment'` and nothing
+in the file distinguishes it from an exhibit copy. `_replaces` mirrors the producer's own `_REPLACES`
+over the docket words, so it cannot see that amendment, and the case reads `supported` with the
+superseded figure. Closing it needs the producer to keep the title (an `attached_document_title`).
 
 `reconcile_judgments`' `_ADDS_TO` matches a bare `attorney'?s? fees?` over `operative_text` plus
 `description` plus `comments`, so a final judgment whose clerk comments merely mention attorney's fees

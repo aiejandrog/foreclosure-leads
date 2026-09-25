@@ -185,6 +185,15 @@ CERTIFICATE_KINDS = ('certificate_of_sale', 'certificate_of_title')
 # and leaving them out is how a cover-titled notice of sale read `supported` while the same notice
 # under its own title read incomplete (twenty-first review).
 COVER_KINDS = ('notice_of_filing', 'certificate_of_service', 'affidavit')
+# The producer's own two functions disagree on one cover head: classify (:158) lists
+# `certificate of (?:service|mailing|compliance|filing)`, and _FILED_ABOUT_RE (:275) leaves `filing`
+# out. So "Certificate of Filing Satisfaction of Judgment" gets a COVER label from one and no match
+# from the other, and _cover_subject could never strip the head: satisfied, vacated, dismissed, sold
+# and bankrupt cases all read `supported`, and the report printed "none on the docket" over a live
+# Chapter 13 (twenty-second review). Fixed here and not in the producer: adding `filing` there would
+# move the READ half's posture as well, which is a producer decision with its own blast radius, and
+# the misalignment is reported in MIAMI-AUTOMATION-STATUS.md instead.
+_CERT_FILING_RE = re.compile(r'(?:amended\s+|supplemental\s+)?certificate of filing\b', re.I)
 UNLABELLED_KINDS = ('other', 'hearing') + COVER_KINDS
 # Only to notice that the classifier left a sale-worded entry unlabelled, which is reported as a
 # gap. Never to decide that a sale IS or IS NOT scheduled - see _sale_state.
@@ -623,6 +632,7 @@ def _cover_subject(entry):
         match = miami_case_timeline._FILED_ABOUT_RE.match(text)
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return None
+    match = match or _CERT_FILING_RE.match(text)
     return _classify(text[match.end():]) if match else None
 
 
@@ -1114,6 +1124,7 @@ def assess(timeline, dossier=None):
         if not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of')):
             continue
         attached = entry.get('attached_document_kind')
+        from_title = False
         # final_judgment is deliberately excluded. It is in _DISPOSITIVE_BODIES, so a motion for
         # summary judgment, a proposed judgment, a memorandum or a status report carrying a judgment
         # copy all set this key - and holding on those made routine dockets incomplete for good
@@ -1138,12 +1149,23 @@ def assess(timeline, dossier=None):
             if (subject in DECIDING_KINDS
                     and subject not in SALE_NOTICE_KINDS + ('order_cancelling_sale',)
                     and (subject != 'final_judgment' or _replaces(entry))):
-                attached = subject
+                attached, from_title = subject, True
         if attached in DECIDING_KINDS and (attached != 'final_judgment' or _replaces(entry)):
-            missing.append('entry %s is titled as a filing about something else, and the document '
-                           'under it reads as %s, which the run therefore did not fold into the '
-                           "case's posture; whether it decides this case is not settled in this file"
-                           % (entry.get('entry_id') or '?', attached))
+            # The two halves get different sentences, because only one of them has a document. On the
+            # unread half nobody opened anything - the county may index no image at all - and the
+            # label comes from the docket TITLE through the producer's classifier. Saying "the
+            # document under it reads as" there told the reader someone had opened a satisfaction of
+            # judgment, and on a title whose read document turns out to be an actual certificate of
+            # service it said the opposite of what the producer saved (twenty-second review).
+            missing.append(
+                ('entry %s is titled as a filing about something else and its own docket title '
+                 'names a %s; nobody opened it, so the run did not fold it into the case\'s '
+                 'posture, and whether it decides this case is not settled in this file'
+                 if from_title else
+                 'entry %s is titled as a filing about something else, and the document under it '
+                 'reads as %s, which the run therefore did not fold into the case\'s posture; '
+                 'whether it decides this case is not settled in this file')
+                % (entry.get('entry_id') or '?', attached))
     # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
     # one net for these - :505 forces status 'unclear' for every undated entry `_transition`
     # recognises - and `_transition` returns None for exactly the kinds that then reach nothing else:
