@@ -235,6 +235,20 @@ def _producer_labels(entry):
     return tuple(k for k in (kind,) if k)
 
 
+def _after_cutoff(entry, as_of):
+    """True when this entry is dated after the run's as_of, so it says nothing about the case AT it.
+
+    An UNDATED entry is never dropped. The producer skips both undated and later entries where it
+    decides a posture (:446, reconcile_judgments :675) and compensates for the undated half by forcing
+    status 'unclear' - but only for entries `_transition` recognises. Copying that skip into a gap
+    check emptied it: an undated "Notice of Rescheduled Foreclosure Sale", the classifier's own known
+    blind spot, stopped raising its gap and a case under a live stay read `supported` (fourteenth
+    review). An entry with no date is more unknown, not less, and every check below raises gaps.
+    """
+    date = str(entry.get('date') or '')
+    return bool(date) and date > str(as_of or '9999-99-99')
+
+
 def _labelled(timeline, kinds, since=None):
     """-> the entries the producer gave one of `kinds`, read through _producer_labels.
 
@@ -295,7 +309,8 @@ def _relabelled(timeline):
     """
     out = []
     for e in _rows(timeline, 'entries'):
-        if not isinstance(e, dict) or e.get('kind') != 'hearing' or not e.get('calendar_event'):
+        if (not isinstance(e, dict) or e.get('kind') != 'hearing'
+                or not e.get('calendar_event') or _after_cutoff(e, timeline.get('as_of'))):
             continue
         index_kind = e.get('index_kind')
         source = e.get('kind_source')
@@ -370,10 +385,9 @@ def _sale_state(timeline, status, kind):
     # certificate dated AFTER the cutoff closed a sale that was live at it, and the case read
     # `supported` over a stay (thirteenth review). The mirror over-fired: a later notice of sale made
     # a docket with no sale at the cutoff read conflicted.
-    as_of = str(timeline.get('as_of') or '9999-99-99')
+    as_of = timeline.get('as_of')
     for entry in _rows(timeline, 'entries'):
-        if not isinstance(entry, dict) or not str(entry.get('date') or '') or str(
-                entry.get('date')) > as_of:
+        if not isinstance(entry, dict) or _after_cutoff(entry, as_of):
             continue
         labels = set(_producer_labels(entry))
         if labels & set(SALE_CLOSING_KINDS):
@@ -662,7 +676,9 @@ def assess(timeline, dossier=None):
     held = timeline.get('sale_held') if isinstance(timeline.get('sale_held'), dict) else {}
     money = _labelled(timeline, SALE_MONEY_KINDS)
     certificates = _labelled(timeline, CERTIFICATE_KINDS, since=held.get('date'))
-    closing_for_money = _labelled(timeline, SALE_CLOSING_KINDS)
+    # Only a CERTIFICATE closes a held sale. An order cancelling a sale filed after the clerk posted
+    # bids says nothing about whether that sale was held, and SALE_CLOSING_KINDS carries one.
+    closing_for_money = _labelled(timeline, CERTIFICATE_KINDS)
     if money and not held.get('date') and not [
             c for c in closing_for_money
             if str(c.get('date') or '') >= max(str(e.get('date') or '') for e in money)]:
@@ -737,6 +753,9 @@ def assess(timeline, dossier=None):
                          % (', '.join(str(e) for e in (held.get('bankruptcy_same_day') or ['?'])),
                             held.get('date') or 'unknown date'))
 
+    # `mine` is the controlling judgment's own coverage rows; the amount block below prints
+    # which documents on the entry were read, so it is read before both sections.
+    coverage, mine = _coverage_of(timeline, entry_id)
     # --- the amount ----------------------------------------------------------------------------
     verified, failed, rejected = _judgment_amount(timeline, entry_id)
     missing.extend(rejected)
@@ -807,6 +826,18 @@ def assess(timeline, dossier=None):
         conflicts.append('two different totals on the controlling judgment each verify to the '
                          'cent: %s' % ', '.join(_money(a) for a in amounts))
     if verified:
+        # Blocking on this held routine dockets and flipped a pilot case, so it is a note: nothing
+        # saved says which attachment on an entry IS the judgment, and the standing qualification
+        # cannot say WHICH cases that bites on. Without the note a reader sees a confident figure
+        # that may be a sibling document's total - an Affidavit of Indebtedness filed under the same
+        # entry has its own (fourteenth review).
+        read_docs = {str(r.get('document') or '') for r in mine if r.get('state') == 'read'}
+        read_docs.discard('')
+        if len(read_docs) > 1:
+            notes.append("the judgment's docket entry carries %d read documents (%s); the figure "
+                         'verified on %s, and nothing saved says which of them is the judgment'
+                         % (len(read_docs), ', '.join(sorted(read_docs)),
+                            ', '.join(sorted({str(c.get('source_ref') or '?') for c in verified}))))
         supported_by.append('amount %s verified to the cent on %s' % (
             ', '.join(_money(a) for a in amounts) or 'recorded with no figure',
             ', '.join(sorted({str(c.get('source_ref') or c.get('pages') or '?') for c in verified}))))
@@ -824,7 +855,6 @@ def assess(timeline, dossier=None):
                            for c in failed))))
 
     # --- what was read for THIS judgment -------------------------------------------------------
-    coverage, mine = _coverage_of(timeline, entry_id)
     if entry_id is not None and not mine:
         # Absence is not evidence of reading. A timeline saved before `coverage` existed, a partial
         # write, or an attachment list that simply has no row for this entry all land here.
@@ -871,7 +901,7 @@ def assess(timeline, dossier=None):
     # and _transition never see it, so a satisfied, vacated, dismissed or sold case kept a status of
     # judgment_entered with an operative judgment and nothing in the report named the document.
     for entry in _rows(timeline, 'entries'):
-        if not isinstance(entry, dict):
+        if not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of')):
             continue
         attached = entry.get('attached_document_kind')
         # final_judgment is deliberately excluded. It is in _DISPOSITIVE_BODIES, so a motion for
@@ -893,7 +923,8 @@ def assess(timeline, dossier=None):
     # `supported` with status judgment_entered (twelfth review). scope_of (:569) sets limited off a
     # bare `\bonly\b` near `dismiss`, with no party named, which is reported and not changed.
     for entry in _rows(timeline, 'entries'):
-        if not isinstance(entry, dict) or not entry.get('limited_scope'):
+        if (not isinstance(entry, dict) or not entry.get('limited_scope')
+                or _after_cutoff(entry, timeline.get('as_of'))):
             continue
         if not set(_producer_labels(entry)) & {'notice_of_voluntary_dismissal', 'order_of_dismissal'}:
             continue
@@ -1083,8 +1114,10 @@ def for_saved_case(dossier_path):
         # Parsing is not the only way a file can be wrong. `null` or a bare list parses fine and is
         # not a timeline; filing it under "no whole-case timeline saved" puts a corrupt file in the
         # bucket _load's docstring says it must never land in - indistinguishable from never run.
-        raise Unreadable('%s: parsed to %s, not a timeline object'
-                         % (saved.name, type(timeline).__name__))
+        raise Unreadable('%s: %s' % (saved.name, 'could not be read'
+                                     if timeline is None else
+                                     'parsed to %s, not a timeline object'
+                                     % type(timeline).__name__))
     # The dossier contributes NOTES only (its open_gaps); the verdict rests entirely on the timeline.
     # Requiring it discarded a whole readable verdict over a truncated file that changes nothing
     # about it (ninth review). A dossier that is there and will not parse is reported as a gap on the

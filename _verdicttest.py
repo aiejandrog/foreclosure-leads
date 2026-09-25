@@ -2134,5 +2134,90 @@ class ThirteenthReviewTests(unittest.TestCase):
 
 
 
+class FourteenthReviewTests(unittest.TestCase):
+    """The fourteenth review found a regression of mine: the as_of bound the thirteenth round added to
+    _sale_state also dropped UNDATED entries, which silently emptied the unlabelled-sale gap. It also
+    found the held-sale money rows closed by anything sale-shaped rather than by a certificate.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+
+    def test_an_undated_sale_notice_under_a_live_stay_is_never_supported(self):
+        # The blocker. miami_case_timeline's classifier does not label "Notice of Rescheduled
+        # Foreclosure Sale", so the only thing standing between this docket and `supported` is the
+        # unlabelled-sale gap - and a cutoff filter that drops undated entries deletes exactly that.
+        # An entry with no date is more unknown, not less.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (4, 'Suggestion of Bankruptcy Chapter 13 case 26-11111', '', '07/01/2026', ''),
+                        (9, 'Notice of Rescheduled Foreclosure Sale', 'sale set for 11/02/2026',
+                         '', '')],
+                       pages={'2': self.JUDGMENT_PAGE})
+        undated = [e for e in t['entries'] if e['entry_id'] == '9']
+        self.assertEqual([e.get('date') for e in undated], [None],
+                         'the fixture must carry the undated entry the producer keeps')
+        r = CV.assess(t)
+        self.assertNotEqual(r['verdict'], 'supported', (r['missing'], r['conflicts'], r['notes']))
+        self.assertTrue(any('sale' in m.lower() for m in r['missing'] + r['conflicts']),
+                        (r['missing'], r['conflicts']))
+
+    def test_a_dated_entry_after_the_cutoff_is_still_dropped(self):
+        # The bound itself is right for DATED entries and the thirteenth round's case must stay fixed.
+        docket = [(1, 'Complaint', '', '01/05/2025', ''),
+                  (2, 'Final Judgment of Foreclosure', '', '04/10/2025', ''),
+                  (3, 'Notice of Foreclosure Sale on 12/10/2025', '', '05/01/2025', ''),
+                  (4, 'Suggestion of Bankruptcy Chapter 13 case 25-11111', '', '06/01/2025', ''),
+                  (120, 'Certificate of Title', '', '03/01/2026', '')]
+        r = CV.assess(self.built(docket, as_of='2025-12-31', pages={'2': self.JUDGMENT_PAGE}))
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+
+    def test_only_a_certificate_closes_the_clerks_money_rows(self):
+        # The held-sale gap read `closing_for_money` off SALE_CLOSING_KINDS while its own reason says
+        # a certificate. An order CANCELLING a sale dated after money changed hands does not settle
+        # what happened at it; saying a certificate closed the day when none exists is the same
+        # false-agreement failure in the reason text rather than the verdict.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (4, 'Bid Amount', '', '07/01/2026', 'Hearing'),
+                        (5, 'Order Cancelling Foreclosure Sale', '', '07/10/2026', '')],
+                       pages={'2': self.JUDGMENT_PAGE})
+        r = CV.assess(t)
+        self.assertTrue(any('whether a sale was held' in m for m in r['missing']), r['missing'])
+
+    def test_two_read_documents_on_the_judgment_entry_are_named_in_the_notes(self):
+        # Nothing saved says WHICH attachment on an entry is the judgment, so a verified figure may be
+        # a sibling document's total. Blocking on it flipped a pilot (thirteenth review), so it is a
+        # per-case note - the standing qualification cannot say which cases it bites on.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')],
+                       pages={'2': self.JUDGMENT_PAGE})
+        t['coverage'] = {'attachments': [read_attachment('2', 'court:2:1'),
+                                         read_attachment('2', 'court:2:2')], 'complete': False}
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+        note = [n for n in r['notes'] if 'read documents' in n]
+        self.assertTrue(note, r['notes'])
+        self.assertIn('court:2:2', note[0])
+
+    def test_one_read_document_on_the_judgment_entry_says_nothing(self):
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')],
+                       pages={'2': self.JUDGMENT_PAGE})
+        r = CV.assess(t)
+        self.assertFalse([n for n in r['notes'] if 'read documents' in n], r['notes'])
+
+    def test_an_unreadable_timeline_file_is_not_reported_as_a_parsed_shape(self):
+        # `null` and a file that will not parse reach the same branch; reporting the second as
+        # "parsed to NoneType" describes a parse that never happened.
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text('{"case": "A", ')
+            proc = run_cli('--dossiers', folder, dealflow=folder)
+            self.assertIn('UNREADABLE', proc.stdout)
+            self.assertNotIn('NoneType', proc.stdout)
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

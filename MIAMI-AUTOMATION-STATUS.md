@@ -103,12 +103,24 @@ Indebtedness filed as a second attachment has its own additive table and its own
 in a saved timeline says which attachment on an entry IS the judgment, and a judgment filed with its
 legal-description exhibit is the ordinary shape, so holding every multi-document entry as a gap would
 make routine dockets `incomplete` for good - it was written that way for one commit and would have
-flipped a pilot case. The ambiguity is uniform, so it lives in the report's standing qualification
-instead, and every amount line names the copy the figure verified on. The producer-side reason it
+flipped a pilot case. So it is reported twice and blocks nothing: the standing qualification carries
+the general form, and a case whose judgment entry has more than one READ document gets a note of its
+own naming those documents and the copy the figure verified on. Without the per-case note a reader
+saw a confident figure with nothing on the page to say a sibling document could have produced it. The producer-side reason it
 cannot be resolved here is reported: `miami_case_timeline` :349 merges the pages of all matched
 documents on an entry and `_body_kind` reads `pages[:1]`, while `run_case_timeline.load_rows` :45
 iterates `sorted(glob('*.json'))` over sha256 filenames, so which attachment supplies a
 multi-document entry's label is arbitrary.
+
+**Entries after the run's cutoff, and entries with no date at all.** `miami_case_timeline` skips both
+where it decides a posture (:446, `reconcile_judgments` :675, `sale_held` :544) and compensates for the
+undated half by forcing status `unclear` - but only for entries `_transition` recognises. `case_verdict`
+mirrors the first half and deliberately not the second: an entry dated after `as_of` says nothing about
+the case at it and is dropped, while an undated entry is never dropped, because it is more unknown, not
+less, and the checks it reaches raise gaps rather than clear them. Copying the producer's skip whole
+emptied a gap check for one commit: an undated "Notice of Rescheduled Foreclosure Sale", a title the
+classifier does not label, stopped raising the unlabelled-sale gap and a case under a live bankruptcy
+stay read `supported` (fourteenth review).
 
 **The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry
