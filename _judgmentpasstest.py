@@ -14,7 +14,8 @@ CASE = '2025-000001-CA-01'
 
 def _row(base, entry, text, name, total_page=True):
     ref = 'court:%s:1' % entry
-    pages = [{'page': 1, 'text': text}] + ([{'page': 2, 'text': 'Total $1,234.56'}] if total_page else [])
+    pages = [{'page': 1, 'outcome': 'text', 'text': text}] + (
+        [{'page': 2, 'outcome': 'text', 'text': 'Total $1,234.56'}] if total_page else [])
     row = {'source_ref': ref, 'manifest': {'sha256': 'h' + entry}, 'reading': {'pages': pages}}
     (Path(base) / (hashlib.sha256(name.encode()).hexdigest() + '.json')).write_text(json.dumps(row))
     return ref
@@ -209,7 +210,51 @@ class Assess(unittest.TestCase):
         plan['judgments']['controlling_entry'] = '9'
         with mock.patch('document_prioritizer.prioritize', return_value=plan):
             got = JP.assess(CASE, self.base, None, '2026-09-25')
-        self.assertEqual(got['target_basis'], 'controlling')
+        # the plan's reconciliation is docket-index metadata: it never establishes a controlling one
+        self.assertEqual(got['target_basis'], 'latest_operative')
+        self.assertIn('no controlling judgment established', got['detail'])
+
+    def test_timeline_without_judgments_falls_back(self):
+        _row(self.base, '9', '$1.00', 'j')
+        got = self.run_assess([('9', 'final_judgment', True, [])], {'gaps': []})
+        self.assertEqual((got['state'], got['target_basis']), ('needs_paid_read', 'latest_operative'))
+
+    def test_missing_key_is_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason':
+                                         'no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_unreachable_pdf_with_nothing_to_ocr_is_not_marked(self):
+        row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': 'C:/elsewhere/x.pdf'},
+               'reading': {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text': 'Total $1.00'}]}}
+        self.assertNotIn('_ocr_unreachable', JP._with_cached_ocr(row, self.base))
+
+    def test_partial_ocr_cache_is_marked(self):
+        pdf = self.base / 'doc.pdf'
+        pdf.write_bytes(b'%PDF fake')
+        digest = hashlib.sha256(b'%PDF fake').hexdigest()
+        (self.base / 'timeline-ocr').mkdir()
+        (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
+            {'pages': {'1': {'outcome': 'ocr_text', 'text': 'none'}}}))
+        row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
+               'reading': {'pages': [{'page': n, 'outcome': 'text', 'text': 'x'} for n in (1, 2)]}}
+        self.assertTrue(JP._with_cached_ocr(row, self.base)['_ocr_unreachable'])
+
+    def test_stuck_read_elsewhere_does_not_blame_the_judgment(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        other = _row(self.base, '5', '$2.00', 'o')
+        _buy(self.base, other, '5', gaps=[{'page': 1, 'reason': 'Stored content is not a PDF'}])
+        bad = [{'ok': False, 'amount': 1, 'page': 2, 'reason': 'x', 'pages': [], 'run': [],
+                'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=bad):
+            got = self.run_assess([('5', 'order_on_motion', True, []), ('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+        self.assertNotIn('paying again repeats', got.get('detail') or '')
 
     def test_timeline_gap_on_the_judgment_blocks_verified(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -367,7 +412,8 @@ class Assess(unittest.TestCase):
         (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
             {'pages': {'1': {'outcome': 'ocr_text', 'text': 'Total $270,322.07'}}}))
         row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
-               'reading': {'pages': [{'page': 1, 'text': 'no dollar sign in the text layer'}]}}
+               'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                      'text': 'no dollar sign in the text layer'}]}}
         (self.base / (hashlib.sha256(b'j').hexdigest() + '.json')).write_text(json.dumps(row))
         got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))

@@ -58,6 +58,11 @@ def _with_cached_ocr(row, base):
     path = manifest.get('path') or manifest.get('pdf_path') or row.get('path')
     if not path:
         return row                     # no stored file at all: the pass could not OCR it either
+    # supplement() OCRs only text/embedded pages; a row with none has nothing to look up.
+    targets = [p for p in (row.get('reading') or {}).get('pages', [])
+               if p.get('outcome') == 'text' or p.get('text_source') == 'embedded']
+    if not targets:
+        return row
     try:
         digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     except OSError:
@@ -68,12 +73,12 @@ def _with_cached_ocr(row, base):
         saved = json.loads((Path(base) / 'timeline-ocr' / (digest + '-ocr300-v1.json'))
                            .read_text(encoding='utf-8'))
     except (OSError, ValueError):
-        # supplement() OCRs every text/embedded page; no cache means the pass never did, so
-        # OCR-only amount pages are unknown here. Marked like an unreachable file.
-        targets = [p for p in (row.get('reading') or {}).get('pages', [])
-                   if p.get('outcome') == 'text' or p.get('text_source') == 'embedded']
-        return dict(row, _ocr_unreachable=True) if targets else row
+        # No cache means the pass never OCR'd it, so OCR-only amount pages are unknown here.
+        return dict(row, _ocr_unreachable=True)
     row = copy.deepcopy(row)
+    if any(str(p.get('page')) not in (saved.get('pages') or {}) for p in targets):
+        # supplement() checkpoints page by page: a pass killed mid-document leaves a partial cache.
+        row['_ocr_unreachable'] = True
     for page in (row.get('reading') or {}).get('pages', []):
         got = (saved.get('pages') or {}).get(str(page.get('page')))
         if got:
@@ -129,18 +134,19 @@ def _target(recon, controlling):
     else the latest OPERATIVE judgment of record in the docket's own reconciliation. A vacated,
     satisfied, supplemental or duplicate entry is never the target: its amount proves nothing
     about the current debt."""
+    import miami_case_timeline as MCT
     if controlling:
         return controlling, 'controlling'
     judgments = (recon or {}).get('judgments') or []
-    operative = [j for j in judgments if j.get('status') in ('operative', 'partially_vacated')
-                 and j.get('role') not in ('supplemental', 'docket_duplicate') and j.get('date')]
+    of_record = [j for j in judgments if j.get('role') not in MCT._NOT_A_JUDGMENT_OF_RECORD
+                 and j.get('date')]
+    operative = [j for j in of_record if j.get('status') in ('operative', 'partially_vacated')]
     if operative:
         best = max(operative, key=lambda j: (j['date'], _entry_order(j['entry_id'])))
         return str(best['entry_id']), 'latest_operative'
     # The reconciliation could not tie them together (two same-day entries, a vacatur naming no
     # judgment): the latest unclear one is still the one to read, and the basis says so.
-    unclear = [j for j in judgments if j.get('status') == 'unclear'
-               and j.get('role') not in ('supplemental', 'docket_duplicate') and j.get('date')]
+    unclear = [j for j in of_record if j.get('status') == 'unclear']
     if unclear:
         best = max(unclear, key=lambda j: (j['date'], _entry_order(j['entry_id'])))
         return str(best['entry_id']), 'latest_unclear'
@@ -197,8 +203,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         out.update(state='timeline_older_than_docket',
                    detail='re-run the pass for this case before trusting any verdict')
         return out
-    controlling = str(((timeline or {}).get('judgments') if timeline is not None
-                       else plan.get('judgments') or {}).get('controlling_entry') or '')
+    # Only the timeline, which read the bodies, can establish a controlling judgment. The docket
+    # plan's reconciliation is index metadata (it says controlling_judgment_established False).
+    controlling = str(((timeline or {}).get('judgments') or {}).get('controlling_entry') or '')
     out['controlling_entry'] = controlling or None
     # The timeline's reconciliation read the bodies (a vacatur citing its judgment's date, an
     # image-less same-day twin); the plan's is the docket index alone. Prefer the timeline's.
@@ -224,7 +231,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         if reason.startswith('Vision returned unreadable'):
             stuck_pages.setdefault(ref, set()).add(gap.get('page'))
         elif re.search(r'budget|cap or reader stop|paid_read_not_selected|APIStatus|APIConnection|'
-                       r'RateLimit|Timeout|overloaded|NotConfigured|not configured', reason, re.I):
+                       r'RateLimit|Timeout|overloaded|NotConfigured|not configured|ANTHROPIC_API_KEY|'
+                       r'SDK is not installed', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
         else:
             # Anything unrecognised (a rejected or missing file, an uncertain paid call) is taken
@@ -301,8 +309,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         out['state'] = 'read_not_verified'
         if any(c.get('ok') for c in target_checks):
             notes.append('one printed total reproduces and another does not')
-        if any(r in stuck_docs or stuck_pages.get(r) for r in
-               {c.get('source_ref') for c in target_checks} | stuck_docs):
+        target_refs = {r.get('source_ref') for r in order
+                       if str(r.get('entry_ref') or '') == target}
+        if any(r in stuck_docs or stuck_pages.get(r) for r in target_refs):
             notes.append('a read failed in a way paying again repeats')
     else:
         doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
