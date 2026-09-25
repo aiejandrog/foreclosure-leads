@@ -74,14 +74,20 @@ always was — reading a document does not move a lead into a FACT state.
 
 THE NIGHTLY LINE is refresh-dealflow.bat's [2e/5] stage, after the [2b/5] records step:
 
-    if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
+    if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
 
 It does nothing until DEALFLOW_DOCS=1 is set; setting it is the decision to spend up to $1.00 a
 night on vision reads. --token-budget stays 0 (no paid owner-search tokens). #53 now routes token
 minting through PaidCutoffSolver, so raising it is possible, but it is a separate one-line change
-that must add --captcha-max-spend and needs the owner's go on the spend. --max-minutes 20 starts
-no new case after twenty minutes, so a slow clerk cannot hold the board rebuild behind it. --limit 25 with oldest-dossier-first ordering cycles every
-live Miami lead. Each night also writes dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no
+that must add --captcha-max-spend and needs the owner's go on the spend.
+
+--max-minutes 20 starts no new case after twenty minutes. A case already running is allowed to
+finish, so one slow case can still overrun: the flag bounds the stage, it does not guarantee it.
+--limit 10 because CaseAllocator splits --vision-max-spend evenly over the cases picked and a
+case may not borrow from one that has not finished yet: $1.00 over 10 gives each case $0.10,
+enough for one three-page judgment at the measured $0.0675, where 25 left each $0.04 and the
+first cases stopped part-way. Oldest-dossier-first ordering still cycles every live Miami lead,
+ten a night. Each night also writes dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no
 token, read, judgments found, judgments SATISFIED, and the commonest open gaps.
 
 --vision needs an Anthropic API key the SCHEDULED TASK can see: put it in anthropic.key beside the
@@ -522,9 +528,10 @@ def main(argv=None):
                              'in that order has no token yet — which is what blocks asking for '
                              'a named case on demand. Nothing here filters by case type.')
     parser.add_argument('--max-minutes', type=float, default=0,
-                        help='start no new case after this many minutes (0 = no limit). The '
-                             'nightly line sets it so a slow clerk cannot push the board rebuild '
-                             'and publish that run after this stage back by hours')
+                        help='start no new case after this many minutes (0 = no limit). A case '
+                             'already running still finishes, so this bounds the stage rather '
+                             'than guaranteeing it; the nightly line sets it so a slow clerk '
+                             'does not hold the board rebuild behind case after case')
     parser.add_argument('--captcha-max-spend', type=float, default=None,
                         help='required with --token-budget: the real-balance captcha cutoff in '
                              'dollars, at most 1.50, enforced by captcha_cost_cutoff against the '

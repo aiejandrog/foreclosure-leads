@@ -45,11 +45,11 @@ class RecordsQsMoveTests(unittest.TestCase):
 
     def test_dealflow_dir_set_explicitly_to_the_default_still_moves(self):
         self._write(self.legacy, {'OWNER A': 'qs-a'})
-        os.environ['DEALFLOW_DIR'] = self.out + os.sep
-        try:
-            P.records_qs()
-        finally:
-            del os.environ['DEALFLOW_DIR']
+        # What paths.py resolves from DEALFLOW_DIR=<home>\DEALFLOW\ : the same folder, spelled
+        # with a trailing separator. The module reads the env var once at import, so the resolved
+        # constant is what records_qs() compares.
+        P.DEALFLOW_DIR = self.out + os.sep
+        P.records_qs()
         self.assertFalse(os.path.exists(self.legacy))
         self.assertEqual(self._read(P.RECORDS_QS), {'OWNER A': 'qs-a'})
 

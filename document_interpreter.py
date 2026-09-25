@@ -56,8 +56,10 @@ MIN_SDK = '0.41'
 def api_client(anthropic, **kw):
     """anthropic.Anthropic() for a metered reader, or NotConfigured naming the fix."""
     need = 'pip install -U "anthropic>=%s"' % MIN_SDK
+    opts = api_client_kwargs()
+    opts.update(kw)        # an explicit argument wins; never a duplicate-keyword TypeError
     try:
-        client = anthropic.Anthropic(**api_client_kwargs(), **kw)
+        client = anthropic.Anthropic(**opts)
     except TypeError as exc:
         raise NotConfigured('the anthropic SDK %s cannot start here (%s): %s'
                             % (getattr(anthropic, '__version__', '?'), exc, need))
@@ -74,8 +76,16 @@ def api_client_kwargs():
     if os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN'):
         return {}
     if os.path.exists(KEY_FILE):
-        with open(KEY_FILE, encoding='utf-8') as fh:
-            key = fh.read().strip()
+        with open(KEY_FILE, 'rb') as fh:
+            raw = fh.read()
+        # `echo KEY > anthropic.key` in Windows PowerShell 5.1 writes UTF-16LE with a BOM, and
+        # Notepad can add a UTF-8 BOM; either would otherwise crash here or send a corrupt key.
+        codec = 'utf-16' if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else 'utf-8-sig'
+        try:
+            key = raw.decode(codec).strip()
+        except UnicodeDecodeError:
+            raise NotConfigured('anthropic.key is not readable text; rewrite it as one line of '
+                                'plain text') from None
         if key:
             return {'api_key': key}
     raise NotConfigured('no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment '

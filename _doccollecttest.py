@@ -862,6 +862,26 @@ class BudgetTests(unittest.TestCase):
             del os.environ['ANTHROPIC_API_KEY']
         self.assertIn('anthropic>=', str(ctx.exception))
 
+    def test_a_key_file_written_by_powershell_or_notepad_reads_cleanly(self):
+        saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'anthropic.key')
+        try:
+            # PowerShell 5.1 `echo KEY > file` is UTF-16LE with a BOM; Notepad may add a UTF-8 BOM.
+            for raw in ('sk-test-bom\r\n'.encode('utf-16'), b'\xef\xbb\xbfsk-test-bom\n'):
+                with open(DI.KEY_FILE, 'wb') as fh:
+                    fh.write(raw)
+                self.assertEqual(DI.api_client_kwargs(), {'api_key': 'sk-test-bom'})
+            with open(DI.KEY_FILE, 'wb') as fh:
+                fh.write(b'\xff\xff\xc3(')
+            with self.assertRaises(DI.NotConfigured):
+                DI.api_client_kwargs()
+        finally:
+            os.remove(DI.KEY_FILE)
+            DI.KEY_FILE = key_file
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
     def test_the_key_file_is_used_when_the_environment_has_no_key(self):
         saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
         key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'anthropic.key')
