@@ -209,6 +209,38 @@ def _parcel_in(models, folio):
     return bool(models) and bool(fol) and any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models)
 
 
+def _mortgages_narrower(old, new):
+    """Does `new` miss mortgage debt `old` recorded? An OPEN loan not in the new rows (open, or shown
+    satisfied, by book/page), more unpriced loans before than now, or a lender's second foreclosure
+    the new read does not see. Any of these means the new read is narrower, not news of a payoff."""
+    now = {str(l.get('bp') or '') for l in (new.get('liens') or []) if isinstance(l, dict)}
+    for l in old.get('liens') or []:
+        if isinstance(l, dict) and str(l.get('st') or 'OPEN').upper() == 'OPEN':
+            if not l.get('bp') or str(l['bp']) not in now:
+                return True
+    if (old.get('mtg_open_unpriced') or 0) > (new.get('mtg_open_unpriced') or 0):
+        return True
+    if (old.get('second_fc') or old.get('second_fc_unsure')) and not (new.get('second_fc') or new.get('second_fc_unsure')):
+        return True
+    return False
+
+
+_LIEN_KEYS = ('other', 'other_open_unpriced', 'case_type', 'searched_as')
+
+
+def _lay_lien_rows(old, new):
+    """The old chain with the new read's lien rows on it. Each lien total takes the larger figure."""
+    out = dict(old)
+    for k in _LIEN_KEYS:
+        if k in new:
+            out[k] = new[k]
+    for k in ('hoa_open', 'code_open', 'irs_open'):
+        out[k] = max(old.get(k) or 0, new.get(k) or 0)
+    out['mtg_kept'] = ("mortgages from the earlier search (searched as %s); the %s re-read did not reach "
+                       "all of them" % (old.get('searched_as') or old.get('owner') or '?', time.strftime('%Y-%m-%d')))
+    return out
+
+
 def _ledger_lock(path):
     """One paying run per ledger. A second run would read the same 'already spent' and both could
     spend what is left. A lock older than 12 hours is a crashed run's and is taken over."""
@@ -1370,7 +1402,7 @@ def _run(a, ap):
             print(f"  2captcha: balance ${_SPEND['bal0']:.4f}; cap ${_usd(_SPEND['cap'])}"
                   + (f", ${_SPEND['prior']:.4f} already spent against {a.spend_ledger}" if a.spend_ledger else ''))
 
-    done = hits = cf_free = paid = kept = capped = 0
+    done = hits = cf_free = paid = kept = capped = merged = 0
     try:
         for r in picked:
             _lock_touch()
@@ -1488,13 +1520,8 @@ def _run(a, ap):
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
-                # --repull: every mortgage the old chain had OPEN must still be there, open or shown
-                # satisfied; a fresh search that simply does not reach one is narrower, not a payoff
-                _had = [l for l in ((out.get(case) or {}).get('liens') or []) if isinstance(l, dict)]
-                _now = {str(l.get('bp') or '') for l in (res.get('liens') or []) if isinstance(l, dict)}
-                _lost = a.repull and any(str(l.get('st') or 'OPEN').upper() == 'OPEN'
-                                         and (not l.get('bp') or str(l['bp']) not in _now) for l in _had)
-                if out.get(case) and (not (res.get('nrec') and res.get('parcel_found')) or _lost):
+                _old = out.get(case)
+                if _old and not (res.get('nrec') and res.get('parcel_found')):
                     if a.repull and _SPEND['stopped']:
                         # the cap stopped the search part-way (the defendants were never asked):
                         # not a finding, and not marked, so a later run with budget can finish it
@@ -1503,24 +1530,28 @@ def _run(a, ap):
                         continue
                     # The cached token came back empty, or no longer carries this folio: that is a
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
-                    # --repull: a fresh search that shows none of the mortgages the old chain had (a
-                    # chain first found through a defendant's surname) is a narrower search, not a payoff
                     kept += 1
-                    print(f"  ..  {case:22} {oc:26} re-read found "
-                          + ("none of the old chain's mortgages" if _lost else "nothing on this parcel")
-                          + "; old chain kept")
+                    print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
                     if a.repull:
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
                         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                     continue
-                res = dict(out.get(case) or {}, **res)       # keep keys other steps wrote (chain_note)
+                if _old and _mortgages_narrower(_old, res):
+                    # A re-read ONLY ADDS lien rows. The old chain may have come from a wider search
+                    # (a surname-only 2Captcha search, a defendant's name) than the token re-read now:
+                    # its mortgage picture stays, and the new lien rows and totals are laid over it.
+                    res = _lay_lien_rows(_old, res)
+                    merged += 1
+                    print(f"  ++  {case:22} {oc:26} lien rows added; the earlier search's mortgages kept")
+                else:
+                    res = dict(_old or {}, **res)            # keep keys other steps wrote (chain_note)
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
             done += 1
             flag = ''
-            if res['open_count'] >= 2:
-                hits += 1; flag = f"  <-- OPEN 2ND ~${res['junior']:,} (of {res['open_count']} open mtgs)"
-            print(f"  ok  {case:22} {oc:26} {res['open_count']} open mtg{flag}")
+            if (res.get('open_count') or 0) >= 2:
+                hits += 1; flag = f"  <-- OPEN 2ND ~${res.get('junior') or 0:,} (of {res['open_count']} open mtgs)"
+            print(f"  ok  {case:22} {oc:26} {res.get('open_count') or 0} open mtg{flag}")
             json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
             time.sleep(0.4)
     finally:
@@ -1532,10 +1563,13 @@ def _run(a, ap):
 
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
     if a.repull:
-        print(f"     --repull: {done} chain(s) re-read, {kept} re-read(s) found nothing on the parcel "
+        print(f"     --repull: {done} chain(s) re-read ({merged} kept the earlier search's mortgages and took "
+              f"only the lien rows), {kept} re-read(s) found nothing on the parcel "
               f"(old chain kept), {capped} not pulled because of the cap, "
               f"{len(picked) - done - kept - capped} with no records or blocked")
     elif a.reanalyze:
+        print(f"     --reanalyze: {done} chain(s) re-read ({merged} kept the earlier search's mortgages and took "
+              f"only the lien rows)")
         print(f"     --reanalyze: {len(picked) - done - kept} cached token(s) had expired and {kept} re-read(s) "
               f"found nothing on the parcel; those chains, and the {len(no_token)} without a token, keep "
               f"their old lien picture until a paid re-pull")

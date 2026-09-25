@@ -448,17 +448,37 @@ _hca = CD._b(dict(res, ftype='MORTGAGE', case_type='HOA/Condo', judgment=60000))
 check("dossier b: a circuit association case never names the first mortgage as the foreclosed debt",
       _hca['recorded_face'] is None and _hca['instrument'] is None and 'survives' in (_hca.get('note') or ''), _hca)
 
+# ---- review round 10: a re-read only ever adds lien rows
+_wide = {'conf': 'ok', 'liens': [{'d': '2/1/2008', 'amt': 150000, 'st': 'OPEN', 'bp': '29500/100'}],
+         'mtg_open_unpriced': 0, 'code_open': 300, 'searched_as': 'JOHN SMITH'}
+_narrow = RL.analyze([deed, city3], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a narrower re-read is narrower, not a payoff", RL._mortgages_narrower(_wide, _narrow))
+_lay = RL._lay_lien_rows(_wide, _narrow)
+check("the earlier search's mortgages stay and the new lien rows are laid over them",
+      _lay['liens'] == _wide['liens'] and _lay['other'] == _narrow['other'] and _lay['code_open'] == 1500
+      and 'mtg_kept' in _lay, _lay)
+check("an unpriced loan the old chain counted is not lost either",
+      RL._mortgages_narrower({'liens': [], 'mtg_open_unpriced': 1}, _narrow))
+check("a re-read that shows the old loan satisfied is news, not narrower",
+      not RL._mortgages_narrower({'liens': [{'bp': '26100/11', 'st': 'OPEN', 'amt': 1}]},
+                                 {'liens': [{'bp': '26100/11', 'st': 'SATISFIED', 'amt': 1}]}))
+check("a lost second foreclosure is narrower", RL._mortgages_narrower({'liens': [], 'second_fc': {'case': 'x'}},
+                                                                     {'liens': [], 'second_fc': None}))
+
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
 _tmp = tempfile.mkdtemp()
-_leads = [{'Case #': '2099-000101-CA-01', 'owner_clean': 'OWNER A', 'Folio': FOLIO, 'judgment': 1, 'plaintiff': PLAINTIFF},
+_leads = [{'Case #': '2099-000100-CA-01', 'owner_clean': 'OWNER W', 'Folio': FOLIO, 'judgment': 1},
+          {'Case #': '2099-000101-CA-01', 'owner_clean': 'OWNER A', 'Folio': FOLIO, 'judgment': 1, 'plaintiff': PLAINTIFF},
           {'Case #': '2099-000102-CA-01', 'owner_clean': 'JOHN QUINCY TESTER', 'Folio': FOLIO, 'judgment': 1},
           {'Case #': '2099-000103-CA-01', 'owner_clean': 'OWNER C', 'Folio': FOLIO, 'judgment': 1},
           {'Case #': '2099-000104-CA-01', 'owner_clean': 'OWNER D', 'Folio': FOLIO, 'judgment': 1}]
 json.dump(_leads, open(os.path.join(_tmp, 'leads_final.json'), 'w'))
-json.dump({c['Case #']: {'conf': 'ok', 'liens': [], 'chain_note': 'kept'} for c in _leads},
-          open(os.path.join(_tmp, 'records_liens.json'), 'w'))
-json.dump({'OWNER A': 'tokA', 'JOHN QUINCY TESTER': 'tokDEAD', 'OWNER D': 'tokEMPTY'}, open(os.path.join(_tmp, 'records_qs.json'), 'w'))
+_chains0 = {c['Case #']: {'conf': 'ok', 'liens': [], 'chain_note': 'kept'} for c in _leads}
+_chains0['2099-000100-CA-01'] = dict(_wide)
+json.dump(_chains0, open(os.path.join(_tmp, 'records_liens.json'), 'w'))
+json.dump({'OWNER A': 'tokA', 'JOHN QUINCY TESTER': 'tokDEAD', 'OWNER D': 'tokEMPTY', 'OWNER W': 'tokA'},
+          open(os.path.join(_tmp, 'records_qs.json'), 'w'))
 _spent = []
 open(os.path.join(_tmp, 'gen_records_qs.py'), 'w').write('')
 _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
@@ -488,6 +508,9 @@ _out = json.load(open(os.path.join(_tmp, 'records_liens.json')))
 check('--reanalyze re-runs a cached chain from its cached token and adds the lien rows',
       len(_out['2099-000101-CA-01'].get('other', [])) == 1 and _out['2099-000101-CA-01']['other_open_unpriced'] == 1)
 check('--reanalyze keeps keys other steps wrote', _out['2099-000101-CA-01'].get('chain_note') == 'kept')
+check("--reanalyze never drops a mortgage a wider earlier search found; it only adds the lien rows",
+      _out['2099-000100-CA-01']['liens'] == _wide['liens'] and 'other' in _out['2099-000100-CA-01']
+      and _out['2099-000100-CA-01'].get('mtg_kept'), _out['2099-000100-CA-01'])
 check('--reanalyze leaves a dead-token or untokened chain exactly as it was',
       'other' not in _out['2099-000102-CA-01'] and 'other' not in _out['2099-000103-CA-01'])
 check('--reanalyze keeps the old chain when the re-read comes back empty',
@@ -496,7 +519,7 @@ check('--reanalyze stores the lead case type on the chains it rewrites',
       '2099-000101-CA-01' in _out and 'case_type' in _out['2099-000101-CA-01'])
 check('--reanalyze never mints, opens a browser or pays', _spent == [], _spent)
 check('--reanalyze --dry-run counts the untokened chain it will not touch',
-      '1 older chain(s) have no cached token' in _dry.getvalue() and '3 lead(s) to pull' in _dry.getvalue(),
+      '1 older chain(s) have no cached token' in _dry.getvalue() and '4 lead(s) to pull' in _dry.getvalue(),
       _dry.getvalue()[-300:])
 
 # ---- --max-spend: a hard cap on 2Captcha solves (Alex's $5 for Miami reads, 2026-09-25)
