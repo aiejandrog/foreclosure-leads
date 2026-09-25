@@ -133,12 +133,30 @@ Amount" over a read judgment, and an undated partial satisfaction of that judgme
 `supported` with nothing in `missing`. Each now raises a gap naming the entry and the label it carries
 (fifteenth review).
 
+**The sale reader is read for every case.** `_sale_state` answers the one question a caller most wants
+off this page - is a sale still running - and for fifteen rounds `assess` consulted it only inside
+`if stay is True`. On every other docket the answer was computed and discarded: a sale noticed for
+2026-04-01, a cutoff in September, nothing on the docket cancelling it and no certificate, read
+`supported`. Nothing else covered it, because `sale_outcome` is written only while the FINAL status is
+`sale_scheduled` with a parsed sale date (:508) and a later judgment entry moves the status off it,
+while the held-sale block needs the clerk's sale-day money rows, which a sale nobody has held does not
+have. The gap is now raised whenever the producer's labels leave a sale live or unreadable and the
+status is `judgment_entered` - the only settled posture that can sit over an unresolved sale, since the
+producer's loop takes the latest transition, so `dismissed`, `satisfied_redeemed`, `sold` and
+`sale_cancelled` all mean the thing that ended the case is newer than the sale entries. Reporting on
+every kind would have held those four routine shapes `incomplete` for good (sixteenth review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
 undated dispositive entry therefore reaches `case_verdict` with reason "Undated dispositive entry
 prevents reliable chronology", so the verdict is `incomplete` on a file that also holds a
 contradiction. `case_verdict` restates the producer faithfully; the loss is upstream.
+
+`reconcile_judgments`' `_ADDS_TO` matches a bare `attorney'?s? fees?` over `operative_text` plus
+`description` plus `comments`, so a final judgment whose clerk comments merely mention attorney's fees
+is typed `role: supplemental`, excluded from `operative`, and the case reads "no operative judgment"
+and therefore `incomplete`. Also upstream, also reported rather than fixed here.
 
 **The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry

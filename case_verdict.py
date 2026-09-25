@@ -758,13 +758,20 @@ def assess(timeline, dossier=None):
     # --- the bankruptcy stay -------------------------------------------------------------------
     stay = timeline.get('stay_in_effect')
     history = _rows(timeline, 'stay_history')
+    # _sale_state is read for EVERY case. It used to be read only inside `if stay is True`, so on
+    # every other docket the producer's own labels could say a sale was still running and the verdict
+    # threw that away: a sale noticed for 2026-04-01, an as_of in September, nothing on the docket
+    # cancelling it and no certificate, read `supported` (sixteenth review). Nothing else covers it -
+    # sale_outcome is written only while the FINAL status is 'sale_scheduled' with a parsed sale date
+    # (miami_case_timeline :508), which a later judgment entry moves off, and the held-sale block
+    # needs the clerk's sale-day money rows, which a sale nobody has held yet does not have.
+    state, sale = _sale_state(timeline, status, kind)
     if stay is True:
         # A well-evidenced stay is not a contradiction, and the status table's 2023-020247 is
         # "supported" with one in effect. A stay in effect while the docket runs a sale IS one:
         # 2018-026274, stay #93 with no relief order, against an amended judgment and a sale notice
         # for the same month. Where the file cannot say which of those it is, that is a gap - not a
         # contradiction and not a clean bill.
-        state, sale = _sale_state(timeline, status, kind)
         if state == 'live':
             conflicts.append('a bankruptcy stay is in effect while the docket shows a sale going '
                              'ahead (%s); no relief order was identified' % sale)
@@ -775,6 +782,16 @@ def assess(timeline, dossier=None):
                          'contacted')
     elif stay is None and history:
         missing.append('stay state unknown')
+    if stay is not True and state in ('live', 'unknown') and kind == 'judgment_entered':
+        # Scoped to 'judgment_entered' on purpose, and this is the whole of contract 5 here. It is
+        # the only settled posture that can sit over an unresolved sale: the producer's status loop
+        # takes the LATEST transition, so 'dismissed', 'satisfied_redeemed', 'sold' and
+        # 'sale_cancelled' all mean the thing that ended the case is newer than the sale entries,
+        # while _sale_state - which reads a newest notice against a newest cancellation or
+        # certificate and knows nothing of dismissals or satisfactions - still calls those 'live'.
+        # Reporting on every kind would have held all four routine shapes incomplete for good.
+        # 'sale_scheduled' says the sale itself, so it needs no second line.
+        missing.append('the docket status is %r while %s' % (kind, sale))
     unseen = _bankruptcy_entries(timeline)
     if stay is not True and unseen:
         # On the docket but never in stay_history: undated, or dated after the run's as_of. Either

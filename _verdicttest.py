@@ -2309,5 +2309,84 @@ class FifteenthReviewTests(unittest.TestCase):
 
 
 
+class SixteenthReviewTests(unittest.TestCase):
+    """_sale_state answered the most decision-relevant question on the page - is a sale still running -
+    and `assess` consulted it only when a bankruptcy stay happened to be in effect. On every other
+    docket the answer was computed and thrown away.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    NOTICED = [(1, 'Complaint', '', '01/05/2026', ''),
+               (145, 'Notice of Foreclosure Sale on 04/01/2026', '', '03/01/2026', ''),
+               (150, 'Final Judgment of Foreclosure', '', '05/01/2026', '')]
+
+    def case(self, rows):
+        return self.built(rows, controlling='150', pages={'150': self.JUDGMENT_PAGE})
+
+    def test_a_live_sale_with_no_stay_is_not_supported(self):
+        # The producer's status loop takes the LATEST transition, so a judgment entered after the sale
+        # notice leaves kind 'judgment_entered' - a SETTLED_KIND - and sale_outcome is written only
+        # while the final status is 'sale_scheduled' with a parsed date (miami_case_timeline :508), so
+        # nothing else in the module covered it. No clerk money rows either: the sale has not been held.
+        t = self.case(self.NOTICED)
+        self.assertEqual((t['status']['kind'], t['status'].get('sale_outcome'), t['sale_held']),
+                         ('judgment_entered', None, None))
+        self.assertEqual(CV._sale_state(t, t['status'], t['status']['kind'])[0], 'live')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if '145' in m and 'notice_of_sale' in m], r['missing'])
+
+    def test_a_sale_the_classifier_could_not_label_is_named_without_a_stay(self):
+        # The `unknown` half. With a Suggestion of Bankruptcy on the same docket this exact sentence
+        # already reached `missing`; without one the identical evidence reached nobody.
+        t = self.case([(1, 'Complaint', '', '01/05/2026', ''),
+                       (145, 'Notice of Rescheduled Foreclosure Sale on 12/28/2026', '',
+                        '03/01/2026', ''),
+                       (150, 'Final Judgment of Foreclosure', '', '05/01/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if 'whether a sale is pending' in m], r['missing'])
+
+    def test_a_judgment_with_no_sale_entries_is_untouched(self):
+        r = CV.assess(self.case([(1, 'Complaint', '', '01/05/2026', ''),
+                                 (150, 'Final Judgment of Foreclosure', '', '05/01/2026', '')]))
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_the_postures_that_end_a_case_are_not_held_by_an_older_sale_notice(self):
+        # Contract 5, and the reason the gate is scoped to 'judgment_entered'. _sale_state reads a
+        # newest notice against a newest cancellation or certificate and knows nothing of dismissals
+        # or satisfactions, so it still calls all of these 'live'. The producer's status loop takes
+        # the latest transition, so the thing that ended the case is newer than the sale entries.
+        for title, kind in (('Order of Dismissal', 'dismissed'),
+                            ('Certificate of Title', 'sold'),
+                            ('Order Cancelling Foreclosure Sale', 'sale_cancelled')):
+            t = self.case(self.NOTICED + [(160, title, '', '06/01/2026', '')])
+            self.assertEqual(t['status']['kind'], kind, title)
+            r = CV.assess(t)
+            self.assertFalse([m for m in r['missing'] if 'the docket status is' in m],
+                             (title, r['missing']))
+
+    def test_a_live_sale_under_an_unknown_stay_state_is_named_too(self):
+        # `elif stay is None and history` skipped _sale_state as well, so a live sale under an unknown
+        # stay state said only "stay state unknown" and never named the sale. Already incomplete, so
+        # this is a reporting loss rather than a false clean bill - and it is the same gate.
+        t = self.case(self.NOTICED)
+        t['stay_in_effect'] = None
+        t['stay_history'] = [{'entry_id': '99', 'kind': 'suggestion_of_bankruptcy'}]
+        r = CV.assess(t)
+        self.assertIn('stay state unknown', r['missing'])
+        self.assertTrue([m for m in r['missing'] if '145' in m], r['missing'])
+
+    def test_a_live_sale_under_a_stay_is_still_one_contradiction(self):
+        # The stay branch must not double-report: a live sale with a stay in effect is a conflict, not
+        # a conflict plus a gap saying the same thing.
+        t = self.case(self.NOTICED + [(160, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '',
+                                       '06/01/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['conflicts'], r['missing']))
+        self.assertFalse([m for m in r['missing'] if 'the docket status is' in m], r['missing'])
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
