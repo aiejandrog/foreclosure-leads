@@ -196,7 +196,12 @@ def read_amounts(rows, base, budget=None, plan=None):
             {'source_ref': row.get('source_ref'), 'entry_id': detail['entry_id'],
              'amount': c['amount'], 'page': c['page'], 'ok': c['ok'], 'reason': c['reason'],
              'pages': c['pages'], 'run': c['run'], 'components': c['components'],
-             'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals']}
+             'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals'],
+             # A printed subtotal its own rows do not reproduce is the document disagreeing with
+             # itself, and it is the difference between "not read" and "cannot add up" (2018-026274's
+             # $0.60). judgment_money reports it per failed check; keeping it out of the saved row
+             # left that distinction visible only in the console output of the run that found it.
+             'disagreeing_subtotals': c.get('disagreeing_subtotals') or []}
             for c in checks)
         result['figures'].extend(dict(figure, source_ref=row.get('source_ref'),
             document_key=detail['document_key'], document_hash=detail['document_hash'],

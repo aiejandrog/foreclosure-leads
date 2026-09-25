@@ -527,3 +527,5 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+# _verdicttest: case_verdict.assess on the five pilot cases' states and the conflict/missing edges.
+!_verdicttest.py
