@@ -49,8 +49,12 @@ def timeline(case, kind='judgment_entered', reason=None, controlling='232820355'
              stay=None, history=(), checks=(), attachments=(), sale_held=None, gaps=(),
              judgments=None, duplicates=(), sale_date=None, sale_outcome=None, entries=()):
     status = {'kind': kind, 'evidence': [], 'reason': reason or ''}
-    if sale_date:
-        status['sale_date'] = sale_date
+    if sale_date or kind == 'sale_scheduled':
+        # _transition always writes the key for a 'sale_scheduled' status (:262), with None when it
+        # could parse no date from the notice. A fixture that omits it is a shape build_timeline
+        # cannot write - the same failure mode as read_attachment's missing `document` - and it is
+        # how the unparsed-sale-date gap went untested for sixteen rounds (seventeenth review).
+        status['sale_date'] = sale_date or None
     if sale_outcome:
         status['sale_outcome'] = sale_outcome
     # The producer always writes a row per final judgment beside `controlling_entry`; a fixture with
@@ -139,7 +143,7 @@ class PilotVerdictTests(unittest.TestCase):
         # "$1,746,032.70 verifies on court:232820355:1 pp. 2-3. Controlling judgment #82.
         #  Sale 2026-09-28."
         r = CV.assess(pilot('2024-014878-CA-01', '232820355', kind='sale_scheduled',
-                            checks=[ok_check()],
+                            sale_date='2026-09-28', checks=[ok_check()],
                             attachments=[read_attachment('232820355')]))
         self.assertEqual(r['verdict'], 'supported')
         self.assertEqual(r['conflicts'], [])
@@ -2385,6 +2389,88 @@ class SixteenthReviewTests(unittest.TestCase):
         r = CV.assess(t)
         self.assertEqual(r['verdict'], 'conflicted', (r['conflicts'], r['missing']))
         self.assertFalse([m for m in r['missing'] if 'the docket status is' in m], r['missing'])
+
+
+
+class SeventeenthReviewTests(unittest.TestCase):
+    """Both halves of the gate the sixteenth round added were wrong against the producer, in two
+    different ways - and the pilot fixture that should have caught the first was itself a shape
+    build_timeline cannot write.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+
+    def case(self, extra):
+        return self.built(self.JUDGED + list(extra), controlling='140',
+                          pages={'140': self.JUDGMENT_PAGE})
+
+    def test_a_noticed_sale_with_no_parseable_date_is_not_supported(self):
+        # _transition takes the sale date from sale_passages - the docket line plus the body lines of
+        # READ pages - and falls back to the entry's own date only for a calendar event (:264). A
+        # notice of sale whose description carries no date and whose document is behind the county
+        # login leaves sale_date None, so build_timeline's past-sale check (:508, written
+        # `and status.get('sale_date') and ... < today`) never runs and no sale_outcome is saved.
+        t = self.case([(145, 'Notice of Foreclosure Sale', '', '07/01/2026', '')])
+        self.assertEqual((t['status']['kind'], t['status']['sale_date'],
+                          t['status'].get('sale_outcome')), ('sale_scheduled', None, None))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if 'parsed no sale date' in m], r['missing'])
+
+    def test_the_same_notice_with_a_date_is_the_case_that_already_worked(self):
+        # The inversion that proves it was a defect and not a policy: the docket where LESS is known
+        # was the one reading supported.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 03/02/2026', '', '02/20/2026', '')])
+        self.assertEqual(t['status'].get('sale_outcome'), 'unknown_no_certificate')
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_a_future_sale_date_on_the_calendar_is_still_supported(self):
+        # Contract 5: a sale_scheduled status with a parsed date the cutoff has not passed is the
+        # ordinary live-lead shape, and 2024-014878 in the acceptance table is exactly it.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 12/28/2026', '', '08/01/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_the_sale_scheduled_fixture_carries_the_key_the_producer_always_writes(self):
+        # The read_attachment lesson again: _transition always writes sale_date for a sale_scheduled
+        # status, so a fixture omitting it could never reach the check above.
+        self.assertIn('sale_date', timeline('X', kind='sale_scheduled')['status'])
+        self.assertIsNone(timeline('X', kind='sale_scheduled')['status']['sale_date'])
+        self.assertNotIn('sale_date', timeline('X')['status'])
+
+    def test_an_unlabelled_sale_entry_after_a_cancellation_is_named(self):
+        # The gate reported `unknown` only on judgment_entered, on the argument that a settled kind
+        # means the settling entry is newer than the sale entries. That cannot reach the entries
+        # `unknown` is built from: classify leaves "Notice of Rescheduled Foreclosure Sale" as
+        # 'other' and _transition has no entry for 'other', so they produce no transition and are
+        # invisible to the status loop. A cancellation order in between flipped identical evidence
+        # from incomplete to supported.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/20/2026', ''),
+                       (150, 'Order Cancelling Foreclosure Sale', '', '07/10/2026', ''),
+                       (155, 'Notice of Rescheduled Foreclosure Sale on 12/28/2026', '',
+                        '08/01/2026', '')])
+        self.assertEqual(t['status']['kind'], 'sale_cancelled')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if '155' in m], r['missing'])
+
+    def test_a_completed_sale_is_not_reopened_by_the_clerks_proceeds_entries(self):
+        # Contract 5, and why `unknown` is not simply reported on every kind. "Disbursement of Sale
+        # Proceeds" and "Surplus Funds from Sale" both carry the word and both classify as 'other',
+        # so every completed sale would read incomplete for good. The producer's own certificate
+        # label is what separates the two: a cancellation leaves room for a later notice, a
+        # certificate does not.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/20/2026', ''),
+                       (150, 'Certificate of Sale', '', '07/21/2026', ''),
+                       (151, 'Certificate of Title', '', '08/05/2026', ''),
+                       (160, 'Disbursement of Sale Proceeds', '', '08/10/2026', ''),
+                       (161, 'Surplus Funds from Sale', '', '08/12/2026', '')])
+        self.assertEqual(t['status']['kind'], 'sold')
+        self.assertEqual(CV._sale_state(t, t['status'], 'sold'), ('none', None))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
 
 
 

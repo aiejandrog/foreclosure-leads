@@ -146,6 +146,28 @@ producer's loop takes the latest transition, so `dismissed`, `satisfied_redeemed
 `sale_cancelled` all mean the thing that ended the case is newer than the sale entries. Reporting on
 every kind would have held those four routine shapes `incomplete` for good (sixteenth review).
 
+That scoping was right for `live` and wrong for `unknown`, and a round later both halves were
+corrected. `unknown` is built from entries `classify` leaves `'other'` - "Notice of Rescheduled
+Foreclosure Sale", "Notice of Cancellation of Foreclosure Sale" - and `_transition` has no entry for
+`'other'`, so those entries produce no transition and are invisible to the status loop. They can be
+arbitrarily newer than whatever set the settled kind, and a cancellation order between a notice and a
+rescheduling flipped identical evidence from `incomplete` to `supported`. `unknown` is now reported on
+every kind, with the completed-sale case excluded inside `_sale_state` by the producer's own
+certificate label: a cancellation leaves room for a later notice, a certificate does not, and the
+clerk's "Disbursement of Sale Proceeds" and "Surplus Funds from Sale" both classify as `'other'` and
+both carry the word, so without that exclusion every completed sale would read `incomplete` for good.
+
+The same round closed the other half of the eighth review's defect. `_transition` takes the sale date
+from `sale_passages` - the docket line plus the body lines of READ pages - and falls back to the
+entry's own date only for a calendar event (:264). A notice of sale whose description carries no
+parseable date and whose document sits behind the county login therefore leaves `sale_date` None, and
+:508's past-sale check is written `and status.get('sale_date') and ... < today`, so it never runs and
+no `sale_outcome` is saved. The docket where LESS was known was the one reading `supported`: the same
+docket with the date printed in its description was already `incomplete`. A status of `sale_scheduled`
+with no parsed date is now a gap of its own. The acceptance fixture for 2024-014878 had hidden this
+for sixteen rounds by omitting the `sale_date` key that `_transition` always writes for that status -
+the same failure mode as the coverage fixture's missing `document` (thirteenth review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an

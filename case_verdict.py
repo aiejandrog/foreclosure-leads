@@ -483,8 +483,14 @@ def _sale_state(timeline, status, kind):
                                 opening.get('date') or 'undated',
                                 '; sale date %s' % ', '.join(dates) if dates else ''))
     # Either the newest labelled sale event ends a sale, or there was never one. In both cases an
-    # unlabelled sale-worded entry after it could be a fresh notice this module cannot read.
-    later = _later_unlabelled(closing_date)
+    # unlabelled sale-worded entry after it could be a fresh notice this module cannot read - UNLESS
+    # the thing that closed the sale was a certificate. A sale that completed is followed by the
+    # clerk's proceeds handling, and "Disbursement of Sale Proceeds" and "Surplus Funds from Sale"
+    # both carry the word and both classify as 'other', so treating those as a possible fresh notice
+    # would read every completed sale as unknown for good (seventeenth review). A cancellation, or
+    # nothing at all, leaves room for a later notice; a certificate does not.
+    completed = closing is not None and set(_producer_labels(closing)) & set(CERTIFICATE_KINDS)
+    later = [] if completed else _later_unlabelled(closing_date)
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))
@@ -782,16 +788,39 @@ def assess(timeline, dossier=None):
                          'contacted')
     elif stay is None and history:
         missing.append('stay state unknown')
-    if stay is not True and state in ('live', 'unknown') and kind == 'judgment_entered':
-        # Scoped to 'judgment_entered' on purpose, and this is the whole of contract 5 here. It is
-        # the only settled posture that can sit over an unresolved sale: the producer's status loop
-        # takes the LATEST transition, so 'dismissed', 'satisfied_redeemed', 'sold' and
-        # 'sale_cancelled' all mean the thing that ended the case is newer than the sale entries,
-        # while _sale_state - which reads a newest notice against a newest cancellation or
-        # certificate and knows nothing of dismissals or satisfactions - still calls those 'live'.
-        # Reporting on every kind would have held all four routine shapes incomplete for good.
-        # 'sale_scheduled' says the sale itself, so it needs no second line.
+    if stay is not True and (state == 'unknown'
+                             or (state == 'live' and kind == 'judgment_entered')):
+        # Two different scopings, because the producer's status is evidence about one of these states
+        # and not the other.
+        #
+        # 'live' is reported only on 'judgment_entered'. The other settled kinds mean the entry that
+        # ended the case is newer than the sale entries, because every kind `live` is built from -
+        # notice_of_sale, order_resetting_sale, a certificate, a cancellation - IS a _transition the
+        # status loop would have taken. _sale_state knows nothing of dismissals or satisfactions, so
+        # it calls those dockets 'live' too, and reporting them would hold four routine shapes
+        # incomplete for good.
+        #
+        # 'unknown' is reported on every kind, because that argument cannot reach the entries it is
+        # built from. classify leaves "Notice of Rescheduled Foreclosure Sale" and "Notice of
+        # Cancellation of Foreclosure Sale" as 'other', _transition has no entry for 'other', so
+        # those entries produce no transition and are INVISIBLE to the status loop - they can be
+        # arbitrarily newer than whatever set the settled kind. A cancellation order between the
+        # notice and the rescheduling flipped the identical evidence from incomplete to supported
+        # (seventeenth review). The completed-sale case is excluded inside _sale_state, where the
+        # producer's own certificate label answers it.
         missing.append('the docket status is %r while %s' % (kind, sale))
+    if kind == 'sale_scheduled' and not status.get('sale_date'):
+        # The eighth review's defect, other half. _transition (:263) takes the sale date from
+        # sale_passages - the docket line plus the body lines of READ pages - and falls back to the
+        # entry's own date only for a calendar event (:264). A notice of sale whose description
+        # carries no parseable date and whose document is behind the county login therefore leaves
+        # sale_date None, and build_timeline's past-sale check (:508) is written
+        # `if kind == 'sale_scheduled' and status.get('sale_date') and ... < today`, so it never runs
+        # and no sale_outcome is saved. The case with LESS known about it was the one reading
+        # `supported`: the same docket with the date printed in the description is incomplete.
+        missing.append("the docket status is 'sale_scheduled' and the run parsed no sale date, so "
+                       "miami_case_timeline's own past-sale check never ran and whether that sale "
+                       'has been held is not in this file')
     unseen = _bankruptcy_entries(timeline)
     if stay is not True and unseen:
         # On the docket but never in stay_history: undated, or dated after the run's as_of. Either
