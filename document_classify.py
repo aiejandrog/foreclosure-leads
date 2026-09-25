@@ -377,6 +377,66 @@ _BOOKPAGE_LOOSE_RE = re.compile(
     r'[\s,]*(?:AT\s+)?(?:PAGE|PG\.?|P\.)\s*[.:#]?\s*(\d{1,5})', re.I)
 
 
+# A recital naming the condominium declaration or plat the legal description rests on. It cites a
+# real instrument, but not one that encumbers this unit: 2023-013492 logged its declaration
+# 13491/2403 as a lead (12-case verification, defect 8).
+_RECITAL_RE = re.compile(r'declaration\s+of\s+condominium|condominium\s+thereof|plat\s+book'
+                         r'|according\s+to\s+the\s+(?:map\s+or\s+)?plat', re.I)
+
+
+def stamp_run_pages(cites):
+    """Keys of the recording stamps a COPY of a recorded instrument carries after its first page.
+
+    A mortgage attached as an exhibit to a court filing carries its own recording stamp on every
+    page, so page 1 cites 34472/1351, page 2 cites 34472/1352 and so on: one instrument read as
+    ten (2025-023462, 12-case verification defect 8). own_spans() handles this for a document
+    fetched from Official Records; a court filing's exhibit is not one. A run is two or more
+    consecutive pages whose cited page steps with them. Its first page is kept: that is the
+    instrument, and the only one worth fetching."""
+    runs = {}
+    for c in cites or []:
+        try:
+            page, cited = int(c.get('cited_on_page')), int(c.get('page_no'))
+        except (TypeError, ValueError):
+            continue
+        runs.setdefault((str(c.get('book')), cited - page), {})[page] = cited
+    extra = set()
+    for (book, _offset), by_page in runs.items():
+        pages = sorted(by_page)
+        linked = {p for a, b in zip(pages, pages[1:]) if b == a + 1 for p in (a, b)}
+        if linked:
+            first = min(by_page[p] for p in linked)
+            extra.update(key_of(book, by_page[p]) for p in linked if by_page[p] != first)
+    return extra
+
+
+# Words that start a citation of their own. A recital earlier on the line does not describe a
+# citation that one of these introduces.
+_OWN_INSTRUMENT_RE = re.compile(r'mortgage|lien|judgment|lis\s+pendens|assignment|notice|claim|'
+                                r'certificate|deed|satisfaction|release|agreement|;', re.I)
+
+
+def _recital_leads_to(cite):
+    """True when a declaration or plat recital is what introduces THIS citation. A passage is the
+    whole OCR line, so a plat recital and a separate mortgage on one line share it (Greptile on
+    #61): only the text between the recital and this citation's book number decides."""
+    passage = cite.get('passage') or ''
+    book = str(cite.get('book') or '').lstrip('0')
+    at = re.search(r'(?<!\d)0*%s(?!\d)' % re.escape(book), passage) if book else None
+    before = passage[:at.start()] if at else ''
+    recitals = list(_RECITAL_RE.finditer(before))
+    return bool(recitals) and not _OWN_INSTRUMENT_RE.search(before[recitals[-1].end():])
+
+
+def not_followed_reason(cite, stamps=()):
+    """Why a citation is not a lead to fetch, or '' when it is one."""
+    if key_of(cite.get('book'), cite.get('page_no')) in stamps:
+        return 'page stamp of an exhibit copy; its first page is the instrument'
+    if _recital_leads_to(cite):
+        return 'declaration or plat recital, not an encumbrance'
+    return ''
+
+
 def cited_instruments(reading):
     """Book/page references the document's own text cites. Candidates to fetch, never findings.
 

@@ -189,10 +189,14 @@ def _c(documents):
         page_verified=sum(1 for d in documents if d.get('page_count_verified')),
         # Every book/page the read documents point at. An owner-name search never sees a lien
         # recorded against a prior owner or a misspelt name; the document that references it does.
+        # Not an exhibit's page stamps after its first page, nor a declaration or plat recital
+        # (12-case verification, defect 8).
         cited_but_not_fetched=[c for d in documents for c in (d.get('cited_instruments') or [])
                                if not c.get('fetched')
                                and document_classify.key_of(c.get('book'), c.get('page_no'))
-                               not in document_classify.own_spans(documents)],
+                               not in document_classify.own_spans(documents)
+                               and not document_classify.not_followed_reason(
+                                   c, document_classify.stamp_run_pages(d.get('cited_instruments')))],
         # Court papers from the owner's OTHER lawsuits, kept out of everything above and listed
         # here. They are real and they are about this person; they are not about this case.
         other_actions=[{'source_ref': d.get('source_ref'),
