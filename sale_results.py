@@ -135,16 +135,18 @@ def _date_spans(text):
 
 
 # A docket line can name dates that are not the sale: a notice of sale reciting the surplus-claim
-# deadline ('... CLAIMS MUST BE FILED BY 12/01/2026'), a hearing, a mailing or filing date. Taking
-# the latest date on the line as the sale date pushed a sale days away months out, which dropped it
-# off the urgent lane and out of Call Mode. A date counts as a SALE date unless the words just
-# before it (since the previous date) point elsewhere and no sale word comes after them.
-_NONSALE_CUE = re.compile(r'claim|surplus|deadline|\bwithin\b|\bfil(?:e|ed|ing)\b|hearing|\bdated\b|'
-                          r'\bentered\b|\bmail|lis\s+pendens|objection|redempt|redeem|\bdue\b|'
-                          r'\bby\b|respon|no\s+later\s+than|on\s+or\s+before|\bservice\b|\bserved\b|'
-                          r'\bsigned\b|\bexpir|\bdocketed\b|\brecorded\b|\bpublish', re.I)
-_SALE_CUE = re.compile(r'\bsale\b|\bauction|\breset|reschedul|postpon|continu|\bsold\b', re.I)
-_CUE_SPAN = 60             # how far back a cue is read, capped at the previous date on the line
+# deadline ('... SURPLUS CLAIMS MUST BE FILED BY 12/01/2026'), a hearing, an objection deadline.
+# Taking the latest date on the line as the sale date pushed a sale days away months out, which
+# dropped it off the urgent lane and out of Call Mode. A date is NOT a sale date when the words
+# before it (back to the previous date on the line) name a deadline-type thing and no sale-SETTING
+# phrase comes after that. Only nouns that never introduce a sale date count: 'by', 'due to',
+# 'entered' or 'filed' also appear in real resets ('RESET BY ORDER TO 10/20/2026'), and a bare
+# 'the sale' also appears in the surplus sentence itself ('WITHIN 60 DAYS AFTER THE SALE, 11/30'),
+# so neither decides anything.
+_NONSALE_CUE = re.compile(r'claim|surplus|deadline|hearing|objection|redempt|redeem|lis\s+pendens|'
+                          r'\bmail|\bserv(?:ed|ice)\b|\bexpir|\brespon', re.I)
+_SETS_SALE = re.compile(r'\bsale\s+(?:date|of|on|set|scheduled|reset|to|for)\b|\breset|reschedul|postpon|'
+                        r'continu|\bset\s+for\b|\bmoved?\s+to\b|\bauction\s+(?:date|of|on|set|for)\b', re.I)
 
 
 def _sale_dates_in(text):
@@ -152,10 +154,10 @@ def _sale_dates_in(text):
     text = text or ''
     out, prev_end = [], 0
     for start, end, d in _date_spans(text):
-        ctx = text[max(prev_end, start - _CUE_SPAN):start]
+        ctx = text[prev_end:start]
         prev_end = end
         bad = [m.end() for m in _NONSALE_CUE.finditer(ctx)]
-        good = [m.end() for m in _SALE_CUE.finditer(ctx)]
+        good = [m.end() for m in _SETS_SALE.finditer(ctx)]
         if bad and not (good and good[-1] > bad[-1]):
             continue
         out.append(d)
@@ -334,8 +336,8 @@ def classify(dockets, sale, today=None, listed=None):
     # docket says 2027-01-04 and 2026-11-09). If the newest line that names any sale date names a
     # LATER one — a notice of sale, or a reset order — the sale was moved, however long ago.
     if not (held or vacated or cancel):
-        _setting = [(d, max(_sale_dates_in(desc + ' ' + cmt))) for d, desc, cmt, code in _entries(dockets)
-                    if _sale_dates_in(desc + ' ' + cmt) and not (_MOTION.search(desc) and not _ORDER.search(desc))
+        _setting = [(d, max(_sd)) for d, desc, cmt, code in _entries(dockets)
+                    if (_sd := _sale_dates_in(desc + ' ' + cmt)) and not (_MOTION.search(desc) and not _ORDER.search(desc))
                     and (_NOTICE_SALE.search(desc) or code == 'NOTSCV'
                          or (_ORDER.search(desc) and _SALEWORD.search(desc) and _CANCEL.search(desc + ' ' + cmt)))]
         if _setting:
