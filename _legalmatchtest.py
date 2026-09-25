@@ -103,6 +103,22 @@ class DeedPlacementTests(unittest.TestCase):
         other = title([mortgage(plat=''), rec('7', '6/1/2023', 'A', 'B', plat='', sub='SAMPLE GROVE 2ND ADDN')])
         self.assertEqual(other['unanchored_deeds'][0]['status'], 'legal_description_match_required')
 
+    def test_a_plat_on_only_one_side_is_never_settled_by_the_subdivision_name(self):
+        for ref_plat, deed_plat in (('', '99/1'), ('53/900', '')):
+            got = title([mortgage(plat=ref_plat), rec('7', '6/1/2023', 'A', 'B', plat=deed_plat)])
+            self.assertEqual(got['legal_matched_deeds'], [], (ref_plat, deed_plat))
+            self.assertEqual(got['unanchored_deeds'][0]['legal_match']['reason'],
+                             'only one side names a plat book/page')
+
+    def test_leading_zeros_are_not_a_difference(self):
+        rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', block='012', plat='053/0900')]
+        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+
+    def test_block_and_lot_spellings_the_index_also_uses(self):
+        got = T.index_legal(rec('1', '', '', '', legal='LOTS 1 AND 2 BLOCK 12', block=''))
+        self.assertEqual((got['lots'], got['block']), ({'1', '2'}, '12'))
+
     def test_condo_unit_building_and_phase(self):
         unit = dict(sub='SAMPLE TOWERS CONDO', legal='CONDO UNIT NO 104 BLDG 7', block='', plat='11542/2022')
         self.assertEqual(title([mortgage(**unit), rec('7', '6/1/2023', 'A', 'B', **unit)])['legal_matched_deeds'], ['7/1'])
@@ -143,6 +159,9 @@ class PresentTitleTests(unittest.TestCase):
         self.assertEqual(own['legal_description_differs'], ['8/1'])
         self.assertEqual(own['legal_description_match_required'], [])
         self.assertFalse(any('legal-description matching' in h for h in got['held_because']))
+        self.assertIn('clerk index legal description', own['basis'])
+        self.assertTrue(any('every deed party was recovered' in g and 'official_records/7-1' in g
+                            for g in title(rows)['gaps']))
 
 
 if __name__ == '__main__':

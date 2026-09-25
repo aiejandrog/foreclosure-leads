@@ -74,8 +74,11 @@ def present_title(report, entities=None):
         'legal_description_differs': [d['book_page'] for d in unanchored
                                       if d.get('status') == 'legal_description_differs'],
         'anchored_by': current.get('anchored_by') or ('folio' if current else None),
-        'basis': ('Newest folio-anchored deed in what was searched and stored. Deed inventory '
-                  'completeness is unverified; this is a candidate, not a title finding.'),
+        'basis': (('Newest deed placed on this parcel by the clerk index legal description (no '
+                   'folio on the deed) in what was searched and stored. '
+                   if current.get('anchored_by') == 'legal_description' else
+                   'Newest folio-anchored deed in what was searched and stored. ') +
+                  'Deed inventory completeness is unverified; this is a candidate, not a title finding.'),
     }
     records = {SE._key(e.get('name')): e for e in entities or []}
     owner_entities = []

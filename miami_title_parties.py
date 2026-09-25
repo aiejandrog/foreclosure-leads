@@ -85,8 +85,9 @@ def build_title_parties(models, documents, docket, folio):
                     # The clerk's own index puts this deed on the same lot/block/plat (or condo
                     # unit) as the records it filed under this parcel's folio. That is the check a
                     # person did by hand; anything short of an exact match still goes to one.
-                    gaps.append('%s: anchored by the clerk index legal description (%s), not by folio.'
-                                % (ref, verdict['basis']))
+                    gaps.append('%s: anchored by the clerk index legal description (%s), not by '
+                                'folio; index names and bounded explicit-role extraction do not '
+                                'establish that every deed party was recovered.' % (ref, verdict['basis']))
                     deeds.append({'book_page':book_page,'source_ref':ref,'date':model.get('reC_DATE'),
                                   'doc_type':label,'parties':parties,'anchored_by':'legal_description',
                                   'legal_match':verdict,'date_parsed':_date(model.get('reC_DATE'))})
@@ -264,7 +265,7 @@ def _lots(text):
     """'LOTS 38 THRU 40 LOTS 1 THRU 3' -> {'38','39','40','1','2','3'}. None when any piece is not a
     plain lot number (a part of a lot, a metes-and-bounds call), which only a person can compare.
     The index's punctuation is already gone by here, so runs and ranges are read token by token."""
-    tokens = re.sub(r'\bLOTS?\b', ' ', text).split()
+    tokens = re.sub(r'\b(?:LOTS?|AND)\b', ' ', text).split()
     lots, i = set(), 0
     while i < len(tokens):
         token = tokens[i]
@@ -294,6 +295,9 @@ def index_legal(model):
     sub = _tokens(model.get('subdiV_NAME'))
     desc = _tokens(model.get('legaL_DESCRIPTION'))
     block = re.sub(r'[^A-Z0-9]', '', str(model.get('blocK_NO') or '').upper()) or None
+    if not block:
+        in_desc = re.search(r'\b(?:BLK|BLOCK)\s+([A-Z0-9]+)', desc)
+        block = in_desc.group(1) if in_desc else None
     plat = re.sub(r'\s', '', str(model.get('plaT_BOOKPAGE') or ''))
     plat = None if re.fullmatch(r'[0/-]*', plat) else plat
     if not (sub or desc or block or plat):
@@ -302,7 +306,7 @@ def index_legal(model):
            'lots': None, 'unit': None, 'building': None, 'phase': None, 'tract': None,
            'see_document': bool(re.search(r'\bSEE DOC', desc)), 'unparsed': False}
     body = re.sub(r'\bSEE DOC\w*', ' ', desc)
-    lot = re.search(r'\bLOTS?\s+(.+?)(?=\s+BLK\b|$)', body)
+    lot = re.search(r'\bLOTS?\s+(.+?)(?=\s+(?:BLK|BLOCK)\b|$)', body)
     unit = re.search(r'\b(?:UNIT|PARCEL)\s+(?:NO\s+)?(.+?)(?=\s+(?:BLDG|BUILDING|PH|PHASE)\b|$)', body)
     tract = re.search(r'\bTR(?:ACT)?\s+([A-Z0-9]+)\s*$', body)
     if lot:
@@ -355,6 +359,16 @@ def parcel_legal_reference(models, folio):
     return dict(legal, from_record=book_page), None
 
 
+def _num(value):
+    """Compare index values without their leading zeros and spacing: the clerk writes block 12 as
+    '12' on one instrument and '012' on another, and a false 'differs' would drop a deed out of
+    the later-conveyance warning entirely. Letters, order and spacing are kept: spacing is a
+    question for a person ('UNIT 10 5' is not obviously unit 105), not a difference to rule on."""
+    if value is None:
+        return None
+    return re.sub(r'\b0+(\d)', r'\1', str(value).upper())
+
+
 def _same(a, b):
     """'exact' | 'spacing' (same characters, different spacing: a person decides) | 'differs'."""
     if a == b:
@@ -381,18 +395,24 @@ def compare_legal(reference, legal, reference_gap=None):
     if legal['see_document'] or legal['unparsed']:
         return result('needs_person', 'the index legal continues in the document (SEE DOC) or is not a plain lot or unit')
     if reference['plat'] and legal['plat']:
-        if reference['plat'] != legal['plat']:
+        if _num(reference['plat']) != _num(legal['plat']):
             return result('differs', 'plat book/page %s is not the parcel\'s %s' % (legal['plat'], reference['plat']))
         place = 'plat %s' % legal['plat']
+    elif reference['plat'] or legal['plat']:
+        # One side names a plat book/page and the other does not, so the subdivision name is all
+        # they share, and a name is not a parcel: 'SAMPLE GROVE' plats more than one of them.
+        return result('needs_person', 'only one side names a plat book/page')
     elif reference['subdivision'] and reference['subdivision'] == legal['subdivision']:
         place = 'subdivision %s' % legal['subdivision']
     else:
-        return result('needs_person', 'no plat book/page on both sides and the subdivision names do not agree')
-    kind = _kind(legal)
-    if kind != _kind(reference):
-        return result('needs_person', 'the deed describes a %s and the parcel a %s' % (kind, _kind(reference)))
+        return result('needs_person', 'no plat book/page on either side and the subdivision names do not agree')
+    kind, parcel_kind = _kind(legal), _kind(reference)
+    if not kind:
+        return result('needs_person', 'the index names no lot, unit or tract for this deed')
+    if kind != parcel_kind:
+        return result('needs_person', 'the deed describes a %s and the parcel a %s' % (kind, parcel_kind))
     if kind == 'lot':
-        if reference['block'] != legal['block']:
+        if _num(reference['block']) != _num(legal['block']):
             if reference['block'] and legal['block']:
                 return result('differs', 'block %s is not the parcel\'s block %s' % (legal['block'], reference['block']))
             return result('needs_person', 'only one side names a block')
@@ -404,13 +424,13 @@ def compare_legal(reference, legal, reference_gap=None):
         return result('differs', 'lot(s) %s are not the parcel\'s lot(s) %s'
                       % (', '.join(sorted(legal['lots'])), ', '.join(sorted(reference['lots']))))
     field = 'unit' if kind == 'unit' else 'tract'
-    same = _same(reference[field], legal[field])
+    same = _same(_num(reference[field]), _num(legal[field]))
     if same == 'differs':
         return result('differs', '%s %s is not the parcel\'s %s %s' % (field, legal[field], field, reference[field]))
     if same == 'spacing':
         return result('needs_person', '%s %s and %s differ only in spacing' % (field, legal[field], reference[field]))
     for extra in ('building', 'phase'):
-        if reference[extra] != legal[extra]:
+        if _num(reference[extra]) != _num(legal[extra]):
             if reference[extra] and legal[extra]:
                 return result('differs', '%s %s is not the parcel\'s %s %s' % (extra, legal[extra], extra, reference[extra]))
             return result('needs_person', 'only one side names a %s' % extra)
