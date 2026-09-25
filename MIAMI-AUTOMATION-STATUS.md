@@ -96,14 +96,19 @@ a limited-scope satisfaction - which `reconcile_judgments` records as `partially
 reconciles a dismissal, so a voluntarily dismissed action read `supported` with the status still
 `judgment_entered`.
 
-**One limit of the amount column, and it is not closable here.** An amount check names a docket ENTRY,
-not a document: `run_case_timeline` :53 takes `entry_ref` from the middle segment of
-`court:<entry>:<document>`, so every attachment filed under the judgment's entry produces checks
-carrying the judgment's entry id. An Affidavit of Indebtedness filed as a second attachment has its own
-additive table and its own grand total, and that total was printed as the judgment's amount "verified
-to the cent". Nothing in a saved timeline says which attachment on an entry is the judgment, so where
-the entry carries more than one read document the verdict now says the figure cannot be tied to the
-judgment itself rather than vouching for it.
+**One limit of the amount column, and it is not closable here.** An amount check's `entry_id` comes
+from the middle segment of `court:<entry>:<document>` (`run_case_timeline` :53), so every attachment
+filed under the judgment's entry produces checks carrying the judgment's entry id. An Affidavit of
+Indebtedness filed as a second attachment has its own additive table and its own grand total. Nothing
+in a saved timeline says which attachment on an entry IS the judgment, and a judgment filed with its
+legal-description exhibit is the ordinary shape, so holding every multi-document entry as a gap would
+make routine dockets `incomplete` for good - it was written that way for one commit and would have
+flipped a pilot case. The ambiguity is uniform, so it lives in the report's standing qualification
+instead, and every amount line names the copy the figure verified on. The producer-side reason it
+cannot be resolved here is reported: `miami_case_timeline` :349 merges the pages of all matched
+documents on an entry and `_body_kind` reads `pages[:1]`, while `run_case_timeline.load_rows` :45
+iterates `sorted(glob('*.json'))` over sha256 filenames, so which attachment supplies a
+multi-document entry's label is arbitrary.
 
 **The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry

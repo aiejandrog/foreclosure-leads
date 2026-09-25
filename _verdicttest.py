@@ -123,8 +123,13 @@ def pilot(case, controlling, walled=False, **kw):
                     judgments=[judgment_row(controlling), dup], **kw)
 
 
-def read_attachment(entry_id='232820355'):
-    return {'entry_id': entry_id, 'kind': 'final_judgment', 'state': 'read', 'detail': []}
+def read_attachment(entry_id='232820355', document=None):
+    # `document` is the source_ref string document_coverage :166 ALWAYS sets on a row built from a
+    # fetched attachment. Omitting it made every coverage fixture a shape the producer cannot write,
+    # which is how a check reading that key passed the whole suite while flipping a pilot case on
+    # real evidence (thirteenth review).
+    return {'entry_id': entry_id, 'kind': 'final_judgment', 'state': 'read', 'detail': [],
+            'document': document or 'court:%s:1' % entry_id}
 
 
 class PilotVerdictTests(unittest.TestCase):
@@ -678,10 +683,12 @@ class SecondReviewTests(unittest.TestCase):
         # was written to fix. The saved `entries` list survives, so that is what is read.
         r = CV.assess(timeline('X', kind='stayed_by_bankruptcy', stay=True,
                                history=[{'entry_id': '150', 'event': 'stayed'}],
+                               # Dated BEFORE the fixture's own as_of (2026-09-24): the producer
+                               # decides nothing off a later entry, and neither does this module.
                                entries=[{'entry_id': '120', 'kind': 'notice_of_sale',
-                                         'date': '2026-11-01'},
+                                         'date': '2026-08-01'},
                                         {'entry_id': '150', 'kind': 'suggestion_of_bankruptcy',
-                                         'date': '2026-11-10'}],
+                                         'date': '2026-08-10'}],
                                checks=[ok_check()], attachments=[read_attachment()]))
         self.assertEqual(r['verdict'], 'conflicted')
         self.assertTrue(any('entry 120' in c and 'notice_of_sale' in c for c in r['conflicts']),
@@ -1957,19 +1964,27 @@ class TwelfthReviewTests(unittest.TestCase):
         r = CV.assess(t)
         self.assertFalse(any('notice_of_sale' in c for c in r['conflicts']), r['conflicts'])
 
-    def test_an_amount_off_another_attachment_is_not_the_judgments(self):
-        # A check names an ENTRY, not a document (run_case_timeline :53), so an Affidavit of
-        # Indebtedness filed as a second attachment on the judgment entry had its own grand total
-        # printed as the judgment amount "verified to the cent".
+    def test_the_amount_names_the_document_it_was_read_off(self):
+        # A check's entry_id comes from the MIDDLE segment of court:<entry>:<document>
+        # (run_case_timeline :53), so an Affidavit of Indebtedness filed as a second attachment on
+        # the judgment entry carries the judgment's entry_id and its own total.
+        #
+        # The twelfth round answered that with a per-case gap on any entry with two read documents.
+        # That was wrong twice over: a judgment filed with its legal-description exhibit is the
+        # ORDINARY shape, so it held routine dockets for good and flipped a pilot case, and the
+        # reason it printed ("a check names the entry rather than the document") was refuted by the
+        # source_ref in the same sentence. The ambiguity is uniform across every multi-document
+        # entry and nothing saved resolves it, so it belongs in the report's standing qualification -
+        # which every report carries - and the line names the copy the figure verified on.
         t = self.built(self.OPEN, pages={'2': self.JUDGMENT_PAGE})
         t['amount_vision'] = {'amount_checks': [ok_check('2', 'court:2:2', 412880.00)]}
-        t['coverage'] = {'attachments': [dict(read_attachment('2'), document='court:2:1'),
-                                         dict(read_attachment('2'), document='court:2:2')],
+        t['coverage'] = {'attachments': [read_attachment('2', 'court:2:1'),
+                                         read_attachment('2', 'court:2:2')],
                          'complete': False}
         r = CV.assess(t)
-        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
-        self.assertTrue(any('names the entry rather than the document' in m for m in r['missing']),
-                        r['missing'])
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+        self.assertTrue(any('court:2:2' in line for line in r['supported_by']), r['supported_by'])
+        self.assertIn('which attachment on a docket entry IS the judgment', CV.QUALIFICATION)
 
     def test_one_read_document_on_the_entry_leaves_the_amount_alone(self):
         # The ordinary case must not gap: one document, no ambiguity about what the figure came off.
@@ -2026,6 +2041,96 @@ class TwelfthReviewTests(unittest.TestCase):
                                attachments=[dict(read_attachment(), state='not_enumerated')]))
         self.assertFalse(any('no document to read' in m for m in r['missing']), r['missing'])
         self.assertTrue(any('never reached' in m for m in r['missing']), r['missing'])
+
+
+
+class ThirteenthReviewTests(unittest.TestCase):
+    """The thirteenth review found the two failures the brief asked it to weigh against each other:
+    a false `supported` over a live stay, and one of my own gap checks holding ordinary dockets. It
+    also found the inverse of this suite's standing lesson - a fixture MISSING a key the producer
+    always writes, which let a bad check pass all 134 tests.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+
+    def test_an_entry_after_the_cutoff_decides_nothing(self):
+        # The producer keeps post-as_of entries in `entries` and skips them everywhere it decides
+        # anything (:442, reconcile_judgments :671, sale_held :544). _sale_state's scan did not, so on
+        # an acceptance replay with a cutoff behind the collection date a certificate dated AFTER the
+        # cutoff closed a sale that was live at it: `supported`, amount vouched to the cent.
+        docket = [(1, 'Complaint', '', '01/05/2025', ''),
+                  (2, 'Final Judgment of Foreclosure', '', '04/10/2025', ''),
+                  (3, 'Notice of Foreclosure Sale on 12/10/2025', '', '05/01/2025', ''),
+                  (4, 'Suggestion of Bankruptcy Chapter 13 case 25-11111', '', '06/01/2025', '')]
+        before = self.built(docket, as_of='2025-12-31', pages={'2': self.JUDGMENT_PAGE})
+        self.assertEqual(CV.assess(before)['verdict'], 'conflicted')
+        after = self.built(docket + [(120, 'Certificate of Title', '', '03/01/2026', '')],
+                           as_of='2025-12-31', pages={'2': self.JUDGMENT_PAGE})
+        self.assertEqual(next(e['entry_id'] for e in after['entries'] if e['entry_id'] == '120'),
+                         '120', 'the producer keeps the later entry in the list')
+        r = CV.assess(after)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+
+    def test_a_sale_noticed_after_the_cutoff_is_not_a_sale_at_it(self):
+        # The mirror: a later notice must not make a docket with no sale at the cutoff conflicted.
+        t = self.built([(1, 'Complaint', '', '01/05/2025', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '04/10/2025', ''),
+                        (4, 'Suggestion of Bankruptcy Chapter 13 case 25-11111', '', '06/01/2025', ''),
+                        (5, 'Notice of Foreclosure Sale on 06/01/2026', '', '03/01/2026', '')],
+                       as_of='2025-12-31', pages={'2': self.JUDGMENT_PAGE})
+        r = CV.assess(t)
+        self.assertEqual(r['conflicts'], [], r['conflicts'])
+
+    def test_a_judgment_filed_with_its_exhibit_still_reads_supported(self):
+        # The over-broad check the last round added: a final judgment plus its legal-description
+        # exhibit, both read, one verified total, is the ORDINARY shape - document_collectors :374
+        # builds court:<entry>:<documentID> per attachment - and every such entry read incomplete for
+        # good. The status table's 2023-020247 verifies "on both copies", so it flipped a pilot too.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')],
+                       pages={'2': self.JUDGMENT_PAGE})
+        t['coverage'] = {'attachments': [read_attachment('2', 'court:2:1'),
+                                         read_attachment('2', 'court:2:2')], 'complete': False}
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_the_coverage_fixture_carries_the_key_the_producer_always_writes(self):
+        # The inverse of this suite's standing lesson. document_coverage :166 always sets `document`
+        # on a row built from a fetched attachment; read_attachment omitted it, so a check reading
+        # that key could never fire in any test and passed the whole suite while being wrong on real
+        # evidence. Assert the fixture against the producer, not against itself.
+        import document_coverage as COV
+        import inspect
+        src = inspect.getsource(COV.coverage)
+        self.assertIn("document=str(row.get('source_ref'))", src,
+                      'document_coverage no longer names the row key this fixture mirrors')
+        self.assertTrue(str(read_attachment('9')['document']).startswith('court:9:'),
+                        read_attachment('9'))
+
+    def test_a_held_sale_a_certificate_closes_is_not_reported_as_open(self):
+        # assess's held-sale gap printed "whether a sale was held is not settled" with no regard for
+        # a certificate closing the day, while the sibling branch in _sale_state checks exactly that.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (4, 'Bid Amount', '', '07/01/2026', 'Hearing'),
+                        (5, 'Certificate of Title', '', '07/10/2026', '')],
+                       pages={'2': self.JUDGMENT_PAGE})
+        self.assertIsNone(t['sale_held'])
+        r = CV.assess(t)
+        self.assertFalse(any('whether a sale was held' in m for m in r['missing']), r['missing'])
+
+    def test_a_timeline_that_parses_to_a_non_object_is_unreadable(self):
+        # Parsing is not the only way a file can be wrong. `null` parses fine and is not a timeline;
+        # it was filed under "no whole-case timeline saved" - the bucket _load exists to keep corrupt
+        # files out of, where it is indistinguishable from a case nobody has run.
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text('null')
+            proc = run_cli('--dossiers', folder, dealflow=folder)
+            self.assertIn('UNREADABLE', proc.stdout)
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertEqual(report['no_verdict']['no_timeline_saved'], [], report['no_verdict'])
 
 
 

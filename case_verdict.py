@@ -115,7 +115,10 @@ CAVEAT = ('Docket completeness is unproven: the clerk publishes no pagination cu
 QUALIFICATION = (
     'Restates states other modules computed; reads and spends nothing. "supported" covers the '
     'controlling judgment, its posture and its amount - not every attachment on the docket. Not '
-    'contact clearance (miami_ranking.qualify), not an equity input (equity_state).')
+    'contact clearance (miami_ranking.qualify), not an equity input (equity_state). An amount is '
+    'named by the document it was read off, but nothing saved says which attachment on a docket '
+    'entry IS the judgment, so on an entry filed with more than one document the figure is the one '
+    'that verified on the named copy, not proof that copy is the judgment.')
 
 
 def _rows(timeline, key):
@@ -361,8 +364,16 @@ def _sale_state(timeline, status, kind):
     """
     opening = closing = None
     unlabelled = []
+    # The producer keeps post-as_of entries in `entries` and skips them everywhere it DECIDES
+    # anything (:442, reconcile_judgments :671, sale_held :544), and _labelled :249 re-applies that
+    # bound. This loop did not, so on an acceptance replay with a cutoff behind the collection date a
+    # certificate dated AFTER the cutoff closed a sale that was live at it, and the case read
+    # `supported` over a stay (thirteenth review). The mirror over-fired: a later notice of sale made
+    # a docket with no sale at the cutoff read conflicted.
+    as_of = str(timeline.get('as_of') or '9999-99-99')
     for entry in _rows(timeline, 'entries'):
-        if not isinstance(entry, dict):
+        if not isinstance(entry, dict) or not str(entry.get('date') or '') or str(
+                entry.get('date')) > as_of:
             continue
         labels = set(_producer_labels(entry))
         if labels & set(SALE_CLOSING_KINDS):
@@ -651,7 +662,10 @@ def assess(timeline, dossier=None):
     held = timeline.get('sale_held') if isinstance(timeline.get('sale_held'), dict) else {}
     money = _labelled(timeline, SALE_MONEY_KINDS)
     certificates = _labelled(timeline, CERTIFICATE_KINDS, since=held.get('date'))
-    if money and not held.get('date'):
+    closing_for_money = _labelled(timeline, SALE_CLOSING_KINDS)
+    if money and not held.get('date') and not [
+            c for c in closing_for_money
+            if str(c.get('date') or '') >= max(str(e.get('date') or '') for e in money)]:
         # The summary is empty while the entries carry the labels it is built from: the :383 override
         # emptied it, and the evidence that a sale was held is in the file (ninth review).
         missing.append("entr%s %s carr%s the clerk's sale-day bid or deposit label while the run's "
@@ -847,26 +861,6 @@ def assess(timeline, dossier=None):
     # The timeline's OWN gaps (budget_exhausted, amount_page_unreadable,
     # inventory_completeness_unknown and the rest) reached the report only where they happened to
     # change a coverage state. They are the run saying what it could not do, so they are named.
-    # An amount check names an ENTRY, not a document: run_case_timeline :53 sets entry_ref from the
-    # middle segment of `court:<entry>:<document>`, so every attachment filed under the judgment's
-    # docket entry produces checks carrying the judgment's entry_id. An Affidavit of Indebtedness
-    # filed as a second attachment - a shape miami_case_timeline :159 names by hand - has its own
-    # additive table and its own grand total, and that total was printed as the judgment's amount
-    # "verified to the cent" with nothing to tell a reader but the document number in a source ref
-    # (twelfth review). Where the entry carries only one read document there is no ambiguity; where
-    # it carries more, which one the figure came off is not in this file.
-    if verified:
-        # document_coverage :166 names the document on each row as `document`, carrying the
-        # source_ref string; rows for an entry with no document reached carry None.
-        read_docs = {str(r.get('document') or '') for r in mine if r.get('state') == 'read'}
-        read_docs.discard('')
-        if len(read_docs) > 1:
-            missing.append('the amount is verified on %s, but the judgment\'s docket entry carries '
-                           '%d read documents and a check names the entry rather than the document, '
-                           'so whether the figure was read off the judgment itself is not settled in '
-                           'this file'
-                           % (', '.join(sorted(str(c.get('source_ref') or '?') for c in verified)),
-                              len(read_docs)))
     # Two fields the producer writes and, until the eleventh review, nothing in the repo read. Both
     # are one line here and both were a false `supported` with the amount vouched for "to the cent".
     #
@@ -1081,9 +1075,16 @@ def _load(path, required=False):
 def for_saved_case(dossier_path):
     """-> the verdict for one saved dossier, or None when it has no whole-case timeline yet."""
     path = Path(dossier_path)
-    timeline = _load(path.with_name(path.stem + '-timeline.json'), required=True)
-    if not isinstance(timeline, dict):
+    saved = path.with_name(path.stem + '-timeline.json')
+    timeline = _load(saved, required=True)
+    if timeline is None and not saved.exists():
         return None
+    if not isinstance(timeline, dict):
+        # Parsing is not the only way a file can be wrong. `null` or a bare list parses fine and is
+        # not a timeline; filing it under "no whole-case timeline saved" puts a corrupt file in the
+        # bucket _load's docstring says it must never land in - indistinguishable from never run.
+        raise Unreadable('%s: parsed to %s, not a timeline object'
+                         % (saved.name, type(timeline).__name__))
     # The dossier contributes NOTES only (its open_gaps); the verdict rests entirely on the timeline.
     # Requiring it discarded a whole readable verdict over a truncated file that changes nothing
     # about it (ninth review). A dossier that is there and will not parse is reported as a gap on the
