@@ -274,6 +274,38 @@ for case, sd, dk, ok in W:
     v = S.classify(dk, sd, T)
     check('SWEEP %s: %s %s' % (case, v['st'], v.get('nd') or ''), ok(v), v)
 
+# ---- a line's other dates are not the sale date (surplus deadline, hearing, filing) -----------
+# A notice of sale reciting the surplus-claim deadline used to become the "newest sale-setting line
+# names a LATER date", so a sale days away read as reset months out and left the urgent lane.
+v = S.classify([e('09/10/2026', 'Notice of Sale', 'SALE OF 10/1/2026. SURPLUS CLAIMS MUST BE FILED BY 11/30/2026')],
+               '10/01/2026', D(2026, 9, 25))
+check('surplus deadline on the notice: the sale stays 10/01', v['st'] == 'scheduled' and 'nd' not in v, v)
+v = S.classify([e('09/10/2026', 'Notice of Sale', 'Sale Date: OCTOBER 1, 2026; ANY CLAIM TO SURPLUS NO LATER THAN NOVEMBER 30, 2026')],
+               '10/01/2026', D(2026, 9, 25))
+check('spelled-out surplus deadline: the sale stays 10/01', v['st'] == 'scheduled' and 'nd' not in v, v)
+v = S.classify([e('09/26/2026', 'Order Cancelling Foreclosure Sale',
+                  'Sale Date: SEPTEMBER 28, 2026 AND RESET FOR OCTOBER 26, 2026 AT 9:00 A.M. OBJECTIONS DUE BY DECEMBER 1, 2026')],
+               '09/28/2026', D(2026, 9, 27))
+check('reset order with a later objection deadline: moved to the RESET date', v['st'] == 'reset' and v.get('nd') == '2026-10-26', v)
+v = S.classify([e('09/28/2026', 'Mortgage Foreclosure Sale Cancelled', ''),
+                e('09/30/2026', 'Notice of Sale', 'SALE OF 10/20/2026 CLAIMS WITHIN 60 DAYS, DEADLINE 12/19/2026')],
+               '09/28/2026', D(2026, 10, 1))
+check('re-notice after a cancel: the new sale date, not the claim deadline', v['st'] == 'reset' and v.get('nd') == '2026-10-20', v)
+v = S.classify([e('08/20/2026', 'Mortgage Foreclosure Sale Cancelled', ''),
+                e('08/26/2026', 'Notice of Sale', 'SALE OF 9/28/2026 SURPLUS CLAIMS FILED BY 11/27/2026')],
+               '09/28/2026', D(2026, 9, 24))
+check('the notice that SET this sale still clears an older cancel when it recites a deadline', v['st'] == 'scheduled', v)
+v = S.classify([e('06/15/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: SEPTEMBER 28, 2026 AND RESET FOR JANUARY 4, 2027'),
+                e('07/01/2026', 'Notice of Sale', 'SALE OF 1/4/2027 SURPLUS CLAIMS FILED BY 3/5/2027')],
+               '09/28/2026', D(2026, 9, 24))
+check('stale board date + deadline on the newest notice: the reset date, not the deadline', v['st'] == 'reset' and v.get('nd') == '2027-01-04', v)
+check('sale dates: a reset order names both sales',
+      S._sale_dates_in('Sale Date: AUGUST 24, 2026 AND RESET FOR SEPTEMBER 23, 2026 AT 9:00 A.M.') == [D(2026, 8, 24), D(2026, 9, 23)])
+check('sale dates: a filing date before the sale date is not one',
+      S._sale_dates_in('NOTICE FILED 09/01/2026 FOR SALE ON 10/01/2026') == [D(2026, 10, 1)])
+check('sale dates: a hearing date is not one',
+      S._sale_dates_in('SALE OF 10/1/2026, HEARING ON OBJECTIONS 11/5/2026') == [D(2026, 10, 1)])
+
 # window
 w = S.window_cases(D(2026, 9, 24),
                    [{'Case #': '2025-013918-CA-01', 'AuctionDate': '09/28/2026'},

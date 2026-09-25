@@ -117,17 +117,48 @@ def _to_date(s):
     return None
 
 
-def _dates_in(text):
+def _date_spans(text):
+    """[(start, end, date)] for every date written on the line, in reading order."""
+    text = text or ''
     out = []
-    for m in _DATE.finditer(text or ''):
+    for m in _DATE.finditer(text):
         d = _to_date(m.group(0))
         if d:
-            out.append(d)
-    for m in _WDATE.finditer(text or ''):
+            out.append((m.start(), m.end(), d))
+    for m in _WDATE.finditer(text):
         try:
-            out.append(datetime.date(int(m.group(3)), _MONTHS.index(m.group(1).lower()) + 1, int(m.group(2))))
+            out.append((m.start(), m.end(),
+                        datetime.date(int(m.group(3)), _MONTHS.index(m.group(1).lower()) + 1, int(m.group(2)))))
         except ValueError:
             pass
+    return sorted(out, key=lambda t: t[0])
+
+
+# A docket line can name dates that are not the sale: a notice of sale reciting the surplus-claim
+# deadline ('... CLAIMS MUST BE FILED BY 12/01/2026'), a hearing, a mailing or filing date. Taking
+# the latest date on the line as the sale date pushed a sale days away months out, which dropped it
+# off the urgent lane and out of Call Mode. A date counts as a SALE date unless the words just
+# before it (since the previous date) point elsewhere and no sale word comes after them.
+_NONSALE_CUE = re.compile(r'claim|surplus|deadline|\bwithin\b|\bfil(?:e|ed|ing)\b|hearing|\bdated\b|'
+                          r'\bentered\b|\bmail|lis\s+pendens|objection|redempt|redeem|\bdue\b|'
+                          r'\bby\b|respon|no\s+later\s+than|on\s+or\s+before|\bservice\b|\bserved\b|'
+                          r'\bsigned\b|\bexpir|\bdocketed\b|\brecorded\b|\bpublish', re.I)
+_SALE_CUE = re.compile(r'\bsale\b|\bauction|\breset|reschedul|postpon|continu|\bsold\b', re.I)
+_CUE_SPAN = 60             # how far back a cue is read, capped at the previous date on the line
+
+
+def _sale_dates_in(text):
+    """The dates on a docket line that name a SALE, in reading order. See _NONSALE_CUE."""
+    text = text or ''
+    out, prev_end = [], 0
+    for start, end, d in _date_spans(text):
+        ctx = text[max(prev_end, start - _CUE_SPAN):start]
+        prev_end = end
+        bad = [m.end() for m in _NONSALE_CUE.finditer(ctx)]
+        good = [m.end() for m in _SALE_CUE.finditer(ctx)]
+        if bad and not (good and good[-1] > bad[-1]):
+            continue
+        out.append(d)
     return out
 
 
@@ -225,7 +256,7 @@ def classify(dockets, sale, today=None, listed=None):
         # anything cancelled before it was an earlier sale
         # ('Order Cancelling Foreclosure Sale :: Sale Date: AUGUST 17, 2026 AND RESET FOR SEPTEMBER
         # 28, 2026' SET the 09-28 sale; a line naming this date AND a later one cancelled it.)
-        _ds = _dates_in(t)
+        _ds = _sale_dates_in(t)
         if (sale in _ds and not any(x > sale for x in _ds) and d < sale and not is_motion
                 and (_RESET.search(t) or _NOTICE_SALE.search(desc))):
             cancel, new_date, pending = None, None, []
@@ -281,12 +312,12 @@ def classify(dockets, sale, today=None, listed=None):
             continue
 
         if _CANCEL.search(t) and d <= sale + datetime.timedelta(days=1):
-            _cd = _dates_in(t)
+            _cd = _sale_dates_in(t)
             if _cd and sale not in _cd and not any(x > sale for x in _cd):
                 continue                 # it names an earlier sale date, not this one
             cancel = (d, desc, cmt)
             pending = []                 # the ask was granted (or the clerk pulled the sale anyway)
-            later = [x for x in _dates_in(t) if x > sale]
+            later = [x for x in _cd if x > sale]
             if later:
                 new_date = max(later)
             ev(d, desc, cmt)
@@ -294,7 +325,7 @@ def classify(dockets, sale, today=None, listed=None):
 
         # a fresh notice of sale naming a later date after a cancellation = the sale was moved
         if _NOTICE_SALE.search(desc) and cancel:
-            later = [x for x in _dates_in(t) if x > sale]
+            later = [x for x in _sale_dates_in(t) if x > sale]
             if later:
                 new_date = max(later)
                 ev(d, desc, cmt)
@@ -303,8 +334,8 @@ def classify(dockets, sale, today=None, listed=None):
     # docket says 2027-01-04 and 2026-11-09). If the newest line that names any sale date names a
     # LATER one — a notice of sale, or a reset order — the sale was moved, however long ago.
     if not (held or vacated or cancel):
-        _setting = [(d, max(_dates_in(desc + ' ' + cmt))) for d, desc, cmt, code in _entries(dockets)
-                    if _dates_in(desc + ' ' + cmt) and not (_MOTION.search(desc) and not _ORDER.search(desc))
+        _setting = [(d, max(_sale_dates_in(desc + ' ' + cmt))) for d, desc, cmt, code in _entries(dockets)
+                    if _sale_dates_in(desc + ' ' + cmt) and not (_MOTION.search(desc) and not _ORDER.search(desc))
                     and (_NOTICE_SALE.search(desc) or code == 'NOTSCV'
                          or (_ORDER.search(desc) and _SALEWORD.search(desc) and _CANCEL.search(desc + ' ' + cmt)))]
         if _setting:
