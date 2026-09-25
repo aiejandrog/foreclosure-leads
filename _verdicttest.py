@@ -77,10 +77,12 @@ def ok_check(entry_id='232820355', source_ref='court:232820355:1', amount=174603
 
 
 def failed_check(entry_id='232632335', source_ref='court:232632335:1', amount=785670.31,
-                 subtotals=()):
+                 subtotals=(), reason=None):
+    # run_case_timeline.py:195 writes exactly these keys, and 'disagreeing_subtotals' is always []
+    # because verify_document cannot populate it (see the 2018-026274 test).
     return {'entry_id': entry_id, 'source_ref': source_ref, 'amount': amount, 'ok': False,
-            'reason': 'no contiguous run of rows ending at the total adds up to it to the cent '
-                      '(tried up to 2 page(s) back)',
+            'reason': reason or ('no contiguous run of rows ending at the total adds up to it to '
+                                 'the cent (tried up to 2 page(s) back)'),
             'pages': [1, 2], 'run': None, 'disagreeing_subtotals': list(subtotals)}
 
 
@@ -183,18 +185,22 @@ class PilotVerdictTests(unittest.TestCase):
             reason='Later foreclosure activity conflicts with an unresolved bankruptcy stay; no '
                    'relief identified.',
             history=[{'entry_id': '93', 'event': 'stayed'}],
-            # judgment_money's `difference` is signed: rows above minus the printed subtotal, so
-            # this case's real output is -0.60, not 0.60 (_moneytest pins (30.0, 2, 30.6, -0.6)).
-            checks=[failed_check(subtotals=[{'page': 2, 'label': 'INTEREST', 'amount': 225243.83,
-                                             'rows_above': 8, 'rows_above_sum': 225244.43,
-                                             'difference': -0.60}])],
+            # The shape verify_document REALLY writes for this case. It cannot emit
+            # disagreeing_subtotals at all: vision_rows marks every row `explicit`, and for an
+            # explicit row _resolve_subtotal either resolves or raises, so the notes that key is
+            # collected from are never written. What reaches the file is this reason, and the
+            # earlier fixture's non-empty subtotals with a 'no contiguous run' reason is a
+            # combination the pipeline cannot produce.
+            checks=[failed_check(reason=CV.SUBTOTAL_DISAGREES)],
             attachments=[read_attachment('232632335')]))
         self.assertEqual(r['verdict'], 'conflicted')
         self.assertTrue(any('Later foreclosure activity conflicts' in c
                             for c in r['conflicts']), r['conflicts'])
-        self.assertTrue(any('$225,243.83'.replace(',', '') in c.replace(',', '')
-                            for c in r['conflicts']), r['conflicts'])
-        self.assertTrue(any('off by $0.60' in c for c in r['conflicts']), r['conflicts'])
+        # The amount is "incomplete" exactly as the status table says, and the reason is named.
+        # The $0.60 breakdown itself is NOT in a saved timeline: judgment_money reports a subtotal
+        # whose members could not be read and one whose members do not add up under one string.
+        self.assertTrue(any(CV.SUBTOTAL_DISAGREES in m for m in r['missing']), r['missing'])
+        self.assertTrue(any('does not say which' in m for m in r['missing']), r['missing'])
         self.assertTrue(any('verifies to the cent' in m for m in r['missing']), r['missing'])
 
 
@@ -540,9 +546,16 @@ class CliTests(unittest.TestCase):
             self.assertIn('conflicted 1', proc.stdout)
             self.assertIn('$0 spent, no requests', proc.stdout)
             self.assertIn('SKIPPED', proc.stdout)
-            rows = json.loads((folder / 'case-verdicts.json').read_text())
-            self.assertEqual([r['verdict'] for r in rows], ['conflicted', 'supported'])
-            self.assertIn('| Case | Verdict |', (folder / 'case-verdicts.md').read_text())
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertEqual([r['verdict'] for r in report['verdicts']],
+                             ['conflicted', 'supported'])
+            # A dossier with no timeline is IN the file, not only on stdout.
+            self.assertTrue(any('no-timeline-yet' in p
+                                for p in report['no_verdict']['no_timeline_saved']))
+            md = (folder / 'case-verdicts.md').read_text()
+            self.assertIn('| Case | Verdict |', md)
+            self.assertIn('## No verdict', md)
+            self.assertIn('no verdict: 1', md)
 
     def test_it_asks_for_an_input_rather_than_guessing(self):
         proc = run_cli()
@@ -580,16 +593,15 @@ class SecondReviewTests(unittest.TestCase):
         self.assertIn('$1,746,032.70', CV.render_markdown([r]))
         self.assertIn('| Amount |', CV.render_markdown([r]))
 
-    def test_a_failed_check_saved_before_the_subtotal_key_existed_says_so(self):
-        # run_case_timeline started saving disagreeing_subtotals in this PR, and
-        # keep_cached_amounts copies an older check verbatim. On every timeline already on the
-        # desktop, 2018-026274's $0.60 contradiction degraded silently to "not read".
+    def test_a_failed_check_saved_in_an_older_shape_says_so(self):
+        # run_case_timeline started saving the key in this PR. An older saved check lacks it, and
+        # re-running does not recover a subtotal breakdown either, so the line says only that.
         check = failed_check(entry_id='232820355')
         check.pop('disagreeing_subtotals')
         r = CV.assess(timeline('X', checks=[check], attachments=[read_attachment()]))
         self.assertEqual(r['verdict'], 'incomplete')
-        self.assertTrue(any('kept no subtotal detail' in m for m in r['missing']), r['missing'])
-        self.assertTrue(any('re-run the timeline' in m for m in r['missing']))
+        self.assertTrue(any('older shape than this run writes' in m for m in r['missing']),
+                        r['missing'])
 
     def test_a_total_with_no_matching_printed_total_row_is_named(self):
         check = failed_check(entry_id='232820355')
@@ -653,7 +665,8 @@ class SecondReviewTests(unittest.TestCase):
                                          'date': '2026-11-10'}],
                                checks=[ok_check()], attachments=[read_attachment()]))
         self.assertEqual(r['verdict'], 'conflicted')
-        self.assertTrue(any('notice of sale (entry 120' in c for c in r['conflicts']), r['conflicts'])
+        self.assertTrue(any('a sale on the docket (entry 120' in c for c in r['conflicts']),
+                        r['conflicts'])
 
     def test_a_cancelled_sale_under_a_stay_is_not_a_contradiction(self):
         r = CV.assess(timeline('X', kind='stayed_by_bankruptcy', stay=True,
@@ -794,8 +807,8 @@ class SecondReviewTests(unittest.TestCase):
             (folder / 'BAD-timeline.json').write_text(json.dumps(bad))
             proc = run_cli('--dossiers', folder, dealflow=folder)
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            rows = json.loads((folder / 'case-verdicts.json').read_text())
-            self.assertIn('GOOD', [r['case'] for r in rows])
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertIn('GOOD', [r['case'] for r in report['verdicts']])
 
     def test_a_rerun_does_not_read_its_own_report_as_a_case(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -842,13 +855,153 @@ class SecondReviewTests(unittest.TestCase):
                 timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
             proc = run_cli('--dossiers', folder, '--out', folder / 'report.md', dealflow=folder)
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertEqual(json.loads((folder / 'report.md').read_text())[0]['case'], 'A')
+            self.assertEqual(json.loads((folder / 'report.md').read_text())['verdicts'][0]['case'],
+                             'A')
             self.assertIn('| Case | Verdict |', (folder / 'report-report.md').read_text())
 
     def test_more_than_twenty_dossier_gaps_says_how_many_were_dropped(self):
         r = CV.assess(timeline('X', checks=[ok_check()], attachments=[read_attachment()]),
                       {'open_gaps': ['gap %d' % i for i in range(25)]})
         self.assertTrue(any('5 more open gap(s)' in n for n in r['notes']), r['notes'])
+
+
+class FourthReviewTests(unittest.TestCase):
+    """Findings from the fourth independent review. Every test fails on 9caf846.
+
+    Two of them drive miami_case_timeline.build_timeline, because both bugs were invisible to any
+    hand-written fixture: the producer's real output was the evidence.
+    """
+
+    @staticmethod
+    def built(entries, as_of='2026-09-23', controlling='140', amount=500000.00):
+        import miami_case_timeline as T
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'expected_documents': 0,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text}}
+            for n, text, d in entries], 'pagination_verified': True}, [], as_of)
+        t['judgments'] = {'controlling_entry': controlling, 'controlling_reason':
+                          'one operative judgment after amendments, vacaturs and satisfactions',
+                          'judgments': [judgment_row(controlling)],
+                          'docket_duplicates_inferred': []}
+        t['amount_vision'] = {'amount_checks': [ok_check(controlling, 'court:%s:1' % controlling,
+                                                        amount)]}
+        t['coverage'] = {'attachments': [read_attachment(controlling)], 'complete': False}
+        return t
+
+    def test_a_rescheduled_sale_notice_under_a_stay_is_still_conflicted(self):
+        # classify labels "Notice of Foreclosure Sale" but leaves "Notice of RESCHEDULED Foreclosure
+        # Sale", "Amended Notice of Rescheduled Foreclosure Sale" and "Notice of Resetting
+        # Foreclosure Sale" as kind 'other'. Reading the kind alone let a one-word difference in the
+        # clerk's phrasing flip a live 11 USC 362 stay over a pending sale from conflicted to
+        # supported. Those entries still carry sale_passages.
+        for phrasing in ('Notice of Foreclosure Sale on 12/28/2026',
+                         'Notice of Rescheduled Foreclosure Sale on 12/28/2026',
+                         'Amended Notice of Rescheduled Foreclosure Sale on 12/28/2026',
+                         'Notice of Resetting Foreclosure Sale on 12/28/2026'):
+            t = self.built([(100, 'Complaint', '01/05/2026'),
+                            (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                            (145, phrasing, '07/01/2026'),
+                            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345',
+                             '08/01/2026')])
+            self.assertIs(t['stay_in_effect'], True, phrasing)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'conflicted', (phrasing, r['missing'], r['notes']))
+            self.assertTrue(any('sale going ahead' in c for c in r['conflicts']), phrasing)
+
+    def test_a_bankruptcy_the_stay_history_never_saw_is_not_a_clean_docket(self):
+        # build_timeline drops an entry with no date, or a date after as_of, before building
+        # stay_history. Both left stay_history empty and stay_in_effect None, and the report then
+        # printed "none on the docket" over a docket that has a bankruptcy on it - in the
+        # after-as_of case with a verdict of 'supported' beside it.
+        for date in ('', '12/01/2026'):
+            t = self.built([(100, 'Complaint', '01/05/2026'),
+                            (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', date)])
+            self.assertEqual(t['stay_history'], [], date)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (date, r))
+            self.assertTrue(any('stay history never saw' in m for m in r['missing']),
+                            (date, r['missing']))
+            self.assertNotIn('none on the docket', CV.render_markdown([r]))
+
+    def test_a_clean_docket_still_says_none_on_the_docket(self):
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026')])
+        r = CV.assess(t)
+        self.assertIn('none on the docket', CV.render_markdown([r]))
+
+    def test_the_subtotal_reason_the_pipeline_really_writes_is_named(self):
+        # verify_document cannot emit disagreeing_subtotals: vision_rows marks every row `explicit`
+        # and _resolve_subtotal never returns None for one, so the notes it is collected from are
+        # never written. What a saved check carries is this reason, for both a subtotal whose
+        # members could not be read and one whose members do not add up.
+        r = CV.assess(timeline('X', checks=[failed_check(entry_id='232820355',
+                                                         reason=CV.SUBTOTAL_DISAGREES)],
+                               attachments=[read_attachment()]))
+        self.assertEqual(r['verdict'], 'incomplete')
+        self.assertTrue(any(CV.SUBTOTAL_DISAGREES in m and 'does not say which' in m
+                            for m in r['missing']), r['missing'])
+
+    def test_verify_document_really_cannot_emit_disagreeing_subtotals(self):
+        # The producer contract behind the test above, so a later change to judgment_money that
+        # starts emitting the key makes this fail and the conflict branch gets re-examined.
+        import judgment_money as JM
+        figures = [{'id': 'i1', 'kind': 'charge', 'label': 'Principal', 'amount': '1000.00',
+                    'page': 2, 'confident': True},
+                   {'id': 'i2', 'kind': 'charge', 'label': '2019 Statutory Interest',
+                    'amount': '10.30', 'page': 2, 'confident': True},
+                   {'id': 'i3', 'kind': 'charge', 'label': '2020 Statutory Interest',
+                    'amount': '20.30', 'page': 2, 'confident': True},
+                   {'id': 's1', 'kind': 'subtotal', 'label': 'Interest Total', 'amount': '30.00',
+                    'item_ids': ['i2', 'i3'], 'page': 2, 'confident': True},
+                   {'id': 't1', 'kind': 'total', 'label': 'AMENDED TOTAL', 'amount': '1030.00',
+                    'page': 2, 'confident': True}]
+        [check] = JM.verify_document(figures, [{'amount': '1030.00', 'page': 2}], {2})
+        self.assertFalse(check['ok'])
+        self.assertFalse(check.get('disagreeing_subtotals'))
+        self.assertEqual(check['reason'], CV.SUBTOTAL_DISAGREES)
+
+    def test_the_gaps_note_names_kinds_not_sentences(self):
+        r = CV.assess(timeline('X', checks=[ok_check()], attachments=[read_attachment()],
+                               gaps=[{'kind': 'inventory_completeness_unknown',
+                                      'reason': 'Docket pagination completeness is not verified.'},
+                                     {'kind': 'page_unreadable', 'reason': 'No image indexed by '
+                                                                          'county.'}]))
+        note = next(n for n in r['notes'] if 'gaps of its own' in n)
+        self.assertIn('inventory_completeness_unknown', note)
+        self.assertNotIn('Docket pagination', note)
+
+    def test_a_case_that_raises_is_named_in_the_report_not_swallowed(self):
+        # The per-case guard could not be reached with any input I could build - the type guards
+        # absorb malformed shapes - so it and its test were decorative. This drives main() with a
+        # for_saved_case that raises, which is what the guard is for.
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text(json.dumps(
+                timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
+            (folder / 'B.json').write_text(json.dumps({'case': 'B'}))
+            (folder / 'B-timeline.json').write_text(json.dumps(timeline('B')))
+            real = CV.for_saved_case
+
+            def flaky(path):
+                if Path(path).stem == 'B':
+                    raise RuntimeError('saved evidence exploded')
+                return real(path)
+
+            # paths.py reads DEALFLOW_DIR at import, so the env alone would depend on whether
+            # something already imported it in this process. Patch the attribute the guard reads.
+            import paths
+            with mock.patch.dict(os.environ, {'DEALFLOW_DIR': str(folder)}), \
+                    mock.patch.object(paths, 'DEALFLOW_DIR', str(folder)), \
+                    mock.patch.object(CV, 'for_saved_case', flaky):
+                self.assertEqual(CV.main(['--dossiers', str(folder)]), 0)
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertEqual([r['case'] for r in report['verdicts']], ['A'])
+            self.assertTrue(any('exploded' in n for n in report['no_verdict']['unreadable']))
+            self.assertIn('saved evidence does not load or does not parse',
+                          (folder / 'case-verdicts.md').read_text())
 
 
 if __name__ == '__main__':

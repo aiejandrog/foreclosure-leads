@@ -49,7 +49,19 @@ shared spending controls. This is not complete.
 2024-009959's and 2022-012065's amounts were first produced by an agent transcribing pages; they now
 come from the saved text and OCR alone. The verdict column was written from the code's output by
 hand until 2026-09-25; `case_verdict.assess` now emits it, and `_verdicttest.PilotVerdictTests`
-pins these five words to the states this table cites.
+pins these five words to the states this table cites - with two limits stated below, because an
+earlier version of this paragraph claimed more than the tests establish.
+
+2018-026274's amount reason is one of them. The $0.60 breakdown in the row below is what the console
+printed on the run that found it, and it does NOT reach a saved timeline: `verify_document` builds its
+rows through `vision_rows`, which marks every row `explicit`, and `_resolve_subtotal` never returns
+None for an explicit row, so the notes `disagreeing_subtotals` is collected from are never written on
+that path. What the saved check carries is the reason "printed subtotal lacks valid members or
+disagrees with its own items", which `judgment_money` raises both for a subtotal whose members could
+not be read and for one whose members read fine and do not add up. `case_verdict` names that reason
+and says the file cannot tell the two apart, so the amount reads incomplete - which is what this
+table says - while the case is conflicted on the stay against the sale. The breakdown itself exists
+in `miami_judgment`'s text path as `sum_check_disagreeing_subtotals`; joining the two is not done.
 
 One caveat on that, because an earlier version of this paragraph overstated it. `reconcile_judgments`
 reaches ONE operative judgment on 2024-014878 (#57), 2024-009959 (#79/#80), 2023-020247 (#91/#92)
