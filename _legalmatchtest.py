@@ -226,11 +226,22 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(title(folio_pair() + rows[1:])['legal_matched_deeds'], ['7/1'])
 
     def test_a_blank_field_is_not_a_disagreement(self):
-        # The clerk writes '0/0' for no plat on one instrument and the real plat on the next.
-        rows = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE',
-                               plat='0/0', block=''),
-                rec('7', '6/1/2023', 'A', 'B')]
-        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+        # The clerk writes '0/0' for no plat on one instrument and the real plat on the next: the
+        # records still describe one parcel. They do not corroborate the plat and block, though,
+        # which is why this deed waits for a person rather than being placed.
+        blank = rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE',
+                    plat='0/0', block='')
+        reference, gap = T.parcel_legal_reference([mortgage(), blank], FOLIO)
+        self.assertIsNone(gap)
+        self.assertEqual((reference['plat'], reference['block'], reference['corroborated']),
+                         ('53/900', '12', False))
+        kept = title([mortgage(), blank, rec('7', '6/1/2023', 'A', 'B')])['unanchored_deeds'][0]
+        self.assertIn('only one record', kept['legal_match']['reason'])
+
+    def test_a_tract_and_a_unit_under_one_folio_disagree(self):
+        rows = [rec('5', '3/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='TRACT A', block='', plat=''),
+                rec('6', '4/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='UNIT 5', block='', plat='')]
+        self.assertIsNone(T.parcel_legal_reference(rows, FOLIO)[0])
         conflicting = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO,
                                        'MORTGAGE', legal='LOT 15'),
                        rec('7', '6/1/2023', 'A', 'B')]

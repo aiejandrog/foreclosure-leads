@@ -420,20 +420,13 @@ def _kind(legal):
             'tract' if legal.get('tract') else None)
 
 
-def _signature(legal):
-    # Normalized, so one parcel's records writing block '12' and '012' are one legal and not two
-    # disagreeing ones, which would leave the parcel with no reference at all.
-    return tuple(_num(legal[k]) for k in ('plat', 'block', 'unit', 'building', 'phase', 'tract')) + (
-        tuple(sorted(legal['lots'] or ())), None if legal['plat'] else legal['subdivision'])
-
-
 def parcel_legal_reference(models, folio):
     """What the clerk index says this parcel's legal is, from the instruments it filed under the
     parcel's folio. Returns (reference, gap). No reference when none carries a complete legal, or
     when two of them disagree: the index is then not a safe yardstick and a person compares. A
     field one record leaves blank is not a disagreement with a record that fills it in."""
     target = _folio(folio)
-    merged, records = None, []
+    merged, records, stated = None, [], {}
     for model in models or []:
         if not target or _folio(model.get('foliO_NUMBER')) != target:
             continue
@@ -443,17 +436,22 @@ def parcel_legal_reference(models, folio):
         book_page = '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE'))
         if book_page in records:          # the same instrument can come back twice in one search
             continue
-        if merged is None:
-            merged, records = dict(legal), [book_page]
-            continue
-        combined = _merge_legal(merged, legal)
+        combined = dict(legal) if merged is None else _merge_legal(merged, legal)
         if combined is None:
             return None, ('records filed under this folio carry different index legal descriptions '
                           '(%s)' % ', '.join(sorted(records + [book_page])))
-        merged, _ = combined, records.append(book_page)
+        merged = combined
+        records.append(book_page)
+        for field in _LEGAL_FIELDS + ('lots',):
+            if legal[field]:
+                stated[field] = stated.get(field, 0) + 1
     if merged is None:
         return None, 'no record filed under this folio carries a complete index legal description'
-    return dict(merged, from_record=records[0], corroborated=len(records) > 1), None
+    # Corroborated means two records state the same thing, field by field. Two records that merge
+    # because one is blank where the other is filled in leave that field resting on one keystroke,
+    # and the blank fields here are plat and block: the ones a match turns on.
+    corroborated = all(stated.get(f, 0) > 1 for f in _LEGAL_FIELDS + ('lots',) if merged[f])
+    return dict(merged, from_record=records[0], corroborated=corroborated), None
 
 
 _LEGAL_FIELDS = ('plat', 'block', 'unit', 'building', 'phase', 'tract', 'subdivision')
@@ -464,6 +462,10 @@ def _merge_legal(a, b):
     one record states and the other leaves blank is filled in, not counted against it: the clerk
     writes '0/0' for no plat on one instrument and the real plat on the next."""
     if sorted(a['lots'] or ()) != sorted(b['lots'] or ()):
+        return None
+    if _kind(a) != _kind(b):
+        # 'TRACT A' and 'UNIT 5' disagree in every way that matters, yet each leaves blank every
+        # field the other fills in, so the field-by-field check alone would merge them.
         return None
     out = dict(a)
     for field in _LEGAL_FIELDS:
