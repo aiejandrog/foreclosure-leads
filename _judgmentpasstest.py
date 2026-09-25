@@ -521,13 +521,33 @@ class Assess(unittest.TestCase):
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual(got['state'], 'read_not_verified')
 
-    def test_missing_file_is_not_called_a_failed_paid_call(self):
+    def test_rejected_document_gets_its_own_note(self):
         ref = _row(self.base, '9', '$1.00', 'j')
-        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'FileNotFoundError: gone'}])
+        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'Stored content is not a PDF'}])
         with mock.patch('judgment_money.verify_document', return_value=[]):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertIn('could not read a document', got['detail'])
-        self.assertNotIn('paid call failed', got['detail'])
+        self.assertNotIn('paid call', got['detail'])
+
+    def test_per_page_error_keeps_the_documents_capped_pages_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'ValueError: page render failed'},
+                                        {'page': 2, 'reason': 'budget: cap would be exceeded'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_read_stopped_before_the_total_is_not_called_blocked(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        (self.base / ('amount-vision-' + hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(
+            json.dumps({'source_ref': ref, 'document_hash': 'h9', 'figures': [], 'grand_totals': [],
+                        'pages': {'1': {}},
+                        'gaps': [{'page': 2, 'reason': 'Amount page not read; cap or reader stop'}]}))
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'needs_paid_read')
+        self.assertNotIn('gaps_block_verified', got)
 
     def test_cache_for_another_file_is_ignored(self):
         pdf = self.base / 'doc.pdf'

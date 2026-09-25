@@ -235,8 +235,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                    and not d.get('eligible_for_acquisition')]
         if why == 'no_judgment_on_docket' and held_fj:
             # The reconciliation drops an undated final judgment; the docket plan holds it.
-            out.update(state='judgment_held_by_docket_plan', target_entry=str(held_fj[-1]['entry_id']),
-                       detail=','.join(held_fj[-1].get('gaps') or []) or 'not_eligible')
+            fj = max(held_fj, key=lambda d: _entry_order(d['entry_id']))
+            out.update(state='judgment_held_by_docket_plan', target_entry=str(fj['entry_id']),
+                       detail=','.join(fj.get('gaps') or []) or 'not_eligible')
             return out
         out['state'] = why
         return out
@@ -266,9 +267,13 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                        r'not configured|ANTHROPIC_API_KEY|SDK is not installed|Authentication|'
                        r'PermissionDenied|Error code: 40[13]|PyMuPDF is not installed', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
+        elif re.match(r'[A-Za-z_]\w*: ', reason):
+            # Any other exception read_document caught per page ('TypeName: message'): it moves
+            # on to the next page, and the failure is taken to repeat on this one.
+            stuck_pages.setdefault(ref, set()).add(gap.get('page'))
         else:
-            # Anything unrecognised (a rejected or missing file, an uncertain paid call) is taken
-            # to repeat: under-pricing a case beats promising a read that cannot happen.
+            # A bare message is a DocumentRejected (not a PDF, no pages, a page count that
+            # disagrees): read_document stops the whole document there, and it repeats.
             stuck_docs.add(ref)
     done = {Path(f).name for f in bought['evidence_files']}
     # Only the rows the paid reader would walk get the (hash-keyed, whole-file) OCR lookup.
@@ -301,7 +306,7 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     last_target = None  # index in `order` of the last target row that run owes
     target_amount_rows = 0
     held_unread = False
-    t_bought, t_stuck_pages, t_stuck_doc = set(), False, False
+    t_bought, t_owed, t_stuck_pages, t_stuck_doc = set(), set(), False, False
     for i, row in enumerate(order + held):
         ref = row.get('source_ref')
         is_target = str(row.get('entry_ref') or '') == target
@@ -321,6 +326,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             need.append((is_target, left))
             if is_target:
                 last_target = i
+        if is_target and owed:
+            t_owed.add(ref)
     notes = [out['detail']] if out.get('detail') else []
     target_doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
 
@@ -333,9 +340,11 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     checked = {c.get('source_ref') for c in target_checks}
     # read_amounts fails every check of a document with a reading gap; only the others are a
     # total that truly does not reproduce.
-    arithmetic = [c for c in target_checks if not c.get('ok')
+    # A document the next run still reads (a capped or newly found page) may yet show its total:
+    # only a document that run leaves as it is can already be called blocked.
+    arithmetic = [c for c in target_checks if not c.get('ok') and c.get('source_ref') not in t_owed
                   and 'unresolved reading gaps' not in str(c.get('reason') or '')]
-    unchecked = t_bought - checked - stuck_docs - set(stuck_pages)
+    unchecked = t_bought - checked - stuck_docs - set(stuck_pages) - t_owed
 
     def blockers():
         """What the evidence already shows paying will not fix, in words."""
@@ -350,8 +359,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             out_notes.append('a document of the judgment was read and shows no printed total '
                              'to check')
         if t_stuck_pages:
-            out_notes.append('a page came back unreadable or a paid call failed; paying again '
-                             'does not re-read it')
+            out_notes.append('a page could not be read (unreadable, a paid call that failed, '
+                             'or an error that repeats); paying again does not re-read it')
         if t_stuck_doc:
             out_notes.append('the reader could not read a document (a missing or rejected file, '
                              'or an unrecognised failure): see its evidence gaps')
