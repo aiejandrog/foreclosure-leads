@@ -60,7 +60,7 @@ class AcquisitionTests(unittest.TestCase):
             ledger.write_text(json.dumps({'version': 1, 'cases': {}, 'actual_usd': .08, 'reserved': {}}))
             dossier = base / 'case.json'
             inventory = {'pagination_verified': True, 'entries': []}
-            def fail_paid(rows, base, budget=None):
+            def fail_paid(rows, base, budget=None, plan=None):
                 if budget is not None:
                     raise RuntimeError('reader stopped')
                 return {'figures': [], 'gaps': [], 'evidence_files': []}
@@ -74,6 +74,44 @@ class AcquisitionTests(unittest.TestCase):
             self.assertTrue((base / 'case-timeline.json').exists())
             self.assertTrue((base / 'case-timeline.md').exists())
             self.assertIn('whole_case_timeline', json.loads(dossier.read_text()))
+
+    def test_a_judgment_with_no_readable_dollar_text_is_a_gap(self):
+        # Greptile on #53: an unreadable or watermark-only money page was skipped silently.
+        class Budget:
+            exhausted = False
+        plan = {'documents': [
+            {'entry_id': '7', 'kind': 'final_judgment', 'eligible_for_acquisition': True, 'gaps': []},
+            {'entry_id': '8', 'kind': 'notice_of_filing', 'eligible_for_acquisition': True, 'gaps': []},
+            {'entry_id': '9', 'kind': 'motion_for_summary_judgment', 'eligible_for_acquisition': True,
+             'gaps': []}]}
+        scan = {'pages': [{'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE for plaintiff'},
+                          {'page': 2, 'outcome': 'ocr_text', 'text': 'NOT AN OFFICIAL COPY'}]}
+        rows = [{'source_ref': 'court:7:1', 'entry_ref': '7', 'reading': scan},
+                {'source_ref': 'court:8:1', 'entry_ref': '8', 'reading': scan},
+                {'source_ref': 'court:9:1', 'entry_ref': '9', 'reading': scan}]
+        with tempfile.TemporaryDirectory() as folder:
+            got = R.read_amounts(rows, folder, Budget(), plan=plan)
+        self.assertEqual([g['source_ref'] for g in got['gaps']], ['court:7:1'])
+        self.assertTrue(got['gaps'][0]['reason'].startswith('amount_page_unreadable: '))
+        self.assertIn('1 of 2 page(s) unread (2)', got['gaps'][0]['reason'])
+
+    def test_a_deferred_documents_saved_figures_survive_the_paid_pass(self):
+        # Greptile on #53: the paid pass rebuilt the timeline from its selected rows only.
+        import hashlib
+        path = lambda ref: '/b/amount-vision-%s.json' % hashlib.sha256(ref.encode()).hexdigest()
+        cached = {'evidence_files': [path('court:1:1'), path('court:2:1')],
+                  'figures': [{'source_ref': 'court:1:1', 'amount': 1.0},
+                              {'source_ref': 'court:2:1', 'amount': 2.0}],
+                  'amount_checks': [{'source_ref': 'court:2:1', 'ok': True}], 'gaps': []}
+        paid = {'evidence_files': [path('court:1:1')],
+                'figures': [{'source_ref': 'court:1:1', 'amount': 1.5}], 'amount_checks': [],
+                'gaps': [{'source_ref': 'court:2:1', 'reason': 'budget_exhausted: spent'}]}
+        got = R.keep_cached_amounts(paid, cached)
+        self.assertEqual(sorted((f['source_ref'], f['amount']) for f in got['figures']),
+                         [('court:1:1', 1.5), ('court:2:1', 2.0)])
+        self.assertEqual(got['amount_checks'], [{'source_ref': 'court:2:1', 'ok': True}])
+        self.assertEqual(got['gaps'], [])
+        self.assertIs(R.keep_cached_amounts(paid, {'evidence_files': [path('court:1:1')]}), paid)
 
     def test_counts_separate_embedded_supplement_and_unreadable_source(self):
         rows = [{'manifest': {'pages': 3}, 'reading': {'pages': [
@@ -101,7 +139,9 @@ class AcquisitionTests(unittest.TestCase):
             detail = {'pages': {}, 'figures': [{'page': 1, 'amount': 100, 'kind': 'total'}],
                       'gaps': [{'page': 1, 'reason': 'unverified'}], 'usd': 0}
             with State(ledger) as state, patch.object(A, 'assess_amount_pages', return_value=detail):
-                report = R.read_amounts([row], base, PersistentBudget(1, state))
+                # Paid reads follow a docket plan; an entry the plan holds eligible is readable.
+                plan = {'documents': [{'entry_id': '1', 'eligible_for_acquisition': True, 'gaps': []}]}
+                report = R.read_amounts([row], base, PersistentBudget(1, state), plan=plan)
             self.assertEqual(report['figures'][0]['verification_status'], 'unverified')
             self.assertEqual(report['figures'][0]['source_ref'], 'court:1:2')
             self.assertEqual(report['figures'][0]['document_hash'], 'b' * 64)
@@ -181,7 +221,9 @@ class AcquisitionTests(unittest.TestCase):
             (base / ('a' * 64 + '.json')).write_text(json.dumps(row))
             inventory = {'pagination_verified': True, 'entries': [
                 {'source_id': '123', 'source_ref': 'dockets/0', 'expected_documents': 1,
-                 'metadata': {'eventID': 123, 'description': 'Motion', 'date': '2026-01-01'}}]}
+                 # Not 'Motion': a judgment on page 1 of an entry the docket calls a motion is an
+                 # exhibit (6828, desktop replay 2026-09-24). This test is about the join.
+                 'metadata': {'eventID': 123, 'description': 'Order', 'date': '2026-01-01'}}]}
             timeline = T.build_timeline('2026-000001-CA-01', inventory, R.load_rows(base), '2026-02-01')
             self.assertEqual(timeline['entries'][0]['kind'], 'final_judgment')
 

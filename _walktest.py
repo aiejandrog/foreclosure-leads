@@ -570,7 +570,7 @@ class TokenBudgetTest(unittest.TestCase):
         import gen_records_qs as G
         import records_liens as R
         real_mint, real_split = G.mint_qs, R.split_owner
-        G.mint_qs = lambda lf: result
+        G.mint_qs = lambda lf, **kw: result
         R.split_owner = lambda oc: ('SMITH', 'JANE')
         self.addCleanup(lambda: (setattr(G, 'mint_qs', real_mint),
                                  setattr(R, 'split_owner', real_split)))
@@ -608,7 +608,7 @@ class TokenBudgetTest(unittest.TestCase):
         import records_liens as R
         real_mint, real_split = G.mint_qs, R.split_owner
 
-        def boom(lf):
+        def boom(lf, **kw):
             raise RuntimeError('2captcha down')
         G.mint_qs, R.split_owner = boom, lambda oc: ('SMITH', 'JANE')
         try:
@@ -622,7 +622,7 @@ class TokenBudgetTest(unittest.TestCase):
         import gen_records_qs as G
         real = G.mint_qs
 
-        def never(lf):
+        def never(lf, **kw):
             raise AssertionError('mint_qs must not be reached with --token-budget 0')
         G.mint_qs = never
         try:
