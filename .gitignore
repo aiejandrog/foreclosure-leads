@@ -511,6 +511,10 @@ deal_desk.json
 # the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
+# _archivefilltest guards the auction archive merge: a real number may fill a hole, nothing may
+# overwrite a number already held. Untracked, the suite that proves the equity pair keeps filling
+# would live on one laptop.
+!_archivefilltest.py
 !_boardaccuracytest.py
 !_docboardtest.py
 # _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
@@ -518,4 +522,9 @@ deal_desk.json
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
 # blocked the publish. This suite fails if the file is written before the restore.
 !_stayfiletest.py
+# sale_results.json: docket sale verdicts per case (sale_results.py), rebuilt nightly, carries docket text.
+sale_results.json
+sale_results.json.tmp
+# _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
+!_saleresultstest.py
 !_judgmentpasstest.py
