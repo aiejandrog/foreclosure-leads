@@ -140,16 +140,56 @@ check('dossier d: an association case with a documented empty chain still reads 
 full = CD.build('2099-000099-CA-01', 'MIAMI-DADE', chain=capped)
 check('dossier gaps name the 500-record cap', any('500-record cap' in g for g in full['open_gaps']))
 
+# ---- Greptile on #62
+_wd = RL.analyze([deed, rec('WARRANTY DEED', '3/3/2015', '29500', '4', 0, 'OWNER TESTER', first='PRIOR SELLER')],
+                 FOLIO, 12000, ftype='HOA')
+check('a warranty deed is not a tax warrant and never makes a clear chain unpriced',
+      not _wd['other'] and ES.state_of(_wd) == 'clear', (_wd['other'], ES.state_of(_wd)))
+_pnc = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34990', '12', 250000, 'OWNER TESTER', first='PNC BANK NA')],
+                  FOLIO, 250000, ftype='MORTGAGE', plaintiff='PNC BANK, N.A.')
+check("a short lender name ('PNC BANK' -> 'PNC') still marks its own judgment this case, never summed",
+      _pnc['other'] and _pnc['other'][0].get('own_case') is True and _pnc['code_open'] == 0,
+      (_pnc['other'], _pnc['code_open']))
+_pnc2 = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34990', '13', 5000, 'OWNER TESTER', first='PNCX CAPITAL LLC')],
+                   FOLIO, 250000, ftype='MORTGAGE', plaintiff='PNC BANK, N.A.')
+check('a short lender name matches exactly, not by containment', not _pnc2['other'][0].get('own_case'))
+_copy_else = rec('LIEN', '6/6/2020', '31950', '2', 700, 'OWNER TESTER', first='CITY OF MIAMI',
+                 folio='3099999999999', subdiV_NAME='ELSEWHERE')
+_copy_here = rec('LIEN', '6/6/2020', '31950', '2', 700, 'OWNER TESTER', first='CITY OF MIAMI')
+_cp = RL.analyze([deed, _copy_else, _copy_here], FOLIO, 12000, ftype='HOA')
+check("a copy indexed to another folio does not hide this parcel's copy of the same lien",
+      [o['bp'] for o in _cp['other']] == ['31950/2'] and _cp['code_open'] == 700, (_cp['other'], _cp['code_open']))
+_hoa_ca = dict(empty, ftype='MORTGAGE', case_type='HOA/Condo')
+check('dossier d: an association case in circuit court reads clear when the chain carries its case type',
+      CD._d(_hoa_ca, {'status': 'empty'})['eqstate'] == 'clear')
+_hoa_ca_old = dict(empty, ftype='MORTGAGE', other=[{'own_case': True, 'kind': 'lis_pendens',
+                                                     'party': 'TEST GARDENS CONDOMINIUM ASSOCIATION INC'}])
+check("dossier d: an older circuit chain whose own filing names an association is not taken as a lender's",
+      CD._d(_hoa_ca_old, {'status': 'empty'})['eqstate'] == 'clear')
+_bank_ca_old = dict(empty, ftype='MORTGAGE', other=[{'own_case': True, 'kind': 'lis_pendens',
+                                                      'party': 'SYNTHETIC BANK NATIONAL ASSOCIATION'}])
+check("dossier d: a bank's 'National Association' is still a lender",
+      CD._d(_bank_ca_old, {'status': 'empty'})['eqstate'] == 'none')
+_hoa_b = CD._b(dict(empty, judgment=12000))
+check("dossier b: an association case shows its judgment as the foreclosed debt, with no mortgage face",
+      (_hoa_b['foreclosed_debt'] or {}).get('amount') == 12000
+      and (_hoa_b['foreclosed_debt'] or {}).get('recorded_face') is None,
+      _hoa_b['foreclosed_debt'])
+_bw = {'conf': 'ok', 'liens': [], 'nrec': 3}
+check('dossier b: a chain with no judgment key takes it from the lead',
+      (CD._b(_bw, {'judgment': '$88,500.10'})['foreclosed_debt'] or {}).get('amount') == 88500.10)
+
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
 _tmp = tempfile.mkdtemp()
 _leads = [{'Case #': '2099-000101-CA-01', 'owner_clean': 'OWNER A', 'Folio': FOLIO, 'judgment': 1, 'plaintiff': PLAINTIFF},
           {'Case #': '2099-000102-CA-01', 'owner_clean': 'JOHN QUINCY TESTER', 'Folio': FOLIO, 'judgment': 1},
-          {'Case #': '2099-000103-CA-01', 'owner_clean': 'OWNER C', 'Folio': FOLIO, 'judgment': 1}]
+          {'Case #': '2099-000103-CA-01', 'owner_clean': 'OWNER C', 'Folio': FOLIO, 'judgment': 1},
+          {'Case #': '2099-000104-CA-01', 'owner_clean': 'OWNER D', 'Folio': FOLIO, 'judgment': 1}]
 json.dump(_leads, open(os.path.join(_tmp, 'leads_final.json'), 'w'))
 json.dump({c['Case #']: {'conf': 'ok', 'liens': [], 'chain_note': 'kept'} for c in _leads},
           open(os.path.join(_tmp, 'records_liens.json'), 'w'))
-json.dump({'OWNER A': 'tokA', 'JOHN QUINCY TESTER': 'tokDEAD'}, open(os.path.join(_tmp, 'records_qs.json'), 'w'))
+json.dump({'OWNER A': 'tokA', 'JOHN QUINCY TESTER': 'tokDEAD', 'OWNER D': 'tokEMPTY'}, open(os.path.join(_tmp, 'records_qs.json'), 'w'))
 _spent = []
 open(os.path.join(_tmp, 'gen_records_qs.py'), 'w').write('')
 _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
@@ -158,7 +198,7 @@ _argv = sys.argv
 try:
     RL.LEADS, RL.OUT = os.path.join(_tmp, 'leads_final.json'), os.path.join(_tmp, 'records_liens.json')
     RL.QS_CACHE, RL.HERE = os.path.join(_tmp, 'records_qs.json'), _tmp
-    RL.records_by_qs = lambda qs: [deed, city1] if qs == 'tokA' else None
+    RL.records_by_qs = lambda qs: [deed, city1] if qs == 'tokA' else ([] if qs == 'tokEMPTY' else None)
     RL.fetch_via_turnstile = lambda *a, **k: _spent.append('turnstile')
     RL.camoufox_session = lambda: _spent.append('camoufox') or (None, None)
     RL.mint_and_fetch = lambda *a, **k: _spent.append('mint')
@@ -181,9 +221,13 @@ check('--reanalyze re-runs a cached chain from its cached token and adds the lie
 check('--reanalyze keeps keys other steps wrote', _out['2099-000101-CA-01'].get('chain_note') == 'kept')
 check('--reanalyze leaves a dead-token or untokened chain exactly as it was',
       'other' not in _out['2099-000102-CA-01'] and 'other' not in _out['2099-000103-CA-01'])
+check('--reanalyze keeps the old chain when the re-read comes back empty',
+      _out['2099-000104-CA-01'] == {'conf': 'ok', 'liens': [], 'chain_note': 'kept'}, _out['2099-000104-CA-01'])
+check('--reanalyze stores the lead case type on the chains it rewrites',
+      '2099-000101-CA-01' in _out and 'case_type' in _out['2099-000101-CA-01'])
 check('--reanalyze never mints, opens a browser or pays', _spent == [], _spent)
 check('--reanalyze --dry-run counts the untokened chain it will not touch',
-      '1 older chain(s) have no cached token' in _dry.getvalue() and '2 lead(s) to pull' in _dry.getvalue(),
+      '1 older chain(s) have no cached token' in _dry.getvalue() and '3 lead(s) to pull' in _dry.getvalue(),
       _dry.getvalue()[-300:])
 
 print('\nOK: 0 failure(s)' if not FAILS else '\nFAIL: %d failure(s)' % len(FAILS))

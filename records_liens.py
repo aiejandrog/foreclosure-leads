@@ -666,19 +666,24 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
     _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|PACE|CLEAN ENERGY|WATER\s+(?:AND|&)\s+SEWER|\bWASD\b', re.I)
     _HOA_DOC_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|TOWNHO|MAINTENANCE', re.I)
     _ASSN_DOC_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
-    _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|WARRANT|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
+    _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|\bWARRANTS?\b|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
     _NOT_A_CLAIM_RE = re.compile(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE|NOTICE OF COMMENCEMENT|^MORTGAGE', re.I)
     _CREDITOR_RE = re.compile('|'.join(x.pattern for x in (_IRS_RE, _DOR_RE, _CODE_RE, _HOA_DOC_RE, _ASSN_DOC_RE)), re.I)
     released_bp = {(str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip())
                    for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())}
     released_bp.discard(('', ''))
-    _pl = _inst(plaintiff)
+    _pnorm = lambda x: _inst(re.sub(r'[.,]', ' ', x or ''))    # "PNC BANK, N.A." and "PNC BANK NA" agree
+    _pl = _pnorm(plaintiff)
     def _is_plaintiff(*parties):
-        if len(_pl) < 5:
+        # A name that normalizes short ("PNC BANK" -> "PNC") must match exactly; a containment
+        # test on three letters would call every party with "PNC" in it the plaintiff.
+        if len(_pl) < 2:
             return False
         for p in parties:
-            q = _inst(p)
-            if len(q) >= 5 and (q[:12] == _pl[:12] or q in _pl or _pl in q):
+            q = _pnorm(p)
+            if not q:
+                continue
+            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q[:12] == _pl[:12] or q in _pl or _pl in q)):
                 return True
         return False
     other = []
@@ -690,12 +695,6 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
         if not _OTHER_DOC_RE.search(doc) or _NOT_A_CLAIM_RE.search(doc):
             continue
         bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
-        ident = (('bp',) + bp) if all(bp) else (
-            ('cfn', str(r.get('cfN_MASTER_ID') or '').strip()) if r.get('cfN_MASTER_ID') else None)
-        if ident is not None:
-            if ident in seen_other:
-                continue                                    # one instrument, one row (co-owner copies)
-            seen_other.add(ident)
         p1, p2 = r.get('firsT_PARTY') or '', r.get('seconD_PARTY') or ''
         both = p1 + ' | ' + p2
         rf = norm_folio(r.get('foliO_NUMBER', ''))
@@ -705,7 +704,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
             kind = 'lis_pendens'
         elif _IRS_RE.search(both):
             kind = 'irs'
-        elif _DOR_RE.search(both) or 'WARRANT' in doc:
+        elif _DOR_RE.search(both) or re.search(r'\bWARRANTS?\b', doc):   # a tax warrant, never a WARRANTY deed
             kind = 'state_tax'
         elif _HOA_DOC_RE.search(both) or _ASSN_DOC_RE.search(both):
             kind = 'association'
@@ -718,6 +717,14 @@ def analyze(models, folio, judgment, ftype='', plaintiff=''):
         person_wide = kind in ('irs', 'state_tax', 'judgment')
         if not (on_parcel or person_wide):
             continue                                        # another property of the same owner
+        # One instrument, one row (co-owner copies). Marked seen only once a copy is KEPT: a copy
+        # indexed to another folio must not hide this parcel's copy of the same recording.
+        ident = (('bp',) + bp) if all(bp) else (
+            ('cfn', str(r.get('cfN_MASTER_ID') or '').strip()) if r.get('cfN_MASTER_ID') else None)
+        if ident is not None:
+            if ident in seen_other:
+                continue
+            seen_other.add(ident)
         own_case = _is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
         amt = num(r.get('consideratioN_1')) or num(r.get('amount'))
         released = all(bp) and bp in released_bp
@@ -936,7 +943,7 @@ def main():
         print('  camoufox: %s' % ('ready (free Turnstile tokens)' if cf_browser
                                   else 'UNAVAILABLE — %s; using 2Captcha' % CF_UNAVAILABLE))
 
-    done = hits = cf_free = paid = 0
+    done = hits = cf_free = paid = kept = 0
     try:
         for r in picked:
             case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
@@ -1024,7 +1031,14 @@ def main():
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '')
             res['searched_as'] = _searched
+            res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
+                if out.get(case) and not (res.get('nrec') and res.get('parcel_found')):
+                    # The cached token came back empty, or no longer carries this folio: that is a
+                    # failed re-read, not news that the recorded mortgages went away. Keep the chain.
+                    kept += 1
+                    print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
+                    continue
                 res = dict(out.get(case) or {}, **res)       # keep keys other steps wrote (chain_note)
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
@@ -1044,8 +1058,9 @@ def main():
 
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
     if a.reanalyze:
-        print(f"     --reanalyze: {len(picked) - done} cached token(s) had expired; those chains, and the "
-              f"{len(no_token)} without a token, keep their old lien picture until a paid re-pull")
+        print(f"     --reanalyze: {len(picked) - done - kept} cached token(s) had expired and {kept} re-read(s) "
+              f"found nothing on the parcel; those chains, and the {len(no_token)} without a token, keep "
+              f"their old lien picture until a paid re-pull")
     if cf_free or paid:
         # paid counts owners that reached fetch_via_turnstile; each of those is a 2Captcha solve
         # (~$0.003) that a free Camoufox token would have avoided.
