@@ -432,14 +432,25 @@ def _save(data):
 
 
 BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'pl', 'sale', 'ts')
+# A verdict older than this is not shown: a docket read that keeps failing must not leave last
+# week's "SALE AT RISK" on the board after the docket has moved on. The nightly reads every case
+# in the window, so two days allows one missed night.
+MAX_AGE_DAYS = 2
+EV_SHIP = 3            # newest docket lines behind the verdict, shipped so the chip can cite them
 
 
-def load_for_board(rows, path=OUT):
-    """Stamp `sr` onto board rows whose case AND sale date match a verdict. Returns the count.
-    'scheduled' with no flag carries nothing worth a chip, so it is not shipped."""
+def load_for_board(rows, path=OUT, today=None):
+    """Stamp `sr` onto board rows whose case AND sale date match a fresh verdict. Returns the count.
+    'scheduled' with no flag carries nothing worth a chip, so it is not shipped.
+
+    A MOVED sale also moves the row's clock: when the docket's newest sale-setting line names a
+    later date, `auction` becomes that date (the listed one is kept in sr.was), so the countdown,
+    the payoff accrual and Call Mode's "sale already passed" cut follow the date the court set,
+    not the stale calendar listing."""
     res = _load(path, {})
     if not res:
         return 0
+    today = today or datetime.date.today()
     n = 0
     for r in rows:
         v = res.get(str(r.get('case') or '').strip().upper())
@@ -448,9 +459,21 @@ def load_for_board(rows, path=OUT):
         rd = _to_date(r.get('auction'))
         if not rd or rd.isoformat() != v.get('sale'):
             continue
+        ts = _to_date(v.get('ts'))
+        if not ts or (today - ts).days > MAX_AGE_DAYS:
+            continue
         if v.get('st') == 'scheduled' and not (v.get('amj') or v.get('bkb')):
             continue
-        r['sr'] = {k: v[k] for k in BOARD_KEYS if v.get(k) not in (None, '')}
+        sr = {k: v[k] for k in BOARD_KEYS if v.get(k) not in (None, '')}
+        ev = [{'d': e.get('d', ''), 'x': str(e.get('x') or '')[:140]}
+              for e in (v.get('ev') or []) if isinstance(e, dict)][-EV_SHIP:]
+        if ev:
+            sr['ev'] = ev
+        nd = _to_date(v.get('nd'))
+        if v.get('st') == 'reset' and nd and nd > rd:
+            sr['was'] = rd.isoformat()
+            r['auction'] = nd.strftime('%m/%d/%Y')
+        r['sr'] = sr
         n += 1
     return n
 

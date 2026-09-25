@@ -8320,7 +8320,7 @@ function _stayChip(r){
 function _srMD(iso){ var m = String(iso||'').match(/^\d{4}-(\d{2})-(\d{2})$/); return m ? m[1]+'/'+m[2] : String(iso||''); }
 function _srLabel(sr){
   if(!sr || !sr.st) return '';
-  var t = {held:'SOLD '+_srMD(sr.d), cancelled:'SALE CANCELLED '+_srMD(sr.d), reset:'SALE MOVED to '+_srMD(sr.nd),
+  var t = {held:'SOLD '+_srMD(sr.d), cancelled:'SALE CANCELLED '+_srMD(sr.d), reset:'SALE MOVED to '+_srMD(sr.nd)+(sr.was?' (was '+_srMD(sr.was)+')':''),
            vacated:'SALE SET ASIDE '+_srMD(sr.d), redeemed:'REDEEMED '+_srMD(sr.d), at_risk:'SALE AT RISK', unknown:'RESULT NOT ON DOCKET YET'}[sr.st] || '';
   if(sr.st === 'held' && sr.bkb) t += ' · BK filed '+_srMD(sr.bkb);
   if(sr.st === 'held' && sr.obj) t += ' · objection filed';
@@ -8335,7 +8335,8 @@ function _saleResultChip(r){
     + (sr.amj ? '. Amended final judgment entered '+sr.amj+(sr.ama?' for $'+(+sr.ama).toLocaleString():' — amount not in the docket text, read the order before quoting a number') : '')
     + (sr.st==='held' ? '. A sold house is not a wholesale deal; surplus talk only.' : '')
     + ((sr.st==='cancelled'||sr.st==='reset') ? '. The owner has more time: this lead is live again.' : '')
-    + '. Verify on the clerk docket before telling the owner.';
+    + '. Verify on the clerk docket before telling the owner.'
+    + ((sr.ev && sr.ev.length) ? '\nDocket lines: ' + sr.ev.map(function(e){ return _srMD(e.d)+' '+e.x; }).join(' | ') : '');
   return '<span class="frchip '+cls+'" title="'+esc(tip)+'">'+esc(lab)+'</span> ';
 }
 function _freshChip(r){

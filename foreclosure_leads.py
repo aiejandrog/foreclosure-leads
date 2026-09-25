@@ -2270,7 +2270,9 @@ def make_tracker(leads):
     # SALE RESULTS (sale_results.py -> sale_results.json, gitignored, Miami-Dade docket). Held,
     # cancelled, moved or at-risk sales and amended judgments, as `sr`. Only a verdict for the SAME
     # sale date as the row attaches: a verdict about last month's sale must not describe this one.
-    # Display only; the §362 stay gate stays on saleBkAct. Never fatal.
+    # A docket-moved sale also moves `auction` to the court's new date (sr.was keeps the listed one);
+    # it runs BEFORE the re-clock below so `days` follows. The §362 stay gate stays on saleBkAct.
+    # Never fatal.
     try:
         from sale_results import load_for_board as _srload
         _srn = _srload(slim, os.path.join(HERE, 'sale_results.json'))

@@ -285,5 +285,28 @@ w = S.window_cases(D(2026, 9, 24),
 check('window: upcoming lead + recent archive sale only', sorted(w) == ['2025-013918-CA-01', '2025-023462-CA-01'], w)
 check('window: archive last_seen carried', w['2025-023462-CA-01'][1] == D(2026, 9, 23), w)
 
+# load_for_board: fresh verdicts only, moved sales move the clock, evidence ships
+import json as _json, os as _os, tempfile as _tf
+_fd, _fp = _tf.mkstemp(suffix='.json'); _os.close(_fd)
+_json.dump({
+    'A-1': {'st': 'reset', 'sale': '2026-09-28', 'd': '2026-09-22', 'nd': '2026-11-09', 'ts': '2026-09-24',
+            'why': 'reset', 'ev': [{'d': '2026-09-%02d' % i, 'x': 'line %d' % i} for i in range(1, 6)]},
+    'B-2': {'st': 'at_risk', 'sale': '2026-09-28', 'ts': '2026-09-20', 'why': 'old read'},
+    'C-3': {'st': 'at_risk', 'sale': '2026-09-28', 'ts': '2026-09-23', 'why': 'yesterday'},
+    'D-4': {'st': 'reset', 'sale': '2026-09-28', 'nd': '2026-08-01', 'ts': '2026-09-24'},
+}, open(_fp, 'w'))
+_rows = [{'case': 'A-1', 'auction': '09/28/2026'}, {'case': 'B-2', 'auction': '09/28/2026'},
+         {'case': 'C-3', 'auction': '09/28/2026'}, {'case': 'D-4', 'auction': '09/28/2026'}]
+_n = S.load_for_board(_rows, _fp, today=D(2026, 9, 25))
+_os.remove(_fp)
+_by = {r['case']: r for r in _rows}
+check('board: moved sale moves the clock to the new date', _by['A-1']['auction'] == '11/09/2026'
+      and _by['A-1']['sr'].get('was') == '2026-09-28', _by['A-1'])
+check('board: newest 3 evidence lines ship', [e['x'] for e in _by['A-1']['sr'].get('ev', [])] == ['line 3', 'line 4', 'line 5'], _by['A-1'])
+check('board: a verdict read 5 days ago is not shown', 'sr' not in _by['B-2'], _by['B-2'])
+check('board: yesterday\'s read still shows', 'sr' in _by['C-3'], _by['C-3'])
+check('board: a reset to an EARLIER date never moves the clock back', _by['D-4']['auction'] == '09/28/2026', _by['D-4'])
+check('board: count', _n == 3, _n)
+
 print('\n%d failed' % len(FAIL) if FAIL else '\nall passed')
 sys.exit(1 if FAIL else 0)
