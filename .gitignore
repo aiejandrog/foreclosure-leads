@@ -107,6 +107,7 @@ lp_leads.json)
 __pycache__/
 browser-profile/
 leads-run.log
+refresh-running.flag
 diligence_server.log
 batchdata.key
 site.pass

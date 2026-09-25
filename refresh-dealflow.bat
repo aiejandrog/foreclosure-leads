@@ -19,6 +19,20 @@ if errorlevel 1 exit /b 1
 echo.>> "%LOG%"
 echo ==================== REFRESH %date% %time% ====================>> "%LOG%"
 
+rem  KILLED-RUN MARKER (2026-09-25). On 09-25 the run started 06:53, printed the requests import
+rem  warning from foreclosure_leads.py and then nothing: no scrape line, no done marker, no rc line,
+rem  and DEALFLOW-STATUS.txt kept the previous morning. A Python failure cannot look like that -
+rem  any exit from python, crash or clean, falls through to the next line of THIS file, which
+rem  always writes to the log. Silence from both means cmd.exe itself was ended from outside:
+rem  the console window closed, a restart, or Task Scheduler stopping the task. Nothing in the log
+rem  said so, and the next run could not tell either. This flag is written at start and deleted
+rem  only at the final exit, so a run that finds it left over says, in the log, that the previous
+rem  one was killed and when it had started. Top-level lines, no if-block: see _batsyntaxtest.py.
+set "PREVRUN="
+if exist refresh-running.flag set /p PREVRUN=<refresh-running.flag
+if defined PREVRUN echo     ^!^! PREVIOUS RUN NEVER FINISHED - it started %PREVRUN% and wrote no ENDED line, so it was killed from outside this file: window closed, restart, or a Task Scheduler stop.>> "%LOG%"
+>refresh-running.flag echo %date% %time%
+
 rem  RUNEXIT carries the run's verdict to :end. Until 2026-09-18 this file exited 0 no matter what
 rem  happened - Task Scheduler recorded `rc=0` on 09-17 for a run that scraped nothing, published
 rem  nothing and left the board 94 hours stale. An exit code that is 0 whether the night worked or
@@ -738,7 +752,10 @@ rem  the answer to "did the night work", which is what anyone reading it already
 rem  Do NOT read this the other way round either: a 0 here means this file finished its work, not
 rem  that the data is fresh - 09-17 exited 0 precisely because the run aborted before the
 rem  healthcheck ever ran. That is the hole this closes.
-if not "%RUNEXIT%"=="0" echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
+rem  ALWAYS WRITE THE ENDED LINE (2026-09-25). It used to be written only for a non-zero rc, so a
+rem  clean night and a killed one both ended without it and the log could not tell them apart.
+echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
+if exist refresh-running.flag del refresh-running.flag
 endlocal & exit /b %RUNEXIT%
 
 rem  BELOW THE FINAL EXIT ON PURPOSE. A subroutine placed in the body is not inert: control
