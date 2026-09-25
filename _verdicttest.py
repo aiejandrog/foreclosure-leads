@@ -1499,11 +1499,13 @@ class EighthReviewTests(unittest.TestCase):
             self.assertTrue(any('150' in m for m in r['missing']), (text, r['missing']))
             self.assertNotIn('none on the docket', CV.render_markdown([r]), text)
 
-    def test_a_certificate_of_title_on_a_hearing_event_still_ends_the_sale(self):
+    def test_a_certificate_of_title_on_a_hearing_event_is_not_a_sale_going_ahead(self):
         # A certificate of title carries no "sale" word, so the unlabelled branch did not catch it
         # either: the sale read as still going ahead and a later petition made it `conflicted`, with
         # a reason saying there was no certificate over a docket whose certificate the producer
-        # labelled. The same docket with the certificate not calendar-typed came back `supported`.
+        # labelled. It is NOT `supported` either, which this test asserted for two rounds: a
+        # calendar event can be a hearing ABOUT the certificate, and nothing saved says which. The
+        # contradiction is gone and the case is held as a gap naming the entry.
         t = self.calendared(self.OPEN + [
             (145, 'Notice of Foreclosure Sale on 07/20/2026', '06/20/2026', ''),
             (170, 'Certificate of Title', '07/30/2026', 'Hearing'),
@@ -1511,7 +1513,9 @@ class EighthReviewTests(unittest.TestCase):
         entry = next(e for e in t['entries'] if e['entry_id'] == '170')
         self.assertEqual((entry['kind'], entry['index_kind']), ('hearing', 'certificate_of_title'))
         r = CV.assess(t)
-        self.assertEqual(r['verdict'], 'supported', (r['conflicts'], r['missing']))
+        self.assertFalse(any('sale going ahead' in c for c in r['conflicts']), r['conflicts'])
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['missing']))
+        self.assertTrue(any('170' in m for m in r['missing']), r['missing'])
 
     def test_a_held_sale_is_read_even_when_the_status_never_carried_it(self):
         # build_timeline writes sale_outcome only inside `kind == 'sale_scheduled' and sale_date and
@@ -1536,12 +1540,15 @@ class EighthReviewTests(unittest.TestCase):
         # _producer_labels, which reads kind AND index_kind.
         import ast
         tree = ast.parse(MODULE.read_text())
-        producer_labels = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
-                               and n.name == '_producer_labels')
+        # _relabelled reads `kind` on purpose: it DETECTS the relabel, so 'hearing' is the thing it
+        # is looking for, not a label it trusts.
+        exempt = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                  and n.name in ('_producer_labels', '_relabelled')]
+        producer_labels = exempt[0]
         # `status` is the case posture, not a docket entry, and `g` is a gap row; neither goes
         # through the :383 override. Anything else reading 'kind' is reading an entry's label.
         allowed = {'status', 'g'}
-        inside = {id(n) for n in ast.walk(producer_labels)}
+        inside = {id(n) for f in exempt for n in ast.walk(f)}
         bad = []
         for node in ast.walk(tree):
             if id(node) in inside:
@@ -1678,6 +1685,109 @@ class NinthReviewTests(unittest.TestCase):
             second = run_cli('--dossiers', folder, '--out', folder / 'report.json', dealflow=folder)
             self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
             self.assertNotIn('SKIPPED', second.stdout)
+
+
+
+class TenthReviewTests(unittest.TestCase):
+    """Nine rounds fixed this one relabel at one site each. The tenth found three more summaries it
+    reaches - a vacated judgment and a satisfied one reported `supported` with the amount "verified to
+    the cent", and an order resetting a sale under a live stay reported `supported` with the sale
+    never named - so the fix stopped being per-site: `_relabelled` holds the case wherever a
+    posture-deciding label was lost. Every case drives the producer.
+    """
+    built = staticmethod(NinthReviewTests.__dict__['built'].__func__)
+    OPEN = NinthReviewTests.OPEN
+
+    def test_a_vacated_judgment_on_a_hearing_event_is_never_supported(self):
+        # The worst output in the series: reconcile_judgments never saw the vacatur, so the judgment
+        # stayed 'operative', status stayed 'judgment_entered' - an allowed settled kind - and the
+        # report told a reader the amount was verified to the cent on a judgment the docket vacated.
+        for text, index_kind in (('Order Vacating Final Judgment', 'vacatur'),
+                                 ('Satisfaction of Judgment', 'satisfaction')):
+            t = self.built(self.OPEN + [(150, text, '07/15/2026', 'Hearing')])
+            entry = next(e for e in t['entries'] if e['entry_id'] == '150')
+            self.assertEqual((entry['kind'], entry['index_kind']), ('hearing', index_kind), text)
+            r = CV.assess(t)
+            self.assertNotEqual(r['verdict'], 'supported', (text, r['supported_by'], r['notes']))
+            self.assertTrue(any('150' in m and index_kind in m for m in r['missing']),
+                            (text, r['missing']))
+
+    def test_a_document_read_label_lost_to_the_relabel_holds_the_case(self):
+        # :383 exempts only notice_of_sale, so an order resetting a sale is relabelled like anything
+        # else - and where `kind` came from READING the document, what the relabel destroyed is saved
+        # nowhere: index_kind is 'other' because the docket line is the bare word "Order". Not even
+        # the unlabelled-sale gap fires, because that scans description and comments.
+        t = self.built(self.OPEN + [
+            (160, 'Order', '07/01/2026', 'Hearing'),
+            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '08/01/2026', '')],
+            pages={'160': 'ORDER RESETTING FORECLOSURE SALE\nThe clerk shall sell the property on '
+                          '12/28/2026.'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '160')
+        self.assertEqual((entry['kind'], entry['index_kind'], entry['kind_source']),
+                         ('hearing', 'other', 'document'))
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertNotEqual(r['verdict'], 'supported', (r['supported_by'], r['notes']))
+        self.assertTrue(any('160' in m and 'read document' in m for m in r['missing']), r['missing'])
+
+    def test_a_bankruptcy_on_the_sale_day_is_not_lost_to_the_relabel(self):
+        # sale_held builds bankruptcy_same_day from the bare kind too (:552), so the one fact the
+        # producer's own qualification says decides whether the sale stands went missing.
+        t = self.built(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale on 09/10/2026', '08/01/2026', ''),
+            (146, 'Bid Amount', '09/10/2026', ''),
+            (147, 'Mortgage Foreclosure Deposit', '09/10/2026', ''),
+            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '09/10/2026', 'Hearing')])
+        self.assertEqual((t['sale_held'] or {}).get('bankruptcy_same_day'), [])
+        r = CV.assess(t)
+        self.assertNotEqual(r['verdict'], 'supported', (r['supported_by'], r['notes']))
+        # The relabel itself has to be named: the old head held the case for a different reason and
+        # said nothing about the sale-day petition, which is the fact that decides the sale.
+        self.assertTrue(any('150' in m and 'relabelled' in m for m in r['missing']), r['missing'])
+
+    def test_the_stay_against_a_held_sale_survives_an_emptied_summary(self):
+        # _sale_state still short-circuited on the summary, so with the money rows relabelled it read
+        # "no sale was held" and the stay-against-sale contradiction became a note. The verdict was
+        # held by a separate gap; the contradiction itself was lost.
+        t = self.built(self.OPEN + [
+            (146, 'Bid Amount', '09/10/2026', 'Hearing'),
+            (147, 'Mortgage Foreclosure Deposit', '09/10/2026', 'Hearing'),
+            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '09/15/2026', '')])
+        self.assertIsNone(t['sale_held'])
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
+        # Under the stay specifically: _sale_state must report the held sale, not "none".
+        self.assertTrue(any('stay is in effect' in m and 'held' in m for m in r['missing']),
+                        r['missing'])
+
+    def test_a_certificate_from_an_earlier_sale_does_not_excuse_a_later_one(self):
+        # sale_held counts a certificate only when it is dated ON OR AFTER the held sale (:550), so
+        # `certificate: None` was CORRECT here. The re-read applied no date filter, so a certificate
+        # from a sale two years earlier downgraded the stay-against-sale contradiction to a gap and
+        # printed that the summary had not taken it in - which the summary had, and excluded.
+        t = self.built(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale on 07/20/2024', '07/01/2024', ''),
+            (150, 'Certificate of Title', '08/15/2024', ''),
+            (160, 'Order Resetting Foreclosure Sale on 09/10/2026', '07/01/2026', ''),
+            (170, 'Bid Amount', '09/10/2026', ''),
+            (171, 'Mortgage Foreclosure Deposit', '09/10/2026', ''),
+            (180, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '09/15/2026', '')])
+        self.assertEqual((t['sale_held'] or {}).get('date'), '2026-09-10')
+        self.assertIsNone((t['sale_held'] or {}).get('certificate'))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+        self.assertFalse(any('150' in m and 'certificate label' in m for m in r['missing']),
+                         r['missing'])
+
+    def test_an_undated_money_row_is_not_a_held_sale(self):
+        # sale_held requires a date at or before the run's as_of (:544). Without that filter an
+        # undated Bid Amount produced a gap that does not exist, with an inaccurate reason.
+        t = self.built(self.OPEN + [(146, 'Bid Amount', '', '')])
+        self.assertIsNone(t['sale_held'])
+        r = CV.assess(t)
+        self.assertFalse(any('sale-day bid or deposit label' in m for m in r['missing']),
+                         r['missing'])
 
 
 

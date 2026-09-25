@@ -215,7 +215,7 @@ def _producer_labels(entry):
     return tuple(k for k in (kind,) if k)
 
 
-def _labelled(timeline, kinds):
+def _labelled(timeline, kinds, since=None):
     """-> the entries the producer gave one of `kinds`, read through _producer_labels.
 
     `timeline['sale_held']` is a producer SUMMARY computed from a bare `e['kind']`
@@ -225,8 +225,63 @@ def _labelled(timeline, kinds):
     certificate made the report print "no certificate of sale has followed" about a docket carrying
     one. A summary is only as good as the field it was built from, so the entries are re-read here.
     """
-    return [e for e in _rows(timeline, 'entries')
-            if isinstance(e, dict) and set(_producer_labels(e)) & set(kinds)]
+    since = str(since or '')
+    until = str(timeline.get('as_of') or '9999-99-99')
+    out = []
+    for e in _rows(timeline, 'entries'):
+        if not isinstance(e, dict) or not set(_producer_labels(e)) & set(kinds):
+            continue
+        # The producer's own filters, or this re-read invents evidence the summary correctly left
+        # out: sale_held takes a money row only when it has a date at or before the run's as_of
+        # (:544) and a certificate only when it is dated ON OR AFTER the held sale (:550). Without
+        # the second, a certificate from a sale two years earlier downgraded a live stay-against-sale
+        # contradiction to a gap, with a reason saying the summary had not taken it in when the
+        # summary had considered it and correctly excluded it (tenth review).
+        date = str(e.get('date') or '')
+        if not date or date > until or (since and date < since):
+            continue
+        out.append(e)
+    return out
+
+
+# Producer labels that decide a case's posture, and so the summaries the verdict rests on. Any of
+# these lost to the :383 relabel is a gap: this module does not guess which one the entry was.
+DECIDING_KINDS = ('vacatur', 'satisfaction', 'final_judgment', 'order_of_dismissal',
+                  'notice_of_voluntary_dismissal', 'sale_bid', 'sale_deposit',
+                  'certificate_of_sale', 'certificate_of_title', 'notice_of_sale',
+                  'order_resetting_sale', 'order_cancelling_sale', 'suggestion_of_bankruptcy',
+                  'stay', 'stay_reinstated', 'relief_from_stay')
+DOCUMENT_SOURCES = ('document', 'document_passage')
+
+
+def _relabelled(timeline):
+    """-> [(entry, what the relabel cost)] for entries :383 took a deciding label from.
+
+    Ten review rounds went one site at a time: the stay history, then the held-sale summary and the
+    certificate, then the bankruptcy-on-the-sale-day list. Every one was the same relabel reaching a
+    different summary, and the tenth round found three more - a vacated judgment and a satisfied one
+    reported `supported` with the amount "verified to the cent", and an order resetting a sale under a
+    live stay reported `supported` with the sale never named. So this stops chasing sites: where the
+    relabel took a posture-deciding label, the case is held as a gap, whatever summary consumed it.
+
+    THIS MODULE DOES NOT DECIDE WHAT THE ENTRY WAS. A calendar event genuinely can be a hearing ON a
+    motion rather than the thing itself, which is what :383 is for, and nothing in the saved file says
+    which this is. Naming the possibility and holding the case is the only answer the file supports;
+    deciding it needs the clerk's real data, which is the desktop's to measure.
+    """
+    out = []
+    for e in _rows(timeline, 'entries'):
+        if not isinstance(e, dict) or e.get('kind') != 'hearing' or not e.get('calendar_event'):
+            continue
+        index_kind = e.get('index_kind')
+        if e.get('kind_source') in DOCUMENT_SOURCES:
+            # kind came from reading the document, so what the relabel destroyed was the DOCUMENT's
+            # own label - and that is saved nowhere. index_kind is only the clerk's index line, which
+            # this module's rule says must never outrank a read document.
+            out.append((e, 'the label a read document gave it, which is saved nowhere'))
+        elif index_kind in DECIDING_KINDS:
+            out.append((e, 'the docket index calls it %s' % index_kind))
+    return out
 
 
 def _index_text(entry):
@@ -293,9 +348,21 @@ def _sale_state(timeline, status, kind):
         return [e for e in unlabelled if str(e.get('date') or '') >= str(floor or '')]
 
     held = timeline.get('sale_held')
+    if not (isinstance(held, dict) and held.get('date')):
+        # The summary is built from a bare kind, so :383 can empty it while the clerk's own sale-day
+        # rows sit in `entries`. Reading it as "no sale was held" replaced the stay-against-sale
+        # contradiction with a note (tenth review). The money rows are the producer's labels too.
+        money = _labelled(timeline, SALE_MONEY_KINDS)
+        if money and closing_date < max(str(e.get('date') or '') for e in money):
+            return 'unknown', ("entr%s %s carr%s the clerk's sale-day bid or deposit label while the "
+                               "run's own held-sale summary took none of them in, so whether a sale "
+                               'was held is not settled in this file'
+                               % ('y' if len(money) == 1 else 'ies',
+                                  ', '.join(str(e.get('entry_id') or '?') for e in money[:5]),
+                                  'ies' if len(money) == 1 else 'y'))
     if (isinstance(held, dict) and held.get('date') and not held.get('certificate')
             and closing_date < str(held['date'])):
-        if _labelled(timeline, CERTIFICATE_KINDS):
+        if _labelled(timeline, CERTIFICATE_KINDS, since=held['date']):
             # The summary says no certificate; an entry carries a certificate label the summary did
             # not take in. Saying either is a claim this file does not support.
             return 'unknown', ('the run\'s held-sale summary for %s records no certificate while a '
@@ -541,7 +608,7 @@ def assess(timeline, dossier=None):
     # block ends "the sale can still be vacated", which is not a posture to vouch for.
     held = timeline.get('sale_held') if isinstance(timeline.get('sale_held'), dict) else {}
     money = _labelled(timeline, SALE_MONEY_KINDS)
-    certificates = _labelled(timeline, CERTIFICATE_KINDS)
+    certificates = _labelled(timeline, CERTIFICATE_KINDS, since=held.get('date'))
     if money and not held.get('date'):
         # The summary is empty while the entries carry the labels it is built from: the :383 override
         # emptied it, and the evidence that a sale was held is in the file (ninth review).
@@ -735,6 +802,13 @@ def assess(timeline, dossier=None):
     # The timeline's OWN gaps (budget_exhausted, amount_page_unreadable,
     # inventory_completeness_unknown and the rest) reached the report only where they happened to
     # change a coverage state. They are the run saying what it could not do, so they are named.
+    # The relabel sweep. Deliberately last among the gap checks and deliberately not per-summary:
+    # every one of the ten rounds' label defects was this one relabel reaching a summary nobody had
+    # enumerated yet, so the entry is named once and the case is held, whatever consumed it.
+    for entry, lost in _relabelled(timeline):
+        missing.append('entry %s is a calendar event, so the run relabelled it "hearing" and the '
+                       'summaries built from that label did not take it in (%s); what it decides is '
+                       'not settled in this file' % (entry.get('entry_id') or '?', lost))
     kinds = sorted({str(g.get('kind') or g.get('reason') or '?').split(':')[0]
                     for g in _rows(timeline, 'gaps') if isinstance(g, dict)})
     if kinds:

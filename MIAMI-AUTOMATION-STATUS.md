@@ -80,15 +80,27 @@ co-equal let a docket line reading "Certificate of Sale" close a sale whose own 
 of sale, and made a line reading "Notice of Filing Bankruptcy Petition" hold a case whose document
 reads "ORDER DENYING MOTION TO COMPEL".
 
-One limitation this raised is not `case_verdict`'s and is NOT fixed here. `miami_case_timeline` :383
-does `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket
-entry whose OCS eventType is a hearing loses its real label and keeps it only in `index_kind` - and
-the producer's own `stay_history` (:462) keys on the overwritten `kind`. So a suggestion of bankruptcy
-filed on a hearing event leaves `stay_history` empty and `stay_in_effect` None: the producer does not
-know about that stay at all. `case_verdict` now matches both keys and holds such a case as a gap, but
-the underlying loss is in the producer, it would move the §362 stay flags the board hard-gates on,
-and the rule for a bug found on a surface another session owns is to report it. Reported to
-Alejandro; not fixed on this branch.
+**The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
+`if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry
+whose OCS eventType is a hearing loses its real label, and every summary the producer builds afterwards
+is keyed on the label that is gone: `stay_history` and `stay_in_effect` (:462), `sale_held` with its
+certificate and its sale-day bankruptcy list (:544, :550, :552), `_transition`'s status kind (:247) and
+`reconcile_judgments` (:722). Ten review rounds each found this reaching one more summary than the last
+round had enumerated, so `case_verdict` stopped chasing sites: where a posture-deciding label was lost,
+it names the entry and holds the case, whatever consumed it. An earlier version of this paragraph said
+the case is held "as a gap" as though that covered the whole override; it covered the stay path only,
+and a vacated judgment, a satisfied one and an order resetting a sale each read `supported` past it.
+
+`case_verdict` cannot do better than a gap here, and neither could a fix in the producer without
+evidence this repo does not hold. A calendar event genuinely can be a hearing ABOUT a motion rather
+than the thing itself, which is what :383 is for, and nothing in a saved timeline says which a given
+entry is. Deciding it needs a count of how often OCS puts a hearing eventType on an order row, which
+is the desktop's to measure; a read-only script for that is in the project files. The producer is
+therefore left alone on purpose, not by the earlier reasoning in this paragraph, which said the fix
+would move the §362 stay flags the board hard-gates on. That was wrong and was checked: the board's
+`saleBkAct` / `sale_bk_active` is built by `sale_history.py` (:391-447) from its own fresh docket pull,
+that module has no `eventType` reference at all, and nothing outside `case_verdict`, `miami_ranking`
+and `document_prioritizer` reads the timeline's stay state.
 
 2018-026274's amount reason is the second. The $0.60 breakdown in the row below is what the console
 printed on the run that found it, and it does NOT reach a saved timeline: `verify_document` builds its
