@@ -2556,5 +2556,93 @@ class EighteenthReviewTests(unittest.TestCase):
 
 
 
+class NineteenthReviewTests(unittest.TestCase):
+    """One false `incomplete` on the highest-value posture in the pipeline, and one false `supported`
+    from feeding the producer's parser less than the producer gave it.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGMENT_PAGE = EleventhReviewTests.JUDGMENT_PAGE
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    LIVE = (160, 'Notice of Foreclosure Sale on 12/28/2026', '', '08/01/2026', '')
+
+    def case(self, extra, pages=None):
+        pg = {'140': self.JUDGMENT_PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + list(extra), controlling='140', pages=pg)
+
+    def test_a_sale_worded_entry_older_than_the_notice_does_not_unsettle_it(self):
+        # The live-sale gate asks whether an unlabelled entry might be the cancellation or the
+        # rescheduling of the sale now on the calendar, so an entry dated BEFORE the notice that put
+        # it there cannot be one. It was floored at closing_date, which is '' when nothing closes a
+        # sale, so a routine docket line - classify leaves "Order Setting Foreclosure Sale" 'other' -
+        # held the ordinary live-lead shape incomplete for good.
+        t = self.case([(142, 'Order Setting Foreclosure Sale', '', '02/15/2026', ''), self.LIVE])
+        self.assertEqual(t['status']['kind'], 'sale_scheduled')
+        self.assertEqual(CV._sale_state(t, t['status'], 'sale_scheduled')[0], 'live')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_an_entry_between_a_cancellation_and_a_fresh_notice_does_not_unsettle_it(self):
+        # The commoner shape: the floor was the CANCELLATION, so an entry the producer labelled a
+        # notice of sale after it did not lift the floor past it.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 04/01/2026', '', '03/01/2026', ''),
+                       (150, 'Order Cancelling Foreclosure Sale', '', '03/20/2026', ''),
+                       (152, "Plaintiff's Bid at Sale", '', '04/10/2026', ''), self.LIVE])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def test_an_unlabelled_entry_after_the_notice_is_still_caught(self):
+        # The eighteenth round's fix must survive the new floor.
+        t = self.case([self.LIVE,
+                       (165, 'Notice of Cancellation of Foreclosure Sale', '', '08/20/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if '165' in m], r['missing'])
+
+    def test_a_resale_dated_only_inside_the_document_is_not_supported(self):
+        # sale_passages is what build_timeline saved for the entry: the docket line plus every body
+        # line of a READ page matching its sale vocabulary, and _transition takes the status's own
+        # sale_date from it. _sale_dates_of read only the docket words, so the producer's parser got a
+        # narrower input than the producer gave it and the completed-sale filter discarded a resale
+        # noticed after the certificate. The field was saved by the producer and read by nothing.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 03/02/2026', '', '02/20/2026', ''),
+                       (151, 'Certificate of Title', '', '04/15/2026', ''),
+                       (160, 'Sale Package Filed by Plaintiff', '', '05/01/2026', '')],
+                      pages={'160': 'SALE PACKAGE\nTHE CLERK SHALL SELL THE PROPERTY AT PUBLIC SALE '
+                                    'ON JUNE 20, 2026 at 9am'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '160')
+        self.assertIn('THE CLERK SHALL SELL', ' '.join(entry['sale_passages']),
+                      'the producer must have saved the document line in sale_passages')
+        self.assertEqual(CV._sale_dates_of(entry), ['2026-06-20'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if '160' in m], r['missing'])
+
+    def test_a_rescheduled_sale_with_no_parseable_date_is_not_supported(self):
+        # The same inversion as the seventeenth round: the docket whose date nobody could parse - the
+        # ordinary case for a notice whose document is behind the county login - was the one reading
+        # `supported`. The producer's own reset vocabulary answers it without a date.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 03/02/2026', '', '02/20/2026', ''),
+                       (151, 'Certificate of Title', '', '04/15/2026', ''),
+                       (160, 'Notice of Rescheduled Foreclosure Sale', '', '05/01/2026', '')])
+        self.assertEqual(CV._sale_dates_of(
+            next(e for e in t['entries'] if e['entry_id'] == '160')), [])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+
+    def test_the_clerks_proceeds_entries_still_close_a_completed_sale(self):
+        # Contract 5 again: neither of the two discriminators may fire on proceeds handling.
+        t = self.case([(145, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/20/2026', ''),
+                       (146, 'Bid Amount', '', '07/20/2026', ''),
+                       (150, 'Certificate of Sale', '', '07/21/2026', ''),
+                       (151, 'Certificate of Title', '', '08/05/2026', ''),
+                       (160, 'Disbursement of Sale Proceeds', '', '08/10/2026', ''),
+                       (161, 'Surplus Funds from Sale', '', '08/12/2026', '')])
+        self.assertEqual(CV._sale_state(t, t['status'], 'sold'), ('none', None))
+        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

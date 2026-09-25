@@ -183,6 +183,11 @@ UNLABELLED_KINDS = ('other', 'hearing')
 # Only to notice that the classifier left a sale-worded entry unlabelled, which is reported as a
 # gap. Never to decide that a sale IS or IS NOT scheduled - see _sale_state.
 _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
+# miami_case_timeline's own reset vocabulary (:31). An entry saying a sale was reset or
+# rescheduled is a resale whether or not anything saved prints its new date: the date may be in
+# a document behind the county login, which is the ordinary case for a sale notice. The clerk's
+# proceeds entries after a completed sale carry neither word.
+_RESET_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*)\b', re.I)
 # Entry kinds that RAISE a stay (miami_case_timeline :469, :553). Relief, dismissal and discharge
 # are stay-ENDING events: one of those dated after the run's as_of says nothing about the stay state
 # at as_of, and counting them made a clean case incomplete.
@@ -425,6 +430,17 @@ def _sale_state(timeline, status, kind):
     def _later_unlabelled(floor):
         return [e for e in unlabelled if str(e.get('date') or '') >= str(floor or '')]
 
+    # The floor for the LIVE-sale branches. Those ask whether an unlabelled entry might be the
+    # cancellation or the rescheduling of the sale now on the calendar, so an entry dated BEFORE the
+    # notice that put it there cannot be one - and a routine foreclosure docket carries such entries
+    # ("Order Setting Foreclosure Sale", "Plaintiff's Bid at Sale", "Statement of Amounts Due at
+    # Sale" all classify as 'other'). Flooring them at closing_date alone, which is '' when nothing
+    # closes a sale, held the ordinary live-lead shape incomplete for good and said of a five-month-old
+    # entry that it might unsettle a sale noticed later (nineteenth review). The `opening` branch below
+    # has always floored at the notice; these now do the same. max() keeps today's behaviour when the
+    # producer labelled no notice at all.
+    live_floor = max(closing_date, str((opening or {}).get('date') or ''))
+
     held = timeline.get('sale_held')
     if not (isinstance(held, dict) and held.get('date')):
         # The summary is built from a bare kind, so :383 can empty it while the clerk's own sale-day
@@ -464,7 +480,7 @@ def _sale_state(timeline, status, kind):
         # the live sale itself - the gap was unreachable, and a docket where strictly LESS was known
         # read `supported` where the same entry after a LABELLED cancellation read incomplete
         # (eighteenth review).
-        later = _later_unlabelled(closing_date)
+        later = _later_unlabelled(live_floor)
         if later:
             return 'unknown', ('%s, so whether that sale still stands cannot be told from this file'
                                % _unlabelled_phrase(later))
@@ -473,7 +489,7 @@ def _sale_state(timeline, status, kind):
         # Only reachable if the producer ever writes sale_date on a status kind outside
         # SALE_LIVE_STATUS_KINDS; _transition writes it only for 'sale_scheduled' today, so the
         # branch above wins. Guarded the same way rather than left as the one unguarded path.
-        later = _later_unlabelled(closing_date)
+        later = _later_unlabelled(live_floor)
         if later:
             return 'unknown', ('%s, so whether the sale on the calendar for %s still stands cannot '
                                'be told from this file'
@@ -518,7 +534,9 @@ def _sale_state(timeline, status, kind):
         # had already fixed for the phrasing classify does label (eighteenth review). The producer's
         # own date parser separates them: a proceeds entry prints no sale date after the certificate,
         # a rescheduled-sale notice does.
-        later = [e for e in later if any(d > closing_date for d in _sale_dates_of(e))]
+        later = [e for e in later
+                 if any(d > closing_date for d in _sale_dates_of(e))
+                 or _RESET_WORD_RE.search(_index_text(e))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))
@@ -548,7 +566,23 @@ def _classify(text):
 
 
 def _sale_dates_of(entry):
-    """The sale dates the entry's own docket words print, via the producer's own parser."""
+    """The sale dates this entry prints, off the producer's own saved field and its own parser.
+
+    `sale_passages` is what build_timeline (:393, :397) saved for this entry: the docket line plus
+    every body line of a READ page matching its sale vocabulary, and it is the field _transition :262
+    takes the status's own sale_date from. Reading only the docket words gave the producer's parser a
+    narrower input than the producer gave it, so a resale whose new date is printed in the document
+    rather than in the docket line produced no date here - and the completed-sale filter below then
+    discarded it and the case read `supported` over a resale after the certificate (nineteenth
+    review). The field was saved by the producer and read by nothing in the repo.
+    """
+    passages = [str(p) for p in _rows(entry, 'sale_passages') if str(p or '').strip()]
+    if passages:
+        try:
+            import miami_case_timeline
+            return [d for d in (miami_case_timeline._sale_dates(passages) or []) if d]
+        except Exception:                              # noqa: BLE001 - a missing parser is not a verdict
+            return []
     text = _index_text(entry)
     if not text.strip():
         return []
@@ -858,13 +892,15 @@ def assess(timeline, dossier=None):
                        'never took in, so the stay state is unknown rather than settled'
                        % ('y' if len(unseen) == 1 else 'ies',
                           ', '.join(str(e.get('entry_id') or '?') for e in unseen[:5])))
-    held = _sale_day_bankruptcy(timeline)
-    if held:
+    # Not named `held`: the held-sale block further down binds that to timeline['sale_held'], and
+    # rebinding it here was a trap for the next edit in either block.
+    sale_day = _sale_day_bankruptcy(timeline)
+    if sale_day:
         conflicts.append('a bankruptcy entry (%s) landed on the day of the sale (%s); whether the '
                          'petition preceded the sale decides whether the sale is void under the '
                          'automatic stay, and the docket gives dates, not times'
-                         % (', '.join(str(e) for e in (held.get('bankruptcy_same_day') or ['?'])),
-                            held.get('date') or 'unknown date'))
+                         % (', '.join(str(e) for e in (sale_day.get('bankruptcy_same_day') or ['?'])),
+                            sale_day.get('date') or 'unknown date'))
 
     # `mine` is the controlling judgment's own coverage rows; the amount block below prints
     # which documents on the entry were read, so it is read before both sections.

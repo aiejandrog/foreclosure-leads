@@ -167,6 +167,20 @@ unread entry matters most - the live sale itself - a docket where strictly LESS 
 rescheduling to a different date, both of which `classify` leaves `'other'`, while the same entry after
 a LABELLED cancellation order was already `incomplete` (eighteenth review).
 
+That fix arrived floored at the wrong entry, and the round after corrected it in both directions. The
+live-sale branches ask whether an unlabelled entry might be the cancellation or the rescheduling of the
+sale now on the calendar, so an entry dated BEFORE the notice that put it there cannot be one - and a
+routine docket carries such entries, since `classify` leaves "Order Setting Foreclosure Sale",
+"Plaintiff's Bid at Sale" and "Statement of Amounts Due at Sale" as `'other'`. Flooring them at the
+newest cancellation, which is nothing at all when no cancellation exists, held the ordinary live-lead
+shape `incomplete` for good. They now floor at the notice, as the `opening` branch always did. And
+`_sale_dates_of` now reads the producer's own `sale_passages` - the docket line plus every body line of
+a READ page matching the producer's sale vocabulary, the field `_transition` itself takes `sale_date`
+from - rather than the docket words alone, with the producer's reset vocabulary as a second
+discriminator. Feeding the parser less than the producer gave it made a resale whose new date is
+printed inside the document, and a rescheduling with no parseable date anywhere, both read `supported`
+after a certificate. `sale_passages` was a producer field nothing in the repo read (nineteenth review).
+
 The same round closed the other half of the eighth review's defect. `_transition` takes the sale date
 from `sale_passages` - the docket line plus the body lines of READ pages - and falls back to the
 entry's own date only for a calendar event (:264). A notice of sale whose description carries no
