@@ -157,7 +157,7 @@ def apply(lead, chain):
     st = state_of(chain, lead)
     lead['eqstate'] = st
     lead['eqstate_why'] = LABEL[st]
-    if st == 'none' and lender_foreclosure(lead) and state_of(chain) == 'clear':
+    if st == 'none' and lender_foreclosure(lead) and _state_of(chain) == 'clear':
         lead['eqstate_why'] = LENDER_OWN_CASE_WHY
     if st == 'unpriced' and _state_of(chain, lead) == 'clear':
         lead['eqmtgclear'] = True    # the MORTGAGE verdict was clear; only an amountless lien made it

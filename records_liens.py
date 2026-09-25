@@ -249,13 +249,21 @@ def _carry_lien_totals(old, new, out):
         return
     own = {'hoa_open': 0, 'code_open': 0, 'irs_open': 0}
     if legacy:
+        _tr = str(old.get('traced') or '')
         for o in new.get('other') or []:
             if isinstance(o, dict) and o.get('own_case') and o.get('amt'):
+                # only a claim the old search could have seen: recorded on or before its trace
+                _d = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', str(o.get('d') or ''))
+                if _tr and _d and '%s-%02d-%02d' % (_d.group(3), int(_d.group(1)), int(_d.group(2))) > _tr:
+                    continue
                 k = ('irs_open' if o.get('kind') in ('irs', 'state_tax') else
                      'hoa_open' if o.get('kind') == 'association' else 'code_open')
                 own[k] += o['amt']
     for k in own:
-        out[k] = max((old.get(k) or 0) - own[k], new.get(k) or 0)
+        # subtracted only when the old total is at least the claim: a smaller total never held it,
+        # and taking it out would erase a real lien the re-read did not reach
+        _o = old.get(k) or 0
+        out[k] = max(_o - own[k] if _o >= own[k] else _o, new.get(k) or 0)
     if legacy and any(out[k] > (new.get(k) or 0) for k in own):
         out['lien_totals_kept'] = ('lien totals from the earlier, wider search (%s records) kept; they may '
                                    'include this case\'s own judgment' % (old.get('nrec') or '?'))
@@ -708,6 +716,13 @@ def clear_undocumented(res, case=''):
             and not ('nrec' in res and 'second_fc' in res and 'mtg_open_unpriced' in res))
 
 
+# words on a deed's party line that are not a person's given name
+_NOT_GIVEN = frozenset(('AND', 'HW', 'WF', 'HUSB', 'WIFE', 'ET', 'AL', 'ETAL', 'UX', 'VIR', 'JR', 'SR', 'II', 'III',
+                        'IV', 'TR', 'TRS', 'TRUSTEE', 'TRUSTEES', 'LE', 'EST', 'ESTATE', 'OF', 'THE', 'REM', 'LIFE',
+                        'HEIRS', 'DEC', 'DECEASED', 'JT', 'JTRS', 'TEN', 'TENANTS', 'ENT', 'ENTIRETY', 'WROS',
+                        'MR', 'MRS', 'MS', 'DR', 'REV', 'LIV', 'LIVING', 'TRUST', 'REVOCABLE', 'FAMILY'))
+
+
 def _owner_words(owner):
     """The words a party string must carry to name the searched owner, or None when unknown.
     A person needs the surname and the first given name as whole words (the clerk writes
@@ -984,7 +999,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     released_bp.discard(('', ''))
     # "U.S. BANK NATIONAL ASSOCIATION, AS TRUSTEE FOR ..." and "U S BANK NATIONAL ASSN TR" agree
     # once the trustee clause is cut; "PNC BANK, N.A." and "PNC BANK NA" once punctuation is.
-    _pnorm = lambda x: _inst(re.sub(r'\s(?:AS\s+)?(?:TRUSTEE|TR)\b.*$', '', re.sub(r'[.,]', ' ', (x or '').upper())))
+    _pnorm = lambda x: _inst(re.sub(r'\bASS(?:N|OC)\b', 'ASSOCIATION',
+                                    re.sub(r'\s(?:AS\s+)?(?:TRUSTEE|TR)\b.*$', '', re.sub(r'[.,]', ' ', (x or '').upper()))))
     _pl = _pnorm(plaintiff)
     _ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
     # The parcel's own deeds name the household too ('SMITH JOHN & HELEN'), and an LP lead carries no
@@ -995,12 +1011,14 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         for r in models:
             if 'DEED' not in (r.get('doC_TYPE', '') or '').upper() or norm_folio(r.get('foliO_NUMBER', '')) != fol:
                 continue
-            for side in (r.get('firsT_PARTY'), r.get('seconD_PARTY')):
-                toks = re.findall(r'[A-Z0-9]+', (side or '').upper().replace("'", ''))
-                if _sn and all(t in toks for t in _sn):
-                    for g in toks:
-                        if len(g) > 1 and g not in _sn and g not in ('AND', 'HW', 'WF', 'HUSB', 'WIFE', 'ET', 'AL', 'UX', 'VIR'):
-                            _ow.append(('person', _o0[1], g))
+            # the GRANTEE only: a same-surname seller deeding to the owner is not the household. And
+            # never a suffix or a role word: 'GARCIA JOSE JR' must not make every GARCIA JR an owner,
+            # whose release in the subdivision would then free this owner's lien.
+            toks = re.findall(r'[A-Z0-9]+', (r.get('seconD_PARTY') or '').upper().replace("'", ''))
+            if _sn and all(t in toks for t in _sn):
+                for g in toks:
+                    if len(g) > 1 and g not in _sn and g not in _NOT_GIVEN and not g.isdigit():
+                        _ow.append(('person', _o0[1], g))
     _cy = re.match(r'\s*(\d{4})-', case or '')
     _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):

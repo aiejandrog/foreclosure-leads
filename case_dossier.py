@@ -295,7 +295,7 @@ def _d(chain, section_c, lead=None):
             lead = {'case_type': equity_state.LENDER_CASE_TYPES[0]}
     state = equity_state.state_of(chain, lead)
     verdict = equity_state.LABEL[state]
-    if state == 'none' and equity_state.lender_foreclosure(lead) and equity_state.state_of(chain) == 'clear':
+    if state == 'none' and equity_state.lender_foreclosure(lead) and equity_state._state_of(chain) == 'clear':
         verdict = equity_state.LENDER_OWN_CASE_WHY
     rests_on = ['b'] if chain else []
     doc_note = None

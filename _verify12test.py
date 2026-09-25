@@ -518,10 +518,48 @@ RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'nrec': 40, 'code_open': 5000,
                       dict(_bankfj, nrec=2), _o)
 check("a narrower re-read of a chain the new rules wrote keeps the larger total without a legacy note",
       _o['code_open'] == 5000 and not _o.get('lien_totals_kept'), _o)
+import foreclosure_leads as FLD
 _flsrc16 = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read()
-check("the board keeps netting an association's judgment when a re-read kept an old analyzer's total",
-      _flsrc16.count("'other' in rlh and not rlh.get('lien_totals_kept')") == 1
-      and _flsrc16.count("'other' in _h and not _h.get('lien_totals_kept')") == 1)
+_ownassn = {'other': [{'own_case': True, 'kind': 'association', 'amt': 6000}]}
+check("the board stops netting only when the chain took the association's own claim out of orhoa",
+      FLD._hoa_own_out(_ownassn) and not FLD._hoa_own_out(dict(_ownassn, lien_totals_kept='x'))
+      and not FLD._hoa_own_out({'other': [{'kind': 'association', 'amt': 12000}]})
+      and not FLD._hoa_own_out({'other': []}) and _flsrc16.count('if _hoa_own_out(') == 2)
+# review round 17: an own claim the old total never held is not taken out of it
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 3000},
+                      dict(_bankfj, code_open=0, other=[dict(_bankfj['other'][0], amt=250000)]), _o)
+check("a re-read never takes the case's own judgment out of a smaller old total that never held it",
+      _o['code_open'] == 3000 and _o.get('lien_totals_kept'), _o)
+_o = {}
+RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 400000, 'traced': '2024-01-01'},
+                      dict(_bankfj, code_open=0, other=[dict(_bankfj['other'][0], d='5/5/2024', amt=250000)]), _o)
+check("a re-read never takes out a judgment recorded after the old search ran",
+      _o['code_open'] == 400000, _o)
+_hl = RL.analyze([rec('DEED', '2/1/2008', '26100', '10', 0, 'GARCIA JOSE JR', first='PRIOR SELLER'),
+                  rec('LIEN', '5/5/2019', '31100', '1', 4000, 'GARCIA JOSE', first='CITY OF MIAMI'),
+                  rec('RELEASE OF LIEN', '6/6/2020', '31200', '1', 0, 'GARCIA JR ROBERTO', first='CITY OF MIAMI',
+                      folio='0100000000077')], FOLIO, 12000, ftype='HOA', owner='JOSE GARCIA')
+check("a deed to 'GARCIA JOSE JR' does not make every GARCIA JR an owner whose release frees this lien",
+      _hl['code_open'] == 4000 and _hl['other'][0]['st'] == 'OPEN', _hl['other'])
+_hs = RL.analyze([rec('DEED', '2/1/2008', '26100', '10', 0, 'GARCIA JOSE', first='GARCIA MARIA'),
+                  rec('LIEN', '5/5/2019', '31100', '1', 4000, 'GARCIA JOSE', first='CITY OF MIAMI'),
+                  rec('RELEASE OF LIEN', '6/6/2020', '31200', '1', 0, 'GARCIA MARIA', first='CITY OF MIAMI',
+                      folio='0100000000077')], FOLIO, 12000, ftype='HOA', owner='JOSE GARCIA')
+check("the seller on the owner's deed is not the household", _hs['code_open'] == 4000, _hs['other'])
+_sa = RL.analyze([deed, rec('CLAIM OF LIEN', '5/5/2023', '33100', '1', 12000, 'OWNER TESTER',
+                            first='SUNSET TEST HOMEOWNERS ASSN INC')],
+                 FOLIO, 12500, ftype='HOA', plaintiff='SUNSET TEST HOMEOWNERS ASSOCIATION INC', owner='OWNER TESTER',
+                 case='2023-000123-CC-05')
+check("an association's own claim indexed 'ASSN' is its own case, not a second debt",
+      _sa['other'][0].get('own_case') and _sa['hoa_open'] == 0, (_sa['other'], _sa['hoa_open']))
+_lw = {'Case #': '2099-000950-CA-01', 'case_type': 'Bank/Mortgage'}
+ES.apply(_lw, {'conf': 'ok', 'nrec': 30, 'second_fc': None, 'liens': [], 'other_open_unpriced': 1})
+check("a lender's case keeps its 'the chain missed the loan' reason beside an amountless lien",
+      _lw['eqstate'] == 'none' and _lw['eqstate_why'] == ES.LENDER_OWN_CASE_WHY, _lw)
+_dl = CD._d({'conf': 'ok', 'nrec': 30, 'second_fc': None, 'liens': [], 'other_open_unpriced': 1},
+            {'status': 'empty'}, {'case_type': 'Bank/Mortgage'})
+check("dossier d: the same reason beside an amountless lien", _dl['verdict'] == ES.LENDER_OWN_CASE_WHY, _dl['verdict'])
 _bfc = {'Case #': '2099-000900-CC-01', 'ctype': 'HOA/Condo', 'orsecond': {'party': 'ABC BANK NA'}}
 ES.apply(_bfc, {'conf': 'ok', 'nrec': 30, 'second_fc': None, 'liens': [], 'other_open_unpriced': 1})
 check("a ceiling made only by an amountless lien is still demoted beside a lender's separate foreclosure",
