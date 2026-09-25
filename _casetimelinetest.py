@@ -585,6 +585,41 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(r['status']['kind'], 'judgment_entered')
         self.assertFalse(r['stay_in_effect'])
 
+    def test_an_older_bankruptcys_dismissal_leaves_the_newer_stay(self):
+        # Two petitions on one docket: dismissing the first must not end the second's stay (the
+        # failure #58 fixed in sale_history; review of #53's code on #55).
+        first, second = 'Case No. 26-11111', 'Case No. 26-22222'
+        base = [entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy ' + first),
+                entry(3, 'Suggestion of Bankruptcy ' + second),
+                entry(4, 'Notice of Filing: Order Dismissing Chapter 13 ' + first)]
+        r = run(base)
+        self.assertTrue(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'stayed_by_bankruptcy')
+        r = run(base + [entry(5, 'Notice of Filing: Order Dismissing Chapter 13 ' + second)])
+        self.assertFalse(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'judgment_entered')
+
+    def test_a_numberless_dismissal_with_two_open_bankruptcies_is_unknown(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy Case No. 26-11111'),
+                 entry(3, 'Suggestion of Bankruptcy Case No. 26-22222'),
+                 entry(4, 'Order Dismissing Chapter 13 Bankruptcy')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_a_repeated_numberless_notice_is_the_same_bankruptcy(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy'), entry(4, 'Order dismissing bankruptcy')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_an_order_lifting_stay_that_names_no_bankruptcy_does_not_end_it(self):
+        # A bare "Order Lifting Stay" can lift a state-court stay; it cannot lift the federal
+        # automatic stay (Board accuracy's #60 found the same on 2025-012246).
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order Lifting Stay')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+        self.assertEqual(r['stay_history'][-1]['event'], 'relief_not_bankruptcy')
+
     def test_a_dismissed_bankruptcy_is_not_a_dismissed_foreclosure(self):
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
                  entry(3, 'Notice of dismissal of bankruptcy')])

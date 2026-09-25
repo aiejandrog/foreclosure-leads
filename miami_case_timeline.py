@@ -50,6 +50,75 @@ _BANKRUPTCY_CONTEXT_RE = re.compile(r'\bchapter\s+(?:7|11|12|13)\b|\bdebtor|\b11
                                     r'\b362\b|bankruptcy court|\bu\.?\s?s\.? trustee', re.I)
 
 
+# A federal bankruptcy case number as a foreclosure docket cites it: "Case No. 26-11111-LMI".
+_BK_NUMBER_RE = re.compile(r'(?<![\d-])(\d{2})-(\d{5})(?![\d])')
+# "Relief from stay" is the bankruptcy code's own phrase (11 U.S.C. 362(d)); a bare "Order Lifting
+# Stay" is not, and can lift a state-court stay.
+_BK_WORD_RE = re.compile(r'bankrupt|automatic\s+stay|relief\s+from\s+(?:the\s+)?stay|'
+                         + _BANKRUPTCY_CONTEXT_RE.pattern, re.I)
+
+
+class _StayCases:
+    """Open bankruptcy stays, one per bankruptcy case. A docket can carry two petitions; the
+    older one's dismissal must not end the newer one's stay (the same failure #58 fixed in
+    sale_history). A closing line citing a case number closes that case; one citing none closes
+    the only open case, and with two or more open it is ambiguous, so the stay reads unknown."""
+
+    def __init__(self):
+        self.open, self.closed, self.ambiguous = [], [], False
+
+    @staticmethod
+    def numbers(text):
+        return {'%s-%s' % m for m in _BK_NUMBER_RE.findall(text or '')}
+
+    def _find(self, pool, nums):
+        return [c for c in pool if c['numbers'] & nums]
+
+    def start(self, kind, text):
+        nums = self.numbers(text)
+        mine = self._find(self.open, nums) if nums else []
+        if mine:
+            mine[-1]['numbers'] |= nums
+            return
+        if kind == 'stay_reinstated':
+            back = self._find(self.closed, nums) if nums else self.closed[-1:]
+            if back:
+                self.closed.remove(back[-1])
+                self.open.append(back[-1])
+                return
+        if self.open and (not nums or kind != 'suggestion_of_bankruptcy'):
+            # A stay order, or a second numberless notice, is the open case acting.
+            self.open[-1]['numbers'] |= nums
+            return
+        if nums and self._find(self.closed, nums):
+            case = self._find(self.closed, nums)[-1]
+            self.closed.remove(case)
+            self.open.append(case)
+            return
+        self.open.append({'numbers': set(nums)})
+
+    def end(self, text):
+        nums = self.numbers(text)
+        hit = self._find(self.open, nums) if nums else []
+        if not hit and not nums and len(self.open) == 1:
+            hit = list(self.open)
+        if not hit and nums and len(self.open) == 1 and not self.open[0]['numbers']:
+            hit = list(self.open)
+        if not hit and self.open:
+            self.ambiguous = True
+            return
+        for case in hit:
+            self.open.remove(case)
+            self.closed.append(case)
+        if not self.open:
+            self.ambiguous = False
+
+    def in_effect(self):
+        if self.ambiguous and self.open:
+            return None
+        return bool(self.open)
+
+
 def classify(text):
     """Classify operative title, not mentions of earlier documents in body prose."""
     s = re.sub(r'\s+', ' ', str(text or '')).lower()
@@ -357,6 +426,7 @@ def build_timeline(case, inventory, document_rows, as_of):
     pre_stay = None
     unresolved_stay = []
     stay_history = []
+    stay_cases = _StayCases()
     day_changes = {}
     for e in entries:
         if not e['date'] or e['date'] > today: continue
@@ -370,15 +440,33 @@ def build_timeline(case, inventory, document_rows, as_of):
             text = e['operative_text'].lower()
             topics = ('dismiss', 'summary judgment', 'cancel', 'reset', 'attorney fees', "attorney's fees", 'default')
             _close_unique_motion(pending, text, e['date'], topics)
+        stay_text = '%s %s' % (e.get('description') or '', e['operative_text'])
+        # "Order Lifting Stay" with no bankruptcy words can be a state-court stay (an abatement);
+        # a state court cannot lift the federal automatic stay, so it does not end one.
+        unattributed = (e['kind'] == 'relief_from_stay' and not e.get('limited_scope')
+                        and not _BK_WORD_RE.search(stay_text))
         if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed', 'bankruptcy_discharged', 'stay_reinstated', 'suggestion_of_bankruptcy', 'stay'):
             stay_history.append({'entry_id': e['entry_id'], 'date': e['date'], 'event': {
-                'relief_from_stay': 'limited_relief' if e.get('limited_scope') else 'relief',
+                'relief_from_stay': 'limited_relief' if e.get('limited_scope') else
+                                    'relief_not_bankruptcy' if unattributed else 'relief',
                 'bankruptcy_dismissed': 'bankruptcy_dismissed', 'bankruptcy_discharged': 'discharged',
                 'stay_reinstated': 'reinstated', 'suggestion_of_bankruptcy': 'stayed', 'stay': 'stayed'}[e['kind']],
                 'text': e['operative_text'][:200]})
+            if e['kind'] in ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated'):
+                stay_cases.start(e['kind'], stay_text)
+            elif not e.get('limited_scope') and not unattributed:
+                stay_cases.end(stay_text)
         if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed', 'bankruptcy_discharged'):
             if e.get('limited_scope'):
                 status = {'kind': 'unclear', 'evidence': unresolved_stay + [e['entry_id']], 'reason': 'Partial or limited stay relief does not establish that all foreclosure restrictions ended.'}
+                continue
+            if unattributed and unresolved_stay:
+                status = {'kind': 'unclear', 'evidence': unresolved_stay + [e['entry_id']], 'reason': 'An order lifting a stay names no bankruptcy; it does not show the bankruptcy stay ended.'}
+                continue
+            if stay_cases.in_effect() is not False and unresolved_stay:
+                status = {'kind': 'unclear' if stay_cases.in_effect() is None else 'stayed_by_bankruptcy',
+                          'evidence': unresolved_stay + [e['entry_id']],
+                          'reason': 'This closes one bankruptcy; another bankruptcy stay on the docket has no closing entry of its own.'}
                 continue
             unresolved_stay = []
             if pre_stay:
@@ -417,7 +505,10 @@ def build_timeline(case, inventory, document_rows, as_of):
     stay_now = None
     if stay_history:
         last = stay_history[-1]['event']
-        stay_now = (True if last in ('stayed', 'reinstated') else False if last in ('relief', 'bankruptcy_dismissed', 'discharged') else None)
+        stay_now = stay_cases.in_effect()
+        # Limited relief, or a lift that names no bankruptcy, leaves the stay's reach unknown.
+        if last == 'limited_relief' or (last == 'relief_not_bankruptcy' and stay_now):
+            stay_now = None
     judgments = reconcile_judgments(entries, today)
     for e in entries:
         e.pop('_body', None)
