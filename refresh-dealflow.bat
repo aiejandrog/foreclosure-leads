@@ -26,13 +26,21 @@ rem  still building when DealFlow Replies fires, and run-replies-daily.bat publi
 rem  2026-09-15 two runners published one minute apart and the poorer board became origin/main,
 rem  which moved the baseline every later publish_guard compared against.
 rem  rc=9 is the "lock not obtained" code - another publishing runner holds it, or the lock is
-rem  unusable, and publish_lock.py prints which. Either way it exits WITHOUT releasing: the lock is
+rem  unusable, and publish_lock.py prints which. This block says NOT OBTAINED rather than naming a
+rem  cause it cannot tell apart. Either way it exits WITHOUT releasing: the lock is
 rem  not ours to drop. Released once at :end, on every other exit path. See publish_lock.py for the
 rem  stale-lock budget and the fail direction.
 python -u publish_lock.py acquire refresh-dealflow.bat >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo     ^!^! PUBLISH LOCK not obtained - see leads-run.log for which. Nothing ran.
-  echo ==== REFRESH REFUSED rc=9 - publish lock held %date% %time% ====>> "%LOG%"
+  echo ==== REFRESH REFUSED rc=9 - publish lock NOT OBTAINED %date% %time% ====>> "%LOG%"
+  rem  SAY SO ON THE DESKTOP. DEALFLOW-STATUS.txt is the only unattended signal that the night
+  rem  worked, run_report.py is the only writer of it, and it sits 650 lines below here - so a
+  rem  refusal that just exits leaves yesterday's OK on the Desktop for a morning on which nothing
+  rem  ran at all. That is the stale-green pattern run-phones-nightly.bat writes its own status file
+  rem  to avoid, and this file was the one path still doing it. --refused claims no counts and
+  rem  always exits 0, so it cannot change the rc=9 below.
+  python -u run_report.py --refused "publish lock not obtained - nothing was scraped, built or pushed" >> "%LOG%" 2>&1
   exit /b 9
 )
 

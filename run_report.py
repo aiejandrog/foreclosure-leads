@@ -148,7 +148,43 @@ def verdict_of(total, hstatus, lp_ran, lp_failed):
     return 'HEALTHY', ''
 
 
+def refused(reason):
+    """Write the Desktop status for a run that never started, and say so.
+
+    refresh-dealflow.bat is 780 lines long and this report is written near the bottom, so any
+    refusal at the top - the publish lock not obtained, 2026-09-22 - exited without touching
+    DEALFLOW-STATUS.txt, and that file is the ONLY unattended signal on this box. Yesterday's
+    "OK" then stood for a morning on which nothing was scraped, built or pushed, which is the
+    rc=0-while-broken shape this project has paid for three times.
+
+    It claims NOTHING about the data: no counts, no health, no git line. The board is whatever the
+    last run left, and saying "0 leads" here would be a second lie in the other direction. It always
+    exits 0 so it cannot change its caller's exit code.
+    """
+    report = "\n".join([
+        "DEALFLOW refresh — DID NOT RUN",
+        f"  when   : {datetime.now().strftime('%a %Y-%m-%d %H:%M')}",
+        f"  why    : {reason}",
+        "",
+        "Nothing was scraped, built or published, so the board and the live site are whatever the",
+        "last successful run left. No counts are reported here on purpose - this run graded nothing.",
+        "See leads-run.log for the refusal and its cause.",
+    ]) + "\n"
+    try:
+        open(STATUS, 'w', encoding='utf-8').write(report)
+    except Exception as e:
+        print("status write failed:", e)
+    print(report)
+    # _toast interpolates into a single-quoted PowerShell string, so a quote in the reason would
+    # break the command rather than the report.
+    _toast("DEALFLOW refresh DID NOT RUN", reason.replace("'", "") + " See DEALFLOW-STATUS.txt")
+    sys.exit(0)
+
+
 def main():
+    if '--refused' in sys.argv:
+        i = sys.argv.index('--refused')
+        refused(' '.join(sys.argv[i + 1:]).strip() or 'no reason given')
     by = _counts()
     total = sum(v['leads'] for v in by.values())
     total_ph = sum(v['phones'] for v in by.values())

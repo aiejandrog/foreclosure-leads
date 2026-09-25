@@ -65,18 +65,46 @@ def _reads_mirror_exit(text):
     return False
 
 
+def _flag_reaches_five(text, flag):
+    """Is `flag` actually turned into rc=5 somewhere - `if "%FLAG%"=="1"` followed by an exit 5 or by
+    a variable the file exits with set to 5? Either on the same line or inside the block it opens."""
+    needle = '"%{}%"=="1"'.format(flag)
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        st = ln.strip()
+        if needle not in st:
+            continue
+        tail = [st]
+        if st.endswith('('):
+            depth = 1
+            for nxt in lines[i + 1:]:
+                tail.append(nxt.strip())
+                depth += nxt.count('(') - nxt.count(')')
+                if depth <= 0:
+                    break
+        blob = ' '.join(tail)
+        if ('exit /b 5' in blob or 'set "NEXIT=5"' in blob
+                or 'set "RUNEXIT=5"' in blob):
+            return True
+    return False
+
+
 def _propagates(text):
-    """Does a mirror failure reach the process exit code? Either via this file's RUNEXIT verdict, via
-    a MIRRORFAIL flag returned as rc=5, or via the NEXIT funnel run-phones-nightly.bat adopted when
-    the publish lock went in on 2026-09-22 - its `exit /b 5` became `set "NEXIT=5"` + `goto :end` so
-    that the single `publish_lock.py release` at :end runs on every path out of the file. The
-    mechanism changed; the contract this checks - a mirror failure reaches rc=5 - did not. A log
-    line the scheduler never sees is half a fix."""
-    sets = ('set "RUNEXIT=5"' in text or 'set "MIRRORFAIL=1"' in text
-            or 'set "NEXIT=5"' in text)
-    exits = ('exit /b 5' in text or 'exit /b %RUNEXIT%' in text
-             or 'exit /b %NEXIT%' in text)
-    return sets and exits
+    """Does a mirror failure reach the process exit code? Either via this file's RUNEXIT verdict, or
+    via a MIRRORFAIL flag turned into rc=5 - directly with `exit /b 5`, or through the NEXIT funnel
+    run-phones-nightly.bat adopted when the publish lock went in on 2026-09-22, where `exit /b 5`
+    became `set "NEXIT=5"` + `goto :end` so the single `publish_lock.py release` at :end runs on
+    every path out of the file. The mechanism changed; the contract this checks - a mirror failure
+    reaches rc=5 - did not. A log line the scheduler never sees is half a fix.
+
+    THE LINK IS CHECKED, not just the two ends (2026-09-25 review). Accepting "a flag is set
+    somewhere" AND "the file exits with some variable" passed a file that set MIRRORFAIL=1 and then
+    never converted it, because `exit /b %NEXIT%` is present whatever NEXIT holds - the funnel made
+    that half unconditionally true. So a file that routes through a flag has to be shown turning
+    that flag into 5."""
+    if 'set "MIRRORFAIL=1"' in text:
+        return _flag_reaches_five(text, 'MIRRORFAIL')
+    return 'set "RUNEXIT=5"' in text and 'exit /b %RUNEXIT%' in text
 
 
 # Windows externals that a git-bash PATH shadows with a GNU build. Git for Windows offers "Use Git
@@ -229,6 +257,19 @@ def main():
                                             .replace('set "NEXIT=5"', ''))]
         check('mutation check (drop the propagation and every runner fails)',
               sorted(broken), sorted(RUNNERS))
+
+        # MUTATION CHECK, the narrow one the funnel made necessary. Cut ONLY the flag-to-code line
+        # and leave everything else: MIRRORFAIL is still set, the mirror failure is still logged,
+        # and the file still ends in `exit /b %NEXIT%`. Before 2026-09-25 that passed - a mirror
+        # failure that reaches the log and never reaches the scheduler, which is the 09-17 bug in a
+        # new place. Only run-phones-nightly.bat routes through NEXIT, so only it can be cut this
+        # way, and it must go red.
+        half = _bat('run-phones-nightly.bat').replace('set "NEXIT=5"', 'rem set NEXIT=5')
+        check('mutation check (cut only MIRRORFAIL->rc=5 and the nightly fails)',
+              _propagates(half), False)
+        check('  and the other three are unaffected by that cut',
+              [n for n in RUNNERS if n != 'run-phones-nightly.bat'
+               and not _propagates(_bat(n))], [])
 
         print()
         print(f'{len(RUN) - len(FAILS)} pass / {len(FAILS)} fail')

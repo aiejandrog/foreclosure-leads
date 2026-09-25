@@ -135,8 +135,18 @@ if lock_i and rel_i:
     gotos = [i for i, l in enumerate(lines) if l.strip().lower() == 'goto :end']
     rec('every goto :end is above the release', all(g < rel_i[0] for g in gotos),
         '%d goto sites' % len(gotos))
-    # the refusal must NOT release: rc=9 means another runner owns the lock
-    refusal = '\n'.join(lines[lock_i[0]:lock_i[0] + 8])
+    # the refusal must NOT release: rc=9 means another runner owns the lock.
+    # The window is the acquire's `if errorlevel 1 (` block itself, read to its closing paren,
+    # not a fixed number of lines - a comment added inside the block once pushed `exit /b 9` out
+    # of an 8-line window and reported a refusal that does not refuse.
+    refusal_end = lock_i[0] + 1
+    depth = 0
+    for j in range(lock_i[0] + 1, min(len(lines), lock_i[0] + 40)):
+        depth += lines[j].count('(') - lines[j].count(')')
+        refusal_end = j + 1
+        if depth <= 0:
+            break
+    refusal = '\n'.join(lines[lock_i[0]:refusal_end])
     rec('the refusal exits 9', 'exit /b 9' in refusal, refusal.replace('\n', ' / ')[:110])
     rec('the refusal does not release a lock it failed to take',
         'publish_lock.py release' not in refusal,

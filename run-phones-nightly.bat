@@ -34,10 +34,13 @@ rem  measured collision: on 2026-09-15 at 19:11 run-replies-daily.bat published 
 rem  live 1,148, and one minute later this job published 714 over the same board. rc=9 = the lock was
 rem  not obtained, held or unusable. It exits WITHOUT releasing - the lock is not ours to drop -
 rem  and writes the status file, because rc=9 with a stale green status file is the rc=0-while-broken
-rem  pattern this project has paid for three times. See publish_lock.py.
+rem  pattern this project has paid for three times. The status line says NOT OBTAINED and not which
+rem  cause: rc=9 covers both and this file cannot tell them apart, so naming contention here would
+rem  send whoever reads the one unattended signal hunting phones-run.log for a run that never
+rem  existed. See publish_lock.py.
 python -u publish_lock.py acquire run-phones-nightly.bat >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo [%STAMP%] REFUSED - another publishing runner is mid-run on this machine. Nothing traced, built or pushed. See phones-run.log.> "%STATUS%"
+  echo [%STAMP%] REFUSED - publish lock not obtained. Another publishing runner holds it, or the lock is unusable; phones-run.log says which. Nothing traced, built or pushed.> "%STATUS%"
   echo     ^!^! PUBLISH LOCK not obtained - see phones-run.log for which. Nothing ran.
   echo ==== refused rc=9 - publish lock held %date% %time% ==== >> "%LOG%"
   exit /b 9

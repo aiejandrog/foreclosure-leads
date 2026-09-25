@@ -158,13 +158,27 @@ assumption that has already been wrong. `publish_lock.py` is the mechanism:
   wedges the machine on the first bad night.
 - A lock older than **six hours** is stale and is broken with a loud log line. Six hours is the
   longest `ExecutionTimeLimit` any DEALFLOW task carries. If that line appears every morning, a
-  runner is dying mid-flight — find that, do not raise the budget.
+  runner is dying mid-flight — find that, do not raise the budget. Be exact about what that bounds:
+  `ExecutionTimeLimit` binds the three **scheduled** paths only. `run-leads.bat`, `run-phones.bat`
+  and a refresh started by hand run outside the task, so a hand-run publish past six hours can have
+  its live lock broken. The number stays six — the longest measured refresh is ~4h, and `break` is
+  what a human uses on a dead lock inside its budget, so the budget does not have to be short.
+- A break that has already renamed the lock aside and then finds it was live puts it back. If it
+  **cannot** put it back, it keeps the renamed `.publish.lock.stale.*` file and says so rather than
+  deleting it: a live publisher with no lock file is the collision, not the cure. If you see that
+  line, rename that file back to `.publish.lock` before the next runner starts.
+- The holder line names the **run's** process (the recorded `ppid`), not the `pid` of the ephemeral
+  acquire, which is dead the moment the lock exists. That is the process to check before `--force`.
+- A refusal writes the unattended signal too. `run-phones-nightly.bat` writes `%STATUS%`, and
+  `refresh-dealflow.bat` calls `run_report.py --refused "<reason>"` — its normal report sits 650
+  lines lower, so without that the Desktop keeps yesterday's **OK** for a morning on which nothing
+  ran. `--refused` claims no counts and always exits 0.
 - It is a **local** lock, one file per machine. It says nothing about the other box; that is still
   repo_guard, publish_guard and the one-armed-machine rule in MACHINE-HANDOFF.
 - **A lock nothing will release** — a runner whose `cmd.exe` died between the acquire and the
   release — blocks every publisher until the six-hour budget ages it out. `python publish_lock.py
-  break` is the procedure: it refuses a lock still inside its budget, tells you to check the pid
-  first, and takes it with `--force` while saying what that costs. It is deliberately not wired into
+  break` is the procedure: it refuses a lock still inside its budget, tells you to check whether
+  that run's process is still alive, and takes it with `--force` while saying what that costs. It is deliberately not wired into
   any runner, and `_batsyntaxtest.py` fails if one calls it: a publish path that can break its way
   past the lock does not have a lock.
 - `python publish_lock.py status` prints the holder, and `_batsyntaxtest.py` asserts the wiring:

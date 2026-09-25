@@ -36,8 +36,17 @@ STALE LOCKS. A runner killed mid-flight (the 2026-08-31 StopOnIdleEnd terminatio
 2h scheduler kill) leaves its lock behind, and a lock nothing can break is a lock that stops all
 publishing until a human notices. So a lock older than STALE_AFTER is broken and reported. The
 budget is SIX HOURS because that is the longest runner budget in the project: DEALFLOW Refresh
-carries ExecutionTimeLimit PT6H (see _refreshexittest.py), and its measured chain is 3h08m. A
-runner still holding the lock at six hours is not working, it is stuck.
+carries ExecutionTimeLimit PT6H (see _refreshexittest.py), and its measured chain is 3h08m.
+
+Be exact about what that bounds, because it is not everything. ExecutionTimeLimit binds the three
+SCHEDULED publish paths; run-leads.bat and run-phones.bat run by hand and a refresh started by hand
+runs outside the task too, so nothing stops one of those passing six hours - and then a second
+runner breaks a lock whose holder is alive and publishing. Six hours is still the right number:
+the longest measured refresh is about 4h, and the alternative failure - a dead run's lock stopping
+every publish until somebody notices - is the one this project actually keeps hitting. `break` is
+what a human uses on a dead lock inside its budget, so the budget does not have to be short. If a
+hand-run publish ever does overrun six hours, the break line is loud in the run log and the second
+runner's own O_EXCL create is the only thing that lets it through.
 
 FAIL DIRECTION: CLOSED. If the lock cannot be created, read or broken, acquire refuses. The
 alternative is a guard that disappears exactly when the disk or the permissions are wrong, and
@@ -184,8 +193,19 @@ def _read_holder():
 
 
 def _describe(held, age):
-    return 'held by %s  pid %s  on %s  since %s  age %s' % (
-        held.get('runner', '?'), held.get('pid', '?'), held.get('host', '?'),
+    """One line naming the holder, and the process to check if you want to know it is alive.
+
+    That process is the RUN's cmd.exe - the 'ppid' recorded in the lock - and not 'pid', which is
+    the acquire python and has been dead since the instant the lock was taken. This line printed
+    that pid, and break_lock sends whoever reads it to "look for that pid" before deciding whether
+    to --force: a pid that is always gone reads as "the run is dead", which is advice to break a
+    live lock. A lock file written before 'ppid' existed still prints its pid, labelled as what it
+    is.
+    """
+    run = held.get('ppid')
+    who = 'run %s' % run if run is not None else 'acquired by pid %s' % held.get('pid', '?')
+    return 'held by %s  %s  on %s  since %s  age %s' % (
+        held.get('runner', '?'), who, held.get('host', '?'),
         held.get('started_at', '?'), _ago(age))
 
 
@@ -211,9 +231,60 @@ def _write_lock(runner):
         if exc.errno == errno.EEXIST:
             return False
         raise
-    with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-        fh.write(payload)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            fh.write(payload)
+    except Exception:
+        # The O_EXCL create SUCCEEDED and the write did not (a full disk, a revoked handle), so
+        # what is on disk now is a ZERO-BYTE file this process made and nobody owns. Left there it
+        # is a LOCK to every reader - _read_holder deliberately ages an unreadable lock off its
+        # mtime rather than ignoring it, because 'the file is corrupt so I will pretend it is
+        # absent' is how a guard turns into a no-op - so all five publishers would refuse for six
+        # hours over a file that never held a run, and report it as contention. Remove it and let
+        # acquire report UNUSABLE, which is the truth and names the disk.
+        try:
+            os.remove(LOCK)
+        except OSError:
+            pass
+        raise
     return True
+
+
+def _restore(doomed, moved):
+    """Put a lock back that this runner renamed away and then found was live.
+
+    -> 'restored' | 'taken' | 'failed'. It never overwrites: the create is O_EXCL, so if a third
+    runner took the lock in the gap, THAT one stands and the renamed file is litter ('taken').
+
+    'failed' is the case this used to swallow with `except OSError: pass` and then delete anyway.
+    EEXIST means somebody holds the lock; any other error - permissions, a full disk - means there
+    is NO lock on disk while a holder is still publishing, and the renamed file is the only copy of
+    it. The caller keeps that file and says where it is.
+    """
+    if moved is None:
+        # The renamed file could not even be read, so its bytes cannot be rewritten. A rename back
+        # is the only restore available, and it must not clobber a lock taken since.
+        if os.path.exists(LOCK):
+            return 'taken'
+        try:
+            os.rename(doomed, LOCK)
+        except OSError:
+            return 'failed'
+        return 'restored'
+    try:
+        fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except OSError as exc:
+        return 'taken' if exc.errno == errno.EEXIST else 'failed'
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            fh.write(moved)
+    except Exception:
+        try:
+            os.remove(LOCK)
+        except OSError:
+            pass
+        return 'failed'
+    return 'restored'
 
 
 def _break_stale(held, age, sig):
@@ -253,22 +324,28 @@ def _break_stale(held, age, sig):
         if moved != sig[0]:
             # A fresh lock was written between the check above and the rename. Put it back.
             _say('     !! PUBLISH LOCK: the stale lock was replaced by a live one mid-break.')
-            restored = False
-            if moved is not None:
+            state = _restore(doomed, moved)
+            if state == 'restored':
+                _say('     !! Its holder is still publishing, so it was put back byte-for-byte and')
+                _say('     !! this runner refuses.')
+            elif state == 'taken':
+                _say('     !! Another runner already holds the lock, so it was not put back and')
+                _say('     !! this runner refuses.')
+            else:
+                # The one case that must not end in a delete. There is no lock at LOCK, a holder
+                # is live, and the only copy of its lock is the renamed file - so removing it
+                # leaves a publishing run completely unguarded, which is the collision this file
+                # exists to stop. Keep the file and name it.
+                _say('     !! IT COULD NOT BE PUT BACK, and it is NOT being deleted. A live')
+                _say('     !! publisher with no lock file is how two runners rebuild docs/ at once.')
+                _say('     !! The holder\'s lock is at: %s' % doomed)
+                _say('     !! Rename it back to %s by hand before the next runner starts.'
+                     % os.path.basename(LOCK))
+            if state != 'failed':
                 try:
-                    fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.remove(doomed)
                 except OSError:
-                    pass
-                else:
-                    with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-                        fh.write(moved)
-                    restored = True
-            _say('     !! Its holder is still publishing, so it was %s and this runner refuses.'
-                 % ('put back' if restored else 'already replaced again'))
-            try:
-                os.remove(doomed)
-            except OSError:
-                pass
+                    pass  # a rename-back restore already moved it; nothing left to clean up
             return False
     _say('     !! PUBLISH LOCK: BROKE A STALE LOCK - %s' % _describe(held, age))
     _say('     !! Over the %s budget, so the run that took it is dead, not working.'
@@ -423,8 +500,9 @@ def break_lock(force=False):
         _say('     !! %s' % _describe(held, age))
         _say('     !! It has %s of its %s left, so the run that took it may well be working.'
              % (_ago(STALE_AFTER - age), _ago(STALE_AFTER)))
-        _say('     !! Check first - python publish_lock.py status, and look for that pid. If the')
-        _say('     !! run is genuinely dead, break it with: python publish_lock.py break --force')
+        _say('     !! Check first - python publish_lock.py status names the run\'s process; see')
+        _say('     !! whether it is still alive (Task Manager, or tasklist /fi \"pid eq <that>\").')
+        _say('     !! If the run is genuinely dead: python publish_lock.py break --force')
         return 9
     what = _describe(held, age) if held is not None else problem
     try:

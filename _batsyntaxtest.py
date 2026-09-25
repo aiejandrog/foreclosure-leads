@@ -361,6 +361,34 @@ rec('the legitimate jump to the refusal label is still allowed',
     dict((l, ok) for l, ok, _ in lock_wiring('x.bat', HOP))['x.bat has no goto that jumps past the release'],
     'run-replies-daily.bat:nolock sits below the release on purpose and must not release')
 
+# ---- 4b. what the refusal PATHS tell a human (review 2026-09-25) -----------------------------
+# rc=9 is "the lock was not obtained" and covers two causes the .bat cannot tell apart. A refusal
+# line that names contention sends whoever reads the one unattended signal hunting a run log for a
+# run that never existed - the same defect the headers carried and 13a120c fixed.
+print('\nTHE REFUSAL PATHS DO NOT GUESS A CAUSE')
+for _name in ('refresh-dealflow.bat', 'run-leads.bat', 'run-phones-nightly.bat',
+              'run-replies-daily.bat', 'run-phones.bat'):
+    _text = io.open(os.path.join(HERE, _name), encoding='utf-8').read()
+    _echoes = [l.strip() for l in _text.splitlines()
+               if not l.strip().lower().startswith('rem ')
+               and ('echo' in l.lower() and ('REFUSED' in l or 'PUBLISH LOCK' in l))]
+    rec('%s refusal output names no cause rc=9 cannot know' % _name,
+        [l for l in _echoes if 'mid-run' in l or 'lock held' in l] == [],
+        [l[:80] for l in _echoes if 'mid-run' in l or 'lock held' in l])
+
+# refresh-dealflow.bat is the only runner whose unattended signal is written 650 lines below the
+# acquire, so its refusal has to write that signal itself or the Desktop keeps yesterday's OK for a
+# morning on which nothing ran. run-phones-nightly.bat already writes its %STATUS% on refusal.
+_ref = io.open(os.path.join(HERE, 'refresh-dealflow.bat'), encoding='utf-8').read()
+_head = _ref[:_ref.index('publish_lock.py acquire') + 1200]
+rec('refresh-dealflow.bat refusal writes the Desktop status itself',
+    'run_report.py --refused' in _head,
+    'DEALFLOW-STATUS.txt is the only unattended signal and run_report is its only writer')
+_rr = io.open(os.path.join(HERE, 'run_report.py'), encoding='utf-8').read()
+rec('and run_report.py has that mode', "'--refused' in sys.argv" in _rr)
+rec('and it claims no counts for a run that never started',
+    'DID NOT RUN' in _rr and 'No counts are reported here' in _rr)
+
 BREAKER = list(GOOD)
 BREAKER[3] = 'if errorlevel 1 (python -u publish_lock.py break --force & goto :end)'
 bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', BREAKER))
@@ -543,6 +571,106 @@ try:
     rec('and it is reported as UNUSABLE, not as another runner mid-run',
         'UNUSABLE' in said and 'another publishing runner is mid-run' not in said,
         said.strip().replace('\n', ' / ')[:110])
+
+    # -- a create that succeeds and a write that fails must leave NO lock behind (review 2026-09-25)
+    # O_EXCL creates the file and THEN the payload is written. If the write dies - a full disk, a
+    # revoked handle - the file on disk is zero bytes and nobody's, and _read_holder honours an
+    # unreadable lock by design, so all five publishers would refuse for six hours over a lock no
+    # run ever held, and _refuse would report it as contention.
+    zero = io.StringIO()
+    real_say3, PL._say = PL._say, lambda m: zero.write(m + '\n')
+    real_fdopen = PL.os.fdopen
+    def _full_disk(fd, *a, **k):
+        real_fdopen(fd, 'w').close()       # take the descriptor, write nothing
+        raise IOError('no space left on device')
+    PL.os.fdopen = _full_disk
+    try:
+        rc = PL.acquire('run-phones.bat')
+    finally:
+        PL.os.fdopen = real_fdopen
+        PL._say = real_say3
+    rec('a write that fails after the create refuses with 9', rc == 9)
+    rec('and leaves no zero-byte lock to wedge the next six hours',
+        not os.path.exists(PL.LOCK), 'a lock nobody owns is still a lock to every reader')
+    rec('and reports it as UNUSABLE rather than as contention',
+        'UNUSABLE' in zero.getvalue()
+        and 'another publishing runner is mid-run' not in zero.getvalue(),
+        zero.getvalue().strip().replace('\n', ' / ')[:110])
+
+    # -- an aborted stale break that cannot put the lock back must KEEP it, not delete it ---------
+    # Same race as above, one step worse: the live lock has been renamed aside and the restore
+    # fails for a reason that is NOT "somebody already holds it" - a permission error, a full disk.
+    # Deleting the renamed file there leaves a publishing run with no lock at all, which is the
+    # double publish this whole file exists to stop. `except OSError: pass` could not tell the two
+    # apart and deleted either way.
+    # The swap has to happen BETWEEN the pre-rename identity check and the rename itself, or the
+    # check catches it first and the post-rename path - the only one that cannot be raced - never
+    # runs. Hooking os.rename is that interleaving exactly.
+    stale2 = {'runner': 'run-phones-nightly.bat', 'pid': 1, 'ppid': 2, 'host': 'H',
+              'started_at': 'earlier', 'started_epoch': time.time() - (PL.STALE_AFTER + 60)}
+    fresh2 = json.dumps(dict(stale2, runner='run-leads.bat', pid=3, ppid=4,
+                             started_epoch=time.time()))
+    real_rename = PL.os.rename
+
+    def _swap_then_rename(src, dst):
+        if src == PL.LOCK:
+            io.open(PL.LOCK, 'w', encoding='utf-8').write(fresh2)
+        return real_rename(src, dst)
+
+    def _run_break(deny_restore):
+        io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(stale2))
+        sig = PL._identity(PL._raw_lock())
+        buf = io.StringIO()
+        real_say4, PL._say = PL._say, lambda m: buf.write(m + '\n')
+        real_osopen = PL.os.open
+        PL.os.rename = _swap_then_rename
+        if deny_restore:
+            def _denied(path, *a, **k):
+                if path == PL.LOCK:
+                    raise OSError(13, 'permission denied')
+                return real_osopen(path, *a, **k)
+            PL.os.open = _denied
+        try:
+            return PL._break_stale(stale2, PL.STALE_AFTER + 60, sig), buf.getvalue()
+        finally:
+            PL.os.open = real_osopen
+            PL.os.rename = real_rename
+            PL._say = real_say4
+
+    broke2, kept = _run_break(deny_restore=True)
+    litter = [f for f in os.listdir(tmp) if '.stale.' in f]
+    rec('a break that cannot restore the live lock still refuses', broke2 is False)
+    rec('and keeps the renamed lock instead of deleting it', len(litter) == 1,
+        '%s - a live publisher with no lock file is the collision, not the cure' % litter)
+    rec('and says where it is', '.stale.' in kept, kept.strip().replace('\n', ' / ')[:120])
+    for f in litter:
+        os.remove(os.path.join(tmp, f))
+    if os.path.exists(PL.LOCK):
+        os.remove(PL.LOCK)
+
+    # and the same interleaving with the restore ALLOWED puts the live lock back byte-for-byte.
+    # This is the post-rename check doing its job, which the earlier fixture never reaches.
+    broke3, putback = _run_break(deny_restore=False)
+    rec('the same race with the restore available refuses too', broke3 is False)
+    rec('and the live lock is back byte-for-byte',
+        os.path.exists(PL.LOCK)
+        and io.open(PL.LOCK, encoding='utf-8').read() == fresh2,
+        'restored by an O_EXCL create, so it can never overwrite a newer holder')
+    rec('and no .stale litter is left behind',
+        [f for f in os.listdir(tmp) if '.stale.' in f] == [], putback[:80])
+    os.remove(PL.LOCK)
+
+    # -- the line a human reads must name the process that is actually alive ---------------------
+    # 'pid' is the acquire python and is dead the moment the lock exists; the run is the recorded
+    # ppid. break_lock tells whoever is deciding about --force to check that process, so printing
+    # the dead one was advice to break a live lock.
+    shown = PL._describe({'runner': 'run-leads.bat', 'pid': 111, 'ppid': 222, 'host': 'H',
+                          'started_at': 'earlier'}, 60)
+    rec('the holder line names the run, not the dead acquire pid',
+        'run 222' in shown and '111' not in shown, shown)
+    rec('and a pre-ppid lock file still says which pid it is showing',
+        'acquired by pid 111' in PL._describe({'runner': 'run-leads.bat', 'pid': 111, 'host': 'H',
+                                               'started_at': 'earlier'}, 60))
 
 finally:
     PL.LOCK = real_lock
