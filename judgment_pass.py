@@ -264,6 +264,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     if any(r.get('_ocr_unreachable') for r in order
            if str(r.get('entry_ref') or '') == target):
         out['ocr_unreachable'] = True
+        # The judgment's own OCR-only pages are unseen, so both of its counts are floors.
+        out['price_is_floor'] = out['whole_case_is_floor'] = True
     else:
         at = [i for i, r in enumerate(order) if str(r.get('entry_ref') or '') == target]
         missing = [i for i, r in enumerate(order) if r.get('_ocr_unreachable')]

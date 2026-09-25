@@ -261,6 +261,16 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'report_on_pass_machine')
 
+    def test_priced_judgment_without_its_ocr_is_a_floor(self):
+        _row(self.base, '9', '$1.00', 'j')
+        path = next(p for p in self.base.glob('*.json') if len(p.stem) == 64)
+        row = json.loads(path.read_text()); row['manifest']['path'] = 'C:/elsewhere/doc.pdf'
+        path.write_text(json.dumps(row))
+        got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'needs_paid_read')
+        self.assertTrue(got['price_is_floor'])
+        self.assertTrue(got['whole_case_is_floor'])
+
     def test_readable_pdf_without_ocr_cache_is_marked(self):
         pdf = self.base / 'doc.pdf'
         pdf.write_bytes(b'%PDF fake')
