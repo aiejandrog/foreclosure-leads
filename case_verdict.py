@@ -2,11 +2,12 @@
 
 WHY THIS EXISTS
 MIAMI-AUTOMATION-STATUS.md's five-case table carries a verdict column — supported, incomplete,
-conflicted — and says of it: "The verdict column is written from the code's output by hand: no
-module emits supported / incomplete / conflicted yet." That sentence is the last thing between the
-pipeline and the acceptance matrix's "Twelve-case review: explicit review-policy acceptance and
-unattended evidence report", which is still marked not passed. A human reading nine kinds of JSON
-and typing a word is not an unattended report, and it does not scale past twelve cases.
+conflicted — and said of it, until the commit that added this module: "The verdict column is written
+from the code's output by hand: no module emits supported / incomplete / conflicted yet." That
+sentence was the last thing between the pipeline and the acceptance matrix's "Twelve-case review:
+explicit review-policy acceptance and unattended evidence report", which is still marked not passed.
+A human reading nine kinds of JSON and typing a word is not an unattended report, and it does not
+scale past twelve cases.
 
 WHAT THIS IS ALLOWED TO DO
 Restate, in one word plus its reasons, states that other modules already computed. It reads nothing,
@@ -77,6 +78,15 @@ NO_OPERATIVE_JUDGMENT = 'no operative judgment'
 AMBIGUOUS_RUN = ('more than one run of rows adds up to the total; where the table starts is '
                  'ambiguous, review required')
 
+# miami_case_timeline's status kinds, minus the two this module handles on their own ('unclear' and
+# 'active_pre_judgment'). An ALLOWLIST: a kind this module has never heard of holds the case, because
+# the alternative is that a renamed or added kind silently turns every case into 'supported'.
+SETTLED_KINDS = ('judgment_entered', 'sale_scheduled', 'sale_cancelled', 'stayed_by_bankruptcy',
+                 'dismissed', 'satisfied_redeemed', 'sold')
+# Postures where the docket is moving or has moved a sale. A stay in effect over any of them is a
+# contradiction, not a note.
+SALE_KINDS = ('sale_scheduled', 'sold')
+
 CAVEAT = ('Docket completeness is unproven: the clerk publishes no pagination cursor, so no run can '
           'show the entry list is whole. A verdict describes the evidence read, never the file.')
 QUALIFICATION = (
@@ -103,24 +113,51 @@ def _controlling(timeline):
 
 
 def _judgment_amount(timeline, entry_id):
-    """The verified total for the controlling judgment, if one verifies.
+    """-> (verified, failed, rejected) checks for the controlling judgment.
 
-    A check is tied to a judgment through its source_ref/entry_id when the producer recorded one.
-    An amount that verifies on a document belonging to some other entry is NOT this judgment's
-    amount: that is verify-12 defect D5, and document_prioritizer already refuses to let another
-    case's instrument corroborate this one.
+    A check counts for this judgment only when it NAMES that entry and was read off a COURT
+    document. Both halves are load-bearing, and the first version of this function got both wrong:
+
+      - It accepted `entry_id: None` as "could be this judgment". `run_case_timeline.load_rows` sets
+        `entry_ref` only for a `court:` source_ref, so every recorded-instrument row in the same
+        pipeline carries None. A recorded mortgage's principal could then corroborate a judgment
+        amount, which is verify-12 defect D5 exactly - the corroboration document_prioritizer was
+        changed to refuse.
+      - It used `check.get('ok')` as a truthiness test, so `ok: 1` or the string `'false'` from
+        hand-edited or older saved JSON read as a to-the-cent verification.
+
+    A check that names this judgment but cannot be trusted is `rejected` and reported, never
+    silently dropped: a discarded check is indistinguishable from no check at all.
     """
-    verified, failed = [], []
+    verified, failed, rejected = [], [], []
     for check in _amount_checks(timeline):
-        if entry_id is not None and check.get('entry_id') not in (None, entry_id):
+        if entry_id is None or check.get('entry_id') != entry_id:
             continue
-        (verified if check.get('ok') else failed).append(check)
-    return verified, failed
+        source = str(check.get('source_ref') or '')
+        if not source.startswith('court:'):
+            rejected.append('a check for this judgment was read off %s, not the court copy'
+                            % (source or 'a document with no source recorded'))
+            continue
+        if check.get('ok') is True:
+            if check.get('amount') is None:
+                rejected.append('a check for this judgment verifies but records no amount')
+            else:
+                verified.append(check)
+        elif check.get('ok') is False:
+            failed.append(check)
+        else:
+            rejected.append('a check for this judgment records ok=%r, which is neither true nor '
+                            'false' % (check.get('ok'),))
+    return verified, failed, rejected
 
 
 def _coverage_of(timeline, entry_id):
-    coverage = timeline.get('coverage') or {}
-    rows = [r for r in (coverage.get('attachments') or []) if isinstance(r, dict)]
+    """-> (coverage, rows for this entry). `coverage` may be any shape; callers must not assume."""
+    coverage = timeline.get('coverage')
+    if not isinstance(coverage, dict):
+        coverage = {}
+    attachments = coverage.get('attachments')
+    rows = [r for r in attachments if isinstance(r, dict)] if isinstance(attachments, list) else []
     return coverage, [r for r in rows if r.get('entry_id') == entry_id]
 
 
@@ -136,11 +173,19 @@ def _state_counts(rows):
 def assess(timeline, dossier=None):
     """-> the verdict dict for one case. Pure; takes the saved timeline (and optionally its dossier).
 
+    EVERY REQUIREMENT IS SHOWN, NOT ASSUMED. The first version of this function asked only whether
+    anything contradicted "supported", so absent data produced it: a timeline with no coverage block,
+    no coverage row for the controlling judgment, an unrecognised status kind, or `ok: 1` each read
+    as supported. In this domain that is the one unacceptable direction, so each requirement below
+    has to be positively satisfied by something saved, and anything else lands in `missing`.
+
     Every string in `conflicts`, `missing` and `supported_by` names where it came from, so a reader
     can go straight to the producing block instead of trusting this summary.
     """
     conflicts, missing, notes, supported_by = [], [], [], []
-    status = timeline.get('status') or {}
+    status = timeline.get('status')
+    if not isinstance(status, dict):
+        status = {}
     kind = status.get('kind')
     entry_id, judgments = _controlling(timeline)
 
@@ -155,6 +200,11 @@ def assess(timeline, dossier=None):
         (conflicts if text in CONFLICT_REASONS else missing).append('docket status unclear: %s' % text)
     elif kind == 'active_pre_judgment':
         missing.append('no judgment entered yet')
+    elif kind not in SETTLED_KINDS:
+        # An allowlist, not a denylist. miami_case_timeline owns this vocabulary; if it gains a kind
+        # or renames one, every case must read incomplete until someone looks, rather than every
+        # case silently reading supported.
+        missing.append('docket status %r is not a posture this module can vouch for' % (kind,))
     if entry_id is None and reason not in (CONFLICTING_JUDGMENTS, NO_OPERATIVE_JUDGMENT):
         missing.append('no single controlling judgment')
 
@@ -162,19 +212,23 @@ def assess(timeline, dossier=None):
     stay = timeline.get('stay_in_effect')
     history = _rows(timeline, 'stay_history')
     if stay is True:
-        # A stay in effect is not by itself a contradiction; a stay in effect WHILE the docket runs
-        # a sale is. 2018-026274: stay #93 with no relief order, against an amended judgment and a
-        # sale notice for the same month.
-        if kind == 'sale_scheduled' or timeline.get('sale_held'):
+        # A well-evidenced stay is not a contradiction, and the status table's 2023-020247 is
+        # "supported" with one in effect. A stay in effect while the docket moves a sale IS one:
+        # 2018-026274, stay #93 with no relief order, against an amended judgment and a sale notice
+        # for the same month. 'sold' counts too - a stay over a completed sale is at least as
+        # contradictory as one over a scheduled sale.
+        if kind in SALE_KINDS or timeline.get('sale_held'):
             conflicts.append('a bankruptcy stay is in effect while the docket shows a sale going '
                              'ahead; no relief order was identified')
         else:
-            notes.append('a bankruptcy stay is in effect')
+            notes.append('a bankruptcy stay is in effect; nothing here clears anyone to be '
+                         'contacted')
     elif stay is None and history:
         missing.append('stay state unknown')
 
     # --- the amount ----------------------------------------------------------------------------
-    verified, failed = _judgment_amount(timeline, entry_id)
+    verified, failed, rejected = _judgment_amount(timeline, entry_id)
+    missing.extend(rejected)
     for check in failed:
         # A printed subtotal its own rows do not reproduce is the document disagreeing with itself.
         # The status table calls this "amount incomplete"; it is recorded here as a contradiction
@@ -191,20 +245,35 @@ def assess(timeline, dossier=None):
     else:
         missing.append('no total for the controlling judgment verifies to the cent'
                        + (' (%d check(s) failed)' % len(failed) if failed else ''))
+    if verified and failed:
+        # A judgment can print several totals (verify_document returns one check per grand total).
+        # One verifying does not excuse another that the document cannot reproduce, and reporting
+        # only the good one is how "the amount verified" gets said about a document that disagrees
+        # with itself.
+        missing.append('%d other total(s) on the controlling judgment do not verify: %s'
+                       % (len(failed), '; '.join(sorted({_money(c.get('amount')) for c in failed}))))
 
     # --- what was read for THIS judgment -------------------------------------------------------
     coverage, mine = _coverage_of(timeline, entry_id)
+    if entry_id is not None and not mine:
+        # Absence is not evidence of reading. A timeline saved before `coverage` existed, a partial
+        # write, or an attachment list that simply has no row for this entry all land here.
+        missing.append("no coverage row for the controlling judgment, so nothing shows its filing "
+                       "was read")
     for row in mine:
         state = row.get('state')
         if state in LOGIN_WALLED:
             missing.append("the controlling judgment's filing is behind the clerk's login (%s)" % state)
         elif state in NO_IMAGE:
             missing.append("the controlling judgment's filing has no document to read (%s)" % state)
-        elif state and state != 'read':
-            missing.append("the controlling judgment's filing is %s" % state)
+        elif state != 'read':
+            missing.append("the controlling judgment's filing is %s" % (state or 'in an unrecorded state'))
 
     # --- everything else, reported and never a blocker (see the module docstring) ---------------
-    counts = _state_counts([r for r in (coverage.get('attachments') or []) if isinstance(r, dict)])
+    others = [r for r in (coverage.get('attachments') or [])
+              if isinstance(r, dict) and r not in mine] if isinstance(
+                  coverage.get('attachments'), list) else []
+    counts = _state_counts(others)
     elsewhere = {k: v for k, v in counts.items() if k not in ('read', 'county_no_document')}
     if elsewhere:
         notes.append('elsewhere on the docket, attachments not read: '
@@ -228,14 +297,26 @@ def assess(timeline, dossier=None):
 
 
 def _subtotal_gap(check):
+    """judgment_money's disagreeing_subtotals, in a sentence a person reads.
+
+    `difference` is signed (rows above minus the printed subtotal, so 2018-026274's is -0.60), and
+    `_nearest_rows_above` omits both `rows_above_sum` and `difference` when the row above the
+    subtotal is not additive. Printing the raw values gave "off by $-0.60" and "vs None above it".
+    """
     out = []
     for row in (check.get('disagreeing_subtotals') or []):
         if not isinstance(row, dict):
             continue
-        out.append('%s %s vs %s above it%s' % (
-            row.get('label') or 'subtotal', _money(row.get('amount')),
-            _money(row.get('rows_above_sum')),
-            (' (off by %s)' % _money(row.get('difference'))) if row.get('difference') is not None else ''))
+        label = row.get('label') or 'subtotal'
+        total = row.get('rows_above_sum')
+        if total is None:
+            out.append('%s %s, with no additive rows above it to compare'
+                       % (label, _money(row.get('amount'))))
+            continue
+        gap = row.get('difference')
+        out.append('%s %s vs %s in the rows above it%s' % (
+            label, _money(row.get('amount')), _money(total),
+            (' (off by %s)' % _money(abs(gap))) if isinstance(gap, (int, float)) else ''))
     return '; '.join(out) or 'no detail recorded'
 
 
@@ -246,14 +327,29 @@ def _money(value):
         return str(value)
 
 
+def _stay_word(value):
+    return {True: 'IN EFFECT', False: 'no', None: 'unknown'}.get(value, str(value))
+
+
 def render_markdown(rows):
+    # The stay column is not decoration. The first version of this report rendered only
+    # conflicts/missing/supported_by, so 2023-020247 - supported, with a bankruptcy stay in effect -
+    # printed as a clean row with nothing anywhere on the page saying a stay was in force.
     out = ['# Case verdicts', '',
-           '| Case | Verdict | Controlling judgment | Why |', '|---|---|---|---|']
+           '| Case | Verdict | Judgment | Bankruptcy stay | Why |', '|---|---|---|---|---|']
     for row in sorted(rows, key=lambda r: (REVIEW_ORDER.index(r['verdict']), str(r.get('case')))):
         why = (row['conflicts'] + row['missing'] + row['supported_by']) or ['-']
-        out.append('| %s | %s | %s | %s |' % (
+        out.append('| %s | %s | %s | %s | %s |' % (
             row.get('case') or '?', row['verdict'], row.get('controlling_judgment') or '-',
+            _stay_word(row.get('stay_in_effect')),
             '; '.join(w.replace('|', '/') for w in why[:3])))
+    noted = [r for r in rows if r.get('notes')]
+    if noted:
+        out += ['', '## Also on the record', '']
+        for row in sorted(noted, key=lambda r: str(r.get('case'))):
+            out.append('- **%s**' % (row.get('case') or '?'))
+            for note in row['notes']:
+                out.append('  - %s' % note)
     out += ['', '## Counted', '']
     for name in REVIEW_ORDER:
         out.append('- %s: %d' % (name, sum(1 for r in rows if r['verdict'] == name)))
