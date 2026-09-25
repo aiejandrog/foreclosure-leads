@@ -2267,6 +2267,20 @@ def make_tracker(leads):
                 _dkn += 1
         print(f'live dockets: {_dkn} lead(s) ship their filings inline (of {len(dkc)} cached)')
 
+    # SALE RESULTS (sale_results.py -> sale_results.json, gitignored, Miami-Dade docket). Held,
+    # cancelled, moved or at-risk sales and amended judgments, as `sr`. Only a verdict for the SAME
+    # sale date as the row attaches: a verdict about last month's sale must not describe this one.
+    # A docket-moved sale also moves `auction` to the court's new date (sr.was keeps the listed one);
+    # it runs BEFORE the re-clock below so `days` follows. The §362 stay gate stays on saleBkAct.
+    # Never fatal.
+    try:
+        from sale_results import load_for_board as _srload
+        _srn = _srload(slim, os.path.join(HERE, 'sale_results.json'))
+        if _srn:
+            print(f'sale results: {_srn} lead(s) carry a docket sale result')
+    except Exception as _sre:
+        print('sale results: skipped (%s)' % str(_sre)[:100])
+
     # bake code-enforcement liens (code_liens.py, free Miami-Dade CCVIOL ArcGIS, folio-keyed). A code
     # lien is a JUNIOR lien that never shows in the mortgage chain, so a lead reading "90% equity" can
     # be quietly underwater once the county's accrued fines attach. codeliens = [{case,st,stLabel,
