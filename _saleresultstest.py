@@ -303,8 +303,23 @@ check('sale dates: a reset order names both sales',
       S._sale_dates_in('Sale Date: AUGUST 24, 2026 AND RESET FOR SEPTEMBER 23, 2026 AT 9:00 A.M.') == [D(2026, 8, 24), D(2026, 9, 23)])
 check('sale dates: the statute surplus sentence says "the sale" before its deadline',
       S._sale_dates_in('SALE OF 10/1/2026. ANY PERSON CLAIMING SURPLUS FROM THE SALE MUST FILE WITHIN 60 DAYS AFTER THE SALE, 11/30/2026') == [D(2026, 10, 1)])
-check('sale dates: a hearing, then a reset, keeps the reset',
-      S._sale_dates_in('SALE OF 9/28/2026 CANCELLED; HEARING HELD, RESET FOR 11/09/2026') == [D(2026, 9, 28), D(2026, 11, 9)])
+check('sale dates: a hearing, then the sale reset, keeps the reset',
+      S._sale_dates_in('SALE OF 9/28/2026 CANCELLED; HEARING HELD; SALE RESET FOR 11/09/2026') == [D(2026, 9, 28), D(2026, 11, 9)])
+# scheduling verbs move hearings too: the thing named decides, not the verb
+for _txt in ('SALE OF 10/1/2026; HEARING ON OBJECTIONS SET FOR 11/5/2026', 'SALE OF 10/1/2026; HEARING CONTINUED TO 11/5/2026',
+             'SALE OF 10/1/2026; RESPONSE RESCHEDULED TO 11/5/2026'):
+    check('sale dates: %s' % _txt, S._sale_dates_in(_txt) == [D(2026, 10, 1)], S._sale_dates_in(_txt))
+check('sale dates: a docket title is its own part',
+      S._sale_dates_in('Notice of Sale and Certificate of Service', '11/09/2026') == [D(2026, 11, 9)])
+check('sale dates: DISCLAIMER is not a claim', S._sale_dates_in('SALE OF 10/1/2026 DISCLAIMER 10/20/2026') == [D(2026, 10, 1), D(2026, 10, 20)])
+v = S.classify([e('09/10/2026', 'Notice of Sale', 'SALE OF 10/1/2026; HEARING ON OBJECTIONS SET FOR 11/5/2026')], '10/01/2026', D(2026, 9, 25))
+check('hearing "set for" on the notice: the sale stays 10/01', v['st'] == 'scheduled' and 'nd' not in v, v)
+v = S.classify([e('07/01/2026', 'Notice of Sale and Certificate of Service', '11/09/2026')], '09/28/2026', D(2026, 9, 24))
+check('stale board date read through a "Service" docket title', v['st'] == 'reset' and v.get('nd') == '2026-11-09', v)
+v = S.classify([e('09/20/2026', "Order on Plaintiff's Response", 'SALE CANCELLED, NEW SALE 11/09/2026')], '09/28/2026', D(2026, 9, 24))
+check('"Response" in the title does not hide the new sale date', v['st'] == 'reset' and v.get('nd') == '2026-11-09', v)
+v = S.classify([e('08/20/2026', 'Mortgage Foreclosure Sale Cancelled', 'CANCELLED; HEARING ON MOTION 08/25/2026')], '09/28/2026', D(2026, 9, 24))
+check('an earlier sale\'s cancel naming only a hearing date: this sale still scheduled', v['st'] == 'scheduled', v)
 # real reset phrasing carries 'by', 'due to', 'entered': those dates are sales and stay
 for _txt, _want in [('RESET BY ORDER TO 10/20/2026', [D(2026, 10, 20)]),
                     ('Sale Date: SEPTEMBER 28, 2026 AND RESET BY THE COURT FOR OCTOBER 26, 2026', [D(2026, 9, 28), D(2026, 10, 26)]),
