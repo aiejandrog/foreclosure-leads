@@ -244,6 +244,13 @@ def lock_wiring(name, code_lines):
                 jumps.append('L%d %s -> L%d, past the release at L%d' % (i, label, at[0], ri))
     out.append(('%s has no goto that jumps past the release' % name, jumps == [],
                 '; '.join(jumps)))
+    # ...and it NEVER breaks the lock itself. `publish_lock.py break` is the procedure a human runs
+    # on a lock nothing will release; a publish path that can break its way past the guard does not
+    # have a guard. Confirmed needed on 2026-09-25: a holder whose cmd.exe dies leaves the lock, and
+    # the tempting "fix" is for the next runner to clear it, which is the whole race back again.
+    out.append(('%s never breaks the lock itself' % name,
+                not any(re.search(r'publish_lock\.py\s+break', l) for l in code_lines),
+                'break is for a human, not a runner'))
     return out
 
 
@@ -353,6 +360,13 @@ rec('a goto to a label that does not exist is caught',
 rec('the legitimate jump to the refusal label is still allowed',
     dict((l, ok) for l, ok, _ in lock_wiring('x.bat', HOP))['x.bat has no goto that jumps past the release'],
     'run-replies-daily.bat:nolock sits below the release on purpose and must not release')
+
+BREAKER = list(GOOD)
+BREAKER[3] = 'if errorlevel 1 (python -u publish_lock.py break --force & goto :end)'
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', BREAKER))
+rec('a runner that breaks its way past the lock is caught',
+    bad['x.bat never breaks the lock itself'] is False,
+    'that is the 2026-09-15 race with an extra step, not a fix for it')
 
 # ---- 5. the lock itself does what the runners assume ------------------------------------------
 # No network, no cmd.exe: this drives publish_lock.py directly. A wiring check over a lock that
@@ -477,6 +491,43 @@ try:
     rec('a lock with no ppid falls back to the filename match',
         PL.release('run-phones.bat') == 0 and not os.path.exists(PL.LOCK),
         'a new key must not wedge a lock written by the previous version')
+
+    # -- `break` is the procedure for a lock nothing will release (desktop run, 2026-09-25) --
+    # A holder whose cmd.exe died leaves its lock behind and every publisher refuses until the
+    # six-hour budget. Waiting six hours, or working out unaided that the fix is deleting a file,
+    # is not a procedure - and a person who has worked that out deletes the file during a live run
+    # just as readily as after a dead one. `break` checks the age first.
+    rec('break on a free lock is a no-op', PL.main(['x', 'break']) == 0)
+    PL.acquire('refresh-dealflow.bat')
+    rec('break REFUSES a lock still inside its budget',
+        PL.main(['x', 'break']) == 9 and os.path.exists(PL.LOCK),
+        'the holder may well be working - a 3h08m refresh must not be broken at hour one')
+    rec('break --force takes it anyway, and says what that costs',
+        PL.main(['x', 'break', '--force']) == 0 and not os.path.exists(PL.LOCK))
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(
+        {'runner': 'run-phones.bat', 'pid': 1, 'ppid': 2, 'host': 'H', 'started_at': 'earlier',
+         'started_epoch': time.time() - (PL.STALE_AFTER + 60)}))
+    rec('break needs no --force once the lock is past its budget',
+        PL.main(['x', 'break']) == 0 and not os.path.exists(PL.LOCK))
+
+    # -- the different-run refusal must not assert a cause it cannot know --
+    PL.acquire('run-leads.bat')
+    other = json.load(io.open(PL.LOCK, encoding='utf-8'))
+    other['ppid'] = os.getppid() + 90001
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(other))
+    saidbuf = io.StringIO()
+    real_say2, PL._say = PL._say, lambda m: saidbuf.write(m + '\n')
+    try:
+        PL.release('run-leads.bat')
+    finally:
+        PL._say = real_say2
+    said2 = saidbuf.getvalue()
+    rec('it offers both causes, not just the overrun',
+        'died without' in said2 and 'overran' in said2,
+        'on the 2026-09-25 desktop run the real cause was a holder whose cmd.exe exited')
+    rec('and it tells the reader how to clear it',
+        'publish_lock.py break' in said2, said2.strip().splitlines()[-1][:90])
+    os.remove(PL.LOCK)
 
     # -- rc=9 for an unusable lock says so, instead of blaming a runner that never ran --
     unusable = io.StringIO()

@@ -161,6 +161,12 @@ assumption that has already been wrong. `publish_lock.py` is the mechanism:
   runner is dying mid-flight — find that, do not raise the budget.
 - It is a **local** lock, one file per machine. It says nothing about the other box; that is still
   repo_guard, publish_guard and the one-armed-machine rule in MACHINE-HANDOFF.
+- **A lock nothing will release** — a runner whose `cmd.exe` died between the acquire and the
+  release — blocks every publisher until the six-hour budget ages it out. `python publish_lock.py
+  break` is the procedure: it refuses a lock still inside its budget, tells you to check the pid
+  first, and takes it with `--force` while saying what that costs. It is deliberately not wired into
+  any runner, and `_batsyntaxtest.py` fails if one calls it: a publish path that can break its way
+  past the lock does not have a lock.
 - `python publish_lock.py status` prints the holder, and `_batsyntaxtest.py` asserts the wiring:
   one acquire, one release, its own filename in both, no exit path between them, and no `goto` that
   jumps past the release.

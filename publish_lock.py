@@ -60,6 +60,13 @@ EXIT CODES
               never be the thing that turns a good run into a failed one. It only ever removes
               a lock THIS runner owns; a mismatch is logged and left alone.
     status    0 always. Prints the holder, for `python publish_lock.py status` by hand.
+    break     0 = there is no lock now, 9 = refused to touch a live one. For a HUMAN clearing a
+              lock nothing will release - a runner whose cmd.exe died between acquire and release
+              leaves the file behind and every publisher then refuses until the six-hour budget
+              ages it out. It refuses a lock still inside its budget unless --force, and --force
+              says what it costs. It is deliberately NOT wired into any runner: a publish path that
+              can break its way past the lock does not have a lock, and _batsyntaxtest asserts that
+              no .bat calls it.
 
 OWNERSHIP is matched on the runner's filename AND on the ppid recorded in the lock - the cmd.exe
 that ran the .bat, which is shared by that run's acquire and its release and differs between two
@@ -84,6 +91,13 @@ LOCK = os.path.join(HERE, '.publish.lock')
 
 # Six hours: the longest ExecutionTimeLimit any DEALFLOW task carries. See the header.
 STALE_AFTER = 6 * 60 * 60
+
+# What a human does about a lock nothing will release. Written once, printed by every refusal that
+# leaves a lock in place, because the alternative - a person working out for themselves that the
+# fix is deleting a file - is how a guard gets deleted during a live run instead of after a dead
+# one. `break` checks the age first; --force is the escape hatch and says what it costs.
+_REMEDY = ('if no runner is really publishing, clear it with: '
+           'python publish_lock.py break')
 
 # The five runners that rebuild docs/ and push. _batsyntaxtest.py rediscovers this list from the
 # .bat files themselves rather than trusting it - a name here that stops publishing, or a publisher
@@ -351,10 +365,14 @@ def release(runner):
     if own is not None and own != os.getppid():
         _say('     !! PUBLISH LOCK: this lock belongs to a DIFFERENT run of %s - not releasing.' % runner)
         _say('     !! %s' % _describe(held, age))
-        _say('     !! Its run started under process %s, this one under %s. A run that overran the'
+        _say('     !! Its run started under process %s, this one under %s, so this is not the run'
              % (own, os.getppid()))
-        _say('     !! %s budget had its lock broken, and the run that took it is still going.'
+        _say('     !! that took the lock. Either a run that overran the %s budget had its lock'
              % _ago(STALE_AFTER))
+        _say('     !! broken and the run that took it is still going, or this release is running')
+        _say('     !! outside the run that acquired - a holder whose cmd.exe died without')
+        _say('     !! releasing, or a release typed by hand. Leaving the lock alone either way:')
+        _say('     !! %s' % _REMEDY)
         return 0
     try:
         os.remove(LOCK)
@@ -378,15 +396,60 @@ def status():
         if age > STALE_AFTER:
             _say('              STALE - past the %s budget. The next runner will break it.'
                  % _ago(STALE_AFTER))
+        else:
+            _say('              %s' % _REMEDY)
+    return 0
+
+
+def break_lock(force=False):
+    """Clear a lock by hand. 0 = there is no lock now, 9 = refused to touch a live one.
+
+    This exists because of what the guard costs when it is holding a lock nobody will release: a
+    runner whose cmd.exe died between acquire and release leaves the file behind, and every
+    publisher then refuses until the six-hour budget ages it out. That is the right default - the
+    alternative is a guard that lets go whenever a process disappears, which is how a live 3h08m
+    refresh gets its lock stolen at hour one - but "wait six hours or work out that you are meant
+    to delete a file" is not an operational procedure. This is the procedure.
+
+    It is NOT wired into any runner and must not be: a publish path that can break its way past the
+    lock does not have a lock. `_batsyntaxtest` asserts that no .bat calls it.
+    """
+    held, age, problem = _read_holder()
+    if held is None and not problem:
+        _say('publish lock: already free on %s - nothing to break.' % socket.gethostname())
+        return 0
+    if held is not None and age is not None and age <= STALE_AFTER and not force:
+        _say('     !! PUBLISH LOCK: refusing to break a lock that is still inside its budget.')
+        _say('     !! %s' % _describe(held, age))
+        _say('     !! It has %s of its %s left, so the run that took it may well be working.'
+             % (_ago(STALE_AFTER - age), _ago(STALE_AFTER)))
+        _say('     !! Check first - python publish_lock.py status, and look for that pid. If the')
+        _say('     !! run is genuinely dead, break it with: python publish_lock.py break --force')
+        return 9
+    what = _describe(held, age) if held is not None else problem
+    try:
+        os.remove(LOCK)
+    except OSError as exc:
+        _say('     !! PUBLISH LOCK: could not remove %s - %s' % (LOCK, exc))
+        return 9
+    _say('     !! PUBLISH LOCK BROKEN BY HAND - %s' % what)
+    if force and held is not None and age is not None and age <= STALE_AFTER:
+        _say('     !! It was still inside its %s budget and --force took it anyway. If that run'
+             % _ago(STALE_AFTER))
+        _say('     !! was in fact alive, two runners can now rebuild and push at once.')
+    _say('     publish lock: free on %s.' % socket.gethostname())
     return 0
 
 
 def main(argv):
     if len(argv) >= 2 and argv[1] == 'status':
         return status()
+    if len(argv) >= 2 and argv[1] == 'break':
+        return break_lock(force='--force' in argv[2:])
     if len(argv) != 3 or argv[1] not in ('acquire', 'release'):
         sys.stderr.write('usage: publish_lock.py acquire|release <runner.bat>\n'
-                         '       publish_lock.py status\n')
+                         '       publish_lock.py status\n'
+                         '       publish_lock.py break [--force]\n')
         # Usage errors fail CLOSED for acquire's sake: a caller that mistypes the verb must not
         # sail past the guard. 9 is the same "did not acquire" the runners already handle.
         return 9
