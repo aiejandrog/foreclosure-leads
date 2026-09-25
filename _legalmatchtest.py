@@ -68,6 +68,14 @@ class IndexLegalParseTests(unittest.TestCase):
         for legal in ('SAMPLE GROVE LOT 14', 'WINSTON PARK UNIT THREE LOT 9'):
             self.assertTrue(T.index_legal(rec('1', '', '', '', legal=legal))['lots'], legal)
 
+    def test_two_blocks_for_one_instrument_settle_nothing(self):
+        got = T.index_legal(rec('1', '', '', '', legal='LOT 14 BLK 12', block='13'))
+        self.assertTrue(got['unparsed'])
+        self.assertEqual(T.index_legal(rec('1', '', '', '', legal='LOT 14 BLK 012', block='12'))['lots'], {'14'})
+
+    def test_a_hyphen_range_is_a_range_and_not_two_lots(self):
+        self.assertEqual(T.index_legal(rec('1', '', '', '', legal='LOTS 38-40'))['lots'], {'38', '39', '40'})
+
     def test_one_plat_written_two_ways_is_one_plat(self):
         self.assertEqual([T.index_legal(rec('1', '', '', '', plat=p))['plat']
                           for p in ('53/900', '053-0900', '53 / 900')], ['53/900'] * 3)
@@ -181,6 +189,14 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['current_deed_candidate']['book_page'], '2/1')
         self.assertEqual(got['unanchored_deeds'][0]['legal_match']['verdict'], 'needs_person')
         self.assertEqual(got['possible_later_conveyances'], ['7/1'])
+
+    def test_a_same_day_matching_deed_never_costs_the_current_deed(self):
+        rows = [mortgage(), rec('2', '6/1/2023', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['current_deed_candidate']['book_page'], '2/1')
+        self.assertIn('same day', got['unanchored_deeds'][0]['legal_match']['reason'])
+        self.assertEqual(got['unanchored_deeds'][0]['status'], 'legal_description_match_required')
 
     def test_disagreeing_folio_records_give_no_yardstick(self):
         rows = [mortgage(), rec('6', '1/1/2020', 'X', 'Y', FOLIO, 'MORTGAGE', legal='LOT 15'),

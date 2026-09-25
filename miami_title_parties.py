@@ -54,6 +54,10 @@ def build_title_parties(models, documents, docket, folio):
     docs = {d.get('source_ref'): d for d in documents or [] if isinstance(d, dict)}
     deeds, unanchored, flags = [], [], []
     reference, reference_gap = parcel_legal_reference(models, folio)
+    folio_dates = {_date(m.get('reC_DATE')) for m in models or []
+                   if _folio(m.get('foliO_NUMBER')) == _folio(folio)
+                   and re.search(r'\b(DEED|CERTIFICATE OF TITLE)\b', str(m.get('doC_TYPE') or ''), re.I)
+                   and not re.search(r'TAX|MORTGAGE|TRUST DEED', str(m.get('doC_TYPE') or ''), re.I)}
     for model in models or []:
         label = str(model.get('doC_TYPE') or '')
         if not re.search(r'\b(DEED|CERTIFICATE OF TITLE)\b', label, re.I):
@@ -87,6 +91,12 @@ def build_title_parties(models, documents, docket, folio):
                     verdict = dict(verdict, verdict='needs_person', basis=None,
                                    reason='its legal description matches the parcel but the index '
                                           'gives it no readable recording date')
+                if verdict['verdict'] == 'matched' and _date(model.get('reC_DATE')) in folio_dates:
+                    # Same reason, same rule: two deeds on one day stop a current deed being
+                    # chosen, and a folio-anchored deed should not lose its place to this one.
+                    verdict = dict(verdict, verdict='needs_person', basis=None,
+                                   reason='its legal description matches the parcel but it is '
+                                          'recorded the same day as a deed filed under the folio')
                 if verdict['verdict'] == 'matched':
                     # The clerk's own index puts this deed on the same lot/block/plat (or condo
                     # unit) as the records it filed under this parcel's folio. That is the check a
@@ -264,7 +274,10 @@ def _legal_description(pages):
 
 
 def _tokens(text):
-    return re.sub(r'[^A-Z0-9]+', ' ', str(text or '').upper()).strip()
+    # A hyphen between two numbers is the index's other way of writing a range ('LOTS 38-40'), so
+    # it becomes THRU rather than a space, which would read as two separate lots.
+    text = re.sub(r'(?<=[0-9])\s*-\s*(?=[0-9])', ' THRU ', str(text or '').upper())
+    return re.sub(r'[^A-Z0-9]+', ' ', text).strip()
 
 
 def _lots(text):
@@ -368,7 +381,11 @@ def _parse_body(body, out):
                                                        if found['block_clause'] else None])
             if out['lots'] is None:
                 continue
-            out['block'] = out['block'] or re.sub(r'\s', '', found['block'] or '') or None
+            in_text = re.sub(r'\s', '', found['block'] or '') or None
+            if out['block'] and in_text and _num(out['block']) != _num(in_text):
+                # The index says two different blocks for one instrument. Neither is safe to use.
+                return False
+            out['block'] = out['block'] or in_text
         else:
             out.update({k: v for k, v in found.items() if v})
         return True
