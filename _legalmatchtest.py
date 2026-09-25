@@ -336,6 +336,21 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertEqual(got['legal_matched_deeds'], ['7/1'])
         self.assertEqual(got['unanchored_deeds'][0]['status'], 'folio_conflict')
 
+    def test_one_instrument_indexed_as_several_rows_is_one_deed(self):
+        # Miami-Dade indexes a deed carrying several legals as several rows at one book and page.
+        rows = folio_pair() + [rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC', legal='LOT 15'),
+                               rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(got['unanchored_deeds'], [])
+        self.assertEqual(got['current_deed_candidate']['legal_match']['deed_index_legal'],
+                         'SAMPLE GROVE / LOT 14 / BLK 12 / PB 53/900')
+
+    def test_a_duplicated_index_row_is_not_two_deeds_on_one_day(self):
+        rows = folio_pair() + [rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC'),
+                               rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+
     def test_disagreeing_folio_records_give_no_yardstick(self):
         rows = [mortgage(), rec('6', '1/1/2020', 'X', 'Y', FOLIO, 'MORTGAGE', legal='LOT 15'),
                 rec('7', '6/1/2023', 'A', 'B')]

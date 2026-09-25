@@ -103,21 +103,24 @@ def build_title_parties(models, documents, docket, folio):
     def day(value):
         return value.date() if value else None
     taken = {day(d['date_parsed']) for d in deeds}
+    # Verdicts are keyed by position, not by book and page: Miami-Dade indexes one deed as
+    # several rows when it carries several legals, so two candidates can share a source_ref and
+    # must not overwrite each other. Of those rows, one matching row places the deed; its
+    # siblings are then dropped rather than reported as a second deed at the same book and page.
+    verdicts = [None if conflict else compare_legal(reference, index_legal(model), reference_gap)
+                for model, _row, _printed, _own, conflict, _pages in candidates]
+    matched_refs = {row['source_ref'] for (_m, row, *_), v in zip(candidates, verdicts)
+                    if v and v['verdict'] == 'matched'}
     matched_days = {}
-    verdicts = {}
-    for model, row, _printed, _own, conflict, _pages in candidates:
-        # A deed whose folio names another parcel can never be placed here, so it does not make
-        # a day ambiguous for one that can.
-        if conflict:
-            continue
-        verdicts[row['source_ref']] = compare_legal(reference, index_legal(model), reference_gap)
-        if verdicts[row['source_ref']]['verdict'] == 'matched':
-            matched_days[day(row['date_parsed'])] = matched_days.get(day(row['date_parsed']), 0) + 1
-    for model, row, printed, own_folio, conflict, pages in candidates:
+    for ref in matched_refs:
+        when = day(next(row['date_parsed'] for _m, row, *_ in candidates if row['source_ref'] == ref))
+        matched_days[when] = matched_days.get(when, 0) + 1
+    placed = set()
+    for (model, row, printed, own_folio, conflict, pages), verdict in zip(candidates, verdicts):
         ref = row['source_ref']
-        verdict = None
+        if ref in matched_refs and verdict['verdict'] != 'matched':
+            continue          # another index row for this same instrument matched the parcel
         if not conflict:
-            verdict = verdicts[ref]
             if verdict['verdict'] == 'matched' and not row['date_parsed']:
                 verdict = dict(verdict, verdict='needs_person', basis=None,
                                reason='its legal description matches the parcel but the index '
@@ -129,6 +132,8 @@ def build_title_parties(models, documents, docket, folio):
                 verdict = dict(verdict, verdict='needs_person', basis=None,
                                reason='its legal description matches the parcel but another deed '
                                       'on the parcel is recorded the same day')
+            if verdict['verdict'] == 'matched' and ref in placed:
+                continue      # a sibling row for this instrument already placed it
             if verdict['verdict'] == 'matched':
                 # The clerk's own index puts this deed on the same lot/block/plat (or condo
                 # unit) as the records it filed under this parcel's folio. That is the check a
@@ -137,6 +142,7 @@ def build_title_parties(models, documents, docket, folio):
                             'folio; index names and bounded explicit-role extraction do not '
                             'establish that every deed party was recovered.' % (ref, verdict['basis']))
                 taken.add(day(row['date_parsed']))
+                placed.add(ref)
                 deeds.append(dict(row, anchored_by='legal_description', legal_match=verdict))
                 continue
         gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)
@@ -533,9 +539,10 @@ def _same(a, b):
 
 def compare_legal(reference, legal, reference_gap=None):
     """Compare one unanchored deed's index legal with the parcel's. 'matched' only when the plat
-    book/page (or, with no plat on either side, the subdivision name) agrees and the lots with the
-    block, or the condo unit with its building and phase, agree exactly. 'differs' only on a
-    positive disagreement. Everything else is 'needs_person', with the reason."""
+    book and page agrees on both sides and the lots with the block, or the condo unit with its
+    building and phase, agree exactly. Without a plat on both sides nothing is decided: a
+    subdivision name names more than one plat. 'differs' only on a positive disagreement.
+    Everything else is 'needs_person', with the reason."""
     def result(verdict, why, basis=None):
         if verdict in ('differs', 'matched') and not (reference or {}).get('corroborated'):
             # One index record is one clerk keystroke, and nothing downstream gates on how a deed
