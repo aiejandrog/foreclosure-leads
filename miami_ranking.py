@@ -177,6 +177,15 @@ def contact_fact(trace, present, as_of):
                     reason='the number belongs to an officer of %s; an officer is not the owner' % trace['entity'])
     elif not phones:
         fact.update(state='traced_no_phone', call_ready=False)
+    elif trace.get('source') == 'tracerfy-parcel':
+        # tracerfy_mcp stores the lead's owner label as `name` and drops the names of whoever the
+        # parcel lookup returned, so the deed match below would compare the owner with the owner
+        # (an audit of #53: an estate parcel's unknown person read as "phone for person on deed").
+        fact.update(state='parcel_trace_person_unnamed', call_ready=False,
+                    reason='a parcel trace names no person; whose numbers these are is unknown')
+    elif str(trace.get('contact_trust') or '').startswith(('SUSPECT', 'UNVERIFIED')):
+        fact.update(state='contact_trust_flagged', call_ready=False,
+                    reason=str(trace['contact_trust'])[:200])
     elif not on_deed:
         fact.update(state='phone_for_name_not_on_deed', call_ready=False,
                     reason='traced %r, who is not a grantee on the current deed candidate' % name)
