@@ -22,12 +22,19 @@ stops a reader inferring that the documents were read because a verdict appeared
 
 Nothing here fetches, publishes, or writes to a lead.
 """
+import re
 from datetime import datetime, timezone
 
 import document_classify
 import equity_state
 
 SCHEMA_VERSION = 1
+# An association plaintiff (records_liens' own pattern), never a bank's "National Association".
+# foreclosure_leads.classify's case types that name a plaintiff who is NOT a lender.
+_NOT_LENDER_TYPES = ('HOA', 'GOVT', 'TAX')
+# Narrower than records_liens' association words on purpose: MASTER and COMMUNITY also name banks
+# ("COMMUNITY BANK"), and a lender read as an association would lift a CLEAR it must not.
+_ASSN_PARTY = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b|HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|PROPERTY\s+OWNERS?', re.I)
 SECTIONS = ('a_filed', 'b_indexed', 'c_documents', 'd_picture')
 
 
@@ -63,23 +70,77 @@ def _a(inventory):
         caveat='Docket metadata only. No document is read at this rung.')
 
 
-def _b(chain):
+def _money(x):
+    try:
+        return float(str(x).replace('$', '').replace(',', '').strip() or 0)
+    except ValueError:
+        return 0
+
+
+def _b(chain, lead=None):
     """b) What the recorded-records INDEX shows. Not a document anyone opened."""
     if not chain:
         return _section('What the records index shows', 'missing', 'records_index',
                         note='no recorded chain has been pulled for this case')
     liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
+    other = [l for l in (chain.get('other') or []) if isinstance(l, dict)]
+    # THE FORECLOSED DEBT IS THE JUDGMENT, NOT THE MORTGAGE'S FACE (12-case verification
+    # 2026-09-24, defect 2: 2024-006803 read $417,000, the 2008 face, against a $1,022,358.91
+    # judgment). The judgment is the auction listing's figure the board already prices from; the
+    # face is kept, under a name that says it is a recorded face. A chain written before the
+    # judgment was stored on it (Broward, Palm Beach, older Miami) takes it from the lead.
+    judgment = chain.get('judgment') or _money((lead or {}).get('judgment'))
+    face = chain.get('first_face', chain.get('first_est'))
+    # a circuit-court case can still be an association's: records_liens types it HOA when the case type
+    # AND the plaintiff both say so. The case type alone is not enough: classify() calls Fannie Mae an
+    # association, and a lender's case must still name the mortgage it forecloses.
+    _ct = str(chain.get('case_type') or '').upper()
+    assn = chain.get('ftype') == 'HOA'
+    lender = chain.get('ftype') == 'MORTGAGE' and not _ct.startswith(('GOVT', 'TAX'))
+    if judgment:
+        foreclosed = {'amount': judgment, 'basis': 'auction listing final judgment',
+                      'recorded_face': (face or None) if lender else None,
+                      'instrument': (chain.get('first_bp') or None) if lender else None}
+        if assn:
+            foreclosed['note'] = ("an association's judgment: the first mortgage is not what is "
+                                  "being foreclosed and survives the sale")
+    elif lender and face:
+        # without the lead, an older chain that never stored the judgment says nothing about the
+        # listing: say what is missing, not that the listing has no figure
+        foreclosed = {'amount': None, 'basis': ('no judgment amount on the listing' if lead is not None
+                                                else 'the judgment was not stored with this chain'),
+                      'recorded_face': face, 'instrument': chain.get('first_bp') or None,
+                      'note': 'the recorded face is what was lent, not what is owed'}
+    else:
+        foreclosed = None
     return _section(
         'What the records index shows', 'present', 'records_index',
         confidence=chain.get('conf'),
         records_examined=chain.get('nrec'),
         surviving_instruments=chain.get('open_count'),
         surviving_total=chain.get('surv'),
-        first_mortgage_estimate=chain.get('first_est'),
+        first_mortgage_face=face,
+        foreclosed_debt=foreclosed,
         hoa_open=chain.get('hoa_open'), code_open=chain.get('code_open'),
         irs_open=chain.get('irs_open'),
         liens=[{'date': l.get('d'), 'amount': l.get('amt'), 'party': l.get('party'),
                 'book_page': l.get('bp'), 'status': l.get('st')} for l in liens],
+        # liens, judgments, lis pendens and tax warrants the search returned for this parcel or
+        # person, priced or not. A row the index gives no amount is a count, never a zero.
+        other_instruments=[{'date': l.get('d'), 'type': l.get('doc'), 'kind': l.get('kind'),
+                            'amount': l.get('amt'), 'party': l.get('party'),
+                            'book_page': l.get('bp'), 'status': l.get('st'),
+                            'anchored_by': l.get('anchor'),
+                            'this_case': bool(l.get('own_case'))} for l in other],
+        other_open_unpriced=chain.get('other_open_unpriced'),
+        # a narrower re-read's lien rows: listed for a person to read, never in any total above
+        listed_not_counted=[{'date': l.get('d'), 'type': l.get('doc'), 'kind': l.get('kind'), 'amount': l.get('amt'),
+                             'party': l.get('party'), 'book_page': l.get('bp'), 'status': l.get('st'),
+                             'this_case': bool(l.get('own_case'))}
+                            for l in (chain.get('other_seen') or []) if isinstance(l, dict)] or None,
+        wider_search_needed=chain.get('wider_repull') or None,
+        search_capped=chain.get('capped'),
+        parcel_found=chain.get('parcel_found'),
         anchored_to=chain.get('subdiv') or None,
         caveat='Index rows and party names. Amounts are RECORDED figures, never a current payoff.')
 
@@ -221,9 +282,30 @@ def _operative_judgment(rows):
                     % (len(refs), ', '.join(str(r) for r in refs)))}
 
 
-def _d(chain, section_c):
+def _d(chain, section_c, lead=None):
     """d) The picture, and which rungs it rests on."""
-    state = equity_state.state_of(chain)
+    # A LENDER FORECLOSING PROVES A MORTGAGE (12-case verification 2026-09-24, defect 4:
+    # 2025-013918 read VERIFIED CLEAR on a 7-record search that missed the mortgage being
+    # foreclosed). The board applies that rule with the lead; the dossier used to call state_of
+    # without one, so it never did. With no lead, the chain's stored case type (records_liens
+    # writes the lead's) decides: a lender's type applies the rule, an association's, a
+    # government's or a tax deed's does not. Any other type, or a chain written before the type
+    # was stored, falls back to its court: a circuit case is taken as a lender's unless the chain's
+    # own filings name an association. That fallback can only move CLEAR down, never up.
+    if lead is None and isinstance(chain, dict):
+        ct = str(chain.get('case_type') or '')
+        own_assn = any(isinstance(o, dict) and o.get('own_case') and _ASSN_PARTY.search(o.get('party') or '')
+                       for o in (chain.get('other') or []))
+        if ct in equity_state.LENDER_CASE_TYPES:
+            lead = {'case_type': ct}
+        elif ct.upper().startswith(_NOT_LENDER_TYPES) or own_assn:
+            lead = {'case_type': ct or 'HOA/Condo'}        # an association, a government or a tax deed
+        elif chain.get('ftype') == 'MORTGAGE':
+            lead = {'case_type': equity_state.LENDER_CASE_TYPES[0]}
+    state = equity_state.state_of(chain, lead)
+    verdict = equity_state.LABEL[state]
+    if state == 'none' and equity_state.lender_foreclosure(lead) and equity_state._state_of(chain) == 'clear':
+        verdict = equity_state.LENDER_OWN_CASE_WHY
     rests_on = ['b'] if chain else []
     doc_note = None
     if section_c['status'] == 'empty':
@@ -239,7 +321,7 @@ def _d(chain, section_c):
     return _section(
         'The picture', 'present' if chain else 'missing', 'equity_state',
         eqstate=state,
-        verdict=equity_state.LABEL[state],
+        verdict=verdict,
         short=equity_state.SHORT[state],
         speakable_as_fact=state in equity_state.FACT,
         rests_on=rests_on,
@@ -248,19 +330,27 @@ def _d(chain, section_c):
                 'current payoff.' % ' or '.join(equity_state.FACT)))
 
 
-def build(case, county, inventory=None, chain=None, documents=None, walk=None):
+def build(case, county, inventory=None, chain=None, documents=None, walk=None, lead=None):
     """Assemble one case's dossier. Pure: everything it reports was handed to it."""
     a = _a(inventory)
-    b = _b(chain)
+    b = _b(chain, lead)
     c = _c(documents)
     if walk is not None:
         c['walk'] = _walk_section(walk)
-    d = _d(chain, c)
+    d = _d(chain, c, lead)
     gaps = []
     if not a.get('pagination_verified'):
         gaps.append('the docket may be incomplete: no pagination cursor is published')
     if b['status'] == 'missing':
         gaps.append('no recorded chain pulled')
+    if b.get('search_capped'):
+        gaps.append('the owner search hit the county\'s 500-record cap: records past it were never seen')
+    if b.get('parcel_found') is False:
+        gaps.append('the owner search returned no record carrying this folio: it may be another '
+                    'person\'s records')
+    if b.get('other_open_unpriced'):
+        gaps.append('%d open lien(s) on this parcel or owner carry no published amount'
+                    % b['other_open_unpriced'])
     if c['status'] != 'present':
         gaps.append('no document has been read')
     for row in c.get('documents', []):
