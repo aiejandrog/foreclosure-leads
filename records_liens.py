@@ -480,9 +480,13 @@ def mint_and_fetch(owner_lf, budget=70, persist=False):
 
 
 # ---- parse the chain: open vs satisfied, isolate the surviving junior --------------------------
-def _fc_type(case):
+def _fc_type(case, case_type=''):
     """HOA/county-court (whole 1st mortgage survives) vs circuit mortgage foreclosure. Miami-Dade case format
-    uses -CA- (circuit) / -CC- (county); also handle the Broward-style CACE/COCE prefixes defensively."""
+    uses -CA- (circuit) / -CC- (county); also handle the Broward-style CACE/COCE prefixes defensively.
+    An association suing in CIRCUIT court (a large arrears claim) is still an association's case: the
+    lead's own case_type says so, and the first mortgage survives its sale just the same."""
+    if str(case_type or '').upper().startswith('HOA'):
+        return 'HOA'
     c = (case or '').upper()
     if '-CA-' in c or c.startswith('CACE'): return 'MORTGAGE'
     if '-CC-' in c or c.startswith(('COCE', 'CONO', 'COWE', 'COSO')): return 'HOA'
@@ -616,12 +620,13 @@ def _names_owner(party, owners):
     if not owners or not party:
         return False
     up = party.upper()
-    toks = set(re.findall(r'[A-Z0-9\-\']+', up))
+    toks = set(re.findall(r'[A-Z0-9]+', up.replace("'", '')))   # GARCIA-LOPEZ = GARCIA LOPEZ; O'BRIEN = OBRIEN
     for words in owners:
         if words[0] == 'co':
             if words[1] and words[1] in re.sub(r'[^A-Z0-9]', '', up):
                 return True
-        elif all(w in toks for w in words[1].split()) and words[2] in toks:   # 'DE LA CRUZ' is three words
+        elif (all(w in toks for w in re.findall(r'[A-Z0-9]+', words[1].replace("'", '')))    # 'DE LA CRUZ'
+              and words[2].replace("'", '').replace('-', '') in toks):
             return True
     return False
 
@@ -817,6 +822,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     _ASSN_DOC_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
     _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|\bWARRANTS?\b|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
     _NOT_A_CLAIM_RE = re.compile(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE|NOTICE OF COMMENCEMENT|^MORTGAGE', re.I)
+    _CLAIM_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|\bWARRANTS?\b', re.I)
+    _NOT_CLAIM_DOC_RE = re.compile(r'WAIVER|CONTEST|SUBORDINAT', re.I)
     _CREDITOR_RE = re.compile('|'.join(x.pattern for x in (_IRS_RE, _DOR_RE, _CODE_RE, _HOA_DOC_RE, _ASSN_DOC_RE)), re.I)
     def _here(r):
         rf = norm_folio(r.get('foliO_NUMBER', ''))
@@ -837,16 +844,17 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):
         # A name that normalizes short ("PNC BANK" -> "PNC") must match exactly; a containment
-        # test on three letters would call every party with "PNC" in it the plaintiff. Containment,
-        # not a shared prefix: a truncated index name is contained in the full one, while a sibling
-        # association ("VILLAGES OF KENDALL MASTER" vs "... HOMEOWNERS") shares only a prefix.
+        # test on three letters would call every party with "PNC" in it the plaintiff. One name must
+        # START the other (the index truncates names): a sibling association ("VILLAGES OF KENDALL
+        # MASTER" vs "... HOMEOWNERS") only shares a start, and "BANK OF AMERICA" (-> OFAMERICA)
+        # sits inside "UNITED STATES OF AMERICA" without starting it.
         if len(_pl) < 2:
             return False
         for p in parties:
             q = _pnorm(p)
             if not q:
                 continue
-            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q in _pl or _pl in q)):
+            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q.startswith(_pl) or _pl.startswith(q))):
                 return True
         return False
     def _own_judgment(doc, amt, d):
@@ -907,6 +915,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             kind = 'judgment'
         else:
             kind = 'other'
+        if 'JUDGMENT' in doc and not on_parcel and kind in ('association', 'code'):
+            kind = 'judgment'           # COMMUNITY BANK's money judgment follows the person, not a parcel
         person_wide = kind in ('irs', 'state_tax', 'judgment')
         if not on_parcel:
             if not person_wide:
@@ -941,7 +951,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                'anchor': 'folio' if (rf and rf == fol) else ('subdivision' if on_parcel else 'person')}
         if own_case:
             row['own_case'] = True                          # this foreclosure's own filing: never a claim
-        row['_holder'] = _pnorm(cred if cred is not both else row['party'])
+        row['_holder'] = _pnorm(cred if cred is not both else
+                                (p1 if _is_plaintiff(p1) or _CREDITOR_RE.search(p1) else p2))   # untruncated
         if (kind == 'judgment' and not own_case and cred is not both
                 and not COMPANY_RE.search(cred) and not _CREDITOR_RE.search(cred)):
             # person against person: the index does not say who won, and a judgment the OWNER won is
@@ -973,8 +984,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         kind = row['kind']
         if row['st'] == 'RELEASED' or row.get('own_case') or kind == 'lis_pendens':
             continue
-        if kind == 'other' and not re.search(r'\bLIEN\b|JUDGMENT', row['doc']):
-            continue                                        # a notice, a certificate, a financing statement
+        if not _CLAIM_DOC_RE.search(row['doc']) or _NOT_CLAIM_DOC_RE.search(row['doc']):
+            continue                                        # a notice, a certificate, a financing statement,
+                                                            # a waiver: shown, never counted, whoever filed it
         if not row['amt'] or row.get('direction_unknown'):
             other_unpriced += 1                             # found, open, amount not published: a count
             continue
@@ -1312,10 +1324,15 @@ def _run(a, ap):
                 # defendant): try the defendants too, and fall back to this result if they fail
                 _owner_models, models = models, None
             if models is None and not a.cached_only:
+                _sp0 = split_owner(oc)
+                _asked_sn = {_sp0[0].upper()} if _sp0 else set()
                 for _last, _first in _co[:2]:
                     _nm = '%s %s' % (_first, _last)          # split_owner wants FIRST ... LAST
                     if _nm.strip().upper() == oc.strip().upper():
                         continue                              # already tried as the owner
+                    if (split_owner(_nm) or ('',))[0].upper() in _asked_sn:
+                        continue                              # the clerk searches the SURNAME: same query
+                    _asked_sn.add((split_owner(_nm) or ('',))[0].upper())
                     _sp = split_owner(_nm)
                     if not _sp:
                         continue
@@ -1344,16 +1361,22 @@ def _run(a, ap):
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
                 else:
                     print(f"  --  {case:22} {oc:26} (no records / blocked)")
-                    if a.repull and out.get(case):
+                    if a.repull and out.get(case) and not _SPEND['stopped']:
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')   # paid once, found nothing
                         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                 continue
-            res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '',
+            res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type')), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
                 if out.get(case) and not (res.get('nrec') and res.get('parcel_found')):
+                    if a.repull and _SPEND['stopped']:
+                        # the cap stopped the search part-way (the defendants were never asked):
+                        # not a finding, and not marked, so a later run with budget can finish it
+                        capped += 1
+                        print(f"  $$  {case:22} {oc:26} not fully searched: spend cap ({_SPEND['stopped']})")
+                        continue
                     # The cached token came back empty, or no longer carries this folio: that is a
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
                     kept += 1

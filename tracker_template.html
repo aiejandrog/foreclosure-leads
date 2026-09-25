@@ -2857,7 +2857,9 @@ function recompute(){
     // NOT actually checked. Confidence for those buckets
     // must exclude 'bd' so a $0 there is treated as "not checked" (surfaces the manual-check nudge)
     // instead of "verified none" (which fakes an estoppel/code surprise away at closing).
-    const nonMortConf = (r.orconf==='ok' || r.orconf==='low');
+    // a chain with no mortgage still carries its city/association/IRS liens (equity_state priced them)
+    const nonMortConf = (r.orconf==='ok' || r.orconf==='low'
+                         || (!!(r.orhoa || r.orcode || r.orirs) && (r.eqstate==='priced' || r.eqstate==='unpriced')));
     // Split the surviving stack cleanly so NO mortgage counts twice (the double-count bug: `orsurv`
     // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
     // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing

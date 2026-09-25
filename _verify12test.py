@@ -329,6 +329,41 @@ _dlc = RL.analyze([deed, rec('FEDERAL TAX LIEN', '4/4/2021', '33000', '15', 3000
                   FOLIO, 12000, ftype='HOA', owner='JUAN PEREZ', co_owners=[('DE LA CRUZ', 'MARIA')])
 check("a co-owner with a three-word surname is still the owner's household", _dlc['irs_open'] == 3000, _dlc['other'])
 
+# ---- review round 4
+_c45 = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '20', 45000, 'OWNER TESTER', first='CITY OF MIAMI')],
+                  FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('a priced City lien on a parcel with no mortgage reads VERIFIED (priced), never CLEAR',
+      _c45['code_open'] == 45000 and ES.state_of(_c45) == 'priced', ES.state_of(_c45))
+_boa = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34999', '21', 40000, 'TESTER OWNER',
+                             first='UNITED STATES OF AMERICA', folio='', subdiV_NAME='')],
+                  FOLIO, 0, ftype='MORTGAGE', plaintiff='BANK OF AMERICA, N.A.', owner='OWNER TESTER',
+                  case='2025-000001-CA-01')
+check("BANK OF AMERICA is not the UNITED STATES OF AMERICA: a federal judgment is never this case",
+      not _boa['other'][0].get('own_case') and _boa['irs_open'] == 40000, _boa['other'])
+_long = 'MIAMI-DADE COUNTY WATER AND SEWER DEPARTMENT'
+_lg = RL.analyze([deed, rec('LIEN', '3/3/2021', '33000', '22', 900, 'PRIOR OWNER', first=_long),
+                  rec('RELEASE OF LIEN', '9/9/2023', '34000', '22', 0, 'PRIOR OWNER', first=_long)],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('a creditor name over 40 letters still pairs with its own release', _lg['other'][0]['st'] == 'RELEASED'
+      and _lg['code_open'] == 0, _lg['other'])
+_nt = RL.analyze([deed, rec('NOTICE', '3/3/2022', '33500', '23', 0, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('CERTIFICATE OF TITLE', '3/3/2022', '33500', '24', 250000, 'OWNER TESTER', first='MIAMI-DADE COUNTY CLERK'),
+                  rec('WAIVER OF LIEN', '3/3/2022', '33500', '25', 0, 'OWNER TESTER', first='CITY OF MIAMI')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('a City notice, a clerk certificate and a lien waiver are shown, never counted as debt',
+      _nt['code_open'] == 0 and _nt['other_open_unpriced'] == 0 and ES.state_of(_nt) == 'clear', _nt['other'])
+_cb = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '26', 20000, 'TESTER OWNER', first='COMMUNITY BANK OF FLORIDA',
+                            folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("COMMUNITY BANK's money judgment follows the owner like any other", _cb['code_open'] == 20000, _cb['other'])
+for _p, _w in (('GARCIA LOPEZ MARIA', 'MARIA GARCIA-LOPEZ'), ("O'BRIEN KATHLEEN", 'KATHLEEN OBRIEN'),
+               ('OBRIEN KATHLEEN', "KATHLEEN O'BRIEN")):
+    check('%r names the owner %r' % (_p, _w), RL._names_owner(_p, [RL._owner_words(_w)]))
+check("an association suing in circuit court is an association's case: the first mortgage survives",
+      RL._fc_type('2024-000009-CA-01', 'HOA/Condo') == 'HOA' and RL._fc_type('2024-000009-CA-01', 'Bank/Mortgage') == 'MORTGAGE')
+_hca = CD._b(dict(res, ftype='MORTGAGE', case_type='HOA/Condo', judgment=60000))['foreclosed_debt']
+check("dossier b: a circuit association case never names the first mortgage as the foreclosed debt",
+      _hca['recorded_face'] is None and _hca['instrument'] is None and 'survives' in (_hca.get('note') or ''), _hca)
+
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
 _tmp = tempfile.mkdtemp()
@@ -532,6 +567,50 @@ try:
           and _o2['2099-000201-CA-01'].get('searched_as') == 'JOHN TESTER (defendant)', (_asked, _o2['2099-000201-CA-01']))
     check('--repull marks a chain it paid to search and found nothing for, and never pays for it again',
           _o2['2099-000202-CA-01'].get('repull_tried') and _asked.count(('NOTHING', 'ANN')) == 1, (_asked, _o2))
+    # one surname, one query: the clerk searches the SURNAME, so a spouse or the owner's own longer
+    # name is the same search; and a cap that stops the defendant search leaves the chain unmarked
+    _t3 = tempfile.mkdtemp()
+    json.dump([{'Case #': '2099-000301-CA-01', 'owner_clean': 'MARIA ELENA GARCIA', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Garcia, Maria Elena; Garcia, Jose'},
+               {'Case #': '2099-000302-CA-01', 'owner_clean': 'BOB OWNERZ', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Perez, Juan'}],
+              open(os.path.join(_t3, 'leads_final.json'), 'w'))
+    json.dump({'2099-000301-CA-01': {'conf': 'ok', 'liens': []}, '2099-000302-CA-01': {'conf': 'ok', 'liens': []}},
+              open(os.path.join(_t3, 'records_liens.json'), 'w'))
+    json.dump({}, open(os.path.join(_t3, 'records_qs.json'), 'w'))
+    open(os.path.join(_t3, 'gen_records_qs.py'), 'w').write('')
+    _asked3 = []
+    def _ft3(sp, tries=3):
+        if not RL._may_submit():
+            return None
+        RL._SPEND['submits'] += 1
+        _asked3.append(sp)
+        return [_far]
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                           'camoufox_session', 'mint_and_fetch', 'time')}
+    _out3 = io.StringIO()
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_t3, 'leads_final.json'), os.path.join(_t3, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_t3, 'records_qs.json'), _t3
+        RL.records_by_qs = lambda qs: None
+        RL.fetch_via_turnstile = _ft3
+        RL.camoufox_session = lambda: (None, None)
+        RL.mint_and_fetch = lambda *a, **k: None
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066', '--spend-ledger', os.path.join(_t3, 's.json')]
+        with contextlib.redirect_stdout(_out3):
+            RL.main()
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    _o3 = json.load(open(os.path.join(_t3, 'records_liens.json')))
+    check('--repull asks the clerk for one surname once: the owner and a spouse named GARCIA are one query',
+          [x[0] for x in _asked3].count('GARCIA') == 1, _asked3)
+    check('--repull never marks a chain whose defendant search the cap stopped',
+          not _o3['2099-000302-CA-01'].get('repull_tried') and 'not fully searched: spend cap' in _out3.getvalue(),
+          (_asked3, _o3, _out3.getvalue()[-400:]))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs

@@ -91,12 +91,15 @@ def _b(chain, lead=None):
     # judgment was stored on it (Broward, Palm Beach, older Miami) takes it from the lead.
     judgment = chain.get('judgment') or _money((lead or {}).get('judgment'))
     face = chain.get('first_face', chain.get('first_est'))
-    lender = chain.get('ftype') == 'MORTGAGE'
+    # a circuit-court case can still be an association's: its stored case type says so
+    _ct = str(chain.get('case_type') or '').upper()
+    assn = chain.get('ftype') == 'HOA' or _ct.startswith('HOA')
+    lender = chain.get('ftype') == 'MORTGAGE' and not _ct.startswith(_NOT_LENDER_TYPES)
     if judgment:
         foreclosed = {'amount': judgment, 'basis': 'auction listing final judgment',
                       'recorded_face': (face or None) if lender else None,
                       'instrument': (chain.get('first_bp') or None) if lender else None}
-        if chain.get('ftype') == 'HOA':
+        if assn:
             foreclosed['note'] = ("an association's judgment: the first mortgage is not what is "
                                   "being foreclosed and survives the sale")
     elif lender and face:
