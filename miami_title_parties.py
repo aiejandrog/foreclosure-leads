@@ -295,9 +295,6 @@ def index_legal(model):
     sub = _tokens(model.get('subdiV_NAME'))
     desc = _tokens(model.get('legaL_DESCRIPTION'))
     block = re.sub(r'[^A-Z0-9]', '', str(model.get('blocK_NO') or '').upper()) or None
-    if not block:
-        in_desc = re.search(r'\b(?:BLK|BLOCK)\s+([A-Z0-9]+)', desc)
-        block = in_desc.group(1) if in_desc else None
     plat = re.sub(r'\s', '', str(model.get('plaT_BOOKPAGE') or ''))
     plat = None if re.fullmatch(r'[0/-]*', plat) else plat
     if not (sub or desc or block or plat):
@@ -305,25 +302,51 @@ def index_legal(model):
     out = {'subdivision': sub or None, 'description': desc or None, 'block': block, 'plat': plat,
            'lots': None, 'unit': None, 'building': None, 'phase': None, 'tract': None,
            'see_document': bool(re.search(r'\bSEE DOC', desc)), 'unparsed': False}
-    body = re.sub(r'\bSEE DOC\w*', ' ', desc)
-    lot = re.search(r'\bLOTS?\s+(.+?)(?=\s+(?:BLK|BLOCK)\b|$)', body)
-    unit = re.search(r'\b(?:UNIT|PARCEL)\s+(?:NO\s+)?(.+?)(?=\s+(?:BLDG|BUILDING|PH|PHASE)\b|$)', body)
-    tract = re.search(r'\bTR(?:ACT)?\s+([A-Z0-9]+)\s*$', body)
-    if lot:
-        # 'WINSTON PARK UNIT THREE LOT 9' names a subdivision unit, not a condo unit.
-        out['lots'] = _lots(lot.group(1))
-        out['unparsed'] = out['lots'] is None
-    elif unit:
-        out['unit'] = unit.group(1).strip()
-        bldg = re.search(r'\b(?:BLDG|BUILDING)\s+(?:NO\s+)?([A-Z0-9]+)', body)
-        phase = re.search(r'\b(?:PH|PHASE)\s+([A-Z0-9]+)', body[unit.end():])
-        out['building'] = bldg.group(1) if bldg else None
-        out['phase'] = phase.group(1) if phase else None
-    elif tract:
-        out['tract'] = tract.group(1)
-    elif desc:
-        out['unparsed'] = True
+    out['unparsed'] = not _parse_body(re.sub(r'\bSEE DOC\w*', ' ', desc), out) and bool(desc)
     return out
+
+
+# A legal that carves a piece out of a lot or unit, or describes land by metes and bounds, is not
+# a lot number and never compares as one. One of these words anywhere in the index legal sends the
+# row to a person, whatever else it says.
+_PART_RE = re.compile(r'\b(LESS|EXCEPT|EXC|PART|PT|OF|FT|AC|ACRES|BEG|COMM|MEAS|TWP|RGE|EXHIBIT|ATTACHED)\b')
+# The tail after LOT / UNIT must be consumed WHOLE. Anything left over means the index is saying
+# something more than a lot or unit number, and a truncated read would silently promote a partial
+# conveyance into the deed chain.
+_LOT_TAIL = re.compile(r'(?:LOTS?|THRU|AND|\d+[A-Z]?|[A-Z])(?:\s+(?:LOTS?|THRU|AND|\d+[A-Z]?|[A-Z]))*'
+                       r'(?P<block_clause>\s+(?:BLK|BLOCK)\s+(?P<block>[A-Z0-9]+(?:\s+[A-Z0-9])?))?')
+_UNIT_TAIL = re.compile(r'(?:NO\s+)?(?P<unit>[A-Z0-9]+(?:\s+[A-Z0-9]+)?)'
+                        r'(?:\s+(?:BLDG|BUILDING)\s+(?:NO\s+)?(?P<building>[A-Z0-9]+))?'
+                        r'(?:\s+(?:PH|PHASE)\s+(?P<phase>[A-Z0-9]+))?')
+_TRACT_TAIL = re.compile(r'(?P<tract>[A-Z0-9]+)')
+
+
+def _parse_body(body, out):
+    """Fill out['lots'|'unit'|'building'|'phase'|'tract'] from the index legal text. True when the
+    text was read in full as one plain lot or unit; False leaves the row for a person."""
+    if not body or _PART_RE.search(body):
+        return False
+    for anchor, tail_re in ((r'\bLOTS?\b', _LOT_TAIL), (r'\b(?:UNIT|PARCEL)\b', _UNIT_TAIL),
+                            (r'\bTR(?:ACT)?\b', _TRACT_TAIL)):
+        # Only the FIRST occurrence of each keyword: a second 'LOT' later in the text means the
+        # legal says more than one thing, and reading from it would drop the rest.
+        # 'WINSTON PARK UNIT THREE LOT 9' names a subdivision unit, not a condo unit, so LOT is
+        # tried before UNIT; a tail that does not consume cleanly moves on to the next keyword.
+        start = re.search(anchor, body)
+        tail = start and tail_re.fullmatch(body[start.end():].strip())
+        if not tail:
+            continue
+        found = tail.groupdict()
+        if tail_re is _LOT_TAIL:
+            out['lots'] = _lots('LOT ' + tail.group(0)[:tail.start('block_clause') - tail.start(0)
+                                                       if found['block_clause'] else None])
+            if out['lots'] is None:
+                continue
+            out['block'] = out['block'] or re.sub(r'\s', '', found['block'] or '') or None
+        else:
+            out.update({k: v for k, v in found.items() if v})
+        return True
+    return False
 
 
 def _kind(legal):
@@ -366,7 +389,7 @@ def _num(value):
     question for a person ('UNIT 10 5' is not obviously unit 105), not a difference to rule on."""
     if value is None:
         return None
-    return re.sub(r'\b0+(\d)', r'\1', str(value).upper())
+    return re.sub(r'(?<![0-9])0+(\d)', r'\1', str(value).upper())
 
 
 def _same(a, b):

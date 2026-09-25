@@ -52,6 +52,23 @@ class IndexLegalParseTests(unittest.TestCase):
         got = T.index_legal(rec('1', '', '', '', legal='UNIT THREE LOT 9', block='21'))
         self.assertEqual((got['lots'], got['unit']), ({'9'}, None))
 
+    def test_a_legal_that_says_more_than_a_lot_or_unit_is_never_truncated(self):
+        # Each of these once parsed as its leading lot or unit, which promoted a PARTIAL
+        # conveyance into the deed chain as the current deed candidate.
+        for legal in ('LOT 14 BLOCK 12 LESS THE W 5FT', 'LOT 14 BLOCK 12 AND LOT 15',
+                      'LOT 9 SEE ATTACHED EXHIBIT A', 'CONDO UNIT NO 104 BLDG 7 LESS THE W 5FT',
+                      'CONDO UNIT NO 104 AND 105 BLDG 7', 'LOT 24 A BLK 6'):
+            got = T.index_legal(rec('1', '', '', '', legal=legal, block=''))
+            self.assertTrue(got['unparsed'], legal)
+            self.assertEqual((got['lots'], got['unit']), (None, None), legal)
+
+    def test_block_bearing_forms_still_read(self):
+        for legal, lots, block in (('LOTS 1 AND 2 BLOCK 12', {'1', '2'}, '12'),
+                                   ('LOT 14 BLK 27 F', {'14'}, '27F'),
+                                   ('LOT 9 BLOCK 151C', {'9'}, '151C')):
+            got = T.index_legal(rec('1', '', '', '', legal=legal, block=''))
+            self.assertEqual((got['lots'], got['block']), (lots, block), legal)
+
     def test_a_part_of_a_lot_is_never_read_as_the_lot(self):
         for legal in ('LOT 9 LESS W 10FT', 'LOT 24 A'):
             self.assertTrue(T.index_legal(rec('1', '', '', '', legal=legal))['unparsed'], legal)
@@ -121,7 +138,14 @@ class DeedPlacementTests(unittest.TestCase):
 
     def test_condo_unit_building_and_phase(self):
         unit = dict(sub='SAMPLE TOWERS CONDO', legal='CONDO UNIT NO 104 BLDG 7', block='', plat='11542/2022')
+        spaced = dict(unit, legal='CONDO UNIT PH 07 BLDG 7')
         self.assertEqual(title([mortgage(**unit), rec('7', '6/1/2023', 'A', 'B', **unit)])['legal_matched_deeds'], ['7/1'])
+        self.assertEqual(title([mortgage(**spaced), rec('7', '6/1/2023', 'A', 'B', **spaced)])['legal_matched_deeds'], ['7/1'])
+        # 'PH07' and 'PH 07' are one unit written two ways: a person decides, and it is never
+        # reported as a different parcel (which would drop it from the conveyance warning).
+        got = title([mortgage(**spaced), rec('7', '6/1/2023', 'A', 'B', **dict(unit, legal='CONDO UNIT PH07 BLDG 7'))])
+        self.assertEqual(got['unanchored_deeds'][0]['status'], 'legal_description_match_required')
+        self.assertIn('differ only in spacing', got['unanchored_deeds'][0]['legal_match']['reason'])
         for legal, status in (('CONDO UNIT NO 105 BLDG 7', 'legal_description_differs'),
                               ('CONDO UNIT NO 104 BLDG 8', 'legal_description_differs'),
                               ('CONDO UNIT NO 104', 'legal_description_match_required'),
