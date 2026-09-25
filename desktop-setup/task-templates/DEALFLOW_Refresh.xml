@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DEALFLOW Refresh - the nightly chain (refresh-dealflow.bat), daily at 05:30.
+
+  WHY THIS FILE EXISTS (2026-09-21)
+  Until today the ONLY definition of the job that rebuilds and publishes the board lived in
+  desktop-setup/tasks/, which is gitignored - a Windows export embeds the exporting machine's
+  principal SID and user paths, so it travels in the transfer bundle and never in git. The
+  consequence is the one this audit ran into: the settings that decide whether the nightly fires
+  at all - batteries, sleep, idle, the time limit - could not be read, diffed or reviewed from
+  anywhere except the laptop itself, and MACHINE-HANDOFF.md section 4 is a prose summary rather
+  than the thing that runs. The table that documents nine tasks had a tracked definition for one.
+
+  THIS DOES NOT OVERRIDE THE LAPTOP. install-tasks.ps1 applies an export in tasks/ over a template
+  of the same task name, always. So adding this changes nothing on a machine that already has the
+  export; it gives every other machine the hardened definition instead of no definition, and it
+  makes the settings below reviewable in a diff. Same contract as DealFlow_Cadence.xml.
+
+  Placeholders, substituted by install-tasks.ps1: __REPO__ __PROFILE__ __USER__
+
+  EVERY SETTING BELOW IS A PAID-FOR LESSON:
+
+  * ExecutionTimeLimit PT6H. setup-automation.ps1 - still in the repo root - registers this same
+    task with New-TimeSpan -Minutes 120, and install-tasks.ps1's own header records that PT2H
+    "silently killed rebuild/publish for days". The measured full chain on 2026-09-20 ran 3h08m
+    start to [5/5] commit. PT2H is under the real runtime; PT6H is slack.
+
+  * StopOnIdleEnd FALSE, RestartOnIdle FALSE, RunOnlyIfIdle FALSE. The 2026-08-31 root cause,
+    written up at the :end label of refresh-dealflow.bat: StopOnIdleEnd=true terminates the task
+    the moment the machine stops being idle - i.e. the moment Alejandro sits down at it - which
+    produced exit 255 at an hour that tracked when he woke up rather than any elapsed duration.
+    Every PowerShell script in this repo that calls New-ScheduledTaskSettingsSet without an
+    -IdleSettings object re-creates that default. This file states it instead of inheriting it.
+
+  * DisallowStartIfOnBatteries FALSE, StopIfGoingOnBatteries FALSE. MACHINE-HANDOFF.md section 4
+    records these as true on 6 of the 8 exported tasks. On the desktop that is inert. On the
+    LAPTOP - which is the armed machine - true means the 05:30 run is skipped outright whenever
+    the lid was on battery at 05:30, and killed mid-run if it is unplugged. A three-hour job on a
+    laptop cannot carry either.
+
+  * StartWhenAvailable TRUE with WakeToRun TRUE. Wake the box for the trigger, and catch up if the
+    wake did not happen. Nothing in this chain mails a homeowner, so a late catch-up run is simply
+    a late board - unlike DealFlow Cadence, which needs cadence-daily.bat's 08:00-20:00 window to
+    make the same setting safe.
+
+  * RunOnlyIfNetworkAvailable FALSE, and this is the one place this template deliberately differs
+    from DealFlow_Cadence.xml. Task Scheduler's network condition is evaluated by NLA, which after
+    a 05:30 wake routinely reports no network for the seconds before the adapter associates - and
+    a task declined for a condition writes NOTHING to leads-run.log. That is indistinguishable
+    from a task that never fired, and distinguishing those two is exactly what costs a morning.
+    refresh-dealflow.bat already opens with net_ready.py, which waits ~4 minutes and then REFUSES
+    with a per-host reason in the log and rc=3. Prefer the refusal that explains itself over the
+    silence that does not. Do not set this true without deleting that [0/5] block, and do not
+    delete that block while this is false.
+
+  * RestartOnFailure 2 x PT20M. New in this template. rc is now a real verdict - 1 scrape,
+    2 compliance, 3 network, 4 health DOWN, 5 mirror, 6 gate refused - so a failure exit is
+    finally something the scheduler can act on, and the single commonest one is rc=3, a network
+    that was not up during one four-minute window. Retrying that at 05:50 and again at 06:10
+    turns a lost day into a late board. MultipleInstancesPolicy IgnoreNew below is what makes it
+    safe: a retry can never overlap a run that is still going.
+
+  * MultipleInstancesPolicy IgnoreNew. Two refreshes at once would both scrape, both build, and
+    both push.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>__USER__</Author>
+    <URI>\DEALFLOW Refresh</URI>
+    <Description>DEALFLOW: nightly chain - scrape Miami-Dade/Broward/Palm Beach auctions, enrich, skip-trace phones, rebuild the board, run healthcheck + publish_guard, publish to the live site. Only the armed machine may run this - see MACHINE-HANDOFF.md section 1. Log: leads-run.log in the repo.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-09-21T05:30:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>__USER__</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <RestartOnFailure>
+      <Interval>PT20M</Interval>
+      <Count>2</Count>
+    </RestartOnFailure>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>true</WakeToRun>
+    <ExecutionTimeLimit>PT6H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>__REPO__\refresh-dealflow.bat</Command>
+      <WorkingDirectory>__REPO__</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

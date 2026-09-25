@@ -28,6 +28,17 @@ rem  never came up | 4 healthcheck says DOWN (advisory) | 5 the board built, gat
 rem  here, but the mirror to the public site repo did not publish, so the LIVE SITE still shows the
 rem  previous board - a materially different morning from a clean run, and it went unreported from
 rem  the 09-17 repo split until 09-18 because nobody read publish_site.py's exit code.
+rem  7 = the LIS PENDENS chain did not fully refresh (lp_refresh.py returned non-zero). Documented
+rem  2026-09-21 because _refreshexittest.py's own "exit code 7 is documented in the header" check
+rem  was the one red in its 52, and because the first real 7 on this box reported `LP CHAIN exit 2`
+rem  - a code the legend at :220 does not list either (it names only 3 = every source blocked and
+rem  4 = PARTIAL). The board still rebuilds on the leads already on file, which is the right
+rem  availability call; 7 exists so the night is not reported as clean. An earlier fault wins.
+rem  6 = a pre-publish GATE refused the board. Added 2026-09-21: both gate branches below did
+rem  `goto :end` without touching RUNEXIT, so a publish_guard block - a content regression, the one
+rem  thing healthcheck does not grade - ended the run at rc=0 with "health OK" on the console. Every
+rem  other fault in this list was given a code precisely so the morning could not lie; these two
+rem  were the hole left in that work.
 set "RUNEXIT=0"
 
 rem  [0/5] NETWORK FIRST, and this is not defensive padding - it is the 09-14/16/17 post-mortem.
@@ -103,6 +114,13 @@ if errorlevel 1 (
 )
 git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "refresh: fresh leads" >> "%LOG%" 2>&1
+rem  SAY SO WHEN THERE IS NOTHING TO SAY (2026-09-21). A failing commit here - nothing staged,
+rem  because the scrape produced an identical board - skipped the whole push block and wrote not one
+rem  line to the log. The [5/5] publish logs "nothing changed - site already current" for exactly the
+rem  same case. Two mornings that read identically - no early-publish lines at all - are a commit
+rem  that found nothing and a run that never reached this point, and telling those apart from the log
+rem  alone is most of a morning. The line goes in an `else`, not in a second `if errorlevel` test:
+rem  any command between the commit and the test is one more thing that can move ERRORLEVEL.
 if not errorlevel 1 (
   rem  PULL BEFORE PUSH. Without this the push is rejected non-fast-forward the moment GitHub
 rem  Actions pushes anything (it publishes the balloon book on its own schedule), and the
@@ -138,6 +156,8 @@ git push origin main >> "%LOG%" 2>&1
   rem  anything reached origin. publish_verify.bat asks the remote instead of assuming, and it
   rem  prints the outcome itself - which is why the unconditional echo that sat here is gone.
   call publish_verify.bat "%LOG%" "-" "fresh leads (early publish)"
+) else (
+  echo     early publish: nothing staged - the board is unchanged since the last run.>> "%LOG%"
 )
 :afterearly
 
@@ -214,7 +234,31 @@ rem  value=0 / hs=False and equity ranking was silently dead for the freshest la
 rem  It also never ran lp_resolve2 or fl_lp/broward_resolve at all. lp_refresh.py IS the canonical
 rem  chain (sweep -> resolve -> resolve2 -> broward_resolve -> values -> status -> leads -> phones),
 rem  fail-fast, and stamps lp_meta.json so healthcheck can age it. One line replaces five.
+rem  READ THE LP CHAIN'S EXIT CODE (audit 2026-09-21, defect 7). lp_refresh.py is fail-fast and
+rem  stops the moment a step returns a code it does not consider benign - and this line threw that
+rem  away, so a chain that died at RESOLVE looked identical to one that swept three counties clean.
+rem  WHAT LPEXIT ACTUALLY IS, corrected 2026-09-22. This comment used to say "codes from
+rem  lis_pendens.py", which reads as though the sweep is the only thing that can speak here. It is
+rem  not: lp_refresh.py is a chain of EIGHT scripts and run^(^) propagates the first non-benign code
+rem  any of them returns, so LPEXIT is "whichever step stopped the chain", not "how the sweep went".
+rem  That mattered on the first real 7 on this box, 09-21: LPEXIT was 2, nobody could find a 2 in
+rem  lis_pendens.py, and two readers went hunting a dead sweeper, a missing captcha.key and an empty
+rem  2Captcha balance. All three were fine - the 2 came from skiptrace.py at the BOTTOM of the chain
+rem  ^(TraceAborted: the phone vendor rejected the call^). The sweep had worked that night.
+rem  Read LPEXIT as: 4 = DEGRADED, the chain reached the bottom but not everything ran ^(this is
+rem  lp_refresh's own code, and the one a partial sweep or a phone-vendor outage now produces^);
+rem  anything else = the chain STOPPED, and lp_refresh printed "CHAIN STOPPED at <step>" naming
+rem  which one. Read that line, not this legend - only the log knows which script spoke.
+rem  Neither case stops the refresh - the board still rebuilds on the leads already on file, which
+rem  is the right availability call - but the night is no longer reported as clean.
+rem  RUNEXIT 7 ^(6 is taken by the publish-guard gate^); an earlier fault wins.
+set "LPEXIT=0"
 if exist captcha.key python -u lp_refresh.py --days 30 >> "%LOG%" 2>&1
+if exist captcha.key call :lpcode
+if not "%LPEXIT%"=="0" echo     ^!^! LP CHAIN exit %LPEXIT% - pre-foreclosure lane did NOT fully refresh.>> "%LOG%"
+if not "%LPEXIT%"=="0" echo     ^!^! LP CHAIN exit %LPEXIT% - see leads-run.log. Board still rebuilds on file data.
+if not "%LPEXIT%"=="0" if "%RUNEXIT%"=="0" set "RUNEXIT=7"
+
 
 echo [2d/5] Geocoding new leads (keyless US Census) -> lat/lng for the origin-anchored door route...
 python -u geo_enrich.py >> "%LOG%" 2>&1
@@ -358,6 +402,13 @@ rem  this repo is PUBLIC). The [4/5] build then bakes the latest call per lead i
 rem  payload as row.qc. Gated on quo.key: no key, no step, zero noise.
 if exist quo.key python -u quo_sync.py --days 3 >> "%LOG%" 2>&1
 
+echo [3q/5] Sale results from the Miami-Dade docket - held, cancelled, moved, at risk, amended judgments...
+rem  sale_results.py reads the free OCS docket for every Miami case with a sale in the last 7 or next
+rem  30 days, including cases the scrape already dropped, and writes sale_results.json - gitignored.
+rem  The [4/5] rebuild bakes it as row.sr. Display only, gates nothing; capped at 420s. Never a gate:
+rem  a clerk outage costs the chips, never the publish.
+python -u sale_results.py >> "%LOG%" 2>&1
+
 echo [3p/5] Live dockets (Miami-Dade OCS JSON API) - the FILINGS, shown inline on the board...
 rem  A "click Docket, land on the docket" LINK is impossible: MD retired /ocs/Search.aspx and their
 rem  SPA refuses to render a case from a URL (the case-number token mints but resolves empty);
@@ -467,6 +518,11 @@ python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 2 (
   echo     ^!^! GATE: healthcheck COMPLIANCE fail ^(^&sect;362 stays / sources down^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: healthcheck COMPLIANCE fail - publish SKIPPED. See leads-run.log.
+  rem  CARRY IT TO THE EXIT CODE, 2026-09-21. This branch skipped the publish and then fell into
+  rem  :end with RUNEXIT still 0. It survived only because the tail healthcheck runs a SECOND time
+  rem  and sets 2 - so a source that came back up during the three-hour enrichment produced rc=0 on
+  rem  a morning that published nothing. Set it here, where the decision is made.
+  set "RUNEXIT=2"
   goto :end
 )
 if errorlevel 1 (
@@ -476,6 +532,13 @@ python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo     ^!^! GATE: publish_guard BLOCKED the build ^(regression or corruption^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED. See leads-run.log.
+  rem  THE WORST rc=0 LEFT IN THIS FILE, 2026-09-21. publish_guard refuses a board materially
+  rem  poorer than the live one - a content regression, which is precisely the fault healthcheck
+  rem  does NOT grade. So this branch skipped the publish, fell into :end, the tail healthcheck
+  rem  printed "health OK", and the task recorded rc=0. A blocked morning was byte-identical to a
+  rem  clean one in Task Scheduler and in DEALFLOW-STATUS.txt, which is the exact signal-is-noise
+  rem  pattern the RUNEXIT block at the top of this file was written to end.
+  set "RUNEXIT=6"
   goto :end
 )
 echo [5/5] Publishing to the live site...
@@ -677,3 +740,10 @@ rem  that the data is fresh - 09-17 exited 0 precisely because the run aborted b
 rem  healthcheck ever ran. That is the hole this closes.
 if not "%RUNEXIT%"=="0" echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
 endlocal & exit /b %RUNEXIT%
+
+rem  BELOW THE FINAL EXIT ON PURPOSE. A subroutine placed in the body is not inert: control
+rem  falls into its label, runs it, and `goto :eof` ends the script - which would have skipped
+rem  :end, the healthcheck and the verdict exit code entirely. Only `call` reaches it here.
+:lpcode
+set "LPEXIT=%errorlevel%"
+goto :eof

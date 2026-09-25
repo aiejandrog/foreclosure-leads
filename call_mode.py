@@ -1255,7 +1255,7 @@ def extract_funnel_js(tracker_src):
     block = '\n'.join((clock, saled, wrong, funl))
     # PRESENCE IS NOT ENOUGH, same lesson as extract_sync_js: an anchor can still match while the
     # thing it was pointing at has moved out of the slice. Name every definition we are relying on.
-    for need in ('const NO_SALE', 'function _hasClock', 'function _aucPassed',
+    for need in ('const NO_SALE', 'function _hasClock', 'function _aucPassed', 'function _heldToday',
                  'function _saleDays', 'function _isWrongOwner',
                  'var FUNNEL ', 'var FUNNEL_ORDER', 'function _fDays', 'function _funnelStage'):
         if need not in block:
@@ -1592,7 +1592,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         _a1 = (d.get('addr') or '').split(',')[0].strip().upper()
         row = {
             'c': case,
-            'o': (d.get('owners') or '').strip()[:70],          # FULL owners, co-owners included
+            'o': (d.get('owners') or d.get('oname') or '').strip(),
             # GREETING NAME, separate from the display string above.
             # `owners` comes off the county roll as "LAST,FIRST" on 32% of leads (measured across
             # 4,009 real rows; Broward is almost entirely this shape). Deriving a first name from it
@@ -1601,7 +1601,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # The pipeline already fixes this: owner_clean flips "Last, First" to "First Last"
             # (foreclosure_leads.py:536-539) and ships as `oname`. Ship it and use it. ~14 B/lead.
             'on': _greet_name(d),
-            'a': (d.get('addr') or '')[:60],
+            'a': (d.get('addr') or '').strip(),
+            # Advisory candidates stay separate from the address used by scripts and links.
+            'ag': (d.get('addrGuess') or '').strip() or None,
+            'aw': (d.get('addrWhy') or '').strip() or None,
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
             'd': days,
             'lp': 1 if is_lp else 0,
@@ -1649,6 +1652,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
+            # docket sale result (sale_results.py -> row.sr): held / cancelled / moved / at risk /
+            # amended judgment. None on almost every row; the null-strip drops it.
+            'sr': (lambda v: ({k: v[k] for k in ('st', 'd', 'nd', 'was', 'why', 'amj', 'ama', 'bkb', 'obj', 'ev')
+                               if v.get(k) not in (None, '')} if isinstance(v, dict) and v.get('st') else None))(d.get('sr')),
             # ---- last Quo call (transcript-backed). None on most rows; the null-strip removes it.
             'qc': (lambda q: ({'w': str(q.get('at') or '')[:16], 'du': q.get('dur') or 0,
                                's': ' '.join(q.get('summary') or [])[:180],
@@ -1843,24 +1850,54 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # worse one. Only the REMAINDER of the cap rotates, by day of month, so the whole qualified
     # pool reaches the phone over a month instead of never. Deterministic within a day (same build,
     # same list) and needs no stored cursor.
-    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', '200'))))
+    # Head defaults to HALF the cap (200 of the historical 400), so a caller that scales the cap
+    # with the number of seats scales the protected head with it.
+    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', str(cap // 2)))))
     total = len(out)
     if total > cap:
         head, tail = out[:head_n], out[head_n:]
         slots = cap - head_n
+        n_fresh = 0
         if slots > 0 and tail:
-            # Stride by the window, not by a small constant: a stride smaller than the window
-            # overlaps consecutive days almost completely, which is the bug it is meant to fix.
-            rot = (_dt.date.today().day * slots) % len(tail)
-            tail = tail[rot:] + tail[:rot]
-            out = head + tail[:slots]
+            # ---- FRESH FILINGS ARE PINNED, NOT ROTATED (2026-09-21) ------------------------------
+            # A brand-new LP has no sale date and no priced equity, so the rank puts it just PAST
+            # the head (ranks 222-251 on the 09-21 book) — which is exactly the front of the tail.
+            # The rotation then skipped that front two days in three: on 09-21, 30 of the 32 leads
+            # filed in the last 7 days were on NEITHER phone. The first call on a fresh filing is
+            # the whole first-mover edge; a lead that waits for its rotation day has lost it.
+            # So tail leads filed within CALLMODE_FRESH_DAYS ride right behind the head, in rank
+            # order, capped at half the slots so the rotation still walks the rest of the book.
+            fresh_days = max(0, int(os.environ.get('CALLMODE_FRESH_DAYS', '14')))
+            _age = {}
+            if fresh_days:
+                _today = _dt.date.today()
+                for d in slim:
+                    c = (d.get('case') or '').strip()
+                    v = str(d.get('filedDate') or '').strip()
+                    try:
+                        _age[c] = (_today - _dt.datetime.strptime(v, '%m/%d/%Y').date()).days
+                    except ValueError:
+                        pass
+            fresh = [r for r in tail if 0 <= _age.get(r.get('c'), -1) <= fresh_days][:slots // 2]
+            _pinned = {id(r) for r in fresh}
+            rest = [r for r in tail if id(r) not in _pinned]
+            n_fresh = len(fresh)
+            left = slots - n_fresh
+            if rest and left > 0:
+                # Stride by the window, not by a small constant: a stride smaller than the window
+                # overlaps consecutive days almost completely, which is the bug it is meant to fix.
+                rot = (_dt.date.today().day * left) % len(rest)
+                rest = rest[rot:] + rest[:rot]
+            out = head + fresh + rest[:max(0, left)]
         else:
             out = head[:cap]
         # NO SILENT CAPS. A list that quietly shrank looks exactly like a list that was always
         # this size — the same rule the dedupe and identity-drop notices above follow.
-        print('call mode: %d qualified, %d shipped — top %d by rank always, the remaining %d slots '
-              'rotate daily through the other %d so the tail reaches the phone'
-              % (total, len(out), head_n, max(0, cap - head_n), len(out) - head_n))
+        print('call mode: %d qualified, %d shipped — top %d by rank always, %d fresh filing(s) '
+              'pinned, the remaining %d slots rotate daily through the other %d so the tail '
+              'reaches the phone'
+              % (total, len(out), len(head), n_fresh, len(out) - len(head) - n_fresh,
+                 max(0, total - len(head) - n_fresh)))
     return out[:cap], total
 
 
@@ -1931,16 +1968,18 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
         # BUDGETED TO ~150 BYTES A ROW. This page's founding rule is that it opens on cell data at a
         # door — ~490 rows in ~100 KB against the board's 6.4 MB — and coverage adds ~1,900 rows to
         # it. Every field here is one a caller reads off the list or a skip-tracer needs to work the
-        # lead; there is no room for anything else. `o` (the full owner string with co-owners) is
-        # dropped whenever `on` can stand in, which is most rows, saving ~25 B each.
+        # lead. Keep the full owner/co-owner string when it differs from the greeting name;
+        # drop only an exact duplicate. Greeting-name truncation must not erase identity context.
         _on = _greet_name(d)
-        _o = (d.get('owners') or '').strip()[:70]
+        _o = (d.get('owners') or d.get('oname') or '').strip()
         _ne = len([e for e in (d.get('emails') or []) if str(e or '').strip()])
         row = {
             'c': case,
-            'o': (None if _on else _o),
+            'o': (_o if _o != _on else None),
             'on': _on,
-            'a': (d.get('addr') or '')[:60],
+            'a': (d.get('addr') or '').strip(),
+            'ag': (d.get('addrGuess') or '').strip() or None,
+            'aw': (d.get('addrWhy') or '').strip() or None,
             # BOARD KEY NAMES from here down — _funnelStage reads these verbatim.
             'auction': (d.get('auction') or ''),
             'days': days,
@@ -2346,23 +2385,39 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         rows, total = call_rows(slim, optouts, deads)
     else:
         rows, total = rows
-    # BEFORE the seat split — see the coverage-rows note below. A lead carried by the OTHER seat is
-    # still carried, and must not reappear here as uncovered work.
-    _dial_all = list(rows)
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
             raise CallModeError('call_mode: bad seat %r (want n>1, 0<=i<n)' % (seat,))
         rows = seat_rows(rows, _sn, _si)
+    # ---- COVERAGE IS CUT AGAINST *THIS PAGE'S* DIAL LIST (2026-09-21) -------------------------
+    # This was cut against the CREW-WIDE list, one line ABOVE the seat split, on the argument that
+    # the nine board lane counts describe the business and halving them per phone would make two
+    # callers read two different books. The argument is right; the code did the opposite of it.
+    #
+    # A seat page shipped `rows` (its own half) plus coverage for everything outside the CREW dial
+    # list — so the OTHER seat's rows were in NEITHER list and were absent from the page entirely.
+    # Every board lane on Alejandro's handset read short by the size of Carlos's queue, and the
+    # leads that went missing were the most callable in the book: they had passed every gate and
+    # made the cap, which is exactly why coverage skipped them. The guard below did not catch it
+    # because it checked the CREW union rather than what this page actually ships.
+    #
+    # Scaling the cap with the crew (1863e22) doubled the hole rather than closing it: the crew
+    # window went 400 -> 800, so ~400 leads now fall off each page instead of ~200.
+    #
+    # Cut against this page's own list and each page carries the WHOLE book: its own rows dialable,
+    # every other lead as a countable, un-dialable coverage row. Both phones then total the same
+    # 2,394 — which is what the crew-wide cut was trying to achieve and did not.
+    _dial_all = list(rows)
     # total stays the CREW-WIDE qualifying count on purpose: "N qualifying" describes the funnel,
     # not this phone. SHOWN (len(rows)) is what this seat actually carries.
     # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
     #
-    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead the dial queue
-    # drops (no traced number, auction past the 60-day window, over the cap) as a countable,
-    # sortable, un-dialable row. Cut from the CREW-WIDE dial list, never the seat's: the nine board
-    # lane counts describe the business, and halving them per phone would make two callers read two
-    # different books. See coverage_rows for what is deliberately absent from them.
+    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead THIS page's
+    # dial queue does not carry (no traced number, auction past the 60-day window, over the cap, or
+    # on the other caller's phone) as a countable, sortable, un-dialable row, so the nine board lane
+    # counts on a handset describe the whole business. See coverage_rows for what is deliberately
+    # absent from them, and the cut note above for why it is this page's list and not the crew's.
     _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
     # EVERY LEAD, OR SAY WHICH ONES ARE MISSING. The whole promise of the board lanes on the phone
     # is that they count the same book the board counts; a lead that falls out of BOTH the dial
@@ -2910,7 +2965,9 @@ function allLeads(){ return ROWS.concat(COV); }
    its own (_funnelparitytest.py evaluates exactly this region). */
 var _FCGEN = 0, _FCC = null, _FCCK = '';
 function funnelCounts(){
-  var key = _FCGEN + '|' + new Date().toDateString() + '|' + ROWS.length + '|' + COV.length;
+  /* the sale hour is a second edge inside the day: at 9am every sale-day lead leaves its lane */
+  var _nw = new Date();
+  var key = _FCGEN + '|' + _nw.toDateString() + '|' + (typeof SALE_HOUR === 'number' && _nw.getHours() >= SALE_HOUR) + '|' + ROWS.length + '|' + COV.length;
   if(_FCC && _FCCK === key) return _FCC;
   var c = {}; FUNNEL_ORDER.forEach(function(k){ c[k] = 0; });
   allLeads().forEach(function(r){ var s = funnelOf(r); if(s && c[s] != null) c[s]++; });
@@ -3326,12 +3383,18 @@ function isBalloon(r){ return r.st==='BAL'; }
    left open past midnight would keep a passed sale in Urgent. Recompute from the baked date string
    r.x with the board's own regex. LP rows have no sale date and BAL rows count down to maturity on
    r.d — neither goes through liveDays. */
+/* The board's sale-hour rule, reached through a typeof guard: _heldToday arrives with the extracted
+   funnel block, and a page built without it (the suites' stub pages) must still paint its lanes. */
+function _heldNow(x){ return typeof _heldToday === 'function' && _heldToday(x); }
 function liveDays(r){
   if(r.lp || isBalloon(r)) return null;
   var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(!m) return (typeof r.d==='number' && r.d<9000) ? r.d : null;
   var t=new Date(+m[3],+m[1]-1,+m[2]), td=new Date(); td.setHours(0,0,0,0);
-  return Math.round((t-td)/864e5);
+  var d=Math.round((t-td)/864e5);
+  /* Sale morning past the sale hour reads as held (-1), the board's own rule: _heldToday is lifted
+     from the template with the clock block, so the phone and the board flip at the same minute. */
+  return (d===0 && _heldNow(r.x)) ? -1 : d;
 }
 /* ═════════════ WHAT COUNTS AS "WE ALREADY CONTACTED THIS PERSON" (2026-09-10) ═════════════
    Byte-for-byte the board's own vocabulary, tracker_template.html:3780. `worker` is deliberately
@@ -3420,7 +3483,7 @@ function _dayLane(r, lo, hi){ if(r.lp || isBalloon(r)) return false;
 function _bizDays(r){
   var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(!m) return null;
   var t=new Date(+m[3],+m[1]-1,+m[2]), cur=new Date(); cur.setHours(0,0,0,0);
-  if(t<cur) return -1;
+  if(t<cur || _heldNow(r.x)) return -1;
   var n=0; while(cur<t){ cur.setDate(cur.getDate()+1); if(cur.getDay()>0 && cur.getDay()<6) n++; }
   return n;
 }
@@ -3989,6 +4052,14 @@ function boardBar(){
 /* The list behind a board-lane button. Read-only on purpose for the rows that are not dialable:
    the point of putting TRACE on the phone is to be able to SEE and HAND OFF the 1,068 leads nobody
    can call yet, not to invent a way to call them. */
+function propertyLabel(r){
+  if(r.a) return r.a;
+  if(r.ag) return 'Possible property: ' + r.ag + ' — unverified';
+  return 'Property address unresolved — check the case record';
+}
+function ownerLabel(r){
+  return r.o || r.on || 'Owner name unresolved — check the case record';
+}
 function boardList(){
   var k = BLANE, F = FUNNEL[k] || {t:k, ic:'', d:''}, rows = funnelRows(k);
   var head_ = '<div class="card"><b>' + F.ic + ' ' + esc(F.t) + ' &middot; ' + rows.length + '</b>'
@@ -4016,8 +4087,8 @@ function boardList(){
       : bv.emails.length ? 'no phone — email only'
       : 'no phone, no email — skip-trace first';
     return '<div class="card"' + (dial ? ' data-open="' + esc(r.c) + '" style="cursor:pointer"' : '')
-         + '><b>' + esc(r.on || r.o || r.c) + '</b>'
-         + '<div class="sub">' + esc(r.a || '') + '</div>'
+         + '><b>' + esc(ownerLabel(r)) + '</b>'
+         + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq
          + (why ? ' &middot; ' + why : ' &middot; <b style="color:var(--gold)">tap to call</b>') + '</div></div>';
   }).join('');
@@ -4590,8 +4661,10 @@ function screenLead(){
   var when = r.lp ? ('lis pendens filed '+esc(r.x||''))
                   : ((r.d===0?'auction TODAY':(r.d===1?'auction TOMORROW':'auction in '+r.d+' days'))+(r.x?' &middot; '+esc(r.x):''));
 
-  var who = '<div class="addr">'+esc(r.a||'(no address on file)')+'</div>'
-          + '<div class="own">'+esc(r.o||'(owner unknown)')+'</div>';
+  var who = '<div class="addr">'+esc(propertyLabel(r))+'</div>'
+          + '<div class="own">'+esc(ownerLabel(r))+'</div>';
+  if(!r.a && r.ag) who += '<div class="warnbar">Verify this candidate against the case record before quoting it.'
+    + (r.aw ? ' ' + esc(r.aw) : '') + '</div>';
   /* LAST QUO CALL -- what happened last time, in front of him BEFORE he redials. Summary from
      Quo's AI, flags from quo_sync's coach pass. Flags render red because every one of them is a
      sentence that must not be said again on the call he is about to make. */
@@ -4641,6 +4714,12 @@ function screenLead(){
   if(r.bk)           clock += '<span class="chip bad">'+r.bk+' bankruptcy filing'+(r.bk>1?'s':'')+'</span>';
   if(r.sl)           clock += '<span class="chip hot">stay LIFTED '+esc(r.sl)+'</span>';
   if(r.cs)           clock += '<span class="chip">case '+esc(r.cs)+'</span>';
+  if(r.sr){ var _sm=function(i){var m=String(i||'').match(/^\d{4}-(\d{2})-(\d{2})$/);return m?m[1]+'/'+m[2]:'';};
+    var _sl={held:'SOLD '+_sm(r.sr.d), cancelled:'sale CANCELLED '+_sm(r.sr.d), reset:'sale MOVED to '+_sm(r.sr.nd)+(r.sr.was?' (was '+_sm(r.sr.was)+')':''),
+             vacated:'sale SET ASIDE', redeemed:'REDEEMED after sale', at_risk:'sale AT RISK', unknown:'result not on docket yet'}[r.sr.st]||'';
+    if(_sl) clock += '<span class="chip '+((r.sr.st==='cancelled'||r.sr.st==='reset')?'hot':(r.sr.st==='held'?'bad':''))+'" title="'+esc((r.sr.why||'')+((r.sr.ev&&r.sr.ev.length)?' | docket: '+r.sr.ev.map(function(e){return _sm(e.d)+' '+e.x;}).join(' | '):''))+'">'+esc(_sl)+'</span>';
+    if(r.sr.bkb && r.sr.st==='held') clock += '<span class="chip bad">BK filed '+esc(_sm(r.sr.bkb))+', sale may not stand</span>';
+    if(r.sr.amj) clock += '<span class="chip">amended judgment '+esc(_sm(r.sr.amj))+(r.sr.ama?' $'+Math.round(r.sr.ama).toLocaleString():'')+'</span>'; }
   clock += '</div>';
 
   var mny = '<div class="grid">'
@@ -5067,8 +5146,8 @@ function screenOutcome(){
   };
   var refRows = '';
   var addRef = function(k, v){ if(v) refRows += '<tr><td class="rk">'+k+'</td><td>'+v+'</td></tr>'; };
-  addRef('Property', esc(r.a || ''));
-  addRef('Owner', esc(r.o || ''));
+  addRef('Property', esc(propertyLabel(r)));
+  addRef('Owner', esc(ownerLabel(r)));
   if(r.v || r.jg || r.py){
     var eqv = (r.v && (r.py || r.jg)) ? (+r.v - (+r.py || +r.jg)) : 0;
     /* UNDERWATER MUST SHOW. Showing equity only when positive quietly hid the single fact that

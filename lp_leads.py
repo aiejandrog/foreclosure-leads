@@ -25,6 +25,7 @@ Run:  python lp_leads.py           # reads lis_pendens.json (+ lp_addresses.json
 import json
 import os
 import re
+import time
 
 import requests
 
@@ -98,7 +99,7 @@ def build():
     feed = json.load(open(IN, encoding='utf-8'))
     addrs = _addresses()
     stats = _statuses()
-    nhigh = nadv = nmismatch = nvalued = ndismissed = nclosed = 0
+    nhigh = nadv = nmismatch = nvalued = ndismissed = nclosed = nunanchored = 0
     out, seen = [], set()
     for lp in feed:
         case = str(lp.get('case') or '').strip()
@@ -136,6 +137,20 @@ def build():
             addr_guess, addr_why = _candidates_guess(a)
             if addr_guess:
                 nadv += 1
+
+        # ---- THE ANCHOR STATE, stamped rather than inferred -----------------------------------
+        # Everything above decides what to SHOW. This decides whether the lead may be CONTACTED,
+        # and it is a different question with a worse failure. `addrGuess` already carried the
+        # answer as prose ("ONE OF 8 PARCELS: ..."), which means every consumer that wanted to act
+        # on it had to parse an English sentence — so none of them did, and the row went out
+        # looking like any other. diligence_flags.parcel_unanchored() reads this key, the diligence
+        # gate turns it into a hold, and Call Mode and the Morning Worker already refuse a held
+        # lead. Stamped only when TRUE: an absent key means anchored, and the board payload does
+        # not grow a false on 1,400 rows to say so.
+        _cands = [c for c in (a.get('candidates') or []) if str(c.get('addr') or '').strip()]
+        unanchored = (not addr) and len(_cands) >= 2
+        if unanchored:
+            nunanchored += 1
         mismatch = bool(a.get('ownerMismatch')) and bool(addr or addr_guess)
         if mismatch:
             nmismatch += 1
@@ -151,6 +166,17 @@ def build():
 
         # ---- is the case still alive? ------------------------------------------------------
         _s = stats.get(case) or {}
+        # Was this case's status ACTUALLY looked up? An unchecked row and a row checked-and-OPEN
+        # both arrive here as an empty dict, and both used to render as a live fresh filing
+        # (audit 2026-09-21, defect 10). Only Miami-Dade has a case-status adapter today, so
+        # every Broward and Palm Beach LP row is unchecked -- say so on the row.
+        lp_checked = bool(_s)
+        lp_asof = ''
+        if _s.get('at'):
+            try:
+                lp_asof = time.strftime('%Y-%m-%d', time.localtime(float(_s['at'])))
+            except Exception:
+                lp_asof = ''
         lp_status = str(_s.get('status') or '')
         lp_dismissed = bool(_s.get('dismissed'))
         # terminal WITHOUT a dismissal docket: the case ended some other way (likely judgment).
@@ -198,6 +224,9 @@ def build():
             'filed': lp.get('date', ''), 'filedDate': lp.get('date', ''),   # the Fresh-filings sort keys on filedDate
             'lpkind': lp.get('kind', ''), 'legal': lp.get('legal', ''),
             'cstatus': lp_status, 'lpDismissed': lp_dismissed, 'lpClosed': lp_closed,
+            # an old lis pendens is not evidence the case is still live; these two say whether
+            # anyone checked, and when.
+            'lpStatusChecked': lp_checked, 'lpStatusAsOf': lp_asof,
             'bookpage': lp.get('bookpage', ''),
             'zillow': '',
             # deep links are per-recorder — a Broward owner deep-linked into Miami-Dade's PA
@@ -224,6 +253,10 @@ def build():
             'docket': (docket if _cty == 'MIAMI-DADE' else ''),
             'ctype': 'Bank/Mortgage', 'ftype': 'MORTGAGE',
         })
+        if unanchored:
+            out[-1]['unanchored'] = True
+            out[-1]['anchorN'] = len(_cands)
+            out[-1]['anchorWhy'] = str(a.get('evidence') or '')[:180]
     # This file had NO write guard at all — 1,007 rows, overwritten unconditionally, so an upstream
     # lis_pendens.json that came back thin (a walled sweep, an interrupted write) silently emptied
     # the entire Fresh-filings lane and the board simply showed fewer leads. Same ratio rule as the
@@ -239,6 +272,11 @@ def build():
     if addrs:
         print(f'  addresses: {nhigh} filled (high confidence, skiptrace-ready) · '
               f'{nadv} advisory only (needs human) · {nmismatch} owner-of-record changed since filing')
+        # Printed unconditionally, zero included: "0 unanchored" and "the stamp stopped running"
+        # are different facts and only one of them is good news.
+        print(f'  anchor:    {nunanchored} row(s) UNANCHORED — the defendant\'s name sits on '
+              f'several parcels and nothing picks one. Held out of every outbound queue by '
+              f'diligence_flags.PARCEL_UNANCHORED until a record settles the parcel.')
         print(f'  case:      {ndismissed} DISMISSED, {nclosed} closed without a dismissal docket'
               + (' — these drop out of the EARLY lane' if (ndismissed or nclosed) else ''))
         print(f'  values:    {nvalued} priced from the Property Appraiser'
