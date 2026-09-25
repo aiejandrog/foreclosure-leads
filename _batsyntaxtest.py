@@ -672,6 +672,58 @@ try:
         'acquired by pid 111' in PL._describe({'runner': 'run-leads.bat', 'pid': 111, 'host': 'H',
                                                'started_at': 'earlier'}, 60))
 
+    # -- `break` must delete the lock it JUDGED, not whatever is at the path now (Greptile P1) -----
+    # The holder of an expired lock can release, and a new runner can take a fresh one, between the
+    # read and the remove - and a plain os.remove would then delete the NEW runner's lock and report
+    # success, leaving it publishing unguarded. Same read-then-act gap as the stale break, and it is
+    # reproduced the same way: by swapping the file underneath the rename.
+    expired = {'runner': 'run-phones-nightly.bat', 'pid': 1, 'ppid': 2, 'host': 'H',
+               'started_at': 'earlier', 'started_epoch': time.time() - (PL.STALE_AFTER + 60)}
+    newlock = json.dumps(dict(expired, runner='run-leads.bat', pid=3, ppid=4,
+                              started_epoch=time.time()))
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(expired))
+    swapped = io.StringIO()
+    real_say5, PL._say = PL._say, lambda m: swapped.write(m + '\n')
+    real_rename2 = PL.os.rename
+
+    def _swap2(src, dst):
+        if src == PL.LOCK:
+            io.open(PL.LOCK, 'w', encoding='utf-8').write(newlock)
+        return real_rename2(src, dst)
+
+    PL.os.rename = _swap2
+    try:
+        rc_break = PL.break_lock()
+    finally:
+        PL.os.rename = real_rename2
+        PL._say = real_say5
+    rec('break refuses once the lock has been replaced mid-break', rc_break == 9)
+    rec('and the new runner still has its lock',
+        os.path.exists(PL.LOCK) and io.open(PL.LOCK, encoding='utf-8').read() == newlock,
+        'deleting it by pathname would leave that runner publishing with no lock at all')
+    rec('and no .stale litter is left by the refused break',
+        [f for f in os.listdir(tmp) if '.stale.' in f] == [],
+        [f for f in os.listdir(tmp) if '.stale.' in f])
+    os.remove(PL.LOCK)
+
+    # -- an UNREADABLE lock is refused by break without --force too (Greptile P1) ------------------
+    # _read_holder reports a problem with no holder and no age, which used to fall straight through
+    # the budget check to the remove - so the one case where nothing is knowable about the holder was
+    # the one case break cleared silently. An unknown lock is assumed live, as everywhere else here.
+    os.mkdir(PL.LOCK)                              # unreadable: a directory where the file goes
+    blind = io.StringIO()
+    real_say6, PL._say = PL._say, lambda m: blind.write(m + '\n')
+    try:
+        rc_blind = PL.break_lock()
+        rec('break refuses an unreadable lock without --force', rc_blind == 9)
+        rec('and says why rather than clearing it silently',
+            'assumed LIVE' in blind.getvalue(),
+            blind.getvalue().strip().replace('\n', ' / ')[:110])
+        rec('and the lock is still there', os.path.exists(PL.LOCK))
+    finally:
+        PL._say = real_say6
+        os.rmdir(PL.LOCK)
+
 finally:
     PL.LOCK = real_lock
     shutil.rmtree(tmp, ignore_errors=True)

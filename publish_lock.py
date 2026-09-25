@@ -73,7 +73,11 @@ EXIT CODES
               lock nothing will release - a runner whose cmd.exe died between acquire and release
               leaves the file behind and every publisher then refuses until the six-hour budget
               ages it out. It refuses a lock still inside its budget unless --force, and --force
-              says what it costs. It is deliberately NOT wired into any runner: a publish path that
+              says what it costs. An UNREADABLE lock is refused without --force too: nothing is
+              knowable about it, so it is assumed live. And it deletes the lock it JUDGED, not
+              whatever is at the path by the time it deletes - same rename-and-verify interlock as
+              the stale break, because the holder can release and a new runner can take a fresh
+              lock in that gap. It is deliberately NOT wired into any runner: a publish path that
               can break its way past the lock does not have a lock, and _batsyntaxtest asserts that
               no .bat calls it.
 
@@ -495,6 +499,17 @@ def break_lock(force=False):
     if held is None and not problem:
         _say('publish lock: already free on %s - nothing to break.' % socket.gethostname())
         return 0
+    if problem and not force:
+        # A lock that cannot be read or aged (Greptile P1, second round). This path used to fall
+        # straight through to the remove, skipping the budget check entirely - so the ONE case
+        # where nothing is knowable about the holder was the one case `break` cleared without
+        # --force and without its warning. An unknown lock is assumed live, like everywhere else
+        # in this file.
+        _say('     !! PUBLISH LOCK: %s' % problem)
+        _say('     !! Nothing is knowable about this lock - not who holds it, not how old it is -')
+        _say('     !! so it is assumed LIVE. Fix the file or the folder, or, if you are certain no')
+        _say('     !! runner is publishing: python publish_lock.py break --force')
+        return 9
     if held is not None and age is not None and age <= STALE_AFTER and not force:
         _say('     !! PUBLISH LOCK: refusing to break a lock that is still inside its budget.')
         _say('     !! %s' % _describe(held, age))
@@ -505,11 +520,46 @@ def break_lock(force=False):
         _say('     !! If the run is genuinely dead: python publish_lock.py break --force')
         return 9
     what = _describe(held, age) if held is not None else problem
+    # DELETE THE LOCK THAT WAS JUDGED, NOT WHATEVER IS AT THE PATH NOW (Greptile P1, second round).
+    # Between the read above and the remove, the holder can release and a new runner can take a
+    # fresh lock - and a plain os.remove(LOCK) would then delete the NEW runner's lock and report
+    # success, leaving it publishing unguarded. That is the same read-then-act gap `_break_stale`
+    # closes, so it uses the same interlock: rename first, verify the moved file is the one that
+    # was judged, put it back and refuse if it is not.
+    sig = _identity(_raw_lock())
+    doomed = '%s.stale.%d.%d' % (LOCK, os.getpid(), int(time.time() * 1000))
     try:
-        os.remove(LOCK)
+        os.rename(LOCK, doomed)
     except OSError as exc:
-        _say('     !! PUBLISH LOCK: could not remove %s - %s' % (LOCK, exc))
+        _say('     !! PUBLISH LOCK: could not move %s out of the way - %s' % (LOCK, exc))
         return 9
+    if sig is not None:
+        try:
+            with open(doomed, encoding='utf-8') as fh:
+                moved = fh.read()
+        except IOError:
+            moved = None
+        if moved != sig[0]:
+            _say('     !! PUBLISH LOCK: the lock changed while it was being broken - a runner took')
+            _say('     !! a fresh one. NOT breaking it; run status and look again.')
+            state = _restore(doomed, moved)
+            if state == 'failed':
+                _say('     !! It could not be put back and is NOT being deleted. The live holder\'s')
+                _say('     !! lock is at: %s' % doomed)
+                _say('     !! Rename it back to %s before the next runner starts.'
+                     % os.path.basename(LOCK))
+            else:
+                try:
+                    os.remove(doomed)
+                except OSError:
+                    pass
+            return 9
+    try:
+        os.remove(doomed)
+    except OSError as exc:
+        # The lock is already out of the way, which is what break is for; a leftover .stale file
+        # is litter and is gitignored.
+        _say('     note: %s is out of the way but could not be deleted - %s' % (doomed, exc))
     _say('     !! PUBLISH LOCK BROKEN BY HAND - %s' % what)
     if force and held is not None and age is not None and age <= STALE_AFTER:
         _say('     !! It was still inside its %s budget and --force took it anyway. If that run'

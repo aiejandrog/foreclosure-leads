@@ -178,7 +178,11 @@ assumption that has already been wrong. `publish_lock.py` is the mechanism:
 - **A lock nothing will release** — a runner whose `cmd.exe` died between the acquire and the
   release — blocks every publisher until the six-hour budget ages it out. `python publish_lock.py
   break` is the procedure: it refuses a lock still inside its budget, tells you to check whether
-  that run's process is still alive, and takes it with `--force` while saying what that costs. It is deliberately not wired into
+  that run's process is still alive, and takes it with `--force` while saying what that costs. It
+  also refuses an **unreadable** lock without `--force` — nothing is knowable about that one, so it
+  is assumed live — and it deletes the lock it *judged*, by rename-and-verify, not whatever is at the
+  path by the time it deletes: the holder can release and a new runner can take a fresh lock in that
+  gap, and removing it by pathname would leave that runner publishing with no lock at all. It is deliberately not wired into
   any runner, and `_batsyntaxtest.py` fails if one calls it: a publish path that can break its way
   past the lock does not have a lock.
 - `python publish_lock.py status` prints the holder, and `_batsyntaxtest.py` asserts the wiring:
