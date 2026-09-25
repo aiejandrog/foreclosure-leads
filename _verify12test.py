@@ -357,6 +357,11 @@ _two = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '35', 500, 'OWNER TEST
                   FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
 check("a release naming two lienors frees one lien, not both", sorted(o['st'] for o in _two['other']) == ['OPEN', 'RELEASED'],
       _two['other'])
+_mj = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '37', 45000, 'GARCIA MARIA-JOSE', first='CITY OF MIAMI'),
+                  rec('RELEASE OF LIEN', '9/9/2023', '34000', '37', 0, 'GARCIA MARIA L', first='CITY OF MIAMI',
+                      folio='3099999999999')], FOLIO, 12000, ftype='HOA', owner='MARIA-JOSE GARCIA')
+check("a neighbour sharing the owner's surname and first name does not release the owner's lien",
+      _mj['other'][0]['st'] == 'OPEN' and _mj['code_open'] == 45000, _mj['other'])
 check("a hyphenated first name still names the owner",
       RL._names_owner('GARCIA MARIA-JOSE', [RL._owner_words('MARIA-JOSE GARCIA')]))
 _boa2 = RL.analyze([deed, rec('JUDGMENT', '6/1/2025', '35000', '1', 8500, 'TESTER OWNER', first='BANK OF AMERICA NA',
@@ -550,6 +555,18 @@ try:
     finally:
         sys.argv = _argv
     check('--spend-ledger: an unreadable ledger leaves no lock behind', not os.path.exists(_bad + '.lock'))
+    _lk = os.path.join(_tmp, 'own.json')
+    _got = RL._ledger_lock(_lk)
+    _t0 = os.path.getmtime(_got)
+    os.utime(_got, (_t0 - 3600, _t0 - 3600))
+    RL._SPEND['lock'] = _got
+    RL._lock_touch()
+    check('--spend-ledger: a running pass keeps its lock fresh', os.path.getmtime(_got) > _t0 - 60)
+    RL._SPEND['lock'] = None
+    open(_got, 'w').write('999 another run')
+    check("--spend-ledger: a lock another run took over is not ours to delete",
+          open(_got).read() != RL._SPEND.get('lock_id'))
+    os.remove(_got)
     check('--spend-ledger: a second paying run cannot start while one holds the ledger',
           _locked and len(_fake_cs.calls) == _n2)
     check('--spend-ledger: a second run gets only what the first left, and cannot raise the cap',

@@ -207,7 +207,8 @@ def _ledger_lock(path):
     for _ in range(2):
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, ('%d %s' % (os.getpid(), time.strftime('%Y-%m-%d %H:%M'))).encode())
+            _SPEND['lock_id'] = '%d %s %s' % (os.getpid(), time.strftime('%Y-%m-%d %H:%M:%S'), os.urandom(4).hex())
+            os.write(fd, _SPEND['lock_id'].encode())
             os.close(fd)
             return lock
         except FileExistsError:
@@ -233,10 +234,20 @@ def _ledger_open(path, cap):
     return cap, float(led.get('counted_usd', 0) or 0), led
 
 
+def _lock_touch():
+    """Keep the ledger lock fresh, so a long run is never taken for a crashed one."""
+    if _SPEND.get('lock'):
+        try:
+            os.utime(_SPEND['lock'], None)
+        except OSError:
+            pass
+
+
 def _ledger_save(charged=None, final=False):
     path = _SPEND['ledger']
     if not path:
         return
+    _lock_touch()
     run = _SPEND['submits'] * PAID_SOLVE_USD
     total = _SPEND['prior'] + max(run, charged or 0)
     led = dict(_SPEND.get('led') or {}, cap=_SPEND['cap'], counted_usd=round(total, 4))
@@ -613,11 +624,12 @@ def _owner_words(owner):
     if not sp[1]:
         return ('co', re.sub(r'[^A-Z0-9]', '', sp[0].upper()))
     given = re.findall(r'[A-Z0-9]+', sp[1].upper().replace("'", ''))    # MARIA-JOSE -> MARIA, as tokens split
-    return ('person', sp[0].upper().strip('.'), given[0]) if given else None
+    return ('person', sp[0].upper().strip('.'), given[0], tuple(g for g in given if len(g) > 1)) if given else None
 
 
-def _names_owner(party, owners):
-    """True when the party string names any of `owners` (a list of _owner_words results)."""
+def _names_owner(party, owners, strict=False):
+    """True when the party string names any of `owners` (a list of _owner_words results). strict: every
+    given name the owner has (not just the first) must be there, for a match that releases a debt."""
     if not owners or not party:
         return False
     up = party.upper()
@@ -627,7 +639,8 @@ def _names_owner(party, owners):
             if words[1] and words[1] in re.sub(r'[^A-Z0-9]', '', up):
                 return True
         elif (all(w in toks for w in re.findall(r'[A-Z0-9]+', words[1].replace("'", '')))    # 'DE LA CRUZ'
-              and (re.findall(r'[A-Z0-9]+', words[2].replace("'", '')) or [''])[0] in toks):
+              and (re.findall(r'[A-Z0-9]+', words[2].replace("'", '')) or [''])[0] in toks
+              and (not strict or all(g in toks for g in (words[3] if len(words) > 3 else ())))):
             return True
     return False
 
@@ -884,8 +897,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                  and not re.search(r'MORTGAGE|PARTIAL', (r.get('doC_TYPE', '') or '').upper())
                  and (norm_folio(r.get('foliO_NUMBER', '')) == fol           # on this folio, or in its
                       or (_here(r) and (_ow is None                           # subdivision AND naming the
-                                        or _names_owner(r.get('firsT_PARTY'), _ow)   # owner: a neighbour's
-                                        or _names_owner(r.get('seconD_PARTY'), _ow))))  # release is not ours
+                                        or _names_owner(r.get('firsT_PARTY'), _ow, strict=True)   # owner: a
+                                        or _names_owner(r.get('seconD_PARTY'), _ow, strict=True))))  # neighbour's
+                                                                                          # is not ours
                  and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())]
     other = []
     hoa_open = code_open = irs_open = 0
@@ -1092,15 +1106,18 @@ def main():
         if not _lock:
             ap.error('another run holds %s.lock; wait for it (or delete the lock if no run is going)'
                      % a.spend_ledger)
+    _SPEND['lock'] = _lock
     try:
         if a.spend_ledger:
             _SPEND['cap'], _SPEND['prior'], _SPEND['led'] = _ledger_open(a.spend_ledger, a.max_spend)
             _SPEND['ledger'] = a.spend_ledger
         _run(a, ap)
     finally:
+        _SPEND['lock'] = None
         if _lock:
             try:
-                os.remove(_lock)
+                if open(_lock, encoding='utf-8').read() == _SPEND.get('lock_id'):
+                    os.remove(_lock)                          # only our own: never a later run's
             except OSError:
                 pass
 
@@ -1272,6 +1289,7 @@ def _run(a, ap):
     done = hits = cf_free = paid = kept = capped = 0
     try:
         for r in picked:
+            _lock_touch()
             case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
             folio = r.get('Folio', '') or r.get('year_folio', '')
             judg = num(r.get('judgment'))

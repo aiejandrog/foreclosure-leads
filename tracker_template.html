@@ -2928,9 +2928,11 @@ function recompute(){
       const bid = judg;
       // if the ASSOCIATION is the plaintiff, its judgment (bid) already includes the dues/assessment, so
       // only the estoppel amount ABOVE the judgment is additional -> don't double-count it.
-      // ...but a chain that marks the plaintiff's own claim of lien (orhoaown) already left it out of orhoa:
-      // what is left there is ANOTHER association's lien (a master association) and is owed in full.
-      const assessEff = ((r.ctype||'').toUpperCase().indexOf('HOA')===0 && (_dTyped(nn.assess) || !r.orhoaown))
+      // ...but a chain that marks the plaintiff's own claim of lien (orhoaown) already left it out of orhoa,
+      // and the HOA field is pre-filled from orhoa: what is there is ANOTHER association's lien (a master
+      // association) and is owed in full, typed or not. (A full estoppel typed over it is then counted
+      // with the judgment on top: too much debt, never too little.)
+      const assessEff = ((r.ctype||'').toUpperCase().indexOf('HOA')===0 && !r.orhoaown)
                           ? Math.max(0, assess - judg) : assess;
       r._assess = assessEff;
       r._equity = val - judg - slien - jlien - assessEff;
