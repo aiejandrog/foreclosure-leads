@@ -123,7 +123,9 @@ class DeedPlacementTests(unittest.TestCase):
         kept = got['unanchored_deeds'][0]
         self.assertEqual(kept['status'], 'legal_description_differs')
         self.assertEqual(got['current_deed_candidate']['book_page'], '2/1')
-        self.assertEqual(got['possible_later_conveyances'], [])
+        # Listed as a question all the same: one index row put it on another lot, and one index
+        # row is one keystroke, so a person reads it before the owner is treated as the owner.
+        self.assertEqual(got['possible_later_conveyances'], ['7/1'])
 
     def test_another_block_or_plat_differs(self):
         for kw in ({'block': '13'}, {'plat': '53/910'}):
@@ -239,8 +241,8 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertIn('only one record', kept['legal_match']['reason'])
 
     def test_a_tract_and_a_unit_under_one_folio_disagree(self):
-        rows = [rec('5', '3/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='TRACT A', block='', plat=''),
-                rec('6', '4/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='UNIT 5', block='', plat='')]
+        rows = [rec('5', '3/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='TRACT 6', block='', plat=''),
+                rec('6', '4/1/2019', 'O', 'B', FOLIO, 'MORTGAGE', legal='CONDO UNIT 5', block='', plat='')]
         self.assertIsNone(T.parcel_legal_reference(rows, FOLIO)[0])
         conflicting = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO,
                                        'MORTGAGE', legal='LOT 15'),
@@ -264,6 +266,14 @@ class DeedPlacementTests(unittest.TestCase):
     def test_one_instrument_returned_twice_is_not_two_records_agreeing(self):
         self.assertIs(T.parcel_legal_reference([mortgage(), dict(mortgage())], FOLIO)[0]['corroborated'], False)
         self.assertIs(T.parcel_legal_reference(folio_pair(), FOLIO)[0]['corroborated'], True)
+
+    def test_a_subdivision_phase_is_not_a_condo_unit(self):
+        # 'WINSTON PARK UNIT THREE' is a phase of a subdivision. A lettered CONDO unit is real.
+        self.assertTrue(T.index_legal(rec('1', '', '', '', legal='WINSTON PARK UNIT THREE'))['unparsed'])
+        self.assertEqual(T.index_legal(rec('1', '', '', '', legal='CONDO UNIT B BLDG 97', block=''))['unit'], 'B')
+
+    def test_a_block_of_zero_written_in_the_legal_text_is_no_block(self):
+        self.assertIsNone(T.index_legal(rec('1', '', '', '', legal='LOT 14 BLK 0', block=''))['block'])
 
     def test_a_unit_written_as_two_numbers_settles_nothing(self):
         for legal in ('CONDO UNIT NO 104 & 105 BLDG 7', 'CONDO UNIT NO 10 5'):

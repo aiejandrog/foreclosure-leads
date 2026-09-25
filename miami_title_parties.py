@@ -222,7 +222,10 @@ def _assemble(deeds, unanchored, gaps, flags, documents, docket):
         grantors = {name_key(p['name']) for p in d['parties'] if p['role'] == 'grantor'}
         # Same day counts: the index times some recordings and not others, so a conveyance
         # recorded the day the current deed was cannot be ordered against it and is a question.
-        if (current and d['status'] == 'legal_description_match_required' and grantors & owner_keys
+        # A deed the index puts on another parcel is listed too: its own index row is one
+        # keystroke, and nothing corroborates it, so it is a question like the rest.
+        if (current and d['status'] in ('legal_description_match_required', 'legal_description_differs')
+                and grantors & owner_keys
                 and (d['date_parsed'] is None
                      or d['date_parsed'].date() >= current['date_parsed'].date())):
             later.append(d['book_page'])
@@ -399,12 +402,17 @@ def _parse_body(body, out):
                                                        if found['block_clause'] else None])
             if out['lots'] is None:
                 continue
-            in_text = re.sub(r'\s', '', found['block'] or '') or None
+            in_text = re.sub(r'\s', '', found['block'] or '').lstrip('0') or None
             if out['block'] and in_text and _num(out['block']) != _num(in_text):
                 # The index says two different blocks for one instrument. Neither is safe to use.
                 return False
             out['block'] = out['block'] or in_text
         else:
+            unit = found.get('unit') or ''
+            if tail_re is _UNIT_TAIL and not re.search(r'\d', unit) and not re.search(r'\bCONDO', body):
+                # 'WINSTON PARK UNIT THREE' is a phase of a subdivision, not a condominium unit.
+                # A lettered unit ('CONDO UNIT B BLDG 97') is real, and says CONDO.
+                return False
             if re.fullmatch(r'\d+\s+\d+', found.get('unit') or ''):
                 # 'UNIT 104 105' (the index writes '104 & 105', and the punctuation is gone by
                 # here) is units 104 and 105, or unit 104105 with a stray space, and the index
@@ -442,7 +450,7 @@ def parcel_legal_reference(models, folio):
                           '(%s)' % ', '.join(sorted(records + [book_page])))
         merged = combined
         records.append(book_page)
-        for field in _LEGAL_FIELDS + ('lots',):
+        for field in _COMPARED + ('lots',):
             if legal[field]:
                 stated[field] = stated.get(field, 0) + 1
     if merged is None:
@@ -450,11 +458,15 @@ def parcel_legal_reference(models, folio):
     # Corroborated means two records state the same thing, field by field. Two records that merge
     # because one is blank where the other is filled in leave that field resting on one keystroke,
     # and the blank fields here are plat and block: the ones a match turns on.
-    corroborated = all(stated.get(f, 0) > 1 for f in _LEGAL_FIELDS + ('lots',) if merged[f])
+    corroborated = all(stated.get(f, 0) > 1 for f in _COMPARED + ('lots',) if merged[f])
     return dict(merged, from_record=records[0], corroborated=corroborated), None
 
 
 _LEGAL_FIELDS = ('plat', 'block', 'unit', 'building', 'phase', 'tract', 'subdivision')
+# What a verdict actually rests on. A subdivision name never places a deed (only a plat book and
+# page does), so a record naming the subdivision the other leaves blank is not what corroboration
+# is about, and requiring it would make the matcher a no-op on ordinary index data.
+_COMPARED = ('plat', 'block', 'unit', 'building', 'phase', 'tract')
 
 
 def _merge_legal(a, b):
