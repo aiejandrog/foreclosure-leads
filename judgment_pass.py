@@ -48,21 +48,25 @@ def _auction(entry):
     return None
 
 
-def _vision_key(source_ref):
-    # run_case_timeline.read_amounts names its evidence file amount-vision-<this>.json.
-    return hashlib.sha256(str(source_ref).encode()).hexdigest()
-
-
-def _bought(path, row):
-    """The saved amount read for this exact document, or None. Bound to the document hash the way
-    read_amounts binds it: a re-downloaded filing is not already bought."""
-    import document_store as DS
-    detail = DS.pipeline_load(path) if Path(path).exists() else None
-    current = ((row.get('manifest') or {}).get('source_sha256') or
-               (row.get('manifest') or {}).get('sha256'))
-    if not detail or not current or detail.get('document_hash') != current:
-        return None
-    return detail
+def _with_cached_ocr(row, base):
+    """The row as the paid reader sees it: plus the free 300-DPI OCR the pass already cached
+    (miami_timeline_ocr's hash-keyed file). Cache only: supplement() itself would OCR, and off
+    Windows it would write ocr_failed into the cache a real pass later trusts."""
+    import copy
+    manifest = row.get('manifest') or {}
+    path = manifest.get('path') or manifest.get('pdf_path') or row.get('path')
+    try:
+        digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        saved = json.loads((Path(base) / 'timeline-ocr' / (digest + '-ocr300-v1.json'))
+                           .read_text(encoding='utf-8'))
+    except (OSError, TypeError, ValueError):
+        return row
+    row = copy.deepcopy(row)
+    for page in (row.get('reading') or {}).get('pages', []):
+        got = (saved.get('pages') or {}).get(str(page.get('page')))
+        if got:
+            page['supplemental_ocr'] = got
+    return row
 
 
 def load_entries(runner, leads_file=None):
@@ -109,20 +113,31 @@ def evidence_rate(root):
 
 
 def _target(plan, controlling):
-    """The judgment whose amount counts: the controlling entry when the timeline established one,
-    else the latest dated final judgment on the docket. Never 'any judgment': an older, amended or
-    vacated one verifying proves nothing about the current debt."""
-    import run_case_timeline as RCT
+    """-> (entry_id or None, reason). The controlling entry when the timeline established one;
+    else the latest OPERATIVE judgment of record in the docket's own reconciliation. A vacated,
+    satisfied, supplemental or duplicate entry is never the target: its amount proves nothing
+    about the current debt."""
     if controlling:
-        return controlling
-    dated = sorted((d['date'], str(d['entry_id'])) for d in plan['documents']
-                   if d['kind'] in RCT._AMOUNT_KINDS and d.get('date')
-                   and 'future_entry_not_current_evidence' not in (d.get('gaps') or []))
-    return dated[-1][1] if dated else None
+        return controlling, 'controlling'
+    judgments = ((plan or {}).get('judgments') or {}).get('judgments') or []
+    operative = [j for j in judgments if j.get('status') in ('operative', 'partially_vacated')
+                 and j.get('role') not in ('supplemental', 'docket_duplicate') and j.get('date')]
+    if operative:
+        best = max(operative, key=lambda j: (j['date'], _entry_order(j['entry_id'])))
+        return str(best['entry_id']), 'latest_operative'
+    return None, ('no_operative_judgment' if judgments else 'no_judgment_on_docket')
+
+
+def _entry_order(entry_id):
+    text = str(entry_id)
+    return (0, int(text), '') if text.isdigit() else (1, 0, text)
 
 
 def assess(case, base, timeline, as_of):
-    """One case's state from disk. -> dict with 'state' and the page counts a paid read needs."""
+    """One case's state from disk. -> dict with 'state' and the page counts a paid read needs.
+
+    Evidence is read through run_case_timeline.read_amounts with no budget: the same hash binding
+    and the same exact-cents check the timeline itself uses, so the two cannot disagree."""
     import document_store as DS
     import document_prioritizer as DP
     import miami_timeline_amounts as amounts
@@ -130,7 +145,6 @@ def assess(case, base, timeline, as_of):
     out = {'case': case, 'pages_to_judgment': 0, 'pages_all': 0}
     controlling = str(((timeline or {}).get('judgments') or {}).get('controlling_entry') or '')
     out['controlling_entry'] = controlling or None
-    checks = ((timeline or {}).get('amount_vision') or {}).get('amount_checks') or []
     inventory = DS.pipeline_load(Path(base) / 'inventory.json')
     if inventory is None:
         out['state'] = 'no_docket'
@@ -140,38 +154,39 @@ def assess(case, base, timeline, as_of):
     except ValueError as exc:
         out.update(state='docket_incomplete', detail=str(exc)[:200])
         return out
-    target = _target(plan, controlling)
+    target, why = _target(plan, controlling)
     if target is None:
-        out['state'] = 'no_judgment_on_docket'
+        out['state'] = why
         return out
-    out['target_entry'] = target
-    if any(c.get('ok') and str(c.get('entry_id')) == target for c in checks):
+    out.update(target_entry=target, target_basis=why)
+    rows = [_with_cached_ocr(r, base) for r in RCT.load_rows(base)]
+    bought = RCT.read_amounts(rows, base)
+    if any(c.get('ok') and str(c.get('entry_id')) == target for c in bought['amount_checks']):
         out['state'] = 'verified'
         return out
-    rows = RCT.load_rows(base)
+    gapped = {g.get('source_ref') for g in bought['gaps']}
+    done = {Path(f).name for f in bought['evidence_files']}
     order = DP.timeline_read_order(plan, rows)['order']
-    reached = bought_unverified = False
+    need = []          # (is_target, pages) for every amount-bearing row not yet bought in full
+    target_amount_rows = 0
     for row in order:
         pages = amounts.amount_page_numbers(row.get('reading') or {})
         if not pages:
             continue
         is_target = str(row.get('entry_ref') or '') == target
-        detail = _bought(Path(base) / ('amount-vision-' + _vision_key(row.get('source_ref')) + '.json'),
-                         row)
-        if detail is not None and not detail.get('gaps'):
-            if is_target and not reached:
-                # Read in full and still no exact-cents agreement: paying again buys the same answer.
-                reached = bought_unverified = True
+        target_amount_rows += is_target
+        key = 'amount-vision-' + hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest() + '.json'
+        if key in done and row.get('source_ref') not in gapped:
             continue
-        out['pages_all'] += len(pages)
-        if not reached:
-            out['pages_to_judgment'] += len(pages)
-            reached = is_target
-    if bought_unverified:
+        need.append((is_target, len(pages)))
+    if any(t for t, _ in need):
+        last = max(i for i, (t, _) in enumerate(need) if t)
+        out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
+                   pages_all=sum(n for _, n in need))
+    elif target_amount_rows:
+        # Every amount page of the target was read in full and the figures still do not reproduce
+        # the printed total to the cent: paying again buys the same answer.
         out['state'] = 'read_not_verified'
-        out['pages_to_judgment'] = 0
-    elif reached:
-        out['state'] = 'needs_paid_read'
     else:
         doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
@@ -179,11 +194,9 @@ def assess(case, base, timeline, as_of):
             out.update(state='judgment_not_fetched',
                        detail=','.join(doc.get('gaps') or []) or 'not_downloaded')
         else:
-            # Fetched, but no page carries a printed dollar figure the free OCR could see: a paid
-            # read would have nothing selected. Named, never counted as verified.
+            # Fetched, but no page carries a printed dollar figure the free reads could see: a
+            # paid read would have nothing selected. Named, never counted as verified.
             out['state'] = 'judgment_without_amount_page'
-    if out['state'] != 'needs_paid_read':
-        out['pages_all'] = 0
     return out
 
 
@@ -191,16 +204,20 @@ def run_pass(runner, entries, today, collect, log, limit=None):
     import run_case_timeline as RCT
     done = errors = skipped = 0
     for entry in entries:
-        if limit and done + errors >= limit:     # --limit counts cases worked, not cases skipped
+        if limit is not None and done + errors >= limit:     # --limit counts cases worked, not cases skipped
             break
         case = entry['case']
-        if built_recently(timeline_path(runner, case)):
+        last = (log.get('built') or {}).get(case) or {}
+        if (built_recently(timeline_path(runner, case))
+                and (last.get('collect') or not collect)
+                and time.time() - float(last.get('at') or 0) < FRESH_HOURS * 3600):
             skipped += 1
             (log.get('errors') or {}).pop(case, None)
             continue
         try:
             RCT.timeline_case(case, today, collect=collect)   # shared=None: no API client, $0
             done += 1
+            log.setdefault('built', {})[case] = {'at': time.time(), 'collect': bool(collect)}
             (log.get('errors') or {}).pop(case, None)
         except Exception as exc:                              # one case never stops the pass
             errors += 1
@@ -245,7 +262,7 @@ def render(rows, skipped_ids, rate, sample, today):
         return next(name for name, limit in windows if days <= limit)
     names = [w[0] for w in windows] + ['sale passed', 'no sale date']
     states = ['verified', 'needs_paid_read', 'read_not_verified', 'judgment_not_fetched',
-              'judgment_without_amount_page', 'no_judgment_on_docket', 'docket_incomplete',
+              'judgment_without_amount_page', 'no_operative_judgment', 'no_judgment_on_docket', 'docket_incomplete',
               'no_docket', 'unreadable_on_disk']
     lines = ['# Miami judgment amounts: court-copy state and read plan (%s)' % today.isoformat(), '',
              'Built from files on disk after a $0 docket pass. Case numbers only; no names. '
@@ -303,7 +320,7 @@ def main(argv=None):
         entries = [e for e in entries if _auction(e) and 0 <= (_auction(e) - today).days <= args.days]
     out_dir = Path(case_review.output_path('judgment-plan/.keep')).parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    log_path = out_dir / ('pass-%s.json' % today.isoformat())
+    log_path = out_dir / 'pass-log.json'      # one log across days: a pass may cross midnight
     try:
         log = json.loads(log_path.read_text(encoding='utf-8'))
     except (OSError, ValueError):

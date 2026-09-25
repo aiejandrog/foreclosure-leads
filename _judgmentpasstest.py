@@ -20,15 +20,24 @@ def _row(base, entry, text, name, total_page=True):
     return ref
 
 
-def _plan(docs):
-    return {'documents': [dict(entry_id=e, kind=k, eligible_for_acquisition=ok, gaps=g,
-                               date='2026-01-%02d' % int(e))
-                          for e, k, ok, g in docs]}
+def _plan(docs, judgments=None):
+    """docs: (entry, kind, eligible, gaps). judgments: {entry: (status, role)}; by default every
+    final judgment is an operative judgment of record."""
+    documents = [dict(entry_id=e, kind=k, eligible_for_acquisition=ok, gaps=g,
+                      date='2026-01-%02d' % int(e)) for e, k, ok, g in docs]
+    status = judgments or {e: ('operative', 'judgment') for e, k, _, _ in docs
+                           if k == 'final_judgment'}
+    return {'documents': documents, 'judgments': {'judgments': [
+        {'entry_id': e, 'date': '2026-01-%02d' % int(e), 'status': st, 'role': role}
+        for e, (st, role) in status.items()]}}
 
 
 def _buy(base, ref, entry, gaps=()):
-    (Path(base) / ('amount-vision-' + JP._vision_key(ref) + '.json')).write_text(
-        json.dumps({'document_hash': 'h' + entry, 'gaps': list(gaps)}))
+    figures = [{'id': 'a', 'page': 2, 'amount': 1234.56}]
+    (Path(base) / ('amount-vision-' + hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(
+        json.dumps({'source_ref': ref, 'document_hash': 'h' + entry, 'gaps': list(gaps),
+                    'figures': figures, 'grand_totals': [{'amount': 1234.56, 'page': 2}],
+                    'pages': {'2': {}}}))
 
 
 class Assess(unittest.TestCase):
@@ -48,16 +57,21 @@ class Assess(unittest.TestCase):
         (self.base / 'inventory.json').unlink()
         self.assertEqual(JP.assess(CASE, self.base, None, '2026-09-25')['state'], 'no_docket')
 
-    def test_verified_needs_ok_check_on_controlling(self):
-        timeline = {'judgments': {'controlling_entry': '9'},
-                    'amount_vision': {'amount_checks': [{'entry_id': '8', 'ok': True},
-                                                         {'entry_id': '9', 'ok': False}]}}
+    def test_verified_needs_ok_check_on_target(self):
+        timeline = {'judgments': {'controlling_entry': '9'}}
+        ref8 = _row(self.base, '8', '$5.00', 'b')
+        _buy(self.base, ref8, '8')
         _row(self.base, '9', '$5.00', 'a')
-        got = self.run_assess([('9', 'final_judgment', True, []), ('8', 'final_judgment', True, [])],
-                              timeline)
+        docs = [('9', 'final_judgment', True, []), ('8', 'final_judgment', True, [])]
+        ok8 = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+                'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok8):
+            got = self.run_assess(docs, timeline)
         self.assertEqual(got['state'], 'needs_paid_read')    # an ok check on another judgment is not it
-        timeline['amount_vision']['amount_checks'][1]['ok'] = True
-        got = self.run_assess([('9', 'final_judgment', True, [])], timeline)
+        ref9 = 'court:9:1'
+        _buy(self.base, ref9, '9')
+        with mock.patch('judgment_money.verify_document', return_value=ok8):
+            got = self.run_assess(docs, timeline)
         self.assertEqual(got['state'], 'verified')
 
     def test_pages_counted_in_reader_order_and_cache_skipped(self):
@@ -68,27 +82,53 @@ class Assess(unittest.TestCase):
         self.assertEqual((got['state'], got['pages_to_judgment'], got['pages_all']),
                          ('needs_paid_read', 4, 4))
         _buy(self.base, ref, '9')
-        got = self.run_assess(docs)
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess(docs)
         # read in full, still not verified: named, not priced again, not 'no amount page'
         self.assertEqual((got['state'], got['pages_to_judgment']), ('read_not_verified', 0))
 
     def test_stale_or_partial_purchase_is_priced(self):
         ref = _row(self.base, '9', 'judgment $2.00', 'j')
-        (self.base / ('amount-vision-' + JP._vision_key(ref) + '.json')).write_text(
-            json.dumps({'document_hash': 'OLD', 'gaps': []}))
+        (self.base / ('amount-vision-' + hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(
+            json.dumps({'source_ref': ref, 'document_hash': 'OLD', 'gaps': []}))
         got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 2))
         _buy(self.base, ref, '9', gaps=[{'page': 2}])
         got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'needs_paid_read')
 
-    def test_without_controlling_only_latest_judgment_counts(self):
-        timeline = {'judgments': {'controlling_entry': None},
-                    'amount_vision': {'amount_checks': [{'entry_id': '4', 'ok': True}]}}
+    def test_without_controlling_only_latest_operative_judgment_counts(self):
         _row(self.base, '9', '$5.00', 'a')
-        got = self.run_assess([('4', 'final_judgment', True, []), ('9', 'final_judgment', True, [])],
-                              timeline)
+        _row(self.base, '4', '$5.00', 'b')
+        docs = [('4', 'final_judgment', True, []), ('9', 'final_judgment', True, [])]
+        got = self.run_assess(docs)
         self.assertEqual((got['state'], got['target_entry']), ('needs_paid_read', '9'))
+        # the later one vacated: the earlier operative one is the target
+        with mock.patch('document_prioritizer.prioritize', return_value=_plan(
+                docs, {'4': ('operative', 'judgment'), '9': ('vacated', 'judgment')})):
+            got = JP.assess(CASE, self.base, None, '2026-09-25')
+        self.assertEqual(got['target_entry'], '4')
+        # every judgment vacated: no target at all, never 'verified' on a dead one
+        with mock.patch('document_prioritizer.prioritize', return_value=_plan(
+                docs, {'4': ('vacated', 'judgment'), '9': ('satisfied', 'judgment')})):
+            got = JP.assess(CASE, self.base, None, '2026-09-25')
+        self.assertEqual(got['state'], 'no_operative_judgment')
+
+    def test_every_document_of_the_target_counts(self):
+        ref1 = _row(self.base, '9', '$1.00', 'j1')
+        row2 = {'source_ref': 'court:9:2', 'manifest': {'sha256': 'h9'},
+                'reading': {'pages': [{'page': 1, 'text': 'Total $9.99'}]}}
+        (self.base / (hashlib.sha256(b'j2').hexdigest() + '.json')).write_text(json.dumps(row2))
+        _buy(self.base, ref1, '9')
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_same_day_tie_takes_the_later_entry_numerically(self):
+        self.assertEqual(JP._target({'judgments': {'judgments': [
+            {'entry_id': '9', 'date': '2026-01-01', 'status': 'operative', 'role': 'judgment'},
+            {'entry_id': '10', 'date': '2026-01-01', 'status': 'operative', 'role': 'replacement'}]}},
+            None), ('10', 'latest_operative'))
 
     def test_walled_reason_is_the_targets_own(self):
         _row(self.base, '9', 'no dollars here', 'j', total_page=False)
@@ -104,6 +144,19 @@ class Assess(unittest.TestCase):
     def test_no_judgment(self):
         self.assertEqual(self.run_assess([('3', 'motion', True, [])])['state'],
                          'no_judgment_on_docket')
+
+    def test_cached_supplemental_ocr_is_seen(self):
+        pdf = self.base / 'doc.pdf'
+        pdf.write_bytes(b'%PDF fake')
+        digest = hashlib.sha256(b'%PDF fake').hexdigest()
+        (self.base / 'timeline-ocr').mkdir()
+        (self.base / 'timeline-ocr' / (digest + '-ocr300-v1.json')).write_text(json.dumps(
+            {'pages': {'1': {'outcome': 'ocr_text', 'text': 'Total $270,322.07'}}}))
+        row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
+               'reading': {'pages': [{'page': 1, 'text': 'no dollar sign in the text layer'}]}}
+        (self.base / (hashlib.sha256(b'j').hexdigest() + '.json')).write_text(json.dumps(row))
+        got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
 
 
 class Rate(unittest.TestCase):
@@ -133,9 +186,12 @@ class Fresh(unittest.TestCase):
 
 class Pass(unittest.TestCase):
     def test_limit_counts_worked_cases_and_clears_old_errors(self):
+        import time
         runner = mock.Mock(COUNTY='MIAMI-DADE')
         entries = [{'case': c} for c in ('a', 'b', 'c', 'd')]
-        log = {'errors': {'a': 'old', 'c': 'old'}}
+        now = time.time()
+        log = {'errors': {'a': 'old', 'c': 'old'},
+               'built': {'a': {'at': now, 'collect': False}, 'b': {'at': now, 'collect': False}}}
         with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
                 mock.patch.object(JP, 'built_recently', side_effect=lambda c: c in ('a', 'b')), \
                 mock.patch('run_case_timeline.timeline_case') as build:
@@ -143,6 +199,13 @@ class Pass(unittest.TestCase):
         self.assertEqual(got, (1, 2, 0))
         self.assertEqual([c.args[0] for c in build.call_args_list], ['c'])
         self.assertEqual(log['errors'], {})
+        # --collect re-does a case built without it; --limit 0 works nothing
+        with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
+                mock.patch.object(JP, 'built_recently', return_value=True), \
+                mock.patch('run_case_timeline.timeline_case') as build:
+            self.assertEqual(JP.run_pass(runner, entries[:2], date(2026, 9, 25), True, log), (2, 0, 0))
+            self.assertEqual(JP.run_pass(runner, entries, date(2026, 9, 25), True, log, limit=0),
+                             (0, 0, 0))
 
 
 class Render(unittest.TestCase):
