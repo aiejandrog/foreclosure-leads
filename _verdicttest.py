@@ -419,30 +419,33 @@ class AbsentEvidenceTests(unittest.TestCase):
                                    attachments=[read_attachment()]))
             self.assertEqual(r['verdict'], 'incomplete', kind)
 
-    def test_every_kind_on_the_allowlist_is_one_miami_case_timeline_can_emit(self):
-        # The allowlist is only safe while it matches the producer's vocabulary. The first version
-        # of this test looked for MCT._TRANSITIONS, which does not exist (the mapping is a local
-        # named `statuses`), so it always fell through to grepping the source for the quoted string:
-        # a check that passes on an unrelated mention, depends on the working directory, and cannot
-        # see a kind the producer GAINED. _transition() is the producer, so ask it directly.
+    def test_case_verdict_and_miami_case_timeline_agree_on_the_status_vocabulary(self):
+        # Two earlier versions of this test could not see a kind the producer GAINED. The first
+        # looked for MCT._TRANSITIONS, which does not exist, and fell through to grepping the source
+        # for a quoted string. The second fed _transition a hand-copied tuple of docket kinds, so a
+        # producer kind absent from that tuple never appeared in `emitted` - a reviewer added
+        # 'order_confirming_sale' -> 'sale_confirmed' to the producer and this test still passed.
+        # Read the producer's own mapping literal instead, so a new entry cannot hide.
+        import ast
+        import inspect
         import miami_case_timeline as MCT
-        docket_kinds = ('complaint', 'amended_complaint', 'final_judgment', 'notice_of_sale',
-                        'order_resetting_sale', 'order_cancelling_sale', 'suggestion_of_bankruptcy',
-                        'stay', 'notice_of_voluntary_dismissal', 'order_of_dismissal',
-                        'satisfaction', 'certificate_of_sale', 'certificate_of_title',
-                        'stay_reinstated', 'vacatur')
+        tree = ast.parse(inspect.getsource(MCT._transition))
         emitted = set()
-        for kind in docket_kinds:
-            change = MCT._transition({'kind': kind, 'entry_id': '1', 'date': '2026-01-01',
-                                      'operative_text': '', 'description': '', 'comments': '',
-                                      'sale_passages': [], 'calendar_event': False})
-            if change:
-                emitted.add(change['kind'])
-        self.assertIn('judgment_entered', emitted, 'this test no longer drives the producer')
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict) and node.values and all(
+                    isinstance(v, ast.Constant) and isinstance(v.value, str) for v in node.values):
+                emitted |= {v.value for v in node.values}
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                continue
+        # The vacatur branch returns 'unclear' outside the mapping; pick it up from the literal keys.
+        emitted |= {'unclear'}
+        self.assertIn('judgment_entered', emitted,
+                      'this test no longer reads the producer mapping')
         self.assertEqual(set(CV.SETTLED_KINDS + CV.SALE_KINDS) - emitted, set(),
                          'case_verdict vouches for a kind miami_case_timeline does not emit')
         self.assertEqual(emitted - set(CV.SETTLED_KINDS) - {'unclear', 'active_pre_judgment'}, set(),
-                         'miami_case_timeline emits a kind case_verdict has never heard of')
+                         'miami_case_timeline emits a status kind case_verdict has never heard of; '
+                         'decide whether it is a posture to vouch for before adding it')
         for kind in CV.SALE_KINDS:
             self.assertIn(kind, CV.SETTLED_KINDS)
 
@@ -920,7 +923,7 @@ class FourthReviewTests(unittest.TestCase):
             self.assertEqual(t['stay_history'], [], date)
             r = CV.assess(t)
             self.assertEqual(r['verdict'], 'incomplete', (date, r))
-            self.assertTrue(any('stay history never saw' in m for m in r['missing']),
+            self.assertTrue(any('stay history never took in' in m for m in r['missing']),
                             (date, r['missing']))
             self.assertNotIn('none on the docket', CV.render_markdown([r]))
 
@@ -1002,6 +1005,153 @@ class FourthReviewTests(unittest.TestCase):
             self.assertTrue(any('exploded' in n for n in report['no_verdict']['unreadable']))
             self.assertIn('saved evidence does not load or does not parse',
                           (folder / 'case-verdicts.md').read_text())
+
+
+class FifthReviewTests(unittest.TestCase):
+    """Findings from the fifth independent review. Every test fails on 8d67734.
+
+    The theme: the round-4 fix over-corrected. Reading `sale_passages` turned "this text contains
+    the word sale" into "a sale is scheduled", so every stayed case with a read judgment reported the
+    same conflict - which buried the real contradiction AND made the status table's
+    2023-020247 = supported unreachable.
+    """
+
+    built = staticmethod(FourthReviewTests.__dict__['built'].__func__)
+
+    JUDGMENT_BODY = ('IT IS ORDERED that the Clerk shall sell the property at public sale to the '
+                     'highest bidder on the date set by the Clerk.')
+
+    @classmethod
+    def with_judgment_body(cls, entries, as_of='2026-09-23', controlling='140'):
+        """The producer's output with the judgment's real body text read, which is where
+        sale_passages comes from."""
+        import miami_case_timeline as T
+        docs = [{'entry_ref': controlling, 'source_ref': 'court:%s:1' % controlling,
+                 'reading': {'pages': [{'page': 1, 'text': cls.JUDGMENT_BODY, 'chars': 120,
+                                        'outcome': 'text', 'text_source': 'embedded'}]},
+                 'manifest': {'document_key': 'k'}}]
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'expected_documents': 0,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text}}
+            for n, text, d in entries], 'pagination_verified': True}, docs, as_of)
+        t['judgments'] = {'controlling_entry': controlling, 'controlling_reason':
+                          'one operative judgment after amendments, vacaturs and satisfactions',
+                          'judgments': [judgment_row(controlling)],
+                          'docket_duplicates_inferred': []}
+        t['amount_vision'] = {'amount_checks': [ok_check(controlling, 'court:%s:1' % controlling,
+                                                        500000.00)]}
+        t['coverage'] = {'attachments': [read_attachment(controlling)], 'complete': False}
+        return t
+
+    def test_the_judgment_ordering_a_sale_is_not_a_sale_on_the_calendar(self):
+        # A Florida final judgment of foreclosure always orders the clerk to sell, and the producer
+        # appends every body line matching sale|sell|auction|reset|reschedul to sale_passages,
+        # ungated by kind. So the controlling judgment's own document made a stayed case conflicted
+        # with no sale ever noticed.
+        t = self.with_judgment_body([(100, 'Complaint', '01/05/2026'),
+                                     (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                                     (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
+        self.assertTrue(any(e.get('sale_passages') for e in t['entries']),
+                        'the fixture no longer reproduces the condition')
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['conflicts'], r['missing']))
+        self.assertTrue(any('stay is in effect' in n for n in r['notes']))
+
+    def test_a_bankruptcy_petition_asking_to_stop_a_sale_is_not_a_sale_on_the_calendar(self):
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                        (150, 'Suggestion of Bankruptcy; debtor asks the Court to stop the '
+                              'foreclosure sale', '08/01/2026')])
+        r = CV.assess(t)
+        self.assertEqual(r['conflicts'], [], r['conflicts'])
+
+    def test_a_real_notice_of_sale_under_a_stay_is_still_conflicted(self):
+        # The round-4 finding must stay fixed: the phrasings classify sets to kind 'other' are
+        # recognised from the entry's own docket description.
+        for phrasing in ('Notice of Foreclosure Sale on 12/28/2026',
+                         'Notice of Rescheduled Foreclosure Sale on 12/28/2026',
+                         'Amended Notice of Rescheduled Foreclosure Sale on 12/28/2026',
+                         'Notice of Resetting Foreclosure Sale on 12/28/2026'):
+            t = self.with_judgment_body([(100, 'Complaint', '01/05/2026'),
+                                         (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                                         (145, phrasing, '07/01/2026'),
+                                         (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'conflicted', (phrasing, r['missing'], r['notes']))
+            self.assertTrue(any('entry 145' in c for c in r['conflicts']), (phrasing, r['conflicts']))
+
+    def test_a_cancellation_the_producer_calls_other_still_cancels(self):
+        # "Notice of Cancellation of Foreclosure Sale" classifies as kind 'other'. Testing only
+        # kind == order_cancelling_sale read it as the NEWEST sale notice, so a cancelled sale
+        # reported as going ahead.
+        t = self.with_judgment_body([(100, 'Complaint', '01/05/2026'),
+                                     (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                                     (145, 'Notice of Foreclosure Sale on 12/28/2026', '07/01/2026'),
+                                     (148, 'Notice of Cancellation of Foreclosure Sale',
+                                      '07/10/2026'),
+                                     (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
+        r = CV.assess(t)
+        self.assertEqual(r['conflicts'], [], r['conflicts'])
+
+    def test_an_order_denying_a_motion_to_reschedule_is_not_a_sale(self):
+        t = self.with_judgment_body([(100, 'Complaint', '01/05/2026'),
+                                     (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                                     (145, 'Notice of Foreclosure Sale on 12/28/2026', '07/01/2026'),
+                                     (147, 'Order Cancelling Foreclosure Sale', '07/20/2026'),
+                                     (149, 'Order Denying Defendant Motion to Reschedule the Sale',
+                                      '07/25/2026'),
+                                     (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026')])
+        r = CV.assess(t)
+        self.assertEqual(r['conflicts'], [], r['conflicts'])
+
+    def test_a_second_petition_after_an_earlier_one_is_not_absorbed(self):
+        # The guard asked whether stay_history was EMPTY, so a docket with an earlier bankruptcy
+        # swallowed a petition dated after the run's as_of: verdict 'supported', stay column "no".
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (110, 'Suggestion of Bankruptcy Chapter 7', '02/01/2026'),
+                        (120, 'Order Granting Relief from Bankruptcy Stay', '03/01/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026'),
+                        (160, 'Suggestion of Bankruptcy Chapter 13 case 26-99999', '12/01/2026')])
+        self.assertTrue(t['stay_history'], 'the fixture no longer reproduces the condition')
+        self.assertIs(t['stay_in_effect'], False)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', r)
+        self.assertTrue(any('160' in m and 'never took in' in m for m in r['missing']), r['missing'])
+        self.assertNotIn('| no |', CV.render_markdown([r]))
+
+    def test_a_bankruptcy_the_history_did_take_in_is_not_reported_as_unseen(self):
+        t = self.built([(100, 'Complaint', '01/05/2026'),
+                        (110, 'Suggestion of Bankruptcy Chapter 7', '02/01/2026'),
+                        (120, 'Order Granting Relief from Bankruptcy Stay', '03/01/2026'),
+                        (140, 'Final Judgment of Foreclosure', '06/10/2026')])
+        r = CV.assess(t)
+        self.assertFalse(any('never took in' in m for m in r['missing']), r['missing'])
+        self.assertEqual(r['verdict'], 'supported', (r['conflicts'], r['missing']))
+
+    def test_a_timeline_that_will_not_parse_is_not_reported_as_never_run(self):
+        # _load swallowed ValueError, so a partial write - the real failure this has to survive -
+        # was filed as "no whole-case timeline saved", indistinguishable from a case never run.
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text('{ not json')
+            proc = run_cli('--dossiers', folder, dealflow=folder)
+            self.assertIn('UNREADABLE', proc.stdout)
+            self.assertNotIn('SKIPPED', proc.stdout)
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertEqual(report['no_verdict']['no_timeline_saved'], [])
+            self.assertTrue(any('A-timeline.json' in n for n in report['no_verdict']['unreadable']))
+
+    def test_a_run_where_every_case_fails_still_writes_the_report(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A'}))
+            proc = run_cli('--dossiers', folder, dealflow=folder)
+            self.assertTrue((folder / 'case-verdicts.json').exists(), proc.stdout)
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertEqual(report['verdicts'], [])
+            self.assertTrue(report['no_verdict']['no_timeline_saved'])
 
 
 if __name__ == '__main__':

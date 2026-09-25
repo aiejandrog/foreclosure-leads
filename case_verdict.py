@@ -42,6 +42,7 @@ standing caveat on every verdict rather than hidden or quietly treated as satisf
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 
 VERDICTS = ('supported', 'incomplete', 'conflicted')
@@ -153,6 +154,19 @@ def _judgment_record(judgments, entry_id):
 # Docket entry kinds that put a sale on the calendar, and the one that takes it off.
 SALE_NOTICE_KINDS = ('notice_of_sale', 'order_resetting_sale')
 SALE_CANCELLED_KIND = 'order_cancelling_sale'
+# The entry's OWN docket description decides whether it schedules or cancels a sale. NOT
+# `sale_passages`: miami_case_timeline (:384) appends every BODY line matching
+# sale|sell|auction|reset|reschedul to that list, ungated by kind, and a Florida final judgment of
+# foreclosure always orders the clerk to sell - so reading sale_passages made the controlling
+# judgment itself, and even a bankruptcy petition asking the court to stop the sale, count as "a sale
+# on the docket". Every stayed case then reported the same conflict, which buried the real
+# 2018-026274 contradiction and made "supported with a stay in effect" unreachable.
+_SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
+_SALE_SET_RE = re.compile(r'\b(?:notice|resett?ing|reset|reschedul\w*)\b|\border\s+of\s+sale\b', re.I)
+# Cancelled, vacated, denied, struck or withdrawn: not a sale the docket is running.
+_SALE_OFF_RE = re.compile(r'\b(?:cancel\w*|vacat\w*|den(?:y|ies|ied|ying)|withdraw\w*|strik\w*|'
+                          r'struck|stayed)\b', re.I)
+_SALE_CANCEL_RE = re.compile(r'\b(?:cancel\w*|vacat\w*)\b', re.I)
 # Entry kinds that put a bankruptcy on the docket (miami_case_timeline :462, :553).
 BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated', 'relief_from_stay',
                     'bankruptcy_dismissed', 'bankruptcy_discharged')
@@ -180,23 +194,19 @@ def _sale_on_the_docket(timeline, status, kind):
     for entry in _rows(timeline, 'entries'):
         if not isinstance(entry, dict):
             continue
-        if entry.get('kind') == SALE_CANCELLED_KIND:
-            cancelled = entry if cancelled is None or str(entry.get('date') or '') >= str(
-                cancelled.get('date') or '') else cancelled
-        elif entry.get('kind') in SALE_NOTICE_KINDS or entry.get('sale_passages'):
-            # NOT the kind alone. miami_case_timeline.classify labels "Notice of Foreclosure Sale"
-            # but leaves "Notice of RESCHEDULED Foreclosure Sale", "Amended Notice of Rescheduled
-            # Foreclosure Sale" and "Notice of Resetting Foreclosure Sale" as kind 'other' - real
-            # Florida phrasings, and reading kind alone let a one-word difference flip a live stay
-            # over a pending sale from conflicted to supported. Those entries still carry
-            # `sale_passages`, which is where the sale actually lives.
-            notice = entry if notice is None or str(entry.get('date') or '') >= str(
-                notice.get('date') or '') else notice
+        # Cancellation is tested FIRST, and by the same kind of rule as the notice: "Notice of
+        # Cancellation of Foreclosure Sale" classifies as kind 'other', and an asymmetric test read
+        # it as the newest sale notice and called a cancelled sale one going ahead.
+        if _cancels_a_sale(entry):
+            cancelled = _newer(cancelled, entry)
+        elif _schedules_a_sale(entry):
+            notice = _newer(notice, entry)
     if notice is not None and not (cancelled is not None
                                   and str(cancelled.get('date') or '') > str(notice.get('date') or '')):
+        dates = _sale_dates_of(notice)
         return 'a sale on the docket (entry %s, %s%s) with no later cancellation' % (
             notice.get('entry_id') or '?', notice.get('date') or 'undated',
-            '; sale date %s' % ', '.join(_sale_dates_of(notice)) if _sale_dates_of(notice) else '')
+            '; sale date %s' % ', '.join(dates) if dates else '')
     if kind in SALE_KINDS:
         return 'the docket status is %r' % (kind,)
     if status.get('sale_date'):
@@ -204,29 +214,57 @@ def _sale_on_the_docket(timeline, status, kind):
     return None
 
 
+def _entry_text(entry):
+    """The entry's own docket words - description, title, clerk comments. Never document body lines."""
+    return ' '.join(str(entry.get(k) or '') for k in ('description', 'operative_text', 'comments'))
+
+
+def _schedules_a_sale(entry):
+    if entry.get('kind') in SALE_NOTICE_KINDS:
+        return True
+    text = _entry_text(entry)
+    return bool(_SALE_WORD_RE.search(text) and _SALE_SET_RE.search(text)
+                and not _SALE_OFF_RE.search(text))
+
+
+def _cancels_a_sale(entry):
+    if entry.get('kind') == SALE_CANCELLED_KIND:
+        return True
+    text = _entry_text(entry)
+    return bool(_SALE_WORD_RE.search(text) and _SALE_CANCEL_RE.search(text))
+
+
+def _newer(current, entry):
+    if current is None:
+        return entry
+    return entry if str(entry.get('date') or '') >= str(current.get('date') or '') else current
+
+
 def _sale_dates_of(entry):
-    """The sale dates the entry's own passages print, via the producer's own parser."""
-    passages = entry.get('sale_passages')
-    if not isinstance(passages, list) or not passages:
+    """The sale dates the entry's own docket words print, via the producer's own parser."""
+    text = _entry_text(entry)
+    if not text.strip():
         return []
     try:
         import miami_case_timeline
-        return [d for d in (miami_case_timeline._sale_dates(
-            [str(x) for x in passages]) or []) if d]
+        return [d for d in (miami_case_timeline._sale_dates([text]) or []) if d]
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return []
 
 
 def _bankruptcy_entries(timeline):
-    """Bankruptcy filings on the docket, whatever the stay history says.
+    """Bankruptcy filings on the docket that the stay history never took in.
 
-    build_timeline skips an entry with no date or a date after `as_of` before building
-    stay_history, so a petition that is undated, or filed after the replay's as_of, leaves
-    stay_history empty and stay_in_effect None. Rendering that as "no bankruptcy on the docket" is a
-    positive claim the entries themselves refute.
+    PER ENTRY, not "the history is empty". build_timeline skips an entry with no date, or a date
+    after `as_of`, before building stay_history - and a fixed as_of is how the acceptance replay
+    runs. Asking only whether stay_history was empty let a docket with an EARLIER bankruptcy absorb a
+    second petition silently: relief granted in March, a fresh petition dated after the cutoff,
+    verdict 'supported', stay column "no".
     """
+    seen = {str(h.get('entry_id')) for h in _rows(timeline, 'stay_history') if isinstance(h, dict)}
     return [e for e in _rows(timeline, 'entries')
-            if isinstance(e, dict) and e.get('kind') in BANKRUPTCY_KINDS]
+            if isinstance(e, dict) and e.get('kind') in BANKRUPTCY_KINDS
+            and str(e.get('entry_id')) not in seen]
 
 
 def _sale_day_bankruptcy(timeline):
@@ -410,11 +448,12 @@ def assess(timeline, dossier=None):
     elif stay is None and history:
         missing.append('stay state unknown')
     unseen = _bankruptcy_entries(timeline)
-    if stay is not True and unseen and not history:
-        # The petition is on the docket but never reached stay_history: undated, or dated after the
-        # run's as_of. Either way the stay state is unknown, not absent.
+    if stay is not True and unseen:
+        # On the docket but never in stay_history: undated, or dated after the run's as_of. Either
+        # way the stay state is unknown, not absent - whether or not an EARLIER bankruptcy did reach
+        # the history.
         missing.append('a bankruptcy filing is on the docket (entr%s %s) that the stay history '
-                       'never saw, so the stay state is unknown rather than clear'
+                       'never took in, so the stay state is unknown rather than settled'
                        % ('y' if len(unseen) == 1 else 'ies',
                           ', '.join(str(e.get('entry_id') or '?') for e in unseen[:5])))
     held = _sale_day_bankruptcy(timeline)
@@ -613,10 +652,13 @@ def _stay_word(value, history=None, on_docket=None):
     # not the same as no bankruptcy on the docket: it skips an undated entry, and one dated after the
     # run's as_of, before building that history. Saying "none on the docket" on those was a positive
     # claim the entries refuted, and on one of them the verdict read 'supported' as well.
+    # `on_docket` counts bankruptcy entries the history never took in. With one of those, the stay
+    # state is unknown whatever stay_in_effect says: False there means "the history's last event
+    # closed it", not "no live petition".
+    if on_docket:
+        return 'IN EFFECT' if value is True else 'unknown'
     if value is None:
-        if history or on_docket:
-            return 'unknown'
-        return 'none on the docket'
+        return 'unknown' if history else 'none on the docket'
     return {True: 'IN EFFECT', False: 'no'}.get(value, str(value))
 
 
@@ -663,10 +705,26 @@ def render_markdown(rows, skipped=(), broken=()):
     return '\n'.join(out)
 
 
-def _load(path):
+class Unreadable(Exception):
+    """The file is there and will not parse. Not the same as a file nobody ever wrote."""
+
+
+def _load(path, required=False):
+    """-> the parsed JSON, or None when the file is absent.
+
+    A partial write is the real failure this module has to survive, and swallowing ValueError filed
+    it under "no whole-case timeline saved" - in the report, indistinguishable from a case that was
+    never run.
+    """
     try:
-        return json.loads(Path(path).read_text(encoding='utf-8'))
-    except (OSError, ValueError):
+        text = Path(path).read_text(encoding='utf-8')
+    except OSError:
+        return None
+    try:
+        return json.loads(text)
+    except ValueError as exc:
+        if required:
+            raise Unreadable('%s: %s' % (Path(path).name, exc))
         return None
 
 
@@ -674,7 +732,7 @@ def for_saved_case(dossier_path):
     """-> the verdict for one saved dossier, or None when it has no whole-case timeline yet."""
     path = Path(dossier_path)
     dossier = _load(path)
-    timeline = _load(path.with_name(path.stem + '-timeline.json'))
+    timeline = _load(path.with_name(path.stem + '-timeline.json'), required=True)
     if not isinstance(timeline, dict):
         return None
     return assess(timeline, dossier if isinstance(dossier, dict) else None)
@@ -724,7 +782,8 @@ def main(argv=None):
     for note in broken:
         print('  UNREADABLE (saved evidence does not load or does not parse): %s' % note)
 
-    if rows:
+    if rows or skipped or broken:
+        # A run where every case failed still has something to report, and it was writing nothing.
         # Every other writer in this chain routes through case_review.output_path, which refuses a
         # path outside paths.DEALFLOW_DIR and anything under OneDrive - CLAUDE.md's Known Folder
         # Move rule. A raw --out here was the one unguarded write path in the chain.
