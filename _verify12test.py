@@ -236,5 +236,85 @@ check('--reanalyze --dry-run counts the untokened chain it will not touch',
       '1 older chain(s) have no cached token' in _dry.getvalue() and '3 lead(s) to pull' in _dry.getvalue(),
       _dry.getvalue()[-300:])
 
+# ---- --max-spend: a hard cap on 2Captcha solves (Alex's $5 for Miami reads, 2026-09-25)
+_fake_cs = types.SimpleNamespace(calls=[], bal=['10.00'])
+_fake_cs.solve_turnstile = lambda *a, **k: _fake_cs.calls.append(1)
+_fake_cs.balance = lambda: _fake_cs.bal[0]
+_real_cs = sys.modules.get('captcha_solver')
+sys.modules['captcha_solver'] = _fake_cs
+try:
+    RL._SPEND.update(cap=0.01, submits=0, bal0=10.0, bal=None, stopped='')
+    RL.fetch_via_turnstile(('OWNERX', ''))
+    RL.fetch_via_turnstile(('OWNERY', ''))
+    check('--max-spend $0.01 submits three solves at $0.0033 and refuses the fourth',
+          len(_fake_cs.calls) == 3 and RL._SPEND['submits'] == 3 and 'cap' in RL._SPEND['stopped'],
+          (len(_fake_cs.calls), RL._SPEND))
+    del _fake_cs.calls[:]
+    _fake_cs.bal[0] = '8.99'
+    RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, bal=None, stopped='')
+    for _i in range(10):
+        RL.fetch_via_turnstile(('OWNERZ', ''))
+    check('--max-spend stops at the 20-solve balance check when the account fell by the cap',
+          len(_fake_cs.calls) == 20 and 'balance' in RL._SPEND['stopped'], (len(_fake_cs.calls), RL._SPEND))
+    del _fake_cs.calls[:]
+    _fake_cs.bal[0] = None
+    RL._SPEND.update(cap=1.00, submits=20, bal0=10.0, bal=None, stopped='')
+    RL.fetch_via_turnstile(('OWNERW', ''))
+    check('--max-spend stops paying when the balance can no longer be read', _fake_cs.calls == [], RL._SPEND)
+    RL._SPEND.update(cap=None, submits=0, bal0=None, bal=None, stopped='')
+    RL.fetch_via_turnstile(('OWNERV', ''))
+    check('without --max-spend the solver behaves as before (three tries, counted)',
+          len(_fake_cs.calls) == 3 and RL._SPEND['submits'] == 3)
+
+    for _bad in (['--repull'], ['--repull', '--max-spend', '6'], ['--max-spend', '0'],
+                 ['--repull', '--cached-only', '--max-spend', '1']):
+        sys.argv = ['records_liens.py'] + _bad
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                RL.main()
+            _ok = False
+        except SystemExit:
+            _ok = True
+        check('records_liens refuses %s' % ' '.join(_bad), _ok)
+
+    # --repull over the same fixture: 101 was rewritten above, so 102 (dead token), 104 (empty
+    # re-read) and 103 (no token) are left. Two solves fit under $0.0066; the third is refused mid-way
+    # through 102, so 102 and 103 both count as left by the cap.
+    _before = json.load(open(os.path.join(_tmp, 'records_liens.json')))
+    del _fake_cs.calls[:]
+    _fake_cs.bal[0] = '10.00'
+    _spent2 = []
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs',
+                                           'camoufox_session', 'mint_and_fetch', 'time')}
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_tmp, 'leads_final.json'), os.path.join(_tmp, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_tmp, 'records_qs.json'), _tmp
+        RL.records_by_qs = lambda qs: [deed, city1] if qs == 'tokA' else ([] if qs == 'tokEMPTY' else None)
+        RL.camoufox_session = lambda: _spent2.append('camoufox') or (None, None)
+        RL.mint_and_fetch = lambda *a, **k: _spent2.append('mint')
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        _rp = io.StringIO()
+        sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066']
+        with contextlib.redirect_stdout(_rp):
+            RL.main()
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    _rp = _rp.getvalue()
+    _after = json.load(open(os.path.join(_tmp, 'records_liens.json')))
+    check('--repull submits no more solves than the cap allows', len(_fake_cs.calls) == 2, (_fake_cs.calls, _rp[-600:]))
+    check('--repull tries Camoufox before paying', _spent2 == ['camoufox'], _spent2)
+    check('--repull names the leads the cap left unpulled', 'not pulled: spend cap' in _rp and '2 not pulled because of the cap' in _rp and 'reached the $0.0066 cap' in _rp, _rp[-600:])
+    check('--repull reports the actual charge from the account balance', 'ACTUAL CHARGE: balance $10.0000' in _rp, _rp[-400:])
+    check('--repull never overwrites a chain it could not re-read', _after == _before, (_before, _after))
+finally:
+    if _real_cs is not None:
+        sys.modules['captcha_solver'] = _real_cs
+    else:
+        sys.modules.pop('captcha_solver', None)
+    RL._SPEND.update(cap=None, submits=0, bal0=None, bal=None, stopped='')
+
 print('\nOK: 0 failure(s)' if not FAILS else '\nFAIL: %d failure(s)' % len(FAILS))
 sys.exit(1 if FAILS else 0)

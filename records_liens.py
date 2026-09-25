@@ -147,6 +147,52 @@ def records_by_qs(qs):
         return None
 
 
+# ---- the paid-solve cap ------------------------------------------------------------------------
+# 2026-09-25: Alex set $5 for Miami data reads, lien re-pulls first. `paid` below counted OWNERS that
+# reached 2Captcha, but one owner can cost three solves (tries=3) and the defendant fallback adds two
+# more owners, so it was never a spend figure and nothing stopped at a number. --max-spend now counts
+# every submitted solve at the measured owner-search price and refuses the next one that would pass
+# the cap; the account balance is re-read every 20 solves in case the price moved.
+PAID_SOLVE_USD = 0.0033          # measured per owner-search token, 2026-09 (2Captcha lists ~$0.003)
+MAX_SPEND_CEILING = 5.00         # the most any one run may be given, whatever --max-spend says
+_SPEND = {'cap': None, 'submits': 0, 'bal0': None, 'bal': None, 'stopped': ''}
+
+
+def _usd(x):
+    return ('%.2f' % x) if abs(x * 100 - round(x * 100)) < 1e-9 else ('%.4f' % x)
+
+
+def _balance():
+    try:
+        from captcha_solver import balance
+        v = balance()
+        return float(v) if v not in (None, '') else None
+    except Exception:
+        return None
+
+
+def _may_submit():
+    """True when one more paid solve fits under --max-spend. Sticky: once it says no, it stays no."""
+    cap = _SPEND['cap']
+    if cap is None:
+        return True
+    if _SPEND['stopped']:
+        return False
+    if (_SPEND['submits'] + 1) * PAID_SOLVE_USD > cap + 1e-9:
+        _SPEND['stopped'] = 'counted solves reached the $%s cap' % _usd(cap)
+        return False
+    if _SPEND['submits'] and _SPEND['submits'] % 20 == 0:
+        b = _balance()
+        if b is None:
+            _SPEND['stopped'] = '2Captcha balance could not be re-read'
+            return False
+        _SPEND['bal'] = b
+        if _SPEND['bal0'] - b + PAID_SOLVE_USD > cap + 1e-9:
+            _SPEND['stopped'] = 'the account balance fell by the $%s cap' % _usd(cap)
+            return False
+    return True
+
+
 def fetch_via_turnstile(owner_lf, tries=3):
     """THE UNLOCK — pull an owner's recorded docs by solving Cloudflare Turnstile (2Captcha), no
     browser. Solves the token, POSTs the same standardsearch the app uses with it in the
@@ -166,6 +212,9 @@ def fetch_via_turnstile(owner_lf, tries=3):
            + '&dateRangeFrom=&dateRangeTo=&documentType=&searchT=&firstQuery=y&searchtype='
            + urllib.parse.quote('Name/Document'))
     for _ in range(max(1, tries)):
+        if not _may_submit():
+            return None
+        _SPEND['submits'] += 1                  # counted on submit: a failed solve may still bill
         tok = solve_turnstile(TS_SITE_KEY, OR_BASE)
         if not tok:
             continue
@@ -795,13 +844,28 @@ def main():
                     help="$0: re-run the chain analysis on cached chains traced before the lien rows "
                          "existed (no 'other' key), using ONLY cached search tokens. Never mints, never "
                          "opens a browser, never pays; a dead token leaves the old chain as it was.")
+    ap.add_argument('--repull', action='store_true',
+                    help="the --reanalyze chains, but PAID: a chain with no cached token or an expired "
+                         "one gets a fresh search (Camoufox first, free; then 2Captcha). Needs --max-spend.")
+    ap.add_argument('--max-spend', type=float, default=None,
+                    help="hard dollar cap on 2Captcha solves this run (at most $%.2f); each submitted "
+                         "solve counts ~$%s and the run stops paying at the cap" % (MAX_SPEND_CEILING, PAID_SOLVE_USD))
     ap.add_argument('--no-camoufox', action='store_true',
                     help="skip the free Camoufox token mint and go straight to 2Captcha "
                          "(escape hatch for the day the county stops issuing tokens to it)")
     ap.add_argument('--persist', action='store_true', help="never give up on the captcha — keep minting with back-off until it yields (per-lead cap via MINT_ATTEMPTS env, default 25). This is how we FIGURE OUT the surviving-senior for every lead no matter how hostile the wall is.")
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
-    if a.reanalyze:
+    if a.max_spend is not None and not (0 < a.max_spend <= MAX_SPEND_CEILING):
+        ap.error('--max-spend must be above 0 and at most %.2f' % MAX_SPEND_CEILING)
+    if a.repull and a.max_spend is None:
+        ap.error('--repull pays for searches; give it a --max-spend')
+    if a.repull and a.cached_only:
+        ap.error('--repull and --cached-only contradict each other')
+    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, bal=None, stopped='')
+    if a.repull:
+        a.reanalyze = True                                    # same chains, same keep rule, but it may mint
+    elif a.reanalyze:
         a.cached_only = True                                  # no mint, no browser, no captcha: $0
 
     leads = json.load(open(LEADS, encoding='utf-8'))
@@ -887,7 +951,7 @@ def main():
             # cached token is only counted: a fresh search needs a mint, which is Alex's call.
             _old = out.get(case) or {}
             if case in out and 'other' not in _old and _old.get('conf') in ('ok', 'low'):
-                (picked if oc in qs_cache else no_token).append(r)
+                (picked if oc in qs_cache or a.repull else no_token).append(r)
             continue
         if a.cached_only and oc not in qs_cache: continue
         if case in out and not a.case:
@@ -909,6 +973,8 @@ def main():
                 md_retries.insert(0, r)
             continue
         picked.append(r)
+    if a.repull:
+        picked.sort(key=lambda r: (r.get('owner_clean', '') or '').strip() not in qs_cache)  # $0 re-reads first
     if a.limit: picked = picked[:a.limit]
     # append retries AFTER the fresh cap so new leads always win the budget
     if md_retries:
@@ -921,7 +987,11 @@ def main():
 
     cached = sum(1 for r in picked if (r.get('owner_clean','') or '').strip() in qs_cache)
     print(f"{len(picked)} lead(s) to pull ({cached} via cached token / requests, {len(picked)-cached} need a mint)")
-    if a.reanalyze:
+    if a.repull:
+        _need = len(picked) - cached
+        print(f"  --repull: at most ${_usd(a.max_spend)} of 2Captcha; the {_need} without a token (and any "
+              f"expired token) try Camoufox first, free")
+    elif a.reanalyze:
         print(f"  --reanalyze: {len(no_token)} older chain(s) have no cached token and stay as they are "
               f"(a fresh search would need a mint, ~$0.0033 each; not done here)")
     # Say what was dropped and why. A silent filter reads as "there was nothing there".
@@ -943,7 +1013,15 @@ def main():
         print('  camoufox: %s' % ('ready (free Turnstile tokens)' if cf_browser
                                   else 'UNAVAILABLE — %s; using 2Captcha' % CF_UNAVAILABLE))
 
-    done = hits = cf_free = paid = kept = 0
+    if _SPEND['cap'] is not None:
+        _SPEND['bal0'] = _balance()
+        if _SPEND['bal0'] is None:
+            _SPEND['stopped'] = '2Captcha balance could not be read at the start'
+            print('  2captcha: balance unreadable, so no paid solves this run (free paths only)')
+        else:
+            print(f"  2captcha: balance ${_SPEND['bal0']:.4f}; this run stops paying at ${_usd(_SPEND['cap'])}")
+
+    done = hits = cf_free = paid = kept = capped = 0
     try:
         for r in picked:
             case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
@@ -1027,7 +1105,11 @@ def main():
                         _searched = _nm + ' (defendant)'
                         break
             if models is None:
-                print(f"  --  {case:22} {oc:26} (no records / blocked)")
+                if _SPEND['stopped'] and not a.cached_only:
+                    capped += 1
+                    print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
+                else:
+                    print(f"  --  {case:22} {oc:26} (no records / blocked)")
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '')
             res['searched_as'] = _searched
@@ -1057,15 +1139,29 @@ def main():
                 pass
 
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
-    if a.reanalyze:
+    if a.repull:
+        print(f"     --repull: {done} chain(s) re-read, {kept} re-read(s) found nothing on the parcel "
+              f"(old chain kept), {capped} not pulled because of the cap, "
+              f"{len(picked) - done - kept - capped} with no records or blocked")
+    elif a.reanalyze:
         print(f"     --reanalyze: {len(picked) - done - kept} cached token(s) had expired and {kept} re-read(s) "
               f"found nothing on the parcel; those chains, and the {len(no_token)} without a token, keep "
               f"their old lien picture until a paid re-pull")
     if cf_free or paid:
         # paid counts owners that reached fetch_via_turnstile; each of those is a 2Captcha solve
         # (~$0.003) that a free Camoufox token would have avoided.
-        print(f"     token source: {cf_free} free (camoufox) / {paid} paid (2captcha)"
-              f"  ~${paid * 0.003:.3f} spent, ~${cf_free * 0.003:.3f} avoided")
+        print(f"     token source: {cf_free} free (camoufox) / {paid} owner search(es) sent to 2captcha, "
+              f"{_SPEND['submits']} solve(s) submitted  ~${_SPEND['submits'] * PAID_SOLVE_USD:.3f} spent, "
+              f"~${cf_free * PAID_SOLVE_USD:.3f} avoided")
+    if _SPEND['cap'] is not None:
+        b1 = _balance() if _SPEND['bal0'] is not None else None
+        print(f"     2captcha cap ${_usd(_SPEND['cap'])}: {_SPEND['submits']} solve(s) submitted, "
+              f"~${_SPEND['submits'] * PAID_SOLVE_USD:.3f} counted")
+        if b1 is not None:
+            print(f"     ACTUAL CHARGE: balance ${_SPEND['bal0']:.4f} -> ${b1:.4f} = ${_SPEND['bal0'] - b1:.4f} "
+                  f"(account-wide: anything else solving at the same time counts too)")
+        if _SPEND['stopped']:
+            print(f"     stopped paying: {_SPEND['stopped']}")
 
 
 if __name__ == '__main__':
