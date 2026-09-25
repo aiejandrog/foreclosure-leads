@@ -6,6 +6,7 @@ an interrupted API call retains its worst-case reservation instead of becoming f
 """
 import hashlib
 import json
+import re
 import math
 import os
 from pathlib import Path
@@ -163,12 +164,25 @@ class State:
         steps = self.data['cases'].get(entry['case'], {}).get('steps', {})
         self.data['cases'][entry['case']] = {
             'fingerprint': fingerprint(entry),
-            'status': ('budget_paused' if paused else
-                       'complete' if dossier.get('complete') is True else 'assessed_with_gaps'),
+            # A documents step stopped by a spending cap is paused too, so the next run takes the
+            # case up again without --retry-gaps (an audit of #53: it read as done-with-gaps).
+            'status': ('budget_paused' if paused or (steps.get('documents') or {}).get('status') == 'budget'
+                       else 'complete' if dossier.get('complete') is True else 'assessed_with_gaps'),
             'open_gaps': dossier.get('open_gaps', []),
             'steps': steps,
         }
         self.save()
+
+
+def _documents_step_status(dossier):
+    """'done' only for a complete dossier. A dossier with gaps is 'gap' (redone by --retry-gaps);
+    one that stopped on a spending cap is 'budget', redone on every run, so a raised cap or a new
+    day reads the refused pages. Re-running is spend-safe: settled pages come back free from the
+    page ledger and uncertain ones stay blocked."""
+    if dossier.get('complete') is True:
+        return 'done'
+    gaps = json.dumps(dossier.get('open_gaps') or [])
+    return 'budget' if re.search(r'budget', gaps, re.I) else 'gap'
 
 
 class PersistentBudget(Budget):
@@ -323,7 +337,8 @@ def run(args, runner):
                 # restart when this exact step already finished for this exact entry.
                 docs_fp = fingerprint(dict(entry, _processing={
                     k: v for k, v in entry['_processing'].items() if k != 'timeline'}))
-                saved = DS.pipeline_load(target) if state.step_done(case, 'documents', docs_fp) else None
+                saved = (DS.pipeline_load(target)
+                         if state.step_done(case, 'documents', docs_fp, args.retry_gaps) else None)
                 if saved is not None:
                     dossier = saved
                 else:
@@ -335,7 +350,7 @@ def run(args, runner):
                         walk_budget=args.walk_budget, resume=True, reuse_done=True)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
-                    state.mark_step(case, 'documents', docs_fp, 'done')
+                    state.mark_step(case, 'documents', docs_fp, _documents_step_status(dossier))
                 # STEP 2, timeline: the whole-case docket and its filings, through the SAME
                 # ledger and the SAME per-case share (run_case_timeline.timeline_case).
                 if getattr(args, 'timeline', False):

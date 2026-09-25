@@ -223,10 +223,65 @@ class RunnerWiringTests(unittest.TestCase):
                  patch.object(RD, 'run_case', side_effect=process):
                 code = RD.main(['--backfill', '--enable', '--vision', '--leads-file', str(source),
                                 '--vision-max-spend', '0.30', '--no-ocr'])
-        self.assertEqual(code, 0)                 # no pause: the cap itself was never spent
+        # One spent share paused nothing: all three cases ran. The third spent the last of the
+        # $0.30 cap itself, so the run then pauses (exit 4) rather than calling the rest done.
+        self.assertEqual(code, 4)
         self.assertEqual([c for c, _ in seen], ROSTER[:3])
         self.assertAlmostEqual(seen[0][1], 0.10)  # first case: its own third, nothing more
 
+
+
+class BudgetStopTests(unittest.TestCase):
+    """An audit of #53: a documents step the cap stopped was marked done, so neither a raised cap
+    nor --retry-gaps ever read the refused pages, and the global cap never paused a backfill."""
+
+    def test_the_documents_step_status_names_why_it_stopped(self):
+        self.assertEqual(BF._documents_step_status({'complete': True}), 'done')
+        self.assertEqual(BF._documents_step_status({'complete': False, 'open_gaps': ['x: gap']}), 'gap')
+        self.assertEqual(BF._documents_step_status(
+            {'complete': False, 'open_gaps': ['vision: budget_exhausted: next page']}), 'budget')
+
+    def test_a_budget_stopped_step_is_never_done_and_a_gap_only_without_retry(self):
+        with tempfile.TemporaryDirectory() as folder, BF.State(Path(folder) / 'state.json') as state:
+            state.mark_step('C', 'documents', 'fp', 'budget')
+            self.assertFalse(state.step_done('C', 'documents', 'fp'))
+            state.mark_step('C', 'documents', 'fp', 'gap')
+            self.assertTrue(state.step_done('C', 'documents', 'fp'))
+            self.assertFalse(state.step_done('C', 'documents', 'fp', True))
+            entry = {'case': 'C', 'x': 1}
+            state.mark_step('C', 'documents', 'fp', 'budget')
+            state.finish(entry, {'complete': False, 'open_gaps': ['budget_exhausted']})
+            self.assertTrue(state.pending(entry))
+
+    def test_the_cumulative_cap_refusing_marks_the_ledger_exhausted(self):
+        alloc = CB.CaseAllocator(BF.PersistentBudget(0.06, CB.MemoryState()), ROSTER[:1])
+        share = alloc.for_case(ROSTER[0])
+        spend_until_refused(share, DV.VisionReader(client=Client()), 'x')
+        self.assertTrue(alloc.budget.exhausted)
+
+    def test_a_page_whose_request_died_in_this_run_is_not_paid_again(self):
+        client = Client()
+        real, calls = client.create, {'n': 0}
+        def flaky(**kw):
+            calls['n'] += 1
+            real(**kw)
+            if calls['n'] == 1:
+                raise ConnectionError('reset after the request left')
+            return real(**kw)
+        client.create = flaky
+        with tempfile.TemporaryDirectory() as folder, BF.State(Path(folder) / 'l.json') as state:
+            alloc = CB.CaseAllocator(BF.PersistentBudget(1.0, state), ['A'])
+            reader = DV.VisionReader(client=client)
+            with self.assertRaises(ConnectionError):
+                reader.read_page(b'page-7', alloc.for_case('A'))
+            with self.assertRaises(CB.UncertainPaidCall):
+                reader.read_page(b'page-7', alloc.for_case('A'))
+            self.assertEqual(calls['n'], 1)
+
+    def test_one_share_refusing_leaves_the_ledger_open(self):
+        alloc = CB.CaseAllocator(BF.PersistentBudget(0.2, CB.MemoryState()), ROSTER[:2])
+        spend_until_refused(alloc.for_case(ROSTER[0]), DV.VisionReader(client=Client()), 'y')
+        self.assertFalse(alloc.budget.exhausted)
 
 
 class OrchestrationTests(unittest.TestCase):
