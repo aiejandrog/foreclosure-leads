@@ -194,6 +194,12 @@ def _may_submit():
     return True
 
 
+def _parcel_in(models, folio):
+    """Does a search result carry this folio at all? analyze()'s parcel_found, without the analysis."""
+    fol = norm_folio(folio)
+    return bool(models) and bool(fol) and any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models)
+
+
 def _ledger_lock(path):
     """One paying run per ledger. A second run would read the same 'already spent' and both could
     spend what is left. A lock older than 12 hours is a crashed run's and is taken over."""
@@ -615,7 +621,7 @@ def _names_owner(party, owners):
         if words[0] == 'co':
             if words[1] and words[1] in re.sub(r'[^A-Z0-9]', '', up):
                 return True
-        elif words[1] in toks and words[2] in toks:
+        elif all(w in toks for w in words[1].split()) and words[2] in toks:   # 'DE LA CRUZ' is three words
             return True
     return False
 
@@ -806,7 +812,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # vacated final judgment 34932/1256).
     _IRS_RE = re.compile(r'INTERNAL\s+REV|UNITED\s+STATES|\bIRS\b', re.I)
     _DOR_RE = re.compile(r'DEPARTMENT\s+OF\s+REVENUE|DEPT\.?\s+OF\s+REV|\bDOR\b', re.I)
-    _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|PACE|CLEAN ENERGY|WATER\s+(?:AND|&)\s+SEWER|\bWASD\b', re.I)
+    _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|\bPACE\b|CLEAN ENERGY|WATER\s+(?:AND|&)\s+SEWER|\bWASD\b', re.I)
     _HOA_DOC_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|TOWNHO|MAINTENANCE', re.I)
     _ASSN_DOC_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
     _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|\bWARRANTS?\b|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
@@ -843,9 +849,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q in _pl or _pl in q)):
                 return True
         return False
-    def _own_judgment(kind, amt, d):
+    def _own_judgment(doc, amt, d):
         # the case's own final judgment, whatever name the index files it under: same figure
-        return (kind == 'judgment' and amt > 0 and judgment and judgment > 0
+        return ('JUDGMENT' in doc and amt > 0 and judgment and judgment > 0
                 and abs(amt - judgment) <= max(1.0, 0.01 * judgment) and not _before_case(d))
     def _before_case(d):
         # a recording from before the year this case was filed cannot be one of its own filings
@@ -863,7 +869,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                  for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
                  and re.search(r'LIEN|JUDG|WARRANT', (r.get('doC_TYPE', '') or '').upper())
                  and not re.search(r'MORTGAGE|PARTIAL', (r.get('doC_TYPE', '') or '').upper())
-                 and _here(r)
+                 and (norm_folio(r.get('foliO_NUMBER', '')) == fol           # on this folio, or in its
+                      or (_here(r) and (_ow is None                           # subdivision AND naming the
+                                        or _names_owner(r.get('firsT_PARTY'), _ow)   # owner: a neighbour's
+                                        or _names_owner(r.get('seconD_PARTY'), _ow))))  # release is not ours
                  and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())]
     other = []
     hoa_open = code_open = irs_open = 0
@@ -915,9 +924,13 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         amt = num(r.get('consideratioN_1')) or num(r.get('amount'))
         # The year floor is for the filings the suit itself makes (its lis pendens and judgment). An
         # association's claim of lien is recorded BEFORE it sues and is the debt being foreclosed.
-        own_case = ((_is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
-                     and not (kind in ('lis_pendens', 'judgment') and _before_case(r.get('reC_DATE', ''))))
-                    or _own_judgment(kind, amt, r.get('reC_DATE', '')))
+        # By DOCUMENT, not by who the creditor looks like: a plaintiff called SPACE COAST CREDIT UNION
+        # or FIRST COUNTY BANK reads as 'code', and its own judgment is still this case. Its other
+        # liens are claims unless they are an association's (the claim of lien it forecloses).
+        _suit_doc = 'LIS PENDENS' in doc or 'JUDGMENT' in doc
+        own_case = ((_is_plaintiff(p1, p2) and (kind in ('association', 'other') or _suit_doc)
+                     and not (_suit_doc and _before_case(r.get('reC_DATE', ''))))
+                    or _own_judgment(doc, amt, r.get('reC_DATE', '')))
         released = all(bp) and bp in released_bp
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'doc': doc[:40], 'kind': kind,
                'party': (cred if cred is not both else
@@ -929,6 +942,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if own_case:
             row['own_case'] = True                          # this foreclosure's own filing: never a claim
         row['_holder'] = _pnorm(cred if cred is not both else row['party'])
+        if (kind == 'judgment' and not own_case and cred is not both
+                and not COMPANY_RE.search(cred) and not _CREDITOR_RE.search(cred)):
+            # person against person: the index does not say who won, and a judgment the OWNER won is
+            # money owed to them. Counted as a debt we cannot size, never summed into one.
+            row['direction_unknown'] = True
         other.append(row)
     # pair the releases that point nowhere with the liens of their own holder, one to one
     for h in {o['_holder'] for o in other if o['_holder']}:
@@ -957,7 +975,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             continue
         if kind == 'other' and not re.search(r'\bLIEN\b|JUDGMENT', row['doc']):
             continue                                        # a notice, a certificate, a financing statement
-        if not row['amt']:
+        if not row['amt'] or row.get('direction_unknown'):
             other_unpriced += 1                             # found, open, amount not published: a count
             continue
         if kind in ('irs', 'state_tax'):
@@ -1017,11 +1035,14 @@ def main():
                     help="the --reanalyze chains, but PAID: a chain with no cached token or an expired "
                          "one gets a fresh search (Camoufox first, free; then 2Captcha). Needs --max-spend.")
     ap.add_argument('--max-spend', type=float, default=None,
-                    help="hard dollar cap on 2Captcha solves this run (at most $%.2f); each submitted "
-                         "solve counts ~$%s and the run stops paying at the cap" % (MAX_SPEND_CEILING, PAID_SOLVE_USD))
+                    help="hard dollar cap on 2Captcha solves (at most $%.2f); each submitted solve counts "
+                         "~$%s and the run stops paying at the cap. With --spend-ledger it is the TOTAL for "
+                         "that ledger across runs, and the ledger keeps the lowest total ever given"
+                         % (MAX_SPEND_CEILING, PAID_SOLVE_USD))
     ap.add_argument('--spend-ledger', default='',
                     help="JSON file that makes --max-spend a total across runs (what earlier runs "
-                         "spent is subtracted; the cap in the file can be lowered, never raised)")
+                         "spent is subtracted; the total in the file can be lowered, never raised). "
+                         "--repull also records each chain it paid to search, so none is paid for twice")
     ap.add_argument('--no-camoufox', action='store_true',
                     help="skip the free Camoufox token mint and go straight to 2Captcha "
                          "(escape hatch for the day the county stops issuing tokens to it)")
@@ -1043,10 +1064,10 @@ def main():
         if not _lock:
             ap.error('another run holds %s.lock; wait for it (or delete the lock if no run is going)'
                      % a.spend_ledger)
-    if a.spend_ledger:
-        _SPEND['cap'], _SPEND['prior'], _SPEND['led'] = _ledger_open(a.spend_ledger, a.max_spend)
-        _SPEND['ledger'] = a.spend_ledger
     try:
+        if a.spend_ledger:
+            _SPEND['cap'], _SPEND['prior'], _SPEND['led'] = _ledger_open(a.spend_ledger, a.max_spend)
+            _SPEND['ledger'] = a.spend_ledger
         _run(a, ap)
     finally:
         if _lock:
@@ -1145,6 +1166,9 @@ def _run(a, ap):
             # cached token is only counted: a fresh search needs a mint, which is Alex's call.
             _old = out.get(case) or {}
             if case in out and 'other' not in _old and _old.get('conf') in ('ok', 'low'):
+                if a.repull and _old.get('repull_tried'):
+                    skipped.setdefault('already re-searched by --repull on %s' % _old['repull_tried'], []).append(oc)
+                    continue                                # paid for once; a second search finds the same
                 (picked if oc in qs_cache or a.repull else no_token).append(r)
             continue
         if a.cached_only and oc not in qs_cache: continue
@@ -1231,13 +1255,11 @@ def _run(a, ap):
                 _co = []
             if oc in qs_cache:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
-                if a.repull and models is not None:
+                if a.repull and not _parcel_in(models, folio):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
                     # search cannot re-read this parcel, so search afresh (free first) instead of keeping
-                    _chk = analyze(models, folio, judg, ftype=_fc_type(case))
-                    if not (_chk.get('nrec') and _chk.get('parcel_found')):
-                        models = None
+                    models = None
             if models is None and not a.cached_only:
                 sp = split_owner(oc)
                 if sp:
@@ -1284,13 +1306,13 @@ def _run(a, ap):
             # subdivision, so a wrong-person hit cannot pollute the number — worst case is
             # another empty result, same as now.
             _searched = oc
+            _owner_models = None
+            if a.repull and models is not None and not _parcel_in(models, folio):
+                # the owner's name does not reach this parcel (a chain first found through a
+                # defendant): try the defendants too, and fall back to this result if they fail
+                _owner_models, models = models, None
             if models is None and not a.cached_only:
-                try:
-                    import stub_resolve as _sr
-                    _cands = _sr.people_from(r.get('defendants') or '')
-                except Exception:
-                    _cands = []
-                for _last, _first in _cands[:2]:
+                for _last, _first in _co[:2]:
                     _nm = '%s %s' % (_first, _last)          # split_owner wants FIRST ... LAST
                     if _nm.strip().upper() == oc.strip().upper():
                         continue                              # already tried as the owner
@@ -1309,15 +1331,22 @@ def _run(a, ap):
                     if models is None:
                         paid += 1
                         models = fetch_via_turnstile(_sp)
+                    if models is not None and a.repull and not _parcel_in(models, folio):
+                        models = None                         # not this parcel either; next defendant
                     if models is not None:
                         _searched = _nm + ' (defendant)'
                         break
+            if models is None and _owner_models is not None:
+                models = _owner_models
             if models is None:
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
                 else:
                     print(f"  --  {case:22} {oc:26} (no records / blocked)")
+                    if a.repull and out.get(case):
+                        out[case]['repull_tried'] = time.strftime('%Y-%m-%d')   # paid once, found nothing
+                        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)
@@ -1329,6 +1358,9 @@ def _run(a, ap):
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
                     kept += 1
                     print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
+                    if a.repull:
+                        out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
+                        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                     continue
                 res = dict(out.get(case) or {}, **res)       # keep keys other steps wrote (chain_note)
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc

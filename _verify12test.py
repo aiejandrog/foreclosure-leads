@@ -306,6 +306,29 @@ _pb = {}
 ES.apply(_pb, {'conf': 'unpriced', 'mtg_recorded': 2, 'mtg_open_unpriced': 2, 'liens': [{'amt': 0, 'st': 'OPEN'}]})
 check('Palm Beach: its count already covers every mortgage, never added twice', _pb.get('eqopen') == 2, _pb)
 
+# ---- review round 3
+for _pl3, _j3 in (('SPACE COAST CREDIT UNION', 180000), ('FIRST COUNTY BANK', 250000)):
+    _s3 = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34999', '7', _j3, 'OWNER TESTER', first=_pl3)],
+                     FOLIO, 0, ftype='MORTGAGE', plaintiff=_pl3, owner='OWNER TESTER', case='2024-000001-CA-01')
+    check("a plaintiff named %s: its own judgment is this case, whatever its name looks like" % _pl3,
+          _s3['other'][0].get('own_case') is True and _s3['code_open'] == 0, _s3['other'])
+_cm = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '8', 5000, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('JUDGMENT', '5/5/2025', '34999', '8', 7500, 'OWNER TESTER', first='CITY OF MIAMI')],
+                 FOLIO, 0, ftype='MORTGAGE', plaintiff='CITY OF MIAMI', owner='OWNER TESTER', case='2024-000001-CA-01')
+check("a City foreclosing: its judgment is this case, its liens still count", _cm['code_open'] == 5000, _cm['other'])
+_nb = RL.analyze([deed, _l1, rec('RELEASE OF LIEN', '9/9/2023', '34000', '13', 0, 'NEIGHBOR TESTER',
+                                 first='CITY OF MIAMI', folio='')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a neighbour's release in the same subdivision never frees the owner's lien",
+      _nb['other'][0]['st'] == 'OPEN' and _nb['code_open'] == 400, _nb['other'])
+_won = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '14', 20000, 'SMITH BOB', first='TESTER OWNER',
+                             folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a person-against-person judgment is never summed as the owner's debt (it may be one they won)",
+      _won['code_open'] == 0 and _won['other_open_unpriced'] == 1 and _won['other'][0].get('direction_unknown'), _won['other'])
+_dlc = RL.analyze([deed, rec('FEDERAL TAX LIEN', '4/4/2021', '33000', '15', 3000, 'DE LA CRUZ MARIA',
+                             first='INTERNAL REVENUE SERVICE', folio='', subdiV_NAME='')],
+                  FOLIO, 12000, ftype='HOA', owner='JUAN PEREZ', co_owners=[('DE LA CRUZ', 'MARIA')])
+check("a co-owner with a three-word surname is still the owner's household", _dlc['irs_open'] == 3000, _dlc['other'])
+
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
 _tmp = tempfile.mkdtemp()
@@ -450,11 +473,65 @@ try:
     check('--repull never overwrites a chain it could not re-read', _after == _before, (_before, _after))
     _ledj = json.load(open(_led))
     check('--spend-ledger: a finished run leaves no lock behind', _nolock)
+    _bad = os.path.join(_tmp, 'bad.json')
+    open(_bad, 'w').write('{not json')
+    sys.argv = ['records_liens.py', '--repull', '--max-spend', '1', '--spend-ledger', _bad]
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            RL.main()
+    except Exception:
+        pass
+    finally:
+        sys.argv = _argv
+    check('--spend-ledger: an unreadable ledger leaves no lock behind', not os.path.exists(_bad + '.lock'))
     check('--spend-ledger: a second paying run cannot start while one holds the ledger',
           _locked and len(_fake_cs.calls) == _n2)
     check('--spend-ledger: a second run gets only what the first left, and cannot raise the cap',
           _n1 == 2 and len(_fake_cs.calls) == 2 and _ledj['cap'] == 0.0066 and _ledj['counted_usd'] == 0.0066
           and len(_ledj['runs']) == 2 and _ledj['runs'][1]['solves'] == 0, (_n1, _fake_cs.calls, _ledj, _rp2.getvalue()[-300:]))
+    # --repull on a chain first found through a defendant: the owner's token reaches only other
+    # folios, so the defendants are searched too; a chain that finds nothing is marked and not paid twice
+    _t2 = tempfile.mkdtemp()
+    json.dump([{'Case #': '2099-000201-CA-01', 'owner_clean': 'BOB OWNERZ', 'Folio': FOLIO, 'judgment': 1,
+                'defendants': 'Tester, John'},
+               {'Case #': '2099-000202-CA-01', 'owner_clean': 'ANN NOTHING', 'Folio': FOLIO, 'judgment': 1}],
+              open(os.path.join(_t2, 'leads_final.json'), 'w'))
+    json.dump({'2099-000201-CA-01': {'conf': 'ok', 'liens': []}, '2099-000202-CA-01': {'conf': 'ok', 'liens': []}},
+              open(os.path.join(_t2, 'records_liens.json'), 'w'))
+    json.dump({'BOB OWNERZ': 'tokOTHER'}, open(os.path.join(_t2, 'records_qs.json'), 'w'))
+    open(os.path.join(_t2, 'gen_records_qs.py'), 'w').write('')
+    _far = rec('DEED', '1/1/2010', '20000', '1', folio='3099999999999', subdiV_NAME='ELSEWHERE')
+    _asked = []
+    def _ft(sp, tries=3):
+        _asked.append(sp)
+        # the owner's fresh search comes back too, just not on this parcel
+        return [deed, city1] if sp == ('TESTER', 'JOHN') else ([_far] if sp == ('OWNERZ', 'BOB') else None)
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                           'camoufox_session', 'mint_and_fetch', 'time')}
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_t2, 'leads_final.json'), os.path.join(_t2, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_t2, 'records_qs.json'), _t2
+        RL.records_by_qs = lambda qs: [_far] if qs == 'tokOTHER' else None
+        RL.fetch_via_turnstile = _ft
+        RL.camoufox_session = lambda: (None, None)
+        RL.mint_and_fetch = lambda *a, **k: None
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        _l2 = os.path.join(_t2, 'spend.json')
+        for _ in range(2):
+            sys.argv = ['records_liens.py', '--repull', '--max-spend', '1', '--spend-ledger', _l2]
+            with contextlib.redirect_stdout(io.StringIO()):
+                RL.main()
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    _o2 = json.load(open(os.path.join(_t2, 'records_liens.json')))
+    check('--repull searches the defendant when the owner name misses the parcel',
+          ('TESTER', 'JOHN') in _asked and 'other' in _o2['2099-000201-CA-01']
+          and _o2['2099-000201-CA-01'].get('searched_as') == 'JOHN TESTER (defendant)', (_asked, _o2['2099-000201-CA-01']))
+    check('--repull marks a chain it paid to search and found nothing for, and never pays for it again',
+          _o2['2099-000202-CA-01'].get('repull_tried') and _asked.count(('NOTHING', 'ANN')) == 1, (_asked, _o2))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs
