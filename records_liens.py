@@ -1597,7 +1597,7 @@ def _run(a, ap):
             judg = num(r.get('judgment'))
             models = None
             _paid0 = paid
-            _def_blocked = False
+            _def_blocked = False   # a paid search (the owner's or a defendant's) the clerk never answered
             _free_miss = False     # a name only a free search answered, and it missed: its paid search never ran
             try:
                 import stub_resolve as _sr
@@ -1652,6 +1652,7 @@ def _run(a, ap):
                         paid += 1
                         models = fetch_via_turnstile(sp)
                         _src = 'paid'
+                        _def_blocked = models is None and not _SPEND['stopped']
                     if models is None:
                         _src = 'mint'
                         src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
@@ -1678,7 +1679,6 @@ def _run(a, ap):
                 # the paid search asks for the SURNAME only, so a spouse's paid search after the
                 # owner's is the same query; Camoufox fills the first name too, so it is not
                 _paid_sn = {_sp0[0].upper()} if _sp0 and paid > _paid0 else set()
-                _def_blocked = False                          # a defendant search the clerk never answered
                 for _last, _first in _co[:2]:
                     _nm = '%s %s' % (_first, _last)          # split_owner wants FIRST ... LAST
                     if _nm.strip().upper() == oc.strip().upper():
