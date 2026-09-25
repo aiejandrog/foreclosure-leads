@@ -210,10 +210,12 @@ def _parcel_in(models, folio):
 
 
 def _mortgages_narrower(old, new):
-    """Does `new` miss mortgage debt `old` recorded? An OPEN loan not in the new rows (open, or shown
-    satisfied, by book/page), more unpriced loans before than now, or a lender's second foreclosure
-    the new read does not see. Any of these means the new read is narrower, not news of a payoff."""
-    now = {str(l.get('bp') or '') for l in (new.get('liens') or []) if isinstance(l, dict)}
+    """Does `new` miss mortgage debt `old` recorded? An OPEN loan the new rows do not show open or
+    released by a satisfaction that names its book/page, more unpriced loans before than now, or a
+    lender's second foreclosure the new read does not see. Any of these means the new read is
+    narrower (or its release rules guessed from a namesake's satisfaction), not news of a payoff."""
+    now = {str(l.get('bp') or '') for l in (new.get('liens') or []) if isinstance(l, dict)
+           and (str(l.get('st') or 'OPEN').upper() == 'OPEN' or l.get('sat_by') == 'book/page')}
     for l in old.get('liens') or []:
         if isinstance(l, dict) and str(l.get('st') or 'OPEN').upper() == 'OPEN':
             if not l.get('bp') or str(l['bp']) not in now:
@@ -793,6 +795,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
                'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
                '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY'))}
+        if not is_open:
+            row['sat_by'] = 'book/page'       # a release that names this loan (the others below infer it)
         if nopx:
             row['_nopx'] = True
         liens.append(row)
@@ -842,7 +846,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             if not s['_dt'] or s['_dt'] < o['_dt']: continue
             si = _inst(s.get('seconD_PARTY'))
             if si and si in chain:
-                o['st'] = 'SATISFIED'; break
+                o['st'] = 'SATISFIED'; o['sat_by'] = 'lender chain'; break
     opens = [o for o in liens if o['st'] == 'OPEN']
     # rule 2: a LENDER-party release kills the NEWEST still-open mortgage recorded 3-24 months
     # before it. The 3-month floor is the Echeverri guard: a release dated weeks after a loan was
@@ -856,7 +860,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                  and 3 <= _months(o['_dt'], s['_dt'][:10]) <= 24]
         if prior:
             newest = max(prior, key=lambda o: o['_dt'])
-            newest['st'] = 'SATISFIED'
+            newest['st'] = 'SATISFIED'; newest['sat_by'] = 'lender release'
             opens = [o for o in opens if o is not newest]
     # rule 3: refi-kill ONLY in true-refi shape — newer different-lender mortgage >=90% of the
     # older balance within 24 months (a junior second is usually far smaller, so it can't pose as one)
@@ -867,7 +871,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             if m2 is o or m2['_dt'] <= o['_dt']: continue
             if (_months(o['_dt'], m2['_dt']) <= 24 and m2['amt'] >= o['amt'] * 0.9
                     and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain3):
-                o['st'] = 'SATISFIED'; break
+                o['st'] = 'SATISFIED'; o['sat_by'] = 'refinance'; break
     # unpriced loans leave the list here: counted, never summed, never shown as a $0 lien
     unpriced_open = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'OPEN')
     liens = [o for o in liens if not o.get('_nopx')]

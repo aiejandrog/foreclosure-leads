@@ -459,9 +459,20 @@ check("the earlier search's mortgages stay and the new lien rows are laid over t
       and 'mtg_kept' in _lay, _lay)
 check("an unpriced loan the old chain counted is not lost either",
       RL._mortgages_narrower({'liens': [], 'mtg_open_unpriced': 1}, _narrow))
-check("a re-read that shows the old loan satisfied is news, not narrower",
+check("a re-read that shows the old loan released by a satisfaction naming it is news, not narrower",
       not RL._mortgages_narrower({'liens': [{'bp': '26100/11', 'st': 'OPEN', 'amt': 1}]},
-                                 {'liens': [{'bp': '26100/11', 'st': 'SATISFIED', 'amt': 1}]}))
+                                 {'liens': [{'bp': '26100/11', 'st': 'SATISFIED', 'amt': 1, 'sat_by': 'book/page'}]}))
+check("a release INFERRED from a lender's name (it may be a namesake's) never retires a loan on a re-read",
+      RL._mortgages_narrower({'liens': [{'bp': '26100/11', 'st': 'OPEN', 'amt': 1}]},
+                             {'liens': [{'bp': '26100/11', 'st': 'SATISFIED', 'amt': 1, 'sat_by': 'lender chain'}]}))
+_wf = rec('MORTGAGE', '2/1/2012', '29900', '101', 280000, 'WELLS FARGO BANK NA', first='OWNER TESTER')
+_nsat = rec('SATISFACTION', '6/1/2021', '32000', '9', 0, 'WELLS FARGO BANK NA', first='TESTER MARIA',
+            folio='3099999999999', subdiV_NAME='ELSEWHERE')
+_rd = RL.analyze([deed, _wf, _nsat], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("analyze says how it decided a loan was satisfied",
+      [(l['st'], l.get('sat_by')) for l in _rd['liens']] == [('SATISFIED', 'lender chain')], _rd['liens'])
+check("so a namesake's satisfaction on a re-read keeps the old chain's open loan",
+      RL._mortgages_narrower({'liens': [{'bp': '29900/101', 'st': 'OPEN', 'amt': 280000}]}, _rd))
 check("a lost second foreclosure is narrower", RL._mortgages_narrower({'liens': [], 'second_fc': {'case': 'x'}},
                                                                      {'liens': [], 'second_fc': None}))
 
