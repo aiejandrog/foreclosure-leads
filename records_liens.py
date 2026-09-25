@@ -181,11 +181,7 @@ def _may_submit():
     if _SPEND['stopped']:
         return False
     if _SPEND.get('lock'):
-        try:
-            mine = open(_SPEND['lock'], encoding='utf-8').read() == _SPEND.get('lock_id')
-        except OSError:
-            mine = False
-        if not mine:
+        if not _lock_mine():
             # asleep past the stale age and another run took the ledger over: its total is not ours
             _SPEND['stopped'] = 'another run took over the spend ledger'
             return False
@@ -292,6 +288,13 @@ def _lay_lien_rows(old, new):
     for k in ('second_fc', 'second_fc_unsure'):
         if new.get(k):
             out[k] = new[k]
+    # a satisfaction that names a kept loan's book/page is a payoff, whatever else the new read missed
+    _sat = {str(l.get('bp')): l for l in new.get('liens') or [] if isinstance(l, dict) and l.get('bp')
+            and l.get('sat_by') == 'book/page' and str(l.get('st') or '').upper() == 'SATISFIED'}
+    out['liens'] = [dict(l, st='SATISFIED', sat_by='book/page')
+                    if isinstance(l, dict) and str(l.get('bp') or '') in _sat
+                    and str(l.get('st') or 'OPEN').upper() == 'OPEN' else l
+                    for l in out.get('liens') or []]
     # a re-read only ADDS: a mortgage the new read found that the old one did not is kept too
     _have = {str(l.get('bp') or '') for l in out.get('liens') or [] if isinstance(l, dict)}
     out['liens'] = list(out.get('liens') or []) + [
@@ -358,6 +361,14 @@ def _ledger_open(path, cap):
     return cap, float(led.get('counted_usd', 0) or 0), led
 
 
+def _lock_mine():
+    """Does this run still hold the ledger lock (no other run took it over as stale)?"""
+    try:
+        return open(_SPEND['lock'], encoding='utf-8').read() == _SPEND.get('lock_id')
+    except OSError:
+        return False
+
+
 def _lock_touch():
     """Keep the ledger lock fresh, so a long run is never taken for a crashed one."""
     if _SPEND.get('lock'):
@@ -370,6 +381,12 @@ def _lock_touch():
 def _ledger_save(charged=None, final=False):
     path = _SPEND['ledger']
     if not path:
+        return
+    if _SPEND.get('lock') and not _lock_mine():
+        # another run took the ledger over while this one slept: its file holds that run's spend on
+        # top of ours, and writing our stale copy back would erase it (and hand its money out again)
+        _SPEND['stopped'] = 'another run took over the spend ledger'
+        print('  ! spend ledger %s: another run holds it now; this run\'s record is left to it' % path)
         return
     _lock_touch()
     run = _SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD)
@@ -872,7 +889,7 @@ def _maybe_owner(party, owners):
         given = set(re.findall(r'[A-Z0-9]+', words[2].replace("'", ''))) | set(words[3] if len(words) > 3 else ())
         inits = {t for t in rest if len(t) == 1}
         mids = set(words[4] if len(words) > 4 else ())
-        if ok and mids and ({t[:1] for t in rest} & mids):
+        if ok and mids and ({t[:1] for t in rest if t not in _NOT_GIVEN} & mids):
             return True                                     # the owner's middle initial, or a name it starts
         # any of the owner's given names (a middle name too: 'PEREZ ANTONIO' may be JOSE ANTONIO PEREZ)
         # or any of their initials
@@ -1155,8 +1172,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         _rel_seen.add(k)
         return True
     def _rel_names_owner(r):
-        return _ow is not None and (_names_owner(r.get('firsT_PARTY'), _ow, strict=True)
-                                    or _names_owner(r.get('seconD_PARTY'), _ow, strict=True))
+        # a release on ANOTHER folio is that property's (the owner's other house): never a person-wide one
+        return (_ow is not None and not norm_folio(r.get('foliO_NUMBER', ''))
+                and (_names_owner(r.get('firsT_PARTY'), _ow, strict=True)
+                     or _names_owner(r.get('seconD_PARTY'), _ow, strict=True)))
     def _rel_here(r):
         # on this folio, or in its subdivision AND naming the owner: a neighbour's is not ours
         return (norm_folio(r.get('foliO_NUMBER', '')) == fol
@@ -1278,8 +1297,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                       key=lambda o: _parse_recd(o['d']))
         # a lien on the parcel takes a release on the parcel; a person-wide one (a tax lien, a money
         # judgment, no folio) also takes a release that names the owner, wherever it is indexed
-        for mine, ok in (([o for o in _all if o['anchor'] != 'person'], lambda p: p),
-                         ([o for o in _all if o['anchor'] == 'person'], lambda p: True)):
+        _parcel = [o for o in _all if o['anchor'] != 'person']
+        # a release on the parcel belongs to the parcel's liens first: when this holder has any there, a
+        # person-wide lien takes only a folio-less release naming the owner, never the parcel's leftover
+        for mine, ok in ((_parcel, lambda p: p),
+                         ([o for o in _all if o['anchor'] == 'person'], (lambda p: not p) if _parcel else (lambda p: True))):
             rels = sorted((d, k) for k, (d, ps, here) in enumerate(unref_rel)
                           if d and h in ps and k not in _used and ok(here))
             if not mine or not rels:

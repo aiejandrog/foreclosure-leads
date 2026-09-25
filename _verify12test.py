@@ -690,6 +690,49 @@ ES.apply(_bfc2, {'conf': 'ok', 'nrec': 30, 'second_fc': None, 'liens': [], 'mtg_
 check("an unpriced MORTGAGE ceiling is not re-labelled by the separate-case rule", not ES.demote_for_bank_fc(_bfc2)
       and _bfc2['eqstate'] == 'unpriced', _bfc2)
 
+# ---- review round 22
+_oh = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '7', 7000, 'OWNER TESTER', first='MIAMI-DADE COUNTY',
+                            folio='', subdiV_NAME=''),
+                  rec('LIEN', '1/1/2020', '32000', '7', 900, 'OWNER TESTER', first='MIAMI-DADE COUNTY',
+                      folio='3099999999999', subdiV_NAME='ELSEWHERE'),
+                  rec('RELEASE OF LIEN', '9/9/2022', '33500', '7', 0, 'OWNER TESTER', first='MIAMI-DADE COUNTY',
+                      folio='3099999999999', subdiV_NAME='ELSEWHERE')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a release on the owner's other house never frees a person-wide judgment", _oh['code_open'] == 7000, _oh['other'])
+_lf = RL.analyze([deed, rec('JUDGMENT', '4/4/2018', '32900', '8', 20000, 'OWNER TESTER', first='CITY OF MIAMI',
+                            folio='', subdiV_NAME=''),
+                  rec('LIEN', '5/5/2019', '33000', '8', 500, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('LIEN', '6/6/2020', '33100', '8', 600, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('RELEASE OF LIEN', '9/9/2022', '33500', '8', 0, 'OWNER TESTER', first='CITY OF MIAMI')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a release the parcel's liens could not share out never frees an unrelated person-wide judgment",
+      _lf['code_open'] == 21100, _lf['other'])
+import json, types, tempfile, io, contextlib
+for _ow22, _ix22 in (('JOSE E PEREZ', 'PEREZ MARIA ET AL'), ('JOSE J PEREZ', 'PEREZ MARIA JR'), ('JOSE T PEREZ', 'PEREZ MARIA TR')):
+    check("%r is not %s: role words are no initial" % (_ix22, _ow22),
+          not RL._maybe_owner(_ix22, [RL._owner_words(_ow22)]))
+_sat22 = RL._lay_lien_rows({'conf': 'ok', 'ftype': 'MORTGAGE', 'judgment': 300000, 'nrec': 50,
+                            'liens': [{'d': '2/1/2004', 'amt': 90000, 'st': 'OPEN', 'bp': '26100/11'},
+                                      {'d': '2/1/2012', 'amt': 300000, 'st': 'OPEN', 'bp': '29900/101'}]},
+                           {'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 10, 'other': [], 'judgment': 300000,
+                            'liens': [{'d': '2/1/2004', 'amt': 90000, 'st': 'SATISFIED', 'bp': '26100/11',
+                                       'sat_by': 'book/page'}]})
+check("a narrower re-read still takes a satisfaction that names a kept loan's book/page",
+      [l['st'] for l in _sat22['liens']] == ['SATISFIED', 'OPEN'] and _sat22['surv'] == 0
+      and _sat22['open_count'] == 1, _sat22)
+_lt = tempfile.mkdtemp()
+_lg = os.path.join(_lt, 'led.json')
+json.dump({'cap': 5.0, 'counted_usd': 0.099, 'unit_usd': 0.0033, 'runs': [{'solves': 10}, {'solves': 20}]}, open(_lg, 'w'))
+open(_lg + '.lock', 'w').write('another run')
+_sv22 = dict(RL._SPEND)
+RL._SPEND.update(cap=5.0, prior=0.0, led={'runs': [{'solves': 10}]}, submits=10, unit=RL.PAID_SOLVE_USD, ledger=_lg,
+                 stopped='', lock=_lg + '.lock', lock_id='this run')
+with contextlib.redirect_stdout(io.StringIO()):
+    RL._ledger_save(final=True)
+_after = json.load(open(_lg))
+RL._SPEND.clear(); RL._SPEND.update(_sv22)
+check("a run whose ledger another run took over never writes its stale total back",
+      _after['counted_usd'] == 0.099 and len(_after['runs']) == 2, _after)
+
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
 _tmp = tempfile.mkdtemp()
