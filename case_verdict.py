@@ -163,6 +163,10 @@ SALE_CLOSING_KINDS = ('order_cancelling_sale', 'certificate_of_sale', 'certifica
 # Status kinds that say a sale is on the calendar NOW. 'sold' is not one of them: it is what a
 # certificate produces, and a completed sale is not a sale going ahead.
 SALE_LIVE_STATUS_KINDS = ('sale_scheduled',)
+# The clerk's own sale-day rows and the two certificates, as miami_case_timeline.sale_held keys on
+# them (:543, :550) - re-read here through _producer_labels because that function does not.
+SALE_MONEY_KINDS = ('sale_bid', 'sale_deposit')
+CERTIFICATE_KINDS = ('certificate_of_sale', 'certificate_of_title')
 # The kinds classify uses when it did NOT recognise the entry: 'other' is its fallthrough (:223) and
 # 'hearing' is the override a calendar eventType forces onto anything but a notice of sale (:383).
 # An entry the producer DID label is explained by its label - the petition that names the sale it
@@ -188,12 +192,41 @@ def _producer_labels(entry):
     the docket" printed in the stay column, over a live 11 USC 362 stay. Matching both keys still only
     restates a label the producer computed.
 
+    `index_kind` is read ONLY where the override actually fired, because it is the WEAKER label
+    everywhere else. `kind = body_kind or ik` (:361): when the producer opened the document, `kind` is
+    what the document says and `index_kind` is only the clerk's index. Unioning the two let the index
+    outrank a read document in both directions (ninth review): a docket line saying "Certificate of
+    Sale" whose own document reads "NOTICE OF FORECLOSURE SALE" closed a live sale under a §362 stay
+    and returned `supported`, and a line saying "Notice of Filing Bankruptcy Petition" whose document
+    reads "ORDER DENYING MOTION TO COMPEL" produced an `incomplete` no further reading can clear.
+    `kind_source` cannot be the test - :383 does not update it - but `calendar_event` is on the entry
+    and is exactly the condition the override fires on.
+
     THE PRODUCER'S OWN stay_history HAS THE SAME BUG (:462 keys on e['kind']), so its backstop is
     defeated by the same docket. That is not fixed here: it is on miami_case_timeline, it would move
     §362 stay flags the board hard-gates on, and CLAUDE.md's rule for a bug found from another
     session's surface is to report it rather than fix it. Reported to Alejandro with this PR.
     """
-    return tuple(k for k in (entry.get('kind'), entry.get('index_kind')) if k)
+    kind = entry.get('kind')
+    if kind == 'hearing' and entry.get('calendar_event'):
+        # The override fired and took the real label with it. index_kind is the only survivor; the
+        # document-read label, if there was one, is not saved anywhere.
+        return tuple(k for k in (entry.get('index_kind'),) if k) or ('hearing',)
+    return tuple(k for k in (kind,) if k)
+
+
+def _labelled(timeline, kinds):
+    """-> the entries the producer gave one of `kinds`, read through _producer_labels.
+
+    `timeline['sale_held']` is a producer SUMMARY computed from a bare `e['kind']`
+    (miami_case_timeline :543 for the clerk's money rows, :550 for the certificate), so the :383
+    override silently empties it: sale-day bid and deposit rows on a calendar event made sale_held
+    None and the verdict `supported` over a sale the saved file says was held, and a calendar-typed
+    certificate made the report print "no certificate of sale has followed" about a docket carrying
+    one. A summary is only as good as the field it was built from, so the entries are re-read here.
+    """
+    return [e for e in _rows(timeline, 'entries')
+            if isinstance(e, dict) and set(_producer_labels(e)) & set(kinds)]
 
 
 def _index_text(entry):
@@ -262,6 +295,12 @@ def _sale_state(timeline, status, kind):
     held = timeline.get('sale_held')
     if (isinstance(held, dict) and held.get('date') and not held.get('certificate')
             and closing_date < str(held['date'])):
+        if _labelled(timeline, CERTIFICATE_KINDS):
+            # The summary says no certificate; an entry carries a certificate label the summary did
+            # not take in. Saying either is a claim this file does not support.
+            return 'unknown', ('the run\'s held-sale summary for %s records no certificate while a '
+                               'docket entry carries a certificate label it did not take in'
+                               % held['date'])
         return 'live', ('the clerk posted sale-day bid and deposit entries on %s and no '
                         'certificate of sale has followed' % held['date'])
     if kind in SALE_LIVE_STATUS_KINDS:
@@ -500,12 +539,30 @@ def assess(timeline, dossier=None):
     # a stay, by _sale_state. The clerk's money rows said a sale was HELD and the verdict was
     # `supported` for "sale scheduled" (eighth review). The producer's own qualification on this
     # block ends "the sale can still be vacated", which is not a posture to vouch for.
-    held = timeline.get('sale_held')
-    if (isinstance(held, dict) and held.get('date') and not held.get('certificate')
-            and outcome not in UNSETTLED_SALE_OUTCOMES):
-        missing.append("the clerk's sale-day bid and deposit entries say a sale was held on %s and "
-                       'no certificate of sale has followed, so what became of it is not in this '
-                       'file' % held['date'])
+    held = timeline.get('sale_held') if isinstance(timeline.get('sale_held'), dict) else {}
+    money = _labelled(timeline, SALE_MONEY_KINDS)
+    certificates = _labelled(timeline, CERTIFICATE_KINDS)
+    if money and not held.get('date'):
+        # The summary is empty while the entries carry the labels it is built from: the :383 override
+        # emptied it, and the evidence that a sale was held is in the file (ninth review).
+        missing.append("entr%s %s carr%s the clerk's sale-day bid or deposit label while the run's "
+                       'own held-sale summary took none of them in, so whether a sale was held is '
+                       'not settled in this file'
+                       % ('y' if len(money) == 1 else 'ies',
+                          ', '.join(str(e.get('entry_id') or '?') for e in money[:5]),
+                          'ies' if len(money) == 1 else 'y'))
+    elif held.get('date') and not held.get('certificate') and outcome not in UNSETTLED_SALE_OUTCOMES:
+        if certificates:
+            missing.append("the run's held-sale summary for %s records no certificate while entr%s "
+                           '%s carr%s a certificate label it did not take in, so what became of the '
+                           'sale is not settled in this file'
+                           % (held['date'], 'y' if len(certificates) == 1 else 'ies',
+                              ', '.join(str(e.get('entry_id') or '?') for e in certificates[:5]),
+                              'ies' if len(certificates) == 1 else 'y'))
+        else:
+            missing.append("the clerk's sale-day bid and deposit entries say a sale was held on %s "
+                           'and no certificate of sale has followed, so what became of it is not in '
+                           'this file' % held['date'])
     record = _judgment_record(judgments, entry_id)
     if entry_id is not None and record is None:
         missing.append('no record for the controlling judgment in the reconciliation, so nothing '
@@ -682,8 +739,8 @@ def assess(timeline, dossier=None):
                     for g in _rows(timeline, 'gaps') if isinstance(g, dict)})
     if kinds:
         notes.append('the run recorded gaps of its own: ' + ', '.join(kinds))
-    if dossier:
-        gaps = [g for g in (dossier.get('open_gaps') or [])]
+    if isinstance(dossier, dict):
+        gaps = _rows(dossier, 'open_gaps')
         for gap in gaps[:20]:
             notes.append('dossier: %s' % gap)
         if len(gaps) > 20:
@@ -831,10 +888,22 @@ def _load(path, required=False):
 def for_saved_case(dossier_path):
     """-> the verdict for one saved dossier, or None when it has no whole-case timeline yet."""
     path = Path(dossier_path)
-    dossier = _load(path, required=True)
     timeline = _load(path.with_name(path.stem + '-timeline.json'), required=True)
     if not isinstance(timeline, dict):
         return None
+    # The dossier contributes NOTES only (its open_gaps); the verdict rests entirely on the timeline.
+    # Requiring it discarded a whole readable verdict over a truncated file that changes nothing
+    # about it (ninth review). A dossier that is there and will not parse is reported as a gap on the
+    # case, which is the honest form: something the run wrote cannot be read.
+    try:
+        dossier = _load(path, required=True)
+    except Unreadable as exc:
+        row = assess(timeline, None)
+        row['missing'] = list(row['missing']) + [
+            'the saved dossier for this case does not parse (%s), so its own open gaps are not in '
+            'this verdict' % exc]
+        row['verdict'] = 'conflicted' if row['conflicts'] else 'incomplete'
+        return row
     return assess(timeline, dossier if isinstance(dossier, dict) else None)
 
 
@@ -851,10 +920,15 @@ def main(argv=None):
     paths = [Path(p) for p in args.case]
     if args.dossiers:
         # This module's own output lands in the same directory, so a rerun would read
-        # case-verdicts.json as a dossier and print it as skipped every time.
+        # case-verdicts.json as a dossier and print it as skipped every time. The default names are
+        # not enough: --out takes any name, and `--dossiers D --out D/report.json` made the next run
+        # read its own report forever (ninth review). Exclude the name this run will actually write.
+        mine = {'case-verdicts'}
+        if args.out:
+            mine.add(Path(args.out).stem)
         paths += sorted(p for p in Path(args.dossiers).glob('*.json')
                         if not p.stem.endswith('-timeline')
-                        and not p.stem.startswith('case-verdicts'))
+                        and not any(p.stem == m or p.stem.startswith(m + '-') for m in mine))
     if not paths:
         parser.error('give --dossiers DIR or --case FILE')
 

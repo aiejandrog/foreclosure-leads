@@ -1314,16 +1314,32 @@ class SixthReviewTests(unittest.TestCase):
         self.assertFalse(any('sale going ahead' in c for c in r['conflicts']), r['conflicts'])
         self.assertEqual(r['verdict'], 'supported', (r['conflicts'], r['missing']))
 
-    def test_a_dossier_that_will_not_parse_is_reported(self):
+    def test_a_timeline_that_will_not_parse_is_reported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text('{ not json')
+            proc = run_cli('--dossiers', folder, dealflow=folder)
+            self.assertIn('UNREADABLE', proc.stdout)
+            report = json.loads((folder / 'case-verdicts.json').read_text())
+            self.assertTrue(any('A-timeline.json' in n
+                                for n in report['no_verdict']['unreadable']), report)
+
+    def test_a_dossier_that_will_not_parse_keeps_the_verdict_and_names_the_loss(self):
+        # It used to discard the whole case. The dossier contributes NOTES only - its open_gaps - and
+        # the verdict rests entirely on the timeline, so throwing away a readable verdict over a
+        # truncated file that changes nothing about it was the wrong trade (ninth review).
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             (folder / 'A.json').write_text('{ not json')
             (folder / 'A-timeline.json').write_text(json.dumps(
                 timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
             proc = run_cli('--dossiers', folder, dealflow=folder)
-            self.assertIn('UNREADABLE', proc.stdout)
             report = json.loads((folder / 'case-verdicts.json').read_text())
-            self.assertTrue(any('A.json' in n for n in report['no_verdict']['unreadable']))
+            self.assertEqual([r['case'] for r in report['verdicts']], ['A'], proc.stdout)
+            row = report['verdicts'][0]
+            self.assertEqual(row['verdict'], 'incomplete', row)
+            self.assertTrue(any('does not parse' in m for m in row['missing']), row['missing'])
 
 
 class SeventhReviewTests(unittest.TestCase):
@@ -1543,6 +1559,125 @@ class EighthReviewTests(unittest.TestCase):
         self.assertEqual(bad, [], 'a producer label is read off `kind` alone; miami_case_timeline '
                                   ':383 overwrites it with "hearing" on a calendar eventType, so '
                                   'this must go through _producer_labels')
+
+
+
+class NinthReviewTests(unittest.TestCase):
+    """The eighth round's fix read `index_kind` as co-equal with `kind`. The ninth found that this
+    breaks the other way wherever `kind` came from READING THE DOCUMENT - `kind = body_kind or ik`
+    (:361) - and that it does not reach `sale_held` at all, because that summary is computed upstream
+    from a bare `kind`. Every case here drives the producer, with eventType and document pages.
+    """
+    @staticmethod
+    def built(rows, as_of='2026-11-20', pages=None):
+        """rows are (id, description, date, eventType); pages maps entry id -> page text."""
+        import miami_case_timeline as T
+        docs = [{'source_ref': str(n), 'document_hash': 'h%s' % n, 'manifest': {'sha256': 'h%s' % n},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': text}]}}
+                for n, text in (pages or {}).items()]
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'expected_documents': 1 if str(n) in (pages or {}) else 0,
+             'source_ref': str(n),
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text, 'eventType': ev}}
+            for n, text, d, ev in rows], 'pagination_verified': True}, docs, as_of)
+        t['judgments'] = {'controlling_entry': '140', 'controlling_reason': 'one operative judgment',
+                          'judgments': [judgment_row('140')], 'docket_duplicates_inferred': []}
+        t['amount_vision'] = {'amount_checks': [ok_check('140', 'court:140:1', 500000.00)]}
+        t['coverage'] = {'attachments': [read_attachment('140')], 'complete': False}
+        return t
+
+    OPEN = [(100, 'Complaint', '01/05/2026', ''),
+            (140, 'Final Judgment of Foreclosure', '06/10/2026', '')]
+
+    def test_the_clerks_money_rows_on_a_hearing_event_are_not_lost(self):
+        # sale_held is computed upstream from a bare e['kind'] (miami_case_timeline :543), so the :383
+        # override empties it: bid and deposit rows on a calendar event made sale_held None and the
+        # verdict `supported` over a sale the saved file says was held.
+        t = self.built(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale on 06/01/2026', '05/01/2026', ''),
+            (170, 'Bid Amount', '07/01/2026', 'Hearing'),
+            (171, 'Mortgage Foreclosure Deposit', '07/01/2026', 'Hearing')])
+        self.assertIsNone(t['sale_held'])
+        self.assertEqual([e['index_kind'] for e in t['entries'] if e['entry_id'] in ('170', '171')],
+                         ['sale_bid', 'sale_deposit'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
+        self.assertTrue(any('170' in m and 'held' in m for m in r['missing']), r['missing'])
+
+    def test_no_certificate_is_never_printed_over_a_labelled_certificate(self):
+        # The summary's `certificate` is keyed on a bare kind too (:550), so a calendar-typed
+        # certificate made the report say "no certificate of sale has followed" about a docket that
+        # carries one - a sentence the producer's own saved entry refutes.
+        t = self.built(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale on 06/01/2026', '05/01/2026', ''),
+            (170, 'Bid Amount', '07/01/2026', ''),
+            (171, 'Mortgage Foreclosure Deposit', '07/01/2026', ''),
+            (175, 'Certificate of Sale', '07/10/2026', 'Hearing')])
+        self.assertEqual((t['sale_held'] or {}).get('date'), '2026-07-01')
+        self.assertIsNone((t['sale_held'] or {}).get('certificate'))
+        r = CV.assess(t)
+        self.assertFalse(any('no certificate of sale has followed' in m for m in r['missing']),
+                         r['missing'])
+        self.assertTrue(any('175' in m for m in r['missing']), r['missing'])
+
+    def test_a_document_read_label_is_not_overruled_by_the_docket_index(self):
+        # `kind = body_kind or ik`: where the producer opened the document, `kind` is what the
+        # document says and `index_kind` is only the clerk's line. Unioning them let a docket line
+        # reading "Certificate of Sale" close a sale whose own document is a notice of sale - and
+        # under a live Chapter 13 stay that came back `supported` with the sale never named.
+        t = self.built(self.OPEN + [
+            (145, 'Certificate of Sale', '07/01/2026', ''),
+            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '11/10/2026', '')],
+            pages={'145': 'NOTICE OF FORECLOSURE SALE\nthe clerk shall sell the property at public '
+                          'sale on 12/28/2026'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '145')
+        self.assertEqual((entry['kind'], entry['index_kind'], entry['kind_source']),
+                         ('notice_of_sale', 'certificate_of_sale', 'document'))
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'conflicted', (r['missing'], r['notes']))
+        self.assertTrue(any('145' in c for c in r['conflicts']), r['conflicts'])
+
+    def test_a_read_document_that_is_not_a_bankruptcy_filing_does_not_hold_the_case(self):
+        # The same union in the conservative direction produced an `incomplete` no further reading
+        # can ever clear: the producer opened the document, concluded it is an order on a motion, and
+        # left stay_history empty on purpose.
+        t = self.built(self.OPEN + [(150, 'Notice of Filing Bankruptcy Petition', '11/10/2026', '')],
+                       pages={'150': 'ORDER DENYING MOTION TO COMPEL'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '150')
+        self.assertEqual((entry['kind'], entry['index_kind']),
+                         ('order_on_motion', 'suggestion_of_bankruptcy'))
+        self.assertEqual(t['stay_history'], [])
+        r = CV.assess(t)
+        self.assertFalse(any('150' in m and 'bankruptcy filing' in m for m in r['missing']),
+                         r['missing'])
+
+    def test_the_stay_backstop_still_catches_a_calendar_typed_petition(self):
+        # The narrowing must not undo round 8: where the override DID fire, index_kind is still read.
+        t = self.built(self.OPEN + [
+            (150, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '11/10/2026', 'Hearing')])
+        entry = next(e for e in t['entries'] if e['entry_id'] == '150')
+        self.assertEqual((entry['kind'], entry['index_kind']),
+                         ('hearing', 'suggestion_of_bankruptcy'))
+        self.assertEqual(t['stay_history'], [])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
+        self.assertTrue(any('150' in m for m in r['missing']), r['missing'])
+        self.assertNotIn('none on the docket', CV.render_markdown([r]))
+
+    def test_a_run_does_not_read_its_own_named_report_as_a_dossier(self):
+        # The self-exclusion was hardcoded to the default name, so `--out D/report.json` made every
+        # later run read its own report, print SKIPPED and exit 1 for good.
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / 'A.json').write_text(json.dumps({'case': 'A', 'open_gaps': []}))
+            (folder / 'A-timeline.json').write_text(json.dumps(
+                timeline('A', checks=[ok_check()], attachments=[read_attachment()])))
+            first = run_cli('--dossiers', folder, '--out', folder / 'report.json', dealflow=folder)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            second = run_cli('--dossiers', folder, '--out', folder / 'report.json', dealflow=folder)
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            self.assertNotIn('SKIPPED', second.stdout)
 
 
 

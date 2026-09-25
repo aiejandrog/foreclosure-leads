@@ -57,7 +57,7 @@ classification job, and `case_verdict` does not do classification: it answers li
 from `miami_case_timeline`'s own labels, and where the classifier left a sale-worded entry
 unlabelled - it labels "Notice of Foreclosure Sale" but not "Notice of Rescheduled Foreclosure Sale"
 - the answer is "unknown", which holds the case as a gap. So a stayed case reads conflicted only when
-the docket itself says a sale is running. Five earlier attempts here each broke the opposite way: by
+the docket itself says a sale is running. Six earlier attempts here each broke the opposite way: by
 status field (missed a stay filed after the notice), by entry kind (missed the rescheduled phrasings),
 by regex over the entry's words (counted the judgment's own "shall sell the property", the petition
 asking the court to stop the sale, and unruled motions and denials), and by reading only the labels of
@@ -67,6 +67,18 @@ plus the clerk's comments. Both of those were reachable false clean bills over a
 earlier version of this paragraph claimed no wrong verdict in either direction was reachable, which
 is a claim the tests cannot establish and this one does not make. What the tests do establish is that
 each phrasing they carry lands on a gap rather than a verdict.
+
+A saved summary is only as good as the field it was built from. `sale_held` is computed upstream from
+a bare `kind` as well (`sale_held`, for the clerk's bid and deposit rows and for the certificate), so
+the same override emptied it: sale-day money rows on a calendar event made the block `None` and the
+verdict `supported` over a sale the saved entries say was held, and a calendar-typed certificate made
+the report print "no certificate of sale has followed" about a docket carrying one. The verdict now
+re-reads those entries rather than trusting the summary. In the other direction, `index_kind` is read
+ONLY where the override actually fired: `kind = body_kind or ik`, so wherever the producer opened the
+document, `kind` is what the document says and the docket index is the weaker label - treating them as
+co-equal let a docket line reading "Certificate of Sale" close a sale whose own document is a notice
+of sale, and made a line reading "Notice of Filing Bankruptcy Petition" hold a case whose document
+reads "ORDER DENYING MOTION TO COMPEL".
 
 One limitation this raised is not `case_verdict`'s and is NOT fixed here. `miami_case_timeline` :383
 does `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket
