@@ -108,6 +108,13 @@ def timeline_path(runner, case):
 FRESH_HOURS = 20
 
 
+def _mtime(path):
+    try:
+        return Path(path).stat().st_mtime
+    except OSError:
+        return 0
+
+
 def built_recently(path, hours=FRESH_HOURS, now=None):
     """A timeline written in the last `hours` is skipped on a re-run. By file age, not the
     timeline's as_of date: a pass that crosses local midnight would otherwise rebuild every case
@@ -229,19 +236,24 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     rows = RCT.load_rows(base)
     bought = RCT.read_amounts(rows, base)
     target_checks = [c for c in bought['amount_checks'] if str(c.get('entry_id')) == target]
-    # Classify every recorded gap. A rejected render or an uncertain paid call repeats at $0 and
-    # the reader stops the document there, so that whole document needs a person. An unreadable
-    # page repeats from the ledger cache: that page needs a person. Anything else (the cap, the
-    # reader's stop, a transient API or network error, a missing key) is a page paying buys.
+    # Classify every recorded gap by what the NEXT paid run would do with that page.
+    # - Unreadable: the ledger cache returns the same answer at $0. The page needs a person.
+    # - An API or network error: read_page reserves in the ledger before messages.create, and
+    #   nothing releases a reservation whose call raised, so the next run's cached_read refuses
+    #   that page as an UncertainPaidCall. The page needs a person, and so does an
+    #   UncertainPaidCall itself. read_document carries on to the document's other pages.
+    # - The cap, the reader's stop, or a setup failure raised before any reservation (no key, no
+    #   SDK, a rejected key, no PDF renderer): paying on a fixed setup buys the page.
     rebuy, stuck_docs, stuck_pages = {}, set(), {}
     for gap in bought['gaps']:
         ref, reason = gap.get('source_ref'), str(gap.get('reason') or '')
-        if reason.startswith('Vision returned unreadable'):
+        if reason.startswith('Vision returned unreadable') or re.search(
+                r'UncertainPaidCall|APIStatus|APIConnection|RateLimit|Timeout|overloaded|'
+                r'InternalServer|ServiceUnavailable|Connection|Error code: (?:429|5\d\d)', reason):
             stuck_pages.setdefault(ref, set()).add(gap.get('page'))
-        elif re.search(r'budget|cap or reader stop|paid_read_not_selected|APIStatus|APIConnection|'
-                       r'RateLimit|Timeout|overloaded|InternalServer|ServiceUnavailable|Connection|'
-                       r'Error code: 5\d\d|NotConfigured|not configured|ANTHROPIC_API_KEY|'
-                       r'SDK is not installed', reason, re.I):
+        elif re.search(r'budget|cap or reader stop|paid_read_not_selected|NotConfigured|'
+                       r'not configured|ANTHROPIC_API_KEY|SDK is not installed|Authentication|'
+                       r'PermissionDenied|Error code: 40[13]|PyMuPDF is not installed', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
         else:
             # Anything unrecognised (a rejected or missing file, an uncertain paid call) is taken
@@ -255,6 +267,7 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     in_order = {r.get('source_ref') for r in order}
     held = [_with_cached_ocr(r, base) for r in rows
             if str(r.get('entry_ref') or '') == target and r.get('source_ref') not in in_order]
+    held_refs = {r.get('source_ref') for r in held}
 
     def pages_left(row, pages):
         ref = row.get('source_ref')
@@ -278,11 +291,13 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             continue
         target_amount_rows += is_target
         left = pages_left(row, pages)
-        if row in held:
+        if row.get('source_ref') in held_refs:
             held_unread = held_unread or bool(left)
         elif left:
             need.append((is_target, left))
     notes = [out['detail']] if out.get('detail') else []
+    target_refs = {r.get('source_ref') for r in order + held
+                   if str(r.get('entry_ref') or '') == target}
     # The timeline's own gaps on the target entry: a missing attachment, a page neither text nor
     # OCR could read, pages never assessed. Any of them means an amount page may be unseen.
     target_gaps = sorted({str(g.get('kind')) for g in (timeline or {}).get('gaps') or []
@@ -306,9 +321,10 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             notes.append('free OCR missing for a filing read before the judgment: its pages are not '
                      'in the price, so pages to the judgment is a floor')
     if out.get('ocr_unreachable'):
-        notes.append('the free OCR for a document is not reachable here (stored PDF or its OCR '
-                     'cache missing), so OCR-only amount pages are unknown: re-run the pass for '
-                     'this case on the machine that runs it')
+        notes.append('the free OCR for a judgment document is not reachable here (stored PDF or '
+                     'its OCR cache missing), so OCR-only amount pages are unknown: on another '
+                     'machine, report from the pass machine; on the pass machine, the stored '
+                     'PDF is missing and needs downloading again')
     if any(t for t, _ in need):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
@@ -327,19 +343,24 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         out['state'] = 'judgment_incomplete'
         notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
     elif (target_checks and all(c.get('ok') for c in target_checks)
+          and not any(r in stuck_docs or stuck_pages.get(r) for r in target_refs)
           and _every_document_checked(target, target_checks, order + held, done)):
         # Every printed total on every document of the target reproduces to the cent, no amount
         # page of it is unread, and the timeline has no gap on it. One total agreeing while
         # another fails, or a judgment read with no total at all, is not this.
         out['state'] = 'verified'
+        if timeline is None:
+            # Nothing read the judgment's bodies or checked its attachments: no verdict, whatever
+            # evidence an earlier run left on disk.
+            out['state'] = 'timeline_missing'
+            notes.append('no timeline on disk: run the pass for this case')
     elif target_amount_rows:
         out['state'] = 'read_not_verified'
         if any(c.get('ok') for c in target_checks):
             notes.append('one printed total reproduces and another does not')
-        target_refs = {r.get('source_ref') for r in order
-                       if str(r.get('entry_ref') or '') == target}
         if any(r in stuck_docs or stuck_pages.get(r) for r in target_refs):
-            notes.append('a read failed in a way paying again repeats')
+            notes.append('a page came back unreadable or a paid call failed; paying again '
+                         'does not re-read it')
     else:
         doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
@@ -390,11 +411,13 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
             done += 1
             log.setdefault('built', {})[case] = {'at': time.time(), 'collect': bool(collect)}
             (log.get('errors') or {}).pop(case, None)
+            (log.get('error_at') or {}).pop(case, None)
         except Exception as exc:                              # one case never stops the pass
             errors += 1
             # timeline_case writes its file before it finishes: a fresh file after a failure is
             # not a finished case, so the next pass must not skip it.
             (log.get('built') or {}).pop(case, None)
+            log.setdefault('error_at', {})[case] = time.time()
             log.setdefault('errors', {})[case] = '%s %s: %s' % (
                 date.today().isoformat(), type(exc).__name__, str(exc)[:200])
         if save:
@@ -419,7 +442,11 @@ def plan(runner, entries, today, log):
                    'pages_all': 0, 'detail': '%s: %s' % (type(exc).__name__, str(exc)[:160])}
         auction = _auction(entry)
         row['sale'] = auction.isoformat() if auction else None
-        if case in (log.get('errors') or {}):
+        err_at = (log.get('error_at') or {}).get(case)
+        rebuilt = (err_at is not None and row.get('state') != 'timeline_missing'
+                   and _mtime(timeline_path(runner, case)) > err_at)
+        if case in (log.get('errors') or {}) and not rebuilt:
+            # Another tool (run_documents --backfill --timeline) may rebuild the case later.
             row['pass_error'] = log['errors'][case]
         rows.append(row)
     return rows, rate, sample
@@ -443,7 +470,8 @@ def render(rows, skipped_ids, rate, sample, today):
     names = [w[0] for w in windows] + ['sale passed', 'no sale date']
     states = ['verified', 'needs_paid_read', 'read_not_verified', 'judgment_not_fetched',
               'judgment_held_by_docket_plan', 'judgment_without_amount_page',
-              'timeline_older_than_docket', 'judgment_incomplete', 'report_on_pass_machine',
+              'timeline_older_than_docket', 'timeline_missing', 'judgment_incomplete',
+              'report_on_pass_machine',
               'no_operative_judgment', 'no_judgment_on_docket', 'docket_incomplete', 'no_docket',
               'unreadable_on_disk']
     lines = ['# Miami judgment amounts: court-copy state and read plan (%s)' % today.isoformat(), '',
@@ -476,9 +504,11 @@ def render(rows, skipped_ids, rate, sample, today):
                         ' or more (%d case%s missing free OCR)' % (floors, '' if floors == 1 else 's')
                         if floors else '', pa, '+' if whole else '', pa * per_page,
                         ' or more' if whole else ''))
-    lines += ['', '"read_not_verified": the judgment was already read in full and its figures do not '
-              'reproduce its printed total to the cent; paying again buys the same answer, so it '
-              'needs a person or the paid clerk copy, not another read.']
+    lines += ['', '"read_not_verified": the judgment was read as far as a paid run can take it, and '
+              'its figures do not reproduce its printed total to the cent, or a page came back '
+              'unreadable, or a paid call failed with its outcome unknown (the reader never '
+              'repeats one). Paying again does not change it: it needs a person or the paid clerk '
+              'copy, not another read.']
     lines += ['', 'Prices assume the paid run goes through run_documents --backfill --timeline --vision, '
               'whose checkpoint ledger serves pages it already bought at $0. A run through another '
               'ledger re-bills them; the "whole case" column is the ceiling for that.']

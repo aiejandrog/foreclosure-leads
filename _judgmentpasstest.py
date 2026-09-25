@@ -165,12 +165,49 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
 
-    def test_transient_failure_is_priced(self):
-        ref = _row(self.base, '9', '$1.00', 'j')
-        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'APIStatusError: overloaded'}])
+    def test_failed_api_call_is_not_priced(self):
+        # read_page reserved before messages.create raised; the next run refuses that page
+        for reason in ('APIStatusError: overloaded', 'InternalServerError: Error code: 500',
+                       'APIConnectionError: Connection error.', 'UncertainPaidCall: x'):
+            ref = _row(self.base, '9', '$1.00', 'j')
+            _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': reason}])
+            with mock.patch('judgment_money.verify_document', return_value=[]):
+                got = self.run_assess([('9', 'final_judgment', True, [])])
+            self.assertEqual((got['state'], got['pages_to_judgment']), ('read_not_verified', 0), reason)
+
+    def test_uncertain_page_does_not_drop_the_documents_other_pages(self):
+        ref = _row(self.base, '9', '$1.00 $2.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'UncertainPaidCall: x'},
+                                        {'page': 2, 'reason': 'Amount page not read; cap or reader stop'}])
         with mock.patch('judgment_money.verify_document', return_value=[]):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_rejected_key_is_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'AuthenticationError: Error code: 401'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_stuck_page_on_the_judgment_blocks_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 1, 'reason': 'Vision returned unreadable'}])
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_no_timeline_is_never_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'timeline_missing')
 
     def test_rejected_document_stops_the_whole_document(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -254,7 +291,7 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('5', 'order_on_motion', True, []), ('9', 'final_judgment', True, [])],
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual(got['state'], 'read_not_verified')
-        self.assertNotIn('paying again repeats', got.get('detail') or '')
+        self.assertNotIn('paying again does not', got.get('detail') or '')
 
     def test_timeline_gap_on_the_judgment_blocks_verified(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -399,13 +436,6 @@ class Assess(unittest.TestCase):
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual((got['state'], got['pages_to_judgment']), ('judgment_held_by_docket_plan', 0))
 
-    def test_server_error_is_priced(self):
-        ref = _row(self.base, '9', '$1.00', 'j')
-        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'InternalServerError: Error code: 500'}])
-        with mock.patch('judgment_money.verify_document', return_value=[]):
-            got = self.run_assess([('9', 'final_judgment', True, [])])
-        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
-
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [
             {'entry_id': '9', 'date': '2026-01-01', 'status': 'operative', 'role': 'judgment'},
@@ -472,6 +502,25 @@ class Fresh(unittest.TestCase):
             self.assertTrue(JP.built_recently(f.name, now=mtime + 3 * 3600))
             self.assertFalse(JP.built_recently(f.name, now=mtime + 21 * 3600))
         self.assertFalse(JP.built_recently('/nonexistent/timeline.json'))
+
+
+class PassError(unittest.TestCase):
+    def test_error_hidden_once_the_timeline_is_rebuilt(self):
+        import time
+        runner = mock.Mock(COUNTY='MIAMI-DADE')
+        with tempfile.TemporaryDirectory() as tmp:
+            tpath = Path(tmp) / 't.json'
+            tpath.write_text('{}')
+            log = {'errors': {'a': 'e', 'b': 'e'},
+                   'error_at': {'a': time.time() - 60, 'b': time.time() + 60}}
+            with mock.patch.object(JP, 'timeline_path', return_value=tpath), \
+                    mock.patch.object(JP, 'assess', side_effect=lambda *a: {'state': 'verified'}), \
+                    mock.patch.object(JP, 'evidence_rate', return_value=(None, 0)), \
+                    mock.patch('document_store.pipeline_folder', return_value=tmp + '/x'), \
+                    mock.patch('document_store.pipeline_load', return_value={}):
+                rows, _, _ = JP.plan(runner, [{'case': 'a'}, {'case': 'b'}], date(2026, 9, 25), log)
+        self.assertNotIn('pass_error', rows[0])       # rebuilt after the error
+        self.assertEqual(rows[1]['pass_error'], 'e')   # the error is the newer fact
 
 
 class Pass(unittest.TestCase):
