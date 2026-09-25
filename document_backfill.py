@@ -174,6 +174,9 @@ class State:
         self.save()
 
 
+_VISION_STOP_RE = re.compile(r'\bnot bought - budget:')
+
+
 def _documents_step_status(dossier):
     """'done' only for a complete dossier. A dossier with gaps is 'gap' (redone by --retry-gaps);
     one that stopped on a spending cap is 'budget', redone on every run, so a raised cap or a new
@@ -181,8 +184,10 @@ def _documents_step_status(dossier):
     page ledger and uncertain ones stay blocked."""
     if dossier.get('complete') is True:
         return 'done'
-    gaps = json.dumps(dossier.get('open_gaps') or [])
-    return 'budget' if re.search(r'budget', gaps, re.I) else 'gap'
+    # Only the paid reader's refusal (case_dossier: "page N not bought - budget: ..."). The walk's
+    # document-count cap and --token-budget also say "budget" and are not spending stops.
+    stopped = any(_VISION_STOP_RE.search(str(g)) for g in dossier.get('open_gaps') or [])
+    return 'budget' if stopped else 'gap'
 
 
 class PersistentBudget(Budget):
@@ -351,6 +356,9 @@ def run(args, runner):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
                     state.mark_step(case, 'documents', docs_fp, _documents_step_status(dossier))
+                    # The saved dossier was just replaced, so a timeline step recorded as done
+                    # would reload it without its own gaps and could call the case complete.
+                    state.steps(case).pop('timeline', None)
                 # STEP 2, timeline: the whole-case docket and its filings, through the SAME
                 # ledger and the SAME per-case share (run_case_timeline.timeline_case).
                 if getattr(args, 'timeline', False):

@@ -211,7 +211,7 @@ class RunnerWiringTests(unittest.TestCase):
             # Spend this case's whole share, as the pilot's first case did.
             spend_until_refused(share, DV.VisionReader(client=Client()), entry['case'])
             alloc.finish(entry['case'])
-            return {'complete': False, 'open_gaps': ['budget_exhausted']}
+            return {'complete': False, 'open_gaps': ['x: page 1 not bought - budget: budget_exhausted']}
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / 'leads.json'
             source.write_text(json.dumps(rows))
@@ -239,7 +239,13 @@ class BudgetStopTests(unittest.TestCase):
         self.assertEqual(BF._documents_step_status({'complete': True}), 'done')
         self.assertEqual(BF._documents_step_status({'complete': False, 'open_gaps': ['x: gap']}), 'gap')
         self.assertEqual(BF._documents_step_status(
-            {'complete': False, 'open_gaps': ['vision: budget_exhausted: next page']}), 'budget')
+            {'complete': False, 'open_gaps': ['court:1:1: page 3 not bought - budget: '
+                                              'budget_exhausted: next page could cost $0.0550']}),
+            'budget')
+        # Greptile on #65: the walk's document cap and --token-budget say "budget" too.
+        for other in ("walk stopped: budget: 12 document(s) is this run's cap, reached at hop 2",
+                      'no cached search token for this owner, and --token-budget is 0'):
+            self.assertEqual(BF._documents_step_status({'complete': False, 'open_gaps': [other]}), 'gap')
 
     def test_a_budget_stopped_step_is_never_done_and_a_gap_only_without_retry(self):
         with tempfile.TemporaryDirectory() as folder, BF.State(Path(folder) / 'state.json') as state:
@@ -250,7 +256,7 @@ class BudgetStopTests(unittest.TestCase):
             self.assertFalse(state.step_done('C', 'documents', 'fp', True))
             entry = {'case': 'C', 'x': 1}
             state.mark_step('C', 'documents', 'fp', 'budget')
-            state.finish(entry, {'complete': False, 'open_gaps': ['budget_exhausted']})
+            state.finish(entry, {'complete': False, 'open_gaps': ['x: page 1 not bought - budget: y']})
             self.assertTrue(state.pending(entry))
 
     def test_the_cumulative_cap_refusing_marks_the_ledger_exhausted(self):
@@ -346,6 +352,27 @@ class OrchestrationTests(unittest.TestCase):
                          {'documents': 'done', 'timeline': 'done'})
         self.assertEqual(steps['timeline']['controlling_judgment'], '7')
         self.assertEqual(state['cases'][ROSTER[1]]['status'], 'complete')
+
+    def test_a_rerun_documents_step_reruns_the_timeline_and_keeps_its_gaps(self):
+        # Greptile on #65: --retry-gaps reran a documents step that had gaps and replaced the
+        # saved dossier; the timeline step, recorded done, reloaded it without its own gaps.
+        runs = {'documents': 0, 'timeline': 0}
+
+        def process(entry, qs, **kwargs):
+            runs['documents'] += 1
+            return {'complete': False, 'open_gaps': ['court:1:1: page count never verified']}
+
+        def timeline(case, as_of, **kw):
+            runs['timeline'] += 1
+            return {'coverage_complete': False, 'gaps': [{'kind': 'x'}],
+                    'status': {'kind': 'judgment_entered'}, 'judgments': {}}, {}
+
+        with tempfile.TemporaryDirectory() as folder:
+            self.run_backfill(folder, process, timeline)
+            self.run_backfill(folder, process, timeline, ['--retry-gaps'])
+            dossier = json.loads((Path(folder) / (ROSTER[0] + '.json')).read_text())
+        self.assertEqual(runs, {'documents': 4, 'timeline': 4})
+        self.assertTrue(any(str(g).startswith('timeline: ') for g in dossier['open_gaps']))
 
     def test_a_case_with_no_saved_docket_is_a_named_gap(self):
         def process(entry, qs, **kwargs):

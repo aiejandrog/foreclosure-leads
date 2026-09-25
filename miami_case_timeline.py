@@ -86,10 +86,15 @@ class _StayCases:
                 self.closed.remove(back[-1])
                 self.open.append(back[-1])
                 return
-        if self.open and (not nums or kind != 'suggestion_of_bankruptcy'):
-            # A stay order, or a second numberless notice, is the open case acting.
-            self.open[-1]['numbers'] |= nums
+        if self.open and not nums:
+            # A numberless stay order or notice is the open case acting.
             return
+        unnamed = [c for c in self.open if not c['numbers']]
+        if nums and unnamed:
+            # The first number cited for a case that was opened without one names that case.
+            unnamed[-1]['numbers'] |= nums
+            return
+        # Otherwise a number no case has yet is a different bankruptcy, whatever kind of line.
         if nums and self._find(self.closed, nums):
             case = self._find(self.closed, nums)[-1]
             self.closed.remove(case)

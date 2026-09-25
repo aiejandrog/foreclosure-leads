@@ -599,6 +599,20 @@ class ReconciliationTests(unittest.TestCase):
         self.assertFalse(r['stay_in_effect'])
         self.assertEqual(r['status']['kind'], 'judgment_entered')
 
+    def test_a_stay_order_for_a_second_bankruptcy_is_its_own_stay(self):
+        # Greptile on #65: a stay ORDER citing a new number joined the open case, so dismissing
+        # the first case ended both.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy Case No. 26-11111'),
+                 entry(3, 'Order staying action, automatic stay, Bankruptcy Case No. 26-22222'),
+                 entry(4, 'Notice of Filing: Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertTrue(r['stay_in_effect'])
+
+    def test_a_number_cited_later_names_the_numberless_case(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order staying action, automatic stay, Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Notice of Filing: Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertFalse(r['stay_in_effect'])
+
     def test_a_numberless_dismissal_with_two_open_bankruptcies_is_unknown(self):
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy Case No. 26-11111'),
                  entry(3, 'Suggestion of Bankruptcy Case No. 26-22222'),
