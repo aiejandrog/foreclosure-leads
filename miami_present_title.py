@@ -74,10 +74,6 @@ def present_title(report, entities=None):
         'legal_description_differs': [d['book_page'] for d in unanchored
                                       if d.get('status') == 'legal_description_differs'],
         'anchored_by': current.get('anchored_by') or ('folio' if current else None),
-        # A deed placed by a legal description only one index row states is the weakest ownership
-        # this module will report. It says so here, not only in the report's gap lines.
-        'legal_description_corroborated': (None if current.get('anchored_by') != 'legal_description'
-                                           else bool((current.get('legal_match') or {}).get('corroborated'))),
         'basis': (('Newest deed placed on this parcel by the clerk index legal description (no '
                    'folio on the deed) in what was searched and stored. '
                    if current.get('anchored_by') == 'legal_description' else
@@ -154,9 +150,6 @@ def present_title(report, entities=None):
         held.append('ownership: ' + ownership['status'])
     if not persons and owner_entities:
         held.append('owner is an entity; no person is established as able to act for it')
-    if ownership['legal_description_corroborated'] is False:
-        held.append('the current deed is placed on this parcel by a legal description only one '
-                    'record filed under the folio states')
     if ownership['legal_description_match_required']:
         held.append('%d deed(s) without a folio need legal-description matching'
                     % len(ownership['legal_description_match_required']))

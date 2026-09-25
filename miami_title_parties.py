@@ -119,15 +119,11 @@ def build_title_parties(models, documents, docket, folio):
                 # The clerk's own index puts this deed on the same lot/block/plat (or condo
                 # unit) as the records it filed under this parcel's folio. That is the check a
                 # person did by hand; anything short of an exact match still goes to one.
-                gaps.append('%s: anchored by the clerk index legal description (%s)%s, not by '
+                gaps.append('%s: anchored by the clerk index legal description (%s), not by '
                             'folio; index names and bounded explicit-role extraction do not '
-                            'establish that every deed party was recovered.'
-                            % (ref, verdict['basis'],
-                               '' if reference.get('corroborated') else
-                               ', which only one record filed under this folio states'))
+                            'establish that every deed party was recovered.' % (ref, verdict['basis']))
                 taken.add(day(row['date_parsed']))
-                deeds.append(dict(row, anchored_by='legal_description',
-                                  legal_match=dict(verdict, corroborated=bool(reference.get('corroborated')))))
+                deeds.append(dict(row, anchored_by='legal_description', legal_match=verdict))
                 continue
         gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)
         unanchored.append(dict(row,
@@ -189,7 +185,8 @@ def _assemble(deeds, unanchored, gaps, flags, documents, docket):
     # An undated anchored conveyance prevents selecting a newest deed.
     ordered = sorted(deeds, key=lambda d:d['date_parsed'] or datetime.min, reverse=True)
     current = ordered[0] if ordered and all(d['date_parsed'] for d in ordered) else None
-    if len(ordered)>1 and ordered[0]['date_parsed']==ordered[1]['date_parsed']:
+    # The index times some recordings and not others, so days are compared as days.
+    if current and len(ordered)>1 and ordered[0]['date_parsed'].date()==ordered[1]['date_parsed'].date():
         current = None
         gaps.append('Same-date deeds need document chronology reconciliation; no current deed selected.')
     previous = ordered[1] if current and len(ordered)>1 else None
@@ -433,9 +430,10 @@ def _signature(legal):
 def parcel_legal_reference(models, folio):
     """What the clerk index says this parcel's legal is, from the instruments it filed under the
     parcel's folio. Returns (reference, gap). No reference when none carries a complete legal, or
-    when two of them disagree: the index is then not a safe yardstick and a person compares."""
+    when two of them disagree: the index is then not a safe yardstick and a person compares. A
+    field one record leaves blank is not a disagreement with a record that fills it in."""
     target = _folio(folio)
-    found = {}
+    merged, records = None, []
     for model in models or []:
         if not target or _folio(model.get('foliO_NUMBER')) != target:
             continue
@@ -443,16 +441,36 @@ def parcel_legal_reference(models, folio):
         if not legal or legal['see_document'] or legal['unparsed'] or not _kind(legal):
             continue
         book_page = '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE'))
-        records = found.setdefault(_signature(legal), (legal, []))[1]
-        if book_page not in records:      # the same instrument can come back twice in one search
-            records.append(book_page)
-    if not found:
+        if book_page in records:          # the same instrument can come back twice in one search
+            continue
+        if merged is None:
+            merged, records = dict(legal), [book_page]
+            continue
+        combined = _merge_legal(merged, legal)
+        if combined is None:
+            return None, ('records filed under this folio carry different index legal descriptions '
+                          '(%s)' % ', '.join(sorted(records + [book_page])))
+        merged, _ = combined, records.append(book_page)
+    if merged is None:
         return None, 'no record filed under this folio carries a complete index legal description'
-    if len(found) > 1:
-        return None, ('records filed under this folio carry %d different index legal descriptions (%s)'
-                      % (len(found), ', '.join(sorted(r[0] for _, r in found.values()))))
-    legal, records = next(iter(found.values()))
-    return dict(legal, from_record=records[0], corroborated=len(records) > 1), None
+    return dict(merged, from_record=records[0], corroborated=len(records) > 1), None
+
+
+_LEGAL_FIELDS = ('plat', 'block', 'unit', 'building', 'phase', 'tract', 'subdivision')
+
+
+def _merge_legal(a, b):
+    """One legal from two records of the same parcel, or None when they positively disagree. What
+    one record states and the other leaves blank is filled in, not counted against it: the clerk
+    writes '0/0' for no plat on one instrument and the real plat on the next."""
+    if sorted(a['lots'] or ()) != sorted(b['lots'] or ()):
+        return None
+    out = dict(a)
+    for field in _LEGAL_FIELDS:
+        if a[field] and b[field] and _num(a[field]) != _num(b[field]):
+            return None
+        out[field] = a[field] or b[field]
+    return out
 
 
 def _num(value):

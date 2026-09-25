@@ -225,6 +225,25 @@ class DeedPlacementTests(unittest.TestCase):
         self.assertIn('only one record', got['unanchored_deeds'][0]['legal_match']['reason'])
         self.assertEqual(title(folio_pair() + rows[1:])['legal_matched_deeds'], ['7/1'])
 
+    def test_a_blank_field_is_not_a_disagreement(self):
+        # The clerk writes '0/0' for no plat on one instrument and the real plat on the next.
+        rows = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE',
+                               plat='0/0', block=''),
+                rec('7', '6/1/2023', 'A', 'B')]
+        self.assertEqual(title(rows)['legal_matched_deeds'], ['7/1'])
+        conflicting = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO,
+                                       'MORTGAGE', legal='LOT 15'),
+                       rec('7', '6/1/2023', 'A', 'B')]
+        kept = title(conflicting)['unanchored_deeds'][0]
+        self.assertIn('different index legal descriptions', kept['legal_match']['reason'])
+
+    def test_two_anchored_deeds_on_one_day_choose_no_current_deed(self):
+        rows = [rec('2', '3/5/2024 09:00:00 AM', 'SELLER', 'FIRST LLC', FOLIO),
+                rec('3', '3/5/2024 02:00:00 PM', 'FIRST LLC', 'SECOND LLC', FOLIO)]
+        got = title(rows)
+        self.assertIsNone(got['current_deed_candidate'])
+        self.assertTrue(any('Same-date deeds' in g for g in got['gaps']))
+
     def test_the_same_legal_written_two_ways_is_still_one_yardstick(self):
         rows = [mortgage(), rec('6', '4/1/2019', 'OWNER PERSON', 'SAMPLE BANK', FOLIO, 'MORTGAGE',
                                block='012', plat='053-0900'),
@@ -299,15 +318,12 @@ class PresentTitleTests(unittest.TestCase):
         self.assertEqual(own['legal_description_match_required'], [])
         self.assertFalse(any('legal-description matching' in h for h in got['held_because']))
         self.assertIn('clerk index legal description', own['basis'])
-        self.assertIs(own['legal_description_corroborated'], True)
-        self.assertFalse(any('only one record' in h for h in got['held_because']))
         self.assertTrue(any('every deed party was recovered' in g and 'official_records/7-1' in g
                             for g in title(rows)['gaps']))
 
     def test_present_title_holds_a_deed_no_one_could_place(self):
         thin = MPT.present_title({'title_parties': title(
             [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')])})
-        self.assertIsNone(thin['ownership']['legal_description_corroborated'])
         self.assertEqual(thin['ownership']['legal_description_match_required'], ['7/1'])
         self.assertTrue(any('need legal-description matching' in h for h in thin['held_because']))
 
