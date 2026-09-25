@@ -1255,7 +1255,7 @@ def extract_funnel_js(tracker_src):
     block = '\n'.join((clock, saled, wrong, funl))
     # PRESENCE IS NOT ENOUGH, same lesson as extract_sync_js: an anchor can still match while the
     # thing it was pointing at has moved out of the slice. Name every definition we are relying on.
-    for need in ('const NO_SALE', 'function _hasClock', 'function _aucPassed',
+    for need in ('const NO_SALE', 'function _hasClock', 'function _aucPassed', 'function _heldToday',
                  'function _saleDays', 'function _isWrongOwner',
                  'var FUNNEL ', 'var FUNNEL_ORDER', 'function _fDays', 'function _funnelStage'):
         if need not in block:
@@ -1652,6 +1652,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
+            # docket sale result (sale_results.py -> row.sr): held / cancelled / moved / at risk /
+            # amended judgment. None on almost every row; the null-strip drops it.
+            'sr': (lambda v: ({k: v[k] for k in ('st', 'd', 'nd', 'was', 'why', 'amj', 'ama', 'bkb', 'obj', 'ev')
+                               if v.get(k) not in (None, '')} if isinstance(v, dict) and v.get('st') else None))(d.get('sr')),
             # ---- last Quo call (transcript-backed). None on most rows; the null-strip removes it.
             'qc': (lambda q: ({'w': str(q.get('at') or '')[:16], 'du': q.get('dur') or 0,
                                's': ' '.join(q.get('summary') or [])[:180],
@@ -2961,7 +2965,9 @@ function allLeads(){ return ROWS.concat(COV); }
    its own (_funnelparitytest.py evaluates exactly this region). */
 var _FCGEN = 0, _FCC = null, _FCCK = '';
 function funnelCounts(){
-  var key = _FCGEN + '|' + new Date().toDateString() + '|' + ROWS.length + '|' + COV.length;
+  /* the sale hour is a second edge inside the day: at 9am every sale-day lead leaves its lane */
+  var _nw = new Date();
+  var key = _FCGEN + '|' + _nw.toDateString() + '|' + (typeof SALE_HOUR === 'number' && _nw.getHours() >= SALE_HOUR) + '|' + ROWS.length + '|' + COV.length;
   if(_FCC && _FCCK === key) return _FCC;
   var c = {}; FUNNEL_ORDER.forEach(function(k){ c[k] = 0; });
   allLeads().forEach(function(r){ var s = funnelOf(r); if(s && c[s] != null) c[s]++; });
@@ -3377,12 +3383,18 @@ function isBalloon(r){ return r.st==='BAL'; }
    left open past midnight would keep a passed sale in Urgent. Recompute from the baked date string
    r.x with the board's own regex. LP rows have no sale date and BAL rows count down to maturity on
    r.d — neither goes through liveDays. */
+/* The board's sale-hour rule, reached through a typeof guard: _heldToday arrives with the extracted
+   funnel block, and a page built without it (the suites' stub pages) must still paint its lanes. */
+function _heldNow(x){ return typeof _heldToday === 'function' && _heldToday(x); }
 function liveDays(r){
   if(r.lp || isBalloon(r)) return null;
   var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(!m) return (typeof r.d==='number' && r.d<9000) ? r.d : null;
   var t=new Date(+m[3],+m[1]-1,+m[2]), td=new Date(); td.setHours(0,0,0,0);
-  return Math.round((t-td)/864e5);
+  var d=Math.round((t-td)/864e5);
+  /* Sale morning past the sale hour reads as held (-1), the board's own rule: _heldToday is lifted
+     from the template with the clock block, so the phone and the board flip at the same minute. */
+  return (d===0 && _heldNow(r.x)) ? -1 : d;
 }
 /* ═════════════ WHAT COUNTS AS "WE ALREADY CONTACTED THIS PERSON" (2026-09-10) ═════════════
    Byte-for-byte the board's own vocabulary, tracker_template.html:3780. `worker` is deliberately
@@ -3471,7 +3483,7 @@ function _dayLane(r, lo, hi){ if(r.lp || isBalloon(r)) return false;
 function _bizDays(r){
   var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(!m) return null;
   var t=new Date(+m[3],+m[1]-1,+m[2]), cur=new Date(); cur.setHours(0,0,0,0);
-  if(t<cur) return -1;
+  if(t<cur || _heldNow(r.x)) return -1;
   var n=0; while(cur<t){ cur.setDate(cur.getDate()+1); if(cur.getDay()>0 && cur.getDay()<6) n++; }
   return n;
 }
@@ -4702,6 +4714,12 @@ function screenLead(){
   if(r.bk)           clock += '<span class="chip bad">'+r.bk+' bankruptcy filing'+(r.bk>1?'s':'')+'</span>';
   if(r.sl)           clock += '<span class="chip hot">stay LIFTED '+esc(r.sl)+'</span>';
   if(r.cs)           clock += '<span class="chip">case '+esc(r.cs)+'</span>';
+  if(r.sr){ var _sm=function(i){var m=String(i||'').match(/^\d{4}-(\d{2})-(\d{2})$/);return m?m[1]+'/'+m[2]:'';};
+    var _sl={held:'SOLD '+_sm(r.sr.d), cancelled:'sale CANCELLED '+_sm(r.sr.d), reset:'sale MOVED to '+_sm(r.sr.nd)+(r.sr.was?' (was '+_sm(r.sr.was)+')':''),
+             vacated:'sale SET ASIDE', redeemed:'REDEEMED after sale', at_risk:'sale AT RISK', unknown:'result not on docket yet'}[r.sr.st]||'';
+    if(_sl) clock += '<span class="chip '+((r.sr.st==='cancelled'||r.sr.st==='reset')?'hot':(r.sr.st==='held'?'bad':''))+'" title="'+esc((r.sr.why||'')+((r.sr.ev&&r.sr.ev.length)?' | docket: '+r.sr.ev.map(function(e){return _sm(e.d)+' '+e.x;}).join(' | '):''))+'">'+esc(_sl)+'</span>';
+    if(r.sr.bkb && r.sr.st==='held') clock += '<span class="chip bad">BK filed '+esc(_sm(r.sr.bkb))+', sale may not stand</span>';
+    if(r.sr.amj) clock += '<span class="chip">amended judgment '+esc(_sm(r.sr.amj))+(r.sr.ama?' $'+Math.round(r.sr.ama).toLocaleString():'')+'</span>'; }
   clock += '</div>';
 
   var mny = '<div class="grid">'

@@ -130,15 +130,19 @@ def _series(s):
     return tuple(_SERIES.findall(core))
 
 
-def _lookup(entity):
+def _lookup(entity, fetch=None):
     """Search Sunbiz and return the detail ONLY for a genuine name match.
 
     NEVER returns a fuzzy neighbour: Sunbiz's search is prefix-ish, so 'BEETA BRIDGES LLC' (not
     registered in FL) returned 'BEETAILS LLC' — a stranger's company with a stranger's CEO. That
     is worse than no data: it puts the operator on the phone with the wrong person. A match must
     be identical, or identical once the corporate suffix is dropped (LLC vs L.L.C. vs INC drift).
-    Anything else -> not_found, and the UI says so."""
-    h = _curl(BASE + '/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&searchTerm='
+    Anything else -> not_found, and the UI says so.
+
+    `fetch` replaces _curl. _curl returns '' when Sunbiz is unreachable, which reads here as
+    not_found; a caller that must tell the two apart passes a fetch that raises instead."""
+    fetch = fetch or _curl
+    h = fetch(BASE + '/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&searchTerm='
               + urllib.parse.quote(entity))
     links = re.findall(r'href="(/Inquiry/CorporationSearch/SearchResultDetail[^"]+)"[^>]*>([^<]+)</a>', h)
     # Sunbiz returns HTML-escaped names ("ANGEL&#39;S NEWS LLC"). Unescape BEFORE any comparison:
@@ -166,7 +170,7 @@ def _lookup(entity):
     if not hit:
         return {'not_found': True, 'officers': [], 'ra': '', 'ra_addr': '', 'status': '',
                 'exact': False, 'near': [l[1].strip() for l in links[:3]]}
-    d = _parse_detail(_curl(BASE + hit[0][0].replace('&amp;', '&')))
+    d = _parse_detail(fetch(BASE + hit[0][0].replace('&amp;', '&')))
     d['matched'] = hit[0][1].strip()
     d['exact'] = True
     d['typo'] = typo

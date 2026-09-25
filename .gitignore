@@ -15,7 +15,15 @@ _*.py
 !_calldetailtest.py
 !_batsyntaxtest.py
 !_refreshexittest.py
+# 2026-09-23: BSG Warmup failed silently on 09-17 and 09-19..21 (pythonw, no console). This suite pins
+# the retries and the failure log, and runs warmup.py only as a temp copy with no real key and SMTP faked.
+!_warmuperrtest.py
 !_lpchaintest.py
+!_casebudgettest.py
+!_moneytest.py
+!_coveragetest.py
+!_presenttitletest.py
+!_rankingtest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -61,6 +69,29 @@ BSG_Mail_Campaign_*.pdf
 !_nearmetest.py
 !_docroomtest.py
 !_portfoliotest.py
+# _doccollecttest guards county document acquisition: that a short download is rejected against
+# the recording index, that a scanned page is never called read, and that document evidence cannot
+# reach equity_state's FACT states. Untracked, it would exist on one machine only.
+!_doccollecttest.py
+# _dossiertest guards the a/b/c/d dossier: that an unread document has no type, that the clerk's
+# index label is never a substitute for reading, and that reading a document never moves a lead
+# into an equity FACT state.
+!_dossiertest.py
+# _optionstest guards the homeowner options strategy: that unverified equity never yields a sell
+# path, that a stay stops everything, and that only the wholesale path ever pays us.
+!_optionstest.py
+# _walktest guards the citation walk: that an unresolvable citation is reported rather than
+# dropped, that a search capability is never assumed without a probe observing it, and that a
+# walked document stays at rung c and cannot move the equity verdict.
+!_walktest.py
+# Official-records rows saved for miami_judgment --records. They carry owner names, party names
+# and recording keys for a real homeowner, and the pilot run on 2026-09-22 left one of these
+# untracked in the working copy. Named here by kind, per CLAUDE.md's "Never commit".
+or_rows*.json
+*_rows.json
+pilot*.json
+documents/
+dossiers/
 _*.html
 _*.json
 _*.txt
@@ -76,6 +107,7 @@ lp_leads.json)
 __pycache__/
 browser-profile/
 leads-run.log
+refresh-running.flag
 diligence_server.log
 batchdata.key
 site.pass
@@ -108,6 +140,13 @@ tracerfy_mcp.url
 dnc_scrub.json
 cases_qs.json
 records_qs.json
+# book/page -> recording keys, accumulated from every recordingModels list the pipeline pulls.
+# Same posture as records_qs.json: a compounding cache of county index metadata, keyed to real
+# parcels, that belongs on a machine and not in git.
+records_index.json
+# What records_probe observed about non-name search on the clerk endpoint. Machine-specific:
+# a verdict minted with one machine's captcha path is not a verdict for another.
+records_search_caps.json
 full.json
 pa_probe.json
 *_probe.json
@@ -476,3 +515,20 @@ deal_desk.json
 # the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
+# _archivefilltest guards the auction archive merge: a real number may fill a hole, nothing may
+# overwrite a number already held. Untracked, the suite that proves the equity pair keeps filling
+# would live on one laptop.
+!_archivefilltest.py
+!_boardaccuracytest.py
+!_docboardtest.py
+# _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
+# file before the sale-history cache restored them (the restore ran only inside make_tracker, in
+# memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
+# blocked the publish. This suite fails if the file is written before the restore.
+!_stayfiletest.py
+# sale_results.json: docket sale verdicts per case (sale_results.py), rebuilt nightly, carries docket text.
+sale_results.json
+sale_results.json.tmp
+# _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
+!_saleresultstest.py
+!_judgmentpasstest.py
