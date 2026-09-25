@@ -94,6 +94,9 @@ SETTLED_KINDS = ('judgment_entered', 'sale_scheduled', 'sale_cancelled', 'stayed
 # to unreachable in real output and the first version's stay-vs-sale rule was exercised only by a
 # fixture shape the pipeline does not write. `_sale_on_the_docket` below reads the sale facts the
 # producer actually saves.
+# Status kinds that are ABOUT a sale. Read by the vocabulary test only, which checks this module
+# vouches for no posture miami_case_timeline cannot emit; the sale-liveness decision is
+# SALE_LIVE_STATUS_KINDS, further down, and deliberately excludes 'sold'.
 SALE_KINDS = ('sale_scheduled', 'sold')
 # status kinds that say a sale is over and settled, so a date in the past is not an open question.
 # miami_case_timeline records sale_outcome when a scheduled date passes with no certificate.
@@ -174,6 +177,25 @@ _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
 BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')
 
 
+def _producer_labels(entry):
+    """Every kind the PRODUCER assigned this entry: `kind` and `index_kind` both.
+
+    `kind` is not a reliable carrier of the producer's classification. miami_case_timeline :383 does
+    `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any entry
+    whose OCS eventType is a hearing has its real label overwritten and keeps it only in
+    `index_kind`. The eighth review found that this module knew about the override in one of the three
+    places it reaches: a suggestion of bankruptcy on a hearing event read `supported` with "none on
+    the docket" printed in the stay column, over a live 11 USC 362 stay. Matching both keys still only
+    restates a label the producer computed.
+
+    THE PRODUCER'S OWN stay_history HAS THE SAME BUG (:462 keys on e['kind']), so its backstop is
+    defeated by the same docket. That is not fixed here: it is on miami_case_timeline, it would move
+    §362 stay flags the board hard-gates on, and CLAUDE.md's rule for a bug found from another
+    session's surface is to report it rather than fix it. Reported to Alejandro with this PR.
+    """
+    return tuple(k for k in (entry.get('kind'), entry.get('index_kind')) if k)
+
+
 def _index_text(entry):
     """The text the PRODUCER classifies on: description + comments (miami_case_timeline :345).
 
@@ -223,12 +245,12 @@ def _sale_state(timeline, status, kind):
     for entry in _rows(timeline, 'entries'):
         if not isinstance(entry, dict):
             continue
-        entry_kind = entry.get('kind')
-        if entry_kind in SALE_CLOSING_KINDS:
+        labels = set(_producer_labels(entry))
+        if labels & set(SALE_CLOSING_KINDS):
             closing = _newer(closing, entry)
-        elif entry_kind in SALE_NOTICE_KINDS:
+        elif labels & set(SALE_NOTICE_KINDS):
             opening = _newer(opening, entry)
-        elif entry_kind in UNLABELLED_KINDS and _SALE_WORD_RE.search(_index_text(entry)):
+        elif labels <= set(UNLABELLED_KINDS) and _SALE_WORD_RE.search(_index_text(entry)):
             # The classifier saw the word and did not label the entry. That is a limit of the
             # classifier, not evidence either way, and it is not this module's to resolve.
             unlabelled.append(entry)
@@ -261,9 +283,12 @@ def _sale_state(timeline, status, kind):
                                    'that sale still stands cannot be told from this file' % (
                                        opening.get('entry_id') or '?', _unlabelled_phrase(later)))
             dates = _sale_dates_of(opening)
-            return 'live', ('entry %s, which the docket classifies as a notice of sale (%s%s), '
-                            'with no cancellation or certificate on or after it' % (
-                                opening.get('entry_id') or '?', opening.get('date') or 'undated',
+            return 'live', ('entry %s, which the docket classifies as %s (%s%s), with no '
+                            'cancellation or certificate on or after it' % (
+                                opening.get('entry_id') or '?',
+                                next(k for k in _producer_labels(opening)
+                                     if k in SALE_NOTICE_KINDS),
+                                opening.get('date') or 'undated',
                                 '; sale date %s' % ', '.join(dates) if dates else ''))
     # Either the newest labelled sale event ends a sale, or there was never one. In both cases an
     # unlabelled sale-worded entry after it could be a fresh notice this module cannot read.
@@ -316,7 +341,7 @@ def _bankruptcy_entries(timeline):
     """
     seen = {str(h.get('entry_id')) for h in _rows(timeline, 'stay_history') if isinstance(h, dict)}
     return [e for e in _rows(timeline, 'entries')
-            if isinstance(e, dict) and e.get('kind') in BANKRUPTCY_KINDS
+            if isinstance(e, dict) and set(_producer_labels(e)) & set(BANKRUPTCY_KINDS)
             and str(e.get('entry_id')) not in seen]
 
 
@@ -468,6 +493,19 @@ def assess(timeline, dossier=None):
     outcome = status.get('sale_outcome')
     if outcome in UNSETTLED_SALE_OUTCOMES:
         missing.append('the sale date has passed and the outcome is %s' % outcome)
+    # The same fact reaches the status only through one branch: build_timeline :509 writes
+    # sale_outcome inside `if status['kind'] == 'sale_scheduled' and status.get('sale_date') and
+    # status['sale_date'] < today`. A notice of sale whose docket words carry no parseable date
+    # leaves sale_date None, so that branch never runs - and the top-level block was read only under
+    # a stay, by _sale_state. The clerk's money rows said a sale was HELD and the verdict was
+    # `supported` for "sale scheduled" (eighth review). The producer's own qualification on this
+    # block ends "the sale can still be vacated", which is not a posture to vouch for.
+    held = timeline.get('sale_held')
+    if (isinstance(held, dict) and held.get('date') and not held.get('certificate')
+            and outcome not in UNSETTLED_SALE_OUTCOMES):
+        missing.append("the clerk's sale-day bid and deposit entries say a sale was held on %s and "
+                       'no certificate of sale has followed, so what became of it is not in this '
+                       'file' % held['date'])
     record = _judgment_record(judgments, entry_id)
     if entry_id is not None and record is None:
         missing.append('no record for the controlling judgment in the reconciliation, so nothing '
@@ -549,8 +587,15 @@ def assess(timeline, dossier=None):
             conflicts.append('two different runs of printed rows both reach %s; the document '
                              'supports more than one reading' % _money(check.get('amount')))
         elif why == TOTAL_ROW_DISAGREES:
-            missing.append("the judgment prints %s as its total but no printed total row on that "
-                           'page matches it (%s)' % (_money(check.get('amount')), why))
+            # One reason string, several different facts: judgment_money raises it at :486 both when
+            # NO printed total row matches the stated total and when one matches but a second
+            # disagreeing kind=total row sits on the same page (`if not candidates or others`), and
+            # again at :348, :384 and :388 for further cases. Saying only the first was a sentence
+            # the document refutes, so the ambiguity is named the way SUBTOTAL_DISAGREES does below.
+            missing.append('the printed total rows on the judgment page do not settle %s: either '
+                           'none of them matches it or more than one disagrees, and which of those '
+                           'it is cannot be told from this file (%s)'
+                           % (_money(check.get('amount')), why))
         elif 'disagreeing_subtotals' in check:  # noqa: SIM114 - the reason is the point, see below
             # run_case_timeline always writes the key now, so every OTHER failure reason
             # judgment_money emits landed here and produced no line at all: the verdict fell to
@@ -866,7 +911,9 @@ def main(argv=None):
         md.write_text(render_markdown(rows, skipped, broken), encoding='utf-8')
         print('  report: %s' % out)
         print('  report: %s' % md)
-    return 0 if rows else 1
+    # A case lost to an unreadable or missing file is not a clean run. Returning 0 as long as one
+    # case succeeded let a scheduled caller read a truncated run as fine (eighth review).
+    return 0 if rows and not skipped and not broken else 1
 
 
 if __name__ == '__main__':

@@ -57,7 +57,7 @@ classification job, and `case_verdict` does not do classification: it answers li
 from `miami_case_timeline`'s own labels, and where the classifier left a sale-worded entry
 unlabelled - it labels "Notice of Foreclosure Sale" but not "Notice of Rescheduled Foreclosure Sale"
 - the answer is "unknown", which holds the case as a gap. So a stayed case reads conflicted only when
-the docket itself says a sale is running. Four earlier attempts here each broke the opposite way: by
+the docket itself says a sale is running. Five earlier attempts here each broke the opposite way: by
 status field (missed a stay filed after the notice), by entry kind (missed the rescheduled phrasings),
 by regex over the entry's words (counted the judgment's own "shall sell the property", the petition
 asking the court to stop the sale, and unruled motions and denials), and by reading only the labels of
@@ -67,6 +67,16 @@ plus the clerk's comments. Both of those were reachable false clean bills over a
 earlier version of this paragraph claimed no wrong verdict in either direction was reachable, which
 is a claim the tests cannot establish and this one does not make. What the tests do establish is that
 each phrasing they carry lands on a gap rather than a verdict.
+
+One limitation this raised is not `case_verdict`'s and is NOT fixed here. `miami_case_timeline` :383
+does `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket
+entry whose OCS eventType is a hearing loses its real label and keeps it only in `index_kind` - and
+the producer's own `stay_history` (:462) keys on the overwritten `kind`. So a suggestion of bankruptcy
+filed on a hearing event leaves `stay_history` empty and `stay_in_effect` None: the producer does not
+know about that stay at all. `case_verdict` now matches both keys and holds such a case as a gap, but
+the underlying loss is in the producer, it would move the §362 stay flags the board hard-gates on,
+and the rule for a bug found on a surface another session owns is to report it. Reported to
+Alejandro; not fixed on this branch.
 
 2018-026274's amount reason is the second. The $0.60 breakdown in the row below is what the console
 printed on the run that found it, and it does NOT reach a saved timeline: `verify_document` builds its

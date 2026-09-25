@@ -5,6 +5,7 @@ a person wrote by reading the code's output. The fixtures below reproduce the st
 cites, so the module has to reach the same word the person did. If a rule here has to be loosened to
 make a case pass, that is a policy change and it belongs in the status file, not in this test.
 """
+import re
 import json
 import os
 import subprocess
@@ -555,7 +556,9 @@ class CliTests(unittest.TestCase):
             (folder / 'no-timeline-yet.json').write_text(json.dumps({'case': 'Z'}))
 
             proc = run_cli('--dossiers', folder, dealflow=folder)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
+            # 1, not 0: one dossier has no timeline saved, so this run did not cover every case it
+            # was given, and a scheduled caller must not read it as clean (eighth review).
+            self.assertEqual(proc.returncode, 1, proc.stderr)
             self.assertIn('supported 1', proc.stdout)
             self.assertIn('conflicted 1', proc.stdout)
             self.assertIn('$0 spent, no requests', proc.stdout)
@@ -622,7 +625,9 @@ class SecondReviewTests(unittest.TestCase):
         check['reason'] = CV.TOTAL_ROW_DISAGREES
         r = CV.assess(timeline('X', checks=[check], attachments=[read_attachment()]))
         self.assertEqual(r['verdict'], 'incomplete')
-        self.assertTrue(any('no printed total row on that page matches it' in m
+        # judgment_money raises this one string for several distinct facts, so the line must name
+        # the ambiguity rather than assert the first of them (eighth review).
+        self.assertTrue(any('either none of them matches it or more than one disagrees' in m
                             for m in r['missing']), r['missing'])
 
     def test_an_inferred_unread_duplicate_judgment_holds_the_case(self):
@@ -679,7 +684,7 @@ class SecondReviewTests(unittest.TestCase):
                                          'date': '2026-11-10'}],
                                checks=[ok_check()], attachments=[read_attachment()]))
         self.assertEqual(r['verdict'], 'conflicted')
-        self.assertTrue(any('entry 120' in c and 'notice of sale' in c for c in r['conflicts']),
+        self.assertTrue(any('entry 120' in c and 'notice_of_sale' in c for c in r['conflicts']),
                         r['conflicts'])
 
     def test_a_cancelled_sale_under_a_stay_is_not_a_contradiction(self):
@@ -820,6 +825,8 @@ class SecondReviewTests(unittest.TestCase):
             (folder / 'BAD.json').write_text(json.dumps({'case': 'BAD'}))
             (folder / 'BAD-timeline.json').write_text(json.dumps(bad))
             proc = run_cli('--dossiers', folder, dealflow=folder)
+            # 0: both cases produced a verdict. The type guards absorbed BAD's malformed blocks, so
+            # nothing was skipped or lost - which is what separates this from the exit-1 cases.
             self.assertEqual(proc.returncode, 0, proc.stderr)
             report = json.loads((folder / 'case-verdicts.json').read_text())
             self.assertIn('GOOD', [r['case'] for r in report['verdicts']])
@@ -1020,7 +1027,9 @@ class FourthReviewTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {'DEALFLOW_DIR': str(folder)}), \
                     mock.patch.object(paths, 'DEALFLOW_DIR', str(folder)), \
                     mock.patch.object(CV, 'for_saved_case', flaky):
-                self.assertEqual(CV.main(['--dossiers', str(folder)]), 0)
+                # Exit 1 because a case was lost, and the report is still written and still names
+                # it: reporting the loss and exiting clean are two different things.
+                self.assertEqual(CV.main(['--dossiers', str(folder)]), 1)
             report = json.loads((folder / 'case-verdicts.json').read_text())
             self.assertEqual([r['case'] for r in report['verdicts']], ['A'])
             self.assertTrue(any('exploded' in n for n in report['no_verdict']['unreadable']))
@@ -1414,28 +1423,126 @@ class SeventhReviewTests(unittest.TestCase):
             r = CV.assess(t)
             self.assertEqual(r['verdict'], 'supported', (text, r['missing'], r['conflicts']))
 
-    def test_a_hearing_entry_that_mentions_a_sale_is_still_a_gap(self):
-        # The producer overwrites kind with 'hearing' for anything on a calendar eventType except a
-        # notice of sale (:383), so 'hearing' has to stay in the unlabelled set: gating the check on
-        # 'other' alone would have dropped an order resetting a sale carried on a hearing event.
+    @staticmethod
+    def calendared(rows, as_of='2026-09-23'):
+        """Drive the producer with an eventType per entry: (id, description, date, eventType)."""
         import miami_case_timeline as T
         t = T.build_timeline('SYNTHETIC', {'entries': [
             {'source_id': str(n), 'expected_documents': 0,
-             'metadata': dict({'eventID': n, 'eventDate': d, 'docketDescrition': text}, **extra)}
-            for n, text, d, extra in [
-                (100, 'Complaint', '01/05/2026', {}),
-                (140, 'Final Judgment of Foreclosure', '06/10/2026', {}),
-                (145, 'Order Resetting Foreclosure Sale', '07/01/2026', {'eventType': 'Hearing'}),
-                (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026', {})]],
-            'pagination_verified': True}, [], '2026-09-23')
-        self.assertEqual(next(e['kind'] for e in t['entries'] if e['entry_id'] == '145'), 'hearing')
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text, 'eventType': ev}}
+            for n, text, d, ev in rows], 'pagination_verified': True}, [], as_of)
         t['judgments'] = {'controlling_entry': '140', 'controlling_reason': 'one operative judgment',
                           'judgments': [judgment_row('140')], 'docket_duplicates_inferred': []}
         t['amount_vision'] = {'amount_checks': [ok_check('140', 'court:140:1', 500000.00)]}
         t['coverage'] = {'attachments': [read_attachment('140')], 'complete': False}
+        return t
+
+    def test_a_hearing_entry_the_classifier_never_labelled_is_still_a_gap(self):
+        # The producer overwrites kind with 'hearing' for anything on a calendar eventType except a
+        # notice of sale (:383), so 'hearing' has to stay in the unlabelled set. "Notice of
+        # Rescheduled Foreclosure Sale" is one classify leaves as 'other', so on a hearing event both
+        # of its labels are unrecognising ones and the answer is a gap.
+        t = self.calendared([(100, 'Complaint', '01/05/2026', ''),
+                             (140, 'Final Judgment of Foreclosure', '06/10/2026', ''),
+                             (145, 'Notice of Rescheduled Foreclosure Sale on 12/28/2026',
+                              '07/01/2026', 'Hearing'),
+                             (150, 'Suggestion of Bankruptcy Chapter 13', '08/01/2026', '')])
+        entry = next(e for e in t['entries'] if e['entry_id'] == '145')
+        self.assertEqual((entry['kind'], entry['index_kind']), ('hearing', 'other'))
         r = CV.assess(t)
         self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
         self.assertTrue(any('145' in m for m in r['missing']), r['missing'])
+
+
+class EighthReviewTests(unittest.TestCase):
+    """miami_case_timeline :383 overwrites `kind` with 'hearing' for any entry on a calendar
+    eventType except a notice of sale, leaving the producer's real label only in `index_kind`. The
+    seventh round's fix knew that and closed it in ONE of the three places it reaches. Every case
+    here drives the producer with a real eventType.
+    """
+    calendared = staticmethod(SeventhReviewTests.__dict__['calendared'].__func__)
+    OPEN = [(100, 'Complaint', '01/05/2026', ''),
+            (140, 'Final Judgment of Foreclosure', '06/10/2026', '')]
+
+    def test_a_bankruptcy_on_a_hearing_event_is_never_none_on_the_docket(self):
+        # The worst verdict this module can produce: `supported`, no gaps, and "none on the docket"
+        # printed in the stay column, over a live 11 USC 362 stay. All three stay-raising kinds were
+        # reachable. The producer's OWN stay_history (:462) keys on the overwritten kind too, so the
+        # backstop that exists to catch exactly this was defeated by the same docket.
+        for text in ('Suggestion of Bankruptcy Chapter 13 case 26-12345',
+                     'Order Staying Action Due To Bankruptcy 11 U.S.C. 362 debtor',
+                     'Order Reinstating Automatic Stay chapter 13 debtor'):
+            t = self.calendared(self.OPEN + [(150, text, '08/01/2026', 'Hearing')])
+            entry = next(e for e in t['entries'] if e['entry_id'] == '150')
+            self.assertEqual(entry['kind'], 'hearing', text)
+            self.assertIn(entry['index_kind'], CV.BANKRUPTCY_KINDS, text)
+            # The producer's own history is empty here - that is its bug, reported not fixed.
+            self.assertEqual(t['stay_history'], [], text)
+            r = CV.assess(t)
+            self.assertNotEqual(r['verdict'], 'supported', (text, r['notes'], r['supported_by']))
+            self.assertTrue(any('150' in m for m in r['missing']), (text, r['missing']))
+            self.assertNotIn('none on the docket', CV.render_markdown([r]), text)
+
+    def test_a_certificate_of_title_on_a_hearing_event_still_ends_the_sale(self):
+        # A certificate of title carries no "sale" word, so the unlabelled branch did not catch it
+        # either: the sale read as still going ahead and a later petition made it `conflicted`, with
+        # a reason saying there was no certificate over a docket whose certificate the producer
+        # labelled. The same docket with the certificate not calendar-typed came back `supported`.
+        t = self.calendared(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale on 07/20/2026', '06/20/2026', ''),
+            (170, 'Certificate of Title', '07/30/2026', 'Hearing'),
+            (180, 'Suggestion of Bankruptcy Chapter 13 case 26-12345', '08/15/2026', '')])
+        entry = next(e for e in t['entries'] if e['entry_id'] == '170')
+        self.assertEqual((entry['kind'], entry['index_kind']), ('hearing', 'certificate_of_title'))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['conflicts'], r['missing']))
+
+    def test_a_held_sale_is_read_even_when_the_status_never_carried_it(self):
+        # build_timeline writes sale_outcome only inside `kind == 'sale_scheduled' and sale_date and
+        # sale_date < today` (:509). A notice of sale with no parseable date leaves sale_date None, so
+        # that branch never runs, and the top-level sale_held block was read only under a stay. The
+        # clerk's money rows said the sale was HELD and the verdict vouched for "sale scheduled".
+        t = self.calendared(self.OPEN + [
+            (145, 'Notice of Foreclosure Sale', '06/20/2026', ''),
+            (146, 'Bid Amount', '07/20/2026', ''),
+            (147, 'Mortgage Foreclosure Deposit', '07/20/2026', '')])
+        self.assertIsNone(t['status'].get('sale_date'))
+        self.assertIsNone(t['status'].get('sale_outcome'))
+        self.assertEqual((t['sale_held'] or {}).get('date'), '2026-07-20')
+        self.assertIsNone((t['sale_held'] or {}).get('certificate'))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['conflicts'], r['notes']))
+        self.assertTrue(any('2026-07-20' in m and 'held' in m for m in r['missing']), r['missing'])
+
+    def test_no_producer_label_is_matched_on_kind_alone(self):
+        # The class of bug, not the instance: eight rounds on this module and the same override was
+        # closed in one of three places. Every comparison against a producer label must go through
+        # _producer_labels, which reads kind AND index_kind.
+        import ast
+        tree = ast.parse(MODULE.read_text())
+        producer_labels = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                               and n.name == '_producer_labels')
+        # `status` is the case posture, not a docket entry, and `g` is a gap row; neither goes
+        # through the :383 override. Anything else reading 'kind' is reading an entry's label.
+        allowed = {'status', 'g'}
+        inside = {id(n) for n in ast.walk(producer_labels)}
+        bad = []
+        for node in ast.walk(tree):
+            if id(node) in inside:
+                continue
+            receiver = None
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == 'get' and len(node.args) == 1
+                    and getattr(node.args[0], 'value', None) == 'kind'):
+                receiver = node.func.value
+            elif (isinstance(node, ast.Subscript) and getattr(node.slice, 'value', None) == 'kind'):
+                receiver = node.value
+            if receiver is None or (isinstance(receiver, ast.Name) and receiver.id in allowed):
+                continue
+            bad.append((getattr(node, 'lineno', '?'), ast.dump(receiver)[:60]))
+        self.assertEqual(bad, [], 'a producer label is read off `kind` alone; miami_case_timeline '
+                                  ':383 overwrites it with "hearing" on a calendar eventType, so '
+                                  'this must go through _producer_labels')
 
 
 
