@@ -242,12 +242,14 @@ def _carry_lien_totals(old, new, out):
     its totals stand. Otherwise (narrower, or an old chain that never said) the larger figure is kept,
     less what the re-read shows was this case's own claim, and the chain says so."""
     out.pop('lien_totals_kept', None)
+    out.pop('hoa_own_in', None)
     legacy = 'other' not in old
     if legacy and old.get('nrec') and (new.get('nrec') or 0) >= old['nrec']:
         for k in ('hoa_open', 'code_open', 'irs_open'):
             out[k] = new.get(k) or 0
         return
     own = {'hoa_open': 0, 'code_open': 0, 'irs_open': 0}
+    claim_out = False                   # the plaintiff's own claim of lien was taken out of hoa_open
     if legacy:
         _tr = str(old.get('traced') or '')
         for o in new.get('other') or []:
@@ -259,6 +261,9 @@ def _carry_lien_totals(old, new, out):
                 k = ('irs_open' if o.get('kind') in ('irs', 'state_tax') else
                      'hoa_open' if o.get('kind') == 'association' else 'code_open')
                 own[k] += o['amt']
+                if k == 'hoa_open' and re.search(r'\bLIEN\b', str(o.get('doc') or ''), re.I) \
+                        and not re.search(r'JUDG|LIS PENDENS', str(o.get('doc') or ''), re.I):
+                    claim_out = True
     for k in own:
         # subtracted only when the old total is at least the claim: a smaller total never held it,
         # and taking it out would erase a real lien the re-read did not reach
@@ -267,6 +272,11 @@ def _carry_lien_totals(old, new, out):
     if legacy and any(out[k] > (new.get(k) or 0) for k in own):
         out['lien_totals_kept'] = ('lien totals from the earlier, wider search (%s records) kept; they may '
                                    'include this case\'s own judgment' % (old.get('nrec') or '?'))
+    if legacy and out['hoa_open'] > (new.get('hoa_open') or 0) and not (claim_out and own['hoa_open'] and
+                                                                        (old.get('hoa_open') or 0) >= own['hoa_open']):
+        # the association total kept is the old analyzer's, which summed the plaintiff's own claim:
+        # the board must keep netting the judgment against it
+        out['hoa_own_in'] = True
 
 
 def _lay_lien_rows(old, new):

@@ -520,11 +520,30 @@ check("a narrower re-read of a chain the new rules wrote keeps the larger total 
       _o['code_open'] == 5000 and not _o.get('lien_totals_kept'), _o)
 import foreclosure_leads as FLD
 _flsrc16 = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read()
-_ownassn = {'other': [{'own_case': True, 'kind': 'association', 'amt': 6000}]}
+_ownassn = {'other': [{'own_case': True, 'kind': 'association', 'amt': 6000, 'doc': 'CLAIM OF LIEN'}]}
 check("the board stops netting only when the chain took the association's own claim out of orhoa",
-      FLD._hoa_own_out(_ownassn) and not FLD._hoa_own_out(dict(_ownassn, lien_totals_kept='x'))
+      FLD._hoa_own_out(_ownassn) and not FLD._hoa_own_out(dict(_ownassn, hoa_own_in=True))
+      and FLD._hoa_own_out(dict(_ownassn, lien_totals_kept='a City total was kept'))
+      and not FLD._hoa_own_out({'other': [{'own_case': True, 'kind': 'association', 'amt': 9500,
+                                           'doc': 'FINAL JUDGMENT'}]})
       and not FLD._hoa_own_out({'other': [{'kind': 'association', 'amt': 12000}]})
       and not FLD._hoa_own_out({'other': []}) and _flsrc16.count('if _hoa_own_out(') == 2)
+# review round 18: a kept total the own claim was taken out of is netted once, not twice
+_oc = {'own_case': True, 'kind': 'association', 'amt': 9000, 'd': '3/1/2024', 'doc': 'CLAIM OF LIEN', 'st': 'OPEN'}
+_lr = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80, 'traced': '2025-06-01'},
+                        {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30, 'other': [_oc]})
+check("a kept association total with the plaintiff's claim taken out is not netted against the judgment again",
+      _lr['hoa_open'] == 5000 and not _lr.get('hoa_own_in') and FLD._hoa_own_out(_lr), _lr)
+_lr2 = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'code_open': 3000, 'nrec': 80},
+                         {'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'code_open': 0, 'nrec': 30, 'other': [_oc]})
+check("a kept City total does not switch the association netting back on", FLD._hoa_own_out(_lr2)
+      and _lr2['code_open'] == 3000 and _lr2.get('lien_totals_kept'), _lr2)
+_lr3 = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80},
+                         {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30,
+                          'other': [dict(_oc, doc='FINAL JUDGMENT', amt=9500, d='3/1/2025')]})
+check("a kept association total that still holds the plaintiff's claim keeps the netting",
+      _lr3.get('hoa_own_in') and not FLD._hoa_own_out(_lr3), _lr3)
+
 # review round 17: an own claim the old total never held is not taken out of it
 _o = {}
 RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 3000},

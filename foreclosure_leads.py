@@ -420,9 +420,13 @@ def _hoa_own_out(chain):
     """Did the chain find the plaintiff association's own claim and leave it out of hoa_open? Only
     then may the board stop netting the judgment against orhoa. A claim indexed under a spelling the
     analyzer could not tie to the plaintiff is still IN hoa_open, and a re-read that kept an older
-    analyzer's larger total never took it out."""
-    return (isinstance(chain, dict) and not chain.get('lien_totals_kept')
+    analyzer's larger association total without taking the claim out (hoa_own_in) still holds it."""
+    # the plaintiff's own FINAL JUDGMENT is an own-case association row too, but it is not the claim of
+    # lien: only a recognised claim proves the claim is out of hoa_open
+    return (isinstance(chain, dict) and not chain.get('hoa_own_in')
             and any(isinstance(o, dict) and o.get('own_case') and o.get('kind') == 'association'
+                    and re.search(r'\bLIEN\b', str(o.get('doc') or ''), re.I)
+                    and not re.search(r'JUDG|LIS PENDENS', str(o.get('doc') or ''), re.I)
                     for o in chain.get('other') or []))
 
 
