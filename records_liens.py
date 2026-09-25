@@ -194,6 +194,27 @@ def _may_submit():
     return True
 
 
+def _ledger_lock(path):
+    """One paying run per ledger. A second run would read the same 'already spent' and both could
+    spend what is left. A lock older than 12 hours is a crashed run's and is taken over."""
+    lock = path + '.lock'
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, ('%d %s' % (os.getpid(), time.strftime('%Y-%m-%d %H:%M'))).encode())
+            os.close(fd)
+            return lock
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock) > 12 * 3600:
+                    os.remove(lock)
+                    continue
+            except OSError:
+                pass
+            return None
+    return None
+
+
 def _ledger_open(path, cap):
     """(cap, already counted) from a --spend-ledger file; the smaller cap wins."""
     try:
@@ -219,9 +240,17 @@ def _ledger_save(charged=None, final=False):
                                                      'charged_usd': None if charged is None else round(charged, 4)}]
         _SPEND['led'] = led
     tmp = path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(led, f, indent=1)
-    os.replace(tmp, path)
+    for i in range(6):                     # Windows: an indexer or AV scan can hold the file a moment
+        try:
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(led, f, indent=1)
+            os.replace(tmp, path)
+            return
+        except OSError:
+            time.sleep(0.25 * (i + 1))
+    # the spend can no longer be written down, so no more of it happens
+    _SPEND['stopped'] = 'the spend ledger %s could not be written' % path
+    print('  ! %s' % _SPEND['stopped'])
 
 
 def fetch_via_turnstile(owner_lf, tries=3):
@@ -576,17 +605,22 @@ def _owner_words(owner):
     return ('person', sp[0].upper().strip('.'), sp[1].split()[0].upper().strip('.'))
 
 
-def _names_owner(party, words):
-    if not words or not party:
+def _names_owner(party, owners):
+    """True when the party string names any of `owners` (a list of _owner_words results)."""
+    if not owners or not party:
         return False
     up = party.upper()
-    if words[0] == 'co':
-        return bool(words[1]) and words[1] in re.sub(r'[^A-Z0-9]', '', up)
     toks = set(re.findall(r'[A-Z0-9\-\']+', up))
-    return words[1] in toks and words[2] in toks
+    for words in owners:
+        if words[0] == 'co':
+            if words[1] and words[1] in re.sub(r'[^A-Z0-9]', '', up):
+                return True
+        elif words[1] in toks and words[2] in toks:
+            return True
+    return False
 
 
-def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
+def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=()):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
     ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd.
@@ -594,7 +628,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
     included) are shown as this case and never counted as another claim.
     owner = the name that was searched: the clerk search is by SURNAME ONLY, so a person-wide row
     (tax warrant, money judgment) with no parcel anchor rides only when it names this owner.
-    case = this case's number: its own filings cannot predate the year it was filed."""
+    co_owners = the case's other named people, (LAST, FIRST): a spouse's tax lien or judgment
+    attaches to their share, so it rides like the owner's own.
+    case = this case's number: its own judgment and lis pendens cannot predate the year it was filed."""
     fol = norm_folio(folio)
     if not fol:
         return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
@@ -776,12 +812,21 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
     _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|\bWARRANTS?\b|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
     _NOT_A_CLAIM_RE = re.compile(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE|NOTICE OF COMMENCEMENT|^MORTGAGE', re.I)
     _CREDITOR_RE = re.compile('|'.join(x.pattern for x in (_IRS_RE, _DOR_RE, _CODE_RE, _HOA_DOC_RE, _ASSN_DOC_RE)), re.I)
+    def _here(r):
+        rf = norm_folio(r.get('foliO_NUMBER', ''))
+        return bool((rf and rf == fol) or (subj_subdiv and (r.get('subdiV_NAME') or '').strip().upper() == subj_subdiv))
+    # A PARTIAL release frees one parcel of a lien that may cover several: it counts only when it
+    # is indexed to this folio.
     released_bp = {(str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip())
-                   for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())}
+                   for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
+                   and ('PARTIAL' not in (r.get('doC_TYPE', '') or '').upper()
+                        or norm_folio(r.get('foliO_NUMBER', '')) == fol)}
     released_bp.discard(('', ''))
-    _pnorm = lambda x: _inst(re.sub(r'[.,]', ' ', x or ''))    # "PNC BANK, N.A." and "PNC BANK NA" agree
+    # "U.S. BANK NATIONAL ASSOCIATION, AS TRUSTEE FOR ..." and "U S BANK NATIONAL ASSN TR" agree
+    # once the trustee clause is cut; "PNC BANK, N.A." and "PNC BANK NA" once punctuation is.
+    _pnorm = lambda x: _inst(re.sub(r'\s(?:AS\s+)?(?:TRUSTEE|TR)\b.*$', '', re.sub(r'[.,]', ' ', (x or '').upper())))
     _pl = _pnorm(plaintiff)
-    _ow = _owner_words(owner)
+    _ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
     _cy = re.match(r'\s*(\d{4})-', case or '')
     _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):
@@ -798,6 +843,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
             if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q in _pl or _pl in q)):
                 return True
         return False
+    def _own_judgment(kind, amt, d):
+        # the case's own final judgment, whatever name the index files it under: same figure
+        return (kind == 'judgment' and amt > 0 and judgment and judgment > 0
+                and abs(amt - judgment) <= max(1.0, 0.01 * judgment) and not _before_case(d))
     def _before_case(d):
         # a recording from before the year this case was filed cannot be one of its own filings
         dt = _parse_recd(d)
@@ -806,10 +855,15 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
     # now a lien falls only to a release that points at it, or, for releases that point nowhere, when
     # its holder has at least one such release on or after each of its liens (paired one to one).
     # Fewer releases than liens and none of them is released: which one was paid is not knowable.
+    # Only a release that says it is of a lien, judgment or warrant (a plain SATISFACTION is how the
+    # index files a mortgage payoff), never a partial one, and only one indexed to THIS parcel: a
+    # release of the same City's lien on the owner's other house must not free this one.
     unref_rel = [((_parse_recd((r.get('reC_DATE', '') or '')[:10])),
                   {_pnorm(r.get('firsT_PARTY')), _pnorm(r.get('seconD_PARTY'))} - {''})
                  for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
-                 and 'MORTGAGE' not in (r.get('doC_TYPE', '') or '').upper()        # a loan's, not a lien's
+                 and re.search(r'LIEN|JUDG|WARRANT', (r.get('doC_TYPE', '') or '').upper())
+                 and not re.search(r'MORTGAGE|PARTIAL', (r.get('doC_TYPE', '') or '').upper())
+                 and _here(r)
                  and not (str(r.get('oriG_REC_BOOK', '')).strip() and str(r.get('oriG_REC_PAGE', '')).strip())]
     other = []
     hoa_open = code_open = irs_open = 0
@@ -858,9 +912,12 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
             if ident in seen_other:
                 continue
             seen_other.add(ident)
-        own_case = (_is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
-                    and not _before_case(r.get('reC_DATE', '')))
         amt = num(r.get('consideratioN_1')) or num(r.get('amount'))
+        # The year floor is for the filings the suit itself makes (its lis pendens and judgment). An
+        # association's claim of lien is recorded BEFORE it sues and is the debt being foreclosed.
+        own_case = ((_is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
+                     and not (kind in ('lis_pendens', 'judgment') and _before_case(r.get('reC_DATE', ''))))
+                    or _own_judgment(kind, amt, r.get('reC_DATE', '')))
         released = all(bp) and bp in released_bp
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'doc': doc[:40], 'kind': kind,
                'party': (cred if cred is not both else
@@ -876,7 +933,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
     # pair the releases that point nowhere with the liens of their own holder, one to one
     for h in {o['_holder'] for o in other if o['_holder']}:
         mine = sorted((o for o in other if o['_holder'] == h and o['st'] == 'OPEN' and not o.get('own_case')
-                       and o['kind'] not in ('lis_pendens', 'other') and _parse_recd(o['d'])),
+                       and o['kind'] != 'lis_pendens' and _parse_recd(o['d'])),
                       key=lambda o: _parse_recd(o['d']))
         rels = sorted(d for d, ps in unref_rel if d and h in ps)
         if not mine or not rels:
@@ -896,8 +953,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
     for row in other:
         row.pop('_holder', None)
         kind = row['kind']
-        if row['st'] == 'RELEASED' or row.get('own_case') or kind in ('lis_pendens', 'other'):
+        if row['st'] == 'RELEASED' or row.get('own_case') or kind == 'lis_pendens':
             continue
+        if kind == 'other' and not re.search(r'\bLIEN\b|JUDGMENT', row['doc']):
+            continue                                        # a notice, a certificate, a financing statement
         if not row['amt']:
             other_unpriced += 1                             # found, open, amount not published: a count
             continue
@@ -906,7 +965,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case=''):
         elif kind == 'association':
             hoa_open += row['amt']
         else:
-            code_open += row['amt']                         # code/muni + debt-buyer money judgments
+            code_open += row['amt']                         # code/muni, money judgments, any other lienor
     # confidence: we must have isolated by a real anchor, sane count, and not a common-name over-match
     conf = 'ok'
     if not subj_subdiv: conf = 'low'                   # couldn't anchor the property (no folio-carrying record)
@@ -978,9 +1037,26 @@ def main():
     if a.repull and a.cached_only:
         ap.error('--repull and --cached-only contradict each other')
     _SPEND.update(cap=a.max_spend, submits=0, bal0=None, prior=0.0, ledger=None, led=None, stopped='')
+    _lock = None
+    if a.spend_ledger and not a.dry_run:
+        _lock = _ledger_lock(a.spend_ledger)
+        if not _lock:
+            ap.error('another run holds %s.lock; wait for it (or delete the lock if no run is going)'
+                     % a.spend_ledger)
     if a.spend_ledger:
         _SPEND['cap'], _SPEND['prior'], _SPEND['led'] = _ledger_open(a.spend_ledger, a.max_spend)
         _SPEND['ledger'] = a.spend_ledger
+    try:
+        _run(a, ap)
+    finally:
+        if _lock:
+            try:
+                os.remove(_lock)
+            except OSError:
+                pass
+
+
+def _run(a, ap):
     if a.repull:
         a.reanalyze = True                                    # same chains, same keep rule, but it may mint
     elif a.reanalyze:
@@ -1148,8 +1224,20 @@ def main():
             folio = r.get('Folio', '') or r.get('year_folio', '')
             judg = num(r.get('judgment'))
             models = None
+            try:
+                import stub_resolve as _sr
+                _co = _sr.people_from(r.get('defendants') or '')
+            except Exception:
+                _co = []
             if oc in qs_cache:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
+                if a.repull and models is not None:
+                    # an expired token can come back EMPTY rather than failing, and a chain first found
+                    # through a defendant's name is not in the owner's results: either way the cached
+                    # search cannot re-read this parcel, so search afresh (free first) instead of keeping
+                    _chk = analyze(models, folio, judg, ftype=_fc_type(case))
+                    if not (_chk.get('nrec') and _chk.get('parcel_found')):
+                        models = None
             if models is None and not a.cached_only:
                 sp = split_owner(oc)
                 if sp:
@@ -1232,7 +1320,7 @@ def main():
                     print(f"  --  {case:22} {oc:26} (no records / blocked)")
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '',
-                          owner=_searched, case=case)
+                          owner=_searched, case=case, co_owners=_co)
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:

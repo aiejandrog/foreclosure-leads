@@ -174,7 +174,11 @@ def apply(lead, chain):
             # board can say which kind of debt it cannot total.
             _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)
                       and str(l.get('st') or 'OPEN').upper() != 'SATISFIED']
-            lead['eqopen'] = (chain.get('mtg_open_unpriced') or 0) or len(_liens)
+            # Palm Beach's mtg_open_unpriced already counts every recorded mortgage (priced rows
+            # included, it records mtg_recorded); Miami keeps unpriced loans OUT of `liens`, so
+            # there the two add up.
+            _unp = chain.get('mtg_open_unpriced') or 0
+            lead['eqopen'] = (_unp or len(_liens)) if 'mtg_recorded' in chain else _unp + len(_liens)
             if chain.get('other_open_unpriced'):
                 lead['eqoth'] = chain.get('other_open_unpriced')
             _gap = [l for l in _liens if not l.get('amt')]

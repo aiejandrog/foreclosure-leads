@@ -90,8 +90,11 @@ check("the case's own lis pendens is marked this case", other['34000/9'].get('ow
 check("the case's own (vacated) final judgment is marked this case and never summed",
       other['34999/1999'].get('own_case') is True and res['code_open'] == 1500)
 _noplaintiff = RL.analyze(models, FOLIO, 987654.32, ftype='MORTGAGE')
-check('without the plaintiff, a lender judgment is still a money judgment (unchanged behaviour)',
-      _noplaintiff['code_open'] == 1500 + 987654, _noplaintiff['code_open'])
+check("without the plaintiff, the case's own judgment is still known by its figure",
+      _noplaintiff['code_open'] == 1500, _noplaintiff['code_open'])
+_nojudg = RL.analyze(models, FOLIO, 0, ftype='MORTGAGE')
+check('with neither plaintiff nor judgment, a lender judgment is still a money judgment (unchanged behaviour)',
+      _nojudg['code_open'] == 1500 + 987654, _nojudg['code_open'])
 
 # ---- defect 2: the debt is the judgment
 check('the chain keeps the recorded face apart from the judgment',
@@ -244,6 +247,65 @@ _old_j = RL.analyze([deed, rec('JUDGMENT', '5/5/2016', '30000', '1', 4000, 'OWNE
 check("the plaintiff's judgment from years before this case was filed is another claim",
       not _old_j['other'][0].get('own_case') and _old_j['code_open'] == 4000, _old_j['other'])
 
+# ---- review round 2
+_far_rel = rec('RELEASE OF LIEN', '9/9/2023', '34000', '7', 0, 'OWNER TESTER', first='CITY OF MIAMI',
+               folio='3099999999999', subdiV_NAME='ELSEWHERE')
+_r1 = RL.analyze([deed, _l1, _far_rel], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a release of the same City's lien on another property never frees this parcel's",
+      _r1['other'][0]['st'] == 'OPEN' and _r1['code_open'] == 400, _r1['other'])
+_cap1 = rec('JUDGMENT', '4/4/2021', '33000', '8', 5000, 'OWNER TESTER', first='CAPITAL ONE BANK USA NA')
+_r2 = RL.analyze([deed, _cap1, rec('SATISFACTION', '9/9/2023', '34000', '8', 0, 'OWNER TESTER', first='CAPITAL ONE BANK')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a plain SATISFACTION (how the index files a mortgage payoff) never releases a judgment",
+      _r2['other'][0]['st'] == 'OPEN' and _r2['code_open'] == 5000, _r2['other'])
+_r2b = RL.analyze([deed, _cap1, rec('SATISFACTION OF JUDGMENT', '9/9/2023', '34000', '9', 0, 'OWNER TESTER',
+                                    first='CAPITAL ONE BANK USA NA')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a SATISFACTION OF JUDGMENT from the same holder does", _r2b['other'][0]['st'] == 'RELEASED', _r2b['other'])
+_roof = RL.analyze([deed, rec('LIEN', '4/4/2023', '33000', '9', 40000, 'OWNER TESTER', first='ABC ROOFING INC')],
+                   FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a contractor's lien on the parcel is counted, not shown and forgotten", _roof['code_open'] == 40000, _roof)
+_roof0 = RL.analyze([deed, rec('LIEN', '4/4/2023', '33000', '9', 0, 'OWNER TESTER', first='ABC ROOFING INC')],
+                    FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("an amountless contractor's lien keeps the verdict off VERIFIED",
+      _roof0['other_open_unpriced'] == 1 and ES.state_of(_roof0) == 'unpriced', _roof0['other'])
+_ucc = RL.analyze([deed, rec('FINANCING STATEMENT', '4/4/2023', '33000', '10', 0, 'OWNER TESTER', first='SOLAR LEASE LLC')],
+                  FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check('a financing statement is shown, not counted as a lien', _ucc['other_open_unpriced'] == 0 and len(_ucc['other']) == 1)
+_claim = RL.analyze([deed, rec('CLAIM OF LIEN', '10/1/2023', '33900', '1', 6400, 'OWNER TESTER',
+                               first='TEST GARDENS CONDOMINIUM ASSOCIATION INC')],
+                    FOLIO, 6400, ftype='HOA', plaintiff='TEST GARDENS CONDOMINIUM ASSOCIATION INC',
+                    owner='OWNER TESTER', case='2024-000123-CC-05')
+check("the association's claim of lien recorded the year before it sued is the debt being foreclosed",
+      _claim['other'][0].get('own_case') is True and _claim['hoa_open'] == 0, _claim['other'])
+_co = RL.analyze([deed, rec('FEDERAL TAX LIEN', '4/4/2021', '33000', '11', 20000, 'SMITH MARY',
+                            first='INTERNAL REVENUE SERVICE', folio='', subdiV_NAME='')],
+                 FOLIO, 12000, ftype='HOA', owner='JOHN SMITH', co_owners=[('SMITH', 'MARY')])
+check("a co-owner named in the case: their tax lien rides", _co['irs_open'] == 20000, _co['other'])
+_usb = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34999', '5', 410000, 'OWNER TESTER',
+                             first='U S BANK NATIONAL ASSN TR')],
+                  FOLIO, 0, ftype='MORTGAGE', plaintiff='U.S. BANK NATIONAL ASSOCIATION, AS TRUSTEE FOR XYZ TRUST 2006-1',
+                  owner='OWNER TESTER', case='2024-000001-CA-01')
+check("the index's 'U S BANK NATIONAL ASSN TR' is the trustee plaintiff: its own judgment, never summed",
+      _usb['other'][0].get('own_case') is True and _usb['code_open'] == 0, _usb['other'])
+_fig = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34999', '6', 410000, 'OWNER TESTER', first='SERVICER NAME LLC')],
+                  FOLIO, 410000, ftype='MORTGAGE', plaintiff=PLAINTIFF, owner='OWNER TESTER', case='2024-000001-CA-01')
+check("a judgment at this case's figure is its own, whatever name the index files it under",
+      _fig['other'][0].get('own_case') is True and _fig['code_open'] == 0, _fig['other'])
+_part = rec('PARTIAL RELEASE OF LIEN', '9/9/2023', '34000', '12', 0, 'OWNER TESTER', first='CITY OF MIAMI',
+            oriG_REC_BOOK='33000', oriG_REC_PAGE='5', folio='3099999999999', subdiV_NAME='ELSEWHERE')
+_r8 = RL.analyze([deed, _l1, _part], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a partial release freeing another parcel leaves this parcel's lien open", _r8['other'][0]['st'] == 'OPEN', _r8['other'])
+_r8b = RL.analyze([deed, _l1, dict(_part, foliO_NUMBER=FOLIO, subdiV_NAME='TEST GARDENS')], FOLIO, 12000,
+                  ftype='HOA', owner='OWNER TESTER')
+check("a partial release indexed to this folio releases it", _r8b['other'][0]['st'] == 'RELEASED', _r8b['other'])
+_mx = {}
+ES.apply(_mx, {'conf': 'ok', 'nrec': 9, 'second_fc': None, 'mtg_open_unpriced': 1,
+               'liens': [{'amt': 150000, 'st': 'OPEN'}, {'amt': 20000, 'st': 'OPEN'}]})
+check('Miami: unpriced loans are kept out of liens, so the two counts add', _mx.get('eqopen') == 3, _mx)
+_pb = {}
+ES.apply(_pb, {'conf': 'unpriced', 'mtg_recorded': 2, 'mtg_open_unpriced': 2, 'liens': [{'amt': 0, 'st': 'OPEN'}]})
+check('Palm Beach: its count already covers every mortgage, never added twice', _pb.get('eqopen') == 2, _pb)
+
 # ---- $0 re-analysis of chains traced before the lien rows existed
 import json, tempfile, types
 _tmp = tempfile.mkdtemp()
@@ -339,8 +401,8 @@ try:
         check('records_liens refuses %s' % ' '.join(_bad), _ok)
 
     # --repull over the same fixture: 101 was rewritten above, so 102 (dead token), 104 (empty
-    # re-read) and 103 (no token) are left. Two solves fit under $0.0066; the third is refused mid-way
-    # through 102, so 102 and 103 both count as left by the cap.
+    # re-read, which --repull searches afresh instead of keeping) and 103 (no token) are left. Two
+    # solves fit under $0.0066; the third is refused mid-way through 102, so all three are left.
     _before = json.load(open(os.path.join(_tmp, 'records_liens.json')))
     del _fake_cs.calls[:]
     _fake_cs.bal[0] = '10.00'
@@ -364,6 +426,17 @@ try:
         sys.argv = ['records_liens.py', '--repull', '--max-spend', '5', '--spend-ledger', _led]
         with contextlib.redirect_stdout(_rp2):
             RL.main()
+        _nolock = not os.path.exists(_led + '.lock')
+        open(_led + '.lock', 'w').write('1 now')
+        _n2 = len(_fake_cs.calls)
+        sys.argv = ['records_liens.py', '--repull', '--max-spend', '1', '--spend-ledger', _led]
+        try:
+            with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                RL.main()
+            _locked = False
+        except SystemExit:
+            _locked = True
+        os.remove(_led + '.lock')
     finally:
         for k, v in _saved.items():
             setattr(RL, k, v)
@@ -372,10 +445,13 @@ try:
     _after = json.load(open(os.path.join(_tmp, 'records_liens.json')))
     check('--repull submits no more solves than the cap allows', len(_fake_cs.calls) == 2, (_fake_cs.calls, _rp[-600:]))
     check('--repull opens Camoufox before paying, once per run', _spent2 == ['camoufox', 'camoufox'], _spent2)
-    check('--repull names the leads the cap left unpulled', 'not pulled: spend cap' in _rp and '2 not pulled because of the cap' in _rp and 'reached the $0.0066 cap' in _rp, _rp[-600:])
+    check('--repull names the leads the cap left unpulled', 'not pulled: spend cap' in _rp and '3 not pulled because of the cap' in _rp and 'reached the $0.0066 cap' in _rp, _rp[-600:])
     check('--repull reports the actual charge from the account balance', 'ACTUAL CHARGE: balance $10.0000' in _rp, _rp[-400:])
     check('--repull never overwrites a chain it could not re-read', _after == _before, (_before, _after))
     _ledj = json.load(open(_led))
+    check('--spend-ledger: a finished run leaves no lock behind', _nolock)
+    check('--spend-ledger: a second paying run cannot start while one holds the ledger',
+          _locked and len(_fake_cs.calls) == _n2)
     check('--spend-ledger: a second run gets only what the first left, and cannot raise the cap',
           _n1 == 2 and len(_fake_cs.calls) == 2 and _ledj['cap'] == 0.0066 and _ledj['counted_usd'] == 0.0066
           and len(_ledj['runs']) == 2 and _ledj['runs'][1]['solves'] == 0, (_n1, _fake_cs.calls, _ledj, _rp2.getvalue()[-300:]))
