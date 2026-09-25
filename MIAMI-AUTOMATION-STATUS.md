@@ -65,11 +65,18 @@ because each one is in code this branch adds or made worse by it:
 | D12 watermark-only pages marked read | `document_coverage.page_is_read()` needs 12 characters that are not watermark words; the timeline uses the same test |
 | D14 stale timelines ranked | a timeline older than a day or without judgment and stay blocks disqualifies the case; `miami_ranking.py --refresh-timelines` rebuilds them first |
 
-Left for the follow-up PR (main code, not this branch's): D8 exhibit page stamps read as
-instruments; D7 and the root of D6, an own-case and vacated filter in
-`document_walk.run_name_searches`; D3's three discovery rounds and 500-record cap (more searches
-cost owner-search tokens, so it waits for Alex); the rest of D13 (a paid read on the recorded
-copy while the court copy had text, one image-only judgment, and the unverified-extraction label).
+Fixed in the follow-up (main code):
+
+| Defect | Fix |
+|---|---|
+| D8 exhibit page stamps and a condominium declaration followed as instruments | a run of stamps that steps with the pages is one instrument, its first page; declaration and plat recitals are not followed (only the text leading to a citation decides, so a mortgage on the same line is still followed). Both are listed in the walk's `not_followed` and left out of the dossier's `cited_but_not_fetched` |
+| D7 and the D6 root: this case's own judgment counted as a claim | `document_walk.run_name_searches(this_case=...)` moves a judgment or lis pendens recorded at a docket book/page, or between this case's plaintiff and anyone and recorded near a docket judgment date (a lis pendens near the first docket entry), into `own_case_instruments` with `own_case` and `this_case`. Lender names made only of generic words never match |
+| D3 capped or wrong-parcel searches | title discovery reports `search_capped`, `parcel_found` and `names_left_unsearched` (a name whose search failed counts as unsearched). The three rounds and the 500 cap stay: raising them costs owner-search tokens and waits for Alex |
+
+Still open: D13's paid read of 2025-023462's recorded copy while its court copy had text. The
+recorded-copy reader (`miami_judgment.run`) cannot see the court copies yet; checking that needs
+the saved evidence on the desktop. Paid reads run only with Alex's go, so nothing spends meanwhile.
+2023-020247's amounts need image OCR, and 2023-013492's unverified-extraction label is policy.
 
 ## Implementation sequence
 
