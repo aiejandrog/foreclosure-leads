@@ -84,9 +84,27 @@ def _case(r):
 
 
 def _days(r):
+    """Days to auction, RECOMPUTED from the sale-date string against the agenda's date when it
+    parses; the baked value only as a fallback. The baked number is scrape-time truth: when a
+    county is "kept last good" for N days every window on the agenda drifts by N, and --date
+    could not move it either. A Miami-Dade row whose date failed to parse is baked as 0 (=sale
+    today); with no date string that is UNKNOWN, not "expiring today"."""
     try:
+        ds = _sale(r)
+        if ds:
+            for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%m/%d/%y', '%Y-%m-%dT%H:%M:%S', '%b %d, %Y', '%B %d, %Y'):
+                try:
+                    sd = dt.datetime.strptime(ds[:len(fmt) + 6].strip(), fmt).date()
+                    return (sd - (_TODAY or dt.date.today())).days
+                except ValueError:
+                    continue
         d = r.get('days_to_auction') if r.get('days_to_auction') is not None else r.get('days')
-        return int(d) if d is not None else None
+        if d is None:
+            return None
+        d = int(d)
+        if d == 0 and not ds:
+            return None
+        return d
     except Exception:
         return None
 
@@ -197,6 +215,49 @@ def _board_age_days():
 # ---------------------------------------------------------------- signals
 _DG_TALLY = None
 _OPTOUTS = {}   # set in main() before the tables build
+_NOTES = {}     # worker_notes.json (envelope-unwrapped), set in main() -- the reps' own marks
+_TODAY = None   # the agenda's date (--date), so countdowns are recomputed rather than baked
+
+
+def _load_notes():
+    """The board/phone notes the reps write (Dead, DO NOT CONTACT, wrong number, the hard/soft
+    no). bsg_daily_routes and sheets_crm both read this file; until 2026-09-25 the agenda did not,
+    so a lead Jose marked Dead on Monday headlined Tuesday's standup for the full 33-day window."""
+    d = _load_json('worker_notes.json', {})
+    n = d.get('notes') if isinstance(d, dict) else None
+    return n if isinstance(n, dict) else {}
+
+
+def _notes_blocked(r):
+    """True when the reps' notes say this person is not to be assigned today. Mirrors Call Mode's
+    hardSuppressed()/noState(): DNC, Dead, wrong number and a HARD no block outright; a SOFT no is
+    retired unless its one event-driven resurface is open (T-14 with a date, or a date appeared on
+    a lead that had none when the no was logged)."""
+    if not _NOTES:
+        return False
+    case = _case(r)
+    n = _NOTES.get(case) if case else None
+    if not isinstance(n, dict):
+        # person-level keys the phone writes
+        for p in (r.get('phones') or []):
+            k = '#' + re.sub(r'\D', '', str(p))
+            m = _NOTES.get(k)
+            if isinstance(m, dict) and (m.get('optout') or str(m.get('status') or '').upper() == 'DO NOT CONTACT'):
+                return True
+        return False
+    st = str(n.get('status') or '').strip().lower()
+    if n.get('optout') or n.get('wrongown') or st in ('do not contact', 'dead', 'wrong number') \
+            or str(n.get('no') or '').lower() == 'hard':
+        return True
+    if str(n.get('no') or '').lower() == 'soft' or (not n.get('no') and st == 'not interested'):
+        if (n.get('resurf') or 0) > 0:
+            return True
+        d = _days(r)
+        was_lp = bool(n.get('noWasLp')) if n.get('no') == 'soft' else (d is None or d >= 9999)
+        if was_lp:
+            return not (d is not None and d < 9999 and not (r.get('st') == 'LP' or r.get('stage') == 'LP'))
+        return not (d is not None and 0 <= d <= 14)
+    return False
 
 
 def _agenda_safe(r):
@@ -280,7 +341,7 @@ def _workable_leads(leads, min_days=13, max_days=45, limit=40):
     rows = [r for r in leads
             if (_days(r) is not None and min_days <= _days(r) <= max_days)
             and not _deeply_underwater(r)
-            and _agenda_safe(r) and not _opted_out(r, _OPTOUTS)]
+            and _agenda_safe(r) and not _opted_out(r, _OPTOUTS) and not _notes_blocked(r)]
     # VERIFIED EQUITY FIRST. Tier is derived from the equity number, so sorting on tier alone let
     # an untraced guess headline the morning brief ahead of a chain-verified lead. Traced first,
     # then the old key unchanged.
@@ -294,7 +355,7 @@ def _expiring_leads(leads, max_days=12, limit=20):
     window; the meeting decision is call/door-knock TODAY or write them off. Not the focus."""
     rows = [r for r in leads
             if (_days(r) is not None and 0 <= _days(r) <= max_days)
-            and _agenda_safe(r) and not _opted_out(r, _OPTOUTS)]
+            and _agenda_safe(r) and not _opted_out(r, _OPTOUTS) and not _notes_blocked(r)]
     # VERIFIED EQUITY FIRST. Tier is derived from the equity number, so sorting on tier alone let
     # an untraced guess headline the morning brief ahead of a chain-verified lead. Traced first,
     # then the old key unchanged.
@@ -304,7 +365,8 @@ def _expiring_leads(leads, max_days=12, limit=20):
 
 
 def _late_count(leads, gt_days=45):
-    return sum(1 for r in leads if (_days(r) is not None and _days(r) > gt_days))
+    # < 9999: the LP sentinel (lp_leads.py writes days=9999 for 'no date') is not a late sale.
+    return sum(1 for r in leads if (_days(r) is not None and gt_days < _days(r) < 9999))
 
 
 # ---------------------------------------------------------------- Carlos cluster
@@ -376,6 +438,11 @@ def _carlos_cluster(leads, exclude_zips=('33172',), max_days=45, min_cluster=3, 
             continue
         if _is_company(r):
             continue
+        # SAME GATES AS THE WORKABLE TABLE (2026-09-25). This picker skipped _agenda_safe, the
+        # opt-out ledger, the underwater floor and the reps' notes, so a person who said stop
+        # could headline "Carlos's cluster of the day" as a door to knock.
+        if not _agenda_safe(r) or _opted_out(r, _OPTOUTS) or _deeply_underwater(r) or _notes_blocked(r):
+            continue
         d = _days(r)
         if d is None or d < 0 or d > max_days:
             continue
@@ -419,6 +486,10 @@ def _portfolios(leads):
     """One primary email -> N leads. Same shape the worker uses."""
     by_email = defaultdict(list)
     for r in leads:
+        # Same gates as every other table on this page (2026-09-25): an opted-out or held owner
+        # must not appear here with their email and a "Who is calling?" cell.
+        if not _agenda_safe(r) or _opted_out(r, _OPTOUTS) or _notes_blocked(r):
+            continue
         em = ''
         for e in (r.get('emails') or []):
             if e and '@' in str(e):
@@ -541,11 +612,14 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
     blockers = _blockers(leads)
     board_age = _board_age_days()
     new_replies = _new_replies(replies, since_days=1)
+    # opt_count is not rendered anywhere; kept as a number that is at least TRUE (ledger entries,
+    # not envelope keys). mail_today is structurally 0 at ~07:00 -- the worker sends at 08:00.
     opt_count = 0
-    if isinstance(optouts, dict):
-        opt_count = sum(1 for v in optouts.values() if v)
-    elif isinstance(optouts, list):
-        opt_count = len(optouts)
+    _led = optouts.get('notes') if isinstance(optouts, dict) and isinstance(optouts.get('notes'), dict) else optouts
+    if isinstance(_led, dict):
+        opt_count = sum(1 for v in _led.values() if v)
+    elif isinstance(_led, list):
+        opt_count = len(_led)
     mail_today = 0
     if isinstance(mail_ledger, list):
         today_iso = dt.date.today().isoformat()
@@ -555,7 +629,7 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
     banner_bits = []
     if board_age is not None and board_age >= 2:
         banner_bits.append(f'<div class="warn">⚠ Board data is <b>{board_age} days old</b>. Run '
-                           f'<code>python refresh.py</code> before making bids.</div>')
+                           f'<code>refresh-dealflow.bat</code> before making bids.</div>')
     if not workable:
         banner_bits.append(f'<div class="ok">✓ No sales in the workable window ({min_days}–{max_days}d). '
                            f'Focus on EARLY (lis pendens) instead.</div>')
@@ -910,6 +984,8 @@ def main():
     args = ap.parse_args()
 
     day_dt = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
+    globals()['_TODAY'] = day_dt
+    globals()['_NOTES'] = _load_notes()
 
     leads = _load_leads()
     replies = _load_json('replies.json', {})
@@ -941,7 +1017,9 @@ def main():
     print(f'  portfolio owners: {sum(1 for _ in _portfolios(leads))}')
     print(f'  new replies since yesterday: {len(_new_replies(replies))}')
 
-    if not args.no_open:
+    # A scheduled run (refresh-dealflow.bat sets DEALFLOW_SCHEDULED) has nobody at the screen;
+    # popping a browser from Task Scheduler is at best pointless and at worst a stuck process.
+    if not args.no_open and not os.environ.get('DEALFLOW_SCHEDULED'):
         try:
             webbrowser.open('file:///' + out_path.replace('\\', '/'))
         except Exception:

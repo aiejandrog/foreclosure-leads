@@ -394,9 +394,17 @@ def _load_optouts():
     if isinstance(data, list):
         return {str(x).strip().lower().lstrip('@') for x in data}
     notes = data.get('notes') if isinstance(data, dict) else None
+    out = set()
     if isinstance(notes, dict):
-        return {str(k).strip().lower().lstrip('@') for k, v in notes.items() if v}
-    return set()
+        out = {str(k).strip().lower().lstrip('@') for k, v in notes.items() if v}
+    # Rep-logged DNC from the board/phone notes (worker_notes.json) gates here too -- a hard no
+    # tapped in Call Mode must stop the CLI even if the ledger sync has not run yet (2026-09-25).
+    try:
+        from optout_sync import notes_dnc_keys
+        out |= {k.lstrip('@') for k in notes_dnc_keys() if not k.startswith('#')}
+    except Exception:
+        pass
+    return out
 
 
 _BOUNCED = None

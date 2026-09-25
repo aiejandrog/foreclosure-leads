@@ -527,3 +527,11 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+
+# 2026-09-25: homeowner names/addresses/skip-traced phones — generated door lists and the worker activity log. Never tracked.
+pre_foreclosure_doors.json
+deep_zone_doors.json
+worker_marks.applied.jsonl
+!_stoptexttest.py
+!_cadencetest.py
+!_plannertest.py

@@ -450,6 +450,8 @@ rem  ran. So the morning standup only existed when a human remembered to type th
 rem  the one surface built to answer "what do I do today" was the one surface that never appeared
 rem  on its own. Same defect class as ownership_scan (called by nothing until 08-19). It reads the
 rem  freshly-rebuilt leads above and writes the agenda to the Desktop, so it must run AFTER [4/5].
+rem  DEALFLOW_SCHEDULED: the planner must not pop a browser from Task Scheduler (2026-09-25).
+set DEALFLOW_SCHEDULED=1
 python -u morning_planner.py >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! morning worker failed - see leads-run.log ^(board unaffected^).>> "%LOG%"
 

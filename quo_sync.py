@@ -328,19 +328,113 @@ def sync(days=7, phones=None, watch=False, verbose=False):
     return 0
 
 
+# ---- inbound texts: STOP handling ---------------------------------------------------------------
+# WHY (2026-09-25 audit): every outbound text is a 1:1 handset SMS from the Quo line, so no
+# carrier/10DLC STOP handling exists for it, and until now NOTHING read inbound texts: an owner who
+# replied STOP to a text was honoured only if a human noticed and tapped DNC. This pass pulls
+# inbound messages for every number we dialled or texted, runs each through the SAME detector the
+# email path uses (replies.is_sms_stop: carrier keywords + is_stop_text), and ledgers a hit as a
+# '#digits' person key -- the shape call_rows()/optPhones() already read back, so the number
+# disappears from the phone and the board on the next build.
+#
+# ENDPOINT NOTE: MESSAGES_PATH and its query names follow the OpenPhone v1 messages listing
+# (phoneNumberId + participants + createdAfter). Quo is OpenPhone rebranded and /calls uses the
+# same parameter shape above, but this exact endpoint has NOT been exercised against the live API
+# from a machine holding quo.key. If it 4xx's, the run prints the error and ledgers nothing --
+# it never fails silent. Verify with:  python quo_sync.py --messages --days 2 --phone <number>
+MESSAGES_PATH = '/messages'
+
+
+def _inbound(m):
+    d = str(m.get('direction') or '').lower()
+    return d in ('incoming', 'inbound', 'received')
+
+
+def sync_messages(days=7, phones=None, verbose=False, dry_run=False):
+    key = _key()
+    if not key:
+        print('quo.key missing -- inbound STOP scan skipped')
+        return 1
+    try:
+        from replies import is_sms_stop
+        from optout_sync import ledger_add
+    except Exception as e:
+        print('!! inbound STOP scan cannot run (%s) -- replies/optout_sync import failed' % e)
+        return 1
+    pn = _get(key, '/phone-numbers')
+    pids = [x.get('id') for x in (pn.get('data') or []) if x.get('id')] if isinstance(pn, dict) else []
+    if not pids:
+        print('no Quo phone numbers visible to this key -- nothing to scan')
+        return 1
+    nums = set(_digits(p)[-10:] for p in (phones or []) if _digits(p))
+    if not nums:
+        for e164, _meta in (dialed_numbers(days) or {}).items():
+            nums.add(_digits(e164)[-10:])
+        # numbers we TEXTED from the bridge ledger, which dialed_numbers() does not see
+        try:
+            for row in _load(os.path.join(HERE, 'mail_sent.json'), []) or []:
+                if row.get('ch') == 'text' and row.get('to'):
+                    nums.add(_digits(row.get('to'))[-10:])
+        except Exception:
+            pass
+    since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).isoformat()
+    stops, scanned, errors = [], 0, 0
+    for n10 in sorted(n for n in nums if len(n) == 10):
+        for pid in pids:
+            try:
+                res = _get(key, MESSAGES_PATH, {'phoneNumberId': pid, 'participants': '+1' + n10,
+                                                'createdAfter': since, 'maxResults': 50})
+            except Exception as e:
+                errors += 1
+                print('  !! %s: messages fetch failed (%s)' % (n10, str(e)[:100]))
+                continue
+            for m in (res.get('data') or []) if isinstance(res, dict) else []:
+                if not _inbound(m):
+                    continue
+                scanned += 1
+                body = str(m.get('content') or m.get('text') or m.get('body') or '')
+                if is_sms_stop(body):
+                    stops.append((n10, body[:120], str(m.get('createdAt') or '')[:19]))
+                    if verbose:
+                        print('  STOP from %s: %r' % (n10, body[:80]))
+                    break
+    for n10, body, when in stops:
+        a, b = ledger_add(['#' + n10], 'inbound TEXT said stop. Covers ALL channels: no email, no '
+                                       'call, no text, no door.', 'sms STOP (quo_sync --messages)',
+                          when=when.replace('T', ' ') if when else None, dry_run=dry_run, excerpt=body)
+        print('  %s %s -> %s' % ('WOULD LEDGER' if dry_run else 'LEDGERED' if a else 'already ledgered',
+                                 n10, body[:60]))
+    print('inbound texts: %d number(s) checked, %d inbound message(s) read, %d STOP(s), %d fetch error(s)'
+          % (len(nums), scanned, len(stops), errors))
+    return 0 if not errors else 2
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--days', type=int, default=7)
     ap.add_argument('--phone', action='append')
     ap.add_argument('--case')
     ap.add_argument('--watch', action='store_true')
+    ap.add_argument('--messages', action='store_true',
+                    help='ONLY the inbound-text STOP scan (it also runs after every normal sync)')
+    ap.add_argument('--no-messages', action='store_true', help='skip the inbound-text STOP scan')
+    ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
     phones = a.phone or []
     if a.case:
         for d in _leads():
             if str(d.get('case') or '').strip() == a.case.strip():
                 phones += [p for p in (d.get('phones') or [])]
-    return sync(days=a.days, phones=phones or None, watch=a.watch)
+    if a.messages:
+        return sync_messages(days=a.days, phones=phones or None, verbose=True, dry_run=a.dry_run)
+    rc = sync(days=a.days, phones=phones or None, watch=a.watch)
+    if not a.watch and not a.no_messages:
+        # STOP scan is ON by default: a text opt-out that nobody reads is the FTSA fact pattern.
+        try:
+            sync_messages(days=a.days, phones=phones or None, dry_run=a.dry_run)
+        except Exception as e:
+            print('!! inbound STOP scan crashed (%s) -- texts may hold un-honoured STOPs' % str(e)[:120])
+    return rc
 
 
 if __name__ == '__main__':
