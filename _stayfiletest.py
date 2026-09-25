@@ -305,6 +305,20 @@ try:
     check('a motion to reinstate, not yet ruled on, leaves the dismissed case closed',
           _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
                 NOF('01/31/2024', 'Motion to Reinstate Chapter 13 Case'))[0] is False)
+    # Greptile's second round on #60: an order that does the thing counts even when it names a motion.
+    check('an order dismissing the case and denying another motion still ends the stay',
+          _stay(BK('02/01/2026', '26-11111'),
+                NOF('03/01/2026', 'Order Granting Motion to Dismiss Chapter 13 Case and Denying Motion for Rehearing'))[0] is False)
+    check("an order dismissing the case on the trustee's motion ends the stay",
+          _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', "Order Dismissing Chapter 13 Case on Trustee's Motion"))[0] is False)
+    check('an order continuing the hearing on a relief motion does not end the stay',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Motion to Continue Hearing on Motion for Relief from Stay'))[0] is True)
+    check('an order denying reinstatement of a dismissed case leaves it closed',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Denying Motion to Reinstate Dismissed Chapter 13 Case'))[0] is False)
+    check('an order vacating the order of dismissal reopens the case',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Vacating Order of Dismissal, Chapter 13'))[0] is True)
     check('relief from the automatic stay still ends it with no bankruptcy word on the line',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
     # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to
