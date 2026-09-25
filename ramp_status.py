@@ -184,8 +184,8 @@ def main(argv=None):
         if crossover:
             print('  The cold ramp CAP first matches or passes the warm-up quota on %s.' % crossover)
             print('  That is a date on the calendar, not a measurement. The ramp climbs from')
-            print('  ramp_start whether or not a single message was sent, so the cap reaching 15')
-            print('  says nothing about real cold volume. Audit 2026-09-23 found no live cold path')
+            print('  ramp_start whether or not a single message was sent, so the cap passing the')
+            print('  quota says nothing about real cold volume. Audit 2026-09-23 found no live cold path')
             print('  to these aliases at all - so stopping BSG Warmup on this date would have')
             print('  dropped each alias 15 -> 0, not 15 -> 20.')
             print('  Stop warm-up per alias only after the cold column above shows >= the warm-up')

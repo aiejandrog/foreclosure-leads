@@ -102,18 +102,27 @@ rec('an alias with no rows reads 0, not None', RS.cold_today(MAIN, DAY) == 0)
 _live = os.path.join(tmp, 'mail_sent_today.json')
 _now = dt.date.today()
 _niso = _now.isoformat()
-json.dump([{'d': r['d'] if r['d'] == other else _niso, **{k: v for k, v in r.items() if k != 'd'}}
-           for r in rows], io.open(_live, 'w', encoding='utf-8'))
+_far = '2000-01-01'   # a fixed past date, so "another day" can never collide with today
+_live_rows = [{'d': _far if r['d'] == other else _niso,
+               **{k: v for k, v in r.items() if k != 'd'}} for r in rows]
+json.dump(_live_rows, io.open(_live, 'w', encoding='utf-8'))
+# expected counts come off the fixture, not a literal: a literal silently becomes wrong on whatever
+# date the fixture's own arithmetic happens to collide with, and then reports a divergence that
+# is not one.
+def _want(addr):
+    return sum(1 for r in _live_rows
+               if r['d'] == _niso and str(r.get('from') or '').lower() == addr
+               and r.get('message_id') and not r.get('test_mode') and not r.get('error'))
 _real_ss, _real_rs = SS.SENT_LEDGER, RS.SENT_LEDGER
 try:
     SS.SENT_LEDGER = RS.SENT_LEDGER = _live
     _theirs, _ours = SS._alias_sent_today(A1), RS.cold_today(A1, _now)
     rec('agrees with send_server._alias_sent_today, on any day this runs',
-        _theirs == _ours == 3, '%s vs %s' % (_theirs, _ours))
+        _theirs == _ours == _want(A1) == 3, '%s vs %s, fixture wants %s' % (_theirs, _ours, _want(A1)))
     rec('and agrees on the second alias too',
-        SS._alias_sent_today(A2) == RS.cold_today(A2, _now) == 1)
+        SS._alias_sent_today(A2) == RS.cold_today(A2, _now) == _want(A2) == 1)
     rec('and on an alias with no rows at all',
-        SS._alias_sent_today(MAIN) == RS.cold_today(MAIN, _now) == 0)
+        SS._alias_sent_today(MAIN) == RS.cold_today(MAIN, _now) == _want(MAIN) == 0)
 finally:
     SS.SENT_LEDGER, RS.SENT_LEDGER = _real_ss, _real_rs
 
@@ -182,7 +191,9 @@ src, _rs_doc = _code_only(os.path.join(HERE, 'ramp_status.py'))
 rec('never opens a file for writing',
     not re.search(r"open\([^)]*['\"][wa]", src) and not re.search(r"\bmode\s*=\s*['\"][wa]", src)
     and 'write_text' not in src and 'write_bytes' not in src and 'makedirs' not in src
-    and 'shutil' not in src, 'checked against %d lines of code, docstrings excluded' % len(src.splitlines()))
+    and 'shutil' not in src and not re.search(r"\b(os\.(remove|unlink|replace|rename|rmdir|truncate)|unlink\()", src)
+    and 'rmtree' not in src,
+    'checked against %d lines of code, docstrings excluded' % len(src.splitlines()))
 rec('imports no mail transport', 'smtplib' not in src and 'sendmail' not in src)
 rec('writes no ledger', '_append_ledger' not in src and 'json.dump' not in src)
 rec('shells out to nothing', 'subprocess' not in src and 'os.system' not in src and 'requests' not in src)
