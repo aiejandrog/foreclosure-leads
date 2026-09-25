@@ -110,10 +110,8 @@ def state_of(chain, lead=None):
     # FACT, exactly like an unpriced mortgage.
     if st in FACT and (chain.get('other_open_unpriced') or 0) > 0:
         return 'unpriced'
-    # ...and a PRICED one is surviving debt: a $45k City lien on a parcel with no mortgage is not
-    # "clear", it is priced (the figure reaches the board as orcode/orhoa/orirs).
-    if st == 'clear' and any((chain.get(k) or 0) > 0 for k in ('hoa_open', 'code_open', 'irs_open')):
-        return 'priced'
+    # A PRICED one stays 'clear' on purpose: the state is the MORTGAGE verdict (demote_for_bank_fc and
+    # the lender rule key on it), and the lien's figure reaches the deal math as orcode/orhoa/orirs.
     return st
 
 

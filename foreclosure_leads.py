@@ -1963,6 +1963,8 @@ def make_tracker(leads):
             # City lien on a parcel with no mortgage is exactly the debt that must not read as $0.
             d['orhoa'] = rlh.get('hoa_open', 0); d['orcode'] = rlh.get('code_open', 0)
             d['orirs'] = rlh.get('irs_open', 0)
+            if 'other' in rlh:
+                d['orhoaown'] = 1       # the plaintiff's own claim of lien is already out of orhoa
         if rlh:
             _fwd_flags(d, rlh, _ft)                       # surviving-1st / TAKEN / 2nd-foreclosure flags
             # JUNIOR-FORECLOSURE GUARD (the Echeverri lesson, MD side): the traced chain shows an
@@ -2188,6 +2190,8 @@ def make_tracker(leads):
                     # non-mortgage open liens for the deal-modal prefills, mortgages or not (see above)
                     _d['orhoa'] = _h.get('hoa_open', 0); _d['orcode'] = _h.get('code_open', 0)
                     _d['orirs'] = _h.get('irs_open', 0)
+                    if 'other' in _h:
+                        _d['orhoaown'] = 1
                 if _h:
                     _fwd_flags(_d, _h, _cft)                          # surviving-1st / TAKEN / 2nd-foreclosure flags
                 _es.demote_for_bank_fc(_d)                            # CLEAR beside a 2ND FORECLOSURE -> UNVERIFIED

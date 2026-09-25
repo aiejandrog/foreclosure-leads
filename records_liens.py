@@ -612,7 +612,8 @@ def _owner_words(owner):
         return None
     if not sp[1]:
         return ('co', re.sub(r'[^A-Z0-9]', '', sp[0].upper()))
-    return ('person', sp[0].upper().strip('.'), sp[1].split()[0].upper().strip('.'))
+    given = re.findall(r'[A-Z0-9]+', sp[1].upper().replace("'", ''))    # MARIA-JOSE -> MARIA, as tokens split
+    return ('person', sp[0].upper().strip('.'), given[0]) if given else None
 
 
 def _names_owner(party, owners):
@@ -626,7 +627,7 @@ def _names_owner(party, owners):
             if words[1] and words[1] in re.sub(r'[^A-Z0-9]', '', up):
                 return True
         elif (all(w in toks for w in re.findall(r'[A-Z0-9]+', words[1].replace("'", '')))    # 'DE LA CRUZ'
-              and words[2].replace("'", '').replace('-', '') in toks):
+              and (re.findall(r'[A-Z0-9]+', words[2].replace("'", '')) or [''])[0] in toks):
             return True
     return False
 
@@ -822,8 +823,12 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     _ASSN_DOC_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
     _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|\bWARRANTS?\b|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
     _NOT_A_CLAIM_RE = re.compile(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE|NOTICE OF COMMENCEMENT|^MORTGAGE', re.I)
+    # A City's code lien is often recorded as a CERTIFIED COPY OF (FINAL) ORDER imposing a fine, so a
+    # recognised creditor's row counts unless its document says it is NOT a claim; an unrecognised
+    # creditor's counts only when the document says lien, judgment or warrant.
     _CLAIM_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|\bWARRANTS?\b', re.I)
-    _NOT_CLAIM_DOC_RE = re.compile(r'WAIVER|CONTEST|SUBORDINAT', re.I)
+    _NOT_CLAIM_DOC_RE = re.compile(r'WAIVER|CONTEST|SUBORDINAT|FINANCING STATEMENT|CERTIFICATE OF TITLE|'
+                                   r'^NOTICE(?!.*\bLIEN\b)', re.I)
     _CREDITOR_RE = re.compile('|'.join(x.pattern for x in (_IRS_RE, _DOR_RE, _CODE_RE, _HOA_DOC_RE, _ASSN_DOC_RE)), re.I)
     def _here(r):
         rf = norm_folio(r.get('foliO_NUMBER', ''))
@@ -938,8 +943,12 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         # or FIRST COUNTY BANK reads as 'code', and its own judgment is still this case. Its other
         # liens are claims unless they are an association's (the claim of lien it forecloses).
         _suit_doc = 'LIS PENDENS' in doc or 'JUDGMENT' in doc
+        # A plaintiff-named JUDGMENT off this parcel with a different figure is the same bank's OTHER
+        # suit (a credit card), not this one.
+        _other_suit = ('JUDGMENT' in doc and not on_parcel and amt > 0 and judgment and judgment > 0
+                       and not _own_judgment(doc, amt, r.get('reC_DATE', '')))
         own_case = ((_is_plaintiff(p1, p2) and (kind in ('association', 'other') or _suit_doc)
-                     and not (_suit_doc and _before_case(r.get('reC_DATE', ''))))
+                     and not (_suit_doc and _before_case(r.get('reC_DATE', ''))) and not _other_suit)
                     or _own_judgment(doc, amt, r.get('reC_DATE', '')))
         released = all(bp) and bp in released_bp
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'doc': doc[:40], 'kind': kind,
@@ -951,8 +960,12 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                'anchor': 'folio' if (rf and rf == fol) else ('subdivision' if on_parcel else 'person')}
         if own_case:
             row['own_case'] = True                          # this foreclosure's own filing: never a claim
+        row['_doc'] = doc                                   # untruncated, for the counting filter
+        # untruncated creditor name; when neither side names the owner and neither reads as a
+        # creditor, there is no holder to pair a release with (it could be the owner's own name)
         row['_holder'] = _pnorm(cred if cred is not both else
-                                (p1 if _is_plaintiff(p1) or _CREDITOR_RE.search(p1) else p2))   # untruncated
+                                (p1 if _is_plaintiff(p1) or _CREDITOR_RE.search(p1) else
+                                 p2 if _is_plaintiff(p2) or _CREDITOR_RE.search(p2) else ''))
         if (kind == 'judgment' and not own_case and cred is not both
                 and not COMPANY_RE.search(cred) and not _CREDITOR_RE.search(cred)):
             # person against person: the index does not say who won, and a judgment the OWNER won is
@@ -960,20 +973,22 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             row['direction_unknown'] = True
         other.append(row)
     # pair the releases that point nowhere with the liens of their own holder, one to one
-    for h in {o['_holder'] for o in other if o['_holder']}:
+    _used = set()                                           # a release frees one lien, whoever holds it
+    for h in sorted({o['_holder'] for o in other if o['_holder']}):
         mine = sorted((o for o in other if o['_holder'] == h and o['st'] == 'OPEN' and not o.get('own_case')
                        and o['kind'] != 'lis_pendens' and _parse_recd(o['d'])),
                       key=lambda o: _parse_recd(o['d']))
-        rels = sorted(d for d, ps in unref_rel if d and h in ps)
+        rels = sorted((d, k) for k, (d, ps) in enumerate(unref_rel) if d and h in ps and k not in _used)
         if not mine or not rels:
             continue
-        left, i = list(rels), 0
+        left, i, took = list(rels), 0, []
         for o in mine:                                      # oldest lien takes the oldest release on/after it
-            j = next((k for k, d in enumerate(left) if d >= _parse_recd(o['d'])), None)
+            j = next((k for k, (d, _) in enumerate(left) if d >= _parse_recd(o['d'])), None)
             if j is None:
                 break
-            left.pop(j); i += 1
+            took.append(left.pop(j)[1]); i += 1
         if i == len(mine):
+            _used.update(took)
             for o in mine:
                 o['st'] = 'RELEASED'; o['released_by'] = 'unreferenced release, one per lien'
         else:
@@ -981,12 +996,13 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 o['release_unmatched'] = len(rels)          # releases seen, too few to say which lien
     for row in other:
         row.pop('_holder', None)
+        _full = row.pop('_doc', row['doc'])
         kind = row['kind']
         if row['st'] == 'RELEASED' or row.get('own_case') or kind == 'lis_pendens':
             continue
-        if not _CLAIM_DOC_RE.search(row['doc']) or _NOT_CLAIM_DOC_RE.search(row['doc']):
-            continue                                        # a notice, a certificate, a financing statement,
-                                                            # a waiver: shown, never counted, whoever filed it
+        if _NOT_CLAIM_DOC_RE.search(_full) or (kind == 'other' and not _CLAIM_DOC_RE.search(_full)):
+            continue                                        # a notice, a title certificate, a financing
+                                                            # statement, a waiver: shown, never counted
         if not row['amt'] or row.get('direction_unknown'):
             other_unpriced += 1                             # found, open, amount not published: a count
             continue

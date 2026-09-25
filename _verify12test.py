@@ -332,8 +332,39 @@ check("a co-owner with a three-word surname is still the owner's household", _dl
 # ---- review round 4
 _c45 = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '20', 45000, 'OWNER TESTER', first='CITY OF MIAMI')],
                   FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
-check('a priced City lien on a parcel with no mortgage reads VERIFIED (priced), never CLEAR',
-      _c45['code_open'] == 45000 and ES.state_of(_c45) == 'priced', ES.state_of(_c45))
+check('a priced City lien on a parcel with no mortgage is carried as code_open; the mortgage verdict stays clear',
+      _c45['code_open'] == 45000 and ES.state_of(_c45) == 'clear', ES.state_of(_c45))
+check('no internal key leaks into the stored rows', not any(k.startswith('_') for o in res['other'] for k in o),
+      [sorted(o) for o in res['other']][:1])
+_cert = RL.analyze([deed, rec('CERTIFIED COPY OF FINAL ORDER IMPOSING FINE AND LIEN', '3/3/2022', '33500', '30', 45000,
+                              'OWNER TESTER', first='CITY OF MIAMI'),
+                    rec('CERTIFIED COPY OF ORDER', '3/4/2022', '33500', '31', 12000, 'OWNER TESTER', first='CITY OF MIAMI')],
+                   FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a City's code-enforcement order is counted, however long its document name", _cert['code_open'] == 57000, _cert['other'])
+_sj = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '32', 20000, 'SMITH J', first='ABC PLUMBING LLC'),
+                  rec('LIEN', '3/3/2022', '33500', '33', 500, 'SMITH J', first='CITY OF MIAMI'),
+                  rec('RELEASE OF LIEN', '9/9/2023', '34000', '33', 0, 'SMITH J', first='CITY OF MIAMI')],
+                 FOLIO, 12000, ftype='HOA', owner='JOHN SMITH')
+check("one City release frees at most one lien, and never a plumber's",
+      [o['st'] for o in _sj['other']] == ['OPEN', 'RELEASED'] and _sj['code_open'] == 20000, _sj['other'])
+_sj2 = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '34', 20000, 'SMITH J', first='ABC PLUMBING LLC'),
+                   rec('RELEASE OF LIEN', '9/9/2023', '34000', '34', 0, 'SMITH J', first='CITY OF MIAMI')],
+                  FOLIO, 12000, ftype='HOA', owner='JOHN SMITH')
+check("a release that names the owner is not the plumber's release", _sj2['other'][0]['st'] == 'OPEN', _sj2['other'])
+_two = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '35', 500, 'OWNER TESTER', first='CITY OF MIAMI'),
+                   rec('LIEN', '3/3/2022', '33500', '36', 700, 'OWNER TESTER', first='MIAMI-DADE COUNTY'),
+                   rec('RELEASE OF LIEN', '9/9/2023', '34000', '35', 0, 'MIAMI-DADE COUNTY', first='CITY OF MIAMI')],
+                  FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a release naming two lienors frees one lien, not both", sorted(o['st'] for o in _two['other']) == ['OPEN', 'RELEASED'],
+      _two['other'])
+check("a hyphenated first name still names the owner",
+      RL._names_owner('GARCIA MARIA-JOSE', [RL._owner_words('MARIA-JOSE GARCIA')]))
+_boa2 = RL.analyze([deed, rec('JUDGMENT', '6/1/2025', '35000', '1', 8500, 'TESTER OWNER', first='BANK OF AMERICA NA',
+                              folio='', subdiV_NAME='')],
+                   FOLIO, 310000, ftype='MORTGAGE', plaintiff='BANK OF AMERICA NA', owner='OWNER TESTER',
+                   case='2024-000001-CA-01')
+check("the plaintiff bank's other judgment (another figure, not on this parcel) is a debt, not this case",
+      not _boa2['other'][0].get('own_case') and _boa2['code_open'] == 8500, _boa2['other'])
 _boa = RL.analyze([deed, rec('JUDGMENT', '5/5/2025', '34999', '21', 40000, 'TESTER OWNER',
                              first='UNITED STATES OF AMERICA', folio='', subdiV_NAME='')],
                   FOLIO, 0, ftype='MORTGAGE', plaintiff='BANK OF AMERICA, N.A.', owner='OWNER TESTER',
