@@ -285,6 +285,11 @@ class Assess(unittest.TestCase):
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual(got['state'], 'verified')
         self.assertTrue(got['price_is_floor'])
+        # the same filing read AFTER the judgment cannot raise the cost of reaching it
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, []), ('5', 'order_on_motion', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertNotIn('price_is_floor', got)
 
     def test_repeatable_failure_is_not_priced(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -414,6 +419,9 @@ class Render(unittest.TestCase):
                  'pages_to_judgment': 0, 'pages_all': 0}]
         out = JP.render(rows, ['2026A00001'], 0.02, 10, date(2026, 9, 25))
         self.assertIn('| next 7 days | 1 | 3 | $0.06 | 5 | $0.10 |', out)
+        rows[0]['price_is_floor'] = True
+        self.assertIn('| next 7 days | 1 | 3+ | $0.06 or more (1 case missing free OCR) |',
+                      JP.render(rows, [], 0.02, 10, date(2026, 9, 25)))
         self.assertIn('| verified | 0 | 0 | 1 | 0 | 0 | 1 |', out)
         self.assertIn('(all sale dates): 1', out)
 

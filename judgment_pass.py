@@ -264,7 +264,9 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     if any(r.get('_ocr_unreachable') for r in order
            if str(r.get('entry_ref') or '') == target):
         out['ocr_unreachable'] = True
-    elif any(r.get('_ocr_unreachable') for r in order):
+    elif any(r.get('_ocr_unreachable') for r in order[:max(
+            [i for i, r in enumerate(order) if str(r.get('entry_ref') or '') == target] or [-1])]):
+        # Only a filing the reader walks BEFORE the judgment can add to the cost of reaching it.
         out['price_is_floor'] = True
         notes.append('free OCR missing for a filing read before the judgment: its pages are not '
                      'in the price, so pages to the judgment is a floor')
@@ -422,8 +424,12 @@ def render(rows, skipped_ids, rate, sample, today):
             continue
         pj = sum(r['pages_to_judgment'] for r in need)
         pa = sum(r['pages_all'] for r in need)
-        lines.append('| %s | %d | %d | $%.2f | %d | $%.2f |'
-                     % (name, len(need), pj, pj * per_page, pa, pa * per_page))
+        floors = sum(1 for r in need if r.get('price_is_floor'))
+        # A floor case's hidden pages are not in its count: the totals then are a lower bound.
+        lines.append('| %s | %d | %d%s | $%.2f%s | %d | $%.2f |'
+                     % (name, len(need), pj, '+' if floors else '', pj * per_page,
+                        ' or more (%d case%s missing free OCR)' % (floors, '' if floors == 1 else 's')
+                        if floors else '', pa, pa * per_page))
     lines += ['', '"read_not_verified": the judgment was already read in full and its figures do not '
               'reproduce its printed total to the cent; paying again buys the same answer, so it '
               'needs a person or the paid clerk copy, not another read.']
