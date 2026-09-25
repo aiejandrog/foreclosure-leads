@@ -28,15 +28,16 @@ MAX_HITS = 100   # a real individual owner rarely has >100 recorded docs; more =
 DEADLINE_SEC = int(os.environ.get('GEN_DEADLINE', '480'))   # stay under the scheduled task's kill; resume next run
 
 
-def mint_qs(owner_lf, tries=3):
+def mint_qs(owner_lf, tries=3, solver=None):
     """Turnstile-mint a durable qs for owner (SURNAME, GIVEN). Returns (qs, record_count) or (None, 0)."""
     from captcha_solver import solve_turnstile
+    solve = solver or solve_turnstile
     party = (owner_lf[0] + ' ' + (owner_lf[1] or '')).strip()
     url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(party)
            + '&dateRangeFrom=&dateRangeTo=&documentType=&searchT=&firstQuery=y&searchtype='
            + urllib.parse.quote('Name/Document'))
     for _ in range(tries):
-        tok = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
+        tok = solve(R.TS_SITE_KEY, R.OR_BASE)
         if not tok:
             continue
         try:

@@ -122,9 +122,26 @@ def snapshot():
                 cur['auction'] = auc.isoformat()
                 cur['reset_from'] = prev.isoformat()
                 moved += 1
-            # keep the richest address/value we have ever seen
-            if not cur.get('addr') and r.get('addr'):
-                cur['addr'] = r['addr']
+            # Keep the richest row we have ever seen. This said "address/value" and then
+            # backfilled only the address, so `value` and `judg` were frozen at whatever the
+            # FIRST sighting held -- and the first sighting is the night the case appears on the
+            # auction calendar, BEFORE the property-appraiser enrichment has run against it. A
+            # case archived on calendar night kept value=0 forever even after the board learned
+            # the number the next morning. Measured 2026-09-22 on 294 upcoming Miami-Dade sales:
+            # 97% carried a judgment, 24% carried both a judgment AND a value. That second number
+            # is this bug, not a gap in the county data, and it is the exact pair the equity
+            # screen needs (judgment vs value is the only filter the 09-22 caveman week runs on).
+            #
+            # FILL HOLES ONLY, never overwrite. The append-only law above is about not erasing
+            # what we recorded; a 0 is not something we recorded, it is the absence of it. So a
+            # real number may replace a missing one and nothing may replace a real one -- a later
+            # scrape glitch reporting 0 cannot blank a value the archive already holds.
+            for k in ('addr', 'county'):
+                if not cur.get(k) and r.get(k):
+                    cur[k] = r[k]
+            for k in ('value', 'judg'):
+                if not (cur.get(k) or 0) and (r.get(k) or 0):
+                    cur[k] = r[k]
     save(arc)
     print(f'auction archive: {len(arc)} sale(s) remembered  (+{added} new, {moved} reset) '
           f'[source: {src}]')

@@ -247,7 +247,8 @@ try:
     _rl = os.path.join(HERE, 'leads-run.log')
     if os.path.exists(_rl):
         _log = open(_rl, encoding='utf-8', errors='replace').read()
-        _cut = _log.rfind('REFRESH ')                     # most recent run only — old stops are history
+        # the run HEADER, not any 'REFRESH ': the tail's 'REFRESH ENDED rc=' line would cut to nothing
+        _cut = _log.rfind('==================== REFRESH ')   # most recent run only — old stops are history
         _tail = _log[_cut:] if _cut >= 0 else _log[-120000:]
         if 'DAILY BUDGET REACHED' in _tail:
             add('WARN', 'skiptrace early stop', 'last run stopped mid-queue on a budget cap — '
