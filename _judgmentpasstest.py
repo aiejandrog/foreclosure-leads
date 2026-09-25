@@ -381,7 +381,14 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('5', 'vacatur', True, []), ('9', 'final_judgment', True, [])],
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertEqual(got['state'], 'verified')
+        self.assertNotIn('price_is_floor', got)          # nothing owed on the judgment: 0 is exact
+        self.assertTrue(got['whole_case_is_floor'])
+        # owed on the judgment, with the OCR-less filing read first: a floor
+        (self.base / ('amount-vision-' + hashlib.sha256(ref.encode()).hexdigest() + '.json')).unlink()
+        got = self.run_assess([('5', 'vacatur', True, []), ('9', 'final_judgment', True, [])],
+                              {'judgments': {'controlling_entry': '9'}})
         self.assertTrue(got['price_is_floor'])
+        _buy(self.base, ref, '9')
         # the same filing read AFTER the judgment cannot raise the cost of reaching it
         with mock.patch('judgment_money.verify_document', return_value=ok):
             got = self.run_assess([('9', 'final_judgment', True, []), ('5', 'order_on_motion', True, [])],
@@ -532,6 +539,62 @@ class Assess(unittest.TestCase):
         row = {'source_ref': 'court:9:1', 'manifest': {'sha256': 'h9', 'path': str(pdf)},
                'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'x'}]}}
         self.assertEqual(JP._with_cached_ocr(row, self.base)['_ocr_unreachable'], 'cache')
+
+    def test_known_blocker_flags_a_priced_case(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Vision returned unreadable'}])
+        row = {'source_ref': 'court:9:2', 'manifest': {'sha256': 'h9b'},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'Total $9.00'}]}}
+        (self.base / (hashlib.sha256(b'j2').hexdigest() + '.json')).write_text(json.dumps(row))
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+        self.assertTrue(got['gaps_block_verified'])
+        self.assertIn('unreadable', got['detail'])
+
+    def test_stale_stuck_page_owes_a_free_rerun(self):
+        ref = _row(self.base, '9', 'no dollars', 'j')     # amount page now: 2 only
+        _buy(self.base, ref, '9', gaps=[{'page': 3, 'reason': 'Vision returned unreadable'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 0))
+
+    def test_reading_gap_is_not_called_a_failing_total(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Vision returned unreadable'}])
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+        self.assertNotIn('does not reproduce', got['detail'])
+
+    def test_undated_final_judgment_is_held_not_absent(self):
+        plan = _plan([('9', 'final_judgment', False, ['entry_date_unknown'])])
+        plan['judgments'] = {'judgments': []}             # the reconciliation dropped it
+        with mock.patch('document_prioritizer.prioritize', return_value=plan):
+            got = JP.assess(CASE, self.base, {'judgments': {}}, '2026-09-25')
+        self.assertEqual(got['state'], 'judgment_held_by_docket_plan')
+
+    def test_bought_document_without_amount_page_or_total_blocks_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        row = {'source_ref': 'court:9:2', 'manifest': {'sha256': 'h9b'},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'no dollars'}]}}
+        (self.base / (hashlib.sha256(b'j2').hexdigest() + '.json')).write_text(json.dumps(row))
+        (self.base / ('amount-vision-' + hashlib.sha256(b'court:9:2').hexdigest() + '.json')).write_text(
+            json.dumps({'source_ref': 'court:9:2', 'document_hash': 'h9b', 'gaps': [],
+                        'figures': [], 'grand_totals': [], 'pages': {'1': {}}}))
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document',
+                        side_effect=lambda figures, totals, read_pages=None: ok if totals else []):
+            got = self.run_assess([('9', 'final_judgment', True, [])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+        self.assertIn('shows no printed total', got['detail'])
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [

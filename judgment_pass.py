@@ -179,19 +179,9 @@ def _entry_order(entry_id):
     return (0, int(text), '') if text.isdigit() else (1, 0, text)
 
 
-def _every_document_checked(target, checks, order, done):
-    """Every bought amount document of the target produced at least one exact-cents check."""
-    import miami_timeline_amounts as amounts
-    checked = {c.get('source_ref') for c in checks}
-    for row in order:
-        if str(row.get('entry_ref') or '') != target:
-            continue
-        if not amounts.amount_page_numbers(row.get('reading') or {}):
-            continue
-        key = 'amount-vision-' + hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest() + '.json'
-        if key in done and row.get('source_ref') not in checked:
-            return False
-    return True
+def _evidence_name(ref):
+    """run_case_timeline.read_amounts' evidence file for one document."""
+    return 'amount-vision-' + hashlib.sha256(str(ref).encode()).hexdigest() + '.json'
 
 
 def assess(case, base, timeline, as_of, timeline_mtime=None):
@@ -241,6 +231,13 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     recon = timeline.get('judgments') or plan.get('judgments')
     target, why = _target(recon, controlling)
     if target is None:
+        held_fj = [d for d in plan['documents'] if d.get('kind') == 'final_judgment'
+                   and not d.get('eligible_for_acquisition')]
+        if why == 'no_judgment_on_docket' and held_fj:
+            # The reconciliation drops an undated final judgment; the docket plan holds it.
+            out.update(state='judgment_held_by_docket_plan', target_entry=str(held_fj[-1]['entry_id']),
+                       detail=','.join(held_fj[-1].get('gaps') or []) or 'not_eligible')
+            return out
         out['state'] = why
         return out
     out.update(target_entry=target, target_basis=why)
@@ -283,49 +280,82 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
             if str(r.get('entry_ref') or '') == target and r.get('source_ref') not in in_order]
     held_refs = {r.get('source_ref') for r in held}
 
-    def pages_left(row, pages):
+    def pages_left(ref, pages):
         """-> (pages to buy, whether a paid-reader run is owed even at $0)."""
-        ref = row.get('source_ref')
-        key = 'amount-vision-' + hashlib.sha256(str(ref).encode()).hexdigest() + '.json'
-        if key not in done:
+        if _evidence_name(ref) not in done:
             return len(pages), True
         if ref in stuck_docs:
             return 0, False
-        detail = DS.pipeline_load(Path(base) / key) or {}
+        detail = DS.pipeline_load(Path(base) / _evidence_name(ref)) or {}
         # Amount pages the free OCR found after the purchase are new pages to buy.
-        fresh = set(pages) - set(detail.get('selected_pages') or pages)
-        # A capped page the current OCR no longer selects is not one the reader would buy, but
-        # its gap still sits in the evidence and fails every check until a run rewrites it; that
-        # run re-reads the bought pages from its ledger at $0.
-        rebuy_now = rebuy.get(ref) or set()
-        left = len(((rebuy_now & set(pages)) | fresh) - (stuck_pages.get(ref) or set()))
-        return left, bool(left or rebuy_now - set(pages))
+        fresh = pages - set(detail.get('selected_pages') or pages)
+        rebuy_now, stuck_now = rebuy.get(ref) or set(), stuck_pages.get(ref) or set()
+        left = len(((rebuy_now & pages) | fresh) - stuck_now)
+        # A gapped page the current OCR no longer selects is not one the reader would buy, but its
+        # gap still sits in the evidence and fails every check until a run rewrites it; that run
+        # re-reads the selected pages from its ledger at $0.
+        return left, bool(left or (rebuy_now | stuck_now) - pages)
 
-    need = []          # (is_target, pages) for every amount-bearing row with pages left to buy
+    # One walk over the judgment's documents and everything the reader reads before them.
+    need = []           # (is_target, pages) for every row a paid-reader run owes, in reader order
+    last_target = None  # index in `order` of the last target row that run owes
     target_amount_rows = 0
     held_unread = False
-    for row in order + held:
+    t_bought, t_stuck_pages, t_stuck_doc = set(), False, False
+    for i, row in enumerate(order + held):
+        ref = row.get('source_ref')
         is_target = str(row.get('entry_ref') or '') == target
-        pages = amounts.amount_page_numbers(row.get('reading') or {})
+        pages = set(amounts.amount_page_numbers(row.get('reading') or {}))
+        if is_target:
+            if _evidence_name(ref) in done:
+                t_bought.add(ref)
+            t_stuck_doc = t_stuck_doc or ref in stuck_docs
+            t_stuck_pages = t_stuck_pages or bool((stuck_pages.get(ref) or set()) & pages)
         if not pages:
             continue
         target_amount_rows += is_target
-        left, owed = pages_left(row, pages)
-        if row.get('source_ref') in held_refs:
+        left, owed = pages_left(ref, pages)
+        if ref in held_refs:
             held_unread = held_unread or owed
         elif owed:
             need.append((is_target, left))
+            if is_target:
+                last_target = i
     notes = [out['detail']] if out.get('detail') else []
     target_doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
 
     def held_why():
         return ','.join(target_doc.get('gaps') or []) or 'not_eligible'
-    target_refs = {r.get('source_ref') for r in order + held
-                   if str(r.get('entry_ref') or '') == target}
     # The timeline's own gaps on the target entry: a missing attachment, a page neither text nor
     # OCR could read, pages never assessed. Any of them means an amount page may be unseen.
     target_gaps = sorted({str(g.get('kind')) for g in timeline.get('gaps') or []
                           if str(g.get('entry_id') or '') == target})
+    checked = {c.get('source_ref') for c in target_checks}
+    # read_amounts fails every check of a document with a reading gap; only the others are a
+    # total that truly does not reproduce.
+    arithmetic = [c for c in target_checks if not c.get('ok')
+                  and 'unresolved reading gaps' not in str(c.get('reason') or '')]
+    unchecked = t_bought - checked - stuck_docs - set(stuck_pages)
+
+    def blockers():
+        """What the evidence already shows paying will not fix, in words."""
+        out_notes = []
+        if target_gaps:
+            out_notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
+        if arithmetic:
+            out_notes.append('a printed total does not reproduce to the cent'
+                             + (' (another one does)' if any(c.get('ok') for c in target_checks)
+                                else ''))
+        if unchecked:
+            out_notes.append('a document of the judgment was read and shows no printed total '
+                             'to check')
+        if t_stuck_pages:
+            out_notes.append('a page came back unreadable or a paid call failed; paying again '
+                             'does not re-read it')
+        if t_stuck_doc:
+            out_notes.append('the reader could not read a document (a missing or rejected file, '
+                             'or an unrecognised failure): see its evidence gaps')
+        return out_notes
     # Only the judgment's own documents decide a verdict. Another filing without its OCR can hide
     # pages the reader buys first, so it only makes the price a floor, and the note says so.
     why_unseen = {r.get('_ocr_unreachable') for r in order + held
@@ -335,13 +365,12 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         # The judgment's own OCR-only pages are unseen, so both of its counts are floors.
         out['price_is_floor'] = out['whole_case_is_floor'] = True
     else:
-        at = [i for i, r in enumerate(order) if str(r.get('entry_ref') or '') == target]
         missing = [i for i, r in enumerate(order) if r.get('_ocr_unreachable')]
         if missing:
             out['whole_case_is_floor'] = True        # every unseen page is out of the whole-case count
-        # Only a filing the reader walks BEFORE the judgment can add to the cost of reaching it; a
-        # judgment the plan holds out of the order has no 'before'.
-        if at and any(i < max(at) for i in missing):
+        # Only a filing the reader walks BEFORE the last judgment document it still owes can add
+        # to the cost of reaching it.
+        if last_target is not None and any(i < last_target for i in missing):
             out['price_is_floor'] = True
             notes.append('free OCR missing for a filing read before the judgment: its pages are not '
                      'in the price, so pages to the judgment is a floor')
@@ -358,11 +387,12 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         last = max(i for i, (t, _) in enumerate(need) if t)
         out.update(state='needs_paid_read', pages_to_judgment=sum(n for _, n in need[:last + 1]),
                    pages_all=sum(n for _, n in need))
-        if target_gaps:
-            # Paying buys the amount pages but not these: the case stays judgment_incomplete.
+        known = blockers()
+        if known:
+            # Paying buys the amount pages but not these, so it cannot bring the case to verified.
             out['gaps_block_verified'] = True
-            notes.append('timeline gaps on the judgment (%s): a paid read alone will not verify it'
-                         % ', '.join(target_gaps))
+            notes.extend(known)
+            notes.append('a paid read alone will not verify it')
     elif out.get('ocr_unreachable'):
         # Without the free OCR, amount pages may be missing from every count below.
         out['state'] = 'report_on_pass_machine'
@@ -374,31 +404,14 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     elif target_gaps:
         out['state'] = 'judgment_incomplete'
         notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
-    elif (target_checks and all(c.get('ok') for c in target_checks)
-          and not any(r in stuck_docs or stuck_pages.get(r) for r in target_refs)
-          and _every_document_checked(target, target_checks, order + held, done)):
-        # Every printed total on every document of the target reproduces to the cent, no amount
-        # page of it is unread, and the timeline has no gap on it. One total agreeing while
-        # another fails, or a judgment read with no total at all, is not this.
+    elif target_checks and not blockers() and all(c.get('ok') for c in target_checks):
+        # Every printed total on every bought document of the target reproduces to the cent, no
+        # amount page of it is unread, and the timeline has no gap on it.
         out['state'] = 'verified'
-    elif target_amount_rows or target_checks:
-        # A read with checks counts even if today's OCR no longer shows its amount pages.
+    elif target_amount_rows or t_bought:
+        # A read counts even if today's OCR no longer shows its amount pages.
         out['state'] = 'read_not_verified'
-        checked = {c.get('source_ref') for c in target_checks}
-        if any(not c.get('ok') for c in target_checks):
-            notes.append('a printed total does not reproduce to the cent'
-                         + (' (another one does)' if any(c.get('ok') for c in target_checks) else ''))
-        unchecked = [r for r in target_refs if r not in checked and r not in stuck_docs
-                     and not stuck_pages.get(r) and 'amount-vision-' + hashlib.sha256(
-                         str(r).encode()).hexdigest() + '.json' in done]
-        if unchecked:
-            notes.append('a document of the judgment was read and shows no printed total to check')
-        if any(stuck_pages.get(r) for r in target_refs):
-            notes.append('a page came back unreadable or a paid call failed; paying again '
-                         'does not re-read it')
-        if any(r in stuck_docs for r in target_refs):
-            notes.append('the reader could not read a document (a missing or rejected file, or '
-                         'an unrecognised failure): see its evidence gaps')
+        notes.extend(blockers())
     else:
         doc = target_doc
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
@@ -546,8 +559,9 @@ def render(rows, skipped_ids, rate, sample, today):
                         ' or more' if whole else ''))
     blocked = sum(1 for r in rows if r['state'] == 'needs_paid_read' and r.get('gaps_block_verified'))
     if blocked:
-        lines += ['', '%d of the priced cases also have timeline gaps on the judgment: paying buys '
-                  'their amount pages but will not verify them (their Note names the gaps).' % blocked]
+        lines += ['', '%d of the priced cases already show something paying will not fix (a '
+                  'timeline gap, a total that does not reproduce, an unreadable page): paying buys '
+                  'their amount pages but will not verify them. Their Note says what.' % blocked]
     lines += ['', '"read_not_verified": the judgment was read as far as a paid run can take it, and '
               'its figures do not reproduce its printed total to the cent, or a document shows no '
               'printed total, or a page came back unreadable, or a paid call failed with its '
