@@ -147,8 +147,10 @@ class DeedPlacementTests(unittest.TestCase):
             got = title([mortgage(plat=ref_plat), rec('7', '6/1/2023', 'A', 'B', plat=deed_plat)])
             self.assertEqual(got['legal_matched_deeds'], [], (ref_plat, deed_plat))
             self.assertIn('plat book and page', got['unanchored_deeds'][0]['legal_match']['reason'])
+        # Nor does a name rule a deed out: 'SEC 2' and 'SECTION 2' are one subdivision typed two
+        # ways, and calling that a difference would drop the deed out of the conveyance warning.
         other = title(folio_pair(plat='') + [rec('7', '6/1/2023', 'A', 'B', plat='', sub='SAMPLE GROVE 2ND ADDN')])
-        self.assertEqual(other['unanchored_deeds'][0]['status'], 'legal_description_differs')
+        self.assertEqual(other['unanchored_deeds'][0]['status'], 'legal_description_match_required')
 
     def test_leading_zeros_are_not_a_difference(self):
         rows = [mortgage(), rec('2', '1/1/2018', 'SELLER', 'OWNER PERSON', FOLIO),
@@ -206,6 +208,13 @@ class DeedPlacementTests(unittest.TestCase):
         got = title(rows)
         self.assertEqual(got['legal_matched_deeds'], [])
         self.assertIn('same day', got['unanchored_deeds'][0]['legal_match']['reason'])
+
+    def test_a_same_day_conveyance_by_the_owner_is_still_a_question(self):
+        rows = [mortgage(), rec('2', '6/1/2023 10:00:00 AM', 'SELLER', 'OWNER PERSON', FOLIO),
+                rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
+        got = title(rows)
+        self.assertEqual(got['possible_later_conveyances'], ['7/1'])
+        self.assertEqual(got['current_deed_status'], 'possibly_conveyed_later')
 
     def test_a_placement_resting_on_one_index_row_says_so(self):
         rows = [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')]
@@ -280,8 +289,17 @@ class PresentTitleTests(unittest.TestCase):
         self.assertEqual(own['legal_description_match_required'], [])
         self.assertFalse(any('legal-description matching' in h for h in got['held_because']))
         self.assertIn('clerk index legal description', own['basis'])
+        self.assertIs(own['legal_description_corroborated'], True)
+        self.assertFalse(any('only one record' in h for h in got['held_because']))
         self.assertTrue(any('every deed party was recovered' in g and 'official_records/7-1' in g
                             for g in title(rows)['gaps']))
+
+    def test_present_title_holds_a_deed_placed_on_a_single_index_row(self):
+        thin = MPT.present_title({'title_parties': title(
+            [mortgage(), rec('7', '6/1/2023', 'OWNER PERSON', 'BUYER LLC')])})
+        self.assertIs(thin['ownership']['legal_description_corroborated'], False)
+        self.assertTrue(any('only one record filed under the folio states' in h
+                            for h in thin['held_because']))
 
 
 if __name__ == '__main__':

@@ -126,7 +126,8 @@ def build_title_parties(models, documents, docket, folio):
                                '' if reference.get('corroborated') else
                                ', which only one record filed under this folio states'))
                 taken.add(day(row['date_parsed']))
-                deeds.append(dict(row, anchored_by='legal_description', legal_match=verdict))
+                deeds.append(dict(row, anchored_by='legal_description',
+                                  legal_match=dict(verdict, corroborated=bool(reference.get('corroborated')))))
                 continue
         gaps.append('%s: deed parcel anchor missing or conflicts; subdivision is insufficient.' % ref)
         unanchored.append(dict(row,
@@ -222,12 +223,15 @@ def _assemble(deeds, unanchored, gaps, flags, documents, docket):
         d['chain_link'] = sorted({'%s is an anchored-deed %s' % (p['name'], role)
                                   for p in d['parties'] for role in anchored_roles.get(name_key(p['name']), ())})
         grantors = {name_key(p['name']) for p in d['parties'] if p['role'] == 'grantor'}
+        # Same day counts: the index times some recordings and not others, so a conveyance
+        # recorded the day the current deed was cannot be ordered against it and is a question.
         if (current and d['status'] == 'legal_description_match_required' and grantors & owner_keys
-                and (d['date_parsed'] is None or d['date_parsed'] > current['date_parsed'])):
+                and (d['date_parsed'] is None
+                     or d['date_parsed'].date() >= current['date_parsed'].date())):
             later.append(d['book_page'])
     if later:
         gaps.append('Deed(s) %s have no folio for this parcel, name the current grantee as grantor and '
-                    'are dated after (or undated against) the current deed candidate: the owner may '
+                    'are dated on or after (or undated against) the current deed candidate: the owner may '
                     'already have conveyed. Match their legal descriptions before treating the '
                     'current candidate as the owner.' % ', '.join(later))
     # Flags quote text, never infer that a person has died (especially if deceased).
@@ -489,13 +493,13 @@ def compare_legal(reference, legal, reference_gap=None):
         if _num(reference['plat']) != _num(legal['plat']):
             return result('differs', 'plat book/page %s is not the parcel\'s %s' % (legal['plat'], reference['plat']))
         place = 'plat %s' % legal['plat']
-    elif reference['subdivision'] and reference['subdivision'] != legal['subdivision']:
-        return result('differs', 'subdivision %s is not the parcel\'s %s'
-                      % (legal['subdivision'], reference['subdivision']))
     else:
         # Without a plat book and page on BOTH sides there is nothing that names one piece of
         # ground: Miami repeats subdivision names, and lot and block numbers repeat across plats,
-        # so an agreeing name and lot can still be another parcel. A person compares.
+        # so an agreeing name and lot can still be another parcel. Nor does a name rule one out:
+        # 'SAMPLE GROVE SEC 2' and 'SAMPLE GROVE SECTION 2' are one subdivision typed two ways,
+        # and calling that a difference drops the deed out of the conveyance warning. A person
+        # compares.
         return result('needs_person', 'the plat book and page is missing on one side or both, and '
                                       'a subdivision name alone names more than one plat')
     kind, parcel_kind = _kind(legal), _kind(reference)
