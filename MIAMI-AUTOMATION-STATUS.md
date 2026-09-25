@@ -80,6 +80,17 @@ co-equal let a docket line reading "Certificate of Sale" close a sale whose own 
 of sale, and made a line reading "Notice of Filing Bankruptcy Petition" hold a case whose document
 reads "ORDER DENYING MOTION TO COMPEL".
 
+**Two producer fields were written and read by nothing**, which is its own class of defect: a field
+saved and never consumed reads as handled. `attached_document_kind` carries the real label whenever a
+dispositive document is filed under a covering title - "Notice of Filing Satisfaction of Judgment",
+which `_FILED_ABOUT_RE`'s bare `notice\b` matches - and `reconcile_judgments`' `unmatched` list carries
+every dispositive event it could not link to a judgment, which a satisfaction citing the mortgage's
+recording date rather than the judgment's normally is. Each left a satisfied, vacated, dismissed or
+sold case reading `supported` with the amount vouched for to the cent; the verdict now names both. The
+producer-side halves are reported, not changed: `_FILED_ABOUT_RE` swallowing a bare "Notice of Filing
+<dispositive document>", and `_target` finding no target whenever a satisfaction's text cites any
+unrelated date. Reading the fields the producer already saves is the cheaper fix and invents nothing.
+
 **The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry
 whose OCS eventType is a hearing loses its real label, and every summary the producer builds afterwards

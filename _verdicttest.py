@@ -1547,7 +1547,11 @@ class EighthReviewTests(unittest.TestCase):
         producer_labels = exempt[0]
         # `status` is the case posture, not a docket entry, and `g` is a gap row; neither goes
         # through the :383 override. Anything else reading 'kind' is reading an entry's label.
-        allowed = {'status', 'g'}
+        # `status` is the case posture and `g` a gap row; `event` is one of reconcile_judgments'
+        # own `unmatched` rows, whose 'kind' the producer wrote itself (:739) and which is only
+        # quoted back - and which can only ever be 'satisfaction' or 'vacatur' (:722), never the
+        # relabel. None of the three is a docket entry, so none goes through the :383 override.
+        allowed = {'status', 'g', 'event'}
         inside = {id(n) for f in exempt for n in ast.walk(f)}
         bad = []
         for node in ast.walk(tree):
@@ -1788,6 +1792,126 @@ class TenthReviewTests(unittest.TestCase):
         r = CV.assess(t)
         self.assertFalse(any('sale-day bid or deposit label' in m for m in r['missing']),
                          r['missing'])
+
+
+
+class EleventhReviewTests(unittest.TestCase):
+    """Ten rounds concentrated on the calendar-eventType relabel. The eleventh found two false
+    `supported` paths with nothing to do with it: two fields the producer writes and, until this
+    commit, nothing in the repo read. Both drive the producer with real document pages.
+    """
+    @staticmethod
+    def built(rows, as_of='2026-09-23', pages=None, controlling='2', amount=1746032.70):
+        import miami_case_timeline as T
+        docs = [{'source_ref': str(n), 'document_hash': 'h%s' % n,
+                 'manifest': {'sha256': 'h%s' % n},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': text}]}}
+                for n, text in (pages or {}).items()]
+        t = T.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'source_ref': str(n),
+             'expected_documents': 1 if str(n) in (pages or {}) else 0,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': text,
+                          'comments': comments, 'eventType': ev}}
+            for n, text, comments, d, ev in rows], 'pagination_verified': True}, docs, as_of)
+        t['judgments'] = dict(t['judgments'] or {}, controlling_entry=controlling,
+                              docket_duplicates_inferred=[])
+        if not (t['judgments'].get('judgments') or []):
+            t['judgments']['judgments'] = [judgment_row(controlling)]
+        t['amount_vision'] = {'amount_checks': [ok_check(controlling, 'court:%s:1' % controlling,
+                                                        amount)]}
+        t['coverage'] = {'attachments': [read_attachment(controlling)], 'complete': False}
+        return t
+
+    OPEN = [(1, 'Complaint', '', '01/05/2026', ''),
+            (2, 'Final Judgment of Foreclosure', '', '06/10/2026', '')]
+    JUDGMENT_PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $1,746,032.70'
+
+    def test_a_dispositive_document_filed_under_a_covering_title_is_named(self):
+        # _FILED_ABOUT_RE matches a bare `notice\b` (:274), so "Notice of Filing Satisfaction of
+        # Judgment" moves the real label to attached_document_kind and leaves kind as the cover. The
+        # producer's rule is right - a judgment on page 1 of a motion is an exhibit - but nothing read
+        # the field, so the status stayed judgment_entered, the judgment stayed operative, and the
+        # report vouched for the amount "to the cent" on a judgment the document says is paid.
+        for title, body, attached in (
+                ('Notice of Filing Satisfaction of Judgment',
+                 'SATISFACTION OF FINAL JUDGMENT\nThe final judgment is fully satisfied and paid.',
+                 'satisfaction'),
+                ('Notice of Filing Order Vacating Final Judgment',
+                 'ORDER VACATING FINAL JUDGMENT', 'vacatur'),
+                ('Notice of Filing Certificate of Title', 'CERTIFICATE OF TITLE',
+                 'certificate_of_title'),
+                ('Notice of Filing Order of Dismissal', 'ORDER OF DISMISSAL',
+                 'order_of_dismissal')):
+            t = self.built(self.OPEN + [(5, title, '', '09/10/2026', '')],
+                           pages={'2': self.JUDGMENT_PAGE, '5': body})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '5')
+            self.assertEqual(entry.get('attached_document_kind'), attached, title)
+            r = CV.assess(t)
+            self.assertNotEqual(r['verdict'], 'supported', (title, r['supported_by'], r['notes']))
+            self.assertTrue(any('5' in m and attached in m for m in r['missing']),
+                            (title, r['missing']))
+
+    def test_a_satisfaction_the_reconciliation_could_not_link_is_named(self):
+        # reconcile_judgments keeps its own list of dispositive events it could not link to a
+        # judgment (:756). _target returns none whenever the satisfaction cites a date that is not the
+        # judgment's - the ordinary shape, since a satisfaction cites the mortgage's recording date -
+        # so the judgment stayed operative / no_satisfaction_found and the list reached no reader.
+        t = self.built(self.OPEN + [
+            (7, 'Satisfaction of Final Judgment',
+             'Satisfaction of the judgment on the mortgage recorded 03/14/2019 in OR Book 31234 '
+             'Page 512', '09/12/2026', '')],
+            pages={'2': self.JUDGMENT_PAGE,
+                   '7': 'SATISFACTION OF FINAL JUDGMENT\nThe mortgage recorded 03/14/2019 is '
+                        'satisfied in full.'})
+        unmatched = (t['judgments'] or {}).get('unmatched') or []
+        self.assertTrue(any(u.get('entry_id') == '7' for u in unmatched), unmatched)
+        r = CV.assess(t)
+        self.assertNotEqual(r['verdict'], 'supported', (r['supported_by'], r['notes']))
+        self.assertTrue(any('7' in m and 'could not link' in m for m in r['missing']), r['missing'])
+
+    def test_an_ordinary_document_on_a_calendar_event_does_not_hold_the_case(self):
+        # The relabel sweep's document branch filtered on nothing, so ANY read document on a calendar
+        # event held the case for good - a notice of appearance, an answer, even an order SETTING a
+        # hearing, where the relabel was a no-op. The lost label is recoverable: :360 sets
+        # operative_text to the very title line the producer classified, so its own parser gives it
+        # back, and only a posture-deciding label is a gap.
+        for body in ('NOTICE OF APPEARANCE', 'ORDER SETTING HEARING', 'MOTION TO COMPEL',
+                     'ANSWER AND AFFIRMATIVE DEFENSES'):
+            t = self.built(self.OPEN + [(9, 'Order', '', '07/01/2026', 'Hearing')],
+                           pages={'2': self.JUDGMENT_PAGE, '9': body})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '9')
+            self.assertEqual((entry['kind'], entry['kind_source']), ('hearing', 'document'), body)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (body, r['missing'], r['conflicts']))
+
+    def test_a_deciding_document_on_a_calendar_event_still_holds_the_case(self):
+        # The same branch must keep firing where the lost label DOES decide something.
+        t = self.built(self.OPEN + [(9, 'Order', '', '07/01/2026', 'Hearing')],
+                       pages={'2': self.JUDGMENT_PAGE,
+                              '9': 'ORDER VACATING FINAL JUDGMENT'})
+        r = CV.assess(t)
+        self.assertNotEqual(r['verdict'], 'supported', (r['supported_by'], r['notes']))
+        self.assertTrue(any('9' in m and 'vacatur' in m for m in r['missing']), r['missing'])
+
+    def test_a_stay_ending_label_lost_to_the_relabel_is_a_deciding_label(self):
+        # DECIDING_KINDS listed relief_from_stay but not the two other ways a stay ends, both of which
+        # the producer writes into stay_history (:462).
+        for kind in ('bankruptcy_dismissed', 'bankruptcy_discharged'):
+            self.assertIn(kind, CV.DECIDING_KINDS, kind)
+
+    def test_a_certificate_after_the_cutoff_is_not_filtered_out(self):
+        # The producer's certificate scan has no upper bound (:550); only its money-row scan does
+        # (:544). Mirroring a bound the producer does not have drops evidence.
+        t = self.built(self.OPEN + [
+            (4, 'Bid Amount', '', '09/10/2026', ''),
+            (5, 'Certificate of Title', '', '09/30/2026', ''),
+            (6, 'Mortgage Foreclosure Deposit', '', '09/30/2026', '')], as_of='2026-09-23',
+            pages={'2': self.JUDGMENT_PAGE})
+        # The certificate is dated after the cutoff and must still be seen, because the producer sees
+        # it; the money row dated after the cutoff must not be, because the producer does not.
+        self.assertEqual([e['entry_id'] for e in CV._labelled(t, CV.CERTIFICATE_KINDS,
+                                                              since='2026-09-10')], ['5'])
+        self.assertEqual([e['entry_id'] for e in CV._labelled(t, CV.SALE_MONEY_KINDS)], ['4'])
 
 
 

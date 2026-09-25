@@ -226,7 +226,10 @@ def _labelled(timeline, kinds, since=None):
     one. A summary is only as good as the field it was built from, so the entries are re-read here.
     """
     since = str(since or '')
-    until = str(timeline.get('as_of') or '9999-99-99')
+    # The producer's money-row scan bounds by as_of (:544); its certificate scan does NOT (:550), it
+    # only requires a date at or after the held sale. Mirroring a bound the producer does not have
+    # drops evidence, so the upper bound applies only where the producer has one.
+    until = '9999-99-99' if since else str(timeline.get('as_of') or '9999-99-99')
     out = []
     for e in _rows(timeline, 'entries'):
         if not isinstance(e, dict) or not set(_producer_labels(e)) & set(kinds):
@@ -250,7 +253,8 @@ DECIDING_KINDS = ('vacatur', 'satisfaction', 'final_judgment', 'order_of_dismiss
                   'notice_of_voluntary_dismissal', 'sale_bid', 'sale_deposit',
                   'certificate_of_sale', 'certificate_of_title', 'notice_of_sale',
                   'order_resetting_sale', 'order_cancelling_sale', 'suggestion_of_bankruptcy',
-                  'stay', 'stay_reinstated', 'relief_from_stay')
+                  'stay', 'stay_reinstated', 'relief_from_stay', 'bankruptcy_dismissed',
+                  'bankruptcy_discharged')
 DOCUMENT_SOURCES = ('document', 'document_passage')
 
 
@@ -274,11 +278,21 @@ def _relabelled(timeline):
         if not isinstance(e, dict) or e.get('kind') != 'hearing' or not e.get('calendar_event'):
             continue
         index_kind = e.get('index_kind')
-        if e.get('kind_source') in DOCUMENT_SOURCES:
+        source = e.get('kind_source')
+        if source == 'document_passage':
+            # The stay_reinstated path (:377) overwrote operative_text with the passage, so the label
+            # is not recoverable - and that path only ever carries a deciding label anyway.
+            out.append((e, 'the label a read document passage gave it, which is saved nowhere'))
+        elif source == 'document':
             # kind came from reading the document, so what the relabel destroyed was the DOCUMENT's
-            # own label - and that is saved nowhere. index_kind is only the clerk's index line, which
-            # this module's rule says must never outrank a read document.
-            out.append((e, 'the label a read document gave it, which is saved nowhere'))
+            # own label. It IS recoverable: :360 sets operative_text to the very title line
+            # _body_kind classified, so the producer's own parser gives the label back. Claiming it
+            # was "saved nowhere" and holding every case with a read document on a calendar event
+            # made an ordinary docket incomplete for good - a notice of appearance, an answer, even
+            # an order SETTING a hearing, where the relabel was a no-op (eleventh review).
+            lost = _classify(e.get('operative_text'))
+            if lost in DECIDING_KINDS:
+                out.append((e, "the read document's own title reads as %s" % lost))
         elif index_kind in DECIDING_KINDS:
             out.append((e, 'the docket index calls it %s' % index_kind))
     return out
@@ -414,6 +428,17 @@ def _unlabelled_phrase(entries):
                 len(entries), 'y does' if len(entries) == 1 else 'ies do',
                 'y' if len(entries) == 1 else 'ies',
                 ', '.join(str(e.get('entry_id') or '?') for e in entries[:5])))
+
+
+def _classify(text):
+    """The label the PRODUCER's own classifier gives this text, or None. Never a label of our own."""
+    if not str(text or '').strip():
+        return None
+    try:
+        import miami_case_timeline
+        return miami_case_timeline.classify(str(text))
+    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
+        return None
 
 
 def _sale_dates_of(entry):
@@ -802,6 +827,36 @@ def assess(timeline, dossier=None):
     # The timeline's OWN gaps (budget_exhausted, amount_page_unreadable,
     # inventory_completeness_unknown and the rest) reached the report only where they happened to
     # change a coverage state. They are the run saying what it could not do, so they are named.
+    # Two fields the producer writes and, until the eleventh review, nothing in the repo read. Both
+    # are one line here and both were a false `supported` with the amount vouched for "to the cent".
+    #
+    # attached_document_kind (:366): where a dispositive document is filed UNDER a covering title -
+    # "Notice of Filing Satisfaction of Judgment", which _FILED_ABOUT_RE's bare `notice\b` matches -
+    # the producer moves the real label here and leaves kind as the cover. Its rule is defensible: a
+    # judgment on page 1 of a motion is an exhibit, not a new judgment. But then reconcile_judgments
+    # and _transition never see it, so a satisfied, vacated, dismissed or sold case kept a status of
+    # judgment_entered with an operative judgment and nothing in the report named the document.
+    for entry in _rows(timeline, 'entries'):
+        if not isinstance(entry, dict):
+            continue
+        attached = entry.get('attached_document_kind')
+        if attached in DECIDING_KINDS:
+            missing.append('entry %s is titled as a filing about something else, and the document '
+                           'under it reads as %s, which the run therefore did not fold into the '
+                           "case's posture; whether it decides this case is not settled in this file"
+                           % (entry.get('entry_id') or '?', attached))
+    # unmatched (:756): reconcile_judgments' own list of dispositive events it could not link to a
+    # judgment. A satisfaction citing the mortgage's recording date rather than the judgment's - the
+    # ordinary shape - lands here (_target, :793), and an unmatched satisfaction left the judgment
+    # `operative` / `no_satisfaction_found`. An unmatched VACATUR is already safe: :721 marks every
+    # candidate unclear, so the case conflicts. Only satisfaction leaked.
+    for event in _rows(judgments, 'unmatched'):
+        if not isinstance(event, dict):
+            continue
+        missing.append('the reconciliation could not link entry %s, which it reads as %s, to any '
+                       'judgment (%s), so what it acts on is not settled in this file'
+                       % (event.get('entry_id') or '?', event.get('kind') or 'a dispositive event',
+                          str(event.get('reason') or 'no reason recorded')))
     # The relabel sweep. Deliberately last among the gap checks and deliberately not per-summary:
     # every one of the ten rounds' label defects was this one relabel reaching a summary nobody had
     # enumerated yet, so the entry is named once and the case is held, whatever consumed it.
