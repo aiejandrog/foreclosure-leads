@@ -547,6 +547,10 @@ check("a kept City total does not switch the association netting back on", FLD._
 _lr3 = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80},
                 {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30,
                           'other': [dict(_oc, doc='FINAL JUDGMENT', amt=9500, d='3/1/2025')]})
+_lr4 = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 3000, 'nrec': 80},
+                {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30, 'other': [_oc]})
+check("an association total smaller than the plaintiff's claim never held it: kept, and not netted against the judgment",
+      _lr4['hoa_open'] == 3000 and not _lr4.get('hoa_own_in') and FLD._hoa_own_out(_lr4), _lr4)
 check("a kept association total that still holds the plaintiff's claim keeps the netting",
       _lr3.get('hoa_own_in') and not FLD._hoa_own_out(_lr3), _lr3)
 
@@ -935,7 +939,8 @@ try:
     _after = json.load(open(os.path.join(_tmp, 'records_liens.json')))
     check('--repull submits no more solves than the cap allows', len(_fake_cs.calls) == 2, (_fake_cs.calls, _rp[-600:]))
     check('--repull opens Camoufox before paying, once per run', _spent2 == ['camoufox', 'camoufox'], _spent2)
-    check('--repull names the leads the cap left unpulled', 'not pulled: spend cap' in _rp and '3 not pulled because of the cap' in _rp and 'reached the $0.0066 cap' in _rp, _rp[-600:])
+    check('--repull names the leads the cap left unpulled', 'not pulled: spend cap' in _rp and '4 not pulled because of the cap' in _rp
+          and any('2099-000100-CA-01' in l and 'not pulled: spend cap' in l for l in _rp.splitlines()) and 'reached the $0.0066 cap' in _rp, _rp[-600:])
     check('--repull reports the actual charge from the account balance', 'ACTUAL CHARGE: balance $10.0000' in _rp, _rp[-400:])
     check('--repull never overwrites a chain it could not re-read', _after == _before, (_before, _after))
     _ledj = json.load(open(_led))
@@ -1014,6 +1019,7 @@ try:
         # ANN NOTHING's search is answered with no records; ZED BLOCKED's and CARL BLOCKEDSN's never are
         return ([deed, city1] if sp == ('TESTER', 'JOHN') else [_far] if sp == ('OWNERZ', 'BOB')
                 else [] if sp == ('NOTHING', 'ANN') else [deed, city1] if sp in (('FRESH', 'KIM'), ('WIDER', 'LEE'))
+                else [deed] if sp == ('PARTIAL', 'JANE') else [deed, mtg, city1] if sp == ('NEWOWNER', 'JOHN')
                 else None)
     _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
                                            'camoufox_session', 'mint_and_fetch', 'time')}
@@ -1042,11 +1048,15 @@ try:
           and _o2['2099-000201-CA-01'].get('searched_as') == 'JOHN TESTER (defendant)', (_asked, _o2['2099-000201-CA-01']))
     check("--repull never drops an open mortgage the fresh search does not reach, even beside a satisfied one",
           _o2['2099-000204-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000204-CA-01'])
-    check("--repull never replaces a chain's mortgages with a narrower search that shows none",
-          _o2['2099-000203-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000203-CA-01'])
-    for _c in ('2099-000203-CA-01', '2099-000204-CA-01'):
-        check("--repull: a cached token's narrower re-read lists its rows, flags the chain and marks nothing",
-              'other' not in _o2[_c] and _o2[_c].get('wider_repull') and not _o2[_c].get('repull_tried'), _o2[_c])
+    check("--repull: a narrower cached re-read sends the chain to the paid surname search next run, and a wider "
+          "answer there replaces the flag with counted rows",
+          [l.get('bp') for l in _o2['2099-000203-CA-01']['liens']] == ['26100/11'] and 'other' in _o2['2099-000203-CA-01']
+          and 'wider_repull' not in _o2['2099-000203-CA-01'] and _asked.count(('NEWOWNER', 'JOHN')) == 1,
+          (_asked, _o2['2099-000203-CA-01']))
+    check("--repull: a paid surname search that is still narrower keeps the chain whole, flagged, and is paid once",
+          _o2['2099-000204-CA-01']['liens'] == _mtg_chain['liens'] and 'other' not in _o2['2099-000204-CA-01']
+          and _o2['2099-000204-CA-01'].get('wider_repull') and _o2['2099-000204-CA-01'].get('repull_tried')
+          and _asked.count(('PARTIAL', 'JANE')) == 1, (_asked, _o2['2099-000204-CA-01']))
     check("--repull: a fresh search that comes back narrower keeps the chain whole, flags it, and is never paid twice",
           _o2['2099-000207-CA-01']['liens'] == _mtg_chain['liens'] and 'other' not in _o2['2099-000207-CA-01']
           and _o2['2099-000207-CA-01'].get('wider_repull') and _o2['2099-000207-CA-01'].get('repull_tried')
@@ -1139,6 +1149,43 @@ try:
     check("--repull asks free Camoufox for a spouse with the owner's surname: first names differ there",
           ('PEREZ', 'MARIA') in [tuple(x) for x in _cfq] and _o4.get('searched_as') == 'MARIA PEREZ (defendant)'
           and not _paid4, (_cfq, _paid4, _o4))
+    # a free Camoufox search (first AND last name) that comes back narrower only flags the chain; the
+    # next --repull skips Camoufox and pays for the surname search
+    _t5 = tempfile.mkdtemp()
+    json.dump([{'Case #': '2099-000501-CA-01', 'owner_clean': 'AMY NARROW', 'Folio': FOLIO, 'judgment': 1}],
+              open(os.path.join(_t5, 'leads_final.json'), 'w'))
+    json.dump({'2099-000501-CA-01': dict(_mtg_chain, searched_as='NARROW (surname)')},
+              open(os.path.join(_t5, 'records_liens.json'), 'w'))
+    json.dump({}, open(os.path.join(_t5, 'records_qs.json'), 'w'))
+    open(os.path.join(_t5, 'gen_records_qs.py'), 'w').write('')
+    _cf5, _paid5, _o5 = [], [], []
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                           'camoufox_session', 'camoufox_qs', 'mint_and_fetch', 'time')}
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_t5, 'leads_final.json'), os.path.join(_t5, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_t5, 'records_qs.json'), _t5
+        RL.records_by_qs = lambda qs: [deed, city1] if qs == 'tokA' else None
+        RL.fetch_via_turnstile = lambda sp, tries=3: _paid5.append(tuple(sp)) or [deed, mtg, city1]
+        RL.camoufox_session = lambda: (contextlib.nullcontext(), object())
+        RL.camoufox_qs = lambda browser, sp: _cf5.append(tuple(sp)) or 'tokA'
+        RL.mint_and_fetch = lambda *a, **k: None
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        for _ in range(2):
+            json.dump({}, open(os.path.join(_t5, 'records_qs.json'), 'w'))    # the free token is not the point here
+            sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066', '--spend-ledger', os.path.join(_t5, 's.json')]
+            with contextlib.redirect_stdout(io.StringIO()):
+                RL.main()
+            _o5.append(json.load(open(os.path.join(_t5, 'records_liens.json')))['2099-000501-CA-01'])
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    check("--repull: a narrower free Camoufox search flags the chain and never marks it as re-searched",
+          _o5[0].get('wider_repull') and not _o5[0].get('repull_tried') and 'other' not in _o5[0], _o5[0])
+    check("--repull: the next run skips Camoufox for it and pays for the surname search once",
+          _cf5 == [('NARROW', 'AMY')] and _paid5 == [('NARROW', 'AMY')] and 'other' in _o5[1]
+          and 'wider_repull' not in _o5[1], (_cf5, _paid5, _o5[1]))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs

@@ -267,10 +267,10 @@ def _carry_lien_totals(old, new, out):
     if legacy and any(out[k] > (new.get(k) or 0) for k in own):
         out['lien_totals_kept'] = ('lien totals from the earlier, wider search (%s records) kept; they may '
                                    'include this case\'s own judgment' % (old.get('nrec') or '?'))
-    if legacy and out['hoa_open'] > (new.get('hoa_open') or 0) and not (claim_out and own['hoa_open'] and
-                                                                        (old.get('hoa_open') or 0) + 1 >= own['hoa_open']):
+    if legacy and out['hoa_open'] > (new.get('hoa_open') or 0) and not (claim_out and own['hoa_open']):
         # the association total kept is the old analyzer's, which summed the plaintiff's own claim:
-        # the board must keep netting the judgment against it
+        # the board must keep netting the judgment against it. Not when the re-read found that claim:
+        # either it was taken out above, or the old total was smaller than it and never held it.
         out['hoa_own_in'] = True
 
 
@@ -1531,7 +1531,9 @@ def _run(a, ap):
             continue
         picked.append(r)
     if a.repull:
-        picked.sort(key=lambda r: (r.get('owner_clean', '') or '').strip() not in qs_cache)  # $0 re-reads first
+        # $0 re-reads first; a chain flagged for a wider search pays, so it waits with the untokened
+        picked.sort(key=lambda r: (r.get('owner_clean', '') or '').strip() not in qs_cache
+                    or bool((out.get(r.get('Case #', '')) or {}).get('wider_repull')))
     if a.limit: picked = picked[:a.limit]
     # append retries AFTER the fresh cap so new leads always win the budget
     if md_retries:
@@ -1559,7 +1561,8 @@ def _run(a, ap):
     if a.dry_run or not picked:
         for r in picked[:20]:
             oc=(r.get('owner_clean','') or '').strip()
-            print(f"  {r.get('Case #',''):22} {oc:26} {'cached' if oc in qs_cache else 'MINT'}")
+            _w = a.repull and (out.get(r.get('Case #', '')) or {}).get('wider_repull')
+            print(f"  {r.get('Case #',''):22} {oc:26} {'WIDER (paid)' if _w else 'cached' if oc in qs_cache else 'MINT'}")
         return
 
     # One Camoufox for the whole batch, opened only when there is actually something to mint.
@@ -1595,9 +1598,14 @@ def _run(a, ap):
                 _co = _sr.people_from(r.get('defendants') or '')
             except Exception:
                 _co = []
-            _cached = None
-            if oc in qs_cache:
-                models = _cached = records_by_qs(qs_cache[oc])   # free: reuse a still-valid cached token
+            _src = None                                       # which search produced `models`
+            # a chain an earlier re-read found narrower is searched the widest way there is: the paid
+            # surname-only search. The cached token and Camoufox (first AND last name) are what
+            # came back narrower, so they are skipped for it.
+            _wider = bool(a.repull and (out.get(case) or {}).get('wider_repull'))
+            if oc in qs_cache and not _wider:
+                models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
+                _src = 'cache'
                 if a.repull and not _parcel_in(models, folio):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
@@ -1611,7 +1619,7 @@ def _run(a, ap):
                     #    back to records_qs.json, which puts the NEXT run for this owner on the free
                     #    plain-requests path above — the saving compounds instead of repeating.
                     #    Any failure just falls through to the paid path below; it never ends the run.
-                    if cf_browser is not None:
+                    if cf_browser is not None and not _wider:
                         try:
                             qs = camoufox_qs(cf_browser, sp)
                         except Exception as e:
@@ -1621,6 +1629,7 @@ def _run(a, ap):
                             models = records_by_qs(qs)
                             if models is not None:
                                 cf_free += 1
+                                _src = 'camoufox'
                                 qs_cache[oc] = qs
                                 try:
                                     json.dump(qs_cache, open(QS_CACHE, 'w', encoding='utf-8'), indent=1)
@@ -1636,7 +1645,9 @@ def _run(a, ap):
                     if models is None:
                         paid += 1
                         models = fetch_via_turnstile(sp)
+                        _src = 'paid'
                     if models is None:
+                        _src = 'mint'
                         src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
                         if 'JS = r"""' in src:
                             models = mint_and_fetch(sp, persist=a.persist)
@@ -1649,11 +1660,12 @@ def _run(a, ap):
             # subdivision, so a wrong-person hit cannot pollute the number — worst case is
             # another empty result, same as now.
             _searched = oc
-            _owner_models = None
+            _owner_models = _owner_src = None
             if a.repull and models is not None and not _parcel_in(models, folio):
                 # the owner's name does not reach this parcel (a chain first found through a
                 # defendant): try the defendants too, and fall back to this result if they fail
                 _owner_models, models = models, None
+                _owner_src = _src
             if models is None and not a.cached_only:
                 _sp0 = split_owner(oc)
                 # the paid search asks for the SURNAME only, so a spouse's paid search after the
@@ -1667,7 +1679,7 @@ def _run(a, ap):
                     _sp = split_owner(_nm)
                     if not _sp:
                         continue
-                    if cf_browser is not None:
+                    if cf_browser is not None and not _wider:
                         try:
                             _qs = camoufox_qs(cf_browser, _sp)
                         except Exception:
@@ -1676,10 +1688,12 @@ def _run(a, ap):
                             models = records_by_qs(_qs)
                             if models is not None:
                                 cf_free += 1
+                                _src = 'camoufox'
                     if models is None and _sp[0].upper() not in _paid_sn:
                         _paid_sn.add(_sp[0].upper())
                         paid += 1
                         models = fetch_via_turnstile(_sp)
+                        _src = 'paid'
                         _def_blocked = _def_blocked or models is None
                     if models is not None and a.repull and not _parcel_in(models, folio):
                         models = None                         # not this parcel either; next defendant
@@ -1687,7 +1701,7 @@ def _run(a, ap):
                         _searched = _nm + ' (defendant)'
                         break
             if models is None and _owner_models is not None:
-                models = _owner_models
+                models, _src = _owner_models, _owner_src
             if models is None:
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
@@ -1726,9 +1740,10 @@ def _run(a, ap):
                     # a defendant's name) than this re-read. It stands whole; the new lien rows are
                     # listed beside it, not counted, and the chain waits for a wider search.
                     out[case] = _lay_lien_rows(_old, res)
-                    if a.repull and models is not _cached:
-                        # a fresh search (free or paid) came back narrower: never paid for again.
-                        # The cached token's re-read found out nothing a $0 --reanalyze had not.
+                    if a.repull and _src == 'paid':
+                        # the widest search there is came back narrower: never paid for again. A
+                        # free re-read (cached token, Camoufox) only flags it, and the next --repull
+                        # goes straight to the paid surname search.
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
                     merged += 1
                     print(f"  ++  {case:22} {oc:26} narrower re-read: earlier chain kept, "
@@ -1783,7 +1798,9 @@ def _run(a, ap):
               f"~${_SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD):.3f} counted")
         if _SPEND['ledger']:
             _ledger_save(charged=(_SPEND['bal0'] - b1) if b1 is not None else None, final=True)
-            print(f"     ledger {_SPEND['ledger']}: ${_SPEND['led']['counted_usd']:.4f} of ${_usd(_SPEND['cap'])} used")
+            _cu = (_SPEND.get('led') or {}).get('counted_usd')
+            print(f"     ledger {_SPEND['ledger']}: " + (f"${_cu:.4f} of ${_usd(_SPEND['cap'])} used" if _cu is not None
+                                                        else "not written by this run (another run holds it)"))
         if b1 is not None:
             print(f"     ACTUAL CHARGE: balance ${_SPEND['bal0']:.4f} -> ${b1:.4f} = ${_SPEND['bal0'] - b1:.4f} "
                   f"(account-wide: anything else solving at the same time counts too)")
