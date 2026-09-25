@@ -34,7 +34,7 @@ shared spending controls. This is not complete.
 | One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | `run_documents --backfill --timeline [--collect-dockets]`: per case, a documents step then a whole-case timeline step, each recorded in the one backfill checkpoint with its own fingerprint; a restart resumes at the first unfinished step. Both steps draw on one vision ledger and one per-case share; reservations are durable before each call, cached page reads are free, unsettled calls are never retried. Title discovery and the owner-token worker stay separate commands (they spend captcha, which the backfill refuses) |
 | Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); run_documents --token-budget now solves only through the real-balance PaidCutoffSolver (one try, free browser first) |
 | Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Passed at $0 on the desktop (09-24, four rounds), no hand selection or transcription; see "Five-case acceptance" below |
-| Twelve-case review | Explicit review-policy acceptance and unattended evidence report | `case_verdict.py` emits the verdict per case - supported / incomplete / conflicted - from the saved timeline and dossier, at $0, with every reason in the producing module's own words. It restates states other modules computed and never upgrades one. Reproduces the five hand-written pilot verdicts from their recorded states (`_verdicttest`), but has NOT been run on the desktop's real saved evidence; no gate removed |
+| Twelve-case review | Explicit review-policy acceptance and unattended evidence report | `case_verdict.py` emits the verdict per case - supported / incomplete / conflicted - from the saved timeline and dossier, at $0, with every reason in the producing module's own words. It restates states other modules computed and never upgrades one. Reproduces the five hand-written pilot verdicts (`_verdicttest`), but on one reading of a fork the container cannot settle: four of the five carry a same-day judgment entry the reconciliation infers is a duplicate without reading it, and if that twin is behind the county login rather than image-less, those four read incomplete instead. Has NOT been run on the desktop's real saved evidence, which is what decides it; no gate removed |
 
 ## Five-case acceptance (09-24, desktop, $0, saved evidence only)
 
@@ -49,7 +49,21 @@ shared spending controls. This is not complete.
 2024-009959's and 2022-012065's amounts were first produced by an agent transcribing pages; they now
 come from the saved text and OCR alone. The verdict column was written from the code's output by
 hand until 2026-09-25; `case_verdict.assess` now emits it, and `_verdicttest.PilotVerdictTests`
-pins these five words to the states this table cites. Two things that column does NOT mean:
+pins these five words to the states this table cites.
+
+One caveat on that, because an earlier version of this paragraph overstated it. `reconcile_judgments`
+reaches ONE operative judgment on 2024-014878 (#57), 2024-009959 (#79/#80), 2023-020247 (#91/#92)
+and 2022-012065 (#174/#177) by inferring that a same-day entry is the same judgment listed twice -
+its own reason ends "(inferred, not read)". Where the county indexes no document for that twin there
+is nothing to read and the inference rests on the docket index, which the whole reconciliation rests
+on; `case_verdict` notes it and the case can still be supported. Where the twin is behind the county
+login a document exists that nobody read, and the uniqueness of the controlling judgment - which is
+what "supported" is scoped to - rests on it, so the case reads incomplete. Which of the two each
+pilot twin is, only the desktop's saved evidence says. If it is the login, four of these five
+verdicts become incomplete: that is the finding for the acceptance run to report, not a rule to
+loosen, and `_verdicttest` pins both outcomes so it cannot arrive as a surprise.
+
+Two things that column does NOT mean:
 "supported" is scoped to the controlling judgment, its posture and its amount, not to every
 attachment on the docket (requiring that would make every case incomplete forever, since the clerk
 publishes no pagination cursor); and no verdict is contact clearance - `miami_ranking.qualify`

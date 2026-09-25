@@ -147,22 +147,63 @@ def _judgment_record(judgments, entry_id):
     return next((r for r in rows if isinstance(r, dict) and r.get('entry_id') == entry_id), None)
 
 
+# Docket entry kinds that put a sale on the calendar, and the one that takes it off.
+SALE_NOTICE_KINDS = ('notice_of_sale', 'order_resetting_sale')
+SALE_CANCELLED_KIND = 'order_cancelling_sale'
+
+
 def _sale_on_the_docket(timeline, status, kind):
     """-> a phrase naming the sale the docket is running, or None.
 
-    Reads the facts the producer saves rather than the kind alone: `sale_held` (the clerk's bid and
-    deposit entries) and the scheduled `sale_date` both survive a status the stay rewrote to
-    'unclear' or 'stayed_by_bankruptcy'.
+    THE STATUS DICT IS NOT A SOURCE FOR THIS. miami_case_timeline's loop does `status = change`
+    (:503), and _transition builds a fresh dict for a bankruptcy entry (:258) with no sale_date, so
+    a stay filed AFTER a notice of sale destroys the scheduled date - and the rewrite to 'unclear'
+    at :495 drops it too. The previous version of this function read status['sale_date'] and was
+    pinned by a fixture carrying kind 'stayed_by_bankruptcy' WITH a sale_date, a combination the
+    producer cannot write. The result was `supported` on a case with a live 11 USC 362 stay over a
+    sale still on the calendar.
+
+    The saved `entries` list survives all of that, so the notice of sale is read from there.
     """
     held = timeline.get('sale_held')
     if isinstance(held, dict) and held.get('date'):
         return 'the clerk posted sale-day bid and deposit entries on %s' % held['date']
     if held:
         return 'the clerk posted sale-day bid and deposit entries'
+    notice, cancelled = None, None
+    for entry in _rows(timeline, 'entries'):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get('kind') in SALE_NOTICE_KINDS:
+            notice = entry if notice is None or str(entry.get('date') or '') >= str(
+                notice.get('date') or '') else notice
+        elif entry.get('kind') == SALE_CANCELLED_KIND:
+            cancelled = entry if cancelled is None or str(entry.get('date') or '') >= str(
+                cancelled.get('date') or '') else cancelled
+    if notice is not None and not (cancelled is not None
+                                  and str(cancelled.get('date') or '') > str(notice.get('date') or '')):
+        return 'a notice of sale (entry %s, %s) with no later cancellation' % (
+            notice.get('entry_id') or '?', notice.get('date') or 'undated')
     if kind in SALE_KINDS:
         return 'the docket status is %r' % (kind,)
     if status.get('sale_date'):
         return 'a sale is on the calendar for %s' % status['sale_date']
+    return None
+
+
+def _sale_day_bankruptcy(timeline):
+    """-> the sale_held row when a bankruptcy entry landed on the sale day, else None.
+
+    miami_case_timeline.sale_held (:553) records bankruptcy_order 'unresolved' and says in its own
+    qualification that "whether the petition preceded the sale decides whether the sale is void
+    under the automatic stay". If relief was later granted, stay_in_effect is False, so this fact
+    reached the report through no other path and the one thing that decides whether the foreclosure
+    sale stands was absent from every verdict.
+    """
+    held = timeline.get('sale_held')
+    if isinstance(held, dict) and (held.get('bankruptcy_order') == 'unresolved'
+                                  or held.get('bankruptcy_same_day')):
+        return held
     return None
 
 
@@ -193,8 +234,13 @@ def _judgment_amount(timeline, entry_id):
                             % (source or 'a document with no source recorded'))
             continue
         if check.get('ok') is True:
-            if check.get('amount') is None:
-                rejected.append('a check for this judgment verifies but records no amount')
+            # `amount` must be a NUMBER, not merely present: a string amount from an older saved
+            # format passed the None test, so `verified` was non-empty while the figure set was
+            # empty - a row reading "supported" with "not verified" in the Amount column.
+            if isinstance(check.get('amount'), bool) or not isinstance(
+                    check.get('amount'), (int, float)):
+                rejected.append('a check for this judgment verifies but records its amount as %r, '
+                                'which is not a number' % (check.get('amount'),))
             else:
                 verified.append(check)
         elif check.get('ok') is False:
@@ -267,9 +313,27 @@ def assess(timeline, dossier=None):
     # what "supported" is scoped to, so it cannot rest on a document nobody opened.
     duplicates = [d for d in (judgments.get('docket_duplicates_inferred') or []) if d]
     if duplicates and entry_id is not None:
-        missing.append('one operative judgment only because same-day final judgment entr%s %s '
-                       'was inferred to be a duplicate without being read'
-                       % ('y' if len(duplicates) == 1 else 'ies', ', '.join(str(d) for d in duplicates)))
+        # Why the twin went unread decides whether this is a gap or a note, and the producer says
+        # which in the duplicate row's own reason (miami_case_timeline :686, :690):
+        #   behind the county login -> a document EXISTS and nobody read it. The uniqueness of the
+        #     controlling judgment, which is what "supported" is scoped to, rests on an unread
+        #     filing, so it holds the case.
+        #   no document image -> the county indexes no document, so there is nothing to read and
+        #     the inference rests on the docket index, which is what the whole reconciliation
+        #     rests on. A note.
+        # An unrecognised reason holds the case, the same policy as the 'unclear' reasons above.
+        rows = judgments.get('judgments') if isinstance(judgments.get('judgments'), list) else []
+        by_id = {str(r.get('entry_id')): r for r in rows if isinstance(r, dict)}
+        for dup in duplicates:
+            text = str((by_id.get(str(dup)) or {}).get('reason') or '')
+            if text.startswith('no document image;'):
+                notes.append('entry %s is taken as this judgment listed twice; the county indexes '
+                             'no document for it, so the inference rests on the docket index' % dup)
+            else:
+                missing.append('one operative judgment only because same-day final judgment entry '
+                               '%s was inferred to be a duplicate without being read%s'
+                               % (dup, ' (%s)' % text if text else
+                                  ' and no reason for the inference was saved'))
     # A scheduled sale date that has passed with no certificate: the producer's own reason says
     # "whether a sale occurred is unknown". That is not a posture to vouch for, whatever the kind.
     outcome = status.get('sale_outcome')
@@ -307,6 +371,13 @@ def assess(timeline, dossier=None):
                          'contacted')
     elif stay is None and history:
         missing.append('stay state unknown')
+    held = _sale_day_bankruptcy(timeline)
+    if held:
+        conflicts.append('a bankruptcy entry (%s) landed on the day of the sale (%s); whether the '
+                         'petition preceded the sale decides whether the sale is void under the '
+                         'automatic stay, and the docket gives dates, not times'
+                         % (', '.join(str(e) for e in (held.get('bankruptcy_same_day') or ['?'])),
+                            held.get('date') or 'unknown date'))
 
     # --- the amount ----------------------------------------------------------------------------
     verified, failed, rejected = _judgment_amount(timeline, entry_id)
@@ -325,12 +396,21 @@ def assess(timeline, dossier=None):
         elif why == TOTAL_ROW_DISAGREES:
             missing.append("the judgment prints %s as its total but no printed total row on that "
                            'page matches it (%s)' % (_money(check.get('amount')), why))
-        elif 'disagreeing_subtotals' not in check:
+        elif 'disagreeing_subtotals' in check:
+            # run_case_timeline always writes the key now, so every OTHER failure reason
+            # judgment_money emits landed here and produced no line at all: the verdict fell to
+            # incomplete on the generic fallback below, with nothing saying why.
+            missing.append('a total for the controlling judgment does not verify: %s'
+                           % (why or 'no reason recorded'))
+        else:
             # run_case_timeline started saving that key in the commit that added this module, and
             # keep_cached_amounts (:258) copies an older check verbatim for any document a later
             # pass does not re-read. So on evidence saved before then, the difference between "the
             # pages were not all read" and "the document cannot add up" - 2018-026274's $0.60 - is
             # not in the file at all. Say that, rather than let it degrade silently to "not read".
+            # A check saved before run_case_timeline started keeping disagreeing_subtotals: the
+            # difference between "the pages were not all read" and "the document cannot add up" -
+            # 2018-026274's $0.60 - is not in the file at all.
             missing.append('a total for the controlling judgment does not verify (%s) and the run '
                            'that saved it kept no subtotal detail, so a self-contradiction cannot '
                            'be ruled out here; re-run the timeline for this case' % why)
@@ -357,7 +437,9 @@ def assess(timeline, dossier=None):
         # only the good one is how "the amount verified" gets said about a document that disagrees
         # with itself.
         missing.append('%d other total(s) on the controlling judgment do not verify: %s'
-                       % (len(failed), '; '.join(sorted({_money(c.get('amount')) for c in failed}))))
+                       % (len(failed), '; '.join(sorted(
+                           '%s (%s)' % (_money(c.get('amount')), c.get('reason') or 'no reason recorded')
+                           for c in failed))))
 
     # --- what was read for THIS judgment -------------------------------------------------------
     coverage, mine = _coverage_of(timeline, entry_id)
@@ -391,6 +473,13 @@ def assess(timeline, dossier=None):
     walled = sum(v for k, v in counts.items() if k in LOGIN_WALLED)
     if walled:
         notes.append('%d filing(s) behind the clerk\'s login; a login is a decision, not a bug' % walled)
+    # The timeline's OWN gaps (budget_exhausted, amount_page_unreadable,
+    # inventory_completeness_unknown and the rest) reached the report only where they happened to
+    # change a coverage state. They are the run saying what it could not do, so they are named.
+    kinds = sorted({str(g.get('reason') or g.get('kind') or '?').split(':')[0]
+                    for g in _rows(timeline, 'gaps') if isinstance(g, dict)})
+    if kinds:
+        notes.append('the run recorded gaps of its own: ' + ', '.join(kinds))
     if dossier:
         gaps = [g for g in (dossier.get('open_gaps') or [])]
         for gap in gaps[:20]:
@@ -407,7 +496,7 @@ def assess(timeline, dossier=None):
             # nothing verifies; a list when the document verifies two different totals.
             'judgment_amount': amounts[0] if len(amounts) == 1 else (amounts or None),
             'docket_status': kind,
-            'stay_in_effect': stay,
+            'stay_in_effect': stay, 'stay_history_count': len(history),
             'conflicts': conflicts, 'missing': missing, 'notes': notes,
             'supported_by': supported_by,
             'caveat': CAVEAT, 'qualification': QUALIFICATION}
@@ -454,8 +543,13 @@ def _amount_word(value):
     return _money(value) if isinstance(value, (int, float)) else 'not verified'
 
 
-def _stay_word(value):
-    return {True: 'IN EFFECT', False: 'no', None: 'unknown'}.get(value, str(value))
+def _stay_word(value, history=None):
+    # miami_case_timeline leaves stay_in_effect None when there is NO bankruptcy history at all, so
+    # rendering that as "unknown" put the same word on a clean docket and on a genuinely
+    # unresolved stay - and only the second one is a gap.
+    if value is None:
+        return 'unknown' if history else 'none on the docket'
+    return {True: 'IN EFFECT', False: 'no'}.get(value, str(value))
 
 
 def render_markdown(rows):
@@ -467,10 +561,16 @@ def render_markdown(rows):
            '|---|---|---|---|---|---|']
     for row in sorted(rows, key=lambda r: (REVIEW_ORDER.index(r['verdict']), str(r.get('case')))):
         why = (row['conflicts'] + row['missing'] + row['supported_by']) or ['-']
+        # Three reasons fit a table cell; the rest must still be counted. This is the human-facing
+        # report, and dropping evidence that says no is the one thing it must not do.
+        shown = '; '.join(w.replace('|', '/') for w in why[:3])
+        if len(why) > 3:
+            shown += '; +%d more, in the JSON' % (len(why) - 3)
         out.append('| %s | %s | %s | %s | %s | %s |' % (
             row.get('case') or '?', row['verdict'], row.get('controlling_judgment') or '-',
-            _amount_word(row.get('judgment_amount')), _stay_word(row.get('stay_in_effect')),
-            '; '.join(w.replace('|', '/') for w in why[:3])))
+            _amount_word(row.get('judgment_amount')),
+            _stay_word(row.get('stay_in_effect'), row.get('stay_history_count')),
+            shown))
     noted = [r for r in rows if r.get('notes')]
     if noted:
         out += ['', '## Also on the record', '']
@@ -550,19 +650,24 @@ def main(argv=None):
         # Every other writer in this chain routes through case_review.output_path, which refuses a
         # path outside paths.DEALFLOW_DIR and anything under OneDrive - CLAUDE.md's Known Folder
         # Move rule. A raw --out here was the one unguarded write path in the chain.
-        if args.out:
-            import case_review
-            try:
-                out = Path(case_review.output_path(args.out))
-            except ValueError as exc:
-                # A refused path is the guard working. Say so in one line instead of a traceback.
-                print('  refused --out: %s' % exc)
-                return 2
-        else:
-            out = Path(paths[0]).parent / 'case-verdicts.json'
+        # BOTH branches go through the guard. Routing only --out through it left the DEFAULT - the
+        # branch that actually runs - writing case numbers and judgment amounts to whatever
+        # directory --dossiers pointed at, which is the unguarded write path CLAUDE.md's Known
+        # Folder Move rule exists to prevent.
+        import case_review
+        target = args.out or str(Path(paths[0]).parent / 'case-verdicts.json')
+        try:
+            out = Path(case_review.output_path(target))
+        except ValueError as exc:
+            # A refused path is the guard working. Say so in one line instead of a traceback; the
+            # verdicts are already on stdout, so nothing is lost but the file.
+            print('  no report written, refused by the output guard: %s' % exc)
+            return 2
         out.parent.mkdir(parents=True, exist_ok=True)
+        # `--out report.md` would make these the same file and the markdown would eat the JSON.
+        md = out.with_suffix('.md') if out.suffix.lower() != '.md' else out.with_name(
+            out.stem + '-report.md')
         out.write_text(json.dumps(rows, indent=2) + '\n', encoding='utf-8')
-        md = out.with_suffix('.md')
         md.write_text(render_markdown(rows), encoding='utf-8')
         print('  report: %s' % out)
         print('  report: %s' % md)

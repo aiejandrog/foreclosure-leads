@@ -527,5 +527,11 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+# case_verdict's report carries case numbers and judgment amounts. It writes inside
+# paths.DEALFLOW_DIR, which is outside the repo, but a --dossiers run pointed at a folder in
+# here must not be one edit away from committing it.
+case-verdicts.json
+case-verdicts.md
+case-verdicts-report.md
 # _verdicttest: case_verdict.assess on the five pilot cases' states and the conflict/missing edges.
 !_verdicttest.py
