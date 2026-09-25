@@ -261,7 +261,7 @@ def _carry_lien_totals(old, new, out):
                 k = o.get('old_bucket')
                 if k not in own:
                     continue                                # the old analyzer never summed it
-                own[k] += o['amt']
+                own[k] += o.get('old_amt') or o['amt']       # the unrounded figure the old code summed
                 if k == 'hoa_open' and re.search(r'\bLIEN\b', str(o.get('doc') or ''), re.I) \
                         and not re.search(r'JUDG|LIS PENDENS', str(o.get('doc') or ''), re.I):
                     claim_out = True
@@ -269,12 +269,13 @@ def _carry_lien_totals(old, new, out):
         # subtracted only when the old total is at least the claim: a smaller total never held it,
         # and taking it out would erase a real lien the re-read did not reach
         _o = old.get(k) or 0
-        out[k] = max(_o - own[k] if _o >= own[k] else _o, new.get(k) or 0)
+        _left = _o - own[k] if _o + 1 >= own[k] else _o         # a dollar of rounding is the same claim
+        out[k] = max(round(_left, 2) if _left >= 1 else 0, new.get(k) or 0)
     if legacy and any(out[k] > (new.get(k) or 0) for k in own):
         out['lien_totals_kept'] = ('lien totals from the earlier, wider search (%s records) kept; they may '
                                    'include this case\'s own judgment' % (old.get('nrec') or '?'))
     if legacy and out['hoa_open'] > (new.get('hoa_open') or 0) and not (claim_out and own['hoa_open'] and
-                                                                        (old.get('hoa_open') or 0) >= own['hoa_open']):
+                                                                        (old.get('hoa_open') or 0) + 1 >= own['hoa_open']):
         # the association total kept is the old analyzer's, which summed the plaintiff's own claim:
         # the board must keep netting the judgment against it
         out['hoa_own_in'] = True
@@ -291,14 +292,19 @@ def _lay_lien_rows(old, new):
     for k in ('second_fc', 'second_fc_unsure'):
         if new.get(k):
             out[k] = new[k]
+    # the listing's judgment and whether the new search hit the county's cap describe this read too
+    if new.get('judgment'):
+        out['judgment'] = new['judgment']
+    out['capped'] = bool(old.get('capped') or new.get('capped'))
     # the case's type decides what survives: a circuit association case the old analyzer read as a
-    # bank's keeps its mortgages, but the whole first now survives the association's sale
-    if new.get('ftype') and new.get('ftype') != old.get('ftype'):
+    # bank's keeps its mortgages, but the whole first now survives the association's sale. Re-settled
+    # on the kept mortgages every time, so first_bp / first_face exist on an old chain that lacked them.
+    if new.get('ftype'):
         out['ftype'] = new['ftype']
-        _op = [l for l in out.get('liens') or [] if isinstance(l, dict) and l.get('amt')
-               and str(l.get('st') or 'OPEN').upper() == 'OPEN']
-        _sv = _surv_of(_op, new['ftype'], new.get('judgment') or old.get('judgment') or 0)
-        out.update(_sv, first_face=_sv['first_est'], open_count=len(_op))
+    _op = [l for l in out.get('liens') or [] if isinstance(l, dict) and l.get('amt')
+           and str(l.get('st') or 'OPEN').upper() == 'OPEN']
+    _sv = _surv_of(_op, out.get('ftype') or '', out.get('judgment') or 0)
+    out.update(_sv, first_face=_sv['first_est'], open_count=len(_op))
     out['mtg_kept'] = ("mortgages from the earlier search (searched as %s); the %s re-read did not reach "
                        "all of them" % (old.get('searched_as') or old.get('owner') or '?', time.strftime('%Y-%m-%d')))
     return out
@@ -1229,6 +1235,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             _ob = _legacy_bucket(r, on_parcel, _legacy_sats)
             if _ob:
                 row['old_bucket'] = _ob                     # where the pre-2026-09-25 analyzer summed it
+                row['old_amt'] = num(r.get('consideratioN_1'))   # and the unrounded figure it summed
         row['_doc'] = doc                                   # untruncated, for the counting filter
         # untruncated creditor name; when neither side names the owner and neither reads as a
         # creditor, there is no holder to pair a release with (it could be the owner's own name)

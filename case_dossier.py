@@ -105,7 +105,10 @@ def _b(chain, lead=None):
             foreclosed['note'] = ("an association's judgment: the first mortgage is not what is "
                                   "being foreclosed and survives the sale")
     elif lender and face:
-        foreclosed = {'amount': None, 'basis': 'no judgment amount on the listing',
+        # without the lead, an older chain that never stored the judgment says nothing about the
+        # listing: say what is missing, not that the listing has no figure
+        foreclosed = {'amount': None, 'basis': ('no judgment amount on the listing' if lead is not None
+                                                else 'the judgment was not stored with this chain'),
                       'recorded_face': face, 'instrument': chain.get('first_bp') or None,
                       'note': 'the recorded face is what was lent, not what is owed'}
     else:

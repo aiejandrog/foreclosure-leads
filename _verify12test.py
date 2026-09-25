@@ -585,6 +585,27 @@ check("a kept mortgage re-settles when the case turns out to be an association's
       _lr19['ftype'] == 'HOA' and _lr19['surv'] == 300000 and _lr19['surv_first'] == 300000, _lr19)
 check("a lender's foreclosure the narrower re-read found is kept", _lr19.get('second_fc'), _lr19)
 
+# review round 20: cents, and what a narrower re-read still knows about the case
+_fjc = RL.analyze([deed, rec('JUDGMENT', '5/5/2024', '34932', '1256', 1022358.91, 'OWNER TESTER', first=PLAINTIFF)],
+                  FOLIO, 1022358.91, ftype='MORTGAGE', plaintiff=PLAINTIFF, owner='OWNER TESTER', case='2024-014878-CA-01')
+for _old in (1022358.91, 1022358.20):
+    _o = {}
+    RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': _old, 'nrec': 200, 'traced': '2026-09-10'},
+                          dict(_fjc, nrec=40), _o)
+    check("a judgment of $%s comes out of the old total whole, cents and all" % _old,
+          _o['code_open'] == 0 and not _o.get('lien_totals_kept'), (_fjc['other'], _o))
+_lr20 = RL._lay_lien_rows({'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 200, 'second_fc': None,
+                           'liens': [{'d': '2/1/2008', 'amt': 300000, 'st': 'OPEN', 'bp': '26100/11'},
+                                     {'d': '2/1/2012', 'amt': 50000, 'st': 'OPEN', 'bp': '28100/11'}]},
+                          {'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 40, 'other': [], 'judgment': 412345.67,
+                           'capped': True, 'liens': [{'d': '2/1/2008', 'amt': 300000, 'st': 'OPEN', 'bp': '26100/11'}]})
+check("a narrower re-read keeps the listing's judgment, the search cap and the foreclosed first's book/page",
+      _lr20.get('judgment') == 412345.67 and _lr20.get('capped') and _lr20.get('first_bp') == '26100/11'
+      and _lr20['surv'] == 50000, _lr20)
+_fd20 = CD._b({'conf': 'ok', 'ftype': 'MORTGAGE', 'first_est': 300000, 'liens': []})['foreclosed_debt']
+check("dossier b: an old chain with no stored judgment does not claim the listing has none",
+      _fd20['basis'] == 'the judgment was not stored with this chain', _fd20)
+
 # review round 17: an own claim the old total never held is not taken out of it
 _o = {}
 RL._carry_lien_totals({'conf': 'ok', 'liens': [], 'code_open': 3000},
