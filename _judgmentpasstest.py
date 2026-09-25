@@ -88,6 +88,15 @@ class Rate(unittest.TestCase):
             self.assertEqual(JP.evidence_rate(Path(tmp) / 'none'), (None, 0))
 
 
+class Fresh(unittest.TestCase):
+    def test_by_file_age_across_midnight(self):
+        with tempfile.NamedTemporaryFile() as f:
+            mtime = Path(f.name).stat().st_mtime
+            self.assertTrue(JP.built_recently(f.name, now=mtime + 3 * 3600))
+            self.assertFalse(JP.built_recently(f.name, now=mtime + 21 * 3600))
+        self.assertFalse(JP.built_recently('/nonexistent/timeline.json'))
+
+
 class Render(unittest.TestCase):
     def test_prices_and_windows(self):
         rows = [{'case': CASE, 'sale': '2026-09-28', 'state': 'needs_paid_read',

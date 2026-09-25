@@ -12,7 +12,7 @@ So this does two things, in order, and neither spends:
   1. PASS: run_case_timeline.timeline_case(case, collect=True/False) with NO vision budget, soonest
      sale first. That collects the full OCS docket, downloads the accessible filings, OCRs them for
      free, and reuses any hash-bound vision evidence already on disk. Resumable: a case whose
-     timeline was already built today is skipped.
+     timeline was written in the last 20 hours is skipped.
   2. PLAN: for every case, from files on disk only, whether its controlling (or latest) judgment
      already has an exact-cents verified amount, and if not, how many amount pages the paid reader
      would have to send to reach it, priced at the measured average of the evidence already bought.
@@ -29,6 +29,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -63,10 +64,18 @@ def timeline_path(runner, case):
     return path.with_name(path.stem + '-timeline.json')
 
 
-def built_today(runner, case, today):
-    import document_store as DS
-    saved = DS.pipeline_load(timeline_path(runner, case)) or {}
-    return str(saved.get('as_of') or '')[:10] == today.isoformat()
+FRESH_HOURS = 20
+
+
+def built_recently(path, hours=FRESH_HOURS, now=None):
+    """A timeline written in the last `hours` is skipped on a re-run. By file age, not the
+    timeline's as_of date: a pass that crosses local midnight would otherwise rebuild every case
+    the previous day's half already built."""
+    try:
+        age = (now or time.time()) - Path(path).stat().st_mtime
+    except OSError:
+        return False
+    return 0 <= age < hours * 3600
 
 
 def evidence_rate(root):
@@ -148,7 +157,7 @@ def run_pass(runner, entries, today, collect, log):
     done = errors = skipped = 0
     for entry in entries:
         case = entry['case']
-        if built_today(runner, case, today):
+        if built_recently(timeline_path(runner, case)):
             skipped += 1
             continue
         try:
@@ -260,7 +269,7 @@ def main(argv=None):
             done, skipped, errors = run_pass(runner, todo, today, args.collect, log)
         finally:
             log_path.write_text(json.dumps(log, indent=2), encoding='utf-8')
-        print('  pass: %d built, %d already built today, %d errors (log %s)'
+        print('  pass: %d built, %d built in the last 20h, %d errors (log %s)'
               % (done, skipped, errors, log_path))
     rows, rate, sample = plan(runner, entries, today, log)
     report = render(rows, skipped_ids, rate, sample, today)
