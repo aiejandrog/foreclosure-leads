@@ -93,9 +93,10 @@ def build_title_parties(models, documents, docket, folio):
                'date_parsed':_date(model.get('reC_DATE'))}
         if anchored:
             key = _instrument(model)
-            if key and key in anchored_refs:
-                continue      # another index row for this same instrument is already in the chain
-            anchored_refs.add(key)
+            if key:
+                if key in anchored_refs:
+                    continue  # another index row for this same instrument is already in the chain
+                anchored_refs.add(key)
             gaps.append('%s: index names and bounded explicit-role extraction do not establish that every deed party was recovered.' % ref)
             deeds.append(row)
             continue
@@ -490,9 +491,10 @@ def parcel_legal_reference(models, folio):
         legal = index_legal(model)
         if not legal or legal['see_document'] or legal['unparsed'] or not _kind(legal):
             continue
-        book_page = '%s/%s' % (model.get('reC_BOOK'), model.get('reC_PAGE'))
-        if book_page in records:          # the same instrument can come back twice in one search
+        book_page = _instrument(model)
+        if book_page and book_page in records:   # one instrument can come back twice in a search
             continue
+        book_page = book_page or '(no book or page)'
         combined = dict(legal) if merged is None else _merge_legal(merged, legal)
         if combined is None:
             return None, ('records filed under this folio carry different index legal descriptions '

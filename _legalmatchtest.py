@@ -400,6 +400,19 @@ class DeedPlacementTests(unittest.TestCase):
                          ['MID PERSON', 'OWNER PERSON'])
         self.assertEqual(chain['chain_of_title'][0]['link'], 'continuous')
 
+    def test_an_anchored_row_with_no_book_and_page_hides_no_other_deed(self):
+        # Both rows name no instrument, so neither collapses into the other: the folio-less deed
+        # is still read, and without a yardstick it is still the owner's possible conveyance.
+        anchored = unkeyed('1/1/2020', 'ALICE', 'BOB', folio=FOLIO)
+        conveyance = unkeyed('1/1/2021', 'BOB', 'CARL')
+        got = title([anchored, conveyance])
+        self.assertEqual([p['name'] for p in got['current_deed_candidate']['parties']], ['ALICE', 'BOB'])
+        self.assertEqual(got['possible_later_conveyances'], ['None/None'])
+        with_yardstick = title(folio_pair() + [anchored, conveyance])
+        self.assertEqual([p['name'] for p in with_yardstick['current_deed_candidate']['parties']],
+                         ['BOB', 'CARL'])
+        self.assertEqual(with_yardstick['chain_of_title'][-1]['link'], 'continuous')
+
     def test_a_deed_already_in_the_chain_is_not_also_an_unplaced_deed(self):
         # The instrument is indexed once under this parcel's folio and once without it (or under
         # another parcel's). It used to appear as the current deed AND as a deed recorded the
