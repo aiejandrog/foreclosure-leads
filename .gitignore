@@ -504,6 +504,7 @@ deal_desk.json
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
 !_boardaccuracytest.py
+!_docboardtest.py
 # _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
 # file before the sale-history cache restored them (the restore ran only inside make_tracker, in
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
