@@ -34,10 +34,18 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-CASE_RE = re.compile(r'\d{4}-\d{6}-(?:CA-01|CC-\d{2})')   # run_case_timeline.validate_case's
 # Measured 2026-09-22 on the desktop: $0.045 per judgment once page selection sent two pages.
 # Used only when no bought evidence is on disk to average; the report says which it used.
 FALLBACK_USD_PER_PAGE = 0.0225
+
+
+def _is_case(value):
+    import run_case_timeline as RCT
+    try:
+        RCT.validate_case(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _auction(entry):
@@ -231,7 +239,8 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
         if reason.startswith('Vision returned unreadable'):
             stuck_pages.setdefault(ref, set()).add(gap.get('page'))
         elif re.search(r'budget|cap or reader stop|paid_read_not_selected|APIStatus|APIConnection|'
-                       r'RateLimit|Timeout|overloaded|NotConfigured|not configured|ANTHROPIC_API_KEY|'
+                       r'RateLimit|Timeout|overloaded|InternalServer|ServiceUnavailable|Connection|'
+                       r'Error code: 5\d\d|NotConfigured|not configured|ANTHROPIC_API_KEY|'
                        r'SDK is not installed', reason, re.I):
             rebuy.setdefault(ref, set()).add(gap.get('page'))
         else:
@@ -241,27 +250,38 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     done = {Path(f).name for f in bought['evidence_files']}
     # Only the rows the paid reader would walk get the (hash-keyed, whole-file) OCR lookup.
     order = [_with_cached_ocr(r, base) for r in DP.timeline_read_order(plan, rows)['order']]
+    # The judgment's documents the plan holds out of the order (an undated entry, no image
+    # count): the reader defers them, but they still decide whether the judgment is fully read.
+    in_order = {r.get('source_ref') for r in order}
+    held = [_with_cached_ocr(r, base) for r in rows
+            if str(r.get('entry_ref') or '') == target and r.get('source_ref') not in in_order]
+
+    def pages_left(row, pages):
+        ref = row.get('source_ref')
+        key = 'amount-vision-' + hashlib.sha256(str(ref).encode()).hexdigest() + '.json'
+        if key not in done:
+            return len(pages)
+        if ref in stuck_docs:
+            return 0
+        detail = DS.pipeline_load(Path(base) / key) or {}
+        # Amount pages the free OCR found after the purchase are new pages to buy.
+        fresh = set(pages) - set(detail.get('selected_pages') or pages)
+        return len(((rebuy.get(ref) or set()) | fresh) - (stuck_pages.get(ref) or set()))
+
     need = []          # (is_target, pages) for every amount-bearing row with pages left to buy
     target_amount_rows = 0
-    for row in order:
+    held_unread = False
+    for row in order + held:
         is_target = str(row.get('entry_ref') or '') == target
         pages = amounts.amount_page_numbers(row.get('reading') or {})
         if not pages:
             continue
         target_amount_rows += is_target
-        ref = row.get('source_ref')
-        key = 'amount-vision-' + hashlib.sha256(str(ref).encode()).hexdigest() + '.json'
-        if key in done:
-            if ref in stuck_docs:
-                continue
-            detail = DS.pipeline_load(Path(base) / key) or {}
-            # Amount pages the free OCR found after the purchase are new pages to buy.
-            fresh = set(pages) - set(detail.get('selected_pages') or pages)
-            left = ((rebuy.get(ref) or set()) | fresh) - (stuck_pages.get(ref) or set())
-            if left:
-                need.append((is_target, len(left)))
-            continue
-        need.append((is_target, len(pages)))
+        left = pages_left(row, pages)
+        if row in held:
+            held_unread = held_unread or bool(left)
+        elif left:
+            need.append((is_target, left))
     notes = [out['detail']] if out.get('detail') else []
     # The timeline's own gaps on the target entry: a missing attachment, a page neither text nor
     # OCR could read, pages never assessed. Any of them means an amount page may be unseen.
@@ -269,7 +289,7 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
                           if str(g.get('entry_id') or '') == target})
     # Only the judgment's own documents decide a verdict. Another filing without its OCR can hide
     # pages the reader buys first, so it only makes the price a floor, and the note says so.
-    if any(r.get('_ocr_unreachable') for r in order
+    if any(r.get('_ocr_unreachable') for r in order + held
            if str(r.get('entry_ref') or '') == target):
         out['ocr_unreachable'] = True
         # The judgment's own OCR-only pages are unseen, so both of its counts are floors.
@@ -296,11 +316,18 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     elif out.get('ocr_unreachable'):
         # Without the free OCR, amount pages may be missing from every count below.
         out['state'] = 'report_on_pass_machine'
+    elif held_unread:
+        # Part of the judgment carries amount pages the reader defers: never verified, never
+        # priced. The fix is the docket entry.
+        out['state'] = 'judgment_held_by_docket_plan'
+        doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
+        notes.insert(0, (','.join(doc.get('gaps') or []) or 'not_eligible')
+                     + ': unread amount pages the reader defers')
     elif target_gaps:
         out['state'] = 'judgment_incomplete'
         notes.append('timeline gaps on the judgment: ' + ', '.join(target_gaps))
     elif (target_checks and all(c.get('ok') for c in target_checks)
-          and _every_document_checked(target, target_checks, order, done)):
+          and _every_document_checked(target, target_checks, order + held, done)):
         # Every printed total on every document of the target reproduces to the cent, no amount
         # page of it is unread, and the timeline has no gap on it. One total agreeing while
         # another fails, or a judgment read with no total at all, is not this.
@@ -357,7 +384,9 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
             skipped += 1
             continue
         try:
-            RCT.timeline_case(case, today, collect=collect)   # shared=None: no API client, $0
+            # The date each case is built, not the pass's start: a pass that crosses midnight
+            # would otherwise treat that day's docket entries as future ones.
+            RCT.timeline_case(case, today or date.today(), collect=collect)   # shared=None: $0
             done += 1
             log.setdefault('built', {})[case] = {'at': time.time(), 'collect': bool(collect)}
             (log.get('errors') or {}).pop(case, None)
@@ -368,7 +397,6 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
             (log.get('built') or {}).pop(case, None)
             log.setdefault('errors', {})[case] = '%s %s: %s' % (
                 date.today().isoformat(), type(exc).__name__, str(exc)[:200])
-        log['last'] = case
         if save:
             save()
     return done, skipped, errors
@@ -483,8 +511,8 @@ def main(argv=None):
     import run_documents as runner
     today = date.today()
     entries = load_entries(runner, args.leads_file)
-    skipped_ids = [e['case'] for e in entries if not CASE_RE.fullmatch(e['case'])]
-    entries = [e for e in entries if CASE_RE.fullmatch(e['case'])]
+    skipped_ids = [e['case'] for e in entries if not _is_case(e['case'])]
+    entries = [e for e in entries if _is_case(e['case'])]
     if args.days is not None:
         entries = [e for e in entries if _auction(e) and 0 <= (_auction(e) - today).days <= args.days]
     out_dir = Path(case_review.output_path('judgment-plan/.keep')).parent
@@ -504,7 +532,8 @@ def main(argv=None):
         import document_store as DS
         def save():                              # after every case: a killed pass keeps progress
             DS._atomic_write_text(str(log_path), json.dumps(log, indent=2))
-        done, skipped, errors = run_pass(runner, entries, today, args.collect, log, args.limit, save)
+        done, skipped, errors = run_pass(runner, entries, None, args.collect, log, args.limit, save)
+        today = date.today()        # the report's as_of: after the pass, which may cross midnight
         print('  pass: %d built, %d built in the last 20h, %d errors (log %s)'
               % (done, skipped, errors, log_path))
     rows, rate, sample = plan(runner, entries, today, log)

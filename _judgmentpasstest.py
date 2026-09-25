@@ -376,6 +376,36 @@ class Assess(unittest.TestCase):
         self.assertEqual(got['state'], 'judgment_held_by_docket_plan')
         self.assertTrue(got['detail'].startswith('entry_date_unknown'))
 
+    def test_held_judgment_read_and_failing_is_read_not_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        bad = [{'ok': False, 'amount': 1, 'page': 2, 'reason': 'x', 'pages': [], 'run': [],
+                'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=bad):
+            got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_held_judgment_with_an_unbought_document_is_never_verified(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9')
+        row = {'source_ref': 'court:9:2', 'manifest': {'sha256': 'h9b'},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'Total $9.00'}]}}
+        (self.base / (hashlib.sha256(b'j2').hexdigest() + '.json')).write_text(json.dumps(row))
+        ok = [{'ok': True, 'amount': 1, 'page': 2, 'reason': '', 'pages': [], 'run': [],
+               'components': [], 'credits': [], 'rates': [], 'subtotals': [], 'component_rows': []}]
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('judgment_held_by_docket_plan', 0))
+
+    def test_server_error_is_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'InternalServerError: Error code: 500'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': [
             {'entry_id': '9', 'date': '2026-01-01', 'status': 'operative', 'role': 'judgment'},
@@ -445,6 +475,17 @@ class Fresh(unittest.TestCase):
 
 
 class Pass(unittest.TestCase):
+    def test_each_case_built_as_of_its_own_day(self):
+        runner = mock.Mock(COUNTY='MIAMI-DADE')
+        days = iter([date(2026, 9, 25), date(2026, 9, 26)])
+        with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
+                mock.patch.object(JP, 'built_recently', return_value=False), \
+                mock.patch.object(JP, 'date', mock.Mock(today=lambda: next(days))), \
+                mock.patch('run_case_timeline.timeline_case') as build:
+            JP.run_pass(runner, [{'case': 'a'}, {'case': 'b'}], None, False, {})
+        self.assertEqual([c.args[1] for c in build.call_args_list],
+                         [date(2026, 9, 25), date(2026, 9, 26)])
+
     def test_limit_counts_worked_cases_and_clears_old_errors(self):
         import time
         runner = mock.Mock(COUNTY='MIAMI-DADE')
