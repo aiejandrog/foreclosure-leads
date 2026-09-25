@@ -27,6 +27,7 @@ arithmetic agreement on one filing (see run_case_timeline.read_amounts), never a
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -125,6 +126,13 @@ def _target(plan, controlling):
     if operative:
         best = max(operative, key=lambda j: (j['date'], _entry_order(j['entry_id'])))
         return str(best['entry_id']), 'latest_operative'
+    # The reconciliation could not tie them together (two same-day entries, a vacatur naming no
+    # judgment): the latest unclear one is still the one to read, and the basis says so.
+    unclear = [j for j in judgments if j.get('status') == 'unclear'
+               and j.get('role') not in ('supplemental', 'docket_duplicate') and j.get('date')]
+    if unclear:
+        best = max(unclear, key=lambda j: (j['date'], _entry_order(j['entry_id'])))
+        return str(best['entry_id']), 'latest_unclear'
     return None, ('no_operative_judgment' if judgments else 'no_judgment_on_docket')
 
 
@@ -159,15 +167,21 @@ def assess(case, base, timeline, as_of):
         out['state'] = why
         return out
     out.update(target_entry=target, target_basis=why)
-    rows = [_with_cached_ocr(r, base) for r in RCT.load_rows(base)]
+    rows = RCT.load_rows(base)
     bought = RCT.read_amounts(rows, base)
     if any(c.get('ok') and str(c.get('entry_id')) == target for c in bought['amount_checks']):
         out['state'] = 'verified'
         return out
-    gapped = {g.get('source_ref') for g in bought['gaps']}
+    # Pages a re-run would actually bill: a page the reader never reached (cap, error). A page it
+    # read and called unreadable is a ledger-cache hit at $0 with the same answer, so not priced.
+    rebuy = {}
+    for gap in bought['gaps']:
+        if not str(gap.get('reason') or '').startswith('Vision returned unreadable'):
+            rebuy.setdefault(gap.get('source_ref'), set()).add(gap.get('page'))
     done = {Path(f).name for f in bought['evidence_files']}
-    order = DP.timeline_read_order(plan, rows)['order']
-    need = []          # (is_target, pages) for every amount-bearing row not yet bought in full
+    # Only the rows the paid reader would walk get the (hash-keyed, whole-file) OCR lookup.
+    order = [_with_cached_ocr(r, base) for r in DP.timeline_read_order(plan, rows)['order']]
+    need = []          # (is_target, pages) for every amount-bearing row with pages left to buy
     target_amount_rows = 0
     for row in order:
         pages = amounts.amount_page_numbers(row.get('reading') or {})
@@ -176,7 +190,10 @@ def assess(case, base, timeline, as_of):
         is_target = str(row.get('entry_ref') or '') == target
         target_amount_rows += is_target
         key = 'amount-vision-' + hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest() + '.json'
-        if key in done and row.get('source_ref') not in gapped:
+        if key in done:
+            left = rebuy.get(row.get('source_ref')) or set()
+            if left:
+                need.append((is_target, len(left)))
             continue
         need.append((is_target, len(pages)))
     if any(t for t, _ in need):
@@ -190,9 +207,14 @@ def assess(case, base, timeline, as_of):
     else:
         doc = next((d for d in plan['documents'] if str(d['entry_id']) == target), {})
         fetched = any(str(r.get('entry_ref') or '') == target for r in rows)
-        if not fetched or not doc.get('eligible_for_acquisition'):
+        if not fetched:
             out.update(state='judgment_not_fetched',
                        detail=','.join(doc.get('gaps') or []) or 'not_downloaded')
+        elif not doc.get('eligible_for_acquisition'):
+            # On disk, but the docket plan holds the entry (undated, no image count), so the paid
+            # reader defers it. The fix is the docket entry, not another download.
+            out.update(state='judgment_held_by_docket_plan',
+                       detail=','.join(doc.get('gaps') or []) or 'not_eligible')
         else:
             # Fetched, but no page carries a printed dollar figure the free reads could see: a
             # paid read would have nothing selected. Named, never counted as verified.
@@ -200,7 +222,7 @@ def assess(case, base, timeline, as_of):
     return out
 
 
-def run_pass(runner, entries, today, collect, log, limit=None):
+def run_pass(runner, entries, today, collect, log, limit=None, save=None):
     import run_case_timeline as RCT
     done = errors = skipped = 0
     for entry in entries:
@@ -223,6 +245,8 @@ def run_pass(runner, entries, today, collect, log, limit=None):
             errors += 1
             log.setdefault('errors', {})[case] = '%s: %s' % (type(exc).__name__, str(exc)[:200])
         log['last'] = case
+        if save:
+            save()
     return done, skipped, errors
 
 
@@ -262,8 +286,9 @@ def render(rows, skipped_ids, rate, sample, today):
         return next(name for name, limit in windows if days <= limit)
     names = [w[0] for w in windows] + ['sale passed', 'no sale date']
     states = ['verified', 'needs_paid_read', 'read_not_verified', 'judgment_not_fetched',
-              'judgment_without_amount_page', 'no_operative_judgment', 'no_judgment_on_docket', 'docket_incomplete',
-              'no_docket', 'unreadable_on_disk']
+              'judgment_held_by_docket_plan', 'judgment_without_amount_page',
+              'no_operative_judgment', 'no_judgment_on_docket', 'docket_incomplete', 'no_docket',
+              'unreadable_on_disk']
     lines = ['# Miami judgment amounts: court-copy state and read plan (%s)' % today.isoformat(), '',
              'Built from files on disk after a $0 docket pass. Case numbers only; no names. '
              '"verified" means the court copy\'s line items reproduce its printed total to the cent '
@@ -328,10 +353,14 @@ def main(argv=None):
     print('judgment_pass: %d docketed Miami cases, %d tax-deed IDs left out; $0: no API client, '
           'no token mints, no captcha' % (len(entries), len(skipped_ids)))
     if not args.report_only:
-        try:
-            done, skipped, errors = run_pass(runner, entries, today, args.collect, log, args.limit)
-        finally:
-            log_path.write_text(json.dumps(log, indent=2), encoding='utf-8')
+        if os.name != 'nt':
+            # The pass OCRs through Windows' own reader; anywhere else every page would be cached
+            # as ocr_failed and a later Windows pass would trust that and never read it.
+            parser.error('the pass runs on Windows only; use --report-only elsewhere')
+        import document_store as DS
+        def save():                              # after every case: a killed pass keeps progress
+            DS._atomic_write_text(str(log_path), json.dumps(log, indent=2))
+        done, skipped, errors = run_pass(runner, entries, today, args.collect, log, args.limit, save)
         print('  pass: %d built, %d built in the last 20h, %d errors (log %s)'
               % (done, skipped, errors, log_path))
     rows, rate, sample = plan(runner, entries, today, log)

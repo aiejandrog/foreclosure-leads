@@ -124,6 +124,28 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
 
+    def test_unclear_judgments_still_get_a_target(self):
+        self.assertEqual(JP._target({'judgments': {'judgments': [
+            {'entry_id': '9', 'date': '2026-01-01', 'status': 'unclear', 'role': 'judgment'},
+            {'entry_id': '4', 'date': '2025-01-01', 'status': 'vacated', 'role': 'judgment'}]}},
+            None), ('9', 'latest_unclear'))
+
+    def test_partial_purchase_prices_only_unreached_pages(self):
+        ref = _row(self.base, '9', '$1.00', 'j')                 # amount pages 1 and 2
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Amount page not read; cap or reader stop'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Vision returned unreadable'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'read_not_verified')      # re-reading buys the same answer
+
+    def test_on_disk_but_held_by_plan(self):
+        _row(self.base, '9', '$1.00', 'j')
+        got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])])
+        self.assertEqual((got['state'], got['detail']), ('judgment_held_by_docket_plan', 'entry_date_unknown'))
+
     def test_same_day_tie_takes_the_later_entry_numerically(self):
         self.assertEqual(JP._target({'judgments': {'judgments': [
             {'entry_id': '9', 'date': '2026-01-01', 'status': 'operative', 'role': 'judgment'},
@@ -135,6 +157,13 @@ class Assess(unittest.TestCase):
         got = self.run_assess([('4', 'final_judgment', False, ['no_image_count_established']),
                                ('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'judgment_without_amount_page')
+
+    def test_pass_refuses_off_windows(self):
+        with mock.patch.object(JP.os, 'name', 'posix'), \
+                mock.patch.object(JP, 'load_entries', return_value=[]), \
+                mock.patch('case_review.output_path', return_value=str(self.base / 'jp' / '.keep')):
+            with self.assertRaises(SystemExit):
+                JP.main(['--collect'])
 
     def test_login_walled_judgment_named(self):
         got = self.run_assess([('9', 'final_judgment', False, ['no_image_count_established'])])
