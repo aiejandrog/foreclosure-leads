@@ -435,7 +435,9 @@ BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'pl', '
 # A verdict older than this is not shown: a docket read that keeps failing must not leave last
 # week's "SALE AT RISK" on the board after the docket has moved on. The nightly reads every case
 # in the window, so two days allows one missed night.
-MAX_AGE_DAYS = 2
+# Three since read_order(): a sale more than HOT_AHEAD days out is re-read on a rotation that takes
+# about two nights for a 200-case window. Sales near today are re-read every night regardless.
+MAX_AGE_DAYS = 3
 EV_SHIP = 3            # newest docket lines behind the verdict, shipped so the chip can cite them
 
 
@@ -475,6 +477,48 @@ def load_for_board(rows, path=OUT, today=None):
             r['auction'] = nd.strftime('%m/%d/%Y')
         r['sr'] = sr
         n += 1
+    return n
+
+
+HOT_BEHIND, HOT_AHEAD = 2, 3     # sales this close to today are re-read every night
+
+
+def read_order(win, res, today):
+    """Which window cases to read tonight, in order. A night's budget (DEADLINE_S) does not cover a
+    200-case window, and nearest-first alone re-read the same near half every night, so sales 2-4
+    weeks out were never read. Order: sales within HOT_BEHIND days back / HOT_AHEAD days ahead
+    first (a result or a last-minute motion lands there), then everything else by how old its
+    verdict is (never read first), nearest sale breaking ties. Cases already read today for the
+    same sale are skipped.
+
+    What this guarantees is that no case starves, not a fixed cycle: the hot cases take their
+    share every night, so the rest are covered in (cold cases / (reads per night - hot cases))
+    nights. A verdict older than MAX_AGE_DAYS is hidden rather than shown stale, and main()
+    prints coverage_gap() so a window that outgrows the budget shows up in the refresh log."""
+    stamp = today.isoformat()
+    out = []
+    for c, (d, seen) in win.items():
+        v = res.get(c) or {}
+        if v.get('ts') == stamp and v.get('sale') == d.isoformat():
+            continue
+        dist = (d - today).days
+        hot = -HOT_BEHIND <= dist <= HOT_AHEAD
+        ts = _to_date(v.get('ts')) if v.get('sale') == d.isoformat() else None
+        age = (today - ts).days if ts else 10 ** 6
+        out.append((0 if hot else 1, 0 if hot else -age, abs(dist), c, d, seen))
+    out.sort()
+    return [(c, d, seen) for _, _, _, c, d, seen in out]
+
+
+def coverage_gap(win, res, today):
+    """Window cases with no verdict the board would show (none, another sale's, or older than
+    MAX_AGE_DAYS). Above 0 night after night means the budget is short for the window."""
+    n = 0
+    for c, (d, _) in win.items():
+        v = res.get(c) or {}
+        ts = _to_date(v.get('ts'))
+        if v.get('sale') != d.isoformat() or not ts or (today - ts).days > MAX_AGE_DAYS:
+            n += 1
     return n
 
 
@@ -546,11 +590,7 @@ def main():
             return 2
         todo = [(c, sd, (win.get(c) or (None, None))[1])]
     else:
-        # nearest-to-now first: yesterday's and today's sales, then this week, then the rest
-        todo = sorted(((c, d, seen) for c, (d, seen) in win.items()), key=lambda t: abs((t[1] - today).days))
-        stamp = today.isoformat()
-        todo = [t for t in todo
-                if (res.get(t[0]) or {}).get('ts') != stamp or (res.get(t[0]) or {}).get('sale') != t[1].isoformat()]
+        todo = read_order(win, res, today)
         todo = todo[:a.limit]
     print('sale results: %d case(s) in the window, %d to read' % (len(win), len(todo)))
 
@@ -587,6 +627,10 @@ def main():
         del res[c]
     _save(res)
     print('sale results: %d read, %d failed, %d on file -> sale_results.json' % (ok, fail, len(res)))
+    gap = coverage_gap(win, res, today)
+    if gap:
+        print('sale results: %d of %d window case(s) have no current verdict and show no chip; if this '
+              'stays above 0 night after night, raise SALE_RESULTS_DEADLINE (now %ds)' % (gap, len(win), DEADLINE_S))
     report(res, today)
     return 0
 
