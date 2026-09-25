@@ -551,6 +551,11 @@ _lr4 = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 3000, 'nrec': 80},
                 {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30, 'other': [_oc]})
 check("an association total smaller than the plaintiff's claim never held it: kept, and not netted against the judgment",
       _lr4['hoa_open'] == 3000 and not _lr4.get('hoa_own_in') and FLD._hoa_own_out(_lr4), _lr4)
+_lr5 = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'nrec': 30, 'traced': '2026-06-01'},
+                {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 20,
+                 'other': [dict(_oc, amt=5000, d='3/1/2024'), dict(_oc, doc='FINAL JUDGMENT', amt=25000, d='5/1/2026')]})
+check("an association total the size of the plaintiff's claim, beside its bigger judgment, keeps the netting",
+      _lr5['hoa_open'] == 5000 and _lr5.get('hoa_own_in') and not FLD._hoa_own_out(_lr5), _lr5)
 check("a kept association total that still holds the plaintiff's claim keeps the netting",
       _lr3.get('hoa_own_in') and not FLD._hoa_own_out(_lr3), _lr3)
 
@@ -1186,6 +1191,39 @@ try:
     check("--repull: the next run skips Camoufox for it and pays for the surname search once",
           _cf5 == [('NARROW', 'AMY')] and _paid5 == [('NARROW', 'AMY')] and 'other' in _o5[1]
           and 'wider_repull' not in _o5[1], (_cf5, _paid5, _o5[1]))
+    # a free Camoufox search that misses the parcel flags the chain; only the paid surname search marks it
+    _t6 = tempfile.mkdtemp()
+    json.dump([{'Case #': '2099-000601-CA-01', 'owner_clean': 'BEA MISSED', 'Folio': FOLIO, 'judgment': 1}],
+              open(os.path.join(_t6, 'leads_final.json'), 'w'))
+    json.dump({'2099-000601-CA-01': {'conf': 'ok', 'liens': []}}, open(os.path.join(_t6, 'records_liens.json'), 'w'))
+    open(os.path.join(_t6, 'gen_records_qs.py'), 'w').write('')
+    _cf6, _paid6, _o6 = [], [], []
+    _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                           'camoufox_session', 'camoufox_qs', 'mint_and_fetch', 'time')}
+    try:
+        RL.LEADS, RL.OUT = os.path.join(_t6, 'leads_final.json'), os.path.join(_t6, 'records_liens.json')
+        RL.QS_CACHE, RL.HERE = os.path.join(_t6, 'records_qs.json'), _t6
+        RL.records_by_qs = lambda qs: [_far] if qs == 'tokF' else None
+        RL.fetch_via_turnstile = lambda sp, tries=3: _paid6.append(tuple(sp)) or [_far]
+        RL.camoufox_session = lambda: (contextlib.nullcontext(), object())
+        RL.camoufox_qs = lambda browser, sp: _cf6.append(tuple(sp)) or 'tokF'
+        RL.mint_and_fetch = lambda *a, **k: None
+        RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                        time=__import__('time').time)
+        for _ in range(3):
+            json.dump({}, open(os.path.join(_t6, 'records_qs.json'), 'w'))
+            sys.argv = ['records_liens.py', '--repull', '--max-spend', '0.0066', '--spend-ledger', os.path.join(_t6, 's.json')]
+            with contextlib.redirect_stdout(io.StringIO()):
+                RL.main()
+            _o6.append(json.load(open(os.path.join(_t6, 'records_liens.json')))['2099-000601-CA-01'])
+    finally:
+        for k, v in _saved.items():
+            setattr(RL, k, v)
+        sys.argv = _argv
+    check("--repull: a free search that misses the parcel flags the chain for the paid search, never marks it",
+          _o6[0].get('wider_repull') and not _o6[0].get('repull_tried'), _o6[0])
+    check("--repull: the paid surname search that also misses it marks it, and it is never paid for again",
+          _o6[1].get('repull_tried') and _cf6 == [('MISSED', 'BEA')] and _paid6 == [('MISSED', 'BEA')], (_cf6, _paid6, _o6))
 finally:
     if _real_cs is not None:
         sys.modules['captcha_solver'] = _real_cs

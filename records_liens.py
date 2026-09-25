@@ -242,7 +242,7 @@ def _carry_lien_totals(old, new, out):
             out[k] = new.get(k) or 0
         return
     own = {'hoa_open': 0, 'code_open': 0, 'irs_open': 0}
-    claim_out = False                   # the plaintiff's own claim of lien was taken out of hoa_open
+    claim = 0                           # the plaintiff's own claim(s) of lien among those hoa_open rows
     if legacy:
         _tr = str(old.get('traced') or '')
         for o in new.get('other') or []:
@@ -257,7 +257,7 @@ def _carry_lien_totals(old, new, out):
                 own[k] += o.get('old_amt') or o['amt']       # the unrounded figure the old code summed
                 if k == 'hoa_open' and re.search(r'\bLIEN\b', str(o.get('doc') or ''), re.I) \
                         and not re.search(r'JUDG|LIS PENDENS', str(o.get('doc') or ''), re.I):
-                    claim_out = True
+                    claim += o.get('old_amt') or o['amt']
     for k in own:
         # subtracted only when the old total is at least the claim: a smaller total never held it,
         # and taking it out would erase a real lien the re-read did not reach
@@ -267,10 +267,13 @@ def _carry_lien_totals(old, new, out):
     if legacy and any(out[k] > (new.get(k) or 0) for k in own):
         out['lien_totals_kept'] = ('lien totals from the earlier, wider search (%s records) kept; they may '
                                    'include this case\'s own judgment' % (old.get('nrec') or '?'))
-    if legacy and out['hoa_open'] > (new.get('hoa_open') or 0) and not (claim_out and own['hoa_open']):
+    _oh = old.get('hoa_open') or 0
+    if legacy and out['hoa_open'] > (new.get('hoa_open') or 0) and not (
+            claim and (_oh + 1 >= own['hoa_open'] or _oh + 1 < claim)):
         # the association total kept is the old analyzer's, which summed the plaintiff's own claim:
-        # the board must keep netting the judgment against it. Not when the re-read found that claim:
-        # either it was taken out above, or the old total was smaller than it and never held it.
+        # the board must keep netting the judgment against it. Not when the re-read found that claim
+        # and it was taken out above, nor when the old total is smaller than the claim ALONE (it never
+        # held it; smaller than the claim plus the association's judgment proves nothing).
         out['hoa_own_in'] = True
 
 
@@ -387,6 +390,8 @@ def _ledger_save(charged=None, final=False):
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(led, f, indent=1)
             os.replace(tmp, path)
+            if final:
+                _SPEND['led_written'] = True
             return
         except OSError:
             time.sleep(0.25 * (i + 1))
@@ -1389,7 +1394,7 @@ def main():
         ap.error('--spend-ledger needs a --max-spend')
     if a.repull and a.cached_only:
         ap.error('--repull and --cached-only contradict each other')
-    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, prior=0.0, ledger=None, led=None, stopped='',
+    _SPEND.update(cap=a.max_spend, submits=0, bal0=None, prior=0.0, ledger=None, led=None, led_written=False, stopped='',
                   unit=PAID_SOLVE_USD)
     _lock = None
     if a.spend_ledger and not a.dry_run:
@@ -1729,10 +1734,18 @@ def _run(a, ap):
                     # failed re-read, not news that the recorded mortgages went away. Keep the chain.
                     kept += 1
                     print(f"  ..  {case:22} {oc:26} re-read found nothing on this parcel; old chain kept")
-                    if a.repull and not _def_blocked:
-                        # the searches were answered and none reached this parcel: marked, never paid
-                        # for again. A defendant the clerk never answered leaves it for a later run.
+                    if a.repull and not _def_blocked and _src == 'paid':
+                        # the paid surname search was answered and reached nothing on this parcel:
+                        # marked, never paid for again. A defendant the clerk never answered leaves
+                        # it for a later run.
                         out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
+                        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+                    elif a.repull and not _def_blocked:
+                        # a free search (first AND last name) missed the parcel: the next --repull
+                        # pays for the wider surname search instead of marking the chain searched
+                        out[case]['wider_repull'] = ('%s: a free re-read searched as %s did not reach this '
+                                                     'parcel; the earlier chain is kept whole'
+                                                     % (time.strftime('%Y-%m-%d'), _searched))
                         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                     continue
                 if _old and _mortgages_narrower(_old, res):
@@ -1799,8 +1812,9 @@ def _run(a, ap):
         if _SPEND['ledger']:
             _ledger_save(charged=(_SPEND['bal0'] - b1) if b1 is not None else None, final=True)
             _cu = (_SPEND.get('led') or {}).get('counted_usd')
-            print(f"     ledger {_SPEND['ledger']}: " + (f"${_cu:.4f} of ${_usd(_SPEND['cap'])} used" if _cu is not None
-                                                        else "not written by this run (another run holds it)"))
+            print(f"     ledger {_SPEND['ledger']}: " + (f"${_cu:.4f} of ${_usd(_SPEND['cap'])} used"
+                                                        if _SPEND.get('led_written') and _cu is not None
+                                                        else "NOT written by this run (see above)"))
         if b1 is not None:
             print(f"     ACTUAL CHARGE: balance ${_SPEND['bal0']:.4f} -> ${b1:.4f} = ${_SPEND['bal0'] - b1:.4f} "
                   f"(account-wide: anything else solving at the same time counts too)")
