@@ -438,8 +438,14 @@ _nt = RL.analyze([deed, rec('NOTICE', '3/3/2022', '33500', '23', 0, 'OWNER TESTE
                   rec('CERTIFICATE OF TITLE', '3/3/2022', '33500', '24', 250000, 'OWNER TESTER', first='MIAMI-DADE COUNTY CLERK'),
                   rec('WAIVER OF LIEN', '3/3/2022', '33500', '25', 0, 'OWNER TESTER', first='CITY OF MIAMI')],
                  FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
-check('a City notice, a clerk certificate and a lien waiver are shown, never counted as debt',
-      _nt['code_open'] == 0 and _nt['other_open_unpriced'] == 0 and ES.state_of(_nt) == 'clear', _nt['other'])
+check('a clerk certificate and a lien waiver are shown, never counted; an unpriced City notice is a ceiling',
+      _nt['code_open'] == 0 and _nt['other_open_unpriced'] == 1 and ES.state_of(_nt) == 'unpriced', _nt['other'])
+_np = RL.analyze([deed, rec('NOTICE - NOT', '3/3/2022', '33500', '23', 9000, 'OWNER TESTER', first='CITY OF MIAMI'),
+                  rec('NOTICE - NOT', '4/4/2022', '33600', '23', 48000, 'OWNER TESTER',
+                      first='INTERNAL REVENUE SERVICE', folio='', subdiV_NAME='')],
+                 FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+check("a priced 'NOTICE - NOT' from a City or the IRS is counted, as main counted it",
+      _np['code_open'] == 9000 and _np['irs_open'] == 48000, _np['other'])
 _cb = RL.analyze([deed, rec('JUDGMENT', '4/4/2021', '33000', '26', 20000, 'TESTER OWNER', first='COMMUNITY BANK OF FLORIDA',
                             folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
 check("COMMUNITY BANK's money judgment follows the owner like any other", _cb['code_open'] == 20000, _cb['other'])

@@ -934,8 +934,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # recognised creditor's row counts unless its document says it is NOT a claim; an unrecognised
     # creditor's counts only when the document says lien, judgment or warrant.
     _CLAIM_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|\bWARRANTS?\b', re.I)
-    _NOT_CLAIM_DOC_RE = re.compile(r'WAIVER|CONTEST|SUBORDINAT|FINANCING STATEMENT|CERTIFICATE OF TITLE|'
-                                   r'^NOTICE(?!.*\bLIEN\b)', re.I)
+    _NOT_CLAIM_DOC_RE = re.compile(r'WAIVER|CONTEST|SUBORDINAT|FINANCING STATEMENT|CERTIFICATE OF TITLE', re.I)
+    # a NOTICE from a recognized creditor (the IRS, a City, an association) still counts: Miami-Dade
+    # files federal tax liens and code liens as 'NOTICE - NOT', and main summed them
     _CREDITOR_RE = re.compile('|'.join(x.pattern for x in (_IRS_RE, _DOR_RE, _CODE_RE, _HOA_DOC_RE, _ASSN_DOC_RE)), re.I)
     def _here(r):
         rf = norm_folio(r.get('foliO_NUMBER', ''))
@@ -1147,8 +1148,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if row['st'] == 'RELEASED' or row.get('own_case') or kind == 'lis_pendens':
             continue
         if _NOT_CLAIM_DOC_RE.search(_full) or (kind == 'other' and not _CLAIM_DOC_RE.search(_full)):
-            continue                                        # a notice, a title certificate, a financing
-                                                            # statement, a waiver: shown, never counted
+            continue                                        # a title certificate, a financing statement,
+                                                            # a waiver: shown, never counted
         if not row['amt']:
             other_unpriced += 1                             # found, open, amount not published: a count
             continue
