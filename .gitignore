@@ -518,3 +518,4 @@ deal_desk.json
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
 # blocked the publish. This suite fails if the file is written before the restore.
 !_stayfiletest.py
+!_judgmentpasstest.py
