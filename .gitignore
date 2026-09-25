@@ -15,7 +15,15 @@ _*.py
 !_calldetailtest.py
 !_batsyntaxtest.py
 !_refreshexittest.py
+# 2026-09-23: BSG Warmup failed silently on 09-17 and 09-19..21 (pythonw, no console). This suite pins
+# the retries and the failure log, and runs warmup.py only as a temp copy with no real key and SMTP faked.
+!_warmuperrtest.py
 !_lpchaintest.py
+!_casebudgettest.py
+!_moneytest.py
+!_coveragetest.py
+!_presenttitletest.py
+!_rankingtest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -511,7 +519,11 @@ deal_desk.json
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
 # blocked the publish. This suite fails if the file is written before the restore.
 !_stayfiletest.py
-
+# sale_results.json: docket sale verdicts per case (sale_results.py), rebuilt nightly, carries docket text.
+sale_results.json
+sale_results.json.tmp
+# _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
+!_saleresultstest.py
 # publish_lock.py's lockfile. Per-machine run state, never repo content: committing it would ship
 # one box's "a runner is publishing right now" to every other checkout and wedge them all until it
 # aged past the six-hour stale budget. The .stale.* form is the rename a stale-lock break goes

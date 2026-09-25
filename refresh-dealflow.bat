@@ -422,6 +422,13 @@ rem  this repo is PUBLIC). The [4/5] build then bakes the latest call per lead i
 rem  payload as row.qc. Gated on quo.key: no key, no step, zero noise.
 if exist quo.key python -u quo_sync.py --days 3 >> "%LOG%" 2>&1
 
+echo [3q/5] Sale results from the Miami-Dade docket - held, cancelled, moved, at risk, amended judgments...
+rem  sale_results.py reads the free OCS docket for every Miami case with a sale in the last 7 or next
+rem  30 days, including cases the scrape already dropped, and writes sale_results.json - gitignored.
+rem  The [4/5] rebuild bakes it as row.sr. Display only, gates nothing; capped at 420s. Never a gate:
+rem  a clerk outage costs the chips, never the publish.
+python -u sale_results.py >> "%LOG%" 2>&1
+
 echo [3p/5] Live dockets (Miami-Dade OCS JSON API) - the FILINGS, shown inline on the board...
 rem  A "click Docket, land on the docket" LINK is impossible: MD retired /ocs/Search.aspx and their
 rem  SPA refuses to render a case from a URL (the case-number token mints but resolves empty);
