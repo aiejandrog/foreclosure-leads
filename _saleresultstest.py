@@ -308,5 +308,15 @@ check('board: yesterday\'s read still shows', 'sr' in _by['C-3'], _by['C-3'])
 check('board: a reset to an EARLIER date never moves the clock back', _by['D-4']['auction'] == '09/28/2026', _by['D-4'])
 check('board: count', _n == 3, _n)
 
+# read order: hot sales first, then oldest verdict / never read, today's reads skipped
+_T = D(2026, 9, 25)
+_win = {'HOT': (D(2026, 9, 28), None), 'NEAR-FRESH': (D(2026, 10, 1), None), 'FAR-NEW': (D(2026, 10, 20), None),
+        'FAR-OLD': (D(2026, 10, 15), None), 'DONE': (D(2026, 9, 24), None), 'PAST': (D(2026, 9, 23), None)}
+_res = {'NEAR-FRESH': {'sale': '2026-10-01', 'ts': '2026-09-24'}, 'FAR-OLD': {'sale': '2026-10-15', 'ts': '2026-09-22'},
+        'DONE': {'sale': '2026-09-24', 'ts': '2026-09-25'}, 'HOT': {'sale': '2026-09-28', 'ts': '2026-09-24'}}
+_o = [c for c, _, _ in S.read_order(_win, _res, _T)]
+check('read order: hot first, never-read, oldest, freshest last; today\'s skipped',
+      _o == ['PAST', 'HOT', 'FAR-NEW', 'FAR-OLD', 'NEAR-FRESH'], _o)
+
 print('\n%d failed' % len(FAIL) if FAIL else '\nall passed')
 sys.exit(1 if FAIL else 0)
