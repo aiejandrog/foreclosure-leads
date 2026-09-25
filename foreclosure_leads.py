@@ -1600,6 +1600,44 @@ def subst_build_facts(tpl, updated):
     return out
 
 
+def restore_stays_from_cache(leads):
+    """Re-stamp the sale-history fields (the §362 stay flags among them) from the durable cache.
+
+    Runs in TWO places. make_tracker, so the board never depends on sale_history.py having run
+    after the scrape (see the comment there). And main(), BEFORE leads_final.json is written: the
+    scrape rewrites that file without the flags, and healthcheck's "§362 stay flags reach the build"
+    rule counts stays in the LEAD FILES against the cache. Written flagless, the file read 0 stays
+    while the board it produced carried them, and any run that ended before sale_history.py
+    re-stamped it (run-leads.bat never runs it) failed the compliance gate on a correct board.
+    Field mapping is sale_history.py:246-250 verbatim -- do not re-derive it. Returns the number of
+    ACTIVE stays restored.
+    """
+    _shc = {}
+    _shf = os.path.join(HERE, 'sale_history_cache.json')
+    if os.path.exists(_shf):
+        try: _shc = json.load(open(_shf, encoding='utf-8'))
+        except Exception: _shc = {}
+    _restored = 0
+    if _shc:
+        for r in leads:
+            ent = _shc.get(r.get('Case #') or '')
+            if not isinstance(ent, dict):
+                continue
+            if r.get('sale_survived') is None and ent.get('s') is not None:
+                r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
+            if ent.get('w') and not r.get('sale_who'):     r['sale_who'] = ent['w']
+            if ent.get('b') and not r.get('sale_bk'):      r['sale_bk'] = ent['b']
+            if ent.get('sl') and not r.get('sale_stay_lifted'): r['sale_stay_lifted'] = ent['sl']
+            if ent.get('a') and not r.get('sale_bk_active'):
+                r['sale_bk_active'] = True
+                r['sale_bk_date'] = ent.get('bd', '')
+                _restored += 1
+        if _restored:
+            print('sale-history cache: restored %d ACTIVE 362 stay flag(s) the scrape had wiped '
+                  '-> outreach stays gated' % _restored)
+    return _restored
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -1788,29 +1826,7 @@ def make_tracker(leads):
     # and the site hard-gates outreach on this flag, so a miss means soliciting someone under a
     # federal automatic stay. sale_history_cache.json is DURABLE, so read it here as the floor.
     # Field mapping is sale_history.py:246-250 verbatim — do not re-derive it.
-    _shc = {}
-    _shf = os.path.join(HERE, 'sale_history_cache.json')
-    if os.path.exists(_shf):
-        try: _shc = json.load(open(_shf, encoding='utf-8'))
-        except Exception: _shc = {}
-    if _shc:
-        _restored = 0
-        for r in leads:
-            ent = _shc.get(r.get('Case #') or '')
-            if not isinstance(ent, dict):
-                continue
-            if r.get('sale_survived') is None and ent.get('s') is not None:
-                r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
-            if ent.get('w') and not r.get('sale_who'):     r['sale_who'] = ent['w']
-            if ent.get('b') and not r.get('sale_bk'):      r['sale_bk'] = ent['b']
-            if ent.get('sl') and not r.get('sale_stay_lifted'): r['sale_stay_lifted'] = ent['sl']
-            if ent.get('a') and not r.get('sale_bk_active'):
-                r['sale_bk_active'] = True
-                r['sale_bk_date'] = ent.get('bd', '')
-                _restored += 1
-        if _restored:
-            print('sale-history cache: restored %d ACTIVE 362 stay flag(s) the scrape had wiped '
-                  '-> outreach stays gated' % _restored)
+    restore_stays_from_cache(leads)
     slim = []
     for r in leads:
         _ft = _fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
@@ -2251,6 +2267,20 @@ def make_tracker(leads):
                 _dkn += 1
         print(f'live dockets: {_dkn} lead(s) ship their filings inline (of {len(dkc)} cached)')
 
+    # SALE RESULTS (sale_results.py -> sale_results.json, gitignored, Miami-Dade docket). Held,
+    # cancelled, moved or at-risk sales and amended judgments, as `sr`. Only a verdict for the SAME
+    # sale date as the row attaches: a verdict about last month's sale must not describe this one.
+    # A docket-moved sale also moves `auction` to the court's new date (sr.was keeps the listed one);
+    # it runs BEFORE the re-clock below so `days` follows. The §362 stay gate stays on saleBkAct.
+    # Never fatal.
+    try:
+        from sale_results import load_for_board as _srload
+        _srn = _srload(slim, os.path.join(HERE, 'sale_results.json'))
+        if _srn:
+            print(f'sale results: {_srn} lead(s) carry a docket sale result')
+    except Exception as _sre:
+        print('sale results: skipped (%s)' % str(_sre)[:100])
+
     # bake code-enforcement liens (code_liens.py, free Miami-Dade CCVIOL ArcGIS, folio-keyed). A code
     # lien is a JUNIOR lien that never shows in the mortgage chain, so a lead reading "90% equity" can
     # be quietly underwater once the county's accrued fines attach. codeliens = [{case,st,stLabel,
@@ -2273,6 +2303,17 @@ def make_tracker(leads):
                 print(f"code liens: flagged {_cn} lead(s) with an open case or recorded code lien")
         except Exception as e:
             print(f"code_liens.json skipped ({e})")
+
+    # bake the Miami document dossiers (doc_board.py over run_documents' DEALFLOW_DIR/dossiers). A
+    # read judgment is NOT verified until the 12-case review, so `docs` rides beside the row and
+    # nothing here writes judg, payoff or eq. Never fatal: no folder = no chips.
+    try:
+        import doc_board
+        _dbn = doc_board.attach(slim, doc_board.load())
+        if _dbn:
+            print(f"documents: {_dbn} lead(s) carry a read-document summary (unverified, not in equity)")
+    except Exception as e:
+        print(f"document dossiers skipped ({e})")
 
     # bake the PropStream overlay (propstream_import.py, CSV bridge — PropStream has no API).
     # Advisory context on leads we already have: their AVM vs ours, open-loan balance, distress
@@ -3182,6 +3223,9 @@ def make_tracker(leads):
         'taxes':     sum(1 for d in slim if d.get('taxChecked')),
         'judgdt':    sum(1 for d in slim if d.get('jdate')),
         'ownflip':   sum(1 for d in slim if d.get('paOwner')),
+        # Miami rows carrying a document-dossier summary (doc_board). Census only for now: it is not in
+        # publish_guard.FIELDS until a few nights of real counts say what a wipeout looks like.
+        'docs':      sum(1 for d in slim if d.get('docs')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)
@@ -3399,6 +3443,8 @@ def main():
             if _zc: print(f"zillow seed: listing photos restored for {_zc} leads")
     except Exception as _e:
         print('zillow seed skipped:', _e)
+    # the file healthcheck measures must carry the stays the board will (restore_stays_from_cache)
+    restore_stays_from_cache(leads)
     json.dump(leads, open(os.path.join(HERE,'leads_final.json'),'w'), indent=1)
     make_tracker(leads)
     cols = ['tier','score','sale_type','AuctionDate','days_to_auction','Case #','opening_bid','filing_year','owners','Address','mailing_address',

@@ -1652,6 +1652,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
+            # docket sale result (sale_results.py -> row.sr): held / cancelled / moved / at risk /
+            # amended judgment. None on almost every row; the null-strip drops it.
+            'sr': (lambda v: ({k: v[k] for k in ('st', 'd', 'nd', 'was', 'why', 'amj', 'ama', 'bkb', 'obj', 'ev')
+                               if v.get(k) not in (None, '')} if isinstance(v, dict) and v.get('st') else None))(d.get('sr')),
             # ---- last Quo call (transcript-backed). None on most rows; the null-strip removes it.
             'qc': (lambda q: ({'w': str(q.get('at') or '')[:16], 'du': q.get('dur') or 0,
                                's': ' '.join(q.get('summary') or [])[:180],
@@ -4710,6 +4714,12 @@ function screenLead(){
   if(r.bk)           clock += '<span class="chip bad">'+r.bk+' bankruptcy filing'+(r.bk>1?'s':'')+'</span>';
   if(r.sl)           clock += '<span class="chip hot">stay LIFTED '+esc(r.sl)+'</span>';
   if(r.cs)           clock += '<span class="chip">case '+esc(r.cs)+'</span>';
+  if(r.sr){ var _sm=function(i){var m=String(i||'').match(/^\d{4}-(\d{2})-(\d{2})$/);return m?m[1]+'/'+m[2]:'';};
+    var _sl={held:'SOLD '+_sm(r.sr.d), cancelled:'sale CANCELLED '+_sm(r.sr.d), reset:'sale MOVED to '+_sm(r.sr.nd)+(r.sr.was?' (was '+_sm(r.sr.was)+')':''),
+             vacated:'sale SET ASIDE', redeemed:'REDEEMED after sale', at_risk:'sale AT RISK', unknown:'result not on docket yet'}[r.sr.st]||'';
+    if(_sl) clock += '<span class="chip '+((r.sr.st==='cancelled'||r.sr.st==='reset')?'hot':(r.sr.st==='held'?'bad':''))+'" title="'+esc((r.sr.why||'')+((r.sr.ev&&r.sr.ev.length)?' | docket: '+r.sr.ev.map(function(e){return _sm(e.d)+' '+e.x;}).join(' | '):''))+'">'+esc(_sl)+'</span>';
+    if(r.sr.bkb && r.sr.st==='held') clock += '<span class="chip bad">BK filed '+esc(_sm(r.sr.bkb))+', sale may not stand</span>';
+    if(r.sr.amj) clock += '<span class="chip">amended judgment '+esc(_sm(r.sr.amj))+(r.sr.ama?' $'+Math.round(r.sr.ama).toLocaleString():'')+'</span>'; }
   clock += '</div>';
 
   var mny = '<div class="grid">'
