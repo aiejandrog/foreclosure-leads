@@ -33,6 +33,7 @@ Run: python _mailguardtest.py
 """
 import io
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -165,7 +166,11 @@ rec('the old single end-of-run dump is gone',
 # The lane path inherits the header from send_server._smtp_send. The legacy fallback -- reached
 # only when `import send_server` failed -- builds its message by hand and used to set nothing,
 # which made it the one path that could mail a homeowner with no opt-out at all.
-_fallback = src_c.split("msg = MIMEText(body, 'plain', 'utf-8')", 1)[-1].split('sent += 1', 1)[0]
+# Sliced to the LAST line of the branch, not to `sent += 1` further down: prose in this branch's
+# own comments names that token, so slicing on it cut the region short and silently emptied the
+# assertions below. End on the statement the branch actually ends with.
+_fallback = src_c.split("msg = MIMEText(body, 'plain', 'utf-8')", 1)[-1]
+_fallback = _fallback.split('smtp.send_message(msg)', 1)[0] + 'smtp.send_message(msg)'
 rec('cadence\'s legacy fallback sets List-Unsubscribe',
     "msg['List-Unsubscribe'] = _unsub_hdr" in _fallback
     and '_MG.unsubscribe_header(cred[0])' in _fallback)
@@ -176,6 +181,29 @@ rec('...and the lane path still goes through send_server, which sets it too',
     '_ss._smtp_send(' in src_c
     and "msg['List-Unsubscribe'] = unsub" in io.open(
         os.path.join(HERE, 'send_server.py'), encoding='utf-8').read())
+
+# ...and BOTH now run the pre-send guard. The fallback had no check of any kind: an unfilled
+# placeholder or an empty-rendered value could leave on it, and both have reached real homeowners
+# before ("My name is [YOUR NAME]", "my last note about ."), succeeding at the SMTP layer so
+# nothing downstream could notice.
+rec('cadence\'s legacy fallback runs the guard before handing the message to smtplib',
+    '_MG.check(subj, body, ' in _fallback
+    and _fallback.index('_MG.check(subj, body, ') < _fallback.index('smtp.send_message(msg)'))
+# SKIP, not raise. Nothing in the send loop catches an exception, so a raise would abort the run
+# and every other owner due today would go unmailed over one bad row. `continue` also delivers
+# mail_guard's own promise literally -- "the message was NOT sent and the step was NOT consumed" --
+# because it skips both `sent += 1` and the step advance, leaving the touch due for the next run.
+_loop_body = src_c.split('    for c, s in active.items():', 1)[1].split('    if smtp:', 1)[0]
+rec('...and SKIPS the lead rather than raising, so one bad row cannot abort the batch',
+    'continue' in _fallback.split('_MG.check(subj, body, ', 1)[1]
+    and '_MG.assert_sendable(' not in _fallback)
+rec('...which is required, because no send in that loop is wrapped in try/except',
+    not re.search(r'try:\s*\n\s*(mid = _ss\._smtp_send|smtp\.send_message)', _loop_body))
+# The skip has to land BEFORE the counter and the step advance, or a refused touch would be
+# recorded as delivered and never retried. Both live after the branch in the loop body.
+rec('a refused step is NOT consumed (the guard precedes the counter and the step advance)',
+    _loop_body.index('_MG.check(subj, body, ') < _loop_body.index('sent += 1')
+    < _loop_body.index("s['step'] = step + 1"))
 
 # ---- 7. every commercial message offers a way out ----------------------------------------------
 # CAN-SPAM 15 U.S.C. 7704(a)(3). The guard itself is UNCHANGED and still refuses a send that has

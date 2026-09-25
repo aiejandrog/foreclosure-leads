@@ -541,6 +541,28 @@ def main():
             _unsub_hdr = _MG.unsubscribe_header(cred[0])
             if _unsub_hdr:
                 msg['List-Unsubscribe'] = _unsub_hdr
+            # PRE-SEND GUARD. The lane path gets this inside _ss._smtp_send; this branch had no
+            # check of any kind, so an unfilled placeholder or an empty-rendered value could leave
+            # on it. "My name is [YOUR NAME]" and "my last note about ." both reached real
+            # homeowners once and both SUCCEEDED at the SMTP layer, which is why this check exists
+            # at all rather than being left to the mail server to notice.
+            #
+            # WHY check() AND continue, NOT assert_sendable() AND raise. Nothing in this loop
+            # catches an exception, so a raise here would abort the entire run and every other
+            # owner due today would go unmailed because of one bad row. Skipping keeps mail_guard's
+            # own contract exactly -- its refusal text already promises "the message was NOT sent
+            # and the step was NOT consumed" -- and `continue` delivers that literally: it skips
+            # `sent += 1` and the step advance below, so the touch stays due and goes out on the
+            # next run once the lead data is fixed. Same shape as the warm-up cap above.
+            #
+            # The lane path DOES abort the run on a refusal, and that asymmetry is pre-existing,
+            # not introduced here. Flagged for Alejandro; changing it is a behaviour change to the
+            # path every real run uses, on the surface CLAUDE.md reserves.
+            _bad = _MG.check(subj, body, s['email'], unsub=_unsub_hdr)
+            if _bad:
+                print(f"  !! REFUSED {s['email']} — {'; '.join(_bad)}. Step {step+1}/4 was NOT "
+                      f"consumed; it stays due. Fix the lead data or the template.")
+                continue
             smtp.send_message(msg)
         sent += 1
         # THE LEDGER ROW — same shape the bridge writes, and the reason the cap above can work at
