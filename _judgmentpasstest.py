@@ -93,7 +93,7 @@ class Assess(unittest.TestCase):
             json.dumps({'source_ref': ref, 'document_hash': 'OLD', 'gaps': []}))
         got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 2))
-        _buy(self.base, ref, '9', gaps=[{'page': 2}])
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'budget_exhausted: share spent'}])
         got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'needs_paid_read')
 
@@ -125,9 +125,9 @@ class Assess(unittest.TestCase):
         self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
 
     def test_unclear_judgments_still_get_a_target(self):
-        self.assertEqual(JP._target({'judgments': {'judgments': [
+        self.assertEqual(JP._target({'judgments': [
             {'entry_id': '9', 'date': '2026-01-01', 'status': 'unclear', 'role': 'judgment'},
-            {'entry_id': '4', 'date': '2025-01-01', 'status': 'vacated', 'role': 'judgment'}]}},
+            {'entry_id': '4', 'date': '2025-01-01', 'status': 'vacated', 'role': 'judgment'}]},
             None), ('9', 'latest_unclear'))
 
     def test_partial_purchase_prices_only_unreached_pages(self):
@@ -141,15 +141,55 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, [])])
         self.assertEqual(got['state'], 'read_not_verified')      # re-reading buys the same answer
 
+    def test_timeline_reconciliation_wins_over_the_index(self):
+        _row(self.base, '9', '$5.00', 'a')
+        _row(self.base, '4', '$5.00', 'b')
+        docs = [('4', 'final_judgment', True, []), ('9', 'final_judgment', True, [])]
+        timeline = {'judgments': {'controlling_entry': None, 'judgments': [
+            {'entry_id': '4', 'date': '2026-01-04', 'status': 'unclear', 'role': 'judgment'},
+            {'entry_id': '9', 'date': '2026-01-09', 'status': 'vacated', 'role': 'judgment'}]}}
+        got = self.run_assess(docs, timeline)
+        self.assertEqual((got['target_entry'], got['target_basis']), ('4', 'latest_unclear'))
+        self.assertIn('no controlling judgment', JP.render(
+            [dict(got, sale=None)], [], None, 0, date(2026, 9, 25)).split('## Every case')[1])
+
+    def test_new_amount_page_after_purchase_is_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')                 # amount pages now 1 and 2
+        _buy(self.base, ref, '9')
+        path = self.base / ('amount-vision-' + hashlib.sha256(ref.encode()).hexdigest() + '.json')
+        detail = json.loads(path.read_text())
+        detail['selected_pages'] = [2]                            # bought before page 1 was seen
+        path.write_text(json.dumps(detail))
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual((got['state'], got['pages_to_judgment']), ('needs_paid_read', 1))
+
+    def test_repeatable_failure_is_not_priced(self):
+        ref = _row(self.base, '9', '$1.00', 'j')
+        _buy(self.base, ref, '9', gaps=[{'page': 2, 'reason': 'Stored content is not a PDF'}])
+        with mock.patch('judgment_money.verify_document', return_value=[]):
+            got = self.run_assess([('9', 'final_judgment', True, [])])
+        self.assertEqual(got['state'], 'read_not_verified')
+
+    def test_timeline_older_than_docket(self):
+        import os
+        _row(self.base, '9', '$1.00', 'j')
+        os.utime(self.base / 'inventory.json', (2000, 2000))
+        with mock.patch('document_prioritizer.prioritize',
+                        return_value=_plan([('9', 'final_judgment', True, [])])):
+            got = JP.assess(CASE, self.base, {'judgments': {'controlling_entry': '9'}},
+                            '2026-09-25', timeline_mtime=1000)
+        self.assertEqual(got['state'], 'timeline_older_than_docket')
+
     def test_on_disk_but_held_by_plan(self):
         _row(self.base, '9', '$1.00', 'j')
         got = self.run_assess([('9', 'final_judgment', False, ['entry_date_unknown'])])
         self.assertEqual((got['state'], got['detail']), ('judgment_held_by_docket_plan', 'entry_date_unknown'))
 
     def test_same_day_tie_takes_the_later_entry_numerically(self):
-        self.assertEqual(JP._target({'judgments': {'judgments': [
+        self.assertEqual(JP._target({'judgments': [
             {'entry_id': '9', 'date': '2026-01-01', 'status': 'operative', 'role': 'judgment'},
-            {'entry_id': '10', 'date': '2026-01-01', 'status': 'operative', 'role': 'replacement'}]}},
+            {'entry_id': '10', 'date': '2026-01-01', 'status': 'operative', 'role': 'replacement'}]},
             None), ('10', 'latest_operative'))
 
     def test_walled_reason_is_the_targets_own(self):
@@ -227,7 +267,7 @@ class Pass(unittest.TestCase):
             got = JP.run_pass(runner, entries, date(2026, 9, 25), False, log, limit=1)
         self.assertEqual(got, (1, 2, 0))
         self.assertEqual([c.args[0] for c in build.call_args_list], ['c'])
-        self.assertEqual(log['errors'], {})
+        self.assertEqual(log['errors'], {'a': 'old'})    # a skip is no news: the error stays
         # --collect re-does a case built without it; --limit 0 works nothing
         with mock.patch.object(JP, 'timeline_path', side_effect=lambda r, c: c), \
                 mock.patch.object(JP, 'built_recently', return_value=True), \

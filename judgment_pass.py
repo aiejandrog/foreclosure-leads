@@ -113,14 +113,14 @@ def evidence_rate(root):
     return (usd / pages, pages) if pages else (None, 0)
 
 
-def _target(plan, controlling):
+def _target(recon, controlling):
     """-> (entry_id or None, reason). The controlling entry when the timeline established one;
     else the latest OPERATIVE judgment of record in the docket's own reconciliation. A vacated,
     satisfied, supplemental or duplicate entry is never the target: its amount proves nothing
     about the current debt."""
     if controlling:
         return controlling, 'controlling'
-    judgments = ((plan or {}).get('judgments') or {}).get('judgments') or []
+    judgments = (recon or {}).get('judgments') or []
     operative = [j for j in judgments if j.get('status') in ('operative', 'partially_vacated')
                  and j.get('role') not in ('supplemental', 'docket_duplicate') and j.get('date')]
     if operative:
@@ -141,7 +141,7 @@ def _entry_order(entry_id):
     return (0, int(text), '') if text.isdigit() else (1, 0, text)
 
 
-def assess(case, base, timeline, as_of):
+def assess(case, base, timeline, as_of, timeline_mtime=None):
     """One case's state from disk. -> dict with 'state' and the page counts a paid read needs.
 
     Evidence is read through run_case_timeline.read_amounts with no budget: the same hash binding
@@ -162,11 +162,28 @@ def assess(case, base, timeline, as_of):
     except ValueError as exc:
         out.update(state='docket_incomplete', detail=str(exc)[:200])
         return out
-    target, why = _target(plan, controlling)
+    try:
+        docket_mtime = (Path(base) / 'inventory.json').stat().st_mtime
+    except OSError:
+        docket_mtime = None
+    if timeline is not None and timeline_mtime is not None and docket_mtime is not None \
+            and timeline_mtime < docket_mtime:
+        # The docket was refreshed after the timeline was built (a rebuild that failed part-way):
+        # its controlling judgment and checks may predate a new vacatur or satisfaction.
+        out.update(state='timeline_older_than_docket',
+                   detail='re-run the pass for this case before trusting any verdict')
+        return out
+    # The timeline's reconciliation read the bodies (a vacatur citing its judgment's date, an
+    # image-less same-day twin); the plan's is the docket index alone. Prefer the timeline's.
+    recon = (timeline or {}).get('judgments') or plan.get('judgments')
+    target, why = _target(recon, controlling)
     if target is None:
         out['state'] = why
         return out
     out.update(target_entry=target, target_basis=why)
+    if why != 'controlling':
+        out['detail'] = ('no controlling judgment established; target is the %s one'
+                         % why.replace('latest_', 'latest '))
     rows = RCT.load_rows(base)
     bought = RCT.read_amounts(rows, base)
     if any(c.get('ok') and str(c.get('entry_id')) == target for c in bought['amount_checks']):
@@ -175,9 +192,15 @@ def assess(case, base, timeline, as_of):
     # Pages a re-run would actually bill: a page the reader never reached (cap, error). A page it
     # read and called unreadable is a ledger-cache hit at $0 with the same answer, so not priced.
     rebuy = {}
+    stuck = set()
     for gap in bought['gaps']:
-        if not str(gap.get('reason') or '').startswith('Vision returned unreadable'):
+        reason = str(gap.get('reason') or '')
+        # Only a page the cap or the reader's stop never reached is bought by paying again. An
+        # unreadable page, a rejected render or an uncertain paid call repeats at $0: a person.
+        if re.search(r'budget|cap or reader stop|paid_read_not_selected', reason):
             rebuy.setdefault(gap.get('source_ref'), set()).add(gap.get('page'))
+        else:
+            stuck.add(gap.get('source_ref'))
     done = {Path(f).name for f in bought['evidence_files']}
     # Only the rows the paid reader would walk get the (hash-keyed, whole-file) OCR lookup.
     order = [_with_cached_ocr(r, base) for r in DP.timeline_read_order(plan, rows)['order']]
@@ -191,9 +214,14 @@ def assess(case, base, timeline, as_of):
         target_amount_rows += is_target
         key = 'amount-vision-' + hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest() + '.json'
         if key in done:
-            left = rebuy.get(row.get('source_ref')) or set()
+            detail = DS.pipeline_load(Path(base) / key) or {}
+            # Amount pages the free OCR found after the purchase are new pages to buy.
+            fresh = set(pages) - set(detail.get('selected_pages') or pages)
+            left = (rebuy.get(row.get('source_ref')) or set()) | fresh
             if left:
                 need.append((is_target, len(left)))
+            elif is_target and row.get('source_ref') in stuck:
+                out['detail'] = 'a read of the judgment failed in a way paying again repeats'
             continue
         need.append((is_target, len(pages)))
     if any(t for t, _ in need):
@@ -234,7 +262,6 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
                 and (last.get('collect') or not collect)
                 and time.time() - float(last.get('at') or 0) < FRESH_HOURS * 3600):
             skipped += 1
-            (log.get('errors') or {}).pop(case, None)
             continue
         try:
             RCT.timeline_case(case, today, collect=collect)   # shared=None: no API client, $0
@@ -243,7 +270,8 @@ def run_pass(runner, entries, today, collect, log, limit=None, save=None):
             (log.get('errors') or {}).pop(case, None)
         except Exception as exc:                              # one case never stops the pass
             errors += 1
-            log.setdefault('errors', {})[case] = '%s: %s' % (type(exc).__name__, str(exc)[:200])
+            log.setdefault('errors', {})[case] = '%s %s: %s' % (
+                date.today().isoformat(), type(exc).__name__, str(exc)[:200])
         log['last'] = case
         if save:
             save()
@@ -258,8 +286,10 @@ def plan(runner, entries, today, log):
     for entry in entries:
         case = entry['case']
         try:
-            timeline = DS.pipeline_load(timeline_path(runner, case))
-            row = assess(case, DS.pipeline_folder(runner.COUNTY, case), timeline, today.isoformat())
+            tpath = timeline_path(runner, case)
+            timeline = DS.pipeline_load(tpath)
+            row = assess(case, DS.pipeline_folder(runner.COUNTY, case), timeline, today.isoformat(),
+                         tpath.stat().st_mtime if timeline is not None else None)
         except Exception as exc:                  # one unreadable case never costs the report
             row = {'case': case, 'state': 'unreadable_on_disk', 'pages_to_judgment': 0,
                    'pages_all': 0, 'detail': '%s: %s' % (type(exc).__name__, str(exc)[:160])}
@@ -287,6 +317,7 @@ def render(rows, skipped_ids, rate, sample, today):
     names = [w[0] for w in windows] + ['sale passed', 'no sale date']
     states = ['verified', 'needs_paid_read', 'read_not_verified', 'judgment_not_fetched',
               'judgment_held_by_docket_plan', 'judgment_without_amount_page',
+              'timeline_older_than_docket',
               'no_operative_judgment', 'no_judgment_on_docket', 'docket_incomplete', 'no_docket',
               'unreadable_on_disk']
     lines = ['# Miami judgment amounts: court-copy state and read plan (%s)' % today.isoformat(), '',
@@ -297,6 +328,10 @@ def render(rows, skipped_ids, rate, sample, today):
     for state in states:
         counts = [sum(1 for r in rows if r['state'] == state and window(r) == n) for n in names]
         lines.append('| %s | %s | %d |' % (state, ' | '.join(map(str, counts)), sum(counts)))
+    guessed = sum(1 for r in rows if r['state'] == 'verified'
+                  and r.get('target_basis') not in (None, 'controlling'))
+    lines += ['', 'Of the verified, %d are on a judgment the docket did not establish as controlling '
+              '(the latest operative or unclear one); their Note says which.' % guessed]
     lines += ['', 'Tax-deed IDs with no court docket, left out (all sale dates): %d' % len(skipped_ids), '']
     lines += ['## Price to read the rest', '', 'Rate: ' + basis + '.', '',
               '| Sales | Cases | Pages to the judgment | Cost | Pages, whole case | Cost |',
@@ -321,7 +356,9 @@ def render(rows, skipped_ids, rate, sample, today):
         lines.append('| %s | %s | %s | %s | %s |' % (
             r['case'], r['sale'] or '', r['state'],
             r['pages_to_judgment'] if r['state'] == 'needs_paid_read' else '',
-            (r.get('pass_error') or r.get('detail') or '').replace('|', '/')[:120]))
+            '; '.join(x for x in (r.get('detail'), r.get('pass_error') and
+                                  'last pass error ' + r['pass_error']) if x)
+            .replace('|', '/')[:200]))
     return '\n'.join(lines) + '\n'
 
 
