@@ -152,7 +152,10 @@ def safe_llc(raw):
 
 # ---- the 4-touch sequence (EN, with the ES block every owner expects from this operation) ------
 def steps(lead, sender):
-    first = (lead.get('owner') or '').split(',')[0].split()[0].title() or 'there'
+    # An empty or comma-only owner used to raise IndexError here and take the whole run down
+    # (state unsaved for every step already sent). Fall back to 'there' like the texts do.
+    _fw = (lead.get('owner') or '').split(',')[0].split()
+    first = (_fw[0].title() if _fw else '') or 'there'
     # The board stores addresses as "455 NE 210 TER, MIAMI, FL- 33179". That stray hyphen after the
     # state, and the shouted city, appear in every message and are the most machine-looking thing on
     # the page. Nobody writes their own address that way. Tidy it for display only.
@@ -242,8 +245,16 @@ def load_key():
     return user.strip(), pw.strip()
 
 
-def imap_replies(cred, emails, dry):
-    """Return {email: 'replied'|'stopped'} for anything found in the inbox from these addresses."""
+def imap_replies(cred, emails, dry, since=None):
+    """Return {email: 'replied'|'stopped'} for anything found in the inbox from these addresses.
+
+    ONLY THE FRESH TEXT IS SCANNED (2026-09-25). This used to run the stop detector over the raw
+    RFC822.TEXT -- every MIME part, quoted original included. Our own touch ends "reply 'stop' and
+    you won't hear from me again", and Gmail quotes it under every reply, so any owner who replied
+    "Yes, call me" with the quote attached was classified 'stopped' and ledgered DO NOT CONTACT for
+    good. replies.reply_text() is the one quote-cutter; it is used here and nowhere else re-typed.
+    `since` = {email: 'YYYY-MM-DD'} -- only messages on/after that date count, so a thread from
+    before the sequence started cannot end it."""
     if not emails:
         return {}
     if dry:
@@ -256,27 +267,93 @@ def imap_replies(cred, emails, dry):
         M = imaplib.IMAP4_SSL('imap.gmail.com')
         M.login(user, pw)
         M.select('INBOX')
+        try:
+            from replies import reply_text as _reply_text
+        except Exception:
+            _reply_text = None
         for em in emails:
-            typ, data = M.search(None, f'(FROM "{em}")')
+            crit = f'(FROM "{em}")'
+            _s = (since or {}).get(em)
+            if _s:
+                try:
+                    crit = f'(FROM "{em}" SINCE {datetime.strptime(_s[:10], "%Y-%m-%d").strftime("%d-%b-%Y")})'
+                except Exception:
+                    pass
+            typ, data = M.search(None, crit)
             if typ != 'OK' or not data or not data[0].split():
                 continue
             out[em] = 'replied'
-            # read the latest one for STOP words
+            # read the latest one for STOP words -- fresh text only
             latest = data[0].split()[-1]
-            typ, body = M.fetch(latest, '(RFC822.TEXT)')
-            if typ == 'OK' and body and body[0] and isinstance(body[0], tuple) and \
-                    _is_stop(body[0][1].decode('utf-8', 'ignore')):
-                out[em] = 'stopped'
+            typ, body = M.fetch(latest, '(RFC822)')
+            if typ == 'OK' and body and body[0] and isinstance(body[0], tuple):
+                raw = body[0][1]
+                if _reply_text is not None:
+                    subj, fresh = _reply_text(raw)
+                    if _is_stop(subj) or _is_stop(fresh):
+                        out[em] = 'stopped'
+                else:
+                    # detector import failed: fail CLOSED on explicit words only (see _is_stop)
+                    if _is_stop(raw.decode('utf-8', 'ignore')):
+                        out[em] = 'stopped'
         M.logout()
     except Exception as e:
         print('  IMAP check failed (skipping this pass):', str(e)[:90])
     return out
 
 
+def _lock_dir():
+    try:
+        import paths as _P
+        return _P.out('cadence.lock')
+    except Exception:
+        return os.path.join(HERE, 'cadence.lock')
+
+
+class _RunLock:
+    """One cadence at a time on this box. mkdir is atomic; a lock older than 6h is treated as
+    abandoned (a killed run) and taken over. Two overlapping runs read one state file and each
+    sends the step the other just sent -- the duplicate-send incident of 2026-08-25/26 had that
+    shape. This does not protect against a SECOND MACHINE (state files are gitignored); that
+    remains the arming rule in MACHINE-HANDOFF.md §1."""
+    def __init__(self):
+        self.d = _lock_dir()
+        self.held = False
+
+    def __enter__(self):
+        try:
+            if os.path.isdir(self.d) and (time.time() - os.path.getmtime(self.d)) > 6 * 3600:
+                os.rmdir(self.d)
+        except OSError:
+            pass
+        try:
+            os.makedirs(os.path.dirname(self.d) or '.', exist_ok=True)
+            os.mkdir(self.d)
+            self.held = True
+        except FileExistsError:
+            self.held = False
+        return self
+
+    def __exit__(self, *a):
+        if self.held:
+            try:
+                os.rmdir(self.d)
+            except OSError:
+                pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry-run', action='store_true', help='render and report only — no mail sent')
     args = ap.parse_args()
+    with _RunLock() as _lk:
+        if not _lk.held:
+            print('another cadence run holds %s — not starting a second one.' % _lk.d)
+            return 3
+        return _run(args)
+
+
+def _run(args):
     today = date.today()
 
     payload = load_json(QUEUE, None)
@@ -307,6 +384,14 @@ def main():
                         'email': lead.get('email'), 'auction': lead.get('auction'), 'log': []}
         elif state[c].get('status') in ('stopped', 'suppressed', 'replied', 'cancelled', 'completed'):
             state[c] = state[c]   # never resurrect a finished sequence by re-exporting
+        elif state[c].get('status') == 'held':
+            # A hold is WORK, not a verdict (see the diligence sweep below). Re-exporting the queue
+            # after clearing the reason is how a held sequence resumes; until 2026-09-25 nothing
+            # ever flipped it back, so 'held' was a silent 'cancelled'.
+            state[c]['status'] = 'active'
+            state[c]['log'].append({'d': str(today), 'ev': 'resumed — re-exported after a hold'})
+            state[c]['owner'] = lead.get('owner'); state[c]['addr'] = lead.get('addr')
+            state[c]['email'] = lead.get('email'); state[c]['auction'] = lead.get('auction')
         else:
             state[c]['owner'] = lead.get('owner'); state[c]['addr'] = lead.get('addr')
             state[c]['email'] = lead.get('email'); state[c]['auction'] = lead.get('auction')
@@ -365,10 +450,53 @@ def main():
                 _rows[_c] = _r
         _held = 0
         _nolookup = 0
+        _wn = {}
+        try:
+            _wnd = load_json(os.path.join(HERE, 'worker_notes.json'), {})
+            _wn = _wnd.get('notes') if isinstance(_wnd, dict) and isinstance(_wnd.get('notes'), dict) else {}
+        except Exception:
+            _wn = {}
         for c, s in list(active.items()):
             _row = _rows.get(c)
             if _row is None:
-                _nolookup += 1          # off the board (auction passed, file rotated) — not a hold
+                # OFF THE BOARD. Until 2026-09-25 this was "left running": a case whose auction
+                # passed or whose file rotated kept receiving "before the sale date" touches with
+                # nothing able to check it. Hold it; a re-export resumes it if it is back.
+                _nolookup += 1
+                s['status'] = 'held'
+                s['log'].append({'d': str(today), 'ev': 'held before send — case not on the board'})
+                active.pop(c)
+                continue
+            # SEND-TIME COMPLIANCE, the checks build_cadence_queue runs at ENROLMENT and this loop
+            # never re-asked: a §362 stay filed after enrolment, a sale that already happened, a
+            # dismissed case, a rep's Dead / wrong-number mark. (2026-09-25)
+            _why = ''
+            if (_row.get('saleBkAct') or _row.get('sale_bk_active')) and not _row.get('saleLift'):
+                _why = 'active §362 bankruptcy stay'
+            elif _row.get('sibclaimed'):
+                _why = 'sibling case sold'
+            elif str(_row.get('cstatus') or _row.get('case_status') or '').strip().upper().startswith('DISM') \
+                    or _row.get('lpDismissed'):
+                _why = 'case dismissed'
+            else:
+                try:
+                    _d = _oe._days(_row)
+                except Exception:
+                    _d = 0
+                if _d is not None and _d < 0:
+                    _why = 'auction already passed'
+            if not _why:
+                _n = _wn.get(c) or {}
+                _st = str(_n.get('status') or '').strip().lower()
+                if _st in ('dead', 'wrong number') or _n.get('wrongown'):
+                    _why = 'rep marked %s on the board' % (_st or 'wrong number')
+            if _why:
+                _held += 1
+                s['status'] = 'cancelled' if _why in ('auction already passed', 'case dismissed') else 'held'
+                s['log'].append({'d': str(today), 'ev': '%s before send — %s' % (s['status'], _why)})
+                active.pop(c)
+                print('  %s (not sent) -> %s  (%s) — %s' % (s['status'].upper(), s.get('email') or c,
+                                                           s.get('owner'), _why))
                 continue
             _g = _dg.gate(_row)
             if _g['hold']:
@@ -381,15 +509,22 @@ def main():
                 print('  HELD (not sent) -> %s  (%s) — diligence %s: %s'
                       % (s.get('email') or c, s.get('owner'), _g['code'], _dg._clip(_g['why'], 120)))
         if _held or _nolookup:
-            print('  diligence sweep: %d sequence(s) held, %d case(s) not found in the lead files '
-                  '(off-board, left running)' % (_held, _nolookup))
+            print('  diligence sweep: %d sequence(s) held/cancelled, %d case(s) not found in the '
+                  'lead files (off-board, HELD until re-exported)' % (_held, _nolookup))
     except Exception as _dge:
         # A cadence run that cannot diligence-check must still deliver its opt-out sweep and its
         # reply check. Say the protection is off; do not take the engine down with it.
         print('  !! diligence sweep SKIPPED (%s) — this run is sending UNGATED.' % str(_dge)[:120])
 
     # 1) reply check FIRST — never send another touch to someone who already wrote back
-    replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred)
+    _since = {}
+    for s in active.values():
+        for ev in (s.get('log') or []):
+            if str(ev.get('ev') or '').startswith('sent step 1'):
+                _since[s['email']] = ev.get('d')
+                break
+    replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred,
+                           since=_since)
     for c, s in active.items():
         got = replies.get(s['email'])
         if got == 'replied':
@@ -417,42 +552,20 @@ def main():
     if stopped and args.dry_run:
         print(f'  [dry-run] would ledger {len(stopped)} opt-out(s): {", ".join(stopped)}')
     elif stopped:
-        opt = load_json(OPTOUTS, {}) or {}
-        if not isinstance(opt, dict):
-            opt = {}
-        opt.setdefault('_dealflow_notes', 1)
-        opt.setdefault('device', 'server-ledger')
-        opt['exported'] = str(today)
-        notes = opt.setdefault('notes', {})
-        sup = load_json(os.path.join(HERE, 'bounced_emails.json'), {})
-        if not isinstance(sup, dict):
-            sup = {}
-        now = datetime.now().isoformat(timespec='seconds')
+        # ONE WRITER (2026-09-25): optout_sync.ledger_add owns the file. This block used to be the
+        # third copy of the write.
+        from optout_sync import ledger_add
         added, sup_new = [], []
         for c, s in stopped.items():
             em = (s.get('email') or '').strip().lower()
-            entry = {'status': 'DO NOT CONTACT', 'optout': str(today),
-                     'note': ('AUTO-LEDGERED by cadence.py: the owner replied with a stop word to '
-                              'the 4-touch sequence. Covers ALL channels: no email, no call, no '
-                              'text, no door. Owner %s, %s.'
-                              % (s.get('owner') or '?', s.get('addr') or '?')),
-                     'optlog': [{'ts': now, 'act': 'opted-out', 'src': 'cadence stop-word (IMAP reply)'}]}
-            for key in (c, ('@' + em) if em else ''):
-                if key and key not in notes:
-                    notes[key] = dict(entry)
-                    added.append(key)
-            if em and em not in sup:
-                sup[em] = {'type': 'optout', 'when': str(today), 'why': 'cadence stop-word reply'}
+            _a, _ = ledger_add([c] + (['@' + em] if em else []),
+                               ('AUTO-LEDGERED by cadence.py: the owner replied with a stop word to '
+                                'the 4-touch sequence. Covers ALL channels: no email, no call, no '
+                                'text, no door. Owner %s, %s.' % (s.get('owner') or '?', s.get('addr') or '?')),
+                               'cadence stop-word (IMAP reply)', emails=[em] if em else ())
+            added += _a
+            if em:
                 sup_new.append(em)
-        if added:
-            tmp = OPTOUTS + '.tmp'
-            json.dump(opt, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
-            os.replace(tmp, OPTOUTS)
-        if sup_new:
-            _b = os.path.join(HERE, 'bounced_emails.json')
-            tmp = _b + '.tmp'
-            json.dump(sup, open(tmp, 'w', encoding='utf-8'), indent=0, ensure_ascii=False)
-            os.replace(tmp, _b)
         print(f'  optouts.json: {len(added)} key(s) ledgered for {len(stopped)} owner(s), '
               f'{len(sup_new)} address(es) hard-suppressed')
 
@@ -565,7 +678,10 @@ def main():
     for a, n in sorted(capped.items()):
         print(f'  warm-up cap reached on {a} — {n} step(s) held for tomorrow (not consumed).')
 
-    _save_state(state)
+    if not args.dry_run:
+        _save_state(state)
+    else:
+        print('  [dry-run] state NOT written (status flips above are for display only)')
     print(f'done. {sent} sent, {sum(1 for s in state.values() if s.get("status")=="active")} active, '
           f'{sum(1 for s in state.values() if s.get("status")=="replied")} replied-cancelled, '
           f'{sum(1 for s in state.values() if s.get("status")=="suppressed")} suppressed, '

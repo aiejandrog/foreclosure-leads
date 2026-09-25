@@ -488,17 +488,26 @@ def chk_committed_secrets():
     import subprocess
     codes = []
     p_codes = os.path.join(HERE, 'site.codes')
-    if not os.path.exists(p_codes):
-        add('WARN', 'committed secrets', 'no site.codes here — cannot check for leaked codes')
-        return
-    try:
-        for line in open(p_codes, encoding='utf-8'):
-            m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
-            if m:
-                codes.append(m.group(1))
-    except Exception as e:
-        add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
-        return
+    have_codes = os.path.exists(p_codes)
+    if have_codes:
+        try:
+            for line in open(p_codes, encoding='utf-8'):
+                m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
+                if m:
+                    codes.append(m.group(1))
+        except Exception as e:
+            add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
+            have_codes = False
+    # SHAPE SCAN, even with no site.codes (2026-09-25): a code that was pasted into a tracked file
+    # by another machine is invisible to the exact-match check above when THIS box's site.codes
+    # differs or is absent (the 2026-09-03 leak was exactly that -- a code in MACHINE-HANDOFF.md).
+    # A live code is DEALFLOW- plus 8 symbols with at least one digit; DEALFLOW-COVERAGE /
+    # DEALFLOW-STATUS and friends are all-letter words and do not match.
+    _shape = re.compile(r'\bDEALFLOW-(?=[A-Z0-9]{8}\b)(?=[A-Z]*\d)[A-Z0-9]{8}\b')
+    # Skip-traced phone numbers next to owner names in a tracked JSON: the other leak class
+    # (pre_foreclosure_doors.json, 2026-09-01). Public-record names are one thing; bought phones
+    # are not public record.
+    _phone_row = re.compile(r'"(?:ph|phone|phones?)"\s*:\s*\[?\s*"\d{10}"')
     try:
         tracked = subprocess.run(['git', 'ls-files'], cwd=HERE, capture_output=True,
                                  text=True, timeout=30).stdout.split()
@@ -508,6 +517,8 @@ def chk_committed_secrets():
     hits = []
     for f in tracked:
         fp = os.path.join(HERE, f)
+        if f.startswith('docs/') or f == 'healthcheck.py':
+            continue        # the encrypted board and this file's own docstring
         try:
             body = open(fp, encoding='utf-8', errors='ignore').read()
         except Exception:
@@ -515,6 +526,12 @@ def chk_committed_secrets():
         for c in codes:
             if c in body:
                 hits.append('%s carries %s...' % (f, c[:13]))
+        for m in _shape.finditer(body):
+            if not any(m.group(0) == c for c in codes):
+                hits.append('%s carries a code-shaped token %s...' % (f, m.group(0)[:13]))
+        if f.endswith('.json') and '"owner"' in body and _phone_row.search(body):
+            hits.append('%s pairs owner names with 10-digit phone numbers (skip-trace data in git)' % f)
+    hits = sorted(set(hits))
     if hits:
         add('FAIL', 'committed secrets',
             '%d live access code(s) in TRACKED files on a PUBLIC repo — ROTATE them, deleting the '
@@ -605,7 +622,10 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
 #   exit 1 = coverage-floor FAIL only -> advisory; caller may publish if publish_guard is clean
 #   exit 0 = healthy
 _CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources',
-                  'entity claim in published board'}
+                  'entity claim in published board',
+                  # 2026-09-25: a committed access code was ADVISORY (exit 1) when the 09-03 leak
+                  # happened, so the publish went ahead. It blocks now.
+                  'committed secrets'}
 _crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
 if _crit:
     print(f"  !! COMPLIANCE FAIL (blocks publish): {', '.join(_crit)}")

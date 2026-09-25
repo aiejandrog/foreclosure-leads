@@ -108,10 +108,17 @@ def main():
         pg.pdf(path=OUT, prefer_css_page_size=True, print_background=True)
         b.close()
     print('wrote %s (%.0f KB)' % (OUT, os.path.getsize(OUT) / 1024))
+    # The copy used to go to a hardcoded C:\Users\olqbb\OneDrive\Desktop path -- a homeowner-facing
+    # PDF into consumer cloud storage, on one specific machine. paths.py owns output now (2026-09-25).
     import shutil
-    desk = r'C:\Users\olqbb\OneDrive\Desktop\%s' % os.path.basename(OUT)
+    try:
+        import paths as _P
+        desk = _P.out(os.path.basename(OUT))
+    except Exception:
+        desk = os.path.join(os.path.expanduser('~'), 'DEALFLOW', os.path.basename(OUT))
+    os.makedirs(os.path.dirname(desk), exist_ok=True)
     shutil.copy(OUT, desk)
-    print('desktop: %s' % desk)
+    print('copied to: %s' % desk)
 
 
 if __name__ == '__main__':

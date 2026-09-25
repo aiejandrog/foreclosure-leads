@@ -228,6 +228,17 @@ def _optout_set():
         if isinstance(v, (dict, list)):
             for m in re.findall(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+', json.dumps(v)):
                 emails.add(m.lower())
+    # Rep-logged DNC (board/phone notes) gates email too, even before the nightly sweep ledgers it
+    # (2026-09-25). Read-only union with the ledger; the ledger stays the record.
+    try:
+        from optout_sync import notes_dnc_keys
+        for _k in notes_dnc_keys():
+            if _k.startswith('@'):
+                emails.add(_k.lstrip('@'))
+            elif not _k.startswith('#'):
+                cases.add(_k)
+    except Exception:
+        pass
     return cases, emails
 
 
@@ -1106,12 +1117,27 @@ class Handler(BaseHTTPRequestHandler):
             size = _write_notes(payload)
         except Exception as e:
             return self._json(500, {'ok': False, 'err': f'write failed: {e}'})
+        # HARD NO -> LEDGER (2026-09-25). A "stop calling me" tapped in Call Mode wrote
+        # status='DO NOT CONTACT' into the notes, synced to the board, and landed here -- and then
+        # went nowhere: cadence, the CLI and this bridge's own /send gate read optouts.json, which
+        # nothing on that path ever wrote. The person kept getting touches 2-4. Every DNC in the
+        # push is ledgered now, add-only, through the one writer.
+        _ledgered = 0
+        try:
+            from optout_sync import ledger_from_notes
+            _added, _ = ledger_from_notes(payload, src='call-mode/board notes push (%s)'
+                                          % str(payload.get('device') or 'device')[:24])
+            _ledgered = len(_added)
+        except Exception as e:
+            self.log_message('notes push: ledger sync FAILED (%s) -- DNCs in this push are not in '
+                             'optouts.json yet; optout_sync.py sweeps them nightly', str(e)[:120])
         n_notes = len(payload.get('notes') or {})
         saved = bool(_WROTE.get('ok', True))
         self.log_message('notes push: %d leads, %d log entries, %d KB — %s',
                          n_notes, len(payload.get('workerLog') or []), size // 1024,
                          'saved' if saved else 'REFUSED (poorer than the backup on disk)')
-        out = {'ok': True, 'saved': saved, 'notes_count': n_notes, 'bytes': size}
+        out = {'ok': True, 'saved': saved, 'notes_count': n_notes, 'bytes': size,
+               'ledgered_dnc': _ledgered}
         # What actually LANDED, not just what was sent. Under the merge a push always saves, so the
         # useful number is how much of it was new.
         out['merged_cases'] = _WROTE.get('new_cases', 0)

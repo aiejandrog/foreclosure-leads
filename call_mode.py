@@ -291,11 +291,18 @@ FIFTEEN_SEC = ("Totally understand. One thing and I am gone: our senior advisor 
                "mortgages and foreclosure workouts — reviews your case free, five minutes, on the "
                "phone. If nothing fits, we part friends. Fair?")
 
-MARS_BLOCK = ("Before we start, a few things I am required to tell you: Biscayne Solutions Group is not "
-              "associated with the government, and our service is not approved by the government or "
-              "by your lender. Even if you use our service, your lender may not agree to change your "
-              "loan. You may stop doing business with us at any time. This consultation is free, and "
-              "you will never be asked to pay us a fee before you get results.")
+# ONE SOURCE (2026-09-25). This block was a hand-typed copy that had already drifted from
+# disclaimer.mars() -- it dropped "not a law firm", "not a lender or mortgage broker" and "not a
+# foreclosure-rescue company" and added a fee sentence of its own. CLAUDE.md: never re-type this
+# text. The federally-scripted sentences come from disclaimer.py; the one house sentence about fees
+# is appended separately so it is visibly not part of the MARS text.
+import disclaimer as _D
+_MARS_HOUSE_EN = "This consultation is free, and you will never be asked to pay us a fee before you get results."
+_MARS_HOUSE_ES = "Esta consulta es gratis, y nunca se le pedirá pagarnos una tarifa antes de obtener resultados."
+MARS_BLOCK = ("Before we start, a few things I am required to tell you: "
+              + _D.mars('Biscayne Solutions Group', as_html=False) + " " + _MARS_HOUSE_EN)
+MARS_BLOCK_ES = ("Antes de empezar, unas cosas que estoy obligado a decirle: "
+                 + _D.mars('Biscayne Solutions Group', lang='es', as_html=False) + " " + _MARS_HOUSE_ES)
 
 NEVER_SAY = [
     'Any promised outcome or date. "Options," never "we will save your home."',
@@ -2058,6 +2065,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'cioc': [{'k': k, 'w': w, 's': sx} for k, w, sx in CIOC],
         'f15': FIFTEEN_SEC,
         'mars': MARS_BLOCK,
+        'mars_es': MARS_BLOCK_ES,
         'never': NEVER_SAY,
         # NEPQ Black Book additions (2026-09-13). Homeowner lane only — the balloon dict has none of
         # these, so renderSheet's `if(SCRIPT.frame)` guards leave the investor call exactly as it was.
@@ -2888,6 +2896,25 @@ function syncFreshness(){}
    silent failure this page exists to delete. The build fails loud if the anchors move.
    Storage key is the board's own `fcLeadNotes` on the same origin, so there is one store, not two. */
 __SYNCJS__
+/* NO-POLICY FIELDS ACROSS DEVICES (2026-09-25). The board's _mergeLead above copies only the
+   fields it names, so n.no / noAt / noWasLp / resurf written by logOutcome() were dropped on every
+   pull: a soft no logged on this phone reached the cousin's phone as a bare touch and his queue
+   re-served the person on the next calendar tick. Wrapping the extracted function (assignment, not
+   a second declaration -- _assert_no_dead_overrides would flag a redeclaration) keeps the board's
+   merge byte-identical and layers the four fields on top, in the suppressing direction only:
+   hard wins forever, a soft fills an empty side, the EARLIEST noAt wins, resurf = max. */
+(function(){
+  var _base = _mergeLead;
+  _mergeLead = function(local, remote){
+    var out = _base(local, remote); local = local || {}; remote = remote || {};
+    if(remote.no === 'hard' || local.no === 'hard'){ out.no = 'hard'; }
+    else if(remote.no === 'soft' && !local.no){ out.no = 'soft'; }
+    if(remote.noAt && (!out.noAt || +remote.noAt < +out.noAt)) out.noAt = remote.noAt;
+    if(remote.noWasLp != null && out.noWasLp == null) out.noWasLp = remote.noWasLp;
+    if((remote.resurf||0) > (out.resurf||0)) out.resurf = remote.resurf;
+    return out;
+  };
+})();
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
 /* ══════ THE BOARD'S NINE FUNNEL LANES — also extracted VERBATIM, same rule ══════
    WARM / URGENT / CALL / WRITE / LETTER / DOOR / TRACE / WAITING / OUT. These are the counts
@@ -3182,9 +3209,17 @@ function agoTxt(ms){
    the queue cooldown below because the two answer different questions: "may we contact this
    person at all?" versus "is this lead due to be dialled again?". */
 function hardSuppressed(r){
+  /* HARD NO / opt-out is PERSON-WIDE: walk every case this person owns (r.pcs), not just the row.
+     Checked here, which is the predicate screenLead(), afterCall() and the lookup screen all go
+     through -- so it is the dial-time gate the 2026-09-02 policy asks for, not only a queue gate. */
+  var cs = [r.c].concat(r.pcs || []);
+  for(var k = 0; k < cs.length; k++){
+    var m = notes[cs[k]] || {};
+    if(m.no === 'hard') return 'hard no — do not call';
+    if(m.optout || m.status === 'DO NOT CONTACT') return 'opted out';
+  }
   var n = notes[r.c] || {};
   if(n.wrongown) return 'wrong number reported';
-  if(n.optout || n.status === 'DO NOT CONTACT') return 'opted out';
   if(n.status === 'Dead') return 'dead';
   var ph = optPhones(), p = r.p || [];
   for(var j=0;j<p.length;j++) if(ph[p[j]]) return 'this number opted out';
@@ -3239,14 +3274,50 @@ function supReason(r, laneK){
 /* TIER 2 only — a call or a dial. Kept as its own function because afterCall(), _teammateCall()
    and the registry all ask specifically "have we CALLED this person", which is a different
    question from "have we contacted them". */
+/* ═══════════════ THE NO POLICY (decided 2026-09-02, built 2026-09-25) ═══════════════
+   HARD NO ("stop calling me") -> n.no='hard': permanent, person-keyed, hardSuppressed() above.
+   SOFT NO ("we're set, thanks") -> n.no='soft': RETIRED from rotation. Not a cooldown -- the
+   30-day calendar window is dead. Exactly ONE deliberate, event-driven resurface:
+     - the lead HAD a sale date when the no was logged (noWasLp=false) -> dialable at T-14;
+     - the lead was LP / no date (noWasLp=true) -> dialable the day a sale date APPEARS
+       (this branch is why the feature is not dead for the 1,100+ LP rows).
+   Any outcome logged on the resurfaced serve spends it (n.resurf=1); after that, retired for good.
+   A legacy note (status 'Not interested', no `no` field) is read as a soft no whose noWasLp is
+   "has no date now" -- so an old no on a dateless lead stays retired instead of returning on
+   day 31, which is the exact thing _cm_notint_spec.js's last case asserts. */
+function _wasLp(r){ return !(typeof r.d === 'number' && r.d < 9999) || !!r.lp; }
+function noState(r){
+  var cs = [r.c].concat(r.pcs || []), soft = null;
+  for(var k = 0; k < cs.length; k++){
+    var n = notes[cs[k]] || {};
+    if(n.no === 'hard') return {hard:true, soft:false, open:false, why:'hard no — do not call'};
+    if(n.no === 'soft' || (!n.no && n.status === 'Not interested')){ if(!soft) soft = n; }
+  }
+  if(!soft) return {hard:false, soft:false, open:false, why:''};
+  var wasLp = (soft.no === 'soft') ? !!soft.noWasLp : _wasLp(r);
+  var d = (typeof r.d === 'number') ? r.d : 9999;
+  var open = false;
+  if(!(soft.resurf > 0)){
+    open = wasLp ? (d < 9999 && !r.lp) : (d >= 0 && d <= 14);
+  }
+  var why = (soft.resurf > 0) ? 'soft no — resurfaced once already, retired'
+          : wasLp ? 'soft no — retired until a sale date appears'
+          : 'soft no — retired until 14 days before the sale';
+  return {hard:false, soft:true, open:open, why:why};
+}
 function suppressed(r){
   var h = hardSuppressed(r);
   if(h) return h;
+  var ns = noState(r);
+  if(ns.soft){
+    if(!ns.open) return ns.why;
+    return '';          // the ONE resurface: served now, whatever the cooldown clock says
+  }
   /* Every number this lead has is marked dead — there is nothing left to dial, so it must leave the
      queue rather than serve a card whose only buttons are dead numbers. Counted in the visible
      hidden tally like every other suppression (NO SILENT CAPS), and reversible: badnum_audit.py
      restores the mark and the lead comes straight back. */
-  if((r.p||[]).length && nextLivePh(r, 0) < 0) return 'every number marked bad';
+  if((r.p||[]).length && typeof nextLivePh === 'function' && nextLivePh(r, 0) < 0) return 'every number marked bad';
   var n = notes[r.c] || {};
   /* ALREADY WORKED — by me OR by a teammate. Without this, Carlos logs a call, the note syncs to
      this phone, and the lead still sits in the queue waiting to be dialled a second time by the
@@ -4390,8 +4461,13 @@ function screenLookup(prefill){
                   + esc(String(e.t).slice(0,16)) + ' &middot; ' + esc(e.w) + '</div>'; }).join('')
             : '<div class="mut" style="margin-top:8px;font-size:12px">no contact logged yet</div>')
         + '<div class="flinks" style="margin-top:10px">'
-        +   '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
-        +   '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'
+        /* DIAL-TIME GATE ON THE LOOKUP SCREEN (2026-09-25). These two links used to render for ANY
+           indexed number: a person who said "stop" after the build could be called and texted from
+           here with no check at all. Same predicate the queue uses, on the row when we have it. */
+        +   ((function(){ var _hs = hardSuppressed(r || {c:h.c, p:[h.num]});
+              if(_hs) return '<span class="nc" style="color:#ff8a80;font-weight:800">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '</span>';
+              return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
+                   + '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'; })())
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
         + '</div>'
@@ -4430,7 +4506,10 @@ function screenLookup(prefill){
     Array.prototype.forEach.call(box.querySelectorAll('.lkgo'), function(b){
       b.onclick = function(){
         var c = b.dataset.c;
-        for(var j=0;j<ROWS.length;j++){ if(ROWS[j].c === c){ cur = ROWS[j]; phIdx = 0; SCREEN='lead'; return screenLead(); } }
+        for(var j=0;j<ROWS.length;j++){ if(ROWS[j].c === c){
+          var _hs = hardSuppressed(ROWS[j]);
+          if(_hs){ toast('DO NOT CONTACT — ' + _hs, {bad:true, ms:5000}); return; }
+          cur = ROWS[j]; phIdx = 0; SCREEN='lead'; return screenLead(); } }
         toast('That lead is not in this page’s call list');
       };
     });
@@ -4654,6 +4733,20 @@ function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
   var r=cur, d=r.p[phIdx], rk=r.r[phIdx]||'';
+  /* DIAL-TIME GATES (2026-09-25). Every path that paints a lead ends here, so this is where "may
+     we contact this person at all" is asked one last time -- pool() is built once per render and a
+     sync can land a hard no between the build and the tap. */
+  var _hs = hardSuppressed(r);
+  var _cap = _tele24(r);
+  if(_hs || _cap >= 3){
+    $('app').innerHTML = head()
+      + '<div class="card"><div class="warnbar">' + (_hs ? ('&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '. This person is not to be called or texted.')
+                                                       : ('&#9888; FTSA cap: ' + _cap + ' telephonic touches to this person in the last 24 hours (max 3). No call, no text until the oldest one ages out.'))
+      + '</div><div class="addr">' + esc(propertyLabel(r)) + '</div><div class="own">' + esc(ownerLabel(r)) + '</div>'
+      + '<button class="big" id="skip" style="background:#2a3f6b;margin-top:12px">Next lead</button></div>';
+    $('skip').onclick = function(){ advance(r.c); };
+    return;
+  }
   /* Teammate already called this lead and the operator has not chosen to stay: take over the
      paint entirely. Covers every arrival path — queue advance on a stale pool, the lookup jump,
      the back path from a text panel — because they all end here. */
@@ -4872,6 +4965,22 @@ function screenLead(){
     }catch(e){ try{ logErr(e,'dial-prelog'); }catch(_e){} }
     setTimeout(screenOutcome,0);
   });
+  /* OUTSIDE FTSA HOURS: the first tap does not dial. It arms the button and says why; the second
+     tap dials (a callback they asked for is legitimate outside the window, a cold dial is not, and
+     the rep is the one who knows which this is). The capture-phase listener runs before the
+     outcome-screen handler above, so an un-armed tap paints nothing. (2026-09-25) */
+  if(!fl.ok){
+    var _da = $('dial');
+    _da.dataset.href = _da.getAttribute('href');
+    _da.setAttribute('href', '#');
+    _da.addEventListener('click', function(ev){
+      if(_da.dataset.armed) return;
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      _da.dataset.armed = '1';
+      _da.setAttribute('href', _da.dataset.href);
+      _da.textContent = 'Outside FTSA hours (' + fl.txt + ' in FL) — tap again to dial anyway';
+    }, true);
+  }
   /* Skip was the last raw i++ in the file — the same bug class already fixed for advance(), and
      reachable without any teammate involvement: in the worker lane retireFromWorkerQ() shrinks the
      pool on the first logged number, so i++ from there lands one past the next person. Skipping is
@@ -4942,8 +5051,13 @@ __TEXTTPLJS__
    OBJECT — a raw `+ SENDER +` renders "this is [object Object] with Biscayne Solutions Group", which is
    the same failure as the {sender} bug that already reached a live read-aloud script. Going through
    fillScript also inherits the Jose heal and the company-name heal for free. */
-/* 2026-09-04 (Alejandro): the ladder is 1:1 human texts now. No confirm-CTA and no opt-out line in
-   the body -- his call as operator of record. Jeremy Miner / NEPQ voice: curiosity,
+/* 2026-09-04 (Alejandro): the ladder is 1:1 human texts now. No confirm-CTA.
+   2026-09-25: the opt-out line is BACK, appended to every template below (TEXT_OPTOUT). The 09-04
+   removal assumed STOP would be handled at the carrier layer; nothing handles it there (these are
+   handset 1:1 texts, no 10DLC), and until quo_sync --messages landed today nothing read inbound
+   texts at all. FTSA 501.059's cure safe harbor and the TCPA's opt-out expectation both turn on the
+   recipient being TOLD how to stop. One constant, one sentence, removable in one place if counsel
+   says otherwise -- but it ships on. Jeremy Miner / NEPQ voice: curiosity,
    self-qualify, ONE soft question that earns a reply on its own. Still identifies the sender and
    names the street; no em dashes (reads as AI in a text); 'keep my number' is drill card 14's
    read-back close at SMS size. Run through fillScript -- SENDER is an OBJECT, a raw `+ SENDER +`
@@ -4976,6 +5090,9 @@ var TEXT_T_ES = {
         + 'llamada rápida con nuestro asesor principal le muestra lo que todavía funciona. De '
         + 'cualquier forma, guarde mi número.'
 };
+var TEXT_OPTOUT = {en:' Reply STOP to opt out.', es:' Responda STOP para no recibir más mensajes.'};
+Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf('STOP') < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
+Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('STOP') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
 function textBody(r, stage){
   var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
   return fillScript(T[stage] || T.cold, r);
@@ -5294,6 +5411,7 @@ function stopEverywhere(r, digits){
     var n = notes[c] = notes[c] || {status:'',note:''};
     n.optout = n.optout || stamp;
     n.status = 'DO NOT CONTACT';
+    n.no = 'hard'; n.noAt = n.noAt || Date.now();
     n.optlog = n.optlog || [];
     n.optlog.push({ts:nowTS(), tsu:Date.now(), act:'set-local', src:'call-mode'});
     // n.dntph is the field _mergeLead carries laptop->phone precisely so a do-not-text survives the
@@ -5362,6 +5480,7 @@ function afterCall(r, o, nextC){
   var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
+  else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
   else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
@@ -5534,9 +5653,25 @@ function afterCall(r, o, nextC){
    dial or text has already happened by the time either caller below runs, so this cannot un-ring the
    phone; it exists to make the cap-crossing impossible to miss RIGHT NOW and to mark the exact touch
    an audit would need to find, instead of leaving that to a future re-scan of timestamps. */
-function _telephonicToday(n){
-  return (n.touches||[]).filter(function(x){ return x.d===today() && (x.ch==='call'||x.ch==='text'); }).length;
+/* ROLLING 24 HOURS, PERSON-WIDE (2026-09-25). This counted `touches` with d===today(): a calendar
+   day, not the statute's 24 hours, and touches are same-day-same-outcome DEDUPED while redials only
+   write `dials` -- so five no-answers and two redials counted as ONE. Now: every call touch, text
+   touch and dial row inside the last 24h, across every case the person owns, deduped by minute so a
+   dial and its own logged outcome are not counted twice. The board's _recentTeleCount is rolling
+   too; the two surfaces now agree. */
+function _tele24n(n){
+  var since = Date.now() - 24*3600000, seen = {}, cnt = 0;
+  function add(ts){ var k = Math.floor(ts/60000); if(ts >= since && !seen[k]){ seen[k]=1; cnt++; } }
+  ((n && n.touches)||[]).forEach(function(x){ if(x.ch==='call'||x.ch==='text'){ var ts=+x.tsu||+new Date(x.ts||0)||0; if(ts) add(ts); } });
+  ((n && n.dials)||[]).forEach(function(x){ var ts=+x.tsu||0; if(ts) add(ts); });
+  return cnt;
 }
+function _tele24(r){
+  var cs = (typeof personCases === 'function') ? personCases(r) : [r.c].concat(r.pcs||[]), tot = 0;
+  cs.forEach(function(c){ tot += _tele24n(notes[c]||{}); });
+  return tot;
+}
+function _telephonicToday(n){ return _tele24n(n); }
 function _ftsaCapToast(n, extra){
   var cnt = _telephonicToday(n);
   if(cnt <= 3) return false;
@@ -5550,6 +5685,7 @@ function _ftsaCapToast(n, extra){
    problem exists to recover; the touch itself stays deduped for cooldown purposes. */
 function logOutcome(r,o,digits){
   var n=notes[r.c]=notes[r.c]||{status:'',note:''};
+  var _ns = noState(r);                      // read BEFORE this outcome mutates the note
   n.touches=n.touches||[];
   var last=n.touches[n.touches.length-1];
   /* Returns whether a NEW touch was written. The same-day dedupe is correct (cooldown math), but
@@ -5573,11 +5709,22 @@ function logOutcome(r,o,digits){
   }
   n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
   n.cooldownH=o.h;
+  /* THE NO POLICY (see noState). A soft no that is served on its one resurface is spent by ANY
+     outcome logged on that serve; a real conversation (talked / appointment / callback) clears the
+     retirement outright -- they re-engaged, so ordinary cadence applies again. */
+  if(_ns.soft && _ns.open && n.no !== 'hard') n.resurf = (n.resurf||0) + 1;
   if(o.k==='appt') n.status='Appointment';
-  else if(o.k==='dnc'){ stopEverywhere(r, digits); }
+  else if(o.k==='dnc'){ n.no='hard'; n.noAt=n.noAt||Date.now(); stopEverywhere(r, digits); }
   else if(o.k==='wrong'){ n.wrongown=n.wrongown||today(); n.status=n.status||'Wrong number'; }
   else if(o.k==='talked') n.status=n.status||'Contacted';
-  else if(o.k==='notint') n.status=n.status||'Not interested';
+  else if(o.k==='notint'){
+    n.status=n.status||'Not interested';
+    if(n.no!=='hard'){
+      if(n.no!=='soft'){ n.no='soft'; n.noAt=Date.now(); n.noWasLp=_wasLp(r); n.resurf=n.resurf||0; }
+      else if(_ns.open){ n.resurf=Math.max(1, n.resurf||0); }   // second no on the resurface = permanent
+    }
+  }
+  if((o.k==='talked'||o.k==='appt'||o.k==='callback') && n.no==='soft'){ delete n.no; delete n.noAt; delete n.noWasLp; delete n.resurf; }
   else if(o.k==='callback') n.status=n.status||'Callback';
   else if(o.k==='gate') n.status=n.status||'Gatekeeper';
   else if(o.k==='badnum'){
@@ -6039,7 +6186,7 @@ function renderSheet(r){
 
   b += '<div class="ltag">'+(SCRIPT===SCRIPT_ALL ? 'MARS &mdash; say this at the TOP of any advisor consult'
                                                  : 'THE FRAME &mdash; a business talking to a business about a rate')+'</div>'
-     + '<div class="say">'+esc(SCRIPT.mars)+'</div>';
+     + '<div class="say">'+esc((lang()==='es' && SCRIPT.mars_es) ? SCRIPT.mars_es : SCRIPT.mars)+'</div>';
 
   b += '<div class="never"><b>NEVER SAY</b><br>';
   SCRIPT.never.forEach(function(n){ b += '&bull; '+esc(n)+'<br>'; });
