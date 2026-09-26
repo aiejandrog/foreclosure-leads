@@ -216,6 +216,20 @@ check('both listed daily files, oldest first',
       listed['files'])
 check('ids are the digits only', [item['id'] for item in listed['files']] == ['6', '7'])
 check('units balance', daily.parse_units('<div>Balance</div> 10 units') == 10)
+check('units balance with markup between number and word (live page shape)',
+      daily.parse_units('<div class="panel-heading">Balance</div> <div class="panel-body"> <h2> '
+                        '<p class="text-center">10 <small class="upper-sm">units</small></p> </h2></div>') == 10)
+check('units balance missing is None', daily.parse_units('<div>Balance</div> <p>n/a</p>') is None)
+live_shape = daily.parse_ftp_page(
+    '<li class="list-group-item"><label class="label-control">Expiration Date:</label>'
+    '<span class="badge ocs-badge-text badge-success">Monday, October 26, 2026</span></li>'
+    '<li class="list-group-item"><label class="label-control">Days Left:</label>'
+    '<span class="badge ocs-badge-text badge-success">29</span></li>'
+    '<table><tr><td>dly_records_09252026</td><td>ZIP</td>'
+    '<td><a href="/Developers/FTP/FTP/DownloadFile/123" class="btn"></a></td></tr></table>')
+check('expiry and days left read through span markup (live page shape)',
+      live_shape['expires'] == daily.dt.date(2026, 10, 26) and live_shape['days_left'] == 29
+      and [f['id'] for f in live_shape['files']] == ['123'], live_shape)
 
 # ---- URL gate ---------------------------------------------------------------------------------
 for url in (

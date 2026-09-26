@@ -1064,7 +1064,9 @@ class Client(object):
 
 
 def parse_units(html):
-    m = BALANCE_RE.search(html or '')
+    # The live page splits the number and the word: '10 <small ...>units</small>'.
+    text = re.sub(r'<[^>]+>', ' ', html or '')
+    m = BALANCE_RE.search(text)
     if not m:
         return None
     try:
@@ -1092,8 +1094,10 @@ def parse_ftp_page(html):
         seen.add(name)
         files.append({'name': name, 'id': id_m.group(1), 'date': file_stamp(name)})
     files.sort(key=lambda item: item['date'])
-    idx = (html or '').lower().find('dly_records_')
-    window = (html or '')[max(0, idx - 2500):idx + 800] if idx >= 0 else (html or '')
+    # The live page wraps the values: 'Expiration Date:</label><span ...>Monday, ...</span>'.
+    text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html or ''))
+    idx = text.lower().find('dly_records_')
+    window = text[max(0, idx - 2500):idx + 800] if idx >= 0 else text
     exp_m = EXPIRY_RE.search(window)
     days_m = DAYS_RE.search(window)
     expires = parse_long_date(exp_m.group(1)) if exp_m else None
