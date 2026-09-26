@@ -52,6 +52,15 @@ TODAY = dt.date.fromtimestamp(NOW)
 Q = PS.quarter_of(TODAY)
 
 
+
+def write_sync_ok(d):
+    """A clean 07:15 opt-out sync recorded today (#80's sync_gate): without it the bridge
+    correctly HOLDS every send, which is not what this suite is testing."""
+    import datetime as _dt
+    (d / 'sync_status.json').write_text(json.dumps({
+        'date': _dt.date.today().isoformat(), 'state': 'finished', 'ok': True,
+        'started_at': time.time() - 120, 'finished_at': time.time() - 60, 'steps': []}), encoding='utf-8')
+
 def iso(days):
     """ISO date `days` from today (negative = past)."""
     return (TODAY + dt.timedelta(days=days)).isoformat()
@@ -1180,8 +1189,9 @@ reset_ledgers()
 srv = work({'broward_leads.json': leads_br, 'palmbeach_leads.json': leads_pb, 'leads_final.json': leads_final,
             'sale_history_cache.json': md_cache})
 run(srv, FakeHTTP(by_name=http.by_name), args=['--max-spend', '2'])
-for fn in ('send_server.py', 'stay_gate.py', 'mail_guard.py'):
+for fn in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
     shutil.copy(HERE / fn, srv / fn)
+write_sync_ok(srv)
 (srv / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
 (srv / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
 (srv / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
@@ -1282,8 +1292,9 @@ leads19 = [{'county': 'BROWARD', 'case': 'CACE-99-000901', 'owners': 'PRESEND CL
            {'county': 'BROWARD', 'case': 'CACE-99-000904', 'owners': 'NOCREDS FRANK', 'auction': mdy(20)}]
 canned19 = {'OPENCASE|DORA': [row('OPENCASE', 'DORA', no='0:99-bk-19002', filed=iso(-20))]}
 srv19 = work({'broward_leads.json': leads19, 'pcl_canned.json': canned19})
-for fn in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'pacer_stay.py', 'paid_reads.py', 'paths.py'):
+for fn in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'pacer_stay.py', 'paid_reads.py', 'paths.py', 'sync_gate.py'):
     shutil.copy(HERE / fn, srv19 / fn)
+write_sync_ok(srv19)
 (srv19 / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
 (srv19 / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
 (srv19 / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
