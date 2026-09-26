@@ -31,7 +31,14 @@ DEADLINE_SEC = int(os.environ.get('GEN_DEADLINE', '480'))   # stay under the sch
 def mint_qs(owner_lf, tries=3, solver=None):
     """Turnstile-mint a durable qs for owner (SURNAME, GIVEN). Returns (qs, record_count) or (None, 0)."""
     from captcha_solver import solve_turnstile
-    solve = solver or solve_turnstile
+    # The default path pays 2Captcha, so it goes through the shared monthly cap (paid_reads.py):
+    # each solve is checked and counted before it is submitted, and a refused one returns None like
+    # any failed solve. A caller that passes its own solver (run_documents' PaidCutoffSolver ladder)
+    # guards that solver itself.
+    if solver is None:
+        import paid_reads
+        solver = paid_reads.guarded(solve_turnstile, 'gen_records_qs')
+    solve = solver
     party = (owner_lf[0] + ' ' + (owner_lf[1] or '')).strip()
     url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(party)
            + '&dateRangeFrom=&dateRangeTo=&documentType=&searchT=&firstQuery=y&searchtype='
@@ -81,9 +88,14 @@ def main():
 
     ok = 0
     _start = time.time()
+    import paid_reads
     for oc, lf in items:
         if time.time() - _start > DEADLINE_SEC:
             print("  .. budget hit; stopping (rest resume next run)"); break
+        # Up to three solves per owner. Stop the whole run the moment the month cannot pay for one,
+        # rather than walking the rest of the list refusing each owner in turn.
+        if not paid_reads.allow(paid_reads.SOLVE_USD, 'gen_records_qs')[0]:
+            print("  .. monthly paid-reads cap: stopping, nothing more minted (rest resume when it resets)"); break
         qs, n = mint_qs(lf)
         if qs and 0 < n <= MAX_HITS:
             cache[oc] = qs; ok += 1
