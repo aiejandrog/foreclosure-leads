@@ -53,6 +53,8 @@ BSG_Mail_Campaign_*.pdf
 !_casestatustest.py
 !_workeremailtest.py
 !_codelientest.py
+# _taxschedtest: Tax1 near-sale scheduling, stale-read gate, certificate follow-up; invented folios.
+!_taxschedtest.py
 # code_lien_amounts.py (C2): per-lien estimates keyed by book/page. County records, local only.
 code_lien_amounts.json
 code_lien_amounts.json.tmp
@@ -574,6 +576,8 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+# _saleresultstaletest: AR1 -- old decisive sale results ship flagged stale; passed sales with no read show UNREAD.
+!_saleresultstaletest.py
 !_judgmentpasstest.py
 # pacer_stay.py: federal bankruptcy verdicts per lead (case-keyed, local data) + the local PACER
 # quarter-spend ledger (money state). Never commit either; the repo is public.
@@ -595,3 +599,5 @@ pacer_newfiler*.lock
 !_pacerstaytest.py
 # _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
 !_titlechaintest.py
+# _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
+!_judgmentscopetest.py
