@@ -433,6 +433,12 @@ rem                                Cloudflare wall refresh.yml documents elsewhe
 rem                                here, not "landing failed".
 echo [3k/5] Code-enforcement liens (free county ArcGIS)...
 python -u code_liens.py >> "%LOG%" 2>&1
+rem  C2 (2026-09-26): what each RECORDED code lien prints -- fine, daily rate, start date -- read
+rem  off the recorded document by book/page (CFN from records_index.json, anonymous OR image
+rem  endpoint, free local OCR). $0: no search, no captcha, no units. Output is an ESTIMATE, never a
+rem  payoff, and it never enters equity. Non-fatal: a failure leaves the board as it was.
+python -u code_lien_amounts.py --limit 25 >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! code_lien_amounts failed - code-lien estimates not refreshed ^(board unaffected^).>> "%LOG%"
 
 echo [3l/5] Back taxes + sold certificates (feeds equity and the tax chip)...
 python -u county_taxes.py >> "%LOG%" 2>&1
