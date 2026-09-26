@@ -247,7 +247,31 @@ nothing else in the repo reads that label: no `_transition` entry, not in `stay_
 `sale_held`'s, never in `reconcile_judgments`. And because the producer DID label it, `_sale_state`'s
 unlabelled scan could not see it either, so an "Order Staying Foreclosure Sale" filed after a notice of
 sale left the status `sale_scheduled` and the case `supported`, over a court order staying that very
-sale. The entry fell between labelled and consumed; it now raises a gap naming the producer's own label.
+sale. The entry fell between labelled and consumed; it now raises a gap naming the producer's own label
+- but only where no posture-deciding entry outlives it. That check shipped without a floor for one
+commit, and `classify` reaches `order.*stay` before `order.*motion`, so an "Order Granting Motion to
+Stay Discovery" from 2024 held a docket whose own later entries are a final judgment, a noticed sale and
+a certificate of title `incomplete` for ever. An older one is a note.
+
+**A second judgment row the reconciliation left operative.** `reconcile_judgments` (:678) tests
+`_ADDS_TO` before `_REPLACES` over `operative_text` + `description` + `comments`, so an entry whose
+words say BOTH "Amended Final Judgment of Foreclosure" AND "awarding attorneys fees and costs" is typed
+`role='supplemental'`: that branch only records `adds_to` and never calls `_target`, so the judgment it
+amends is never marked `superseded`, and :752 keeps supplemental rows out of `operative` - leaving the
+ORIGINAL judgment controlling with its figure vouched to the cent and the amendment named nowhere.
+Deleting the fee words from the same docket line, knowing strictly less, was already `incomplete`. A
+self-declared amendment (the producer's own `_REPLACES` over its own docket words) now holds the case; a
+genuine supplemental judgment for fees is a note, since the Amount column is then the controlling
+judgment's alone and understates the total (twenty-fourth review).
+
+**Two producers disagreeing about whether a filing was read.** `document_coverage` :152 emits
+`restricted_likely` for a docket-linked document the docket counts as 0, and it does so BEFORE it looks
+at the rows actually acquired, while `build_timeline` :403 sets `image_status` `'read'` for the same
+entry once its pages are read. So once one of those filings is obtained the two disagree for good, and
+the report printed "behind the clerk's login" beside "amount verified to the cent" on that entry's own
+court copy - a sentence the same file refutes - and held the case `incomplete` however much was read.
+The disagreement is now stated in both modules' own words. Upgrading the state to `read` would not be
+this module's to do; the branch order in `document_coverage` is **reported, not changed**.
 
 **The report prints the posture and the cutoff.** `dismissed`, `sold` and `sale_cancelled` are all
 `SETTLED_KINDS` and the producer folds none of them into the judgment row or the amount, so all three
@@ -287,7 +311,7 @@ superseded figure. Closing it needs the producer to keep the title (an `attached
 is typed `role: supplemental`, excluded from `operative`, and the case reads "no operative judgment"
 and therefore `incomplete`. Also upstream, also reported rather than fixed here.
 
-**The limitation behind most of this, stated plainly.** `miami_case_timeline` :383 does
+**The limitation behind most of this, stated plainly.** `miami_case_timeline` :380 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry
 whose OCS eventType is a hearing loses its real label, and every summary the producer builds afterwards
 is keyed on the label that is gone: `stay_history` and `stay_in_effect` (:462), `sale_held` with its
@@ -300,7 +324,7 @@ and a vacated judgment, a satisfied one and an order resetting a sale each read 
 
 `case_verdict` cannot do better than a gap here, and neither could a fix in the producer without
 evidence this repo does not hold. A calendar event genuinely can be a hearing ABOUT a motion rather
-than the thing itself, which is what :383 is for, and nothing in a saved timeline says which a given
+than the thing itself, which is what :380 is for, and nothing in a saved timeline says which a given
 entry is. Deciding it needs a count of how often OCS puts a hearing eventType on an order row, which
 is the desktop's to measure; a read-only script for that is in the project files. The producer is
 therefore left alone on purpose, not by the earlier reasoning in this paragraph, which said the fix

@@ -176,7 +176,7 @@ SALE_LIVE_STATUS_KINDS = ('sale_scheduled',)
 SALE_MONEY_KINDS = ('sale_bid', 'sale_deposit')
 CERTIFICATE_KINDS = ('certificate_of_sale', 'certificate_of_title')
 # The kinds classify uses when it did NOT recognise the entry: 'other' is its fallthrough (:223) and
-# 'hearing' is the override a calendar eventType forces onto anything but a notice of sale (:383).
+# 'hearing' is the override a calendar eventType forces onto anything but a notice of sale (:380).
 # An entry the producer DID label is explained by its label - the petition that names the sale it
 # stays is not an unclassified sale entry, which is how a docket with no sale on it read incomplete.
 # The producer's own COVER labels: what classify returns for a filing titled ABOUT something else
@@ -216,7 +216,7 @@ BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')
 def _producer_labels(entry):
     """Every kind the PRODUCER assigned this entry: `kind` and `index_kind` both.
 
-    `kind` is not a reliable carrier of the producer's classification. miami_case_timeline :383 does
+    `kind` is not a reliable carrier of the producer's classification. miami_case_timeline :380 does
     `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any entry
     whose OCS eventType is a hearing has its real label overwritten and keeps it only in
     `index_kind`. The eighth review found that this module knew about the override in one of the three
@@ -231,7 +231,7 @@ def _producer_labels(entry):
     Sale" whose own document reads "NOTICE OF FORECLOSURE SALE" closed a live sale under a §362 stay
     and returned `supported`, and a line saying "Notice of Filing Bankruptcy Petition" whose document
     reads "ORDER DENYING MOTION TO COMPEL" produced an `incomplete` no further reading can clear.
-    `kind_source` cannot be the test - :383 does not update it - but `calendar_event` is on the entry
+    `kind_source` cannot be the test - :380 does not update it - but `calendar_event` is on the entry
     and is exactly the condition the override fires on.
 
     THE PRODUCER'S OWN stay_history HAS THE SAME BUG (:462 keys on e['kind']), so its backstop is
@@ -299,7 +299,7 @@ def _labelled(timeline, kinds, since=None):
     """-> the entries the producer gave one of `kinds`, read through _producer_labels.
 
     `timeline['sale_held']` is a producer SUMMARY computed from a bare `e['kind']`
-    (miami_case_timeline :543 for the clerk's money rows, :550 for the certificate), so the :383
+    (miami_case_timeline :543 for the clerk's money rows, :550 for the certificate), so the :380
     override silently empties it: sale-day bid and deposit rows on a calendar event made sale_held
     None and the verdict `supported` over a sale the saved file says was held, and a calendar-typed
     certificate made the report print "no certificate of sale has followed" about a docket carrying
@@ -328,7 +328,7 @@ def _labelled(timeline, kinds, since=None):
 
 
 # Producer labels that decide a case's posture, and so the summaries the verdict rests on. Any of
-# these lost to the :383 relabel is a gap: this module does not guess which one the entry was.
+# these lost to the :380 relabel is a gap: this module does not guess which one the entry was.
 DECIDING_KINDS = ('vacatur', 'satisfaction', 'final_judgment', 'order_of_dismissal',
                   'notice_of_voluntary_dismissal', 'sale_bid', 'sale_deposit',
                   'certificate_of_sale', 'certificate_of_title', 'notice_of_sale',
@@ -339,7 +339,7 @@ DOCUMENT_SOURCES = ('document', 'document_passage')
 
 
 def _relabelled(timeline):
-    """-> [(entry, what the relabel cost)] for entries :383 took a deciding label from.
+    """-> [(entry, what the relabel cost)] for entries :380 took a deciding label from.
 
     Ten review rounds went one site at a time: the stay history, then the held-sale summary and the
     certificate, then the bankruptcy-on-the-sale-day list. Every one was the same relabel reaching a
@@ -349,7 +349,7 @@ def _relabelled(timeline):
     relabel took a posture-deciding label, the case is held as a gap, whatever summary consumed it.
 
     THIS MODULE DOES NOT DECIDE WHAT THE ENTRY WAS. A calendar event genuinely can be a hearing ON a
-    motion rather than the thing itself, which is what :383 is for, and nothing in the saved file says
+    motion rather than the thing itself, which is what :380 is for, and nothing in the saved file says
     which this is. Naming the possibility and holding the case is the only answer the file supports;
     deciding it needs the clerk's real data, which is the desktop's to measure.
     """
@@ -473,7 +473,7 @@ def _sale_state(timeline, status, kind):
 
     held = timeline.get('sale_held')
     if not (isinstance(held, dict) and held.get('date')):
-        # The summary is built from a bare kind, so :383 can empty it while the clerk's own sale-day
+        # The summary is built from a bare kind, so :380 can empty it while the clerk's own sale-day
         # rows sit in `entries`. Reading it as "no sale was held" replaced the stay-against-sale
         # contradiction with a note (tenth review). The money rows are the producer's labels too.
         money = _labelled(timeline, SALE_MONEY_KINDS)
@@ -863,7 +863,7 @@ def assess(timeline, dossier=None):
     if money and not held.get('date') and not [
             c for c in closing_for_money
             if str(c.get('date') or '') >= max(str(e.get('date') or '') for e in money)]:
-        # The summary is empty while the entries carry the labels it is built from: the :383 override
+        # The summary is empty while the entries carry the labels it is built from: the :380 override
         # emptied it, and the evidence that a sale was held is in the file (ninth review).
         missing.append("entr%s %s carr%s the clerk's sale-day bid or deposit label while the run's "
                        'own held-sale summary took none of them in, so whether a sale was held is '
@@ -915,16 +915,47 @@ def assess(timeline, dossier=None):
     # still: _transition returns None, so even the posture word stays judgment_entered (twenty-third
     # review). This suite asserted the opposite as settled fact, so no fixture ever built the shape.
     for row in _rows(judgments, 'judgments'):
-        if (not isinstance(row, dict) or row.get('entry_id') == entry_id
-                or _row_satisfied(row) is False):
+        if not isinstance(row, dict) or row.get('entry_id') == entry_id:
             continue
-        missing.append('the reconciliation records judgment entry %s in this case as %s, and it is '
-                       'not the controlling judgment, so what was satisfied is not settled in this '
-                       'file (%s)'
-                       % (row.get('entry_id') or '?',
-                          str(row.get('satisfaction') or row.get('status') or 'in an unrecorded '
-                              'state'),
-                          str(row.get('reason') or 'no reason recorded')))
+        if _row_satisfied(row):
+            missing.append('the reconciliation records judgment entry %s in this case as %s, and it '
+                           'is not the controlling judgment, so what was satisfied is not settled in '
+                           'this file (%s)'
+                           % (row.get('entry_id') or '?',
+                              str(row.get('satisfaction') or row.get('status') or 'in an unrecorded '
+                                  'state'),
+                              str(row.get('reason') or 'no reason recorded')))
+            continue
+        # A second judgment row the reconciliation left OPERATIVE. reconcile_judgments (:678) tests
+        # _ADDS_TO before _REPLACES over operative_text + description + comments, so an entry whose
+        # words say BOTH "Amended Final Judgment of Foreclosure" AND "awarding attorneys fees and
+        # costs" is typed role='supplemental', takes the branch that only records adds_to, and never
+        # calls _target - so the judgment it amends is never marked superseded, and :752 excludes
+        # supplemental rows from `operative`, leaving the ORIGINAL judgment controlling. The case read
+        # `supported` with the superseded figure verified to the cent and the amendment named nowhere,
+        # and deleting the fee words from the same docket line - knowing LESS - made it incomplete
+        # (twenty-fourth review). A verified total on the second judgment's own court copy is
+        # discarded too, since _judgment_amount filters on the controlling entry id.
+        if row.get('status') == 'operative' and row.get('role') == 'supplemental':
+            twin = next((e for e in _rows(timeline, 'entries')
+                         if isinstance(e, dict)
+                         and str(e.get('entry_id')) == str(row.get('entry_id'))), None)
+            if twin is not None and _replaces(twin):
+                missing.append('the reconciliation records judgment entry %s as role %r adding to '
+                               '%s, so it superseded nothing, while the entry\'s own docket words say '
+                               'it replaces a judgment; which judgment is controlling is not settled '
+                               'in this file'
+                               % (row.get('entry_id') or '?', row.get('role'),
+                                  row.get('adds_to') or 'no entry'))
+            else:
+                # A genuine supplemental judgment for fees and costs adds to what is owed without
+                # replacing anything, so it is a note - but the amount column is then the controlling
+                # judgment's alone and understates the total, which a reader has to see.
+                notes.append('judgment entry %s is a second judgment of record the reconciliation '
+                             'records as role %r adding to %s; any amount above is the controlling '
+                             "judgment's alone"
+                             % (row.get('entry_id') or '?', row.get('role'),
+                                row.get('adds_to') or 'no entry'))
 
     # --- the bankruptcy stay -------------------------------------------------------------------
     stay = timeline.get('stay_in_effect')
@@ -1112,8 +1143,23 @@ def assess(timeline, dossier=None):
         # write, or an attachment list that simply has no row for this entry all land here.
         missing.append("no coverage row for the controlling judgment, so nothing shows its filing "
                        "was read")
+    # document_coverage :152 emits restricted_likely for a docket-linked document the docket counts
+    # as 0, and it does so BEFORE it looks at the rows actually acquired, while build_timeline :403
+    # sets image_status 'read' for the same entry once its pages are read. So once one of those
+    # filings IS obtained the two producers disagree for good, and this loop printed "behind the
+    # clerk's login" beside "amount verified to the cent on court:<that entry>:1" in one row - a
+    # sentence the same file refutes - and held the case incomplete however much was read. Restating
+    # the disagreement is the honest form; upgrading the state to 'read' is not this module's to do.
+    read_per_timeline = next((e.get('image_status') for e in _rows(timeline, 'entries')
+                              if isinstance(e, dict)
+                              and str(e.get('entry_id')) == str(entry_id)), None)
     for row in mine:
         state = row.get('state')
+        if state != 'read' and read_per_timeline == 'read':
+            missing.append("document_coverage records the controlling judgment's filing as %s while "
+                           "the timeline's own image_status for that entry is 'read'; the two "
+                           'producers disagree about whether it was read' % state)
+            continue
         if state in LOGIN_WALLED:
             missing.append("the controlling judgment's filing is behind the clerk's login (%s)" % state)
         elif state in NO_IMAGE:
@@ -1242,14 +1288,26 @@ def assess(timeline, dossier=None):
     # it either: an "Order Staying Foreclosure Sale" after a notice of sale left the status
     # `sale_scheduled` and the case `supported`, over a court order staying that very sale. The entry
     # fell between labelled and consumed (twenty-third review).
+    # It needs a floor, and the round that added it shipped without one. classify reaches
+    # ('nonbankruptcy_stay', r'order.*stay') before ('order_on_motion', r'order.*motion'), so an
+    # "Order Granting Motion to Stay Discovery" gets the label too - and an unfloored check held a
+    # docket whose own later entries are a final judgment, a noticed sale and a certificate of title
+    # `incomplete` for ever, on a discovery stay from the year before. Nothing a later run can read
+    # would clear it. The motivating case was a stay order filed AFTER a notice of sale, so the check
+    # asks only about an order no posture-deciding entry outlives.
+    decided = [str(record.get('date') or '') if isinstance(record, dict) else '']
+    decided += [str(e.get('date') or '') for e in _labelled(
+        timeline, SALE_NOTICE_KINDS + CERTIFICATE_KINDS + ('order_cancelling_sale',))]
+    stay_floor = max(decided)
     for entry in _rows(timeline, 'entries'):
         if (not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of'))
                 or 'nonbankruptcy_stay' not in _producer_labels(entry)):
             continue
-        missing.append('entry %s is an order the run labelled nonbankruptcy_stay, a kind '
-                       'miami_case_timeline folds into no posture, so what it stays - and whether it '
-                       'reaches this case or a sale on the calendar - is not settled in this file'
-                       % (entry.get('entry_id') or '?'))
+        said = ('entry %s is an order the run labelled nonbankruptcy_stay, a kind '
+                'miami_case_timeline folds into no posture, so what it stays - and whether it '
+                'reaches this case or a sale on the calendar - is not settled in this file'
+                % (entry.get('entry_id') or '?'))
+        (missing if str(entry.get('date') or '') >= stay_floor else notes).append(said)
     # unmatched (:756): reconcile_judgments' own list of dispositive events it could not link to a
     # judgment. A satisfaction citing the mortgage's recording date rather than the judgment's - the
     # ordinary shape - lands here (_target, :793), and an unmatched satisfaction left the judgment

@@ -1466,7 +1466,7 @@ class SeventhReviewTests(unittest.TestCase):
 
     def test_a_hearing_entry_the_classifier_never_labelled_is_still_a_gap(self):
         # The producer overwrites kind with 'hearing' for anything on a calendar eventType except a
-        # notice of sale (:383), so 'hearing' has to stay in the unlabelled set. "Notice of
+        # notice of sale (:380), so 'hearing' has to stay in the unlabelled set. "Notice of
         # Rescheduled Foreclosure Sale" is one classify leaves as 'other', so on a hearing event both
         # of its labels are unrecognising ones and the answer is a gap.
         t = self.calendared([(100, 'Complaint', '01/05/2026', ''),
@@ -1482,7 +1482,7 @@ class SeventhReviewTests(unittest.TestCase):
 
 
 class EighthReviewTests(unittest.TestCase):
-    """miami_case_timeline :383 overwrites `kind` with 'hearing' for any entry on a calendar
+    """miami_case_timeline :380 overwrites `kind` with 'hearing' for any entry on a calendar
     eventType except a notice of sale, leaving the producer's real label only in `index_kind`. The
     seventh round's fix knew that and closed it in ONE of the three places it reaches. Every case
     here drives the producer with a real eventType.
@@ -1557,11 +1557,11 @@ class EighthReviewTests(unittest.TestCase):
                   and n.name in ('_producer_labels', '_relabelled')]
         producer_labels = exempt[0]
         # `status` is the case posture, not a docket entry, and `g` is a gap row; neither goes
-        # through the :383 override. Anything else reading 'kind' is reading an entry's label.
+        # through the :380 override. Anything else reading 'kind' is reading an entry's label.
         # `status` is the case posture and `g` a gap row; `event` is one of reconcile_judgments'
         # own `unmatched` rows, whose 'kind' the producer wrote itself (:739) and which is only
         # quoted back - and which can only ever be 'satisfaction' or 'vacatur' (:722), never the
-        # relabel. None of the three is a docket entry, so none goes through the :383 override.
+        # relabel. None of the three is a docket entry, so none goes through the :380 override.
         allowed = {'status', 'g', 'event'}
         inside = {id(n) for f in exempt for n in ast.walk(f)}
         bad = []
@@ -1579,7 +1579,7 @@ class EighthReviewTests(unittest.TestCase):
                 continue
             bad.append((getattr(node, 'lineno', '?'), ast.dump(receiver)[:60]))
         self.assertEqual(bad, [], 'a producer label is read off `kind` alone; miami_case_timeline '
-                                  ':383 overwrites it with "hearing" on a calendar eventType, so '
+                                  ':380 overwrites it with "hearing" on a calendar eventType, so '
                                   'this must go through _producer_labels')
 
 
@@ -1612,7 +1612,7 @@ class NinthReviewTests(unittest.TestCase):
             (140, 'Final Judgment of Foreclosure', '06/10/2026', '')]
 
     def test_the_clerks_money_rows_on_a_hearing_event_are_not_lost(self):
-        # sale_held is computed upstream from a bare e['kind'] (miami_case_timeline :543), so the :383
+        # sale_held is computed upstream from a bare e['kind'] (miami_case_timeline :543), so the :380
         # override empties it: bid and deposit rows on a calendar event made sale_held None and the
         # verdict `supported` over a sale the saved file says was held.
         t = self.built(self.OPEN + [
@@ -1728,7 +1728,7 @@ class TenthReviewTests(unittest.TestCase):
                             (text, r['missing']))
 
     def test_a_document_read_label_lost_to_the_relabel_holds_the_case(self):
-        # :383 exempts only notice_of_sale, so an order resetting a sale is relabelled like anything
+        # :380 exempts only notice_of_sale, so an order resetting a sale is relabelled like anything
         # else - and where `kind` came from READING the document, what the relabel destroyed is saved
         # nowhere: index_kind is 'other' because the docket line is the bare word "Order". Not even
         # the unlabelled-sale gap fires, because that scans description and comments.
@@ -2963,6 +2963,101 @@ class TwentyThirdReviewTests(unittest.TestCase):
             self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
             self.assertTrue([m for m in r['missing'] if 'nonbankruptcy_stay' in m],
                             (title, r['missing']))
+
+
+
+class TwentyFourthReviewTests(unittest.TestCase):
+    """A second judgment row the reconciliation left operative, a gap check of mine that shipped with
+    no floor, and two producers disagreeing about whether the same filing was read.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+    JUDGED = [(100, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '03/10/2026', '')]
+
+    def case(self, extra, as_of='2026-09-23'):
+        return self.built(self.JUDGED + list(extra), controlling='140', amount=500000.0,
+                          as_of=as_of, pages={'140': self.PAGE})
+
+    def test_an_amended_judgment_typed_supplemental_is_named(self):
+        # reconcile_judgments (:678) tests _ADDS_TO before _REPLACES over operative_text +
+        # description + comments, so an entry whose words say BOTH "Amended Final Judgment" AND
+        # "awarding attorneys fees and costs" is role='supplemental': the branch only records adds_to,
+        # never calls _target, so the judgment it amends is not superseded, and :752 keeps supplemental
+        # rows out of `operative` - leaving the ORIGINAL judgment controlling and its figure vouched.
+        t = self.case([(180, 'Amended Final Judgment of Foreclosure',
+                        'ORDER AMENDING FINAL JUDGMENT AND AWARDING ATTORNEYS FEES AND COSTS',
+                        '05/12/2026', '')])
+        rows = {r['entry_id']: (r['role'], r['status']) for r in t['judgments']['judgments']}
+        self.assertEqual(rows.get('180'), ('supplemental', 'operative'))
+        self.assertEqual(rows.get('140'), ('judgment', 'operative'))
+        self.assertEqual(t['judgments']['controlling_entry'], '140')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if '180' in m and 'superseded nothing' in m],
+                        r['missing'])
+
+    def test_knowing_less_about_the_same_amendment_was_already_incomplete(self):
+        # The asymmetry: drop the fee words and nothing else, _REPLACES wins, 140 goes superseded and
+        # the case was already incomplete. Adding words that say MORE flipped it to supported.
+        bare = self.case([(180, 'Amended Final Judgment of Foreclosure', '', '05/12/2026', '')])
+        self.assertEqual(CV.assess(bare)['verdict'], 'incomplete')
+
+    def test_a_genuine_supplemental_fees_judgment_is_a_note(self):
+        # Contract 5. A supplemental judgment for fees and costs adds to what is owed without
+        # replacing anything, so it does not hold the case - but the Amount column is then the
+        # controlling judgment's alone and understates the total, which the reader has to see.
+        t = self.case([(180, 'Supplemental Final Judgment Awarding Attorneys Fees and Costs', '',
+                        '05/12/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+        self.assertTrue([n for n in r['notes'] if '180' in n and 'second judgment of record' in n],
+                        r['notes'])
+
+    def test_an_old_unrelated_stay_order_does_not_hold_a_finished_docket(self):
+        # My own check from the round before, shipped with no floor. classify reaches
+        # ('nonbankruptcy_stay', r'order.*stay') before ('order_on_motion', r'order.*motion'), so a
+        # discovery stay carries the label - and a 2024 discovery stay held a docket whose own later
+        # entries are a judgment, a noticed sale and a certificate of title incomplete for ever.
+        t = self.built([(100, 'Complaint', '', '01/05/2024', ''),
+                        (110, 'Order Granting Motion to Stay Discovery', '', '02/01/2024', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '03/10/2025', ''),
+                        (160, 'Notice of Foreclosure Sale on 06/01/2025', '', '04/10/2025', ''),
+                        (175, 'Certificate of Title', '', '06/20/2025', '')],
+                       controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        self.assertEqual(next(e for e in t['entries']
+                              if e['entry_id'] == '110')['kind'], 'nonbankruptcy_stay')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+        self.assertTrue([n for n in r['notes'] if 'nonbankruptcy_stay' in n], r['notes'])
+
+    def test_a_stay_order_no_later_entry_outlives_still_holds_the_case(self):
+        # The motivating case, which must survive the floor.
+        t = self.built([(100, 'Complaint', '', '01/05/2026', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (160, 'Notice of Foreclosure Sale set for 12/28/2026', '', '07/01/2026', ''),
+                        (191, 'Order Staying Foreclosure Sale', '', '08/01/2026', '')],
+                       controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if 'nonbankruptcy_stay' in m], r['missing'])
+
+    def test_the_two_producers_disagreeing_about_a_read_filing_is_said_as_that(self):
+        # document_coverage :152 emits restricted_likely for a docket-linked document the docket counts
+        # as 0, BEFORE it looks at the rows actually acquired; build_timeline :403 sets image_status
+        # 'read' for the same entry once its pages are read. The loop printed "behind the clerk's
+        # login" beside "amount verified to the cent" on that entry's own court copy - a sentence the
+        # same file refutes - and held the case incomplete however much was read.
+        t = self.case([])
+        self.assertEqual(next(e for e in t['entries'] if e['entry_id'] == '140')['image_status'],
+                         'read')
+        t['coverage'] = {'attachments': [{'entry_id': '140', 'kind': 'final_judgment',
+                                          'state': 'restricted_likely', 'detail': [],
+                                          'document': None}], 'complete': False}
+        r = CV.assess(t)
+        self.assertTrue([m for m in r['missing'] if 'disagree about whether it was read' in m],
+                        r['missing'])
+        self.assertFalse([m for m in r['missing'] if "behind the clerk's login" in m], r['missing'])
 
 
 
