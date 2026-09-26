@@ -3260,5 +3260,88 @@ class TwentySixthReviewTests(unittest.TestCase):
             r = CV.assess(self.read_cover(title, rows=live))
             self.assertEqual(r['verdict'], 'supported', (title, r['missing'], r['conflicts']))
 
+class TwentySeventhReviewTests(unittest.TestCase):
+    """The round before's own fix, half applied: a sentence picked from where the SUBJECT STRING came
+    from rather than from whether anyone opened the document; a floor whose stated scope is every
+    posture-deciding entry and whose list held four sale labels; and a parser guard returning the
+    wrong shape.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+    JUDGED = [(100, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '03/10/2026', '')]
+
+    def cover(self, page=None):
+        # The clerk's line names the satisfaction; `page`, when given, is what the run READ.
+        return self.built(self.JUDGED + [(180, 'Notice of Filing Satisfaction of Final Judgment',
+                                          '', '05/12/2026', '')],
+                          controlling='140', amount=500000.0,
+                          pages=dict({'140': self.PAGE}, **({'180': page} if page else {})))
+
+    def test_a_read_filing_is_never_described_as_unopened(self):
+        # Contract 4. _body_kind only accepts a first page whose own title matches its whitelist
+        # (miami_case_timeline :231), so an OPENED filing whose page 1 is a cover sheet, a stamp or a
+        # caption block keeps kind_source 'docket_text' with image_status 'read'. The sweep's flag
+        # answered "which string gave the subject", and the sentence it picked asserted "nobody opened
+        # it" - about a document the same timeline records as read. DOCUMENT_SOURCES was defined three
+        # hundred lines away and read by nothing.
+        for page in ('NOTICE OF FILING\ncover sheet',
+                     'IN THE CIRCUIT COURT OF THE 11TH JUDICIAL CIRCUIT\nfiled stamp'):
+            t = self.cover(page)
+            e = next(x for x in t['entries'] if x['entry_id'] == '180')
+            self.assertEqual(e['image_status'], 'read', page)
+            self.assertTrue(CV._was_read(e), page)
+            self.assertEqual(CV._cover_subject(e), ('satisfaction', False), page)
+            said = CV.assess(t)['missing']
+            self.assertTrue([m for m in said if 'entry 180' in m and 'was read' in m], said)
+            self.assertFalse([m for m in said if 'nobody opened it' in m], said)
+
+    def test_an_unopened_filing_is_still_described_as_unopened(self):
+        # The third state has to stay distinct from the other two, or the split is a lie the other way.
+        said = CV.assess(self.cover())['missing']
+        self.assertTrue([m for m in said if 'entry 180' in m and 'nobody opened it' in m], said)
+
+    def test_a_dismissal_clears_an_old_unrelated_stay_order(self):
+        # Contract 5. stay_floor's own comment scopes it to "an order no posture-deciding entry
+        # outlives"; the list was the controlling judgment plus four SALE labels. So the docket
+        # carrying the STRONGER disposition was the one held: a cancelled sale cleared a discovery
+        # stay and an order of dismissal did not, for ever - reading the order's own pages still
+        # classifies its title nonbankruptcy_stay.
+        stay = [(100, 'Complaint', '', '01/05/2026', ''),
+                (140, 'Final Judgment of Foreclosure', '', '03/10/2026', ''),
+                (170, 'Order Granting Motion to Stay Discovery', '', '04/10/2026', '')]
+        for desc in ('Order of Dismissal', 'Notice of Voluntary Dismissal',
+                     'Order Cancelling Foreclosure Sale', 'Certificate of Title'):
+            t = self.built(stay + [(190, desc, '', '07/09/2026', '')], controlling='140',
+                           amount=500000.0, pages={'140': self.PAGE})
+            self.assertEqual(next(e for e in t['entries']
+                                  if e['entry_id'] == '170')['kind'], 'nonbankruptcy_stay')
+            r = CV.assess(t)
+            self.assertFalse([m for m in r['missing'] if 'nonbankruptcy_stay' in m], (desc, r['missing']))
+            self.assertTrue([n for n in r['notes'] if 'nonbankruptcy_stay' in n], (desc, r['notes']))
+
+    def test_a_stay_order_nothing_outlives_still_holds_the_case(self):
+        # The motivating case, which must survive the wider floor.
+        t = self.built([(100, 'Complaint', '', '01/05/2026', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                        (160, 'Notice of Foreclosure Sale set for 12/28/2026', '', '07/01/2026', ''),
+                        (191, 'Order Staying Foreclosure Sale', '', '08/01/2026', '')],
+                       controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['conflicts']))
+        self.assertTrue([m for m in r['missing'] if 'nonbankruptcy_stay' in m], r['missing'])
+
+    def test_a_missing_parser_is_not_a_crash(self):
+        # Every parser guard in the module returns the value that means "no verdict from the parser".
+        # This one returned a bare None while both success paths return a tuple and the call site
+        # unpacks, so a missing parser filed a file that parses fine under `broken`.
+        import miami_case_timeline as real
+        sys.modules['miami_case_timeline'] = object()
+        try:
+            self.assertEqual(CV._cover_subject({'operative_text': 'Notice of Filing Satisfaction',
+                                                'description': '', 'comments': ''}), (None, False))
+        finally:
+            sys.modules['miami_case_timeline'] = real
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

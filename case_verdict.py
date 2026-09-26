@@ -670,7 +670,10 @@ def _cover_subject(entry):
         import miami_case_timeline
         cover = miami_case_timeline._FILED_ABOUT_RE
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
-        return None
+        # The same shape as the success paths: the call site unpacks, so a bare None turned a
+        # missing parser into a TypeError and filed a file that parses fine under `broken`
+        # (twenty-seventh review).
+        return None, False
     # Both regexes are anchored, so each candidate has to START with the cover head. The producer's
     # `operative_text` does when the cover label came from the READ document's title, and the
     # clerk's own line does when it came from `index_kind`; whichever it was, the subject is in one
@@ -685,6 +688,20 @@ def _cover_subject(entry):
         if subject is not None and subject not in UNLABELLED_KINDS:
             return subject, from_document
     return None, False
+
+
+def _was_read(entry):
+    """True when the run OPENED this entry's document, whatever its first page turned out to say.
+
+    DOCUMENT_SOURCES existed and nothing read it. The cover sweep's sentence was picked from where
+    the SUBJECT STRING came from, which is a different question: `_body_kind` only accepts a first
+    page whose own title matches its whitelist (miami_case_timeline :231), so an opened filing whose
+    page 1 is a cover sheet, a stamp or a caption block keeps kind_source 'docket_text' - and the
+    report told the reader nobody opened a document the same timeline records as `read`
+    (twenty-seventh review).
+    """
+    return (str(entry.get('kind_source')) in DOCUMENT_SOURCES
+            or str(entry.get('image_status')) == 'read')
 
 
 def _sale_dates_of(entry):
@@ -1287,6 +1304,14 @@ def assess(timeline, dossier=None):
                  'the run did not fold it into the case\'s posture, and whether it decides this '
                  'case is not settled in this file'
                  if from_title and read_cover else
+                 # The middle state, which the two booleans above had collapsed into "nobody opened
+                 # it": the document WAS opened, its first page carried no title the producer's
+                 # whitelist recognises, and the subject came from the clerk's own line.
+                 'entry %s was read and no title on its first page was recognised, while its own '
+                 'docket title names a %s; the producer labelled the entry by the cover, so the run '
+                 'did not fold it into the case\'s posture, and whether it decides this case is not '
+                 'settled in this file'
+                 if from_title and _was_read(entry) else
                  'entry %s is titled as a filing about something else and its own docket title '
                  'names a %s; nobody opened it, so the run did not fold it into the case\'s '
                  'posture, and whether it decides this case is not settled in this file'
@@ -1347,8 +1372,17 @@ def assess(timeline, dossier=None):
     # would clear it. The motivating case was a stay order filed AFTER a notice of sale, so the check
     # asks only about an order no posture-deciding entry outlives.
     decided = [str(record.get('date') or '') if isinstance(record, dict) else '']
+    # The floor's own scope is "an order no posture-deciding entry outlives", and it listed four
+    # SALE labels. So a docket carrying the stronger disposition was the one held: an
+    # order_cancelling_sale cleared a discovery stay while an order_of_dismissal, a voluntary
+    # dismissal, a satisfaction or a vacatur - each of which ends the case outright - did not, for
+    # ever, since reading the order's own pages still classifies its title nonbankruptcy_stay
+    # (twenty-seventh review). The bankruptcy labels stay out: a bankruptcy filed after a
+    # non-bankruptcy stay order settles nothing about what that order stays.
     decided += [str(e.get('date') or '') for e in _labelled(
-        timeline, SALE_NOTICE_KINDS + CERTIFICATE_KINDS + ('order_cancelling_sale',))]
+        timeline, SALE_NOTICE_KINDS + CERTIFICATE_KINDS
+        + ('order_cancelling_sale', 'satisfaction', 'vacatur', 'order_of_dismissal',
+           'notice_of_voluntary_dismissal'))]
     stay_floor = max(decided)
     for entry in _rows(timeline, 'entries'):
         if (not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of'))

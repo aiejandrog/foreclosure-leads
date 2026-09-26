@@ -332,6 +332,23 @@ twenty-second review's defect mirrored. The same root cause reached `_sale_state
 sale noticed under a read cover title beside a live bankruptcy stay said nothing at all (twenty-sixth
 review).
 
+**The round before's fix, half applied, and a floor narrower than its own comment.** Three things, none
+a false `supported`. The cover sweep's new sentence was picked from where the SUBJECT STRING came from,
+and what it asserts is whether anyone opened the document: `_body_kind` only accepts a first page whose
+own title matches its whitelist (:231), so an OPENED filing whose page 1 is a cover sheet, a stamp or a
+caption block keeps `kind_source` `'docket_text'` with `image_status` `'read'`, and the report told the
+reader nobody opened a document the same timeline records as read - the twenty-second review's defect
+mirrored a second time. `DOCUMENT_SOURCES` was defined three hundred lines away and read by nothing,
+which is the test the sentence needed; there are now three states and three sentences. Second,
+`stay_floor`'s own comment scopes it to "an order no posture-deciding entry outlives" while its list
+held four SALE labels, so the docket carrying the STRONGER disposition was the one held: a cancelled sale
+cleared a discovery stay and an order of dismissal, a voluntary dismissal or a satisfaction did not, for
+ever, since reading the order's own pages still classifies its title `nonbankruptcy_stay`. The
+bankruptcy labels stay out of that floor on purpose - a bankruptcy filed after a non-bankruptcy stay
+order settles nothing about what that order stays. Third, `_cover_subject`'s parser guard returned a bare
+`None` while both success paths return a tuple and the call site unpacks, so a missing parser would have
+filed a file that parses fine under `broken` (twenty-seventh review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
