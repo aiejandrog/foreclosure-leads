@@ -77,7 +77,20 @@ How the gate uses it:
     A number with fewer than five digits ('CASE', 'OTHER', an LP- placeholder) is never looked up
     and stays stay_case_unresolvable.
 A clear is a point-in-time fact about a name search: it goes stale, so it stops clearing after the
-max age (pacer_stay.py re-checks clear leads every 12 days, near-sale ones every 3).
+max age. On the free PACER tier the search is done ON DEMAND: check() sets 'pacer_need' True when a
+fresh per-lead search could change the answer (no-stem lead, keyable number, no entry / an entry
+older than the max age / an errored lookup more than a day old), and send_server.py then asks
+pacer_stay.presend_check() for one search -- under the daily pre-send cap, the $25 quarter cap and
+#74's monthly cap -- and re-reads the verdict. Any other outcome is the refusal it already was.
+
+NEW FILERS (pacer_newfiler_hits.json, BLOCK-ONLY). pacer_stay.py pulls every flsbk party filed
+since its last pull once a day and matches that index against every lead locally; a strong owner
+match on a case open at pull time is written here keyed like the PACER cache. A production hit
+refuses (stay_active) for any lead -- Miami-Dade stem or not -- unless a production per-lead PACER
+'clear' queried AFTER the hit's rows were pulled says otherwise (that search saw the same flsb case
+with its current status). The index never clears anything: a lead that is not in it is exactly as
+unverified as before. A missing hits file changes nothing; an unreadable one refuses no-stem leads
+(stay_unverified) and, like an unreadable PACER file, leaves a Miami-Dade docket verdict alone.
 
 READ FRESH. The cache is re-read whenever its mtime or size changes (one os.stat per call, a parse
 only after sale_history.py writes). sale_history.py writes it with a plain json.dump, not an atomic
@@ -91,6 +104,7 @@ import time
 
 CACHE_NAME = 'sale_history_cache.json'
 PACER_NAME = 'pacer_stay_cache.json'           # written by pacer_stay.py, same folder as CACHE_NAME
+HITS_NAME = 'pacer_newfiler_hits.json'         # pacer_stay.py's daily new-filer matches (block-only)
 ENV_PACER_MAX_AGE = 'DEALFLOW_PACER_MAX_AGE_DAYS'
 DEFAULT_PACER_MAX_AGE_DAYS = 14.0
 
@@ -114,6 +128,7 @@ UNAVAILABLE = 'stay_data_unavailable'
 _LOCK = threading.Lock()
 _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, entry), ...]}
 _PMEMO = {}         # PACER file: path -> (mtime_ns, size, (by_key, by_stem))
+_HMEMO = {}         # new-filer hits file: same shape
 
 
 def case_stem(case):
@@ -190,8 +205,8 @@ def _load(path):
 def pacer_key(case):
     """The key pacer_stay.py writes and check() looks up for a case number that has no Miami-Dade stem.
 
-    'CACE-24-012345' -> 'CACE-24-012345'; ' case no. cace - 24 - 012345 ' -> 'CACE-24-012345';
-    '502024CA001234XXXAMB' unchanged. '' when fewer than five digits remain ('CASE', 'OTHER', 'LP-...')."""
+    'CACE-99-012345' -> 'CACE-99-012345'; ' case no. cace - 99 - 012345 ' -> 'CACE-99-012345';
+    '509999CA001234XXXAMB' unchanged. '' when fewer than five digits remain ('CASE', 'OTHER', 'LP-...')."""
     s = ' '.join(str(case or '').split()).upper()
     s = _LABEL_RE.sub('', s, count=1).strip()
     s = re.sub(r'\s*-\s*', '-', s)
@@ -213,14 +228,26 @@ def _pacer_path(cache_path):
 
 def _load_pacer(path):
     """((by_key, by_stem), err, exists). A missing file is exists=False with no error."""
+    return _load_keyed(path, PACER_NAME, _PMEMO)
+
+
+def _hits_path(cache_path):
+    return os.path.join(os.path.dirname(os.path.abspath(cache_path)), HITS_NAME)
+
+
+def _load_hits(path):
+    return _load_keyed(path, HITS_NAME, _HMEMO)
+
+
+def _load_keyed(path, name, memo_map):
     try:
         st = os.stat(path)
     except FileNotFoundError:
         return None, '', False
     except OSError as e:
-        return None, '%s unreadable (%s)' % (PACER_NAME, e.strerror or e), True
+        return None, '%s unreadable (%s)' % (name, e.strerror or e), True
     with _LOCK:
-        memo = _PMEMO.get(path)
+        memo = memo_map.get(path)
         if memo and memo[0] == st.st_mtime_ns and memo[1] == st.st_size:
             return memo[2], '', True
     data, err = None, ''
@@ -231,15 +258,15 @@ def _load_pacer(path):
             err = ''
             break
         except Exception as e:
-            err = '%s could not be parsed (%s)' % (PACER_NAME, str(e)[:120])
+            err = '%s could not be parsed (%s)' % (name, str(e)[:120])
             data = None
             if attempt == 0:
                 time.sleep(0.25)
     if not err and not isinstance(data, dict):
-        err = '%s is not a JSON object' % PACER_NAME
+        err = '%s is not a JSON object' % name
     if err:
         with _LOCK:
-            _PMEMO.pop(path, None)
+            memo_map.pop(path, None)
         return None, err, True
     by_key, by_stem = {}, {}
     for k, v in data.items():
@@ -254,7 +281,7 @@ def _load_pacer(path):
             by_stem.setdefault(stem, []).append((key, v))
     idx = (by_key, by_stem)
     with _LOCK:
-        _PMEMO[path] = (st.st_mtime_ns, st.st_size, idx)
+        memo_map[path] = (st.st_mtime_ns, st.st_size, idx)
     return idx, '', True
 
 
@@ -300,7 +327,55 @@ def pacer_verdict(ent, now=None):
     return CLEAR, 'no open federal bankruptcy for the owner in PACER (checked %s)' % str(ent.get('q') or '')[:10]
 
 
-def _check_pacer(raw, out, pacer_path):
+def pacer_needs_lookup(ent, now=None):
+    """True when a fresh per-lead PACER search could change this entry's answer (send_server.py's
+    pre-send check asks for one only then). A fresh verdict of any kind is reused -- repeats inside
+    the max age cost nothing -- except an errored lookup, retried after a day."""
+    if not isinstance(ent, dict):
+        return True
+    limit = pacer_max_age_days()
+    if limit <= 0:
+        return False                                 # no clear can be accepted: a search is wasted money
+    if ent.get('env') != 'prod':
+        return True
+    now = time.time() if now is None else now
+    if ent.get('err'):
+        try:
+            tried = float(ent.get('tried') or ent.get('t') or 0)
+        except (TypeError, ValueError):
+            tried = 0.0
+        if (now - tried) / 86400.0 >= 1.0:
+            return True
+    age = _pacer_age_days(ent, now)
+    if age is None:
+        return True
+    return age < -1 or age > limit
+
+
+def hit_blocks(hit, pacer_ent=None, now=None):
+    """Does this new-filer hit refuse the lead? Production hits with a case do, unless a production
+    per-lead PACER 'clear' still within the max age was queried after the hit's rows were pulled."""
+    if not isinstance(hit, dict) or hit.get('env') != 'prod' or not hit.get('cases'):
+        return False
+    if isinstance(pacer_ent, dict) and pacer_verdict(pacer_ent, now)[0] == CLEAR:
+        try:
+            seen = float(hit.get('seen_t') or hit.get('t') or 0)
+            if float(pacer_ent.get('t') or 0) > seen > 0:
+                return False
+        except (TypeError, ValueError):
+            pass
+    return True
+
+
+def _hit_why(hit):
+    cases = [c for c in (hit.get('cases') or []) if isinstance(c, dict)]
+    return ('OPEN federal bankruptcy in the daily Southern District new-filer index for the owner (%s, '
+            'filed %s) -- contacting the debtor is a stay violation'
+            % (', '.join(str(c.get('no')) for c in cases[:3]) or 'case number not recorded',
+               max((str(c.get('filed') or '') for c in cases), default='') or 'date unknown'))
+
+
+def _check_pacer(raw, out, pacer_path, hits_path=None):
     """The verdict for a case number with no Miami-Dade stem: PACER is its only durable stay source."""
     key = pacer_key(raw)
     if not key:
@@ -309,8 +384,20 @@ def _check_pacer(raw, out, pacer_path):
                         'can be keyed to' % raw[:40]))
         return out
     idx, err, exists = _load_pacer(pacer_path)
+    ent = idx[0].get(key) if (exists and not err and idx) else None
+    if hits_path:
+        hidx, herr, hexists = _load_hits(hits_path)
+        if herr:
+            out.update(code=UNVERIFIED, why=herr)
+            return out
+        hit = hidx[0].get(key) if (hexists and hidx) else None
+        if hit is not None and hit_blocks(hit, ent):
+            cases = [c for c in (hit.get('cases') or []) if isinstance(c, dict)]
+            out.update(code=STAY_ACTIVE, why=_hit_why(hit), matched=[key], src='pacer_newfilers',
+                       bd=max((str(c.get('filed') or '') for c in cases), default=''))
+            return out
     if not exists:
-        out.update(code=UNRESOLVABLE,
+        out.update(code=UNRESOLVABLE, pacer_need=True,
                    why=('case %s has no Miami-Dade case stem, and there is no PACER stay data '
                         '(%s missing -- pacer_stay.py has not run or has no credentials)'
                         % (raw[:40], PACER_NAME)))
@@ -318,9 +405,8 @@ def _check_pacer(raw, out, pacer_path):
     if err:
         out.update(code=UNVERIFIED, why=err)
         return out
-    ent = idx[0].get(key)
     if ent is None:
-        out.update(code=UNVERIFIED,
+        out.update(code=UNVERIFIED, pacer_need=True,
                    why='case %s has no PACER lookup yet -- pacer_stay.py has not searched its owner' % raw[:40])
         return out
     out['matched'] = [key]
@@ -329,7 +415,24 @@ def _check_pacer(raw, out, pacer_path):
     out.update(code=code, why=why, ok=(code == CLEAR))
     if code == STAY_ACTIVE:
         out['bd'] = str(ent.get('bd') or '')
+    if code != CLEAR and pacer_needs_lookup(ent):
+        out['pacer_need'] = True
     return out
+
+
+def _hit_on_stem(stem, hits_path, pacer_path):
+    """(key, hit) of a blocking new-filer hit on this Miami-Dade stem, else None. Additive only."""
+    if not hits_path:
+        return None
+    hidx, herr, hexists = _load_hits(hits_path)
+    if not hexists or herr or not hidx:
+        return None
+    pidx, perr, pexists = _load_pacer(pacer_path)
+    pk = pidx[0] if (pexists and not perr and pidx) else {}
+    for k, v in hidx[1].get(stem) or []:
+        if hit_blocks(v, pk.get(k)):
+            return k, v
+    return None
 
 
 def _pacer_active_on_stem(stem, pacer_path):
@@ -344,15 +447,18 @@ def _pacer_active_on_stem(stem, pacer_path):
     return None
 
 
-def check(case, cache_path, pacer_path=None):
+def check(case, cache_path, pacer_path=None, hits_path=None):
     """The stay verdict for one case. Never raises.
 
     Returns {'ok': bool, 'code': str, 'why': str, 'case': str, 'matched': [cache keys],
              'bd': newest filing date on an active entry, 'sl': lift date when cleared by a lift}
-    (+ 'src': 'pacer_pcl' when the verdict came from pacer_stay_cache.json).
-    ok=True only for CLEAR. pacer_path defaults to pacer_stay_cache.json beside cache_path."""
+    (+ 'src': 'pacer_pcl' / 'pacer_newfilers' when the verdict came from PACER data, and
+    'pacer_need': True when an on-demand per-lead PACER search could change a refusal).
+    ok=True only for CLEAR. pacer_path / hits_path default to pacer_stay_cache.json /
+    pacer_newfiler_hits.json beside cache_path."""
     raw = str(case or '').strip()
-    out = {'ok': False, 'code': '', 'why': '', 'case': raw, 'matched': [], 'bd': '', 'sl': ''}
+    out = {'ok': False, 'code': '', 'why': '', 'case': raw, 'matched': [], 'bd': '', 'sl': '',
+           'pacer_need': False}
     try:
         if not raw:
             out.update(code=NO_CASE, why='no case number on the request, so its bankruptcy-stay '
@@ -361,8 +467,10 @@ def check(case, cache_path, pacer_path=None):
         stem = case_stem(raw)
         if pacer_path is None:
             pacer_path = _pacer_path(cache_path)
+        if hits_path is None:
+            hits_path = _hits_path(cache_path)
         if not stem:
-            return _check_pacer(raw, out, pacer_path)
+            return _check_pacer(raw, out, pacer_path, hits_path)
         idx, err = _load(cache_path)
         if err:
             out.update(code=UNAVAILABLE, why=err)
@@ -394,12 +502,21 @@ def check(case, cache_path, pacer_path=None):
             out.update(code=STAY_ACTIVE, bd=str(v.get('bd') or ''), src='pacer_pcl',
                        why=pacer_verdict(v)[1] + ' (the state docket does not show it yet)')
             return out
+        nf = _hit_on_stem(stem, hits_path, pacer_path)
+        if nf:
+            k, v = nf
+            cases = [c for c in (v.get('cases') or []) if isinstance(c, dict)]
+            out['matched'] = out['matched'] + [k]
+            out.update(code=STAY_ACTIVE, src='pacer_newfilers',
+                       bd=max((str(c.get('filed') or '') for c in cases), default=''),
+                       why=_hit_why(v) + ' (the state docket does not show it yet)')
+            return out
         lifts = sorted(str(v.get('sl')) for _, v in hits if v.get('sl'))
         out.update(ok=True, code=CLEAR, sl=(lifts[-1] if lifts else ''),
                    why=('stay lifted %s' % lifts[-1]) if lifts else 'no active stay on record')
         return out
     except Exception as e:                           # a gate that throws must not become a pass
-        out.update(ok=False, code=UNAVAILABLE, why='stay check failed (%s)' % str(e)[:120])
+        out.update(ok=False, code=UNAVAILABLE, pacer_need=False, why='stay check failed (%s)' % str(e)[:120])
         return out
 
 
@@ -410,7 +527,8 @@ def health(cache_path):
         return {'ok': False, 'err': err, 'cases': 0, 'active': 0}
     n = sum(len(v) for v in idx.values())
     act = sum(1 for v in idx.values() for _, e in v if isinstance(e, dict) and entry_stay_active(e))
-    return {'ok': True, 'err': '', 'cases': n, 'active': act, 'pacer': pacer_health(cache_path)}
+    return {'ok': True, 'err': '', 'cases': n, 'active': act, 'pacer': pacer_health(cache_path),
+            'newfilers': newfiler_health(cache_path)}
 
 
 def pacer_health(cache_path):
@@ -421,3 +539,10 @@ def pacer_health(cache_path):
     codes = [pacer_verdict(e)[0] for e in pidx[0].values()]
     return {'ok': True, 'err': '', 'cases': len(codes), 'active': codes.count(STAY_ACTIVE),
             'clear': codes.count(CLEAR)}
+
+
+def newfiler_health(cache_path):
+    hidx, herr, hexists = _load_hits(_hits_path(cache_path))
+    if not hexists or herr:
+        return {'ok': False, 'err': herr or ('%s missing' % HITS_NAME), 'hits': 0}
+    return {'ok': True, 'err': '', 'hits': sum(1 for v in hidx[0].values() if hit_blocks(v))}

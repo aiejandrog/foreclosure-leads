@@ -357,9 +357,11 @@ python -u ownership_scan.py --days 45 --max 500 --budget 1500 >> "%LOG%" 2>&1
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 
 echo [3g/5] Federal bankruptcy stay lookup (PACER PCL; OFF without PACER_USERNAME/PASSWORD)...
-rem  ADDED 2026-09-26: feeds stay_gate.py (pacer_stay_cache.json) so Broward/Palm Beach leads can pass
-rem  the strict send gate. No-op (exit 0, no network) when the PACER env vars are missing. Every page
-rem  is reserved against paid_reads (monthly cap) + the PACER quarter ledger first; fails closed.
+rem  ADDED 2026-09-26: feeds stay_gate.py. Free tier: ONE daily flsb new-filer search (blocks leads
+rem  whose owner just filed); the nightly per-lead search is OFF unless PACER_BULK=md-near/all. Per-lead
+rem  checks happen in the send bridge just before a send. No-op (exit 0, no network) when the PACER env
+rem  vars are missing. Every page is reserved against paid_reads (monthly cap) + the $25 PACER quarter
+rem  cap first; fails closed.
 python -u pacer_stay.py >> "%LOG%" 2>&1
 
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.

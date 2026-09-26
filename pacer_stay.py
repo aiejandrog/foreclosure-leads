@@ -2,6 +2,35 @@
 """pacer_stay.py -- federal bankruptcy (§362 stay) lookup for board leads through the official PACER
 Case Locator (PCL) API, written where stay_gate.py (the /send gate, #72) reads it.
 
+FREE-TIER STRATEGY (2026-09-26, Alejandro's decision: stay at or under $25 a quarter, below PACER's
+$30 waiver). A per-lead search of every lead would cost ~$216 up front and ~$2,500 a quarter, so the
+budget is spent in this order, and nothing else runs unless asked for:
+    1. DAILY NEW-FILER PULL (block-only). One PCL party search a day for every party in a bankruptcy
+       case filed in flsbk (the Southern District: Miami-Dade, Broward, Palm Beach) since the last
+       successful pull, every page read, kept locally in pacer_newfilers.json (a rolling index:
+       debtor name, case number, chapter, filed / closed / dismissed / discharged dates) and matched
+       against EVERY lead locally for free. A strong owner match on a case open at pull time writes
+       pacer_newfiler_hits.json, which stay_gate refuses as stay_active. It NEVER clears: it does not
+       cover older cases, other districts, or a case dismissed after the pull. Volume: flsb reports
+       17,027 cases filed in the 12 months to August 2026 (~68 per business day); at ~1.25 party rows
+       per case that is ~85 rows = 2 pages for a weekday, ~1.6 pages (~$0.16) a day on average.
+       A window of weekend days only is folded into the next pull (a Saturday search would still
+       bill its one page). The measured average replaces the estimate after a week of pulls.
+    2. PRE-SEND CHECK. send_server.py asks presend_check() for ONE per-lead search just before it
+       emails a lead that needs a PACER verdict (no Miami-Dade stem: Broward, Palm Beach, lis pendens
+       without a Miami-Dade docket) and has no fresh one. Reserved against a DAILY pre-send
+       allowance, the quarter cap and #74's monthly cap; the verdict is cached, so repeats inside the
+       14-day max age cost nothing. The allowance: the quarter cap, minus everything already spent
+       that was not a pre-send check, minus the expected cost of the new-filer pulls still to come,
+       is the quarter's pre-send pool; it accrues evenly day by day, and what a quiet day does not
+       use carries forward (so a two-search lead still fits on the next day), capped optionally by
+       PACER_PRESEND_DAILY_MAX. Budget exhausted, PACER off, or anything but a clean clear: refused.
+    3. NIGHTLY PER-LEAD BULK: OFF by default (--bulk off). --bulk md-near searches near-sale
+       Miami-Dade leads only with pre-send money beyond a 7-day reserve (money a quiet week would
+       otherwise carry to the quarter's end); --bulk all is the paid mode (raise PACER_QUARTER_CAP).
+Expected on the free tier: ~$14.7 a quarter of pulls, ~$10 of pre-send checks (~1.1 searches a
+day, about one new non-Miami-Dade lead cleared per day; each clear then covers that lead for 14 days).
+
 WHY (2026-09-26). The send gate refuses every lead it cannot prove is clear of an automatic stay.
 Its only durable source was sale_history_cache.json: the Miami-Dade state docket. So every Broward
 and Palm Beach lead -- and every Miami-Dade lis pendens row that carries another county's case
@@ -106,10 +135,11 @@ PACER_REDACT_FLAG=1 (filer accounts only), PACER_ENV=prod|qa. Missing username/p
 lookup is OFF, says so once, exits 0 (the nightly refresh carries on). Nothing is ever printed about
 the password, the token or owner names.
 
-    python pacer_stay.py                 # nightly: plan, log in, search what the budget allows
-    python pacer_stay.py --plan          # no network, no credentials: what it would search and cost
-    python pacer_stay.py --case CACE-24-012345   # just this lead (still under every cap)
-    python pacer_stay.py --status        # quarter + month spend
+    python pacer_stay.py                 # nightly: new-filer pull + local match (+ --bulk mode)
+    python pacer_stay.py --plan          # no network, no credentials: pull window, allowance, cost
+    python pacer_stay.py --case CACE-99-000123   # search this lead now (quarter + month caps apply)
+    python pacer_stay.py --status        # quarter spend by kind, today's pre-send allowance
+    python pacer_stay.py --bulk all      # paid mode: the per-lead search of every due lead
 """
 import argparse
 import base64
@@ -123,6 +153,7 @@ import os
 import re
 import struct
 import sys
+import threading
 import time
 import unicodedata
 
@@ -142,6 +173,23 @@ HOSTS = {
 AUTH_PATH = '/services/cso-auth'
 LOGOUT_PATH = '/services/cso-logout'
 PARTY_FIND = '/pcl-public-api/rest/parties/find'
+
+NEWFILERS_NAME = 'pacer_newfilers.json'          # the rolling flsbk new-filer index (names: local only)
+QA_NEWFILERS_NAME = 'pacer_newfilers_qa.json'
+HITS_NAME = 'pacer_newfiler_hits.json'           # index x leads matches stay_gate reads (no names)
+QA_HITS_NAME = 'pacer_newfiler_hits_qa.json'
+NEWFILER_COURT = 'flsbk'
+NF_MAX_WINDOW_DAYS = 14                          # one immediate search; ~1,200 rows at flsb volume
+DEFAULT_NF_BACKFILL_DAYS = 14
+DEFAULT_NF_MAX_PAGES = 20
+DEFAULT_NF_KEEP_DAYS = 400
+DEFAULT_NF_EST_PAGES_PER_DAY = 1.6               # see FREE-TIER STRATEGY; measured value replaces it
+FLSB_CASES_12MO = 17027                          # flsb statistics, 12 months ending August 2026
+FLSB_BUSINESS_DAYS = 250
+PARTY_ROWS_PER_CASE = 1.25
+PRESEND_KEEP_DAYS = 7                            # --bulk md-near leaves a week of pre-send accrual
+ENV_BULK = 'PACER_BULK'
+ENV_PRESEND_DAILY_MAX = 'PACER_PRESEND_DAILY_MAX'
 
 PAGE_USD = 0.10
 PAGE_SIZE = 54
@@ -235,8 +283,12 @@ def quarter_days_left(day):
     return (end - day).days + 1
 
 
+KINDS = ('pull', 'presend', 'bulk', 'manual')
+
+
 class QuarterLedger:
-    """{"2026-Q3": {"total": 1.2, "pages": 12, "searches": 11}} -- dollars and counts only."""
+    """{"2026-Q3": {"total": 1.2, "pages": 12, "searches": 11,
+                    "days": {"2026-09-26": {"pull": 0.2, "presend": 0.1}}}} -- dollars and counts only."""
 
     def __init__(self, path=None, env=None, today=None):
         env = os.environ if env is None else env
@@ -265,7 +317,7 @@ class QuarterLedger:
     def status(self):
         d, problem = self._read()
         out = {'quarter': self.q, 'cap': self.cap, 'spent': 0.0, 'remaining': 0.0, 'pages': 0,
-               'ok': False, 'why': ''}
+               'ok': False, 'why': '', 'days': {}}
         if problem or self.broken:
             out['why'] = problem or self.broken
             return out
@@ -273,7 +325,10 @@ class QuarterLedger:
         try:
             out['spent'] = round(float(ent.get('total', 0) or 0), 4)
             out['pages'] = int(ent.get('pages', 0) or 0)
-        except (TypeError, ValueError):
+            days = ent.get('days') if isinstance(ent.get('days'), dict) else {}
+            out['days'] = {str(k): {kk: float(vv) for kk, vv in v.items()}
+                           for k, v in days.items() if isinstance(v, dict)}
+        except (TypeError, ValueError, AttributeError):
             out['why'] = 'PACER quarter ledger %s malformed' % self.q
             return out
         out['remaining'] = round(max(0.0, self.cap - out['spent']), 4)
@@ -285,7 +340,7 @@ class QuarterLedger:
             out['ok'] = True
         return out
 
-    def _write(self, usd, pages, searches, enforce):
+    def _write(self, usd, pages, searches, enforce, kind='bulk'):
         import paid_reads
         why = ''
         try:
@@ -311,6 +366,11 @@ class QuarterLedger:
             ent['total'] = max(0.0, round(total + usd, 6))
             ent['pages'] = max(0, int(ent.get('pages', 0) or 0) + pages)
             ent['searches'] = max(0, int(ent.get('searches', 0) or 0) + searches)
+            days = ent.get('days') if isinstance(ent.get('days'), dict) else {}
+            day = days.get(self.today.isoformat()) if isinstance(days.get(self.today.isoformat()), dict) else {}
+            day[kind] = max(0.0, round(float(day.get(kind, 0) or 0) + usd, 6))
+            days[self.today.isoformat()] = day
+            ent['days'] = days
             d[self.q] = ent
             tmp = self.path + '.tmp'
             for i in range(6):
@@ -324,19 +384,20 @@ class QuarterLedger:
             self.broken = why = 'PACER quarter ledger %s could not be written' % self.path
             return False, why
 
-    def debit(self, usd, searches=0):
-        return self._write(float(usd), 1, searches, True)
+    def debit(self, usd, searches=0, kind='bulk'):
+        return self._write(float(usd), 1, searches, True, kind)
 
-    def adjust(self, delta, pages=0):
+    def adjust(self, delta, pages=0, kind='bulk'):
         if abs(delta) < 1e-12 and not pages:
             return True
-        return self._write(float(delta), pages, 0, False)[0]
+        return self._write(float(delta), pages, 0, False, kind)[0]
 
 
 class Budget:
     """Every paid page: per-run room, then the quarter, then #74's month -- reserve, call, settle."""
 
-    def __init__(self, run_cap, quarter, billable, paid=None):
+    def __init__(self, run_cap, quarter, billable, paid=None, kind='bulk'):
+        self.kind = kind
         self.run_cap = float(run_cap)
         self.quarter = quarter
         self.billable = billable
@@ -366,13 +427,13 @@ class Budget:
         if self.spent + usd > self.run_cap + 1e-9:
             self.refused = 'per-run cap $%.2f reached' % self.run_cap
             return False, self.refused
-        ok, why = self.quarter.debit(usd, 1 if new_search else 0)
+        ok, why = self.quarter.debit(usd, 1 if new_search else 0, kind=self.kind)
         if not ok:
             self.refused = why
             return False, why
         ok, why = self.paid.debit(usd, SPENDER)
         if not ok:
-            self.quarter.adjust(-usd, pages=-1)
+            self.quarter.adjust(-usd, pages=-1, kind=self.kind)
             self.refused = why or 'monthly paid-reads cap refused'
             return False, self.refused
         self.spent += usd
@@ -389,7 +450,7 @@ class Budget:
         delta = round(float(actual) - float(reserved), 6)
         if abs(delta) < 1e-9 and retrieved:
             return
-        self.quarter.adjust(delta, pages=(0 if retrieved else -1))
+        self.quarter.adjust(delta, pages=(0 if retrieved else -1), kind=self.kind)
         if abs(delta) >= 1e-9:
             self.paid.adjust(delta, SPENDER)
             self.spent += delta
@@ -544,10 +605,15 @@ def search_body(q, date_from, region):
 
 
 def run_search(pcl, budget, q, date_from, region, max_pages):
-    """One name search, paged, every page reserved then settled.
-    -> {'rows', 'pages', 'overflow', 'error', 'refused'}; raises RateLimited / AuthError."""
-    out = {'rows': [], 'pages': 0, 'overflow': False, 'error': '', 'refused': ''}
-    body = search_body(q, date_from, region)
+    """One name search, paged, every page reserved then settled."""
+    return run_paged(pcl, budget, search_body(q, date_from, region), max_pages)
+
+
+def run_paged(pcl, budget, body, max_pages):
+    """One PCL party search (any body), paged, every page reserved then settled.
+    -> {'rows', 'pages', 'overflow', 'error', 'refused', 'total_pages'}; raises RateLimited / AuthError.
+    overflow: more pages exist than max_pages allowed (not read, not billed)."""
+    out = {'rows': [], 'pages': 0, 'overflow': False, 'error': '', 'refused': '', 'total_pages': 0}
     page, reauthed = 0, False
     while True:
         ok, why = budget.reserve(PAGE_USD, new_search=(page == 0 and not reauthed))
@@ -595,6 +661,7 @@ def run_search(pcl, budget, q, date_from, region, max_pages):
             total_pages = int(pi.get('totalPages') or 0)
         except (TypeError, ValueError):
             total_pages = 0
+        out['total_pages'] = max(out['total_pages'], total_pages)
         if pi:
             more = (page + 1 < total_pages) or (pi.get('last') is False)
         else:
@@ -1098,6 +1165,17 @@ def load_cache(path):
     return d if isinstance(d, dict) else {}
 
 
+def load_cache_strict(path):
+    """(cache, problem). No file: ({}, ''). A file that will not parse: (None, why) -- never overwritten,
+    because it may hold 'active' verdicts the gate relies on."""
+    if not os.path.exists(path):
+        return {}, ''
+    d = _load_json(path)
+    if not isinstance(d, dict):
+        return None, '%s is unreadable or not a JSON object' % os.path.basename(path)
+    return d, ''
+
+
 def save_cache(path, cache):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
@@ -1173,15 +1251,525 @@ def summarize_plan(leads, queue, skipped, today):
     return by
 
 
+# --------------------------------------------------------------------------------------------------
+# settings helpers used by the free-tier pieces
+# --------------------------------------------------------------------------------------------------
+def _int_setting(name, default, env, lo=0, hi=10 ** 6):
+    """(value, problem). A bad value is None with a problem (callers refuse rather than guess)."""
+    raw = str(env.get(name) or '').strip()
+    if not raw:
+        return default, ''
+    try:
+        v = int(raw)
+    except ValueError:
+        return None, '%s=%r is not a whole number' % (name, raw)
+    if v < lo or v > hi:
+        return None, '%s=%r is outside %d-%d' % (name, raw, lo, hi)
+    return v, ''
+
+
+def quarter_bounds(day):
+    q = (day.month - 1) // 3
+    start = dt.date(day.year, q * 3 + 1, 1)
+    return start, day + dt.timedelta(days=quarter_days_left(day) - 1)
+
+
+def _weekdays(frm, to):
+    n, d = 0, frm
+    while d <= to:
+        n += d.weekday() < 5
+        d += dt.timedelta(days=1)
+    return n
+
+
+def expected_pull(weekdays):
+    """(rows, pages) a pull of this many weekdays should return at flsb's published volume."""
+    rows = weekdays * FLSB_CASES_12MO / float(FLSB_BUSINESS_DAYS) * PARTY_ROWS_PER_CASE
+    return int(round(rows)), max(1, int(math.ceil(rows / PAGE_SIZE)))
+
+
+# --------------------------------------------------------------------------------------------------
+# 1. the daily new-filer pull (flsbk) -- BLOCK-ONLY
+# --------------------------------------------------------------------------------------------------
+NF_FIELDS = ('lastName', 'firstName', 'middleName', 'generation', 'partyRole', 'courtId', 'caseNumberFull',
+             'bankruptcyChapter', 'dateFiled', 'dateTermed', 'dateDismissed', 'dateDischarged', 'dateReopened',
+             'jurisdictionType', 'caseType')
+
+
+def nf_paths(here, env_name):
+    qa = env_name == 'qa'
+    return (os.path.join(here, QA_NEWFILERS_NAME if qa else NEWFILERS_NAME),
+            os.path.join(here, QA_HITS_NAME if qa else HITS_NAME))
+
+
+def load_index(path, env_name):
+    """(index, problem). No file: a new empty index. Unreadable: (None, why) -- never overwritten."""
+    if not os.path.exists(path):
+        return {'v': 1, 'court': NEWFILER_COURT, 'env': env_name, 'last_to': '', 'covered': [],
+                'pulls': [], 'rows': {}}, ''
+    d = _load_json(path)
+    if not isinstance(d, dict) or not isinstance(d.get('rows'), dict):
+        return None, '%s is unreadable or malformed (not pulled into, not overwritten)' % os.path.basename(path)
+    for k, v in (('covered', []), ('pulls', []), ('last_to', '')):
+        if not isinstance(d.get(k), type(v)):
+            d[k] = v
+    return d, ''
+
+
+def _nf_row(r, seen_ts):
+    if not isinstance(r, dict):
+        return None
+    cc = r.get('courtCase') if isinstance(r.get('courtCase'), dict) else {}
+    out = {}
+    for k in NF_FIELDS:
+        v = r.get(k)
+        if v in (None, '', ' '):
+            v = cc.get(k)
+        if v not in (None, '', ' '):
+            out[k] = str(v).strip()
+    ec = cc.get('effectiveDateClosed') or r.get('effectiveDateClosed')
+    if ec:
+        out['effectiveDateClosed'] = str(ec).strip()
+    out['seen'] = round(float(seen_ts), 1)
+    return out if out.get('lastName') and out.get('caseNumberFull') else None
+
+
+def _nf_key(x):
+    return '|'.join(str(x.get(k) or '').upper() for k in
+                    ('courtId', 'caseNumberFull', 'lastName', 'firstName', 'middleName', 'generation'))
+
+
+def _merge_intervals(ivs, new):
+    out = []
+    for a, b in sorted([tuple(x) for x in ivs if isinstance(x, (list, tuple)) and len(x) == 2] + [tuple(new)]):
+        if out and _date(a) and _date(out[-1][1]) and _date(a) <= _date(out[-1][1]) + dt.timedelta(days=1):
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+
+def pull_window(idx, today, env):
+    """(from, to, note) of the next pull, or (None, None, why there is none). Dates filed, inclusive;
+    `to` is yesterday (a whole day). A window of weekend days only is folded into the next pull."""
+    backfill, p1 = _int_setting('PACER_NEWFILER_BACKFILL_DAYS', DEFAULT_NF_BACKFILL_DAYS, env, 1, NF_MAX_WINDOW_DAYS)
+    overlap, p2 = _int_setting('PACER_NEWFILER_OVERLAP_DAYS', 0, env, 0, 7)
+    if p1 or p2:
+        return None, None, p1 or p2
+    yday = today - dt.timedelta(days=1)
+    last = _date(idx.get('last_to'))
+    start = (last + dt.timedelta(days=1 - overlap)) if last else (today - dt.timedelta(days=backfill))
+    if start > yday:
+        return None, None, 'already current (filed through %s)' % last
+    if str(env.get('PACER_NEWFILER_WEEKENDS') or '').strip() != '1' and _weekdays(start, yday) == 0:
+        return None, None, ('only weekend days pending (%s..%s) -- folded into the next weekday pull'
+                            % (start, yday))
+    note = ''
+    if (yday - start).days + 1 > NF_MAX_WINDOW_DAYS:
+        gap_to = yday - dt.timedelta(days=NF_MAX_WINDOW_DAYS)
+        note = ('filings %s..%s were never pulled (more than %d days behind) -- the index does not cover them'
+                % (start, gap_to, NF_MAX_WINDOW_DAYS))
+        start = gap_to + dt.timedelta(days=1)
+    return start, yday, note
+
+
+def nf_roles(env):
+    return [r.strip().lower() for r in str(env.get('PACER_NEWFILER_ROLES') or '').split(',') if r.strip()]
+
+
+def pull_body(frm, to, roles=None):
+    body = {'courtCase': {'jurisdictionType': 'bk', 'courtId': [NEWFILER_COURT],
+                          'dateFiledFrom': frm.isoformat(), 'dateFiledTo': to.isoformat()}}
+    if roles:
+        body['role'] = list(roles)
+    return body
+
+
+def pull_new_filers(pcl, budget, idx, win, today, now_ts, env):
+    """One party search over the window, every page read (and reserved) -> the pull record.
+    The window only counts as covered when every page came back."""
+    frm, to, note = win
+    maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
+    rec = {'d': today.isoformat(), 'from': frm.isoformat(), 'to': to.isoformat(), 'rows': 0, 'new': 0,
+           'pages': 0, 'cost': 0.0, 'ok': False, 'why': '', 'wd': _weekdays(frm, to), 'status': ''}
+    if prob:
+        rec.update(status='error', why=prob)
+        return rec
+    cost0 = budget.spent
+    res = run_paged(pcl, budget, pull_body(frm, to, nf_roles(env)), maxp)
+    for r in res['rows']:
+        x = _nf_row(r, now_ts)
+        if x:
+            k = _nf_key(x)
+            rec['new'] += k not in idx['rows']
+            idx['rows'][k] = x
+    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4))
+    if res['refused']:
+        rec.update(status='refused', why=res['refused'])
+    elif res['error']:
+        rec.update(status='error', why=res['error'])
+    elif res['overflow']:
+        rec.update(status='partial', why='%d pages of results, %d read (PACER_NEWFILER_MAX_PAGES) -- window not '
+                   'marked covered' % (res['total_pages'], res['pages']))
+    else:
+        rec.update(status='done', ok=True, why=note)
+        idx['last_to'] = to.isoformat()
+        idx['covered'] = _merge_intervals(idx.get('covered') or [], [frm.isoformat(), to.isoformat()])
+    rec['why'] = str(rec['why'])[:200]
+    idx['pulls'] = (idx.get('pulls') or [])[-89:] + [rec]
+    idx['env'] = pcl.env
+    keep, _ = _int_setting('PACER_NEWFILER_KEEP_DAYS', DEFAULT_NF_KEEP_DAYS, env, 30, 3650)
+    cutoff = today - dt.timedelta(days=keep or DEFAULT_NF_KEEP_DAYS)
+    for k in [k for k, x in idx['rows'].items() if (_date(x.get('dateFiled')) or today) < cutoff]:
+        del idx['rows'][k]
+    return rec
+
+
+def pull_estimate(idx, env):
+    """(pages per calendar day, basis) the pre-send allowance reserves for the pulls still to come."""
+    pulls = [p for p in ((idx or {}).get('pulls') or []) if isinstance(p, dict) and p.get('ok')]
+    recent = pulls[-28:]
+    if len(recent) >= 5:
+        f = [_date(p.get('from')) for p in recent]
+        t = [_date(p.get('to')) for p in recent]
+        if all(f) and all(t):
+            days = (max(t) - min(f)).days + 1
+            if days >= 7:
+                return round(sum(int(p.get('pages') or 0) for p in recent) / float(days), 3), \
+                    'measured: %d pulls over %d days' % (len(recent), days)
+    v, prob = _money_setting('PACER_NEWFILER_EST_PAGES_PER_DAY', DEFAULT_NF_EST_PAGES_PER_DAY, env)
+    if prob or v <= 0:
+        return DEFAULT_NF_EST_PAGES_PER_DAY, 'default estimate (flsb volume)'
+    return v, 'estimate (flsb volume)'
+
+
+def pulled_today(idx, today):
+    return bool(idx) and any(isinstance(p, dict) and p.get('d') == today.isoformat() and p.get('ok')
+                             for p in idx.get('pulls') or [])
+
+
+def match_index(leads, idx, today, now_ts, env_name):
+    """{lead key: hit} for every lead whose owner strongly matches a debtor on a case OPEN at pull
+    time in the index. Local, free. No names in the output."""
+    by_last = {}
+    for x in (idx.get('rows') or {}).values():
+        if not isinstance(x, dict):
+            continue
+        cv = case_view(x)
+        if not cv['is_bk'] or cv['role'] in NOT_DEBTOR_ROLES or case_status(cv, today) != 'open':
+            continue
+        for t in set(name_tokens(x.get('lastName'))):
+            by_last.setdefault(t, []).append((x, cv))
+    if not by_last:
+        return {}
+    stamp = dt.datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec='seconds')
+    hits = {}
+    for key, ld in leads.items():
+        subjects, problem, _ = lead_subjects(ld.get('owners') or [])
+        if problem:
+            continue
+        found = {}
+        for sj in subjects:
+            toks = sj.core[:1] if sj.kind == 'entity' else {t for _, sn, _ in sj.interps for t in sn}
+            for t in toks:
+                for x, cv in by_last.get(t, []):
+                    if match_row(x, sj) == 'strong':
+                        found[(cv['court'], cv['no'])] = (x, cv)
+        if not found:
+            continue
+        cases = sorted(({'court': cv['court'], 'no': cv['no'], 'ch': cv['ch'], 'filed': str(cv['filed'] or ''),
+                         'status': 'open', 'open': True} for x, cv in found.values()),
+                       key=lambda c: c['filed'], reverse=True)
+        hits[key] = {'src': 'pacer_newfilers', 'env': env_name, 't': round(now_ts, 1), 'q': stamp,
+                     'seen_t': max(float(x.get('seen') or 0) for x, _ in found.values()),
+                     'county': ld.get('county') or '', 'cases': cases[:10], 'v': 1}
+    return hits
+
+
+# --------------------------------------------------------------------------------------------------
+# 2. the pre-send allowance and the on-demand per-lead check
+# --------------------------------------------------------------------------------------------------
+def presend_allowance(qs, today, pull_pages_per_day, pull_done_today, env):
+    """How much pre-send searching today may still buy. The quarter's pre-send pool is the cap minus
+    everything spent that was not a pre-send check minus the pulls still expected; it accrues evenly
+    over the quarter's days and unused accrual carries forward."""
+    start, end = quarter_bounds(today)
+    total = (end - start).days + 1
+    elapsed = (today - start).days + 1
+    after = (end - today).days
+    days = qs.get('days') or {}
+    presend_spent = sum(float(v.get('presend', 0) or 0) for v in days.values())
+    presend_today = float((days.get(today.isoformat()) or {}).get('presend', 0) or 0)
+    other = max(0.0, float(qs.get('spent') or 0) - presend_spent)
+    pull_reserve = float(pull_pages_per_day) * PAGE_USD * (after + (0 if pull_done_today else 1))
+    pool = max(0.0, float(qs.get('cap') or 0) - other - pull_reserve)
+    out = {'pool': round(pool, 4), 'per_day': round(pool / total, 4), 'pull_reserve': round(pull_reserve, 4),
+           'presend_spent': round(presend_spent, 4), 'presend_today': round(presend_today, 4),
+           'days_left': after + 1, 'left': 0.0, 'why': ''}
+    if not qs.get('ok'):
+        out['why'] = qs.get('why') or 'PACER quarter ledger not usable'
+        return out
+    left = pool * elapsed / total - presend_spent
+    dmax, prob = _money_setting(ENV_PRESEND_DAILY_MAX, 0.0, env)
+    if prob:
+        out['why'] = prob
+        return out
+    if dmax > 0:
+        left = min(left, dmax - presend_today)
+    left = min(left, float(qs.get('remaining') or 0) - pull_reserve)
+    out['left'] = round(max(0.0, left), 4)
+    return out
+
+
+SESSION_FACTORY = None          # tests (and nothing else) may set a fake HTTP session factory here
+_PRESEND_LOCK = threading.Lock()
+_LEADS_MEMO = {}
+
+
+def _session():
+    return SESSION_FACTORY() if SESSION_FACTORY else None
+
+
+def _leads_cached(here):
+    names = sorted(set(glob.glob(os.path.join(here, '*_leads.json'))
+                       + [os.path.join(here, n) for n in ('leads_final.json', 'lp_leads.json', 'lis_pendens.json')]))
+    sig = []
+    for f in names:
+        try:
+            st = os.stat(f)
+            sig.append((f, st.st_mtime_ns, st.st_size))
+        except OSError:
+            pass
+    sig = tuple(sig)
+    m = _LEADS_MEMO.get(here)
+    if m and m[0] == sig:
+        return m[1]
+    leads, _ = load_leads(here)
+    _LEADS_MEMO[here] = (sig, leads)
+    return leads
+
+
+def record_result(cache, key, fields, status, ld, env_name, region, date_from, now_ts, mode):
+    """Put one lead's outcome into `cache`. An error never overwrites an earlier verdict."""
+    prev = cache.get(key) if isinstance(cache.get(key), dict) else None
+    if status == 'error':
+        if prev:
+            prev['err'] = str(fields.get('why') or '')[:160]
+            prev['tried'] = round(now_ts, 1)
+        else:
+            ent = _entry(fields, ld, env_name, region, date_from, now_ts)
+            ent['err'] = str(fields.get('why') or '')[:160]
+            ent['mode'] = mode
+            cache[key] = ent
+        return
+    ent = _entry(fields, ld, env_name, region, date_from, now_ts)
+    ent['mode'] = mode
+    cache[key] = ent
+
+
+def write_result(cpath, key, fields, status, ld, env_name, region, date_from, now_ts, mode):
+    """record_result against the file as it is on disk now (another process may have written it).
+    -> '' or why it could not be written (the verdict is then lost, never guessed)."""
+    import paid_reads
+    with paid_reads._FileLock(cpath) as lk:
+        if not lk.held:
+            return '%s is locked by another writer' % os.path.basename(cpath)
+        cache, prob = load_cache_strict(cpath)
+        if prob:
+            return prob
+        record_result(cache, key, fields, status, ld, env_name, region, date_from, now_ts, mode)
+        save_cache(cpath, cache)
+    return ''
+
+
+def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, manual=False, max_usd=None):
+    """ONE on-demand per-lead PACER search for a lead the send gate cannot clear yet. Never raises.
+
+    -> {'status', 'verdict', 'why', 'cost', 'pages'}. status:
+       searched | cached | index_hit | unsearchable   (the cache / hits file now says why)
+       no_lead | not_needed | off | refused | error   (nothing new: the gate's refusal stands)
+    manual=True is `pacer_stay.py --case`: searches even with a fresh verdict, is not held to the
+    daily pre-send allowance (only the quarter + month caps and max_usd / PACER_RUN_MAX)."""
+    out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0}
+    try:
+        return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out)
+    except Exception as e:                            # a check that throws is a refusal, never a pass
+        out.update(status='error', why='pre-send PACER check failed (%s)' % type(e).__name__)
+        return out
+
+
+def _presend(case, here, env, session, now, paid, manual, max_usd, out):
+    import stay_gate
+    now_ts = time.time() if now is None else now
+    key = stay_gate.pacer_key(case)
+    if not key or (stay_gate.case_stem(case) and not manual):
+        out.update(status='not_needed', why='case %s is not one a PACER search can clear' % str(case or '')[:40])
+        return out
+    env_name = environment(env)
+    if not env_name:
+        out.update(status='off', why='PACER_ENV=%r is neither prod nor qa' % env.get('PACER_ENV'))
+        return out
+    creds = credentials(env)
+    if not creds:
+        out.update(status='off', why='PACER lookup is off (PACER_USERNAME / PACER_PASSWORD not set)')
+        return out
+    if not _PRESEND_LOCK.acquire(timeout=90):
+        out.update(status='refused', why='another pre-send PACER check is still running')
+        return out
+    try:
+        import paid_reads
+        cpath = cache_path(here, env_name)
+        with paid_reads._FileLock(cpath + '.presend') as lk:
+            if not lk.held:
+                out.update(status='refused', why='another process holds the pre-send PACER lock')
+                return out
+            return _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual,
+                                   max_usd, cpath, out)
+    finally:
+        _PRESEND_LOCK.release()
+
+
+def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual, max_usd, cpath, out):
+    import stay_gate
+    today = dt.date.fromtimestamp(now_ts)
+    cache, prob = load_cache_strict(cpath)
+    if prob:
+        out.update(status='refused', why=prob)
+        return out
+    ent = cache.get(key)
+    if not manual and isinstance(ent, dict) and not stay_gate.pacer_needs_lookup(ent, now_ts):
+        out.update(status='cached', verdict=str(ent.get('verdict') or ''),
+                   why='the PACER verdict from %s is still inside the max age' % str(ent.get('q') or '?')[:10])
+        return out
+    ld = _leads_cached(here).get(key)
+    if ld is None:
+        out.update(status='no_lead', why='case %s is not in the lead files, so there is no owner name to search' % key)
+        return out
+    idx_path, hits_path = nf_paths(here, env_name)
+    idx = load_index(idx_path, env_name)[0] if os.path.exists(idx_path) else None
+    if idx:
+        h = match_index({key: ld}, idx, today, now_ts, env_name)
+        if h:
+            hits = _load_json(hits_path) if os.path.exists(hits_path) else {}
+            if isinstance(hits, dict):
+                hits.update(h)
+                save_cache(hits_path, hits)
+            out.update(status='index_hit', verdict='active',
+                       why='open %s case %s in the new-filer index' % (h[key]['cases'][0]['court'], h[key]['cases'][0]['no']))
+            return out
+    region = 'fl' if str(env.get('PACER_REGION') or '').strip().lower() == 'fl' else 'national'
+    date_from = lookback_from(today, LOOKBACK_YEARS)
+    subjects, problem, nsearch = lead_subjects(ld['owners'])
+    kind = 'manual' if manual else 'presend'
+    if problem:
+        werr = write_result(cpath, key, {'verdict': 'unverifiable', 'why': problem}, 'done', ld, env_name, region,
+                            date_from, now_ts, kind)
+        out.update(status='unsearchable' if not werr else 'error', verdict='unverifiable', why=werr or problem)
+        return out
+    billable = env_name == 'prod'
+    quarter = QuarterLedger(env=env, today=today)
+    need = nsearch * PAGE_USD
+    room = 0.0
+    if billable:
+        if paid is None:
+            import paid_reads as paid
+        qs = quarter.status()
+        if not qs['ok']:
+            out.update(status='refused', why=qs['why'])
+            return out
+        if manual:
+            room, prob = (float(max_usd), '') if max_usd is not None else _money_setting(ENV_RUN_MAX, DEFAULT_RUN_MAX, env)
+            label = 'this manual check'
+        else:
+            ppd, _ = pull_estimate(idx, env)
+            al = presend_allowance(qs, today, ppd, pulled_today(idx, today), env)
+            room, prob = al['left'], al['why']
+            label = "today's pre-send PACER allowance"
+        if prob:
+            out.update(status='refused', why=prob)
+            return out
+        room = min(room, qs['remaining'], paid.remaining(SPENDER))
+        if room + 1e-9 < need:
+            out.update(status='refused', why='%s has $%.2f left; this lead needs $%.2f (%d search%s)'
+                       % (label, max(0.0, room), need, nsearch, '' if nsearch == 1 else 'es'))
+            return out
+    budget = Budget(room, quarter, billable, paid=paid, kind=kind)
+    pcl = PCL(env_name, creds, session=session if session is not None else _session(), now=now)
+    fields = status = None
+    why = ''
+    try:
+        try:
+            pcl.login()
+        except AuthError as e:
+            out.update(status='error', why=str(e))
+            return out
+        try:
+            fields, status, why = check_lead(pcl, budget, ld, subjects, today, date_from, region, 1)
+        except (RateLimited, AuthError) as e:
+            fields, status, why = None, 'error', str(e)
+    finally:
+        pcl.logout()
+    out.update(cost=round(budget.spent, 4) if billable else 0.0, pages=budget.pages)
+    if status == 'refused':
+        out.update(status='refused', why='budget refused mid-lead (%s)' % why)
+        return out
+    if fields is None or 'verdict' not in fields:
+        fields = {'verdict': 'unverifiable', 'why': 'PCL error: ' + why, 'pages': budget.pages,
+                  'cost': round(budget.spent, 4), 'searches': 0}
+        status = 'error'
+    werr = write_result(cpath, key, fields, status, ld, env_name, region, date_from, now_ts, kind)
+    if werr:
+        out.update(status='error', verdict='unverifiable', why=werr)
+        return out
+    out.update(status='searched' if status == 'done' else 'error',
+               verdict=fields['verdict'] if status == 'done' else 'unverifiable', why=str(fields.get('why') or ''))
+    return out
+
+
+def refresh_hits(leads, idx, hits_path, today, now_ts, env_name):
+    hits = match_index(leads, idx, today, now_ts, env_name)
+    save_cache(hits_path, hits)
+    return hits
+
+
+# --------------------------------------------------------------------------------------------------
+# the nightly run
+# --------------------------------------------------------------------------------------------------
+def _log_status(quarter, idx, today, env):
+    import paid_reads
+    qs, ms = quarter.status(), paid_reads.status()
+    log('PACER quarter %s: $%.2f of $%.2f (%d pages)%s' % (qs['quarter'], qs['spent'], qs['cap'], qs['pages'],
+                                                         '' if qs['ok'] else ' -- ' + qs['why']))
+    kinds = {}
+    for v in (qs.get('days') or {}).values():
+        for k, usd in v.items():
+            kinds[k] = kinds.get(k, 0.0) + float(usd or 0)
+    log('  by kind: %s' % (', '.join('%s $%.2f' % (k, kinds[k]) for k in sorted(kinds)) or 'nothing yet'))
+    ppd, basis = pull_estimate(idx, env)
+    al = presend_allowance(qs, today, ppd, pulled_today(idx, today), env)
+    log('  pre-send allowance today: $%.2f (quarter pool $%.2f = ~$%.2f/day; new-filer pulls reserved $%.2f at '
+        '%.2f pages/day, %s)%s' % (al['left'], al['pool'], al['per_day'], al['pull_reserve'], ppd, basis,
+                                   (' -- ' + al['why']) if al['why'] else ''))
+    if idx is not None:
+        log('  new-filer index: filed through %s, %d rows, %d pulls logged'
+            % (idx.get('last_to') or 'never', len(idx.get('rows') or {}), len(idx.get('pulls') or [])))
+    log('paid reads %s: $%.2f of $%.2f, pacer_stay $%.2f' % (ms['month'], ms['spent'], ms['cap'],
+                                                            float(ms['by'].get(SPENDER, 0) or 0)))
+
+
 def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     env = os.environ if env is None else env
     ap = argparse.ArgumentParser(description='Federal bankruptcy (PACER PCL) stay lookup for board leads')
+    ap.add_argument('--bulk', choices=('off', 'md-near', 'all'), default=None,
+                    help="nightly per-lead search: off (default; PACER_BULK overrides), md-near (near-sale "
+                         "Miami-Dade leads with surplus pre-send money only), all (paid mode)")
+    ap.add_argument('--no-pull', action='store_true', help='skip the daily flsbk new-filer pull')
     ap.add_argument('--max-spend', default='auto',
-                    help="per-run dollar cap; 'auto' = quarter remaining / nights left (<= PACER_RUN_MAX)")
+                    help="per-run dollar cap for --bulk all; 'auto' = quarter remaining / nights left (<= PACER_RUN_MAX)")
     ap.add_argument('--limit', type=int, default=0, help='max leads searched this run (0 = budget decides)')
-    ap.add_argument('--case', default='', help='search only this lead (still under every cap)')
+    ap.add_argument('--case', default='', help='search only this lead now (quarter + month caps apply)')
     ap.add_argument('--plan', action='store_true', help='no network: print what would be searched and its cost')
-    ap.add_argument('--status', action='store_true', help='print quarter and month spend, then exit')
+    ap.add_argument('--status', action='store_true', help='print quarter / month spend and the pre-send allowance')
     ap.add_argument('--max-pages', type=int, default=1,
                     help='pages read per name before calling it a common name (unverifiable)')
     ap.add_argument('--lookback-years', type=int, default=LOOKBACK_YEARS)
@@ -1194,42 +1782,86 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     if not env_name:
         log('PACER: PACER_ENV=%r is neither prod nor qa -- federal bankruptcy lookup not run' % env.get('PACER_ENV'))
         return 3
+    bulk = (a.bulk or str(env.get(ENV_BULK) or 'off')).strip().lower()
+    if bulk not in ('off', 'md-near', 'all'):
+        log('PACER: %s=%r is not off / md-near / all -- not run' % (ENV_BULK, env.get(ENV_BULK)))
+        return 3
     quarter = QuarterLedger(env=env, today=today)
+    idx_path, hits_path = nf_paths(here, env_name)
+    idx, iprob = load_index(idx_path, env_name)
     if a.status:
-        import paid_reads
-        qs, ms = quarter.status(), paid_reads.status()
-        log('PACER quarter %s: $%.2f of $%.2f (%d pages)%s' % (qs['quarter'], qs['spent'], qs['cap'], qs['pages'],
-                                                             '' if qs['ok'] else ' -- ' + qs['why']))
-        log('paid reads %s: $%.2f of $%.2f, pacer_stay $%.2f' % (ms['month'], ms['spent'], ms['cap'],
-                                                                float(ms['by'].get(SPENDER, 0) or 0)))
+        _log_status(quarter, idx, today, env)
         return 0
 
+    import stay_gate
     leads, skipped = load_leads(here)
     cpath = cache_path(here, env_name)
-    cache = load_cache(cpath)
-    queue = plan(leads, cache, today, now_ts, a.case or None)
+    cache, cprob = load_cache_strict(cpath)
+    queue = plan(leads, cache or {}, today, now_ts, None) if not cprob else []
+    if bulk == 'off':
+        queue = []
+    elif bulk == 'md-near':
+        queue = [(ld, t, n) for ld, t, n in queue if t == 0 and stay_gate.case_stem(ld['key'])]
     date_from = lookback_from(today, a.lookback_years)
     by = summarize_plan(leads, queue, skipped, today)
-    log('PACER: %d lead(s) with a usable case number (%s), %d due tonight%s' % (
-        len(leads), ', '.join('%s %d' % (c, b.get('leads', 0)) for c, b in sorted(by.items())), len(queue),
+    log('PACER: %d lead(s) with a usable case number (%s); per-lead bulk %s: %d due%s' % (
+        len(leads), ', '.join('%s %d' % (c, b.get('leads', 0)) for c, b in sorted(by.items())), bulk, len(queue),
         ('; skipped: ' + ', '.join('%s %d' % kv for kv in skipped.items())) if skipped else ''))
+    if a.no_pull:
+        win = (None, None, 'skipped (--no-pull)')
+    elif idx is None:
+        win = (None, None, iprob)
+    else:
+        win = pull_window(idx, today, env)
     if a.plan:
         for c, b in sorted(by.items()):
             log('  %-11s leads %4d  searchable %4d (%d searches, ~$%.2f)  not searchable %4d  near-sale %3d  due %4d'
                 % (c, b.get('leads', 0), b.get('searchable', 0), b.get('searches', 0), b.get('searches', 0) * PAGE_USD,
                    b.get('unsearchable', 0), b.get('near', 0), b.get('due', 0)))
+        if win[0]:
+            wd = _weekdays(win[0], win[1])
+            rows, pages = expected_pull(wd)
+            log('  new-filer pull: flsbk filed %s..%s (%d weekday(s)) -> expect ~%d rows, ~%d page(s), ~$%.2f%s'
+                % (win[0], win[1], wd, rows, pages, pages * PAGE_USD, ('; ' + win[2]) if win[2] else ''))
+        else:
+            log('  new-filer pull: none (%s)' % win[2])
+        ppd, basis = pull_estimate(idx, env)
+        if env_name == 'prod':
+            al = presend_allowance(quarter.status(), today, ppd, pulled_today(idx, today), env)
+            log('  pre-send allowance today: $%.2f (~$%.2f/day this quarter; pulls reserved at %.2f pages/day, %s)%s'
+                % (al['left'], al['per_day'], ppd, basis, (' -- ' + al['why']) if al['why'] else ''))
+        if cprob:
+            log('  %s' % cprob)
         return 0
 
     creds = credentials(env)
     if not creds:
-        log('PACER: PACER_USERNAME / PACER_PASSWORD not set -- federal bankruptcy lookup is OFF (nothing '
-            'searched, nothing spent). Broward / Palm Beach sends stay refused by the stay gate.')
+        log('PACER: PACER_USERNAME / PACER_PASSWORD not set -- federal bankruptcy lookup is OFF (no new-filer '
+            'pull, no pre-send checks, nothing searched, nothing spent). Broward / Palm Beach sends stay refused '
+            'by the stay gate.')
         return 0
-    if not queue:
-        log('PACER: nothing due tonight')
-        return 0
+    if cprob:
+        log('PACER: %s -- nothing searched (fix or remove the file)' % cprob)
+        return 3
+    if a.case:
+        mx = None
+        if str(a.max_spend).lower() != 'auto':
+            try:
+                mx = max(0.0, float(a.max_spend))
+            except ValueError:
+                log('PACER: --max-spend %r is not a number -- nothing searched' % a.max_spend)
+                return 3
+        r = presend_check(a.case, here=here, env=env, session=session, now=now_ts, paid=paid, manual=True, max_usd=mx)
+        log('PACER --case %s: %s%s -- %s (%d page(s), $%.2f)' % (
+            stay_gate.pacer_key(a.case) or a.case[:40], r['status'], (' -> ' + r['verdict']) if r['verdict'] else '',
+            r['why'][:200], r['pages'], r['cost']))
+        return 0 if r['status'] in ('searched', 'cached', 'index_hit', 'unsearchable') else 3
 
     billable = env_name == 'prod'
+    do_pull = win[0] is not None
+    if not do_pull:
+        log('PACER new filers: no pull tonight -- %s' % win[2])
+    pull_cap = run_cap = 0.0
     if billable:
         qs = quarter.status()
         if paid is None:
@@ -1237,114 +1869,156 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         ms_left = paid.remaining(SPENDER)
         if not qs['ok']:
             log('PACER: %s -- no paid searches tonight' % qs['why'])
-            return 0
-        if qs['cap'] >= FREE_QUARTER_USD:
+            do_pull, queue = False, []
+        elif qs['cap'] >= FREE_QUARTER_USD:
             log('PACER: WARNING PACER_QUARTER_CAP $%.2f is at or above the $30 waiver -- this quarter will be billed'
                 % qs['cap'])
-        run_max, prob = _money_setting(ENV_RUN_MAX, DEFAULT_RUN_MAX, env)
-        if prob:
-            log('PACER: %s -- no paid searches tonight' % prob)
-            return 0
-        if str(a.max_spend).lower() == 'auto':
-            run_cap = auto_run_cap(qs, today, run_max)
-        else:
-            try:
-                run_cap = max(0.0, float(a.max_spend))
-            except ValueError:
-                log('PACER: --max-spend %r is not a number -- no paid searches' % a.max_spend)
-                return 3
-        run_cap = min(run_cap, qs['remaining'], ms_left)
-        if run_cap + 1e-9 < PAGE_USD:
-            log('PACER: $%.2f available tonight (quarter $%.2f left, month $%.2f left) -- no paid searches'
-                % (run_cap, qs['remaining'], ms_left))
-            return 0
-        log('PACER: tonight up to $%.2f (quarter %s $%.2f of $%.2f spent; month $%.2f left)'
-            % (run_cap, qs['quarter'], qs['spent'], qs['cap'], ms_left))
-    else:
-        run_cap = 0.0
-        log('PACER: QA environment -- searches are not billable; verdicts go to %s, which the gate never reads'
-            % QA_CACHE_NAME)
-    budget = Budget(run_cap, quarter, billable, paid=paid)
-
-    pcl = PCL(env_name, creds, session=session, now=now)
-    counts = {}
-    active_keys = []
-    rc = 0
-    try:
-        try:
-            pcl.login()
-        except AuthError as e:
-            log('PACER: %s -- no searches tonight' % e)
-            return 3
-        searched = errs_in_row = 0
-        for ld, tier, near in queue:
-            if a.limit and searched >= a.limit:
-                break
-            c = counts.setdefault(ld.get('county') or '?', {'clear': 0, 'active': 0, 'unverifiable': 0,
-                                                            'error': 0, 'deferred': 0})
-            subjects, problem, nsearch = lead_subjects(ld['owners'])
-            key = ld['key']
-            if problem:
-                prev = cache.get(key)
-                if not (isinstance(prev, dict) and prev.get('verdict') == 'unverifiable' and not prev.get('err')
-                        and prev.get('why') == problem):
-                    cache[key] = _entry({'verdict': 'unverifiable', 'why': problem}, ld, env_name, a.region,
-                                        date_from, now_ts)
-                    save_cache(cpath, cache)
-                c['unverifiable'] += 1
-                continue
-            ok, why = budget.fits(nsearch * PAGE_USD)
-            if not ok:
-                c['deferred'] += 1
-                if budget.billable and budget.spent + PAGE_USD > budget.run_cap + 1e-9:
-                    break
-                continue
-            try:
-                fields, status, why = check_lead(pcl, budget, ld, subjects, today, date_from, a.region, a.max_pages)
-            except RateLimited as e:
-                log('PACER: %s -- stopping tonight' % e)
-                rc = 3
-                break
-            except AuthError as e:
-                log('PACER: re-login failed (%s) -- stopping tonight' % e)
-                rc = 3
-                break
-            searched += 1
-            if status == 'refused':
-                c['deferred'] += 1
-                log('PACER: budget refused mid-lead (%s) -- stopping tonight' % why)
-                break
-            prev = cache.get(key) if isinstance(cache.get(key), dict) else None
-            if status == 'error':
-                c['error'] += 1
-                errs_in_row += 1
-                if prev:
-                    prev['err'] = fields['why'][:160]
-                    prev['tried'] = round(now_ts, 1)
+        if do_pull:
+            maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
+            pull_cap = min((maxp or 0) * PAGE_USD, qs['remaining'], ms_left)
+            if prob or pull_cap + 1e-9 < PAGE_USD:
+                log('PACER new filers: %s -- no pull tonight' % (prob or '$%.2f available (quarter $%.2f, month $%.2f left)'
+                                                                   % (pull_cap, qs['remaining'], ms_left)))
+                do_pull = False
+        if queue:
+            run_max, prob = _money_setting(ENV_RUN_MAX, DEFAULT_RUN_MAX, env)
+            if prob:
+                log('PACER: %s -- no per-lead bulk tonight' % prob)
+                queue = []
+            elif bulk == 'all':
+                if str(a.max_spend).lower() == 'auto':
+                    run_cap = auto_run_cap(qs, today, run_max)
                 else:
-                    ent = _entry(fields, ld, env_name, a.region, date_from, now_ts)
-                    ent['err'] = fields['why'][:160]
-                    cache[key] = ent
-                save_cache(cpath, cache)
-                if errs_in_row >= MAX_LEAD_ERRORS:
-                    log('PACER: %d leads in a row failed (%s) -- stopping tonight' % (errs_in_row, why))
+                    try:
+                        run_cap = max(0.0, float(a.max_spend))
+                    except ValueError:
+                        log('PACER: --max-spend %r is not a number -- no paid searches' % a.max_spend)
+                        return 3
+            else:
+                ppd, _ = pull_estimate(idx, env)
+                al = presend_allowance(qs, today, ppd, pulled_today(idx, today), env)
+                surplus = al['left'] - min(PRESEND_KEEP_DAYS, al['days_left']) * al['per_day']
+                run_cap = math.floor(max(0.0, min(run_max, surplus)) / PAGE_USD + 1e-9) * PAGE_USD
+                if str(a.max_spend).lower() != 'auto':
+                    try:
+                        run_cap = min(run_cap, max(0.0, float(a.max_spend)))
+                    except ValueError:
+                        pass
+            run_cap = min(run_cap, qs['remaining'] - pull_cap, ms_left - pull_cap) if queue else 0.0
+            if queue and run_cap + 1e-9 < PAGE_USD:
+                log('PACER: per-lead bulk (%s): $%.2f available tonight -- none (the free budget goes to the '
+                    'new-filer pull and pre-send checks)' % (bulk, max(0.0, run_cap)))
+                queue = []
+            elif queue:
+                log('PACER: per-lead bulk (%s) tonight up to $%.2f (quarter %s $%.2f of $%.2f spent; month $%.2f left)'
+                    % (bulk, run_cap, qs['quarter'], qs['spent'], qs['cap'], ms_left))
+    else:
+        log('PACER: QA environment -- searches are not billable; results go to the *_qa files, which the gate '
+            'never reads')
+    if bulk == 'off':
+        log('PACER: per-lead bulk search is off (pre-send checks search a lead when it is about to be emailed)')
+
+    counts, active_keys, rc = {}, [], 0
+    budget = Budget(run_cap, quarter, billable, paid=paid, kind='bulk')
+    rec = None
+    if do_pull or queue:
+        pcl = PCL(env_name, creds, session=session, now=now)
+        try:
+            try:
+                pcl.login()
+            except AuthError as e:
+                log('PACER: %s -- no searches tonight' % e)
+                return 3
+            if do_pull:
+                pb = Budget(pull_cap, quarter, billable, paid=paid, kind='pull')
+                try:
+                    rec = pull_new_filers(pcl, pb, idx, win, today, now_ts, env)
+                except (RateLimited, AuthError) as e:
+                    log('PACER new filers: %s -- stopping tonight' % e)
+                    rc, queue = 3, []
+                if rec is not None:
+                    save_cache(idx_path, idx)
+                    rows_exp, pages_exp = expected_pull(rec['wd'])
+                    ppd, basis = pull_estimate(idx, env)
+                    log('PACER new filers (%s): filed %s..%s (%d weekday(s)): %s -- %d rows (%d new), %d page(s), $%.2f; '
+                        'expected ~%d rows / ~%d page(s) at flsb volume (~%d cases per business day); '
+                        'running estimate %.2f pages/day (%s)%s'
+                        % (NEWFILER_COURT, rec['from'], rec['to'], rec['wd'], rec['status'], rec['rows'], rec['new'],
+                           rec['pages'], rec['cost'] if billable else 0.0, rows_exp, pages_exp,
+                           round(FLSB_CASES_12MO / float(FLSB_BUSINESS_DAYS)), ppd, basis,
+                           ('; ' + rec['why']) if rec['why'] else ''))
+                    if rec['status'] in ('error', 'refused'):
+                        rc = 3 if rec['status'] == 'error' else rc
+            searched = errs_in_row = 0
+            for ld, tier, near in queue:
+                if a.limit and searched >= a.limit:
+                    break
+                c = counts.setdefault(ld.get('county') or '?', {'clear': 0, 'active': 0, 'unverifiable': 0,
+                                                                'error': 0, 'deferred': 0})
+                subjects, problem, nsearch = lead_subjects(ld['owners'])
+                key = ld['key']
+                if problem:
+                    prev = cache.get(key)
+                    if not (isinstance(prev, dict) and prev.get('verdict') == 'unverifiable' and not prev.get('err')
+                            and prev.get('why') == problem):
+                        write_result(cpath, key, {'verdict': 'unverifiable', 'why': problem}, 'done', ld, env_name,
+                                     a.region, date_from, now_ts, 'bulk')
+                    c['unverifiable'] += 1
+                    continue
+                ok, why = budget.fits(nsearch * PAGE_USD)
+                if not ok:
+                    c['deferred'] += 1
+                    if budget.billable and budget.spent + PAGE_USD > budget.run_cap + 1e-9:
+                        break
+                    continue
+                try:
+                    fields, status, why = check_lead(pcl, budget, ld, subjects, today, date_from, a.region, a.max_pages)
+                except RateLimited as e:
+                    log('PACER: %s -- stopping tonight' % e)
                     rc = 3
                     break
-                continue
-            errs_in_row = 0
-            cache[key] = _entry(fields, ld, env_name, a.region, date_from, now_ts)
-            save_cache(cpath, cache)
-            c[fields['verdict']] += 1
-            if fields['verdict'] == 'active':
-                active_keys.append(key)
-    finally:
-        out = pcl.logout()
-        if pcl.creds and not out:
-            log('PACER: logout did not confirm (the token expires on its own)')
+                except AuthError as e:
+                    log('PACER: re-login failed (%s) -- stopping tonight' % e)
+                    rc = 3
+                    break
+                searched += 1
+                if status == 'refused':
+                    c['deferred'] += 1
+                    log('PACER: budget refused mid-lead (%s) -- stopping tonight' % why)
+                    break
+                werr = write_result(cpath, key, fields, status, ld, env_name, a.region, date_from, now_ts, 'bulk')
+                if werr:
+                    log('PACER: %s -- stopping tonight' % werr)
+                    rc = 3
+                    break
+                if status == 'error':
+                    c['error'] += 1
+                    errs_in_row += 1
+                    if errs_in_row >= MAX_LEAD_ERRORS:
+                        log('PACER: %d leads in a row failed (%s) -- stopping tonight' % (errs_in_row, why))
+                        rc = 3
+                        break
+                    continue
+                errs_in_row = 0
+                c[fields['verdict']] += 1
+                if fields['verdict'] == 'active':
+                    active_keys.append(key)
+        finally:
+            out = pcl.logout()
+            if pcl.creds and not out:
+                log('PACER: logout did not confirm (the token expires on its own)')
+    if idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
+        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name)
+        log('PACER new filers: index %d rows; %d lead(s) match an owner on an open flsb case (blocked)%s'
+            % (len(idx.get('rows') or {}), len(hits), (': ' + ', '.join(sorted(hits)[:20])) if hits else ''))
+    elif iprob:
+        log('PACER new filers: %s' % iprob)
     for cty, c in sorted(counts.items()):
         log('  PACER %-11s clear %3d  active %3d  unverifiable %3d  error %3d  deferred %3d'
             % (cty, c['clear'], c['active'], c['unverifiable'], c['error'], c['deferred']))
-    log('PACER: %d page(s), $%.2f this run%s' % (budget.pages, budget.spent if billable else 0.0,
+    pull_cost = (rec or {}).get('cost', 0.0) if billable else 0.0
+    log('PACER: %d page(s), $%.2f this run%s' % (budget.pages + ((rec or {}).get('pages') or 0),
+                                                 (budget.spent + pull_cost) if billable else 0.0,
                                                  '' if billable else ' (QA, not billed)'))
     if active_keys:
         log('PACER: OPEN federal bankruptcy found on %d lead(s): %s' % (len(active_keys), ', '.join(active_keys[:20])))

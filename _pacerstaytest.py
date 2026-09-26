@@ -12,8 +12,13 @@ Every name, case number and credential below is invented. Sections:
   5 cost accounting (receipt, quarter ledger, #74 month)        11 prioritisation
   6 names: parsing and matching                                 12 caps exhausted: nothing searched
                                                                 13 the stay gate reads it (+ live /send)
+ FREE-TIER STRATEGY
+ 14 quarter ledger by kind + the daily pre-send allowance       17 the pre-send check (cache, caps, lock)
+ 15 the daily flsb new-filer pull (paging, window, resume)      18 per-lead bulk modes (off by default)
+ 16 matching the new-filer index against leads (block-only)     19 live pre-send inside the send bridge
 """
 import json
+import math
 import os
 import pathlib
 import shutil
@@ -172,12 +177,17 @@ def env(**kw):
     return e
 
 
-def run(d, http, e=None, args=None, now=NOW):
+def run(d, http, e=None, args=None, now=NOW, raw=False):
+    """PS.main in work dir d. Sections 3-13 exercise the per-lead search itself, so by default the run
+    is the paid mode (--bulk all) without the new-filer pull; raw=True runs the real defaults."""
     import io
     import contextlib
+    args = list(args or [])
+    if not raw:
+        args = ['--no-pull', '--bulk', 'all'] + args
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = PS.main(args or [], session=http, here=str(d), env=e if e is not None else env(), now=now)
+        rc = PS.main(args, session=http, here=str(d), env=e if e is not None else env(), now=now)
     return rc, buf.getvalue()
 
 
@@ -448,9 +458,9 @@ def verdict(rows, overflow=False):
 
 v = verdict([])
 check('no rows -> clear', v[0] == 'clear')
-v = verdict([row('TESTPERSON', 'QUINCY', no='1:26-bk-10001', filed=iso(-6))])
+v = verdict([row('TESTPERSON', 'QUINCY', no='1:99-bk-10001', filed=iso(-6))])
 check('exact name, open case in flsbk -> ACTIVE, filing date and case number recorded',
-      v[0] == 'active' and v[3] == iso(-6) and v[2][0]['no'] == '1:26-bk-10001' and v[2][0]['open'], v)
+      v[0] == 'active' and v[3] == iso(-6) and v[2][0]['no'] == '1:99-bk-10001' and v[2][0]['open'], v)
 check('the stored case has no name or caption', 'QUINCY' not in json.dumps(v[2]) and 'caseTitle' not in json.dumps(v[2]))
 check('open case in the Middle District of Florida -> active', verdict([row('TESTPERSON', 'QUINCY', court='flmbk')])[0] == 'active')
 check('closed case -> clear', verdict([row('TESTPERSON', 'QUINCY', termed='2024-01-05')])[0] == 'clear')
@@ -468,7 +478,7 @@ check('adversary proceeding ignored', verdict([row('TESTPERSON', 'QUINCY', ctype
 check('civil case ignored', verdict([row('TESTPERSON', 'QUINCY', court='flsdc', juris='Civil', ctype='cv')])[0] == 'clear')
 check('filed before the lookback ignored', verdict([row('TESTPERSON', 'QUINCY', filed='2015-01-01')])[0] == 'clear')
 check('overflow (unread pages) -> unverifiable even with no match on page 0', verdict([], overflow=True)[0] == 'unverifiable')
-check('active beats every doubt', verdict([row('TESTPERSON', 'Q'), row('TESTPERSON', 'QUINCY', no='1:26-bk-3')], overflow=True)[0] == 'active')
+check('active beats every doubt', verdict([row('TESTPERSON', 'Q'), row('TESTPERSON', 'QUINCY', no='1:99-bk-3')], overflow=True)[0] == 'active')
 check('an unknown role still counts (fail closed)', verdict([row('TESTPERSON', 'QUINCY', role='')])[0] == 'active')
 
 # ------------------------------------------------------------------------------------ 8 missing credentials
@@ -538,7 +548,7 @@ print('-- 10 the cache')
 reset_ledgers()
 leads_md = [{'Case #': '2099-000301-CA-01', 'owners': 'QUINCY TESTPERSON; ROSALIND TESTPERSON', 'AuctionDate': mdy(34)}]
 d = work({'broward_leads.json': BR, 'leads_final.json': leads_md})
-rc, out = run(d, FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): [row('TESTPERSON', 'QUINCY', no='1:26-bk-77777', filed=iso(-6))]}),
+rc, out = run(d, FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): [row('TESTPERSON', 'QUINCY', no='1:99-bk-77777', filed=iso(-6))]}),
               args=['--max-spend', '1'])
 raw = (d / 'pacer_stay_cache.json').read_text()
 cache = json.loads(raw)
@@ -547,7 +557,7 @@ check('entry carries verdict, a/bd/sl, src, env, query time, county, cost and ma
       e.get('verdict') == 'active' and e.get('a') is True and e.get('bd') == iso(-6) and e.get('sl') == ''
       and e.get('src') == 'pacer_pcl' and e.get('env') == 'prod'
       and abs(dt.datetime.fromisoformat(e.get('q')).timestamp() - NOW) < 2 and e.get('q')[-6] in '+-'
-      and e.get('county') == 'BROWARD' and e['cases'][0]['no'] == '1:26-bk-77777', e)
+      and e.get('county') == 'BROWARD' and e['cases'][0]['no'] == '1:99-bk-77777', e)
 check('no owner names, no captions anywhere in the cache file', 'QUINCY' not in raw.upper() and 'ROSALIND' not in raw.upper()
       and 'caseTitle' not in raw)
 check('co-owners on the Miami-Dade lead were both searched (same case, same verdict)',
@@ -679,10 +689,10 @@ leads_final = [{'Case #': '2099-000401-CA-01', 'owners': 'OSCAR MDSTAYED', 'Auct
 g = work({'broward_leads.json': leads_br, 'palmbeach_leads.json': leads_pb, 'leads_final.json': leads_final,
           'sale_history_cache.json': md_cache})
 http = FakeHTTP(by_name={
-    ('STAYEDP', 'ROSALIND'): [row('STAYEDP', 'ROSALIND', no='1:26-bk-12001', filed=iso(-11))],
+    ('STAYEDP', 'ROSALIND'): [row('STAYEDP', 'ROSALIND', no='1:99-bk-12001', filed=iso(-11))],
     ('COMMONP', 'JOHN'): page([row('COMMONP', 'JOHNNY', termed='2020-01-01')] * 54, total_pages=4),
-    ('MDSTAYED', 'OSCAR'): [row('MDSTAYED', 'OSCAR', no='0:26-bk-12002', filed=iso(-4), court='flsbk')],
-    ('CLEARP', 'QUINCY'): [row('CLEARP', 'QUINCY', no='1:19-bk-30001', filed=iso(-2400), termed=iso(-2000))],
+    ('MDSTAYED', 'OSCAR'): [row('MDSTAYED', 'OSCAR', no='0:99-bk-12002', filed=iso(-4), court='flsbk')],
+    ('CLEARP', 'QUINCY'): [row('CLEARP', 'QUINCY', no='1:98-bk-30001', filed=iso(-2400), termed=iso(-2000))],
 })
 rc, out = run(g, http, args=['--max-spend', '2'])
 sh = str(g / 'sale_history_cache.json')
@@ -692,7 +702,7 @@ check('gate: Broward lead PACER cleared (closed 2019 case only) -> ALLOWED', r['
       and r.get('src') == 'pacer_pcl', r)
 r = chk('CACE-99-000802')
 check('gate: Broward lead with an open flsbk case -> refused stay_active, case number in the reason',
-      r['ok'] is False and r['code'] == SG.STAY_ACTIVE and '1:26-bk-12001' in r['why'] and r['bd'] == iso(-11), r)
+      r['ok'] is False and r['code'] == SG.STAY_ACTIVE and '1:99-bk-12001' in r['why'] and r['bd'] == iso(-11), r)
 r = chk('CACE-99-000803')
 check('gate: common name (4 pages) -> refused stay_unverified', r['ok'] is False and r['code'] == SG.UNVERIFIED, r)
 r = chk('509999CA000804XXXAMB')
@@ -733,6 +743,410 @@ qa_dir = work({'broward_leads.json': leads_br, 'sale_history_cache.json': md_cac
 run(qa_dir, FakeHTTP(), env(PACER_ENV='qa'))
 check('gate: a QA run (all clear) allows nothing -- its file is not the one the gate reads',
       SG.check('CACE-99-000801', str(qa_dir / 'sale_history_cache.json'))['code'] == SG.UNRESOLVABLE)
+
+# ------------------------------------------------------------------------------------ 14 quarter ledger by kind + allowance
+print('-- 14 free tier: ledger by kind, pre-send allowance')
+reset_ledgers()
+ql = PS.QuarterLedger(env=env(), today=TODAY)
+ql.debit(0.10, 1, kind='pull')
+ql.debit(0.10, 1, kind='presend')
+ql.adjust(-0.05, kind='presend')
+st = ql.status()
+check('quarter ledger keeps per-day spend by kind (pull / presend), settlements included',
+      abs(st['days'][TODAY.isoformat()]['pull'] - 0.10) < 1e-9 and abs(st['days'][TODAY.isoformat()]['presend'] - 0.05) < 1e-9
+      and abs(st['spent'] - 0.15) < 1e-9, st)
+Q4 = dt.date(2026, 10, 1)
+
+
+def qst(spent=0.0, days=None, cap=25.0, ok=True):
+    return {'cap': cap, 'spent': spent, 'remaining': max(0.0, cap - spent), 'ok': ok, 'why': '' if ok else 'x', 'days': days or {}}
+
+
+al = PS.presend_allowance(qst(), Q4, 1.6, False, {})
+check('Q4 day 1, nothing spent: pulls reserved 92 x 1.6 pages = $14.72, pool $10.28, ~$0.11/day',
+      abs(al['pull_reserve'] - 14.72) < 1e-6 and abs(al['pool'] - 10.28) < 1e-6 and abs(al['left'] - 10.28 / 92) < 1e-4, al)
+check('... so day 1 affords a one-search lead ($0.10) but not a two-search one ($0.20)', 0.10 <= al['left'] < 0.20)
+al2 = PS.presend_allowance(qst(), Q4 + dt.timedelta(days=1), 1.6, False, {})
+check('an unused day carries forward: day 2 affords a two-search lead', al2['left'] >= 0.20, al2)
+al3 = PS.presend_allowance(qst(0.10, {Q4.isoformat(): {'presend': 0.10}}), Q4, 1.6, False, {})
+check('pre-send spend today comes off today\'s allowance', abs(al3['left'] - max(0, 10.28 / 92 - 0.10)) < 1e-4, al3)
+al4 = PS.presend_allowance(qst(), Q4 + dt.timedelta(days=30), 1.6, False, {'PACER_PRESEND_DAILY_MAX': '0.30'})
+check('PACER_PRESEND_DAILY_MAX caps a day however much has accrued', abs(al4['left'] - 0.30) < 1e-9, al4)
+check('a junk PACER_PRESEND_DAILY_MAX allows nothing', PS.presend_allowance(qst(), Q4, 1.6, False,
+                                                                            {'PACER_PRESEND_DAILY_MAX': 'x'})['left'] == 0)
+check('quarter ledger not usable -> nothing', PS.presend_allowance(qst(ok=False), Q4, 1.6, False, {})['left'] == 0)
+check('today\'s pull already done: one day less reserved', PS.presend_allowance(qst(), Q4, 1.6, True, {})['pull_reserve']
+      < al['pull_reserve'])
+check('money spent on pulls / manual checks comes out of the pre-send pool',
+      PS.presend_allowance(qst(5.0, {Q4.isoformat(): {'pull': 5.0}}), Q4, 1.6, False, {})['pool'] < al['pool'] - 4.99)
+# a whole quarter, spending every cent the allowance offers each day + the pulls: never above the cap
+spent, days_map = 0.0, {}
+d0 = Q4
+for i in range(92):
+    day = d0 + dt.timedelta(days=i)
+    dm = days_map.setdefault(day.isoformat(), {})
+    pull = 0.2 if day.weekday() < 5 else 0.0            # 2 pages every weekday pull
+    dm['pull'] = pull
+    spent += pull
+    a_ = PS.presend_allowance(qst(spent, days_map), day, 1.6, True, {})
+    buy = math.floor(a_['left'] / 0.10 + 1e-9) * 0.10
+    dm['presend'] = dm.get('presend', 0) + buy
+    spent += buy
+check('simulated quarter (pull every weekday, pre-send buys all it may each day) stays <= $25',
+      spent <= 25.0 + 1e-9 and spent > 20.0, spent)
+presend_days = sum(1 for v in days_map.values() if v.get('presend'))
+check('... and pre-send money is spread over the quarter (spent on most days, not all on day 1)',
+      presend_days > 60, presend_days)
+
+# ------------------------------------------------------------------------------------ 15 new-filer pull
+print('-- 15 daily new-filer pull (flsbk)')
+check('expected pull at flsb volume: one weekday ~85 party rows = 2 pages', PS.expected_pull(1) == (85, 2))
+w = PS.pull_window({'last_to': ''}, dt.date(2026, 10, 7), {})
+check('first pull backfills 14 days, through yesterday', w[0] == dt.date(2026, 9, 23) and w[1] == dt.date(2026, 10, 6), w)
+w = PS.pull_window({'last_to': '2026-10-06'}, dt.date(2026, 10, 8), {})      # Thursday
+check('next pull: the day after the last pulled day through yesterday', w[:2] == (dt.date(2026, 10, 7), dt.date(2026, 10, 7)), w)
+w = PS.pull_window({'last_to': '2026-10-07'}, dt.date(2026, 10, 8), {})
+check('already current -> no pull', w[0] is None and 'already current' in w[2], w)
+w = PS.pull_window({'last_to': '2026-10-09'}, dt.date(2026, 10, 11), {})     # Sunday run, Saturday pending
+check('only a Saturday pending -> folded into the next weekday pull (no page bought)', w[0] is None and 'weekend' in w[2], w)
+w = PS.pull_window({'last_to': '2026-10-09'}, dt.date(2026, 10, 13), {})     # Tuesday run
+check('Tuesday pulls Saturday..Monday in one search', w[:2] == (dt.date(2026, 10, 10), dt.date(2026, 10, 12)), w)
+w = PS.pull_window({'last_to': '2026-10-09'}, dt.date(2026, 10, 11), {'PACER_NEWFILER_WEEKENDS': '1'})
+check('PACER_NEWFILER_WEEKENDS=1 pulls weekend days too', w[0] == dt.date(2026, 10, 10), w)
+w = PS.pull_window({'last_to': '2026-09-01'}, dt.date(2026, 10, 8), {})
+check('more than 14 days behind: pulls the latest 14 and says what was never pulled',
+      w[0] == dt.date(2026, 9, 24) and w[1] == dt.date(2026, 10, 7) and 'never pulled' in w[2], w)
+check('bad backfill / overlap settings -> no pull', PS.pull_window({}, Q4, {'PACER_NEWFILER_BACKFILL_DAYS': 'lots'})[0] is None
+      and PS.pull_window({}, Q4, {'PACER_NEWFILER_OVERLAP_DAYS': '99'})[0] is None)
+
+
+class PullHTTP(FakeHTTP):
+    """FakeHTTP whose name-less party search (the new-filer pull) is answered by `pull(body, page)`."""
+
+    def __init__(self, pull=None, **kw):
+        super().__init__(**kw)
+        self.pull = pull
+        self.pulls = []
+
+    def post(self, url, json=None, headers=None, timeout=None):
+        if '/parties/find?page=' in url and not (json or {}).get('lastName'):
+            pg = int(url.rsplit('page=', 1)[1])
+            self.calls.append(('pull', url, json, dict(headers or {})))
+            self.pulls.append((json, pg))
+            r = self.pull(json, pg) if self.pull else page([], pg)
+            if isinstance(r, Exception):
+                raise r
+            return r
+        return super().post(url, json=json, headers=headers, timeout=timeout)
+
+
+def filer_pages(rows, per=54):
+    def f(body, pg):
+        chunk = rows[pg * per:(pg + 1) * per]
+        tp = max(1, -(-len(rows) // per))
+        return page(chunk, pg, total_pages=tp)
+    return f
+
+
+NF_ROWS = ([row('NEWFILERP', 'QUINCY', no='1:%02d-bk-5%04d' % (TODAY.year % 100, i), filed=iso(-3)) for i in range(1)]
+           + [row('OTHERFILER%d' % i, 'ANNA', no='1:%02d-bk-6%04d' % (TODAY.year % 100, i), filed=iso(-2)) for i in range(120)])
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = PullHTTP(pull=filer_pages(NF_ROWS))
+rc, out = run(d, h, raw=True)
+pl = [c for c in h.calls if c[0] == 'pull']
+check('nightly default: login, the pull (3 pages for 121 rows), logout -- and NO per-lead name search',
+      rc == 0 and [c[0] for c in h.calls] == ['auth', 'pull', 'pull', 'pull', 'logout'] and not h.finds(), ([c[0] for c in h.calls], out))
+b0 = pl[0][2]
+yday = TODAY - dt.timedelta(days=1)
+check('pull request: POST parties/find, no name, bankruptcy cases in flsbk filed from..to (to = yesterday)',
+      pl[0][1] == 'https://pcl.uscourts.gov/pcl-public-api/rest/parties/find?page=0'
+      and b0 == {'courtCase': {'jurisdictionType': 'bk', 'courtId': ['flsbk'],
+                               'dateFiledFrom': (TODAY - dt.timedelta(days=14)).isoformat(),
+                               'dateFiledTo': yday.isoformat()}}, b0)
+check('every page is read (page=0,1,2) and billed to the quarter as kind "pull"',
+      [c[1].rsplit('=', 1)[1] for c in pl] == ['0', '1', '2']
+      and abs(qledger()[Q]['days'][TODAY.isoformat()]['pull'] - 0.30) < 1e-9 and abs(month_spent() - 0.30) < 1e-9, qledger())
+idx = json.loads((d / 'pacer_newfilers.json').read_text())
+check('index: 121 rows with name, case number, chapter, dates; last_to advanced; window covered',
+      len(idx['rows']) == 121 and idx['last_to'] == yday.isoformat() and idx['pulls'][-1]['ok']
+      and idx['pulls'][-1]['pages'] == 3
+      and all(set(('lastName', 'caseNumberFull', 'bankruptcyChapter', 'dateFiled', 'seen')) <= set(x) for x in idx['rows'].values()), idx['pulls'])
+check('the log reports rows, pages, cost and the expected pages at flsb volume, names none',
+      'new filers (flsbk)' in out and '121 rows' in out and '3 page(s)' in out and 'flsb volume' in out
+      and 'NEWFILERP' not in out and 'QUINCY' not in out, out)
+check('per-lead bulk is off by default and says so', 'per-lead bulk search is off' in out)
+rc, out = run(d, PullHTTP(pull=filer_pages(NF_ROWS)), raw=True)
+check('same day again: already current, no login, nothing bought', 'already current' in out and qledger()[Q]['pages'] == 3, out)
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = PullHTTP(pull=filer_pages(NF_ROWS))
+rc, out = run(d, h, env(PACER_NEWFILER_MAX_PAGES='2'), raw=True)
+idx = json.loads((d / 'pacer_newfilers.json').read_text())
+check('more pages than PACER_NEWFILER_MAX_PAGES: stops at 2, rows kept, window NOT marked covered',
+      len([c for c in h.calls if c[0] == 'pull']) == 2 and len(idx['rows']) == 108 and idx['last_to'] == ''
+      and idx['pulls'][-1]['status'] == 'partial', idx['pulls'])
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+rc, out = run(d, PullHTTP(pull=lambda b, pg: Resp(500, {})), raw=True)
+idx = json.loads((d / 'pacer_newfilers.json').read_text())
+check('pull HTTP 500: exit 3, window not covered (retried next night)', rc == 3 and idx['last_to'] == '', (rc, out))
+reset_ledgers()
+(TMP / 'pacer_q.json').write_text(json.dumps({Q: {'total': 24.85}}))
+d = work({'broward_leads.json': BR})
+h = PullHTTP(pull=filer_pages(NF_ROWS))
+rc, out = run(d, h, raw=True)
+idx = json.loads((d / 'pacer_newfilers.json').read_text())
+check('quarter nearly spent ($0.15 left): the pull buys one page, is refused the next, window not covered',
+      len([c for c in h.calls if c[0] == 'pull']) == 1 and idx['last_to'] == '' and qledger()[Q]['total'] <= 25.0 + 1e-9,
+      (qledger(), idx['pulls']))
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = PullHTTP(pull=filer_pages(NF_ROWS[:3]))
+run(d, h, env(PACER_NEWFILER_ROLES='db'), raw=True)
+check('PACER_NEWFILER_ROLES=db narrows the pull to debtors (role in the body)', h.pulls[0][0].get('role') == ['db'], h.pulls[0][0])
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = PullHTTP(pull=filer_pages(NF_ROWS[:3]))
+run(d, h, env(PACER_ENV='qa'), raw=True)
+check('QA pull goes to qa-pcl, bills nothing, writes the *_qa index', h.calls[1][1].startswith('https://qa-pcl.uscourts.gov/')
+      and qledger() == {} and (d / 'pacer_newfilers_qa.json').exists() and not (d / 'pacer_newfilers.json').exists())
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = PullHTTP(pull=filer_pages(NF_ROWS))
+rc, out = run(d, h, env(PACER_USERNAME=None), raw=True)
+check('no credentials: the pull is off too (no HTTP, no index written)', rc == 0 and h.calls == []
+      and not (d / 'pacer_newfilers.json').exists() and 'OFF' in out)
+rc, out = run(d, PullHTTP(), raw=True, args=['--plan'])
+check('--plan (no network) shows the pull window and its expected pages / cost, and today\'s allowance',
+      'new-filer pull: flsbk filed' in out and 'expect ~' in out and 'pre-send allowance today' in out, out)
+
+# ------------------------------------------------------------------------------------ 16 matching the index (block-only)
+print('-- 16 new-filer index x leads: block-only')
+leads16 = [{'county': 'BROWARD', 'case': 'CACE-99-001601', 'owners': 'NEWFILERP QUINCY', 'auction': mdy(20)},   # open
+           {'county': 'BROWARD', 'case': 'CACE-99-001602', 'owners': 'NEWFILERP Q', 'auction': mdy(21)},        # initials only
+           {'county': 'BROWARD', 'case': 'CACE-99-001603', 'owners': 'CLOSEDFILER ROSA', 'auction': mdy(22)},   # closed
+           {'county': 'BROWARD', 'case': 'CACE-99-001604', 'owners': 'NEWFILERP QUINTON', 'auction': mdy(23)},  # other person
+           {'county': 'BROWARD', 'case': 'CACE-99-001605', 'owners': 'NOBODYFILED PAUL', 'auction': mdy(24)},   # not in index
+           {'county': 'BROWARD', 'case': 'CACE-99-001606', 'owners': 'CREDFILER ANA', 'auction': mdy(25)},      # creditor row
+           {'county': 'BROWARD', 'case': 'CACE-99-001607', 'owners': 'DISMFILER LUIS', 'auction': mdy(26)},     # dismissed
+           {'county': 'BROWARD', 'case': 'CACE-99-001609', 'owners': 'NEWFILERW OLGA', 'auction': mdy(26)}]     # weak (no first name on the row)
+lf16 = [{'Case #': '2099-001608-CA-01', 'owners': 'MARTA MDFILER', 'AuctionDate': mdy(27)}]
+rows16 = [row('NEWFILERP', 'QUINCY', no='1:99-bk-70001', filed=iso(-3)),
+          row('CLOSEDFILER', 'ROSA', no='1:99-bk-70002', filed=iso(-9), termed=iso(-1)),
+          row('CREDFILER', 'ANA', no='1:99-bk-70003', filed=iso(-4), role='cr'),
+          row('DISMFILER', 'LUIS', no='1:99-bk-70004', filed=iso(-8), dismissed=iso(-2)),
+          row('MDFILER', 'MARTA', no='1:99-bk-70005', filed=iso(-5)),
+          row('NEWFILERW OLGA', '', no='1:99-bk-70006', filed=iso(-2))]
+reset_ledgers()
+md16 = {'2099-001608-CA-01': {'a': False, 'bd': '', 'sl': '', 'v': 5, 't': NOW}}
+g16 = work({'broward_leads.json': leads16, 'leads_final.json': lf16, 'sale_history_cache.json': md16})
+rc, out = run(g16, PullHTTP(pull=filer_pages(rows16)), raw=True)
+hits = json.loads((g16 / 'pacer_newfiler_hits.json').read_text())
+check('strong owner match on a case open at pull time -> hit (Broward and Miami-Dade leads)',
+      sorted(hits) == ['2099-001608-CA-01', 'CACE-99-001601'], sorted(hits))
+check('no hit for: an initials-only owner, a closed case, a different first name, a creditor row, a dismissed case',
+      not any(k in hits for k in ('CACE-99-001602', 'CACE-99-001603', 'CACE-99-001604', 'CACE-99-001606', 'CACE-99-001607')))
+check('no hit for a WEAK name match (row with no first name): the index blocks on strong matches only',
+      'CACE-99-001609' not in hits and PS.match_row(rows16[-1], PS.lead_subjects([('NEWFILERW OLGA', 'last_first')])[0][0]) == 'weak')
+hraw = (g16 / 'pacer_newfiler_hits.json').read_text()
+check('hits file: case numbers, court, chapter, filed date, pull time -- no names',
+      hits['CACE-99-001601']['cases'][0]['no'] == '1:99-bk-70001' and hits['CACE-99-001601']['env'] == 'prod'
+      and hits['CACE-99-001601']['seen_t'] > 0 and 'NEWFILERP' not in hraw and 'QUINCY' not in hraw and 'MARTA' not in hraw)
+sh16 = str(g16 / 'sale_history_cache.json')
+r = SG.check('CACE-99-001601', sh16)
+check('gate: Broward lead in the new-filer index -> stay_active (src pacer_newfilers, case in the reason)',
+      r['code'] == SG.STAY_ACTIVE and r.get('src') == 'pacer_newfilers' and '1:99-bk-70001' in r['why'] and not r['pacer_need'], r)
+r = SG.check('2099-001608-CA-01', sh16)
+check('gate: Miami-Dade docket clear but owner is a new flsb filer -> stay_active', r['code'] == SG.STAY_ACTIVE
+      and r.get('src') == 'pacer_newfilers', r)
+r = SG.check('CACE-99-001605', sh16)
+check('gate: NOT in the index never clears -- a lead with no per-lead PACER verdict is still refused, and flagged for a pre-send check',
+      r['ok'] is False and r['code'] in (SG.UNRESOLVABLE, SG.UNVERIFIED) and r['pacer_need'] is True, r)
+pc = {'CACE-99-001601': {'verdict': 'clear', 'a': False, 'env': 'prod', 't': NOW + 5, 'q': 'x', 'src': 'pacer_pcl'}}
+(g16 / 'pacer_stay_cache.json').write_text(json.dumps(pc))
+check('a per-lead PACER clear queried AFTER the hit\'s rows were pulled supersedes the hit (it saw the current status)',
+      SG.check('CACE-99-001601', sh16)['ok'] is True)
+pc['CACE-99-001601']['t'] = hits['CACE-99-001601']['seen_t'] - 60
+(g16 / 'pacer_stay_cache.json').write_text(json.dumps(pc))
+check('... an older per-lead clear does not', SG.check('CACE-99-001601', sh16)['code'] == SG.STAY_ACTIVE)
+hq = dict(hits)
+hq['CACE-99-001601'] = dict(hits['CACE-99-001601'], env='qa')
+(g16 / 'pacer_newfiler_hits.json').write_text(json.dumps(hq))
+check('a QA hit never blocks (test data)', SG.check('CACE-99-001601', sh16)['code'] != SG.STAY_ACTIVE)
+(g16 / 'pacer_newfiler_hits.json').write_text('{broken')
+r1, r2 = SG.check('CACE-99-001605', sh16), SG.check('2099-001608-CA-01', sh16)
+check('unreadable hits file: no-stem lead refused (stay_unverified, no pre-send spend); Miami-Dade docket verdict unaffected',
+      r1['code'] == SG.UNVERIFIED and not r1['pacer_need'] and r2['ok'] is True, (r1, r2))
+(g16 / 'pacer_newfiler_hits.json').write_text(json.dumps(hits))
+check('/health counts new-filer hits', SG.health(sh16)['newfilers'] == {'ok': True, 'err': '', 'hits': 2}, SG.health(sh16))
+
+# ------------------------------------------------------------------------------------ 17 pre-send check
+print('-- 17 pre-send check (send bridge path)')
+leads17 = [{'county': 'BROWARD', 'case': 'CACE-99-001701', 'owners': 'PRESENDP QUINCY', 'auction': mdy(30)},
+           {'county': 'BROWARD', 'case': 'CACE-99-001702', 'owners': 'PRESTAYED ROSA', 'auction': mdy(31)},
+           {'county': 'PALM BEACH', 'case': '509999CA001703XXXAMB', 'owners': 'COMMONP JOHN', 'auction': mdy(32)},
+           {'county': 'BROWARD', 'case': 'CACE-99-001704', 'owners': 'PRESENDP QUINCY & OTHERP ANA', 'auction': mdy(33)},
+           {'county': 'BROWARD', 'case': 'CACE-99-001705', 'owners': 'TESTPERSON QUINCY TR', 'auction': mdy(34)},
+           {'county': 'BROWARD', 'case': 'CACE-99-001706', 'owners': 'ERRP PAULO', 'auction': mdy(35)}]
+by17 = {('PRESENDP', 'QUINCY'): [row('PRESENDP', 'QUINCY', termed='2021-02-02', filed='2020-01-01')],
+        ('PRESTAYED', 'ROSA'): [row('PRESTAYED', 'ROSA', no='1:99-bk-71002', filed=iso(-12))],
+        ('COMMONP', 'JOHN'): page([row('COMMONP', 'JOHNNY', termed='2020-01-01')] * 54, total_pages=3),
+        ('ERRP', 'PAULO'): Resp(500, {})}
+e17 = env(PACER_NEWFILER_EST_PAGES_PER_DAY='0.5')     # a roomy allowance on any calendar day
+
+
+def ps17(case, h, e=None, now=NOW, **kw):
+    return PS.presend_check(case, here=str(g17), env=e or e17, session=h, now=now, **kw)
+
+
+reset_ledgers()
+g17 = work({'broward_leads.json': leads17, 'palmbeach_leads.json': [leads17[2]], 'sale_history_cache.json': md16})
+sh17 = str(g17 / 'sale_history_cache.json')
+h = FakeHTTP(by_name=by17)
+r = ps17('CACE-99-001701', h, env(PACER_USERNAME=None))
+check('pre-send with PACER off: status off, no HTTP, nothing written', r['status'] == 'off' and h.calls == []
+      and not (g17 / 'pacer_stay_cache.json').exists(), r)
+r = ps17('2099-001608-CA-01', h)
+check('pre-send never runs for a Miami-Dade stem (PACER cannot clear it)', r['status'] == 'not_needed' and h.calls == [])
+r = ps17('CACE-99-009999', h)
+check('pre-send for a case not in the lead files: no_lead, no HTTP', r['status'] == 'no_lead' and h.calls == [], r)
+r = ps17('CACE-99-001701', h)
+check('pre-send search: clear -> cached as a production verdict (mode presend); the gate now allows the send',
+      r['status'] == 'searched' and r['verdict'] == 'clear' and SG.check('CACE-99-001701', sh17)['ok'] is True
+      and json.loads((g17 / 'pacer_stay_cache.json').read_text())['CACE-99-001701']['mode'] == 'presend', r)
+check('... one login, one search, one logout; $0.10 billed to kind "presend" and to #74\'s month',
+      [c[0] for c in h.calls] == ['auth', 'find', 'logout'] and abs(qledger()[Q]['days'][TODAY.isoformat()]['presend'] - 0.10) < 1e-9
+      and abs(month_spent() - 0.10) < 1e-9, (h.calls, qledger()))
+n0 = len(h.calls)
+r = ps17('CACE-99-001701', h)
+check('repeat inside 14 days: cached, no HTTP, no cost', r['status'] == 'cached' and len(h.calls) == n0, r)
+check('gate: a fresh clear needs no pre-send check', SG.check('CACE-99-001701', sh17)['pacer_need'] is False)
+r = ps17('CACE-99-001702', h)
+v = SG.check('CACE-99-001702', sh17)
+check('pre-send search finds an open flsbk case -> stay_active at the gate', r['verdict'] == 'active' and v['code'] == SG.STAY_ACTIVE, (r, v))
+r = ps17('509999CA001703XXXAMB', h)
+check('pre-send, common name (3 pages) -> unverifiable, refused', r['verdict'] == 'unverifiable'
+      and SG.check('509999CA001703XXXAMB', sh17)['code'] == SG.UNVERIFIED and not SG.check('509999CA001703XXXAMB', sh17)['pacer_need'])
+n0 = len(h.calls)
+r = ps17('CACE-99-001705', h)
+check('pre-send, unsearchable owner (trust): unverifiable at no cost', r['status'] == 'unsearchable' and len(h.calls) == n0
+      and SG.check('CACE-99-001705', sh17)['code'] == SG.UNVERIFIED)
+r = ps17('CACE-99-001706', h)
+v = SG.check('CACE-99-001706', sh17)
+check('pre-send, PCL HTTP 500: error, refused (stay_unverified), not retried the same day',
+      r['status'] == 'error' and v['code'] == SG.UNVERIFIED and v['pacer_need'] is False, (r, v))
+check('... but retried after a day', SG.pacer_needs_lookup(json.loads((g17 / 'pacer_stay_cache.json').read_text())['CACE-99-001706'],
+                                                          now=NOW + 1.1 * 86400) is True)
+pcx = json.loads((g17 / 'pacer_stay_cache.json').read_text())
+pcx['CACE-99-001701']['t'] = NOW - 15 * 86400
+(g17 / 'pacer_stay_cache.json').write_text(json.dumps(pcx))
+v = SG.check('CACE-99-001701', sh17)
+check('a clear older than 14 days: refused AND flagged for a new pre-send search', v['code'] == SG.UNVERIFIED and v['pacer_need'] is True, v)
+# budget refusals
+reset_ledgers()
+(TMP / 'pacer_q.json').write_text(json.dumps({Q: {'total': 25.0}}))
+h = FakeHTTP(by_name=by17)
+r = ps17('CACE-99-001701', h)
+check('pre-send, quarter cap reached: refused, no login', r['status'] == 'refused' and 'quarter cap' in r['why'] and h.calls == [], r)
+reset_ledgers()
+json.dump({PR.month(NOW): {'total': 50.0, 'by': {'x': 50.0}}}, open(os.environ['DEALFLOW_PAID_LEDGER'], 'w'))
+h = FakeHTTP(by_name=by17)
+r = ps17('CACE-99-001701', h)
+check('pre-send, #74 monthly cap reached: refused, no login', r['status'] == 'refused' and h.calls == [], r)
+reset_ledgers()
+h = FakeHTTP(by_name=by17)
+r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.10'))
+check('pre-send, daily cap: a two-name lead ($0.20) against $0.10 left today -> refused, no login',
+      r['status'] == 'refused' and 'allowance' in r['why'] and h.calls == [], r)
+reset_ledgers()
+ql = PS.QuarterLedger(env=e17, today=TODAY)
+ql.debit(0.30, 1, kind='presend')
+h = FakeHTTP(by_name=by17)
+r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.40', PACER_NEWFILER_EST_PAGES_PER_DAY='0.5'))
+check('pre-send, daily cap counts what today already spent ($0.30 of $0.40 -> a $0.20 lead is refused)',
+      r['status'] == 'refused' and h.calls == [], r)
+reset_ledgers()
+h = FakeHTTP(by_name=by17)
+r = ps17('CACE-99-001701', h, env(PACER_ENV='qa'))
+check('pre-send in QA: searches qa-pcl, bills nothing, writes the QA cache -- the gate still refuses',
+      r['status'] == 'searched' and qledger() == {} and (g17 / 'pacer_stay_cache_qa.json').exists()
+      and h.finds()[0][1].startswith('https://qa-pcl'), r)
+# index hit short-circuits the paid search
+reset_ledgers()
+g17b = work({'broward_leads.json': [{'county': 'BROWARD', 'case': 'CACE-99-001801', 'owners': 'NEWFILERP QUINCY', 'auction': mdy(20)}]})
+run(g17b, PullHTTP(pull=filer_pages(rows16)), raw=True)
+(g17b / 'pacer_newfiler_hits.json').unlink()
+pages_before = qledger()[Q]['pages']
+h = FakeHTTP(by_name={('NEWFILERP', 'QUINCY'): []})
+r = PS.presend_check('CACE-99-001801', here=str(g17b), env=e17, session=h, now=NOW)
+check('pre-send: owner already in the new-filer index -> index_hit (active), no login, no page bought',
+      r['status'] == 'index_hit' and h.calls == [] and qledger()[Q]['pages'] == pages_before
+      and 'CACE-99-001801' in json.loads((g17b / 'pacer_newfiler_hits.json').read_text()), r)
+# two sends for the same lead at once: one search
+reset_ledgers()
+import threading as _th
+g17c = work({'broward_leads.json': leads17})
+slow_calls = []
+
+
+def slow(body, pg, headers):
+    slow_calls.append(1)
+    time.sleep(0.4)
+    return page([])
+
+
+h = FakeHTTP(by_name={('PRESENDP', 'QUINCY'): slow})
+res = []
+ts = [_th.Thread(target=lambda: res.append(PS.presend_check('CACE-99-001701', here=str(g17c), env=e17, session=h, now=NOW)))
+      for _ in range(2)]
+[t.start() for t in ts]
+[t.join() for t in ts]
+check('two simultaneous sends for one lead: ONE paid search, the other reads the cached verdict',
+      len(slow_calls) == 1 and sorted(x['status'] for x in res) == ['cached', 'searched'], (slow_calls, res))
+pcb = g17c / 'pacer_stay_cache.json'
+pcb.write_text('{half')
+h = FakeHTTP(by_name=by17)
+r = PS.presend_check('CACE-99-001702', here=str(g17c), env=e17, session=h, now=NOW)
+check('unreadable PACER cache: pre-send refused, no search, the file is not overwritten',
+      r['status'] == 'refused' and h.calls == [] and pcb.read_text() == '{half', r)
+
+# ------------------------------------------------------------------------------------ 18 bulk modes
+print('-- 18 nightly per-lead bulk: off by default, md-near only with surplus')
+reset_ledgers()
+leads18 = [{'county': 'BROWARD', 'case': 'CACE-99-001901', 'owners': 'BULKBR ANNA', 'auction': mdy(5)}]
+lf18 = [{'Case #': '2099-001902-CA-01', 'owners': 'PAULO BULKMD', 'AuctionDate': mdy(4)},
+        {'Case #': '2099-001903-CA-01', 'owners': 'RITA BULKFAR', 'AuctionDate': mdy(40)}]
+g18 = work({'broward_leads.json': leads18, 'leads_final.json': lf18})
+h = FakeHTTP()
+rc, out = run(g18, h, args=['--no-pull'], raw=True)
+check('default (bulk off): no per-lead search at all, even for near-sale leads', h.calls == [] and 'bulk search is off' in out, out)
+h = FakeHTTP()
+rc, out = run(g18, h, env(PACER_BULK='md-near', PACER_QUARTER_CAP='25'), args=['--no-pull'], raw=True)
+qs_ = PS.QuarterLedger(env=env(), today=TODAY).status()
+al_ = PS.presend_allowance(qs_, TODAY, PS.DEFAULT_NF_EST_PAGES_PER_DAY, False, {})
+surplus = al_['left'] - min(PS.PRESEND_KEEP_DAYS, al_['days_left']) * al_['per_day']
+if surplus >= 0.10:
+    check('md-near with surplus: only the near-sale Miami-Dade lead is searched (not Broward, not the far sale)',
+          [c[2]['lastName'] for c in h.finds()] == ['BULKMD'], [c[2] for c in h.finds()])
+else:
+    check('md-near with no surplus: nothing searched', h.finds() == [], out)
+reset_ledgers()
+(TMP / 'pacer_q.json').write_text(json.dumps({Q: {'total': 24.9, 'days': {TODAY.isoformat(): {'pull': 24.9}}}}))
+h = FakeHTTP()
+g18 = work({'broward_leads.json': leads18, 'leads_final.json': lf18})
+rc, out = run(g18, h, env(PACER_BULK='md-near'), args=['--no-pull'], raw=True)
+check('md-near when the quarter is nearly spent: no surplus -> nothing searched', h.finds() == [] and 'none' in out, out)
+reset_ledgers()
+h = FakeHTTP()
+g18 = work({'broward_leads.json': leads18, 'leads_final.json': lf18})
+rc, out = run(g18, h, args=['--no-pull', '--bulk', 'all', '--max-spend', '1'], raw=True)
+check('--bulk all (paid mode) still searches every due lead', len(h.finds()) == 3, [c[2] for c in h.finds()])
+rc, out = run(g18, FakeHTTP(), env(PACER_BULK='sometimes'), raw=True)
+check('PACER_BULK junk: refused (exit 3)', rc == 3)
+reset_ledgers()
+rc, out = run(g18, FakeHTTP(), args=['--status'], raw=True)
+check('--status shows spend by kind and today\'s pre-send allowance', 'pre-send allowance today' in out and 'by kind' in out, out)
 
 
 # ---- live /send through the real send_server.py bridge (#72) with the PACER file this run wrote
@@ -825,6 +1239,145 @@ finally:
         proc.wait(timeout=5)
     except Exception:
         proc.kill()
+
+
+# ---- live pre-send: the real bridge runs ONE PACER search just before sending (fake PACER session)
+print('-- 19 live pre-send check inside the send bridge (fake PCL, fake SMTP)')
+BRIDGE_FAKE = (
+    'import json, os, sys, smtplib\n'
+    'class _FakeSMTP:\n'
+    '    def __init__(self, *a, **k): pass\n'
+    '    def __enter__(self): return self\n'
+    '    def __exit__(self, *a): return False\n'
+    '    def login(self, u, p): pass\n'
+    '    def send_message(self, m, **k):\n'
+    '        open("smtp_calls.txt", "a", encoding="utf-8").write(str(m["To"]) + "\\n")\n'
+    '        return {}\n'
+    'smtplib.SMTP_SSL = _FakeSMTP\n'
+    'class _R:\n'
+    '    def __init__(self, st, body): self.status_code, self._b, self.headers = st, body, {}\n'
+    '    def json(self): return self._b\n'
+    'class _FakePCL:\n'
+    '    def post(self, url, json=None, headers=None, timeout=None):\n'
+    '        import json as J\n'
+    '        with open("pcl_calls.txt", "a", encoding="utf-8") as f: f.write(url + " " + J.dumps(json) + "\\n")\n'
+    '        if url.endswith("/services/cso-auth"):\n'
+    '            return _R(200, {"loginResult": "0", "nextGenCSO": "T" * 128, "errorDescription": ""})\n'
+    '        if url.endswith("/services/cso-logout"):\n'
+    '            return _R(200, {"loginResult": "0", "errorDescription": ""})\n'
+    '        canned = J.load(open("pcl_canned.json", encoding="utf-8"))\n'
+    '        rows = canned.get(str(json.get("lastName", "")).upper() + "|" + str(json.get("firstName", "")).upper(), [])\n'
+    '        pg = int(url.rsplit("page=", 1)[1])\n'
+    '        return _R(200, {"content": rows, "receipt": {"billablePages": 1, "searchFee": ".10"},\n'
+    '                        "pageInfo": {"number": pg, "size": 54, "totalPages": 1, "totalElements": len(rows),\n'
+    '                                     "numberOfElements": len(rows), "first": True, "last": True}})\n'
+    'import pacer_stay\n'
+    'pacer_stay.SESSION_FACTORY = _FakePCL\n'
+    'sys.argv = ["send_server.py", "--port", sys.argv[1], "--limit", "50"]\n'
+    'exec(open("send_server.py", encoding="utf-8").read())\n')
+
+leads19 = [{'county': 'BROWARD', 'case': 'CACE-99-000901', 'owners': 'PRESEND CLARA', 'auction': mdy(20)},
+           {'county': 'BROWARD', 'case': 'CACE-99-000902', 'owners': 'OPENCASE DORA', 'auction': mdy(20)},
+           {'county': 'BROWARD', 'case': 'CACE-99-000903', 'owners': 'BUDGET ERIN', 'auction': mdy(20)},
+           {'county': 'BROWARD', 'case': 'CACE-99-000904', 'owners': 'NOCREDS FRANK', 'auction': mdy(20)}]
+canned19 = {'OPENCASE|DORA': [row('OPENCASE', 'DORA', no='0:99-bk-19002', filed=iso(-20))]}
+srv19 = work({'broward_leads.json': leads19, 'pcl_canned.json': canned19})
+for fn in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'pacer_stay.py', 'paid_reads.py', 'paths.py'):
+    shutil.copy(HERE / fn, srv19 / fn)
+(srv19 / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
+(srv19 / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+(srv19 / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
+(srv19 / '_run_bridge.py').write_text(BRIDGE_FAKE, encoding='utf-8')
+QL19 = srv19 / 'pacer_q19.json'
+
+
+def bridge19(creds=True):
+    e = dict(os.environ)
+    for k_ in ('PACER_USERNAME', 'PACER_PASSWORD', 'PACER_ENV', 'PACER_QUARTER_CAP', 'PACER_PRESEND_DAILY_MAX'):
+        e.pop(k_, None)
+    e.update({'PACER_QUARTER_LEDGER': str(QL19), 'DEALFLOW_PAID_LEDGER': str(srv19 / 'paid19.json'),
+              'PACER_NEWFILER_EST_PAGES_PER_DAY': '0.5'})
+    if creds:
+        e.update({'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123'})
+    port_ = free_port()
+    pr = subprocess.Popen([sys.executable, str(srv19 / '_run_bridge.py'), str(port_)], cwd=str(srv19), env=e,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(60):
+        if call(port_, '/health')[0] == 200:
+            return pr, port_
+        time.sleep(0.25)
+    return pr, None
+
+
+def stop19(pr):
+    pr.terminate()
+    try:
+        pr.wait(timeout=5)
+    except Exception:
+        pr.kill()
+
+
+def finds19():
+    p_ = srv19 / 'pcl_calls.txt'
+    return [l for l in (p_.read_text(encoding='utf-8').splitlines() if p_.exists() else []) if '/parties/find' in l]
+
+
+def smtp19():
+    p_ = srv19 / 'smtp_calls.txt'
+    return p_.read_text(encoding='utf-8').split() if p_.exists() else []
+
+
+n19 = [0]
+
+
+def send19(port_, case):
+    n19[0] += 1
+    return call(port_, '/send', {'to': 'lead%d@example.com' % n19[0], 'subj': 'About 2 Oak St',
+                                 'body': 'Hello, a short note about 2 Oak St.',
+                                 'meta': {'owner': 'Clara', 'addr': '2 Oak St', 'wl': 'active', 'c': case}})
+
+
+proc19, port19 = bridge19()
+try:
+    check('pre-send bridge starts', port19 is not None)
+    if port19:
+        st, j = send19(port19, 'CACE-99-000901')
+        check('live pre-send: Broward lead with no verdict -> one PACER search, clear -> 200 sent',
+              st == 200 and j.get('ok') is True and len(smtp19()) == 1 and len(finds19()) == 1, (st, j, finds19()))
+        pc = json.loads((srv19 / 'pacer_stay_cache.json').read_text(encoding='utf-8'))
+        check('live pre-send: the verdict is cached in pacer_stay_cache.json with no names',
+              'CACE-99-000901' in json.dumps(pc) and 'PRESEND' not in json.dumps(pc) and 'CLARA' not in json.dumps(pc))
+        q19 = json.loads(QL19.read_text(encoding='utf-8'))
+        check('live pre-send: $0.10 charged to the quarter ledger as kind "presend"',
+              abs(float(q19[Q]['total']) - 0.10) < 1e-9 and
+              abs(float(q19[Q]['days'][TODAY.isoformat()].get('presend', 0)) - 0.10) < 1e-9, q19)
+        st, j = send19(port19, 'CACE-99-000901')
+        check('live pre-send: second send to the same lead -> cached clear, NO new search, 200',
+              st == 200 and len(finds19()) == 1 and len(smtp19()) == 2, (st, j, finds19()))
+        st, j = send19(port19, 'CACE-99-000902')
+        check('live pre-send: owner has an open flsb case -> 451 stay_active, nothing sent',
+              st == 451 and j.get('blocked') == 'stay_active' and len(smtp19()) == 2 and len(finds19()) == 2, (st, j))
+        QL19.write_text(json.dumps({Q: {'total': 25.0, 'days': {TODAY.isoformat(): {'pull': 25.0}}}}), encoding='utf-8')
+        st, j = send19(port19, 'CACE-99-000903')
+        check('live pre-send: quarter budget spent -> refused, 451 with the existing code, no search',
+              st == 451 and j.get('blocked') in ('stay_unverified', 'stay_unresolvable') and
+              '[PACER pre-send: refused' in json.dumps(j) and len(finds19()) == 2 and len(smtp19()) == 2, (st, j))
+finally:
+    stop19(proc19)
+QL19.write_text(json.dumps({}), encoding='utf-8')
+proc19, port19 = bridge19(creds=False)
+try:
+    check('pre-send bridge (no credentials) starts', port19 is not None)
+    if port19:
+        st, j = send19(port19, 'CACE-99-000904')
+        check('live pre-send: no PACER credentials -> 451 exactly as before, no HTTP to PACER',
+              st == 451 and j.get('blocked') in ('stay_unverified', 'stay_unresolvable') and
+              len(finds19()) == 2 and len(smtp19()) == 2, (st, j))
+        st, j = send19(port19, 'CACE-99-000901')
+        check('live pre-send: a lead with a fresh cached clear still sends with PACER off (no cost)',
+              st == 200 and len(finds19()) == 2, (st, j))
+finally:
+    stop19(proc19)
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all PACER stay checks passed ====')
