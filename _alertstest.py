@@ -87,8 +87,8 @@ def health_rows(rows, bounced):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def ft_rows(dead, mailed):
-    day = S.dt.date.today().isoformat()
+def ft_rows(dead, mailed, day=None):
+    day = day or S.dt.date.today().isoformat()
     bad = ['dead%d@example.com' % i for i in range(dead)]
     live = ['live%d@example.com' % i for i in range(mailed - dead)]
     rows = [{'ch': 'email', 'message_id': '<%d>' % i, 'd': day, 'to': addr, 'touch': 'first'}
@@ -103,7 +103,17 @@ rec('2 of 20 first touches trips the shared block and the alert',
     and (a := one({'bounce': hot}, 'bounce-rate')) and a['severity'] == 'fail'
     and '2 of 20' in a['text'] and clean(a['text']), a['text'] if hot.get('day_blocked') else hot)
 rec('0 of 20 clears the alert', one({'bounce': cold}, 'bounce-rate') is None and cold['day_blocked'] is False)
-rec('the public bounce signal has no address', clean(json.dumps(hot)))
+rec('the public bounce signal has no address', clean(json.dumps(hot)) and hot.get('day_date'))
+yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
+yhot = PA.bounce_signal(health_rows(*ft_rows(2, 20, day=yday)))
+ycold = PA.bounce_signal(health_rows(*ft_rows(1, 20, day=yday)))
+rec("yesterday's 2 of 20 is the cohort the alert names",
+    yhot['day_blocked'] is True and yhot['day_date'] == yday and yhot['trailing_blocked'] is False
+    and (a := one({'bounce': yhot}, 'bounce-rate')) and yday in a['text'] and '2 of 20' in a['text']
+    and clean(a['text']), a['text'] if yhot.get('day_blocked') else yhot)
+rec("yesterday's 1 of 20 does not alert",
+    ycold['day_blocked'] is False and ycold['day_date'] == yday
+    and one({'bounce': ycold}, 'bounce-rate') is None)
 
 print('-- opt-out sync --')
 ran = {'readable': True, 'date': '2026-09-27', 'state': 'finished', 'run_ok': True, 'past_cutoff': True}
@@ -442,6 +452,21 @@ rec('install hint and the task XML have no token URL',
     'http' not in hint and '@' not in hint and '@' not in xml and 'hc-ping' not in xml)
 src = open(PA.__file__, encoding='utf-8').read().lower()
 rec('the publisher has no child powershell', 'powershell' not in src)
+
+print('-- refresh-dealflow.bat order --')
+bat_body = '\n'.join(
+    line for line in open(os.path.join(os.path.dirname(PA.__file__), 'refresh-dealflow.bat'),
+                           encoding='utf-8', errors='replace')
+    if not line.strip().lower().startswith('rem'))
+i_checkout = bat_body.find('git checkout -q HEAD -- pipeline_alerts.json')
+i_pull = bat_body.find('git pull --ff-only origin main')
+i_flag = bat_body.find('if exist refresh-running.flag del refresh-running.flag')
+i_pub = bat_body.find('python -u pipeline_alerts.py publish')
+i_exit = bat_body.find('endlocal & exit /b %RUNEXIT%')
+rec('05:30 pull restores pipeline_alerts.json from HEAD first', 0 <= i_checkout < i_pull)
+rec('nightly publish runs after the refresh flag is deleted and before the exit',
+    0 <= i_flag < i_pub < i_exit)
+rec('the nightly has one alerts publish', bat_body.count('python -u pipeline_alerts.py publish') == 1)
 
 print()
 print('%d/%d passed' % (len(ok), len(ok) + len(bad)))

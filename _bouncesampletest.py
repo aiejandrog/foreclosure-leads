@@ -126,8 +126,8 @@ def health_rows(rows, bounced):
         S.HERE, S._load_ledger = old_here, old_ledger
 
 
-def ft_rows(dead, mailed, touch='first', **extra):
-    d = S.dt.date.today().isoformat()
+def ft_rows(dead, mailed, touch='first', day=None, **extra):
+    d = day or S.dt.date.today().isoformat()
     bad = ['dead%d@x.com' % i for i in range(dead)]
     live = ['live%d@x.com' % i for i in range(max(0, mailed - dead))]
     rows = []
@@ -156,6 +156,29 @@ check('the Wilson block still trips when the rows are not first touches',
       hkeep['day_blocked'] is False and hkeep['blocked'] is True)
 htest = health_rows(*ft_rows(20, 20, test_mode=True))
 check('test sends are not a first-touch sample', htest['day_sent'] == 0 and htest['day_blocked'] is False)
+herr = health_rows(*ft_rows(20, 20, error=True))
+check('error rows are not a first-touch sample', herr['day_sent'] == 0 and herr['day_blocked'] is False)
+yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
+hy = health_rows(*ft_rows(2, 20, day=yday))
+check("yesterday's 2 of 20, with nothing sent today, pauses on that cohort",
+      hy['day_blocked'] is True and hy['blocked'] is True and hy['day_date'] == yday
+      and (hy['day_sent'], hy['day_dead']) == (20, 2) and hy['lb'] <= S.BOUNCE_CEILING,
+      'date=%s sent=%s dead=%s' % (hy['day_date'], hy['day_sent'], hy['day_dead']))
+hy1 = health_rows(*ft_rows(1, 20, day=yday))
+check("yesterday's 1 of 20 does not pause",
+      hy1['day_blocked'] is False and hy1['blocked'] is False and hy1['day_date'] == yday
+      and (hy1['day_sent'], hy1['day_dead']) == (20, 1),
+      'day=%.1f%%' % (hy1['day_rate'] * 100))
+stale = (S.dt.date.today() - S.dt.timedelta(days=S.BOUNCE_WINDOW_DAYS + 1)).isoformat()
+hold = health_rows(*ft_rows(2, 20, day=stale))
+check('a cohort older than the window does not pause',
+      hold['day_blocked'] is False and hold['day_sent'] == 0 and hold['blocked'] is False)
+rows_y, bad_y = ft_rows(2, 20, day=yday)
+rows_t, bad_t = ft_rows(1, 20)
+hmix = health_rows(rows_y + rows_t, bad_y | bad_t)
+check("a clear today does not hide yesterday over the ceiling",
+      hmix['day_blocked'] is True and hmix['blocked'] is True and hmix['day_date'] == yday
+      and (hmix['day_sent'], hmix['day_dead']) == (20, 2))
 os.environ['BOUNCE_DAY_MIN_SAMPLE'] = '5'
 try:
     hmin = health_rows(*ft_rows(2, 9))

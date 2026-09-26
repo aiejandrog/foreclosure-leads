@@ -251,9 +251,10 @@ def bounce_alert(sig, at):
         return None
     parts = []
     if sig.get('day_blocked'):
-        parts.append('First-touch bounce %.1f%% (%d of %d sent today), over the %.0f%% daily ceiling (minimum sample %d).'
+        when = str(sig.get('day_date') or '').strip() or 'a recent send day'
+        parts.append('First-touch bounce %.1f%% (%d of %d sent on %s), over the %.0f%% daily ceiling (minimum sample %d).'
                      % (float(sig.get('day_rate') or 0) * 100,
-                        int(sig.get('day_dead') or 0), int(sig.get('day_sent') or 0),
+                        int(sig.get('day_dead') or 0), int(sig.get('day_sent') or 0), when,
                         float(sig.get('day_ceiling') or 0) * 100, int(sig.get('day_min') or 0)))
     if sig.get('trailing_blocked'):
         parts.append('Trailing %d-day lower bound %.1f%% (raw %.1f%%, %d of %d). Ceiling %.0f%%.'
@@ -470,6 +471,7 @@ def bounce_signal(health):
         return {'readable': False}
     return {
         'readable': True,
+        'day_date': str(health.get('day_date') or ''),
         'day_sent': int(health.get('day_sent') or 0),
         'day_dead': int(health.get('day_dead') or 0),
         'day_rate': float(health.get('day_rate') or 0),
