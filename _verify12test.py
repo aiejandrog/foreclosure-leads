@@ -16,6 +16,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+# The fake 2Captcha solves below go through paid_reads.py's monthly ledger. Point it at a throwaway
+# file, so this suite never books its fake spend against the real month (or fails because the
+# real month has reached its cap).
+import tempfile as _tf
+os.environ['DEALFLOW_PAID_LEDGER'] = os.path.join(_tf.mkdtemp(prefix='paidreads_'), 'paid_reads_ledger.json')
+os.environ.pop('DEALFLOW_PAID_MONTHLY_CAP', None)
 
 import case_dossier as CD
 import equity_state as ES
