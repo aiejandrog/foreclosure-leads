@@ -32,6 +32,11 @@ set "PREVRUN="
 if exist refresh-running.flag set /p PREVRUN=<refresh-running.flag
 if defined PREVRUN echo     ^!^! PREVIOUS RUN NEVER FINISHED - it started %PREVRUN% and wrote no ENDED line, so it was killed from outside this file: window closed, restart, or a Task Scheduler stop.>> "%LOG%"
 >refresh-running.flag echo %date% %time%
+rem  DEAD-MAN'S SWITCH PING (2026-09-26, optional). A no-op unless DEALFLOW_HEALTHCHECK_URL (or a
+rem  gitignored healthcheck.url) is set on this machine; then Healthchecks.io-style monitoring alerts
+rem  on its own when a started run never reports back - the 09-25 sleep - or no run starts at all.
+rem  Always exits 0 and nothing reads its errorlevel: it can never change this run. See hc_ping.py.
+python -u hc_ping.py start >> "%LOG%" 2>&1
 
 rem  RUNEXIT carries the run's verdict to :end. Until 2026-09-18 this file exited 0 no matter what
 rem  happened - Task Scheduler recorded `rc=0` on 09-17 for a run that scraped nothing, published
@@ -215,7 +220,15 @@ rem  (370 AUCTION rows, which already have a judgment) and never touched lp_lead
 rem  that by definition do NOT). So every fresh filing sat at "debt unknown" forever, and a closer
 rem  reading value-with-no-debt reads it as equity - the exact state that put an underwater owner on
 rem  a live call. 284 Miami-Dade LP leads folded in; --all picks them up here, 120/night.
-python -u records_liens.py --all --limit 120 --retries 80 >> "%LOG%" 2>&1
+rem  --max-spend 0.50 (2026-09-26). This line had NO dollar cap - only --limit 120, which caps LEADS,
+rem  and one lead can cost several solves - so it was the one uncapped Miami spender on this box.
+rem  $0.50 is ~150 solves at the measured $0.0033, so at most ~$15/month from this line. With a cap
+rem  set, a 2Captcha balance that cannot be read means free paths only for the night. Every paid
+rem  solve ALSO checks the shared monthly paid-reads cap (paid_reads.py: default $50/month, env
+rem  DEALFLOW_PAID_MONTHLY_CAP) and stops paying, logged, once this month's ledger reaches it - as do
+rem  gen_records_qs, the lis pendens sweep and the document stage. No --spend-ledger on purpose: that
+rem  would make $0.50 a total for all time, not a nightly cap.
+python -u records_liens.py --all --limit 120 --retries 80 --max-spend 0.50 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
 rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
@@ -332,7 +345,14 @@ echo [3d2/5] Redfin Estimate (advisory AVM cross-check, 21-day cache, headless b
 python -u redfin_value.py --limit 100 >> "%LOG%" 2>&1
 
 echo [3e/5] Sale-history survival counts (MD docket, 7-day cache - the STALLER signal)...
-python -u sale_history.py --limit 150 >> "%LOG%" 2>&1
+rem  --limit 150 -> 200 (2026-09-26). sale_history.py now also reads the ~350 Miami-Dade LIS PENDENS
+rem  cases (the board's Fresh-filings lane). Until now not one of them had a stay read, so the send
+rem  bridge's stay gate could only refuse them all as stay_unverified. Estimated steady demand with the
+rem  LP lane added is ~154 reads a night (7-day TTL, near sales on a 20h TTL), so 150 would fall short.
+rem  Never-read cases go first (after near sales), so the ~350 unread LP cases are read within two or
+rem  three nights, ahead of re-reads of distant auction cases. Free public clerk reads (OCS JSON API):
+rem  two small requests and a 0.25s pause per case, no captcha, no spend.
+python -u sale_history.py --limit 200 >> "%LOG%" 2>&1
 
 echo [3f/5] Ownership flip gate (live appraiser owner vs defendant; budget-capped)...
 rem  ADDED 2026-08-19: ownership_scan.py was called by NOTHING - not this bat, not refresh.yml -
@@ -347,6 +367,14 @@ rem  defect. The scan is free (county appraiser pages) and runs ~2.5s/lead, so c
 python -u ownership_scan.py --days 45 --max 500 --budget 1500 >> "%LOG%" 2>&1
 
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
+
+echo [3g/5] Federal bankruptcy stay lookup (PACER PCL; OFF without PACER_USERNAME/PASSWORD)...
+rem  ADDED 2026-09-26: feeds stay_gate.py. Free tier: ONE daily flsb new-filer search (blocks leads
+rem  whose owner just filed); the nightly per-lead search is OFF unless PACER_BULK=md-near/all. Per-lead
+rem  checks happen in the send bridge just before a send. No-op (exit 0, no network) when the PACER env
+rem  vars are missing. Every page is reserved against paid_reads (monthly cap) + the $25 PACER quarter
+rem  cap first; fails closed.
+python -u pacer_stay.py >> "%LOG%" 2>&1
 
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
 rem  This used to be a manual step a human had to remember after every send day; forgetting it
@@ -745,6 +773,8 @@ if errorlevel 2 (
 )
 rem  (report + done marker moved ABOVE the healthcheck — see the note at :end)
 echo     health check complete - see leads-run.log.
+rem  ...and the verdict to the dead-man's switch, once RUNEXIT is final. No-op when unconfigured.
+python -u hc_ping.py exit %RUNEXIT% >> "%LOG%" 2>&1
 
 rem  EXIT WITH THE VERDICT. Task Scheduler's "Last Run Result" is the only unattended signal that
 rem  survives when nobody opens the log, and until 2026-09-18 it was 0 on every outcome. It is now

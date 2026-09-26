@@ -24,6 +24,10 @@ ENDPOINTS:
     GET  /health   -> {"ok": true, "user": "you@gmail.com", "sent_today": 3, "cap": 50}
     POST /send     -> {"to","subj","body","meta":{"c","owner","addr","lang","portfolio","test"}}
                       returns {"ok": true, "message_id": "..."} or {"ok": false, "err": "..."}
+                      Owner sends (no meta.test) are refused unless meta.c resolves to a case that
+                      sale_history_cache.json affirmatively shows is NOT under an active §362 stay:
+                      451 {"blocked": "stay_active" | "stay_no_case" | "stay_case_unresolvable" |
+                      "stay_unverified", "skip": true}, or 503 {"blocked": "stay_data_unavailable"}.
     POST /notes    -> the tracker's full localStorage state {_dealflow_notes, device, notes,
                       workerLog, sentArchive}. Written atomically to worker_notes.json plus a
                       daily snapshot in worker_notes_snapshots/. This is how call dispositions,
@@ -60,6 +64,9 @@ SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
 OPTOUT_FILE = os.path.join(HERE, 'optouts.json')
 NOTES_FILE = os.path.join(HERE, 'worker_notes.json')
 NOTES_SNAP_DIR = os.path.join(HERE, 'worker_notes_snapshots')
+# §362 stay source for the /send gate (stay_gate.py) and the refusal log it writes. See _stay_gate.
+STAY_CACHE_FILE = os.path.join(HERE, 'sale_history_cache.json')
+REFUSAL_LOG = os.path.join(HERE, 'send_refusals.jsonl')
 
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 _LEDGER_LOCK = threading.Lock()
@@ -246,6 +253,65 @@ def _optout_age_days():
         return (time.time() - os.path.getmtime(OPTOUT_FILE)) / 86400.0
     except OSError:
         return None
+
+
+def _stay_gate(case):
+    """§362 verdict for one case from sale_history_cache.json -- never from the board payload.
+
+    ADDED 2026-09-26. /send took the board's word that a case was workable, and a board is only as
+    fresh as its last build: three Miami cases were emailed under a live bankruptcy stay the week
+    of 2026-09-21. The verdict is stay_gate.check() (same predicate outreach_email / outreach_mail
+    apply), re-read whenever the cache file changes. If stay_gate cannot even be imported the send
+    is refused -- a missing gate is not a passed one."""
+    try:
+        import stay_gate as _SG
+    except Exception as e:
+        return {'ok': False, 'code': 'stay_data_unavailable', 'case': str(case or ''),
+                'matched': [], 'bd': '', 'sl': '',
+                'why': 'stay_gate.py could not be imported (%s)' % str(e)[:120]}
+    v = _SG.check(case, STAY_CACHE_FILE)
+    if v.get('ok') or not v.get('pacer_need'):
+        return v
+    # PRE-SEND PACER CHECK (2026-09-26, free tier). A lead with no Miami-Dade stem (Broward, Palm
+    # Beach, lis pendens without a Miami-Dade docket) has PACER as its only stay source, and on the
+    # free tier nobody searches it in bulk. So when the gate says a fresh per-lead search could change
+    # the answer, pacer_stay.presend_check() does ONE search now -- under the daily pre-send cap, the
+    # $25 quarter cap and #74's monthly cap -- caches the verdict for 14 days, and the gate decides
+    # again from the cache. PACER off, budget spent, an error, or anything but a clean clear: the
+    # refusal stands, with the same code and log line as before.
+    try:
+        import pacer_stay as _PS
+        r = _PS.presend_check(case, here=HERE)
+    except Exception as e:
+        r = {'status': 'error', 'why': 'pacer_stay.py could not run (%s)' % str(e)[:120]}
+    if r.get('status') in ('searched', 'index_hit', 'unsearchable'):
+        v = _SG.check(case, STAY_CACHE_FILE)
+    v['pacer_presend'] = r.get('status') or 'error'
+    if not v.get('ok'):
+        v['why'] = '%s [PACER pre-send: %s%s]' % (v.get('why', ''), v['pacer_presend'],
+                                                 (' -- ' + str(r.get('why'))[:160]) if r.get('why') else '')
+    return v
+
+
+def _stay_health():
+    try:
+        import stay_gate as _SG
+        return _SG.health(STAY_CACHE_FILE)
+    except Exception as e:
+        return {'ok': False, 'err': 'stay_gate.py could not be imported (%s)' % str(e)[:120],
+                'cases': 0, 'active': 0}
+
+
+def _log_refusal(rec):
+    """Append one refused send to send_refusals.jsonl. The autostart bridge runs under pythonw.exe,
+    where stderr is None and log_message() prints nowhere, so without this file a refusal would be
+    invisible after the fact. Case number and reason only -- no recipient address. Never raises."""
+    try:
+        with _NOTES_LOCK:
+            with open(REFUSAL_LOG, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
 
 
 def _load_ledger():
@@ -925,6 +991,9 @@ class Handler(BaseHTTPRequestHandler):
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
                 'bounce_blocked': _bh['blocked'],
+                # §362 stay source the /send gate reads. stay_data.ok false = every owner send is
+                # being refused (fail closed) until sale_history_cache.json is readable again.
+                'stay_data': _stay_health(),
                 # verified-only mode: while blocked, sends to proven-deliverable addresses
                 # (accepted mail >= 48h ago, never bounced) still go through. The worker
                 # banner uses this to say "N addresses still sendable" instead of "all stop".
@@ -1249,6 +1318,38 @@ class Handler(BaseHTTPRequestHandler):
                 'ok': False, 'blocked': 'optout',
                 'err': ('recipient is on the DO-NOT-CONTACT ledger (%s) — send refused'
                         % ('email ' + _hit_email if _hit_email else 'case ' + _case))})
+
+        # ---- §362 BANKRUPTCY-STAY GATE (2026-09-26) — fail closed --------------------------------
+        # The case's stay status is decided HERE, from sale_history_cache.json, never from what the
+        # board page says. A board is a snapshot: a tab left open overnight, or a build from before
+        # sale_history.py read the petition, still shows a stayed case as workable, and three Miami
+        # cases were emailed under a live stay the week of 2026-09-21 exactly that way. Every other
+        # sender (outreach_email, outreach_mail, morning_planner, cadence) already refused them.
+        #
+        # Refused: an active stay not lifted; no case on the request; a number with no Miami-Dade
+        # stem (no durable stay source exists for it); a stem the cache has never read; a cache that
+        # is missing or will not parse. See stay_gate.py for why each of those is a refusal.
+        #
+        # 451 + skip for a per-case verdict: today's worker logs the err and advances to the next
+        # lead (its generic non-2xx branch), and a 403 would trip its bounce-breaker branches. 503
+        # when the stay data itself is unreadable — that refuses EVERY owner send until fixed.
+        # meta.test sends are 1:1 to the advisor/operator (Brief Jesse, workups), never to an owner,
+        # and skip this gate the same way they skip the case-level opt-out match above.
+        if not _is_test:
+            _sv = _stay_gate((meta or {}).get('c'))
+            if not _sv.get('ok'):
+                _code = _sv.get('code') or 'stay_data_unavailable'
+                _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                              'd': dt.date.today().isoformat(), 'gate': 'stay', 'code': _code,
+                              'case': str((meta or {}).get('c') or '')[:40],
+                              'matched': _sv.get('matched') or [],
+                              'wl': str((meta or {}).get('wl') or ''), 'why': _sv.get('why', '')})
+                self.log_message('SEND REFUSED [%s] case=%s — %s', _code,
+                                 str((meta or {}).get('c') or '-')[:40], _sv.get('why', ''))
+                return self._json(503 if _code == 'stay_data_unavailable' else 451, {
+                    'ok': False, 'blocked': _code, 'skip': _code != 'stay_data_unavailable',
+                    'case': _sv.get('case', ''), 'matched': _sv.get('matched') or [],
+                    'err': 'send refused — %s' % _sv.get('why', 'bankruptcy-stay status unknown')})
 
         # ---- daily cap ----
         rcpt = _recipients_today()
