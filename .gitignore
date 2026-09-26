@@ -86,6 +86,10 @@ paid_reads_ledger.json.*
 # index label is never a substitute for reading, and that reading a document never moves a lead
 # into an equity FACT state.
 !_dossiertest.py
+# _syncgatetest guards the 07:15 opt-out sync and the fail-closed hold on every send until it has run
+# clean today; _ledgerownertest keeps the sync (optout_sync.ledger_add) the only writer of optouts.json.
+!_syncgatetest.py
+!_ledgerownertest.py
 # _optionstest guards the homeowner options strategy: that unverified equity never yields a sell
 # path, that a stay stops everything, and that only the wholesale path ever pays us.
 !_optionstest.py
@@ -191,6 +195,10 @@ tax_links.json
 cadence_state.json
 cadence_queue.json
 optouts.json
+# the 07:15 opt-out sync's record of its last run (sync_gate.py reads it) and its log -- per machine.
+sync_status.json
+sync_status.json.tmp
+optout-sync-run.log
 gmail.key
 whitepages.key
 whitepages_lookup.json

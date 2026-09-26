@@ -56,6 +56,11 @@ echo ==== done - skipped %date% %time% ==== >> "%LOG%"
 exit /b 0
 
 :send
+rem  07:15 OPT-OUT SYNC GATE (2026-09-26). cadence.py mails homeowners and has no ledger-freshness
+rem  check of its own. sync_gate.py exits 3 unless TODAY's opt-out sync (run-optout-sync.bat) finished
+rem  with every step OK - the same rule send_server /send enforces. Held = nothing sent, steps stay due.
+python -u sync_gate.py >> "%LOG%" 2>&1
+if errorlevel 1 goto :held
 rem  -u so the log is written as the run goes, not flushed at exit. A cadence run that dies halfway
 rem  has already mailed people, and the log is the only record of who.
 python -u cadence.py >> "%LOG%" 2>&1
@@ -68,3 +73,9 @@ if not "%RC%"=="0" (
 echo [%STAMP%] OK - cadence ran. See cadence-run.log for the per-step detail.> "%STATUS%"
 echo ==== done %date% %time% ==== >> "%LOG%"
 exit /b 0
+
+:held
+echo [%STAMP%] HELD - today's 07:15 opt-out sync has not finished OK. Nothing sent; steps stay due. Run run-optout-sync.bat, then this.> "%STATUS%"
+echo HELD - opt-out sync not confirmed today, no mail sent. >> "%LOG%"
+echo ==== done - held %date% %time% ==== >> "%LOG%"
+exit /b 3

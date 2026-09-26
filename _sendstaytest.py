@@ -41,6 +41,15 @@ import stay_gate as SG  # noqa: E402
 ok, bad = [], []
 
 
+
+def write_sync_ok(d):
+    """A clean 07:15 opt-out sync recorded today (#80's sync_gate): without it the bridge
+    correctly HOLDS every send, which is not what this suite is testing."""
+    import datetime as _dt
+    (d / 'sync_status.json').write_text(json.dumps({
+        'date': _dt.date.today().isoformat(), 'state': 'finished', 'ok': True,
+        'started_at': time.time() - 120, 'finished_at': time.time() - 60, 'steps': []}), encoding='utf-8')
+
 def rec(n, cond, d=''):
     (ok if cond else bad).append(n)
     print(('  PASS ' if cond else '  FAIL ') + n + ((' | ' + str(d)[:200]) if d and not cond else ''))
@@ -257,8 +266,9 @@ def server():
     proc = None
     try:
         # The bridge imports stay_gate and mail_guard from its own folder, exactly as in the repo.
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
             shutil.copy(HERE / f, work / f)
+        write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
         (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
         # A FRESH, empty opt-out ledger so the 2-day staleness gate does not refuse first.

@@ -803,6 +803,21 @@ def _release_recipients(addrs):
 
 
 # ---------------------------------------------------------------- SMTP
+def _sync_verdict():
+    """TODAY's 07:15 opt-out sync gate (sync_gate.py, decided 2026-09-26): unless this morning's
+    sync finished with every step OK, /send HOLDS every send instead of mailing against yesterday's
+    list. Fail-closed here too: if the gate itself cannot be evaluated, that is a hold, not a pass."""
+    try:
+        import sync_gate
+        v = sync_gate.verdict(path=os.path.join(HERE, 'sync_status.json'))
+        sync_gate.log_hold(v, log=lambda m: print(m, flush=True))
+        return v
+    except Exception as e:
+        return {'ok': False, 'status': None,
+                'reason': 'HOLD - the opt-out sync gate could not be evaluated (%s); holding every send'
+                          % str(e)[:80]}
+
+
 def _unsub_url():
     """outreach_copy.UNSUB_URL, or '' when the copy module could not be imported."""
     try:
@@ -943,6 +958,7 @@ class Handler(BaseHTTPRequestHandler):
             user, pw = _load_credentials()
             _bh = _bounce_health()
             _oo_age = _optout_age_days()
+            _sg = _sync_verdict()
             self._json(200, {
                 'ok': True,
                 'user': user or '(not configured)',
@@ -952,6 +968,11 @@ class Handler(BaseHTTPRequestHandler):
                 'recipients_today': _recipients_today(),
                 'recipient_cap': self.recipient_cap,
                 'ready': bool(user and pw),
+                # 07:15 opt-out sync gate (sync_gate.py). sync_ok false = /send is HOLDING every send
+                # until today's sync finishes clean; sync_hold says why, in the words the log uses.
+                'sync_ok': bool(_sg.get('ok')),
+                'sync_hold': None if _sg.get('ok') else _sg.get('reason'),
+                'sync_status': {k: (_sg.get('status') or {}).get(k) for k in ('date', 'state', 'ok', 'finished_at')},
                 # Surfaced so the board can show list health next to the cap. `blocked` is the
                 # same verdict /send enforces, so the worker can say WHY before it starts a run
                 # instead of discovering it 403 by 403.
@@ -1268,6 +1289,19 @@ class Handler(BaseHTTPRequestHandler):
                         '(optout_sync.py, or sync from the operator machine) before sending'
                         % ('MISSING' if _age is None else '%.1f days old' % _age,
                            OPTOUT_MAX_AGE_DAYS))})
+
+        # ---- TODAY'S 07:15 OPT-OUT SYNC (2026-09-26 decision) — fail closed, ALL sends ------------
+        # optouts.json has one writer, the 07:15 sync (morning_sync.py: replies.py -> optout_sync's
+        # ledger_add -> ledger_sync.py). If that has not finished OK TODAY, a STOP that came in
+        # overnight may not be in the list yet, so EVERY send holds - test sends too - rather than
+        # mail against yesterday's list. `blocked: optout_stale` on purpose: it is the one refusal
+        # today's Morning Worker already answers by PAUSING the run with the queue intact (and it
+        # logs the err, which names the real cause). Cleared by a clean sync run, nothing else.
+        _sg = _sync_verdict()
+        if not _sg.get('ok'):
+            self.log_message('SEND HELD [sync] — %s', _sg.get('reason', ''))
+            return self._json(200, {'ok': False, 'blocked': 'optout_stale', 'hold': 'sync',
+                                    'err': _sg.get('reason') or 'HOLD - opt-out sync not confirmed today'})
 
         # ---- OPT-OUT BACKSTOP (2026-08-19 stress-test CRITICAL) --------------------------------
         # Refuse to email anyone on the DO-NOT-CONTACT ledger, matched by recipient email OR by the
