@@ -3446,5 +3446,111 @@ class TwentyEighthReviewTests(unittest.TestCase):
         self.assertIn('no title on its first page was recognised', said['no_title'])
         self.assertIn('nobody opened it', said['unopened'])
 
+class TwentyNinthReviewTests(unittest.TestCase):
+    """The first two rounds that found no false `supported` had both been drawn to the newest code.
+    This one went back over older ground: the bankruptcy sweep, untouched since the sixth review, was
+    hiding one.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+    JUDGED = [(100, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '03/10/2026', '')]
+
+    def bk(self, desc, when):
+        return self.built(self.JUDGED + [(180, desc, '', when, '')], controlling='140',
+                          amount=500000.0, pages={'140': self.PAGE})
+
+    ENDINGS = (('Order Granting Relief from Bankruptcy Stay', 'relief_from_stay'),
+               ('Order Dismissing Chapter 13 Bankruptcy Case', 'bankruptcy_dismissed'),
+               ('Order Discharging Debtor in Bankruptcy', 'bankruptcy_discharged'))
+
+    def test_a_stay_ending_order_after_the_cutoff_is_not_no_bankruptcy(self):
+        # Contract 1 and contract 4. An order granting relief from a bankruptcy stay, or dismissing or
+        # discharging the bankruptcy, can only exist if the bankruptcy existed BEFORE it. miami_case_
+        # timeline :462 skips undated and post-as_of entries before building stay_history, so on a
+        # docket whose only bankruptcy entry was one of these three the history was empty,
+        # stay_in_effect None, BANKRUPTCY_KINDS did not list them, and the case read `supported` with
+        # the stay column saying "none on the docket".
+        for desc, kind in self.ENDINGS:
+            for when in ('12/01/2026', ''):
+                t = self.bk(desc, when)
+                self.assertEqual(next(e for e in t['entries']
+                                      if e['entry_id'] == '180')['kind'], kind, desc)
+                r = CV.assess(t)
+                self.assertEqual(r['verdict'], 'incomplete', (desc, when, r['missing']))
+                self.assertTrue([m for m in r['missing'] if 'stay-ENDING' in m], (desc, when, r['missing']))
+                self.assertEqual(CV._stay_word(r['stay_in_effect'], r['stay_history_count'],
+                                               r['bankruptcy_entry_count']), 'unknown', (desc, when))
+                self.assertNotIn('none on the docket', CV.render_markdown([r]), (desc, when))
+
+    def test_the_weaker_post_cutoff_petition_was_already_a_gap(self):
+        # The asymmetry: a post-cutoff PETITION says strictly less than a post-cutoff order ending the
+        # bankruptcy, and it was already incomplete with the column reading "unknown".
+        r = CV.assess(self.bk('Suggestion of Bankruptcy Chapter 13', '12/01/2026'))
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+
+    def test_a_stay_ending_order_the_history_took_in_does_not_hold_the_case(self):
+        # Contract 5, and the guard on the fix: where stay_history holds the petition this order ends,
+        # the order is redundant. This is the sixth review's fixture, which must not move.
+        t = self.built([(100, 'Complaint', '', '01/05/2026', ''),
+                        (110, 'Suggestion of Bankruptcy Chapter 13', '', '02/01/2026', ''),
+                        (120, 'Order Granting Relief from Bankruptcy Stay', '', '03/01/2026', ''),
+                        (140, 'Final Judgment of Foreclosure', '', '04/10/2026', ''),
+                        (180, 'Order Granting Relief from Bankruptcy Stay', '', '12/01/2026', '')],
+                       controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        self.assertTrue(len(t['stay_history']) >= 2, t['stay_history'])
+        r = CV.assess(t)
+        self.assertFalse([m for m in r['missing'] if 'stay-ENDING' in m], r['missing'])
+
+    def test_the_two_producer_disagreement_holds_for_a_part_read_document(self):
+        # Contract 4. The disagreement check tested image_status == 'read' exactly, three hundred
+        # lines after OPENED_STATUSES was introduced for this same question - so the docket whose page
+        # 2 failed OCR, strictly LESS known, got the "behind the clerk's login" sentence this block's
+        # own comment says must never print beside "verified to the cent", while the cleanly-read one
+        # got the honest one.
+        for status in ('read', 'unreadable_pages', 'missing_attachments'):
+            t = self.built(self.JUDGED, controlling='140', amount=500000.0,
+                           pages={'140': self.PAGE})
+            next(e for e in t['entries'] if e['entry_id'] == '140')['image_status'] = status
+            t['coverage'] = {'attachments': [{'entry_id': '140', 'kind': 'final_judgment',
+                                              'state': 'restricted_likely', 'detail': [],
+                                              'document': None}], 'complete': False}
+            r = CV.assess(t)
+            self.assertTrue([m for m in r['missing'] if 'disagree about whether it was read' in m],
+                            (status, r['missing']))
+            self.assertFalse([m for m in r['missing'] if "behind the clerk's login" in m],
+                             (status, r['missing']))
+
+    def test_unassessed_pages_is_read_from_the_producers_own_gap_row(self):
+        # The comment added the round before asserted unassessed_pages is "set from a manifest page
+        # count with no page read at all". miami_case_timeline :414-422 sets it inside `for d in
+        # matched` and OVERWRITES image_status, including 'read', so it also covers a document whose
+        # page 1 WAS read. The producer saves the discriminator in that entry's own gap row.
+        import miami_case_timeline as MCT
+        docs = [{'source_ref': '140', 'document_hash': 'h140', 'manifest': {'sha256': 'h140'},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': self.PAGE}]}},
+                {'source_ref': '180', 'document_hash': 'h180',
+                 'manifest': {'sha256': 'h180', 'pages': 2},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                        'text': 'IN THE CIRCUIT COURT\nfiled stamp'}]}}]
+        rows = [(100, 'Complaint', '01/05/2026'), (140, 'Final Judgment of Foreclosure', '03/10/2026'),
+                (180, 'Notice of Filing Satisfaction of Final Judgment', '05/12/2026')]
+        t = MCT.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'source_ref': str(n), 'expected_documents': 1,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': x, 'comments': '',
+                          'eventType': ''}} for n, x, d in rows], 'pagination_verified': True},
+            docs, '2026-09-23')
+        t['judgments'] = dict(t['judgments'] or {}, controlling_entry='140',
+                              docket_duplicates_inferred=[])
+        t['amount_vision'] = {'amount_checks': [ok_check('140', 'court:140:1', 500000.0)]}
+        t['coverage'] = {'attachments': [read_attachment('140')], 'complete': False}
+        e = next(x for x in t['entries'] if x['entry_id'] == '180')
+        self.assertEqual(e['image_status'], 'unassessed_pages')
+        self.assertTrue(CV._was_read(e, t))
+        self.assertFalse(CV._was_read(e), 'ambiguous without the gap rows, so it must not guess')
+        said = [m for m in CV.assess(t)['missing'] if 'entry 180' in m]
+        self.assertTrue([m for m in said if 'was read' in m], said)
+        self.assertFalse([m for m in said if 'nobody opened it' in m], said)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

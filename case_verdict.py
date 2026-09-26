@@ -211,6 +211,17 @@ _CLOSING_WORD_RE = re.compile(r'\b(?:cancel\w*|vacat\w*|withdraw\w*|reset|resche
 # are stay-ENDING events: one of those dated after the run's as_of says nothing about the stay state
 # at as_of, and counting them made a clean case incomplete.
 BANKRUPTCY_KINDS = ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')
+# The stay-ENDING labels. Leaving them out of the line above is right - they do not raise a stay -
+# but leaving them out of the docket sweep entirely was not: an order granting relief from a
+# bankruptcy stay, or dismissing or discharging the bankruptcy, can only exist if the bankruptcy
+# existed BEFORE it. So on a docket whose only bankruptcy entry was one of these, dated after the
+# run's as_of, stay_history was empty, stay_in_effect None, the sweep returned nothing, and the case
+# read `supported` with the stay column saying "none on the docket" - while a post-cutoff PETITION,
+# which says strictly less (it does not establish that a stay was open at the cutoff), was already a
+# gap. Undated, the label was named in `missing` and the column still said "none on the docket"
+# (twenty-ninth review). They count only when the history took in no bankruptcy at all; where it
+# holds the petition this order ends, the order is redundant and must not hold the case.
+STAY_ENDING_KINDS = ('relief_from_stay', 'bankruptcy_dismissed', 'bankruptcy_discharged')
 
 
 def _producer_labels(entry):
@@ -339,8 +350,14 @@ DOCUMENT_SOURCES = ('document', 'document_passage')
 # image_status values miami_case_timeline can only reach when the run HAD pages for the entry, so
 # each of them means the document was opened: 'read' (:403, `elif pages`), 'unreadable_pages' (:401,
 # where `failed` is a subset of pages) and 'missing_attachments' (:412, which tests `and pages`
-# explicitly). 'unassessed_pages' (:421) is deliberately out - it is set from a manifest page count
-# with no page read at all. This module's own NAMES table already calls unreadable_pages part_read,
+# explicitly). 'unassessed_pages' (:421) is genuinely ambiguous and stays out of this list: :414-422
+# sets it inside `for d in matched`, from the manifest's page count against the pages actually read,
+# and it OVERWRITES whatever image_status already was - including 'read'. So it covers both a
+# document nothing was read from and one whose page 1 was read while the manifest claims more. The
+# producer saves the discriminator, in that entry's own `unassessed_pages` gap row: `pages` holds the
+# page numbers with no assessment, so page 1 missing from that list means page 1 was read. _was_read
+# reads it (twenty-ninth review). This module's own NAMES table already calls unreadable_pages
+# part_read,
 # and _was_read tested 'read' alone, so a document whose page 2 failed OCR - strictly LESS known
 # than one fully read - printed "nobody opened it" (twenty-eighth review).
 OPENED_STATUSES = ('read', 'unreadable_pages', 'missing_attachments')
@@ -698,7 +715,7 @@ def _cover_subject(entry):
     return None, False
 
 
-def _was_read(entry):
+def _was_read(entry, timeline=None):
     """True when the run OPENED this entry's document, whatever its first page turned out to say.
 
     DOCUMENT_SOURCES existed and nothing read it. The cover sweep's sentence was picked from where
@@ -708,8 +725,16 @@ def _was_read(entry):
     report told the reader nobody opened a document the same timeline records as `read`
     (twenty-seventh review).
     """
-    return (str(entry.get('kind_source')) in DOCUMENT_SOURCES
-            or str(entry.get('image_status')) in OPENED_STATUSES)
+    if (str(entry.get('kind_source')) in DOCUMENT_SOURCES
+            or str(entry.get('image_status')) in OPENED_STATUSES):
+        return True
+    if str(entry.get('image_status')) != 'unassessed_pages' or timeline is None:
+        return False
+    # Ambiguous by itself; the producer's own gap row for this entry says which it is.
+    return any(g.get('kind') == 'unassessed_pages'
+               and str(g.get('entry_id')) == str(entry.get('entry_id'))
+               and 1 not in list(g.get('pages') or [])
+               for g in _rows(timeline, 'gaps') if isinstance(g, dict))
 
 
 def _sale_dates_of(entry):
@@ -758,9 +783,15 @@ def _bankruptcy_entries(timeline):
     verdict 'supported', stay column "no".
     """
     seen = {str(h.get('entry_id')) for h in _rows(timeline, 'stay_history') if isinstance(h, dict)}
-    return [e for e in _rows(timeline, 'entries')
-            if isinstance(e, dict) and set(_producer_labels(e)) & set(BANKRUPTCY_KINDS)
-            and str(e.get('entry_id')) not in seen]
+    entries = [e for e in _rows(timeline, 'entries') if isinstance(e, dict)
+               and str(e.get('entry_id')) not in seen]
+    filings = [e for e in entries if set(_producer_labels(e)) & set(BANKRUPTCY_KINDS)]
+    # A stay-ENDING order counts only where the history took in no bankruptcy at all: then the order
+    # is the only thing on the file saying a bankruptcy existed, and nothing says it was closed
+    # before the cutoff. Where the history holds the petition it ends, it is redundant.
+    endings = ([e for e in entries if set(_producer_labels(e)) & set(STAY_ENDING_KINDS)]
+               if not seen else [])
+    return filings, endings
 
 
 def _sale_day_bankruptcy(timeline):
@@ -1083,7 +1114,17 @@ def assess(timeline, dossier=None):
         missing.append("the docket status is 'sale_scheduled' and the run parsed no sale date, so "
                        "miami_case_timeline's own past-sale check never ran and whether that sale "
                        'has been held is not in this file')
-    unseen = _bankruptcy_entries(timeline)
+    unseen, ended = _bankruptcy_entries(timeline)
+    if stay is not True and ended:
+        missing.append('entr%s %s carr%s a stay-ENDING bankruptcy label (%s) that the stay history '
+                       'never took in, and the history took in no bankruptcy at all, so the '
+                       'bankruptcy that order acts on is on this docket and its state at this '
+                       'run\'s as_of is unknown rather than settled'
+                       % ('ies' if len(ended) > 1 else 'y',
+                          ', '.join(str(e.get('entry_id') or '?') for e in ended[:5]),
+                          'y' if len(ended) > 1 else 'ies',
+                          ', '.join(sorted({k for e in ended for k in _producer_labels(e)
+                                            if k in STAY_ENDING_KINDS}))))
     if stay is not True and unseen:
         # On the docket but never in stay_history: undated, or dated after the run's as_of. Either
         # way the stay state is unknown, not absent - whether or not an EARLIER bankruptcy did reach
@@ -1221,7 +1262,11 @@ def assess(timeline, dossier=None):
                               and str(e.get('entry_id')) == str(entry_id)), None)
     for row in mine:
         state = row.get('state')
-        if state != 'read' and read_per_timeline == 'read':
+        # OPENED_STATUSES, not 'read' alone: this is the same question _was_read asks, and testing
+        # equality meant the docket whose page 2 failed OCR - strictly LESS known - got the sentence
+        # this block's own comment says must never print, while the cleanly-read one got the honest
+        # one (twenty-ninth review).
+        if state != 'read' and read_per_timeline in OPENED_STATUSES:
             missing.append("document_coverage records the controlling judgment's filing as %s while "
                            "the timeline's own image_status for that entry is 'read'; the two "
                            'producers disagree about whether it was read' % state)
@@ -1319,7 +1364,7 @@ def assess(timeline, dossier=None):
                  'docket title names a %s; the producer labelled the entry by the cover, so the run '
                  'did not fold it into the case\'s posture, and whether it decides this case is not '
                  'settled in this file'
-                 if from_title and _was_read(entry)
+                 if from_title and _was_read(entry, timeline)
                  and str(entry.get('kind_source')) not in DOCUMENT_SOURCES else
                  # And the fourth shape. kind_source 'document' means the producer DID recognise a
                  # title on page 1 and labelled the entry from it; when that title is a bare cover
@@ -1332,7 +1377,7 @@ def assess(timeline, dossier=None):
                  'nothing, while its own docket title names a %s; the producer labelled the entry '
                  'by that cover, so the run did not fold it into the case\'s posture, and whether '
                  'it decides this case is not settled in this file'
-                 if from_title and _was_read(entry) else
+                 if from_title and _was_read(entry, timeline) else
                  'entry %s is titled as a filing about something else and its own docket title '
                  'names a %s; nobody opened it, so the run did not fold it into the case\'s '
                  'posture, and whether it decides this case is not settled in this file'
@@ -1459,7 +1504,7 @@ def assess(timeline, dossier=None):
             'docket_status': kind,
             'stay_in_effect': stay, 'stay_history_count': len(history),
             # So the report can never print "none on the docket" over a docket that has one.
-            'bankruptcy_entry_count': len(unseen),
+            'bankruptcy_entry_count': len(unseen) + len(ended),
             'conflicts': conflicts, 'missing': missing, 'notes': notes,
             'supported_by': supported_by,
             'caveat': CAVEAT, 'qualification': QUALIFICATION}

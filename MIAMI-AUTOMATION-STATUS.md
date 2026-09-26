@@ -362,6 +362,27 @@ Four shapes, four sentences, each keyed on the fact it asserts: the read title t
 read title that is a bare cover, the read document whose first page carried no recognised title, and
 nothing opened (twenty-eighth review).
 
+**A bankruptcy the file proves existed, read as no bankruptcy at all.** Two rounds in a row had found
+no false `supported`, and both had been drawn to the newest code; this one went back over ground no
+recent round touched and found one in the bankruptcy sweep, untouched since the sixth review.
+`BANKRUPTCY_KINDS` lists the labels that RAISE a stay, which is right, and the stay-ENDING labels were
+left out of the docket sweep entirely, which was not: an order granting relief from a bankruptcy stay, or
+dismissing or discharging the bankruptcy, can only exist if the bankruptcy existed BEFORE it. :462 skips
+undated and post-`as_of` entries before building `stay_history`, so on a docket whose only bankruptcy
+entry was one of those three, dated after the cutoff, the history was empty, `stay_in_effect` None, the
+sweep returned nothing, and the case read `supported` with the stay column saying "none on the docket"
+and not one word about the bankruptcy anywhere on the page. A post-cutoff PETITION - which says strictly
+less, since it does not establish that a stay was open at the cutoff - was already a gap. Undated, the
+label was named in `missing` while the column still said "none on the docket". They now count when the
+history took in no bankruptcy at all; where it holds the petition the order ends, the order is redundant
+and does not hold the case, which is the sixth review's fixture. Two wordings went with it: the
+two-producer disagreement check tested `image_status == 'read'` exactly, three hundred lines after
+`OPENED_STATUSES` was added for that same question, so the docket whose page 2 failed OCR got the
+"behind the clerk's login" sentence that block exists to prevent; and the round before's claim that
+`unassessed_pages` means no page was read is false - :414-422 OVERWRITES `image_status`, `'read'`
+included - so `_was_read` now reads the discriminator the producer saves in that entry's own gap row
+(twenty-ninth review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
