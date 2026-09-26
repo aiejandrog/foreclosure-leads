@@ -13486,7 +13486,9 @@ function genMorningWorker(lane, autostart){
     +           'pause();'
     +         '} else if(x.status===200 && x.j.ok){'
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
-    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    // #83 follow-up: the gate may mail a later address than the To we offered (one address per
+    // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
+    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
     +           'setTimeout(function(){ advance(); }, 900);'
     +         '} else if(x.status===409 && x.j.skip){'
@@ -14512,6 +14514,10 @@ window.addEventListener('message', function(ev){
   } else if(d.k === 'sent'){
     var em2 = (r.emails||[])[0] || '';
     var mid = (d.extra && d.extra.mid) || '';
+    // The address the bridge ACTUALLY mailed (its gate may pick a later one than the To offered).
+    // Empty on a manual send or an older bridge: then the composed To, exactly as before.
+    var sentTo = String((d.extra && d.extra.to) || '').trim().toLowerCase();
+    if(sentTo) em2 = sentTo;
     var via = (d.extra && d.extra.via) || 'bridge';   // 'bridge' | 'manual-confirmed'
     var archived = false;
     try {
@@ -14529,7 +14535,8 @@ window.addEventListener('message', function(ev){
         archived = true;
         _sentAdd({d:_today(), t:Date.now(),
                   ts:new Date().toLocaleString(), c:r.case, ch:'email',
-                  to:LE.to||em2, who:LE.who||'', addr:LE.addr||r.addr||'',
+                  to:sentTo||LE.to||em2, who:LE.who||'', addr:LE.addr||r.addr||'',
+                  offered:(sentTo && LE.to && String(LE.to).toLowerCase() !== sentTo) ? LE.to : undefined,
                   subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||'',
                   via:via, mid:mid});
       }
