@@ -157,6 +157,25 @@ def main(argv=None):
         if alias in _WU.ALIASES and wu_quota > cap:
             over.append((alias, cap, wu_quota))
 
+    # First touches (senders.json first_touch, 2026-09-26): which addresses carry them and today's
+    # first-touch cap. The main domain rests from first touches; it still carries follow-ups.
+    ft = _SS._first_touch_senders(cfg)
+    if ft:
+        print()
+        print('  first touches rotate across %d warm-up address(es); %s rests from first touches:'
+              % (len(ft), cfg.get('main_domain') or 'bsgflorida.com'))
+        for x in ft:
+            sent = None
+            if os.path.exists(SENT_LEDGER):
+                try:
+                    sent = sum(1 for e in json.load(open(SENT_LEDGER, encoding='utf-8'))
+                               if isinstance(e, dict) and e.get('d') == day.isoformat()
+                               and str(e.get('from') or '').lower() == x and e.get('message_id')
+                               and not e.get('test_mode') and not e.get('error') and e.get('touch') == 'first')
+                except Exception:
+                    sent = None
+            print('    %-38s first touches %s / cap %d' % (x, _n(sent), _SS._first_touch_cap(cfg, x, today=day)))
+
     if over:
         print()
         print('  WARM-UP OUTWEIGHS THE COLD RAMP on %d alias(es), by schedule, ledgers aside:'

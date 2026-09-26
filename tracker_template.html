@@ -8095,8 +8095,13 @@ function _codeLienChip(r){
   var hits = r.codeliens || [];
   var lienHits = hits.filter(function(h){ return h.lien; });
   var detail = hits.slice(0,4).map(function(h){
-    return h.stLabel + (h.problem ? ' — ' + h.problem : '') + (h.lienRef ? ' (OR ' + h.lienRef + ')' : '');
+    return h.stLabel + (h.problem ? ' — ' + h.problem : '') + (h.lienRef ? ' (OR ' + h.lienRef + ')' : '')
+      /* C2: the ESTIMATE read off the recorded lien (code_lien_amounts.py). Always says ESTIMATE,
+         never "payoff", and never enters the equity number beside it. */
+      + (h.est ? ' — ESTIMATE ' + (h.estFloor ? 'at least ' : '~') + '$' + Number(h.est).toLocaleString()
+                 + ' as of ' + (h.estAsOf || '?') + ', NOT a payoff (' + (h.estHow || '') + ')' : '');
   }).join(' · ');
+  var estSum = lienHits.reduce(function(a, h){ return a + (h.est || 0); }, 0);
   if(r.codeConcern === 'foreclosing')
     return ' <span class="codechip cf" title="'
       + esc('THE COUNTY IS FORECLOSING ON ITS OWN CODE LIEN here (Active LP). This is a separate '
@@ -8108,7 +8113,7 @@ function _codeLienChip(r){
       + esc('RECORDED CODE-ENFORCEMENT LIEN (' + lienHits.length + ') — a junior lien that is NOT in '
           + 'the mortgage chain and is NOT in the equity number you see. Accrued daily fines attach to '
           + 'the parcel; a "high equity" read here is optimistic until you pull the payoff. ' + detail)
-      + '">⚠ CODE LIEN</span>';
+      + '">⚠ CODE LIEN' + (estSum ? ' est. ~$' + Math.round(estSum/1000) + 'k?' : '') + '</span>';
   return ' <span class="codechip co" title="'
     + esc('Open code-enforcement case — fines may be accruing, no lien recorded yet. Not fatal, but '
         + 'a cost the equity number does not include. ' + detail)

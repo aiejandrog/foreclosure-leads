@@ -276,6 +276,12 @@ def server():
                                            encoding='utf-8')
         cp = work / 'sale_history_cache.json'
         cp.write_text(json.dumps(CACHE), encoding='utf-8')
+        # The first-touch deliverability gate (2026-09-26) holds an address with no delivery
+        # evidence, and every send below is a first touch to a fresh fake address. Mark those fake
+        # addresses ZeroBounce-valid so this suite keeps testing the STAY gate, not that one.
+        (work / 'verified_emails.json').write_text(json.dumps(
+            {'owner%d@example.com' % i: {'v': 'ok', 'why': 'zerobounce:valid', 'd': '2026-09-26'}
+             for i in range(1, 60)}), encoding='utf-8')
         shim = work / '_run_bridge.py'
         shim.write_text(
             'import sys, smtplib\n'
