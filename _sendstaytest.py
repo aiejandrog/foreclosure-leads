@@ -81,7 +81,7 @@ def unit():
             r = c(missing)
             rec('missing case %r is refused (stay_no_case)' % (missing,),
                 not r['ok'] and r['code'] == SG.NO_CASE, r)
-        for weird in ('CACE-24-001234', '50-2024-CA-001234-XXXX-MB', 'CASE-1', '2099-00001-CA-01'):
+        for weird in ('CACE-99-001234', '50-2099-CA-001234-XXXX-MB', 'CASE-1', '2099-00001-CA-01'):
             r = c(weird)
             rec('unresolvable case %r is refused (stay_case_unresolvable)' % weird,
                 not r['ok'] and r['code'] == SG.UNRESOLVABLE, r)
@@ -107,7 +107,7 @@ def unit():
         rec('stem: one ACTIVE entry among siblings blocks even when the exact key is clean',
             r['code'] == SG.STAY_ACTIVE and len(r['matched']) == 2, r)
         rec('case_stem() is the first 11 characters', SG.case_stem('2099-000123-CA-01') == '2099-000123'
-            and SG.case_stem('CACE-24-1') == '')
+            and SG.case_stem('CACE-99-1') == '')
 
         # ---- labelled numbers ("CASE NO 2025-...") resolve to the cache key; junk still refuses ----
         # One Miami-Dade lis pendens row carries its number as "CASE NO 2025-...". Before, that raw
@@ -128,7 +128,7 @@ def unit():
         r = c('CASE NO 2099-000004-CA-01')
         rec('label: "CASE NO" on a pre-v4 entry is still refused (stay_unverified)',
             not r['ok'] and r['code'] == SG.UNVERIFIED, r)
-        for junk in ('CASE', 'CASE NO', 'Case No.:', 'CASE NO CACE-24-001234', 'CASE # 50-2024-CA-001234-XXXX-MB',
+        for junk in ('CASE', 'CASE NO', 'Case No.:', 'CASE NO CACE-99-001234', 'CASE # 50-2099-CA-001234-XXXX-MB',
                      'BW 2099-000003-CA-01', 'LP-ZZOWNERNAME', 'CASE NO. 2099000003CA01', 'NO2099-000003-CA-01',
                      'CASE NO CASE NO 2099-000003-CA-01', 'CASE-2099-000003-CA-01', '2099-000003x', 'x2099-000003'):
             r = c(junk)
@@ -343,7 +343,7 @@ def server():
         rec('no meta.c: 451 blocked=stay_no_case', st == 451 and j.get('blocked') == 'stay_no_case', {'st': st, 'j': j})
         st, j = send('   ')
         rec('blank meta.c: 451 blocked=stay_no_case', st == 451 and j.get('blocked') == 'stay_no_case', {'st': st, 'j': j})
-        st, j = send('CACE-24-001234')
+        st, j = send('CACE-99-001234')
         rec('non-Miami-Dade number: 451 blocked=stay_case_unresolvable',
             st == 451 and j.get('blocked') == 'stay_case_unresolvable', {'st': st, 'j': j})
         st, j = send('2099-000999-CA-01')

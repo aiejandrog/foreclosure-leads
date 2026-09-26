@@ -51,7 +51,7 @@ sale_history.py covers civil Miami-Dade cases only. Broward, Palm Beach and tax-
 therefore land in stay_case_unresolvable: there is no durable stay read for them anywhere in the
 repo, so the bridge cannot say they are clear. That is deliberate, and it is the policy decision
 the PR asks Alejandro to confirm. MIAMI-DADE LIS PENDENS numbers are civil Miami-Dade numbers
-(2025-012345-CA-01), so they resolve: each is stay_unverified until sale_history.py has read its
+(2099-012345-CA-01), so they resolve: each is stay_unverified until sale_history.py has read its
 docket (it reads the lis pendens lane since #73), and then clears or blocks on what it found.
 
 FEDERAL BANKRUPTCY FROM PACER (pacer_stay.py, stacked on this gate). sale_history.py reads the
@@ -135,7 +135,7 @@ def case_stem(case):
     """'2099-000123-CA-01' -> '2099-000123'. '' when the number has no Miami-Dade stem.
 
     'CASE NO 2099-000123-CA-01', 'Case No.: 2099-000123', 'CASE # 2099 - 000123-CA-01' -> '2099-000123'.
-    'CACE-24-001234', '2099-0001231', 'CASE', 'BW 2099-000123' -> '' (refused as unresolvable)."""
+    'CACE-99-001234', '2099-0001231', 'CASE', 'BW 2099-000123' -> '' (refused as unresolvable)."""
     s = ' '.join(str(case or '').split()).upper()
     s = _LABEL_RE.sub('', s, count=1)
     m = _NUM_RE.match(s)
