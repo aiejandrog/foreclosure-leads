@@ -3251,6 +3251,17 @@ def make_tracker(leads):
         'docs':      sum(1 for d in slim if d.get('docs')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
+    # PER-LIEN-TYPE COUNTS for the Miami-Dade rows (lien_census.py): the lien detail files are
+    # gitignored and the board is encrypted, so without these nobody off the laptop can tell how much
+    # of Miami's lien picture a build carries (mortgages open/satisfied, HOA, money judgments, tax
+    # liens, taxes, code, municipal/utility, lis pendens, and how much of it is unpriced). Flat ints
+    # only -- every reader cuts the marker with a non-greedy {.*?} -- and census-only (not in
+    # publish_guard.FIELDS). Never fatal: a census bug must not stop a publish.
+    try:
+        from lien_census import md_counts as _md_counts
+        _cov.update(_md_counts(slim, rl))
+    except Exception as _lce:
+        print('lien census: skipped (%s)' % str(_lce)[:100])
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)
     if codes:
         # {rows, side} since 2026-09-17 — `side` carries the reply text and dead reasons that used to

@@ -24,6 +24,10 @@ ENDPOINTS:
     GET  /health   -> {"ok": true, "user": "you@gmail.com", "sent_today": 3, "cap": 50}
     POST /send     -> {"to","subj","body","meta":{"c","owner","addr","lang","portfolio","test"}}
                       returns {"ok": true, "message_id": "..."} or {"ok": false, "err": "..."}
+                      Owner sends (no meta.test) are refused unless meta.c resolves to a case that
+                      sale_history_cache.json affirmatively shows is NOT under an active §362 stay:
+                      451 {"blocked": "stay_active" | "stay_no_case" | "stay_case_unresolvable" |
+                      "stay_unverified", "skip": true}, or 503 {"blocked": "stay_data_unavailable"}.
     POST /notes    -> the tracker's full localStorage state {_dealflow_notes, device, notes,
                       workerLog, sentArchive}. Written atomically to worker_notes.json plus a
                       daily snapshot in worker_notes_snapshots/. This is how call dispositions,
@@ -60,6 +64,9 @@ SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
 OPTOUT_FILE = os.path.join(HERE, 'optouts.json')
 NOTES_FILE = os.path.join(HERE, 'worker_notes.json')
 NOTES_SNAP_DIR = os.path.join(HERE, 'worker_notes_snapshots')
+# §362 stay source for the /send gate (stay_gate.py) and the refusal log it writes. See _stay_gate.
+STAY_CACHE_FILE = os.path.join(HERE, 'sale_history_cache.json')
+REFUSAL_LOG = os.path.join(HERE, 'send_refusals.jsonl')
 
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 _LEDGER_LOCK = threading.Lock()
@@ -246,6 +253,65 @@ def _optout_age_days():
         return (time.time() - os.path.getmtime(OPTOUT_FILE)) / 86400.0
     except OSError:
         return None
+
+
+def _stay_gate(case):
+    """§362 verdict for one case from sale_history_cache.json -- never from the board payload.
+
+    ADDED 2026-09-26. /send took the board's word that a case was workable, and a board is only as
+    fresh as its last build: three Miami cases were emailed under a live bankruptcy stay the week
+    of 2026-09-21. The verdict is stay_gate.check() (same predicate outreach_email / outreach_mail
+    apply), re-read whenever the cache file changes. If stay_gate cannot even be imported the send
+    is refused -- a missing gate is not a passed one."""
+    try:
+        import stay_gate as _SG
+    except Exception as e:
+        return {'ok': False, 'code': 'stay_data_unavailable', 'case': str(case or ''),
+                'matched': [], 'bd': '', 'sl': '',
+                'why': 'stay_gate.py could not be imported (%s)' % str(e)[:120]}
+    v = _SG.check(case, STAY_CACHE_FILE)
+    if v.get('ok') or not v.get('pacer_need'):
+        return v
+    # PRE-SEND PACER CHECK (2026-09-26, free tier). A lead with no Miami-Dade stem (Broward, Palm
+    # Beach, lis pendens without a Miami-Dade docket) has PACER as its only stay source, and on the
+    # free tier nobody searches it in bulk. So when the gate says a fresh per-lead search could change
+    # the answer, pacer_stay.presend_check() does ONE search now -- under the daily pre-send cap, the
+    # $25 quarter cap and #74's monthly cap -- caches the verdict for 14 days, and the gate decides
+    # again from the cache. PACER off, budget spent, an error, or anything but a clean clear: the
+    # refusal stands, with the same code and log line as before.
+    try:
+        import pacer_stay as _PS
+        r = _PS.presend_check(case, here=HERE)
+    except Exception as e:
+        r = {'status': 'error', 'why': 'pacer_stay.py could not run (%s)' % str(e)[:120]}
+    if r.get('status') in ('searched', 'index_hit', 'unsearchable'):
+        v = _SG.check(case, STAY_CACHE_FILE)
+    v['pacer_presend'] = r.get('status') or 'error'
+    if not v.get('ok'):
+        v['why'] = '%s [PACER pre-send: %s%s]' % (v.get('why', ''), v['pacer_presend'],
+                                                 (' -- ' + str(r.get('why'))[:160]) if r.get('why') else '')
+    return v
+
+
+def _stay_health():
+    try:
+        import stay_gate as _SG
+        return _SG.health(STAY_CACHE_FILE)
+    except Exception as e:
+        return {'ok': False, 'err': 'stay_gate.py could not be imported (%s)' % str(e)[:120],
+                'cases': 0, 'active': 0}
+
+
+def _log_refusal(rec):
+    """Append one refused send to send_refusals.jsonl. The autostart bridge runs under pythonw.exe,
+    where stderr is None and log_message() prints nowhere, so without this file a refusal would be
+    invisible after the fact. Case number and reason only -- no recipient address. Never raises."""
+    try:
+        with _NOTES_LOCK:
+            with open(REFUSAL_LOG, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
 
 
 def _load_ledger():
@@ -737,6 +803,21 @@ def _release_recipients(addrs):
 
 
 # ---------------------------------------------------------------- SMTP
+def _sync_verdict():
+    """TODAY's 07:15 opt-out sync gate (sync_gate.py, decided 2026-09-26): unless this morning's
+    sync finished with every step OK, /send HOLDS every send instead of mailing against yesterday's
+    list. Fail-closed here too: if the gate itself cannot be evaluated, that is a hold, not a pass."""
+    try:
+        import sync_gate
+        v = sync_gate.verdict(path=os.path.join(HERE, 'sync_status.json'))
+        sync_gate.log_hold(v, log=lambda m: print(m, flush=True))
+        return v
+    except Exception as e:
+        return {'ok': False, 'status': None,
+                'reason': 'HOLD - the opt-out sync gate could not be evaluated (%s); holding every send'
+                          % str(e)[:80]}
+
+
 def _unsub_url():
     """outreach_copy.UNSUB_URL, or '' when the copy module could not be imported."""
     try:
@@ -877,6 +958,7 @@ class Handler(BaseHTTPRequestHandler):
             user, pw = _load_credentials()
             _bh = _bounce_health()
             _oo_age = _optout_age_days()
+            _sg = _sync_verdict()
             self._json(200, {
                 'ok': True,
                 'user': user or '(not configured)',
@@ -886,6 +968,11 @@ class Handler(BaseHTTPRequestHandler):
                 'recipients_today': _recipients_today(),
                 'recipient_cap': self.recipient_cap,
                 'ready': bool(user and pw),
+                # 07:15 opt-out sync gate (sync_gate.py). sync_ok false = /send is HOLDING every send
+                # until today's sync finishes clean; sync_hold says why, in the words the log uses.
+                'sync_ok': bool(_sg.get('ok')),
+                'sync_hold': None if _sg.get('ok') else _sg.get('reason'),
+                'sync_status': {k: (_sg.get('status') or {}).get(k) for k in ('date', 'state', 'ok', 'finished_at')},
                 # Surfaced so the board can show list health next to the cap. `blocked` is the
                 # same verdict /send enforces, so the worker can say WHY before it starts a run
                 # instead of discovering it 403 by 403.
@@ -904,6 +991,9 @@ class Handler(BaseHTTPRequestHandler):
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
                 'bounce_blocked': _bh['blocked'],
+                # §362 stay source the /send gate reads. stay_data.ok false = every owner send is
+                # being refused (fail closed) until sale_history_cache.json is readable again.
+                'stay_data': _stay_health(),
                 # verified-only mode: while blocked, sends to proven-deliverable addresses
                 # (accepted mail >= 48h ago, never bounced) still go through. The worker
                 # banner uses this to say "N addresses still sendable" instead of "all stop".
@@ -1200,6 +1290,19 @@ class Handler(BaseHTTPRequestHandler):
                         % ('MISSING' if _age is None else '%.1f days old' % _age,
                            OPTOUT_MAX_AGE_DAYS))})
 
+        # ---- TODAY'S 07:15 OPT-OUT SYNC (2026-09-26 decision) — fail closed, ALL sends ------------
+        # optouts.json has one writer, the 07:15 sync (morning_sync.py: replies.py -> optout_sync's
+        # ledger_add -> ledger_sync.py). If that has not finished OK TODAY, a STOP that came in
+        # overnight may not be in the list yet, so EVERY send holds - test sends too - rather than
+        # mail against yesterday's list. `blocked: optout_stale` on purpose: it is the one refusal
+        # today's Morning Worker already answers by PAUSING the run with the queue intact (and it
+        # logs the err, which names the real cause). Cleared by a clean sync run, nothing else.
+        _sg = _sync_verdict()
+        if not _sg.get('ok'):
+            self.log_message('SEND HELD [sync] — %s', _sg.get('reason', ''))
+            return self._json(200, {'ok': False, 'blocked': 'optout_stale', 'hold': 'sync',
+                                    'err': _sg.get('reason') or 'HOLD - opt-out sync not confirmed today'})
+
         # ---- OPT-OUT BACKSTOP (2026-08-19 stress-test CRITICAL) --------------------------------
         # Refuse to email anyone on the DO-NOT-CONTACT ledger, matched by recipient email OR by the
         # meta.c case. meta.test sends are 1:1 to the advisor/operator (Brief Jesse, case workups),
@@ -1215,6 +1318,38 @@ class Handler(BaseHTTPRequestHandler):
                 'ok': False, 'blocked': 'optout',
                 'err': ('recipient is on the DO-NOT-CONTACT ledger (%s) — send refused'
                         % ('email ' + _hit_email if _hit_email else 'case ' + _case))})
+
+        # ---- §362 BANKRUPTCY-STAY GATE (2026-09-26) — fail closed --------------------------------
+        # The case's stay status is decided HERE, from sale_history_cache.json, never from what the
+        # board page says. A board is a snapshot: a tab left open overnight, or a build from before
+        # sale_history.py read the petition, still shows a stayed case as workable, and three Miami
+        # cases were emailed under a live stay the week of 2026-09-21 exactly that way. Every other
+        # sender (outreach_email, outreach_mail, morning_planner, cadence) already refused them.
+        #
+        # Refused: an active stay not lifted; no case on the request; a number with no Miami-Dade
+        # stem (no durable stay source exists for it); a stem the cache has never read; a cache that
+        # is missing or will not parse. See stay_gate.py for why each of those is a refusal.
+        #
+        # 451 + skip for a per-case verdict: today's worker logs the err and advances to the next
+        # lead (its generic non-2xx branch), and a 403 would trip its bounce-breaker branches. 503
+        # when the stay data itself is unreadable — that refuses EVERY owner send until fixed.
+        # meta.test sends are 1:1 to the advisor/operator (Brief Jesse, workups), never to an owner,
+        # and skip this gate the same way they skip the case-level opt-out match above.
+        if not _is_test:
+            _sv = _stay_gate((meta or {}).get('c'))
+            if not _sv.get('ok'):
+                _code = _sv.get('code') or 'stay_data_unavailable'
+                _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                              'd': dt.date.today().isoformat(), 'gate': 'stay', 'code': _code,
+                              'case': str((meta or {}).get('c') or '')[:40],
+                              'matched': _sv.get('matched') or [],
+                              'wl': str((meta or {}).get('wl') or ''), 'why': _sv.get('why', '')})
+                self.log_message('SEND REFUSED [%s] case=%s — %s', _code,
+                                 str((meta or {}).get('c') or '-')[:40], _sv.get('why', ''))
+                return self._json(503 if _code == 'stay_data_unavailable' else 451, {
+                    'ok': False, 'blocked': _code, 'skip': _code != 'stay_data_unavailable',
+                    'case': _sv.get('case', ''), 'matched': _sv.get('matched') or [],
+                    'err': 'send refused — %s' % _sv.get('why', 'bankruptcy-stay status unknown')})
 
         # ---- daily cap ----
         rcpt = _recipients_today()
