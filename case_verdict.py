@@ -390,6 +390,25 @@ def _index_text(entry):
     return ' '.join(str(entry.get(k) or '') for k in ('description', 'comments'))
 
 
+def _producer_text(entry):
+    """The text the PRODUCER composes when it decides what an entry IS: `operative_text` +
+    `description` + `comments`, exactly as reconcile_judgments builds it at :675.
+
+    `operative_text` is `title or index_text` (:363) - the title line of the document the run
+    actually READ, when it read one. Every scan here that asks what an entry is about has to see it,
+    or the docket where the document was OPENED reads better than the one where it was not: a bland
+    "Notice of Filing" whose first page reads NOTICE OF FILING SATISFACTION OF FINAL JUDGMENT got the
+    cover label from the document's own title, `attached_document_kind` stayed None (notice_of_filing
+    is not in the producer's _DISPOSITIVE_BODIES, :279, so :353 never fires), and asking
+    `description` + `comments` found only "Notice of Filing" - so a satisfied, vacated, dismissed,
+    sold or amended case read `supported` with the judgment's figure vouched and the entry named
+    nowhere at all, while the same words in the clerk's own line with nothing opened were already
+    `incomplete` (twenty-sixth review).
+    """
+    return ' '.join(str(entry.get(k) or '')
+                    for k in ('operative_text', 'description', 'comments'))
+
+
 def _sale_state(timeline, status, kind):
     """-> ('live'|'unknown'|'none', phrase) for the sale the docket is running.
 
@@ -440,7 +459,7 @@ def _sale_state(timeline, status, kind):
             closing = _newer(closing, entry)
         elif labels & set(SALE_NOTICE_KINDS):
             opening = _newer(opening, entry)
-        elif labels <= set(UNLABELLED_KINDS) and _SALE_WORD_RE.search(_index_text(entry)):
+        elif labels <= set(UNLABELLED_KINDS) and _SALE_WORD_RE.search(_producer_text(entry)):
             # The classifier saw the word and did not label the entry. That is a limit of the
             # classifier, not evidence either way, and it is not this module's to resolve.
             unlabelled.append(entry)
@@ -463,7 +482,7 @@ def _sale_state(timeline, status, kind):
             # reach it: "Statement of Amounts Due at Sale" and "Plaintiff's Bid at Sale" held the
             # ordinary live-lead docket incomplete (twentieth review). The final branch below asks a
             # different question - a FRESH notice after a cancellation - and is not filtered.
-            out = [e for e in out if _CLOSING_WORD_RE.search(_index_text(e))]
+            out = [e for e in out if _CLOSING_WORD_RE.search(_producer_text(e))]
         return out
 
     # The floor for the LIVE-sale branches. Those ask whether an unlabelled entry might be the
@@ -572,7 +591,7 @@ def _sale_state(timeline, status, kind):
         # a rescheduled-sale notice does.
         later = [e for e in later
                  if any(d > closing_date for d in _sale_dates_of(e))
-                 or _RESET_WORD_RE.search(_index_text(e))]
+                 or _RESET_WORD_RE.search(_producer_text(e))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))
@@ -614,7 +633,7 @@ def _replaces(entry):
     one that read `supported`, because _ADDS_TO matched in the title the producer saw and _REPLACES
     was asked about a text that did not contain it (twenty-fifth review).
     """
-    text = ' '.join(str(entry.get(k) or '') for k in ('operative_text', 'description', 'comments'))
+    text = _producer_text(entry)
     if not text.strip():
         return False
     try:
@@ -635,7 +654,8 @@ def _row_satisfied(row):
 
 
 def _cover_subject(entry):
-    """-> the producer's own label for what a COVER-titled entry is about, or None.
+    """-> (the producer's own label for what a COVER-titled entry is about, whether that label came
+    from the READ document's title), or (None, False).
 
     attached_document_kind exists only when the producer OPENED the document (:353). When it did not -
     the ordinary case for a login-walled filing - classify falls back to a cover label, and that label
@@ -646,16 +666,25 @@ def _cover_subject(entry):
     classification, just the producer's two functions composed the way the producer composes them when
     it does have the document.
     """
-    text = _index_text(entry).strip()
-    if not text:
-        return None
     try:
         import miami_case_timeline
-        match = miami_case_timeline._FILED_ABOUT_RE.match(text)
+        cover = miami_case_timeline._FILED_ABOUT_RE
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return None
-    match = match or _CERT_FILING_RE.match(text)
-    return _classify(text[match.end():]) if match else None
+    # Both regexes are anchored, so each candidate has to START with the cover head. The producer's
+    # `operative_text` does when the cover label came from the READ document's title, and the
+    # clerk's own line does when it came from `index_kind`; whichever it was, the subject is in one
+    # of them, and the read title is the one this asked about nowhere (twenty-sixth review).
+    read_title = str(entry.get('kind_source')) == 'document'
+    for text, from_document in ((str(entry.get('operative_text') or '').strip(), read_title),
+                                (_index_text(entry).strip(), False)):
+        if not text:
+            continue
+        match = cover.match(text) or _CERT_FILING_RE.match(text)
+        subject = _classify(text[match.end():]) if match else None
+        if subject is not None and subject not in UNLABELLED_KINDS:
+            return subject, from_document
+    return None, False
 
 
 def _sale_dates_of(entry):
@@ -1214,7 +1243,7 @@ def assess(timeline, dossier=None):
         if not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of')):
             continue
         attached = entry.get('attached_document_kind')
-        from_title = False
+        from_title = read_cover = False
         # final_judgment is deliberately excluded. It is in _DISPOSITIVE_BODIES, so a motion for
         # summary judgment, a proposed judgment, a memorandum or a status report carrying a judgment
         # copy all set this key - and holding on those made routine dockets incomplete for good
@@ -1235,7 +1264,7 @@ def assess(timeline, dossier=None):
             # guards three rounds were spent calibrating, and raising an unconditional gap for them
             # held the routine live-lead docket (an "Affidavit of Publication of Notice of
             # Foreclosure Sale" beside a live notice) incomplete.
-            subject = _cover_subject(entry)
+            subject, read_cover = _cover_subject(entry)
             if (subject in DECIDING_KINDS
                     and subject not in SALE_NOTICE_KINDS + ('order_cancelling_sale',)
                     and (subject != 'final_judgment' or _replaces(entry))):
@@ -1247,8 +1276,18 @@ def assess(timeline, dossier=None):
             # document under it reads as" there told the reader someone had opened a satisfaction of
             # judgment, and on a title whose read document turns out to be an actual certificate of
             # service it said the opposite of what the producer saved (twenty-second review).
+            # And a THIRD sentence, because the twenty-sixth review found a third shape: the run
+            # DID open the document and the document's own title is itself a cover ("NOTICE OF
+            # FILING SATISFACTION OF FINAL JUDGMENT"), so the producer took the cover label from the
+            # page it read and attached_document_kind stayed None. Saying "nobody opened it" there is
+            # a claim the same file refutes, which is the twenty-second review's defect mirrored.
             missing.append(
-                ('entry %s is titled as a filing about something else and its own docket title '
+                ('entry %s was read and the document\'s own title is itself a filing about '
+                 'something else, naming a %s; the producer labelled the entry by that cover, so '
+                 'the run did not fold it into the case\'s posture, and whether it decides this '
+                 'case is not settled in this file'
+                 if from_title and read_cover else
+                 'entry %s is titled as a filing about something else and its own docket title '
                  'names a %s; nobody opened it, so the run did not fold it into the case\'s '
                  'posture, and whether it decides this case is not settled in this file'
                  if from_title else

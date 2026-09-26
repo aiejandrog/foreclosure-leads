@@ -3168,5 +3168,97 @@ class TwentyFifthReviewTests(unittest.TestCase):
             self.assertEqual(r['verdict'], 'supported', (desc, r['missing'], r['conflicts']))
 
 
+class TwentySixthReviewTests(unittest.TestCase):
+    """The twenty-fifth round's own finding in the sibling function it did not fix: _replaces was
+    given the producer's composed text, _cover_subject and the sale-word scan were left reading the
+    clerk's line only. So the docket where the document was OPENED read better than the one where
+    nobody opened anything.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+    JUDGED = [(100, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '03/10/2026', '')]
+
+    def read_cover(self, title, rows=None, entry=180):
+        # The clerk's line is bland; the document WAS opened and its own first-page title is itself a
+        # cover naming the dispositive filing.
+        return self.built(list(rows or self.JUDGED) + [(entry, 'Notice of Filing', '', '05/12/2026', '')],
+                          controlling='140', amount=500000.0,
+                          pages={'140': self.PAGE, str(entry): title + '\nbody'})
+
+    def test_a_dispositive_document_under_a_read_cover_title_is_named(self):
+        # _body_kind classifies "NOTICE OF FILING SATISFACTION OF FINAL JUDGMENT" as notice_of_filing,
+        # which is NOT in the producer's _DISPOSITIVE_BODIES (:279), so :353 never fires and
+        # attached_document_kind stays None while `kind` takes the cover label from the READ page.
+        # _cover_subject then asked description + comments - "Notice of Filing" - so a satisfied,
+        # vacated, dismissed, sold or amended case read `supported` with the judgment's figure vouched
+        # and the entry named nowhere in the report at all.
+        for title, subject in (
+                ('NOTICE OF FILING SATISFACTION OF FINAL JUDGMENT', 'satisfaction'),
+                ('NOTICE OF FILING ORDER VACATING FINAL JUDGMENT', 'vacatur'),
+                ('NOTICE OF FILING CERTIFICATE OF TITLE', 'certificate_of_title'),
+                ('NOTICE OF FILING ORDER OF DISMISSAL', 'order_of_dismissal'),
+                ('NOTICE OF FILING AMENDED FINAL JUDGMENT OF FORECLOSURE', 'final_judgment')):
+            t = self.read_cover(title)
+            e = next(x for x in t['entries'] if x['entry_id'] == '180')
+            self.assertEqual(e['kind'], 'notice_of_filing', title)
+            self.assertIsNone(e.get('attached_document_kind'), title)
+            self.assertEqual(e['operative_text'], title)
+            self.assertEqual(CV._cover_subject(e), (subject, True), title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing'], r['notes']))
+            self.assertTrue([m for m in r['missing'] if 'entry 180' in m and subject in m],
+                            (title, r['missing']))
+            self.assertIn('180', CV.render_markdown([r]), title)
+
+    def test_the_unread_sibling_with_the_same_words_was_already_incomplete(self):
+        # The asymmetry. Same words in the clerk's own line, nobody opened anything at all.
+        t = self.built(self.JUDGED + [(180, 'Notice of Filing Satisfaction of Final Judgment', '',
+                                       '05/12/2026', '')],
+                       controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_the_read_cover_sentence_does_not_say_nobody_opened_it(self):
+        # Contract 4, and the twenty-second review's defect mirrored: the run DID open this document,
+        # so the unread half's sentence is a claim the same file refutes. Three shapes, three
+        # sentences.
+        read = CV.assess(self.read_cover('NOTICE OF FILING SATISFACTION OF FINAL JUDGMENT'))['missing']
+        self.assertTrue([m for m in read if 'was read' in m], read)
+        self.assertFalse([m for m in read if 'nobody opened it' in m], read)
+        unread = CV.assess(self.built(
+            self.JUDGED + [(180, 'Notice of Filing Satisfaction of Final Judgment', '', '05/12/2026',
+                            '')], controlling='140', amount=500000.0,
+            pages={'140': self.PAGE}))['missing']
+        self.assertTrue([m for m in unread if 'nobody opened it' in m], unread)
+
+    def test_a_sale_under_a_read_cover_title_reaches_the_sale_reader(self):
+        # Same root cause through _sale_state's unlabelled scan (:443). A live bankruptcy stay beside
+        # a sale filed under a cover title, the document read, said nothing at all.
+        stay = [(100, 'Complaint', '', '01/05/2026', ''),
+                (140, 'Final Judgment of Foreclosure', '', '03/10/2026', ''),
+                (170, 'Suggestion of Bankruptcy Chapter 13', '', '04/01/2026', '')]
+        read = CV.assess(self.read_cover(
+            'NOTICE OF FILING NOTICE OF FORECLOSURE SALE SET FOR 12/28/2026', rows=stay))
+        unread = CV.assess(self.built(
+            stay + [(180, 'Notice of Filing Notice of Foreclosure Sale set for 12/28/2026', '',
+                     '05/12/2026', '')], controlling='140', amount=500000.0,
+            pages={'140': self.PAGE}))
+        for r in (read, unread):
+            self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+            self.assertTrue([m for m in r['missing'] if 'entry 180' in m and 'sale' in m], r['missing'])
+
+    def test_routine_cover_titled_read_filings_still_read_supported(self):
+        # Contract 5, and the guard on this change: the ordinary live-lead docket carries cover-titled
+        # filings whose documents ARE read, and none of them decides anything.
+        live = self.JUDGED + [(150, 'Notice of Foreclosure Sale', 'SALE SET FOR 12/28/2026',
+                               '04/01/2026', '')]
+        for title in ('NOTICE OF FILING CERTIFICATE OF SERVICE',
+                      'NOTICE OF FILING AFFIDAVIT OF PUBLICATION OF NOTICE OF FORECLOSURE SALE',
+                      'NOTICE OF FILING STATEMENT OF AMOUNTS DUE AT SALE',
+                      'NOTICE OF FILING RETURN OF SERVICE',
+                      'CERTIFICATE OF SERVICE'):
+            r = CV.assess(self.read_cover(title, rows=live))
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing'], r['conflicts']))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

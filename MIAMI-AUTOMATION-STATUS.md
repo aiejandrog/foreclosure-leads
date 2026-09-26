@@ -316,6 +316,22 @@ named NOWHERE in the report, which is the fourteenth review's defect back throug
 undated entry now passes every floor. The twentieth review's calibration was the closing-word filter and
 not the date floor, so the routine live-lead docket still reads `supported` (twenty-fifth review).
 
+**The same finding in the sibling function, one round later.** The round before gave `_replaces` the
+producer's composed text and left `_cover_subject` and the sale-word scan reading the clerk's line only.
+`miami_case_timeline` sets `operative_text = title or index_text` (:363), so a bland "Notice of Filing"
+whose first page reads NOTICE OF FILING SATISFACTION OF FINAL JUDGMENT takes its cover label from the
+document's OWN title - and `attached_document_kind` stays None, because `notice_of_filing` is not in
+`_DISPOSITIVE_BODIES` (:279) so :353 never fires. Asking `description` + `comments` found only "Notice
+of Filing", `classify` gave `'other'`, and a satisfied, vacated, dismissed, sold or amended case read
+`supported` with the judgment's figure verified to the cent and the entry named NOWHERE - not in
+`missing`, not in `notes`, not on the page. The same words in the clerk's own line, with nothing opened,
+were already `incomplete`. Every scan that asks what an entry IS now reads `_producer_text` - the
+producer's own composition - and there is a third sentence for this third shape, because the run did
+open the document and the unread half's "nobody opened it" is a claim the same file refutes, which is the
+twenty-second review's defect mirrored. The same root cause reached `_sale_state`'s unlabelled scan: a
+sale noticed under a read cover title beside a live bankruptcy stay said nothing at all (twenty-sixth
+review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
