@@ -438,7 +438,10 @@ finally:
 
 hint = PA.install_hint()
 xml_path = os.path.join(os.path.dirname(PA.__file__), 'desktop-setup', 'tasks', 'DEALFLOW_Evening_Readiness.xml')
-xml = open(xml_path, encoding='utf-8').read()
+raw_xml = open(xml_path, 'rb').read()
+xml = raw_xml.decode('utf-16')
+rec('the task XML starts with the UTF-16 BOM and declares UTF-16',
+    raw_xml.startswith(b'\xff\xfe') and xml.startswith('<?xml version="1.0" encoding="UTF-16"?>'))
 rec('install hint is schtasks /Create /XML and not a shell',
     hint.startswith('schtasks /Create /TN "DEALFLOW Evening Readiness" /XML ') and hint.endswith(' /F')
     and 'powershell' not in hint.lower())
