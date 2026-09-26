@@ -116,6 +116,8 @@ def unit_ledger():
         def _get(key, path, params=None):
             if path == '/phone-numbers':
                 return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
             if path == Q.MESSAGES_PATH:
                 n10 = str((params or {}).get('participants') or '')[-10:]
                 return {'data': [{'direction': 'incoming', 'content': bodies.get(n10, ''),
@@ -515,7 +517,6 @@ def review_blockers():
 
         # B3. torn bounce list is not replaced, and sends treat it as blocked.
         fresh_ledger(oo)
-        oo_bytes = oo.read_bytes()
         sup.write_text('{', encoding='utf-8')
         raw = sup.read_bytes()
         refused = False
@@ -527,7 +528,8 @@ def review_blockers():
         backs = list(tmp.glob('bounced_emails.json.corrupt-*'))
         rec('ledger_add refuses a corrupt bounce list', refused)
         rec('the corrupt bounce list bytes are unchanged', sup.read_bytes() == raw)
-        rec('the opt-out ledger was not written either', oo.read_bytes() == oo_bytes)
+        rec('the opt-out key is written before the bounce list is refused',
+            '2099-000777-CA-01' in notes_of(oo) and sup.read_bytes() == raw)
         rec('the bad bounce list was copied aside', len(backs) == 1 and backs[0].read_bytes() == raw,
             [p.name for p in backs])
         added, _ = O.ledger_add(['2099-000779-CA-01'], 'no address on this add', 'fixture')
@@ -588,6 +590,8 @@ def review_blockers():
         def _get(key, path, params=None):
             if path == '/phone-numbers':
                 return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
             if path == Q.MESSAGES_PATH:
                 seen['who'].append((params or {}).get('participants'))
                 seen['since'].append((params or {}).get('createdAfter'))
@@ -726,11 +730,216 @@ def review_blockers():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def coverage_gap():
+    """Live Quo check: conversation participants are part of the number set, bodies are in `text`,
+    a failed or truncated conversations read holds, 429 is retried, a torn text_sent.json holds."""
+    print('-- conversations coverage')
+    import optout_sync as O
+    import quo_sync as Q
+    import pipeline_alerts as PA
+
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfconv_'))
+    oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
+    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
+           Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q._pause)
+    try:
+        O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
+        Q.TEXT_SENT = str(tmp / 'text_sent.json')
+        fresh_ledger(oo)
+        sup.write_text('{}', encoding='utf-8')
+        Q._key = lambda: 'fixture-key'
+        Q._pause = lambda _s: None
+        now = datetime.datetime.now(datetime.timezone.utc)
+        fresh = now.isoformat()
+        old_at = (now - datetime.timedelta(days=90)).isoformat()
+        seen = []
+
+        def dialed(days):
+            return [('5550100191', '2099-000901-CA-01', 1.0)]
+
+        def message(who, direction, body):
+            return {
+                'conversationId': 'CV1', 'createdAt': fresh, 'direction': direction,
+                'from': who, 'id': 'MSG1', 'phoneNumberId': 'PN1', 'status': 'received',
+                'text': body, 'to': ['+15550100000'], 'updatedAt': fresh,
+            }
+
+        def _get(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {
+                    'data': [
+                        {'participants': ['+15550100197'], 'phoneNumberId': 'PN1', 'lastActivityAt': fresh},
+                        {'participants': ['+15550100198'], 'phoneNumberId': 'PN1', 'lastActivityAt': old_at},
+                        {'participants': ['+15550100199'], 'phoneNumberId': 'PN1'},
+                        {'participants': [{'phoneNumber': '+15550100196'}], 'phoneNumberId': 'PN1',
+                          'lastActivityAt': fresh},
+                    ],
+                    'nextPageToken': None,
+                    'totalItems': 4,
+                }
+            if path == Q.MESSAGES_PATH:
+                who = str((params or {}).get('participants') or '')
+                seen.append(who)
+                if who.endswith('196'):
+                    return {'data': [message(who, 'outgoing', 'STOP')]}
+                body = 'STOP' if who.endswith('197') else 'hello'
+                return {'data': [message(who, 'incoming', body)]}
+            raise AssertionError(path)
+
+        Q.dialed_numbers = dialed
+        Q._inbound_text_rows = lambda: []
+        Q._get = _get
+        rc = Q.sync_messages(days=2)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        blob = json.dumps(st)
+        who = set(seen)
+        rec('a conversation participant outside the dial set is scanned',
+            rc == 0 and '+15550100197' in who and '#5550100197' in notes_of(oo), (rc, sorted(who)))
+        rec('the STOP body is read from text and incoming is the inbound direction',
+            (notes_of(oo).get('#5550100197') or {}).get('status') == 'DO NOT CONTACT')
+        rec('an outgoing text STOP is not ledgered', '#5550100196' not in notes_of(oo))
+        rec('a thread quiet for 90 days is not queried', '+15550100198' not in who)
+        rec('a conversation with no lastActivityAt is still scanned', '+15550100199' in who)
+        rec('the dial list is still unioned in', '+15550100191' in who)
+        rec('status records pages and conversations, counts only',
+            st.get('ok') is True and st.get('pages', 0) >= 2 and st.get('conversations') == 4
+            and '5550100' not in blob and 'fixture-key' not in blob, st)
+
+        def _get_denied(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'_denied': 403}
+            if path == Q.MESSAGES_PATH:
+                return {'data': []}
+            raise AssertionError(path)
+
+        Q._get = _get_denied
+        rc = Q.sync_messages(days=2)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        rec('a failed conversations read holds texting',
+            rc != 0 and st.get('ok') is False and held is True and 'conversations denied 403' in str(st.get('why')),
+            st.get('why'))
+
+        def _get_short(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [{'participants': ['+15550100197'], 'lastActivityAt': fresh}],
+                        'nextPageToken': 'more', 'totalItems': 50}
+            return {'data': []}
+
+        Q._get = _get_short
+        Q.MESSAGE_PAGE_CAP = 2
+        rc = Q.sync_messages(days=2, phones=['5550100120'])
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        blob = json.dumps(st)
+        rec('a truncated conversations read holds texting',
+            rc != 0 and st.get('ok') is False and st.get('truncated') is True and held is True
+            and st.get('conversations') == 2 and st.get('pages', 0) >= 2
+            and '5550100' not in blob, st)
+        Q.MESSAGE_PAGE_CAP = old[7]
+
+        calls = {'n': 0}
+        pauses = []
+
+        def _get_429(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
+            calls['n'] += 1
+            if calls['n'] == 1:
+                return {'_retry': 429}
+            return {'data': [message('+15550100121', 'incoming', 'STOP')]}
+
+        Q._get = _get_429
+        Q._pause = lambda s: pauses.append(s)
+        rc = Q.sync_messages(days=2, phones=['5550100121'])
+        rec('a 429 is retried and then the text STOP is ledgered',
+            rc == 0 and calls['n'] >= 2 and pauses and '#5550100121' in notes_of(oo), (rc, calls['n'], pauses))
+
+        def _get_429_forever(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
+            return {'_retry': 429}
+
+        Q._get = _get_429_forever
+        Q._pause = lambda _s: None
+        rc = Q.sync_messages(days=2, phones=['5550100122'])
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        blob = json.dumps(st)
+        rec('an exhausted 429 holds texting',
+            rc != 0 and st.get('ok') is False and held is True and '429' in str(st.get('why'))
+            and '5550100122' not in blob, st.get('why'))
+
+        sent = tmp / 'text_sent.json'
+        today = datetime.date.today().isoformat()
+        sent.write_text(json.dumps([{'ch': 'text', 'to': '5550100123', 'd': today}]), encoding='utf-8')
+        asked = []
+
+        def _get_text(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
+            who = str((params or {}).get('participants') or '')
+            asked.append(who)
+            body = 'STOP' if who.endswith('123') else 'hello'
+            return {'data': [message(who, 'incoming', body)]}
+
+        Q.dialed_numbers = lambda days: []
+        Q._inbound_text_rows = old[6]
+        Q._get = _get_text
+        rc = Q.sync_messages(days=2)
+        rec('a readable text_sent.json number is scanned',
+            rc == 0 and '+15550100123' in asked and '#5550100123' in notes_of(oo), asked)
+        raw = b'{'
+        sent.write_bytes(raw)
+        asked.clear()
+        rc = Q.sync_messages(days=2)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        rec('an unreadable text_sent.json is an error and holds texting',
+            rc != 0 and st.get('ok') is False and held is True and 'text_sent unreadable' in str(st.get('why'))
+            and '+15550100123' not in asked and sent.read_bytes() == raw
+            and Q._text_sent_problem() == 'text_sent unreadable',
+            st.get('why'))
+
+        torn = tmp / 'torn-optouts.json'
+        torn.write_text('{', encoding='utf-8')
+        sig = PA.read_optout_ledger(str(torn))
+        alert = PA.optout_ledger_alert(sig, '2026-09-26T16:00:00+00:00')
+        missing = PA.read_optout_ledger(str(tmp / 'absent-optouts.json'))
+        rec('an unreadable optouts.json alerts fail',
+            sig.get('unreadable') is True and alert and alert['severity'] == 'fail'
+            and alert['key'] == 'optout-ledger' and '555' not in alert['text'])
+        rec('a missing optouts.json is not that alert', missing.get('unreadable') is False)
+        health = {'list_unreadable': True, 'blocked': True}
+        bounced = PA.bounce_signal(health)
+        b_alert = PA.bounce_alert(bounced, '2026-09-26T16:00:00+00:00')
+        rec('list_unreadable raises a fail alert and not a rate',
+            bounced.get('list_unreadable') is True and 'lb' not in bounced
+            and b_alert and b_alert['severity'] == 'fail' and 'unreadable' in b_alert['text'].lower())
+    finally:
+        (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
+         Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q._pause) = old
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == '__main__':
     unit_ledger()
     text_hold_unit()
     cadence_recheck()
     bridge()
     review_blockers()
+    coverage_gap()
     print('\n%d passed, %d failed' % (len(ok), len(bad)))
     sys.exit(1 if bad else 0)

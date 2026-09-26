@@ -103,6 +103,17 @@ rec('2 of 20 first touches trips the shared block and the alert',
     and (a := one({'bounce': hot}, 'bounce-rate')) and a['severity'] == 'fail'
     and '2 of 20' in a['text'] and clean(a['text']), a['text'] if hot.get('day_blocked') else hot)
 rec('0 of 20 clears the alert', one({'bounce': cold}, 'bounce-rate') is None and cold['day_blocked'] is False)
+unreadable_list = PA.bounce_signal({'list_unreadable': True, 'blocked': True})
+rec('an unreadable bounce list is a fail, not a silent readable:false',
+    unreadable_list.get('readable') is True and unreadable_list.get('list_unreadable') is True
+    and 'lb' not in unreadable_list
+    and (a := one({'bounce': unreadable_list}, 'bounce-rate')) and a['severity'] == 'fail'
+    and 'unreadable' in a['text'].lower() and clean(a['text']), a['text'] if a else unreadable_list)
+rec('an unreadable opt-out ledger alerts',
+    (a := one({'optout_ledger': {'readable': True, 'unreadable': True}}, 'optout-ledger'))
+    and a['severity'] == 'fail' and 'unreadable' in a['text'].lower() and clean(a['text']))
+rec('a readable opt-out ledger does not alert',
+    one({'optout_ledger': {'readable': True, 'unreadable': False}}, 'optout-ledger') is None)
 rec('the public bounce signal has no address', clean(json.dumps(hot)) and hot.get('day_date'))
 yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
 yhot = PA.bounce_signal(health_rows(*ft_rows(2, 20, day=yday)))
