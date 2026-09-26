@@ -292,6 +292,30 @@ with no parsed date is now a gap of its own. The acceptance fixture for 2024-014
 for sixteen rounds by omitting the `sale_date` key that `_transition` always writes for that status -
 the same failure mode as the coverage fixture's missing `document` (thirteenth review).
 
+**A regex given a narrower text than the producer it mirrors.** `_replaces` asks
+`miami_case_timeline._REPLACES` - the producer's own regex - whether an entry's words say it replaces a
+judgment, and that is right; it asked it about `description` + `comments`, and that was not.
+`reconcile_judgments` builds its role text at :675 as `operative_text` + `description` + `comments`, and
+`operative_text` is the TITLE OF THE DOCUMENT the run actually read (:363, `title or index_text`). So the
+docket whose amending judgment was OPENED - the strictly stronger evidence - was the one reading
+`supported`: `_ADDS_TO` matched "ATTORNEYS FEES" in the title the producer saw, the row went
+`role='supplemental'`, the original judgment stayed controlling with its superseded figure verified to
+the cent, and the amendment printed as a note saying it merely adds to the total. `_replaces` now
+composes the producer's own text. A read title that says supplemental fees and nothing about amending is
+still a note (twenty-fifth review).
+
+**Two date floors of mine that read an undated entry as settled.** Both are the asymmetry
+`_after_cutoff` exists to avoid, and both were added by the two rounds before this one.
+`stay_floor` compared `str(entry.get('date') or '')` against the floor, so an UNDATED order the run
+labelled `nonbankruptcy_stay` fell to a note and the case to `supported` - though nothing on a docket
+can be shown to outlive an entry with no date at all. `_later_unlabelled` floored on the date too, so
+once a cancellation or a notice set the floor, every undated sale-worded entry the classifier left
+unlabelled was dropped: an undated "Notice of Rescheduled Foreclosure Sale" after a cancellation - the
+exact phrasing that scan exists for, which `classify` leaves `'other'` - stopped raising its gap and was
+named NOWHERE in the report, which is the fourteenth review's defect back through a different gate. An
+undated entry now passes every floor. The twentieth review's calibration was the closing-word filter and
+not the date floor, so the routine live-lead docket still reads `supported` (twenty-fifth review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
@@ -302,9 +326,9 @@ contradiction. `case_verdict` restates the producer faithfully; the loss is upst
 `attached_document_kind` discards the document's own title (:357 does
 `attached, body_kind, title = body_kind, None, None`), so a bare "Notice of Filing" whose document reads
 AMENDED FINAL JUDGMENT OF FORECLOSURE saves only `attached_document_kind='final_judgment'` and nothing
-in the file distinguishes it from an exhibit copy. `_replaces` mirrors the producer's own `_REPLACES`
-over the docket words, so it cannot see that amendment, and the case reads `supported` with the
-superseded figure. Closing it needs the producer to keep the title (an `attached_document_title`).
+in the file distinguishes it from an exhibit copy. `_replaces` now reads the producer's own `operative_text` +
+`description` + `comments` (twenty-fifth review), but this path nulls the title before it is saved, so
+there is nothing there for it to see, and the case reads `supported` with the superseded figure. Closing it needs the producer to keep the title (an `attached_document_title`).
 
 `reconcile_judgments`' `_ADDS_TO` matches a bare `attorney'?s? fees?` over `operative_text` plus
 `description` plus `comments`, so a final judgment whose clerk comments merely mention attorney's fees

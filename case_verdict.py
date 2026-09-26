@@ -447,7 +447,13 @@ def _sale_state(timeline, status, kind):
     closing_date = str((closing or {}).get('date') or '')
 
     def _later_unlabelled(floor, may_close_it=False):
-        out = [e for e in unlabelled if str(e.get('date') or '') >= str(floor or '')]
+        # An undated entry passes every floor. It cannot be shown to predate the notice, and
+        # dropping it put the fourteenth review's defect back through a different gate: an undated
+        # "Notice of Rescheduled Foreclosure Sale" after a cancellation - a phrasing classify leaves
+        # 'other' - stopped raising its gap and was named nowhere in the report at all, while the
+        # same entry dated read incomplete (twenty-fifth review).
+        out = [e for e in unlabelled
+               if not str(e.get('date') or '') or str(e.get('date')) >= str(floor or '')]
         if may_close_it:
             # The LIVE branches ask one question: could this entry BE the cancellation or the
             # rescheduling of the sale now on the calendar? The phrasings this scan exists for all
@@ -596,13 +602,19 @@ def _classify(text):
 
 
 def _replaces(entry):
-    """True when this entry's own docket words say it REPLACES an earlier judgment.
+    """True when this entry's own words say it REPLACES an earlier judgment.
 
     miami_case_timeline._REPLACES is the same regex reconcile_judgments uses at :674 to give a
     final_judgment row role='replacement', so nothing is classified here that the producer does not
-    classify the same way.
+    classify the same way. The TEXT has to be the producer's too: reconcile_judgments builds it at
+    :675 as operative_text + description + comments, and operative_text is the title of the document
+    the run actually READ (:363, `title or index_text`). Reading description + comments alone meant
+    the stronger docket - the one where the amending judgment's own first page says "AMENDED FINAL
+    JUDGMENT ... AND AWARD OF ATTORNEYS FEES" while the clerk's line says only "Judgment" - was the
+    one that read `supported`, because _ADDS_TO matched in the title the producer saw and _REPLACES
+    was asked about a text that did not contain it (twenty-fifth review).
     """
-    text = _index_text(entry)
+    text = ' '.join(str(entry.get(k) or '') for k in ('operative_text', 'description', 'comments'))
     if not text.strip():
         return False
     try:
@@ -1307,7 +1319,11 @@ def assess(timeline, dossier=None):
                 'miami_case_timeline folds into no posture, so what it stays - and whether it '
                 'reaches this case or a sale on the calendar - is not settled in this file'
                 % (entry.get('entry_id') or '?'))
-        (missing if str(entry.get('date') or '') >= stay_floor else notes).append(said)
+        # An undated order is more unknown, not less: nothing on the docket can be shown to
+        # outlive it, so it passes the floor. Comparing '' against the floor demoted it to a note
+        # and the case to `supported` - the same asymmetry _after_cutoff exists to avoid.
+        when = str(entry.get('date') or '')
+        (missing if (not when or when >= stay_floor) else notes).append(said)
     # unmatched (:756): reconcile_judgments' own list of dispositive events it could not link to a
     # judgment. A satisfaction citing the mortgage's recording date rather than the judgment's - the
     # ordinary shape - lands here (_target, :793), and an unmatched satisfaction left the judgment

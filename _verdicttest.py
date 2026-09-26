@@ -3061,5 +3061,112 @@ class TwentyFourthReviewTests(unittest.TestCase):
 
 
 
+class TwentyFifthReviewTests(unittest.TestCase):
+    """Three ways the docket where MORE is known read better than the one where less is: a regex
+    given a narrower text than the producer it mirrors, and two date floors of mine that treated an
+    undated entry as settled.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+    JUDGED = [(100, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '03/10/2026', '')]
+
+    def case(self, extra, pages=None, as_of='2026-09-23'):
+        return self.built(self.JUDGED + list(extra), controlling='140', amount=500000.0,
+                          as_of=as_of, pages=dict({'140': self.PAGE}, **(pages or {})))
+
+    def test_an_amended_judgment_the_run_read_is_named(self):
+        # reconcile_judgments builds its role text at :675 as operative_text + description +
+        # comments, and operative_text is the TITLE OF THE DOCUMENT the run read (:363). _replaces
+        # asked _REPLACES about description + comments only, so the docket whose amending judgment
+        # was actually OPENED - the strictly stronger one - was the one that read `supported`:
+        # _ADDS_TO matched "ATTORNEYS FEES" in the title the producer saw, the row went
+        # role='supplemental', 140 stayed controlling and its superseded figure stayed vouched, and
+        # the amendment was demoted to a note saying it merely adds to the total.
+        t = self.case([(180, 'Judgment', '', '05/12/2026', '')],
+                      pages={'180': 'AMENDED FINAL JUDGMENT OF FORECLOSURE AND AWARD OF '
+                                    'ATTORNEYS FEES AND COSTS\nTotal $512,500.00'})
+        e = next(x for x in t['entries'] if x['entry_id'] == '180')
+        self.assertEqual(e['kind_source'], 'document')
+        self.assertIn('AMENDED', e['operative_text'])
+        self.assertNotIn('amended', (e['description'] + e['comments']).lower())
+        rows = {r['entry_id']: (r['role'], r['status']) for r in t['judgments']['judgments']}
+        self.assertEqual(rows.get('180'), ('supplemental', 'operative'))
+        self.assertEqual(t['judgments']['controlling_entry'], '140')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if '180' in m and 'superseded nothing' in m],
+                        r['missing'])
+
+    def test_the_same_amendment_in_the_docket_line_is_still_named(self):
+        # The weaker docket, which the round before already caught. Both sides now agree.
+        t = self.case([(180, 'Amended Final Judgment of Foreclosure awarding attorneys fees and '
+                             'costs', '', '05/12/2026', '')])
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_a_read_supplemental_fee_judgment_is_still_a_note(self):
+        # Contract 5, and the guard on the fix above: widening the text must not make every
+        # supplemental judgment an amendment. A read title that says supplemental fees and nothing
+        # about amending still adds to what is owed without replacing anything.
+        t = self.case([(180, 'Judgment', '', '05/12/2026', '')],
+                      pages={'180': 'FINAL JUDGMENT OF FORECLOSURE AWARDING SUPPLEMENTAL '
+                                    'ATTORNEYS FEES AND COSTS\nTotal $12,500.00'})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+        self.assertTrue([n for n in r['notes'] if '180' in n and 'second judgment of record' in n],
+                        r['notes'])
+
+    def test_an_undated_stay_order_still_holds_the_case(self):
+        # The floor the round before added compared '' against it, so an UNDATED order the run
+        # labelled nonbankruptcy_stay was demoted to a note and the case to `supported` - though
+        # nothing on the docket can be shown to outlive an entry with no date at all.
+        rows = [(100, 'Complaint', '', '01/05/2026', ''),
+                (140, 'Final Judgment of Foreclosure', '', '06/10/2026', ''),
+                (160, 'Notice of Foreclosure Sale set for 12/28/2026', '', '07/01/2026', '')]
+        dated = self.built(rows + [(191, 'Order Staying Foreclosure Sale', '', '08/01/2026', '')],
+                           controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        undated = self.built(rows + [(191, 'Order Staying Foreclosure Sale', '', '', '')],
+                             controlling='140', amount=500000.0, pages={'140': self.PAGE})
+        self.assertIsNone(next(e for e in undated['entries'] if e['entry_id'] == '191')['date'])
+        for t in (dated, undated):
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+            self.assertTrue([m for m in r['missing'] if 'nonbankruptcy_stay' in m], r['missing'])
+
+    def test_an_undated_sale_worded_entry_after_a_cancellation_is_named(self):
+        # _later_unlabelled floored on the date too, so once a cancellation set the floor every
+        # UNDATED sale-worded entry the classifier left unlabelled was dropped - the fourteenth
+        # review's defect back through a different gate. classify leaves "Notice of Rescheduled
+        # Foreclosure Sale" 'other', so this is exactly the phrasing the scan exists for.
+        rows = [(100, 'Complaint', '', '01/05/2026', ''),
+                (140, 'Final Judgment of Foreclosure', '', '03/10/2026', ''),
+                (150, 'Notice of Foreclosure Sale set for 07/28/2026', '', '04/01/2026', ''),
+                (160, 'Order Cancelling Foreclosure Sale', '', '05/01/2026', '')]
+        import miami_case_timeline as MCT
+        self.assertEqual(MCT.classify('Notice of Rescheduled Foreclosure Sale'), 'other')
+        for when in ('07/01/2026', ''):
+            t = self.built(rows + [(170, 'Notice of Rescheduled Foreclosure Sale', '', when, '')],
+                           controlling='140', amount=500000.0, pages={'140': self.PAGE})
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (when, r['missing']))
+            self.assertTrue([m for m in r['missing'] if 'entry 170' in m], (when, r['missing']))
+            # Contract 2: the entry has to reach the human report, not just the JSON.
+            self.assertIn('170', CV.render_markdown([r]))
+
+    def test_routine_undated_sale_paperwork_still_does_not_hold_a_live_docket(self):
+        # Contract 5, and the guard on the fix above: the twentieth review's calibration was the
+        # closing-word filter, not the date floor, so admitting undated entries must not reopen it.
+        live = [(100, 'Complaint', '', '01/05/2026', ''),
+                (140, 'Final Judgment of Foreclosure', '', '03/10/2026', ''),
+                (150, 'Notice of Foreclosure Sale', 'SALE SET FOR 09/28/2026', '04/01/2026', '')]
+        for desc in ("Statement of Amounts Due at Sale", "Plaintiff's Bid at Sale",
+                     'Affidavit of Publication of Notice of Foreclosure Sale',
+                     'Order Setting Foreclosure Sale'):
+            t = self.built(live + [(170, desc, '', '', '')], controlling='140', amount=500000.0,
+                           pages={'140': self.PAGE})
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (desc, r['missing'], r['conflicts']))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
