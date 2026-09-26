@@ -59,7 +59,9 @@ _EMPTY_MONEY = re.compile(r'\$\s*(?=[.,;:!?)]|$)')
 _OPTOUT_SENTENCE = re.compile(r'\bunsubscribe\b|\bopt[\s-]?out\b|\btake you off\b'
                               r'|\bremove you\b|\bstop receiving\b'
                               r'|\bquitar\b|\bno recibir m[aá]s\b'
-                              r'|\bcancele su suscripci[oó]n\b|\bsaco de la lista\b', re.I)
+                              r'|\bcancele su suscripci[oó]n\b|\bsaco de la lista\b'
+                              # The approved line (2026-09-26): outreach_copy.OPTOUT_LINE_EN / _ES.
+                              r"|\bwon['\u2019]?t reach out again\b|\bno lo vuelvo a contactar\b", re.I)
 
 
 def unsubscribe_header(login, url=''):

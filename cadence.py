@@ -189,8 +189,14 @@ def steps(lead, sender):
     # instead of dashes, a cushion before the ask, one ask per message. These now match.
     disc = ("\n\nI am not your lender, not the government, not a foreclosure-rescue company, and "
             "not an attorney. Nothing here is legal advice, and there is never a fee to talk to me.")
-    unsub = ("\n\n(If you'd rather not hear from me, reply 'stop' and you won't hear from me again. "
-             "No hard feelings.)")
+    # The approved opt-out line (2026-09-26), from outreach_copy -- one source for every email
+    # body. The literal is the fallback for a checkout where outreach_copy cannot be imported, so
+    # a touch never leaves without it.
+    try:
+        from outreach_copy import OPTOUT_LINE_EN as _OPTOUT_LINE
+    except Exception:
+        _OPTOUT_LINE = "If now's not a good time, just tell me and I won't reach out again."
+    unsub = "\n\n" + _OPTOUT_LINE
     s0 = (f"Hi {first},\n\nMy name is {sn}. I work with a small local team that helps owners in "
           f"foreclosure. Your property at {addr} has an auction scheduled for {auc}.\n\n"
           f"I'm not calling to pressure you. I just want to make sure you've seen your options before "
@@ -623,10 +629,29 @@ def _run(args):
             mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
                                  subj, body, from_addr=alias or None)
         else:
+            # LEGACY FALLBACK -- reached only when `import send_server` failed at the top of this
+            # file (carried over from #46, 2026-09-26). The lane path above goes through
+            # _ss._smtp_send, which sets List-Unsubscribe and runs mail_guard itself; this branch
+            # built the message by hand and did neither. The LOGIN, not a lane alias:
+            # unsubscribe_header's mailto arm has to land in the mailbox replies.py opens, and this
+            # branch sends as the login anyway.
             msg = MIMEText(body, 'plain', 'utf-8')
             msg['Subject'] = subj
             msg['From'] = formataddr((sender.get('name') or cred[0], cred[0]))
             msg['To'] = s['email']
+            _unsub_hdr = _MG.unsubscribe_header(cred[0])
+            if _unsub_hdr:
+                msg['List-Unsubscribe'] = _unsub_hdr
+            # PRE-SEND GUARD, check() and continue rather than assert_sendable() and raise: nothing
+            # in this loop catches an exception, so a raise would abort the run and every other
+            # owner due today would go unmailed over one bad row. `continue` skips `sent += 1` and
+            # the step advance below, so the touch stays due -- exactly what mail_guard's refusal
+            # text promises ("the message was NOT sent and the step was NOT consumed").
+            _bad = _MG.check(subj, body, s['email'], unsub=_unsub_hdr)
+            if _bad:
+                print(f"  !! REFUSED {s['email']} — {'; '.join(_bad)}. Step {step+1}/4 was NOT "
+                      f"consumed; it stays due. Fix the lead data or the template.")
+                continue
             smtp.send_message(msg)
         sent += 1
         # THE LEDGER ROW — same shape the bridge writes, and the reason the cap above can work at

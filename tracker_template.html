@@ -6181,8 +6181,13 @@ function _textBodies(o){
   const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
   const stEN = o.stEN || 'your property', stES = o.stES || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
-  const stopEN = '';
-  const stopES = '';
+  /* The STOP line is BACK on every batch text (2026-09-26, Alejandro: "Reply STOP" for texts).
+     These were empty strings since they were written, so no batch text ever told the owner how to
+     stop; a STOP reply is a per se valid revocation under the FCC's 2025 rules only if we honour
+     it, and the FTSA cure safe harbor turns on the owner being told. Same words as
+     call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
+  const stopEN = ' Reply STOP to opt out.';
+  const stopES = ' Responda STOP para no recibir más mensajes.';
   let en, es;
   /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
      plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
@@ -15464,7 +15469,7 @@ function genBalloonEmail(r, quiet){
   var reSubj = 'Re: ' + subjCold;
   var hi = 'Hi'+(first?' '+first:'')+',';
   var sig = [signer, 'Biscayne Solutions Group', sP ? ('Phone: '+sP) : '', 'BSGflorida.com', sA].filter(function(x){ return x; }).join('\n');
-  var stop = "\n\nIf this isn't relevant, reply STOP and I won't write again.";
+  var stop = "\n\nIf now's not a good time, just tell me and I won't reach out again.";   // the approved email opt-out line, same as outreach_copy.OPTOUT_LINE_EN
   var gapLine = amt
     ? ('On the '+money(amt)+' note'+(lender?(' with '+lender):'')+', the gap between 12% and 7% is about '+money(gap)+' a month, roughly '+money(gap*12)+' a year, going to a lender instead of staying in your pocket.')
     : ('On a $400,000 balance the gap between 12% and 7% is about $1,700 a month. Twenty thousand a year, going to a lender instead of staying in your pocket.');

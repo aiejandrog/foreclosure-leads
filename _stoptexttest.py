@@ -31,6 +31,15 @@ CASES = [
     ('no gracias', False), ('who is this?', False), ('Yes call me tomorrow', False),
     ('Yes my number is 3059093711 u can call me after 5:30', False),
     ('gracias, ya vendí la casa', False),
+    # 2026-09-26: the approved email line is "If now's not a good time, just tell me and I won't
+    # reach out again." Whatever it invites is an opt-out, both languages.
+    ("Now's not a good time", True), ('not a good time, maybe next month', True),
+    ("please don't reach out again", True), ('stop reaching out', True),
+    ('No es buen momento', True), ('ahora no es un buen momento', True),
+    # ...and our own sentence, quoted back with no quote marker, is not
+    ("Yes! You wrote: If now's not a good time, just tell me and I won't reach out again. It is.", False),
+    ("Si ahora no es buen momento, solo digamelo y no lo vuelvo a contactar. Llámeme mañana", False),
+    ('Is now a good time? call me', False),
 ]
 
 pass_n = fail_n = 0
@@ -59,6 +68,33 @@ subj, fresh = R.reply_text(raw)
 T('reply_text parses RFC822 and strips the quote', 'stop' not in fresh.lower() and 'MAIN ST' in subj)
 outlook = 'STOP\r\n\r\n-----Original Message-----\r\nFrom: x@y.com\r\nSubject: hi'
 T('a real STOP above an Outlook quote still counts', R.is_stop_text(R.strip_quotes(outlook)) is True)
+
+print('== the approved lines are what the detector honours ==')
+import outreach_copy as OC
+import mail_guard as MG
+T('outreach_copy EN line is the approved wording',
+  OC.OPTOUT_LINE_EN == "If now's not a good time, just tell me and I won't reach out again.")
+T('email _unsub() carries it (no URL set)', OC._unsub(lang='en') == OC.OPTOUT_LINE_EN)
+T('Spanish _unsub() carries the ES line', OC._unsub(lang='es') == OC.OPTOUT_LINE_ES)
+T('the line alone does not read as a stop (our words)', R.is_stop_text(OC.OPTOUT_LINE_EN) is False)
+T('the ES line alone does not read as a stop', R.is_stop_text(OC.OPTOUT_LINE_ES) is False)
+T('mail_guard sees the EN line as the body opt-out',
+  not MG.check('Subject here', 'Ordinary letter.\n\n' + OC.OPTOUT_LINE_EN, 'a@b.com', unsub=''))
+T('mail_guard sees the ES line as the body opt-out',
+  not MG.check('Asunto', 'Carta.\n\n' + OC.OPTOUT_LINE_ES, 'a@b.com', unsub=''))
+T('outreach_copy.sms ends with Reply STOP', OC.sms('Maria').endswith('Reply STOP to opt out.'))
+T('outreach_copy.sms still fits two segments', len(OC.sms('Maria')) <= 320, len(OC.sms('Maria')))
+T('the STOP keyword it names is one the detector honours', R.is_sms_stop('STOP') is True)
+src_cad = open('cadence.py', encoding='utf-8').read()
+T('cadence touches use the shared line, not the old keyword sentence',
+  "OPTOUT_LINE_EN as _OPTOUT_LINE" in src_cad and "reply 'stop' and you won't" not in src_cad)
+T('cadence legacy fallback sets List-Unsubscribe and runs the guard',
+  "msg['List-Unsubscribe'] = _unsub_hdr" in src_cad and '_MG.check(subj, body, s[\'email\'], unsub=_unsub_hdr)' in src_cad)
+tpl = open('tracker_template.html', encoding='utf-8').read()
+T('board batch texts carry Reply STOP (EN)', "const stopEN = ' Reply STOP to opt out.';" in tpl)
+T('board batch texts carry the STOP line (ES)', "const stopES = ' Responda STOP para no recibir más mensajes.';" in tpl)
+T('investor-lane email uses the approved line', "won't write again" not in tpl
+  and "If now's not a good time, just tell me and I won't reach out again." in tpl)
 
 print('== SMS keywords ==')
 for t, want in [('STOP', True), ('Stop.', True), ('stopall', True), ('CANCEL', True), ('End', True),

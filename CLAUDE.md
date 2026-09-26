@@ -50,6 +50,13 @@ one is not.
 message of whatever you were doing, or add a line here, and say so in your summary to Alejandro.
 An unfixed, reported bug on this surface is cheaper than two uncoordinated fixes.
 
+**2026-09-25/26, at Alejandro's direction:** PR #70 edits this surface (one ledger writer
+`optout_sync.ledger_add()`, the stop-detector fixes, the shared quote-cutter, Call Mode DNC reaching
+the ledger, cadence send-time re-checks) and, on 09-26, teaches `is_stop_text()` the promise the
+approved email line makes ("If now's not a good time, just tell me and I won't reach out again." =
+"not a good time" / "no es buen momento" are opt-outs; our own sentence is stripped before matching).
+It supersedes #46. Review it as a change to this surface, not as ordinary copy.
+
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.

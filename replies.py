@@ -81,7 +81,24 @@ OPTOUT_PHRASES = re.compile(
     r'|\bborre[n]? mi (?:n[uú]mero|correo|email|informaci[oó]n)\b'
     r'|\bdej[ea]n? de (?:llamar|escribir|contactar|enviar|mandar|molestar|textear)\b'
     r'|\bpare[n]? de (?:llamar|escribir|contactar|enviar|mandar|molestar|textear)\b'
-    r'|\bno insist[ae]n?\b|\bcancelar suscripci[oó]n\b|\bdarme de baja\b|\bdesuscribir\b', re.I)
+    r'|\bno insist[ae]n?\b|\bcancelar suscripci[oó]n\b|\bdarme de baja\b|\bdesuscribir\b'
+    # THE PROMISE OUR EMAIL MAKES (2026-09-26). Every email now ends "If now's not a good time, just
+    # tell me and I won't reach out again." (outreach_copy.OPTOUT_LINE_EN). An owner who answers
+    # "not a good time" has told us, in the words we asked for, and the line says we stop. So it IS
+    # an opt-out -- even "not a good time, maybe next month": the sentence did not offer a snooze,
+    # and erring toward suppression is the rule where the readings collide. "reach out" is how our
+    # line says contact, so "please don't reach out" (caught by the do-not rule above) and
+    # "stop reaching out" / "no need to reach out" read the same way.
+    r"|\bnot (?:a )?(?:good|great|convenient) time\b"
+    r"|\b(?:stop|quit|cease) reaching out\b|\bno need to reach out\b"
+    r"|\bno es (?:un )?buen momento\b", re.I)
+
+# Our own opt-out sentence, EN and ES. is_stop_text() removes it before matching: an owner who quotes
+# it back without a quote marker ("...you said if now's not a good time...") must not be suppressed by
+# our words, the same failure strip_quotes() exists for with the old "reply 'stop'" line.
+_OUR_OPTOUT_LINE = re.compile(
+    r"if now['\u2019]?s not a good time,? just tell me and i won['\u2019]?t reach out again\.?"
+    r"|si ahora no es buen momento,? solo d[ií]gamelo y no lo vuelvo a contactar\.?", re.I)
 
 # FALSE-FLAGGED, and this is the dangerous half. A bare "stop" is genuinely ambiguous IN THIS
 # BUSINESS: "Please stop." is an opt-out, but "Can you stop the foreclosure?" is the most motivated
@@ -251,7 +268,7 @@ def is_stop_text(text):
     not. Erring toward suppression stays the default wherever the two readings genuinely collide;
     this only separates the readings that do not.
     """
-    t = str(text or '')
+    t = _OUR_OPTOUT_LINE.sub(' ', str(text or ''))
     if OPTOUT_PHRASES.search(t):
         return True
     for m in _BARE_STOP.finditer(t):
