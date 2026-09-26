@@ -33,8 +33,9 @@ desktop-setup/tasks/DEALFLOW_Evening_Readiness.xml (gitignored) and prints:
 
     schtasks /Create /TN "DEALFLOW Evening Readiness" /XML "<that file>" /F
 
-The XML is RunLevel LeastPrivilege (schtasks /RL LIMITED), DisallowStartIfOnBatteries
-false, StopIfGoingOnBatteries false, StartWhenAvailable true, 21:00 local. The
+The XML is UTF-16 with a BOM (schtasks /Create /XML rejects UTF-8), RunLevel
+LeastPrivilege (schtasks /RL LIMITED), DisallowStartIfOnBatteries false,
+StopIfGoingOnBatteries false, StartWhenAvailable true, 21:00 local. The
 battery reading is kernel32 GetSystemPowerStatus inside this process, not a child shell.
 
 Healthchecks.io (hc_ping.py) is a separate dead-man's switch. It stays off unless
@@ -1101,7 +1102,7 @@ def evening_task_xml(repo):
     def x(text):
         return (str(text).replace('&', '&amp;').replace('<', '&lt;')
                 .replace('>', '&gt;').replace('"', '&quot;'))
-    return """<?xml version="1.0" encoding="UTF-8"?>
+    return """<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <URI>\\DEALFLOW Evening Readiness</URI>
@@ -1158,7 +1159,9 @@ def install_hint():
     folder = os.path.join(repo, 'desktop-setup', 'tasks')
     os.makedirs(folder, exist_ok=True)
     xml_path = os.path.join(folder, 'DEALFLOW_Evening_Readiness.xml')
-    with open(xml_path, 'w', encoding='utf-8', newline='\n') as f:
+    # schtasks /Create /XML reads the file as UTF-16. A UTF-8 file is rejected
+    # with "unable to switch the encoding" at the declaration. utf-16 writes the BOM.
+    with open(xml_path, 'w', encoding='utf-16', newline='\n') as f:
         f.write(evening_task_xml(repo))
     return 'schtasks /Create /TN "DEALFLOW Evening Readiness" /XML "%s" /F' % xml_path
 
