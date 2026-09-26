@@ -98,7 +98,9 @@ finally:
 
 # ---- the handler must not condition the cap on "is this address the login?" ---------------------
 src = io.open(os.path.join(HERE, 'send_server.py'), encoding='utf-8').read()
-blk = re.search(r'_cand = _lane_from\(_cfg, _wl\).*?# ---- send ----', src, re.S)
+# 2026-09-26: a follow-up now resolves the thread's own sender first (_thread_from), then the lane map;
+# the cap block below it is unchanged, and first touches meter their senders in _pick_first_touch_from.
+blk = re.search(r'_cand = (?:_thread_from\(to, _cfg, user\) or )?_lane_from\(_cfg, _wl\).*?# ---- send ----', src, re.S)
 rec('the lane/cap block is still where it was', bool(blk))
 if blk:
     b = blk.group(0)
