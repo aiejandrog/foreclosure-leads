@@ -436,6 +436,14 @@ def classify(case_type, plaintiff):
     # A bank named "... National Association" would falsely match the HOA regex on "ASSOCIATION".
     # Strip that lender suffix before the HOA test; real HOAs are never "National Association".
     pl_h = re.sub(r'\bNATIONAL\s+ASSOCIATION\b', ' ', pl)
+    # A LENDER IS NOT AN ASSOCIATION BECAUSE ITS NAME SAYS ONE. "Federal National MORTGAGE
+    # Association" (Fannie Mae), Ginnie Mae, "COMMUNITY Loan Servicing" and "First COMMUNITY Bank"
+    # all hit the association words below and were typed HOA/Condo, which switched off the board's
+    # "a lender suing proves a mortgage" rule (equity_state.lender_foreclosure) on their cases. A
+    # lender word wins unless the name says homeowners or a condominium outright.
+    if (re.search(r'\b(MORTGAGE|BANK|LOANS?|SERVICING|FEDERAL|FANNIE|FREDDIE|FNMA|GNMA|FHLMC|CREDIT UNION|SAVINGS)\b', pl)
+            and not re.search(r'\b(CONDOMINIUM|CONDO|HOMEOWNERS?|TOWNHOM\w*|PROPERTY OWNERS?)\b', pl)):
+        return 'Bank/Mortgage'
     if re.search(r'\b(ASSOCIATION|ASSN|CONDO|HOMEOWNER|MASTER ASSOC|HOA|TOWNHOM|VILLAS?|COMMUNITY)\b', pl_h):
         return 'HOA/Condo'
     if 'RPMF' in ct or re.search(r'\b(BANK|MORTGAGE|LOAN|FINANCIAL|CAPITAL|FUNDING|LENDING|N\.?A\.?|TRUST|SERVICING|WELLS FARGO|CHASE|CITI|ROCKET|CROSSCOUNTRY|FREEDOM|LAKEVIEW|PENNYMAC|NEWREZ|CARRINGTON)\b', pl):
