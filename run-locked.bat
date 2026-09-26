@@ -11,6 +11,10 @@ rem  Otherwise the runner's own exit code comes back unchanged.
 rem  Lock lines (and the runner's console echo) go to runner-lock.log; each
 rem  runner still writes its own log exactly as before.
 rem  This file never builds, gates or pushes anything itself.
+rem  The lease is OFF unless DEALFLOW_RUNNER_LOCK=1 (see runner_lock.py). Off, this
+rem  wrapper still runs the .bat and changes nothing else. On, a lease held by another
+rem  machine — or a lease that cannot be read — exits 9 and the .bat never starts.
+rem  Send and paid runners also require DEALFLOW_ARMED_MACHINE to match engine.id.
 rem =====================================================================
 setlocal
 cd /d "%~dp0"

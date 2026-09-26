@@ -61,10 +61,16 @@ rem  check of its own. sync_gate.py exits 3 unless TODAY's opt-out sync (run-opt
 rem  with every step OK - the same rule send_server /send enforces. Held = nothing sent, steps stay due.
 python -u sync_gate.py >> "%LOG%" 2>&1
 if errorlevel 1 goto :held
-rem  -u so the log is written as the run goes, not flushed at exit. A cadence run that dies halfway
-rem  has already mailed people, and the log is the only record of who.
-python -u cadence.py >> "%LOG%" 2>&1
+rem  CROSS-MACHINE LEASE around the send, not around the hour window or the hold above.
+rem  Off unless DEALFLOW_RUNNER_LOCK=1, in which case this is a no-op wrapper and cadence.py
+rem  still runs and its exit code still comes back. On, a machine that is not
+rem  DEALFLOW_ARMED_MACHINE, or a lease held elsewhere or unreadable, exits 9 and cadence.py
+rem  never starts. This does not change what cadence.py sends. -u so the log is written as
+rem  the run goes, not flushed at exit. A cadence run that dies halfway has already mailed
+rem  people, and the log is the only record of who.
+python -u runner_lock.py run --runner cadence-daily.bat -- python -u cadence.py >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
+if "%RC%"=="9" goto :refused
 if not "%RC%"=="0" (
   echo [%STAMP%] FAILED - cadence.py exit %RC%. See cadence-run.log.> "%STATUS%"
   echo ==== done - FAILED exit %RC% %date% %time% ==== >> "%LOG%"
@@ -73,6 +79,12 @@ if not "%RC%"=="0" (
 echo [%STAMP%] OK - cadence ran. See cadence-run.log for the per-step detail.> "%STATUS%"
 echo ==== done %date% %time% ==== >> "%LOG%"
 exit /b 0
+
+:refused
+echo [%STAMP%] REFUSED - cross-machine lease not taken, or this machine is not the armed one. Nothing sent.> "%STATUS%"
+echo REFUSED - lease or armed-machine check, no mail sent. >> "%LOG%"
+echo ==== done - refused %date% %time% ==== >> "%LOG%"
+exit /b 9
 
 :held
 echo [%STAMP%] HELD - today's 07:15 opt-out sync has not finished OK. Nothing sent; steps stay due. Run run-optout-sync.bat, then this.> "%STATUS%"

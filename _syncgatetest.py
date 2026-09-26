@@ -306,7 +306,9 @@ finally:
 # ---- 4. wiring
 cad = (HERE / 'cadence-daily.bat').read_text(encoding='utf-8').splitlines()
 ix = lambda pat: next((i for i, l in enumerate(cad) if re.match(pat, l)), None)
-g, e, c, h_ = ix(r'python -u sync_gate\.py'), ix(r'if errorlevel 1 goto :held'), ix(r'python -u cadence\.py'), ix(r':held\s*$')
+g, e, c, h_ = (ix(r'python -u sync_gate\.py'), ix(r'if errorlevel 1 goto :held'),
+               ix(r'python -u runner_lock\.py run --runner cadence-daily\.bat -- python -u cadence\.py'),
+               ix(r':held\s*$'))
 rec('cadence-daily.bat asks sync_gate.py before cadence.py', None not in (g, e, c) and g < e < c, (g, e, c))
 rec('...a hold jumps to :held, which sits after the final exit and never reaches cadence.py',
     h_ is not None and h_ > c and not any('cadence.py' in l for l in cad[h_:]) and
