@@ -215,6 +215,7 @@ worker_notes_snapshots/
 !_sendbridgetest.py
 !_ledgerwritetest.py
 !_attachtest.py
+!_sendstaytest.py
 !_zstatustest.py
 !_skiptracetest.py
 !_phonepagetest.py
@@ -301,6 +302,8 @@ send_server_run.log
 phones-run.log
 scrape_all.log
 worker_marks.jsonl
+# send_server /send refusals (§362 stay gate): case numbers + reasons, append-only runtime log
+send_refusals.jsonl
 retrace_queue.json
 email_preview.html
 badnum_quarantine.json
