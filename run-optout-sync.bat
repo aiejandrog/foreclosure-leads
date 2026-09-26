@@ -19,5 +19,8 @@ call repo_guard.bat "%~dp0" "%LOG%"
 if errorlevel 1 exit /b 1
 python -u morning_sync.py >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
+rem  Counts-only alert file. Fail-soft and after RC is saved, so a push problem cannot change
+rem  whether today's sends hold. It does not publish the board.
+python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
 echo ==== optout-sync ENDED rc=%RC% %date% %time% ====>> "%LOG%"
 endlocal & exit /b %RC%

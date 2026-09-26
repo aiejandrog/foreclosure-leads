@@ -28,6 +28,7 @@ const HERE = __dirname;
 const YML = path.join(HERE, '.github', 'workflows', 'freshness-watchdog.yml');
 const STEP = 'Check the runners are behaving';
 const MORNING_STEP = "Morning check - did last night's refresh publish";
+const ALERTS_STEP = 'Sync pipeline alerts';
 
 // ---------------------------------------------------------------- extract the shipped script
 function extractScript(STEP) {
@@ -76,11 +77,12 @@ async function run(src, commits, opts = {}) {
         const per = p.per_page || 30, page = p.page || 1;
         return { data: commits.slice((page - 1) * per, page * per) };
       } },
-      issues: {
-        listForRepo: async () => ({ data: opts.openIssue ? [{ number: 99 }] : [] }),
+        issues: {
+        listForRepo: async () => ({ data: opts.openIssues || (opts.openIssue ? [{ number: 99 }] : []) }),
         create: async a => { out.issues.push({ kind: 'create', ...a }); },
         createComment: async a => { out.issues.push({ kind: 'comment', ...a }); },
         update: async a => { out.issues.push({ kind: 'update', ...a }); },
+        createLabel: async a => { out.issues.push({ kind: 'label', ...a }); },
       },
     },
   };
@@ -91,12 +93,24 @@ async function run(src, commits, opts = {}) {
     if (opts.html instanceof Error) throw opts.html;
     return { ok: true, status: 200, text: async () => (opts.html || '') };
   };
-  const fn = new Function('github', 'core', 'context', 'fetch',
+  const fn = new Function('github', 'core', 'context', 'fetch', 'require',
                           `return (async () => {\n${src}\n})();`);
   const saved = process.env.WATCHDOG_NOW;
+  const savedAlerts = process.env.WATCHDOG_ALERTS_JSON;
+  const savedFile = process.env.WATCHDOG_ALERTS_FILE;
   if (opts.now) process.env.WATCHDOG_NOW = opts.now; else delete process.env.WATCHDOG_NOW;
-  try { await fn(github, core, context, fetchStub); }
-  finally { if (saved === undefined) delete process.env.WATCHDOG_NOW; else process.env.WATCHDOG_NOW = saved; }
+  if (Object.prototype.hasOwnProperty.call(opts, 'alertsJson')) {
+    if (opts.alertsJson == null) delete process.env.WATCHDOG_ALERTS_JSON;
+    else process.env.WATCHDOG_ALERTS_JSON = opts.alertsJson;
+  }
+  if (opts.alertsFile) process.env.WATCHDOG_ALERTS_FILE = opts.alertsFile;
+  else if (opts.alertsMissing) process.env.WATCHDOG_ALERTS_FILE = path.join(HERE, 'no-such-pipeline-alerts.json');
+  try { await fn(github, core, context, fetchStub, require); }
+  finally {
+    if (saved === undefined) delete process.env.WATCHDOG_NOW; else process.env.WATCHDOG_NOW = saved;
+    if (savedAlerts === undefined) delete process.env.WATCHDOG_ALERTS_JSON; else process.env.WATCHDOG_ALERTS_JSON = savedAlerts;
+    if (savedFile === undefined) delete process.env.WATCHDOG_ALERTS_FILE; else process.env.WATCHDOG_ALERTS_FILE = savedFile;
+  }
   return out;
 }
 
@@ -198,6 +212,11 @@ const MORNING_PAGED_OK = pad(150, fixedDay(15, '12:25')).concat(MORNING_OK);
 // ---------------------------------------------------------------- assertions
 const cases = [
   { name: 'healthy week stays silent', fx: HEALTHY, fire: false },
+  { name: 'alerts publishes are not a second runner',
+    fx: HEALTHY.concat([
+      commit('al0000', 'alerts: pipeline status', at(1, '01:00')),
+      commit('al0001', 'alerts: pipeline status', at(1, '13:00')),
+    ]), fire: false },
   { name: 'two runners on one day fires', fx: TWO_RUNNERS, fire: true, want: /Two runners/ },
   { name: 'stacked unpushed commits fires', fx: STACKED, fire: true, want: /push was not landing/i },
   { name: 'refresh job gone quiet fires', fx: NO_REFRESH, fire: true, want: /No new leads/i },
@@ -300,6 +319,74 @@ const morningCases = [
     if (ok) { console.log(`  pass  ${c.name}`); pass++; }
     else {
       console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? `"${r.failed}"` : 'silence'}`);
+      fail++;
+    }
+  }
+
+  const ALERT_NOW = '2026-09-26T15:00:00Z';
+  const freshDoc = (alerts, published_at) => JSON.stringify({
+    version: 1, published_at: published_at || '2026-09-26T14:00:00Z', alerts,
+  });
+  const openAlert = (key, severity) => ({
+    number: 41, title: '⚠️ [' + severity + '] [' + key + '] old',
+    body: 'alert-key: ' + key + '\nseverity: ' + severity + '\n\nold text',
+  });
+  const alertCases = [
+    { name: 'alerts: a new fail opens one issue and fails the run',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'fail', text: 'Tracerfy balance 0 credits.' }]),
+      fire: true, creates: 'tracerfy-credits' },
+    { name: 'alerts: the same severity comments and does not fail again',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
+      openIssues: [openAlert('tracerfy-credits', 'warn')], fire: false, comments: true },
+    { name: 'alerts: warn to fail is worsened and fails the run',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'fail', text: 'Tracerfy balance 0 credits.' }]),
+      openIssues: [openAlert('tracerfy-credits', 'warn')], fire: true, comments: true },
+    { name: 'alerts: a cleared key closes the issue and does not fail',
+      alertsJson: freshDoc([]),
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: false, closes: true },
+    { name: 'alerts: an address in the text is withheld',
+      alertsJson: freshDoc([{ key: 'bounce-rate', severity: 'fail', text: 'see owner@example.com now' }]),
+      fire: true, creates: 'bounce-rate', noAt: true },
+    { name: 'alerts: invalid JSON fails and does not close',
+      alertsJson: '{',
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true },
+    { name: 'alerts: a file with no alerts array does not close',
+      alertsJson: JSON.stringify({ published_at: '2026-09-26T14:00:00Z', alerts: { bad: true } }),
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true },
+    { name: 'alerts: missing file, nothing open, is not armed yet',
+      alertsJson: null, alertsMissing: true, fire: false },
+    { name: 'alerts: missing file while an issue is open fails and does not close it',
+      alertsJson: null, alertsMissing: true,
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true },
+    { name: 'alerts: a fresh empty file stays quiet',
+      alertsJson: freshDoc([]), fire: false },
+    { name: 'alerts: published_at 31h ago is its own alert',
+      alertsJson: freshDoc([], '2026-09-25T08:00:00Z'), now: ALERT_NOW, fire: true, creates: 'alerts-unpublished' },
+    { name: 'alerts: published_at 29h ago is not stale',
+      alertsJson: freshDoc([], '2026-09-25T10:00:00Z'), now: ALERT_NOW, fire: false },
+  ];
+  const asrc = extractScript(ALERTS_STEP);
+  for (const c of alertCases) {
+    let r;
+    try { r = await run(asrc, [], c); }
+    catch (e) {
+      console.log(`  FAIL  ${c.name} — threw: ${e.message}`);
+      fail++; continue;
+    }
+    const fired = !!r.failed;
+    const created = r.issues.find(i => i.kind === 'create' && i.title && i.title.includes('[' + (c.creates || '') + ']'));
+    let good = fired === c.fire;
+    if (good && c.creates) good = !!created;
+    if (good && c.comments) good = r.issues.some(i => i.kind === 'comment');
+    if (good && c.closes) good = r.issues.some(i => i.kind === 'update' && i.state === 'closed');
+    if (good && c.noClose) good = !r.issues.some(i => i.kind === 'update' && i.state === 'closed');
+    if (good && c.noAt) {
+      const blob = JSON.stringify(r.issues);
+      good = !blob.includes('@') && blob.includes('withheld');
+    }
+    if (good) { console.log(`  pass  ${c.name}`); pass++; }
+    else {
+      console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? JSON.stringify(r.failed) : 'silence'} issues ${JSON.stringify(r.issues).slice(0, 400)}`);
       fail++;
     }
   }

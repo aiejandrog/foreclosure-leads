@@ -78,6 +78,7 @@ python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('l
 if errorlevel 1 (
   echo [%STAMP%] REBUILD FAILED - nothing pushed. See phones-run.log.> "%STATUS%"
   echo REBUILD FAILED >> "%LOG%"
+  python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
   exit /b 1
 )
 
@@ -100,6 +101,7 @@ python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 2 (
   echo [%STAMP%] BLOCKED - healthcheck COMPLIANCE fail. Board NOT published; live site left on its last good build. See phones-run.log.> "%STATUS%"
   echo GATE: healthcheck COMPLIANCE fail - publish skipped. >> "%LOG%"
+  python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
   exit /b 2
 )
 rem  exit 1 is the coverage floor only: advisory, publish_guard decides -- same as refresh-dealflow.bat.
@@ -107,6 +109,7 @@ python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo [%STAMP%] BLOCKED - publish_guard refused a board poorer than the live one. Live site unchanged. See phones-run.log.> "%STATUS%"
   echo GATE: publish_guard BLOCKED the build - publish skipped. >> "%LOG%"
+  python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
   exit /b 2
 )
 
@@ -119,6 +122,7 @@ git commit -m "phones: nightly refresh (%PHONESNOTE%)" >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo [%STAMP%] OK - board already current, nothing to push. %PHONESNOTE%.> "%STATUS%"
   echo no changes to commit >> "%LOG%"
+  python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
   exit /b 0
 )
 rem  PULL BEFORE PUSH. Without this a local push is rejected non-fast-forward the moment
@@ -156,6 +160,7 @@ rem file from the answer, so this can no longer claim a publish that did not hap
 call publish_verify.bat "%LOG%" "%STATUS%" "%PHONESNOTE%"
 if errorlevel 1 (
   echo ==== done - NOT PUBLISHED %date% %time% ==== >> "%LOG%"
+  python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
   exit /b 1
 )
 rem  THE ENGINE PUSH LANDED, BUT DID THE LIVE SITE MOVE? publish_verify only asks about origin/main
@@ -167,7 +172,11 @@ rem  is still the previous one. The status file has to say the same, or it contr
 if "%MIRRORFAIL%"=="1" (
   echo [%STAMP%] ^!^! Board pushed to the engine repo, but the LIVE SITE IS UNCHANGED - the mirror did not publish. %PHONESNOTE%.> "%STATUS%"
   echo ==== done - ENGINE PUBLISHED, LIVE SITE NOT %date% %time% ==== >> "%LOG%"
+  python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
   exit /b 5
 )
 echo ==== done %date% %time% ==== >> "%LOG%"
+rem  Counts only. After the board push, its own commit, exit 0 so it cannot change this job's rc.
+rem  09:30 is after the 08:00 Morning Worker, so this is the same-morning read of "sent 0".
+python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
 exit /b 0

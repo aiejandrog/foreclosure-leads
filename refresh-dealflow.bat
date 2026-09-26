@@ -820,6 +820,12 @@ echo     health check complete - see leads-run.log.
 rem  ...and the verdict to the dead-man's switch, once RUNEXIT is final. No-op when unconfigured.
 python -u hc_ping.py exit %RUNEXIT% >> "%LOG%" 2>&1
 
+rem  PIPELINE ALERTS. Counts only, one file, its own commit. Fail-soft: this script exits 0
+rem  even when the push does not land, and the exit below is still RUNEXIT. It does not publish
+rem  the board, so it is not behind healthcheck or publish_guard — those gates would swallow the
+rem  healthcheck-fail alert, which is one of the things this push exists to carry.
+python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
+
 rem  EXIT WITH THE VERDICT. Task Scheduler's "Last Run Result" is the only unattended signal that
 rem  survives when nobody opens the log, and until 2026-09-18 it was 0 on every outcome. It is now
 rem  the answer to "did the night work", which is what anyone reading it already assumed it was.

@@ -27,6 +27,11 @@ on:
         type: choice
         options: [daily, morning, both]
         default: daily
+  # The laptop pushes pipeline_alerts.json on its own (counts only). That push is what makes a
+  # 9 PM battery reading email him the same evening, instead of waiting for the 15:00 UTC pass.
+  push:
+    branches: [main]
+    paths: ['pipeline_alerts.json']
 
 permissions:
   issues: write                # so it can open/comment the alert issue with the built-in token
@@ -423,3 +428,164 @@ jobs:
                 title: `⚠️ DEALFLOW nightly refresh missed or stale (${today})`, body, labels: ['nightly-missed'] });
             }
             core.setFailed(`Morning check: ${problems.length} problem(s) - see the nightly-missed issue.`);
+
+  # ------------------------------------------------------------------------------------------------
+  # LAPTOP ALERTS. pipeline_alerts.json is the counts-only file the armed machine pushes (credits,
+  # captcha, the paid-reads cap, the bounce pause, the 07:15 sync, morning-worker sends, healthcheck
+  # FAIL stage names, and the evening power/task check). One open issue per key, label
+  # dealflow-alert. Comment while it stays true, close when the key disappears, and fail this run
+  # only when an alert is new or worse — that failure is the email. A missing file with no open
+  # alert issue means the laptop has not published yet (not armed). A missing file while issues
+  # are open, or a file that is not JSON, fails instead of closing those issues.
+  alerts:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.schedule == '0 15 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check != 'morning')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync pipeline alerts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const STALE_HOURS = 30;
+            const NOW_MS = process.env.WATCHDOG_NOW ? Date.parse(process.env.WATCHDOG_NOW) : Date.now();
+            const RANK = { warn: 1, fail: 2 };
+            const { owner, repo } = context.repo;
+            function unsafe(s) {
+              return /@|https?:\/\//i.test(s)
+                || /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/.test(s)
+                || /\b\d{4}-\d{3,6}-[A-Za-z]{2}-\d{2}\b/.test(s)
+                || /\b\d{10,}\b/.test(s);
+            }
+            function publicText(key, text) {
+              const s = String(text || '').replace(/\s+/g, ' ').trim();
+              if (!s || unsafe(s)) return 'Alert ' + key + ' fired. Detail withheld because it was not public-safe.';
+              return s.slice(0, 600);
+            }
+            function loadRaw() {
+              if (process.env.WATCHDOG_ALERTS_JSON) return process.env.WATCHDOG_ALERTS_JSON;
+              const file = process.env.WATCHDOG_ALERTS_FILE || 'pipeline_alerts.json';
+              return require('fs').readFileSync(file, 'utf8');
+            }
+            let doc;
+            let missing = false;
+            try {
+              doc = JSON.parse(loadRaw());
+            } catch (e) {
+              if (e && e.code === 'ENOENT') missing = true;
+              else {
+                core.setFailed('pipeline_alerts.json is not valid JSON. Refusing to close alerts on an unreadable file.');
+                return;
+              }
+            }
+            const listedOpen = async () => {
+              const listed = await github.rest.issues.listForRepo({
+                owner, repo, state: 'open', labels: 'dealflow-alert', per_page: 100 });
+              return listed.data || [];
+            };
+            if (missing) {
+              let open = [];
+              try { open = await listedOpen(); }
+              catch (e) {
+                core.setFailed('Cannot list alert issues and pipeline_alerts.json is missing. Refusing to report healthy.');
+                return;
+              }
+              if (open.length) core.setFailed('pipeline_alerts.json is missing from main while alert issues are still open.');
+              else core.info('pipeline_alerts.json is not on main yet. Alerts arm when the laptop first publishes it.');
+              return;
+            }
+            if (!doc || !Array.isArray(doc.alerts)) {
+              core.setFailed('pipeline_alerts.json has no alerts array. Refusing to close issues on an unreadable file.');
+              return;
+            }
+            const active = [];
+            const seen = new Set();
+            for (const a of doc.alerts) {
+              if (!a || typeof a.key !== 'string' || !/^[a-z0-9-]{1,40}$/.test(a.key) || seen.has(a.key)) continue;
+              seen.add(a.key);
+              const severity = (a.severity === 'warn' || a.severity === 'fail') ? a.severity : 'fail';
+              active.push({ key: a.key, severity, text: publicText(a.key, a.text) });
+            }
+            const published = Date.parse(doc.published_at || '');
+            if (doc.published_at && Number.isFinite(published) && (NOW_MS - published) > STALE_HOURS * 3600000) {
+              const hours = Math.floor((NOW_MS - published) / 3600000);
+              active.push({
+                key: 'alerts-unpublished', severity: 'fail',
+                text: 'pipeline_alerts.json on main was last published ' + hours + 'h ago (over ' + STALE_HOURS + 'h). The laptop has stopped publishing its checks.',
+              });
+            } else if (doc.published_at && !Number.isFinite(published)) {
+              core.setFailed('pipeline_alerts.json published_at is not a timestamp. Refusing to close alerts.');
+              return;
+            }
+            try {
+              await github.rest.issues.createLabel({
+                owner, repo, name: 'dealflow-alert', color: 'b60205',
+                description: 'Pipeline threat. Counts, percentages, balances, stage names, timestamps only.' });
+            } catch (e) { /* the label already exists */ }
+            let open = [];
+            try { open = await listedOpen(); }
+            catch (e) {
+              core.setFailed('Cannot list alert issues (' + e.message + '). Refusing to report healthy.');
+              return;
+            }
+            function keyOf(issue) {
+              const body = String(issue.body || '');
+              const m = body.match(/^alert-key:\s*([a-z0-9-]+)/m);
+              if (m) return m[1];
+              const bits = String(issue.title || '').match(/\[([a-z][a-z0-9-]*)\]/g) || [];
+              for (const bit of bits) {
+                const k = bit.slice(1, -1);
+                if (k !== 'warn' && k !== 'fail') return k;
+              }
+              return '';
+            }
+            function sevOf(issue) {
+              const m = String(issue.title || '').match(/\[(warn|fail)\]/);
+              return m ? m[1] : 'warn';
+            }
+            const byKey = new Map();
+            for (const issue of open) {
+              const k = keyOf(issue);
+              if (k && !byKey.has(k)) byKey.set(k, issue);
+            }
+            const created = [];
+            const worsened = [];
+            const footer = [
+              '---',
+              'Public watchdog alert: counts, percentages, balances, stage names and timestamps only.',
+              'This issue stays open while the condition is true, gets a comment instead of a duplicate, and closes when it clears.',
+              'A new or worsened alert also fails this workflow, which is what emails the repository owner.',
+            ].join('\n');
+            for (const a of active) {
+              const title = ('⚠️ [' + a.severity + '] [' + a.key + '] ' + a.text).slice(0, 240);
+              const body = 'alert-key: ' + a.key + '\nseverity: ' + a.severity + '\n\n' + a.text + '\n\n' + footer;
+              const existing = byKey.get(a.key);
+              if (!existing) {
+                await github.rest.issues.create({ owner, repo, title, body, labels: ['dealflow-alert'] });
+                created.push(a.key);
+                continue;
+              }
+              const prev = sevOf(existing);
+              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body: a.text });
+              if (a.severity !== prev) {
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, title, body });
+              }
+              if ((RANK[a.severity] || 2) > (RANK[prev] || 1)) worsened.push(a.key);
+            }
+            const activeKeys = new Set(active.map(a => a.key));
+            for (const issue of open) {
+              const k = keyOf(issue);
+              if (!k || activeKeys.has(k)) continue;
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: 'Cleared. The published checks no longer report this condition.' });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+            }
+            if (created.length || worsened.length) {
+              core.setFailed('pipeline alerts: ' + created.length + ' new, ' + worsened.length
+                + ' worsened (' + created.concat(worsened).join(', ') + ').');
+            } else {
+              core.info('pipeline alerts: ' + active.length + ' open condition(s), none new or worsened.');
+            }

@@ -705,6 +705,41 @@ def _sent_today_count():
 BOUNCE_WINDOW_DAYS = 7
 BOUNCE_CEILING = 0.10     # refuse bulk outreach above this trailing hard-bounce rate
 BOUNCE_Z = 1.96           # 95% one-sided-ish confidence for the lower bound below
+# DAILY FIRST-TOUCH PAUSE (2026-09-26). The trailing Wilson bound notices a bad week after it
+# has already gone out. A single day's first touches are paused when MORE THAN this fraction
+# bounce, once at least BOUNCE_DAY_MIN_SAMPLE of them have been sent. This only ADDS a reason
+# for `blocked` to be true. It never clears the trailing verdict, and it does not add a second
+# gate: /send still reads `blocked` and still allows the proven-deliverable lane.
+BOUNCE_DAY_CEILING = 0.05
+BOUNCE_DAY_MIN_SAMPLE = 10
+
+
+def _env_unit_float(name, default):
+    """Env override in [0, 1], else default. A blank or garbage value does not change the constant."""
+    raw = (os.environ.get(name) or '').strip()
+    if not raw:
+        return default
+    try:
+        v = float(raw)
+    except ValueError:
+        return default
+    if v < 0 or v > 1:
+        return default
+    return v
+
+
+def _env_pos_int(name, default):
+    """Env override >= 1, else default."""
+    raw = (os.environ.get(name) or '').strip()
+    if not raw:
+        return default
+    try:
+        v = int(raw)
+    except ValueError:
+        return default
+    if v < 1:
+        return default
+    return v
 
 
 def _wilson_lower(dead, mailed, z=BOUNCE_Z):
@@ -752,32 +787,53 @@ def _bounce_health():
     turned out to be real. `rate` stays in the payload untouched because the board prints it; it
     is a display number now, and `blocked` is the decision.
     """
+    day_ceiling = _env_unit_float('BOUNCE_DAY_CEILING', BOUNCE_DAY_CEILING)
+    day_min = _env_pos_int('BOUNCE_DAY_MIN_SAMPLE', BOUNCE_DAY_MIN_SAMPLE)
     thin = {'rate': 0.0, 'lb': 0.0, 'mailed': 0, 'dead': 0, 'known': 0,
-            'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING, 'blocked': False}
+            'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING, 'blocked': False,
+            'day_sent': 0, 'day_dead': 0, 'day_rate': 0.0,
+            'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': False}
     try:
         bounced = {str(k).lower() for k in json.load(open(
             os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
     except Exception:
         return dict(thin)
     cutoff = (dt.date.today() - dt.timedelta(days=BOUNCE_WINDOW_DAYS)).isoformat()
+    today = dt.date.today().isoformat()
     mailed = dead = 0
+    day_sent = day_dead = 0
     for e in _load_ledger():
         if e.get('ch') != 'email' or not e.get('message_id'):
             continue
-        if str(e.get('d') or '') < cutoff:
-            continue
-        for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
-            a = a.strip().lower()
-            if not a:
-                continue
-            mailed += 1
-            if a in bounced:
-                dead += 1
+        if str(e.get('d') or '') >= cutoff:
+            for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+                a = a.strip().lower()
+                if not a:
+                    continue
+                mailed += 1
+                if a in bounced:
+                    dead += 1
+        # One day's first touches, counted as emails sent (a row), dead if any recipient is on
+        # the bounce list. Test sends and rows that never got a message id are not a sample.
+        if (e.get('touch') == 'first' and str(e.get('d') or '') == today
+                and not e.get('test_mode') and not e.get('error')):
+            day_sent += 1
+            recips = [str(e.get('to') or '')] + str(e.get('bcc') or '').split(',')
+            if any(a.strip().lower() in bounced for a in recips if a.strip()):
+                day_dead += 1
     lb = _wilson_lower(dead, mailed)
+    day_rate = (day_dead / day_sent) if day_sent else 0.0
+    # More than the ceiling, and only once the sample is large enough to mean it. Exactly 5%
+    # does not trip (rounded so 1/20 is not "more than" 0.05 by a float hair). A short sample
+    # never trips THIS rule; the Wilson bound above still can.
+    day_blocked = day_sent >= day_min and round(day_rate - day_ceiling, 6) > 0
+    trailing_blocked = lb > BOUNCE_CEILING
     return {'rate': (dead / mailed) if mailed else 0.0, 'lb': lb,
             'mailed': mailed, 'dead': dead, 'known': len(bounced),
             'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING,
-            'blocked': lb > BOUNCE_CEILING}
+            'blocked': trailing_blocked or day_blocked,
+            'day_sent': day_sent, 'day_dead': day_dead, 'day_rate': day_rate,
+            'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': day_blocked}
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
@@ -1819,6 +1875,15 @@ class Handler(BaseHTTPRequestHandler):
                     # must treat a held recipient like the 24h-dedupe skip, not like an outage.
                     # An old worker doc ignores it and halts (safe); a new worker against an old
                     # server sees no skip field and also halts (safe).
+                    _day_note = ''
+                    if _hb.get('day_blocked'):
+                        _day_note = (
+                            " Today's first-touch emails: %d of %d bounced (%.0f%%), over the %.0f%% "
+                            "daily ceiling (at least %d sent)."
+                            % (_hb.get('day_dead') or 0, _hb.get('day_sent') or 0,
+                               (_hb.get('day_rate') or 0) * 100,
+                               (_hb.get('day_ceiling') or 0) * 100,
+                               _hb.get('day_min') or 0))
                     return self._json(403, {
                         'ok': False, 'blocked': 'bounce_rate', 'skip': True,
                         'proven_pool': len(_proven),
@@ -1826,7 +1891,8 @@ class Handler(BaseHTTPRequestHandler):
                         'err': (f"BLOCKED: {_hb['dead']} of {_hb['mailed']} addresses mailed in the last "
                                 f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%, and at "
                                 f"least {_hb['lb']*100:.0f}% once the size of that sample is accounted for). "
-                                f"The safe ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%. "
+                                f"The safe ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%."
+                                f"{_day_note} "
                                 f"Verified-only mode is ON: follow-ups to addresses that already accepted "
                                 f"mail still send; this one has {len(_unproven)} recipient(s) with no "
                                 f"acceptance evidence ({', '.join(_unproven[:3])}...). They unblock when "
