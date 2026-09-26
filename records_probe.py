@@ -127,6 +127,12 @@ def mint_token():
         from captcha_solver import solve_turnstile
     except Exception as exc:
         return None, 'captcha_solver unavailable (%s)' % type(exc).__name__
+    # A paid 2Captcha solve: under the shared monthly cap (paid_reads.py), checked and counted in one
+    # locked step before it is submitted. A spent month refuses it, and the probe stops here.
+    import paid_reads
+    ok, why = paid_reads.debit(paid_reads.SOLVE_USD, 'records_probe')
+    if not ok:
+        return None, 'monthly paid-reads cap: %s' % why
     token = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
     if not token:
         return None, '2Captcha returned no token'

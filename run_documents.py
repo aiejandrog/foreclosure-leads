@@ -572,9 +572,11 @@ def main(argv=None):
         interpreter = document_interpreter.build('api')
         # The shared monthly paid-reads cap (paid_reads.py): the run's cap is cut to what the month
         # has left, and a month with nothing left runs without interpretation (logged), never over.
+        # Each call is then debited at its worst case before it is made and settled after
+        # (paid_reads.cap_budget), so a spender running beside this one cannot share the last cents.
         _icap = paid_reads.clamp(args.max_spend, 'run_documents interpret')
         if _icap > 0:
-            budget = document_interpreter.Budget(_icap)
+            budget = paid_reads.cap_budget(document_interpreter.Budget(_icap), 'run_documents interpret')
         else:
             interpreter = None
     vision_budget = None
@@ -650,11 +652,13 @@ def main(argv=None):
         from document_case_budget import CaseAllocator, MemoryState
         import paid_reads
         # SHARED MONTHLY CAP (paid_reads.py). The night's vision cap is cut to what the month has
-        # left; nothing left = no vision reads this run (logged), OCR still runs. MirrorState writes
-        # each read to the monthly ledger as it settles, so a killed run cannot hide its spend.
+        # left; nothing left = no vision reads this run (logged), OCR still runs. Each read is
+        # debited at its worst case BEFORE the call and settled to its real price after
+        # (paid_reads.cap_budget), so a killed run cannot hide its spend and a concurrent spender
+        # cannot take the same last cents.
         _vcap = paid_reads.clamp(args.vision_max_spend, 'run_documents vision')
-        vision_budget = (CaseAllocator(PersistentBudget(_vcap, paid_reads.MirrorState(
-                                           MemoryState(), 'run_documents vision')),
+        vision_budget = (CaseAllocator(paid_reads.cap_budget(PersistentBudget(_vcap, MemoryState()),
+                                                             'run_documents vision'),
                                        [entry['case'] for entry in picked])
                          if _vcap > 0 else None)
     ocr = None if args.no_ocr else DS.winocr
@@ -696,9 +700,6 @@ def main(argv=None):
             _print_case(dossier)
     finally:
         queue.close()
-        if budget is not None and budget.spent > 0:
-            import paid_reads
-            paid_reads.record(budget.spent, 'run_documents interpret')
         if captcha_state is not None:
             from captcha_cost_cutoff import CutoffStopped
             token_budget['ladder'].close()

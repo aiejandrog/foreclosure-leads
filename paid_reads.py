@@ -11,6 +11,19 @@ per-run ceiling or none:
     run_documents.py    Claude vision / interpretation reads, and paid token mints, when the
                         document stage is switched on (DEALFLOW_DOCS=1)
 
+The same day the cap was extended to every other paid read in the repo, so "$50 a month" means
+all of them, not the nightly four:
+
+    run_documents --backfill   the manual document backfill's Claude reads (its own cumulative
+                        ceiling stays; the month is debited per read and pauses it when spent)
+    run_owner_tokens.py the token-only batch's paid mints (its own $1.50 cutoff stays)
+    records_probe.py    one Turnstile solve per probed search shape
+    broward_plaintiff   the Broward clerk solve (stub_resolve and county_plaintiffs go through it)
+    palmbeach_liens     Palm Beach Landmark reCAPTCHA v2 solves, including its worker pool, and
+                        fl_lp/palmbeach and broward_judgment_dates --pb, which solve through it
+    captcha_solver.py   its own live smoke test
+BatchData keeps its own budget (bd_budget.py); it is not a per-read captcha or Claude spend.
+
 A per-run cap bounds a night, not a month: four scripts each honouring their own ceiling still add
 up, which is the exact lesson bd_budget.py records for BatchData. So every one of them asks THIS
 module before it pays and writes what it paid here. Hands-off spend was estimated at ~$24/month
@@ -31,9 +44,15 @@ DEALFLOW_PAID_LEDGER overrides the ledger path (the suites use it).
 
 Precision: 2Captcha solves are counted when SUBMITTED, at the measured price (a failed solve may
 still bill, and counting before the solve means a crash cannot forget it), so the ledger runs a
-little high, never low. Claude reads are recorded at their billed token price as each one settles.
-Spenders on one machine run one after another in the nightly, so the check-then-spend window is one
-solve or one page read; two paying processes at the same moment could each take the last few cents.
+little high, never low. A PaidCutoffSolver task is reserved at the measured price and settled to its
+own receipt. Claude reads are reserved at their worst case before the call and settled to the
+billed price after; a call started and never settled keeps its worst case.
+
+CONCURRENCY: debit() does the cap check and the ledger write as ONE step under a file lock
+(ledger path + '.lock', taken over after 120s if a writer crashed), re-reading the ledger inside the
+lock. Two spenders running at the same moment on this machine therefore cannot both take the last
+few cents: the second re-reads the first one's write and is refused. The ledger is per machine; a
+second machine running paid work would keep its own month.
 
     python paid_reads.py        # this month's spend, the cap, what is left, by spender
 """
@@ -51,6 +70,7 @@ ENV_LEDGER = 'DEALFLOW_PAID_LEDGER'
 CONFIG = os.path.join(HERE, 'paid_reads.json')          # gitignored — {"monthly_cap": 50}
 LEDGER_NAME = 'paid_reads_ledger.json'
 SOLVE_USD = 0.0033                                      # measured per Turnstile solve (records_liens.PAID_SOLVE_USD)
+RECAPTCHA_V2_USD = 0.003                                # Palm Beach Landmark v2 solve (palmbeach_liens: '$0.003')
 
 _LOCK = threading.Lock()
 _BROKEN = {'why': ''}      # set when a spend could not be written: this process pays for nothing more
@@ -222,12 +242,15 @@ class _FileLock:
                 pass
 
 
-def record(usd, source):
-    """Add a spend to this month. True when written. On False nothing more is paid in this process."""
+def _write(usd, source, enforce):
+    """Add `usd` (may be negative: a settlement refund) to this month under the ledger lock.
+
+    enforce=True is debit(): the cap is re-checked INSIDE the lock, against the ledger as it is on
+    disk at that moment, so two processes cannot both take the last few cents -- the second one
+    re-reads the first one's write and is refused. Returns (ok, why)."""
     usd = float(usd or 0)
-    if usd <= 0:
-        return True
     path = ledger_path()
+    why = ''
     with _LOCK:
         try:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -235,40 +258,79 @@ def record(usd, source):
             pass
         with _FileLock(path) as lk:
             if not lk.held:
-                _BROKEN['why'] = 'paid-reads ledger %s is locked by another writer' % path
+                _BROKEN['why'] = why = 'paid-reads ledger %s is locked by another writer' % path
             else:
                 led, problem = _load()
                 if problem:
-                    _BROKEN['why'] = problem
+                    _BROKEN['why'] = why = problem
                 else:
                     m = month()
                     ent = led.get(m)
                     if not isinstance(ent, dict):
                         ent = {'total': _month_total(ent), 'by': {}}
-                    ent['total'] = round(float(ent.get('total', 0) or 0) + usd, 6)
-                    by = ent.setdefault('by', {})
-                    by[source] = round(float(by.get(source, 0) or 0) + usd, 6)
-                    led[m] = ent
-                    tmp = path + '.tmp'
-                    for i in range(6):          # Windows: an indexer or AV scan can hold the file a moment
-                        try:
-                            with open(tmp, 'w', encoding='utf-8') as f:
-                                json.dump(led, f, indent=1, sort_keys=True)
-                            os.replace(tmp, path)
-                            return True
-                        except OSError:
-                            time.sleep(0.25 * (i + 1))
-                    _BROKEN['why'] = 'paid-reads ledger %s could not be written' % path
-    _say(source, _BROKEN['why'])
-    return False
+                    total = float(ent.get('total', 0) or 0)
+                    if enforce:
+                        c, cproblem = cap()
+                        if _BROKEN['why']:
+                            why = _BROKEN['why']
+                        elif cproblem:
+                            why = 'monthly cap setting invalid: %s' % cproblem
+                        elif total + usd > c + 1e-9:
+                            why = ('monthly paid-reads cap: $%.4f left of $%.2f in %s, next read costs ~$%.4f'
+                                   % (max(0.0, c - total), c, m, usd))
+                    if not why:
+                        ent['total'] = max(0.0, round(total + usd, 6))
+                        by = ent.setdefault('by', {})
+                        by[source] = max(0.0, round(float(by.get(source, 0) or 0) + usd, 6))
+                        led[m] = ent
+                        tmp = path + '.tmp'
+                        for i in range(6):      # Windows: an indexer or AV scan can hold the file a moment
+                            try:
+                                with open(tmp, 'w', encoding='utf-8') as f:
+                                    json.dump(led, f, indent=1, sort_keys=True)
+                                os.replace(tmp, path)
+                                return True, ''
+                            except OSError:
+                                time.sleep(0.25 * (i + 1))
+                        _BROKEN['why'] = why = 'paid-reads ledger %s could not be written' % path
+    _say(source, why)
+    return False, why
+
+
+def record(usd, source):
+    """Add a spend that already happened. True when written. On False nothing more is paid in this
+    process. Never refuses on the cap: the money is gone either way, and the ledger must say so."""
+    usd = float(usd or 0)
+    if usd <= 0:
+        return True
+    return _write(usd, source, False)[0]
+
+
+def debit(usd, source):
+    """ATOMIC check-and-count BEFORE a paid call: (ok, why). The cap check and the write happen
+    under one file lock, so concurrent spenders on this machine cannot overrun the cap between
+    "is there room?" and "I took it". Refused -> nothing written, logged once per source+reason."""
+    usd = float(usd or 0)
+    if usd <= 0:
+        return allow(0, source)
+    return _write(usd, source, True)
+
+
+def adjust(delta, source):
+    """Settle a debit against what the call really cost: negative gives back an over-reservation
+    (a task that never billed, a read cheaper than its worst case). Totals never go below zero."""
+    delta = float(delta or 0)
+    if abs(delta) < 1e-12:
+        return True
+    return _write(delta, source, False)[0]
 
 
 def guarded(solve, source, unit=SOLVE_USD):
     """Wrap a 2Captcha solve function: check the month first, count the solve BEFORE submitting it.
     Returns None (a failed solve, which every caller already handles) when the cap refuses."""
     def _solve(*args, **kwargs):
-        ok, _ = allow(unit, source)
-        if not ok or not record(unit, source):
+        ok, _ = debit(unit, source)            # checked and counted in one locked step
+        if not ok:
             return None
         return solve(*args, **kwargs)
     _solve._paid_reads = True
@@ -292,7 +354,8 @@ class CutoffGuard:
 
     def __call__(self, *args, **kwargs):
         from captcha_cost_cutoff import CutoffStopped
-        ok, why = allow(self._unit, self._source)
+        # reserve the measured price in one locked check-and-count, then settle to the receipt
+        ok, why = debit(self._unit, self._source)
         if not ok:
             raise CutoffStopped(why)
         before = self._actual()
@@ -300,34 +363,54 @@ class CutoffGuard:
             return self._solver(*args, **kwargs)
         finally:
             after = self._actual()
-            # an unknown receipt still cost something: count the measured price, never nothing
-            spent = (after - before) if (before is not None and after is not None) else self._unit
-            if spent > 0 and not record(spent, self._source):
-                pass                                   # _BROKEN is set; the next call refuses
+            # an unknown receipt still cost something: keep the measured price, never nothing
+            if before is not None and after is not None:
+                adjust((after - before) - self._unit, self._source)
 
     def __getattr__(self, name):
         return getattr(self._solver, name)
 
 
-class MirrorState:
-    """Wrap a document_backfill-style state ({'actual_usd', 'reserved'} + save()) so every settled
-    Claude read is also written to this month's ledger as it lands, not only at the end of the run."""
+def cap_budget(budget, source):
+    """Put a Claude-read budget (document_interpreter.Budget, document_backfill.PersistentBudget) under
+    the monthly cap, per call and atomically: each call's WORST case is debited (one locked
+    check-and-count) before the call is made, and settled to its real price when it is recorded.
+    Refused -> BudgetExhausted, the budget's own "stop paying" signal, with `exhausted` set so a
+    backfill PAUSES instead of walking every remaining case. A call started and never settled keeps
+    its worst case on the ledger (runs high, never low). Returns the same object, patched."""
+    from document_interpreter import BudgetExhausted
+    if getattr(budget, '_paid_reads', False):
+        return budget
+    inner_check = budget.check
+    settle_name = 'record_read' if hasattr(budget, 'record_read') else 'record'
+    inner_settle = getattr(budget, settle_name)
+    held = []
 
-    def __init__(self, inner, source):
-        self._inner, self._source = inner, source
-        self.data = inner.data
-        self._seen = float(inner.data.get('actual_usd') or 0)
+    def check(input_tokens, max_output_tokens):
+        worst = budget.price(input_tokens, max_output_tokens)
+        ok, why = debit(worst, source)
+        if not ok:
+            if hasattr(budget, 'exhausted'):
+                budget.exhausted = True
+            raise BudgetExhausted(why)
+        try:
+            out = inner_check(input_tokens, max_output_tokens)
+        except BaseException:
+            adjust(-worst, source)                 # the budget's own cap refused: nothing was sent
+            raise
+        held.append(worst)
+        return out
 
-    def save(self):
-        self._inner.save()
-        now = float(self.data.get('actual_usd') or 0)
-        if now > self._seen:
-            record(now - self._seen, self._source)
-            self._seen = now
+    def settle(input_tokens, output_tokens, *args, **kwargs):
+        out = inner_settle(input_tokens, output_tokens, *args, **kwargs)
+        if held:
+            adjust(budget.price(input_tokens, output_tokens) - held.pop(), source)
+        return out
 
-    def __getattr__(self, name):
-        return getattr(self._inner, name)
-
+    budget.check = check
+    setattr(budget, settle_name, settle)          # PersistentBudget.record() calls self.record_read()
+    budget._paid_reads = True
+    return budget
 
 def main(argv=None):
     st = status()

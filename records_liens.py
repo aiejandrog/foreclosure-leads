@@ -429,14 +429,17 @@ def fetch_via_turnstile(owner_lf, tries=3):
     for _ in range(max(1, tries)):
         if not _may_submit():
             return None
+        # The monthly ledger first, in ONE locked check-and-count (paid_reads.debit): a spender
+        # running beside this one cannot take the same last cents between the check and the count.
+        import paid_reads
+        _ok, _why = paid_reads.debit(_SPEND.get('unit') or PAID_SOLVE_USD, 'records_liens')
+        if not _ok:
+            _SPEND['stopped'] = _why or 'the monthly paid-reads ledger refused the solve'
+            return None
         _SPEND['submits'] += 1                  # counted on submit: a failed solve may still bill
         _ledger_save()                          # before the solve, so a crash cannot forget it
         if _SPEND['stopped']:
             return None                         # the ledger could not be written: no unrecorded solve
-        import paid_reads                       # the monthly ledger too, on the same terms
-        if not paid_reads.record(_SPEND.get('unit') or PAID_SOLVE_USD, 'records_liens'):
-            _SPEND['stopped'] = 'the monthly paid-reads ledger could not be written'
-            return None
         tok = solve_turnstile(TS_SITE_KEY, OR_BASE)
         if not tok:
             continue
