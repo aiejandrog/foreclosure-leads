@@ -98,9 +98,7 @@ class VisionReader:
             import anthropic
         except ImportError:
             raise DI.NotConfigured('the anthropic SDK is not installed (pip install anthropic)')
-        if not (os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')):
-            raise DI.NotConfigured('no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment')
-        self._client = anthropic.Anthropic()
+        self._client = DI.api_client(anthropic)
         return self._client
 
     def read_page(self, png_bytes, budget, instruction=INSTRUCTION, parser=None):

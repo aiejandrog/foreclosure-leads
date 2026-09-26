@@ -523,6 +523,7 @@ deal_desk.json
 # would live on one laptop.
 !_archivefilltest.py
 !_boardaccuracytest.py
+!_recordsqstest.py
 !_docboardtest.py
 # _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
 # file before the sale-history cache restored them (the restore ran only inside make_tracker, in

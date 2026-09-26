@@ -41,6 +41,57 @@ class NotConfigured(RuntimeError):
     """This backend cannot run here, and no other backend will be substituted for it."""
 
 
+# A gitignored key file beside the code, read the way captcha_solver reads captcha.key. It exists so
+# the key reaches only the processes that read documents: a User-wide ANTHROPIC_API_KEY also makes
+# every Claude Code session on that machine bill the API instead of the subscription.
+KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'anthropic.key')
+
+
+# messages.count_tokens (every read is priced BEFORE it is sent) is not on the non-beta client until
+# anthropic 0.41. The laptop had 0.37.1 on 2026-09-24, which would have failed on the first page of
+# the first night; 0.37-0.39 also fail to construct at all beside httpx 0.28.
+MIN_SDK = '0.41'
+
+
+def api_client(anthropic, **kw):
+    """anthropic.Anthropic() for a metered reader, or NotConfigured naming the fix."""
+    need = 'pip install -U "anthropic>=%s"' % MIN_SDK
+    opts = api_client_kwargs()
+    opts.update(kw)        # an explicit argument wins; never a duplicate-keyword TypeError
+    try:
+        client = anthropic.Anthropic(**opts)
+    except TypeError as exc:
+        raise NotConfigured('the anthropic SDK %s cannot start here (%s): %s'
+                            % (getattr(anthropic, '__version__', '?'), exc, need))
+    if not hasattr(client.messages, 'count_tokens'):
+        raise NotConfigured('the anthropic SDK %s has no messages.count_tokens: %s'
+                            % (getattr(anthropic, '__version__', '?'), need))
+    return client
+
+
+def api_client_kwargs():
+    """Credentials for anthropic.Anthropic(): the environment first, then anthropic.key.
+
+    Raises NotConfigured when neither exists. Never returns or logs the key anywhere else."""
+    if os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN'):
+        return {}
+    if os.path.exists(KEY_FILE):
+        with open(KEY_FILE, 'rb') as fh:
+            raw = fh.read()
+        # `echo KEY > anthropic.key` in Windows PowerShell 5.1 writes UTF-16LE with a BOM, and
+        # Notepad can add a UTF-8 BOM; either would otherwise crash here or send a corrupt key.
+        codec = 'utf-16' if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else 'utf-8-sig'
+        try:
+            key = raw.decode(codec).strip()
+        except UnicodeDecodeError:
+            raise NotConfigured('anthropic.key is not readable text; rewrite it as one line of '
+                                'plain text') from None
+        if key:
+            return {'api_key': key}
+    raise NotConfigured('no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment '
+                        'and no anthropic.key beside the code')
+
+
 class BudgetExhausted(RuntimeError):
     """The run's dollar cap would be exceeded by the next call. The call is not made."""
 
@@ -117,11 +168,9 @@ class ApiInterpreter(Interpreter):
             import anthropic
         except ImportError:
             raise NotConfigured('the anthropic SDK is not installed (pip install anthropic)')
-        if not (os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')):
-            # Deliberately not falling through to the CLI. An unattended run that quietly switched
-            # billing model is the failure this module exists to prevent.
-            raise NotConfigured('no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment')
-        self._client = anthropic.Anthropic()
+        # Deliberately not falling through to the CLI when this raises. An unattended run that
+        # quietly switched billing model is the failure this module exists to prevent.
+        self._client = api_client(anthropic)
         return self._client
 
     def interpret(self, pages, budget, instruction=INSTRUCTION):

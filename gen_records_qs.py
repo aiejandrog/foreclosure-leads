@@ -19,11 +19,12 @@ import re
 import time
 import urllib.parse
 
+import paths as P
 import records_liens as R          # split_owner (corrected surname order), OR_BASE, S, TS_SITE_KEY, records_by_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
-CACHE = os.path.join(HERE, 'records_qs.json')
+CACHE = P.records_qs()
 MAX_HITS = 100   # a real individual owner rarely has >100 recorded docs; more = common-name over-match -> skip
 DEADLINE_SEC = int(os.environ.get('GEN_DEADLINE', '480'))   # stay under the scheduled task's kill; resume next run
 

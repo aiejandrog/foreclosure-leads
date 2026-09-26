@@ -72,43 +72,52 @@ to DEALFLOW_DIR (outside the repo, outside OneDrive) through case_review.output_
 verdict it reports is equity_state's existing one, computed from the recorded chain exactly as it
 always was — reading a document does not move a lead into a FACT state.
 
-THE LINE FOR refresh-dealflow.bat, to paste AFTER the [2b/5] records step:
+THE NIGHTLY LINE is refresh-dealflow.bat's [2e/5] stage, after the [2b/5] records step:
 
-    echo [2e/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
-    python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 10 --captcha-max-spend 1.00 >> "%LOG%" 2>&1
+    if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
 
-(No parentheses inside that echo: refresh-dealflow.bat puts stages inside `if` blocks, and cmd ends
-a block at the first unescaped ')'. That exact bug cost [5/5] every run from 08-20 to 09-19.)
---limit 25 with oldest-dossier-first ordering cycles every live Miami lead; --token-budget 10 is at
-most ten captcha-backed searches a night for owners the 40-a-night filler has not reached (~$0.003
-each is an ESTIMATE from county_plaintiffs.py:368). Each night also writes
-dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no token, read, judgments found, judgments
-SATISFIED, and the commonest open gaps.
+It does nothing until DEALFLOW_DOCS=1 is set; setting it is the decision to spend up to $1.00 a
+night on vision reads. --token-budget stays 0 (no paid owner-search tokens). #53 now routes token
+minting through PaidCutoffSolver, so raising it is possible, but it is a separate one-line change
+that must add --captcha-max-spend and needs the owner's go on the spend.
 
---vision needs ANTHROPIC_API_KEY in the environment the SCHEDULED TASK runs in, which means a
-User (or Machine) environment variable on the machine that runs the night, not one typed into a
-shell. Without it this stage exits 2 having spent nothing and read nothing; with --vision dropped
-it still runs, and Miami scans simply stay unread where the watermark crosses the figures.
+--max-minutes 20 starts no new case after twenty minutes. A case already running is allowed to
+finish, so one slow case can still overrun: the flag bounds the stage, it does not guarantee it.
+--limit 10 because CaseAllocator splits --vision-max-spend evenly over the cases picked and a
+case may not borrow from one that has not finished yet: $1.00 over 10 gives each case $0.10,
+enough for one three-page judgment at the measured $0.0675, where 25 left each $0.04 and the
+first cases stopped part-way. Oldest-dossier-first ordering still cycles every live Miami lead,
+ten a night. Each night also writes dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no
+token, read, judgments found, judgments SATISFIED, and the commonest open gaps.
 
-Deliberately not added to the .bat here: cmd reads a batch file by byte offset WHILE it runs, so
-editing a live publish path mid-flight corrupts the running night. Paste it when nothing is running.
+--vision needs an Anthropic API key the SCHEDULED TASK can see: put it in anthropic.key beside the
+code (gitignored by *.key, read like captcha.key). Do NOT set a User or Machine ANTHROPIC_API_KEY:
+that makes every Claude Code session on the machine bill the API instead of the subscription. An
+ANTHROPIC_API_KEY already in the environment still wins, as TWOCAPTCHA_KEY does over captcha.key.
+Without either this stage exits 2 having spent nothing and read nothing; with --vision dropped it
+still runs, and Miami scans simply stay unread where the watermark crosses the figures.
+
+Never pull a change to that .bat while a refresh is running: cmd reads a batch file by byte offset
+WHILE it runs, so changing a live publish path mid-flight corrupts the running night.
 """
 import argparse
 import json
 import math
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 import case_dossier
 import case_review
 import document_store as DS
 import miami_judgment as MJ
+import paths as P
 from document_queue import DocumentQueue
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
-QS_CACHE = os.path.join(HERE, 'records_qs.json')
+QS_CACHE = P.records_qs()
 CHAINS = os.path.join(HERE, 'records_liens.json')
 COUNTY = 'MIAMI-DADE'
 
@@ -492,7 +501,7 @@ def main(argv=None):
                         help='hard dollar cap for --interpret. No cap, no interpretation.')
     parser.add_argument('--vision', action='store_true',
                         help='read page images through the Claude API when OCR\'s figures do not '
-                             'add up (needs --vision-max-spend and ANTHROPIC_API_KEY)')
+                             'add up (needs --vision-max-spend and anthropic.key)')
     parser.add_argument('--vision-max-spend', type=float, default=None,
                         help='hard dollar cap for --vision ACROSS THE WHOLE RUN. One measured '
                              'judgment cost $0.0675 on claude-opus-5 (2026-09-22, three pages, '
@@ -518,6 +527,11 @@ def main(argv=None):
                              'leads_final.json in file order, 40 owners a run, so an owner low '
                              'in that order has no token yet — which is what blocks asking for '
                              'a named case on demand. Nothing here filters by case type.')
+    parser.add_argument('--max-minutes', type=float, default=0,
+                        help='start no new case after this many minutes (0 = no limit). A case '
+                             'already running still finishes, so this bounds the stage rather '
+                             'than guaranteeing it; the nightly line sets it so a slow clerk '
+                             'does not hold the board rebuild behind case after case')
     parser.add_argument('--captcha-max-spend', type=float, default=None,
                         help='required with --token-budget: the real-balance captcha cutoff in '
                              'dollars, at most 1.50, enforced by captcha_cost_cutoff against the '
@@ -594,7 +608,7 @@ def main(argv=None):
                            'not have it: it is gitignored. Copy it in, or run with budgets at 0.\n')
     if not os.path.exists(QS_CACHE) and not args.token_budget:
         print('run_documents: WARNING %s is missing and --token-budget is 0, so every case will be '
-              'skipped for no search token. Copy it in from the main repo folder.' % QS_CACHE)
+              'skipped for no search token. Copy it in from the machine that has one.' % QS_CACHE)
     leads = _lead_rows(only=args.case or None)
     if not leads:
         print('run_documents: %s is missing or empty; nothing to do.' % LEADS)
@@ -656,8 +670,13 @@ def main(argv=None):
     queue = DocumentQueue()
     written = read_ok = 0
     dossiers = []
+    started = time.monotonic()
     try:
         for entry in picked:
+            if args.max_minutes and time.monotonic() - started > args.max_minutes * 60:
+                print('run_documents: --max-minutes %g reached; %d case(s) left for the next run.'
+                      % (args.max_minutes, len(picked) - written))
+                break
             dossier = run_case(entry, qs_cache, queue=queue, ocr=ocr,
                                keep_images=args.keep_images, interpreter=interpreter,
                                budget=budget, vision_budget=vision_budget,

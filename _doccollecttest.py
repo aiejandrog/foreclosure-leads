@@ -832,10 +832,69 @@ class BudgetTests(unittest.TestCase):
 
     def test_missing_api_credentials_raise_rather_than_switching_to_the_cli(self):
         saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'no-such-anthropic.key')
         try:
             with self.assertRaises((DI.NotConfigured, ValueError)):
                 DI.ApiInterpreter().client()
         finally:
+            DI.KEY_FILE = key_file
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_an_sdk_without_count_tokens_is_a_named_gap_before_any_spend(self):
+        class _Messages:
+            pass
+
+        class _Client:
+            def __init__(self, **kw):
+                self.messages = _Messages()
+
+        class _OldSdk:
+            __version__ = '0.37.1'
+            Anthropic = _Client
+
+        os.environ['ANTHROPIC_API_KEY'] = 'sk-test-not-a-real-key'
+        try:
+            with self.assertRaises(DI.NotConfigured) as ctx:
+                DI.api_client(_OldSdk)
+        finally:
+            del os.environ['ANTHROPIC_API_KEY']
+        self.assertIn('anthropic>=', str(ctx.exception))
+
+    def test_a_key_file_written_by_powershell_or_notepad_reads_cleanly(self):
+        saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'anthropic.key')
+        try:
+            # PowerShell 5.1 `echo KEY > file` is UTF-16LE with a BOM; Notepad may add a UTF-8 BOM.
+            for raw in ('sk-test-bom\r\n'.encode('utf-16'), b'\xef\xbb\xbfsk-test-bom\n'):
+                with open(DI.KEY_FILE, 'wb') as fh:
+                    fh.write(raw)
+                self.assertEqual(DI.api_client_kwargs(), {'api_key': 'sk-test-bom'})
+            with open(DI.KEY_FILE, 'wb') as fh:
+                fh.write(b'\xff\xff\xc3(')
+            with self.assertRaises(DI.NotConfigured):
+                DI.api_client_kwargs()
+        finally:
+            os.remove(DI.KEY_FILE)
+            DI.KEY_FILE = key_file
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_the_key_file_is_used_when_the_environment_has_no_key(self):
+        saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'anthropic.key')
+        try:
+            with open(DI.KEY_FILE, 'w', encoding='utf-8') as fh:
+                fh.write('sk-test-not-a-real-key\n')
+            self.assertEqual(DI.api_client_kwargs(), {'api_key': 'sk-test-not-a-real-key'})
+            os.environ['ANTHROPIC_API_KEY'] = 'from-env'
+            self.assertEqual(DI.api_client_kwargs(), {}, 'the environment wins, as in captcha_solver')
+        finally:
+            os.environ.pop('ANTHROPIC_API_KEY', None)
+            os.remove(DI.KEY_FILE)
+            DI.KEY_FILE = key_file
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
@@ -1304,10 +1363,12 @@ class VisionTests(unittest.TestCase):
     def test_no_api_key_is_a_named_gap_never_a_fallback(self):
         reader = DV.VisionReader()
         keys = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'no-such-anthropic.key')
         try:
             with self.assertRaises(DI.NotConfigured):
                 reader.client()
         finally:
+            DI.KEY_FILE = key_file
             for k, v in keys.items():
                 if v is not None:
                     os.environ[k] = v

@@ -72,7 +72,7 @@ def leads_hit(folio):
 
 # ---- 4. Official Records chain (best-effort; captcha-walled) -------------------------------
 OR_BASE = 'https://onlineservices.miamidadeclerk.gov/officialrecords/'
-QS_CACHE = os.path.join(HERE, 'records_qs.json')
+QS_CACHE = P.records_qs()
 
 def or_chain(owner_clean, budget_sec=75):
     """Owner's recorded doc chain, via the CACHED search token only.

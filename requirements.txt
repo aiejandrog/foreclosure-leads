@@ -19,10 +19,10 @@ cryptography>=42
 PyMuPDF>=1.24         # document_store: rebuild, page-count and per-page text of county PDFs
                       # (fl_lp/broward_pin.py and _cardtest.py already import it as `fitz`)
 # LOCAL ONLY — the metered second reader, and nothing else imports it.
-#   anthropic
+#   anthropic>=0.41   (messages.count_tokens; 0.37.1 was on the laptop 2026-09-24 and cannot read)
 # document_vision.py reads a page IMAGE with the Claude API when OCR's figures do not add up. The
 # import is function-local and reports a named gap (NotConfigured) rather than an ImportError, so
 # every other module imports fine without it and no scheduled run can start spending by accident:
 # --vision must be asked for by name and requires --max-spend.
-# Install locally with:  pip install anthropic
+# Install locally with:  pip install -U "anthropic>=0.41"
 segno>=1.6            # QR codes on the business card back (bsg_cards.qr_svg)

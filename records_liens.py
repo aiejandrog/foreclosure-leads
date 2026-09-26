@@ -56,9 +56,11 @@ def _parse_recd(s):
     return None
 import requests
 
+import paths as P
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
-QS_CACHE = os.path.join(HERE, 'records_qs.json')      # owner_clean -> search token (from gen_records_qs.py)
+QS_CACHE = P.records_qs()      # owner_clean -> search token (from gen_records_qs.py); under DEALFLOW_DIR
 OUT = os.path.join(HERE, 'records_liens.json')         # Case # -> lien result  (gitignored)
 OR_BASE = 'https://onlineservices.miamidadeclerk.gov/officialrecords/'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'

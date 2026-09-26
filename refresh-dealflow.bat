@@ -237,6 +237,18 @@ rem  no CAPTCHA_KEY repo secret. Until that secret exists, this laptop line is t
 rem  moving Palm Beach coverage.
 if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
 
+echo [2e/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
+rem  run_documents.py's documented nightly line, with --token-budget 0: no paid owner-search tokens.
+rem  #53 routes token minting through PaidCutoffSolver, so raising it is a separate one-line change
+rem  that must add --captcha-max-spend and needs the owner's go. Setting DEALFLOW_DOCS=1 is the decision to spend up to $1.00 a
+rem  night on vision reads; it is off until someone sets it on purpose. Exit code deliberately
+rem  unread: a document stage failing must never stop or mark the board rebuild.
+rem  --max-minutes 20: no new case starts after twenty minutes. A case already running finishes, so
+rem  one slow case can still overrun; the cap bounds the stage, it does not guarantee it.
+rem  --limit 10: the $1.00 vision cap is split evenly across the cases picked, and 10 gives each
+rem  $0.10, enough for one three-page judgment at the measured $0.0675. 25 left each $0.04.
+if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
+
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
 rem  file most foreclosures over a rolling window, keep the LIS PENDENS, dedupe -> the owner the DAY

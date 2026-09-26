@@ -1171,7 +1171,7 @@ def main(argv=None):
             vision_reader.client()
         except DI.NotConfigured as gap:
             parser.exit(2, '--vision cannot run here: %s\n'
-                           'Set ANTHROPIC_API_KEY in this shell, or drop --vision.\n' % gap)
+                           'Put the key in anthropic.key beside the code, or drop --vision.\n' % gap)
 
     if args.dry_run:
         inventory = enumerate_case(args.case)
