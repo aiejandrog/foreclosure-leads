@@ -3,7 +3,9 @@ rem =====================================================================
 rem  DealFlow Opt-out Sync - daily 07:15, before the 08:00 Morning Worker.
 rem  Runs morning_sync.py: replies.py (inbox scan) -> optout_sync.py (the
 rem  one ledger writer, ledger_add) -> ledger_sync.py (add-only union with
-rem  the other machine). No rebuild, no publish, no push to this repo.
+rem  the other machine). No board rebuild and no docs/ publish. The only extra
+rem  step is pipeline_alerts.py, which commits the counts-only alert file and
+rem  always exits 0, so it cannot change whether sends hold.
 rem  Then bounces.py harvests hard bounces into bounced_emails.json. That one
 rem  is logged only: a failed bounce scan never holds sends or changes rc.
 rem  It records the result in sync_status.json; unless TODAY's run finished
