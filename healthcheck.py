@@ -572,6 +572,19 @@ if os.path.exists(docs):
 else:
     add('FAIL', 'docs/index.html', 'not built')
 
+# ---- Official Records daily file (optional, report-only) ---------------------------------------
+# Paid Clerk CDS "Records" folder. Off unless DEALFLOW_OR_DAILY=1, and the bytes never
+# enter this repo. A machine that has never enabled it has no status file and adds no
+# row here. Near expiry, a units drop, or a logged gap warns. None of those is a
+# compliance fail, and none of them blocks the publish.
+try:
+    import or_daily_file as _or_daily
+    for _lvl, _name, _detail in _or_daily.health_checks():
+        add(_lvl, _name, _detail)
+except Exception as _or_e:
+    if (os.environ.get('DEALFLOW_OR_DAILY') or '').strip() == '1':
+        add('WARN', 'official records daily', 'check errored: %s' % str(_or_e)[:80])
+
 # ---- report + health.json ---------------------------------------------------------------------
 fails = [x for x in R if x[0] == 'FAIL']; warns = [x for x in R if x[0] == 'WARN']
 icon = {'PASS': 'ok  ', 'WARN': 'WARN', 'FAIL': 'FAIL'}
