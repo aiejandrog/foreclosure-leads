@@ -55,6 +55,9 @@ def _tracerfy_spent_today():
     day = bd_budget._load().get(str(date.today()))
     if not isinstance(day, dict):
         return 0.0
+    # Prefix, not equality: skiptrace-tracerfy-unconfirmed (a timeout/DNS/5xx whose receipt we
+    # never saw) counts against this cap too. Dropping the prefix would let an ambiguous call
+    # slip past the backstop.
     return sum(v for k, v in (day.get('by') or {}).items() if str(k).startswith('skiptrace-tracerfy'))
 
 def _require_tracerfy(cost):
@@ -334,6 +337,65 @@ def _err_body(r):
         return (r.text or '').strip()[:400], {}
 
 
+# $0.02/credit. Instant lookup deducts 5 on a hit (PROVIDERS['tracerfy']['cost'] == 0.10) and 0
+# on a miss. The receipt field is credits_deducted; hit:true without it is the same 5-credit hit.
+TRACERFY_CREDIT_USD = 0.02
+TRACERFY_NOTE = 'skiptrace-tracerfy'
+TRACERFY_NOTE_UNCONFIRMED = 'skiptrace-tracerfy-unconfirmed'
+# Answered, and the lookup did not run. 402 is the insufficient-credits refusal.
+_TRACERFY_NOT_BILLED = {400, 401, 402, 403, 404, 405, 409, 422, 429}
+
+
+def tracerfy_ledger_charge(status, body, cost):
+    """(dollars, note) to record for one Tracerfy lookup, or None if it did not bill.
+
+    credits_deducted is the receipt: 5 (or whatever the response says) on a hit, 0 on a miss.
+    A refusal — insufficient credits, a bad key, a 400, a 429 — did not bill. No response at all
+    (timeout, DNS, connection reset) or a 5xx / 200 that never says whether it billed is
+    ambiguous: count `cost` toward the daily cap under TRACERFY_NOTE_UNCONFIRMED so the cap
+    stays conservative without looking like a confirmed hit.
+    """
+    if isinstance(body, dict) and 'credits_deducted' in body:
+        raw = body.get('credits_deducted')
+        # A JSON boolean is not a receipt. Count the cap price rather than drop it.
+        if isinstance(raw, bool):
+            return (float(cost), TRACERFY_NOTE_UNCONFIRMED)
+        try:
+            credits = int(raw)
+        except (TypeError, ValueError):
+            return (float(cost), TRACERFY_NOTE_UNCONFIRMED)
+        if credits < 0:
+            return (float(cost), TRACERFY_NOTE_UNCONFIRMED)
+        if credits == 0:
+            return None
+        return (round(credits * TRACERFY_CREDIT_USD, 4), TRACERFY_NOTE)
+    if status == 200 and isinstance(body, dict) and body.get('hit') is False:
+        return None
+    if status == 200 and isinstance(body, dict) and body.get('hit') is True:
+        return (float(cost), TRACERFY_NOTE)
+    if status in _TRACERFY_NOT_BILLED or (isinstance(status, int) and 400 <= status < 500):
+        return None
+    # status is None (the request never returned), 5xx, or a 200 with no receipt.
+    return (float(cost), TRACERFY_NOTE_UNCONFIRMED)
+
+
+def _record_tracerfy(status, body, cost):
+    got = tracerfy_ledger_charge(status, body, cost)
+    if not got:
+        return
+    dollars, note = got
+    if dollars > 0:
+        bd_budget.charge(dollars, note=note)
+
+
+def _response_obj(r):
+    try:
+        body = r.json()
+    except Exception:
+        return None
+    return body if isinstance(body, dict) else None
+
+
 def trace_one(session, prov, key, lead, raw=False):
     """One provider call, classified. Returns (phones, emails) on a 200. Raises TraceAborted on an
     auth/balance rejection (fatal for the whole run) or TraceTransient on a timeout/5xx/connection
@@ -353,9 +415,18 @@ def trace_one(session, prov, key, lead, raw=False):
         try:
             r = session.post(p['url'], json=p['body'](addr), timeout=30, headers=headers)
         except requests.exceptions.RequestException as e:  # timeout, connection reset, DNS, etc.
-            bd_budget.charge(p['cost'], note='skiptrace-' + prov)  # it left the machine; assume it billed
+            # No response, so whether it billed is unknowable. BatchData is pay-per-request and
+            # has always been counted here. Tracerfy bills only a hit; count the cap price under
+            # a distinct note so a charge that did land cannot walk past the daily cap.
+            if prov == 'tracerfy':
+                _record_tracerfy(None, None, p['cost'])
+            else:
+                bd_budget.charge(p['cost'], note='skiptrace-' + prov)
             raise TraceTransient(f"{type(e).__name__}: {str(e)[:120]}")
-        bd_budget.charge(p['cost'], note='skiptrace-' + prov)      # a miss still costs — charge on response
+        if prov == 'tracerfy':
+            _record_tracerfy(r.status_code, _response_obj(r), p['cost'])
+        else:
+            bd_budget.charge(p['cost'], note='skiptrace-' + prov)  # a miss still costs — charge on response
 
         if raw:
             print('--- RAW', lead.get('Case #', ''), r.status_code, '---')
@@ -536,12 +607,15 @@ def main():
     if provider == 'tracerfy':
         try:
             import tracerfy_mcp as _TM
-            _cr = _TM.balance()
-            _need = len(todo) * 5                       # Instant trace = 5 credits/lookup
-            print(f"  Tracerfy balance: {_cr} credits (~${_cr * 0.02:.2f})"
-                  + (f"  — NOT enough for this run ({len(todo)} leads need ~{_need}cr); "
-                     f"it will stop when credits run out. TOP UP: https://tracerfy.com"
-                     if _cr < _need else ''))
+            # balance_soft is the free check_balance probe. None (missing URL file, DNS, timeout)
+            # must not block the run and must not be printed as zero credits.
+            _cr = _TM.balance_soft()
+            if _cr is not None:
+                _need = len(todo) * 5                   # Instant trace = 5 credits/lookup
+                print(f"  Tracerfy balance: {_cr} credits (~${_cr * 0.02:.2f})"
+                      + (f"  — NOT enough for this run ({len(todo)} leads need ~{_need}cr); "
+                         f"it will stop when credits run out. TOP UP: https://tracerfy.com"
+                         if _cr < _need else ''))
         except Exception:
             pass                                        # no MCP url / MCP down — trace anyway
 

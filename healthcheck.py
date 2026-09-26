@@ -6,6 +6,7 @@ Prints a PASS/WARN/FAIL report, writes health.json (baked into the site header),
 """
 import json, os, re, sys, time
 import requests
+import skiptrace_health
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
@@ -234,16 +235,23 @@ try:
             _tds.append(_dt2.date.fromisoformat(str(_v.get('traced') or '')))
         except Exception:
             pass
+    # "the nightly skiptrace is not running" is a claim about the SYSTEM. Only the runner is
+    # entitled to make it — everywhere else an old trace date just means an old copy. And on the
+    # runner a stale date is not, by itself, that claim: 2026-09-18 through 09-24 the nightly ran
+    # and Tracerfy refused it for credits, and this line said the job was not running. The latest
+    # run slice of the two logs, and the free balance probe, pick the reason. The probe fails soft.
+    _st_logs = skiptrace_health.latest_skiptrace_logs(HERE) if IS_RUNNER else ''
+    _st_bal = skiptrace_health.probe_tracerfy_balance()
     if _tds:
         _sage = (_dt2.date.today() - max(_tds)).days
-        _slvl = 'FAIL' if _sage > 4 else ('WARN' if _sage > 2 else 'PASS')
-        # "the nightly skiptrace is not running" is a claim about the SYSTEM. Only the runner is
-        # entitled to make it — everywhere else an old trace date just means an old copy.
-        add(_slvl, 'skiptrace freshness', f'newest trace {max(_tds).isoformat()} ({_sage}d old, {len(_str)} cached)'
-            + (('' if not IS_RUNNER else ' — the nightly skiptrace is not running') + _STALE_NOTE
-               if _slvl != 'PASS' else ''))
+        skiptrace_health.report_skiptrace_health(
+            add, age_days=_sage, when_iso=max(_tds).isoformat(), cached=len(_str),
+            is_runner=IS_RUNNER, stale_note=_STALE_NOTE, log_text=_st_logs, balance=_st_bal)
     else:
         add('WARN', 'skiptrace freshness', 'no dated traces in skiptrace_results.json')
+        _bw = skiptrace_health.tracerfy_balance_warning(_st_bal)
+        if _bw:
+            add(*_bw)
     _rl = os.path.join(HERE, 'leads-run.log')
     if os.path.exists(_rl):
         _log = open(_rl, encoding='utf-8', errors='replace').read()
