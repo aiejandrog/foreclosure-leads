@@ -196,7 +196,17 @@ def read_amounts(rows, base, budget=None, plan=None):
             {'source_ref': row.get('source_ref'), 'entry_id': detail['entry_id'],
              'amount': c['amount'], 'page': c['page'], 'ok': c['ok'], 'reason': c['reason'],
              'pages': c['pages'], 'run': c['run'], 'components': c['components'],
-             'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals']}
+             'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals'],
+             # judgment_money reports a printed subtotal its own rows do not reproduce per failed
+             # check, and the saved row used to drop it. Faithful passthrough now - but note what
+             # it is NOT: verify_document builds its rows with vision_rows, which marks every row
+             # `explicit`, and _resolve_subtotal never returns None for an explicit row, so the
+             # notes disagreeing_subtotals is collected from are never written on this path. It is
+             # always [] here today. 2018-026274's $0.60 reaches a saved check only as the reason
+             # 'printed subtotal lacks valid members or disagrees with its own items', which covers
+             # an unreadable subtotal and a disagreeing one alike. The breakdown itself lives in
+             # miami_judgment's text path as sum_check_disagreeing_subtotals.
+             'disagreeing_subtotals': c.get('disagreeing_subtotals') or []}
             for c in checks)
         result['figures'].extend(dict(figure, source_ref=row.get('source_ref'),
             document_key=detail['document_key'], document_hash=detail['document_hash'],
