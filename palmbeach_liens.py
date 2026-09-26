@@ -43,12 +43,32 @@ CURL = r'C:\Windows\System32\curl.exe' if os.name == 'nt' and os.path.exists(r'C
 DUMP = os.path.join(HERE, '_pb_last_results.html')             # raw first-success dump (parser iteration aid)
 
 
+PAID_SOURCE = 'palmbeach_liens'   # the monthly-ledger name for every Landmark v2 solve (incl. fl_lp/palmbeach
+                                  # and broward_judgment_dates --pb, which solve through this module)
+
+
+def _paid_v2():
+    """solve_recaptcha_v2 under the shared monthly paid-reads cap (paid_reads.py): each solve is
+    checked and counted in one locked step BEFORE it is submitted; a spent month returns None."""
+    from captcha_solver import solve_recaptcha_v2
+    import paid_reads
+    return paid_reads.guarded(solve_recaptcha_v2, PAID_SOURCE, unit=paid_reads.RECAPTCHA_V2_USD)
+
+
+def _month_can_pay():
+    import paid_reads
+    return paid_reads.allow(paid_reads.RECAPTCHA_V2_USD, PAID_SOURCE)[0]
+
+
 def solve_token_2captcha():
-    """Solve Landmark reCAPTCHA v2 via 2Captcha. Returns token or ''."""
+    """Solve Landmark reCAPTCHA v2 via 2Captcha. Returns token or ''. '' too when the shared
+    monthly paid-reads cap is spent (logged once by paid_reads)."""
     try:
-        from captcha_solver import solve_recaptcha_v2
+        solve_recaptcha_v2 = _paid_v2()
     except Exception as e:
         print(f'  [2captcha] import failed: {e}')
+        return ''
+    if not _month_can_pay():
         return ''
     print('>> solving Landmark reCAPTCHA v2 via 2Captcha (1–3 min)…')
     t0 = time.time()
@@ -93,6 +113,7 @@ class _TokenPool:
         self.q = _q.Queue(maxsize=max(1, slack))
         self.stop = _t.Event()
         self.minted = self.discarded = self.failed = 0
+        self.refused = False
         self._lock = _t.Lock()
         self.threads = [_t.Thread(target=self._run, name=f'pbsolve{i}', daemon=True)
                         for i in range(workers)]
@@ -103,9 +124,14 @@ class _TokenPool:
     def _run(self):
         import queue as _q
         while not self.stop.is_set():
+            # A spent (or unreadable) monthly paid-reads cap stops the whole pool: no worker keeps
+            # retrying a refusal every 5s, and get() stops waiting for tokens that will never come.
+            if not _month_can_pay():
+                self.refused = True
+                self.stop.set()
+                return
             try:
-                from captcha_solver import solve_recaptcha_v2
-                tok = solve_recaptcha_v2(SITE_KEY, PAGE_URL) or ''
+                tok = _paid_v2()(SITE_KEY, PAGE_URL) or ''
             except Exception as e:
                 print(f'  [pool] solve error: {str(e)[:70]}')
                 tok = ''
@@ -131,8 +157,10 @@ class _TokenPool:
         import queue as _q
         deadline = time.time() + timeout
         while time.time() < deadline:
+            if self.stop.is_set() and self.q.empty():
+                return ''                     # the pool stopped (monthly cap): nothing more is coming
             try:
-                tok, born = self.q.get(timeout=min(5, max(0.1, deadline - time.time())))
+                tok, born = self.q.get(timeout=min(1, max(0.1, deadline - time.time())))   # 1s: notice a stopped pool
             except _q.Empty:
                 continue
             age = time.time() - born
@@ -146,7 +174,7 @@ class _TokenPool:
     def close(self):
         self.stop.set()
         print(f'  [pool] minted {self.minted}, discarded-stale {self.discarded}, '
-              f'failed {self.failed}')
+              f'failed {self.failed}' + (', stopped by the monthly paid-reads cap' if self.refused else ''))
 
 
 POOL = None      # set by main() when --workers > 1
@@ -700,7 +728,9 @@ def main():
         print(f'  --workers {a.workers} capped to {want} for a {len(picked)}-lead batch')
     if want > 1 and not a.no_2captcha:
         from captcha_solver import has_key
-        if has_key():
+        if has_key() and not _month_can_pay():
+            print('  --workers ignored: the monthly paid-reads cap is spent (python paid_reads.py)')
+        elif has_key():
             POOL = _TokenPool(want)
         else:
             print('  --workers ignored: no 2Captcha key, nothing to parallelise')
