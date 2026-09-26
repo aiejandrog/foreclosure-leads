@@ -53,6 +53,8 @@ BSG_Mail_Campaign_*.pdf
 !_casestatustest.py
 !_workeremailtest.py
 !_codelientest.py
+# _taxschedtest: Tax1 near-sale scheduling, stale-read gate, certificate follow-up; invented folios.
+!_taxschedtest.py
 # code_lien_amounts.py (C2): per-lien estimates keyed by book/page. County records, local only.
 code_lien_amounts.json
 code_lien_amounts.json.tmp
