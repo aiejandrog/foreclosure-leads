@@ -28,6 +28,7 @@ const HERE = __dirname;
 const YML = path.join(HERE, '.github', 'workflows', 'freshness-watchdog.yml');
 const STEP = 'Check the runners are behaving';
 const MORNING_STEP = "Morning check - did last night's refresh publish";
+const ALERTS_STEP = 'Sync pipeline alerts';
 
 // ---------------------------------------------------------------- extract the shipped script
 function extractScript(STEP) {
@@ -76,11 +77,12 @@ async function run(src, commits, opts = {}) {
         const per = p.per_page || 30, page = p.page || 1;
         return { data: commits.slice((page - 1) * per, page * per) };
       } },
-      issues: {
-        listForRepo: async () => ({ data: opts.openIssue ? [{ number: 99 }] : [] }),
+        issues: {
+        listForRepo: async () => ({ data: opts.openIssues || (opts.openIssue ? [{ number: 99 }] : []) }),
         create: async a => { out.issues.push({ kind: 'create', ...a }); },
         createComment: async a => { out.issues.push({ kind: 'comment', ...a }); },
         update: async a => { out.issues.push({ kind: 'update', ...a }); },
+        createLabel: async a => { out.issues.push({ kind: 'label', ...a }); },
       },
     },
   };
@@ -91,12 +93,24 @@ async function run(src, commits, opts = {}) {
     if (opts.html instanceof Error) throw opts.html;
     return { ok: true, status: 200, text: async () => (opts.html || '') };
   };
-  const fn = new Function('github', 'core', 'context', 'fetch',
+  const fn = new Function('github', 'core', 'context', 'fetch', 'require',
                           `return (async () => {\n${src}\n})();`);
   const saved = process.env.WATCHDOG_NOW;
+  const savedAlerts = process.env.WATCHDOG_ALERTS_JSON;
+  const savedFile = process.env.WATCHDOG_ALERTS_FILE;
   if (opts.now) process.env.WATCHDOG_NOW = opts.now; else delete process.env.WATCHDOG_NOW;
-  try { await fn(github, core, context, fetchStub); }
-  finally { if (saved === undefined) delete process.env.WATCHDOG_NOW; else process.env.WATCHDOG_NOW = saved; }
+  if (Object.prototype.hasOwnProperty.call(opts, 'alertsJson')) {
+    if (opts.alertsJson == null) delete process.env.WATCHDOG_ALERTS_JSON;
+    else process.env.WATCHDOG_ALERTS_JSON = opts.alertsJson;
+  }
+  if (opts.alertsFile) process.env.WATCHDOG_ALERTS_FILE = opts.alertsFile;
+  else if (opts.alertsMissing) process.env.WATCHDOG_ALERTS_FILE = path.join(HERE, 'no-such-pipeline-alerts.json');
+  try { await fn(github, core, context, fetchStub, require); }
+  finally {
+    if (saved === undefined) delete process.env.WATCHDOG_NOW; else process.env.WATCHDOG_NOW = saved;
+    if (savedAlerts === undefined) delete process.env.WATCHDOG_ALERTS_JSON; else process.env.WATCHDOG_ALERTS_JSON = savedAlerts;
+    if (savedFile === undefined) delete process.env.WATCHDOG_ALERTS_FILE; else process.env.WATCHDOG_ALERTS_FILE = savedFile;
+  }
   return out;
 }
 
@@ -198,6 +212,11 @@ const MORNING_PAGED_OK = pad(150, fixedDay(15, '12:25')).concat(MORNING_OK);
 // ---------------------------------------------------------------- assertions
 const cases = [
   { name: 'healthy week stays silent', fx: HEALTHY, fire: false },
+  { name: 'alerts publishes are not a second runner',
+    fx: HEALTHY.concat([
+      commit('al0000', 'alerts: pipeline status', at(1, '01:00')),
+      commit('al0001', 'alerts: pipeline status', at(1, '13:00')),
+    ]), fire: false },
   { name: 'two runners on one day fires', fx: TWO_RUNNERS, fire: true, want: /Two runners/ },
   { name: 'stacked unpushed commits fires', fx: STACKED, fire: true, want: /push was not landing/i },
   { name: 'refresh job gone quiet fires', fx: NO_REFRESH, fire: true, want: /No new leads/i },
@@ -238,7 +257,14 @@ const morningCases = [
   { name: 'morning: commit log unreadable -> alarms (fail-loud)',
     fx: MORNING_OK, now: AT_0715_EDT, html: board('2026-07-15'), listThrows: true, fire: true, want: /Cannot read the commit log/ },
   { name: 'morning: an existing alert gets a comment, not a second issue',
-    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), openIssue: true, fire: true, want: /"kind":"comment"/ },
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), openIssue: true, fire: true, want: /"kind":"comment"/, noCreate: true },
+  { name: 'morning: a new nightly-missed issue is titled for the Gmail filter',
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), fire: true,
+    want: /DEALFLOW ALERT: nightly refresh missed or stale/ },
+  { name: 'morning: an old nightly-missed title is renamed, not duplicated',
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'),
+    openIssues: [{ number: 7, title: '⚠️ DEALFLOW nightly refresh missed or stale (2026-09-25)', labels: ['nightly-missed'] }],
+    fire: true, noCreate: true, retitle: 'DEALFLOW ALERT: nightly refresh missed or stale' },
   { name: 'morning: summer, the 12:15 UTC (winter) cron skips without any call',
     fx: MORNING_MISSED, now: AT_0815_EDT, html: board('2026-07-14'), fire: false, noCalls: true },
   { name: 'morning: winter, the 11:15 UTC (summer) cron skips without any call',
@@ -264,6 +290,9 @@ const morningCases = [
     && !ymlText.includes("cron: '30 12 * * *'") && !ymlText.includes("cron: '30 13 * * *'");
   if (cronsOk) { console.log('  pass  morning crons are 11:15 and 12:15 UTC (07:15 ET, both DSTs)'); pass++; }
   else { console.log('  FAIL  morning crons are not the 07:15 ET pair'); fail++; }
+  const nameOk = /^name:\s*DEALFLOW\b/m.test(ymlText);
+  if (nameOk) { console.log('  pass  workflow name starts with DEALFLOW (failure mail subject)'); pass++; }
+  else { console.log('  FAIL  workflow name does not start with DEALFLOW'); fail++; }
   for (const c of morningCases) {
     let r;
     try {
@@ -278,6 +307,8 @@ const morningCases = [
     if (ok && c.want) ok = c.want.test(text);
     if (ok && c.noCalls) ok = r.fetched === 0 && r.listed === 0 && r.issues.length === 0;
     if (ok && c.closes) ok = r.issues.some(i => i.kind === 'update' && i.state === 'closed');
+    if (ok && c.noCreate) ok = !r.issues.some(i => i.kind === 'create');
+    if (ok && c.retitle) ok = r.issues.some(i => i.kind === 'update' && String(i.title || '').startsWith(c.retitle));
     if (ok) { console.log(`  pass  ${c.name}`); pass++; }
     else {
       console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? `"${r.failed}"` : 'silence'}` +
@@ -300,6 +331,143 @@ const morningCases = [
     if (ok) { console.log(`  pass  ${c.name}`); pass++; }
     else {
       console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? `"${r.failed}"` : 'silence'}`);
+      fail++;
+    }
+  }
+
+  const ALERT_NOW = '2026-09-26T15:00:00Z';
+  const freshDoc = (alerts, published_at) => JSON.stringify({
+    version: 1, published_at: published_at || '2026-09-26T14:00:00Z', alerts,
+  });
+  const openAlert = (key, severity) => ({
+    number: 41, title: '⚠️ [' + severity + '] [' + key + '] old',
+    body: 'alert-key: ' + key + '\nseverity: ' + severity + '\n\nold text',
+  });
+  const alertCases = [
+    { name: 'alerts: a new fail opens one issue and fails the run',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'fail', text: 'Tracerfy balance 0 credits.' }]),
+      fire: true, creates: 'tracerfy-credits' },
+    { name: 'alerts: the same severity comments and does not fail again',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
+      openIssues: [openAlert('tracerfy-credits', 'warn')], fire: false, comments: true },
+    { name: 'alerts: an unchanged alert is not commented again the same Eastern day',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
+      openIssues: [{
+        number: 41,
+        title: '⚠️ [warn] [tracerfy-credits] old',
+        body: 'alert-key: tracerfy-credits\nseverity: warn\n\nTracerfy balance 400 credits, warn under 500.',
+        updated_at: '2026-09-26T14:30:00Z',
+      }],
+      now: ALERT_NOW, fire: false, comments: false, noCreate: true,
+      retitle: 'DEALFLOW ALERT: Tracerfy credits low' },
+    { name: 'alerts: an unchanged alert comments once the next Eastern day',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
+      openIssues: [{
+        number: 41,
+        title: '⚠️ [warn] [tracerfy-credits] old',
+        body: 'alert-key: tracerfy-credits\nseverity: warn\n\nTracerfy balance 400 credits, warn under 500.',
+        updated_at: '2026-09-25T14:30:00Z',
+      }],
+      now: ALERT_NOW, fire: false, comments: true },
+    { name: 'alerts: warn to fail is worsened and fails the run',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'fail', text: 'Tracerfy balance 0 credits.' }]),
+      openIssues: [openAlert('tracerfy-credits', 'warn')], fire: true, comments: true },
+    { name: 'alerts: a cleared key closes the issue and does not fail',
+      alertsJson: freshDoc([]),
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: false, closes: true },
+    { name: 'alerts: an address in the text is withheld',
+      alertsJson: freshDoc([{ key: 'bounce-rate', severity: 'fail', text: 'see owner@example.com now' }]),
+      fire: true, creates: 'bounce-rate', noAt: true },
+    { name: 'alerts: invalid JSON fails and does not close',
+      alertsJson: '{',
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true },
+    { name: 'alerts: a file with no alerts array does not close',
+      alertsJson: JSON.stringify({ published_at: '2026-09-26T14:00:00Z', alerts: { bad: true } }),
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true },
+    { name: 'alerts: missing file, nothing open, is not armed yet',
+      alertsJson: null, alertsMissing: true, fire: false },
+    { name: 'alerts: missing file while an issue is open fails and does not close it',
+      alertsJson: null, alertsMissing: true,
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true },
+    { name: 'alerts: a fresh empty file stays quiet',
+      alertsJson: freshDoc([]), fire: false },
+    { name: 'alerts: published_at 31h ago is its own alert',
+      alertsJson: freshDoc([], '2026-09-25T08:00:00Z'), now: ALERT_NOW, fire: true, creates: 'alerts-unpublished' },
+    { name: 'alerts: published_at 29h ago is not stale',
+      alertsJson: freshDoc([], '2026-09-25T10:00:00Z'), now: ALERT_NOW, fire: false },
+  ];
+  const asrc = extractScript(ALERTS_STEP);
+  for (const c of alertCases) {
+    let r;
+    try { r = await run(asrc, [], c); }
+    catch (e) {
+      console.log(`  FAIL  ${c.name} — threw: ${e.message}`);
+      fail++; continue;
+    }
+    const fired = !!r.failed;
+    const created = r.issues.find(i => i.kind === 'create' && String(i.body || '').includes('alert-key: ' + (c.creates || '___none___')));
+    let good = fired === c.fire;
+    if (good && c.creates) good = !!created && String(created.title || '').startsWith('DEALFLOW ALERT: ');
+    if (good && c.noCreate) good = !r.issues.some(i => i.kind === 'create');
+    if (good && c.retitle) good = r.issues.some(i => i.kind === 'update' && String(i.title || '').startsWith(c.retitle));
+    if (good && c.comments) good = r.issues.some(i => i.kind === 'comment');
+    if (good && c.comments === false) good = !r.issues.some(i => i.kind === 'comment');
+    if (good && c.closes) good = r.issues.some(i => i.kind === 'update' && i.state === 'closed');
+    if (good && c.noClose) good = !r.issues.some(i => i.kind === 'update' && i.state === 'closed');
+    if (good && c.noAt) {
+      const blob = JSON.stringify(r.issues);
+      good = !blob.includes('@') && blob.includes('withheld');
+    }
+    if (good) { console.log(`  pass  ${c.name}`); pass++; }
+    else {
+      console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? JSON.stringify(r.failed) : 'silence'} issues ${JSON.stringify(r.issues).slice(0, 400)}`);
+      fail++;
+    }
+  }
+
+  const ALERT_KEYS = [
+    'tracerfy-credits', 'captcha-balance', 'paid-reads-cap', 'bounce-rate',
+    'optout-sync', 'morning-sends', 'laptop-readiness', 'healthcheck-fail',
+    'alerts-unpublished', 'alerts-redacted',
+  ];
+  for (const key of ALERT_KEYS) {
+    const name = 'alerts: title prefix for ' + key;
+    try {
+      const r = await run(asrc, [], {
+        alertsJson: freshDoc([{ key, severity: 'fail', text: 'count 1' }]),
+        now: ALERT_NOW,
+      });
+      const created = r.issues.filter(i => i.kind === 'create');
+      const title = created.length === 1 ? String(created[0].title || '') : '';
+      const ok = created.length === 1
+        && title.startsWith('DEALFLOW ALERT: ')
+        && title.slice('DEALFLOW ALERT: '.length).trim().length > 0
+        && String(created[0].body || '').includes('alert-key: ' + key);
+      if (ok) { console.log('  pass  ' + name); pass++; }
+      else { console.log('  FAIL  ' + name + ' — ' + JSON.stringify(created).slice(0, 300)); fail++; }
+    } catch (e) {
+      console.log('  FAIL  ' + name + ' — threw: ' + e.message);
+      fail++;
+    }
+  }
+  {
+    const name = 'alerts: an open issue is matched by its key, not its title';
+    try {
+      const r = await run(asrc, [], {
+        alertsJson: freshDoc([{ key: 'optout-sync', severity: 'fail', text: 'count 1' }]),
+        openIssues: [{
+          number: 8,
+          title: 'unrelated subject with no key',
+          body: 'alert-key: optout-sync\nseverity: fail\n\ncount 1',
+        }],
+        now: ALERT_NOW,
+      });
+      const created = r.issues.filter(i => i.kind === 'create');
+      const renamed = r.issues.some(i => i.kind === 'update' && String(i.title || '').startsWith('DEALFLOW ALERT: '));
+      if (!created.length && renamed) { console.log('  pass  ' + name); pass++; }
+      else { console.log('  FAIL  ' + name + ' — ' + JSON.stringify(r.issues).slice(0, 400)); fail++; }
+    } catch (e) {
+      console.log('  FAIL  ' + name + ' — threw: ' + e.message);
       fail++;
     }
   }

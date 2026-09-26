@@ -110,6 +110,90 @@ h3 = health_for(*sample(*DESK_REAL))
 check('the desktop reading blocks end to end', h3['blocked'] is True)
 
 print()
+print('-- daily first-touch pause: more than 5% once 10 have been sent, same blocked bit --')
+
+
+def health_rows(rows, bounced):
+    tmp = tempfile.mkdtemp()
+    with open(os.path.join(tmp, 'bounced_emails.json'), 'w', encoding='utf-8') as f:
+        json.dump(sorted(bounced), f)
+    old_here, old_ledger = S.HERE, S._load_ledger
+    try:
+        S.HERE = tmp
+        S._load_ledger = lambda: rows
+        return S._bounce_health()
+    finally:
+        S.HERE, S._load_ledger = old_here, old_ledger
+
+
+def ft_rows(dead, mailed, touch='first', day=None, **extra):
+    d = day or S.dt.date.today().isoformat()
+    bad = ['dead%d@x.com' % i for i in range(dead)]
+    live = ['live%d@x.com' % i for i in range(max(0, mailed - dead))]
+    rows = []
+    for i, a in enumerate(bad + live):
+        row = {'ch': 'email', 'message_id': '<ft%d>' % i, 'd': d, 'to': a, 'touch': touch}
+        row.update(extra)
+        rows.append(row)
+    return rows, set(bad)
+
+
+hday = health_rows(*ft_rows(2, 20))
+check('2 of 20 first touches is over 5% and pauses (Wilson alone would not)',
+      hday['day_blocked'] is True and hday['blocked'] is True and hday['lb'] <= S.BOUNCE_CEILING,
+      'day=%.1f%% lb=%.1f%%' % (hday['day_rate'] * 100, hday['lb'] * 100))
+h5 = health_rows(*ft_rows(1, 20))
+check('exactly 5% (1 of 20) does not pause',
+      h5['day_blocked'] is False and h5['blocked'] is False, 'day=%.1f%%' % (h5['day_rate'] * 100))
+h0 = health_rows(*ft_rows(0, 20))
+check('0 of 20 first touches is clear', h0['day_blocked'] is False and h0['blocked'] is False)
+hshort = health_rows(*ft_rows(2, 9))
+check('2 of 9 is over 5% but under the minimum sample, and Wilson does not convict it either',
+      hshort['day_blocked'] is False and hshort['blocked'] is False,
+      'day=%.1f%% lb=%.1f%%' % (hshort['day_rate'] * 100, hshort['lb'] * 100))
+hkeep = health_rows(*ft_rows(8, 21, touch=None))
+check('the Wilson block still trips when the rows are not first touches',
+      hkeep['day_blocked'] is False and hkeep['blocked'] is True)
+htest = health_rows(*ft_rows(20, 20, test_mode=True))
+check('test sends are not a first-touch sample', htest['day_sent'] == 0 and htest['day_blocked'] is False)
+herr = health_rows(*ft_rows(20, 20, error=True))
+check('error rows are not a first-touch sample', herr['day_sent'] == 0 and herr['day_blocked'] is False)
+yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
+hy = health_rows(*ft_rows(2, 20, day=yday))
+check("yesterday's 2 of 20, with nothing sent today, pauses on that cohort",
+      hy['day_blocked'] is True and hy['blocked'] is True and hy['day_date'] == yday
+      and (hy['day_sent'], hy['day_dead']) == (20, 2) and hy['lb'] <= S.BOUNCE_CEILING,
+      'date=%s sent=%s dead=%s' % (hy['day_date'], hy['day_sent'], hy['day_dead']))
+hy1 = health_rows(*ft_rows(1, 20, day=yday))
+check("yesterday's 1 of 20 does not pause",
+      hy1['day_blocked'] is False and hy1['blocked'] is False and hy1['day_date'] == yday
+      and (hy1['day_sent'], hy1['day_dead']) == (20, 1),
+      'day=%.1f%%' % (hy1['day_rate'] * 100))
+stale = (S.dt.date.today() - S.dt.timedelta(days=S.BOUNCE_WINDOW_DAYS + 1)).isoformat()
+hold = health_rows(*ft_rows(2, 20, day=stale))
+check('a cohort older than the window does not pause',
+      hold['day_blocked'] is False and hold['day_sent'] == 0 and hold['blocked'] is False)
+rows_y, bad_y = ft_rows(2, 20, day=yday)
+rows_t, bad_t = ft_rows(1, 20)
+hmix = health_rows(rows_y + rows_t, bad_y | bad_t)
+check("a clear today does not hide yesterday over the ceiling",
+      hmix['day_blocked'] is True and hmix['blocked'] is True and hmix['day_date'] == yday
+      and (hmix['day_sent'], hmix['day_dead']) == (20, 2))
+os.environ['BOUNCE_DAY_MIN_SAMPLE'] = '5'
+try:
+    hmin = health_rows(*ft_rows(2, 9))
+    check('BOUNCE_DAY_MIN_SAMPLE=5 lets 2 of 9 pause', hmin['day_blocked'] is True and hmin['blocked'] is True)
+finally:
+    os.environ.pop('BOUNCE_DAY_MIN_SAMPLE', None)
+os.environ['BOUNCE_DAY_CEILING'] = '1'
+try:
+    hoff = health_rows(*ft_rows(2, 20))
+    check('BOUNCE_DAY_CEILING=1 does not pause 2 of 20, and does not clear a Wilson block that is not there',
+          hoff['day_blocked'] is False and hoff['blocked'] is False)
+finally:
+    os.environ.pop('BOUNCE_DAY_CEILING', None)
+
+print()
 print('-- a missing bounce list must not read as health --')
 old_here = S.HERE
 try:

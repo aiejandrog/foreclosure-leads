@@ -224,6 +224,9 @@ clerk_session_status.json
 clerk_session_status.json.tmp
 sync_status.json.tmp
 optout-sync-run.log
+# Counts-only alert publisher log. The json it commits is pipeline_alerts.json (public, no PII).
+pipeline-alerts.log
+pipeline_alerts.json.tmp
 gmail.key
 whitepages.key
 whitepages_lookup.json
@@ -636,3 +639,5 @@ worker_marks.applied.jsonl
 # cadence send-time re-check, Quo-read failure holds texting but not email, and a clean
 # eligible lead still sends. Synthetic fixtures only.
 !_suppressionfixtest.py
+# _alertstest: pipeline alert trigger/clear on fixtures. No network, no paid call, no push.
+!_alertstest.py

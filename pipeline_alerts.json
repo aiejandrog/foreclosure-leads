@@ -1,0 +1,102 @@
+{
+ "alerts": [
+  {
+   "at": "2026-09-26T18:04:35-04:00",
+   "key": "bounce-rate",
+   "severity": "fail",
+   "text": "Trailing 7-day lower bound 27.0% (raw 36.5%, 31 of 85). Ceiling 10%. First-touch sends are paused."
+  },
+  {
+   "at": "2026-09-26T18:04:35-04:00",
+   "key": "laptop-readiness",
+   "severity": "fail",
+   "text": "Laptop readiness: 1 DEALFLOW task(s) disabled (DEALFLOW Daily Scrape); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+  }
+ ],
+ "published_at": "2026-09-26T18:04:35-04:00",
+ "signals": {
+  "bounce": {
+   "ceiling": 0.1,
+   "day_blocked": false,
+   "day_ceiling": 0.05,
+   "day_date": "",
+   "day_dead": 0,
+   "day_min": 10,
+   "day_rate": 0.0,
+   "day_sent": 0,
+   "dead": 31,
+   "lb": 0.2702916275231961,
+   "mailed": 85,
+   "rate": 0.36470588235294116,
+   "readable": true,
+   "trailing_blocked": true,
+   "window": 7
+  },
+  "captcha": {
+   "usd": 2.09059
+  },
+  "health_fails": {
+   "fresh": false,
+   "names": [
+    "skiptrace freshness"
+   ]
+  },
+  "morning_sends": {
+   "addresses": 2,
+   "cap": 0,
+   "caps": [
+    0,
+    0
+   ],
+   "date": "2026-09-26",
+   "eligible": 11,
+   "judged": true,
+   "readable": true,
+   "scheduled": false,
+   "sent": 0
+  },
+  "optout_sync": {
+   "date": "2026-09-26",
+   "failed_steps": [],
+   "past_cutoff": true,
+   "readable": true,
+   "run_ok": true,
+   "started_at": 1790443372,
+   "state": "finished"
+  },
+  "paid_reads": {
+   "cap": 50.0,
+   "month": "2026-09",
+   "readable": true,
+   "spent": 0.0
+  },
+  "readiness": {
+   "at": "2026-09-26T18:04:35-04:00",
+   "battery_present": true,
+   "disabled": 1,
+   "disabled_names": [
+    "DEALFLOW Daily Scrape"
+   ],
+   "failed": 1,
+   "failed_names": [
+    "DEALFLOW Refresh"
+   ],
+   "interactive": 3,
+   "interactive_names": [
+    "DEALFLOW Phones",
+    "DEALFLOW Refresh",
+    "DealFlow Replies"
+   ],
+   "on_ac": true,
+   "pct": 80,
+   "port_open": true,
+   "power_ok": true,
+   "present_check": true,
+   "tasks_ok": true
+  },
+  "tracerfy": {
+   "credits": 991
+  }
+ },
+ "version": 1
+}
