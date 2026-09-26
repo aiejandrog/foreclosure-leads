@@ -260,6 +260,9 @@ def paid_alert(sig, th, at):
 def bounce_alert(sig, at):
     if not sig or not sig.get('readable', False):
         return None
+    if sig.get('list_unreadable'):
+        return _alert('bounce-rate', 'fail',
+                      'Bounce list is unreadable. Every send is refused until the bounce list parses.', at)
     parts = []
     if sig.get('day_blocked'):
         when = str(sig.get('day_date') or '').strip() or 'a recent send day'
@@ -321,6 +324,14 @@ def optout_alert(sig, now, th, at):
         last = date if re.fullmatch(r'\d{4}-\d{2}-\d{2}', date) else 'never'
         return _alert('optout-sync', 'fail',
                       '07:15 opt-out sync did not run on %s (last recorded %s).' % (today, last), at)
+    return None
+
+
+def optout_ledger_alert(sig, at):
+    """optouts.json itself, not the 07:15 sync status. A torn ledger blocks sends immediately."""
+    if isinstance(sig, dict) and sig.get('unreadable'):
+        return _alert('optout-ledger', 'fail',
+                      'Opt-out ledger is unreadable. Sends stay blocked until it parses.', at)
     return None
 
 
@@ -504,6 +515,7 @@ def alerts_from(signals, now, th=None):
         paid_alert(signals.get('paid_reads'), th, at),
         bounce_alert(signals.get('bounce'), at),
         optout_alert(signals.get('optout_sync'), now, th, at),
+        optout_ledger_alert(signals.get('optout_ledger'), at),
         morning_alert(signals.get('morning_sends'), now, th, at),
         readiness_alert(signals.get('readiness'), now, th, at),
         health_alert(signals.get('health_fails'), at),
@@ -523,8 +535,16 @@ def _parse_at(value):
 
 
 def bounce_signal(health):
-    """The public slice of send_server._bounce_health(). Numbers only."""
-    if not isinstance(health, dict) or 'blocked' not in health or health.get('list_unreadable'):
+    """The public slice of send_server._bounce_health(). Numbers only.
+
+    list_unreadable used to come back as readable:false, and bounce_alert stays quiet on that,
+    so every send could be refused with no alert. It is its own fail, with no rate attached:
+    a 0% figure would read as a clean list."""
+    if not isinstance(health, dict):
+        return {'readable': False}
+    if health.get('list_unreadable'):
+        return {'readable': True, 'list_unreadable': True}
+    if 'blocked' not in health:
         return {'readable': False}
     try:
         lb = float(health.get('lb') or 0)
@@ -867,6 +887,23 @@ def read_bounce():
     return bounce_signal(send_server._bounce_health())
 
 
+def read_optout_ledger(path=None):
+    """Whether optouts.json parses. Missing is not unreadable: the ledger may not exist yet.
+    Exists-but-won't-parse, or a value that is not an object, is unreadable."""
+    import optout_sync
+    path = path or optout_sync.OPTOUTS
+    if not path or not os.path.exists(path):
+        return {'readable': True, 'unreadable': False}
+    try:
+        with open(path, encoding='utf-8') as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        return {'readable': True, 'unreadable': True}
+    if not isinstance(doc, dict):
+        return {'readable': True, 'unreadable': True}
+    return {'readable': True, 'unreadable': False}
+
+
 def read_optout(now, th):
     path = os.path.join(HERE, 'sync_status.json')
     try:
@@ -955,6 +992,7 @@ def gather(now, th, measure=False):
         'bounce': _try(read_bounce, {'readable': False}),
         'optout_sync': _try(lambda: read_optout(now, th),
                             {'readable': False, 'past_cutoff': now.hour >= th['optout_hour']}),
+        'optout_ledger': _try(read_optout_ledger, {'unreadable': False}),
         'morning_sends': _try(lambda: read_morning(now, th), {'readable': False}),
         'health_fails': _try(lambda: read_health(now.date().isoformat()), {'fresh': False, 'names': []}),
         'readiness': measure_readiness(now, th['port']) if measure else None,

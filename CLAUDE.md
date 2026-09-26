@@ -67,7 +67,15 @@ an opt-out ledger it cannot parse (backup copy, original left in place, sends st
 it applies that same refusal to `bounced_emails.json`. An empty `ledger_add` does not refresh the
 ledger mtime; the 07:15 sweep does that itself after it finishes. A Quo `/messages` response that
 is denied, missing, or not a listing holds texting (`ok: false`), and so does a scan that hits
-the page cap.
+the page cap. The inbound number set is that dial/text list unioned with Quo `GET /v1/conversations`
+participants whose thread was active in the same 60 days (live check 2026-09-26: `data`,
+`nextPageToken`, `totalItems`; item `participants`, `phoneNumberId`, `lastActivityAt`). A failed
+or truncated conversations read holds texting. Message bodies are read from `text`; inbound
+direction is `incoming`. The status file records pages read and conversations scanned, counts
+only. A 429 is retried a bounded number of times before it counts as an error. An unreadable
+`text_sent.json` is skipped and counted, and that holds texting. `ledger_add` writes the opt-out
+keys before it refuses a torn `bounced_emails.json`. An unreadable bounce list, and an unreadable
+`optouts.json`, each raise a `pipeline_alerts` fail.
 The board and Call Mode hold texting until a fresh inbound scan is confirmed; bridge-down is a
 hold. `cadence.py` enforces the same 07:15 opt-out sync hold as `cadence-daily.bat`. Review this
 as a change to this surface, not as ordinary copy.
