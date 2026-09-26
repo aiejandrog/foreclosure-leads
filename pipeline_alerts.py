@@ -463,7 +463,7 @@ def _parse_at(value):
 
 def bounce_signal(health):
     """The public slice of send_server._bounce_health(). Numbers only."""
-    if not isinstance(health, dict) or 'blocked' not in health:
+    if not isinstance(health, dict) or 'blocked' not in health or health.get('list_unreadable'):
         return {'readable': False}
     try:
         lb = float(health.get('lb') or 0)

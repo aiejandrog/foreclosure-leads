@@ -80,12 +80,13 @@ def _refuse_unreadable_ledger(path, err):
         shutil.copy2(path, backup)
         copied = True
     except Exception as ce:
-        print('!! OPT-OUT LEDGER UNREADABLE and the backup copy FAILED (%s). '
-              'The original was NOT modified. Sends stay blocked.' % str(ce)[:160], file=sys.stderr)
+        print('!! %s UNREADABLE and the backup copy FAILED (%s). '
+              'The original was NOT modified. Sends stay blocked.'
+              % (os.path.basename(path), str(ce)[:160]), file=sys.stderr)
     else:
-        print('!! OPT-OUT LEDGER UNREADABLE (%s). Copied the bad file to %s and LEFT THE ORIGINAL '
+        print('!! %s UNREADABLE (%s). Copied the bad file to %s and LEFT THE ORIGINAL '
               'UNTOUCHED. Refusing to write. Sends stay blocked.'
-              % (str(err)[:160], os.path.basename(backup)), file=sys.stderr)
+              % (os.path.basename(path), str(err)[:160], os.path.basename(backup)), file=sys.stderr)
     raise LedgerUnreadable('opt-out ledger unreadable; original left untouched%s'
                            % ((' (backup %s)' % os.path.basename(backup)) if copied else ''))
 
@@ -118,8 +119,9 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
       src     -- which detector/surface produced the verdict (goes in optlog).
       emails  -- addresses to put on the bridge's hard-suppression list (bounced_emails.json).
 
-    A run that adds nothing still touches the ledger mtime: the send bridge refuses to send on a
-    ledger older than OPTOUT_MAX_AGE_DAYS, and "nobody new opted out" must read as fresh.
+    The opt-out file's mtime moves only when a key is actually added. An empty add, including a
+    /notes push of a note that is already ledgered, must not make a stale ledger look fresh.
+    The 07:15 process refreshes that mtime itself after a completed sweep (see _main).
     """
     now = _now()
     when = (str(when) if when else now)[:32]
@@ -153,10 +155,24 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
             'optlog': [{'ts': when, 'act': 'opted-out', 'src': src},
                        {'ts': now, 'act': 'ledgered', 'src': 'optout_sync.ledger_add'}],
         }
-    sup = _load(SUPPRESS, {})
-    if not isinstance(sup, dict):
-        sup = {str(x).strip().lower(): {'type': 'legacy'} for x in (sup or []) if x}
-    sup_new = [e.strip().lower() for e in set(emails or ()) if e and e.strip() and e.strip().lower() not in sup]
+    # Read the bounce list BEFORE either write, and only when this call would change it.
+    # _load() turns a torn file into {} and the next add used to replace the real list with
+    # only the new addresses, which also empties the #98 bounce block. Same refusal as the
+    # opt-out ledger: backup, do not write, raise. A call with no new addresses does not open
+    # the file, so a torn bounce list cannot block an unrelated opt-out key.
+    want = [e.strip().lower() for e in set(emails or ()) if e and e.strip()]
+    sup, sup_new = {}, []
+    if want:
+        sup = _read_ledger_for_write(SUPPRESS)
+        if sup is None:
+            sup = {}
+        elif isinstance(sup, list):
+            # Older files are a bare list of addresses. That parses; keep every address.
+            sup = {str(x).strip().lower(): {'type': 'legacy'} for x in sup if x}
+        elif not isinstance(sup, dict):
+            _refuse_unreadable_ledger(SUPPRESS, 'parsed but is not an object or a list (%s)'
+                                      % type(sup).__name__)
+        sup_new = [e for e in want if e not in sup]
     if dry_run:
         return added, already
     if added:
@@ -165,11 +181,6 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
         with open(tmp, 'w', encoding='utf-8') as fh:
             json.dump(opt, fh, indent=1, ensure_ascii=False)
         os.replace(tmp, OPTOUTS)
-    elif os.path.exists(OPTOUTS):
-        try:
-            os.utime(OPTOUTS, None)      # a clean pass is still a fresh pass (see main below)
-        except OSError:
-            pass
     if sup_new:
         for e in sup_new:
             sup[e] = {'type': 'optout', 'when': now[:10], 'why': src}
@@ -238,9 +249,19 @@ def main():
         return 1
 
 
+def _touch_ledger_mtime():
+    """The 07:15 sweep's freshness mark. ledger_add does not do this on an empty add."""
+    if os.path.exists(OPTOUTS):
+        try:
+            os.utime(OPTOUTS, None)
+        except OSError:
+            pass
+
+
 def _main(a):
-    # Touch the ledger first so a torn file fails this process before any other work, and a clean
-    # file with nothing new to add still refreshes the mtime the send gate reads.
+    # A torn opt-out file fails this process before any other work. This call does not refresh
+    # the mtime: only an add does, inside ledger_add. The touch below is this process, after
+    # the sweep, so a day with nothing new still counts as a fresh ledger.
     ledger_add([], 'readiness', 'optout_sync.main', dry_run=a.dry_run)
 
     rep = _load(REPLIES, {})
@@ -268,8 +289,10 @@ def _main(a):
     added += _na
     already += _nb
 
-    # ledger_add wrote (or touched) the ledger and the suppression list itself; a clean pass still
-    # refreshes the mtime the send bridge reads (see ledger_add).
+    # This process, not ledger_add, is what makes "nobody new opted out" a fresh ledger. A
+    # /notes push never reaches here, so it cannot refresh a stale file by adding nothing.
+    if not a.dry_run:
+        _touch_ledger_mtime()
     sup_new = []
     print('%d STOP-flagged reply key(s) in replies.json' % len(stops))
     print('  already ledgered : %d' % len(already))

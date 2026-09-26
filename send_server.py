@@ -834,12 +834,27 @@ def _bounce_health():
     thin = {'rate': 0.0, 'lb': 0.0, 'mailed': 0, 'dead': 0, 'known': 0,
             'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING, 'blocked': False,
             'day_date': '', 'day_sent': 0, 'day_dead': 0, 'day_rate': 0.0,
-            'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': False}
-    try:
-        bounced = {str(k).lower() for k in json.load(open(
-            os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
-    except Exception:
+            'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': False,
+            'list_unreadable': False}
+    path = os.path.join(HERE, 'bounced_emails.json')
+    if not os.path.exists(path):
         return dict(thin)
+    try:
+        raw = json.load(open(path, encoding='utf-8'))
+    except Exception:
+        raw = None
+    # A dict's keys are the addresses (what bounces.py writes). A list is the same set,
+    # which is the shape the sample test and an older file use. Anything else parsed, but
+    # it is not a list we can trust, so it blocks.
+    if isinstance(raw, dict):
+        bounced = {str(k).lower() for k in raw}
+    elif isinstance(raw, list):
+        bounced = {str(k).strip().lower() for k in raw if k}
+    else:
+        bad = dict(thin)
+        bad['blocked'] = True
+        bad['list_unreadable'] = True
+        return bad
     cutoff = (dt.date.today() - dt.timedelta(days=BOUNCE_WINDOW_DAYS)).isoformat()
     today = dt.date.today().isoformat()
     mailed = dead = 0
@@ -894,7 +909,8 @@ def _bounce_health():
             'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING,
             'blocked': trailing_blocked or day_blocked,
             'day_date': day_date, 'day_sent': day_sent, 'day_dead': day_dead, 'day_rate': day_rate,
-            'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': day_blocked}
+            'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': day_blocked,
+            'list_unreadable': False}
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
@@ -1924,8 +1940,15 @@ class Handler(BaseHTTPRequestHandler):
         # Hard stop on BULK outreach when the trailing bounce rate is unsafe. 1:1 replies to a
         # human who wrote to us are exempt (meta.test) -- gagging a live conversation to protect
         # deliverability would be the wrong trade, and one message cannot move the rate.
+        # An unreadable list is not that exemption: there is no list to check, so every send
+        # holds, including meta.test.
+        _hb = _bounce_health()
+        if _hb.get('list_unreadable'):
+            return self._json(200, {
+                'ok': False, 'blocked': 'bounce_rate',
+                'err': 'bounce list is UNREADABLE — refusing every send until '
+                       'bounced_emails.json parses'})
         if not meta.get('test'):
-            _hb = _bounce_health()
             if _hb['blocked']:
                 # PROVEN-DELIVERABLE LANE: while the trailing rate is over the ceiling, a send
                 # may still go out if EVERY recipient has direct acceptance evidence (see

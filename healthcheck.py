@@ -483,6 +483,44 @@ def chk_shipped():
             'best single value source covers %d/%d (%d%%)' % (val, shipped, round(val / shipped * 100)))
 
 
+def _index_file_texts(root, paths):
+    """Text of each path as git has it in the index (staged, or HEAD when nothing is staged).
+
+    A working-tree edit is not included. The nightly publish runs on a laptop that also holds
+    local caches; reading those files from disk let a cache edit fail the committed-secrets
+    check and block the publish. `git cat-file --batch` of `:<path>` is the index blob.
+    """
+    import subprocess
+    if not paths:
+        return []
+    proc = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=root,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    req = ''.join(':%s\n' % p for p in paths).encode()
+    out, _err = proc.communicate(req, timeout=60)
+    texts, i = [], 0
+    while i < len(out):
+        nl = out.find(b'\n', i)
+        if nl < 0:
+            break
+        header = out[i:nl].decode('utf-8', 'replace')
+        i = nl + 1
+        parts = header.split()
+        if len(parts) >= 2 and parts[-1] == 'missing':
+            texts.append(None)
+            continue
+        if len(parts) < 3:
+            break
+        size = int(parts[-1])
+        body = out[i:i + size]
+        i += size
+        if i < len(out) and out[i:i + 1] == b'\n':
+            i += 1
+        texts.append(body.decode('utf-8', 'ignore'))
+    if len(texts) != len(paths):
+        raise RuntimeError('index read returned %d bodies for %d paths' % (len(texts), len(paths)))
+    return texts
+
+
 def chk_committed_secrets():
     """No live access code may sit in a file git actually tracks.
 
@@ -523,15 +561,16 @@ def chk_committed_secrets():
     except Exception as e:
         add('WARN', 'committed secrets', 'git ls-files failed (%s)' % e)
         return
+    files = [f for f in tracked if not f.startswith('docs/') and f != 'healthcheck.py']
+    try:
+        bodies = _index_file_texts(HERE, files)
+    except Exception as e:
+        add('WARN', 'committed secrets', 'could not read the index (%s)' % e)
+        return
     hits = []
-    for f in tracked:
-        fp = os.path.join(HERE, f)
-        if f.startswith('docs/') or f == 'healthcheck.py':
-            continue        # the encrypted board and this file's own docstring
-        try:
-            body = open(fp, encoding='utf-8', errors='ignore').read()
-        except Exception:
-            continue
+    for f, body in zip(files, bodies):
+        if body is None:
+            continue        # the encrypted board and this file's own docstring are already filtered
         for c in codes:
             if c in body:
                 hits.append('%s carries %s...' % (f, c[:13]))

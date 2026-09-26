@@ -63,7 +63,11 @@ board Morning Worker follows the 09-02 no policy: a hard no is person-wide and n
 and "Not interested" is retired until its one event-driven resurface rather than a 30-day cooldown.
 The Quo `/messages` request shape follows the published OpenPhone v1 listing and has not been
 exercised against the live API from a machine holding `quo.key`. `ledger_add` refuses to replace
-an opt-out ledger it cannot parse (backup copy, original left in place, sends stay blocked).
+an opt-out ledger it cannot parse (backup copy, original left in place, sends stay blocked), and
+it applies that same refusal to `bounced_emails.json`. An empty `ledger_add` does not refresh the
+ledger mtime; the 07:15 sweep does that itself after it finishes. A Quo `/messages` response that
+is denied, missing, or not a listing holds texting (`ok: false`), and so does a scan that hits
+the page cap.
 The board and Call Mode hold texting until a fresh inbound scan is confirmed; bridge-down is a
 hold. `cadence.py` enforces the same 07:15 opt-out sync hold as `cadence-daily.bat`. Review this
 as a change to this surface, not as ordinary copy.

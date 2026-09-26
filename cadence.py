@@ -285,6 +285,27 @@ def _sync_send_block():
     return v.get('reason') or 'HOLD - opt-out sync not confirmed today'
 
 
+def _bounce_send_block():
+    """'' when bounced_emails.json is missing or a dict.
+
+    A file that exists and will not parse used to come back as an empty set, and the send
+    loop then treated every address as not-bounced. Hold the run instead. A missing file is
+    a machine that has not harvested yet, which is the existing permissive case."""
+    path = os.path.join(HERE, 'bounced_emails.json')
+    if not os.path.exists(path):
+        return ''
+    try:
+        with open(path, encoding='utf-8') as fh:
+            d = json.load(fh)
+    except Exception as e:
+        return 'bounce list is UNREADABLE (%s)' % type(e).__name__
+    if isinstance(d, list):
+        return ''
+    if not isinstance(d, dict):
+        return 'bounce list is UNREADABLE (not an object)'
+    return ''
+
+
 def load_key():
     if not os.path.exists(KEY):
         return None
@@ -628,6 +649,7 @@ def _run(args):
     # This process asks the same question, so a hand-started `python cadence.py` is held too.
     _ledger_hold = ''
     _sync_hold = ''
+    _bounce_hold = ''
     if not args.dry_run:
         _sync_hold = _sync_send_block()
         if _sync_hold:
@@ -635,6 +657,9 @@ def _run(args):
         _ledger_hold = _ledger_send_block()
         if _ledger_hold:
             print('  HELD every due step — %s. Nothing sent; steps stay due.' % _ledger_hold)
+        _bounce_hold = _bounce_send_block()
+        if _bounce_hold:
+            print('  HELD every due step — %s. Nothing sent; steps stay due.' % _bounce_hold)
     sent = 0
     capped = {}
     ctx = ssl.create_default_context()
@@ -675,7 +700,7 @@ def _run(args):
         if step >= 4:
             s['status'] = 'completed'
             continue
-        if _compliance_hold or _ledger_hold or _sync_hold:
+        if _compliance_hold or _ledger_hold or _sync_hold or _bounce_hold:
             held += 1
             continue
         subj, body = steps(s, sender)[step]

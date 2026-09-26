@@ -482,10 +482,255 @@ def bridge():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def review_blockers():
+    """The pre-merge review: dial tuples, denied Quo reads, a torn bounce list, the 60-day
+    number set, pagination, ledger mtime, and the committed-secrets scan."""
+    print('-- review blockers')
+    import ast
+    import optout_sync as O
+    import quo_sync as Q
+    import send_server as S
+    import cadence as C
+    import bounces as B
+
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfrev_'))
+    oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
+    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
+           Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, C.HERE, S.HERE)
+    try:
+        O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
+        fresh_ledger(oo)
+        Q._key = lambda: 'fixture-key'
+
+        # B6. empty add does not refresh; a real add does.
+        old_ts = time.time() - 100000
+        os.utime(oo, (old_ts, old_ts))
+        before = os.path.getmtime(oo)
+        O.ledger_add([], 'noop', 'fixture')
+        rec('an empty ledger_add does not refresh the ledger mtime',
+            abs(os.path.getmtime(oo) - before) < 1, os.path.getmtime(oo) - before)
+        O.ledger_add(['2099-000778-CA-01'], 'a real add', 'fixture')
+        rec('ledger_add refreshes the mtime only when it adds a key',
+            os.path.getmtime(oo) > before + 10)
+
+        # B3. torn bounce list is not replaced, and sends treat it as blocked.
+        fresh_ledger(oo)
+        oo_bytes = oo.read_bytes()
+        sup.write_text('{', encoding='utf-8')
+        raw = sup.read_bytes()
+        refused = False
+        try:
+            O.ledger_add(['2099-000777-CA-01'], 'must not replace a torn bounce list', 'fixture',
+                         emails=['dead@example.com'])
+        except O.LedgerUnreadable:
+            refused = True
+        backs = list(tmp.glob('bounced_emails.json.corrupt-*'))
+        rec('ledger_add refuses a corrupt bounce list', refused)
+        rec('the corrupt bounce list bytes are unchanged', sup.read_bytes() == raw)
+        rec('the opt-out ledger was not written either', oo.read_bytes() == oo_bytes)
+        rec('the bad bounce list was copied aside', len(backs) == 1 and backs[0].read_bytes() == raw,
+            [p.name for p in backs])
+        added, _ = O.ledger_add(['2099-000779-CA-01'], 'no address on this add', 'fixture')
+        rec('an opt-out with no email still lands while the bounce list stays torn',
+            '2099-000779-CA-01' in notes_of(oo) and sup.read_bytes() == raw and added == ['2099-000779-CA-01'],
+            added)
+        here = S.HERE
+        S.HERE = str(tmp)
+        health = S._bounce_health()
+        rec('an unreadable bounce list blocks',
+            health.get('blocked') is True and health.get('list_unreadable') is True, health.get('blocked'))
+        sup.unlink()
+        for p in backs:
+            p.unlink()
+        missing = S._bounce_health()
+        rec('a missing bounce list is not a block',
+            missing.get('blocked') is False and missing.get('list_unreadable') is False)
+        S.HERE = here
+        C.HERE = str(tmp)
+        sup.write_text('[', encoding='utf-8')
+        rec('cadence holds when the bounce list will not parse',
+            'UNREADABLE' in C._bounce_send_block(), C._bounce_send_block())
+        sup.unlink()
+        rec('cadence does not hold when the bounce list is absent', C._bounce_send_block() == '')
+
+        kept = {'owner@example.com': {'first_seen': '2026-09-01', 'reason': '550'}}
+        sup.write_text(json.dumps(kept), encoding='utf-8')
+        B.save_bounce_list(str(sup), dict(kept, **{'other@example.com': {'first_seen': '2026-09-02', 'reason': '550'}}))
+        saved = json.loads(sup.read_text(encoding='utf-8'))
+        rec('bounces.py writes with os.replace and keeps the prior address',
+            'owner@example.com' in saved and 'other@example.com' in saved and not (tmp / 'bounced_emails.json.tmp').exists(),
+            sorted(saved))
+        sup.write_text('{', encoding='utf-8')
+        raw = sup.read_bytes()
+        blew = False
+        try:
+            B.load_bounce_list(str(sup))
+        except O.LedgerUnreadable:
+            blew = True
+        rec('bounces.py refuses to load a torn list', blew and sup.read_bytes() == raw)
+        sup.write_text('{}', encoding='utf-8')
+
+        # B1 + B4. tuples, 60-day number set, message window stays `days`.
+        seen = {'days': None, 'who': [], 'since': []}
+        today = datetime.date.today().isoformat()
+        old_day = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
+
+        def dialed(days):
+            seen['days'] = days
+            return [('5550100191', '2099-000901-CA-01', 1.0)]
+
+        def rows():
+            return [
+                {'ch': 'text', 'to': '5550100192', 'd': today},
+                {'ch': 'text', 'to': '5550100193', 'd': old_day},
+            ]
+
+        def _get(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.MESSAGES_PATH:
+                seen['who'].append((params or {}).get('participants'))
+                seen['since'].append((params or {}).get('createdAfter'))
+                n = str((params or {}).get('participants') or '')
+                body = 'STOP' if n.endswith('191') else 'hello'
+                return {'data': [{'direction': 'incoming', 'content': body,
+                                  'createdAt': '2026-09-26T12:00:00Z'}]}
+            raise AssertionError(path)
+
+        Q.dialed_numbers = dialed
+        Q._inbound_text_rows = rows
+        Q._get = _get
+        rc = Q.sync_messages(days=2)
+        who = set(seen['who'])
+        rec('sync_messages() with no phones= walks dial tuples',
+            rc == 0 and seen['days'] == Q.INBOUND_NUMBER_LOOKBACK_DAYS and '+15550100191' in who,
+            (rc, seen['days'], who))
+        rec('the number set is 60 days of dials and texts, not the message window',
+            '+15550100192' in who and '+15550100193' not in who and seen['days'] == 60, who)
+        ages = []
+        for stamp in seen['since']:
+            when = datetime.datetime.fromisoformat(stamp)
+            ages.append((datetime.datetime.now(datetime.timezone.utc) - when).total_seconds() / 86400)
+        rec('createdAfter still follows the message window', ages and max(ages) < 5, ages)
+        rec('the dialled number STOP was ledgered', '#5550100191' in notes_of(oo))
+
+        # B5. follow the next page, and hold if the cap is hit with a token left.
+        seen['who'] = []
+
+        def _get_pages(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if (params or {}).get('pageToken') == 'p2':
+                return {'data': [{'direction': 'incoming', 'content': 'STOP',
+                                  'createdAt': '2026-09-26T12:00:00Z'}]}
+            return {'data': [{'direction': 'incoming', 'content': 'hello',
+                              'createdAt': '2026-09-26T12:00:00Z'}], 'nextPageToken': 'p2'}
+
+        Q._get = _get_pages
+        rc = Q.sync_messages(days=2, phones=['5550100194'])
+        rec('messages are read across the next page', rc == 0 and '#5550100194' in notes_of(oo), rc)
+
+        def _get_forever(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            return {'data': [{'direction': 'incoming', 'content': 'hello'}], 'nextPageToken': 'more'}
+
+        Q._get = _get_forever
+        Q.MESSAGE_PAGE_CAP = 2
+        rc = Q.sync_messages(days=2, phones=['5550100195'])
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        rec('hitting the page cap records truncated and holds texting',
+            rc != 0 and st.get('ok') is False and st.get('truncated') is True and held is True, st)
+        Q.MESSAGE_PAGE_CAP = old[7]
+
+        # B2. 403, 404, malformed, and a denied phone-number list.
+        def check_hold(name, getter, kind):
+            Q._get = getter
+            rc = Q.sync_messages(days=2, phones=['5550100196'])
+            st = json.loads(status.read_text(encoding='utf-8'))
+            blob = json.dumps(st)
+            held, why = Q.text_hold()
+            rec(name, rc != 0 and st.get('ok') is False and held is True and kind in str(st.get('why'))
+                and '5550100196' not in blob and 'fixture-key' not in blob, st.get('why'))
+
+        def pn_ok_then(messages):
+            def _get(key, path, params=None):
+                if path == '/phone-numbers':
+                    return {'data': [{'id': 'PN1'}]}
+                return messages()
+            return _get
+
+        check_hold('a 403 from /messages holds texting',
+                   pn_ok_then(lambda: {'_denied': 403}), 'denied 403')
+        check_hold('a 404 from /messages holds texting',
+                   pn_ok_then(lambda: None), '404')
+        check_hold('malformed /messages JSON holds texting',
+                   pn_ok_then(lambda: {'data': 'not-a-list'}), 'malformed')
+
+        def pn_denied(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'_denied': 403}
+            raise AssertionError('messages must not be read after a denied phone list')
+
+        check_hold('a 403 from /phone-numbers holds texting', pn_denied, 'denied 403')
+
+        # B1. --messages writes the status file when the scan raises.
+        def boom(days):
+            raise RuntimeError('5550100199 fixture-key')
+
+        def _get_pn(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            return {'data': []}
+
+        Q._get = _get_pn
+        Q.dialed_numbers = boom
+        argv = sys.argv
+        sys.argv = ['quo_sync.py', '--messages']
+        try:
+            rc = Q.main()
+        finally:
+            sys.argv = argv
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        blob = json.dumps(st)
+        rec('--messages writes ok:false when the scan raises',
+            rc != 0 and st.get('ok') is False and held is True and 'RuntimeError' in str(st.get('why'))
+            and '5550100199' not in blob and 'fixture-key' not in blob, st.get('why'))
+
+        # B7. committed-secrets scan reads the index, not the working tree.
+        tree = ast.parse((HERE / 'healthcheck.py').read_text(encoding='utf-8'))
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_index_file_texts')
+        ns = {}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), '<healthcheck>', 'exec'), ns)
+        repo = tmp / 'repo'
+        repo.mkdir()
+        env = dict(os.environ, GIT_AUTHOR_NAME='Fixture', GIT_AUTHOR_EMAIL='fixture@example.com',
+                   GIT_COMMITTER_NAME='Fixture', GIT_COMMITTER_EMAIL='fixture@example.com')
+        subprocess.check_call(['git', 'init'], cwd=repo, stdout=subprocess.DEVNULL)
+        (repo / 'doors.json').write_text('{"owner": "Fixture"}\n', encoding='utf-8')
+        subprocess.check_call(['git', 'add', 'doors.json'], cwd=repo)
+        subprocess.check_call(['git', 'commit', '-m', 'clean'], cwd=repo, env=env)
+        (repo / 'doors.json').write_text(
+            '{"owner": "Fixture", "phones": ["5550100191"]}\n', encoding='utf-8')
+        clean = ns['_index_file_texts'](str(repo), ['doors.json'])[0]
+        rec('a working-tree phone row is not what the secrets scan reads',
+            '5550100191' not in clean and '"owner"' in clean, clean[:80])
+        subprocess.check_call(['git', 'add', 'doors.json'], cwd=repo)
+        staged = ns['_index_file_texts'](str(repo), ['doors.json'])[0]
+        rec('a staged phone row is what the secrets scan reads', '5550100191' in staged, staged[:80])
+    finally:
+        (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
+         Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, C.HERE, S.HERE) = old
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == '__main__':
     unit_ledger()
     text_hold_unit()
     cadence_recheck()
     bridge()
+    review_blockers()
     print('\n%d passed, %d failed' % (len(ok), len(bad)))
     sys.exit(1 if bad else 0)
