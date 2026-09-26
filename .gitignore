@@ -217,6 +217,7 @@ tax_links.json
 cadence_state.json
 cadence_queue.json
 optouts.json
+optouts.json.corrupt-*
 # the 07:15 opt-out sync's record of its last run (sync_gate.py reads it) and its log -- per machine.
 sync_status.json
 clerk_session_status.json
@@ -271,6 +272,8 @@ bd_budget.json
 
 # hard-bounced homeowner addresses (bounces.py) — real emails, PUBLIC repo, never commit
 bounced_emails.json
+bounced_emails.json.corrupt-*
+bounced_emails.json.tmp
 # same, forward-looking: verify_emails.py classifies every address on the board, so this file is a
 # complete roster of homeowner mailboxes. Never commit.
 verified_emails.json
@@ -487,6 +490,10 @@ send_outreach_bundle.py
 send_cal_link.py
 quo.key
 quo_calls.json
+# quo_sync --messages writes this after every inbound STOP scan. Machine state, not a secret,
+# but it must not be a committed "the scan is fresh" that a clone would trust.
+quo_inbound_status.json
+quo_inbound_status.json.tmp
 # call-mode team seats: guards the no-double-dial property — must survive a clone
 !_seattest.py
 # ...and the suite that guards the BUILD-TIME seat split + the lane table. Same rule as
@@ -622,5 +629,17 @@ pacer_newfiler*.lock
 # _tracerfytest: skip-trace freshness reason (credits vs not running) and the Tracerfy spend receipt.
 # Fixtures only — no key, no network, no ledger write.
 !_tracerfytest.py
+
+# 2026-09-25: homeowner names/addresses/skip-traced phones — generated door lists and the worker activity log. Never tracked.
+pre_foreclosure_doors.json
+deep_zone_doors.json
+worker_marks.applied.jsonl
+!_stoptexttest.py
+!_cadencetest.py
+!_plannertest.py
+# _suppressionfixtest: notes DNC, inbound SMS STOP, quoted replies, "not a good time",
+# cadence send-time re-check, Quo-read failure holds texting but not email, and a clean
+# eligible lead still sends. Synthetic fixtures only.
+!_suppressionfixtest.py
 # _alertstest: pipeline alert trigger/clear on fixtures. No network, no paid call, no push.
 !_alertstest.py

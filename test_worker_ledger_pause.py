@@ -26,6 +26,8 @@ class WorkerLedgerPause(unittest.TestCase):
                               for n in ('doSend', 'probeBridge', 'pause', 'startRun'))
         harness = r'''
 var BRIDGE_HOLD='', BRIDGE_OK=true, auto=true, autoAll=true, nextStep=null;
+var TEXT_HOLD_DOWN='Texting is held — inbound STOP scan unconfirmed.';
+var TEXT_HOLD=TEXT_HOLD_DOWN;
 var sending=false, sendingAt=0, i=4, Q=Array(12).fill({mailTo:'fixture@example.invalid'});
 var lane='urgent', marks=[], logs=[], requests=0, timers=[], runs=0, tbOn=false;
 var LMETA={urgent:{t:'URGENT'}}, CAP={max:50}, AbortController=undefined;
@@ -33,6 +35,7 @@ var reply={status:200,j:{ok:false,blocked:'optout_stale',err:'ledger stale'}};
 function fetch(){requests++; return Promise.resolve({status:reply.status,json:()=>Promise.resolve(reply.j)});}
 function setTimeout(fn){timers.push(fn); return timers.length;}
 function clearTimeout(){} function render(){} function renderBridge(){} function renderRunBar(){}
+function paintTextHold(){}
 function addLog(k,n,s){logs.push(k);} function post(k){marks.push(k);}
 function advance(){i++;} function bridgeUp(ok){BRIDGE_OK=ok;} function _cacheLive(){}
 function sendInFlight(){return sending;} function sentToday(){return 0;}

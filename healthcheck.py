@@ -483,6 +483,44 @@ def chk_shipped():
             'best single value source covers %d/%d (%d%%)' % (val, shipped, round(val / shipped * 100)))
 
 
+def _index_file_texts(root, paths):
+    """Text of each path as git has it in the index (staged, or HEAD when nothing is staged).
+
+    A working-tree edit is not included. The nightly publish runs on a laptop that also holds
+    local caches; reading those files from disk let a cache edit fail the committed-secrets
+    check and block the publish. `git cat-file --batch` of `:<path>` is the index blob.
+    """
+    import subprocess
+    if not paths:
+        return []
+    proc = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=root,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    req = ''.join(':%s\n' % p for p in paths).encode()
+    out, _err = proc.communicate(req, timeout=60)
+    texts, i = [], 0
+    while i < len(out):
+        nl = out.find(b'\n', i)
+        if nl < 0:
+            break
+        header = out[i:nl].decode('utf-8', 'replace')
+        i = nl + 1
+        parts = header.split()
+        if len(parts) >= 2 and parts[-1] == 'missing':
+            texts.append(None)
+            continue
+        if len(parts) < 3:
+            break
+        size = int(parts[-1])
+        body = out[i:i + size]
+        i += size
+        if i < len(out) and out[i:i + 1] == b'\n':
+            i += 1
+        texts.append(body.decode('utf-8', 'ignore'))
+    if len(texts) != len(paths):
+        raise RuntimeError('index read returned %d bodies for %d paths' % (len(texts), len(paths)))
+    return texts
+
+
 def chk_committed_secrets():
     """No live access code may sit in a file git actually tracks.
 
@@ -497,33 +535,51 @@ def chk_committed_secrets():
     import subprocess
     codes = []
     p_codes = os.path.join(HERE, 'site.codes')
-    if not os.path.exists(p_codes):
-        add('WARN', 'committed secrets', 'no site.codes here — cannot check for leaked codes')
-        return
-    try:
-        for line in open(p_codes, encoding='utf-8'):
-            m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
-            if m:
-                codes.append(m.group(1))
-    except Exception as e:
-        add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
-        return
+    have_codes = os.path.exists(p_codes)
+    if have_codes:
+        try:
+            for line in open(p_codes, encoding='utf-8'):
+                m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
+                if m:
+                    codes.append(m.group(1))
+        except Exception as e:
+            add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
+            have_codes = False
+    # SHAPE SCAN, even with no site.codes (2026-09-25): a code that was pasted into a tracked file
+    # by another machine is invisible to the exact-match check above when THIS box's site.codes
+    # differs or is absent (the 2026-09-03 leak was exactly that -- a code in MACHINE-HANDOFF.md).
+    # A live code is DEALFLOW- plus 8 symbols with at least one digit; DEALFLOW-COVERAGE /
+    # DEALFLOW-STATUS and friends are all-letter words and do not match.
+    _shape = re.compile(r'\bDEALFLOW-(?=[A-Z0-9]{8}\b)(?=[A-Z]*\d)[A-Z0-9]{8}\b')
+    # Skip-traced phone numbers next to owner names in a tracked JSON: the other leak class
+    # (pre_foreclosure_doors.json, 2026-09-01). Public-record names are one thing; bought phones
+    # are not public record.
+    _phone_row = re.compile(r'"(?:ph|phone|phones?)"\s*:\s*\[?\s*"\d{10}"')
     try:
         tracked = subprocess.run(['git', 'ls-files'], cwd=HERE, capture_output=True,
                                  text=True, timeout=30).stdout.split()
     except Exception as e:
         add('WARN', 'committed secrets', 'git ls-files failed (%s)' % e)
         return
+    files = [f for f in tracked if not f.startswith('docs/') and f != 'healthcheck.py']
+    try:
+        bodies = _index_file_texts(HERE, files)
+    except Exception as e:
+        add('WARN', 'committed secrets', 'could not read the index (%s)' % e)
+        return
     hits = []
-    for f in tracked:
-        fp = os.path.join(HERE, f)
-        try:
-            body = open(fp, encoding='utf-8', errors='ignore').read()
-        except Exception:
-            continue
+    for f, body in zip(files, bodies):
+        if body is None:
+            continue        # the encrypted board and this file's own docstring are already filtered
         for c in codes:
             if c in body:
                 hits.append('%s carries %s...' % (f, c[:13]))
+        for m in _shape.finditer(body):
+            if not any(m.group(0) == c for c in codes):
+                hits.append('%s carries a code-shaped token %s...' % (f, m.group(0)[:13]))
+        if f.endswith('.json') and '"owner"' in body and _phone_row.search(body):
+            hits.append('%s pairs owner names with 10-digit phone numbers (skip-trace data in git)' % f)
+    hits = sorted(set(hits))
     if hits:
         add('FAIL', 'committed secrets',
             '%d live access code(s) in TRACKED files on a PUBLIC repo — ROTATE them, deleting the '
@@ -627,7 +683,10 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
 #   exit 1 = coverage-floor FAIL only -> advisory; caller may publish if publish_guard is clean
 #   exit 0 = healthy
 _CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources',
-                  'entity claim in published board'}
+                  'entity claim in published board',
+                  # 2026-09-25: a committed access code was ADVISORY (exit 1) when the 09-03 leak
+                  # happened, so the publish went ahead. It blocks now.
+                  'committed secrets'}
 _crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
 if _crit:
     print(f"  !! COMPLIANCE FAIL (blocks publish): {', '.join(_crit)}")

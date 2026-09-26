@@ -166,6 +166,7 @@ else:
       reset(); notes['S']={touches:[{ch:'email', out:'emailed', tsu:now-2*H}],
                            status:'Not interested'};
       out.softNoFloor = tier('S','soon');
+      out.softNoWhy = supReason({c:'S', d:20, p:['3055550101']}, 'soon').t || '';
 
       console.log(JSON.stringify(out));
     ''' % (lanes, blk)
@@ -217,8 +218,14 @@ else:
         rec('...and releases it at 7h', o.get('pending7h') == '', o.get('pending7h'))
         rec('...and writes nothing to cooldownH', o.get('pendingWroteNoCooldown') is True)
 
-        rec('a soft no holds other channels for 30 days too',
-            o.get('softNoFloor') == 'soft', o.get('softNoFloor'))
+        # 2026-09-26 (#70): the no policy decided 2026-09-02 is built. A logged "Not interested" is
+        # a SOFT NO, and a soft no RETIRES the lead from every lane until its one event-driven
+        # resurface (T-14 with a date). That is stronger than the old 30-day tier-3 floor, so the
+        # lead is still held in other channels, now by suppressed() (tier 'cool', reason 'soft no').
+        rec('a soft no holds other channels (retired by the soft-no policy, not a 30-day floor)',
+            o.get('softNoFloor') in ('soft', 'cool') and (o.get('softNoFloor') == 'soft'
+                                                          or 'soft no' in o.get('softNoWhy', '')),
+            (o.get('softNoFloor'), o.get('softNoWhy')))
 
 for _s in ('_contactsup_check.js', '_contactsup_harness.js'):
     try:

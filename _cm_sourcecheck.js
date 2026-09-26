@@ -42,7 +42,7 @@ const sandbox = {
   caller: () => 'Alejandro',
   hardSuppressed: () => '',            // isolate the QUEUE cooldown/sibling logic specifically
 };
-const body = ['agoTxt', 'lastCall', 'suppressed'].map(extract).join('\n');
+const body = ['agoTxt', 'lastCall', '_wasLp', 'noState', 'suppressed'].map(extract).join('\n');   // 2026-09-25: suppressed() consults noState()
 const run = new Function('ctx', 'with (ctx) { ' + body + '; return { suppressed: suppressed }; }');
 const fns = run(sandbox);
 

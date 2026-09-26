@@ -165,11 +165,14 @@ rec('a far sale and a dateless lead both open cold',
 APPROVED_EN = ("Hi HILL, this is Alejandro Gonzalez with Biscayne Solutions Group. A case was just "
                "filed at the courthouse on 1887 NW 44 ST. Right now you have the most choices, and "
                "most take weeks to set up. Our senior advisor maps them free in 5 minutes. What do "
-               "you want to do with the house?")
+               "you want to do with the house?"
+               # 2026-09-26: Alejandro -- "Reply STOP" on texts. Appended by stopEN, nothing else moved.
+               " Reply STOP to opt out.")
 APPROVED_ES = ("Hola HILL, le escribe Alejandro Gonzalez de Biscayne Solutions Group. Acaban de "
                "abrir un caso en la corte sobre 1887 NW 44 ST. Hoy es cuando más opciones tiene, y "
                "toman semanas. Nuestro asesor principal se las explica gratis en 5 minutos. "
-               "¿Qué quiere hacer con la casa?")
+               "¿Qué quiere hacer con la casa?"
+               " Responda STOP para no recibir más mensajes.")
 rec('the English just-filed body is the approved wording, character for character',
     MATRIX['cold|LP']['en'] == APPROVED_EN, MATRIX['cold|LP']['en'])
 rec('the Spanish just-filed body is the approved wording, character for character',
