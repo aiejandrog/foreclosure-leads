@@ -428,7 +428,7 @@ const morningCases = [
   const ALERT_KEYS = [
     'tracerfy-credits', 'captcha-balance', 'paid-reads-cap', 'bounce-rate',
     'optout-sync', 'morning-sends', 'laptop-readiness', 'healthcheck-fail',
-    'alerts-unpublished', 'alerts-redacted',
+    'alerts-unpublished', 'alerts-redacted', 'stale-refresh-flag',
   ];
   for (const key of ALERT_KEYS) {
     const name = 'alerts: title prefix for ' + key;

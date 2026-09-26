@@ -570,6 +570,7 @@ jobs:
               'morning-sends': 'Morning Worker sent nothing',
               'laptop-readiness': 'Laptop not ready to send',
               'healthcheck-fail': 'Nightly healthcheck failed',
+              'stale-refresh-flag': 'Refresh flag left behind',
               'alerts-unpublished': 'Pipeline alerts stopped publishing',
               'alerts-redacted': 'Pipeline alert withheld',
             };
