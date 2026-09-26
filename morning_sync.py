@@ -34,6 +34,15 @@ What counts as a step succeeding:
 Every step runs even when an earlier one failed - each only ADDS suppression - but one failure makes
 the whole morning a failure, and the sends hold.
 
+AFTER THE VERDICT: bounces.py (added 2026-09-26). Once the three steps above have run and their result
+is written, the same run harvests hard bounces from the inbox (bounces.py -> bounced_emails.json), so
+a bounce is on the list within a day instead of whenever someone next runs it by hand. On 2026-09-19
+the laptop mailed 85 addresses, 31 hard-bounced, and bounces.py did not see them until 09-24. It is
+deliberately NOT one of the steps: it is not part of the opt-out pipeline, and a failed bounce scan
+must not hold today's sends. Its result is recorded under "after" in sync_status.json and printed in
+the log; it never changes `ok`, `state`, or the exit code. It runs after the verdict is written, so if
+the scheduled task's 45-minute limit kills it, sync_status.json already says "finished".
+
     python morning_sync.py        # exit 0 = all three OK, 1 = something failed (sends will hold)
 """
 import datetime as dt
@@ -54,6 +63,11 @@ STEPS = (
     ('replies', 'replies.py', 25 * 60, True),
     ('optout_sync', 'optout_sync.py', 10 * 60, False),
     ('ledger_sync', 'ledger_sync.py', 10 * 60, False),
+)
+
+# (name, script, timeout seconds) - run after the verdict is recorded; a failure is logged, never fatal
+AFTER = (
+    ('bounces', 'bounces.py', 8 * 60),
 )
 
 
@@ -114,6 +128,17 @@ def main():
         print('[sync] !! opt-out sync FAILED (%s) - every send is HELD until a clean run today. '
               'Fix the step above and re-run run-optout-sync.bat.'
               % ', '.join(s['name'] for s in steps if not s['ok']), flush=True)
+    try:
+        after = [run_step(name, script, timeout, False) for name, script, timeout in AFTER]
+        for a in after:
+            if not a['ok']:
+                print('[sync] note: %s failed (%s). Logged only - the opt-out sync result above stands '
+                      'and sends are not held for it. Re-run: python %s' % (a['name'], a.get('why', '?'), a['name'] + '.py'),
+                      flush=True)
+        st['after'] = after
+        _write(st)
+    except Exception as e:          # never let the after-steps change the verdict or the exit code
+        print('[sync] note: after-steps could not run (%s)' % str(e)[:120], flush=True)
     return 0 if ok else 1
 
 
