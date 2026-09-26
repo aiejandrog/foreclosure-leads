@@ -223,6 +223,9 @@ clerk_session_status.json
 clerk_session_status.json.tmp
 sync_status.json.tmp
 optout-sync-run.log
+# Counts-only alert publisher log. The json it commits is pipeline_alerts.json (public, no PII).
+pipeline-alerts.log
+pipeline_alerts.json.tmp
 gmail.key
 whitepages.key
 whitepages_lookup.json
@@ -619,3 +622,5 @@ pacer_newfiler*.lock
 # _tracerfytest: skip-trace freshness reason (credits vs not running) and the Tracerfy spend receipt.
 # Fixtures only — no key, no network, no ledger write.
 !_tracerfytest.py
+# _alertstest: pipeline alert trigger/clear on fixtures. No network, no paid call, no push.
+!_alertstest.py
