@@ -52,6 +52,12 @@ BSG_Mail_Campaign_*.pdf
 !_codelientest.py
 !_fieldsheettest.py
 !_taxtest.py
+# paid_reads.py: the monthly paid-reads cap setting ({"monthly_cap": 50}) is per machine, and so is
+# its ledger (normally under DEALFLOW_DIR, outside the repo). _paidcaptest pins the cap and its wiring.
+paid_reads.json
+paid_reads_ledger.json
+paid_reads_ledger.json.*
+!_paidcaptest.py
 # ADDED 2026-08-27: these three guard real, load-bearing behaviour and were repaired the same day
 # (dynamic fixtures, correct sort tolerance, colgroup/thead agreement). Untracked, they would have
 # been repaired on exactly one laptop and lost on the next clone — the very thing this exemption

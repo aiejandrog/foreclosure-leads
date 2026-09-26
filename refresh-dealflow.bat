@@ -215,7 +215,15 @@ rem  (370 AUCTION rows, which already have a judgment) and never touched lp_lead
 rem  that by definition do NOT). So every fresh filing sat at "debt unknown" forever, and a closer
 rem  reading value-with-no-debt reads it as equity - the exact state that put an underwater owner on
 rem  a live call. 284 Miami-Dade LP leads folded in; --all picks them up here, 120/night.
-python -u records_liens.py --all --limit 120 --retries 80 >> "%LOG%" 2>&1
+rem  --max-spend 0.50 (2026-09-26). This line had NO dollar cap - only --limit 120, which caps LEADS,
+rem  and one lead can cost several solves - so it was the one uncapped Miami spender on this box.
+rem  $0.50 is ~150 solves at the measured $0.0033, so at most ~$15/month from this line. With a cap
+rem  set, a 2Captcha balance that cannot be read means free paths only for the night. Every paid
+rem  solve ALSO checks the shared monthly paid-reads cap (paid_reads.py: default $50/month, env
+rem  DEALFLOW_PAID_MONTHLY_CAP) and stops paying, logged, once this month's ledger reaches it - as do
+rem  gen_records_qs, the lis pendens sweep and the document stage. No --spend-ledger on purpose: that
+rem  would make $0.50 a total for all time, not a nightly cap.
+python -u records_liens.py --all --limit 120 --retries 80 --max-spend 0.50 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
 rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
