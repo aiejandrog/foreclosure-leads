@@ -57,6 +57,8 @@ EXIT CODES
     break    0 = no lock now | 9 = refused (live lease and no --force, or unusable)
     run      the command's own exit code | 9 = lock not acquired, command never started
              | 10 = lease lost mid-run, command killed
+             With DEALFLOW_RUNNER_LOCK off, `run` does not touch the lease and returns the
+             command's own exit code. With it set to a value this file does not understand, rc=9.
 
     python runner_lock.py status
     python runner_lock.py run --runner refresh-dealflow.bat -- cmd /c refresh-dealflow.bat
@@ -64,11 +66,47 @@ EXIT CODES
     python runner_lock.py release
     python runner_lock.py break [--force]
 
+THE GATE — OFF UNLESS A MACHINE TURNS IT ON
+DEALFLOW_RUNNER_LOCK defaults to off (unset, empty, 0, off, false, no). That is deliberate.
+Once the gate is on, a lease that cannot be read is a refusal: the 05:30 task does no work.
+The same class of fault — GitHub or DNS not up yet — already ate three mornings (09-14/16/17),
+and the private-repo credential this lock reuses is the one ledger_sync.py already has, which
+a scheduled task may not see until somebody confirms it. Shipping the refusal on, the morning
+the code lands, would make the rollout the outage. The laptop is the only armed machine today
+(MACHINE-HANDOFF.md section 1); turning the guard on is one environment variable on each box
+that might run a task, not a default. An unrecognised value (a typo) is NOT off: it refuses,
+because a var that was set and not understood must not be treated as "protection is on" while
+the run proceeds anyway.
+
+ARMED MACHINE
+With the gate on, a runner that SENDS mail or SPENDS money also has to be the configured
+machine. DEALFLOW_ARMED_MACHINE is compared to this box's declared identity: DEALFLOW_ENGINE_ID
+if set, otherwise the gitignored engine.id file (the same marker engine_drift.py uses — declared,
+not sniffed from the hostname). If those two disagree, or the identity cannot be read, or the
+armed name is unset, the runner does not start and does not take the lease. A publish-only
+runner (the reply bake) still takes the lease, so two machines cannot publish it at once, but
+it is not an armed-machine check. Send and spend are: refresh-dealflow.bat, run-leads.bat,
+run-phones.bat, run-phones-nightly.bat, cadence-daily.bat, cadence-run.bat.
+
+WHAT THE DESKTOP DOES IF IT COMES BACK
+Tasks that are still Disabled do nothing. A desktop whose tasks are enabled and whose
+DEALFLOW_RUNNER_LOCK is unset runs, because the gate is off there — setting the var on the
+laptop does not reach the other box. Set the same two variables on the desktop too: the lease
+then serialises the two machines, and send/spend runners refuse because that box's engine.id
+is not the armed one. Copying the laptop's engine.id onto the desktop is the handoff in section
+1, and it is the one case where the desktop is allowed to send — after which it contends for
+the lease like any other holder.
+
 CONFIGURATION (env, all optional; the tests use them to simulate two machines)
-    DEALFLOW_LOCK_REMOTE   the repo URL or path holding the ref   (default: ledger_sync.REPO_URL)
-    DEALFLOW_LOCK_GITDIR   local scratch bare repo                 (default: ~/DEALFLOW/runner-lock.git)
-    DEALFLOW_LOCK_HOST     this machine's name in the lock         (default: socket.gethostname())
-    DEALFLOW_LOCK_SKEW     seconds of clock-skew slack             (default: 120)
+    DEALFLOW_RUNNER_LOCK     1/on/true/yes arms the lease; unset or 0/off/false/no leaves it off
+    DEALFLOW_ARMED_MACHINE   engine id allowed to send or spend, required once the gate is on
+    DEALFLOW_ENGINE_ID       this machine's declared id (overrides engine.id when it agrees)
+    DEALFLOW_ENGINE_ID_FILE  identity file (default: engine.id next to this script; tests)
+    DEALFLOW_LOCK_REMOTE     the repo URL or path holding the ref  (default: ledger_sync.REPO_URL)
+    DEALFLOW_LOCK_GITDIR     local scratch bare repo                (default: ~/DEALFLOW/runner-lock.git)
+    DEALFLOW_LOCK_HOST       this machine's name in the lock        (default: socket.gethostname())
+    DEALFLOW_LOCK_SKEW       seconds of clock-skew slack            (default: 120)
+    DEALFLOW_LOCK_INNER      set by this file on the child it starts; never set it yourself
 """
 import json
 import os
@@ -93,6 +131,18 @@ RUN_TTL = 30 * 60                      # the `run` wrapper's lease...
 RUN_RENEW = 10 * 60                    # ...renewed this often
 GIT_TIMEOUT = 60
 OK, NOT_ACQUIRED, LOST = 0, 9, 10
+# Runners that mail a homeowner or spend money. Anything else (the reply bake) takes the lease
+# when the gate is on, and does not have to be the armed machine.
+SEND_OR_PAID = frozenset({
+    'refresh-dealflow.bat',       # skip-trace, 2Captcha, PACER
+    'run-leads.bat',              # the manual twin of the refresh
+    'run-phones.bat',
+    'run-phones-nightly.bat',     # skip-trace
+    'cadence-daily.bat',          # unattended homeowner email
+    'cadence-run.bat',
+})
+_ON = ('1', 'on', 'true', 'yes')
+_OFF = ('0', 'off', 'false', 'no')
 
 
 class Unusable(Exception):
@@ -121,6 +171,81 @@ def skew():
         return float(os.environ.get('DEALFLOW_LOCK_SKEW', '120'))
     except ValueError:
         return 120.0
+
+
+def lock_mode():
+    """'on' | 'off' | 'bad'. Unset or blank is off. A value this file does not know is bad,
+    which the caller refuses — a typo must not look like the guard is armed while the run goes."""
+    if 'DEALFLOW_RUNNER_LOCK' not in os.environ:
+        return 'off'
+    raw = os.environ.get('DEALFLOW_RUNNER_LOCK', '').strip().lower()
+    if raw == '' or raw in _OFF:
+        return 'off'
+    if raw in _ON:
+        return 'on'
+    return 'bad'
+
+
+def _runner_key(runner):
+    return os.path.basename(runner or '').strip().lower()
+
+
+def sends_or_spends(runner):
+    return _runner_key(runner) in SEND_OR_PAID
+
+
+def _read_identity():
+    """This machine's declared id, lowercased, or None when nothing declares one.
+    DEALFLOW_ENGINE_ID and engine.id must agree when both are present. Unreadable is Unusable,
+    never a guess from the hostname."""
+    env = (os.environ.get('DEALFLOW_ENGINE_ID') or '').strip().lower()
+    path = os.environ.get('DEALFLOW_ENGINE_ID_FILE') or os.path.join(HERE, 'engine.id')
+    file_id = None
+    if os.path.exists(path):
+        try:
+            file_id = open(path, encoding='utf-8').read().strip().lower() or None
+        except OSError as e:
+            raise Unusable('engine.id unreadable (%s): %s' % (path, e))
+    if env and file_id and env != file_id:
+        raise Unusable('DEALFLOW_ENGINE_ID=%s disagrees with engine.id (%s) — refusing to guess' % (env, file_id))
+    return env or file_id
+
+
+def _child_env():
+    env = os.environ.copy()
+    # The child bat sees this and does the work. A value the operator might have typed
+    # ("1", "yes") does not match, so a stale user variable cannot skip the lease.
+    env['DEALFLOW_LOCK_INNER'] = 'held-%d' % os.getpid()
+    return env
+
+
+def assert_armed(runner):
+    """None when this runner may start. NOT_ACQUIRED when it may not, already logged.
+    Publish-only runners are not checked. Called only with the gate on, and before acquire,
+    so a machine that is not armed does not take a lease it is about to refuse."""
+    if not sends_or_spends(runner):
+        return None
+    want = (os.environ.get('DEALFLOW_ARMED_MACHINE') or '').strip().lower()
+    if not want:
+        _say('NOT ACQUIRED - %s sends mail or spends money, and DEALFLOW_ARMED_MACHINE is unset. '
+             'Refusing (fail-closed). Set it to this machine\'s engine.id (the armed laptop\'s is "laptop").'
+             % runner)
+        return NOT_ACQUIRED
+    try:
+        got = _read_identity()
+    except Unusable as e:
+        _say('NOT ACQUIRED - cannot read this machine\'s identity (%s). %s did not start.' % (e, runner))
+        return NOT_ACQUIRED
+    if not got:
+        _say('NOT ACQUIRED - engine.id is missing and DEALFLOW_ENGINE_ID is unset, so this machine '
+             'cannot prove it is "%s". Refusing to run %s. Nothing sent, nothing spent.' % (want, runner))
+        return NOT_ACQUIRED
+    if got != want:
+        _say('NOT ACQUIRED - this machine is "%s", and only "%s" may run %s. '
+             'Nothing sent, nothing spent, lease not taken.' % (got, want, runner))
+        return NOT_ACQUIRED
+    _say('armed-machine check: this machine is "%s", allowed to run %s.' % (got, runner))
+    return None
 
 
 def mine_path():
@@ -281,8 +406,13 @@ def acquire(runner, ttl=CLI_TTL, pid=None, attempts=3):
                      'If this line appears every morning, a runner is dying mid-flight - find that.')
                 expect = sha
             token = str(uuid.uuid4())
+            try:
+                engine = _read_identity() or ''
+            except Unusable:
+                engine = ''
             payload = {'host': host(), 'runner': runner, 'pid': pid or os.getppid(), 'token': token,
-                       'acquired_at': int(now), 'renewed_at': int(now), 'expires_at': int(now + ttl)}
+                       'engine': engine, 'acquired_at': int(now), 'renewed_at': int(now),
+                       'expires_at': int(now + ttl)}
             new = _commit(payload)
             if _cas(new, expect):
                 lease = dict(payload, sha=new)
@@ -406,16 +536,51 @@ def _kill_tree(proc):
             pass
 
 
+def _spawn(cmd):
+    kw = {'env': _child_env()}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x00000200          # CREATE_NEW_PROCESS_GROUP
+    else:
+        kw['start_new_session'] = True
+    return subprocess.Popen(cmd, **kw)
+
+
+def _wait_child(proc):
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        _kill_tree(proc)
+        return 130
+
+
 def run(runner, cmd, ttl=RUN_TTL, every=RUN_RENEW, poll=5.0):
     # Wake often enough to renew on time and to notice a lapsed lease well inside it.
     poll = max(0.2, min(poll, every, ttl / 4.0))
+    mode = lock_mode()
+    if mode == 'bad':
+        _say('NOT ACQUIRED - DEALFLOW_RUNNER_LOCK=%r is not a value this file understands. '
+             'Use 1/on/true/yes to arm the lease, or 0/off/false/no (or unset it) to leave it off. '
+             '%s did not start.' % (os.environ.get('DEALFLOW_RUNNER_LOCK'), runner))
+        return NOT_ACQUIRED
+    if mode == 'off':
+        _say('cross-machine lease OFF (DEALFLOW_RUNNER_LOCK is not 1). This run does not coordinate '
+             'with another machine and does not check which machine is armed. To turn it on: '
+             'DEALFLOW_RUNNER_LOCK=1 and DEALFLOW_ARMED_MACHINE=<this machine\'s engine.id>.')
+        try:
+            proc = _spawn(cmd)
+        except OSError as e:
+            _say('could not start %r: %s' % (cmd, e))
+            return 1
+        return _wait_child(proc)
+    refused = assert_armed(runner)
+    if refused:
+        return refused
     rc, lease = acquire(runner, ttl=ttl, pid=os.getpid())
     if rc != OK:
         return NOT_ACQUIRED
     state = {'lease': lease, 'ok_at': time.time(), 'lost': None}
-    kw = {'creationflags': 0x00000200} if os.name == 'nt' else {'start_new_session': True}
     try:
-        proc = subprocess.Popen(cmd, **kw)
+        proc = _spawn(cmd)
     except OSError as e:
         _say('could not start %r: %s' % (cmd, e))
         release(lease)

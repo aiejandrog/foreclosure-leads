@@ -1195,6 +1195,10 @@ write_sync_ok(srv)
 (srv / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
 (srv / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
 (srv / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
+# first-touch deliverability gate (2026-09-26): these fresh fake addresses would be held as
+# unverified; mark them ZeroBounce-valid so this block keeps testing the STAY gate.
+(srv / 'verified_emails.json').write_text(json.dumps({'owner%d@example.com' % i: {'v': 'ok', 'why': 'zerobounce:valid', 'd': '2026-09-26'}
+    for i in range(1, 60)}), encoding='utf-8')
 port = free_port()
 (srv / '_run_bridge.py').write_text(
     'import sys, smtplib\n'
@@ -1298,6 +1302,10 @@ write_sync_ok(srv19)
 (srv19 / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
 (srv19 / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
 (srv19 / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
+# first-touch deliverability gate (2026-09-26): these fresh fake addresses would be held as
+# unverified; mark them ZeroBounce-valid so this block keeps testing the STAY gate.
+(srv19 / 'verified_emails.json').write_text(json.dumps({'lead%d@example.com' % i: {'v': 'ok', 'why': 'zerobounce:valid', 'd': '2026-09-26'}
+    for i in range(1, 60)}), encoding='utf-8')
 (srv19 / '_run_bridge.py').write_text(BRIDGE_FAKE, encoding='utf-8')
 QL19 = srv19 / 'pacer_q19.json'
 

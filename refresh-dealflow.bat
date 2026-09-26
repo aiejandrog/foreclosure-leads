@@ -10,6 +10,20 @@ rem  Fail-safes: a thin/blocked scrape never overwrites the live site; a
 rem  phone failure never blocks the leads; only pushes when data changed.
 rem =====================================================================
 cd /d "%~dp0"
+rem  CROSS-MACHINE LEASE. runner_lock.py, off unless DEALFLOW_RUNNER_LOCK=1. The child it
+rem  starts has DEALFLOW_LOCK_INNER=held-<pid>; anything else (unset, or a value typed by
+rem  hand) falls through and takes the lease before any scrape, spend or publish. A refusal
+rem  exits here: nothing scraped, nothing spent, live site untouched. See runner_lock.py.
+set "LOCKMARK=%DEALFLOW_LOCK_INNER%"
+if "%LOCKMARK:~0,5%"=="held-" goto :runner_lock_held
+python -u runner_lock.py run --runner "%~nx0" -- cmd /c "%~f0" >> "%~dp0runner-lock.log" 2>&1
+set "LOCKRC=%errorlevel%"
+if not "%LOCKRC%"=="0" echo [%date% %time%] %~nx0 did not start - cross-machine lease exit %LOCKRC%. See runner-lock.log.>> "%~dp0leads-run.log"
+echo %~nx0 lease exit %LOCKRC%. See runner-lock.log.
+rem  Plain exit /b: the setlocal at the top is scoped to this batch and ends with it, and the
+rem  one "endlocal & exit /b" line stays the final exit that _audit12test.py checks.
+exit /b %LOCKRC%
+:runner_lock_held
 set "LOG=leads-run.log"
 
 rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
@@ -206,6 +220,21 @@ python -u gen_tax_links.py --limit 60 >> "%LOG%" 2>&1
 echo [2d/5] Radius comps for Broward + Palm Beach leads (cadastral recent sales, new only)...
 python -u comps.py --limit 80 >> "%LOG%" 2>&1
 
+echo [2a/5] Clerk Official Records daily file - off unless DEALFLOW_OR_DAILY=1...
+rem  Paid Miami-Dade Clerk CDS "Records" folder. or_daily_file.py signs in with
+rem  CLERKDEV_USERNAME / CLERKDEV_PASSWORD, downloads new dly_records_MMDDYYYY.zip
+rem  files, and loads them into %USERPROFILE%\DEALFLOW\or_daily - outside this repo.
+rem  REPORT ONLY, and it runs BEFORE records_liens so the log shows what the daily
+rem  file already had. Matched liens, judgments, lis pendens, releases and mortgages
+rem  are evidence. Nothing here changes send, callable, or hold.
+rem  FAIL SOFT. A down site, a bad login, or a lapsed subscription logs a gap and
+rem  exits 0; this refresh continues. The units balance is read before and after
+rem  every download and a drop aborts the ingest. The script never calls a purchase,
+rem  extend, add-units, or basket URL. Five days before the subscription expiry it
+rem  warns in the log; healthcheck repeats that warning.
+python -u or_daily_file.py >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! OR daily file errored - gap only, refresh continues. See leads-run.log.>> "%LOG%"
+
 echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (2Captcha solves the Turnstile wall)...
 rem  Miami-Dade Official Records sits behind Cloudflare Turnstile. captcha_solver.py -> 2Captcha mints a
 rem  valid token (~$0.003/solve) so records_liens.py reads the chain with plain requests, no browser.
@@ -249,6 +278,15 @@ rem  THE CLOUD CANNOT DO THIS YET: refresh.yml's PB step skipped in 0s on run #4
 rem  no CAPTCHA_KEY repo secret. Until that secret exists, this laptop line is the ONLY thing
 rem  moving Palm Beach coverage.
 if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
+
+echo [2e/5] Title discovery + owner tokens - off unless DEALFLOW_TITLE=1
+rem  F2 (2026-09-26). run_title_chain.py runs miami_title_discovery for up to 3 near-sale Miami cases
+rem  a night (FREE: cached tokens, Camoufox mints, local OCR - never vision, never a paid solve) and,
+rem  ONLY with DEALFLOW_TITLE_TOKENS=1 as well, run_owner_tokens for up to 10 paid owner-token solves
+rem  a night on average (~$0.003 each, $1.50 a month at most, and never past the shared $50/month
+rem  paid-reads cap). Without DEALFLOW_TITLE=1 it prints one line and exits. Never fatal. Reports go
+rem  to DEALFLOW_DIR\title_discovery, outside the repo.
+python -u run_title_chain.py >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
@@ -424,6 +462,12 @@ rem                                Cloudflare wall refresh.yml documents elsewhe
 rem                                here, not "landing failed".
 echo [3k/5] Code-enforcement liens (free county ArcGIS)...
 python -u code_liens.py >> "%LOG%" 2>&1
+rem  C2 (2026-09-26): what each RECORDED code lien prints -- fine, daily rate, start date -- read
+rem  off the recorded document by book/page (CFN from records_index.json, anonymous OR image
+rem  endpoint, free local OCR). $0: no search, no captcha, no units. Output is an ESTIMATE, never a
+rem  payoff, and it never enters equity. Non-fatal: a failure leaves the board as it was.
+python -u code_lien_amounts.py --limit 25 >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! code_lien_amounts failed - code-lien estimates not refreshed ^(board unaffected^).>> "%LOG%"
 
 echo [3l/5] Back taxes + sold certificates (feeds equity and the tax chip)...
 python -u county_taxes.py >> "%LOG%" 2>&1

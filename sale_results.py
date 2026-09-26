@@ -522,7 +522,7 @@ def _save(data):
     os.replace(tmp, OUT)
 
 
-BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'pl', 'sale', 'ts')
+BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'pl', 'sale', 'ts', 'sale_outcome')
 # A verdict older than this is not shown: a docket read that keeps failing must not leave last
 # week's "SALE AT RISK" on the board after the docket has moved on. The nightly reads every case
 # in the window, so two days allows one missed night.
@@ -530,6 +530,17 @@ BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'pl', '
 # about two nights for a 200-case window. Sales near today are re-read every night regardless.
 MAX_AGE_DAYS = 3
 EV_SHIP = 3            # newest docket lines behind the verdict, shipped so the chip can cite them
+
+# AR1 (2026-09-26): THE STALE FLAG. Hiding every verdict past MAX_AGE_DAYS was right for the
+# VOLATILE ones (a 'SALE AT RISK' from last week says nothing about today), but it also hid the
+# DECISIVE ones -- a sale the docket already recorded as held, cancelled, moved, set aside or
+# redeemed does not un-happen because tonight's read failed -- and a PASSED sale with no read at
+# all showed nothing, which on the board is indistinguishable from "nothing happened".
+# Now: a decisive verdict up to STALE_SHOW_DAYS old ships with `stale` = its age in days; a
+# Miami-Dade row whose sale date passed inside the window with no current verdict ships
+# st='unread' (stale = age of the last read, or 'never'). Volatile verdicts stay hidden when old.
+DECISIVE = ('held', 'cancelled', 'reset', 'vacated', 'redeemed')
+STALE_SHOW_DAYS = 14
 
 
 def load_for_board(rows, path=OUT, today=None):
@@ -542,22 +553,39 @@ def load_for_board(rows, path=OUT, today=None):
     not the stale calendar listing."""
     res = _load(path, {})
     if not res:
-        return 0
+        return 0          # the docket reader never ran here: no file means no claims either way
     today = today or datetime.date.today()
     n = 0
     for r in rows:
-        v = res.get(str(r.get('case') or '').strip().upper())
-        if not isinstance(v, dict):
-            continue
+        case = str(r.get('case') or '').strip().upper()
+        v = res.get(case)
         rd = _to_date(r.get('auction'))
-        if not rd or rd.isoformat() != v.get('sale'):
+        if not rd:
             continue
-        ts = _to_date(v.get('ts'))
-        if not ts or (today - ts).days > MAX_AGE_DAYS:
+        v = v if isinstance(v, dict) and v.get('sale') == rd.isoformat() else None
+        ts = _to_date((v or {}).get('ts'))
+        age = (today - ts).days if ts else None
+        stale = None
+        if v is not None and age is not None and age > MAX_AGE_DAYS:
+            if v.get('st') in DECISIVE and age <= STALE_SHOW_DAYS:
+                stale = age                               # still true; say how old the read is
+            else:
+                v = None                                  # a volatile verdict this old says nothing
+        if v is None:
+            # A passed Miami-Dade sale inside the window with no current read: say so, rather than
+            # show nothing (which reads as "nothing happened").
+            if (MD_CASE.match(case) and today - datetime.timedelta(days=PAST_DAYS) <= rd < today):
+                r['sr'] = {'st': 'unread', 'sale': rd.isoformat(),
+                           'stale': age if age is not None else 'never',
+                           'why': ('sale date passed; the docket has not been read since %s' % ts.isoformat()
+                                   if ts else 'sale date passed; the docket has not been read for this sale')}
+                n += 1
             continue
         if v.get('st') == 'scheduled' and not (v.get('amj') or v.get('bkb')):
             continue
         sr = {k: v[k] for k in BOARD_KEYS if v.get(k) not in (None, '')}
+        if stale is not None:
+            sr['stale'] = stale
         ev = [{'d': e.get('d', ''), 'x': str(e.get('x') or '')[:140]}
               for e in (v.get('ev') or []) if isinstance(e, dict)][-EV_SHIP:]
         if ev:
@@ -584,7 +612,8 @@ def read_order(win, res, today):
 
     What this guarantees is that no case starves, not a fixed cycle: the hot cases take their
     share every night, so the rest are covered in (cold cases / (reads per night - hot cases))
-    nights. A verdict older than MAX_AGE_DAYS is hidden rather than shown stale, and main()
+    nights. An old volatile verdict is hidden and an old decisive one ships flagged stale (AR1,
+    see load_for_board), and main()
     prints coverage_gap() so a window that outgrows the budget shows up in the refresh log."""
     stamp = today.isoformat()
     out = []

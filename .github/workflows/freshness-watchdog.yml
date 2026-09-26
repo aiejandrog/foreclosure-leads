@@ -8,15 +8,18 @@ name: DEALFLOW freshness watchdog
 on:
   schedule:
     - cron: '0 15 * * *'      # 15:00 UTC  (~11:00 AM ET) — the full daily check (both jobs below it)
-    # THE MORNING CHECK (issue #28 follow-up, 2026-09-26). 11:00 is three hours after the 8:00 AM
-    # Morning Worker has already worked yesterday's board, so a missed night was only ever found
-    # after the day's outreach had gone out. GitHub cron is UTC-only and New York moves between
-    # UTC-4 and UTC-5, so BOTH crons fire and the job itself only proceeds when it is 08:xx in
-    # America/New_York — 12:30 UTC in summer (EDT), 13:30 UTC in winter (EST). The other one
-    # logs "not 08:xx ET, skipping" and exits green. GitHub can start a scheduled run late on a
-    # busy day, so read this as "about 8:30", not "at 8:30".
-    - cron: '30 12 * * *'
-    - cron: '30 13 * * *'
+    # THE MORNING CHECK, 07:15 ET, before the 08:00 Morning Worker (the first send).
+    # The 11:00 check is three hours after that worker has already used yesterday's board, and
+    # an 08:30 check is still after the send. GitHub cron is UTC-only and New York moves between
+    # UTC-4 and UTC-5, so BOTH crons fire and the job itself only proceeds when it is 07:xx in
+    # America/New_York — 11:15 UTC in summer (EDT), 12:15 UTC in winter (EST). The other one
+    # logs "not 07:xx ET, skipping" and exits green. GitHub can start a scheduled run late on a
+    # busy day, so read this as "about 7:15", not "at 7:15".
+    # A night that already pushed its early "fresh leads" board and is still enriching is not a
+    # miss: the final "auto lead" publish often lands 07:40-08:45, and paging that would be a
+    # false alarm on a healthy morning. The 11:00 check reports a run that never finishes.
+    - cron: '15 11 * * *'
+    - cron: '15 12 * * *'
   workflow_dispatch:           # allow a manual "Run workflow" from the Actions tab
     inputs:
       check:
@@ -116,8 +119,11 @@ jobs:
 
             let commits;
             try {
-              const r = await github.rest.repos.listCommits({ owner, repo, sha: 'main', since, per_page: 100 });
-              commits = r.data;
+              // EVERY page, not the first 100 (issue #87, 2026-09-26): a day of PR merges pushed
+              // 267 commits into the 4-day window, the 09-24 refresh publishes fell off page 1,
+              // and this reported "last publish more than 4 days ago" for one 2.4 days old.
+              commits = await github.paginate(github.rest.repos.listCommits,
+                                              { owner, repo, sha: 'main', since, per_page: 100 });
             } catch (e) {
               core.setFailed(`Cannot read the commit log (${e.message}) — refusing to report healthy on an unchecked repo.`);
               return;
@@ -292,28 +298,30 @@ jobs:
             core.setFailed(`${problems.length} runner problem(s) — see the runner-drift issue.`);
 
   # ------------------------------------------------------------------------------------------------
-  # MORNING CHECK (about 08:30 ET). The daily check above runs at 11:00, after the 8:00 AM Morning
-  # Worker has already sent against whatever board was live, so a missed night was always found
-  # too late to matter for that morning. This one answers a single question early enough to act
-  # on it: did last night's refresh reach origin/main today, and did the live board get rebuilt?
+  # MORNING CHECK (about 07:15 ET). The daily check above runs at 11:00, after the 8:00 AM
+  # Morning Worker has already sent against whatever board was live. This one answers a single
+  # question before that send: did the 05:30 refresh publish anything today, and is the live
+  # board's build stamp today?
   #
   # It alarms on:
   #   MISSED  - no "refresh:" publish (early or final) authored today, Eastern time. That is
   #             09-26: the laptop slept through 05:30 and nothing ran at all.
-  #   STALE   - the live board's build stamp is not today. At 08:30 only the refresh has rebuilt
-  #             the board (Replies is 08:45, Phones 09:30), so yesterday's stamp means the night
-  #             did not publish, whatever the commit log says.
+  #   STALE   - the live board's build stamp is not today. At 07:15 only the refresh has rebuilt
+  #             the board (Morning Worker is 08:00, Replies 08:45, Phones 09:30), so yesterday's
+  #             stamp means the night did not publish, whatever the commit log says.
   #   UNCHECKABLE - the commit log or the live page could not be read. Fail-loud, same rule as
   #             the steps above: a check that cannot be evaluated alarms rather than passing.
-  # A run that pushed its early board and is still working on the final one is NOT an alarm here;
-  # the 11:00 check above catches one that never finishes.
+  # A run that pushed its early board and is still working on the final one is NOT an alarm here.
+  # The final publish on a healthy night lands around 07:40-08:45 (09-22 was 07:40, 09-24 was
+  # 08:45); requiring it by 07:15 would fire on those mornings. The 11:00 check above catches one
+  # that never finishes.
   #
-  # It keeps its own issue (label `nightly-missed`), comments while the problem lasts, and closes
-  # it on the first clean morning. A failing run also fails this workflow, which is what makes
-  # GitHub email the account.
+  # Same issue the 08:30 check used (label `nightly-missed`): comment while the problem lasts,
+  # close it on the first clean morning, never open a second one. A failing run also fails this
+  # workflow, which is what makes GitHub email the account. No new service.
   morning:
     if: >-
-      github.event.schedule == '30 12 * * *' || github.event.schedule == '30 13 * * *' ||
+      github.event.schedule == '15 11 * * *' || github.event.schedule == '15 12 * * *' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.check != 'daily')
     runs-on: ubuntu-latest
     steps:
@@ -326,8 +334,8 @@ jobs:
             const TZ = 'America/New_York';
             const dayET = (d) => d.toLocaleDateString('en-CA', { timeZone: TZ });
             const hourET = (d) => Number(d.toLocaleString('en-US', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }));
-            if (context.eventName === 'schedule' && hourET(NOW) !== 8) {
-              core.info(`It is ${hourET(NOW)}:xx in New York, not 08:xx - this is the other DST cron. Skipping.`);
+            if (context.eventName === 'schedule' && hourET(NOW) !== 7) {
+              core.info(`It is ${hourET(NOW)}:xx in New York, not 07:xx - this is the other DST cron. Skipping.`);
               return;
             }
             const today = dayET(NOW);
@@ -340,8 +348,11 @@ jobs:
             let commits = null;
             try {
               const since = new Date(NOW.getTime() - 36 * 3600000).toISOString();
-              const r = await github.rest.repos.listCommits({ owner, repo, sha: 'main', since, per_page: 100 });
-              commits = r.data;
+              // EVERY page, not the first 100 (issue #87, 2026-09-26): a day of PR merges pushed
+              // 267 commits into the 4-day window, the 09-24 refresh publishes fell off page 1,
+              // and this reported "last publish more than 4 days ago" for one 2.4 days old.
+              commits = await github.paginate(github.rest.repos.listCommits,
+                                              { owner, repo, sha: 'main', since, per_page: 100 });
             } catch (e) {
               problems.push(`**Cannot read the commit log** (${e.message}). Refusing to report a healthy night on an unchecked repo.`);
             }
@@ -357,9 +368,9 @@ jobs:
                   `**MISSED: no refresh published today (${today}).** Nothing matching \`refresh: fresh leads\` ` +
                   `or \`refresh: auto lead\` reached \`origin/main\` since midnight Eastern. The 05:30 run did not ` +
                   `start (the runner was asleep or off - 09-26 was exactly this), died before its first push, or ` +
-                  `its push never landed. The 8:00 AM Morning Worker has worked YESTERDAY's board. On the armed ` +
-                  `machine: check \`leads-run.log\` for today's \`==== REFRESH\` banner, then run ` +
-                  `\`refresh-dealflow.bat\` by hand if it is absent.`);
+                  `its push never landed. The 8:00 AM Morning Worker has not run yet; if nothing publishes before ` +
+                  `then, it works YESTERDAY's board. On the armed machine: check \`leads-run.log\` for today's ` +
+                  `\`==== REFRESH\` banner, then run \`refresh-dealflow.bat\` by hand if it is absent.`);
               } else {
                 const last = refresh[refresh.length - 1];
                 const fin = refresh.find(c => /^refresh: auto lead/.test(c.msg));
@@ -377,9 +388,9 @@ jobs:
               if (!m) throw new Error('no "Updated" stamp (id="upddate") on the page');
               if (m[1] !== today) {
                 problems.push(
-                  `**STALE: the live board was last built ${m[1]}, not today (${today}).** At this hour only the ` +
-                  `05:30 refresh rebuilds it (Replies publishes at 08:45, Phones at 09:30), so the night did not ` +
-                  `reach the live site.`);
+                  `**STALE: the live board was last built ${m[1]}, not today (${today}).** At 07:15 only the ` +
+                  `05:30 refresh has rebuilt it (the Morning Worker sends at 08:00, Replies publishes at 08:45, ` +
+                  `Phones at 09:30), so the night did not reach the live site.`);
               } else {
                 clean.push(`live board built today (${m[1]})`);
               }
@@ -397,12 +408,14 @@ jobs:
               return;
             }
             const body =
-              `Morning check for **${today}** (about 08:30 ET) found:\n\n` +
+              `Morning check for **${today}** (about 07:15 ET, before the 08:00 sends) found:\n\n` +
               problems.map(p => `- ${p}`).join('\n\n') +
               (clean.length ? `\n\nWhat did check out: ${clean.join('; ')}.` : '') +
-              `\n\n---\n_This check runs every morning around 08:30 ET, comments here while the problem lasts ` +
-              `and closes this issue on the first clean morning. The 11:00 daily check (label ` +
-              `\`runner-drift\`) covers two runners, pushes that did not land and runs that never finished._`;
+              `\n\n---\n_This check runs every morning around 07:15 ET, before the 08:00 Morning Worker, ` +
+              `comments here while the problem lasts and closes this issue on the first clean morning. ` +
+              `An early "fresh leads" publish with the final "auto lead" publish still in progress is not ` +
+              `a failure here — that final often lands between 07:40 and 08:45, and the 11:00 daily check ` +
+              `(label \`runner-drift\`) covers two runners, pushes that did not land and runs that never finished._`;
             if (open.data.length) {
               await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
             } else {
