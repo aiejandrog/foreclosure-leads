@@ -2,6 +2,10 @@
 
     python -m unittest _casebudgettest
 """
+import os as _os, tempfile as _tf
+# the shared monthly paid-reads ledger (paid_reads.py) is a THROWAWAY file here: the fake paid reads
+# below must neither book spend against the real month nor fail because the real month is spent
+_os.environ['DEALFLOW_PAID_LEDGER'] = _os.path.join(_tf.mkdtemp(prefix='paidledger_'), 'paid_reads_ledger.json')
 import json
 import tempfile
 import unittest

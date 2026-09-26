@@ -256,6 +256,13 @@ def mint_token(owner, qs_cache, ladder=None):
     from captcha_cost_cutoff import CutoffStopped
     try:
         if ladder is not None:
+            # The ladder's paid step goes through the shared monthly cap (paid_reads.py): checked
+            # before each paid task, its actual receipt recorded after. A refusal raises
+            # CutoffStopped, which already means "stop paid minting for this run".
+            _solver = getattr(ladder, 'solver', None)
+            if _solver is not None and not getattr(_solver, '_paid_reads', False):
+                import paid_reads
+                ladder.solver = paid_reads.CutoffGuard(_solver, 'run_documents tokens')
             token, hits = ladder.search_token(owner, split)
         else:
             token, hits = G.mint_qs(split, tries=1)
@@ -561,8 +568,17 @@ def main(argv=None):
         if args.max_spend <= 0:
             parser.exit(2, '--interpret needs --max-spend; there is no uncapped mode\n')
         import document_interpreter
+        import paid_reads
         interpreter = document_interpreter.build('api')
-        budget = document_interpreter.Budget(args.max_spend)
+        # The shared monthly paid-reads cap (paid_reads.py): the run's cap is cut to what the month
+        # has left, and a month with nothing left runs without interpretation (logged), never over.
+        # Each call is then debited at its worst case before it is made and settled after
+        # (paid_reads.cap_budget), so a spender running beside this one cannot share the last cents.
+        _icap = paid_reads.clamp(args.max_spend, 'run_documents interpret')
+        if _icap > 0:
+            budget = paid_reads.cap_budget(document_interpreter.Budget(_icap), 'run_documents interpret')
+        else:
+            interpreter = None
     vision_budget = None
     if args.vision:
         # Same rule as --interpret, and for the same reason: validated here, before a single
@@ -634,8 +650,17 @@ def main(argv=None):
     if vision_budget is not None:
         from document_backfill import PersistentBudget
         from document_case_budget import CaseAllocator, MemoryState
-        vision_budget = CaseAllocator(PersistentBudget(args.vision_max_spend, MemoryState()),
-                                      [entry['case'] for entry in picked])
+        import paid_reads
+        # SHARED MONTHLY CAP (paid_reads.py). The night's vision cap is cut to what the month has
+        # left; nothing left = no vision reads this run (logged), OCR still runs. Each read is
+        # debited at its worst case BEFORE the call and settled to its real price after
+        # (paid_reads.cap_budget), so a killed run cannot hide its spend and a concurrent spender
+        # cannot take the same last cents.
+        _vcap = paid_reads.clamp(args.vision_max_spend, 'run_documents vision')
+        vision_budget = (CaseAllocator(paid_reads.cap_budget(PersistentBudget(_vcap, MemoryState()),
+                                                             'run_documents vision'),
+                                       [entry['case'] for entry in picked])
+                         if _vcap > 0 else None)
     ocr = None if args.no_ocr else DS.winocr
     token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
     captcha_state = solver = None

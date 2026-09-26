@@ -163,7 +163,8 @@ if __name__ == '__main__':
     page = 'https://onlineservices.miamidadeclerk.gov/officialrecords/'
     print('solving Turnstile for MD Official Records...')
     t0 = time.time()
-    tok = solve_turnstile(R.TS_SITE_KEY, page)
+    import paid_reads                      # a real paid solve: under the shared monthly cap too
+    tok = paid_reads.guarded(solve_turnstile, 'captcha_solver smoke test')(R.TS_SITE_KEY, page)
     print(f'token: {"<none>" if not tok else tok[:40] + "... (" + str(len(tok)) + " chars)"}  in {int(time.time()-t0)}s')
     if not tok:
         raise SystemExit('SOLVE FAILED')

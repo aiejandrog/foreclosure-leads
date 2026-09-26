@@ -52,7 +52,7 @@ FACT = ('clear', 'priced')
 LABEL = {
     'clear':     'VERIFIED CLEAR — chain traced, no surviving mortgage found',
     'priced':    'VERIFIED — surviving debt traced and priced',
-    'unpriced':  'CEILING ONLY — mortgage(s) recorded, surviving total not established',
+    'unpriced':  'CEILING ONLY — recorded debt found, surviving total not established',
     'none':      'UNVERIFIED — the recorded chain could not be established',
     'unchecked': 'NOT CHECKED — no recorded chain pulled for this lead yet',
 }
@@ -61,7 +61,10 @@ SHORT = {'clear': 'CLEAR', 'priced': 'VERIFIED', 'unpriced': 'CEILING',
 
 
 # A lender is foreclosing on this parcel: there IS a mortgage, whatever the recorded search found.
-LENDER_CASE_TYPES = ('Bank/Mortgage',)
+# 'Mortgage/Other' is a mortgage foreclosure whose plaintiff foreclosure_leads.classify could not
+# name as a bank (a private lender, a trust): still a mortgage being foreclosed. Counting it can
+# only move a CLEAR down to UNVERIFIED, never up.
+LENDER_CASE_TYPES = ('Bank/Mortgage', 'Mortgage/Other')
 LENDER_OWN_CASE_WHY = ('UNVERIFIED — a lender is foreclosing on this parcel, but the recorded search '
                        'found no open mortgage; the chain missed it')
 
@@ -100,6 +103,19 @@ def state_of(chain, lead=None):
     """
     if not chain or not isinstance(chain, dict):
         return 'unchecked'
+    st = _state_of(chain, lead)
+    # AN OPEN LIEN WITH NO PUBLISHED AMOUNT (12-case verification 2026-09-24, defect 1). A city,
+    # county, association or tax lien the search found on the parcel, still open, whose amount the
+    # index does not publish, means the surviving total is not established: a ceiling, never a
+    # FACT, exactly like an unpriced mortgage.
+    if st in FACT and (chain.get('other_open_unpriced') or 0) > 0:
+        return 'unpriced'
+    # A PRICED one stays 'clear' on purpose: the state is the MORTGAGE verdict (demote_for_bank_fc and
+    # the lender rule key on it), and the lien's figure reaches the deal math as orcode/orhoa/orirs.
+    return st
+
+
+def _state_of(chain, lead=None):
     conf = str(chain.get('conf') or '').strip().lower()
     liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
     # NO MORTGAGE FOUND IS NOT VERIFIED CLEAR (2026-09-23 accuracy audit). An empty list only proves
@@ -141,8 +157,11 @@ def apply(lead, chain):
     st = state_of(chain, lead)
     lead['eqstate'] = st
     lead['eqstate_why'] = LABEL[st]
-    if st == 'none' and lender_foreclosure(lead) and state_of(chain) == 'clear':
+    if st == 'none' and lender_foreclosure(lead) and _state_of(chain) == 'clear':
         lead['eqstate_why'] = LENDER_OWN_CASE_WHY
+    if st == 'unpriced' and _state_of(chain, lead) == 'clear':
+        lead['eqmtgclear'] = True    # the MORTGAGE verdict was clear; only an amountless lien made it
+                                     # a ceiling, so a lender's separate case still demotes it
     if isinstance(chain, dict):
         # how hard did we look? an operator deserves to see 30-records-examined vs 0.
         if chain.get('nrec') is not None:
@@ -155,8 +174,18 @@ def apply(lead, chain):
             # how many instruments we know survive but cannot total. PB reports the count itself;
             # a part-priced list from any county has to be counted here, or the lead renders a
             # CEILING of 0 and reads like a clear one.
-            _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
-            lead['eqopen'] = (chain.get('mtg_open_unpriced') or 0) or len(_liens)
+            # eqopen counts MORTGAGES still open (a satisfied one is history, not a ceiling); the
+            # open city, association and tax liens with no published amount are eqoth, so the
+            # board can say which kind of debt it cannot total.
+            _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)
+                      and str(l.get('st') or 'OPEN').upper() != 'SATISFIED']
+            # Palm Beach's mtg_open_unpriced already counts every recorded mortgage (priced rows
+            # included, it records mtg_recorded); Miami keeps unpriced loans OUT of `liens`, so
+            # there the two add up.
+            _unp = chain.get('mtg_open_unpriced') or 0
+            lead['eqopen'] = (_unp or len(_liens)) if 'mtg_recorded' in chain else _unp + len(_liens)
+            if chain.get('other_open_unpriced'):
+                lead['eqoth'] = chain.get('other_open_unpriced')
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure
@@ -203,7 +232,8 @@ def bank_fc_evidence(lead):
 
 def demote_for_bank_fc(lead):
     """Call AFTER the merge has attached orsecond / sib. Returns True when it demoted."""
-    if not isinstance(lead, dict) or lead.get('eqstate') != 'clear':
+    if not isinstance(lead, dict) or not (lead.get('eqstate') == 'clear' or
+                                          (lead.get('eqstate') == 'unpriced' and lead.get('eqmtgclear'))):
         return False
     what = bank_fc_evidence(lead)
     if not what:
@@ -232,7 +262,7 @@ def coverage_documented(chain):
         n = int(chain.get('nrec') or 0)
     except (TypeError, ValueError):
         n = 0
-    if n <= 0 or chain.get('capped') or chain.get('truncated'):
+    if n <= 0 or chain.get('capped') or chain.get('truncated') or chain.get('parcel_found') is False:
         return False
     return ('second_fc' in chain and not chain.get('second_fc')
             and not chain.get('second_fc_unsure'))
