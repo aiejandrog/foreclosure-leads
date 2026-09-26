@@ -314,6 +314,13 @@ def run(args, runner):
           'remaining ceiling $%.6f' % (args.vision_max_spend, charged,
                                      max(0, args.vision_max_spend - charged)))
     print('  This is a spending ceiling, NOT a price to finish every case. Captcha spend: $0.00.')
+    try:
+        import paid_reads
+        _m = paid_reads.status()
+        print('  monthly paid-reads cap (shared with every paid read): $%.2f of $%.2f spent in %s%s'
+              % (_m['spent'], _m['cap'], _m['month'], '' if _m['ok'] else ' -- PAID WORK OFF: ' + _m['why']))
+    except Exception as exc:                        # informational only; the run itself re-checks
+        print('  monthly paid-reads cap: status unavailable (%s)' % type(exc).__name__)
     print('  resume checkpoint: %s' % path)
     print('  order: auctions in next 45 days first, nearest date first; then later auctions, '
           'past auctions nearest first, unknown dates last')
@@ -329,6 +336,19 @@ def run(args, runner):
             print('  PAUSED: cumulative cap exhausted; no API client started.')
             print('  progress: %s' % json.dumps(progress(picked, state.data), sort_keys=True))
             return 4
+        if budget:
+            # SHARED MONTHLY CAP (paid_reads.py), on top of this backfill's own cumulative ceiling,
+            # which stays exactly as it was. Every read is debited to the month at its worst case
+            # before the call and settled after, so the backfill both counts toward and respects the
+            # same $50/month every paid read shares. A month with nothing left pauses the backfill
+            # here (resume next month, or when the cap is raised) without starting an API client.
+            import paid_reads
+            if paid_reads.remaining('run_documents backfill') <= 0:
+                print('  PAUSED: the monthly paid-reads cap has nothing left (see python paid_reads.py); '
+                      'no API client started.')
+                print('  progress: %s' % json.dumps(progress(picked, state.data), sort_keys=True))
+                return 4
+            budget = paid_reads.cap_budget(budget, 'run_documents backfill')
         if budget:
             import document_vision
             document_vision.VisionReader().client()

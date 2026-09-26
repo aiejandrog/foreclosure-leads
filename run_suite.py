@@ -12,13 +12,16 @@ A TIMEOUT is reported distinctly from an assertion failure, because they mean di
 an assertion failure is a defect, a timeout is usually this machine being busy. Re-run that one
 suite alone before believing it.
 """
-import glob, subprocess, sys, os, time
+import glob, subprocess, sys, os, tempfile, time
 tests=sorted(set(glob.glob('_*test.py')+glob.glob('_workerui.py')))
 oks=[]; fails=[]
 for t in tests:
     try:
+        # DEALFLOW_PAID_LEDGER: a suite's fake paid solves must never land in the real monthly
+        # paid-reads ledger (paid_reads.py), so every suite gets its own throwaway one.
         r=subprocess.run([sys.executable,t], capture_output=True, text=True, encoding='utf-8',
-                         errors='replace', timeout=240, env={**os.environ,'PYTHONIOENCODING':'utf-8'})
+                         errors='replace', timeout=240, env={**os.environ,'PYTHONIOENCODING':'utf-8',
+                         'DEALFLOW_PAID_LEDGER':os.path.join(tempfile.mkdtemp(),'paid_reads_ledger.json')})
         if r.returncode==0: oks.append(t); print('PASS', t, flush=True)
         else:
             fails.append(t); print('FAIL', t, flush=True)
