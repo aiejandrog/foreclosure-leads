@@ -56,9 +56,10 @@ echo ==== done - skipped %date% %time% ==== >> "%LOG%"
 exit /b 0
 
 :send
-rem  07:15 OPT-OUT SYNC GATE (2026-09-26). cadence.py mails homeowners and has no ledger-freshness
-rem  check of its own. sync_gate.py exits 3 unless TODAY's opt-out sync (run-optout-sync.bat) finished
-rem  with every step OK - the same rule send_server /send enforces. Held = nothing sent, steps stay due.
+rem  07:15 OPT-OUT SYNC GATE (2026-09-26). sync_gate.py exits 3 unless TODAY's opt-out sync
+rem  (run-optout-sync.bat) finished with every step OK - the same rule send_server /send enforces.
+rem  cadence.py asks that question again before it mails, so a hand-started run is held too.
+rem  This bat hold stays: a missed window must not reach cadence.py at 3am. Held = nothing sent.
 python -u sync_gate.py >> "%LOG%" 2>&1
 if errorlevel 1 goto :held
 rem  CROSS-MACHINE LEASE around the send, not around the hour window or the hold above.

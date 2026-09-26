@@ -14,9 +14,8 @@ in one function does not taint a `tmp` in another, and fails if a module outside
     ALLOWED            the pipeline: optout_sync.py (the sync + ledger_add), ledger_sync.py (the
                        add-only union, the sync's last step), replies.py (the sync's first step; on
                        PR #70 it only stamps optout_verified and routes STOPs through ledger_add).
-    LEGACY_PENDING_70  cadence.py still writes the ledger itself on main. PR #70 routes it through
-                       optout_sync.ledger_add. Tolerated with a WARNING until #70 lands; once cadence
-                       stops writing, the entry is stale and this test says to delete it.
+    LEGACY_PENDING_70  empty. cadence.py used to write the ledger itself; PR #70 routes it through
+                       optout_sync.ledger_add, and the entry was removed once that write was gone.
 
 It also proves the detector works (a synthetic writer in each shape is caught; readers are not)
 and that the 07:15 sync's own new code (morning_sync.py, sync_gate.py) never writes the list.
@@ -33,7 +32,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 HERE = pathlib.Path(__file__).resolve().parent
 TARGET = 'optouts.json'
 ALLOWED = {'optout_sync.py', 'ledger_sync.py', 'replies.py'}
-LEGACY_PENDING_70 = {'cadence.py'}
+LEGACY_PENDING_70 = set()
 SAVE_HELPERS = {'_save', 'save_json', '_save_json', 'write_json', '_write_json', 'atomic_write',
                 '_atomic_write', 'write_if_changed', 'dump_json', '_dump_json'}
 ok, bad, warn = [], [], []

@@ -62,8 +62,11 @@ all texting and Call Mode says so; it does not hold email past the 07:15 opt-out
 board Morning Worker follows the 09-02 no policy: a hard no is person-wide and never re-contacted,
 and "Not interested" is retired until its one event-driven resurface rather than a 30-day cooldown.
 The Quo `/messages` request shape follows the published OpenPhone v1 listing and has not been
-exercised against the live API from a machine holding `quo.key`. Review this as a change to this
-surface, not as ordinary copy.
+exercised against the live API from a machine holding `quo.key`. `ledger_add` refuses to replace
+an opt-out ledger it cannot parse (backup copy, original left in place, sends stay blocked).
+The board and Call Mode hold texting until a fresh inbound scan is confirmed; bridge-down is a
+hold. `cadence.py` enforces the same 07:15 opt-out sync hold as `cadence-daily.bat`. Review this
+as a change to this surface, not as ordinary copy.
 
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the

@@ -217,6 +217,7 @@ tax_links.json
 cadence_state.json
 cadence_queue.json
 optouts.json
+optouts.json.corrupt-*
 # the 07:15 opt-out sync's record of its last run (sync_gate.py reads it) and its log -- per machine.
 sync_status.json
 clerk_session_status.json

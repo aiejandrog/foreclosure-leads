@@ -86,7 +86,66 @@ T('_workerEligible consults _workerNoBlocks',
   /function _workerEligible\(r\)\{[\s\S]*?_workerNoBlocks\(r\)/.test(SRC));
 T('notint keeps hrs:720', SRC.includes('hrs:720'));
 T('text hold is separate from the email bridge hold',
-  SRC.includes('TEXT_HOLD=(j&&j.text_hold)') && SRC.includes('BRIDGE_HOLD=(j&&j.optout_stale)'));
+  SRC.includes('TEXT_HOLD=(j&&j.text_hold===false)') && SRC.includes('BRIDGE_HOLD=(j&&j.optout_stale)'));
+
+console.log('\n== bridge down holds texting until /health proves the scan is fresh ==');
+const holdFn = extract('_textHoldApply');
+const downM = SRC.match(/var TEXT_HOLD_DOWN = '([^']*)';/);
+let apply = null;
+try {
+  apply = new Function('TEXT_HOLD_DOWN', holdFn + '\nreturn _textHoldApply;')(downM && downM[1]);
+} catch (e) { apply = null; console.log('  (hold fn: ' + e.message + ')'); }
+T('_textHoldApply is in the board', typeof apply === 'function', holdFn && holdFn.slice(0, 80));
+T('no health answer stays held', apply && apply(null) !== '' && apply(undefined) !== '' && apply({}) !== '',
+  apply && apply(null));
+T('text_hold true stays held and keeps the server reason',
+  apply && apply({text_hold: true, text_hold_why: 'HOLD texting fixture'}) === 'HOLD texting fixture');
+T('text_hold false is the only clear', apply && apply({text_hold: false}) === '');
+T('TEXT_HOLD defaults to the down reason', SRC.includes('var TEXT_HOLD = TEXT_HOLD_DOWN'));
+T('a failed /health puts the board back on the down reason',
+  SRC.includes('TEXT_HOLD = TEXT_HOLD_DOWN'));
+T('the worker starts held', SRC.includes('TEXT_HOLD=TEXT_HOLD_DOWN'));
+T('a failed worker probe holds texting', SRC.includes('TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold()'));
+T('the worker does not open sms: while held',
+  SRC.includes('if(TEXT_HOLD){ addLog("fail", r.first||r.owner, TEXT_HOLD, "warn"); return; }')
+  && SRC.includes('if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'));
+
+console.log('\n== Call Mode: no poll holds unless the baked scan is still fresh ==');
+const CM = fs.readFileSync(path.join(__dirname, 'call_mode.py'), 'utf8');
+function extractCm(name) {
+  const i = CM.indexOf('function ' + name + '(');
+  if (i < 0) return null;
+  let depth = 0, j = CM.indexOf('{', i);
+  for (let k = j; k < CM.length; k++) {
+    if (CM[k] === '{') depth++;
+    else if (CM[k] === '}') { depth--; if (depth === 0) return CM.slice(i, k + 1); }
+  }
+  return null;
+}
+const cmNames = ['quoScanFresh', 'textingHeld', 'textHoldWhy'];
+const cmMissing = cmNames.filter(n => !extractCm(n));
+const cmBox = { QUOLIVE: false, QUOHOLD: null, QUOBAKE: null, Date, isFinite };
+let cm = {};
+try {
+  cm = new Function('ctx', 'with (ctx) {\n' + cmNames.map(extractCm).filter(Boolean).join('\n') +
+    '\n; return { quoScanFresh, textingHeld, textHoldWhy }; }')(cmBox);
+} catch (e) { console.log('  (call mode source did not evaluate: ' + e.message + ')'); }
+const freshTs = new Date().toISOString();
+const staleTs = new Date(Date.now() - 40 * 3600000).toISOString();
+cmBox.QUOLIVE = false;
+cmBox.QUOBAKE = { ok: false, held: true, ts: '', maxAgeH: 36, why: 'scan missing' };
+cmBox.QUOHOLD = cmBox.QUOBAKE;
+T('bridge down and no fresh bake holds', cm.textingHeld && cm.textingHeld() === true, cm.textingHeld && cm.textingHeld());
+cmBox.QUOBAKE = { ok: true, held: false, ts: freshTs, maxAgeH: 36 };
+cmBox.QUOHOLD = cmBox.QUOBAKE;
+T('bridge down with a fresh bake does not hold', cm.textingHeld && cm.textingHeld() === false, cm.textingHeld && cm.textingHeld());
+cmBox.QUOBAKE = { ok: true, held: false, ts: staleTs, maxAgeH: 36 };
+cmBox.QUOHOLD = cmBox.QUOBAKE;
+T('bridge down with a stale bake holds', cm.textingHeld && cm.textingHeld() === true);
+cmBox.QUOLIVE = true;
+cmBox.QUOHOLD = { held: true, why: 'HOLD texting from health', live: true };
+T('a live health hold wins over a fresh bake', cm.textingHeld && cm.textingHeld() === true && cm.textHoldWhy() === 'HOLD texting from health');
+T('call mode functions are in the page', cmMissing.length === 0, cmMissing.join(','));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (missing.length) console.log('missing from source: ' + missing.join(', '));

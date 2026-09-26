@@ -269,6 +269,22 @@ def _ledger_send_block():
     return ''
 
 
+def _sync_send_block():
+    """'' when today's 07:15 opt-out sync finished OK. The same marker cadence-daily.bat reads.
+
+    The bat holds first so a missed window does not mail at 3am. This holds too, so
+    `python cadence.py` on its own cannot skip that check. Any doubt is a hold."""
+    try:
+        import sync_gate
+        v = sync_gate.verdict(path=os.path.join(HERE, 'sync_status.json'))
+    except Exception as e:
+        return ('HOLD - the opt-out sync gate could not be evaluated (%s); holding every send'
+                % str(e)[:80])
+    if v.get('ok'):
+        return ''
+    return v.get('reason') or 'HOLD - opt-out sync not confirmed today'
+
+
 def load_key():
     if not os.path.exists(KEY):
         return None
@@ -608,10 +624,14 @@ def _run(args):
               f'{len(sup_new)} address(es) hard-suppressed')
 
     # 2) send due steps
-    # LEDGER GATE. Stale or unreadable optouts.json blocks the send. The 07:15 sync hold lives in
-    # cadence-daily.bat (sync_gate.py) and is a separate question: this one is the file itself.
+    # LEDGER GATE and the 07:15 SYNC GATE. The bat still runs sync_gate.py before this process.
+    # This process asks the same question, so a hand-started `python cadence.py` is held too.
     _ledger_hold = ''
+    _sync_hold = ''
     if not args.dry_run:
+        _sync_hold = _sync_send_block()
+        if _sync_hold:
+            print('  HELD every due step — %s. Nothing sent; steps stay due.' % _sync_hold)
         _ledger_hold = _ledger_send_block()
         if _ledger_hold:
             print('  HELD every due step — %s. Nothing sent; steps stay due.' % _ledger_hold)
@@ -655,7 +675,7 @@ def _run(args):
         if step >= 4:
             s['status'] = 'completed'
             continue
-        if _compliance_hold or _ledger_hold:
+        if _compliance_hold or _ledger_hold or _sync_hold:
             held += 1
             continue
         subj, body = steps(s, sender)[step]

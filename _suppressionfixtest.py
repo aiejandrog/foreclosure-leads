@@ -206,6 +206,50 @@ def cadence_recheck():
         json.dump([], open(S.SENT_LEDGER, 'w'))
         fresh_ledger(C.OPTOUTS)
         today = datetime.date.today().isoformat()
+
+        def sync_ok(directory):
+            json.dump({
+                'date': today, 'state': 'finished', 'ok': True,
+                'started_at': time.time() - 120, 'finished_at': time.time() - 60, 'steps': [],
+            }, open(os.path.join(directory, 'sync_status.json'), 'w'))
+
+        def run_cadence():
+            argv, stdout = sys.argv, sys.stdout
+            sys.argv = ['cadence.py']
+            buf = io.StringIO()
+            sys.stdout = buf
+            try:
+                rc = C.main()
+            finally:
+                sys.argv, sys.stdout = argv, stdout
+            return rc, buf.getvalue()
+
+        # No sync_status.json: running cadence.py directly is held, same as the .bat.
+        rows_probe = [{'case': '2099-000304-CA-01', 'owner': 'Clean', 'email': 'clean@example.com', 'step': 0}]
+        json.dump({'sender': {'name': 'Test Sender'}, 'queue': rows_probe}, open(C.QUEUE, 'w'))
+        C._oe._load_optouts = lambda: set()
+        C._oe._load_leads = lambda: [{'case': '2099-000304-CA-01', 'days': 40}]
+        import diligence_gate as DG0
+        DG0.gate = lambda row: {'hold': False, 'code': '', 'why': ''}
+        C.load_key = lambda: ('sender@example.com', 'app-password')
+        C.imap_replies = lambda *a, **k: {}
+        C.steps = lambda s, sender: [('subj %d' % i, 'body %d about 1 Example St.' % i) for i in range(4)]
+        zb0 = {'v': 'ok', 'why': 'zerobounce:valid', 'd': today}
+        S._deliverability_evidence = lambda: {
+            'bounced': set(), 'replied': set(), 'proven': set(),
+            'ver': {'clean@example.com': zb0}, 'last_mailed': {}}
+        S._load_senders = lambda: {
+            'main_domain': 'example.com', 'main_domain_cap': 40,
+            'lanes': {'active': 'sender@example.com', 'default': 'sender@example.com', 'early': 'sender@example.com'},
+            'first_touch': {'from': [], 'per_day': 0}}
+        S._senders_active = lambda user, cfg: False
+        S._smtp_send = lambda *a, **k: sent.append(a[3] if len(a) > 3 else k.get('to_addr')) or '<mid@test>'
+        rc, out = run_cadence()
+        st = json.load(open(C.STATE))
+        rec('cadence.py with no 07:15 sync holds and does not mail',
+            not sent and st['2099-000304-CA-01']['step'] == 0 and 'HOLD' in out, out[-400:])
+        sent.clear()
+        os.remove(C.STATE)
         rows = [
             {'case': '2099-000301-CA-01', 'owner': 'Stay', 'email': 'stayed@example.com', 'step': 0},
             {'case': '2099-000302-CA-01', 'owner': 'Pass', 'email': 'passed@example.com', 'step': 0},
@@ -237,6 +281,7 @@ def cadence_recheck():
             'first_touch': {'from': [], 'per_day': 0}}
         S._senders_active = lambda user, cfg: False
         S._smtp_send = lambda *a, **k: sent.append(a[3] if len(a) > 3 else k.get('to_addr')) or '<mid@test>'
+        sync_ok(str(ctmp))
 
         argv, stdout = sys.argv, sys.stdout
         sys.argv = ['cadence.py']
@@ -393,6 +438,23 @@ def bridge():
         rec('that send reached SMTP once', smtp_n() == ['owner1@example.com'], smtp_n())
 
         oo.write_text('{', encoding='utf-8')
+        raw = oo.read_bytes()
+        import optout_sync as O
+        old_oo, old_sup = O.OPTOUTS, O.SUPPRESS
+        O.OPTOUTS, O.SUPPRESS = str(oo), str(work / 'bounced_emails.json')
+        try:
+            try:
+                O.ledger_add(['2099-000310-CA-01'], 'must not replace a torn ledger', 'fixture')
+                refused = False
+            except O.LedgerUnreadable:
+                refused = True
+            backs = list(work.glob('optouts.json.corrupt-*'))
+            rec('ledger_add refuses a corrupt ledger', refused)
+            rec('the corrupt ledger bytes are unchanged', oo.read_bytes() == raw, oo.read_bytes()[:40])
+            rec('the bad bytes were copied to a timestamped backup',
+                len(backs) == 1 and backs[0].read_bytes() == raw, [p.name for p in backs])
+        finally:
+            O.OPTOUTS, O.SUPPRESS = old_oo, old_sup
         st, j = call(port, '/send', {
             'to': 'owner2@example.com', 'subj': 'About 1 Main St',
             'body': 'Hello Jane, a short note about 1 Main St.',

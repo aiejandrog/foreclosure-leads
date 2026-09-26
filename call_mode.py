@@ -2035,13 +2035,32 @@ def _identity_opted_fn(slim, optouts):
 
 
 def _quo_hold_json():
-    """What Call Mode shows before it can ask the bridge. Missing/unreadable status holds texting."""
+    """What Call Mode shows before it can ask the bridge.
+
+    held/why is the verdict at build time. ok/ts/maxAgeH let the phone re-check that verdict
+    against the same 36h window when it cannot reach 127.0.0.1. A missing or failed scan bakes
+    held. A fresh ok scan bakes not-held, and goes stale on the phone once maxAgeH passes."""
+    max_h, rec = 36, {}
     try:
         import quo_sync as _qs
+        max_h = int(_qs.INBOUND_MAX_AGE_H)
         held, why = _qs.text_hold()
+        try:
+            rec = json.load(open(_qs.INBOUND_STATUS, encoding='utf-8'))
+        except Exception:
+            rec = {}
+        if not isinstance(rec, dict):
+            rec = {}
     except Exception as e:
         held, why = True, ('HOLD texting — inbound STOP scan could not be read (%s)' % str(e)[:80])
-    return json.dumps({'held': bool(held), 'why': (why or '') if held else ''})
+        rec = {}
+    return json.dumps({
+        'held': bool(held),
+        'why': (why or '') if held else '',
+        'ok': (not held) and bool(rec.get('ok')),
+        'ts': str(rec.get('ts') or ''),
+        'maxAgeH': max_h,
+    })
 
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
@@ -2744,6 +2763,8 @@ var TEXTPERSON=__TEXTPERSON__;
 /* Baked at build from quo_sync.text_hold(). A live /health poll below can freshen it. A failed
    poll keeps the bake: the phone often cannot see the laptop, and bridge-down is not a scan failure. */
 var QUOHOLD=__QUOHOLD__;
+var QUOBAKE=QUOHOLD;
+var QUOLIVE=false;
 /* BAKED SEAT (2026-09-09). null on a whole-list build; {n,i,w} on a seat page whose payload
    already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
@@ -3863,15 +3884,42 @@ function pool(){
   return keep;
 }
 var _SEATN = 0, _CLMN = 0;
-function textingHeld(){ return !!(typeof QUOHOLD !== 'undefined' && QUOHOLD && QUOHOLD.held); }
+function quoScanFresh(q){
+  /* Same window as quo_sync.INBOUND_MAX_AGE_H. A bake with no ok scan, or an old one, is not fresh. */
+  if(!q || q.ok !== true || !q.ts) return false;
+  var t = Date.parse(q.ts);
+  if(!isFinite(t)) return false;
+  var maxH = (typeof q.maxAgeH === 'number' && q.maxAgeH > 0) ? q.maxAgeH : 36;
+  return (Date.now() - t) <= maxH * 3600000;
+}
+function textingHeld(){
+  /* A successful /health answer wins. If this page cannot poll the bridge, the bake is trusted
+     only while that scan is still inside the staleness window. Otherwise texting is held. */
+  var q = (typeof QUOHOLD === 'object' && QUOHOLD) ? QUOHOLD : null;
+  if(typeof QUOLIVE !== 'undefined' && QUOLIVE && q) return !!q.held;
+  return !quoScanFresh(typeof QUOBAKE === 'object' ? QUOBAKE : null);
+}
+function textHoldWhy(){
+  if(!textingHeld()) return '';
+  var q = (typeof QUOHOLD === 'object' && QUOHOLD) ? QUOHOLD : null;
+  if(typeof QUOLIVE !== 'undefined' && QUOLIVE && q && q.why) return q.why;
+  var b = (typeof QUOBAKE === 'object' && QUOBAKE) ? QUOBAKE : null;
+  if(b && b.held && b.why) return b.why;
+  return 'Texting is held — this page cannot confirm a fresh inbound STOP scan.';
+}
 function pollTextHold(){
-  /* Live answer wins when the bridge is on this machine. A failed fetch keeps the bake. */
+  var was = textingHeld();
   fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
-    if(!j || typeof j.text_hold === 'undefined') return;
-    var was = textingHeld();
-    QUOHOLD = {held: !!j.text_hold, why: j.text_hold_why || ''};
+    if(!j || typeof j.text_hold !== 'boolean'){ QUOLIVE = false; }
+    else {
+      QUOLIVE = true;
+      QUOHOLD = {held: !!j.text_hold, why: j.text_hold_why || '', live: true, ok: j.text_hold === false};
+    }
     if(textingHeld() !== was){ try{ render(); }catch(e){} }
-  }).catch(function(){});
+  }).catch(function(){
+    QUOLIVE = false;
+    if(textingHeld() !== was){ try{ render(); }catch(e){} }
+  });
 }
 function start(){
   /* The worker's queue is the DEFAULT when it has anything in it. Those leads were triaged this
@@ -4092,8 +4140,8 @@ function head(){
      Read from pool()'s last count rather than re-deriving it: this is THIS LANE's hidden count, and
      head() always renders downstream of a pool() call. */
   var sup = _SUPN;
-  var _qh = (typeof QUOHOLD !== 'undefined' && QUOHOLD && QUOHOLD.held)
-    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc(QUOHOLD.why || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>')
+  var _qh = (typeof textingHeld === 'function' && textingHeld())
+    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>')
     : '';
   return _qh + '<div class="top"><div class="lane">'+laneBtns+'</div>'
     + boardBar()
@@ -5516,7 +5564,7 @@ function afterCall(r, o, nextC){
   var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
-  else if(textingHeld())    txt = '<div class="nc">'+esc((QUOHOLD && QUOHOLD.why) || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>';
+  else if(textingHeld())    txt = '<div class="nc">'+esc(textHoldWhy() || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>';
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';

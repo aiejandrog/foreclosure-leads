@@ -52,6 +52,9 @@ C.QUEUE = os.path.join(ctmp, 'cadence_queue.json')
 C.STATE = os.path.join(ctmp, 'cadence_state.json')
 C.OPTOUTS = os.path.join(ctmp, 'optouts.json')
 json.dump({'_dealflow_notes': 1, 'notes': {}}, open(C.OPTOUTS, 'w'))
+json.dump({'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
+           'started_at': 0, 'finished_at': 1, 'steps': []},
+          open(os.path.join(ctmp, 'sync_status.json'), 'w'))
 json.dump({'sender': {'name': 'Test Sender'}, 'queue': [
     {'case': '2099-000201-CA-01', 'owner': 'A', 'email': 'unverified@example.com', 'step': 0},
     {'case': '2099-000202-CA-01', 'owner': 'B', 'email': 'valid1@example.com', 'step': 0},

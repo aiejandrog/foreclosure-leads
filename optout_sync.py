@@ -33,6 +33,8 @@ import argparse
 import datetime
 import json
 import os
+import shutil
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPLIES = os.path.join(HERE, 'replies.json')
@@ -61,6 +63,47 @@ def _now():
     return datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
 
 
+class LedgerUnreadable(Exception):
+    """optouts.json exists and does not parse. The original file was not rewritten."""
+
+
+def _refuse_unreadable_ledger(path, err):
+    """Copy the bad bytes aside and raise. Never replace the original.
+
+    A parse failure used to come back as {} and the next add rewrote the file, which is how a
+    torn ledger became an empty one and the send gate started passing. Sends stay blocked only
+    while the unreadable file is still the file the gate reads."""
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    backup = path + '.corrupt-' + ts
+    copied = False
+    try:
+        shutil.copy2(path, backup)
+        copied = True
+    except Exception as ce:
+        print('!! OPT-OUT LEDGER UNREADABLE and the backup copy FAILED (%s). '
+              'The original was NOT modified. Sends stay blocked.' % str(ce)[:160], file=sys.stderr)
+    else:
+        print('!! OPT-OUT LEDGER UNREADABLE (%s). Copied the bad file to %s and LEFT THE ORIGINAL '
+              'UNTOUCHED. Refusing to write. Sends stay blocked.'
+              % (str(err)[:160], os.path.basename(backup)), file=sys.stderr)
+    raise LedgerUnreadable('opt-out ledger unreadable; original left untouched%s'
+                           % ((' (backup %s)' % os.path.basename(backup)) if copied else ''))
+
+
+def _read_ledger_for_write(path):
+    """The current ledger, or None when the file does not exist yet.
+
+    Exists-but-unreadable raises LedgerUnreadable after copying a backup. The caller must not
+    create a replacement."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding='utf-8') as fh:
+            return json.load(fh)
+    except Exception as e:
+        _refuse_unreadable_ledger(path, e)
+
+
 def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt=''):
     """THE ONE WRITER of optouts.json (2026-09-25). Add-only, atomic, envelope-preserving.
 
@@ -82,9 +125,12 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
     when = (str(when) if when else now)[:32]
     keys = [str(k).strip() for k in keys if k and str(k).strip()]
     keys = [k.lower() if (k.startswith('@') or k.startswith('#')) else k for k in keys]
-    opt = _load(OPTOUTS, {}) or {}
-    if not isinstance(opt, dict):
+    # Read BEFORE any write, including a dry run. A file we cannot parse is not an empty ledger.
+    opt = _read_ledger_for_write(OPTOUTS)
+    if opt is None:
         opt = {}
+    elif not isinstance(opt, dict):
+        _refuse_unreadable_ledger(OPTOUTS, 'parsed but is not an object (%s)' % type(opt).__name__)
     if 'notes' not in opt or not isinstance(opt.get('notes'), dict):
         # legacy bare-dict shape: treat every top-level key as a note and re-wrap
         legacy = {k: v for k, v in opt.items() if k not in ('_dealflow_notes', 'exported', 'device')}
@@ -185,6 +231,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
+    try:
+        return _main(a)
+    except LedgerUnreadable as e:
+        print('!! %s' % e, file=sys.stderr)
+        return 1
+
+
+def _main(a):
+    # Touch the ledger first so a torn file fails this process before any other work, and a clean
+    # file with nothing new to add still refreshes the mtime the send gate reads.
+    ledger_add([], 'readiness', 'optout_sync.main', dry_run=a.dry_run)
 
     rep = _load(REPLIES, {})
     stops = {k: v for k, v in rep.items() if isinstance(v, dict) and _truthy(v.get('stop'))}
