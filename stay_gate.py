@@ -22,8 +22,8 @@ and the verdict is the same predicate outreach_email._eligible and outreach_mail
 that merge stamps: active and not lifted. entry_stay_active() below is that predicate on a cache
 entry; _sendstaytest.py pins it against outreach_email's own merge + _eligible on the same cache.
 
-CASE MATCHING. Board rows carry the full Miami-Dade number (2025-007384-CA-01); other sources drop
-or vary the suffix. Two numbers are the same case when their stem (2025-007384: four-digit year,
+CASE MATCHING. Board rows carry the full Miami-Dade number (2099-000123-CA-01); other sources drop
+or vary the suffix. Two numbers are the same case when their stem (2099-000123: four-digit year,
 six-digit sequence) matches. Every cache entry on the stem counts, and ONE active entry blocks:
 over-blocking a sibling suffix costs an email, under-blocking is a §362 contact.
 
@@ -33,8 +33,8 @@ exactly those labels (CASE, CASE NO / NO. / NUMBER / NUM / NBR / #, a bare NO / 
 ':' '#' or '.') and tolerates spaces around the hyphen, so the row resolves to the same key the
 cache is indexed on. Nothing else is stripped: a county code, a Broward CACE- prefix or a Palm Beach
 50- number still has no Miami-Dade stem. The six-digit sequence must END there (a seventh digit is a
-different or mistyped number, not this case), so 2025-0073841 no longer truncates onto 2025-007384,
-and only a suffix may follow it (-CA-01, a space, or CA01 run on); 2025-007384x is refused.
+different or mistyped number, not this case), so 2099-0001231 no longer truncates onto 2099-000123,
+and only a suffix may follow it (-CA-01, a space, or CA01 run on); 2099-000123x is refused.
 Anything that does not parse is refused as stay_case_unresolvable, as before.
 
 FAIL CLOSED, ALL THE WAY DOWN. This is a send gate, not a build step (compare diligence_gate.py,
@@ -73,7 +73,7 @@ _STEM_RE = re.compile(r'^\d{4}-\d{6}$')
 # then START with the stem, so a mis-strip can only fail closed.
 _LABEL_RE = re.compile(r'^(?:CASE\s*(?:NUMBER|NUM\.?|NBR\.?|NO\.?|#)?|NO\b\.?|#)\s*[:#.]?\s*')
 # the stem, spaces allowed around the hyphen; the sequence must END after six digits, followed by
-# nothing, a hyphen / space (the suffix), or the court code itself (2025-007384CA01)
+# nothing, a hyphen / space (the suffix), or the court code itself (2099-000123CA01)
 _NUM_RE = re.compile(r'^(\d{4})\s*-\s*(\d{6})(?=$|[\s-]|C[AC])')
 
 CLEAR = 'clear'
@@ -88,10 +88,10 @@ _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, 
 
 
 def case_stem(case):
-    """'2025-007384-CA-01' -> '2025-007384'. '' when the number has no Miami-Dade stem.
+    """'2099-000123-CA-01' -> '2099-000123'. '' when the number has no Miami-Dade stem.
 
-    'CASE NO 2025-007384-CA-01', 'Case No.: 2025-007384', 'CASE # 2025 - 007384-CA-01' -> '2025-007384'.
-    'CACE-24-001234', '2025-0073841', 'CASE', 'BW 2025-007384' -> '' (refused as unresolvable)."""
+    'CASE NO 2099-000123-CA-01', 'Case No.: 2099-000123', 'CASE # 2099 - 000123-CA-01' -> '2099-000123'.
+    'CACE-24-001234', '2099-0001231', 'CASE', 'BW 2099-000123' -> '' (refused as unresolvable)."""
     s = ' '.join(str(case or '').split()).upper()
     s = _LABEL_RE.sub('', s, count=1)
     m = _NUM_RE.match(s)

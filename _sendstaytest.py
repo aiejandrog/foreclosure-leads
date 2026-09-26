@@ -106,7 +106,7 @@ def unit():
         r = c('2099-000006-CA-01')
         rec('stem: one ACTIVE entry among siblings blocks even when the exact key is clean',
             r['code'] == SG.STAY_ACTIVE and len(r['matched']) == 2, r)
-        rec('case_stem() is the first 11 characters', SG.case_stem('2025-007384-CA-01') == '2025-007384'
+        rec('case_stem() is the first 11 characters', SG.case_stem('2099-000123-CA-01') == '2099-000123'
             and SG.case_stem('CACE-24-1') == '')
 
         # ---- labelled numbers ("CASE NO 2025-...") resolve to the cache key; junk still refuses ----
@@ -142,8 +142,8 @@ def unit():
         r = c('2099-000003-CA-01')
         rec('... while the real six-digit number still clears', r['ok'], r)
         rec('case_stem(): labels and hyphen spacing normalise to the cache key',
-            SG.case_stem('CASE NO 2025-007384-CA-01') == SG.case_stem('2025 - 007384') == '2025-007384'
-            and SG.case_stem('2025-007384CA01') == '2025-007384')
+            SG.case_stem('CASE NO 2099-000123-CA-01') == SG.case_stem('2099 - 000123') == '2099-000123'
+            and SG.case_stem('2099-000123CA01') == '2099-000123')
         # a cache written with a labelled key is indexed on the same stem (never silently dropped)
         cpl = str(tmp / 'labelled_cache.json')
         pathlib.Path(cpl).write_text(json.dumps({
