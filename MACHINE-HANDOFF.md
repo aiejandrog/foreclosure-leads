@@ -294,8 +294,10 @@ develop and push today. Three gaps remain, all needing a copy from the laptop:
 
 ## 4. Scheduled tasks
 
-The nine below are the ones `install-tasks.ps1` registers, enables and disables as a set — eight
-until 2026-09-18, see the NINTH TASK block in §1. They are identical on both machines.
+The nine below were the installer set (`install-tasks.ps1` registers, enables and disables
+them together — eight until 2026-09-18, see the NINTH TASK block in §1). DEALFLOW Daily Scrape
+has since been deleted from the laptop. It was the old double-biller (see BATCHDATA-EXIT.md)
+and is not registered.
 
 **Times below are as confirmed on the LAPTOP on 2026-09-22.** Two moved that morning — Replies
 06:45 → 08:45 and Phones 06:00 → 09:30 — and this table said the old times for a day afterwards,
@@ -304,7 +306,7 @@ which is the whole reason §1 tells you to enumerate rather than read a list in 
 | Task | Time | Cadence | State on the laptop | Definition |
 |---|---|---|---|---|
 | DEALFLOW Refresh | 05:30 | daily | Ready | `tasks/` export, **or** `task-templates/` — tracked in git |
-| DEALFLOW Daily Scrape | 07:00 | weekly | Ready | `tasks/` export |
+| DEALFLOW Daily Scrape | — | — | **Retired / deleted** from the laptop | old double-biller; see BATCHDATA-EXIT.md |
 | DealFlow Weekly Analyst | 07:30 | weekly | Ready | `tasks/` export |
 | DealflowSendServerDaily | 07:45 | daily | Ready | `tasks/` export |
 | DEALFLOW Morning Worker | 08:00 | daily | Ready | `tasks/` export |
@@ -346,8 +348,9 @@ An export always wins over a template of the same task name.
 section: they decide whether the nightly fires at all, and until today they could not be read,
 diffed or reviewed from anywhere except the armed laptop. Adding the template changes nothing on
 that laptop — the export still wins — but the hardening is now in the repo where a commit can
-carry it, and `_refreshexittest.py` asserts it. The other seven are still export-only; each is one
-`task-templates/` file away from the same treatment.
+carry it, and `_refreshexittest.py` asserts it. The other seven were still export-only; each is one
+`task-templates/` file away from the same treatment. DEALFLOW Daily Scrape is not one of them
+anymore: it is retired and has been deleted, not waiting on a template.
 
 **DealFlow Cadence sends real email to homeowners.** It runs `cadence-daily.bat`, which repo-guards
 the folder, refuses to send outside 08:00–20:00, then runs `python -u cadence.py`. Log:

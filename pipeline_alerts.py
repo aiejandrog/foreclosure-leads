@@ -19,9 +19,12 @@ the opt-out sync, or a send. Nothing here writes the opt-out ledger or decides a
 OFF UNTIL A MACHINE ON main RUNS IT. The watchdog treats a missing file as "not armed" and
 does not close issues it cannot re-read.
 
-GIT. publish writes the file first. It does no git at all while refresh-running.flag
-exists or this machine's runner lease (dealflow-mine.json) is still inside its
+GIT. publish writes the file first. It does no git at all while a fresh
+refresh-running.flag exists (written within 6h, the Refresh task's execution
+limit) or this machine's runner lease (dealflow-mine.json) is still inside its
 expiry — that is the 07:15 sync overlapping a refresh that runs until 07:40–08:45.
+A flag older than 6h is a killed run, not a live one: publishing ignores it and
+the file carries a stale-refresh-flag warning.
 Otherwise it fetches origin/main, fast-forwards when local main is strictly behind,
 and commits only when local main equals origin/main and the index has no other
 staged file. A rejected push is undone (soft reset to the recorded base, then
@@ -86,6 +89,13 @@ _LABEL = re.compile(r"[A-Za-z0-9 ._()%:+'/,&§·-]{1,80}\Z")
 _STEPS = ('replies', 'optout_sync', 'ledger_sync')
 _OK_TASK = {0, 267009, 267011}   # success, currently running, never run
 _UNATTENDED = ('refresh', 'phones', 'replies')
+# Refresh's own exit 7: a lane failed and the night still finished (RUNEXIT=7). Not a kill.
+_REFRESH_DEGRADED = 7
+# 267011 is SCHED_S_TASK_HAS_NOT_RUN. Fine for a task that has never been scheduled to
+# matter yet; on Refresh it means the 05:30 did not start.
+_REFRESH_NOT_RUN = 267011
+# DEALFLOW_Refresh.xml ExecutionTimeLimit. Past this the scheduler has already killed the task.
+REFRESH_FLAG_MAX_AGE_S = 6 * 3600
 
 DEFAULTS = {
     'tracerfy_low': skiptrace_health.DEFAULT_LOW_CREDITS,
@@ -390,9 +400,42 @@ def readiness_alert(sig, now, th, at):
         problems.append('DEALFLOW scheduled tasks could not be listed')
     else:
         problems.extend(_task_bits(sig))
-    if not problems:
+    degraded = [] if sig.get('tasks_ok') is False else _degraded_bits(sig)
+    if not problems and not degraded:
         return None
-    return _alert('laptop-readiness', 'fail', 'Laptop readiness: ' + '; '.join(problems) + '.', at)
+    text = 'Laptop readiness: ' + '; '.join(problems + degraded) + '.'
+    # A finished night with one bad lane is a warning. A kill, a miss, or any other
+    # readiness problem stays a failure, and the degraded code is still named in it.
+    if problems:
+        return _alert('laptop-readiness', 'fail', text, at)
+    return _alert('laptop-readiness', 'warn', text, at)
+
+
+def _degraded_bits(sig):
+    try:
+        n = int(sig.get('degraded') or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n <= 0:
+        return []
+    names = [safe_label(x) for x in (sig.get('degraded_names') or [])]
+    names = [x for x in names if x]
+    codes = []
+    for raw in sig.get('degraded_codes') or []:
+        try:
+            code = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if code not in codes:
+            codes.append(code)
+    code_txt = ', '.join(str(c) for c in codes)
+    if names and code_txt:
+        return ['%d DEALFLOW task(s) degraded (%s, last result %s)' % (n, ', '.join(names), code_txt)]
+    if names:
+        return ['%d DEALFLOW task(s) degraded (%s)' % (n, ', '.join(names))]
+    if code_txt:
+        return ['%d DEALFLOW task(s) degraded (last result %s)' % (n, code_txt)]
+    return ['%d DEALFLOW task(s) degraded' % n]
 
 
 def _task_bits(sig):
@@ -432,6 +475,23 @@ def health_alert(sig, at):
                   'healthcheck FAIL stages: %s.' % ', '.join(kept), at)
 
 
+def stale_flag_alert(sig, at):
+    """A refresh-running.flag older than the task limit. Publishing ignored it."""
+    if not isinstance(sig, dict) or not sig.get('stale'):
+        return None
+    try:
+        age_h = float(sig.get('age_h'))
+    except (TypeError, ValueError):
+        age_h = None
+    if age_h is None or not math.isfinite(age_h):
+        text = ('refresh-running.flag is past the 6h refresh limit, so it was ignored '
+                'and this file was published.')
+    else:
+        text = ('refresh-running.flag is %.1fh old, past the 6h refresh limit, so it was ignored '
+                'and this file was published.' % age_h)
+    return _alert('stale-refresh-flag', 'warn', text, at)
+
+
 def alerts_from(signals, now, th=None):
     """Every current alert. A key that is absent has cleared."""
     now = now_local(now)
@@ -447,6 +507,7 @@ def alerts_from(signals, now, th=None):
         morning_alert(signals.get('morning_sends'), now, th, at),
         readiness_alert(signals.get('readiness'), now, th, at),
         health_alert(signals.get('health_fails'), at),
+        stale_flag_alert(signals.get('refresh_flag'), at),
     ]
     return sorted((a for a in found if a), key=lambda a: a['key'])
 
@@ -615,15 +676,41 @@ def read_system_power():
         return {'power_ok': False}
 
 
+def _result_code(raw):
+    text = str(raw or '').strip()
+    if not text:
+        return None
+    try:
+        return int(text, 0)
+    except ValueError:
+        return None
+
+
 def _failed_result(raw):
     text = str(raw or '').strip()
     if not text:
         return False
-    try:
-        code = int(text, 0)
-    except ValueError:
+    code = _result_code(text)
+    if code is None:
         return True
     return code not in _OK_TASK
+
+
+def _refresh_task(label):
+    return 'refresh' in str(label or '').lower()
+
+
+def _refresh_degraded(label, raw):
+    return _refresh_task(label) and _result_code(raw) == _REFRESH_DEGRADED
+
+
+def _refresh_missed(label, raw):
+    """Refresh only. 267011 / 'has not run' is a missed 05:30, not a quiet never-run."""
+    if not _refresh_task(label):
+        return False
+    if 'has not run' in str(raw or '').strip().lower():
+        return True
+    return _result_code(raw) == _REFRESH_NOT_RUN
 
 
 def _interactive_only(mode):
@@ -641,12 +728,17 @@ def _task_label(raw):
     return safe_label(name)
 
 
+def _no_tasks():
+    return {'tasks_ok': False, 'disabled': 0, 'failed': 0, 'interactive': 0, 'degraded': 0,
+            'disabled_names': [], 'failed_names': [], 'interactive_names': [],
+            'degraded_names': [], 'degraded_codes': []}
+
+
 def parse_tasks(csv_text):
     """schtasks /Query /FO CSV /V. Disabled, failed last result, or Interactive-only logon
-    on the unattended refresh / phones / replies tasks."""
+    on the unattended refresh / phones / replies tasks. Refresh rc=7 is degraded, not failed."""
     if not csv_text:
-        return {'tasks_ok': False, 'disabled': 0, 'failed': 0, 'interactive': 0,
-                'disabled_names': [], 'failed_names': [], 'interactive_names': []}
+        return _no_tasks()
     rows = list(csv.reader(io.StringIO(csv_text)))
     header = None
     start = 0
@@ -656,9 +748,8 @@ def parse_tasks(csv_text):
             start = i + 1
             break
     if not header or 'Last Result' not in header:
-        return {'tasks_ok': False, 'disabled': 0, 'failed': 0, 'interactive': 0,
-                'disabled_names': [], 'failed_names': [], 'interactive_names': []}
-    disabled, failed, interactive = [], [], []
+        return _no_tasks()
+    disabled, failed, interactive, degraded = [], [], [], []
     for row in rows[start:]:
         if len(row) <= header['TaskName']:
             continue
@@ -670,7 +761,9 @@ def parse_tasks(csv_text):
         mode = row[header['Logon Mode']] if 'Logon Mode' in header and len(row) > header['Logon Mode'] else ''
         if status.strip().lower() == 'disabled':
             disabled.append(label)
-        if _failed_result(result):
+        if _refresh_degraded(label, result):
+            degraded.append((label, _REFRESH_DEGRADED))
+        elif _refresh_missed(label, result) or _failed_result(result):
             failed.append(label)
         low = label.lower()
         if any(k in low for k in _UNATTENDED) and _interactive_only(mode):
@@ -678,7 +771,10 @@ def parse_tasks(csv_text):
     return {
         'tasks_ok': True,
         'disabled': len(disabled), 'failed': len(failed), 'interactive': len(interactive),
+        'degraded': len(degraded),
         'disabled_names': disabled, 'failed_names': failed, 'interactive_names': interactive,
+        'degraded_names': [name for name, _code in degraded],
+        'degraded_codes': [code for _name, code in degraded],
     }
 
 
@@ -696,9 +792,12 @@ def readiness_from(power, port_open, tasks, now):
         'disabled': int((tasks or {}).get('disabled') or 0) if isinstance(tasks, dict) else 0,
         'failed': int((tasks or {}).get('failed') or 0) if isinstance(tasks, dict) else 0,
         'interactive': int((tasks or {}).get('interactive') or 0) if isinstance(tasks, dict) else 0,
+        'degraded': int((tasks or {}).get('degraded') or 0) if isinstance(tasks, dict) else 0,
         'disabled_names': list((tasks or {}).get('disabled_names') or []) if isinstance(tasks, dict) else [],
         'failed_names': list((tasks or {}).get('failed_names') or []) if isinstance(tasks, dict) else [],
         'interactive_names': list((tasks or {}).get('interactive_names') or []) if isinstance(tasks, dict) else [],
+        'degraded_names': list((tasks or {}).get('degraded_names') or []) if isinstance(tasks, dict) else [],
+        'degraded_codes': list((tasks or {}).get('degraded_codes') or []) if isinstance(tasks, dict) else [],
     }
     return out
 
@@ -866,6 +965,7 @@ def make_doc(now=None, measure=False, prev_readiness=None, th=None):
     now = now_local(now)
     th = th or thresholds()
     signals = gather(now, th, measure=measure)
+    signals['refresh_flag'] = refresh_flag_signal(HERE)
     if not measure and isinstance(prev_readiness, dict) and prev_readiness.get('at'):
         signals['readiness'] = prev_readiness
     elif not measure:
@@ -942,9 +1042,50 @@ def lease_held(now=None):
     return when <= exp + slack
 
 
-def git_blocked(repo):
-    """Why git must not run, or ''. A flag or a live lease means the refresh still owns the repo."""
-    if os.path.exists(os.path.join(repo, 'refresh-running.flag')):
+def _flag_age(repo, now=None):
+    """Seconds since refresh-running.flag was written, or None when there is no flag.
+
+    A stat failure on a flag that is there returns 0, so publishing still waits: we
+    cannot prove the run is dead.
+    """
+    path = os.path.join(repo, 'refresh-running.flag')
+    if not os.path.lexists(path):
+        return None
+    when = time.time() if now is None else float(now)
+    try:
+        return when - os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+def refresh_flag_state(repo, now=None):
+    """'', 'fresh', or 'stale'. Stale is older than the Refresh execution limit."""
+    age = _flag_age(repo, now)
+    if age is None:
+        return ''
+    if age > REFRESH_FLAG_MAX_AGE_S:
+        return 'stale'
+    return 'fresh'
+
+
+def refresh_flag_signal(repo, now=None):
+    """Counts for the published file. Only a stale flag is an alert."""
+    if refresh_flag_state(repo, now) != 'stale':
+        return {'stale': False}
+    age = _flag_age(repo, now)
+    out = {'stale': True}
+    if isinstance(age, float) and math.isfinite(age) and age >= 0:
+        out['age_h'] = round(age / 3600.0, 1)
+    return out
+
+
+def git_blocked(repo, now=None):
+    """Why git must not run, or ''. A fresh flag or a live lease means the refresh still owns the repo.
+
+    A flag older than 6h does not block. The scheduler's execution limit has already
+    killed that run; the next refresh is what deletes the flag.
+    """
+    if refresh_flag_state(repo, now) == 'fresh':
         return 'refresh-running'
     if lease_held():
         return 'lease-held'

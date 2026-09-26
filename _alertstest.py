@@ -185,7 +185,18 @@ rec('50% is not under 50', one(ready(pct=50), 'laptop-readiness') is None)
 rec('a closed send-server port alerts', '8823' in one(ready(port_open=False), 'laptop-readiness')['text'])
 rec('a disabled task alerts by name',
     'DEALFLOW Refresh' in one(ready(disabled=1, disabled_names=['DEALFLOW Refresh']), 'laptop-readiness')['text'])
-rec('a failed last result alerts', one(ready(failed=1, failed_names=['DEALFLOW Phones']), 'laptop-readiness') is not None)
+rec('a failed last result alerts',
+    (a := one(ready(failed=1, failed_names=['DEALFLOW Phones']), 'laptop-readiness'))
+    and a['severity'] == 'fail')
+rec('Refresh rc=7 is degraded, a warn, and names the code',
+    (a := one(ready(degraded=1, degraded_names=['DEALFLOW Refresh'], degraded_codes=[7]), 'laptop-readiness'))
+    and a['severity'] == 'warn' and 'degraded' in a['text'] and 'last result 7' in a['text']
+    and 'failed' not in a['text'] and clean(a['text']))
+rec('a kill beside a degraded night stays a failure and still names the code',
+    (a := one(ready(failed=1, failed_names=['DEALFLOW Refresh'],
+                   degraded=1, degraded_names=['DEALFLOW Refresh'], degraded_codes=[7]),
+              'laptop-readiness'))
+    and a['severity'] == 'fail' and 'last result failed' in a['text'] and 'last result 7' in a['text'])
 rec('an Interactive-only unattended task alerts',
     one(ready(interactive=1, interactive_names=['DEALFLOW Replies']), 'laptop-readiness') is not None)
 rec('a task name that is an email is counted but not printed',
@@ -224,6 +235,32 @@ rec('task parse: one disabled, one failed, one interactive unattended',
 rec('the evening task is not flagged just for being interactive',
     'Evening' not in ' '.join(tasks['interactive_names']))
 rec('a task outside DEALFLOW is ignored', all('Something' not in n for n in tasks['disabled_names']))
+rec('rc=0 on Refresh is not degraded', tasks['degraded'] == 0)
+deg = PA.parse_tasks(
+    '"TaskName","Status","Logon Mode","Last Result"\n'
+    '"\\DEALFLOW Refresh","Ready","Password","7"\n')
+rec('Refresh last result 7 is degraded, not a failure',
+    deg['degraded'] == 1 and deg['failed'] == 0 and deg['degraded_codes'] == [7]
+    and deg['degraded_names'] == ['DEALFLOW Refresh'])
+killed = PA.parse_tasks(
+    '"TaskName","Status","Logon Mode","Last Result"\n'
+    '"\\DEALFLOW Refresh","Ready","Password","0xC000013A"\n')
+rec('a killed Refresh (0xC000013A) is a failure, not degraded',
+    killed['failed'] == 1 and killed['degraded'] == 0
+    and one(ready(failed=killed['failed'], failed_names=killed['failed_names']), 'laptop-readiness')['severity'] == 'fail')
+missed = PA.parse_tasks(
+    '"TaskName","Status","Logon Mode","Last Result"\n'
+    '"\\DEALFLOW Refresh","Ready","Password","267011"\n'
+    '"\\DealFlow Replies","Ready","Password","267011"\n'
+    '"\\DEALFLOW Refresh","Ready","Password","has not run"\n')
+rec('Refresh has-not-run is a failure; another task never-run is not',
+    missed['failed_names'] == ['DEALFLOW Refresh', 'DEALFLOW Refresh'] and missed['degraded'] == 0
+    and 'Replies' not in ' '.join(missed['failed_names']))
+other7 = PA.parse_tasks(
+    '"TaskName","Status","Logon Mode","Last Result"\n'
+    '"\\DEALFLOW Phones","Ready","Password","7"\n')
+rec('rc=7 on a task that is not Refresh stays a failure',
+    other7['failed'] == 1 and other7['degraded'] == 0)
 built = PA.readiness_from(power, False, tasks, NOW)
 rec('the parts combine into one alert',
     (a := one({'readiness': built}, 'laptop-readiness')) and 'on battery' in a['text']
@@ -342,6 +379,29 @@ try:
     calls.clear()
     rec('refresh-running.flag means zero git calls',
         PA.git_publish(flag_root, push=True, run=counting_run) == 'refresh-running' and calls == [])
+    rec('a fresh flag is not reported as stale',
+        PA.refresh_flag_signal(flag_root).get('stale') is False
+        and one({'refresh_flag': PA.refresh_flag_signal(flag_root)}, 'stale-refresh-flag') is None)
+    old = time.time() - 7 * 3600
+    os.utime(os.path.join(flag_root, 'refresh-running.flag'), (old, old))
+    calls.clear()
+    sig = PA.refresh_flag_signal(flag_root)
+    rec('a 7h-old refresh flag does not block',
+        PA.git_blocked(flag_root) == '' and PA.git_publish(flag_root, push=True, run=counting_run) != 'refresh-running'
+        and calls)
+    rec('a 7h-old refresh flag is reported',
+        sig.get('stale') is True and sig.get('age_h', 0) >= 7
+        and (a := one({'refresh_flag': sig}, 'stale-refresh-flag'))
+        and a['severity'] == 'warn' and '7.0h' in a['text'] and 'ignored' in a['text'] and clean(a['text']))
+    old_here, old_gather = PA.HERE, PA.gather
+    try:
+        PA.HERE = flag_root
+        PA.gather = lambda now, th, measure=False: {}
+        doc = PA.make_doc(NOW, measure=False, th=TH)
+    finally:
+        PA.HERE, PA.gather = old_here, old_gather
+    rec('the published file carries the stale-refresh-flag alert',
+        any(a.get('key') == 'stale-refresh-flag' for a in doc.get('alerts') or []) and PA.public_ok(doc))
 finally:
     shutil.rmtree(flag_root, ignore_errors=True)
 
