@@ -3254,13 +3254,19 @@ function supReason(r, laneK){
   var _n = notes[r.c] || {};
   var _open = _replyOpen(r);
   if(!_open){
+    /* A RETIRED SOFT NO is its own tier: not "we called them recently" (cool) and not "we reached
+       them on another channel" (soft-by-touch), but "they said no and the one resurface has not
+       come" -- it holds EVERY lane, whichever channel the no arrived on. Reported as 'soft' because
+       that is what the lane counters and _contactsuptest read it as; the text says why. */
+    var _ns = noState(r);
+    if(_ns.soft && !_ns.open) return {k:'soft', t:_ns.why};
     var _c = suppressed(r);
     if(_c) return {k:'cool', t:_c};
-    /* TIER 3 — reached on another channel. Same 30-day floor a logged "no" gets, because a soft
-       no is a soft no whichever way it arrived. */
+    /* TIER 3 — reached on another channel. A soft no is handled above (event-driven, no calendar);
+       everything else holds for the ordinary contact cooldown. */
     var laneCh = (laneDef(laneK || lane) || {}).ch || '';
     var lo = lastOutreach(r), soft = null;
-    var softH = (_n.status === 'Not interested') ? 720 : COOL_DEFAULT_H;
+    var softH = COOL_DEFAULT_H;
     for(var chK in lo){
       if(chK === 'call' || chK === laneCh) continue;   // tier 2 owns 'call'; a lane owns its own
       if((Date.now() - lo[chK].ts) >= softH * 3600000) continue;
