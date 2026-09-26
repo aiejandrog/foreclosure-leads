@@ -572,7 +572,7 @@ def review_blockers():
         rec('bounces.py refuses to load a torn list', blew and sup.read_bytes() == raw)
         sup.write_text('{}', encoding='utf-8')
 
-        # B1 + B4. tuples, 60-day number set, message window stays `days`.
+        # B1 + B4. tuples, 60-day number set. With no prior ok scan the message window is 60 days.
         seen = {'days': None, 'who': [], 'since': []}
         today = datetime.date.today().isoformat()
         old_day = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
@@ -615,7 +615,10 @@ def review_blockers():
         for stamp in seen['since']:
             when = datetime.datetime.fromisoformat(stamp)
             ages.append((datetime.datetime.now(datetime.timezone.utc) - when).total_seconds() / 86400)
-        rec('createdAfter still follows the message window', ages and max(ages) < 5, ages)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        rec('with no prior ok scan, createdAfter is the 60-day lookback',
+            ages and min(ages) > 59 and max(ages) < 61 and st.get('window') == 60,
+            (ages, st.get('window')))
         rec('the dialled number STOP was ledgered', '#5550100191' in notes_of(oo))
 
         # B5. follow the next page, and hold if the cap is hit with a token left.
@@ -741,7 +744,7 @@ def coverage_gap():
     tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfconv_'))
     oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
     old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
-           Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q._pause)
+           Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q.MAIL_SENT, Q._pause)
     try:
         O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
         Q.TEXT_SENT = str(tmp / 'text_sent.json')
@@ -892,7 +895,7 @@ def coverage_gap():
                 return {'data': [], 'totalItems': 0}
             who = str((params or {}).get('participants') or '')
             asked.append(who)
-            body = 'STOP' if who.endswith('123') else 'hello'
+            body = 'STOP' if who.endswith(('123', '124')) else 'hello'
             return {'data': [message(who, 'incoming', body)]}
 
         Q.dialed_numbers = lambda days: []
@@ -913,6 +916,101 @@ def coverage_gap():
             and Q._text_sent_problem() == 'text_sent unreadable',
             st.get('why'))
 
+        sent.write_text('[]', encoding='utf-8')
+        mail = tmp / 'mail_sent.json'
+        Q.MAIL_SENT = str(mail)
+        today = datetime.date.today().isoformat()
+        mail.write_text(json.dumps([{'ch': 'text', 'to': '5550100124', 'd': today}]), encoding='utf-8')
+        asked.clear()
+        rc = Q.sync_messages(days=2)
+        rec('a readable mail_sent.json text row is scanned',
+            rc == 0 and '+15550100124' in asked and '#5550100124' in notes_of(oo), asked)
+        mail.write_bytes(b'{')
+        asked.clear()
+        rc = Q.sync_messages(days=2)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        rec('an unreadable mail_sent.json is an error and holds texting',
+            rc != 0 and st.get('ok') is False and held is True and 'mail_sent unreadable' in str(st.get('why'))
+            and '+15550100124' not in asked and mail.read_bytes() == b'{'
+            and Q._mail_sent_problem() == 'mail_sent unreadable',
+            st.get('why'))
+        mail.write_text('[]', encoding='utf-8')
+
+        last = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
+        stop_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
+        status.write_text(json.dumps({'ok': True, 'ts': last.isoformat()}), encoding='utf-8')
+        window_since = []
+
+        def _get_window(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
+            req = datetime.datetime.fromisoformat(str((params or {}).get('createdAfter')))
+            window_since.append(req)
+            if req <= stop_at:
+                return {'data': [message('+15550100130', 'incoming', 'STOP')]}
+            return {'data': [message('+15550100130', 'incoming', 'hello')]}
+
+        Q.dialed_numbers = lambda days: []
+        Q._inbound_text_rows = lambda: []
+        Q._get = _get_window
+        rc = Q.sync_messages(days=3, phones=['5550100130'])
+        st = json.loads(status.read_text(encoding='utf-8'))
+        age = (datetime.datetime.now(datetime.timezone.utc) - window_since[0]).total_seconds() / 86400
+        rec('a scan 5 days ago with --days 3 still reaches a STOP from 4 days ago',
+            rc == 0 and age >= 5 and '#5550100130' in notes_of(oo)
+            and isinstance(st.get('window'), int) and st.get('window') >= 5
+            and '5550100130' not in json.dumps(st),
+            (age, st.get('window'), rc))
+
+        status.write_text('{', encoding='utf-8')
+        window_since.clear()
+        rc = Q.sync_messages(days=3, phones=['5550100131'])
+        age = (datetime.datetime.now(datetime.timezone.utc) - window_since[0]).total_seconds() / 86400
+        st = json.loads(status.read_text(encoding='utf-8'))
+        rec('an unreadable status uses the 60-day lookback',
+            age > 59 and age < 61 and st.get('window') == 60, (age, st.get('window')))
+
+        old90 = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)).isoformat()
+        conv_calls = []
+        extra_page = []
+
+        def _get_conv(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                conv_calls.append(dict(params or {}))
+                token = (params or {}).get('pageToken')
+                if token == 'old':
+                    return {'data': [
+                        {'participants': ['+15550100141'], 'lastActivityAt': old90},
+                        {'participants': ['+15550100142'], 'lastActivityAt': old90},
+                    ], 'nextPageToken': 'past-the-lookback'}
+                if token == 'past-the-lookback':
+                    extra_page.append(token)
+                    return {'data': []}
+                return {'data': [
+                    {'participants': ['+15550100140'], 'lastActivityAt': fresh},
+                ], 'nextPageToken': 'old'}
+            who = str((params or {}).get('participants') or '')
+            asked.append(who)
+            return {'data': []}
+
+        asked.clear()
+        Q._get = _get_conv
+        rc = Q.sync_messages(days=2, phones=['5550100120'])
+        st = json.loads(status.read_text(encoding='utf-8'))
+        rec('conversations are requested with maxResults 100',
+            rc == 0 and conv_calls and all(c.get('maxResults') == 100 for c in conv_calls),
+            conv_calls)
+        rec('paging stops once a whole page is older than the lookback',
+            rc == 0 and st.get('ok') is True and st.get('truncated') is False
+            and not extra_page and '+15550100140' in asked
+            and '+15550100141' not in asked and '+15550100142' not in asked,
+            (len(conv_calls), asked, st.get('truncated')))
+
         torn = tmp / 'torn-optouts.json'
         torn.write_text('{', encoding='utf-8')
         sig = PA.read_optout_ledger(str(torn))
@@ -930,7 +1028,7 @@ def coverage_gap():
             and b_alert and b_alert['severity'] == 'fail' and 'unreadable' in b_alert['text'].lower())
     finally:
         (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
-         Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q._pause) = old
+         Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q.MAIL_SENT, Q._pause) = old
         shutil.rmtree(tmp, ignore_errors=True)
 
 
