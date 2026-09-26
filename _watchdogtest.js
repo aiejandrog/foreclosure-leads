@@ -257,7 +257,14 @@ const morningCases = [
   { name: 'morning: commit log unreadable -> alarms (fail-loud)',
     fx: MORNING_OK, now: AT_0715_EDT, html: board('2026-07-15'), listThrows: true, fire: true, want: /Cannot read the commit log/ },
   { name: 'morning: an existing alert gets a comment, not a second issue',
-    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), openIssue: true, fire: true, want: /"kind":"comment"/ },
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), openIssue: true, fire: true, want: /"kind":"comment"/, noCreate: true },
+  { name: 'morning: a new nightly-missed issue is titled for the Gmail filter',
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), fire: true,
+    want: /DEALFLOW ALERT: nightly refresh missed or stale/ },
+  { name: 'morning: an old nightly-missed title is renamed, not duplicated',
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'),
+    openIssues: [{ number: 7, title: '⚠️ DEALFLOW nightly refresh missed or stale (2026-09-25)', labels: ['nightly-missed'] }],
+    fire: true, noCreate: true, retitle: 'DEALFLOW ALERT: nightly refresh missed or stale' },
   { name: 'morning: summer, the 12:15 UTC (winter) cron skips without any call',
     fx: MORNING_MISSED, now: AT_0815_EDT, html: board('2026-07-14'), fire: false, noCalls: true },
   { name: 'morning: winter, the 11:15 UTC (summer) cron skips without any call',
@@ -283,6 +290,9 @@ const morningCases = [
     && !ymlText.includes("cron: '30 12 * * *'") && !ymlText.includes("cron: '30 13 * * *'");
   if (cronsOk) { console.log('  pass  morning crons are 11:15 and 12:15 UTC (07:15 ET, both DSTs)'); pass++; }
   else { console.log('  FAIL  morning crons are not the 07:15 ET pair'); fail++; }
+  const nameOk = /^name:\s*DEALFLOW\b/m.test(ymlText);
+  if (nameOk) { console.log('  pass  workflow name starts with DEALFLOW (failure mail subject)'); pass++; }
+  else { console.log('  FAIL  workflow name does not start with DEALFLOW'); fail++; }
   for (const c of morningCases) {
     let r;
     try {
@@ -297,6 +307,8 @@ const morningCases = [
     if (ok && c.want) ok = c.want.test(text);
     if (ok && c.noCalls) ok = r.fetched === 0 && r.listed === 0 && r.issues.length === 0;
     if (ok && c.closes) ok = r.issues.some(i => i.kind === 'update' && i.state === 'closed');
+    if (ok && c.noCreate) ok = !r.issues.some(i => i.kind === 'create');
+    if (ok && c.retitle) ok = r.issues.some(i => i.kind === 'update' && String(i.title || '').startsWith(c.retitle));
     if (ok) { console.log(`  pass  ${c.name}`); pass++; }
     else {
       console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? `"${r.failed}"` : 'silence'}` +
@@ -346,7 +358,8 @@ const morningCases = [
         body: 'alert-key: tracerfy-credits\nseverity: warn\n\nTracerfy balance 400 credits, warn under 500.',
         updated_at: '2026-09-26T14:30:00Z',
       }],
-      now: ALERT_NOW, fire: false, comments: false },
+      now: ALERT_NOW, fire: false, comments: false, noCreate: true,
+      retitle: 'DEALFLOW ALERT: Tracerfy credits low' },
     { name: 'alerts: an unchanged alert comments once the next Eastern day',
       alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
       openIssues: [{
@@ -392,9 +405,11 @@ const morningCases = [
       fail++; continue;
     }
     const fired = !!r.failed;
-    const created = r.issues.find(i => i.kind === 'create' && i.title && i.title.includes('[' + (c.creates || '') + ']'));
+    const created = r.issues.find(i => i.kind === 'create' && String(i.body || '').includes('alert-key: ' + (c.creates || '___none___')));
     let good = fired === c.fire;
-    if (good && c.creates) good = !!created;
+    if (good && c.creates) good = !!created && String(created.title || '').startsWith('DEALFLOW ALERT: ');
+    if (good && c.noCreate) good = !r.issues.some(i => i.kind === 'create');
+    if (good && c.retitle) good = r.issues.some(i => i.kind === 'update' && String(i.title || '').startsWith(c.retitle));
     if (good && c.comments) good = r.issues.some(i => i.kind === 'comment');
     if (good && c.comments === false) good = !r.issues.some(i => i.kind === 'comment');
     if (good && c.closes) good = r.issues.some(i => i.kind === 'update' && i.state === 'closed');
@@ -406,6 +421,53 @@ const morningCases = [
     if (good) { console.log(`  pass  ${c.name}`); pass++; }
     else {
       console.log(`  FAIL  ${c.name} — expected ${c.fire ? 'an alarm' : 'silence'}, got ${fired ? JSON.stringify(r.failed) : 'silence'} issues ${JSON.stringify(r.issues).slice(0, 400)}`);
+      fail++;
+    }
+  }
+
+  const ALERT_KEYS = [
+    'tracerfy-credits', 'captcha-balance', 'paid-reads-cap', 'bounce-rate',
+    'optout-sync', 'morning-sends', 'laptop-readiness', 'healthcheck-fail',
+    'alerts-unpublished', 'alerts-redacted',
+  ];
+  for (const key of ALERT_KEYS) {
+    const name = 'alerts: title prefix for ' + key;
+    try {
+      const r = await run(asrc, [], {
+        alertsJson: freshDoc([{ key, severity: 'fail', text: 'count 1' }]),
+        now: ALERT_NOW,
+      });
+      const created = r.issues.filter(i => i.kind === 'create');
+      const title = created.length === 1 ? String(created[0].title || '') : '';
+      const ok = created.length === 1
+        && title.startsWith('DEALFLOW ALERT: ')
+        && title.slice('DEALFLOW ALERT: '.length).trim().length > 0
+        && String(created[0].body || '').includes('alert-key: ' + key);
+      if (ok) { console.log('  pass  ' + name); pass++; }
+      else { console.log('  FAIL  ' + name + ' — ' + JSON.stringify(created).slice(0, 300)); fail++; }
+    } catch (e) {
+      console.log('  FAIL  ' + name + ' — threw: ' + e.message);
+      fail++;
+    }
+  }
+  {
+    const name = 'alerts: an open issue is matched by its key, not its title';
+    try {
+      const r = await run(asrc, [], {
+        alertsJson: freshDoc([{ key: 'optout-sync', severity: 'fail', text: 'count 1' }]),
+        openIssues: [{
+          number: 8,
+          title: 'unrelated subject with no key',
+          body: 'alert-key: optout-sync\nseverity: fail\n\ncount 1',
+        }],
+        now: ALERT_NOW,
+      });
+      const created = r.issues.filter(i => i.kind === 'create');
+      const renamed = r.issues.some(i => i.kind === 'update' && String(i.title || '').startsWith('DEALFLOW ALERT: '));
+      if (!created.length && renamed) { console.log('  pass  ' + name); pass++; }
+      else { console.log('  FAIL  ' + name + ' — ' + JSON.stringify(r.issues).slice(0, 400)); fail++; }
+    } catch (e) {
+      console.log('  FAIL  ' + name + ' — threw: ' + e.message);
       fail++;
     }
   }

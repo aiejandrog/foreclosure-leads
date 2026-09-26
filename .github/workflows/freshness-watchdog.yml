@@ -66,10 +66,14 @@ jobs:
                 `The weekly/daily refresh on your PC likely failed (or the machine was off). ` +
                 `Check \`leads-run.log\`, or just double-click \`refresh-dealflow.bat\` to catch up.\n\n` +
                 `_(This alert is from the free cloud watchdog; it re-checks daily and will comment again if it stays stale.)_`;
+              const title = `DEALFLOW ALERT: live board data is stale (${days} days)`;
               if (open.data.length) {
                 await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+                if (!String(open.data[0].title || '').startsWith('DEALFLOW ALERT: ')) {
+                  await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, title });
+                }
               } else {
-                await github.rest.issues.create({ owner, repo, title: `⚠️ DEALFLOW data is stale (${days} days old)`, body, labels: ['stale-data'] });
+                await github.rest.issues.create({ owner, repo, title, body, labels: ['stale-data'] });
               }
               core.setFailed(`DEALFLOW data is ${days} days stale (>= ${STALE_DAYS}).`);
             } else if (open.data.length) {
@@ -291,14 +295,17 @@ jobs:
               `time, and the 06:00 and 06:45 jobs rebuild the board every morning whether or not any new ` +
               `data arrived. This check re-runs daily and closes itself when the runners are clean._`;
 
+            const title = 'DEALFLOW ALERT: runner check failed on origin/main';
             if (existing.data.length) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: existing.data[0].number, body });
+              if (!String(existing.data[0].title || '').startsWith('DEALFLOW ALERT: ')) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: existing.data[0].number, title });
+              }
             } else {
               await github.rest.issues.create({
-                owner, repo,
-                title: `⚠️ DEALFLOW runners: ${problems.length} problem(s) on origin/main`,
-                body, labels: ['runner-drift'] });
+                owner, repo, title, body, labels: ['runner-drift'] });
             }
             core.setFailed(`${problems.length} runner problem(s) — see the runner-drift issue.`);
 
@@ -421,11 +428,16 @@ jobs:
               `An early "fresh leads" publish with the final "auto lead" publish still in progress is not ` +
               `a failure here — that final often lands between 07:40 and 08:45, and the 11:00 daily check ` +
               `(label \`runner-drift\`) covers two runners, pushes that did not land and runs that never finished._`;
+            // Matched by the nightly-missed label, never by title. An issue opened before the
+            // Gmail subject prefix is renamed in place so a second one is not opened.
+            const title = `DEALFLOW ALERT: nightly refresh missed or stale (${today})`;
             if (open.data.length) {
               await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+              if (!String(open.data[0].title || '').startsWith('DEALFLOW ALERT: ')) {
+                await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, title });
+              }
             } else {
-              await github.rest.issues.create({ owner, repo,
-                title: `⚠️ DEALFLOW nightly refresh missed or stale (${today})`, body, labels: ['nightly-missed'] });
+              await github.rest.issues.create({ owner, repo, title, body, labels: ['nightly-missed'] });
             }
             core.setFailed(`Morning check: ${problems.length} problem(s) - see the nightly-missed issue.`);
 
@@ -542,8 +554,27 @@ jobs:
               return '';
             }
             function sevOf(issue) {
+              const b = String(issue.body || '').match(/^severity:\s*(warn|fail)/m);
+              if (b) return b[1];
               const m = String(issue.title || '').match(/\[(warn|fail)\]/);
               return m ? m[1] : 'warn';
+            }
+            // Subjects the owner's Gmail filter matches. GitHub notification mail shows the
+            // title, not the label. Stable per key so a rename is once, not every push.
+            const ALERT_TITLES = {
+              'tracerfy-credits': 'Tracerfy credits low',
+              'captcha-balance': '2Captcha balance low',
+              'paid-reads-cap': 'Paid reads near the monthly cap',
+              'bounce-rate': 'First-touch bounce rate high',
+              'optout-sync': 'Opt-out sync missed or failed',
+              'morning-sends': 'Morning Worker sent nothing',
+              'laptop-readiness': 'Laptop not ready to send',
+              'healthcheck-fail': 'Nightly healthcheck failed',
+              'alerts-unpublished': 'Pipeline alerts stopped publishing',
+              'alerts-redacted': 'Pipeline alert withheld',
+            };
+            function alertTitle(key) {
+              return 'DEALFLOW ALERT: ' + (ALERT_TITLES[key] || key);
             }
             const byKey = new Map();
             for (const issue of open) {
@@ -565,7 +596,7 @@ jobs:
               return head.replace(/^alert-key:.*$/m, '').replace(/^severity:.*$/m, '').replace(/\s+/g, ' ').trim();
             }
             for (const a of active) {
-              const title = ('⚠️ [' + a.severity + '] [' + a.key + '] ' + a.text).slice(0, 240);
+              const title = alertTitle(a.key);
               const body = 'alert-key: ' + a.key + '\nseverity: ' + a.severity + '\n\n' + a.text + '\n\n' + footer;
               const existing = byKey.get(a.key);
               if (!existing) {
@@ -578,11 +609,14 @@ jobs:
               const unchanged = prev === a.severity && bodyText(existing) === textNow;
               const touched = Date.parse(existing.updated_at || '');
               const commentedToday = Number.isFinite(touched) && dayET(touched) === dayET(NOW_MS);
+              const needsTitle = String(existing.title || '') !== title;
               if (!(unchanged && commentedToday)) {
                 await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body: a.text });
-                if (a.severity !== prev || bodyText(existing) !== textNow) {
+                if (a.severity !== prev || bodyText(existing) !== textNow || needsTitle) {
                   await github.rest.issues.update({ owner, repo, issue_number: existing.number, title, body });
                 }
+              } else if (needsTitle) {
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, title });
               }
               if ((RANK[a.severity] || 2) > (RANK[prev] || 1)) worsened.push(a.key);
             }
