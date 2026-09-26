@@ -500,6 +500,8 @@ def camoufox_qs(browser, owner_lf, settle=9000):
     essential because broad surnames are capped at 500 oldest records and can silently omit the
     current owner.  Companies have an empty FIRST and continue to use the last-name field alone.
     """
+    if hasattr(browser, 'qs_for'):                    # clerk_session.HttpQsSource (signed-in plain HTTP)
+        return browser.qs_for(owner_lf)
     page = browser.new_page()
     grabbed = {}
 
@@ -1589,7 +1591,16 @@ def _run(a, ap):
     cf_cm = cf_browser = None
     # --repull: a cached token may have expired, and finding that out must not skip the free mint
     need_mint = a.repull or any((r.get('owner_clean', '') or '').strip() not in qs_cache for r in picked)
-    if need_mint and not a.cached_only and not a.no_camoufox:
+    # SIGNED-IN CLERK ACCOUNT (clerk_session.py, opt-in with DEALFLOW_CLERK_OR=1): takes Camoufox's
+    # slot as the free token source when it is on and signed in; None (logged why) otherwise.
+    if need_mint and not a.cached_only:
+        try:
+            import clerk_session as _CS
+            cf_browser = _CS.or_qs_source()
+        except Exception as e:
+            cf_browser = None
+            print('  clerk: hook unavailable (%s)' % type(e).__name__)
+    if need_mint and not a.cached_only and not a.no_camoufox and cf_browser is None:
         cf_cm, cf_browser = camoufox_session()
         print('  camoufox: %s' % ('ready (free Turnstile tokens)' if cf_browser
                                   else 'UNAVAILABLE — %s; using 2Captcha' % CF_UNAVAILABLE))
