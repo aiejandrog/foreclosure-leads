@@ -601,5 +601,7 @@ pacer_newfiler*.tmp
 pacer_newfiler*.lock
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
+# _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
+!_titlechaintest.py
 # _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
 !_judgmentscopetest.py

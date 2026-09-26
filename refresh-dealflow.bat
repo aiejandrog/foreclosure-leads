@@ -250,6 +250,15 @@ rem  no CAPTCHA_KEY repo secret. Until that secret exists, this laptop line is t
 rem  moving Palm Beach coverage.
 if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
 
+echo [2e/5] Title discovery + owner tokens - off unless DEALFLOW_TITLE=1
+rem  F2 (2026-09-26). run_title_chain.py runs miami_title_discovery for up to 3 near-sale Miami cases
+rem  a night (FREE: cached tokens, Camoufox mints, local OCR - never vision, never a paid solve) and,
+rem  ONLY with DEALFLOW_TITLE_TOKENS=1 as well, run_owner_tokens for up to 10 paid owner-token solves
+rem  a night on average (~$0.003 each, $1.50 a month at most, and never past the shared $50/month
+rem  paid-reads cap). Without DEALFLOW_TITLE=1 it prints one line and exits. Never fatal. Reports go
+rem  to DEALFLOW_DIR\title_discovery, outside the repo.
+python -u run_title_chain.py >> "%LOG%" 2>&1
+
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
 rem  file most foreclosures over a rolling window, keep the LIS PENDENS, dedupe -> the owner the DAY
