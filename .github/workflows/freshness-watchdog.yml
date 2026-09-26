@@ -116,8 +116,11 @@ jobs:
 
             let commits;
             try {
-              const r = await github.rest.repos.listCommits({ owner, repo, sha: 'main', since, per_page: 100 });
-              commits = r.data;
+              // EVERY page, not the first 100 (issue #87, 2026-09-26): a day of PR merges pushed
+              // 267 commits into the 4-day window, the 09-24 refresh publishes fell off page 1,
+              // and this reported "last publish more than 4 days ago" for one 2.4 days old.
+              commits = await github.paginate(github.rest.repos.listCommits,
+                                              { owner, repo, sha: 'main', since, per_page: 100 });
             } catch (e) {
               core.setFailed(`Cannot read the commit log (${e.message}) — refusing to report healthy on an unchecked repo.`);
               return;
@@ -340,8 +343,11 @@ jobs:
             let commits = null;
             try {
               const since = new Date(NOW.getTime() - 36 * 3600000).toISOString();
-              const r = await github.rest.repos.listCommits({ owner, repo, sha: 'main', since, per_page: 100 });
-              commits = r.data;
+              // EVERY page, not the first 100 (issue #87, 2026-09-26): a day of PR merges pushed
+              // 267 commits into the 4-day window, the 09-24 refresh publishes fell off page 1,
+              // and this reported "last publish more than 4 days ago" for one 2.4 days old.
+              commits = await github.paginate(github.rest.repos.listCommits,
+                                              { owner, repo, sha: 'main', since, per_page: 100 });
             } catch (e) {
               problems.push(`**Cannot read the commit log** (${e.message}). Refusing to report a healthy night on an unchecked repo.`);
             }
