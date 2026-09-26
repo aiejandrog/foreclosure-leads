@@ -356,6 +356,12 @@ python -u ownership_scan.py --days 45 --max 500 --budget 1500 >> "%LOG%" 2>&1
 
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 
+echo [3g/5] Federal bankruptcy stay lookup (PACER PCL; OFF without PACER_USERNAME/PASSWORD)...
+rem  ADDED 2026-09-26: feeds stay_gate.py (pacer_stay_cache.json) so Broward/Palm Beach leads can pass
+rem  the strict send gate. No-op (exit 0, no network) when the PACER env vars are missing. Every page
+rem  is reserved against paid_reads (monthly cap) + the PACER quarter ledger first; fails closed.
+python -u pacer_stay.py >> "%LOG%" 2>&1
+
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
 rem  This used to be a manual step a human had to remember after every send day; forgetting it
 rem  is how the account ran a 24-33% bounce rate for a week (provider tolerance ~2%) — the

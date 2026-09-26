@@ -54,6 +54,31 @@ the PR asks Alejandro to confirm. MIAMI-DADE LIS PENDENS numbers are civil Miami
 (2025-012345-CA-01), so they resolve: each is stay_unverified until sale_history.py has read its
 docket (it reads the lis pendens lane since #73), and then clears or blocks on what it found.
 
+FEDERAL BANKRUPTCY FROM PACER (pacer_stay.py, stacked on this gate). sale_history.py reads the
+state docket, so it only sees a bankruptcy once somebody files a suggestion of bankruptcy there, and
+it reads Miami-Dade only. pacer_stay.py searches the federal PACER Case Locator by owner name and
+writes pacer_stay_cache.json beside sale_history_cache.json (same folder, so check() finds it
+without send_server changing). Entries are keyed by pacer_key(case) -- the board's case number,
+upper-cased, whitespace collapsed, a harmless label stripped -- and carry:
+    verdict  'clear' | 'active' | 'unverifiable'   (a/bd/sl mirror sale_history: a True only if active)
+    q        when PCL was queried (ISO, with offset); env 'prod' or 'qa'; src 'pacer_pcl'
+    cases    the matched bankruptcy case numbers (court, number, chapter, dates) -- no names
+How the gate uses it:
+  * Miami-Dade stem: everything above is unchanged, and a PACER 'active' on the same stem ALSO
+    refuses (stay_active) before a docket clear can pass. PACER cannot clear a Miami-Dade case on
+    its own and a missing/unreadable PACER file changes nothing for Miami-Dade (it is additive).
+  * No Miami-Dade stem (Broward CACE-, Palm Beach 50-, a Miami-Dade LP row carrying another
+    county's number): PACER is the only durable source.
+        no PACER file at all (lookup never ran / no credentials)   -> stay_case_unresolvable (as before)
+        file unreadable, no entry, 'unverifiable', from QA,
+        or a clear older than DEALFLOW_PACER_MAX_AGE_DAYS (14)     -> stay_unverified
+        'active'                                                   -> stay_active
+        'clear', from production, queried within the max age       -> clear
+    A number with fewer than five digits ('CASE', 'OTHER', an LP- placeholder) is never looked up
+    and stays stay_case_unresolvable.
+A clear is a point-in-time fact about a name search: it goes stale, so it stops clearing after the
+max age (pacer_stay.py re-checks clear leads every 12 days, near-sale ones every 3).
+
 READ FRESH. The cache is re-read whenever its mtime or size changes (one os.stat per call, a parse
 only after sale_history.py writes). sale_history.py writes it with a plain json.dump, not an atomic
 replace, so a read can land mid-write; one short retry absorbs that, and a second failure refuses.
@@ -65,6 +90,9 @@ import threading
 import time
 
 CACHE_NAME = 'sale_history_cache.json'
+PACER_NAME = 'pacer_stay_cache.json'           # written by pacer_stay.py, same folder as CACHE_NAME
+ENV_PACER_MAX_AGE = 'DEALFLOW_PACER_MAX_AGE_DAYS'
+DEFAULT_PACER_MAX_AGE_DAYS = 14.0
 
 # Miami-Dade civil numbers: YYYY-NNNNNN-CA-01 / -CC-05. The stem is YYYY-NNNNNN (11 characters).
 STEM_LEN = 11
@@ -85,6 +113,7 @@ UNAVAILABLE = 'stay_data_unavailable'
 
 _LOCK = threading.Lock()
 _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, entry), ...]}
+_PMEMO = {}         # PACER file: path -> (mtime_ns, size, (by_key, by_stem))
 
 
 def case_stem(case):
@@ -158,12 +187,170 @@ def _load(path):
     return idx, ''
 
 
-def check(case, cache_path):
+def pacer_key(case):
+    """The key pacer_stay.py writes and check() looks up for a case number that has no Miami-Dade stem.
+
+    'CACE-24-012345' -> 'CACE-24-012345'; ' case no. cace - 24 - 012345 ' -> 'CACE-24-012345';
+    '502024CA001234XXXAMB' unchanged. '' when fewer than five digits remain ('CASE', 'OTHER', 'LP-...')."""
+    s = ' '.join(str(case or '').split()).upper()
+    s = _LABEL_RE.sub('', s, count=1).strip()
+    s = re.sub(r'\s*-\s*', '-', s)
+    return s if len(re.findall(r'\d', s)) >= 5 else ''
+
+
+def pacer_max_age_days():
+    raw = os.environ.get(ENV_PACER_MAX_AGE, '').strip()
+    try:
+        v = float(raw) if raw else DEFAULT_PACER_MAX_AGE_DAYS
+    except ValueError:
+        return 0.0                                   # a bad setting clears nothing (fail closed)
+    return v if v > 0 else 0.0
+
+
+def _pacer_path(cache_path):
+    return os.path.join(os.path.dirname(os.path.abspath(cache_path)), PACER_NAME)
+
+
+def _load_pacer(path):
+    """((by_key, by_stem), err, exists). A missing file is exists=False with no error."""
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return None, '', False
+    except OSError as e:
+        return None, '%s unreadable (%s)' % (PACER_NAME, e.strerror or e), True
+    with _LOCK:
+        memo = _PMEMO.get(path)
+        if memo and memo[0] == st.st_mtime_ns and memo[1] == st.st_size:
+            return memo[2], '', True
+    data, err = None, ''
+    for attempt in range(2):
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+            err = ''
+            break
+        except Exception as e:
+            err = '%s could not be parsed (%s)' % (PACER_NAME, str(e)[:120])
+            data = None
+            if attempt == 0:
+                time.sleep(0.25)
+    if not err and not isinstance(data, dict):
+        err = '%s is not a JSON object' % PACER_NAME
+    if err:
+        with _LOCK:
+            _PMEMO.pop(path, None)
+        return None, err, True
+    by_key, by_stem = {}, {}
+    for k, v in data.items():
+        if str(k).startswith('_') or not isinstance(v, dict):
+            continue
+        key = pacer_key(k)
+        if not key:
+            continue
+        by_key[key] = v
+        stem = case_stem(key)
+        if stem:
+            by_stem.setdefault(stem, []).append((key, v))
+    idx = (by_key, by_stem)
+    with _LOCK:
+        _PMEMO[path] = (st.st_mtime_ns, st.st_size, idx)
+    return idx, '', True
+
+
+def _pacer_age_days(ent, now=None):
+    """Days since the PCL query, or None when the entry carries no usable query time."""
+    t = ent.get('t')
+    try:
+        t = float(t)
+    except (TypeError, ValueError):
+        return None
+    if not (t > 0):
+        return None
+    return ((time.time() if now is None else now) - t) / 86400.0
+
+
+def pacer_verdict(ent, now=None):
+    """(code, why) for ONE pacer_stay_cache.json entry. Only a fresh production 'clear' clears."""
+    if not isinstance(ent, dict):
+        return UNVERIFIED, 'PACER entry is malformed'
+    verdict = ent.get('verdict')
+    if ent.get('env') != 'prod':
+        return UNVERIFIED, 'PACER entry came from the %s environment (test data never clears)' % (
+            ent.get('env') or 'unknown')
+    if verdict == 'active' or ent.get('a') is True:
+        cases = [c.get('no') for c in (ent.get('cases') or []) if isinstance(c, dict) and c.get('open')]
+        return STAY_ACTIVE, ('ACTIVE federal bankruptcy found in PACER for the owner (%s, filed %s) -- '
+                             'contacting the debtor is a stay violation'
+                             % (', '.join(str(c) for c in cases[:3]) or 'case number not recorded',
+                                ent.get('bd') or 'date unknown'))
+    if verdict == 'unverifiable':
+        return UNVERIFIED, 'PACER could not verify the owner: %s' % str(ent.get('why') or 'no reason recorded')[:160]
+    if verdict != 'clear':
+        return UNVERIFIED, 'PACER entry has no verdict'
+    age = _pacer_age_days(ent, now)
+    limit = pacer_max_age_days()
+    if limit <= 0:
+        return UNVERIFIED, '%s is not a positive number of days -- no PACER clear is accepted' % ENV_PACER_MAX_AGE
+    if age is None:
+        return UNVERIFIED, 'PACER entry has no query time'
+    if age < -1 or age > limit:
+        return UNVERIFIED, ('PACER clear is %.0f days old (older than %g) -- re-run pacer_stay.py'
+                            % (age, limit))
+    return CLEAR, 'no open federal bankruptcy for the owner in PACER (checked %s)' % str(ent.get('q') or '')[:10]
+
+
+def _check_pacer(raw, out, pacer_path):
+    """The verdict for a case number with no Miami-Dade stem: PACER is its only durable stay source."""
+    key = pacer_key(raw)
+    if not key:
+        out.update(code=UNRESOLVABLE,
+                   why=('case %s has no Miami-Dade case stem and is not a case number PACER results '
+                        'can be keyed to' % raw[:40]))
+        return out
+    idx, err, exists = _load_pacer(pacer_path)
+    if not exists:
+        out.update(code=UNRESOLVABLE,
+                   why=('case %s has no Miami-Dade case stem, and there is no PACER stay data '
+                        '(%s missing -- pacer_stay.py has not run or has no credentials)'
+                        % (raw[:40], PACER_NAME)))
+        return out
+    if err:
+        out.update(code=UNVERIFIED, why=err)
+        return out
+    ent = idx[0].get(key)
+    if ent is None:
+        out.update(code=UNVERIFIED,
+                   why='case %s has no PACER lookup yet -- pacer_stay.py has not searched its owner' % raw[:40])
+        return out
+    out['matched'] = [key]
+    out['src'] = 'pacer_pcl'
+    code, why = pacer_verdict(ent)
+    out.update(code=code, why=why, ok=(code == CLEAR))
+    if code == STAY_ACTIVE:
+        out['bd'] = str(ent.get('bd') or '')
+    return out
+
+
+def _pacer_active_on_stem(stem, pacer_path):
+    """(key, entry) of a production PACER 'active' on this Miami-Dade stem, else None. Additive only:
+    a missing or unreadable PACER file returns None and leaves the docket verdict as it was."""
+    idx, err, exists = _load_pacer(pacer_path)
+    if not exists or err or not idx:
+        return None
+    for k, v in idx[1].get(stem) or []:
+        if pacer_verdict(v)[0] == STAY_ACTIVE:
+            return k, v
+    return None
+
+
+def check(case, cache_path, pacer_path=None):
     """The stay verdict for one case. Never raises.
 
     Returns {'ok': bool, 'code': str, 'why': str, 'case': str, 'matched': [cache keys],
-             'bd': newest filing date on an active entry, 'sl': lift date when cleared by a lift}.
-    ok=True only for CLEAR."""
+             'bd': newest filing date on an active entry, 'sl': lift date when cleared by a lift}
+    (+ 'src': 'pacer_pcl' when the verdict came from pacer_stay_cache.json).
+    ok=True only for CLEAR. pacer_path defaults to pacer_stay_cache.json beside cache_path."""
     raw = str(case or '').strip()
     out = {'ok': False, 'code': '', 'why': '', 'case': raw, 'matched': [], 'bd': '', 'sl': ''}
     try:
@@ -172,11 +359,10 @@ def check(case, cache_path):
                                          'status cannot be checked')
             return out
         stem = case_stem(raw)
+        if pacer_path is None:
+            pacer_path = _pacer_path(cache_path)
         if not stem:
-            out.update(code=UNRESOLVABLE,
-                       why=('case %s has no Miami-Dade case stem; sale_history_cache.json is the only '
-                            'durable stay source and covers Miami-Dade civil cases only' % raw[:40]))
-            return out
+            return _check_pacer(raw, out, pacer_path)
         idx, err = _load(cache_path)
         if err:
             out.update(code=UNAVAILABLE, why=err)
@@ -201,6 +387,13 @@ def check(case, cache_path):
                        why=('ACTIVE §362 BANKRUPTCY STAY on %s (filed %s, not lifted) -- contacting '
                             'the debtor is a stay violation' % (k, v.get('bd') or 'date unknown')))
             return out
+        fed = _pacer_active_on_stem(stem, pacer_path)
+        if fed:
+            k, v = fed
+            out['matched'] = out['matched'] + [k]
+            out.update(code=STAY_ACTIVE, bd=str(v.get('bd') or ''), src='pacer_pcl',
+                       why=pacer_verdict(v)[1] + ' (the state docket does not show it yet)')
+            return out
         lifts = sorted(str(v.get('sl')) for _, v in hits if v.get('sl'))
         out.update(ok=True, code=CLEAR, sl=(lifts[-1] if lifts else ''),
                    why=('stay lifted %s' % lifts[-1]) if lifts else 'no active stay on record')
@@ -217,4 +410,14 @@ def health(cache_path):
         return {'ok': False, 'err': err, 'cases': 0, 'active': 0}
     n = sum(len(v) for v in idx.values())
     act = sum(1 for v in idx.values() for _, e in v if isinstance(e, dict) and entry_stay_active(e))
-    return {'ok': True, 'err': '', 'cases': n, 'active': act}
+    return {'ok': True, 'err': '', 'cases': n, 'active': act, 'pacer': pacer_health(cache_path)}
+
+
+def pacer_health(cache_path):
+    """PACER side of /health: is there a file, and how many entries clear / block right now."""
+    pidx, perr, pexists = _load_pacer(_pacer_path(cache_path))
+    if not pexists or perr:
+        return {'ok': False, 'err': perr or ('%s missing' % PACER_NAME), 'cases': 0, 'active': 0, 'clear': 0}
+    codes = [pacer_verdict(e)[0] for e in pidx[0].values()]
+    return {'ok': True, 'err': '', 'cases': len(codes), 'active': codes.count(STAY_ACTIVE),
+            'clear': codes.count(CLEAR)}
