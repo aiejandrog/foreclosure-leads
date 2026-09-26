@@ -576,6 +576,8 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+# _saleresultstaletest: AR1 -- old decisive sale results ship flagged stale; passed sales with no read show UNREAD.
+!_saleresultstaletest.py
 !_judgmentpasstest.py
 # pacer_stay.py: federal bankruptcy verdicts per lead (case-keyed, local data) + the local PACER
 # quarter-spend ledger (money state). Never commit either; the repo is public.
