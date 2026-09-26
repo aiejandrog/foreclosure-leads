@@ -336,6 +336,14 @@ DECIDING_KINDS = ('vacatur', 'satisfaction', 'final_judgment', 'order_of_dismiss
                   'stay', 'stay_reinstated', 'relief_from_stay', 'bankruptcy_dismissed',
                   'bankruptcy_discharged')
 DOCUMENT_SOURCES = ('document', 'document_passage')
+# image_status values miami_case_timeline can only reach when the run HAD pages for the entry, so
+# each of them means the document was opened: 'read' (:403, `elif pages`), 'unreadable_pages' (:401,
+# where `failed` is a subset of pages) and 'missing_attachments' (:412, which tests `and pages`
+# explicitly). 'unassessed_pages' (:421) is deliberately out - it is set from a manifest page count
+# with no page read at all. This module's own NAMES table already calls unreadable_pages part_read,
+# and _was_read tested 'read' alone, so a document whose page 2 failed OCR - strictly LESS known
+# than one fully read - printed "nobody opened it" (twenty-eighth review).
+OPENED_STATUSES = ('read', 'unreadable_pages', 'missing_attachments')
 
 
 def _relabelled(timeline):
@@ -701,7 +709,7 @@ def _was_read(entry):
     (twenty-seventh review).
     """
     return (str(entry.get('kind_source')) in DOCUMENT_SOURCES
-            or str(entry.get('image_status')) == 'read')
+            or str(entry.get('image_status')) in OPENED_STATUSES)
 
 
 def _sale_dates_of(entry):
@@ -1311,6 +1319,19 @@ def assess(timeline, dossier=None):
                  'docket title names a %s; the producer labelled the entry by the cover, so the run '
                  'did not fold it into the case\'s posture, and whether it decides this case is not '
                  'settled in this file'
+                 if from_title and _was_read(entry)
+                 and str(entry.get('kind_source')) not in DOCUMENT_SOURCES else
+                 # And the fourth shape. kind_source 'document' means the producer DID recognise a
+                 # title on page 1 and labelled the entry from it; when that title is a bare cover
+                 # ("NOTICE OF FILING") the subject cannot come out of it, so the flag above is
+                 # False and the sentence before this one said no title was recognised - about an
+                 # entry whose operative_text IS the recognised title. Same mechanism as the round
+                 # before, one level in: the flag answers which string gave the subject, the
+                 # sentence asserts what the producer recognised (twenty-eighth review).
+                 'entry %s was read and its first page\'s own title is a bare cover naming '
+                 'nothing, while its own docket title names a %s; the producer labelled the entry '
+                 'by that cover, so the run did not fold it into the case\'s posture, and whether '
+                 'it decides this case is not settled in this file'
                  if from_title and _was_read(entry) else
                  'entry %s is titled as a filing about something else and its own docket title '
                  'names a %s; nobody opened it, so the run did not fold it into the case\'s '

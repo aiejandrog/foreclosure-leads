@@ -3343,5 +3343,108 @@ class TwentySeventhReviewTests(unittest.TestCase):
         finally:
             sys.modules['miami_case_timeline'] = real
 
+class TwentyEighthReviewTests(unittest.TestCase):
+    """The round before's own fix again, both halves one level in: a test for "was it opened" that
+    missed two statuses the producer only writes when it WAS opened, and a fourth shape the three
+    sentences did not have.
+    """
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+
+    @staticmethod
+    def built(page180=None, failed=False, expected=1, as_of='2026-09-23'):
+        # Built by hand rather than through EleventhReviewTests.built, because the shapes under test
+        # are exactly the ones a document's page list produces: a failed page, and a docket that
+        # claims more documents than were reached.
+        import miami_case_timeline as MCT
+        docs = [{'source_ref': '140', 'document_hash': 'h140', 'manifest': {'sha256': 'h140'},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                        'text': TwentyEighthReviewTests.PAGE}]}}]
+        if page180 is not None:
+            pages = [{'page': 1, 'outcome': 'text', 'text': page180}]
+            if failed:
+                pages.append({'page': 2, 'outcome': 'error',
+                              'assessment': {'reason': 'OCR failed'}})
+            docs.append({'source_ref': '180', 'document_hash': 'h180',
+                         'manifest': {'sha256': 'h180'}, 'reading': {'pages': pages}})
+        rows = [(100, 'Complaint', '01/05/2026'), (140, 'Final Judgment of Foreclosure', '03/10/2026'),
+                (180, 'Notice of Filing Satisfaction of Final Judgment', '05/12/2026')]
+        entries = [{'source_id': str(n), 'source_ref': str(n),
+                    'expected_documents': 1 if n != 180 else expected,
+                    'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': t,
+                                 'comments': '', 'eventType': ''}}
+                   for n, t, d in rows]
+        t = MCT.build_timeline('SYNTHETIC', {'entries': entries, 'pagination_verified': True},
+                               docs, as_of)
+        t['judgments'] = dict(t['judgments'] or {}, controlling_entry='140',
+                              docket_duplicates_inferred=[])
+        if not (t['judgments'].get('judgments') or []):
+            t['judgments']['judgments'] = [judgment_row('140')]
+        t['amount_vision'] = {'amount_checks': [ok_check('140', 'court:140:1', 500000.0)]}
+        t['coverage'] = {'attachments': [read_attachment('140')], 'complete': False}
+        return t
+
+    def said(self, t):
+        return [m for m in CV.assess(t)['missing'] if 'entry 180' in m]
+
+    STAMP = 'IN THE CIRCUIT COURT OF THE 11TH JUDICIAL CIRCUIT\nfiled stamp'
+
+    def test_a_document_whose_page_failed_ocr_was_still_opened(self):
+        # Contract 4. miami_case_timeline writes 'unreadable_pages' only where `failed` is a subset of
+        # `pages` (:401) and 'missing_attachments' only under an explicit `and pages` (:412), so both
+        # mean the run fetched the document and _body_kind ran over page 1. _was_read tested 'read'
+        # alone - and this module's own NAMES table already calls unreadable_pages part_read. So a
+        # document whose page 2 failed OCR, strictly LESS known than one fully read, printed "nobody
+        # opened it", indistinguishable from an entry nothing was fetched for.
+        for kw, status in ((dict(page180=self.STAMP, failed=True), 'unreadable_pages'),
+                           (dict(page180=self.STAMP, expected=2), 'missing_attachments')):
+            t = self.built(**kw)
+            e = next(x for x in t['entries'] if x['entry_id'] == '180')
+            self.assertEqual(e['image_status'], status, kw)
+            self.assertTrue(CV._was_read(e), status)
+            said = self.said(t)
+            self.assertTrue([m for m in said if 'was read' in m], (status, said))
+            self.assertFalse([m for m in said if 'nobody opened it' in m], (status, said))
+
+    def test_nothing_fetched_is_still_nobody_opened_it(self):
+        t = self.built()
+        e = next(x for x in t['entries'] if x['entry_id'] == '180')
+        self.assertFalse(CV._was_read(e), e['image_status'])
+        self.assertTrue([m for m in self.said(t) if 'nobody opened it' in m], self.said(t))
+
+    def test_a_recognised_first_page_title_that_is_a_bare_cover_is_said_as_that(self):
+        # Contract 4, the fourth shape. kind_source 'document' means the producer DID recognise a
+        # title on page 1 and labelled the entry from it; when that title is a bare cover the subject
+        # cannot come out of it, so the round before's flag was False and the sentence said no title
+        # was recognised - about an entry whose operative_text IS the recognised title.
+        import miami_case_timeline as MCT
+        self.assertEqual(MCT.classify('NOTICE OF FILING'), 'notice_of_filing')
+        t = self.built(page180='NOTICE OF FILING\nthe attached paper is filed herewith')
+        e = next(x for x in t['entries'] if x['entry_id'] == '180')
+        self.assertEqual(e['kind_source'], 'document')
+        self.assertEqual(e['operative_text'], 'NOTICE OF FILING')
+        self.assertEqual(CV._cover_subject(e), ('satisfaction', False))
+        said = self.said(t)
+        self.assertTrue([m for m in said if 'bare cover naming nothing' in m], said)
+        self.assertFalse([m for m in said if 'no title on its first page was recognised' in m], said)
+
+    def test_the_four_shapes_get_four_sentences(self):
+        # Each of the four is a different thing to tell the reader, and no two may share a sentence.
+        shapes = {
+            'read_title': self.built(page180='NOTICE OF FILING SATISFACTION OF FINAL JUDGMENT\nx'),
+            'bare_cover': self.built(page180='NOTICE OF FILING\nfiled herewith'),
+            'no_title': self.built(page180=self.STAMP),
+            'unopened': self.built(),
+        }
+        said = {}
+        for name, t in shapes.items():
+            lines = self.said(t)
+            self.assertEqual(len(lines), 1, (name, lines))
+            said[name] = lines[0]
+        self.assertEqual(len(set(said.values())), 4, said)
+        self.assertIn("document's own title is itself a filing", said['read_title'])
+        self.assertIn('bare cover naming nothing', said['bare_cover'])
+        self.assertIn('no title on its first page was recognised', said['no_title'])
+        self.assertIn('nobody opened it', said['unopened'])
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

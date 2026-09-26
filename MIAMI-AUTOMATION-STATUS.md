@@ -349,6 +349,19 @@ order settles nothing about what that order stays. Third, `_cover_subject`'s par
 `None` while both success paths return a tuple and the call site unpacks, so a missing parser would have
 filed a file that parses fine under `broken` (twenty-seventh review).
 
+**The same fix again, one level in, in both its halves.** `_was_read` tested `image_status == 'read'`,
+and two other statuses only exist when the run HAD pages for the entry: `unreadable_pages` (:401, where
+`failed` is a subset of `pages`) and `missing_attachments` (:412, which tests `and pages` explicitly).
+This module's own NAMES table already calls `unreadable_pages` **part_read**. So a document whose page 2
+failed OCR - strictly LESS known than one fully read - printed "nobody opened it", indistinguishable
+from an entry nothing was fetched for. And there was a fourth shape: `kind_source` `'document'` means the
+producer DID recognise a title on page 1 and labelled the entry from it, so when that title is a bare
+cover ("NOTICE OF FILING") the subject cannot come out of it, the round before's flag was False, and the
+sentence said no title was recognised about an entry whose `operative_text` IS the recognised title.
+Four shapes, four sentences, each keyed on the fact it asserts: the read title that names the filing, the
+read title that is a bare cover, the read document whose first page carried no recognised title, and
+nothing opened (twenty-eighth review).
+
 **Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
