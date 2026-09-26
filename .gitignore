@@ -616,3 +616,6 @@ pacer_newfiler*.lock
 !_judgmentscopetest.py
 # _ordailytest: Clerk CDS daily-file ingest, match, and day-file comparison. Synthetic fixtures only.
 !_ordailytest.py
+# _tracerfytest: skip-trace freshness reason (credits vs not running) and the Tracerfy spend receipt.
+# Fixtures only — no key, no network, no ledger write.
+!_tracerfytest.py
