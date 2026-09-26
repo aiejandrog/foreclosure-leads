@@ -254,11 +254,56 @@ def _first_touch_status(cfg, today=None):
 
 def _pick_first_touch_from(cfg, today=None):
     """Rotate: the sender with room under BOTH caps and the fewest first touches today (then fewest
-    sends, then list order). ('' , status) when every sender is at a cap."""
+    sends, then list order). ('' , status) when every sender is at a cap. Slots RESERVED by sends
+    still in flight count as used (see _reserve_first_touch_from)."""
     st = _first_touch_status(cfg, today)
+    day = dt.date.today().isoformat()
+    with _FT_SLOT_LOCK:
+        held = {a: n for (d, a), n in _FT_SLOTS.items() if d == day}
+    for x in st:
+        x['first_touch_today'] += held.get(x['addr'], 0)
+        x['sent_today'] += held.get(x['addr'], 0)
     room = [(x['first_touch_today'], x['sent_today'], i, x['addr']) for i, x in enumerate(st)
             if x['first_touch_today'] < x['first_touch_cap'] and x['sent_today'] < x['alias_cap']]
     return (min(room)[3] if room else ''), st
+
+
+# SENDER-SLOT RESERVATION (#83 follow-up, Greptile P1, 2026-09-26). The in-flight claim protects the
+# RECIPIENT; nothing protected the SENDER's capacity. Two concurrent first touches with one slot
+# left both read the same ledger count, both picked that sender, and both sent before either
+# ledger row existed: one over the cap. Pick-and-reserve is now one step under _FT_SLOT_LOCK, and
+# the reservation is held until the ledger row that counts the send is written (then released:
+# the ledger counts it from there). A send whose outcome is unknown (SMTP error after Gmail may
+# have accepted it) or whose ledger write failed KEEPS its slot for the day -- counted high,
+# never low. Keyed by day so yesterday's reservations never bind today.
+_FT_SLOTS = {}
+_FT_SLOT_LOCK = threading.Lock()
+
+
+def _reserve_first_touch_from(cfg, today=None):
+    """Atomically pick a first-touch sender and reserve one slot on it. ('' , status) when full."""
+    with _FT_RESERVE_LOCK:
+        addr, st = _pick_first_touch_from(cfg, today)
+        if addr:
+            key = (dt.date.today().isoformat(), addr)
+            with _FT_SLOT_LOCK:
+                _FT_SLOTS[key] = _FT_SLOTS.get(key, 0) + 1
+        return addr, st
+
+
+def _release_first_touch_slot(addr):
+    if not addr:
+        return
+    key = (dt.date.today().isoformat(), addr)
+    with _FT_SLOT_LOCK:
+        n = _FT_SLOTS.get(key, 0) - 1
+        if n > 0:
+            _FT_SLOTS[key] = n
+        else:
+            _FT_SLOTS.pop(key, None)
+
+
+_FT_RESERVE_LOCK = threading.Lock()   # serialises pick+reserve (the pick reads the ledger)
 
 
 def _thread_from(addr, cfg, user):
@@ -909,6 +954,37 @@ def _pick_recipient(addrs, ev):
 
 
 _FT_CACHE = {'key': None, 'val': None}
+_WM_CACHE = {'mtime': None, 'val': None}
+
+
+def _worker_mailable_domains():
+    """The Morning Worker's consumer-domain allowlist (tracker_template.html MAILABLE_DOMAINS), read
+    from the template itself so there is ONE list, not a copy that drifts. None when it cannot be
+    read -- /health then says its pool is unfiltered rather than pretend. Cached on the mtime."""
+    path = os.path.join(HERE, 'tracker_template.html')
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    if _WM_CACHE['mtime'] == mt:
+        return _WM_CACHE['val']
+    val = None
+    try:
+        src = open(path, encoding='utf-8').read()
+        m = re.search(r'var MAILABLE_DOMAINS\s*=\s*\{(.*?)\};', src, re.S)
+        if m:
+            val = frozenset(d.lower() for d in re.findall(r"'([a-z0-9.-]+\.[a-z]{2,})'\s*:", m.group(1)))
+            val = val or None
+    except Exception:
+        val = None
+    _WM_CACHE.update(mtime=mt, val=val)
+    return val
+
+
+def _worker_mailable(addr, domains):
+    """Same test as the worker's _mailable(): allowlisted domain, or the regional *.rr.com family."""
+    d = str(addr or '').rsplit('@', 1)[-1].lower()
+    return d in domains or d.endswith('.rr.com')
 
 
 def _first_touch_queue_health():
@@ -920,7 +996,8 @@ def _first_touch_queue_health():
     from; the board's own queue is baked into the encrypted page and is not readable here.
     Counts only: this payload never carries an address. Cached on the input files' mtimes."""
     names = ('leads_final.json', 'skiptrace_results.json', 'bounced_emails.json',
-             'verified_emails.json', 'replies.json', 'optouts.json', os.path.basename(SENT_LEDGER))
+             'verified_emails.json', 'replies.json', 'optouts.json', os.path.basename(SENT_LEDGER),
+             'tracker_template.html')
     key = tuple((os.path.getmtime(os.path.join(HERE, n)) if os.path.exists(os.path.join(HERE, n)) else None)
                 for n in names) + (dt.date.today().isoformat(),)
     if _FT_CACHE['key'] == key:
@@ -941,6 +1018,10 @@ def _first_touch_queue_health():
                     if e.get('ch') == 'email' and e.get('message_id')}
     by = {}
     n_leads = n_send = n_addr = 0
+    # #83 follow-up (Greptile P2): the worker only composes to its consumer-domain allowlist, so an
+    # off-list address -- however good its verdict -- can never reach /send. Left out of the pool.
+    wdom = _worker_mailable_domains()
+    n_off = 0
     for L in leads:
         c = str((L or {}).get('Case #') or '').strip()
         rec = st.get(c) or {}
@@ -950,6 +1031,12 @@ def _first_touch_queue_health():
             continue
         if any(a in ev['last_mailed'] for a in addrs):
             continue                      # not a first touch: someone at this lead was mailed
+        if wdom is not None:
+            keep = [a for a in addrs if _worker_mailable(a, wdom)]
+            n_off += len(addrs) - len(keep)
+            addrs = keep
+            if not addrs:
+                continue                  # nothing here the worker could ever offer to /send
         pick, verdicts = _pick_recipient(addrs, ev)
         n_leads += 1
         n_send += bool(pick)
@@ -963,7 +1050,10 @@ def _first_touch_queue_health():
            'addresses_pass': sum(v for k, v in by.items() if k in GATE_PASS),
            # the headline number: first-touch addresses held for lack of evidence (dead excluded)
            'held_unverified': sum(v for k, v in held.items() if k != 'dead'),
-           'by_verdict': dict(sorted(by.items()))}
+           'by_verdict': dict(sorted(by.items())),
+           # which pool this is: the worker's own filter, or (template unreadable) every address
+           'pool': 'worker_mailable' if wdom is not None else 'unfiltered',
+           'addresses_not_mailable': n_off if wdom is not None else None}
     _FT_CACHE.update(key=key, val=val)
     return val
 
@@ -1631,6 +1721,7 @@ class Handler(BaseHTTPRequestHandler):
         # meta.test sends (1:1 to the advisor/operator) are exempt, as they are from the breaker.
         _gate = None
         _first_touch = False
+        _ft_slot = ''                # the first-touch sender slot this send holds (released once counted)
         if not _is_test:
             _offered = _norm_addrs(to, bcc)
             _ev = _deliverability_evidence()
@@ -1788,7 +1879,7 @@ class Handler(BaseHTTPRequestHandler):
                     'err': ('first touch HELD — the login %s cannot send as the warm-up domains '
                             '(%s), and first touches no longer leave from the main domain'
                             % (user, ', '.join(_ft_senders)))})
-            _ftp, _ftst = _pick_first_touch_from(_cfg)
+            _ftp, _ftst = _reserve_first_touch_from(_cfg)
             if not _ftp:
                 _release_recipients(_claimed)
                 return self._json(409, {
@@ -1799,6 +1890,7 @@ class Handler(BaseHTTPRequestHandler):
                                 x['first_touch_cap'], x['sent_today'], x['alias_cap']) for x in _ftst)),
                     'sent_today': _sent_today_count(), 'cap': self.daily_cap})
             from_addr = _ftp if _ftp != user else None
+            _ft_slot = _ftp
             meta['touch'] = 'first'
         elif _senders_active(user, _cfg) and not meta.get('test'):
             _wl = str(meta.get('wl') or '').lower()
@@ -1840,6 +1932,7 @@ class Handler(BaseHTTPRequestHandler):
             mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach, from_addr=from_addr)
         except smtplib.SMTPAuthenticationError as e:
             _release_recipients(_claimed)
+            _release_first_touch_slot(_ft_slot)      # nothing left: the slot is free again
             return self._json(401, {'ok': False, 'err': f'SMTP AUTH failed: {e}'})
         except Exception as e:
             # NOTE: the claim is deliberately NOT released on a generic send failure — the SMTP
@@ -1893,6 +1986,7 @@ class Handler(BaseHTTPRequestHandler):
                 # 'first' = a first touch from a warm-up sender; _first_touch_sent_today meters it
                 'touch': meta.get('touch') or '',
             })
+            _release_first_touch_slot(_ft_slot)      # the ledger row counts it from here on
         except Exception as e:
             # Loud on the server side (operator can grep the log) — this is the one real gap the
             # skipped write leaves: this send won't count toward today's cap and its 24h dedupe

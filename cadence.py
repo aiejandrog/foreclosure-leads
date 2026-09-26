@@ -62,8 +62,8 @@ try:
     _LANES_OK = True
 except Exception as _e:                                    # pragma: no cover - defensive
     _ss, _LANES_OK = None, False
-    print('cadence: send_server import failed (%s) — sending as the login, NO lane map, NO ledger '
-          'row, NO warm-up cap.' % (str(_e)[:80],))
+    print('cadence: send_server import failed (%s) — NO deliverability gate, so every due step is '
+          'HELD this run (fail closed; nothing is sent).' % (str(_e)[:80],))
 
 
 def _save_state(state):
@@ -473,6 +473,22 @@ def main():
     if _LANES_OK and cred and not _map_on:
         print(f'  lane map OFF — login {cred[0]} cannot send as the aliases; '
               f'everything leaves as the login (copy bsg_gmail.key to enable).')
+    # THE SAME VERIFIED-ADDRESS GATE AS /send (#83 follow-up, Greptile P1, 2026-09-26). Cadence
+    # mails through _smtp_send directly, so it never passed the bridge's deliverability gate or its
+    # warm-up first-touch routing: an enrolled step-0 touch could go to an address with no delivery
+    # evidence, from a lane sender. Now every due step asks send_server's own gate first
+    # (_pick_recipient on the evidence loaded once per run). No evidence = HELD: the step is NOT
+    # advanced, so it goes out the day evidence exists, never silently consumed. A first touch (an
+    # address never mailed) leaves only from the first_touch.from senders under their cap, through
+    # the same atomic slot reservation the bridge uses. If send_server cannot be imported the gate
+    # cannot run, and that is a hold too (fail closed), not a pass.
+    _ev = None
+    if _LANES_OK:
+        try:
+            _ev = _ss._deliverability_evidence()
+        except Exception as e:
+            print(f'  deliverability evidence unreadable ({str(e)[:80]}) — every step HELD this run')
+    held = 0
     for c, s in active.items():
         due = s.get('next') or str(today)
         if due > str(today):
@@ -484,6 +500,35 @@ def main():
         subj, body = steps(s, sender)[step]
         lane = _cadence_lane(s, today)
         alias = _ss._lane_from(_cfg, lane) if _map_on else ''
+        _addr = (s.get('email') or '').strip().lower()
+        if _ev is None:
+            held += 1
+            print(f"  HELD step {step+1}/4 -> {s['email']}: the deliverability gate could not run")
+            continue
+        _pk, _vd = _ss._pick_recipient([_addr], _ev)
+        if not _pk:
+            held += 1
+            print(f"  HELD step {step+1}/4 -> {s['email']}: no delivery evidence ("
+                  + '; '.join(f'{_c}: {_w}' for _a, _c, _w in _vd[:1]) + ') — step stays due')
+            continue
+        _first = _pk not in _ev['last_mailed'] and next(_c for _a, _c, _w in _vd if _a == _pk) != 'replied'
+        _ft_slot = ''
+        _ft_senders = _ss._first_touch_senders(_cfg) if _cfg else []
+        if _first and _ft_senders:
+            if not _map_on:
+                held += 1
+                print(f"  HELD step {step+1}/4 -> {s['email']}: first touch, and the login cannot send "
+                      f"as the warm-up senders ({', '.join(_ft_senders)})")
+                continue
+            if args.dry_run or not cred:
+                _ftp, _st = _ss._pick_first_touch_from(_cfg)
+            else:
+                _ftp, _st = _ss._reserve_first_touch_from(_cfg)
+                _ft_slot = _ftp
+            if not _ftp:
+                capped['first-touch'] = capped.get('first-touch', 0) + 1
+                continue
+            alias = _ftp if _ftp != cred[0] else ''
         if args.dry_run or not cred:
             _as = f'  [{lane} -> {alias}]' if alias else f'  [{lane} -> login]'
             print(f"  [dry-run] {s['email']}  step {step+1}/4  '{subj}'{_as}")
@@ -534,7 +579,9 @@ def main():
                     'message_id': mid,
                     'test_mode': False,
                     'lane': 'cadence', 'wl': lane,
+                    'touch': 'first' if _first and _ft_senders else '',
                 })
+                _ss._release_first_touch_slot(_ft_slot)   # the ledger row counts it from here on
             except Exception as e:
                 print(f'  WARNING: {s["email"]} was emailed (mid={mid}) but the ledger write '
                       f'failed ({str(e)[:90]}) — this send will not count toward the alias cap.')
@@ -562,6 +609,8 @@ def main():
                   f'({str(e)[:80]}) — this step may be RE-SENT on the next run. Fix the file now.')
     if smtp:
         smtp.quit()
+    if held:
+        print(f'  deliverability gate: {held} step(s) HELD (not consumed; they stay due).')
     for a, n in sorted(capped.items()):
         print(f'  warm-up cap reached on {a} — {n} step(s) held for tomorrow (not consumed).')
 
