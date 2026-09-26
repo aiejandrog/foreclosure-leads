@@ -100,7 +100,9 @@ OPTOUT_PHRASES = re.compile(
 # our words, the same failure strip_quotes() exists for with the old "reply 'stop'" line.
 _OUR_OPTOUT_LINE = re.compile(
     r"if now['\u2019]?s not a good time,? just tell me and i won['\u2019]?t reach out again\.?"
-    r"|si ahora no es buen momento,? solo d[ií]gamelo y no lo vuelvo a contactar\.?", re.I)
+    r"|if now['\u2019]?s not a good time,? just let me know and i won['\u2019]?t text you again\.?"
+    r"|si ahora no es buen momento,? solo d[ií]gamelo y no lo vuelvo a contactar\.?"
+    r"|si ahora no es buen momento,? solo d[ií]gamelo y no le vuelvo a escribir\.?", re.I)
 
 # FALSE-FLAGGED, and this is the dangerous half. A bare "stop" is genuinely ambiguous IN THIS
 # BUSINESS: "Please stop." is an opt-out, but "Can you stop the foreclosure?" is the most motivated

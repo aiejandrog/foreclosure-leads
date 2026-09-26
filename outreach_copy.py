@@ -74,10 +74,12 @@ UNSUB_URL = ''
 # dígamelo is the wording Alejandro signed; the detector accepts the unaccented form too.
 OPTOUT_LINE_EN = "If now's not a good time, just tell me and I won't reach out again."
 OPTOUT_LINE_ES = 'Si ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.'
-# Texts carry the carrier keyword instead (FCC 47 CFR 64.1200(a)(10): a STOP reply is a per se valid
-# revocation). Same words as call_mode.TEXT_OPTOUT and the board's stopEN/stopES.
-SMS_OPTOUT_EN = ' Reply STOP to opt out.'
-SMS_OPTOUT_ES = ' Responda STOP para no recibir más mensajes.'
+# Texts (2026-09-26, attorney signed off): do not say "Reply STOP". The owner is invited to say
+# it is not a good time, which is_stop_text() already treats as a permanent opt-out, and the
+# detector strips THESE sentences before matching so quoting them back is not itself a stop.
+# Same words as call_mode.TEXT_OPTOUT and the board's stopEN/stopES. Inbound STOP keywords stay.
+SMS_OPTOUT_EN = " If now's not a good time, just let me know and I won't text you again."
+SMS_OPTOUT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 
 
 def _unsub(url=None, lang='en'):
@@ -392,7 +394,7 @@ def outreach_subject(street, sale_date='', td=False, lang='en', style='measured'
 
 
 # ---------------------------------------------------------------------------------------------
-# SMS — same offer, compressed. Statutory core + STOP.
+# SMS — same offer, compressed. The opt-out sentences are the attorney lines, both languages.
 # ---------------------------------------------------------------------------------------------
 def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
     ds = _short_date(sale_date)
@@ -465,22 +467,24 @@ def cross_surface_check():
 
 
 def selftest():
-    """The disclosure must be present on every channel, SMS must fit two segments, and every
-    surface must promise the same call length."""
+    """The disclosure must be present on every channel, and every surface must promise the same
+    call length. Both attorney text sentences together are longer than two SMS segments."""
     d = dt.date(2026, 9, 16)
     fails = []
     for name, body, need in (
         ('email_long', email_body('Maria', d), (OPTOUT_LINE_EN,)),
         ('email_short', email_body_short('Maria', d), (OPTOUT_LINE_EN,)),
         ('letter', letter('Maria', d), ()),
-        ('sms', sms('Maria', d), ('Reply STOP',)),
+        ('sms', sms('Maria', d), (SMS_OPTOUT_EN.strip(), SMS_OPTOUT_ES.strip())),
     ):
         for m in need:
             if m not in body:
                 fails.append('%s: missing %r' % (name, m))
     s = sms('Maria', d)
-    if len(s) > 320:
-        fails.append('sms %d chars (>320 = 3 segments)' % len(s))
+    if 'Reply STOP' in s:
+        fails.append('sms still says Reply STOP')
+    if len(s) > 400:
+        fails.append('sms %d chars (both opt-out sentences should stay under 400)' % len(s))
     print('outreach_copy selftest: %s' % ('OK' if not fails else 'FAILED'))
     for f in fails:
         print('   !', f)

@@ -5136,16 +5136,14 @@ __TEXTTPLJS__
    the same failure as the {sender} bug that already reached a live read-aloud script. Going through
    fillScript also inherits the Jose heal and the company-name heal for free. */
 /* 2026-09-04 (Alejandro): the ladder is 1:1 human texts now. No confirm-CTA.
-   2026-09-25: the opt-out line is BACK, appended to every template below (TEXT_OPTOUT). The 09-04
-   removal assumed STOP would be handled at the carrier layer; nothing handles it there (these are
-   handset 1:1 texts, no 10DLC), and until quo_sync --messages landed today nothing read inbound
-   texts at all. FTSA 501.059's cure safe harbor and the TCPA's opt-out expectation both turn on the
-   recipient being TOLD how to stop. One constant, one sentence, removable in one place if counsel
-   says otherwise -- but it ships on. Jeremy Miner / NEPQ voice: curiosity,
+   2026-09-26: counsel replaced the carrier-keyword instruction. The line is still appended to every
+   template below (TEXT_OPTOUT). Inbound STOP replies stay permanent opt-outs; the sentence itself
+   only tells the owner to say it is not a good time. Jeremy Miner / NEPQ voice: curiosity,
    self-qualify, ONE soft question that earns a reply on its own. Still identifies the sender and
    names the street; no em dashes (reads as AI in a text); 'keep my number' is drill card 14's
    read-back close at SMS size. Run through fillScript -- SENDER is an OBJECT, a raw `+ SENDER +`
-   renders "[object Object]". Each body stays under two GSM segments. ES pending a language path. */
+   renders "[object Object]". The opt-out sentence is longer than the old STOP line, so a filled
+   body can run past two GSM segments. ES pending a language path. */
 var TEXT_T = {
   cold:   'Hi{first}, it is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
         + 'This might be off base so tell me if it is. I work with a few owners going through the same '
@@ -5174,9 +5172,10 @@ var TEXT_T_ES = {
         + 'llamada rápida con nuestro asesor principal le muestra lo que todavía funciona. De '
         + 'cualquier forma, guarde mi número.'
 };
-var TEXT_OPTOUT = {en:' Reply STOP to opt out.', es:' Responda STOP para no recibir más mensajes.'};
-Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf('STOP') < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
-Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('STOP') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
+var TEXT_OPTOUT = {en:" If now's not a good time, just let me know and I won't text you again.",
+                   es:' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'};
+Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf("won't text you again") < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
+Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('vuelvo a escribir') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
 function textBody(r, stage){
   var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
   return fillScript(T[stage] || T.cold, r);

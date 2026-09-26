@@ -72,6 +72,15 @@ The board and Call Mode hold texting until a fresh inbound scan is confirmed; br
 hold. `cadence.py` enforces the same 07:15 opt-out sync hold as `cadence-daily.bat`. Review this
 as a change to this surface, not as ordinary copy.
 
+**2026-09-26, attorney signed off the same day:** outbound texts no longer say "Reply STOP to opt
+out." or "Responda STOP para no recibir más mensajes." Board batch (`stopEN`/`stopES`), Call Mode
+(`TEXT_OPTOUT`), and `outreach_copy.sms()` use "If now's not a good time, just let me know and I
+won't text you again." and "Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir."
+Inbound detection is unchanged: carrier STOP words, PARE / BASTA / NO MAS, "not a good time" /
+"try next month", "don't text", "remove me", and the rest of `is_stop_text()` stay permanent
+opt-outs. `is_stop_text()` strips this new sentence before matching, the same way it strips the
+email line, so quoting it back is not a stop and a real "not a good time" still is.
+
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
