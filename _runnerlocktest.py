@@ -47,17 +47,29 @@ def rec(n, cond, d=''):
 T = pathlib.Path(tempfile.mkdtemp(prefix='runnerlock_'))
 SERVER = T / 'server.git'
 subprocess.run(['git', 'init', '-q', '--bare', str(SERVER)], check=True)
+# The armed-machine check reads a declared id, never the hostname. Pin both sides to "laptop"
+# so the existing races keep taking the lock; the cases below override them.
+IDFILE = T / 'engine.id'
+IDFILE.write_text('laptop\n', encoding='utf-8')
 
 
-def env_for(machine, server=None, skew='0'):
-    return {**os.environ, 'DEALFLOW_LOCK_REMOTE': str(server or SERVER),
-            'DEALFLOW_LOCK_GITDIR': str(T / ('m-' + machine)), 'DEALFLOW_LOCK_HOST': machine.upper(),
-            'DEALFLOW_LOCK_SKEW': skew, 'PYTHONIOENCODING': 'utf-8'}
+def env_for(machine, server=None, skew='0', **over):
+    e = {**os.environ, 'DEALFLOW_LOCK_REMOTE': str(server or SERVER),
+         'DEALFLOW_LOCK_GITDIR': str(T / ('m-' + machine)), 'DEALFLOW_LOCK_HOST': machine.upper(),
+         'DEALFLOW_LOCK_SKEW': skew, 'PYTHONIOENCODING': 'utf-8',
+         'DEALFLOW_RUNNER_LOCK': '1', 'DEALFLOW_ARMED_MACHINE': 'laptop',
+         'DEALFLOW_ENGINE_ID': 'laptop', 'DEALFLOW_ENGINE_ID_FILE': str(IDFILE)}
+    for k, v in over.items():
+        if v is None:
+            e.pop(k, None)
+        else:
+            e[k] = v
+    return e
 
 
-def lock(machine, *args, server=None, timeout=120):
+def lock(machine, *args, server=None, timeout=120, **over):
     p = subprocess.run([sys.executable, LOCK] + list(args), capture_output=True, text=True,
-                       env=env_for(machine, server), timeout=timeout, cwd=str(T))
+                       env=env_for(machine, server, **over), timeout=timeout, cwd=str(T))
     return p.returncode, p.stdout + p.stderr
 
 
@@ -240,6 +252,74 @@ rec('run-locked.bat wraps the runner in `runner_lock.py run ... -- cmd /c`',
 rec("run-locked.bat hands back runner_lock's exit code", 'endlocal & exit /b %errorlevel%' in bat)
 rec('run-locked.bat never builds, gates or pushes anything itself',
     not any(w in bat.lower() for w in ('git push', 'git add', 'git commit', 'publish_guard', 'make_tracker')))
+rec('run-locked.bat names the env gate', 'DEALFLOW_RUNNER_LOCK' in bat)
+
+# ---- 11. the gate and the armed machine
+# A one-shot command. The gate-off case points at a server that does not exist: touching it is a fail.
+off_marker = T / 'off.txt'
+off_child = [sys.executable, '-c',
+             'import os,sys; open(sys.argv[1],"w").write(os.environ.get("DEALFLOW_LOCK_INNER","")); sys.exit(7)',
+             str(off_marker)]
+rc, out = lock('offbox', 'run', '--runner', 'refresh-dealflow.bat', '--', *off_child,
+               server=T / 'no-such-server.git', DEALFLOW_RUNNER_LOCK=None,
+               DEALFLOW_ENGINE_ID='desktop', timeout=30)
+rec('gate off: the command runs (rc 7) even with a desktop identity and no server',
+    rc == 7 and off_marker.exists(), out.strip()[-180:])
+rec('gate off: the log says the lease is off', 'lease OFF' in out)
+rec('gate off: no scratch repo was created', not (T / 'm-offbox' / 'objects').exists())
+inner = off_marker.read_text(encoding='utf-8') if off_marker.exists() else ''
+rec('gate off: the child is marked held- so the .bat does not take the lease again', inner.startswith('held-'), inner)
+rc, out = lock('offbox', 'run', '--runner', 'refresh-dealflow.bat', '--', sys.executable, '-c', 'raise SystemExit(0)',
+               DEALFLOW_RUNNER_LOCK='please', timeout=30)
+rec('an unrecognised DEALFLOW_RUNNER_LOCK refuses (rc 9) and does not run the command',
+    rc == 9 and 'not a value' in out, out.strip()[-160:])
+
+clear()
+desk = T / 'desk.id'
+desk.write_text('desktop\n', encoding='utf-8')
+spent = T / 'spent.txt'
+rc, out = lock('desktop', 'run', '--runner', 'refresh-dealflow.bat', '--',
+               sys.executable, '-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).write_text("x")', str(spent),
+               DEALFLOW_ENGINE_ID='desktop', DEALFLOW_ENGINE_ID_FILE=str(desk), timeout=30)
+rec('desktop identity cannot run the refresh (rc 9)', rc == 9 and not spent.exists(), out.strip()[-180:])
+rec('...the refusal names both machines', '"desktop"' in out and '"laptop"' in out, out.strip()[-180:])
+rec('...and the lease was not taken', server_lock() is None)
+rc, out = lock('laptop', 'run', '--runner', 'cadence-daily.bat', '--', sys.executable, '-c', 'raise SystemExit(0)',
+               DEALFLOW_ENGINE_ID=None, DEALFLOW_ENGINE_ID_FILE=str(T / 'missing-engine.id'), timeout=30)
+rec('a send with no declared identity refuses', rc == 9 and 'cannot prove' in out, out.strip()[-160:])
+rec('...still without taking the lease', server_lock() is None)
+rc, out = lock('laptop', 'run', '--runner', 'run-phones-nightly.bat', '--', sys.executable, '-c', 'raise SystemExit(0)',
+               DEALFLOW_ARMED_MACHINE=None, timeout=30)
+rec('a paid runner with DEALFLOW_ARMED_MACHINE unset refuses', rc == 9 and 'DEALFLOW_ARMED_MACHINE is unset' in out)
+rc, out = lock('laptop', 'run', '--runner', 'run-phones.bat', '--', sys.executable, '-c', 'raise SystemExit(0)',
+               DEALFLOW_ENGINE_ID='cloud', timeout=30)
+rec('engine.id and DEALFLOW_ENGINE_ID disagreeing refuses (fail closed)', rc == 9 and 'disagrees' in out, out.strip()[-160:])
+rc, out = lock('laptop', 'run', '--runner', 'run-phones.bat', '--', sys.executable, '-c', 'raise SystemExit(0)',
+               DEALFLOW_ENGINE_ID=None, DEALFLOW_ENGINE_ID_FILE=str(T), timeout=30)
+rec('an unreadable engine.id refuses', rc == 9 and 'unreadable' in out, out.strip()[-160:])
+rc, out = lock('desktop', 'run', '--runner', 'run-replies-daily.bat', '--', sys.executable, '-c', 'raise SystemExit(4)',
+               DEALFLOW_ENGINE_ID='desktop', DEALFLOW_ENGINE_ID_FILE=str(desk), timeout=60)
+rec('the reply bake is not an armed-machine check: a desktop identity still runs it (rc 4)',
+    rc == 4, out.strip()[-180:])
+rec('...and releases the lease when it finishes', server_lock() is None)
+# the lease records the declared identity, not only the hostname
+rc, out = lock('laptop', 'acquire', '--runner', 'run-replies-daily.bat')
+held = server_lock() or {}
+rec('the lease carries the declared engine id', held.get('engine') == 'laptop' and held.get('host') == 'LAPTOP', held)
+lock('laptop', 'release')
+
+# the .bats enter through the lease, and only a held- child skips it
+for name in ('refresh-dealflow.bat', 'run-phones-nightly.bat', 'run-phones.bat',
+             'run-replies-daily.bat', 'run-leads.bat'):
+    body = (HERE / name).read_text(encoding='utf-8')
+    rec('%s enters through runner_lock.py unless already inside a held- child' % name,
+        'runner_lock.py run --runner "%~nx0"' in body and 'LOCKMARK:~0,5' in body and ':runner_lock_held' in body)
+cad = (HERE / 'cadence-daily.bat').read_text(encoding='utf-8')
+gate_at = cad.find('runner_lock.py run --runner cadence-daily.bat -- python -u cadence.py')
+sync_at = cad.find('python -u sync_gate.py')
+rec('cadence-daily.bat holds the lease around cadence.py, after the opt-out hold',
+    sync_at >= 0 and gate_at > sync_at)
+rec('a lease refusal does not reach cadence.py', ':refused' in cad and 'exit /b 9' in cad.split(':refused', 1)[1].split(':held', 1)[0])
 
 print('\n==== %d/%d runner-lock checks passed ====' % (len(ok), len(ok) + len(bad)))
 sys.exit(1 if bad else 0)

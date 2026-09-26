@@ -10,6 +10,17 @@ REM auto-ran on YESTERDAY'S build. Speed-to-lead was 24-48h by scheduling accide
 REM The worker session that opens at 8:00 must contain the replies found at 7:00.
 setlocal
 cd /d "%~dp0"
+rem  CROSS-MACHINE LEASE. Same entry as refresh-dealflow.bat. Off unless DEALFLOW_RUNNER_LOCK=1.
+rem  This bat publishes and does not send or spend, so it takes the lease and does not have
+rem  to be the armed machine. Two machines still cannot publish it at the same time.
+set "LOCKMARK=%DEALFLOW_LOCK_INNER%"
+if "%LOCKMARK:~0,5%"=="held-" goto :runner_lock_held
+python -u runner_lock.py run --runner "%~nx0" -- cmd /c "%~f0" >> "%~dp0runner-lock.log" 2>&1
+set "LOCKRC=%errorlevel%"
+if not "%LOCKRC%"=="0" echo [%date% %time%] %~nx0 did not start - cross-machine lease exit %LOCKRC%. See runner-lock.log.>> "%~dp0replies-run.log"
+echo %~nx0 lease exit %LOCKRC%. See runner-lock.log.
+endlocal & exit /b %LOCKRC%
+:runner_lock_held
 REM Durable log in the repo (gitignored), matching phones-run.log / daily-routes-run.log. The old
 REM %TEMP%\dealflow_replies_last.txt evaporated with Windows temp cleanup — verified 2026-08-26:
 REM the 08-25 run exited 0 and its output file already no longer existed anywhere, so a bad morning
