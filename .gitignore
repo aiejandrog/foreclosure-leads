@@ -24,6 +24,9 @@ _*.py
 !_coveragetest.py
 !_presenttitletest.py
 !_rankingtest.py
+# _salehistlptest: sale_history.py reads the Miami-Dade lis pendens lane too (never-read first) and
+# writes LP cases into sale_history_cache.json in the auction format stay_gate.py reads.
+!_salehistlptest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -52,6 +55,12 @@ BSG_Mail_Campaign_*.pdf
 !_codelientest.py
 !_fieldsheettest.py
 !_taxtest.py
+# paid_reads.py: the monthly paid-reads cap setting ({"monthly_cap": 50}) is per machine, and so is
+# its ledger (normally under DEALFLOW_DIR, outside the repo). _paidcaptest pins the cap and its wiring.
+paid_reads.json
+paid_reads_ledger.json
+paid_reads_ledger.json.*
+!_paidcaptest.py
 # ADDED 2026-08-27: these three guard real, load-bearing behaviour and were repaired the same day
 # (dynamic fixtures, correct sort tolerance, colgroup/thead agreement). Untracked, they would have
 # been repaired on exactly one laptop and lost on the next clone — the very thing this exemption
@@ -209,11 +218,13 @@ worker_notes_snapshots/
 !_sendbridgetest.py
 !_ledgerwritetest.py
 !_attachtest.py
+!_sendstaytest.py
 !_zstatustest.py
 !_skiptracetest.py
 !_phonepagetest.py
 !_autorunstoptest.py
 !_balloonlanetest.py
+!_censuslientest.py
 # BatchData shared spend ledger + cap config (local money state, not code)
 batchdata_spend.json
 bd_budget.json
@@ -295,6 +306,8 @@ send_server_run.log
 phones-run.log
 scrape_all.log
 worker_marks.jsonl
+# send_server /send refusals (§362 stay gate): case numbers + reasons, append-only runtime log
+send_refusals.jsonl
 retrace_queue.json
 email_preview.html
 badnum_quarantine.json
@@ -536,3 +549,21 @@ sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
 !_judgmentpasstest.py
+# pacer_stay.py: federal bankruptcy verdicts per lead (case-keyed, local data) + the local PACER
+# quarter-spend ledger (money state). Never commit either; the repo is public.
+pacer_stay_cache.json
+pacer_stay_cache_qa.json
+pacer_stay_cache*.tmp
+pacer_stay_cache*.lock
+pacer_quarter_ledger.json
+pacer_quarter_ledger.json.*
+# The daily flsb new-filer index carries DEBTOR NAMES (public court data, but personal): local only,
+# never commit it or the match file built from it.
+pacer_newfilers.json
+pacer_newfilers_qa.json
+pacer_newfiler_hits.json
+pacer_newfiler_hits_qa.json
+pacer_newfiler*.tmp
+pacer_newfiler*.lock
+# _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
+!_pacerstaytest.py

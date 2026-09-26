@@ -174,12 +174,20 @@ def _balance():
 
 
 def _may_submit():
-    """True when one more paid solve fits under --max-spend. Sticky: once it says no, it stays no."""
+    """True when one more paid solve fits under --max-spend AND the shared monthly paid-reads cap
+    (paid_reads.py). Sticky: once it says no, it stays no."""
+    if _SPEND['stopped']:
+        return False
+    # THE MONTH FIRST, and even with no --max-spend: a per-run cap bounds a night, not a month.
+    # paid_reads fails closed (cap reached, ledger unreadable, bad setting) and logs why once.
+    import paid_reads
+    _ok, _why = paid_reads.allow(_SPEND.get('unit') or PAID_SOLVE_USD, 'records_liens')
+    if not _ok:
+        _SPEND['stopped'] = _why
+        return False
     cap = _SPEND['cap']
     if cap is None:
         return True
-    if _SPEND['stopped']:
-        return False
     if _SPEND.get('lock'):
         if not _lock_mine():
             # asleep past the stale age and another run took the ledger over: its total is not ours
@@ -420,6 +428,13 @@ def fetch_via_turnstile(owner_lf, tries=3):
            + urllib.parse.quote('Name/Document'))
     for _ in range(max(1, tries)):
         if not _may_submit():
+            return None
+        # The monthly ledger first, in ONE locked check-and-count (paid_reads.debit): a spender
+        # running beside this one cannot take the same last cents between the check and the count.
+        import paid_reads
+        _ok, _why = paid_reads.debit(_SPEND.get('unit') or PAID_SOLVE_USD, 'records_liens')
+        if not _ok:
+            _SPEND['stopped'] = _why or 'the monthly paid-reads ledger refused the solve'
             return None
         _SPEND['submits'] += 1                  # counted on submit: a failed solve may still bill
         _ledger_save()                          # before the solve, so a crash cannot forget it
