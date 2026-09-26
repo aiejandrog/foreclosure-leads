@@ -57,12 +57,24 @@ async function run(src, commits, opts = {}) {
     setFailed: m => { out.failed = m; },
     info: m => out.info.push(m),
   };
+  // listCommits pages like the real endpoint (per_page, page; newest first as the fixture lists
+  // them), and paginate walks pages until a short one, like Octokit's. A script that reads only
+  // the first page of a long window sees exactly what production saw on 09-26 (issue #87).
   const github = {
+    paginate: async (method, params) => {
+      const all = [];
+      for (let page = 1; ; page++) {
+        const r = await method({ ...params, page });
+        all.push(...r.data);
+        if (r.data.length < (params.per_page || 30)) return all;
+      }
+    },
     rest: {
-      repos: { listCommits: async () => {
+      repos: { listCommits: async (p = {}) => {
         out.listed++;
         if (opts.listThrows) throw new Error('API rate limit exceeded');
-        return { data: commits };
+        const per = p.per_page || 30, page = p.page || 1;
+        return { data: commits.slice((page - 1) * per, page * per) };
       } },
       issues: {
         listForRepo: async () => ({ data: opts.openIssue ? [{ number: 99 }] : [] }),
@@ -173,6 +185,15 @@ const MORNING_MISSED = [commit('m0f000', REFRESH, fixedDay(14, '12:25')),
                         commit('m0p000', PHONES, fixedDay(15, '10:00'))];
 const WINTER_OK = [commit('w1e000', EARLY, '2026-01-15T10:41:00Z'), commit('w1f000', REFRESH, '2026-01-15T13:10:00Z')];
 
+// ---- issue #87: more than one page of commits in the window ----
+// 150 ordinary merges (newest, so they fill page 1 and half of page 2) ahead of the runners'
+// commits. Reading only page 1 finds no refresh at all and cries "No new leads".
+const pad = (n, stamp) => Array.from({ length: n }, (_, i) =>
+  commit(`pd${String(i).padStart(4, '0')}`, `Merge pull request #${1000 + i} from aiejandrog/some-branch`, stamp));
+const PAGED_HEALTHY = pad(150, at(0, '18:30')).concat(HEALTHY);
+const PAGED_NO_REFRESH = pad(150, at(0, '18:30')).concat(NO_REFRESH);
+const MORNING_PAGED_OK = pad(150, fixedDay(15, '12:25')).concat(MORNING_OK);
+
 // ---------------------------------------------------------------- assertions
 const cases = [
   { name: 'healthy week stays silent', fx: HEALTHY, fire: false },
@@ -190,6 +211,9 @@ const cases = [
   { name: 'refresh started today and never finished fires', fx: KILLED_TODAY, fire: true, now: NOON_ET,
     want: /started and did not finish/ },
   { name: 'an early push only 2h old is not judged yet', fx: KILLED_TODAY, fire: false, now: '2026-07-15T11:45:00Z' },
+  // issue #87
+  { name: '#87: a refresh behind 150 newer commits is still found (pages past 100)', fx: PAGED_HEALTHY, fire: false },
+  { name: '#87: a quiet refresh behind 150 newer commits still fires', fx: PAGED_NO_REFRESH, fire: true, want: /No new leads/i },
 ];
 
 // The morning job's step. `calls` pins that a skipped run touches neither the API nor the page.
@@ -216,6 +240,8 @@ const morningCases = [
     fx: MORNING_MISSED, now: AT_0730_EST, html: board('2026-01-14'), fire: false, noCalls: true },
   { name: 'morning: winter, 08:31 EST, healthy -> silent',
     fx: WINTER_OK, now: AT_0830_EST, html: board('2026-01-15'), fire: false },
+  { name: 'morning: #87 today\'s refresh behind 150 newer commits is still found',
+    fx: MORNING_PAGED_OK, now: AT_0830_EDT, html: board('2026-07-15'), fire: false },
   { name: 'morning: a manual run at 07:31 is not skipped by the hour gate',
     fx: MORNING_MISSED, now: AT_0730_EDT, html: board('2026-07-14'), eventName: 'workflow_dispatch', fire: true, want: /MISSED/ },
 ];
