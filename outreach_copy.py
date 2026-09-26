@@ -70,13 +70,14 @@ UNSUB_URL = ''
 # mail_guard._OPTOUT_SENTENCE recognises it as the body's opt-out. Change the wording HERE only --
 # and it is a legal call (CLAUDE.md, "Disclaimers"), so raise it rather than editing it.
 #
-# The Spanish line is a translation of the approved English, same register as the Spanish bodies
-# (usted, unaccented to match them). It has not been separately approved.
+# The Spanish line is the same promise, approved with the English on 2026-09-26. Accent on
+# dígamelo is the wording Alejandro signed; the detector accepts the unaccented form too.
 OPTOUT_LINE_EN = "If now's not a good time, just tell me and I won't reach out again."
-OPTOUT_LINE_ES = 'Si ahora no es buen momento, solo digamelo y no lo vuelvo a contactar.'
+OPTOUT_LINE_ES = 'Si ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.'
 # Texts carry the carrier keyword instead (FCC 47 CFR 64.1200(a)(10): a STOP reply is a per se valid
 # revocation). Same words as call_mode.TEXT_OPTOUT and the board's stopEN/stopES.
 SMS_OPTOUT_EN = ' Reply STOP to opt out.'
+SMS_OPTOUT_ES = ' Responda STOP para no recibir más mensajes.'
 
 
 def _unsub(url=None, lang='en'):
@@ -86,7 +87,7 @@ def _unsub(url=None, lang='en'):
     on: "not a good time", "no es buen momento", "don't reach out", "no me contacte" all are, and
     _stoptexttest pins them. Inviting a reply the detector does not know would be the worst outcome
     available here -- an opt-out the owner believes they sent and that nothing in the system ever
-    acts on. Spanish stays unaccented to match the bodies it sits under.
+    acts on. Spanish uses the approved accented line (dígamelo); the detector accepts either spelling.
     """
     u = UNSUB_URL if url is None else url
     if lang == 'es':
@@ -400,7 +401,7 @@ def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
             else 'Your home is scheduled for foreclosure auction')
     return ("%sI'm %s with %s. %s. Free %s-minute call, no obligation - I'll lay out every option you "
             "have. Call/text %s.%s"
-            % (who, signer, company, when, CALL_MINUTES_N, phone, SMS_OPTOUT_EN))
+            % (who, signer, company, when, CALL_MINUTES_N, phone, SMS_OPTOUT_EN + SMS_OPTOUT_ES))
 
 
 # ---------------------------------------------------------------------------------------------

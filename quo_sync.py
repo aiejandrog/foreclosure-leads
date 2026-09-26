@@ -343,6 +343,65 @@ def sync(days=7, phones=None, watch=False, verbose=False):
 # from a machine holding quo.key. If it 4xx's, the run prints the error and ledgers nothing --
 # it never fails silent. Verify with:  python quo_sync.py --messages --days 2 --phone <number>
 MESSAGES_PATH = '/messages'
+# Written after every inbound scan, success or failure. text_hold() is what Call Mode and the
+# send bridge read. A missing or unreadable file is a hold: we have not proved we saw today's
+# STOP texts. Email does not read this file.
+INBOUND_STATUS = os.path.join(HERE, 'quo_inbound_status.json')
+# The nightly refresh runs this around 05:30. 36h covers that cycle and still goes stale if the
+# next night's scan never lands. A failed read holds immediately, whatever the age.
+INBOUND_MAX_AGE_H = 36
+
+
+def _write_inbound_status(ok, why='', checked=0, stops=0, errors=0):
+    """Record the scan. Counts only — never a phone number or a message body (the repo is public
+    and this file sits next to the code)."""
+    rec = {
+        'ok': bool(ok),
+        'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+        'checked': int(checked), 'stops': int(stops), 'errors': int(errors),
+        'why': str(why or '')[:240],
+    }
+    try:
+        tmp = INBOUND_STATUS + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(rec, fh)
+        os.replace(tmp, INBOUND_STATUS)
+    except Exception as e:
+        print('!! could not record inbound-scan status (%s) — texting will hold' % str(e)[:80])
+    return rec
+
+
+def text_hold(path=None, now=None, max_age_h=None):
+    """(held, why). Fail closed: missing, unreadable, a failed scan, or a scan older than max_age_h.
+
+    This holds TEXTING only. The 07:15 opt-out sync gate is what holds email, and this function
+    does not touch it."""
+    path = path or INBOUND_STATUS
+    max_age_h = INBOUND_MAX_AGE_H if max_age_h is None else max_age_h
+    try:
+        d = json.load(open(path, encoding='utf-8'))
+    except Exception:
+        return True, ('HOLD texting — the Quo inbound STOP scan has no readable status. '
+                      'Run python quo_sync.py. Email is not held by this.')
+    if not isinstance(d, dict) or not d.get('ok'):
+        why = d.get('why') if isinstance(d, dict) else ''
+        return True, ('HOLD texting — the last Quo inbound STOP scan failed%s. '
+                      'Texting stays off until a clean scan. Email is not held by this.'
+                      % ((' (%s)' % why) if why else ''))
+    try:
+        when = datetime.datetime.fromisoformat(str(d.get('ts') or '').replace('Z', '+00:00'))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return True, ('HOLD texting — the Quo inbound STOP scan status has no timestamp. '
+                      'Email is not held by this.')
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    age_h = (now - when).total_seconds() / 3600.0
+    if age_h > float(max_age_h):
+        return True, ('HOLD texting — the Quo inbound STOP scan is %.0fh old (max %dh). '
+                      'Texting stays off until a fresh scan. Email is not held by this.'
+                      % (age_h, max_age_h))
+    return False, ''
 
 
 def _inbound(m):
@@ -354,17 +413,20 @@ def sync_messages(days=7, phones=None, verbose=False, dry_run=False):
     key = _key()
     if not key:
         print('quo.key missing -- inbound STOP scan skipped')
+        _write_inbound_status(False, 'quo.key missing')
         return 1
     try:
         from replies import is_sms_stop
         from optout_sync import ledger_add
     except Exception as e:
         print('!! inbound STOP scan cannot run (%s) -- replies/optout_sync import failed' % e)
+        _write_inbound_status(False, 'import failed: %s' % str(e)[:160])
         return 1
     pn = _get(key, '/phone-numbers')
     pids = [x.get('id') for x in (pn.get('data') or []) if x.get('id')] if isinstance(pn, dict) else []
     if not pids:
         print('no Quo phone numbers visible to this key -- nothing to scan')
+        _write_inbound_status(False, 'no Quo phone numbers visible to this key')
         return 1
     nums = set(_digits(p)[-10:] for p in (phones or []) if _digits(p))
     if not nums:
@@ -406,7 +468,14 @@ def sync_messages(days=7, phones=None, verbose=False, dry_run=False):
                                  n10, body[:60]))
     print('inbound texts: %d number(s) checked, %d inbound message(s) read, %d STOP(s), %d fetch error(s)'
           % (len(nums), scanned, len(stops), errors))
-    return 0 if not errors else 2
+    # Any fetch error holds texting. A partial read can miss the one STOP that matters, and a
+    # quiet success is not a success we did not finish.
+    if errors:
+        _write_inbound_status(False, '%d message fetch error(s)' % errors,
+                              checked=len(nums), stops=len(stops), errors=errors)
+        return 2
+    _write_inbound_status(True, checked=len(nums), stops=len(stops), errors=0)
+    return 0
 
 
 def main():
@@ -433,7 +502,8 @@ def main():
         try:
             sync_messages(days=a.days, phones=phones or None, dry_run=a.dry_run)
         except Exception as e:
-            print('!! inbound STOP scan crashed (%s) -- texts may hold un-honoured STOPs' % str(e)[:120])
+            print('!! inbound STOP scan crashed (%s) -- texting is HELD until a clean scan' % str(e)[:120])
+            _write_inbound_status(False, 'scan crashed: %s' % str(e)[:160])
     return rc
 
 

@@ -85,11 +85,13 @@ OPTOUT_PHRASES = re.compile(
     # THE PROMISE OUR EMAIL MAKES (2026-09-26). Every email now ends "If now's not a good time, just
     # tell me and I won't reach out again." (outreach_copy.OPTOUT_LINE_EN). An owner who answers
     # "not a good time" has told us, in the words we asked for, and the line says we stop. So it IS
-    # an opt-out -- even "not a good time, maybe next month": the sentence did not offer a snooze,
-    # and erring toward suppression is the rule where the readings collide. "reach out" is how our
+    # an opt-out -- even "not a good time, maybe next month", and "try next month" on its own: the
+    # sentence did not offer a snooze, and erring toward suppression is the rule where the readings
+    # collide. "the sale is next month" does not match. "reach out" is how our
     # line says contact, so "please don't reach out" (caught by the do-not rule above) and
     # "stop reaching out" / "no need to reach out" read the same way.
     r"|\bnot (?:a )?(?:good|great|convenient) time\b"
+    r"|\btry (?:again )?next month\b"
     r"|\b(?:stop|quit|cease) reaching out\b|\bno need to reach out\b"
     r"|\bno es (?:un )?buen momento\b", re.I)
 
@@ -283,7 +285,14 @@ def is_stop_text(text):
 # Carrier-standard SMS keywords. A text whose WHOLE body is one of these is an opt-out regardless of
 # language or object -- this is the layer 10DLC/carriers apply, mirrored here so an inbound text
 # pulled from Quo is judged the same way the carrier would judge it.
-SMS_STOP_WORDS = {'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit', 'pare', 'alto', 'basta'}
+# Carrier keywords plus the Spanish equivalents a one-word reply actually uses. "NO MAS" / "NO MÁS"
+# is the whole message; longer Spanish ("no me llame", "quíteme de su lista") falls through to
+# is_stop_text(). Matching is on the normalized body, so "NO MÁS." and "no mas" are the same hit.
+SMS_STOP_WORDS = {
+    'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit',
+    'pare', 'alto', 'basta', 'cancelar', 'baja',
+    'no mas', 'no más', 'nomas', 'nomás',
+}
 
 
 def is_sms_stop(text):

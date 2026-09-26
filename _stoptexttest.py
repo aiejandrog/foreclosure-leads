@@ -34,6 +34,9 @@ CASES = [
     # 2026-09-26: the approved email line is "If now's not a good time, just tell me and I won't
     # reach out again." Whatever it invites is an opt-out, both languages.
     ("Now's not a good time", True), ('not a good time, maybe next month', True),
+    ('not a good time, try next month', True),
+    ('try next month', True),
+    ('the sale is next month', False),
     ("please don't reach out again", True), ('stop reaching out', True),
     ('No es buen momento', True), ('ahora no es un buen momento', True),
     # ...and our own sentence, quoted back with no quote marker, is not
@@ -76,13 +79,17 @@ T('outreach_copy EN line is the approved wording',
   OC.OPTOUT_LINE_EN == "If now's not a good time, just tell me and I won't reach out again.")
 T('email _unsub() carries it (no URL set)', OC._unsub(lang='en') == OC.OPTOUT_LINE_EN)
 T('Spanish _unsub() carries the ES line', OC._unsub(lang='es') == OC.OPTOUT_LINE_ES)
+T('the ES line is the approved accented wording',
+  OC.OPTOUT_LINE_ES == 'Si ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.')
 T('the line alone does not read as a stop (our words)', R.is_stop_text(OC.OPTOUT_LINE_EN) is False)
 T('the ES line alone does not read as a stop', R.is_stop_text(OC.OPTOUT_LINE_ES) is False)
 T('mail_guard sees the EN line as the body opt-out',
   not MG.check('Subject here', 'Ordinary letter.\n\n' + OC.OPTOUT_LINE_EN, 'a@b.com', unsub=''))
 T('mail_guard sees the ES line as the body opt-out',
   not MG.check('Asunto', 'Carta.\n\n' + OC.OPTOUT_LINE_ES, 'a@b.com', unsub=''))
-T('outreach_copy.sms ends with Reply STOP', OC.sms('Maria').endswith('Reply STOP to opt out.'))
+_sms = OC.sms('Maria')
+T('outreach_copy.sms carries Reply STOP and the ES line',
+  'Reply STOP to opt out.' in _sms and _sms.endswith('Responda STOP para no recibir más mensajes.'))
 T('outreach_copy.sms still fits two segments', len(OC.sms('Maria')) <= 320, len(OC.sms('Maria')))
 T('the STOP keyword it names is one the detector honours', R.is_sms_stop('STOP') is True)
 src_cad = open('cadence.py', encoding='utf-8').read()
@@ -99,6 +106,7 @@ T('investor-lane email uses the approved line', "won't write again" not in tpl
 print('== SMS keywords ==')
 for t, want in [('STOP', True), ('Stop.', True), ('stopall', True), ('CANCEL', True), ('End', True),
                 ('quit', True), ('stop the sale', False), ('ok stop', True), ('PARE', True),
+                ('BASTA', True), ('NO MAS', True), ('NO MÁS', True), ('cancelar', True),
                 ('can you stop the auction', False)]:
     T('sms %-25r -> %s' % (t, want), bool(R.is_sms_stop(t)) == want, R.is_sms_stop(t))
 

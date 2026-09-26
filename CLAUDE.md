@@ -50,12 +50,20 @@ one is not.
 message of whatever you were doing, or add a line here, and say so in your summary to Alejandro.
 An unfixed, reported bug on this surface is cheaper than two uncoordinated fixes.
 
-**2026-09-25/26, at Alejandro's direction:** PR #70 edits this surface (one ledger writer
-`optout_sync.ledger_add()`, the stop-detector fixes, the shared quote-cutter, Call Mode DNC reaching
-the ledger, cadence send-time re-checks) and, on 09-26, teaches `is_stop_text()` the promise the
-approved email line makes ("If now's not a good time, just tell me and I won't reach out again." =
-"not a good time" / "no es buen momento" are opt-outs; our own sentence is stripped before matching).
-It supersedes #46. Review it as a change to this surface, not as ordinary copy.
+**2026-09-26, at Alejandro's direction (legal side approved that day):** PR #70 edits this surface.
+`optout_sync.ledger_add()` stays the only writer of the opt-out ledger. A stale or unreadable
+ledger blocks sends. `is_stop_text()` treats "not a good time" / "try next month" / "no es buen
+momento" as a permanent opt-out, and strips our own opt-out sentence before matching so quoting it
+back is not itself a stop. Every email keeps the EN line and the ES line ("Si ahora no es buen
+momento, solo dígamelo y no lo vuelvo a contactar."). Every text keeps "Reply STOP to opt out." /
+"Responda STOP para no recibir más mensajes." `quo_sync --messages` runs after every sync; carrier
+STOP words plus PARE / BASTA / NO MAS ledger an inbound text. A failed or stale inbound read holds
+all texting and Call Mode says so; it does not hold email past the 07:15 opt-out sync gate. The
+board Morning Worker follows the 09-02 no policy: a hard no is person-wide and never re-contacted,
+and "Not interested" is retired until its one event-driven resurface rather than a 30-day cooldown.
+The Quo `/messages` request shape follows the published OpenPhone v1 listing and has not been
+exercised against the live API from a machine holding `quo.key`. Review this as a change to this
+surface, not as ordinary copy.
 
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the

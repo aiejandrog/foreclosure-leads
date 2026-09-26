@@ -241,6 +241,34 @@ def load_json(path, default):
         return default
 
 
+def _ledger_send_block():
+    """'' when optouts.json is present, parseable, and fresh enough to send against.
+
+    A missing, unreadable, or stale ledger blocks the send loop. Steps stay due. load_json()
+    above returns a default on a bad file, and outreach_email._load_optouts() returns an empty
+    set — both of those are a pass if nobody asks this question first."""
+    try:
+        _max = float(_ss.OPTOUT_MAX_AGE_DAYS) if _LANES_OK else 2.0
+    except Exception:
+        _max = 2.0
+    if not os.path.exists(OPTOUTS):
+        return 'opt-out ledger is MISSING'
+    try:
+        with open(OPTOUTS, encoding='utf-8') as fh:
+            d = json.load(fh)
+    except Exception as e:
+        return 'opt-out ledger is UNREADABLE (%s)' % str(e)[:80]
+    if not isinstance(d, (dict, list)):
+        return 'opt-out ledger is UNREADABLE (not an object)'
+    try:
+        age = (time.time() - os.path.getmtime(OPTOUTS)) / 86400.0
+    except OSError:
+        return 'opt-out ledger is UNREADABLE (no mtime)'
+    if age > _max:
+        return 'opt-out ledger is %.1f days old (max %.0f)' % (age, _max)
+    return ''
+
+
 def load_key():
     if not os.path.exists(KEY):
         return None
@@ -447,6 +475,7 @@ def _run(args):
     # 'held' is its own status, NOT 'suppressed': suppressed means a human said stop and it is
     # permanent. A diligence hold is WORK — clear the reason, rebuild the queue, and the sequence
     # resumes. Conflating the two would quietly convert a verification task into a dead lead.
+    _compliance_hold = False
     try:
         import diligence_gate as _dg
         _rows = {}
@@ -518,9 +547,12 @@ def _run(args):
             print('  diligence sweep: %d sequence(s) held/cancelled, %d case(s) not found in the '
                   'lead files (off-board, HELD until re-exported)' % (_held, _nolookup))
     except Exception as _dge:
-        # A cadence run that cannot diligence-check must still deliver its opt-out sweep and its
-        # reply check. Say the protection is off; do not take the engine down with it.
-        print('  !! diligence sweep SKIPPED (%s) — this run is sending UNGATED.' % str(_dge)[:120])
+        # The sweep is also the §362 / auction / dismissed re-check. If it cannot run, sending
+        # anyway is how a stayed case gets touch 2. Hold the run. The opt-out sweep and the reply
+        # check above already happened; nothing below is mailed.
+        _compliance_hold = True
+        print('  !! send-time compliance sweep FAILED (%s) — every due step HELD this run '
+              '(fail closed).' % str(_dge)[:120])
 
     # 1) reply check FIRST — never send another touch to someone who already wrote back
     _since = {}
@@ -576,6 +608,13 @@ def _run(args):
               f'{len(sup_new)} address(es) hard-suppressed')
 
     # 2) send due steps
+    # LEDGER GATE. Stale or unreadable optouts.json blocks the send. The 07:15 sync hold lives in
+    # cadence-daily.bat (sync_gate.py) and is a separate question: this one is the file itself.
+    _ledger_hold = ''
+    if not args.dry_run:
+        _ledger_hold = _ledger_send_block()
+        if _ledger_hold:
+            print('  HELD every due step — %s. Nothing sent; steps stay due.' % _ledger_hold)
     sent = 0
     capped = {}
     ctx = ssl.create_default_context()
@@ -615,6 +654,9 @@ def _run(args):
         step = int(s.get('step', 0))
         if step >= 4:
             s['status'] = 'completed'
+            continue
+        if _compliance_hold or _ledger_hold:
+            held += 1
             continue
         subj, body = steps(s, sender)[step]
         lane = _cadence_lane(s, today)

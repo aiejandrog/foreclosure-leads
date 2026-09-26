@@ -2034,6 +2034,16 @@ def _identity_opted_fn(slim, optouts):
     return _test
 
 
+def _quo_hold_json():
+    """What Call Mode shows before it can ask the bridge. Missing/unreadable status holds texting."""
+    try:
+        import quo_sync as _qs
+        held, why = _qs.text_hold()
+    except Exception as e:
+        held, why = True, ('HOLD texting — inbound STOP scan could not be read (%s)' % str(e)[:80])
+    return json.dumps({'held': bool(held), 'why': (why or '') if held else ''})
+
+
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
                seat=None, funnel_js='', text_js=''):
     """The page. Deliberately one file, no framework, no external fetch."""
@@ -2049,6 +2059,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
+                       ('__QUOHOLD__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
@@ -2105,7 +2116,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__BSIGNER__', json.dumps(_balloon_signer())) \
                 .replace('__SEAT__', json.dumps({'n': seat[0], 'i': seat[1], 'w': str(seat[2] or '')[:18]}
                                                 if seat else None)) \
-                .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson)))
+                .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
+                .replace('__QUOHOLD__', _quo_hold_json())
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -2729,6 +2741,9 @@ var BOOKURL="__BOOKURL__";
    that never shipped to this phone — without it a fresh phone reads every owner as never-texted and
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
 var TEXTPERSON=__TEXTPERSON__;
+/* Baked at build from quo_sync.text_hold(). A live /health poll below can freshen it. A failed
+   poll keeps the bake: the phone often cannot see the laptop, and bridge-down is not a scan failure. */
+var QUOHOLD=__QUOHOLD__;
 /* BAKED SEAT (2026-09-09). null on a whole-list build; {n,i,w} on a seat page whose payload
    already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
@@ -3848,6 +3863,16 @@ function pool(){
   return keep;
 }
 var _SEATN = 0, _CLMN = 0;
+function textingHeld(){ return !!(typeof QUOHOLD !== 'undefined' && QUOHOLD && QUOHOLD.held); }
+function pollTextHold(){
+  /* Live answer wins when the bridge is on this machine. A failed fetch keeps the bake. */
+  fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
+    if(!j || typeof j.text_hold === 'undefined') return;
+    var was = textingHeld();
+    QUOHOLD = {held: !!j.text_hold, why: j.text_hold_why || ''};
+    if(textingHeld() !== was){ try{ render(); }catch(e){} }
+  }).catch(function(){});
+}
 function start(){
   /* The worker's queue is the DEFAULT when it has anything in it. Those leads were triaged this
      morning and are phone-only — the worker could not reach them any other way, so they are the
@@ -3877,6 +3902,7 @@ function start(){
   }catch(e){}
   i=0; render(); freshCheck();
   paintSync();
+  try{ pollTextHold(); }catch(e){}
 }
 /* THE SYNC LINE, and it is now a BUTTON when sync is off.
    It used to read "Turn it on in the board" — technically true (same origin, so the board's
@@ -4066,7 +4092,10 @@ function head(){
      Read from pool()'s last count rather than re-deriving it: this is THIS LANE's hidden count, and
      head() always renders downstream of a pool() call. */
   var sup = _SUPN;
-  return '<div class="top"><div class="lane">'+laneBtns+'</div>'
+  var _qh = (typeof QUOHOLD !== 'undefined' && QUOHOLD && QUOHOLD.held)
+    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc(QUOHOLD.why || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>')
+    : '';
+  return _qh + '<div class="top"><div class="lane">'+laneBtns+'</div>'
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
@@ -5487,6 +5516,7 @@ function afterCall(r, o, nextC){
   var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
+  else if(textingHeld())    txt = '<div class="nc">'+esc((QUOHOLD && QUOHOLD.why) || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>';
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';

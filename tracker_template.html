@@ -6279,8 +6279,9 @@ function textCardHtml(r){
   const PH=_textPersonHist(r);
   const TS=_textStage(r);
   const retired=(TS==='retired');
-  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired;
-  const canCopy=!hardBlock && !retired; // never for BK / opt-out / wrong-owner / retired
+  const quoHold = (typeof TEXT_HOLD === 'string' && !!TEXT_HOLD);
+  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired && !quoHold;
+  const canCopy=!hardBlock && !retired && !quoHold; // never for BK / opt-out / wrong-owner / retired / a failed STOP scan
   const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
   /* The tone buttons ARE the ladder now. A later touch stays disabled until the earlier ones have
      actually been sent — otherwise touch 3's "this is my last message" body can be fired first,
@@ -6302,6 +6303,7 @@ function textCardHtml(r){
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
+  else if(quoHold) gate='<div class="txblock">⛔ '+esc(TEXT_HOLD)+'</div>';
   else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
   let phBtns;
   if(hardBlock){
@@ -12109,6 +12111,9 @@ function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||
 // what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
 // /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
 var _liveCap = null, _liveCapAt = 0;
+// Quo inbound STOP scan. Set only from a live /health answer. A failed fetch leaves the previous
+// value: bridge-down is not the same fact as "the scan failed". Email does not read this.
+var TEXT_HOLD = '';
 function _pollLiveCap(){
   var ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
   var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;
@@ -12116,7 +12121,10 @@ function _pollLiveCap(){
     .then(function(r){ return r.json(); })
     .then(function(j){ if(to) clearTimeout(to);
       if(j && j.ready){ _liveCap = j; _liveCapAt = Date.now(); }
-      _renderCapBadge(); })
+      TEXT_HOLD = (j && j.text_hold) ? (j.text_hold_why || 'Inbound STOP scan failed or is stale. Texting is held.') : '';
+      _renderCapBadge();
+      try{ if(document.getElementById('textmodal') && document.getElementById('textmodal').classList.contains('show') && typeof renderTextModal==='function') renderTextModal(); }catch(e){}
+    })
     .catch(function(){ if(to) clearTimeout(to); _renderCapBadge(); });
 }
 function _renderCapBadge(){
@@ -12291,6 +12299,43 @@ function _lastTouchMs(caseId, n){
   var B = (MAILLOG[caseId] || {}).last || 0;
   return B > last ? B : last;
 }
+/* THE NO POLICY on the Morning Worker (decided 2026-09-02, Call Mode's noState, board 2026-09-26).
+   A hard no / DNC is person-wide and is never re-contacted. "Not interested" is a soft no: retired,
+   not a 30-day cooldown. One event-driven resurface — T-14 if the lead had a sale date when the
+   no was logged, or the day an LP / dateless lead gets a date. After that resurface is spent, retired. */
+function _boardWasLp(r){
+  if(!r) return true;
+  if(r.st === 'LP' || r.lp) return true;
+  return !(typeof r.days === 'number' && r.days >= 0 && r.days < 9999);
+}
+function _boardNoState(r){
+  var cases = (typeof _personCases === 'function') ? _personCases(r) : [(r && r.case) || ''];
+  var soft = null, i, n, st;
+  for(i = 0; i < cases.length; i++){
+    n = (typeof notes !== 'undefined' && notes[cases[i]]) || {};
+    st = String(n.status || '').toUpperCase();
+    if(n.no === 'hard' || n.optout || st === 'DO NOT CONTACT' || st === 'OPTED OUT')
+      return {hard:true, soft:false, open:false};
+    if(n.no === 'soft' || (!n.no && n.status === 'Not interested')){ if(!soft) soft = n; }
+  }
+  if(!soft) return {hard:false, soft:false, open:false};
+  var wasLp = (soft.no === 'soft') ? !!soft.noWasLp : _boardWasLp(r);
+  var d = (typeof r.days === 'number') ? r.days : 9999;
+  var open = false;
+  if(!(soft.resurf > 0)){
+    var dated = (typeof r.days === 'number' && r.days >= 0 && r.days < 9999 && r.st !== 'LP' && !r.lp);
+    open = wasLp ? dated : (d >= 0 && d <= 14);
+  }
+  return {hard:false, soft:true, open:open};
+}
+/* 'hard' / 'soft' = do not queue. 'open' = the one resurface, and the 30-day cooldown does not apply. */
+function _workerNoBlocks(r){
+  var ns = _boardNoState(r);
+  if(ns.hard) return 'hard';
+  if(ns.soft && !ns.open) return 'soft';
+  if(ns.soft && ns.open) return 'open';
+  return '';
+}
 function _workerEligible(r){
   // Shared gate for every lane. Suppression first — these are legal, not preferences.
   if(!r || !r.case) return false;
@@ -12323,19 +12368,24 @@ function _workerEligible(r){
   // unattended, in bulk, at 8am — was checking only the case and would have kept mailing them on
   // their remaining properties (2026-08-26).
   if(typeof _isOptedOutPerson === 'function' && _isOptedOutPerson(r)) return false;
+  // Hard no is person-wide (a sibling case's DNC closes this one). Soft no / Not interested
+  // replaces the 720h cooldown: retired until the one resurface, then never queued on a calendar.
+  var _nb = _workerNoBlocks(r);
+  if(_nb === 'hard' || _nb === 'soft') return false;
   // A wrong number recorded from call mode is a data problem, not a lead — re-verify title first.
   if(n.wrongown) return false;
   // must be reachable at all — a lead with no phone and no email is a lookup task, not outreach
   if(!((r.phones||[]).length || (r.emails||[]).length)) return false;
-  /* COOLDOWN — outcome-aware, defaults to 72h.
-     A flat three-day rule is wrong for a call list: a no-answer or a voicemail should come back
-     TOMORROW (people are reachable at different hours), while an actual conversation or a "not
-     interested" deserves the full 72h of breathing room. Call mode writes notes[case].cooldownH
-     when the operator logs an outcome; anything else keeps the original 72h. */
+  /* COOLDOWN — outcome-aware, defaults to 72h, for ordinary outcomes only.
+     A no-answer comes back tomorrow; a conversation waits longer. "Not interested" and a hard no
+     do not use this clock: _workerNoBlocks already returned for those (2026-09-02 policy). */
   // A WAITING REPLY overrides the cooldown entirely. The cooldown exists to stop us pestering
   // someone we just contacted; a reply is the opposite situation — THEY contacted US, and hiding
   // them for 72h because we emailed before they answered is how a callback waits 13 days.
   if(_replyWaiting(r)) return true;
+  // The one soft-no resurface is served now, whatever cooldownH says (that field is still 720
+  // on a notint so the phone and the board share one outcome row; it is not the return clock).
+  if(_nb === 'open') return true;
   var last = _lastTouchMs(r.case, n);
   var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
   if(last && (Date.now() - last) < coolH*3600000) return false;
@@ -12363,11 +12413,14 @@ function _laneStats(lane){
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
     // mirror _workerEligible's person-level opt-out, or the lane count promises work it will refuse
     if(typeof _isOptedOutPerson === 'function' && _isOptedOutPerson(r)){ s.suppressed++; return; }
+    var _nb = _workerNoBlocks(r);
+    if(_nb === 'hard' || _nb === 'soft'){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
     if(n.wrongown){ s.suppressed++; return; }
     // Mirrors _workerEligible's outcome-aware cooldown — see the comment there. Reply-waiting
-    // leads bypass it there, so they must bypass it here or the lane count lies.
-    if(!_replyWaiting(r)){
+    // leads bypass it there, so they must bypass it here or the lane count lies. The one soft-no
+    // resurface ('open') bypasses it too.
+    if(!_replyWaiting(r) && _nb !== 'open'){
       var last = _lastTouchMs(r.case, n);
       var cH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
       if(last && (Date.now()-last) < cH*3600000){ s.touched++; return; }
@@ -12952,6 +13005,7 @@ function genMorningWorker(lane, autostart){
     +   '<div class="mwtextq" id="mwtextq" style="display:none;background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
     +     '<div class="mwloghead" style="background:#12224A;color:#CFE0FF"><span>&#128241; Text batch &mdash; pre-filled, you press send</span><span class="mwlogstats" id="mwtextqn"></span></div>'
     +     '<div style="padding:10px 14px;border-bottom:1px solid #eef0f5">'
+    +       '<div id="mwtexthold" style="display:none;margin-bottom:8px;background:#3d2c08;color:#F6E9C8;border-radius:8px;padding:8px 10px;font:700 12.5px/1.45 Segoe UI,Arial"></div>'
     +       '<button id="mwtextqgo" style="width:100%;background:#12224A;color:#fff;border:0;border-radius:8px;padding:11px 14px;font:700 13.5px Segoe UI,Arial;cursor:pointer">&#9654; Start text batch</button>'
     +     '</div>'
     +     '<div id="mwtextqlist" style="max-height:280px;overflow-y:auto"></div>'
@@ -13081,7 +13135,8 @@ function genMorningWorker(lane, autostart){
     /* ---- bridge health -----------------------------------------------------------------------
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
-    +   'var BRIDGE_OK=null, BRIDGE_HOLD="";'
+    +   'var BRIDGE_OK=null, BRIDGE_HOLD="", TEXT_HOLD="";'
+    +   'function paintTextHold(){ var h=document.getElementById("mwtexthold"); if(!h) return; if(TEXT_HOLD){ h.style.display="block"; h.textContent=TEXT_HOLD; } else { h.style.display="none"; h.textContent=""; } }'
     +   'function renderBridge(){'
     +     'var b=document.getElementById("mwbridge"); if(!b) return;'
     +     'if(BRIDGE_HOLD){ b.className="mwbridge down"; b.innerHTML="<b>Sending paused</b> &middot; "+esc(BRIDGE_HOLD); return; }'
@@ -13101,7 +13156,7 @@ function genMorningWorker(lane, autostart){
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
     +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
-    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
+    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):""; paintTextHold(); bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
     +       '.catch(function(){ if(to) clearTimeout(to); bridgeUp(false); });'
     +   '}'
     +   'function renderCap(){'
@@ -13379,6 +13434,7 @@ function genMorningWorker(lane, autostart){
        text per lead here, and _workerEligible already required 24h+ since the last touch. */
     +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
     +   'function textBatchStart(){'
+    +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
     +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
@@ -13388,6 +13444,7 @@ function genMorningWorker(lane, autostart){
     // queued behind it (the confirm-screen handlers call back into here) must not resurrect the
     // batch on top of it.
     +     'if(!tbOn) return;'
+    +     'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return textBatchDone(); }'
     +     'if(TBI>=TEXTQ.length) return textBatchDone();'
     +     'renderRunBar();'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — batch stopped mid-run. Resume after 8 AM ET.","warn"); return textBatchDone(); }'
@@ -14479,7 +14536,7 @@ window.addEventListener('message', function(ev){
       _nw.touches = _nw.touches || [];
       var _oc0 = (d.k==='callout' && d.extra && d.extra.oc) || '';
       if(_oc0 === 'dnc'){
-        _nw.optout = true; _nw.status = 'DO NOT CONTACT';
+        _nw.optout = true; _nw.status = 'DO NOT CONTACT'; _nw.no = 'hard'; _nw.noAt = _nw.noAt || Date.now();
         _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:'DNC — do not contact (logged off-board)'});
         try{ if(typeof _optLog==='function') _optLog(_nw, 'set-local', 'worker-offboard'); }catch(_e){}
       } else if(_oc0 === 'wrong'){
@@ -14488,6 +14545,12 @@ window.addEventListener('message', function(ev){
       } else if(d.k === 'callout'){
         _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:((d.extra&&d.extra.label)||_oc0||'call outcome')+' (logged off-board)'});
         if(d.extra && typeof d.extra.hrs === 'number') _nw.cooldownH = d.extra.hrs;
+        if(_oc0 === 'notint'){
+          if(!_nw.status) _nw.status = 'Not interested';
+          if(_nw.no !== 'hard' && _nw.no !== 'soft'){
+            _nw.no = 'soft'; _nw.noAt = Date.now(); _nw.noWasLp = true; _nw.resurf = _nw.resurf || 0;
+          }
+        }
       } else {
         _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'worker', out:'worker '+(d.k||'action')+' — lead no longer on this board build; recorded to notes only'});
       }
@@ -14577,7 +14640,9 @@ window.addEventListener('message', function(ev){
     // kind 'callout' (not 'call') so the durable ledger can count DIALS separately from every
     // other phone-adjacent breadcrumb — dial-through is the number this whole audit was missing.
     _wlog(r.case, 'callout', 'call outcome: ' + lbl
-          + (sup ? ' — SUPPRESSED, will not be queued again' : ' — returns in ' + hrs + 'h'), true);
+          + (sup ? ' — SUPPRESSED, will not be queued again'
+             : (oc === 'notint' ? ' — soft no, retired until its one resurface (not a 30-day cooldown)'
+                                : ' — returns in ' + hrs + 'h')), true);
     // The touch carries the real outcome, so the funnel can finally distinguish "tried" from
     // "reached". autoLog dedupes same-day/same-channel; logTouch is the underlying writer.
     try { autoLog(r, 'call', lbl); } catch(e){}
@@ -14595,18 +14660,43 @@ window.addEventListener('message', function(ev){
       n.status = 'Appointment';
     }
     if(oc === 'dnc'){
-      // An owner saying "stop" must be honoured immediately and permanently. Previously this was
-      // impossible from the worker — you had to leave, find the lead, and set it by hand.
+      // An owner saying "stop" must be honoured immediately and permanently, on EVERY case this
+      // person owns — the same promise Call Mode's stopEverywhere keeps. A case-only flag left
+      // the second property in tomorrow's queue.
       n.optout = true;
       n.status = 'DO NOT CONTACT';
+      n.no = 'hard';
+      n.noAt = n.noAt || Date.now();
+      try {
+        (_personCases(r) || [r.case]).forEach(function(c){
+          var nn = notes[c] || (notes[c] = {status:'', note:''});
+          nn.optout = nn.optout || _today();
+          nn.status = 'DO NOT CONTACT';
+          nn.no = 'hard';
+          nn.noAt = nn.noAt || Date.now();
+        });
+        (r.phones || []).forEach(function(p){
+          var d = String(p || '').replace(/\D/g, '');
+          if(!d) return;
+          var pn = notes['#' + d] || (notes['#' + d] = {status:'', note:''});
+          pn.optout = pn.optout || _today();
+          pn.status = 'DO NOT CONTACT';
+          pn.no = 'hard';
+        });
+      } catch(e){}
       _wlog(r.case, 'skip', 'DNC recorded from the worker — all channels closed for this owner', true);
     } else if(oc === 'wrong'){
       n.wrongown = true;
       n.status = n.status || 'Wrong number';
     } else if(oc === 'talked' && !n.status){
       n.status = 'Contacted';
-    } else if(oc === 'notint' && !n.status){
-      n.status = 'Not interested';
+    } else if(oc === 'notint'){
+      if(!n.status) n.status = 'Not interested';
+      // Soft no. cooldownH stays 720 so the outcome row matches Call Mode; _boardNoState is what
+      // decides whether the lead comes back, and a calendar expiry does not.
+      if(n.no !== 'hard' && n.no !== 'soft'){
+        n.no = 'soft'; n.noAt = Date.now(); n.noWasLp = _boardWasLp(r); n.resurf = n.resurf || 0;
+      }
     } else if(oc === 'callback' && !n.status){
       n.status = 'Callback';
     } else if(oc === 'gate' && !n.status){

@@ -51,6 +51,7 @@ C.HERE = ctmp
 C.QUEUE = os.path.join(ctmp, 'cadence_queue.json')
 C.STATE = os.path.join(ctmp, 'cadence_state.json')
 C.OPTOUTS = os.path.join(ctmp, 'optouts.json')
+json.dump({'_dealflow_notes': 1, 'notes': {}}, open(C.OPTOUTS, 'w'))
 json.dump({'sender': {'name': 'Test Sender'}, 'queue': [
     {'case': '2099-000201-CA-01', 'owner': 'A', 'email': 'unverified@example.com', 'step': 0},
     {'case': '2099-000202-CA-01', 'owner': 'B', 'email': 'valid1@example.com', 'step': 0},
@@ -58,7 +59,11 @@ json.dump({'sender': {'name': 'Test Sender'}, 'queue': [
     {'case': '2099-000204-CA-01', 'owner': 'D', 'email': 'followup@example.com', 'step': 1},
 ]}, open(C.QUEUE, 'w'))
 C._oe._load_optouts = lambda: set()
-C._oe._load_leads = lambda: []
+C._oe._load_leads = lambda: [
+    {'case': c, 'days': 40} for c in
+    ('2099-000201-CA-01', '2099-000202-CA-01', '2099-000203-CA-01', '2099-000204-CA-01')]
+import diligence_gate as _dg
+_dg.gate = lambda row: {'hold': False, 'code': '', 'why': ''}
 C.load_key = lambda: ('alejandro@bsgflorida.com', 'app-password')
 C.imap_replies = lambda *a, **k: {}
 C.steps = lambda s, sender: [('subj %d' % i, 'body %d' % i) for i in range(4)]

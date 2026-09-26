@@ -401,6 +401,34 @@ def _optout_age_days():
         return None
 
 
+def _optout_readable():
+    """True only when optouts.json parses as an object or a list.
+
+    A missing file is not readable (the age gate already blocks owner sends on it). Corrupt JSON
+    is not readable either: _optout_set() used to swallow that and return an empty set, which is
+    a pass, and a pass against a ledger we cannot read is how a STOP gets mailed. Fail closed."""
+    try:
+        with open(OPTOUT_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+    except Exception:
+        return False
+    return isinstance(d, (dict, list))
+
+
+def _text_hold():
+    """(held, why) from quo_sync.text_hold(). Texting only — never consulted by /send.
+
+    Import failure, a missing status file, a failed scan, or a stale scan all hold. Email stays
+    on the 07:15 opt-out sync gate and the ledger-age gate, not on this one."""
+    try:
+        import quo_sync
+        held, why = quo_sync.text_hold()
+        return bool(held), (why or '')
+    except Exception as e:
+        return True, ('HOLD texting — the inbound STOP scan could not be evaluated (%s). '
+                      'Email is not held by this.' % str(e)[:80])
+
+
 def _stay_gate(case):
     """§362 verdict for one case from sale_history_cache.json -- never from the board payload.
 
@@ -1316,6 +1344,7 @@ class Handler(BaseHTTPRequestHandler):
             _bh = _bounce_health()
             _oo_age = _optout_age_days()
             _sg = _sync_verdict()
+            _th, _tw = _text_hold()
             try:
                 _ft = _first_touch_queue_health()
             except Exception as e:
@@ -1348,8 +1377,12 @@ class Handler(BaseHTTPRequestHandler):
                 # because the board reads it; remove it only with the board in the same commit.
                 'ledger_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
                 'optout_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
-                'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS),
+                'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS or not _optout_readable()),
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
+                # Quo inbound STOP scan. text_hold true holds TEXTING only. It does not pause
+                # email; that stays on sync_ok / optout_stale above.
+                'text_hold': _th,
+                'text_hold_why': _tw if _th else '',
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
                 'bounce_blocked': _bh['blocked'],
                 # §362 stay source the /send gate reads. stay_data.ok false = every owner send is
@@ -1486,6 +1519,13 @@ class Handler(BaseHTTPRequestHandler):
         case = str(d.get('case') or '').strip()
         if not case:
             return self._json(400, {'ok': False, 'err': 'no case'})
+        # INBOUND STOP SCAN (2026-09-26). A failed or stale Quo message read means a STOP text
+        # may be sitting unread. Refuse the ledger write — and the worker treats a refusal as
+        # "do not text" — without touching the email path.
+        _th, _tw = _text_hold()
+        if _th:
+            return self._json(200, {'ok': False, 'blocked': 'quo_inbound',
+                                    'err': _tw or 'texting held — inbound STOP scan not fresh'})
         rec = {'d': dt.date.today().isoformat(),
                'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
                'ch': 'text', 'case': case,
@@ -1676,6 +1716,14 @@ class Handler(BaseHTTPRequestHandler):
                         '(optout_sync.py, or sync from the operator machine) before sending'
                         % ('MISSING' if _age is None else '%.1f days old' % _age,
                            OPTOUT_MAX_AGE_DAYS))})
+        # UNREADABLE is not the same as stale. A file that exists and was touched today but does
+        # not parse used to fall through to an empty opt-out set — a pass. Refuse every send,
+        # including meta.test: there is no list to check the address against.
+        if not _optout_readable():
+            return self._json(200, {
+                'ok': False, 'blocked': 'optout_stale',
+                'err': 'DO-NOT-CONTACT ledger is UNREADABLE — refusing every send until '
+                       'optouts.json parses'})
 
         # ---- TODAY'S 07:15 OPT-OUT SYNC (2026-09-26 decision) — fail closed, ALL sends ------------
         # optouts.json has one writer, the 07:15 sync (morning_sync.py: replies.py -> optout_sync's
