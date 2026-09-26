@@ -24,6 +24,9 @@ _*.py
 !_coveragetest.py
 !_presenttitletest.py
 !_rankingtest.py
+# _salehistlptest: sale_history.py reads the Miami-Dade lis pendens lane too (never-read first) and
+# writes LP cases into sale_history_cache.json in the auction format stay_gate.py reads.
+!_salehistlptest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -221,6 +224,7 @@ worker_notes_snapshots/
 !_phonepagetest.py
 !_autorunstoptest.py
 !_balloonlanetest.py
+!_censuslientest.py
 # BatchData shared spend ledger + cap config (local money state, not code)
 batchdata_spend.json
 bd_budget.json

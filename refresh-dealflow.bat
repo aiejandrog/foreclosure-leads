@@ -340,7 +340,14 @@ echo [3d2/5] Redfin Estimate (advisory AVM cross-check, 21-day cache, headless b
 python -u redfin_value.py --limit 100 >> "%LOG%" 2>&1
 
 echo [3e/5] Sale-history survival counts (MD docket, 7-day cache - the STALLER signal)...
-python -u sale_history.py --limit 150 >> "%LOG%" 2>&1
+rem  --limit 150 -> 200 (2026-09-26). sale_history.py now also reads the ~350 Miami-Dade LIS PENDENS
+rem  cases (the board's Fresh-filings lane). Until now not one of them had a stay read, so the send
+rem  bridge's stay gate could only refuse them all as stay_unverified. Estimated steady demand with the
+rem  LP lane added is ~154 reads a night (7-day TTL, near sales on a 20h TTL), so 150 would fall short.
+rem  Never-read cases go first (after near sales), so the ~350 unread LP cases are read within two or
+rem  three nights, ahead of re-reads of distant auction cases. Free public clerk reads (OCS JSON API):
+rem  two small requests and a 0.25s pause per case, no captcha, no spend.
+python -u sale_history.py --limit 200 >> "%LOG%" 2>&1
 
 echo [3f/5] Ownership flip gate (live appraiser owner vs defendant; budget-capped)...
 rem  ADDED 2026-08-19: ownership_scan.py was called by NOTHING - not this bat, not refresh.yml -
