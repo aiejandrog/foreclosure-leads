@@ -93,6 +93,9 @@ paid_reads_ledger.json.*
 # dropped, that a search capability is never assumed without a probe observing it, and that a
 # walked document stays at rung c and cannot move the equity verdict.
 !_walktest.py
+# _hcpingtest guards hc_ping.py (optional dead-man's-switch pings): a no-op unless configured, never
+# changes the run's exit code, never prints the ping URL, and its two lines in refresh-dealflow.bat.
+!_hcpingtest.py
 # Official-records rows saved for miami_judgment --records. They carry owner names, party names
 # and recording keys for a real homeowner, and the pilot run on 2026-09-22 left one of these
 # untracked in the working copy. Named here by kind, per CLAUDE.md's "Never commit".
@@ -117,6 +120,8 @@ __pycache__/
 browser-profile/
 leads-run.log
 refresh-running.flag
+hc-ping.rid
+healthcheck.url
 diligence_server.log
 batchdata.key
 site.pass

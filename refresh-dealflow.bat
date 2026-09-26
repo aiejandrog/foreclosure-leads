@@ -32,6 +32,11 @@ set "PREVRUN="
 if exist refresh-running.flag set /p PREVRUN=<refresh-running.flag
 if defined PREVRUN echo     ^!^! PREVIOUS RUN NEVER FINISHED - it started %PREVRUN% and wrote no ENDED line, so it was killed from outside this file: window closed, restart, or a Task Scheduler stop.>> "%LOG%"
 >refresh-running.flag echo %date% %time%
+rem  DEAD-MAN'S SWITCH PING (2026-09-26, optional). A no-op unless DEALFLOW_HEALTHCHECK_URL (or a
+rem  gitignored healthcheck.url) is set on this machine; then Healthchecks.io-style monitoring alerts
+rem  on its own when a started run never reports back - the 09-25 sleep - or no run starts at all.
+rem  Always exits 0 and nothing reads its errorlevel: it can never change this run. See hc_ping.py.
+python -u hc_ping.py start >> "%LOG%" 2>&1
 
 rem  RUNEXIT carries the run's verdict to :end. Until 2026-09-18 this file exited 0 no matter what
 rem  happened - Task Scheduler recorded `rc=0` on 09-17 for a run that scraped nothing, published
@@ -768,6 +773,8 @@ if errorlevel 2 (
 )
 rem  (report + done marker moved ABOVE the healthcheck — see the note at :end)
 echo     health check complete - see leads-run.log.
+rem  ...and the verdict to the dead-man's switch, once RUNEXIT is final. No-op when unconfigured.
+python -u hc_ping.py exit %RUNEXIT% >> "%LOG%" 2>&1
 
 rem  EXIT WITH THE VERDICT. Task Scheduler's "Last Run Result" is the only unattended signal that
 rem  survives when nobody opens the log, and until 2026-09-18 it was 0 on every outcome. It is now
