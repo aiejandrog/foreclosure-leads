@@ -269,7 +269,28 @@ def _stay_gate(case):
         return {'ok': False, 'code': 'stay_data_unavailable', 'case': str(case or ''),
                 'matched': [], 'bd': '', 'sl': '',
                 'why': 'stay_gate.py could not be imported (%s)' % str(e)[:120]}
-    return _SG.check(case, STAY_CACHE_FILE)
+    v = _SG.check(case, STAY_CACHE_FILE)
+    if v.get('ok') or not v.get('pacer_need'):
+        return v
+    # PRE-SEND PACER CHECK (2026-09-26, free tier). A lead with no Miami-Dade stem (Broward, Palm
+    # Beach, lis pendens without a Miami-Dade docket) has PACER as its only stay source, and on the
+    # free tier nobody searches it in bulk. So when the gate says a fresh per-lead search could change
+    # the answer, pacer_stay.presend_check() does ONE search now -- under the daily pre-send cap, the
+    # $25 quarter cap and #74's monthly cap -- caches the verdict for 14 days, and the gate decides
+    # again from the cache. PACER off, budget spent, an error, or anything but a clean clear: the
+    # refusal stands, with the same code and log line as before.
+    try:
+        import pacer_stay as _PS
+        r = _PS.presend_check(case, here=HERE)
+    except Exception as e:
+        r = {'status': 'error', 'why': 'pacer_stay.py could not run (%s)' % str(e)[:120]}
+    if r.get('status') in ('searched', 'index_hit', 'unsearchable'):
+        v = _SG.check(case, STAY_CACHE_FILE)
+    v['pacer_presend'] = r.get('status') or 'error'
+    if not v.get('ok'):
+        v['why'] = '%s [PACER pre-send: %s%s]' % (v.get('why', ''), v['pacer_presend'],
+                                                 (' -- ' + str(r.get('why'))[:160]) if r.get('why') else '')
+    return v
 
 
 def _stay_health():

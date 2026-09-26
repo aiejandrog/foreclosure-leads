@@ -549,3 +549,21 @@ sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
 !_judgmentpasstest.py
+# pacer_stay.py: federal bankruptcy verdicts per lead (case-keyed, local data) + the local PACER
+# quarter-spend ledger (money state). Never commit either; the repo is public.
+pacer_stay_cache.json
+pacer_stay_cache_qa.json
+pacer_stay_cache*.tmp
+pacer_stay_cache*.lock
+pacer_quarter_ledger.json
+pacer_quarter_ledger.json.*
+# The daily flsb new-filer index carries DEBTOR NAMES (public court data, but personal): local only,
+# never commit it or the match file built from it.
+pacer_newfilers.json
+pacer_newfilers_qa.json
+pacer_newfiler_hits.json
+pacer_newfiler_hits_qa.json
+pacer_newfiler*.tmp
+pacer_newfiler*.lock
+# _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
+!_pacerstaytest.py
