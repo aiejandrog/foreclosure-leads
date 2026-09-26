@@ -601,3 +601,5 @@ pacer_newfiler*.tmp
 pacer_newfiler*.lock
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
+# _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
+!_judgmentscopetest.py
