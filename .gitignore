@@ -118,6 +118,15 @@ paid_reads_ledger.json.*
 or_rows*.json
 *_rows.json
 pilot*.json
+# Clerk CDS daily Official Records. The zip, the .exp, and the sqlite database
+# live under ~/DEALFLOW/or_daily, outside this repo. These names are the backstop
+# if a copy is ever dropped in the tree. This repo is public.
+or_daily/
+dly_records_*
+or_daily.sqlite
+or_daily.sqlite-journal
+or_daily.sqlite-wal
+or_daily.sqlite-shm
 documents/
 dossiers/
 _*.html
@@ -605,3 +614,5 @@ pacer_newfiler*.lock
 !_titlechaintest.py
 # _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
 !_judgmentscopetest.py
+# _ordailytest: Clerk CDS daily-file ingest, match, and day-file comparison. Synthetic fixtures only.
+!_ordailytest.py

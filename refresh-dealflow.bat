@@ -206,6 +206,21 @@ python -u gen_tax_links.py --limit 60 >> "%LOG%" 2>&1
 echo [2d/5] Radius comps for Broward + Palm Beach leads (cadastral recent sales, new only)...
 python -u comps.py --limit 80 >> "%LOG%" 2>&1
 
+echo [2a/5] Clerk Official Records daily file - off unless DEALFLOW_OR_DAILY=1...
+rem  Paid Miami-Dade Clerk CDS "Records" folder. or_daily_file.py signs in with
+rem  CLERKDEV_USERNAME / CLERKDEV_PASSWORD, downloads new dly_records_MMDDYYYY.zip
+rem  files, and loads them into %USERPROFILE%\DEALFLOW\or_daily - outside this repo.
+rem  REPORT ONLY, and it runs BEFORE records_liens so the log shows what the daily
+rem  file already had. Matched liens, judgments, lis pendens, releases and mortgages
+rem  are evidence. Nothing here changes send, callable, or hold.
+rem  FAIL SOFT. A down site, a bad login, or a lapsed subscription logs a gap and
+rem  exits 0; this refresh continues. The units balance is read before and after
+rem  every download and a drop aborts the ingest. The script never calls a purchase,
+rem  extend, add-units, or basket URL. Five days before the subscription expiry it
+rem  warns in the log; healthcheck repeats that warning.
+python -u or_daily_file.py >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! OR daily file errored - gap only, refresh continues. See leads-run.log.>> "%LOG%"
+
 echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (2Captcha solves the Turnstile wall)...
 rem  Miami-Dade Official Records sits behind Cloudflare Turnstile. captcha_solver.py -> 2Captcha mints a
 rem  valid token (~$0.003/solve) so records_liens.py reads the chain with plain requests, no browser.
