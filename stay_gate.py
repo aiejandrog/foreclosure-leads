@@ -23,9 +23,19 @@ that merge stamps: active and not lifted. entry_stay_active() below is that pred
 entry; _sendstaytest.py pins it against outreach_email's own merge + _eligible on the same cache.
 
 CASE MATCHING. Board rows carry the full Miami-Dade number (2025-007384-CA-01); other sources drop
-or vary the suffix. Two numbers are the same case when their 11-character stem (2025-007384)
-matches. Every cache entry on the stem counts, and ONE active entry blocks: over-blocking a
-sibling suffix costs an email, under-blocking is a §362 contact.
+or vary the suffix. Two numbers are the same case when their stem (2025-007384: four-digit year,
+six-digit sequence) matches. Every cache entry on the stem counts, and ONE active entry blocks:
+over-blocking a sibling suffix costs an email, under-blocking is a §362 contact.
+
+A few sources put a LABEL in front of the number: one Miami-Dade lis pendens row reads
+"CASE NO 2025-...", and clerk exports write "Case No.", "Case Number:", "CASE #". case_stem() strips
+exactly those labels (CASE, CASE NO / NO. / NUMBER / NUM / NBR / #, a bare NO / NO. / #, with an optional
+':' '#' or '.') and tolerates spaces around the hyphen, so the row resolves to the same key the
+cache is indexed on. Nothing else is stripped: a county code, a Broward CACE- prefix or a Palm Beach
+50- number still has no Miami-Dade stem. The six-digit sequence must END there (a seventh digit is a
+different or mistyped number, not this case), so 2025-0073841 no longer truncates onto 2025-007384,
+and only a suffix may follow it (-CA-01, a space, or CA01 run on); 2025-007384x is refused.
+Anything that does not parse is refused as stay_case_unresolvable, as before.
 
 FAIL CLOSED, ALL THE WAY DOWN. This is a send gate, not a build step (compare diligence_gate.py,
 which fails OPEN because it runs inside builds). "I could not check" must never read as "clear":
@@ -37,10 +47,12 @@ which fails OPEN because it runs inside builds). "I could not check" must never 
   * an active stay that has not been lifted            -> refused  (stay_active)
 Only an entry that affirmatively says "no active stay" (or "stay lifted") clears.
 
-sale_history.py covers civil Miami-Dade cases only. Broward, Palm Beach, tax-deed and lis-pendens
-numbers therefore land in stay_case_unresolvable: there is no durable stay read for them anywhere
-in the repo, so the bridge cannot say they are clear. That is deliberate, and it is the policy
-decision the PR asks Alejandro to confirm.
+sale_history.py covers civil Miami-Dade cases only. Broward, Palm Beach and tax-deed numbers
+therefore land in stay_case_unresolvable: there is no durable stay read for them anywhere in the
+repo, so the bridge cannot say they are clear. That is deliberate, and it is the policy decision
+the PR asks Alejandro to confirm. MIAMI-DADE LIS PENDENS numbers are civil Miami-Dade numbers
+(2025-012345-CA-01), so they resolve: each is stay_unverified until sale_history.py has read its
+docket (it reads the lis pendens lane since #73), and then clears or blocks on what it found.
 
 READ FRESH. The cache is re-read whenever its mtime or size changes (one os.stat per call, a parse
 only after sale_history.py writes). sale_history.py writes it with a plain json.dump, not an atomic
@@ -54,9 +66,15 @@ import time
 
 CACHE_NAME = 'sale_history_cache.json'
 
-# Miami-Dade civil numbers: YYYY-NNNNNN-CA-01 / -CC-05. The stem is the first 11 characters.
+# Miami-Dade civil numbers: YYYY-NNNNNN-CA-01 / -CC-05. The stem is YYYY-NNNNNN (11 characters).
 STEM_LEN = 11
 _STEM_RE = re.compile(r'^\d{4}-\d{6}$')
+# Harmless labels in front of the number (see CASE MATCHING). Only these words; the remainder must
+# then START with the stem, so a mis-strip can only fail closed.
+_LABEL_RE = re.compile(r'^(?:CASE\s*(?:NUMBER|NUM\.?|NBR\.?|NO\.?|#)?|NO\b\.?|#)\s*[:#.]?\s*')
+# the stem, spaces allowed around the hyphen; the sequence must END after six digits, followed by
+# nothing, a hyphen / space (the suffix), or the court code itself (2025-007384CA01)
+_NUM_RE = re.compile(r'^(\d{4})\s*-\s*(\d{6})(?=$|[\s-]|C[AC])')
 
 CLEAR = 'clear'
 STAY_ACTIVE = 'stay_active'
@@ -70,9 +88,16 @@ _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, 
 
 
 def case_stem(case):
-    """'2025-007384-CA-01' -> '2025-007384'. '' when the number has no Miami-Dade stem."""
-    s = str(case or '').strip().upper()
-    stem = s[:STEM_LEN]
+    """'2025-007384-CA-01' -> '2025-007384'. '' when the number has no Miami-Dade stem.
+
+    'CASE NO 2025-007384-CA-01', 'Case No.: 2025-007384', 'CASE # 2025 - 007384-CA-01' -> '2025-007384'.
+    'CACE-24-001234', '2025-0073841', 'CASE', 'BW 2025-007384' -> '' (refused as unresolvable)."""
+    s = ' '.join(str(case or '').split()).upper()
+    s = _LABEL_RE.sub('', s, count=1)
+    m = _NUM_RE.match(s)
+    if not m:
+        return ''
+    stem = '%s-%s' % m.groups()
     return stem if _STEM_RE.match(stem) else ''
 
 

@@ -11,7 +11,8 @@ board is a snapshot. The bridge now decides stay status itself from sale_history
   1. stay_gate.check() on its own: stayed blocked, lifted allowed, non-stayed allowed, missing /
      unresolvable / never-read case blocked, missing / corrupt / empty cache blocked, stem matching
      across the -CA-01 suffix, a sibling suffix's active stay blocks, a cache rewrite is seen on
-     the next call.
+     the next call, labelled numbers ("CASE NO 2025-...", "Case No.", "CASE #") resolve to the
+     cache key while unreadable ones are still refused.
   2. PARITY with outreach_email: on the same cache, the rows outreach_email's own merge +
      _eligible() refuse for 'active bankruptcy stay' are exactly the cases stay_gate calls
      stay_active. The bridge reuses that rule; it does not invent a second one.
@@ -107,6 +108,49 @@ def unit():
             r['code'] == SG.STAY_ACTIVE and len(r['matched']) == 2, r)
         rec('case_stem() is the first 11 characters', SG.case_stem('2025-007384-CA-01') == '2025-007384'
             and SG.case_stem('CACE-24-1') == '')
+
+        # ---- labelled numbers ("CASE NO 2025-...") resolve to the cache key; junk still refuses ----
+        # One Miami-Dade lis pendens row carries its number as "CASE NO 2025-...". Before, that raw
+        # string had no stem and the lead was refused as unresolvable forever, even once
+        # sale_history.py (#73) had read its docket under the clean number.
+        for lab in ('CASE NO 2099-000001-CA-01', 'Case No. 2099-000001-CA-01', 'Case No.: 2099-000001',
+                    'CASE # 2099-000001-CA-01', 'CASE#2099-000001-CA-01', 'Case Number: 2099-000001-CA-01',
+                    'NO. 2099-000001-CA-01', '  case  no   2099 - 000001 - CA - 01 '):
+            r = c(lab)
+            rec('label: %r resolves to the stayed case and is refused (stay_active)' % lab,
+                r['code'] == SG.STAY_ACTIVE and r['matched'] == ['2099-000001-CA-01'], r)
+        r = c('CASE NO 2099-000003-CA-01')
+        rec('label: "CASE NO" on a read, clear case clears (the lead is no longer wrongly blocked)',
+            r['ok'] and r['code'] == SG.CLEAR, r)
+        r = c('CASE NO 2099-000999-CA-01')
+        rec('label: "CASE NO" on a case never read is still refused (stay_unverified)',
+            not r['ok'] and r['code'] == SG.UNVERIFIED, r)
+        r = c('CASE NO 2099-000004-CA-01')
+        rec('label: "CASE NO" on a pre-v4 entry is still refused (stay_unverified)',
+            not r['ok'] and r['code'] == SG.UNVERIFIED, r)
+        for junk in ('CASE', 'CASE NO', 'Case No.:', 'CASE NO CACE-24-001234', 'CASE # 50-2024-CA-001234-XXXX-MB',
+                     'BW 2099-000003-CA-01', 'LP-ZZOWNERNAME', 'CASE NO. 2099000003CA01', 'NO2099-000003-CA-01',
+                     'CASE NO CASE NO 2099-000003-CA-01', 'CASE-2099-000003-CA-01', '2099-000003x', 'x2099-000003'):
+            r = c(junk)
+            rec('label: genuinely unreadable %r is still refused (stay_case_unresolvable)' % junk,
+                not r['ok'] and r['code'] == SG.UNRESOLVABLE, r)
+        # the sequence must END after six digits. Before, the stem was simply the first 11 characters,
+        # so a mistyped 2099-0000031 read as 2099-000003 -- a CLEAR case -- and was allowed.
+        r = c('2099-0000031-CA-01')
+        rec('a seven-digit sequence is not truncated onto a clear case (refused, not cleared)',
+            not r['ok'] and r['code'] == SG.UNRESOLVABLE, r)
+        r = c('2099-000003-CA-01')
+        rec('... while the real six-digit number still clears', r['ok'], r)
+        rec('case_stem(): labels and hyphen spacing normalise to the cache key',
+            SG.case_stem('CASE NO 2025-007384-CA-01') == SG.case_stem('2025 - 007384') == '2025-007384'
+            and SG.case_stem('2025-007384CA01') == '2025-007384')
+        # a cache written with a labelled key is indexed on the same stem (never silently dropped)
+        cpl = str(tmp / 'labelled_cache.json')
+        pathlib.Path(cpl).write_text(json.dumps({
+            'CASE NO 2099-000008-CA-01': {'a': True, 'bd': '2026-09-02', 'sl': '', 'b': 1, 'v': 5, 't': 0},
+            '2099-000009-CA-01': {'a': False, 'bd': '', 'sl': '', 'b': 0, 'v': 5, 't': 0}}), encoding='utf-8')
+        r = SG.check('2099-000008-CA-01', cpl)
+        rec('a labelled cache key still blocks its case', r['code'] == SG.STAY_ACTIVE, r)
 
         # ---- fresh reads ----
         c('2099-000003-CA-01')                                   # warm the memo
