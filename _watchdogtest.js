@@ -169,16 +169,17 @@ for (const d of [12, 13, 14, 15]) {
 // 2026-09-25's shape: started, pushed the early board at 05:40 ET, died at 06:53 on sleep.
 const KILLED_TODAY = FIXED_HEALTHY.filter(c => c.sha !== 'fx15f00');
 
-// ---- the morning check (about 08:30 ET) ----
+// ---- the morning check (about 07:15 ET, before the 08:00 Morning Worker) ----
 const board = (day) => `<html><span id="upddate">${day} 05:52</span></html>`;
-const AT_0830_EDT = '2026-07-15T12:31:00Z';               // the summer cron, 08:31 in New York
-const AT_0730_EDT = '2026-07-15T11:31:00Z';               // not a cron, but a 07:xx clock
-const AT_0930_EDT = '2026-07-15T13:31:00Z';               // the WINTER cron firing in summer -> skip
-const AT_0830_EST = '2026-01-15T13:31:00Z';               // the winter cron, 08:31 in New York
-const AT_0730_EST = '2026-01-15T12:31:00Z';               // the SUMMER cron firing in winter -> skip
+const AT_0715_EDT = '2026-07-15T11:15:00Z';               // the summer cron, 07:15 in New York
+const AT_0815_EDT = '2026-07-15T12:15:00Z';               // the WINTER cron firing in summer -> 08:15 EDT, skip
+const AT_0715_EST = '2026-01-15T12:15:00Z';               // the winter cron, 07:15 in New York
+const AT_0615_EST = '2026-01-15T11:15:00Z';               // the SUMMER cron firing in winter -> 06:15 EST, skip
 const MORNING_OK = [commit('m1e000', EARLY, fixedDay(15, '09:41')), commit('m1f000', REFRESH, fixedDay(15, '12:20')),
                     commit('m0f000', REFRESH, fixedDay(14, '12:25'))];
 const MORNING_EARLY_ONLY = [commit('m1e000', EARLY, fixedDay(15, '09:41')), commit('m0f000', REFRESH, fixedDay(14, '12:25'))];
+// Final publish only, landed at 07:10 EDT, before the check. A gated early push is still a publish.
+const MORNING_FINAL_ONLY = [commit('m1f000', REFRESH, fixedDay(15, '11:10')), commit('m0f000', REFRESH, fixedDay(14, '12:25'))];
 const MORNING_MISSED = [commit('m0f000', REFRESH, fixedDay(14, '12:25')),
                         // yesterday evening's hand run carries yesterday's ET date, not today's
                         commit('m0x000', REFRESH, fixedDay(15, '01:30')),
@@ -218,40 +219,51 @@ const cases = [
 
 // The morning job's step. `calls` pins that a skipped run touches neither the API nor the page.
 const morningCases = [
-  { name: 'morning: 08:31 EDT, early+final today, board built today -> silent',
-    fx: MORNING_OK, now: AT_0830_EDT, html: board('2026-07-15'), fire: false },
+  { name: 'morning: 07:15 EDT, early+final today, board built today -> silent',
+    fx: MORNING_OK, now: AT_0715_EDT, html: board('2026-07-15'), fire: false },
   { name: 'morning: an open alert is closed on the first clean morning',
-    fx: MORNING_OK, now: AT_0830_EDT, html: board('2026-07-15'), openIssue: true, fire: false, closes: true },
-  { name: 'morning: early push only (final still running) -> silent, not an alarm',
-    fx: MORNING_EARLY_ONLY, now: AT_0830_EDT, html: board('2026-07-15'), fire: false },
+    fx: MORNING_OK, now: AT_0715_EDT, html: board('2026-07-15'), openIssue: true, fire: false, closes: true },
+  { name: 'morning: 07:15, early push only (final often lands 07:40-08:45) -> silent',
+    fx: MORNING_EARLY_ONLY, now: AT_0715_EDT, html: board('2026-07-15'), fire: false },
+  { name: 'morning: 07:15, final publish only, before the check -> silent',
+    fx: MORNING_FINAL_ONLY, now: AT_0715_EDT, html: board('2026-07-15'), fire: false },
   { name: 'morning: no refresh publish today -> MISSED (the 09-26 sleep)',
-    fx: MORNING_MISSED, now: AT_0830_EDT, html: board('2026-07-14'), fire: true, want: /MISSED: no refresh published today/ },
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), fire: true, want: /MISSED: no refresh published today/ },
+  { name: 'morning: the miss says the 08:00 worker has not run yet',
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), fire: true, want: /has not run yet/ },
   { name: 'morning: refresh commit landed but live board is yesterday -> STALE',
-    fx: MORNING_OK, now: AT_0830_EDT, html: board('2026-07-14'), fire: true, want: /STALE: the live board was last built 2026-07-14/ },
+    fx: MORNING_OK, now: AT_0715_EDT, html: board('2026-07-14'), fire: true, want: /STALE: the live board was last built 2026-07-14/ },
   { name: 'morning: live board unreadable -> alarms (fail-loud)',
-    fx: MORNING_OK, now: AT_0830_EDT, html: new Error('getaddrinfo ENOTFOUND'), fire: true, want: /Cannot read the live board/ },
+    fx: MORNING_OK, now: AT_0715_EDT, html: new Error('getaddrinfo ENOTFOUND'), fire: true, want: /Cannot read the live board/ },
   { name: 'morning: commit log unreadable -> alarms (fail-loud)',
-    fx: MORNING_OK, now: AT_0830_EDT, html: board('2026-07-15'), listThrows: true, fire: true, want: /Cannot read the commit log/ },
+    fx: MORNING_OK, now: AT_0715_EDT, html: board('2026-07-15'), listThrows: true, fire: true, want: /Cannot read the commit log/ },
   { name: 'morning: an existing alert gets a comment, not a second issue',
-    fx: MORNING_MISSED, now: AT_0830_EDT, html: board('2026-07-14'), openIssue: true, fire: true, want: /"kind":"comment"/ },
-  { name: 'morning: summer, the 13:30 UTC (winter) cron skips without any call',
-    fx: MORNING_MISSED, now: AT_0930_EDT, html: board('2026-07-14'), fire: false, noCalls: true },
-  { name: 'morning: winter, the 12:30 UTC (summer) cron skips without any call',
-    fx: MORNING_MISSED, now: AT_0730_EST, html: board('2026-01-14'), fire: false, noCalls: true },
-  { name: 'morning: winter, 08:31 EST, healthy -> silent',
-    fx: WINTER_OK, now: AT_0830_EST, html: board('2026-01-15'), fire: false },
+    fx: MORNING_MISSED, now: AT_0715_EDT, html: board('2026-07-14'), openIssue: true, fire: true, want: /"kind":"comment"/ },
+  { name: 'morning: summer, the 12:15 UTC (winter) cron skips without any call',
+    fx: MORNING_MISSED, now: AT_0815_EDT, html: board('2026-07-14'), fire: false, noCalls: true },
+  { name: 'morning: winter, the 11:15 UTC (summer) cron skips without any call',
+    fx: MORNING_MISSED, now: AT_0615_EST, html: board('2026-01-14'), fire: false, noCalls: true },
+  { name: 'morning: winter, 07:15 EST, healthy -> silent',
+    fx: WINTER_OK, now: AT_0715_EST, html: board('2026-01-15'), fire: false },
   { name: 'morning: #87 today\'s refresh behind 150 newer commits is still found',
-    fx: MORNING_PAGED_OK, now: AT_0830_EDT, html: board('2026-07-15'), fire: false },
-  { name: 'morning: a manual run at 07:31 is not skipped by the hour gate',
-    fx: MORNING_MISSED, now: AT_0730_EDT, html: board('2026-07-14'), eventName: 'workflow_dispatch', fire: true, want: /MISSED/ },
+    fx: MORNING_PAGED_OK, now: AT_0715_EDT, html: board('2026-07-15'), fire: false },
+  { name: 'morning: a manual run at 08:15 is not skipped by the hour gate',
+    fx: MORNING_MISSED, now: AT_0815_EDT, html: board('2026-07-14'), eventName: 'workflow_dispatch', fire: true, want: /MISSED/ },
 ];
 
 (async () => {
+  const ymlText = fs.readFileSync(YML, 'utf8');
   const src = extractScript(STEP);
   const msrc = extractScript(MORNING_STEP);
   console.log(`extracted ${src.split('\n').length} + ${msrc.split('\n').length} lines from ${path.relative(HERE, YML)}\n`);
 
   let pass = 0, fail = 0;
+  // The deadline is the cron, which the extracted script cannot see. 11:15 UTC is 07:15 EDT;
+  // 12:15 UTC is 07:15 EST. The old 08:30 pair must not still be scheduled.
+  const cronsOk = ymlText.includes("cron: '15 11 * * *'") && ymlText.includes("cron: '15 12 * * *'")
+    && !ymlText.includes("cron: '30 12 * * *'") && !ymlText.includes("cron: '30 13 * * *'");
+  if (cronsOk) { console.log('  pass  morning crons are 11:15 and 12:15 UTC (07:15 ET, both DSTs)'); pass++; }
+  else { console.log('  FAIL  morning crons are not the 07:15 ET pair'); fail++; }
   for (const c of morningCases) {
     let r;
     try {
