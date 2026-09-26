@@ -48,6 +48,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# -Only matching ignores case, spaces, hyphens and underscores (2026-09-26). The template docs said
+# `-Only OptoutSync` while the task is named `DealFlow Opt-out Sync`, so the documented command
+# threw "matched no task". A plain -like on the raw name is still tried first, so every pattern that
+# worked before still matches exactly what it matched before.
+function Get-TaskKey([string]$s) { return ($s -replace '[\s_-]', '').ToLowerInvariant() }
+function Test-OnlyMatch([string]$name, [string]$pattern) {
+    if (-not $pattern) { return $true }
+    return ($name -like "*$pattern*") -or ((Get-TaskKey $name) -like "*$(Get-TaskKey $pattern)*")
+}
+
 $OLD_REPO = 'C:\Users\olqbb\projects\foreclosure-leads'
 $OLD_PROFILE = 'C:\Users\olqbb'
 
@@ -57,7 +68,7 @@ if ($DisableLocal) {
     # Enumerating live tasks rather than reading the XML list is deliberate and is why this path
     # already caught `DealFlow Cadence` while -Enable did not. Keep it that way: a task registered
     # by hand on some future morning is still outreach, and this is what stands it down.
-    if ($Only) { $live = $live | Where-Object { $_.TaskName -like "*$Only*" } }
+    if ($Only) { $live = $live | Where-Object { Test-OnlyMatch $_.TaskName $Only } }
     if (-not $live) { Write-Host "No DealFlow tasks on this machine — nothing to disable."; return }
     foreach ($t in $live) {
         if ($PSCmdlet.ShouldProcess($t.TaskName, 'Disable')) {
@@ -138,12 +149,13 @@ $srcs = @($srcs | Where-Object { $_.Kind -eq 'export' -or $exported -notcontains
 
 if ($Only) {
     $all = @($srcs | ForEach-Object { $_.Name })
-    $srcs = @($srcs | Where-Object { $_.Name -like "*$Only*" })
+    $srcs = @($srcs | Where-Object { Test-OnlyMatch $_.Name $Only })
     if (-not $srcs) { throw "-Only '$Only' matched no task. Available: $($all -join ', ')" }
     Write-Host ("scope  : -Only '{0}' — {1} of {2} task(s); every other task on this machine is left exactly as it is`n" -f $Only, $srcs.Count, $all.Count)
 }
 
 $done = 0
+$failed = @()
 foreach ($src in $srcs) {
     $f = $src.File
     $name = $src.Name
@@ -160,16 +172,42 @@ foreach ($src in $srcs) {
     # <Author> is cosmetic registration metadata (Windows ignores it; -User below sets the real
     # principal) — but leaving the laptop's name on a desktop task makes an audit read wrong later.
     $body = $body -replace '<Author>[^<]*</Author>', "<Author>$Me</Author>"
+    # DROP THE XML DECLARATION (2026-09-26). -Xml hands Task Scheduler a .NET string, i.e. UTF-16.
+    # A template says encoding="UTF-8", and Task Scheduler refuses to switch encodings mid-string:
+    #     The task XML is malformed. (1,40)::ERROR: unable to switch the encoding
+    # Every template failed this way. Exports declare UTF-16 and were fine, but with no declaration
+    # at all both kinds parse.
+    $body = $body -replace '^[\uFEFF\s]*<\?xml[^>]*\?>\s*', ''
 
     if ($PSCmdlet.ShouldProcess($name, 'Register')) {
-        Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
-        # -User rewrites the principal, so the laptop's SID never follows the task across machines
-        Register-ScheduledTask -TaskName $name -Xml $body -User $Me -Force | Out-Null
-        if ($Enable) { Enable-ScheduledTask -TaskName $name | Out-Null }
-        else { Disable-ScheduledTask -TaskName $name | Out-Null }
+        # The ScheduledTasks cmdlets are CDXML: they do NOT inherit this script's
+        # $ErrorActionPreference, so a failed Register used to print an error and carry on, and the
+        # script went on to say ENABLED / installed / ARMED about a task that did not exist.
+        # -ErrorAction Stop on each call, and nothing is reported as done until all of it succeeded.
+        try {
+            Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
+            # -User rewrites the principal, so the laptop's SID never follows the task across machines
+            Register-ScheduledTask -TaskName $name -Xml $body -User $Me -Force -ErrorAction Stop | Out-Null
+            if ($Enable) { Enable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null }
+            else { Disable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null }
+            $state = (Get-ScheduledTask -TaskName $name -ErrorAction Stop).State
+            if ($Enable -and "$state" -eq 'Disabled') { throw "registered, but its state is still Disabled" }
+            if (-not $Enable -and "$state" -ne 'Disabled') { throw "registered, but its state is $state, not Disabled" }
+        } catch {
+            $failed += $name
+            Write-Host ("  {0,-28} {1,-22} [{2}]  {3}" -f $name, 'FAILED', $src.Kind, $_.Exception.Message) -ForegroundColor Red
+            continue
+        }
         Write-Host ("  {0,-28} {1,-22} [{2}]" -f $name, $(if ($Enable) { 'ENABLED' } else { 'registered (disabled)' }), $src.Kind)
         $done++
     }
+}
+
+if ($failed) {
+    Write-Host "`n$done task(s) installed, $($failed.Count) FAILED: $($failed -join ', ')" -ForegroundColor Red
+    Write-Host "The rest of this run (prerequisite warnings, the ARMED notice) was skipped. Fix the error above and re-run; the failed task(s) may now be" -ForegroundColor Red
+    Write-Host "MISSING from this machine (the old copy is unregistered before the new one is registered)." -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "`n$done task(s) installed."
