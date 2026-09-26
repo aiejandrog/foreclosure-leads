@@ -4,6 +4,8 @@ rem  DealFlow Opt-out Sync - daily 07:15, before the 08:00 Morning Worker.
 rem  Runs morning_sync.py: replies.py (inbox scan) -> optout_sync.py (the
 rem  one ledger writer, ledger_add) -> ledger_sync.py (add-only union with
 rem  the other machine). No rebuild, no publish, no push to this repo.
+rem  Then bounces.py harvests hard bounces into bounced_emails.json. That one
+rem  is logged only: a failed bounce scan never holds sends or changes rc.
 rem  It records the result in sync_status.json; unless TODAY's run finished
 rem  OK, send_server /send and cadence-daily.bat HOLD every send
 rem  (sync_gate.py). Re-run this by hand after fixing a failure; the hold
