@@ -297,17 +297,44 @@ develop and push today. Three gaps remain, all needing a copy from the laptop:
 The nine below are the ones `install-tasks.ps1` registers, enables and disables as a set — eight
 until 2026-09-18, see the NINTH TASK block in §1. They are identical on both machines.
 
-| Task | Time | Cadence | Definition |
-|---|---|---|---|
-| DEALFLOW Refresh | 05:30 | daily | `tasks/` export, **or** `task-templates/` — tracked in git |
-| DEALFLOW Phones | 06:00 | daily | `tasks/` export |
-| DealFlow Replies | 06:45 | daily | `tasks/` export |
-| DEALFLOW Daily Scrape | 07:00 | weekly | `tasks/` export |
-| DealFlow Weekly Analyst | 07:30 | weekly | `tasks/` export |
-| DealflowSendServerDaily | 07:45 | daily | `tasks/` export |
-| DEALFLOW Morning Worker | 08:00 | daily | `tasks/` export |
-| DealFlow Sheets CRM | 08:05 | daily | `tasks/` export |
-| **DealFlow Cadence** | 09:00 | daily | `task-templates/` — tracked in git |
+**Times below are as confirmed on the LAPTOP on 2026-09-22.** Two moved that morning — Replies
+06:45 → 08:45 and Phones 06:00 → 09:30 — and this table said the old times for a day afterwards,
+which is the whole reason §1 tells you to enumerate rather than read a list in a file.
+
+| Task | Time | Cadence | State on the laptop | Definition |
+|---|---|---|---|---|
+| DEALFLOW Refresh | 05:30 | daily | Ready | `tasks/` export, **or** `task-templates/` — tracked in git |
+| DEALFLOW Daily Scrape | 07:00 | weekly | Ready | `tasks/` export |
+| DealFlow Weekly Analyst | 07:30 | weekly | Ready | `tasks/` export |
+| DealflowSendServerDaily | 07:45 | daily | Ready | `tasks/` export |
+| DEALFLOW Morning Worker | 08:00 | daily | Ready | `tasks/` export |
+| DealFlow Sheets CRM | 08:05 | daily | Ready | `tasks/` export |
+| DealFlow Replies | **08:45** | daily | Ready | `tasks/` export |
+| DEALFLOW Phones | **09:30** | daily | Ready | `tasks/` export |
+| **DealFlow Cadence** | **10:00** | daily | **NOT REGISTERED** on the laptop; Disabled on the desktop | `task-templates/` — tracked in git |
+
+**Cadence is the one row that is not live anywhere.** The template ships in the repo, so
+`install-tasks.ps1 -Only Cadence -Enable` is a *first-time registration of a real sending path*,
+not a checkbox. Do not run it while the bridge's bounce breaker is blocking (see §5) — cadence does
+not consult that gate.
+
+**Cadence's 10:00 is a dependency on Replies, not a preference.** `replies.py` then
+`optout_sync.py` is what carries a detected STOP into `optouts.json`, and cadence re-reads that
+ledger every run: a queue exported yesterday knows nothing about a homeowner who said stop this
+morning. It sat at 09:00 against a 06:45 Replies. When Replies moved to 08:45 that became a
+fifteen-minute gap on a job that also rebuilds and publishes the board, so cadence moved to 10:00.
+**If Replies moves again, move cadence too** — cadence has no ledger-staleness gate of its own
+(`send_server./send` refuses an `optouts.json` older than 2 days; cadence does not), so this
+ordering is the only thing enforcing it. `_taskinstalltest.py` asserts the gap against a
+`REPLIES_AT` constant **in the test**, because the Replies trigger lives in gitignored
+`desktop-setup/tasks/` and the repo cannot read it. So the suite catches someone editing this
+template to an earlier hour; it cannot catch someone moving *Replies* later in Task Scheduler.
+Both numbers have to move together, and the live one is only ever known by enumerating (§1).
+
+Cadence at 10:00 also sits 30 minutes behind DEALFLOW Phones at 09:30 — less slack than the 60
+minutes required behind Replies. That is deliberate and not the same risk: Phones does not write
+`optouts.json`, and cadence publishes nothing and takes no publish lock, so an overlap costs
+contention, not a send against a half-written ledger.
 
 `tasks/` is gitignored: a Windows export embeds the exporting machine's principal SID and user
 paths, so those definitions travel in the transfer bundle. `task-templates/` is the tracked,
@@ -332,6 +359,20 @@ outside the repo because the log carries homeowner email addresses.
 | Task | Time | Cadence | Where |
 |---|---|---|---|
 | BSG Warmup | 09:15 | daily | `warmup.py`, company-owned mailboxes only — the one task deliberately left running on the disarmed desktop |
+
+**`warmup.py` does not write `mail_sent.json`, and that is correct** — warm-up mail goes to
+company-owned mailboxes, so counting it as outreach would corrupt every reply and bounce rate here.
+But every cap in the project meters off that one ledger, so an alias's real daily volume is not
+visible anywhere. `python ramp_status.py` adds the two back together. Read-only.
+
+`--days N` also prints the date the cold ramp **cap** first matches the warm-up quota (2026-09-28).
+**That is not the date to stop BSG Warmup.** `senders.json` ramps by calendar day from `ramp_start`,
+so the cap climbs whether or not one message was sent, and the 2026-09-23 warm-up audit found no
+live cold path to either warming alias — desktop bridge deleted, laptop bridge bounce-blocked at
+20.2%, Cadence registered on neither machine. Stopping warm-up on 09-28 would drop each alias
+**15 → 0**, not 15 → 20: the one direction a warming domain must not move, which is the thing this
+sentence used to exist to prevent. Stop per alias only once the tool's **cold** column shows real
+sends at or above the warm-up quota for five days running with bounce under 3%, then taper.
 
 A runner audit still has to **enumerate** tasks rather than trust any list in this file — see §1.
 
@@ -394,7 +435,7 @@ distinguished it was that the code was absent and its history was one commit dee
 ever refuses; it never resets or re-clones.
 
 The cloud watchdog was blind to all of this because it read the `Updated` stamp on the live page,
-which is the **build** time — and the 06:00/06:45 jobs rebuild every morning whether or not any new
+which is the **build** time — and the Phones/Replies jobs rebuild every morning whether or not any new
 data arrived. `freshness-watchdog.yml` now also reads what reached `origin/main` and alarms on two
 runners publishing the same job in one day, on commits that sat unpushed, and on the 05:30 refresh
 going quiet. `node _watchdogtest.js` is its contract test (it extracts the shipped script out of the

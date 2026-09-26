@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DealFlow Opt-out Sync - the 07:15 reply scan + opt-out sync (run-optout-sync.bat -> morning_sync.py),
+  daily, BEFORE the 08:00 Morning Worker. Added 2026-09-26.
+
+  A TEMPLATE, not an export - see DealFlow_Cadence.xml for why templates exist and how
+  install-tasks.ps1 substitutes __REPO__ / __PROFILE__ / __USER__. Registered DISABLED like every
+  task; arm it on the one armed machine with:
+      pwsh .\desktop-setup\install-tasks.ps1 -Only OptoutSync            (register, disabled)
+      pwsh .\desktop-setup\install-tasks.ps1 -Only OptoutSync -Enable    (arm)
+
+  WHAT IT IS FOR. optouts.json has one writer: this sync (replies.py -> optout_sync.py's ledger_add ->
+  ledger_sync.py). It used to run only inside DealFlow Replies at 08:45 - AFTER the 08:00 Morning
+  Worker had started sending. It records its result in sync_status.json, and unless TODAY's run
+  finished OK, send_server /send and cadence-daily.bat HOLD every send (sync_gate.py). So a sync that
+  does not run is not silent: it stops outreach until someone runs it.
+
+  SETTINGS THAT ARE DELIBERATE:
+  * 07:15 leaves 45 minutes before the Morning Worker. The job measured in minutes, not hours; it
+    never rebuilds or publishes, so it can overlap the 05:30 refresh.
+  * StartWhenAvailable + WakeToRun TRUE. A catch-up run is SAFE here (it only adds suppression and
+    sends nothing), and a late run is better than none: sends stay held until it finishes.
+  * DisallowStartIfOnBatteries / StopIfGoingOnBatteries FALSE, same reasoning as Cadence: a laptop on
+    battery at 07:15 must still sync, and killing it mid-run leaves "running" in sync_status.json,
+    which holds the day's sends.
+  * ExecutionTimeLimit PT45M. morning_sync.py's own step timeouts (25 + 10 + 10 min) sit inside it; a
+    sync still running at 08:00 holds the Morning Worker anyway, so a longer limit buys nothing.
+  * MultipleInstancesPolicy IgnoreNew: two syncs at once would both write sync_status.json.
+  * RunOnlyIfNetworkAvailable FALSE, unlike Cadence: a sync that cannot reach IMAP should RUN and
+    record the failure (the log then says why the sends are held) rather than silently not start.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>__USER__</Author>
+    <URI>\DealFlow Opt-out Sync</URI>
+    <Description>DealFlow: 07:15 inbox scan + opt-out sync (the only writer of optouts.json), before the 08:00 Morning Worker. Sends nothing. Until it finishes OK each day, every send is held. Only the armed machine may run this - see MACHINE-HANDOFF.md section 1.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-09-27T07:15:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>__USER__</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>true</WakeToRun>
+    <ExecutionTimeLimit>PT45M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>__REPO__\run-optout-sync.bat</Command>
+      <WorkingDirectory>__REPO__</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

@@ -2857,7 +2857,9 @@ function recompute(){
     // NOT actually checked. Confidence for those buckets
     // must exclude 'bd' so a $0 there is treated as "not checked" (surfaces the manual-check nudge)
     // instead of "verified none" (which fakes an estoppel/code surprise away at closing).
-    const nonMortConf = (r.orconf==='ok' || r.orconf==='low');
+    // a chain with no mortgage still carries its city/association/IRS liens: a found debt is subtracted
+    // whatever the mortgage verdict (over-counting a namesake's is the safe way to be wrong)
+    const nonMortConf = (r.orconf==='ok' || r.orconf==='low' || !!(r.orhoa || r.orcode || r.orirs));
     // Split the surviving stack cleanly so NO mortgage counts twice (the double-count bug: `orsurv`
     // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
     // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing
@@ -2926,7 +2928,12 @@ function recompute(){
       const bid = judg;
       // if the ASSOCIATION is the plaintiff, its judgment (bid) already includes the dues/assessment, so
       // only the estoppel amount ABOVE the judgment is additional -> don't double-count it.
-      const assessEff = (r.ctype||'').toUpperCase().indexOf('HOA')===0 ? Math.max(0, assess - judg) : assess;
+      // ...but a chain that marks the plaintiff's own claim of lien (orhoaown) already left it out of orhoa,
+      // and the HOA field is pre-filled from orhoa: what is there is ANOTHER association's lien (a master
+      // association) and is owed in full, typed or not. (A full estoppel typed over it is then counted
+      // with the judgment on top: too much debt, never too little.)
+      const assessEff = ((r.ctype||'').toUpperCase().indexOf('HOA')===0 && !r.orhoaown)
+                          ? Math.max(0, assess - judg) : assess;
       r._assess = assessEff;
       r._equity = val - judg - slien - jlien - assessEff;
       r._purchase = bid + slien + jlien;
@@ -7387,8 +7394,13 @@ function _doorVerified(r){
   // exactly like a fact. Only 'clear'/'priced' are facts; everything else must say so out loud.
   var _eqs = r.eqstate || 'unchecked';
   if(r.value > 0 && !r.ju){
-    if(_eqs === 'unpriced')
-      fails.push('EQUITY IS A CEILING — ' + (r.eqopen||'?') + ' mortgage(s) recorded, county publishes no amounts; ask the owner what they owe');
+    if(_eqs === 'unpriced'){
+      // eqopen = open mortgages; eqoth = open city/association/tax liens with no published amount
+      var _ceil = [];
+      if(r.eqopen) _ceil.push(r.eqopen + ' open mortgage(s)');
+      if(r.eqoth) _ceil.push(r.eqoth + ' open lien(s) with no published amount');
+      fails.push('EQUITY IS A CEILING — ' + (_ceil.join(' + ') || 'recorded debt') + ' not totalled; ask the owner what they owe');
+    }
     else if(_eqs === 'none')
       fails.push('EQUITY UNVERIFIED — recorded chain could not be established' + (r.eqrecs ? ' ('+r.eqrecs+' records searched)' : ''));
     else if(_eqs === 'unchecked')

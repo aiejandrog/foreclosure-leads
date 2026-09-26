@@ -57,6 +57,12 @@ def _curl(url, jar, post=None, timeout=45, headers=None, dump_headers=False):
 
 def fetch_case_html(case, verbose=True):
     """Return the raw results HTML for a case number, or '' if blocked/failed."""
+    # Each case lookup pays one 2Captcha solve: under the shared monthly paid-reads cap (paid_reads.py).
+    # Checked before the landing page is even fetched, so a spent month costs no request at all.
+    import paid_reads
+    if not paid_reads.allow(paid_reads.SOLVE_USD, 'broward_plaintiff')[0]:
+        if verbose: print('  monthly paid-reads cap: no paid solve (see python paid_reads.py)')
+        return ''
     jar = os.path.join(tempfile.gettempdir(), 'brw_plaintiff_cookies.txt')
     try: os.remove(jar)
     except OSError: pass
@@ -72,7 +78,7 @@ def fetch_case_html(case, verbose=True):
     token = m.group(1)
     if verbose: print(f'  session up, token {len(token)}c — solving Turnstile...')
     t0 = time.time()
-    cap = captcha_solver.solve_turnstile(SITE_KEY, LANDING)
+    cap = paid_reads.guarded(captcha_solver.solve_turnstile, 'broward_plaintiff')(SITE_KEY, LANDING)
     if not cap:
         if verbose: print('  captcha solve failed')
         return ''
