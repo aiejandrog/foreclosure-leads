@@ -20,7 +20,9 @@ python -u runner_lock.py run --runner "%~nx0" -- cmd /c "%~f0" >> "%~dp0runner-l
 set "LOCKRC=%errorlevel%"
 if not "%LOCKRC%"=="0" echo [%date% %time%] %~nx0 did not start - cross-machine lease exit %LOCKRC%. See runner-lock.log.>> "%~dp0leads-run.log"
 echo %~nx0 lease exit %LOCKRC%. See runner-lock.log.
-endlocal & exit /b %LOCKRC%
+rem  Plain exit /b: the setlocal at the top is scoped to this batch and ends with it, and the
+rem  one "endlocal & exit /b" line stays the final exit that _audit12test.py checks.
+exit /b %LOCKRC%
 :runner_lock_held
 set "LOG=leads-run.log"
 
