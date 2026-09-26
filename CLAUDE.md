@@ -75,7 +75,11 @@ direction is `incoming`. The status file records pages read and conversations sc
 only. A 429 is retried a bounded number of times before it counts as an error. An unreadable
 `text_sent.json` is skipped and counted, and that holds texting. `ledger_add` writes the opt-out
 keys before it refuses a torn `bounced_emails.json`. An unreadable bounce list, and an unreadable
-`optouts.json`, each raise a `pipeline_alerts` fail.
+`optouts.json`, each raise a `pipeline_alerts` fail. The message `createdAfter` is the earlier of
+`--days` and the last ok scan minus 12 hours, and never further than 60 days; no ok scan, or an
+unreadable status, uses that 60-day lookback. The status file records the window as a day count.
+`/conversations` asks for 100 per page and stops once a whole page is older than the lookback.
+An unreadable `mail_sent.json` is skipped and counted, and that holds texting, same as `text_sent.json`.
 The board and Call Mode hold texting until a fresh inbound scan is confirmed; bridge-down is a
 hold. `cadence.py` enforces the same 07:15 opt-out sync hold as `cadence-daily.bat`. Review this
 as a change to this surface, not as ordinary copy.
