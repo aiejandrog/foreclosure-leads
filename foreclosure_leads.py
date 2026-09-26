@@ -2312,10 +2312,27 @@ def make_tracker(leads):
     if os.path.exists(_clf):
         try:
             _cl = json.load(open(_clf, encoding='utf-8')); _cn = 0
+            # C2: the ESTIMATE read off each recorded lien (code_lien_amounts.json), by book/page.
+            # Shown next to the chip as an estimate; never added to equity, never a payoff.
+            _cla = {}
+            try:
+                import code_lien_amounts as _CLA
+                _cla = _CLA.for_board(json.load(open(os.path.join(HERE, 'code_lien_amounts.json'),
+                                                     encoding='utf-8')))
+            except Exception:
+                _cla = {}
+
+            def _CLA_key(ref):
+                try:
+                    _b, _p = str(ref or '').split('/', 1)
+                    return '%d/%d' % (int(_b), int(_p))
+                except (ValueError, TypeError):
+                    return ''
             for _r in slim:
                 _f = str(_r.get('folio') or '').strip().replace('-', '')
                 _hits = _cl.get(_f)
                 if _hits:
+                    _hits = [dict(h, **_cla.get(_CLA_key(h.get('lienRef')), {})) for h in _hits]
                     _r['codeliens'] = _hits[:6]
                     # worst-first: county-foreclosing > recorded-lien > open/referred
                     if any(h.get('st') == '9' for h in _hits):   _r['codeConcern'] = 'foreclosing'

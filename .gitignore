@@ -53,6 +53,11 @@ BSG_Mail_Campaign_*.pdf
 !_casestatustest.py
 !_workeremailtest.py
 !_codelientest.py
+# code_lien_amounts.py (C2): per-lien estimates keyed by book/page. County records, local only.
+code_lien_amounts.json
+code_lien_amounts.json.tmp
+# _codelienamounttest: parser/estimate/board-bake checks on invented lien text only.
+!_codelienamounttest.py
 !_fieldsheettest.py
 !_taxtest.py
 # paid_reads.py: the monthly paid-reads cap setting ({"monthly_cap": 50}) is per machine, and so is
