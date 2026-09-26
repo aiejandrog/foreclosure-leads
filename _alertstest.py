@@ -7,8 +7,10 @@ import datetime as dt
 import json
 import os
 import shutil
+import struct
 import subprocess
 import tempfile
+import time
 from zoneinfo import ZoneInfo
 
 import pipeline_alerts as PA
@@ -184,13 +186,20 @@ rec('an evening check older than 20h alerts', '26h' in one(ready(at=old), 'lapto
 rec('no readiness block means the check is not armed', one({}, 'laptop-readiness') is None)
 rec('a desktop with no battery does not alert on power',
     one(ready(battery_present=False, on_ac=None, pct=None), 'laptop-readiness') is None)
-power = PA.parse_battery('{"BatteryStatus": 1, "EstimatedChargeRemaining": 42}')
-rec('battery JSON: discharging at 42%', power['on_ac'] is False and power['pct'] == 42)
-ac = PA.parse_battery('{"BatteryStatus": 2, "EstimatedChargeRemaining": 80}')
-rec('battery JSON: on AC at 80%', ac['on_ac'] is True and ac['pct'] == 80)
-rec('no battery is a desktop, not a failed probe',
-    PA.parse_battery('')['battery_present'] is False and PA.parse_battery('')['power_ok'] is True)
-rec('a failed probe is not a desktop', PA.parse_battery(None)['power_ok'] is False)
+def power_bytes(ac, flag, pct):
+    return struct.pack('<BBBBII', ac, flag, pct, 0, 0, 0)
+
+
+power = PA.parse_power_bytes(power_bytes(0, 1, 42))
+rec('ctypes power bytes: discharging at 42%', power['on_ac'] is False and power['pct'] == 42 and power['power_ok'] is True)
+ac = PA.parse_power_bytes(power_bytes(1, 8, 80))
+rec('ctypes power bytes: on AC at 80%', ac['on_ac'] is True and ac['pct'] == 80)
+desk = PA.parse_power_bytes(power_bytes(1, 128, 255))
+rec('ctypes power bytes: flag 128 is a desktop, not a failed probe',
+    desk['battery_present'] is False and desk['power_ok'] is True)
+rec('a short buffer is a failed probe', PA.parse_power_bytes(b'')['power_ok'] is False and PA.parse_power_bytes(None)['power_ok'] is False)
+unknown = PA.parse_power_bytes(power_bytes(255, 255, 255))
+rec('unknown percent is not a charge reading', unknown['pct'] is None and unknown['on_ac'] is None and unknown['battery_present'] is True)
 csv_text = (
     '"TaskName","Next Run Time","Status","Logon Mode","Last Run Time","Last Result"\n'
     '"\\DEALFLOW Refresh","N/A","Ready","Interactive only","N/A","0"\n'
@@ -241,39 +250,164 @@ try:
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
-print('-- git publishes only this file, and only on main --')
-repo = tempfile.mkdtemp(prefix='alertsgit_')
-try:
-    def g(args):
-        return subprocess.run(args, cwd=repo, capture_output=True, text=True, check=False)
+print('-- git publishes only this file, and only when main matches origin --')
 
-    g(['git', 'init', '-b', 'main'])
-    g(['git', 'config', 'user.email', 'dev@example.com'])
-    g(['git', 'config', 'user.name', 'Alerts Test'])
-    with open(os.path.join(repo, 'README'), 'w', encoding='utf-8') as f:
+
+def g_at(repo, args):
+    return subprocess.run(args, cwd=repo, capture_output=True, text=True, check=False)
+
+
+def init_pair():
+    root = tempfile.mkdtemp(prefix='alertsgit_')
+    origin = os.path.join(root, 'origin.git')
+    local = os.path.join(root, 'local')
+    subprocess.run(['git', 'init', '--bare', '-b', 'main', origin], check=True, capture_output=True)
+    subprocess.run(['git', 'init', '-b', 'main', local], check=True, capture_output=True)
+    g_at(local, ['git', 'config', 'user.email', 'dev@example.com'])
+    g_at(local, ['git', 'config', 'user.name', 'Alerts Test'])
+    with open(os.path.join(local, 'README'), 'w', encoding='utf-8') as f:
         f.write('seed\n')
-    g(['git', 'add', 'README'])
-    g(['git', 'commit', '-m', 'seed'])
-    with open(os.path.join(repo, 'notes.txt'), 'w', encoding='utf-8') as f:
+    g_at(local, ['git', 'add', 'README'])
+    g_at(local, ['git', 'commit', '-m', 'seed'])
+    g_at(local, ['git', 'remote', 'add', 'origin', origin])
+    g_at(local, ['git', 'push', '-u', 'origin', 'main'])
+    return root, local
+
+
+def write_alert(local, credits=400):
+    doc = PA.build_doc(NOW, {'tracerfy': {'credits': credits}},
+                       PA.alerts_from({'tracerfy': {'credits': credits}}, NOW, TH))
+    PA.write_doc(os.path.join(local, PA.REL), doc)
+
+
+def head_sha(local):
+    return g_at(local, ['git', 'rev-parse', 'HEAD']).stdout.strip()
+
+
+def head_msg(local):
+    return g_at(local, ['git', 'log', '-1', '--format=%s']).stdout.strip()
+
+
+root, local = init_pair()
+try:
+    with open(os.path.join(local, 'notes.txt'), 'w', encoding='utf-8') as f:
         f.write('do not commit this\n')
-    g(['git', 'add', 'notes.txt'])
-    doc = PA.build_doc(NOW, {'tracerfy': {'credits': 400}}, PA.alerts_from({'tracerfy': {'credits': 400}}, NOW, TH))
-    PA.write_doc(os.path.join(repo, PA.REL), doc)
-    how = PA.git_publish(repo, push=False)
-    rec('commit happens without a push', how == 'committed', how)
-    shown = g(['git', 'show', '--name-only', '--pretty=format:%s', 'HEAD'])
+    g_at(local, ['git', 'add', 'notes.txt'])
+    write_alert(local)
+    before = head_sha(local)
+    rec('a dirty index touching another file skips git commit',
+        PA.git_publish(local, push=False) == 'dirty-index' and head_sha(local) == before)
+    staged = g_at(local, ['git', 'diff', '--cached', '--name-only']).stdout
+    rec('the other staged file is still staged and uncommitted',
+        'notes.txt' in staged and PA.REL not in staged.split())
+    g_at(local, ['git', 'reset', '-q', 'HEAD', '--', 'notes.txt'])
+    how = PA.git_publish(local, push=False)
+    rec('commit happens without a push once the index is otherwise clean', how == 'committed', how)
+    shown = g_at(local, ['git', 'show', '--name-only', '--pretty=format:%s', 'HEAD'])
     rec('the commit is the alerts message and only that file',
-        shown.stdout.strip().splitlines() == [PA.MSG, PA.REL], shown.stdout)
-    rec('a staged unrelated file stayed out of the commit',
-        'notes.txt' not in shown.stdout)
-    rec('the committed text is the warn, with no address',
-        '400' in g(['git', 'show', 'HEAD:' + PA.REL]).stdout and '@' not in g(['git', 'show', 'HEAD:' + PA.REL]).stdout)
-    g(['git', 'checkout', '-b', 'elsewhere'])
-    with open(os.path.join(repo, PA.REL), 'a', encoding='utf-8') as f:
+        [ln for ln in shown.stdout.splitlines() if ln.strip()] == [PA.MSG, PA.REL], shown.stdout)
+    blob = g_at(local, ['git', 'show', 'HEAD:' + PA.REL]).stdout
+    rec('the committed text is the warn, with no address', '400' in blob and '@' not in blob)
+    rec('an unstaged unrelated file stayed out of the commit', 'notes.txt' not in shown.stdout)
+    g_at(local, ['git', 'checkout', '-b', 'elsewhere'])
+    with open(os.path.join(local, PA.REL), 'a', encoding='utf-8') as f:
         f.write('\n')
-    rec('off main does not commit', PA.git_publish(repo, push=False) == 'not-on-main')
+    rec('off main does not commit', PA.git_publish(local, push=False) == 'not-on-main')
 finally:
-    shutil.rmtree(repo, ignore_errors=True)
+    shutil.rmtree(root, ignore_errors=True)
+
+print('-- git runner: do not leave local main ahead of origin --')
+calls = []
+
+
+def counting_run(args, repo):
+    calls.append(list(args))
+    return {'code': 0, 'out': 'main\n', 'err': ''}
+
+
+flag_root = tempfile.mkdtemp(prefix='alertflag_')
+try:
+    with open(os.path.join(flag_root, 'refresh-running.flag'), 'w', encoding='utf-8') as f:
+        f.write('running\n')
+    calls.clear()
+    rec('refresh-running.flag means zero git calls',
+        PA.git_publish(flag_root, push=True, run=counting_run) == 'refresh-running' and calls == [])
+finally:
+    shutil.rmtree(flag_root, ignore_errors=True)
+
+lease_dir = tempfile.mkdtemp(prefix='alertlease_')
+old_gitdir = os.environ.get('DEALFLOW_LOCK_GITDIR')
+try:
+    os.environ['DEALFLOW_LOCK_GITDIR'] = lease_dir
+    with open(os.path.join(lease_dir, 'dealflow-mine.json'), 'w', encoding='utf-8') as f:
+        json.dump({'expires_at': time.time() + 3600, 'runner': 'refresh-dealflow.bat'}, f)
+    calls.clear()
+    rec('a live lease means zero git calls',
+        PA.git_publish(tempfile.mkdtemp(prefix='alertlease2_'), push=True, run=counting_run) == 'lease-held'
+        and calls == [])
+    with open(os.path.join(lease_dir, 'dealflow-mine.json'), 'w', encoding='utf-8') as f:
+        json.dump({'expires_at': time.time() - 10000, 'runner': 'refresh-dealflow.bat'}, f)
+    rec('an expired lease is not held', PA.lease_held() is False)
+finally:
+    if old_gitdir is None:
+        os.environ.pop('DEALFLOW_LOCK_GITDIR', None)
+    else:
+        os.environ['DEALFLOW_LOCK_GITDIR'] = old_gitdir
+    shutil.rmtree(lease_dir, ignore_errors=True)
+
+
+def reject_push(args, repo):
+    if len(args) >= 2 and args[1] == 'push':
+        return {'code': 1, 'out': '', 'err': 'rejected'}
+    return PA._git(args, repo)
+
+
+root, local = init_pair()
+try:
+    origin_sha = g_at(local, ['git', 'rev-parse', 'origin/main']).stdout.strip()
+    write_alert(local)
+    how = PA.git_publish(local, push=True, run=reject_push)
+    rec('a rejected push is undone', how == 'push-undone', how)
+    rec('local main is back at origin and the file is uncommitted',
+        head_sha(local) == origin_sha
+        and head_msg(local) != PA.MSG
+        and PA.REL not in g_at(local, ['git', 'diff', '--cached', '--name-only']).stdout
+        and os.path.isfile(os.path.join(local, PA.REL)))
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+
+root, local = init_pair()
+try:
+    with open(os.path.join(local, 'README'), 'a', encoding='utf-8') as f:
+        f.write('local only\n')
+    g_at(local, ['git', 'add', 'README'])
+    g_at(local, ['git', 'commit', '-m', 'local only'])
+    ahead = head_sha(local)
+    write_alert(local)
+    how = PA.git_publish(local, push=True)
+    rec('local commits ahead of origin skip the publish', how == 'local-ahead', how)
+    rec('an ahead main is not moved and the alert file is not committed',
+        head_sha(local) == ahead and head_msg(local) == 'local only')
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+
+root, local = init_pair()
+try:
+    with open(os.path.join(local, 'README'), 'a', encoding='utf-8') as f:
+        f.write('on origin\n')
+    g_at(local, ['git', 'add', 'README'])
+    g_at(local, ['git', 'commit', '-m', 'origin moved'])
+    g_at(local, ['git', 'push', 'origin', 'main'])
+    g_at(local, ['git', 'reset', '--hard', 'HEAD~1'])
+    write_alert(local)
+    how = PA.git_publish(local, push=True)
+    rec('strictly behind fast-forwards, then commits and pushes', how == 'pushed', how)
+    rec('the alerts commit sits on the origin commit it fast-forwarded to',
+        head_msg(local) == PA.MSG
+        and 'origin moved' in g_at(local, ['git', 'log', '-2', '--format=%s']).stdout
+        and head_sha(local) == g_at(local, ['git', 'rev-parse', 'origin/main']).stdout.strip())
+finally:
+    shutil.rmtree(root, ignore_errors=True)
 
 print('-- thresholds follow the env knobs --')
 os.environ['TRACERFY_LOW_CREDITS'] = '50'
@@ -293,11 +427,21 @@ finally:
     os.environ.pop('PAID_READS_WARN_FRACTION', None)
 
 hint = PA.install_hint()
-rec('install hint is a non-admin schtasks line at 21:00',
-    'schtasks /Create' in hint and '/RL LIMITED' in hint and '/ST 21:00' in hint and 'evening' in hint)
-rec('install hint also allows the task to start on battery',
-    'DisallowStartIfOnBatteries=$false' in hint and 'StartWhenAvailable=$true' in hint)
-rec('install hint has no token URL', 'http' not in hint and '@' not in hint)
+xml_path = os.path.join(os.path.dirname(PA.__file__), 'desktop-setup', 'tasks', 'DEALFLOW_Evening_Readiness.xml')
+xml = open(xml_path, encoding='utf-8').read()
+rec('install hint is schtasks /Create /XML and not a shell',
+    hint.startswith('schtasks /Create /TN "DEALFLOW Evening Readiness" /XML ') and hint.endswith(' /F')
+    and 'powershell' not in hint.lower())
+rec('the task XML is least privilege and starts on battery at 21:00',
+    '<RunLevel>LeastPrivilege</RunLevel>' in xml
+    and '<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>' in xml
+    and '<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>' in xml
+    and '<StartWhenAvailable>true</StartWhenAvailable>' in xml
+    and 'T21:00:00' in xml)
+rec('install hint and the task XML have no token URL',
+    'http' not in hint and '@' not in hint and '@' not in xml and 'hc-ping' not in xml)
+src = open(PA.__file__, encoding='utf-8').read().lower()
+rec('the publisher has no child powershell', 'powershell' not in src)
 
 print()
 print('%d/%d passed' % (len(ok), len(ok) + len(bad)))

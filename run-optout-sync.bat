@@ -21,8 +21,10 @@ call repo_guard.bat "%~dp0" "%LOG%"
 if errorlevel 1 exit /b 1
 python -u morning_sync.py >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
-rem  Counts-only alert file. Fail-soft and after RC is saved, so a push problem cannot change
-rem  whether today's sends hold. It does not publish the board.
+rem  Counts-only alert file. After RC is saved, so this cannot change whether sends hold
+rem  and cannot fail the sync. While refresh-running.flag or a live runner lease is
+rem  present it only writes the file — no fetch, no commit — so it does not take the
+rem  git lock the 05:30 refresh still holds (that run often lasts until 07:40-08:45).
 python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
 echo ==== optout-sync ENDED rc=%RC% %date% %time% ====>> "%LOG%"
 endlocal & exit /b %RC%

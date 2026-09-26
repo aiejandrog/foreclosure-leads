@@ -19,15 +19,23 @@ the opt-out sync, or a send. Nothing here writes the opt-out ledger or decides a
 OFF UNTIL A MACHINE ON main RUNS IT. The watchdog treats a missing file as "not armed" and
 does not close issues it cannot re-read.
 
-ARMING (armed laptop, no admin):
+GIT. publish writes the file first. It does no git at all while refresh-running.flag
+exists or this machine's runner lease (dealflow-mine.json) is still inside its
+expiry — that is the 07:15 sync overlapping a refresh that runs until 07:40–08:45.
+Otherwise it fetches origin/main, fast-forwards when local main is strictly behind,
+and commits only when local main equals origin/main and the index has no other
+staged file. A rejected push is undone (soft reset to the recorded base, then
+unstage this file only). Never force-push. Local main must not be left ahead of
+origin, or the 05:30 `git pull --ff-only` refuses and the night builds yesterday.
 
-    schtasks /Create /TN "DEALFLOW Evening Readiness" /SC DAILY /ST 21:00 /RL LIMITED /F /TR "cmd /c cd /d C:\\path\\to\\repo && python -u pipeline_alerts.py evening"
+ARMING (armed laptop, no admin). python pipeline_alerts.py install-hint writes
+desktop-setup/tasks/DEALFLOW_Evening_Readiness.xml (gitignored) and prints:
 
-Windows will not start that task on battery unless you also run:
+    schtasks /Create /TN "DEALFLOW Evening Readiness" /XML "<that file>" /F
 
-    powershell -NoProfile -Command "$t=Get-ScheduledTask -TaskName 'DEALFLOW Evening Readiness'; $t.Settings.DisallowStartIfOnBatteries=$false; $t.Settings.StopIfGoingOnBatteries=$false; $t.Settings.StartWhenAvailable=$true; Set-ScheduledTask -InputObject $t | Out-Null"
-
-python pipeline_alerts.py install-hint prints both lines with this checkout's path.
+The XML is RunLevel LeastPrivilege (schtasks /RL LIMITED), DisallowStartIfOnBatteries
+false, StopIfGoingOnBatteries false, StartWhenAvailable true, 21:00 local. The
+battery reading is kernel32 GetSystemPowerStatus inside this process, not a child shell.
 
 Healthchecks.io (hc_ping.py) is a separate dead-man's switch. It stays off unless
 DEALFLOW_HEALTHCHECK_URL is set (or a gitignored healthcheck.url file). It is not required
@@ -55,8 +63,10 @@ import math
 import os
 import re
 import socket
+import struct
 import subprocess
 import sys
+import time
 
 import skiptrace_health
 
@@ -540,29 +550,66 @@ def build_doc(now, signals, alerts):
 
 # ---- laptop readings (fixtures parse the same bytes the live commands print) ------------------
 
-def parse_battery(raw):
-    """Win32_Battery JSON from PowerShell, or a failed probe."""
-    if raw is None:
-        return {'power_ok': False}
-    text = str(raw).strip()
-    if not text or text.lower() == 'null':
-        return {'power_ok': True, 'battery_present': False, 'on_ac': None, 'pct': None}
+def _u8(value):
+    if isinstance(value, bool) or value is None:
+        return None
     try:
-        data = json.loads(text)
-    except ValueError:
+        return int(value) & 0xFF
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_power_status(ac, flag, percent):
+    """SYSTEM_POWER_STATUS fields from kernel32 GetSystemPowerStatus.
+
+    ACLineStatus 0 offline, 1 online, 255 unknown. BatteryFlag bit 128 means no
+    battery (a desktop). BatteryLifePercent is 0-100, or 255 when unknown.
+    """
+    ac, flag, percent = _u8(ac), _u8(flag), _u8(percent)
+    if ac is None and flag is None and percent is None:
         return {'power_ok': False}
-    if isinstance(data, list):
-        data = data[0] if data else None
-    if not isinstance(data, dict):
+    # 128 is "no system battery". 255 is "unknown", and it happens to have that bit set.
+    if flag == 128 or (flag not in (None, 255) and (flag & 128)):
         return {'power_ok': True, 'battery_present': False, 'on_ac': None, 'pct': None}
-    status = data.get('BatteryStatus')
-    pct = data.get('EstimatedChargeRemaining')
-    on_ac = None
-    if isinstance(status, int) and not isinstance(status, bool):
-        on_ac = status in (2, 3, 6, 7, 8, 9)
-    if isinstance(pct, bool) or not isinstance(pct, int):
-        pct = None
+    if ac == 1:
+        on_ac = True
+    elif ac == 0:
+        on_ac = False
+    else:
+        on_ac = None
+    pct = percent if percent is not None and percent <= 100 else None
     return {'power_ok': True, 'battery_present': True, 'on_ac': on_ac, 'pct': pct}
+
+
+def parse_power_bytes(raw):
+    """The 12-byte SYSTEM_POWER_STATUS layout (4 unsigned bytes, then 2 DWORDs)."""
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) < 12:
+        return {'power_ok': False}
+    ac, flag, percent, _sys, _life, _full = struct.unpack('<BBBBII', bytes(raw[:12]))
+    return parse_power_status(ac, flag, percent)
+
+
+def read_system_power():
+    """Battery via kernel32, in this process. No child shell. Non-Windows is a failed probe."""
+    if os.name != 'nt':
+        return {'power_ok': False}
+    try:
+        import ctypes
+        class SYSTEM_POWER_STATUS(ctypes.Structure):
+            _fields_ = [
+                ('ACLineStatus', ctypes.c_ubyte),
+                ('BatteryFlag', ctypes.c_ubyte),
+                ('BatteryLifePercent', ctypes.c_ubyte),
+                ('SystemStatusFlag', ctypes.c_ubyte),
+                ('BatteryLifeTime', ctypes.c_ulong),
+                ('BatteryFullLifeTime', ctypes.c_ulong),
+            ]
+        status = SYSTEM_POWER_STATUS()
+        if not ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+            return {'power_ok': False}
+        return parse_power_status(status.ACLineStatus, status.BatteryFlag, status.BatteryLifePercent)
+    except Exception:
+        return {'power_ok': False}
 
 
 def _failed_result(raw):
@@ -673,13 +720,8 @@ def _run_capture(args, timeout):
 
 
 def measure_readiness(now, port):
-    battery = _run_capture(
-        ['powershell', '-NoProfile', '-NonInteractive', '-Command',
-         'Get-CimInstance -ClassName Win32_Battery | '
-         'Select-Object BatteryStatus, EstimatedChargeRemaining | ConvertTo-Json -Compress'],
-        30)
     tasks = _run_capture(['schtasks', '/Query', '/FO', 'CSV', '/V'], 60)
-    return readiness_from(parse_battery(battery), port_open(port), parse_tasks(tasks), now)
+    return readiness_from(read_system_power(), port_open(port), parse_tasks(tasks), now)
 
 
 # ---- live collect. Every reader is fail-soft and returns counts only. -------------------------
@@ -859,16 +901,139 @@ def write_doc(path, doc):
 def _git(args, repo):
     env = dict(os.environ)
     env['GIT_TERMINAL_PROMPT'] = '0'
+    env['GIT_MERGE_AUTOEDIT'] = 'no'
     try:
-        p = subprocess.run(args, cwd=repo, capture_output=True, text=True, env=env)
+        p = subprocess.run(args, cwd=repo, capture_output=True, text=True, env=env, timeout=45)
+    except subprocess.TimeoutExpired:
+        return {'code': 124, 'out': '', 'err': ''}
     except OSError:
         return {'code': 127, 'out': '', 'err': ''}
     return {'code': p.returncode, 'out': p.stdout or '', 'err': ''}
 
 
+def _lease_mine_path():
+    """Same file runner_lock.py writes when this machine holds the cross-machine lease.
+    Read locally. Never ls-remote — that is the call that would delay the 07:15 sync."""
+    gitdir = os.environ.get('DEALFLOW_LOCK_GITDIR') or os.path.join(
+        os.path.expanduser('~'), 'DEALFLOW', 'runner-lock.git')
+    return os.path.join(gitdir, 'dealflow-mine.json')
+
+
+def lease_held(now=None):
+    try:
+        with open(_lease_mine_path(), encoding='utf-8') as f:
+            mine = json.load(f)
+    except (OSError, ValueError):
+        return False
+    if not isinstance(mine, dict):
+        return False
+    try:
+        exp = float(mine.get('expires_at'))
+    except (TypeError, ValueError):
+        return False
+    try:
+        slack = float(os.environ.get('DEALFLOW_LOCK_SKEW', '120') or 120)
+    except ValueError:
+        slack = 120.0
+    when = time.time() if now is None else float(now)
+    return when <= exp + slack
+
+
+def git_blocked(repo):
+    """Why git must not run, or ''. A flag or a live lease means the refresh still owns the repo."""
+    if os.path.exists(os.path.join(repo, 'refresh-running.flag')):
+        return 'refresh-running'
+    if lease_held():
+        return 'lease-held'
+    return ''
+
+
+def _ahead_behind(text):
+    parts = (text or '').split()
+    if len(parts) != 2:
+        return None
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+
+
+def _staged_others(porcelain):
+    """Index entries that are not pipeline_alerts.json. Unstaged and untracked files are not these."""
+    others = []
+    for line in (porcelain or '').splitlines():
+        if len(line) < 4 or line[0] in (' ', '?'):
+            continue
+        path = line[3:].strip()
+        if ' -> ' in path:
+            path = path.split(' -> ', 1)[1].strip()
+        if path.replace('\\', '/') != REL:
+            others.append(path)
+    return others
+
+
+def _sha(run, repo, rev):
+    got = run(['git', 'rev-parse', rev], repo)
+    sha = (got.get('out') or '').strip()
+    if got.get('code') != 0 or not re.fullmatch(r'[0-9a-fA-F]{40}', sha):
+        return ''
+    return sha.lower()
+
+
+def _undo_commit(run, repo, base):
+    """Drop our commit. Soft reset keeps any other staged file staged; then unstage only ours."""
+    soft = run(['git', 'reset', '--soft', base], repo)
+    run(['git', 'reset', '-q', 'HEAD', '--', REL], repo)
+    return soft.get('code') == 0
+
+
+def _park_alerts(repo, run):
+    """Lift our just-written file out of the way so a fast-forward can update the checkout.
+    Returns the bytes to put back, or None when there was nothing to park."""
+    path = os.path.join(repo, REL)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'rb') as f:
+            data = f.read()
+    except OSError:
+        return None
+    tracked = run(['git', 'ls-files', '--error-unmatch', '--', REL], repo)
+    if tracked.get('code') == 0:
+        co = run(['git', 'checkout', '-q', 'HEAD', '--', REL], repo)
+        if co.get('code') != 0:
+            return None
+    else:
+        try:
+            os.remove(path)
+        except OSError:
+            return None
+    return data
+
+
+def _restore_alerts(repo, data):
+    if data is None:
+        return
+    path = os.path.join(repo, REL)
+    try:
+        with open(path, 'wb') as f:
+            f.write(data)
+    except OSError:
+        pass
+
+
 def git_publish(repo, push=True, run=None):
-    """Commit and (optionally) push only pipeline_alerts.json. Never prints git output."""
+    """Commit and (optionally) push only pipeline_alerts.json.
+
+    No git work while a refresh or lease is in progress. Otherwise fetch, fast-forward
+    if strictly behind, and commit only when HEAD == origin/main and nothing else is
+    staged. A rejected push is undone so local main is not left ahead of origin.
+    Never prints git output. Never force-pushes.
+    """
     run = run or _git
+    blocked = git_blocked(repo)
+    if blocked:
+        return blocked
     head = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], repo)
     if head['code'] != 0 or head['out'].strip() != 'main':
         return 'not-on-main'
@@ -880,14 +1045,41 @@ def git_publish(repo, push=True, run=None):
         gdir = os.path.join(repo, gdir)
     if os.path.isdir(os.path.join(gdir, 'rebase-merge')) or os.path.isdir(os.path.join(gdir, 'rebase-apply')):
         return 'rebase-in-progress'
-    # A brand-new pipeline_alerts.json is untracked. `git commit -- path` only records paths
-    # git already knows, so add this one path first. --only then commits the worktree copy of
-    # that path and leaves every other staged file (a half-built board, a ledger) uncommitted.
+    fetched = run(['git', 'fetch', 'origin', 'main'], repo)
+    if fetched['code'] != 0:
+        return 'fetch-failed'
+    counts = run(['git', 'rev-list', '--left-right', '--count', 'origin/main...HEAD'], repo)
+    pair = _ahead_behind(counts.get('out') if counts.get('code') == 0 else '')
+    if pair is None:
+        return 'fetch-failed'
+    behind, ahead = pair
+    if ahead > 0:
+        return 'local-ahead'
+    staged = run(['git', 'status', '--porcelain'], repo)
+    if staged.get('code') != 0:
+        return 'commit-failed'
+    if _staged_others(staged.get('out')):
+        return 'dirty-index'
+    if behind > 0:
+        saved = _park_alerts(repo, run)
+        try:
+            ff = run(['git', 'merge', '--ff-only', 'origin/main'], repo)
+        finally:
+            _restore_alerts(repo, saved)
+        if ff.get('code') != 0:
+            return 'ff-failed'
+    local = _sha(run, repo, 'HEAD')
+    origin = _sha(run, repo, 'origin/main')
+    if not local or local != origin:
+        return 'not-even'
+    # This path is untracked the first night. `git commit -- path` only records paths git
+    # already knows, so add it first. --only then commits the worktree copy of that path.
     added = run(['git', 'add', '--', REL], repo)
     if added['code'] != 0:
         return 'commit-failed'
     committed = run(['git', 'commit', '--only', '-m', MSG, '--', REL], repo)
     if committed['code'] != 0:
+        run(['git', 'reset', '-q', 'HEAD', '--', REL], repo)
         status = run(['git', 'status', '--porcelain', '--', REL], repo)
         if (status.get('out') or '').strip():
             return 'commit-failed'
@@ -895,30 +1087,95 @@ def git_publish(repo, push=True, run=None):
     if not push:
         return 'committed'
     pushed = run(['git', 'push', 'origin', 'HEAD:main'], repo)
-    if pushed['code'] != 0:
-        pushed = run(['git', 'push', 'origin', 'HEAD:main'], repo)
-    return 'pushed' if pushed['code'] == 0 else 'push-failed'
+    if pushed['code'] == 0:
+        return 'pushed'
+    if not _undo_commit(run, repo, local):
+        return 'push-failed'
+    return 'push-undone'
+
+
+def evening_task_xml(repo):
+    """Task XML for the current user. LeastPrivilege is schtasks /RL LIMITED. No password, no admin."""
+    def x(text):
+        return (str(text).replace('&', '&amp;').replace('<', '&lt;')
+                .replace('>', '&gt;').replace('"', '&quot;'))
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <URI>\\DEALFLOW Evening Readiness</URI>
+    <Description>DealFlow: counts-only pipeline alert check at 21:00 local. Writes pipeline_alerts.json and pushes that file when main is quiet.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-09-26T21:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>python</Command>
+      <Arguments>-u pipeline_alerts.py evening</Arguments>
+      <WorkingDirectory>%s</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+""" % x(repo)
 
 
 def install_hint():
+    """Write the evening-task XML and return the one schtasks command that registers it."""
     repo = HERE
-    script = os.path.join(repo, 'pipeline_alerts.py')
-    task = r'schtasks /Create /TN "DEALFLOW Evening Readiness" /SC DAILY /ST 21:00 /RL LIMITED /F /TR "cmd /c cd /d \"%s\" && python -u \"%s\" evening"' % (repo, script)
-    power = ("powershell -NoProfile -Command \"$t=Get-ScheduledTask -TaskName 'DEALFLOW Evening Readiness'; "
-             "$t.Settings.DisallowStartIfOnBatteries=$false; $t.Settings.StopIfGoingOnBatteries=$false; "
-             "$t.Settings.StartWhenAvailable=$true; Set-ScheduledTask -InputObject $t | Out-Null\"")
-    return task + '\n' + power
+    folder = os.path.join(repo, 'desktop-setup', 'tasks')
+    os.makedirs(folder, exist_ok=True)
+    xml_path = os.path.join(folder, 'DEALFLOW_Evening_Readiness.xml')
+    with open(xml_path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(evening_task_xml(repo))
+    return 'schtasks /Create /TN "DEALFLOW Evening Readiness" /XML "%s" /F' % xml_path
 
 
 def publish(measure=False):
-    """Write the public file and push it when this checkout is on main. Always returns 0."""
+    """Write the public file. Push only when main is quiet and even with origin. Always returns 0."""
     try:
-        if _git(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], HERE)['out'].strip() != 'main':
-            _log('not on main; did not write or push')
-            return 0
+        blocked = git_blocked(HERE)
+        if not blocked:
+            if _git(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], HERE)['out'].strip() != 'main':
+                _log('not on main; did not write or push')
+                return 0
         prev = load_doc(os.path.join(HERE, REL))
         doc = make_doc(measure=measure, prev_readiness=(prev.get('signals') or {}).get('readiness'))
         write_doc(os.path.join(HERE, REL), doc)
+        if blocked:
+            keys = ','.join(a['key'] for a in doc.get('alerts') or []) or 'none'
+            _log('keys=%s push=%s' % (keys, blocked))
+            return 0
         how = git_publish(HERE, push=True)
         keys = ','.join(a['key'] for a in doc.get('alerts') or []) or 'none'
         _log('keys=%s push=%s' % (keys, how))

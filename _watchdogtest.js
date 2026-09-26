@@ -338,6 +338,24 @@ const morningCases = [
     { name: 'alerts: the same severity comments and does not fail again',
       alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
       openIssues: [openAlert('tracerfy-credits', 'warn')], fire: false, comments: true },
+    { name: 'alerts: an unchanged alert is not commented again the same Eastern day',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
+      openIssues: [{
+        number: 41,
+        title: '⚠️ [warn] [tracerfy-credits] old',
+        body: 'alert-key: tracerfy-credits\nseverity: warn\n\nTracerfy balance 400 credits, warn under 500.',
+        updated_at: '2026-09-26T14:30:00Z',
+      }],
+      now: ALERT_NOW, fire: false, comments: false },
+    { name: 'alerts: an unchanged alert comments once the next Eastern day',
+      alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'warn', text: 'Tracerfy balance 400 credits, warn under 500.' }]),
+      openIssues: [{
+        number: 41,
+        title: '⚠️ [warn] [tracerfy-credits] old',
+        body: 'alert-key: tracerfy-credits\nseverity: warn\n\nTracerfy balance 400 credits, warn under 500.',
+        updated_at: '2026-09-25T14:30:00Z',
+      }],
+      now: ALERT_NOW, fire: false, comments: true },
     { name: 'alerts: warn to fail is worsened and fails the run',
       alertsJson: freshDoc([{ key: 'tracerfy-credits', severity: 'fail', text: 'Tracerfy balance 0 credits.' }]),
       openIssues: [openAlert('tracerfy-credits', 'warn')], fire: true, comments: true },
@@ -378,6 +396,7 @@ const morningCases = [
     let good = fired === c.fire;
     if (good && c.creates) good = !!created;
     if (good && c.comments) good = r.issues.some(i => i.kind === 'comment');
+    if (good && c.comments === false) good = !r.issues.some(i => i.kind === 'comment');
     if (good && c.closes) good = r.issues.some(i => i.kind === 'update' && i.state === 'closed');
     if (good && c.noClose) good = !r.issues.some(i => i.kind === 'update' && i.state === 'closed');
     if (good && c.noAt) {

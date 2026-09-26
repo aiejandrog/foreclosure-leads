@@ -556,8 +556,14 @@ jobs:
               '---',
               'Public watchdog alert: counts, percentages, balances, stage names and timestamps only.',
               'This issue stays open while the condition is true, gets a comment instead of a duplicate, and closes when it clears.',
+              'While the wording is unchanged, it is commented at most once per Eastern day, not once per push.',
               'A new or worsened alert also fails this workflow, which is what emails the repository owner.',
             ].join('\n');
+            const dayET = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+            function bodyText(issue) {
+              const head = String(issue.body || '').split(/\n---\n/)[0] || '';
+              return head.replace(/^alert-key:.*$/m, '').replace(/^severity:.*$/m, '').replace(/\s+/g, ' ').trim();
+            }
             for (const a of active) {
               const title = ('⚠️ [' + a.severity + '] [' + a.key + '] ' + a.text).slice(0, 240);
               const body = 'alert-key: ' + a.key + '\nseverity: ' + a.severity + '\n\n' + a.text + '\n\n' + footer;
@@ -568,9 +574,15 @@ jobs:
                 continue;
               }
               const prev = sevOf(existing);
-              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body: a.text });
-              if (a.severity !== prev) {
-                await github.rest.issues.update({ owner, repo, issue_number: existing.number, title, body });
+              const textNow = a.text.replace(/\s+/g, ' ').trim();
+              const unchanged = prev === a.severity && bodyText(existing) === textNow;
+              const touched = Date.parse(existing.updated_at || '');
+              const commentedToday = Number.isFinite(touched) && dayET(touched) === dayET(NOW_MS);
+              if (!(unchanged && commentedToday)) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body: a.text });
+                if (a.severity !== prev || bodyText(existing) !== textNow) {
+                  await github.rest.issues.update({ owner, repo, issue_number: existing.number, title, body });
+                }
               }
               if ((RANK[a.severity] || 2) > (RANK[prev] || 1)) worsened.push(a.key);
             }
