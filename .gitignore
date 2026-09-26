@@ -89,6 +89,8 @@ paid_reads_ledger.json.*
 # index label is never a substitute for reading, and that reading a document never moves a lead
 # into an equity FACT state.
 !_dossiertest.py
+# _clerksessiontest guards the Miami-Dade Clerk sign-in: env-only credentials, zero spend, loud failure.
+!_clerksessiontest.py
 # _syncgatetest guards the 07:15 opt-out sync and the fail-closed hold on every send until it has run
 # clean today; _ledgerownertest keeps the sync (optout_sync.ledger_add) the only writer of optouts.json.
 !_syncgatetest.py
@@ -201,6 +203,8 @@ cadence_queue.json
 optouts.json
 # the 07:15 opt-out sync's record of its last run (sync_gate.py reads it) and its log -- per machine.
 sync_status.json
+clerk_session_status.json
+clerk_session_status.json.tmp
 sync_status.json.tmp
 optout-sync-run.log
 gmail.key
