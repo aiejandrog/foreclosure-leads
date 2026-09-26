@@ -200,12 +200,13 @@ class ClerkSession:
     """A requests session that only talks to the allowed Clerk URLs, politely, and never spends."""
 
     def __init__(self, session=None, env=None, sleep=time.sleep, clock=time.monotonic,
-                 min_interval=None, jitter=None, max_requests=None, log=print):
+                 min_interval=None, jitter=None, max_requests=None, log=print, anon=None):
         if session is None:
             import requests
             session = requests.Session()
         self.s = session
         self.s.headers.update({'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9'})
+        self.anon = anon                     # cookie-less session, built on first use (probe only)
         self.env = os.environ if env is None else env
         self.sleep, self.clock = sleep, clock
         self.min_interval = MIN_INTERVAL if min_interval is None else min_interval
@@ -231,7 +232,8 @@ class ClerkSession:
         self._last = self.clock()
         self.count += 1
 
-    def request(self, method, url, **kw):
+    def request(self, method, url, via=None, **kw):
+        """All traffic goes through here (via= another session, e.g. the cookie-less anon one)."""
         if SPEND_URL.search(url):
             raise SpendRefused('refused a spend/order URL before sending: %s' % url.split('?')[0])
         if not any(p.search(url) for p in ALLOWED):
@@ -239,7 +241,7 @@ class ClerkSession:
         self._throttle()
         kw.setdefault('timeout', 30)
         try:
-            r = self.s.request(method, url, **kw)
+            r = (via or self.s).request(method, url, **kw)
         except Exception as e:
             raise ClerkError('network error: %s' % _scrub(str(e)[:120], self.env))
         for h in list(getattr(r, 'history', []) or []) + [r]:
@@ -378,12 +380,28 @@ class ClerkSession:
         today = dt.date.today()
         frm = (today - dt.timedelta(days=14)).strftime('%m/%d/%Y')
         to = (today - dt.timedelta(days=7)).strftime('%m/%d/%Y')
-        return self.or_search_qs('MIAMI-DADE COUNTY', frm, to) is not None
+        qs = self.or_search_qs('MIAMI-DADE COUNTY', frm, to)
+        if not qs:
+            return False
+        # records_liens reads results with its own anonymous session, so the qs must work there too
+        if self.anon is None:
+            import requests
+            self.anon = requests.Session()
+            self.anon.headers.update({'User-Agent': UA})
+        try:
+            r = self.request('GET', OR + 'api/SearchResults/getStandardRecords?qs=' + urllib.parse.quote(qs, safe=''),
+                             via=self.anon, headers={'Accept': 'application/json', 'Referer': OR}, timeout=60)
+            return isinstance((r.json() or {}).get('recordingModels'), list)
+        except SpendRefused:
+            raise
+        except Exception:
+            return False
 
 
 # ---- status file ----------------------------------------------------------------------------------
 def write_status(**kw):
-    st = dict(kw, ts=dt.datetime.now().isoformat(timespec='seconds'))
+    st = dict(read_status(), **kw)       # keeps what earlier runs proved (or_http_search, browser_ok)
+    st['ts'] = dt.datetime.now().isoformat(timespec='seconds')
     tmp = STATUS + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(st, f, indent=1)
@@ -509,7 +527,11 @@ def or_qs_source(log=print, env=None):
                 return None
             log('  clerk: signed in (plain HTTP, no captcha token needed)')
             return HttpQsSource(cs, log=log)
-        log('  clerk: signed-in plain HTTP not proven (run --probe); using the dedicated browser profile')
+        if read_status().get('browser_ok') is not True:
+            log('  clerk: neither a plain-HTTP signed-in search (--probe) nor the dedicated profile '
+                '(--browser-setup) is proven - Camoufox as before')
+            return None
+        log('  clerk: signed-in plain HTTP not proven; using the dedicated browser profile')
         from playwright.sync_api import sync_playwright
         pw = sync_playwright().start()
         ctx = open_profile(pw, headless=False)
@@ -576,7 +598,7 @@ def main(argv=None):
                     ctx.close()
             units = st.get('units')
             print('  dedicated profile signed in. prepaid units: %s' % units)
-            write_status(ok=True, mode='browser', units=units, reason='')
+            write_status(ok=True, mode='browser', units=units, reason='', browser_ok=True)
             return 0
         cs = ClerkSession()
         res = cs.login_all()
@@ -602,7 +624,8 @@ def main(argv=None):
     except ClerkError as e:
         print('  clerk: %s' % _scrub(str(e)))
         try:
-            write_status(ok=False, mode=type(e).__name__, reason=_scrub(str(e))[:200])
+            extra = {'browser_ok': False} if (a.browser_setup or a.browser_check) else {}
+            write_status(ok=False, mode=type(e).__name__, reason=_scrub(str(e))[:200], **extra)
         except Exception:
             pass
         return e.code

@@ -1600,6 +1600,8 @@ def _run(a, ap):
         except Exception as e:
             cf_browser = None
             print('  clerk: hook unavailable (%s)' % type(e).__name__)
+    # the signed-in source gets 3 chances in a row; then Camoufox takes over for the rest of the run
+    _CLERK = {'on': cf_browser is not None, 'miss': 0}
     if need_mint and not a.cached_only and not a.no_camoufox and cf_browser is None:
         cf_cm, cf_browser = camoufox_session()
         print('  camoufox: %s' % ('ready (free Turnstile tokens)' if cf_browser
@@ -1667,6 +1669,14 @@ def _run(a, ap):
                                     json.dump(qs_cache, open(QS_CACHE, 'w', encoding='utf-8'), indent=1)
                                 except Exception:
                                     pass
+                        if _CLERK['on']:
+                            _CLERK['miss'] = 0 if (qs and models is not None) else _CLERK['miss'] + 1
+                            if _CLERK['miss'] >= 3:
+                                _CLERK['on'] = False
+                                print('  clerk: 3 signed-in searches in a row failed — Camoufox for the rest of the run')
+                                cf_browser = None
+                                if not a.no_camoufox:
+                                    cf_cm, cf_browser = camoufox_session()
 
                     # 2) 2CAPTCHA (2026-07-21): solve Turnstile for ~$0.003, no browser. This is what
                     # took the wall from ~15% coverage to near-total, and it stays as the fallback for

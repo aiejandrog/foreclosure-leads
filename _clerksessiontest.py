@@ -109,6 +109,8 @@ class FakeSession:
         if 'standardsearch' in url:
             v = self.or_search_valid and self.in_['or']
             return Resp(body={'isValidSearch': v, 'qs': 'FAKEQS==' if v else None}, ctype='application/json')
+        if 'getStandardRecords' in url:
+            return Resp(body={'recordingModels': []}, ctype='application/json')
         if 'GetSDocumentByEvent' in url:
             return Resp(body=[{'documentName': 'Redirect'}], ctype='application/json')
         if url.endswith('/Home/Logout'):
@@ -255,9 +257,22 @@ cs.login_all()
 rec('signed-in OR search accepted -> the qs', cs.or_search_qs('DOE JOHN') == 'FAKEQS==')
 hdr = [c[2]['headers'] for c in fake.calls if 'standardsearch' in c[1]][-1]
 rec('...sent with an EMPTY captcha header, never a minted token', hdr.get('x-recaptcha-token') == '')
+anon = FakeSession()
+cs.anon = anon
 rec('probe says True when the Clerk accepts it', cs.probe_or_http() is True)
-cs2, _, _ = session(FakeSession(or_search_valid=False)); cs2.login_all()
+rec('...and the qs was proven readable by a cookie-less session (as records_liens reads it)',
+    any('getStandardRecords' in c[1] for c in anon.calls) and not any('getStandardRecords' in c[1] for c in fake.calls))
+cs2, _, _ = session(FakeSession(or_search_valid=False), anon=FakeSession()); cs2.login_all()
 rec('probe says False when it does not', cs2.probe_or_http() is False)
+
+
+class NoRecords(FakeSession):
+    def request(self, method, url, **kw):
+        return Resp(status=403, body='denied') if 'getStandardRecords' in url else super().request(method, url, **kw)
+
+
+cs3, _, _ = session(FakeSession(or_search_valid=True), anon=NoRecords()); cs3.login_all()
+rec('probe says False when the signed-in qs is unreadable outside the session', cs3.probe_or_http() is False)
 
 # ---- 7. the records_liens hook
 rec('hook OFF unless DEALFLOW_CLERK_OR=1', C.or_qs_source(log=lambda m: None, env=dict(ENV)) is None)
@@ -273,6 +288,21 @@ tmpd = pathlib.Path(tempfile.mkdtemp(prefix='clerk_'))
 C.STATUS = str(tmpd / 'clerk_session_status.json')
 spend = C.HttpQsSource(session(FakeSession())[0], log=lambda m: None)
 spend.cs.request = lambda *a, **k: (_ for _ in ()).throw(C.SpendRefused('units prompt'))
+msgs = []
+rec('hook ON + credentials, but nothing proven yet -> None (Camoufox as before), no browser opened',
+    C.or_qs_source(log=msgs.append, env=dict(ENV, **{C.ENV_ENABLE: '1'})) is None and 'Camoufox' in ' '.join(msgs), msgs)
+C.write_status(ok=True, mode='http', units=0, or_http_search=False)
+C.write_status(ok=False, mode='BrowserNeeded', reason='x', browser_ok=False)
+st = C.read_status()
+rec('status writes keep earlier findings (probe result survives a browser-check write)',
+    st.get('or_http_search') is False and st.get('browser_ok') is False and st.get('mode') == 'BrowserNeeded', st)
+msgs = []
+rec('probe refused + profile not set up -> None (Camoufox), no browser opened',
+    C.or_qs_source(log=msgs.append, env=dict(ENV, **{C.ENV_ENABLE: '1'})) is None and 'Camoufox' in ' '.join(msgs), msgs)
+rl_src = pathlib.Path(R.__file__).read_text(encoding='utf-8')
+rec('records_liens hands back to Camoufox after 3 signed-in misses in a row',
+    "_CLERK['miss'] >= 3" in rl_src and 'cf_cm, cf_browser = camoufox_session()' in rl_src.split("_CLERK['miss'] >= 3", 1)[1][:600])
+os.remove(C.STATUS)
 rec('a spend prompt switches the source off for the run', spend.qs_for(('DOE', 'JOHN')) is None and spend.off
     and spend.qs_for(('ROE', 'JANE')) is None)
 
