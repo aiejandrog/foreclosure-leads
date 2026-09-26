@@ -6181,22 +6181,26 @@ function _textBodies(o){
   const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
   const stEN = o.stEN || 'your property', stES = o.stES || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
-  const stopEN = '';
-  const stopES = '';
   let en, es;
   /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
      plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
      ADVISOR, "ask the court for more time" = the plain-language rendering of petition-to-postpone
      (never "we will stop the sale"), the word "foreclosure" removed from every body (third-party
-     protocol: a text can be read by someone not on title), ID + STOP on every message, no em
-     dashes (reads as AI). nameEN/disclEN stay defined above for any other caller. */
+     protocol: a text can be read by someone not on title), ID on every message, no em dashes
+     (reads as AI). nameEN/disclEN stay defined above for any other caller.
+
+     NO OPT-OUT LINE, BY DECISION (Alejandro, 2026-09-22). The stopEN/stopES trailers concatenated
+     onto every body below had rendered as empty strings since they were written, so no text ever
+     carried one; the dead wiring is gone rather than filled in. These are sent by hand from the
+     board, one person to one person, not as a campaign. A homeowner who replies STOP is still
+     honored: replies.py scans the mailbox and the reply bake carries it into optouts.json. */
   if(tone==='urgent'){
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. The sale date on '+stEN+' is close.'
        + ' If you have a plan, keep it. Let us be the parachute if it lands late. Free 5 minutes'
-       + ' with our senior advisor, and we can ask the court for more time. No fees ever.'+stopEN;
+       + ' with our senior advisor, and we can ask the court for more time. No fees ever.';
     es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. La subasta de '+stES+' está cerca.'
        + ' Si tiene un plan, sígalo. Nosotros somos el paracaídas si llega tarde. 5 minutos gratis'
-       + ' con nuestro asesor principal, y se puede pedir más tiempo a la corte.'+stopES;
+       + ' con nuestro asesor principal, y se puede pedir más tiempo a la corte.';
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
@@ -6205,45 +6209,45 @@ function _textBodies(o){
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group, my last text about '+stEN+'.'
        + ' I hope your plan lands right on time. If anything slips before the sale date, one free call'
        + ' with our senior advisor, 30 plus years, maps what still works. Either way, keep my number'
-       + ' in your phone.'+stopEN;
+       + ' in your phone.';
     es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Biscayne Solutions Group, mi último mensaje sobre '+stES+'.'
        + ' Ojalá su plan salga a tiempo. Si algo falla antes de la fecha de subasta, una llamada gratis'
        + ' con nuestro asesor principal, más de 30 años, le muestra lo que aún sirve. De cualquier'
-       + ' forma, guarde mi número en su teléfono.'+stopES;
+       + ' forma, guarde mi número en su teléfono.';
   } else if(tone==='followup'){
     // The parachute card's scalpel: ONE question that tests the plan without attacking it.
     en = 'Hi'+(first?' '+first:'')+', '+sN+' with Biscayne Solutions Group again about '+stEN+'. Not trying to crowd you.'
        + ' If you already have a plan you trust, honestly ignore me and I hope it works out. If you'
-       + ' are not fully sure it will, that is the part I would want a second set of eyes on. Worth a quick look?'+stopEN;
+       + ' are not fully sure it will, that is the part I would want a second set of eyes on. Worth a quick look?';
     es = 'Hola'+(first?' '+first:'')+', '+sN+' de Biscayne Solutions Group otra vez, por '+stES+'. No quiero abrumarlo.'
        + ' Si ya tiene un plan en el que confía, ignóreme y ojalá le funcione. Si no está del todo'
-       + ' seguro de que va a funcionar, esa es la parte en la que le daría una segunda opinión. ¿Vale la pena una mirada rápida?'+stopES;
+       + ' seguro de que va a funcionar, esa es la parte en la que le daría una segunda opinión. ¿Vale la pena una mirada rápida?';
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. There is a tax deed sale on '+stEN+'.'
        + ' Two things most owners never hear: paying the back taxes stops it, and if it sells for'
-       + ' more than what is owed, the extra money is yours. Free 5 minutes covers both.'+stopEN;
+       + ' more than what is owed, the extra money is yours. Free 5 minutes covers both.';
     es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. Hay una subasta por impuestos'
        + ' sobre '+stES+'. Dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende'
-       + ' por más de lo que se debe, lo extra es suyo. 5 minutos gratis y se lo explico.'+stopES;
+       + ' por más de lo que se debe, lo extra es suyo. 5 minutos gratis y se lo explico.';
   } else if(lp){
     // Just filed. NO urgency language — the honest fact is stronger: most choices exist NOW.
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. A case was just filed at the'
        + ' courthouse on '+stEN+'. Right now you have the most choices, and most take weeks to set'
        + ' up. Our senior advisor maps them free in 5 minutes. What do you want to do with the'
-       + ' house?'+stopEN;
+       + ' house?';
     es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. Acaban de abrir un caso en la'
        + ' corte sobre '+stES+'. Hoy es cuando más opciones tiene, y toman semanas. Nuestro asesor'
-       + ' principal se las explica gratis en 5 minutos. ¿Qué quiere hacer con la casa?'+stopES;
+       + ' principal se las explica gratis en 5 minutos. ¿Qué quiere hacer con la casa?';
   } else {
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. There is a court sale date on '+stEN+'.'
        + ' Not a lender, nothing to sign. If you have a plan, keep it. Our senior advisor, 30 plus'
-       + ' years, maps every option free in 5 minutes. What do you want to do with the house?'+stopEN;
+       + ' years, maps every option free in 5 minutes. What do you want to do with the house?';
     es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+'.'
        + ' No presto dinero, nada que firmar. Si tiene un plan, sígalo. Nuestro asesor principal,'
        + ' más de 30 años, le da opciones gratis en 5 minutos. ¿Qué quiere hacer con la'
-       + ' casa?'+stopES;
+       + ' casa?';
   }
   return {en: en, es: es};
 }
@@ -15464,7 +15468,10 @@ function genBalloonEmail(r, quiet){
   var reSubj = 'Re: ' + subjCold;
   var hi = 'Hi'+(first?' '+first:'')+',';
   var sig = [signer, 'Biscayne Solutions Group', sP ? ('Phone: '+sP) : '', 'BSGflorida.com', sA].filter(function(x){ return x; }).join('\n');
-  var stop = "\n\nIf this isn't relevant, reply STOP and I won't write again.";
+  /* No opt-out sentence in body copy (Alejandro, 2026-09-22). Was:
+     "\n\nIf this isn't relevant, reply STOP and I won't write again."
+     The List-Unsubscribe header still ships on every send through send_server._smtp_send, which
+     is what Gmail and Outlook render as their own Unsubscribe control. */
   var gapLine = amt
     ? ('On the '+money(amt)+' note'+(lender?(' with '+lender):'')+', the gap between 12% and 7% is about '+money(gap)+' a month, roughly '+money(gap*12)+' a year, going to a lender instead of staying in your pocket.')
     : ('On a $400,000 balance the gap between 12% and 7% is about $1,700 a month. Twenty thousand a year, going to a lender instead of staying in your pocket.');
@@ -15474,12 +15481,12 @@ function genBalloonEmail(r, quiet){
     + "\n\nThat's the problem. Here's the fix.\n\n"
     + "We place DSCR loans at 6 to 8 percent on rental and investment property, 70 to 80 percent LTV, no tax returns and no personal income documents. The property's rent qualifies the loan, not your W-2. Typical close is about two weeks. If you need speed more than price, we also do hard equity at 60 to 70 percent LTV that funds in five to ten business days.\n\n"
     + "Fifteen minutes, free, no commitment. Reply with your best number and a time, or call me directly at "+sP+". If I can't beat what you're already holding, I'll tell you that in the first five minutes and you've lost nothing but the call.\n\n"
-    + sig + stop;
+    + sig;
   var bodyFollow = hi+'\n\n'
     + "Quick one. If you've got a bridge or hard-money note coming up on its maturity date"+(lender?(', the '+lender+' note'):'')+", the default move is to extend with the same lender at the same rate, because it's the path of least resistance and they know it.\n\n"
     + "Before you do that, let me price it. DSCR, 6 to 8 percent, 70 to 80 LTV, no tax returns, about two weeks to close. If the property cash flows, it qualifies. Your personal income never comes into it.\n\n"
     + "Worst case I confirm you already have the best deal available and you extend with confidence. Fifteen minutes, free. "+sP+" or reply with a good time.\n\n"
-    + sig + stop;
+    + sig;
   var bodyFinal = hi+'\n\n'
     + 'Last note from me on '+propTxt+'. If the refinance is handled, ignore this and good luck with it.\n\n'
     + "If it isn't, the offer stands: DSCR at 6 to 8 percent or hard equity in five to ten days, priced in a fifteen-minute call at "+sP+". I won't email again either way.\n\n"

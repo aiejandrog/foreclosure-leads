@@ -12,10 +12,10 @@ squarely that. It comes from disclaimer.py so all four surfaces say the same sen
 drifted into four different disclaimers once before, which is why disclaimer.py exists at all.
 
 Channel differences are LENGTH ONLY, never claims:
-  email  — full copy + full MARS block
-  sms    — the same offer compressed, with the statutory core + STOP (a carrier-truncated
-           disclosure is no disclosure, so the long block cannot go in a text)
-  letter — handwritten length + the three federally mandated sentences
+  email  — full copy
+  sms    — the same offer compressed (a carrier-truncated disclosure is no disclosure, so a long
+           block cannot go in a text)
+  letter — handwritten length
 """
 import datetime as dt
 
@@ -38,45 +38,42 @@ SLOT_MINUTES = 'fifteen'       # what the calendar actually reserves
 BOOKING_URL = 'cal.com/bsgflorida/free-records-review'
 BOOKING_URL_INVESTOR = 'cal.com/bsgflorida/investor-refi-call'
 
-# CAN-SPAM 15 U.S.C. 7704(a)(3): every commercial message needs a clear, working way to opt out.
-# It had none. `stopEN`/`stopES` in tracker_template.html render empty and Alejandro's cold body
-# never carried one, so the only opt-out route was a homeowner guessing that the word "stop" would
-# be read by a machine -- which it is (replies.is_stop_text), but nobody told them.
+# NO OPT-OUT SENTENCE IN BODY COPY. Alejandro's direction, 2026-09-22, said twice: "i literally
+# mean no promoting stop opts it sounds automated and robotic" / "I DONT want it at all in my
+# writings out my outputs". Every version of this line -- "reply with the word unsubscribe",
+# "responda con la palabra QUITAR", "reply STOP" -- reads like a mailing list, and every
+# homeowner-facing surface here is written to read like one person writing to another. His call.
 #
-# WHY REPLY-BASED AND NOT A LINK, TODAY. A link has to land somewhere that writes optouts.json,
-# and nothing in this system serves HTTP: docs/ is a static GitHub Pages site and bsgflorida.com
-# is hosted off-repo. An unsubscribe link that records nothing is worse than no link -- the
-# mechanism has to work for 30 days after the send and the request honored within 10 business
-# days, so a dead link converts a missing disclosure into a broken promise. The reply path works
-# end to end TODAY: replies.py scans the inbox, is_stop_text() matches "unsubscribe" outright,
-# optout_sync.py ledgers it the same night.
+# WHAT STILL CARRIES THE OPT-OUT. The List-Unsubscribe header, set by _smtp_send in BOTH send
+# paths (outreach_email.py and send_server.py) via mail_guard.unsubscribe_header(). Gmail and
+# Outlook render it as their own Unsubscribe control, and its mailto arm lands in the mailbox
+# replies.py scans, so an unsubscribe still reaches optouts.json the same night. That mechanism
+# is untouched here and is now the only recipient-facing way out of an email.
 #
-# TO SWITCH TO THE LINK: set UNSUB_URL to the live page. That one line changes the sentence here
-# AND adds the https arm to the List-Unsubscribe header in both send paths. The page must record
-# the address into optouts.json (the reserved suppression surface -- hand that piece to the
-# desktop session) and must not require the recipient to log in or type anything.
+# WHAT IS GONE. The visible sentence in the words of the message. CAN-SPAM 15 U.S.C. 7704(a)(3)
+# wants a clear and conspicuous notice, and the header alone is the mail client's rendering
+# rather than ours. Raised with him before removing; he reaffirmed. Flagged, not silently done.
+#
+# TO PUT IT BACK: _unsub() below is neutralized rather than deleted at every call site (same
+# pattern _mars() uses for the same reason), so restoring it is one function body.
 UNSUB_URL = ''
 
 
 def _unsub(url=None, lang='en'):
-    """The opt-out sentence. Never empty -- that is the whole point of this function.
+    """No opt-out sentence in body copy. Returns '' for every caller, in every language.
 
-    The word each language asks for is one replies.is_stop_text() already matches: "unsubscribe"
-    hits OPTOUT_PHRASES directly, and so does a bare "quitar". Naming a word the detector does not
-    know would be the worst outcome available here -- an opt-out the owner believes they sent and
-    that nothing in the system ever acts on. Spanish stays unaccented to match the bodies it sits
-    under.
+    Neutralized 2026-09-22 per Alejandro, not deleted, so the six call sites keep their shape and
+    re-enabling is this function body alone. Was, in the no-URL case:
+
+        en: "If you'd rather not hear from me again, reply with the word unsubscribe and I'll
+             take you off the list."
+        es: "Si prefiere no recibir mas mensajes mios, responda con la palabra QUITAR y lo saco
+             de la lista."
+
+    The List-Unsubscribe header still ships on every send (see the block above); this is the
+    visible sentence only.
     """
-    u = UNSUB_URL if url is None else url
-    if lang == 'es':
-        if u:
-            return 'Para dejar de recibir estos correos, cancele su suscripcion aqui: %s' % u
-        return ('Si prefiere no recibir mas mensajes mios, responda con la palabra QUITAR '
-                'y lo saco de la lista.')
-    if u:
-        return 'To stop receiving these emails, unsubscribe here: %s' % u
-    return ("If you'd rather not hear from me again, reply with the word unsubscribe "
-            "and I'll take you off the list.")
+    return ''
 
 
 def _first_of(signer):
@@ -116,6 +113,21 @@ def _mars(company=COMPANY):
     # Neutralized here (returns nothing) rather than deleted at every call site, so the two callers
     # keep their arg shape and any future re-enable is one line. His call, reaffirmed under protest.
     return ''
+
+
+def _tail(company=COMPANY):
+    """Whatever still rides after the signature, and the blank lines that separate it.
+
+    Both trailers are neutralized today: _unsub() by Alejandro's 2026-09-22 direction, _mars() by
+    his 2026-09-01 one. Built here rather than written as fixed list entries so a body does not
+    ship four blank lines at the bottom where two sentences used to be, and so re-enabling either
+    one brings its own separator back with it.
+    """
+    out = []
+    for part in (_unsub(), _mars(company)):
+        if part:
+            out += ['', part]
+    return out + ['']
 
 
 def _ident(identity, lang='en'):
@@ -214,14 +226,7 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         '',
         "Warm regards,",
         '',
-    ] + _sig_lines(sig_block, signer, company, phone) + [
-        '',
-        _unsub(),
-        '',
-        _mars(company),
-        '',
-        "",
-    ])
+    ] + _sig_lines(sig_block, signer, company, phone) + _tail(company))
 
 
 def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY,
@@ -260,14 +265,7 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         "Reply now or call today.",
         '',
         "Warm regards,",
-    ] + _sig_lines(sig_block, signer, company, phone) + [
-        '',
-        _unsub(),
-        '',
-        _mars(company),
-        '',
-        "",
-    ])
+    ] + _sig_lines(sig_block, signer, company, phone) + _tail(company))
 
 
 # ---------------------------------------------------------------------------------------------

@@ -654,10 +654,11 @@ def _compose_single(r, snd, lang='en'):
     case_tag_es = (f' (Número de certificado/caso {case_no})' if td else f' (Caso Número {case_no})') if case_no else ''
     street = _MG.safe_street(_g(r, 'addr', 'Address'))
     sig = _sig(snd)
-    # Every body below ends on the signature, so the opt-out rides with it in the body's own
-    # language. The cold body does NOT use these -- it comes from outreach_copy's baked template,
-    # which carries its own _unsub() after the SIG token, and adding one here would print two.
-    sig_en, sig_es = sig + '\n\n' + _OC_unsub('en'), sig + '\n\n' + _OC_unsub('es')
+    # Every body below ends on the signature. The opt-out sentence used to ride with it in the
+    # body's own language; it is gone as of 2026-09-22 (Alejandro's call) and _sig_unsub() is now
+    # a pass-through. The cold body does NOT use these -- it comes from outreach_copy's baked
+    # template, which carried its own _unsub() after the SIG token.
+    sig_en, sig_es = _sig_unsub(sig, 'en'), _sig_unsub(sig, 'es')
     sN = snd.get('name') or '[YOUR NAME]'
 
     # SUBJECT -- prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of
@@ -819,7 +820,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     owner = _owner_name(head) or 'Property Owner'
     first = _first_name(head) or owner
     sig = _sig(snd)
-    sig_en, sig_es = sig + '\n\n' + _OC_unsub('en'), sig + '\n\n' + _OC_unsub('es')
+    sig_en, sig_es = _sig_unsub(sig, 'en'), _sig_unsub(sig, 'es')
     sN = snd.get('name') or '[YOUR NAME]'
     n = len(all_leads)
 
@@ -883,12 +884,25 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
 def _OC_unsub(lang):
     """outreach_copy._unsub for this language, or '' if the copy module is unavailable -- the same
     degrade-do-not-crash contract _ALEX_TPL_EN uses above. An empty tail loses the sentence, never
-    the send; the List-Unsubscribe header still carries the mechanism."""
+    the send; the List-Unsubscribe header still carries the mechanism.
+
+    EMPTY FOR EVERY LANGUAGE since 2026-09-22 -- Alejandro's direction, no opt-out sentence in body
+    copy. See the block above UNSUB_URL in outreach_copy.py. _sig_unsub() below is what keeps the
+    eight inline bodies from ending on a blank line now that it returns nothing."""
     try:
         import outreach_copy as _OC2
         return _OC2._unsub(lang=lang)
     except Exception:
         return ''
+
+
+def _sig_unsub(sig, lang):
+    """The signature with the opt-out sentence after it, or just the signature when there is none.
+
+    The bodies used to write `sig + '\n\n' + _OC_unsub(lang)` inline, which now renders a
+    signature followed by a blank line and nothing else."""
+    tail = _OC_unsub(lang)
+    return (sig + '\n\n' + tail) if tail else sig
 
 
 # ---------------------------------------------------------------- SMTP

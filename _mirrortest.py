@@ -242,15 +242,29 @@ with sync_playwright() as p:
     rec('signature carries title + phone + email',
         SENDER['title'] in body and 'Phone: ' + SENDER['phone'] in body
         and 'Email: ' + SENDER['email'] in body)
-    # CAN-SPAM 15 U.S.C. 7704(a)(3) opt-out. The probe was the literal 'reply STOP'; the sentence
-    # outreach_copy._unsub() actually ships names "unsubscribe" instead, and deliberately — the
-    # comment above it explains that it picked a word replies.OPTOUT_PHRASES already matches
-    # (`\bunsubscribe\b`, replies.py:62), so the word the homeowner is told to send is one the
-    # detector reads. Sourcing the probe from _unsub() keeps this a real assertion that an opt-out
-    # route is in the body, on both paths, without a second copy of the sentence.
-    _unsub = OC._unsub()
-    rec('opt-out sentence present on BOTH paths, sourced from outreach_copy._unsub()',
-        bool(_unsub) and _unsub in body and _unsub in py['body'], _unsub[:64])
+    # MERGE NOTE (2026-09-25). Both sides rewrote this same assertion, and they disagree on the
+    # FACT, not the style, so the newer decision has to win outright rather than be blended.
+    #
+    # Main's version (PR #36) sourced the probe from outreach_copy._unsub() and asserted the
+    # sentence IS present on both paths. That was right when it was written, and it independently
+    # reached the same finding this branch did: the old literal 'reply STOP' probe had been STALE
+    # since PR #19 moved the sentence into _unsub(), so it could not have been passing.
+    #
+    # It cannot hold here. Alejandro's 2026-09-22 direction, given twice, removed the opt-out
+    # sentence from every body; _unsub() now returns '' for every language, so `bool(_unsub)` is
+    # False and main's assertion fails by construction. Asserting the ABSENCE is what pins the
+    # shipped state, and the state it pins is a deliberate instruction, not an accident -- which
+    # is the one thing a mirror suite exists to catch.
+    #
+    # The opt-out itself did not go away with the sentence: it is the List-Unsubscribe header,
+    # set by _smtp_send on every send path (_mailguardtest covers that, both cadence paths
+    # included). Nothing here weakens CAN-SPAM 7704(a)(3); it moved surface.
+    import mail_guard as _MG_M
+    rec('no opt-out sentence in the composed body (either side)',
+        not _MG_M._OPTOUT_SENTENCE.search(body)
+        and not _MG_M._OPTOUT_SENTENCE.search(py['body']))
+    rec('...and _unsub() is the reason, not a drifted body',
+        OC._unsub() == '' and OC._unsub(lang='es') == '')
     rec('no sentinel survived into the sent body',
         not any(t in body for t in OC.TOK.values()),
         'tokens found: %s' % [k for k, t in OC.TOK.items() if t in body])

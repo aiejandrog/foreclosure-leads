@@ -33,6 +33,7 @@ Run: python _mailguardtest.py
 """
 import io
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -161,11 +162,58 @@ rec('a failed state write is announced, not swallowed',
 rec('the old single end-of-run dump is gone',
     "json.dump(state, open(STATE, 'w', encoding='utf-8'), indent=1)" not in src_c)
 
+# BOTH cadence send paths offer a way out, now that no body carries a sentence (2026-09-22).
+# The lane path inherits the header from send_server._smtp_send. The legacy fallback -- reached
+# only when `import send_server` failed -- builds its message by hand and used to set nothing,
+# which made it the one path that could mail a homeowner with no opt-out at all.
+# Sliced to the LAST line of the branch, not to `sent += 1` further down: prose in this branch's
+# own comments names that token, so slicing on it cut the region short and silently emptied the
+# assertions below. End on the statement the branch actually ends with.
+_fallback = src_c.split("msg = MIMEText(body, 'plain', 'utf-8')", 1)[-1]
+_fallback = _fallback.split('smtp.send_message(msg)', 1)[0] + 'smtp.send_message(msg)'
+rec('cadence\'s legacy fallback sets List-Unsubscribe',
+    "msg['List-Unsubscribe'] = _unsub_hdr" in _fallback
+    and '_MG.unsubscribe_header(cred[0])' in _fallback)
+rec('...off the LOGIN, so the mailto arm lands where replies.py scans',
+    '_MG.unsubscribe_header(cred[0])' in _fallback
+    and '_MG.unsubscribe_header(alias' not in _fallback)
+rec('...and the lane path still goes through send_server, which sets it too',
+    '_ss._smtp_send(' in src_c
+    and "msg['List-Unsubscribe'] = unsub" in io.open(
+        os.path.join(HERE, 'send_server.py'), encoding='utf-8').read())
+
+# ...and BOTH now run the pre-send guard. The fallback had no check of any kind: an unfilled
+# placeholder or an empty-rendered value could leave on it, and both have reached real homeowners
+# before ("My name is [YOUR NAME]", "my last note about ."), succeeding at the SMTP layer so
+# nothing downstream could notice.
+rec('cadence\'s legacy fallback runs the guard before handing the message to smtplib',
+    '_MG.check(subj, body, ' in _fallback
+    and _fallback.index('_MG.check(subj, body, ') < _fallback.index('smtp.send_message(msg)'))
+# SKIP, not raise. Nothing in the send loop catches an exception, so a raise would abort the run
+# and every other owner due today would go unmailed over one bad row. `continue` also delivers
+# mail_guard's own promise literally -- "the message was NOT sent and the step was NOT consumed" --
+# because it skips both `sent += 1` and the step advance, leaving the touch due for the next run.
+_loop_body = src_c.split('    for c, s in active.items():', 1)[1].split('    if smtp:', 1)[0]
+# Split defensively: if the guard is ever removed, the assertion above already fails, and this
+# one must report a FAIL of its own rather than crashing the suite on an empty slice. A traceback
+# reads as a broken test; the whole point here is that it reads as a broken send path.
+_after_guard = _fallback.split('_MG.check(subj, body, ', 1)[1] if '_MG.check(subj, body, ' in _fallback else ''
+rec('...and SKIPS the lead rather than raising, so one bad row cannot abort the batch',
+    'continue' in _after_guard and '_MG.assert_sendable(' not in _fallback)
+rec('...which is required, because no send in that loop is wrapped in try/except',
+    not re.search(r'try:\s*\n\s*(mid = _ss\._smtp_send|smtp\.send_message)', _loop_body))
+# The skip has to land BEFORE the counter and the step advance, or a refused touch would be
+# recorded as delivered and never retried. Both live after the branch in the loop body.
+rec('a refused step is NOT consumed (the guard precedes the counter and the step advance)',
+    _loop_body.index('_MG.check(subj, body, ') < _loop_body.index('sent += 1')
+    < _loop_body.index("s['step'] = step + 1"))
+
 # ---- 7. every commercial message offers a way out ----------------------------------------------
-# CAN-SPAM 15 U.S.C. 7704(a)(3). Before 2026-09-17 nothing in the system offered one: stopEN and
-# stopES in tracker_template.html render empty, and Alejandro's cold body never carried a line at
-# all. The opt-out the machine understood ("stop", "unsubscribe" -> replies.is_stop_text) was real
-# and worked; no homeowner was ever told it existed.
+# CAN-SPAM 15 U.S.C. 7704(a)(3). The guard itself is UNCHANGED and still refuses a send that has
+# neither a header nor a body sentence -- that rule is what makes the 2026-09-22 wording removal
+# safe to make at all. What changed is which of the two arms our own bodies use: the sentence is
+# gone from every body by Alejandro's direction, so the List-Unsubscribe header is now the only
+# thing satisfying this on a real send. These cases pin the guard, not the copy.
 print('\nOPT-OUT')
 rec('a send with neither header nor body line is refused',
     bool(G.check('Subject here', 'A perfectly ordinary sales letter.', 'a@b.com', unsub='')))
@@ -226,23 +274,28 @@ print('\nCOPY')
 import outreach_copy as _OC
 for _name in ('email_body', 'email_body_short'):
     _b = getattr(_OC, _name)(first='Maria', sale_date='2026-09-30')
-    rec('%s() carries an opt-out sentence' % _name, bool(G._OPTOUT_SENTENCE.search(_b)))
-rec('the baked template carries it too (the board renders from this exact string)',
-    bool(G._OPTOUT_SENTENCE.search(_OC.email_body_template())))
+    rec('%s() carries no opt-out sentence' % _name, not G._OPTOUT_SENTENCE.search(_b))
+    rec('...and %s() leaves no run of blank lines behind' % _name,
+        _b.endswith('\n') and not _b.endswith('\n\n'))
+rec('the baked template carries none either (the board renders from this exact string)',
+    not G._OPTOUT_SENTENCE.search(_OC.email_body_template()))
 rec('...and still holds every required token', _OC.missing_tokens(_OC.email_body_template()) == ())
 # UNSUB_URL is the one-line switch from the reply-based opt-out to the hosted page. Empty today
 # because nothing in this system serves HTTP; a link that records nothing is a broken promise.
-rec('UNSUB_URL empty renders the reply line, set renders the link',
-    'unsubscribe' in _OC._unsub('').lower()
-    and _OC._unsub('https://bsgflorida.com/u').endswith('https://bsgflorida.com/u'))
+# 2026-09-22: _unsub() is neutralized for every language and every URL, the way _mars() already
+# was. Pinned empty on purpose -- a sentence reappearing in body copy is a regression against an
+# explicit instruction, not a nice surprise, and this is the assertion that would catch it.
+rec('_unsub() renders nothing, in both languages, URL or not',
+    _OC._unsub('') == '' and _OC._unsub(lang='es') == ''
+    and _OC._unsub('https://bsgflorida.com/u') == '')
 
 
-# ---- 11. every body, both languages, exactly one opt-out -----------------------------------------
+# ---- 11. every body, both languages, no opt-out sentence and no hole where it was ---------------
 # outreach_email.py carries eight inline bodies of its own (early / follow-final / portfolio, EN and
-# ES) that outreach_copy never touches. They had no opt-out line either, and two of them are the
-# only Spanish a homeowner ever gets. Rendering is the only honest check here: wiring {sig} to the
-# wrong tail, or letting the cold body take a sentence it already has from the baked template, both
-# look fine in the source and are obvious the moment a body is built.
+# ES) that outreach_copy never touches, and two of them are the only Spanish a homeowner ever gets.
+# Rendering is the only honest check here: the sentence was concatenated onto the signature inline
+# (`sig + '\n\n' + _OC_unsub(lang)`), so removing it leaves a signature followed by a blank line
+# unless _sig_unsub() collapses it. That is invisible in the source and obvious in a built body.
 print('\nEVERY BODY')
 import outreach_email as _OE
 _SND = {'name': 'Alex Gonzalez', 'title': 'Acquisitions', 'llc': 'Biscayne Solutions Group LLC',
@@ -258,23 +311,36 @@ _LEADS = {
 for _label, _r in _LEADS.items():
     for _lang in ('en', 'es'):
         _body = _OE._compose_single(_r, _SND, lang=_lang)['body']
-        # the EXACT sentence, not a regex hit: one sentence matches the pattern more than once
-        rec('%s/%s carries exactly one opt-out' % (_label, _lang),
-            _body.count(_OC._unsub(lang=_lang)) == 1)
-        rec('%s/%s opt-out is visible to the guard' % (_label, _lang),
-            bool(G._OPTOUT_SENTENCE.search(_body)))
+        rec('%s/%s carries no opt-out sentence' % (_label, _lang),
+            not G._OPTOUT_SENTENCE.search(_body))
+        # The bodies already ended on one blank line before the sentence was removed; what must
+        # NOT appear is a RUN of them where the sentence used to sit.
+        rec('%s/%s leaves no run of blank lines behind' % (_label, _lang),
+            bool(_body.strip()) and not _body.endswith('\n\n\n'))
 for _lang in ('en', 'es'):
     _body = _OE._compose_portfolio(_LEADS['cold'], [_LEADS['early']], _SND, lang=_lang)['body']
-    rec('portfolio/%s carries exactly one opt-out' % _lang,
-        _body.count(_OC._unsub(lang=_lang)) == 1)
+    rec('portfolio/%s carries no opt-out sentence' % _lang,
+        not G._OPTOUT_SENTENCE.search(_body))
+    rec('portfolio/%s leaves no run of blank lines behind' % _lang,
+        bool(_body.strip()) and not _body.endswith('\n\n\n'))
 
-# The Spanish body must not name a word the detector has never heard of. An opt-out the owner
-# believes they sent and that nothing acts on is worse than no opt-out sentence at all.
-rec('the ES sentence names a word replies.is_stop_text() matches',
-    _R.is_stop_text('QUITAR') and _R.is_stop_text('quitar'))
-rec('...and the EN sentence does too', _R.is_stop_text('unsubscribe'))
-rec('the guard reads Spanish, not only English',
-    bool(G._OPTOUT_SENTENCE.search(_OC._unsub(lang='es'))))
+# The bodies no longer name a keyword, but the DETECTOR is untouched and must stay that way: an
+# owner who replies STOP or unsubscribe on their own is still honored, in both languages. That is
+# the whole basis on which the sentence could be dropped, so it is pinned here.
+rec('replies.is_stop_text() still honors an unprompted English opt-out',
+    _R.is_stop_text('unsubscribe') and _R.is_stop_text('take me off your list')
+    and _R.is_stop_text('please stop emailing me'))
+rec('...and an unprompted Spanish one',
+    _R.is_stop_text('QUITAR') and _R.is_stop_text('quitar') and _R.is_stop_text('no me escriba'))
+rec('...and still does not read "stop the foreclosure" as an opt-out',
+    not _R.is_stop_text('Can you stop the foreclosure?'))
+# The header is now the ONLY recipient-facing opt-out on an email, so it is load-bearing.
+rec('the List-Unsubscribe header is still built for a real login',
+    G.unsubscribe_header('alejandro@bsgflorida.com').startswith('<mailto:'))
+rec('...and a send carrying it passes the guard with no sentence in the body',
+    not G.check('Foreclosure sale Sept 30 - your home', _OE._compose_single(
+        _LEADS['cold'], _SND, lang='en')['body'], 'a@b.com',
+        unsub=G.unsubscribe_header('alejandro@bsgflorida.com')))
 
 
 print('\n%d passed, %d failed' % (len(PASS), len(FAIL)))

@@ -186,30 +186,47 @@ def steps(lead, sender):
     # instead of dashes, a cushion before the ask, one ask per message. These now match.
     disc = ("\n\nI am not your lender, not the government, not a foreclosure-rescue company, and "
             "not an attorney. Nothing here is legal advice, and there is never a fee to talk to me.")
-    unsub = ("\n\n(If you'd rather not hear from me, reply 'stop' and you won't hear from me again. "
-             "No hard feelings.)")
+    # BODY COPY ONLY (2026-09-22, Alejandro's direction, given twice). Removed, not rewritten:
+    #     "(If you'd rather not hear from me, reply 'stop' and you won't hear from me again.
+    #      No hard feelings.)"
+    # Telling an owner to reply with a keyword reads like a mailing list, which is the one thing
+    # these bodies are written not to sound like. outreach_copy._unsub() went the same way.
+    #
+    # NOTHING ELSE IN THIS FILE IS TOUCHED. The pre-send sweep, the ledger re-read and the stop
+    # detection are the reserved suppression surface (CLAUDE.md) and are exactly as they were.
+    #
+    # WHAT STILL CARRIES THE OPT-OUT HERE: the List-Unsubscribe header. The normal path sends
+    # through send_server._smtp_send, which sets it and runs mail_guard.assert_sendable against
+    # it, so cadence has always had the header on that path. The legacy fallback in the send loop
+    # (reached only when `import send_server` failed) built its message by hand and set no header;
+    # it does now.
+    #
+    # !! STILL OPEN -- FOR ALEJANDRO. That same fallback skips mail_guard.assert_sendable
+    # entirely, so an unfilled placeholder or an empty-rendered value could leave on it. Not
+    # fixed here: adding a gate that can REFUSE a send is a behaviour change on the surface
+    # CLAUDE.md reserves, and it is a different bug from the one being fixed.
     s0 = (f"Hi {first},\n\nMy name is {sn}. I work with a small local team that helps owners in "
           f"foreclosure. Your property at {addr} has an auction scheduled for {auc}.\n\n"
           f"I'm not calling to pressure you. I just want to make sure you've seen your options before "
           f"that date, because most of them close when the sale happens. If you already have a plan, "
           f"keep it. If you want a second look at the numbers, it costs you nothing."
-          + sig + disc + unsub)
+          + sig + disc)
     s1 = (f"Hi {first},\n\nFollowing up on {addr}. Public records suggest there may be money left "
           f"over after the loan is paid off. If there is, it belongs to you and not the bank, but it "
           f"has to be handled before {auc}.\n\nFive minutes on the phone is usually enough to tell "
           f"whether your numbers work that way. It costs you nothing, and I'd rather you know than "
-          f"guess." + sig + disc + unsub)
+          f"guess." + sig + disc)
     s2 = (f"Hi {first},\n\nA few details before {auc}, in plain terms. Owners in your situation "
           f"usually have three real options.\n\n"
           f"  1) Stop the sale and buy time, usually 60 to 90 days, to regroup.\n"
           f"  2) Sell before the auction and keep the equity yourself.\n"
           f"  3) Borrow against the equity and stay in the home.\n\n"
           f"Which one fits comes down to your numbers. I can walk you through all three against your actual "
-          f"property at {addr}, and it costs you nothing." + sig + disc + unsub)
+          f"property at {addr}, and it costs you nothing." + sig + disc)
     s3 = (f"Hi {first},\n\nThis is my last note about {addr}. The {auc} date is close, and once the "
           f"sale happens the options close with it.\n\nWhatever you decide, including deciding to let "
           f"it go, decide it with your own numbers in front of you instead of the bank's. If a 10 "
-          f"minute call helps, I'm around." + sig + disc + unsub)
+          f"minute call helps, I'm around." + sig + disc)
     _street = _MG.safe_street(lead.get('addr'))
     subj = [f"About {_street} before the auction date",
             f"the part of {_street} that belongs to you",
@@ -510,10 +527,42 @@ def main():
             mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
                                  subj, body, from_addr=alias or None)
         else:
+            # LEGACY FALLBACK -- reached only when `import send_server` failed at the top of this
+            # file. The lane path above goes through _ss._smtp_send, which sets List-Unsubscribe
+            # itself; this branch built the message by hand and set nothing. That cost nothing
+            # while the bodies carried an opt-out sentence. They no longer do (2026-09-22), so
+            # without this the fallback is the one path that can mail a homeowner with no way out
+            # at all. The LOGIN, not a lane alias: unsubscribe_header's mailto arm has to land in
+            # the mailbox replies.py actually opens, and this branch sends as the login anyway.
             msg = MIMEText(body, 'plain', 'utf-8')
             msg['Subject'] = subj
             msg['From'] = formataddr((sender.get('name') or cred[0], cred[0]))
             msg['To'] = s['email']
+            _unsub_hdr = _MG.unsubscribe_header(cred[0])
+            if _unsub_hdr:
+                msg['List-Unsubscribe'] = _unsub_hdr
+            # PRE-SEND GUARD. The lane path gets this inside _ss._smtp_send; this branch had no
+            # check of any kind, so an unfilled placeholder or an empty-rendered value could leave
+            # on it. "My name is [YOUR NAME]" and "my last note about ." both reached real
+            # homeowners once and both SUCCEEDED at the SMTP layer, which is why this check exists
+            # at all rather than being left to the mail server to notice.
+            #
+            # WHY check() AND continue, NOT assert_sendable() AND raise. Nothing in this loop
+            # catches an exception, so a raise here would abort the entire run and every other
+            # owner due today would go unmailed because of one bad row. Skipping keeps mail_guard's
+            # own contract exactly -- its refusal text already promises "the message was NOT sent
+            # and the step was NOT consumed" -- and `continue` delivers that literally: it skips
+            # `sent += 1` and the step advance below, so the touch stays due and goes out on the
+            # next run once the lead data is fixed. Same shape as the warm-up cap above.
+            #
+            # The lane path DOES abort the run on a refusal, and that asymmetry is pre-existing,
+            # not introduced here. Flagged for Alejandro; changing it is a behaviour change to the
+            # path every real run uses, on the surface CLAUDE.md reserves.
+            _bad = _MG.check(subj, body, s['email'], unsub=_unsub_hdr)
+            if _bad:
+                print(f"  !! REFUSED {s['email']} — {'; '.join(_bad)}. Step {step+1}/4 was NOT "
+                      f"consumed; it stays due. Fix the lead data or the template.")
+                continue
             smtp.send_message(msg)
         sent += 1
         # THE LEDGER ROW — same shape the bridge writes, and the reason the cap above can work at
