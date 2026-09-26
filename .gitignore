@@ -576,6 +576,8 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+# _sendgatefollowtest: #83 review follow-ups -- mailed address archived, first-touch sender slot race, /health worker-mailable pool.
+!_sendgatefollowtest.py
 # _saleresultstaletest: AR1 -- old decisive sale results ship flagged stale; passed sales with no read show UNREAD.
 !_saleresultstaletest.py
 !_judgmentpasstest.py
