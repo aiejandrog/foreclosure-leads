@@ -2366,25 +2366,38 @@ def make_tracker(leads):
     # second, separate tax-deed foreclosure clock is already running on the parcel.
     # PALM BEACH IS DELIBERATELY ABSENT: its collector is not on the county-taxes.com platform
     # (DNN/__VIEWSTATE postback), so no PB lead ever gets a taxDue and none gets a false $0 either.
+    # Tax1 (2026-09-26): the bake also reads the READ CACHE (every read, $0 ones included, each
+    # with its `checked` date) through county_taxes.board_fields(), so a read that has gone stale for
+    # how close the sale is carries taxStale -- a stale "$0" most of all -- and a sold certificate
+    # carries its tax-deed follow-up dates. The amount logic is unchanged.
     _ctf = os.path.join(HERE, 'county_taxes.json')
-    if os.path.exists(_ctf):
+    if os.path.exists(_ctf) or os.path.exists(os.path.join(HERE, '_county_taxes_cache.json')):
         try:
-            _ct = json.load(open(_ctf, encoding='utf-8')); _ctn = 0
+            import county_taxes as _CT
+            _ct = _CT._load(_ctf, {})
+            _ctc = _CT._load(_CT.CACHE, {})
+            _ctn = _cts = _ctcf = 0
+            _today_ct = datetime.now().date()
             for _r in slim:
                 _cty = str(_r.get('county') or 'MIAMI-DADE')
                 if _cty not in ('MIAMI-DADE', 'BROWARD'):
                     continue
                 _f = re.sub(r'\D', '', str(_r.get('folio') or ''))
-                _h = _ct.get(_f)
+                if not _f:
+                    continue
+                _h = _ctc.get(_f) or _ct.get(_f)
                 # guard the join: only apply a record scraped for THIS lead's county
-                if _h and _h.get('due') and str(_h.get('county') or _cty) == _cty:
-                    _r['taxDue'] = int(_h['due'])
-                    _r['taxYears'] = [y.get('year') for y in (_h.get('years') or []) if y.get('year')]
-                    _r['taxCert'] = bool(_h.get('cert'))
-                    _r['taxChecked'] = _h.get('checked', '')
-                    _ctn += 1
-            if _ctn:
-                print(f"county taxes: {_ctn} lead(s) carry verified delinquent taxes")
+                if _h and str(_h.get('county') or _cty) != _cty:
+                    continue
+                _bf = _CT.board_fields(_h, _CT._sale_date(_r), _today_ct)
+                if _bf:
+                    _r.update(_bf)
+                    _ctn += bool(_bf.get('taxDue'))
+                    _cts += 'taxStale' in _bf
+                    _ctcf += 'taxCertFollow' in _bf
+            if _ctn or _cts:
+                print(f"county taxes: {_ctn} lead(s) carry verified delinquent taxes; "
+                      f"{_cts} tax read(s) stale for their sale date; {_ctcf} certificate follow-up(s)")
         except Exception as e:
             print(f"county_taxes.json skipped ({e})")
 

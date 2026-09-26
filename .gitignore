@@ -53,6 +53,8 @@ BSG_Mail_Campaign_*.pdf
 !_casestatustest.py
 !_workeremailtest.py
 !_codelientest.py
+# _taxschedtest: Tax1 near-sale scheduling, stale-read gate, certificate follow-up; invented folios.
+!_taxschedtest.py
 !_fieldsheettest.py
 !_taxtest.py
 # paid_reads.py: the monthly paid-reads cap setting ({"monthly_cap": 50}) is per machine, and so is
