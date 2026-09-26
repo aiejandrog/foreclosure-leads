@@ -69,6 +69,9 @@ BSG_Mail_Campaign_*.pdf
 !_nearmetest.py
 !_docroomtest.py
 !_portfoliotest.py
+# _runnerlocktest guards the CROSS-MACHINE runner lease (runner_lock.py): one winner out of eight racing
+# processes on two simulated machines, atomic stale breaks, fail-closed when the lock is unreachable.
+!_runnerlocktest.py
 # _doccollecttest guards county document acquisition: that a short download is rejected against
 # the recording index, that a scanned page is never called read, and that document evidence cannot
 # reach equity_state's FACT states. Untracked, it would exist on one machine only.
@@ -104,6 +107,7 @@ _pb_last_*.html
 surviving
 lp_leads.json)
 *.csv
+runner-lock.log
 __pycache__/
 browser-profile/
 leads-run.log
