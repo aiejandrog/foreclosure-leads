@@ -164,8 +164,10 @@ _BKDONE = {   # what an order says when it does the thing: granted, or the verb 
 # A line that grants stay relief AND names a dismissal ends the case only when the dismissal itself
 # is ordered: 'Order Granting Relief from Stay and Dismissing Case' ends it, 'Order Granting Relief
 # from Stay; Motion to Dismiss' does not.
+# The dismissal must be what THIS order does to the case: 'Prior Case Dismissed' (the usual ground
+# for in-rem relief) and 'as to Discharged Co-Debtor' describe something else.
 _BKEND_DONE = re.compile(_GRANTOF + r'(?:dismiss|discharg)|'
-                         r'\b(?:order|judgment)\b.*?\b(?:dismissing|dismissed|discharging|discharged)\b', re.I)
+                         r'\b(?:dismissing|discharging)\s+(?:the\s+)?(?:(?!and\b)\w+\s+){0,3}?(?:case|debtors?)\b', re.I)
 
 
 # Dismissing a filing inside the case is not dismissing the case: 'Order Dismissing Motion for Relief
@@ -655,8 +657,14 @@ def main(argv=None):
             continue
         ent = cache.get(case)
         _never = _never_contact(case)
-        if _never and isinstance(ent, dict) and (not ent.get('a') or ent.get('sl')):
-            ent = cache[case] = dict(ent, a=True, sl='')   # stay_gate.NEVER_CONTACT: held whatever the docket says
+        if _never:
+            # stay_gate.NEVER_CONTACT: held whatever the docket says, on every path below,
+            # including a run whose --limit budget is spent before this case is read.
+            if isinstance(ent, dict) and (not ent.get('a') or ent.get('sl')):
+                ent = cache[case] = dict(ent, a=True, sl='')
+            for kind, r in rows:
+                _hold_row(kind, r, (ent or {}).get('bd', ''))
+                lp_dirty = lp_dirty or kind == 'lp'
             changed += 1
         _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < (near_ttl if is_near else ttl)
         _bkforce = a.refresh_bk and ent and (ent.get('a') or ent.get('b'))

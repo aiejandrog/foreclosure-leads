@@ -311,6 +311,10 @@ try:
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Dismissing Motion for Relief from Automatic Stay'))[0] is True)
     check('an order dismissing an objection to a claim does not end the case',
           _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', 'Order Dismissing Objection to Claim, Chapter 13 Case 26-11111'))[0] is True)
+    check('in-rem relief citing a PRIOR case dismissed does not end this case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting In Rem Relief from Stay; Prior Case Dismissed'))[0] is True)
+    check('relief as to a discharged co-debtor does not end the case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay as to Discharged Co-Debtor'))[0] is True)
     check('a discharge ends it', _stay(BK('02/01/2026'), CLOSE('06/01/2026', 'Order of Discharge of Debtor, Chapter 7'))[0] is False)
     check('a relief order with no petition line on the docket still shows a bankruptcy (held)',
           _stay(CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay'))[0] is True)
@@ -409,6 +413,28 @@ try:
           _ncc['2099-000042-CA-01'].get('a') is True and not _ncc['2099-000042-CA-01'].get('sl')
           and _ncr['2099-000042-CA-01'].get('sale_bk_active') is True
           and not _ncr['2099-000042-CA-01'].get('sale_stay_lifted'), (_ncc, _ncr))
+    # and when the --limit budget runs out before a never-contact case is read, its row is still held
+    _cp = tempfile.mkdtemp()
+    json.dump({c: dict(_old, a=False, bd='2026-01-01', sl='2026-02-01', t=_now - 30 * 86400)
+               for c in ('2099-000043-CA-01', '2099-000044-CA-01')},
+              open(os.path.join(_cp, 'sale_history_cache.json'), 'w'))
+    json.dump([{'Case #': c, 'sale_stay_lifted': '2026-02-01'} for c in ('2099-000043-CA-01', '2099-000044-CA-01')],
+              open(os.path.join(_cp, 'leads_final.json'), 'w'))
+    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time', '_never_contact')}
+    try:
+        SH.HERE = _cp; SH.CACHE = os.path.join(_cp, 'sale_history_cache.json')
+        SH._fetch = lambda session, case: [BK('01/01/2026'), CLOSE('02/01/2026')]
+        SH._never_contact = lambda case: str(case).startswith('2099-00004')
+        SH.time = types.SimpleNamespace(time=__import__('time').time, sleep=lambda s: None)
+        sys.argv = ['sale_history.py', '--limit', '1']
+        SH.main()
+    finally:
+        for k, v in _sh.items():
+            setattr(SH, k, v)
+        sys.argv = _argv
+    _cpr = json.load(open(os.path.join(_cp, 'leads_final.json')))
+    check('never contact: a case the --limit budget never reached is still held on its row',
+          all(r.get('sale_bk_active') is True and not r.get('sale_stay_lifted') for r in _cpr), _cpr)
     check('a near sale is re-read although its cached read is 3 days old, and shows the new stay',
           '2099-000031-CA-01' in _fetched and _near['2099-000031-CA-01'].get('sale_bk_active') is True, _fetched)
     check('a far sale keeps its 3-day-old read (7-day TTL)', '2099-000032-CA-01' not in _fetched, _fetched)

@@ -115,6 +115,10 @@ def unit():
                 r = c(stem + '-CA-01')
                 rec('never-contact %s is refused although its cache entry reads lifted' % stem,
                     not r['ok'] and r['code'] == SG.STAY_ACTIVE and r.get('src') == 'never_contact', r)
+            import bk_lookup as _BL
+            for stem in sorted(SG.NEVER_CONTACT):
+                rec('never-contact %s: letters/email stamp (send_hold) hold it' % stem, _BL.send_hold(stem + '-CA-01')[0] is True)
+                rec('never-contact %s: Call Mode / planner (federal_hold) hold it' % stem, _BL.federal_hold(stem + '-CA-01')[0] is True)
             rec('the three stay-contact cases are on the built-in list',
                 SG.NEVER_CONTACT == {'2025-000201', '2024-008527', '2024-003696'})
             ncp.write_text(json.dumps(['CASE NO 2099-000003-CA-01']), encoding='utf-8')
@@ -126,6 +130,8 @@ def unit():
             r = c('2099-000002-CA-01')
             rec('an unreadable never_contact.json refuses every send (stay_data_unavailable)',
                 not r['ok'] and r['code'] == SG.UNAVAILABLE, r)
+            rec('an unreadable never_contact.json holds letters and Call Mode too',
+                _BL.send_hold('2099-000002-CA-01')[0] is True and _BL.federal_hold('2099-000002-CA-01')[0] is True)
             ncp.write_text(json.dumps({'2099-000002': 1}), encoding='utf-8')
             r = c('2099-000002-CA-01')
             rec('a never_contact.json that is not a list refuses every send',
