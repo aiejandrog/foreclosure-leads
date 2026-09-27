@@ -687,6 +687,48 @@ order as well as a real one - needs a discriminator nothing the producer saves p
 round of its own rather than a guess made here. The five `_closes_a_sale` over-fires (three from the
 round before, plus the two the producer's flattening would have caught) stay as recorded above.
 
+**Thirty-seventh review.** Two findings, and both were the round before's own two fixes reaching one
+side of a check and not the strictly weaker side. That is family (e) for the twelfth consecutive round.
+
+The disposition guard asked its question of rows about a different motion. :397's test is per-LINE -
+`\bmotion\b` AND the granted/denied vocabulary - and the producer records nothing about WHICH motion a
+row belongs to, so the premise written into the round before ("the document itself says the motion was
+denied and nothing was entered") was false about that field. One read line denying an unrelated motion,
+"The Motion to Continue the Sale is hereby DENIED.", cancelled the hold that the SAME page without that
+line read still raised: the docket where one more line was read vouched to the cent for the superseded
+judgment and named the entry nowhere. Sharper still, the same page plus the decretal sentence that
+positively enters the amended judgment - which carries no `motion`, so the producer saves no row for it -
+also read `supported`. The guard is scoped now to rows that carry the producer's `final judgment` row and
+a surviving replacing word, which are the two tests this file already trusts for that question. The
+scoping fixes the other direction too: a denial of THIS motion beside an unrelated grant now exempts,
+where the unscoped version held it.
+
+The new `auction` word reached the scan and not the date parser. The producer seeds `sale_passages` from
+the docket line only on `\bsale\b` (:395) and appends read body lines on the wider
+`sale|sell|auction|reset|reschedul*` (:398), so an auction-worded clerk line is never in that field - and
+`_sale_dates_of` read the passages *or* the docket line, so as soon as any read body line filled the
+field the docket line was skipped entirely. A notice of a rescheduled auction after a certificate of
+title therefore printed its date while UNREAD and lost it once the document was opened, the
+completed-sale filter discarded the resale, and the case read `supported` with the entry named nowhere:
+the nineteenth review's defect back through the very word the round before added. It reads both inputs
+now. Five completed-sale calibrations - disbursement of sale proceeds, surplus funds, a statement of
+amounts due at a past sale, disbursement of auction proceeds, and a read proceeds document - stay
+`supported`.
+
+The review cleared the rest with reproductions: `_index_text` back in the trigger's tuple is correct
+both ways; no producer field bearing on a verdict is saved and consumed by nothing (`stay_passages`
+reaches the verdict through `kind='stay_reinstated'` and `operative_text` at :385-388; `calendar_override`
+and `judgment_scope` are report-only by their own docstrings); and no further weaker-vs-stronger
+inversion in the sale label ordering.
+
+**Reported, not fixed.** `_replacement_of_record` returns the first `role == 'replacement'` row
+regardless of that row's `status`, so a replacement the reconciliation later typed `unclear`, `vacated`
+or `superseded` is still printed "of record". Wording only - the hold stands in both branches and the
+entry is named either way. And `_bankruptcy_entries` reads producer labels only, so a bankruptcy-worded
+entry `classify` leaves `'other'` (a bare "Chapter 13 Plan") reaches no check; closing that is a new word
+scan rather than a restatement, and it over-fires on any judgment reciting "no bankruptcy is pending", so
+it wants a round that calibrates it deliberately.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and

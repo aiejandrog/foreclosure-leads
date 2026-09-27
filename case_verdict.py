@@ -858,7 +858,18 @@ def _order_grants_a_replacement(entry):
     # that is sound: the read page carries positive evidence that nothing was entered, where the
     # unread docket carries no evidence either way and holds. The family these rounds keep finding is
     # the opposite - reading making a verdict CONFIDENT on less.
-    if dispositions and not any(_GRANTED_RE.search(l) for l in dispositions):
+    #
+    # SCOPED to rows about this subject, which is the whole force of the guard. :397's test is
+    # per-LINE - r'\bmotion\b' AND the granted/denied vocabulary - and records nothing about WHICH
+    # motion a row belongs to, so an unscoped guard let one read line denying an unrelated motion
+    # ("The Motion to Continue the Sale is hereby DENIED.") cancel the hold that the SAME page without
+    # that line read still raised: the docket where one more line was read vouched to the cent for the
+    # superseded judgment and named the entry nowhere. The premise the round before wrote down - "the
+    # document itself says the motion was denied" - was false about that field (thirty-seventh review).
+    # The two tests below are the ones this file already trusts to say a string is about a replacing
+    # final judgment, so nothing new is classified here.
+    subject = [l for l in dispositions if _FINAL_JUDGMENT_RE.search(l) and _replacing_words(l)]
+    if subject and not any(_GRANTED_RE.search(l) for l in subject):
         return False
     for text in (str(entry.get('operative_text') or '').strip(),
                  _index_text(entry).strip(),
@@ -1050,20 +1061,27 @@ def _sale_dates_of(entry):
     rather than in the docket line produced no date here - and the completed-sale filter below then
     discarded it and the case read `supported` over a resale after the certificate (nineteenth
     review). The field was saved by the producer and read by nothing in the repo.
+
+    Both inputs, never one or the other. The producer seeds `sale_passages` from the docket line only
+    on `\bsale\b` (:395) while it appends read body lines on the wider `sale|sell|auction|reset|
+    reschedul*` (:398), so an `auction`-worded clerk line is never in that field - and as soon as any
+    read body line filled it, this read the passages and skipped the docket line entirely. A notice of
+    a rescheduled auction after a certificate of title therefore printed its date while UNREAD and lost
+    it once the document was opened, so the completed-sale filter discarded the resale and the case read
+    `supported` with the entry named nowhere: the nineteenth review's defect back through the very word
+    the round before added to `_SALE_WORD_RE`, and the bound applied on one side of the check and not
+    the strictly weaker side (thirty-seventh review). The docstring's own argument was always
+    symmetric.
     """
     passages = [str(p) for p in _rows(entry, 'sale_passages') if str(p or '').strip()]
-    if passages:
-        try:
-            import miami_case_timeline
-            return [d for d in (miami_case_timeline._sale_dates(passages) or []) if d]
-        except Exception:                              # noqa: BLE001 - a missing parser is not a verdict
-            return []
     text = _index_text(entry)
-    if not text.strip():
+    if text.strip() and text not in passages:
+        passages.append(text)
+    if not passages:
         return []
     try:
         import miami_case_timeline
-        return [d for d in (miami_case_timeline._sale_dates([text]) or []) if d]
+        return [d for d in (miami_case_timeline._sale_dates(passages) or []) if d]
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return []
 

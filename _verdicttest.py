@@ -4596,5 +4596,114 @@ class ThirtySixthReviewTests(unittest.TestCase):
             r = CV.assess(self.read(title))
             self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
 
+class ThirtySeventhReviewTests(unittest.TestCase):
+    """Both of the round before's own fixes, each reaching one side of a check and not the strictly
+    weaker side.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = ThirtyFourthReviewTests.JUDGED
+    PAGE = ThirtyFourthReviewTests.PAGE
+    case = ThirtyFourthReviewTests.case
+    HEAD = 'ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT'
+
+    def order(self, body=''):
+        page = self.HEAD + (chr(10) + body if body else '')
+        return self.case([(140, 'Order on Motion', '', '06/01/2026', '')], pages={'140': page})
+
+    # ---- the disposition guard, scoped to the motion it is about -------------------------------
+
+    def test_a_denial_of_another_motion_does_not_cancel_the_hold(self):
+        # :397's test is per-LINE and records nothing about WHICH motion a row belongs to, so the
+        # unscoped guard let one read line denying an unrelated motion cancel the hold that the SAME
+        # page without that line read still raised. One more line read, and the case vouched to the
+        # cent for the superseded judgment with the entry named nowhere.
+        weaker = self.order()
+        stronger = self.order('The Motion to Continue the Sale is hereby DENIED.')
+        self.assertEqual(CV.assess(weaker)['verdict'], 'incomplete')
+        entry = next(e for e in stronger['entries'] if e['entry_id'] == '140')
+        self.assertTrue(entry['motion_disposition_passages'])   # the producer did save a row
+        self.assertTrue(CV._order_grants_a_replacement(entry))
+        r = CV.assess(stronger)
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+
+    def test_the_decretal_line_that_enters_the_judgment_is_not_an_exemption_either(self):
+        # The sharpest shape: the same unrelated denial, plus the sentence that positively ENTERS the
+        # amended judgment. That line carries no `motion`, so the producer saves no row for it, and the
+        # guard was reading the denial as the document's whole disposition.
+        stronger = self.order('The Motion to Continue the Sale is hereby DENIED.' + chr(10)
+                              + 'An Amended Final Judgment of Foreclosure is hereby entered in '
+                              'favor of Plaintiff.')
+        self.assertEqual(CV.assess(stronger)['verdict'], 'incomplete')
+
+    def test_a_denial_of_this_motion_beside_an_unrelated_grant_still_exempts(self):
+        # The other direction of the same scoping: the producer's row denying THIS motion is the
+        # document's answer about it, and a grant on some other motion does not turn it into a grant.
+        entry = next(e for e in self.order(
+            "Plaintiff's Motion for Entry of an Amended Final Judgment is hereby DENIED." + chr(10)
+            + 'The Motion to Continue the Sale is hereby GRANTED.')['entries']
+            if e['entry_id'] == '140')
+        self.assertFalse(CV._order_grants_a_replacement(entry))
+
+    def test_the_round_before_s_own_two_shapes_are_unchanged(self):
+        for body, held in (("Plaintiff's Motion for Entry of an Amended Final Judgment is hereby "
+                            'DENIED.', False),
+                           ('The Motion to Continue is hereby DENIED.' + chr(10)
+                            + 'The Motion for Entry of an Amended Final Judgment is hereby '
+                            'GRANTED.', True)):
+            entry = next(e for e in self.order(body)['entries'] if e['entry_id'] == '140')
+            self.assertEqual(CV._order_grants_a_replacement(entry), held, body)
+
+    # ---- the sale-date reader, on both of the producer's inputs --------------------------------
+
+    RESALE = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '02/10/2026', ''),
+              (170, 'Notice of Foreclosure Sale set for 08/12/2026', '', '06/01/2026', ''),
+              (175, 'Certificate of Title', '', '08/20/2026', ''),
+              (178, 'Notice of Judicial Auction set for 12/28/2026', '', '09/01/2026', '')]
+    JUDGMENT_PAGE = {'2': 'FINAL JUDGMENT OF FORECLOSURE' + chr(10) + 'Total $105,000.00'}
+
+    def resale(self, pages=None):
+        pg = dict(self.JUDGMENT_PAGE)
+        pg.update(pages or {})
+        return self.built(self.RESALE, controlling='2', amount=105000.00, pages=pg)
+
+    def test_reading_the_auction_notice_does_not_lose_its_date(self):
+        # The producer seeds sale_passages from the docket line only on `\bsale\b` (:395) and appends
+        # read body lines on the wider sale|sell|auction|reset|reschedul* (:398), so an auction-worded
+        # clerk line is never in that field - and as soon as a read body line filled it, the docket
+        # line was skipped entirely. The resale after a certificate of title printed its date while
+        # UNREAD and lost it once the document was opened, so the completed-sale filter discarded it.
+        # The read body carries no date of its own - the ordinary case, since a sale notice's date
+        # usually sits in the clerk's line while the document recites the terms - so once the
+        # passages were read instead of the docket line, no date survived at all.
+        read = self.resale({'178': ('NOTICE OF JUDICIAL AUCTION' + chr(10)
+                                    + 'The property will be sold to the highest bidder at public '
+                                    'sale.')})
+        for label, t in (('unread', self.resale()), ('read', read)):
+            entry = next(e for e in t['entries'] if e['entry_id'] == '178')
+            self.assertIn('2026-12-28', CV._sale_dates_of(entry), label)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (label, r['missing']))
+            self.assertTrue([m for m in r['missing'] + r['notes'] if '178' in m], label)
+
+    def test_the_completed_sale_docket_still_reads_supported(self):
+        # The calibration. Clerk lines that carry a sale word and a date after a certificate of title
+        # without noticing a new sale must not hold a finished case for ever.
+        for clerk, pages in (('Disbursement of Sale Proceeds', None),
+                             ('Surplus Funds from Sale', None),
+                             ('Statement of Amounts Due at Sale of 08/12/2026', None),
+                             ('Disbursement of Auction Proceeds', None),
+                             ('Disbursement of Sale Proceeds',
+                              {'180': ('DISBURSEMENT OF SALE PROCEEDS' + chr(10)
+                                       + 'Proceeds of the sale held on August 12, 2026.')})):
+            rows = [r for r in self.RESALE if r[0] != 178]
+            rows.append((180, clerk, '', '09/01/2026', ''))
+            pg = dict(self.JUDGMENT_PAGE)
+            pg.update(pages or {})
+            t = self.built(rows, controlling='2', amount=105000.00, pages=pg)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
