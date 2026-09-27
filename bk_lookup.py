@@ -5,9 +5,10 @@ CourtListener (Free Law Project) REST API v4 is the provider. PACER registration
 available. A finished CourtListener search with no open match is not, by itself, a release
 for a Broward or Palm Beach lead: that result stays held (clear_unconfirmed) until the
 owner sets DEALFLOW_BK_ALLOW_CL_CLEAR=1, which is a business decision. Miami-Dade keeps the
-state-docket stay gate (stay_gate.py, #72). This lookup only ADDS a hold there. A Miami
-docket bankruptcy date that does not match an FLSB or FLMB filing within 3 days is
-docket_bk_unconfirmed and never clears.
+state-docket stay gate (stay_gate.py, #72). This lookup only ADDS a hold there, and only
+when it finds an open match. A lifted or closed Miami bankruptcy is not an extra hold.
+An active stay is cross-checked with one page of that day's FLSB/FLMB filings; a miss
+leaves the docket verdict as it was.
 
 A PACER Case Locator provider can be dropped in later behind BankruptcyProvider. The parked
 PCL client is still pacer_stay.py; it is not called from here. Set DEALFLOW_BK_PROVIDER=pacer
@@ -46,8 +47,10 @@ flsb, flmb, or flnb is a hard hold. An exact name match in any other bankruptcy 
 with no address or county evidence, is only `possible`. Any weaker plausible match is a
 hold whose reason is `possible bankruptcy: <case number>` and is never auto-cleared. A
 closed case is not a hold. A CourtListener clear does not release a Broward or Palm Beach
-lead unless DEALFLOW_BK_ALLOW_CL_CLEAR=1. A Miami docket bankruptcy date that is not
-matched to an FLSB or FLMB filing within 3 days is `docket_bk_unconfirmed` and never clears.
+lead unless DEALFLOW_BK_ALLOW_CL_CLEAR=1. The Miami docket date is cross-checked only while
+that stay is active, and only as one FLSB/FLMB page for that day. A miss does not add a
+hold. A lifted or closed docket bankruptcy leaves the docket verdict as it was unless an
+open CourtListener match was found.
 A manual override file (DEALFLOW_DIR/bk_overrides.json) drops one bankruptcy case number
 for one lead id. Another lead matching that case stays held.
 
@@ -87,9 +90,10 @@ ENV_FILED_YEARS = 'BK_FILED_AFTER_YEARS'
 # the owner sets this to 1. That is a business decision, not the default.
 ENV_ALLOW_CL_CLEAR = 'DEALFLOW_BK_ALLOW_CL_CLEAR'
 VERDICT_CLEAR_UNCONFIRMED = 'clear_unconfirmed'
-VERDICT_DOCKET_UNCONFIRMED = 'docket_bk_unconfirmed'
 DOCKET_WINDOW_DAYS = 3
-DOCKET_PAGE_CAP = 4
+# One page of the docket day. Shoulders and extra pages would spend the 125/day budget
+# on a check the docket stay already decides.
+DOCKET_PAGE_CAP = 1
 # Miami docket dates are checked against these two courts, not the national list.
 DOCKET_COURTS = ('flsb', 'flmb')
 CLEAR_UNCONFIRMED_WHY = ('CourtListener found no open match — not a confirmed clear, '
@@ -1117,12 +1121,9 @@ def entry_opinion(key, ent, overrides, now):
         return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'why': why,
                 'bk_need': False, 'bd': bd, 'src': 'courtlistener'}
     if verdict == 'clear':
-        if ent.get('docket_bk_unconfirmed') or ent.get('verdict') == VERDICT_DOCKET_UNCONFIRMED:
-            # A Miami docket date we could not match is never a clear, including after
-            # the freshness window and when the owner allows a CourtListener clear.
-            return {'blocks': True, 'ok': False, 'code': VERDICT_DOCKET_UNCONFIRMED,
-                    'why': ent.get('why') or 'Miami docket bankruptcy date was not confirmed — lead stays held',
-                    'bk_need': False, 'bd': '', 'src': 'courtlistener'}
+        # A missed docket-date cross-check is not a hold. The Miami stay gate already
+        # holds an active stay, and a lifted or closed one must stay clear unless an
+        # open match was stored in `cases` (that recomputes as active above).
         fresh = age is not None and limit > 0 and -1 <= age <= limit
         if not fresh:
             return {'blocks': False, 'ok': False, 'code': 'stay_unverified', 'bk_need': True, 'bd': '',
@@ -1572,7 +1573,10 @@ def _relabel_clear(entry, key):
 
 
 def miami_docket_bd(case, here):
-    """Bankruptcy filing date from the Miami sale-history cache, or '' when there is none."""
+    """Bankruptcy filing date from an ACTIVE Miami docket stay, or '' otherwise.
+
+    A lifted or closed entry (`entry_stay_active` false) does not count, even when it
+    still carries a `bd`. Using that date marked a clear lead `docket_bk_unconfirmed`."""
     if not here:
         return ''
     try:
@@ -1588,18 +1592,13 @@ def miami_docket_bd(case, here):
     if err or not idx:
         return ''
     stem = stay_gate.case_stem(case)
-    best = ''
     for _k, v in idx.get(stem) or []:
-        if not isinstance(v, dict):
+        if not isinstance(v, dict) or not stay_gate.entry_stay_active(v):
             continue
         bd = str(v.get('bd') or '').strip()[:10]
-        if not bd or not _day(bd):
-            continue
-        if stay_gate.entry_stay_active(v):
+        if bd and _day(bd):
             return bd
-        if bd > best:
-            best = bd
-    return best
+    return ''
 
 
 def _docket_windows(bd):
@@ -1642,52 +1641,37 @@ def _florida_exact(cases):
                for c in (cases or []))
 
 
-def _mark_docket_unconfirmed(entry, bd):
-    entry['docket_bk_unconfirmed'] = True
-    if entry.get('verdict') in ('clear', VERDICT_CLEAR_UNCONFIRMED):
-        entry['verdict'] = VERDICT_DOCKET_UNCONFIRMED
-        entry['why'] = ('Miami docket bankruptcy date %s was not matched to an FLSB or FLMB '
-                        'filing within 3 days — lead stays held' % str(bd)[:10])
-        entry['a'] = False
-        entry['ok_check'] = True
-        entry['err'] = ''
-        entry['searched'] = True
-    return entry
-
-
 def _confirm_docket(cache, entry, ld, owners, here, provider, transport, budget, clock,
                     max_wait, deadline):
-    """When the Miami docket has a bankruptcy date, match FLSB/FLMB filings within 3 days.
-    No match is docket_bk_unconfirmed and is never a clear."""
+    """When the Miami docket stay is active, look at one page of FLSB/FLMB filings that day.
+
+    A lifted or closed bankruptcy is not checked and cannot add a hold. A miss does not
+    add one either: the docket stay is already the hold, and the stay-check verdict stays
+    whatever the docket says unless this page contains an open name match. One window and
+    one page, so the 125/day budget still belongs to the party search."""
     if not isinstance(entry, dict):
         return entry
-    if entry.get('verdict') not in ('clear', VERDICT_CLEAR_UNCONFIRMED, 'possible', 'active'):
+    if entry.get('verdict') not in ('clear', VERDICT_CLEAR_UNCONFIRMED):
+        # Already a hold (or not a finished search). Another page cannot change that.
         return entry
     bd = miami_docket_bd(ld.get('case') or ld.get('key'), here)
     if not bd or _florida_exact(entry.get('cases')):
         return entry
-    rows = []
-    matched = False
-    try:
-        for start, end in _docket_windows(bd):
-            got, hit, _cut = _scan_docket_window(
-                provider, transport, budget, clock, start, end, owners,
-                ld.get('county') or '', ld.get('place') or '', max_wait, deadline)
-            rows.extend(got)
-            if hit:
-                matched = True
-                break
-    except TimeBudget:
-        _mark_docket_unconfirmed(entry, bd)
-        raise
-    except (BudgetExhausted, RateLimited, ProviderError):
-        matched = False
-    if matched and rows:
-        more = cases_from_hits(owners, rows, county=ld.get('county') or '', place=ld.get('place') or '')
-        entry = put_entry(cache, ld['key'], more, True, True, '', clock.time())
-        entry['docket_bk_unconfirmed'] = False
+    windows = _docket_windows(bd)[:1]
+    if not windows:
         return entry
-    return _mark_docket_unconfirmed(entry, bd)
+    start, end = windows[0]
+    try:
+        rows, matched, _cut = _scan_docket_window(
+            provider, transport, budget, clock, start, end, owners,
+            ld.get('county') or '', ld.get('place') or '', max_wait, deadline)
+    except (TimeBudget, BudgetExhausted, RateLimited, ProviderError):
+        # The party-search result stands. Do not invent a hold the docket did not ask for.
+        return entry
+    if not matched or not rows:
+        return entry
+    more = cases_from_hits(owners, rows, county=ld.get('county') or '', place=ld.get('place') or '')
+    return put_entry(cache, ld['key'], more, True, True, '', clock.time())
 
 
 def public_status():
@@ -1854,8 +1838,9 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
     It can clear only when that search finishes inside the page cap. If it overflows, the
     same name query is run again for the Florida bankruptcy courts over a shorter window,
     with more pages. Hits from both passes are kept. A match in either holds the lead.
-    The narrower pass cannot clear. A Miami docket bankruptcy date is checked against
-    FLSB/FLMB filings within 3 days and never becomes a clear when nothing matches.
+    The narrower pass cannot clear. An active Miami docket stay is checked against one
+    page of FLSB/FLMB filings on that date. A miss does not add a hold. A lifted or
+    closed docket bankruptcy is not checked.
     TimeBudget propagates so a cut-off search is not stored as a clear."""
     owners = lead_owners(ld)
     if not owners:

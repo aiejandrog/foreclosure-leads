@@ -429,7 +429,8 @@ def _merge_bk(raw, out):
     a lead that has no Miami-Dade stem only when that opinion says ok
     (DEALFLOW_BK_ALLOW_CL_CLEAR=1). Otherwise the opinion blocks (clear_unconfirmed).
     It cannot clear a PACER active hit or a Miami-Dade docket verdict — those stay as they were.
-    docket_bk_unconfirmed never clears."""
+    A lifted or closed Miami bankruptcy is not an extra hold. The docket verdict stands
+    unless CourtListener found an open match."""
     try:
         import bk_lookup as _BL
         op = _BL.gate_opinion(raw)
@@ -555,7 +556,7 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
             return out
         held = _merge_bk(raw, dict(out))
         if (not held.get('ok') and held.get('src') == 'courtlistener'
-                and held.get('code') in (STAY_ACTIVE, UNVERIFIED, 'docket_bk_unconfirmed')):
+                and held.get('code') in (STAY_ACTIVE, UNVERIFIED)):
             return held
         lifts = sorted(str(v.get('sl')) for _, v in hits if v.get('sl'))
         out.update(ok=True, code=CLEAR, sl=(lifts[-1] if lifts else ''),

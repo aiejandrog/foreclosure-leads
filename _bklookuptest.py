@@ -1127,7 +1127,10 @@ def _window_miss(url, headers, n):
     if q.get('q'):
         return 200, {}, page([])
     if set(effective_courts(url)) == {'flsb', 'flmb'} and q.get('filed_before'):
-        return 200, {}, page([recap('11-00001', ['Other, Person'], court='flsb', filed=BD)])
+        # A next URL must not be followed: one window, one page.
+        return 200, {}, page(
+            [recap('11-00001', ['Other, Person'], court='flsb', filed=BD)],
+            nxt='https://www.courtlistener.com/api/rest/v4/search/?cursor=more')
     return 200, {}, page([])
 
 
@@ -1135,27 +1138,16 @@ stub = Stub(_window_miss)
 with contextlib.redirect_stdout(io.StringIO()):
     br = BL.presend_check('2099-000201-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
 windows = [u for u, _h in stub.calls if not party_q(u) and q_of(u).get('filed_before')]
-check('a Miami docket date with no filing match is docket_bk_unconfirmed and not a clear',
-      br.get('verdict') == 'docket_bk_unconfirmed' and br.get('verdict') != 'clear'
-      and BD in (br.get('why') or '') and windows
+active_stay = SG.check('2099-000201-CA-01', str(leads / 'sale_history_cache.json'))
+check('an active docket stay is still held, and a missed page does not replace that verdict',
+      active_stay.get('ok') is False and active_stay.get('code') == SG.STAY_ACTIVE
+      and br.get('verdict') != 'docket_bk_unconfirmed'
+      and len(windows) == 1
       and len(court_params(windows[0])) == 1
       and set(effective_courts(windows[0])) == {'flsb', 'flmb'}
       and (q_of(windows[0]).get('filed_after') or [''])[0] == BD
       and (q_of(windows[0]).get('filed_before') or [''])[0] == BD,
-      (br, windows[:1]))
-op = BL.gate_opinion('2099-000201-CA-01')
-check('that unconfirmed docket date blocks even though the party search finished',
-      op and op.get('ok') is False and op.get('blocks') is True
-      and op.get('code') == 'docket_bk_unconfirmed', op)
-os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
-try:
-    op_allow = BL.gate_opinion('2099-000201-CA-01')
-    held_dial = BL.federal_hold('2099-000201-CA-01')
-finally:
-    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
-    BL._HOLD_MEMO = None
-check('an unconfirmed docket date never clears, including Call Mode and the allow switch',
-      op_allow and op_allow.get('ok') is False and held_dial[0] is True, (op_allow, held_dial))
+      (active_stay, br, len(windows), len(stub.calls)))
 
 d = isolate('docket-hit')
 leads = d / 'leads'
@@ -1185,30 +1177,62 @@ check('a filing inside the docket window is a Florida hard hold, not left unconf
       br.get('verdict') == 'active' and '26-15796' in (br.get('why') or '')
       and br.get('verdict') != 'docket_bk_unconfirmed', br)
 
-d = isolate('docket-never-clear')
-sh = d / 'sale_history_cache.json'
+d = isolate('docket-lifted')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': '2099-000203-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA', 'st': 'OK',
+}])
+sh = leads / 'sale_history_cache.json'
 sh.write_text(json.dumps({
     '2099-000203-CA-01': {'a': False, 'bd': BD, 'sl': '2026-04-01', 'b': 1, 'v': 5, 't': 0},
 }), encoding='utf-8')
+
+
+def _lifted_clear(url, headers, n):
+    return 200, {}, page([])
+
+
+stub = Stub(_lifted_clear)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('2099-000203-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
+lifted_windows = [u for u, _h in stub.calls if not party_q(u) and q_of(u).get('filed_before')]
+# The search clock is not wall time. The four readers below use a fresh clear.
 BL._dump(BL.cache_path(), {
     '2099-000203-CA-01': {
-        'verdict': 'docket_bk_unconfirmed', 'docket_bk_unconfirmed': True,
-        'why': 'Miami docket bankruptcy date %s was not matched to an FLSB or FLMB filing' % BD,
+        'verdict': 'clear', 'why': 'no open federal bankruptcy matched this owner',
         'searched': True, 'ok_check': True, 'err': '', 't': time.time(), 'cases': [],
         'src': 'courtlistener',
     },
 })
-os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
-try:
-    lifted = SG.check('2099-000203-CA-01', str(sh))
-    lifted_dial = BL.federal_hold('2099-000203-CA-01')
-    lifted_mail = BL.send_hold('2099-000203-CA-01', here=str(d))
-finally:
-    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
-    BL._HOLD_MEMO = None
-check('a lifted Miami stay with an unmatched bankruptcy date still does not clear',
-      lifted.get('ok') is False and lifted.get('code') == 'docket_bk_unconfirmed'
-      and lifted_dial[0] is True and lifted_mail[0] is True, (lifted, lifted_dial, lifted_mail))
+BL._HOLD_MEMO = None
+lifted = SG.check('2099-000203-CA-01', str(sh))
+lifted_dial = BL.federal_hold('2099-000203-CA-01')
+lifted_mail = BL.send_hold('2099-000203-CA-01', here=str(leads))
+lifted_flags = BL.flags_for_cases(['2099-000203-CA-01'])
+check('a lifted docket stay plus a CourtListener clear stays ok',
+      br.get('verdict') == 'clear' and lifted_windows == []
+      and lifted.get('ok') is True and lifted.get('code') == SG.CLEAR
+      and lifted_dial == (False, '') and lifted_mail == (False, '')
+      and '2099-000203-CA-01' not in lifted_flags,
+      (br, lifted, lifted_dial, lifted_mail, lifted_flags, len(stub.calls)))
+BL._dump(BL.cache_path(), {
+    '2099-000203-CA-01': {
+        'verdict': 'docket_bk_unconfirmed', 'docket_bk_unconfirmed': True,
+        'why': 'Miami docket bankruptcy date was not matched',
+        'searched': True, 'ok_check': True, 'err': '', 't': time.time(), 'cases': [],
+        'src': 'courtlistener',
+    },
+})
+BL._HOLD_MEMO = None
+stale = SG.check('2099-000203-CA-01', str(sh))
+stale_dial = BL.federal_hold('2099-000203-CA-01')
+stale_mail = BL.send_hold('2099-000203-CA-01', here=str(leads))
+stale_flags = BL.flags_for_cases(['2099-000203-CA-01'])
+check('a stored unconfirmed date does not hold a lifted Miami stay',
+      stale.get('ok') is True and stale_dial == (False, '') and stale_mail == (False, '')
+      and '2099-000203-CA-01' not in stale_flags,
+      (stale, stale_dial, stale_mail, stale_flags))
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all CourtListener bankruptcy checks passed ====')

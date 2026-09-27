@@ -251,9 +251,11 @@ spent day, not reset.
   text, and Call Mode. `DEALFLOW_BK_ALLOW_CL_CLEAR=1` is the only switch that lets a
   CourtListener clear release those leads, and setting it is a business decision for the
   owner. An exact name match outside `flsb`, `flmb`, and `flnb` with no address or county
-  evidence is `possible`, not a hard hold. Florida exact matches stay hard holds. When the
-  Miami docket has a bankruptcy date (`bd`), FLSB and FLMB filings within 3 days are
-  matched locally. No match is `docket_bk_unconfirmed` and never clears.
+  evidence is `possible`, not a hard hold. Florida exact matches stay hard holds. The Miami
+  docket date is cross-checked only while that stay is active (`entry_stay_active`): one
+  page of FLSB and FLMB filings for that day, inside the same 125/day budget. A miss does
+  not add a hold. A lifted or closed docket bankruptcy does not add one either, and the
+  Miami stay-check verdict stays the docket's unless CourtListener found an open match.
   Email and letters (`send_hold`) refuse a keyable
   non-stem lead as soon as this module is importable. Text uses that same stay-gate
   verdict in the send bridge, and its pre-send check will not sleep out a rate window.
