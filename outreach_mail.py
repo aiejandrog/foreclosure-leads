@@ -26,6 +26,9 @@ Usage:
   python outreach_mail.py --suppress notes.json # skip DNC / opted-out cases from an exported tracker notes file
   python outreach_mail.py --limit 50            # cap the batch (safety)
   python outreach_mail.py --send                # ACTUALLY send via Lob (requires lob.key + a funded Lob account)
+  python outreach_mail.py --variant notice      # EN front / ES back duplex notice letter (dry run; see notice_letter.py)
+      needs BSG_NOTICE_PHONE, BSG_NOTICE_CALL_HOURS, BSG_NOTICE_RETURN_ADDRESS (or notice_letter.local.json)
+      Miami-Dade only unless --notice-include-county broward / palm-beach; sends only via --vendor c2m
 """
 import argparse
 import base64
@@ -781,6 +784,17 @@ def send_via_lob(key, to_addr, from_addr, file_html, use_type='marketing', mail_
     return ok, j
 
 
+def _notice_prefilter(leads, a, notice_cfg):
+    """County gate for --variant notice (Miami-Dade only unless --notice-include-county). Runs
+    BEFORE build_selection(), so every existing hold still applies to what it keeps. A no-op for
+    every other variant."""
+    from collections import Counter
+    if notice_cfg is None:
+        return leads, Counter()
+    import notice_letter as NL
+    return NL.filter_counties(leads, a.notice_include_county)
+
+
 def main():
     ap = argparse.ArgumentParser(description='Batch-send compliant foreclosure/tax-deed letters via Lob.')
     ap.add_argument('--tier', default='A,B', help='comma tiers to include (default A,B; use "all" for every tier)')
@@ -807,9 +821,35 @@ def main():
                     help='c2m only: hit PRODUCTION (default: staging = free, no real mail)')
     # 2026-09-03: Jesse's letter variant (FINAL NOTICE / URGENT). Alejandro's explicit ask, verbatim.
     # 'default' = build_letter_html (Field Manual 5-exits copy); 'jesse' = build_letter_html_jesse.
-    ap.add_argument('--variant', choices=['default', 'jesse'], default='default',
-                    help='letter body: default (5-exits, Field Manual) or jesse (FINAL NOTICE, URGENT)')
+    # 2026-09-27: 'notice' = notice_letter.build_notice_html, a two-page EN front / ES back duplex
+    # letter. Its wording/layout is a PLACEHOLDER (notice_letter_template.py) pending a new design.
+    ap.add_argument('--variant', choices=['default', 'jesse', 'notice'], default='default',
+                    help='letter body: default (5-exits, Field Manual), jesse (FINAL NOTICE, URGENT) or '
+                         'notice (EN front / ES back duplex; needs BSG_NOTICE_* config)')
+    ap.add_argument('--notice-include-county', action='append', default=[],
+                    choices=['broward', 'palm-beach'],
+                    help='notice variant only: also mail this county (default: Miami-Dade only). Every '
+                         'existing bankruptcy / suppression / diligence hold still applies.')
     a = ap.parse_args()
+
+    # NOTICE VARIANT PRE-FLIGHT. Runs before any lead is loaded or any file is written: without a
+    # mail-only phone, call hours and a return address / PMB, nothing is built -- no preview, no PDF,
+    # no send. The error names the missing settings, never their values.
+    notice_cfg = None
+    if a.notice_include_county and a.variant != 'notice':
+        print('ABORT: --notice-include-county only applies to --variant notice.')
+        sys.exit(2)
+    if a.variant == 'notice':
+        import notice_letter as NL
+        try:
+            notice_cfg = NL.load_config()
+            NL.allowed_counties(a.notice_include_county)
+        except NL.NoticeConfigError as ex:
+            print('ABORT: ' + str(ex))
+            sys.exit(2)
+        if a.send and a.vendor != 'c2m':
+            print('ABORT: --variant notice is a two-page duplex letter and sends only via --vendor c2m.')
+            sys.exit(2)
 
     tiers = None if a.tier.lower() == 'all' else set(t.strip().upper() for t in a.tier.split(',') if t.strip())
     snd = _load_sender()
@@ -827,15 +867,24 @@ def main():
         leads, qsender = load_queue(a.queue)
         if qsender and not snd:
             snd = qsender  # fall back to the sender identity set in the tracker if no local sender.json
-        queue, skips = build_selection(leads, None, a.min_days, suppress, sent, a.remail, a.limit, trust_selection=True)
+        pool, pre_skips = _notice_prefilter(leads, a, notice_cfg)
+        queue, skips = build_selection(pool, None, a.min_days, suppress, sent, a.remail, a.limit, trust_selection=True)
     else:
         leads = _load_leads()
         if not leads:
             print('No leads found (run the scraper first). Nothing to do.')
             return
-        queue, skips = build_selection(leads, tiers, a.min_days, suppress, sent, a.remail, a.limit)
+        pool, pre_skips = _notice_prefilter(leads, a, notice_cfg)
+        queue, skips = build_selection(pool, tiers, a.min_days, suppress, sent, a.remail, a.limit)
+    skips.update(pre_skips)
+    if notice_cfg is not None:
+        queue, miss = NL.filter_complete(queue)
+        skips.update(miss)
 
     from_parsed = parse_address(snd.get('addr', '')) if snd.get('addr') else None
+    if notice_cfg is not None:
+        # The notice letter's return address is the configured one ONLY -- never sender.json's addr.
+        from_parsed = NL.parse_return(notice_cfg['return_address'])
 
     print(f"\n=== DealFlow outreach mail — {'SEND' if a.send else 'DRY RUN'} ===")
     src = f"queue file ({os.path.basename(a.queue)})" if a.queue else f"{len(leads)} leads | tiers={a.tier}"
@@ -849,6 +898,10 @@ def main():
     print("\nskipped:")
     for reason, n in sorted(skips.items(), key=lambda kv: -kv[1]):
         print(f"  {n:5}  {reason}")
+    if notice_cfg is not None:
+        print(f"\nnotice variant: EN front / ES back, 2 pages duplex; counties="
+              f"{', '.join(sorted(NL.allowed_counties(a.notice_include_county)))}; --lang ignored (always both)."
+              f"  The estimate below is the 1-page figure; a duplex 2-page piece costs more.")
     est = len(queue) * COST_PER_LETTER
     print(f"\nESTIMATED COST: {len(queue)} x ~${COST_PER_LETTER:.2f} = ~${est:,.2f}"
           f"  (first-class, 1-page B&W; verify at lob.com/pricing)")
@@ -862,14 +915,16 @@ def main():
     # write a preview of the first letter so the copy/address can be eyeballed with no key/send
     # Variant dispatch. One line, both call sites use the same picker so a future variant only
     # requires a new mapping entry -- no scattered `if a.variant == ...` branches to drift.
-    _builder = {'jesse': build_letter_html_jesse}.get(a.variant, build_letter_html)
+    _builder = {'jesse': build_letter_html_jesse,
+                'notice': (lambda r, s, l: NL.build_notice_html(r, s, l, cfg=notice_cfg)),
+                }.get(a.variant, build_letter_html)
     if queue:
         with open(PREVIEW_FILE, 'w', encoding='utf-8') as f:
             f.write(_builder(queue[0][0], snd, a.lang))
         print(f"preview of letter #1 -> {os.path.relpath(PREVIEW_FILE, HERE)} (open in a browser)")
         print(f"letter variant: {a.variant}")
 
-    if not snd:
+    if not snd and notice_cfg is None:
         print("\n[!] sender.json not found — fill it (see sender.json.template) before a real send; using placeholders in the preview.")
 
     if not a.send:
@@ -897,9 +952,12 @@ def main():
         if not key:
             print("\nABORT: --send --vendor lob requires a Lob API key in lob.key (gitignored). Create it, then re-run.")
             sys.exit(1)
-    if not (snd and from_parsed):
+    if notice_cfg is None and not (snd and from_parsed):
         print("\nABORT: --send requires a complete sender.json with a parseable return address (name + addr).")
         sys.exit(1)
+    if notice_cfg is not None and not from_parsed:
+        print("\nABORT: the configured notice return address does not parse (needs 'City, ST 12345').")
+        sys.exit(2)
     # name = the person, company = the Sunbiz-gated entity. Both reach the top envelope window —
     # that is the only brand surface Lob's standard #10 stock exposes on the sealed envelope.
     from_addr = dict(from_parsed, name=(snd.get('name') or _safe_llc(snd))[:40],
@@ -910,10 +968,14 @@ def main():
     # CASS-verified, so it carries its exact parts explicitly instead of being re-derived.
     #   addr_line2 -> the PMB (Lob's own parse puts it on secondary_line)
     #   addr_zip   -> ZIP+4 (33122-2006); parse_address matches the +4 but keeps only the 5
-    if snd.get('addr_line2'):
-        from_addr['address_line2'] = str(snd['addr_line2']).strip()
-    if snd.get('addr_zip'):
-        from_addr['address_zip'] = str(snd['addr_zip']).strip()
+    if notice_cfg is not None:
+        # Configured return address only: sender.json's PMB / ZIP+4 overrides belong to ITS address.
+        from_addr['name'] = (snd.get('name') or 'Biscayne Solutions Group')[:40]
+    else:
+        if snd.get('addr_line2'):
+            from_addr['address_line2'] = str(snd['addr_line2']).strip()
+        if snd.get('addr_zip'):
+            from_addr['address_zip'] = str(snd['addr_zip']).strip()
     # LIVE flag: Lob is decided by key prefix, Click2Mail by --prod. Same intent, different signal.
     if a.vendor == 'c2m':
         live = bool(a.prod)
@@ -931,9 +993,11 @@ def main():
             if a.vendor == 'c2m':
                 # send_letter returns a dict; adapt to the (ok, response_dict) shape the ledger writer
                 # expects. job_id maps to Lob's letter id in the ledger — same purpose, cross-vendor.
+                _c2m_opts = ({'layout': NL.TPL.C2M_LAYOUT, 'print_option': NL.C2M_PRINT_OPTION}
+                             if notice_cfg is not None else {})
                 res = _c2m.send_letter(letter, to_addr, from_addr,
                                        name='DealFlow ' + _case(r),
-                                       prod=a.prod)
+                                       prod=a.prod, **_c2m_opts)
                 ok, j = True, {'id': res.get('job_id', ''),
                                'expected_delivery_date': '',
                                'vendor': 'click2mail', 'env': res.get('env', '')}
@@ -950,6 +1014,8 @@ def main():
                 'expected_delivery': j.get('expected_delivery_date', ''),
                 'lang': a.lang,
             }
+            if notice_cfg is not None:
+                sent[_case(r)].update(lang='en+es', variant='notice')
             print(f"  OK  {j.get('id','')}  {to_addr['name'][:26]:26} exp {j.get('expected_delivery_date','?')}")
         else:
             msg = (j.get('error') or {}).get('message', 'unknown error')

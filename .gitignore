@@ -663,3 +663,9 @@ worker_marks.applied.jsonl
 # _clerkbktest: Broward clerk-docket bankruptcy check on stubbed HTTP. Synthetic docket
 # lines only, no API key, no party names.
 !_clerkbktest.py
+# _noticelettertest: outreach_mail --variant notice refusal, county gate, EN/ES render.
+# Invented names, addresses and numbers only; no config, no network, no vendor call.
+!_noticelettertest.py
+
+# outreach_mail --variant notice: mail-only phone, call hours, return address/PMB (never commit)
+notice_letter.local.json
