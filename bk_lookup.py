@@ -873,16 +873,19 @@ def contact_blocked_reason(case, here=None):
 
 
 def federal_hold(case, here=None):
-    """(held, why) for stamping saleBkAct on a lead row.
+    """(held, why) for stamping saleBkAct on a lead row, and for the letter queue.
 
     The Miami-Dade docket predicate stays on the exact-key `a` flag outreach_email already
     merges. This adds a hold when CourtListener blocks (including over a docket clear) or
-    when a non-stem lead is not a fresh clear. It does not relabel a pre-v4 row or a clean
-    sibling as an active stay — stay_gate still refuses those on the send bridge."""
+    when a keyable non-stem lead is not a fresh clear. It does not relabel a pre-v4 row or
+    a clean sibling as an active stay — stay_gate still refuses those on the send bridge.
+    A case number with fewer than five digits is not a bankruptcy key, so it is not a hold."""
     try:
         import stay_gate
     except Exception:
         return True, 'federal bankruptcy check unavailable — lead stays held'
+    if not stay_gate.pacer_key(case):
+        return False, ''
     try:
         root = here or os.path.dirname(os.path.abspath(stay_gate.__file__))
         v = stay_gate.check(case, os.path.join(root, 'sale_history_cache.json'))
@@ -894,6 +897,31 @@ def federal_hold(case, here=None):
         return False, ''
     if v.get('src') == 'courtlistener' or not stay_gate.case_stem(case):
         return True, v.get('why') or 'federal bankruptcy check has not run for this lead'
+    return False, ''
+
+
+def queue_hold(case):
+    """(held, why) for the dial queue and the knock planner.
+
+    Those queues already skip a baked saleBkAct. This adds the CourtListener result once
+    a cache file exists, so a raw-row queue does not drop every non-stem lead on a machine
+    that has not pulled yet (and so the queue tests, which never write that file, stay put).
+    After the nightly pull writes the cache, a keyable non-stem lead with no fresh clear
+    is held, and so is any CourtListener block. The email and text bridge does not use
+    this: it refuses a non-stem lead with no fresh clear even when the file is absent."""
+    try:
+        import stay_gate
+    except Exception:
+        return False, ''
+    if not stay_gate.pacer_key(case):
+        return False, ''
+    _data, exists = _load(cache_path())
+    if not exists:
+        return False, ''
+    flags = flags_for_cases([case])
+    hit = flags.get(stay_gate.pacer_key(case))
+    if hit and hit.get('hold'):
+        return True, hit.get('why') or 'federal bankruptcy check has not run for this lead'
     return False, ''
 
 

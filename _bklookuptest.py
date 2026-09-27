@@ -479,6 +479,24 @@ check('a missing status file raises a fail alert',
       alert and alert['severity'] == 'fail' and 'no status file' in alert['text'], alert)
 
 
+# --------------------------------------------------------------------------------------- queues
+print('-- queues')
+d = isolate('queues')
+check('dial and knock queues do not drop a lead before any cache file exists',
+      BL.queue_hold('CACE-99-555801') == (False, '')
+      and BL.queue_hold('C107') == (False, ''))
+held, why = BL.federal_hold('CACE-99-555801', here=str(d))
+check('a letter to a keyable non-stem lead is held with no cache file', held is True, why)
+check('a case number this check cannot key is not a letter hold',
+      BL.federal_hold('C107', here=str(d)) == (False, ''))
+BL._dump(BL.cache_path(), {})
+qheld, qwhy = BL.queue_hold('CACE-99-555801')
+check('once the cache file exists, the dial queue holds an unchecked Broward lead',
+      qheld is True and 'has not run' in qwhy, (qheld, qwhy))
+check('the dial queue still does not hold a Miami stem the check has not touched',
+      BL.queue_hold('2099-000555-CA-01') == (False, ''))
+
+
 # ------------------------------------------------------------------------------------ sticky search
 print('-- sticky plausible')
 d = isolate('sticky')

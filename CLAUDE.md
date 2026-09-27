@@ -217,7 +217,11 @@ pull reserves 10 requests so a pre-send search can still run.
 - Once per lead: a party-name search across federal bankruptcy courts for cases with no
   date terminated and no date closed. Re-checked every 14 days, and again before a first
   touch older than that. Only a fresh completed search with no open match clears a
-  Broward or Palm Beach lead.
+  Broward or Palm Beach lead. Email, text, and letters refuse that lead as soon as this
+  module is importable. The dial queue and the knock planner add the same hold once
+  `bk_lead_cache.json` exists; before that they still honor a baked `saleBkAct`, which the
+  board stamps for every unchecked non-stem lead. A case number with fewer than five
+  digits is not a bankruptcy key and is not held by this check.
 
 **Matching.** Names are folded (case, accents, punctuation). Middle initials, Hispanic
 double surnames, `LLC` / `TRUST` owners, and joint owners are all read. An exact open-case

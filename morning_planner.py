@@ -406,16 +406,10 @@ def _knock_eligible(r):
         return False
     try:
         import bk_lookup as _BKL
-        _held, _why = _BKL.contact_blocked_reason(r.get('case') or r.get('Case #'))
-        if _held:
+        if _BKL.queue_hold(r.get('case') or r.get('Case #'))[0]:
             return False
     except Exception:
-        try:
-            import stay_gate as _SG
-            if not _SG.case_stem(r.get('case') or r.get('Case #')):
-                return False
-        except Exception:
-            return False
+        pass
     if r.get('sibclaimed'):
         return False
     return True
