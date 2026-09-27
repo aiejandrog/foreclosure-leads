@@ -4453,5 +4453,148 @@ class ThirtyFifthReviewTests(unittest.TestCase):
         self.assertEqual(CV.assess(unread)['verdict'], CV.assess(read)['verdict'])
 
 
+class ThirtySixthReviewTests(unittest.TestCase):
+    """The county's other word for a sale, the description/comments split, and a trigger asserting a
+    grant the producer recorded as a denial.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = ThirtyFourthReviewTests.JUDGED
+    PAGE = ThirtyFourthReviewTests.PAGE
+    case = ThirtyFourthReviewTests.case
+    read = ThirtyFourthReviewTests.read
+
+    # ---- the producer's own sale vocabulary, minus one word ------------------------------------
+
+    def test_a_cancelled_auction_reaches_a_check(self):
+        # The gap check at :529 notices a sale-worded entry the classifier left unlabelled. Its word
+        # list had `sale` and not `auction`, which the producer's own sale_passages vocabulary
+        # (:398) carries - so the county's other word for the same event reached no check at all and
+        # the case read `supported` over a sale a read document says is off.
+        for word in ('Sale', 'Auction'):
+            t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '',
+                            '06/01/2026', ''),
+                           (141, 'Notice of Cancellation of Foreclosure %s' % word, '',
+                            '06/05/2026', '')])
+            entry = next(e for e in t['entries'] if e['entry_id'] == '141')
+            self.assertEqual(entry['kind'], 'other', word)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (word, r['missing']))
+            self.assertTrue([m for m in r['missing'] + r['notes'] if '141' in m], (word, r))
+
+    def test_a_rescheduled_auction_reaches_a_check_too(self):
+        # The nineteenth review's resale defect, live for the other word: a notice of a rescheduled
+        # auction after a certificate of title.
+        t = self.case([(140, 'Notice of Rescheduled Auction', '', '06/05/2026', '')])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+
+    def test_sell_is_still_not_a_sale_word_here(self):
+        # A judgment's own "the Clerk shall sell the property at public sale" must not turn every
+        # read judgment cover into an unlabelled-sale gap.
+        self.assertFalse(CV._SALE_WORD_RE.search('the Clerk shall sell the property'))
+
+    # ---- the description/comments split -------------------------------------------------------
+
+    def test_the_concatenation_is_tested_on_the_read_half_as_well(self):
+        # operative_text is `title or index_text` (:364), so once a document is read the description
+        # and the comments are only reachable through _index_text. Reading the three strings as
+        # description / comments separately tested the PAIR nowhere on the read half: a
+        # `final judgment` in the description with the replacing word in the comments held only while
+        # nobody opened the document.
+        for pages in (None, {'140': 'ORDER GRANTING MOTION' + chr(10) + 'Granted.'}):
+            # The pair, split so neither string carries both halves on its own: the producer's
+            # `final judgment` row matches in the description, the replacing word only in the
+            # comment.
+            t = self.case([(140, 'Order Granting Motion for Final Judgment', 'as amended',
+                            '06/01/2026', '')],
+                          pages=pages)
+            entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+            self.assertEqual(entry['kind'], 'order_on_motion', pages)
+            self.assertTrue(CV._order_grants_a_replacement(entry), pages)
+            self.assertEqual(CV.assess(t)['verdict'], 'incomplete', pages)
+
+    # ---- a denial the producer recorded, read as a grant ---------------------------------------
+
+    def test_a_saved_denial_is_not_read_as_a_grant(self):
+        # :397 saves a motion_disposition_passages row for this kind from every read line that grants
+        # or denies a motion. The title branch was reading "ORDER ON MOTION FOR ENTRY OF AMENDED
+        # FINAL JUDGMENT" - which carries no denial word of its own - as a grant, over the producer's
+        # own saved row saying the motion was DENIED, and printed "its own words say it grants a
+        # judgment replacing an earlier one" about a document that entered nothing.
+        t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
+                      pages={'140': ('ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT' + chr(10)
+                                     + "Plaintiff's Motion for Entry of an Amended Final Judgment "
+                                     'is hereby DENIED.')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertTrue(entry['motion_disposition_passages'])
+        self.assertFalse(CV._order_grants_a_replacement(entry))
+        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+
+    def test_a_granted_row_beside_a_denied_one_still_holds(self):
+        # An order granting one motion and denying another entered something, so the saved denial
+        # does not exclude when a saved row grants.
+        t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
+                      pages={'140': ('ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT' + chr(10)
+                                     + 'The Motion to Continue is hereby DENIED.' + chr(10)
+                                     + 'The Motion for Entry of an Amended Final Judgment is '
+                                     'hereby GRANTED.')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertTrue(CV._order_grants_a_replacement(entry))
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_an_unread_order_with_no_saved_disposition_still_holds(self):
+        # The guard reads only what the producer SAVED, so it cannot let the weaker docket - the same
+        # clerk line with no document at all - read better.
+        t = self.case([(140, 'Order Granting Motion for Amended Final Judgment', '',
+                        '06/01/2026', '')])
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertFalse(entry.get('motion_disposition_passages'))
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    # ---- the sentence says only what the strings show ------------------------------------------
+
+    def test_the_reason_no_longer_asserts_a_grant(self):
+        # The trigger fires on any producer string carrying its `final judgment` row and a replacing
+        # word, which is equally true of an order that merely RESTATES one - an order on a motion to
+        # ENFORCE the amended final judgment entered nothing and amended nothing. There is no
+        # restatement-only discriminator in the producer's saved state, so the hold stands and the
+        # reason names what the strings show instead of asserting a disposition.
+        t = self.read('ORDER ON MOTION TO ENFORCE THE AMENDED FINAL JUDGMENT')
+        said = ' '.join(CV.assess(t)['missing'])
+        self.assertNotIn('say it grants', said)
+        self.assertIn('name a final judgment that amends or replaces an earlier one', said)
+
+    def test_an_amending_judgment_already_of_record_is_not_called_unseen(self):
+        # Where the reconciliation itself typed a judgment row role='replacement', the amending
+        # judgment IS in a summary this verdict rests on, so "no summary this verdict rests on took
+        # that judgment in" was flatly false. The hold stands - which judgment this order acted on is
+        # genuinely unsettled here - and the reason says that instead.
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '02/10/2026', ''),
+                        (3, 'Amended Final Judgment of Foreclosure', '', '03/10/2026', ''),
+                        (140, 'Order Granting Motion for Amended Final Judgment', '',
+                         '04/01/2026', '')],
+                       controlling='3', amount=225000.00,
+                       pages={'3': 'AMENDED FINAL JUDGMENT OF FORECLOSURE' + chr(10)
+                              + 'Total $225,000.00'})
+        said = ' '.join(m for m in CV.assess(t)['missing'] if '140' in m)
+        self.assertTrue(said)
+        self.assertNotIn('no summary this verdict rests on took', said)
+        self.assertIn('replacement judgment of record', said)
+        self.assertEqual(CV._replacement_of_record(t.get('judgments') or {}), '3')
+
+    def test_the_calibration_set_still_reads_supported(self):
+        for title in ('ORDER GRANTING AMENDED MOTION',
+                      'ORDER GRANTING MOTION TO AMEND COMPLAINT',
+                      'ORDER GRANTING MOTION TO SUBSTITUTE PARTY PLAINTIFF',
+                      'ORDER GRANTING MOTION FOR SUMMARY JUDGMENT',
+                      'ORDER GRANTING FINAL JUDGMENT',
+                      'ORDER GRANTING MOTION TO TAX COSTS',
+                      'ORDER GRANTING MOTION FOR EXTENSION OF TIME',
+                      'ORDER DENYING MOTION FOR CORRECTED FINAL JUDGMENT'):
+            r = CV.assess(self.read(title))
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

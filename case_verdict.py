@@ -197,7 +197,17 @@ _CERT_FILING_RE = re.compile(r'(?:amended\s+|supplemental\s+)?certificate of fil
 UNLABELLED_KINDS = ('other', 'hearing') + COVER_KINDS
 # Only to notice that the classifier left a sale-worded entry unlabelled, which is reported as a
 # gap. Never to decide that a sale IS or IS NOT scheduled - see _sale_state.
-_SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
+#
+# `auction` because the producer's own vocabulary has it (:398, r'sale|sell|auction|reset|
+# reschedul\w*') and this list did not, so a "Notice of Cancellation of Foreclosure AUCTION" whose
+# read page says the auction scheduled for 10/28/2026 is cancelled reached no check at all: the case
+# read `supported` over a live sale, with the entry named nowhere, while the same notice worded
+# `sale` was `incomplete`. A "Notice of Rescheduled Auction" after a certificate of title did the
+# same, which is the nineteenth review's resale defect still live for the county's other word for
+# the same event (thirty-sixth review). `sell` is deliberately NOT here: a judgment's own "shall
+# sell the property" reaches these scans through a read cover's sale_passages, which is the risk
+# :476 already records.
+_SALE_WORD_RE = re.compile(r'\b(?:sale|auction)\b', re.I)
 # miami_case_timeline's own reset vocabulary (:31). An entry saying a sale was reset or
 # rescheduled is a resale whether or not anything saved prints its new date: the date may be in
 # a document behind the county login, which is the ordinary case for a sale notice. The clerk's
@@ -817,6 +827,14 @@ def _order_grants_a_replacement(entry):
              which nothing here read: a line it recorded as GRANTING, naming a final judgment, with a
              replacing word in it.
     """
+    # `_index_text`, not `description`, and that is the whole point of that helper: `operative_text`
+    # is `title or index_text` (:364), so on the UNREAD half the concatenation is what gets tested,
+    # and splitting it into description and comments tested the pair nowhere once a document was
+    # read. A `final judgment` in the description with the replacing word in the comments therefore
+    # held only while nobody opened the document - the read half reading better, one door along from
+    # the one the round before closed, and exactly what `_index_text`'s own docstring was written
+    # against (thirty-sixth review).
+    #
     # Comments included, deliberately. A clerk comment can point at something else on the docket
     # ("Order Granting Motion for Extension of Time" / "Re: Amended Final Judgment"), so excluding it
     # was tried - and it is INERT on the unread half, because `operative_text` is `title or index_text`
@@ -826,18 +844,47 @@ def _order_grants_a_replacement(entry):
     # is also true on its own terms: that docket line does say an amended final judgment exists which
     # the reconciliation did not take in, and the sentence says only that which judgment controls is
     # not settled here.
+    dispositions = [str(l or '') for l in _rows(entry, 'motion_disposition_passages') if str(l or '').strip()]
+    # The producer's own saved disposition wins over any title. :397 saves a
+    # motion_disposition_passages row for exactly this kind, from the read body, for every line that
+    # says a motion is granted or denied. So when the producer recorded rows and NONE of them grants,
+    # the document itself says the motion was denied and nothing was entered - and the title branch
+    # below was reading "ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT", which carries no
+    # denial word of its own, as a GRANT, over a saved row reading "the Motion for Amended Final
+    # Judgment is hereby DENIED". A printed reason contradicted by the producing module's own state
+    # is the thing this file must never do (thirty-sixth review).
+    #
+    # This does make the READ half read better than the unread one, and that is the one direction
+    # that is sound: the read page carries positive evidence that nothing was entered, where the
+    # unread docket carries no evidence either way and holds. The family these rounds keep finding is
+    # the opposite - reading making a verdict CONFIDENT on less.
+    if dispositions and not any(_GRANTED_RE.search(l) for l in dispositions):
+        return False
     for text in (str(entry.get('operative_text') or '').strip(),
-                 str(entry.get('description') or '').strip(),
+                 _index_text(entry).strip(),
                  str(entry.get('comments') or '').strip()):
         if text and _says_a_replacing_judgment(text):
             return True
-    for line in _rows(entry, 'motion_disposition_passages'):
+    for line in dispositions:
         # A saved disposition line is specifically about granting or denying, so this half also asks
         # the producer's granting vocabulary of it.
-        line = str(line or '')
         if _GRANTED_RE.search(line) and _says_a_replacing_judgment(line):
             return True
     return False
+
+
+def _replacement_of_record(judgments):
+    """The entry id of a judgment the reconciliation itself typed role='replacement', or None.
+
+    reconcile_judgments (:758) gives a final_judgment row role='replacement' when `_REPLACES` matches
+    its own text, so a row of that role IS an amending judgment the summaries this verdict rests on
+    took in. The sweep below needs to know that, because its sentence used to assert the opposite of
+    it in every case (thirty-sixth review).
+    """
+    for row in _rows(judgments, 'judgments'):
+        if isinstance(row, dict) and row.get('role') == 'replacement':
+            return row.get('entry_id') or '?'
+    return None
 
 
 def _says_a_replacing_judgment(text):
@@ -1758,11 +1805,27 @@ def assess(timeline, dossier=None):
                 or not _order_grants_a_replacement(entry)):
             continue
         named = str(entry.get('operative_text') or '').strip()
+        # The sentence NAMES what the strings show and nothing more. It used to read "its own words
+        # say it grants a judgment replacing an earlier one, which no summary this verdict rests on
+        # took in", and both halves of that overclaimed: the trigger fires on any string of the
+        # producer's that carries its `final judgment` row and a replacing word, which is equally
+        # true of an order that merely RESTATES one ("Pursuant to the Amended Final Judgment entered
+        # ...", "To comply with the Amended Final Judgment ..."), and there is no restatement-only
+        # discriminator in the producer's saved state to tell the two apart. And where the
+        # reconciliation already typed a judgment row role='replacement', the amending judgment IS of
+        # record, so "no summary this verdict rests on took in" was flatly false about the sharpest
+        # case the trigger catches. The hold stands in both shapes - which judgment this order acted
+        # on is genuinely unsettled here - but the reason now says only what is true of both
+        # (thirty-sixth review).
+        of_record = _replacement_of_record(judgments)
         missing.append('entry %s is an order the run labelled order_on_motion by its disposition, '
-                       'and its own words say it grants a judgment replacing an earlier one, which '
-                       'no summary this verdict rests on took in; which judgment controls is not '
-                       'settled in this file%s'
+                       'and its own words name a final judgment that amends or replaces an earlier '
+                       'one; %s; which judgment controls is not settled in this file%s'
                        % (entry.get('entry_id') or '?',
+                          'the reconciliation records entry %s as a replacement judgment of record, '
+                          'so which judgment this order acted on is not settled here' % of_record
+                          if of_record else
+                          'no summary this verdict rests on took that judgment in',
                           ' - the run read the title %r' % named[:200] if named else ''))
     # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
     # one net for these - :519 forces status 'unclear' for every undated entry `_transition`

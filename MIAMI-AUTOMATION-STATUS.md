@@ -639,6 +639,54 @@ of 10/28/2026, the sale will be cancelled" both read as the act. All are clause-
 false `supported`, and the producer flattens and abbreviation-normalises its text before applying the
 guard (:308) where `_sale_text` does not. A round of its own.
 
+**Thirty-sixth review.** Four findings. Three were one-change restatements; the fourth was the round
+before's sentence asserting something the producer never recorded.
+
+`_SALE_WORD_RE` - the gap check that notices a sale-worded entry the classifier left unlabelled - had
+`sale` and not `auction`, while the producer's own saved sale vocabulary (:398) is
+`sale|sell|auction|reset|reschedul*`. So "Notice of Cancellation of Foreclosure AUCTION", whose read
+page says the auction set for 10/28/2026 is cancelled, reached no check at all and the case read
+`supported` over a live sale with the entry named nowhere, while the same notice worded `sale` was
+`incomplete`. "Notice of Rescheduled Auction" after a certificate of title did the same, which is the
+nineteenth review's resale defect still live for the county's other word for the same event. `auction`
+is in the list now. `sell` is deliberately not: a judgment's own "shall sell the property" reaches
+these scans through a read cover's `sale_passages`, which is the risk :476 already records.
+
+`_order_grants_a_replacement` read the producer's strings as `operative_text`, `description` and
+`comments`. `operative_text` is `title or index_text` (:364), so once a document was read the
+description and the comment were only reachable through `_index_text`, and reading them separately
+tested the PAIR nowhere: a `final judgment` in the description with the replacing word in the comment
+held only while nobody opened the document. That is the read half reading better, one door along from
+the door the round before closed, and exactly what `_index_text`'s own docstring was written against.
+`_index_text` is back in the tuple.
+
+The same trigger read a denial as a grant. :397 saves a `motion_disposition_passages` row for this kind
+from every read line that grants or denies a motion. An order titled "ORDER ON MOTION FOR ENTRY OF
+AMENDED FINAL JUDGMENT" carries no denial word of its own, so the title branch fired - over the
+producer's own saved row reading "Plaintiff's Motion for Entry of an Amended Final Judgment is hereby
+DENIED" - and the report printed that the order's words say it grants a judgment, about a document that
+entered nothing. A printed reason the producing module's own state contradicts is the thing this file
+must never do. Where the producer saved disposition rows and none of them grants, the title branch is
+now suppressed; a granted row beside a denied one still holds. That makes the read half read better
+than the unread one, which is the one sound direction: the read page carries positive evidence that
+nothing was entered, where the unread docket carries no evidence either way and holds.
+
+And the sentence overclaimed twice. The trigger fires on any producer string carrying the `final
+judgment` row and a replacing word, which is equally true of an order that merely RESTATES one ("Order
+on Motion to Enforce the Amended Final Judgment" entered nothing and amended nothing), and there is no
+restatement-only discriminator in the producer's saved state to tell the two apart - the review said so
+plainly and would not invent one, and neither will this file. Worse, where the reconciliation itself
+typed a judgment row `role='replacement'` (:758), the amending judgment IS of record, so "which no
+summary this verdict rests on took in" was flatly false about the sharpest case the trigger catches.
+The hold stands in both shapes, because which judgment the order acted on is genuinely unsettled here;
+the reason now says only that the order's words name a final judgment that amends or replaces an
+earlier one, and names the replacement judgment of record when there is one.
+
+**Reported, not fixed.** The residual clause-4 calibration on that trigger - it holds a restatement
+order as well as a real one - needs a discriminator nothing the producer saves provides, so it is a
+round of its own rather than a guess made here. The five `_closes_a_sale` over-fires (three from the
+round before, plus the two the producer's flattening would have caught) stay as recorded above.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
