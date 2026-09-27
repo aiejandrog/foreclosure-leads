@@ -1033,10 +1033,16 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
     # subdivisions where the search shows a conveyance to or from the owner: an owner-named loan
     # there is plainly another property of theirs, not this parcel's under another spelling
     _op = lambda x: ow is None or _maybe_owner(x or '', ow) or _names_owner(x, ow)
+    _dk = lambda r: _parse_recd(r.get('reC_DATE'))
     owned_elsewhere = {(r.get('subdiV_NAME', '') or '').strip().upper() for r in models
                        if _conveyance((r.get('doC_TYPE', '') or '').upper())
-                       and (_op(r.get('seconD_PARTY')) or _op(r.get('firsT_PARTY')))
-                       and not (_op(r.get('seconD_PARTY')) and _op(r.get('firsT_PARTY')))}
+                       and _op(r.get('seconD_PARTY')) and not _op(r.get('firsT_PARTY'))}
+    sold_until = {}
+    for r in models:
+        if (_conveyance((r.get('doC_TYPE', '') or '').upper()) and _op(r.get('firsT_PARTY'))
+                and not _op(r.get('seconD_PARTY')) and _dk(r)):
+            k = (r.get('subdiV_NAME', '') or '').strip().upper()
+            sold_until[k] = max(sold_until.get(k, _dk(r)), _dk(r))
     for r in models:
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         if rf == fol:
@@ -1049,11 +1055,11 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
                 # cannot be tied to this parcel or ruled out: dropped as "another property", it
                 # would leave an empty chain that reads as CLEAR
                 return models, 0, 'a mortgage or lien naming the owner carries no folio and no subdivision'
-            if sd != sub and sd not in owned_elsewhere:
+            if sd != sub and sd not in owned_elsewhere and not (sd in sold_until and _dk(r) and _dk(r) <= sold_until[sd]):
                 # another subdivision with no deed of the owner's there: it may be this parcel's
                 # loan indexed under a variant subdivision name, so it cannot be ruled out
                 return models, 0, 'a mortgage or lien naming the owner sits in a subdivision the owner has no deed in'
-        if not rf and sd == sub and (debt or (re.search(r'JUDGMENT|WARRANT', doc) and not re.search(r'SATISF|RELEASE', doc))
+        if sd == sub and (debt or (re.search(r'JUDGMENT|WARRANT', doc) and not re.search(r'SATISF|RELEASE', doc))
                                      or ('LIS PEND' in doc and not re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', doc))) \
                 and not _base_party(r):
             # a same-surname stranger's loan in this subdivision would be counted as this parcel's
@@ -1521,7 +1527,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         # with no folio in another (or no) subdivision may be this parcel's, indexed under a variant
         # name. It cannot be ruled out, so it is never a clear. Asked of placed searches only, so a
         # search that reached the parcel on its own reads exactly as before.
-        _lo = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w]
+        _lo = _ow or []
         _loose = [dict(r, subdiV_NAME=subj_subdiv) for r in models
                   if 'LIS PEND' in (r.get('doC_TYPE', '') or '').upper()
                   and _lo and any(_maybe_owner(r.get(k) or '', _lo) or _names_owner(r.get(k), _lo)

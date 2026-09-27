@@ -228,6 +228,31 @@ oldm = rec('MORTGAGE', '5/5/2003', '21000', '2', 0, 'OLD BANK', first='GARCIA JO
 rg = RL.analyze([gd, gm, sold, oldm], FOLIO, 300000, ftype='MORTGAGE', owner='JOSE GARCIA', deed_bps=DEEDS)
 check('an owner who sold an earlier home to an outsider still places', rg['parcel_found'] is True, rg.get('placement_refused'))
 
+# round 6: a loan indexed after the owner SOLD in a variant subdivision is not that sold home's; it refuses
+V = 'TEST GARDENS 1ST ADDN'
+sold6 = rec('DEED', '1/1/2017', '25000', '1', 0, 'BUYER PERSON', first='GARCIA JOSE', sub=V)
+late6 = rec('MORTGAGE', '6/1/2021', '32000', '5', 0, 'NEWREFI BANK', first='GARCIA JOSE', intangible=700, sub=V)
+r6 = RL.analyze([gd, gm, sold6, late6], FOLIO, 300000, ftype='MORTGAGE', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('a loan recorded after the owner sold in a variant subdivision refuses placement',
+      r6['parcel_found'] is False and not ES.coverage_documented(r6), r6.get('placement_refused'))
+# round 6: a stranger's debt carrying ANOTHER folio in the subdivision refuses placement too
+for doc, second, first in (('MORTGAGE', 'OTHER BANK', 'GARCIA ROBERTO'),
+                           ('CLAIM OF LIEN', 'GARCIA ROBERTO', 'TEST GARDENS HOMEOWNERS ASSOCIATION')):
+    sf6 = rec(doc, '5/5/2020', '31000', '7', 4000, second, first=first, intangible=900, folio='0100000000099')
+    r6 = RL.analyze([gd, gm, sf6], FOLIO, 300000, ftype='MORTGAGE', owner='JOSE GARCIA', deed_bps=DEEDS)
+    check('a stranger\'s %s under another folio in the subdivision refuses placement' % doc.lower(),
+          r6['parcel_found'] is False and not r6.get('hoa_open'), r6.get('placement_refused'))
+# round 6: an HOA lead's loose lender lis pendens naming only the spouse from the deed still blocks a clear
+dh6 = rec('DEED', '2/1/2008', '26100', '0010', 0, 'GARCIA JOSE & MARIA', first='PRIOR SELLER')
+mh6 = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, 'LENDER BANK', first='GARCIA JOSE & MARIA', intangible=600)
+lp6 = rec('LIS PENDENS', _lpd, '33000', '1', 0, 'GARCIA MARIA', first='LENDER BANK', sub=V)
+r6 = RL.analyze([dh6, mh6, lp6], FOLIO, 3000, ftype='HOA', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('HOA lead: a loose lender lis pendens naming the deed spouse blocks a clear', not ES.coverage_documented(r6),
+      (r6.get('parcel_found'), r6.get('second_fc_unsure')))
+r6 = RL.analyze([dh6, mh6], FOLIO, 3000, ftype='HOA', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('a household deed and its loan still place (HOA)', r6['parcel_found'] is True and r6['open_count'] == 1,
+      r6.get('placement_refused'))
+
 # the repull gate asks the appraiser only when no row carries the folio
 _asked = []
 check('_parcel_in does not call the appraiser for a folio-carrying search',
