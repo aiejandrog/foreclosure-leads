@@ -590,6 +590,7 @@ deal_desk.json
 # foreclosed debt priced at the face, capped/wrong-person searches read as CLEAR, and the case's
 # own judgment counted as another claim. Synthetic records only.
 !_verify12test.py
+!_padeedtest.py
 # sale_results.json: docket sale verdicts per case (sale_results.py), rebuilt nightly, carries docket text.
 sale_results.json
 sale_results.json.tmp

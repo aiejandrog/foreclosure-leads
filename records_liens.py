@@ -905,7 +905,63 @@ def _other_person(party, owners):
                for w in owners or ()) and not _maybe_owner(party, owners)
 
 
-def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=()):
+def _bp_key(book, page):
+    b = re.sub(r'\D', '', str(book or '')).lstrip('0')
+    p = re.sub(r'\D', '', str(page or '')).lstrip('0')
+    return (b, p) if b and p else None
+
+
+PA_PROXY = 'https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx'
+_PA_DEEDS = {}
+
+
+def pa_deed_bookpages(folio):
+    """The Official Records book/page of every sale the Property Appraiser lists for this folio
+    (SalesInfos OfficialRecordBook / OfficialRecordPage). Keyless and free. An empty set when the
+    appraiser has none or cannot be read: the caller then places nothing it could not place before."""
+    fol = re.sub(r'\D', '', str(folio or ''))
+    if not fol:
+        return set()
+    if fol in _PA_DEEDS:
+        return _PA_DEEDS[fol]
+    out = set()
+    try:
+        j = requests.get(PA_PROXY, params={'Operation': 'GetPropertySearchByFolio',
+                                           'clientAppName': 'PropertySearch', 'folioNumber': fol},
+                         headers={'User-Agent': UA,
+                                  'Referer': 'https://apps.miamidadepa.gov/PropertySearch/'},
+                         timeout=40).json()
+        for si in (j.get('SalesInfos') or []):
+            k = _bp_key(si.get('OfficialRecordBook'), si.get('OfficialRecordPage'))
+            if k:
+                out.add(k)
+    except Exception:
+        out = set()
+    _PA_DEEDS[fol] = out
+    return out
+
+
+def place_by_deed(models, folio, deed_bps):
+    """Most Miami-Dade index rows carry no folio (measured 2026-09-27: 3,504 of 3,998 rows on 28
+    owner searches), so a search that plainly returned the owner's own records still reads as never
+    reaching the parcel, and nothing on it is counted. The Property Appraiser lists the book/page of
+    every deed on the folio. An index row recorded at one of those book/pages IS that deed, whatever
+    its folio field says, so it is given the folio: it then anchors the parcel's subdivision the way
+    a folio-carrying deed always has. A row that carries a DIFFERENT folio is left alone (the index
+    says it is another parcel). Returns (models, number of rows placed)."""
+    fol = norm_folio(folio)
+    if not fol or not deed_bps:
+        return models, 0
+    placed, out = 0, []
+    for r in models or []:
+        if not norm_folio(r.get('foliO_NUMBER', '')) and _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) in deed_bps:
+            r = dict(r, foliO_NUMBER=fol, _placed_by='appraiser deed book/page')
+            placed += 1
+        out.append(r)
+    return out, placed
+
+
+def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=(), deed_bps=None):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
     ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd.
@@ -920,6 +976,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     if not fol:
         return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
                 'ftype': ftype, 'conf': 'none'}
+    # deed_bps: book/pages the Property Appraiser lists for this folio's deeds (pa_deed_bookpages).
+    # Only asked when no row carries the folio; a row at one of them is the parcel's own deed.
+    placed = 0
+    if deed_bps and not any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models):
+        models, placed = place_by_deed(models, folio, deed_bps)
     # ANCHOR the subject's subdivision from a record that DOES carry the subject folio (usually the deed).
     # folio is blank on most newer mortgages, but subdivision is consistent — so subdivision + owner-name
     # isolates the property, while folio alone would drop the very mortgages we need.
@@ -929,6 +990,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if norm_folio(r.get('foliO_NUMBER', '')) == fol:
             sd = (r.get('subdiV_NAME', '') or '').strip().upper()
             if sd: subj_subdiv = sd; break
+    if placed and not subj_subdiv:
+        # the appraiser's deed was found but the index gives it no subdivision, so nothing else on
+        # the search can be tied to the parcel: an empty chain here would read as CLEAR. Not placed.
+        parcel_found = False
     # a MORTGAGE is satisfied if a SATISFACTION points at its book/page
     satisfied = set()
     for r in models:
@@ -1368,7 +1433,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             # on it (equity_state.coverage_documented), and a search that never returned the
             # subject folio may be a namesake's records (verification defect 3)
             'capped': len(models) >= 500, 'parcel_found': parcel_found,
-            'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
+            'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv,
+            'placed_by': ('appraiser deed book/page (%d row%s)' % (placed, '' if placed == 1 else 's')
+                          if placed and parcel_found else '')}
 
 
 def main():
@@ -1773,8 +1840,14 @@ def _run(a, ap):
                 _CLA.index_models(models)
             except Exception:
                 pass
+            # no row carries the folio: ask the appraiser which book/pages are this parcel's deeds
+            # (free, keyless). DEALFLOW_PA_DEED_ANCHOR=0 turns it off.
+            _deeds = None
+            if (os.environ.get('DEALFLOW_PA_DEED_ANCHOR', '1').strip() != '0'
+                    and not _parcel_in(models, folio)):
+                _deeds = pa_deed_bookpages(folio)
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
-                          owner=_searched, case=case, co_owners=_co)
+                          owner=_searched, case=case, co_owners=_co, deed_bps=_deeds)
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
