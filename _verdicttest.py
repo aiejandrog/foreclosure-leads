@@ -4826,5 +4826,117 @@ class ThirtyEighthReviewTests(unittest.TestCase):
         self.assertEqual(CV._index_text({'description': 'Notice:', 'comments': 'OF SALE'}),
                          'Notice: OF SALE')
 
+class ThirtyNinthReviewTests(unittest.TestCase):
+    """The round before's own three changes: a gate put in a shared helper, a strip that re-made the
+    duplicate it removed, and the printed rows that dropped the denial.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = ThirtyFourthReviewTests.PAGE
+    case = ThirtyFourthReviewTests.case
+    JUDGED = ThirtyFourthReviewTests.JUDGED
+    order = ThirtySeventhReviewTests.order
+
+    SOLD = [(1, 'Complaint', '', '01/05/2026', ''),
+            (2, 'Final Judgment of Foreclosure', '', '02/10/2026', ''),
+            (150, 'Notice of Foreclosure Sale on 07/20/2026', '', '06/01/2026', ''),
+            (152, 'Certificate of Sale', '', '07/21/2026', '')]
+
+    def after_sale(self, clerk, body=None, ident=155):
+        rows = list(self.SOLD) + [(ident, clerk, '', '08/01/2026', '')]
+        pages = {'2': self.PAGE}
+        if body:
+            pages[str(ident)] = body
+        return self.built(rows, controlling='2', amount=105000.00, pages=pages)
+
+    # ---- the gate belongs to the caller, not the helper ----------------------------------------
+
+    def test_a_resale_whose_sale_words_are_only_in_the_read_body_still_holds(self):
+        # _sale_dates_of is read on two sides: the PRINTED sale date and the resale filter that keeps a
+        # sale noticed after a certificate from being discarded. The round before put its
+        # producer-vocabulary gate inside the helper, so it also narrowed the HOLD - and an entry whose
+        # sale wording lives only in the read body has sale passages with no date, leaving the clerk
+        # line as the only date the producer's parser can reach for it. Dropping that date let a resale
+        # after a completed sale read `supported` with the entry named nowhere.
+        t = self.after_sale('Amended Notice 02/10/2027',
+                            'AMENDED NOTICE' + chr(10)
+                            + 'Notice is hereby given that the property shall be sold at public '
+                            'sale.')
+        entry = next(e for e in t['entries'] if e['entry_id'] == '155')
+        self.assertEqual(entry['kind'], 'other')                     # the classifier left it alone
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+        self.assertTrue([m for m in r['missing'] + r['notes'] if '155' in m], r)
+        self.assertEqual(CV._sale_dates_of(entry, gated=False), ['2027-02-10'])
+
+    def test_the_completed_sale_docket_is_still_not_held_for_ever(self):
+        # The calibration for ungating the hold side: the clerk's proceeds handling after a certificate
+        # prints no later sale date, and a dated line about something else is not a sale.
+        for clerk in ('Disbursement of Sale Proceeds', 'Surplus Funds from Sale',
+                      'Motion for Writ of Possession 09/01/2026'):
+            r = CV.assess(self.after_sale(clerk))
+            self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
+
+    def test_the_print_side_keeps_the_gate(self):
+        # The round before's own defect stays fixed: a dateless-sale clerk line must not have its
+        # FILING date read as a sale date.
+        entry = next(e for e in self.after_sale('Notice of Filing 07/07/2026')['entries']
+                     if e['entry_id'] == '155')
+        self.assertEqual(CV._sale_dates_of(entry), [])
+        self.assertEqual(CV._sale_dates_of(entry, gated=False), ['2026-07-07'])
+
+    # ---- the strip that re-made the duplicate --------------------------------------------------
+
+    def test_whitespace_around_the_docket_line_does_not_double_the_sale_date(self):
+        # The producer saves index_text verbatim (:346, :395), so comparing a STRIPPED copy against
+        # sale_passages failed for any description with surrounding whitespace, or a whitespace-only
+        # comments field the producer's `if x` keeps - putting the docket line back in twice, the very
+        # duplicate the round before added the strip to remove.
+        for desc, comments in (('Notice of Foreclosure Sale on 12/28/2026', ''),
+                               (' Notice of Foreclosure Sale on 12/28/2026 ', ''),
+                               ('Notice of Foreclosure Sale on 12/28/2026', '   ')):
+            t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                            (160, desc, comments, '03/01/2026', ''),
+                            (2, 'Final Judgment of Foreclosure', '', '04/10/2026', '')],
+                           controlling='2', amount=105000.00, pages={'2': self.PAGE})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '160')
+            self.assertEqual(CV._sale_dates_of(entry), ['2026-12-28'], (desc, comments))
+            r = CV.assess(t)
+            said = ' '.join(r['missing'] + r['notes'])
+            self.assertNotIn('2026-12-28, 2026-12-28', said, (desc, comments))
+
+    # ---- the printed rows, which are the whole justification for the hold ----------------------
+
+    def test_the_denial_is_printed_even_behind_two_earlier_grants(self):
+        # :397 saves one row per line in the court's own page order, which is not a priority. Printing
+        # rows[:2] dropped the denial whenever two other motions were disposed of earlier on the page:
+        # reading MORE of the document hid the "no" and put two grants in its place.
+        page = ('ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT' + chr(10)
+                + 'The Motion to Compel is hereby GRANTED.' + chr(10)
+                + 'The Motion for Extension of Time is hereby GRANTED.' + chr(10)
+                + "Plaintiff's Motion for Entry of an Amended Final Judgment is hereby DENIED.")
+        t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')], pages={'140': page})
+        said = ' '.join(m for m in CV.assess(t)['missing'] if '140' in m)
+        self.assertIn('is hereby DENIED', said)
+
+    def test_a_long_recital_keeps_its_disposition_verb(self):
+        # A Florida order's disposition sits at the END of its recital sentence, so a head-anchored
+        # 200-character cut printed "THIS CAUSE having come before the Court upon ..." and dropped the
+        # DENIED the excerpt exists to show.
+        long = ("THIS CAUSE having come before the Court upon Plaintiff's Motion for Entry of an "
+                'Amended Final Judgment of Foreclosure, and the Court having reviewed the file and '
+                'heard argument of counsel, and being otherwise fully advised in the premises, it is '
+                'ORDERED AND ADJUDGED that the Motion is hereby DENIED.')
+        self.assertGreater(len(long), 200)
+        t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
+                      pages={'140': 'ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT' + chr(10)
+                             + long})
+        said = ' '.join(m for m in CV.assess(t)['missing'] if '140' in m)
+        self.assertIn('DENIED', said)
+
+    def test_a_short_line_is_printed_whole_and_a_long_one_is_bounded(self):
+        self.assertEqual(CV._disposition_excerpt('  The Motion is hereby DENIED. '),
+                         'The Motion is hereby DENIED.')
+        self.assertLessEqual(len(CV._disposition_excerpt('x' * 400)), 200)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

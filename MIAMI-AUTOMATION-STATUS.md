@@ -769,6 +769,34 @@ The review cleared the rest with reproductions: combining the two sale inputs ca
 the reset word is inside `_sale_text` and the `_RESET_WORD_RE` branch rescues the entry; and the round
 before's scoping did fix the direction it claimed.
 
+**Thirty-ninth review.** Three findings, all three inside the round before's own three changes. That is
+family (e) for the fourteenth consecutive round, and one of the three was a false `supported` produced by
+a change written up as report-only.
+
+The producer-vocabulary gate went into `_sale_dates_of` itself, and that helper is read on two sides: the
+sale date this file PRINTS (:651) and the filter that keeps a resale noticed after a certificate of sale
+from being discarded (:670). So the gate narrowed the HOLD as well. An entry whose sale wording lives
+only in the READ body has sale passages with no date in them - the producer appends body lines on the
+wider `sale|sell|auction|reset|reschedul*` (:398) but seeds the docket line only on `\bsale\b` (:395) -
+so the clerk line is the only date the producer's parser can reach for it, and dropping it let "Amended
+Notice 02/10/2027", read and saying the property shall be sold at public sale, read `supported` after a
+completed sale with the entry named nowhere. That is the eighteenth review's defect back. The gate is the
+caller's now: on by default at the print site, off at the hold. The round before's own defect - a
+dateless "Notice of Filing 07/07/2026" printing its filing date - stays fixed, and three completed-sale
+calibrations stay `supported`.
+
+The `.strip()` added to remove the duplicate sale date re-made it. The producer saves `index_text`
+verbatim (:346, :395), so comparing a stripped copy against `sale_passages` failed for any description
+with surrounding whitespace, and for a whitespace-only `comments` field, which the producer's `if x`
+keeps. The membership test is unstripped again and only the truthiness check strips.
+
+And the printed disposition rows - which are the whole justification for keeping that hold - dropped the
+denial. :397 saves one row per line in the court's own page order, which is not a priority, so `rows[:2]`
+printed two earlier grants and hid the "no": reading more of the document hid the evidence. A single
+300-character Florida recital lost its verb to the 200-character cut as well, because a Florida order's
+disposition sits at the END of the sentence. Denials print first now, and `_disposition_excerpt` anchors
+the cut at the end when the verb is not in the head.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and

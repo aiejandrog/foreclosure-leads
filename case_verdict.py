@@ -667,7 +667,11 @@ def _sale_state(timeline, status, kind):
         # own date parser separates them: a proceeds entry prints no sale date after the certificate,
         # a rescheduled-sale notice does.
         later = [e for e in later
-                 if any(d > closing_date for d in _sale_dates_of(e))
+                 # UNGATED: this is the hold side. The gate exists so a dateless clerk line is not
+                 # PRINTED as a sale date; here the question is only whether a later entry might be a
+                 # resale, and the strictly weaker docket - sale wording only in the read body - must
+                 # not read better than the one whose clerk line carries the word too.
+                 if any(d > closing_date for d in _sale_dates_of(e, gated=False))
                  or _RESET_WORD_RE.search(_sale_text(e))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
@@ -891,6 +895,23 @@ def _disposition_rows(entry):
     return [str(l or '') for l in _rows(entry, 'motion_disposition_passages') if str(l or '').strip()]
 
 
+def _disposition_excerpt(line, limit=200):
+    """At most `limit` characters of a saved disposition line, keeping the disposition verb.
+
+    A Florida order's disposition sits at the END of its recital sentence, so a head-anchored cut
+    printed "THIS CAUSE having come before the Court upon ..." and dropped the DENIED the excerpt
+    exists to show (thirty-ninth review).
+    """
+    line = str(line or '').strip()
+    if len(line) <= limit:
+        return line
+    head = line[:limit]
+    verbs = _DENIED_RE.search(line) or _GRANTED_RE.search(line)
+    if verbs and not (_DENIED_RE.search(head) or _GRANTED_RE.search(head)):
+        return '...' + line[-(limit - 3):]
+    return head
+
+
 def _replacement_of_record(judgments):
     """The entry id of a judgment the reconciliation itself typed role='replacement', or None.
 
@@ -1058,7 +1079,7 @@ def _was_read(entry, timeline=None):
     return bool(rows) and all(1 not in list(g.get('pages') or []) for g in rows)
 
 
-def _sale_dates_of(entry):
+def _sale_dates_of(entry, gated=True):
     """The sale dates this entry prints, off the producer's own saved field and its own parser.
 
     `sale_passages` is what build_timeline (:407, :411) saved for this entry: the docket line plus
@@ -1081,13 +1102,19 @@ def _sale_dates_of(entry):
     symmetric.
     """
     passages = [str(p) for p in _rows(entry, 'sale_passages') if str(p or '').strip()]
-    text = _index_text(entry).strip()
-    # Gated on the producer's own :398 vocabulary, which is what the paragraph above is actually
-    # about. Appended unconditionally, any dated clerk string reached the producer's sale-date parser
-    # even with no sale word in it at all, so a bare "Notice of Filing 07/07/2026" printed its FILING
-    # date as this entry's sale date while the same line without a date printed nothing - a reason the
-    # producer's own state does not carry (thirty-eighth review).
-    if text and _PRODUCER_SALE_WORD_RE.search(text) and text not in passages:
+    # UNSTRIPPED for the membership test, because the producer saves `index_text` verbatim (:346,
+    # :395). Stripping it here meant a clerk description with surrounding whitespace, or a
+    # whitespace-only `comments` field (which the producer's `if x` keeps), failed `text not in
+    # passages` and put the docket line back in twice - the duplicate the round before had just
+    # removed, through the .strip() it added to remove it (thirty-ninth review).
+    text = _index_text(entry)
+    # `gated` is the caller's, because this helper is read on two sides. Gating it here for everyone
+    # also narrowed the completed-sale HOLD at the resale filter: an entry whose sale wording lives
+    # only in the READ body has sale passages with no date, so the clerk line is the only date the
+    # producer's parser can reach for it - and dropping that date let a resale noticed after a
+    # certificate of sale read `supported` with the entry named nowhere, which is the eighteenth
+    # review's defect back. The change that did it was written up as report-only (thirty-ninth review).
+    if text.strip() and (not gated or _PRODUCER_SALE_WORD_RE.search(text)) and text not in passages:
         passages.append(text)
     if not passages:
         return []
@@ -1861,10 +1888,20 @@ def assess(timeline, dossier=None):
         # _order_grants_a_replacement: two rounds running tried to read one of these as the document's
         # answer about the motion for entry, and each produced a false `supported`. A reader decides
         # this in seconds with the line in front of them; this file cannot decide it at all.
+        #
+        # DENIALS FIRST, and the excerpt keeps the verb. :397 saves one row per line in the court's own
+        # page order, which is not a priority, so printing rows[:2] dropped the denial whenever two
+        # other motions were disposed of earlier on the page - reading MORE of the document hid the
+        # "no" and put two grants in its place - and a single 300-character Florida recital
+        # ("THIS CAUSE having come before the Court upon ... it is ORDERED AND ADJUDGED that the Motion
+        # is hereby DENIED.") lost the verb to the 200-character cut. Both are evidence that says "no"
+        # dropped before a human sees it, by the report not printing it (thirty-ninth review).
         rows = _disposition_rows(entry)
         if rows:
+            rows = ([l for l in rows if _DENIED_RE.search(l)]
+                    + [l for l in rows if not _DENIED_RE.search(l)])
             missing[-1] += (' - the run also read %s'
-                            % '; '.join(repr(l.strip()[:200]) for l in rows[:2]))
+                            % '; '.join(repr(_disposition_excerpt(l)) for l in rows[:2]))
     # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
     # one net for these - :519 forces status 'unclear' for every undated entry `_transition`
     # recognises - and `_transition` returns None for exactly the kinds that then reach nothing else:
