@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 from datetime import date
 from pathlib import Path
@@ -309,8 +310,21 @@ def case_coverage(case, inventory, rows, timeline):
                                       recorded_copies(case), case)
 
 
+def fetch_alternate_copies(case, coverage, ocr=None, collector=None, collect=None):
+    """E1: fetch the cited public copies coverage() asked for, free. -> the fetch report, or None
+    when nothing is cited. Never raises: a failed fetch stays a named row."""
+    import document_coverage
+    needed = [n for n in (coverage or {}).get('alternate_copy_needed') or [] if n.get('cited_book_page')]
+    if not needed:
+        return None
+    try:
+        return document_coverage.fetch_alternates(needed, case, ocr=ocr, collector=collector, collect=collect)
+    except Exception as exc:
+        return [{'status': 'error', 'reason': '%s: %s' % (type(exc).__name__, str(exc)[:120])}]
+
+
 def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, ledger=None,
-                  cap=None):
+                  cap=None, fetch_alternates=None):
     """One case's whole-case timeline: acquire, free reading, then (with `shared`, a
     document_case_budget.CaseAllocator) paid amount reads within this case's share.
 
@@ -330,6 +344,13 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
     timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
     timeline['source_comparison'] = inventory.get('source_comparison')
     timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+    # E1: auto-fetch the public OR copies the docket cites for unread attachments. Free (index CFN +
+    # anonymous image endpoint). On by default when this run may use the network (--collect).
+    if (collect if fetch_alternates is None else fetch_alternates):
+        fetched = fetch_alternate_copies(case, timeline['coverage'], ocr=DS.winocr if os.name == 'nt' else None)
+        if fetched is not None:
+            timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+            timeline['coverage']['alternate_fetch'] = fetched
     # Preserve the free whole-case analysis even if a paid reader fails.
     if ledger is not None:
         timeline['vision_budget'] = budget_snapshot(ledger, cap)
@@ -347,7 +368,10 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
         # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
         timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
         timeline['source_comparison'] = inventory.get('source_comparison')
+        _alt = (timeline.get('coverage') or {}).get('alternate_fetch')
         timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+        if _alt is not None:
+            timeline['coverage']['alternate_fetch'] = _alt
         try:
             plan = document_prioritizer.prioritize(case, inventory, as_of)
         except ValueError:
@@ -385,6 +409,8 @@ def main(argv=None):
                         help='Existing shared cumulative cap, at most $1. Required with --vision; '
                              'without --vision it is optional and only reported')
     parser.add_argument('--vision', action='store_true', help='Read only amount-bearing pages within shared cap')
+    parser.add_argument('--no-fetch-alternates', action='store_true',
+                        help='with --collect, do NOT fetch the cited public OR copies of unread attachments')
     args = parser.parse_args(argv)
     import case_review
     try:
@@ -412,7 +438,8 @@ def main(argv=None):
                   if args.vision else None)
         for case in cases:
             timeline_case(case, args.as_of, collect=args.collect, docket_cache=args.docket_cache,
-                          shared=shared, ledger=ledger, cap=args.vision_max_spend)
+                          shared=shared, ledger=ledger, cap=args.vision_max_spend,
+                          fetch_alternates=(args.collect and not args.no_fetch_alternates))
     return 0
 
 

@@ -246,6 +246,7 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   border-radius:3px;cursor:help;border:1px solid}
 .taxchip.tc{background:#fff5f4;color:#8a1c1c;border-color:#e8bcbc}
 .taxchip.td{background:#fff2d7;color:#7a5a10;border-color:#eadb9f}
+.taxchip.ts{background:#f3f4f6;color:#4b5563;border-color:#d1d5db;border-style:dashed}
 /* FS 825.103 elder guardrail (Playbook §0.5). Purple, used by nothing else on the board, so it
    never reads as "just another lien chip" — this one is a stop sign, not a pricing input. */
 .elderchip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
@@ -2857,7 +2858,9 @@ function recompute(){
     // NOT actually checked. Confidence for those buckets
     // must exclude 'bd' so a $0 there is treated as "not checked" (surfaces the manual-check nudge)
     // instead of "verified none" (which fakes an estoppel/code surprise away at closing).
-    const nonMortConf = (r.orconf==='ok' || r.orconf==='low');
+    // a chain with no mortgage still carries its city/association/IRS liens: a found debt is subtracted
+    // whatever the mortgage verdict (over-counting a namesake's is the safe way to be wrong)
+    const nonMortConf = (r.orconf==='ok' || r.orconf==='low' || !!(r.orhoa || r.orcode || r.orirs));
     // Split the surviving stack cleanly so NO mortgage counts twice (the double-count bug: `orsurv`
     // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
     // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing
@@ -2926,7 +2929,12 @@ function recompute(){
       const bid = judg;
       // if the ASSOCIATION is the plaintiff, its judgment (bid) already includes the dues/assessment, so
       // only the estoppel amount ABOVE the judgment is additional -> don't double-count it.
-      const assessEff = (r.ctype||'').toUpperCase().indexOf('HOA')===0 ? Math.max(0, assess - judg) : assess;
+      // ...but a chain that marks the plaintiff's own claim of lien (orhoaown) already left it out of orhoa,
+      // and the HOA field is pre-filled from orhoa: what is there is ANOTHER association's lien (a master
+      // association) and is owed in full, typed or not. (A full estoppel typed over it is then counted
+      // with the judgment on top: too much debt, never too little.)
+      const assessEff = ((r.ctype||'').toUpperCase().indexOf('HOA')===0 && !r.orhoaown)
+                          ? Math.max(0, assess - judg) : assess;
       r._assess = assessEff;
       r._equity = val - judg - slien - jlien - assessEff;
       r._purchase = bid + slien + jlien;
@@ -3150,7 +3158,8 @@ function dealFlags(r){
   if(r.st!=='TD' && !r.mr && r._equity!=null && r.value && (r._equity/r.value)>0.5 && !nn.jlien && !nn.assess) f.push('Big equity on a bank 1st — pull Official Records for a 2nd mortgage / HELOC. To buy from the owner you clear EVERY mortgage, not just the one foreclosing.');
   if(_hasClock(r) && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
   if((+r.saleBK||0)>=2) f.push('SERIAL BANKRUPTCY FILER — '+r.saleBK+' distinct BK cases on this docket. The automatic stay stops any sale the moment they re-file, so timelines here are unreliable and a rescue deal can be frozen mid-flight. Jose screens these out.');
-  if(r.saleBkAct) f.push('⛔ ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' (filed '+r.saleBkD+')':'')+' — 11 U.S.C. §362 prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. A stay violation carries real sanctions and can unwind work already done. Track it; move when it closes.');
+  if(r.bkWhy) f.push('⛔ '+r.bkWhy+' — no calls, texts, letters, or emails until this federal bankruptcy check is cleared.');
+  else if(r.saleBkAct) f.push('⛔ ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' (filed '+r.saleBkD+')':'')+' — 11 U.S.C. §362 prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. A stay violation carries real sanctions and can unwind work already done. Track it; move when it closes.');
   var _ld = _stayLiftedDays(r);
   if(_ld >= 0 && _ld <= 45) f.push('🔔 STAY LIFTED '+_ld+' days ago ('+r.saleLift+') — the bankruptcy closed, contact is legal again, and the bank will reset the sale shortly. This owner just lost their last shield: peak motivation, minimal competition. Move first.');
   return f;
@@ -3348,7 +3357,7 @@ function _clockBodyHtml(r){
       +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':''))
     + row('Deal deadline', _hasClock(r) ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play')
     + row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')')
-    + (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):''));
+    + (r.bkWhy?row('⛔ BANKRUPTCY','<b class="bad">'+esc(r.bkWhy)+'</b>'):(r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):'')));
 }
 function _daClockHtml(r){
   return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+_clockBodyHtml(r)+'</div>';
@@ -3990,8 +3999,9 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   // is live (federal sanctions, not an FTSA fine). Same preventive pattern as the opt-out guard:
   // blocked by default; proceeding only documents an already-happened contact for the record.
   const _st = (typeof DATA !== 'undefined') && DATA.find(x => x.case === caseId);
-  if(_st && _st.saleBkAct && _OUTREACH_CH[ch]){
-    if(typeof confirm === 'function' && !window.__replaying && !confirm('⛔ ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':'')+'.\n\nThe automatic stay (11 U.S.C. §362) prohibits ALL collection contact right now — calls, letters, door-knocks, WhatsApp. A violation carries federal sanctions. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
+  if(_st && (_st.saleBkAct || _st.bkWhy) && _OUTREACH_CH[ch]){
+    var _bkMsg = _st.bkWhy || ('ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':''));
+    if(typeof confirm === 'function' && !window.__replaying && !confirm('⛔ '+_bkMsg+'.\n\nNo calls, texts, letters, or emails until this is cleared. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
   }
   // WRONG-PERSON guard: once someone has told us "that isn't my property", every number we hold for
   // this lead is suspect. Block further outreach the same preventive way — the identity has to be
@@ -6174,8 +6184,11 @@ function _textBodies(o){
   const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
   const stEN = o.stEN || 'your property', stES = o.stES || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
-  const stopEN = '';
-  const stopES = '';
+  /* Opt-out on every batch text (2026-09-26, attorney: not the carrier-keyword instruction). The owner is
+     told to say it is not a good time; inbound STOP / PARE / "not a good time" still opt out.
+     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
+  const stopEN = " If now's not a good time, just let me know and I won't text you again.";
+  const stopES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.';
   let en, es;
   /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
      plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
@@ -6266,8 +6279,9 @@ function textCardHtml(r){
   const PH=_textPersonHist(r);
   const TS=_textStage(r);
   const retired=(TS==='retired');
-  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired;
-  const canCopy=!hardBlock && !retired; // never for BK / opt-out / wrong-owner / retired
+  const quoHold = (typeof TEXT_HOLD === 'string' && !!TEXT_HOLD);
+  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired && !quoHold;
+  const canCopy=!hardBlock && !retired && !quoHold; // never for BK / opt-out / wrong-owner / retired / a failed STOP scan
   const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
   /* The tone buttons ARE the ladder now. A later touch stays disabled until the earlier ones have
      actually been sent — otherwise touch 3's "this is my last message" body can be fired first,
@@ -6289,6 +6303,7 @@ function textCardHtml(r){
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
+  else if(quoHold) gate='<div class="txblock">⛔ '+esc(TEXT_HOLD)+'</div>';
   else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
   let phBtns;
   if(hardBlock){
@@ -7387,8 +7402,13 @@ function _doorVerified(r){
   // exactly like a fact. Only 'clear'/'priced' are facts; everything else must say so out loud.
   var _eqs = r.eqstate || 'unchecked';
   if(r.value > 0 && !r.ju){
-    if(_eqs === 'unpriced')
-      fails.push('EQUITY IS A CEILING — ' + (r.eqopen||'?') + ' mortgage(s) recorded, county publishes no amounts; ask the owner what they owe');
+    if(_eqs === 'unpriced'){
+      // eqopen = open mortgages; eqoth = open city/association/tax liens with no published amount
+      var _ceil = [];
+      if(r.eqopen) _ceil.push(r.eqopen + ' open mortgage(s)');
+      if(r.eqoth) _ceil.push(r.eqoth + ' open lien(s) with no published amount');
+      fails.push('EQUITY IS A CEILING — ' + (_ceil.join(' + ') || 'recorded debt') + ' not totalled; ask the owner what they owe');
+    }
     else if(_eqs === 'none')
       fails.push('EQUITY UNVERIFIED — recorded chain could not be established' + (r.eqrecs ? ' ('+r.eqrecs+' records searched)' : ''));
     else if(_eqs === 'unchecked')
@@ -8057,7 +8077,21 @@ function _taxChip(r){
   // sold certificate escalates the wording because that is a SECOND foreclosure clock (a tax-deed
   // sale on a separate track from the bank's case). Already folded into the equity number via
   // recompute; the chip is the visible "why the equity dropped" and the door-conversation leverage.
-  if(!r || !(+r.taxDue)) return '';
+  /* Tax1 (2026-09-26): a read that is out of date for how close the sale is. A stale "$0" used to
+     render NOTHING, which reads as "no back taxes" -- the one wrong answer this chip exists to
+     prevent. taxStale is the read's age in days, or 'never'. */
+  var stale = (r && r.taxStale) ? ' <span class="taxchip ts" title="'
+      + esc(r.taxStale === 'never'
+            ? 'Back taxes NOT READ for this parcel yet. No chip does not mean no taxes; county_taxes.py reads near-sale parcels first.'
+            : 'Tax read is ' + r.taxStale + ' days old (' + (r.taxChecked || '?') + '), too old for how close the sale is. '
+              + 'The amount shown (if any) may be out of date; county_taxes.py re-reads it on the next run.')
+      + '">TAX READ ' + (r.taxStale === 'never' ? 'PENDING' : esc(String(r.taxStale)) + 'd OLD') + '</span>' : '';
+  var cf = (r && r.taxCertFollow) ? r.taxCertFollow : null;
+  var cfTxt = cf ? (' Certificate issued ' + cf.issued + '; a tax-deed application is possible from '
+      + cf.tda_possible_from + ' (FS 197.502) and it expires ' + cf.expires + ' (FS 197.482). '
+      + (cf.state === 'tax_deed_application_possible' ? 'THE TAX-DEED WINDOW IS OPEN NOW.' : '')
+      + (r.taxDeedSignal ? ' The collector page mentions: "' + r.taxDeedSignal + '".' : '')) : '';
+  if(!r || !(+r.taxDue)) return stale;
   var due = +r.taxDue;
   var yrs = (r.taxYears||[]).length;
   var k = '$' + Math.round(due).toLocaleString();
@@ -8066,13 +8100,13 @@ function _taxChip(r){
       + esc('VERIFIED BACK TAXES: '+k+' unpaid'+(yrs?' ('+yrs+' year'+(yrs>1?'s':'')+')':'')
           + ' — AND a tax certificate has been SOLD, which starts a SECOND foreclosure clock: the '
           + 'certificate holder can force a tax-deed sale on a separate track from the bank. This is '
-          + 'already subtracted from the equity shown. Survives the mortgage foreclosure (FS 197.122).')
-      + '">&#9888; TAX CERT &middot; '+esc(k)+'</span>';
+          + 'already subtracted from the equity shown. Survives the mortgage foreclosure (FS 197.122).' + cfTxt)
+      + '">&#9888; TAX CERT &middot; '+esc(k)+(cf && cf.state === 'tax_deed_application_possible' ? ' &middot; TDA OPEN' : '')+'</span>' + stale;
   return ' <span class="taxchip td" title="'
     + esc('VERIFIED BACK TAXES: '+k+' unpaid'+(yrs?' across '+yrs+' year'+(yrs>1?'s':''):'')
         + ' off the county tax collector. First-priority lien that survives the foreclosure (FS '
         + '197.122) and is NOT in the mortgage chain. Already subtracted from the equity shown.')
-    + '">&#9888; TAXES '+esc(k)+'</span>';
+    + '">&#9888; TAXES '+esc(k)+'</span>' + stale;
 }
 function _codeLienChip(r){
   // A code-enforcement lien never appears in the mortgage chain, so the equity number does not
@@ -8083,8 +8117,13 @@ function _codeLienChip(r){
   var hits = r.codeliens || [];
   var lienHits = hits.filter(function(h){ return h.lien; });
   var detail = hits.slice(0,4).map(function(h){
-    return h.stLabel + (h.problem ? ' — ' + h.problem : '') + (h.lienRef ? ' (OR ' + h.lienRef + ')' : '');
+    return h.stLabel + (h.problem ? ' — ' + h.problem : '') + (h.lienRef ? ' (OR ' + h.lienRef + ')' : '')
+      /* C2: the ESTIMATE read off the recorded lien (code_lien_amounts.py). Always says ESTIMATE,
+         never "payoff", and never enters the equity number beside it. */
+      + (h.est ? ' — ESTIMATE ' + (h.estFloor ? 'at least ' : '~') + '$' + Number(h.est).toLocaleString()
+                 + ' as of ' + (h.estAsOf || '?') + ', NOT a payoff (' + (h.estHow || '') + ')' : '');
   }).join(' · ');
+  var estSum = lienHits.reduce(function(a, h){ return a + (h.est || 0); }, 0);
   if(r.codeConcern === 'foreclosing')
     return ' <span class="codechip cf" title="'
       + esc('THE COUNTY IS FORECLOSING ON ITS OWN CODE LIEN here (Active LP). This is a separate '
@@ -8096,7 +8135,7 @@ function _codeLienChip(r){
       + esc('RECORDED CODE-ENFORCEMENT LIEN (' + lienHits.length + ') — a junior lien that is NOT in '
           + 'the mortgage chain and is NOT in the equity number you see. Accrued daily fines attach to '
           + 'the parcel; a "high equity" read here is optimistic until you pull the payoff. ' + detail)
-      + '">⚠ CODE LIEN</span>';
+      + '">⚠ CODE LIEN' + (estSum ? ' est. ~$' + Math.round(estSum/1000) + 'k?' : '') + '</span>';
   return ' <span class="codechip co" title="'
     + esc('Open code-enforcement case — fines may be accruing, no lien recorded yet. Not fatal, but '
         + 'a cost the equity number does not include. ' + detail)
@@ -8303,6 +8342,8 @@ function _idChip(r){
 function _stayChip(r){
   // kimi: ACTIVE bankruptcy automatic stay (sale_history._bk_active). 11 U.S.C. §362 bars ALL
   // collection contact while live — this chip outranks every other signal on the row.
+  if(r.bkWhy)
+    return '<span class="frchip fr-stay" title="'+esc(r.bkWhy)+'">⛔ '+esc(String(r.bkWhy).slice(0,72))+'</span> ';
   if(r.saleBkAct)
     return '<span class="frchip fr-stay" title="ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' — filed '+r.saleBkD:'')+'. Federal law (11 U.S.C. §362) prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. Outreach here is a federal violation — track the lead, move when the stay closes.">⛔ BK STAY ACTIVE</span> ';
   // the DOOR: the stay CLOSED recently — the owner just lost the shield, the bank is about to
@@ -8321,20 +8362,25 @@ function _srMD(iso){ var m = String(iso||'').match(/^\d{4}-(\d{2})-(\d{2})$/); r
 function _srLabel(sr){
   if(!sr || !sr.st) return '';
   var t = {held:'SOLD '+_srMD(sr.d), cancelled:'SALE CANCELLED '+_srMD(sr.d), reset:'SALE MOVED to '+_srMD(sr.nd)+(sr.was?' (was '+_srMD(sr.was)+')':''),
-           vacated:'SALE SET ASIDE '+_srMD(sr.d), redeemed:'REDEEMED '+_srMD(sr.d), at_risk:'SALE AT RISK', unknown:'RESULT NOT ON DOCKET YET'}[sr.st] || '';
+           vacated:'SALE SET ASIDE '+_srMD(sr.d), redeemed:'REDEEMED '+_srMD(sr.d), at_risk:'SALE AT RISK', unknown:'RESULT NOT ON DOCKET YET',
+           unread:'RESULT UNREAD · sale '+_srMD(sr.sale)+' passed'}[sr.st] || '';
   if(sr.st === 'held' && sr.bkb) t += ' · BK filed '+_srMD(sr.bkb);
   if(sr.st === 'held' && sr.obj) t += ' · objection filed';
   if(sr.amj) t += (t ? ' · ' : '') + 'AMENDED JUDGMENT '+_srMD(sr.amj) + (sr.ama ? ' '+fmtK(sr.ama) : '');
+  /* AR1: a decisive verdict whose read is older than 3 days, labelled with its age. */
+  if(t && sr.st !== 'unread' && typeof sr.stale === 'number') t += ' · read '+sr.stale+'d ago';
   return t;
 }
 function _saleResultChip(r){
   var sr = r && r.sr; var lab = _srLabel(sr);
   if(!lab) return '';
-  var cls = {held:'fr-stale', redeemed:'fr-stale', vacated:'fr-warn', cancelled:'fr-lift', reset:'fr-lift', at_risk:'fr-warn'}[sr.st] || 'fr-warn';
+  var cls = {held:'fr-stale', redeemed:'fr-stale', vacated:'fr-warn', cancelled:'fr-lift', reset:'fr-lift', at_risk:'fr-warn', unread:'fr-warn'}[sr.st] || 'fr-warn';
   var tip = 'From the court docket'+(sr.ts?' (read '+sr.ts+')':'')+': '+(sr.why||'')
     + (sr.amj ? '. Amended final judgment entered '+sr.amj+(sr.ama?' for $'+(+sr.ama).toLocaleString():' — amount not in the docket text, read the order before quoting a number') : '')
     + (sr.st==='held' ? '. A sold house is not a wholesale deal; surplus talk only.' : '')
     + ((sr.st==='cancelled'||sr.st==='reset') ? '. The owner has more time: this lead is live again.' : '')
+    + (sr.stale != null ? '. STALE: ' + (sr.stale === 'never' ? 'this sale has never been read off the docket'
+          : 'the last docket read was ' + sr.stale + ' days ago') + ', so something newer may have happened' : '')
     + '. Verify on the clerk docket before telling the owner.'
     + ((sr.ev && sr.ev.length) ? '\nDocket lines: ' + sr.ev.map(function(e){ return _srMD(e.d)+' '+e.x; }).join(' | ') : '');
   return '<span class="frchip '+cls+'" title="'+esc(tip)+'">'+esc(lab)+'</span> ';
@@ -12067,6 +12113,15 @@ function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||
 // what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
 // /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
 var _liveCap = null, _liveCapAt = 0;
+// Quo inbound STOP scan. HELD until a successful /health says text_hold is false. A failed fetch,
+// a missing field, or the bridge being down is not proof the scan is fresh. Email does not read this.
+var TEXT_HOLD_DOWN = 'Texting is held — the send bridge has not confirmed a fresh inbound STOP scan. Email is not held by this.';
+var TEXT_HOLD = TEXT_HOLD_DOWN;
+function _textHoldApply(j){
+  if(j && j.text_hold === false) return '';
+  if(j && j.text_hold) return (j.text_hold_why || 'Inbound STOP scan failed or is stale. Texting is held. Email is not held by this.');
+  return TEXT_HOLD_DOWN;
+}
 function _pollLiveCap(){
   var ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
   var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;
@@ -12074,8 +12129,15 @@ function _pollLiveCap(){
     .then(function(r){ return r.json(); })
     .then(function(j){ if(to) clearTimeout(to);
       if(j && j.ready){ _liveCap = j; _liveCapAt = Date.now(); }
-      _renderCapBadge(); })
-    .catch(function(){ if(to) clearTimeout(to); _renderCapBadge(); });
+      TEXT_HOLD = _textHoldApply(j);
+      _renderCapBadge();
+      try{ if(document.getElementById('textmodal') && document.getElementById('textmodal').classList.contains('show') && typeof renderTextModal==='function') renderTextModal(); }catch(e){}
+    })
+    .catch(function(){ if(to) clearTimeout(to);
+      TEXT_HOLD = TEXT_HOLD_DOWN;
+      _renderCapBadge();
+      try{ if(document.getElementById('textmodal') && document.getElementById('textmodal').classList.contains('show') && typeof renderTextModal==='function') renderTextModal(); }catch(e){}
+    });
 }
 function _renderCapBadge(){
   // Deliverability banner. The server has computed the trailing bounce rate on /health since
@@ -12249,6 +12311,43 @@ function _lastTouchMs(caseId, n){
   var B = (MAILLOG[caseId] || {}).last || 0;
   return B > last ? B : last;
 }
+/* THE NO POLICY on the Morning Worker (decided 2026-09-02, Call Mode's noState, board 2026-09-26).
+   A hard no / DNC is person-wide and is never re-contacted. "Not interested" is a soft no: retired,
+   not a 30-day cooldown. One event-driven resurface — T-14 if the lead had a sale date when the
+   no was logged, or the day an LP / dateless lead gets a date. After that resurface is spent, retired. */
+function _boardWasLp(r){
+  if(!r) return true;
+  if(r.st === 'LP' || r.lp) return true;
+  return !(typeof r.days === 'number' && r.days >= 0 && r.days < 9999);
+}
+function _boardNoState(r){
+  var cases = (typeof _personCases === 'function') ? _personCases(r) : [(r && r.case) || ''];
+  var soft = null, i, n, st;
+  for(i = 0; i < cases.length; i++){
+    n = (typeof notes !== 'undefined' && notes[cases[i]]) || {};
+    st = String(n.status || '').toUpperCase();
+    if(n.no === 'hard' || n.optout || st === 'DO NOT CONTACT' || st === 'OPTED OUT')
+      return {hard:true, soft:false, open:false};
+    if(n.no === 'soft' || (!n.no && n.status === 'Not interested')){ if(!soft) soft = n; }
+  }
+  if(!soft) return {hard:false, soft:false, open:false};
+  var wasLp = (soft.no === 'soft') ? !!soft.noWasLp : _boardWasLp(r);
+  var d = (typeof r.days === 'number') ? r.days : 9999;
+  var open = false;
+  if(!(soft.resurf > 0)){
+    var dated = (typeof r.days === 'number' && r.days >= 0 && r.days < 9999 && r.st !== 'LP' && !r.lp);
+    open = wasLp ? dated : (d >= 0 && d <= 14);
+  }
+  return {hard:false, soft:true, open:open};
+}
+/* 'hard' / 'soft' = do not queue. 'open' = the one resurface, and the 30-day cooldown does not apply. */
+function _workerNoBlocks(r){
+  var ns = _boardNoState(r);
+  if(ns.hard) return 'hard';
+  if(ns.soft && !ns.open) return 'soft';
+  if(ns.soft && ns.open) return 'open';
+  return '';
+}
 function _workerEligible(r){
   // Shared gate for every lane. Suppression first — these are legal, not preferences.
   if(!r || !r.case) return false;
@@ -12281,19 +12380,24 @@ function _workerEligible(r){
   // unattended, in bulk, at 8am — was checking only the case and would have kept mailing them on
   // their remaining properties (2026-08-26).
   if(typeof _isOptedOutPerson === 'function' && _isOptedOutPerson(r)) return false;
+  // Hard no is person-wide (a sibling case's DNC closes this one). Soft no / Not interested
+  // replaces the 720h cooldown: retired until the one resurface, then never queued on a calendar.
+  var _nb = _workerNoBlocks(r);
+  if(_nb === 'hard' || _nb === 'soft') return false;
   // A wrong number recorded from call mode is a data problem, not a lead — re-verify title first.
   if(n.wrongown) return false;
   // must be reachable at all — a lead with no phone and no email is a lookup task, not outreach
   if(!((r.phones||[]).length || (r.emails||[]).length)) return false;
-  /* COOLDOWN — outcome-aware, defaults to 72h.
-     A flat three-day rule is wrong for a call list: a no-answer or a voicemail should come back
-     TOMORROW (people are reachable at different hours), while an actual conversation or a "not
-     interested" deserves the full 72h of breathing room. Call mode writes notes[case].cooldownH
-     when the operator logs an outcome; anything else keeps the original 72h. */
+  /* COOLDOWN — outcome-aware, defaults to 72h, for ordinary outcomes only.
+     A no-answer comes back tomorrow; a conversation waits longer. "Not interested" and a hard no
+     do not use this clock: _workerNoBlocks already returned for those (2026-09-02 policy). */
   // A WAITING REPLY overrides the cooldown entirely. The cooldown exists to stop us pestering
   // someone we just contacted; a reply is the opposite situation — THEY contacted US, and hiding
   // them for 72h because we emailed before they answered is how a callback waits 13 days.
   if(_replyWaiting(r)) return true;
+  // The one soft-no resurface is served now, whatever cooldownH says (that field is still 720
+  // on a notint so the phone and the board share one outcome row; it is not the return clock).
+  if(_nb === 'open') return true;
   var last = _lastTouchMs(r.case, n);
   var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
   if(last && (Date.now() - last) < coolH*3600000) return false;
@@ -12321,11 +12425,14 @@ function _laneStats(lane){
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
     // mirror _workerEligible's person-level opt-out, or the lane count promises work it will refuse
     if(typeof _isOptedOutPerson === 'function' && _isOptedOutPerson(r)){ s.suppressed++; return; }
+    var _nb = _workerNoBlocks(r);
+    if(_nb === 'hard' || _nb === 'soft'){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
     if(n.wrongown){ s.suppressed++; return; }
     // Mirrors _workerEligible's outcome-aware cooldown — see the comment there. Reply-waiting
-    // leads bypass it there, so they must bypass it here or the lane count lies.
-    if(!_replyWaiting(r)){
+    // leads bypass it there, so they must bypass it here or the lane count lies. The one soft-no
+    // resurface ('open') bypasses it too.
+    if(!_replyWaiting(r) && _nb !== 'open'){
       var last = _lastTouchMs(r.case, n);
       var cH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
       if(last && (Date.now()-last) < cH*3600000){ s.touched++; return; }
@@ -12910,6 +13017,7 @@ function genMorningWorker(lane, autostart){
     +   '<div class="mwtextq" id="mwtextq" style="display:none;background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
     +     '<div class="mwloghead" style="background:#12224A;color:#CFE0FF"><span>&#128241; Text batch &mdash; pre-filled, you press send</span><span class="mwlogstats" id="mwtextqn"></span></div>'
     +     '<div style="padding:10px 14px;border-bottom:1px solid #eef0f5">'
+    +       '<div id="mwtexthold" style="display:none;margin-bottom:8px;background:#3d2c08;color:#F6E9C8;border-radius:8px;padding:8px 10px;font:700 12.5px/1.45 Segoe UI,Arial"></div>'
     +       '<button id="mwtextqgo" style="width:100%;background:#12224A;color:#fff;border:0;border-radius:8px;padding:11px 14px;font:700 13.5px Segoe UI,Arial;cursor:pointer">&#9654; Start text batch</button>'
     +     '</div>'
     +     '<div id="mwtextqlist" style="max-height:280px;overflow-y:auto"></div>'
@@ -13039,7 +13147,9 @@ function genMorningWorker(lane, autostart){
     /* ---- bridge health -----------------------------------------------------------------------
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
-    +   'var BRIDGE_OK=null, BRIDGE_HOLD="";'
+    +   'var TEXT_HOLD_DOWN="Texting is held — the send bridge has not confirmed a fresh inbound STOP scan. Email is not held by this.";'
+    +   'var BRIDGE_OK=null, BRIDGE_HOLD="", TEXT_HOLD=TEXT_HOLD_DOWN;'
+    +   'function paintTextHold(){ var h=document.getElementById("mwtexthold"); if(!h) return; if(TEXT_HOLD){ h.style.display="block"; h.textContent=TEXT_HOLD; } else { h.style.display="none"; h.textContent=""; } }'
     +   'function renderBridge(){'
     +     'var b=document.getElementById("mwbridge"); if(!b) return;'
     +     'if(BRIDGE_HOLD){ b.className="mwbridge down"; b.innerHTML="<b>Sending paused</b> &middot; "+esc(BRIDGE_HOLD); return; }'
@@ -13059,8 +13169,8 @@ function genMorningWorker(lane, autostart){
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
     +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
-    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
-    +       '.catch(function(){ if(to) clearTimeout(to); bridgeUp(false); });'
+    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold===false)?"":((j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):TEXT_HOLD_DOWN); paintTextHold(); bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
+    +       '.catch(function(){ if(to) clearTimeout(to); TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold(); bridgeUp(false); });'
     +   '}'
     +   'function renderCap(){'
     +     'var n=sentToday(), left=Math.max(0,CAP.max-n), blocked=n>=CAP.max, warn=n>=CAP.warnAt;'
@@ -13337,6 +13447,7 @@ function genMorningWorker(lane, autostart){
        text per lead here, and _workerEligible already required 24h+ since the last touch. */
     +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
     +   'function textBatchStart(){'
+    +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
     +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
@@ -13346,6 +13457,7 @@ function genMorningWorker(lane, autostart){
     // queued behind it (the confirm-screen handlers call back into here) must not resurrect the
     // batch on top of it.
     +     'if(!tbOn) return;'
+    +     'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return textBatchDone(); }'
     +     'if(TBI>=TEXTQ.length) return textBatchDone();'
     +     'renderRunBar();'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — batch stopped mid-run. Resume after 8 AM ET.","warn"); return textBatchDone(); }'
@@ -13362,6 +13474,7 @@ function genMorningWorker(lane, autostart){
     +     '+"</div>";'
     +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
     +     'if(ob) ob.onclick=function(){'
+    +   'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
     +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
     +       'post("textopen",{qc:x.c});'
     +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
@@ -13449,7 +13562,9 @@ function genMorningWorker(lane, autostart){
     +           'pause();'
     +         '} else if(x.status===200 && x.j.ok){'
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
-    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    // #83 follow-up: the gate may mail a later address than the To we offered (one address per
+    // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
+    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
     +           'setTimeout(function(){ advance(); }, 900);'
     +         '} else if(x.status===409 && x.j.skip){'
@@ -14226,6 +14341,7 @@ function genMorningWorker(lane, autostart){
     // at ("switch tabs to send") — he never switched, and six leads were still logged as texted.
     // A text is an ATTEMPT until he says otherwise: no cap charge, no CRM touch, lead stays queued.
     +       'if(fn==="text"){'
+    +         'if(TEXT_HOLD){ addLog("fail", r.first||r.owner, TEXT_HOLD, "warn"); return; }'
     +         'if(!r.smsHref){ addLog("fail", r.first||r.owner, "no textable number (DNC or landline) — call instead", "warn"); return; }'
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
@@ -14241,7 +14357,7 @@ function genMorningWorker(lane, autostart){
     +     'if(fn==="skip"){ post("skip"); addLog("skip", r.first||r.owner, "skipped"); return advance(); }'
     +     'if(fn==="done"){ post("done"); addLog("done", r.first||r.owner, "marked worked"); return advance(); }'
     +   '});'
-    +   'renderBridge(); probeBridge(); renderLog(); render(); renderCallQ(); renderTextQ();'
+    +   'paintTextHold(); renderBridge(); probeBridge(); renderLog(); render(); renderCallQ(); renderTextQ();'
     +   'setInterval(probeBridge, 30000);'
     /* ---- UNATTENDED START (Windows Task Scheduler opens this at 8:00 AM) ---------------------
        The 8am task opened the worker and then nothing happened until a human clicked "Start
@@ -14435,7 +14551,7 @@ window.addEventListener('message', function(ev){
       _nw.touches = _nw.touches || [];
       var _oc0 = (d.k==='callout' && d.extra && d.extra.oc) || '';
       if(_oc0 === 'dnc'){
-        _nw.optout = true; _nw.status = 'DO NOT CONTACT';
+        _nw.optout = true; _nw.status = 'DO NOT CONTACT'; _nw.no = 'hard'; _nw.noAt = _nw.noAt || Date.now();
         _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:'DNC — do not contact (logged off-board)'});
         try{ if(typeof _optLog==='function') _optLog(_nw, 'set-local', 'worker-offboard'); }catch(_e){}
       } else if(_oc0 === 'wrong'){
@@ -14444,6 +14560,12 @@ window.addEventListener('message', function(ev){
       } else if(d.k === 'callout'){
         _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:((d.extra&&d.extra.label)||_oc0||'call outcome')+' (logged off-board)'});
         if(d.extra && typeof d.extra.hrs === 'number') _nw.cooldownH = d.extra.hrs;
+        if(_oc0 === 'notint'){
+          if(!_nw.status) _nw.status = 'Not interested';
+          if(_nw.no !== 'hard' && _nw.no !== 'soft'){
+            _nw.no = 'soft'; _nw.noAt = Date.now(); _nw.noWasLp = true; _nw.resurf = _nw.resurf || 0;
+          }
+        }
       } else {
         _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'worker', out:'worker '+(d.k||'action')+' — lead no longer on this board build; recorded to notes only'});
       }
@@ -14475,6 +14597,10 @@ window.addEventListener('message', function(ev){
   } else if(d.k === 'sent'){
     var em2 = (r.emails||[])[0] || '';
     var mid = (d.extra && d.extra.mid) || '';
+    // The address the bridge ACTUALLY mailed (its gate may pick a later one than the To offered).
+    // Empty on a manual send or an older bridge: then the composed To, exactly as before.
+    var sentTo = String((d.extra && d.extra.to) || '').trim().toLowerCase();
+    if(sentTo) em2 = sentTo;
     var via = (d.extra && d.extra.via) || 'bridge';   // 'bridge' | 'manual-confirmed'
     var archived = false;
     try {
@@ -14492,7 +14618,8 @@ window.addEventListener('message', function(ev){
         archived = true;
         _sentAdd({d:_today(), t:Date.now(),
                   ts:new Date().toLocaleString(), c:r.case, ch:'email',
-                  to:LE.to||em2, who:LE.who||'', addr:LE.addr||r.addr||'',
+                  to:sentTo||LE.to||em2, who:LE.who||'', addr:LE.addr||r.addr||'',
+                  offered:(sentTo && LE.to && String(LE.to).toLowerCase() !== sentTo) ? LE.to : undefined,
                   subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||'',
                   via:via, mid:mid});
       }
@@ -14528,7 +14655,9 @@ window.addEventListener('message', function(ev){
     // kind 'callout' (not 'call') so the durable ledger can count DIALS separately from every
     // other phone-adjacent breadcrumb — dial-through is the number this whole audit was missing.
     _wlog(r.case, 'callout', 'call outcome: ' + lbl
-          + (sup ? ' — SUPPRESSED, will not be queued again' : ' — returns in ' + hrs + 'h'), true);
+          + (sup ? ' — SUPPRESSED, will not be queued again'
+             : (oc === 'notint' ? ' — soft no, retired until its one resurface (not a 30-day cooldown)'
+                                : ' — returns in ' + hrs + 'h')), true);
     // The touch carries the real outcome, so the funnel can finally distinguish "tried" from
     // "reached". autoLog dedupes same-day/same-channel; logTouch is the underlying writer.
     try { autoLog(r, 'call', lbl); } catch(e){}
@@ -14546,18 +14675,43 @@ window.addEventListener('message', function(ev){
       n.status = 'Appointment';
     }
     if(oc === 'dnc'){
-      // An owner saying "stop" must be honoured immediately and permanently. Previously this was
-      // impossible from the worker — you had to leave, find the lead, and set it by hand.
+      // An owner saying "stop" must be honoured immediately and permanently, on EVERY case this
+      // person owns — the same promise Call Mode's stopEverywhere keeps. A case-only flag left
+      // the second property in tomorrow's queue.
       n.optout = true;
       n.status = 'DO NOT CONTACT';
+      n.no = 'hard';
+      n.noAt = n.noAt || Date.now();
+      try {
+        (_personCases(r) || [r.case]).forEach(function(c){
+          var nn = notes[c] || (notes[c] = {status:'', note:''});
+          nn.optout = nn.optout || _today();
+          nn.status = 'DO NOT CONTACT';
+          nn.no = 'hard';
+          nn.noAt = nn.noAt || Date.now();
+        });
+        (r.phones || []).forEach(function(p){
+          var d = String(p || '').replace(/\D/g, '');
+          if(!d) return;
+          var pn = notes['#' + d] || (notes['#' + d] = {status:'', note:''});
+          pn.optout = pn.optout || _today();
+          pn.status = 'DO NOT CONTACT';
+          pn.no = 'hard';
+        });
+      } catch(e){}
       _wlog(r.case, 'skip', 'DNC recorded from the worker — all channels closed for this owner', true);
     } else if(oc === 'wrong'){
       n.wrongown = true;
       n.status = n.status || 'Wrong number';
     } else if(oc === 'talked' && !n.status){
       n.status = 'Contacted';
-    } else if(oc === 'notint' && !n.status){
-      n.status = 'Not interested';
+    } else if(oc === 'notint'){
+      if(!n.status) n.status = 'Not interested';
+      // Soft no. cooldownH stays 720 so the outcome row matches Call Mode; _boardNoState is what
+      // decides whether the lead comes back, and a calendar expiry does not.
+      if(n.no !== 'hard' && n.no !== 'soft'){
+        n.no = 'soft'; n.noAt = Date.now(); n.noWasLp = _boardWasLp(r); n.resurf = n.resurf || 0;
+      }
     } else if(oc === 'callback' && !n.status){
       n.status = 'Callback';
     } else if(oc === 'gate' && !n.status){
@@ -15452,7 +15606,7 @@ function genBalloonEmail(r, quiet){
   var reSubj = 'Re: ' + subjCold;
   var hi = 'Hi'+(first?' '+first:'')+',';
   var sig = [signer, 'Biscayne Solutions Group', sP ? ('Phone: '+sP) : '', 'BSGflorida.com', sA].filter(function(x){ return x; }).join('\n');
-  var stop = "\n\nIf this isn't relevant, reply STOP and I won't write again.";
+  var stop = "\n\nIf now's not a good time, just tell me and I won't reach out again.";   // the approved email opt-out line, same as outreach_copy.OPTOUT_LINE_EN
   var gapLine = amt
     ? ('On the '+money(amt)+' note'+(lender?(' with '+lender):'')+', the gap between 12% and 7% is about '+money(gap)+' a month, roughly '+money(gap*12)+' a year, going to a lender instead of staying in your pocket.')
     : ('On a $400,000 balance the gap between 12% and 7% is about $1,700 a month. Twenty thousand a year, going to a lender instead of staying in your pocket.');

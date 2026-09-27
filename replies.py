@@ -68,8 +68,41 @@ OPTOUT_PHRASES = re.compile(
     r'|writing|sending|soliciting)'
     r'|\bleave me alone\b'
     r'|\bno longer\s+(?:wish|want|interested)'
-    r'|\bno me contacte\b|\bno contacte\b|\bno me escriba\b|\bd[eé]jeme en paz\b'
-    r'|\bquitar\b|\bdetener\b|\bparar\b', re.I)
+    r'|\bno me contacte[ns]?\b|\bno contacte[ns]?\b|\bno me escriba[ns]?\b|\bd[eé]jeme en paz\b'
+    # SPANISH, explicit forms (2026-09-25). The bare verbs quitar/detener/parar used to sit here with
+    # no object check, so "¿Pueden detener la venta?" and "Me van a quitar la casa" -- the two most
+    # motivated Spanish replies an owner in foreclosure can send -- were permanent opt-outs. They
+    # now go through the same object test the English bare "stop" gets (_BARE_ES below).
+    r'|\bno (?:me )?llame[ns]?\b(?: m[aá]s)?|\bno (?:me )?llamen\b|\bno me llames\b'
+    r'|\bno (?:me )?(?:escriban?|contacten?|mande[ns]?|env[ií]e[ns]?)\b(?: m[aá]s)?'
+    r'|\bno (?:quiero|deseo) (?:m[aá]s )?(?:mensajes|correos|llamadas|textos|contacto)\b'
+    r'|\bno m[aá]s (?:mensajes|correos|llamadas|textos)\b'
+    r'|\b(?:qu[ií]te(?:me|nme)|s[aá]que(?:me|nme)|b[oó]rre(?:me|nme)|elim[ií]ne(?:me|nme)) de (?:su|la|esta|esa) lista\b'
+    r'|\bborre[n]? mi (?:n[uú]mero|correo|email|informaci[oó]n)\b'
+    r'|\bdej[ea]n? de (?:llamar|escribir|contactar|enviar|mandar|molestar|textear)\b'
+    r'|\bpare[n]? de (?:llamar|escribir|contactar|enviar|mandar|molestar|textear)\b'
+    r'|\bno insist[ae]n?\b|\bcancelar suscripci[oó]n\b|\bdarme de baja\b|\bdesuscribir\b'
+    # THE PROMISE OUR EMAIL MAKES (2026-09-26). Every email now ends "If now's not a good time, just
+    # tell me and I won't reach out again." (outreach_copy.OPTOUT_LINE_EN). An owner who answers
+    # "not a good time" has told us, in the words we asked for, and the line says we stop. So it IS
+    # an opt-out -- even "not a good time, maybe next month", and "try next month" on its own: the
+    # sentence did not offer a snooze, and erring toward suppression is the rule where the readings
+    # collide. "the sale is next month" does not match. "reach out" is how our
+    # line says contact, so "please don't reach out" (caught by the do-not rule above) and
+    # "stop reaching out" / "no need to reach out" read the same way.
+    r"|\bnot (?:a )?(?:good|great|convenient) time\b"
+    r"|\btry (?:again )?next month\b"
+    r"|\b(?:stop|quit|cease) reaching out\b|\bno need to reach out\b"
+    r"|\bno es (?:un )?buen momento\b", re.I)
+
+# Our own opt-out sentence, EN and ES. is_stop_text() removes it before matching: an owner who quotes
+# it back without a quote marker ("...you said if now's not a good time...") must not be suppressed by
+# our words, the same failure strip_quotes() exists for with the old "reply 'stop'" line.
+_OUR_OPTOUT_LINE = re.compile(
+    r"if now['\u2019]?s not a good time,? just tell me and i won['\u2019]?t reach out again\.?"
+    r"|if now['\u2019]?s not a good time,? just let me know and i won['\u2019]?t text you again\.?"
+    r"|si ahora no es buen momento,? solo d[ií]gamelo y no lo vuelvo a contactar\.?"
+    r"|si ahora no es buen momento,? solo d[ií]gamelo y no le vuelvo a escribir\.?", re.I)
 
 # FALSE-FLAGGED, and this is the dangerous half. A bare "stop" is genuinely ambiguous IN THIS
 # BUSINESS: "Please stop." is an opt-out, but "Can you stop the foreclosure?" is the most motivated
@@ -85,6 +118,16 @@ _BARE_STOP = re.compile(r'\bstop\b', re.I)
 _STOP_OBJECT = re.compile(r'\s*(?:the|this|my|a|an)?\s*'
                           r'(?:foreclosure|sale|auction|case|process|hearing|judgment|eviction'
                           r'|it|this|that)\b', re.I)
+
+# Spanish bare verbs, same rule as the English bare "stop": an opt-out UNLESS every occurrence is
+# aimed at the CASE. "PARE" alone or "pare ya" is aimed at us; "parar la subasta", "detener la venta"
+# and "quitar la casa" are the case. "basta" is included because "basta ya" / "basta de mensajes" is
+# the Spanish "enough".
+_BARE_ES = re.compile(r'\b(?:pare[n]?|par(?:ar|en|e)|det[eé]n(?:er|ga|gan|gase)|quitar|quiten?|basta)\b', re.I)
+_STOP_OBJECT_ES = re.compile(r'\s*(?:de\s+)?(?:la|el|esa|ese|esta|este|mi|su|nuestra|nuestro|una|un)?\s*'
+                             r'(?:venta|subasta|remate|ejecuci[oó]n|foreclosure|casa|hipoteca|embargo'
+                             r'|caso|juicio|desalojo|proceso|audiencia|sentencia|banco|deuda|pago|inter[eé]s'
+                             r'|eso|esto|la|lo|todo)\b', re.I)
 
 
 def _unanswered(found, min_days=2):
@@ -170,41 +213,23 @@ def _ledger_stops(found):
     exists is never rewritten, never downgraded, never cleared — so a hand-written note with more
     context than we have here always survives.
     """
-    p = os.path.join(HERE, 'optouts.json')
+    # ONE WRITER (2026-09-25): optout_sync.ledger_add is the only code that touches optouts.json.
+    # This used to be a third, NON-atomic copy of the write.
     try:
-        raw = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
+        from optout_sync import ledger_add
     except Exception as e:
-        print(f'  !! optouts.json unreadable ({e}) — STOP replies NOT ledgered, do it by hand')
+        print(f'  !! optout_sync unavailable ({e}) — STOP replies NOT ledgered, do it by hand')
         return 0, 0
-    envelope = isinstance(raw, dict) and isinstance(raw.get('notes'), dict)
-    notes = raw['notes'] if envelope else (raw if isinstance(raw, dict) else {})
-
-    now = datetime.now()
     written = already = 0
     for key, rec in found.items():
         if not (isinstance(rec, dict) and rec.get('stop')):
             continue
-        # keep BOTH shapes the ledger already uses: '@address' identity keys and bare case keys.
-        if key in notes:
-            already += 1
-            continue
-        notes[key] = {
-            'status': 'DO NOT CONTACT',
-            'optout': now.strftime('%Y-%m-%d'),
-            'note': ('OPT-OUT %s - auto-ledgered by replies.py from an inbound reply: "%s"'
-                     % (now.strftime('%Y-%m-%d %H:%M'), (rec.get('excerpt') or '')[:180])),
-            'optlog': [{'ts': now.strftime('%Y-%m-%d %H:%M'), 'act': 'opted-out',
-                        'src': 'email reply - STOP detected by replies.py'},
-                       {'ts': now.strftime('%Y-%m-%d %H:%M'), 'act': 'ledgered',
-                        'src': 'automatic (replies.py)'}],
-        }
-        written += 1
-    if written:
-        try:
-            json.dump(raw if envelope else notes, open(p, 'w', encoding='utf-8'), indent=1)
-        except Exception as e:
-            print(f'  !! could not write optouts.json ({e}) — {written} STOP(s) NOT ledgered')
-            return 0, already
+        em = (rec.get('email') or (key[1:] if str(key).startswith('@') else '')).strip().lower()
+        a, b = ledger_add([key], 'auto-ledgered by replies.py from an inbound reply.',
+                          'email reply - STOP detected by replies.py', when=rec.get('when'),
+                          emails=[em] if em else (), excerpt=str(rec.get('excerpt') or ''))
+        written += len(a)
+        already += len(b)
     return written, already
 
 
@@ -247,13 +272,73 @@ def is_stop_text(text):
     not. Erring toward suppression stays the default wherever the two readings genuinely collide;
     this only separates the readings that do not.
     """
-    t = str(text or '')
+    t = _OUR_OPTOUT_LINE.sub(' ', str(text or ''))
     if OPTOUT_PHRASES.search(t):
         return True
     for m in _BARE_STOP.finditer(t):
         if not _STOP_OBJECT.match(t[m.end():m.end() + 40]):
             return True          # a "stop" not aimed at the case is aimed at us
+    for m in _BARE_ES.finditer(t):
+        if not _STOP_OBJECT_ES.match(t[m.end():m.end() + 40]):
+            return True          # same reading in Spanish
     return False
+
+
+# Carrier-standard SMS keywords. A text whose WHOLE body is one of these is an opt-out regardless of
+# language or object -- this is the layer 10DLC/carriers apply, mirrored here so an inbound text
+# pulled from Quo is judged the same way the carrier would judge it.
+# Carrier keywords plus the Spanish equivalents a one-word reply actually uses. "NO MAS" / "NO MÁS"
+# is the whole message; longer Spanish ("no me llame", "quíteme de su lista") falls through to
+# is_stop_text(). Matching is on the normalized body, so "NO MÁS." and "no mas" are the same hit.
+SMS_STOP_WORDS = {
+    'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit',
+    'pare', 'alto', 'basta', 'cancelar', 'baja',
+    'no mas', 'no más', 'nomas', 'nomás',
+}
+
+# The text line invites "just let me know" (2026-09-27). These are opt-outs only when they are the
+# whole reply, after our own EN/ES sentence and punctuation are gone. "no" and "not now" stay in
+# this set so "no problem, call me" and "not now, try me next week" do not match. "not interested"
+# and "no me interesa" are not here; that one is undecided.
+SMS_WHOLE_REPLIES = {
+    'no', 'nope', 'nah',
+    'no thanks', 'no thank you',
+    'not now',
+    'no gracias', 'ahora no',
+    'revoke',
+    'lose my number',
+}
+
+# Wrong number is an opt-out wherever it sits. "wrong #" is matched before punctuation is stripped,
+# or the "#" disappears and the word "wrong" is all that is left.
+_WRONG_NUMBER = re.compile(
+    r'\bwrong\s*#'
+    r'|\bwrong number\b'
+    r'|\bwrong person\b'
+    r'|\bn[uú]mero equivocado\b'
+    r'|\bse equivoc[oó] de n[uú]mero\b',
+    re.I)
+
+
+def _sms_reply(text):
+    """The owner's words, with our own text/email opt-out sentence removed."""
+    return _OUR_OPTOUT_LINE.sub(' ', str(text or ''))
+
+
+def is_sms_stop(text):
+    """True for a text that is an opt-out.
+
+    A bare carrier keyword, a whole-message reply the text line invites, a wrong-number phrase
+    anywhere in the message, or is_stop_text(). Our own sentence alone is not a stop; the same
+    sentence plus "no" is.
+    """
+    raw = _sms_reply(text)
+    if _WRONG_NUMBER.search(raw):
+        return True
+    t = re.sub(r'[^a-záéíóúñ]+', ' ', raw.lower()).strip()
+    if t in SMS_STOP_WORDS or t in SMS_WHOLE_REPLIES:
+        return True
+    return is_stop_text(text)
 
 
 def _load_json(path, default):
@@ -307,6 +392,29 @@ _QUOTE = [
 ]
 
 
+def strip_quotes(body):
+    """Only the NEW text of a reply: cut at the earliest quote marker (see _QUOTE above).
+
+    Exposed on purpose (2026-09-25). cadence.imap_replies ran is_stop_text over the RAW message,
+    quoted original included -- and our own template's "reply 'stop'" sentence sits in that quote,
+    so any Gmail-style reply that quoted the email read as an opt-out and was ledgered for good.
+    One quote-cutter, imported everywhere a reply is scanned."""
+    body = str(body or '')
+    cut = len(body)
+    for pat in _QUOTE:
+        m = re.search(pat, body, re.I | re.S)
+        if m and m.start() < cut:
+            cut = m.start()
+    return body[:cut][:2000]
+
+
+def reply_text(raw):
+    """(subject, fresh_body) from raw RFC822 bytes -- the shared parse, for callers that hold the
+    bytes themselves (cadence's IMAP pass). The fresh body is already quote-stripped."""
+    subj, _when, fresh, _stop, _sender = _read_msg(raw)
+    return subj, fresh
+
+
 def _read_msg(raw):
     """(subject, date, fresh_body, is_stop, sender) from one raw RFC822 message.
 
@@ -339,12 +447,7 @@ def _read_msg(raw):
                 body = str(msg.get_payload())[:4000]
     except Exception:
         pass
-    cut = len(body)
-    for pat in _QUOTE:
-        m = re.search(pat, body, re.I | re.S)
-        if m and m.start() < cut:
-            cut = m.start()
-    fresh = body[:cut][:2000]
+    fresh = strip_quotes(body)
     is_stop = bool(is_stop_text(subj) or is_stop_text(fresh))
     return subj, when, fresh, is_stop, sender
 

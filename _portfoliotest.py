@@ -132,9 +132,29 @@ PROBE_SOLO_UNAFFECTED = r"""() => {
   if(!solo) return {err: 'TEST-SOLO not found in DATA'};
   genEmail(solo, true);
   const LE = window.__lastEmail || {};
+  const body = LE.body || '';
+  /* WHAT "SINGLE" MEANS HERE, AND WHY THE OLD PROBE STOPPED MEANING IT.
+     This read `/Bank Z/.test(body) && !/portfolio/i.test(body)` and NEITHER half discriminated
+     between the two composers:
+       * the word "portfolio" appears in neither body — genPortfolioEmail says "N properties in
+         your name" and never the word itself — so that half was always true, of both composers;
+       * genPortfolioEmail names plaintiffs too ("(foreclosed by Bank Z)"), so /Bank Z/ never
+         separated them either. All it ever tested was "the plaintiff got named" — and that
+         stopped being true of the single body the day Alejandro's cold copy shipped, because his
+         copy opens on the auction date and never names the bank. Red ever since, on a composer
+         that was doing the right thing the whole time.
+     Assert instead on the three things only ONE of the two composers can produce:
+       * genPortfolioEmail stashes __lastEmail.portfolio; genEmail never sets that key
+       * its subject is "Regarding N properties in your name"
+       * its body lists every sibling address; a single body names no property but its own
+     bodyLen guards the absence checks — an empty body would satisfy all three vacuously, and a
+     composer that returned nothing is the failure this check is here to catch. */
   return {
     subjIsSingle: /Regarding your property at 999 Z ST/.test(LE.subj||''),
-    bodyIsSingle: /Bank Z/.test(LE.body||'') && !/portfolio/i.test(LE.body||''),
+    noPortfolioMeta: !LE.portfolio,
+    noGroupSubject: !/properties in your name/i.test(LE.subj||''),
+    noSiblingAddrs: !['100 A ST','200 B ST','300 C ST'].some(a => body.indexOf(a) > -1),
+    bodyLen: body.length,
     to: LE.to
   };
 }"""
@@ -180,7 +200,8 @@ async def main():
 
         s = await pg.evaluate(PROBE_SOLO_UNAFFECTED)
         rec('solo-email lead still uses single-lead genEmail() composer',
-            s.get('subjIsSingle') and s.get('bodyIsSingle'), s)
+            s.get('subjIsSingle') and s.get('noPortfolioMeta') and s.get('noGroupSubject')
+            and s.get('noSiblingAddrs') and (s.get('bodyLen') or 0) > 200, s)
 
         rec('no page-level JS errors during test', not errs, errs[:3] if errs else '')
 

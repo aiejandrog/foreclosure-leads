@@ -62,8 +62,8 @@ try:
     _LANES_OK = True
 except Exception as _e:                                    # pragma: no cover - defensive
     _ss, _LANES_OK = None, False
-    print('cadence: send_server import failed (%s) — sending as the login, NO lane map, NO ledger '
-          'row, NO warm-up cap.' % (str(_e)[:80],))
+    print('cadence: send_server import failed (%s) — NO deliverability gate, so every due step is '
+          'HELD this run (fail closed; nothing is sent).' % (str(_e)[:80],))
 
 
 def _save_state(state):
@@ -152,7 +152,10 @@ def safe_llc(raw):
 
 # ---- the 4-touch sequence (EN, with the ES block every owner expects from this operation) ------
 def steps(lead, sender):
-    first = (lead.get('owner') or '').split(',')[0].split()[0].title() or 'there'
+    # An empty or comma-only owner used to raise IndexError here and take the whole run down
+    # (state unsaved for every step already sent). Fall back to 'there' like the texts do.
+    _fw = (lead.get('owner') or '').split(',')[0].split()
+    first = (_fw[0].title() if _fw else '') or 'there'
     # The board stores addresses as "455 NE 210 TER, MIAMI, FL- 33179". That stray hyphen after the
     # state, and the shouted city, appear in every message and are the most machine-looking thing on
     # the page. Nobody writes their own address that way. Tidy it for display only.
@@ -186,8 +189,14 @@ def steps(lead, sender):
     # instead of dashes, a cushion before the ask, one ask per message. These now match.
     disc = ("\n\nI am not your lender, not the government, not a foreclosure-rescue company, and "
             "not an attorney. Nothing here is legal advice, and there is never a fee to talk to me.")
-    unsub = ("\n\n(If you'd rather not hear from me, reply 'stop' and you won't hear from me again. "
-             "No hard feelings.)")
+    # The approved opt-out line (2026-09-26), from outreach_copy -- one source for every email
+    # body. The literal is the fallback for a checkout where outreach_copy cannot be imported, so
+    # a touch never leaves without it.
+    try:
+        from outreach_copy import OPTOUT_LINE_EN as _OPTOUT_LINE
+    except Exception:
+        _OPTOUT_LINE = "If now's not a good time, just tell me and I won't reach out again."
+    unsub = "\n\n" + _OPTOUT_LINE
     s0 = (f"Hi {first},\n\nMy name is {sn}. I work with a small local team that helps owners in "
           f"foreclosure. Your property at {addr} has an auction scheduled for {auc}.\n\n"
           f"I'm not calling to pressure you. I just want to make sure you've seen your options before "
@@ -232,6 +241,71 @@ def load_json(path, default):
         return default
 
 
+def _ledger_send_block():
+    """'' when optouts.json is present, parseable, and fresh enough to send against.
+
+    A missing, unreadable, or stale ledger blocks the send loop. Steps stay due. load_json()
+    above returns a default on a bad file, and outreach_email._load_optouts() returns an empty
+    set — both of those are a pass if nobody asks this question first."""
+    try:
+        _max = float(_ss.OPTOUT_MAX_AGE_DAYS) if _LANES_OK else 2.0
+    except Exception:
+        _max = 2.0
+    if not os.path.exists(OPTOUTS):
+        return 'opt-out ledger is MISSING'
+    try:
+        with open(OPTOUTS, encoding='utf-8') as fh:
+            d = json.load(fh)
+    except Exception as e:
+        return 'opt-out ledger is UNREADABLE (%s)' % str(e)[:80]
+    if not isinstance(d, (dict, list)):
+        return 'opt-out ledger is UNREADABLE (not an object)'
+    try:
+        age = (time.time() - os.path.getmtime(OPTOUTS)) / 86400.0
+    except OSError:
+        return 'opt-out ledger is UNREADABLE (no mtime)'
+    if age > _max:
+        return 'opt-out ledger is %.1f days old (max %.0f)' % (age, _max)
+    return ''
+
+
+def _sync_send_block():
+    """'' when today's 07:15 opt-out sync finished OK. The same marker cadence-daily.bat reads.
+
+    The bat holds first so a missed window does not mail at 3am. This holds too, so
+    `python cadence.py` on its own cannot skip that check. Any doubt is a hold."""
+    try:
+        import sync_gate
+        v = sync_gate.verdict(path=os.path.join(HERE, 'sync_status.json'))
+    except Exception as e:
+        return ('HOLD - the opt-out sync gate could not be evaluated (%s); holding every send'
+                % str(e)[:80])
+    if v.get('ok'):
+        return ''
+    return v.get('reason') or 'HOLD - opt-out sync not confirmed today'
+
+
+def _bounce_send_block():
+    """'' when bounced_emails.json is missing or a dict.
+
+    A file that exists and will not parse used to come back as an empty set, and the send
+    loop then treated every address as not-bounced. Hold the run instead. A missing file is
+    a machine that has not harvested yet, which is the existing permissive case."""
+    path = os.path.join(HERE, 'bounced_emails.json')
+    if not os.path.exists(path):
+        return ''
+    try:
+        with open(path, encoding='utf-8') as fh:
+            d = json.load(fh)
+    except Exception as e:
+        return 'bounce list is UNREADABLE (%s)' % type(e).__name__
+    if isinstance(d, list):
+        return ''
+    if not isinstance(d, dict):
+        return 'bounce list is UNREADABLE (not an object)'
+    return ''
+
+
 def load_key():
     if not os.path.exists(KEY):
         return None
@@ -242,8 +316,16 @@ def load_key():
     return user.strip(), pw.strip()
 
 
-def imap_replies(cred, emails, dry):
-    """Return {email: 'replied'|'stopped'} for anything found in the inbox from these addresses."""
+def imap_replies(cred, emails, dry, since=None):
+    """Return {email: 'replied'|'stopped'} for anything found in the inbox from these addresses.
+
+    ONLY THE FRESH TEXT IS SCANNED (2026-09-25). This used to run the stop detector over the raw
+    RFC822.TEXT -- every MIME part, quoted original included. Our own touch ends "reply 'stop' and
+    you won't hear from me again", and Gmail quotes it under every reply, so any owner who replied
+    "Yes, call me" with the quote attached was classified 'stopped' and ledgered DO NOT CONTACT for
+    good. replies.reply_text() is the one quote-cutter; it is used here and nowhere else re-typed.
+    `since` = {email: 'YYYY-MM-DD'} -- only messages on/after that date count, so a thread from
+    before the sequence started cannot end it."""
     if not emails:
         return {}
     if dry:
@@ -256,27 +338,93 @@ def imap_replies(cred, emails, dry):
         M = imaplib.IMAP4_SSL('imap.gmail.com')
         M.login(user, pw)
         M.select('INBOX')
+        try:
+            from replies import reply_text as _reply_text
+        except Exception:
+            _reply_text = None
         for em in emails:
-            typ, data = M.search(None, f'(FROM "{em}")')
+            crit = f'(FROM "{em}")'
+            _s = (since or {}).get(em)
+            if _s:
+                try:
+                    crit = f'(FROM "{em}" SINCE {datetime.strptime(_s[:10], "%Y-%m-%d").strftime("%d-%b-%Y")})'
+                except Exception:
+                    pass
+            typ, data = M.search(None, crit)
             if typ != 'OK' or not data or not data[0].split():
                 continue
             out[em] = 'replied'
-            # read the latest one for STOP words
+            # read the latest one for STOP words -- fresh text only
             latest = data[0].split()[-1]
-            typ, body = M.fetch(latest, '(RFC822.TEXT)')
-            if typ == 'OK' and body and body[0] and isinstance(body[0], tuple) and \
-                    _is_stop(body[0][1].decode('utf-8', 'ignore')):
-                out[em] = 'stopped'
+            typ, body = M.fetch(latest, '(RFC822)')
+            if typ == 'OK' and body and body[0] and isinstance(body[0], tuple):
+                raw = body[0][1]
+                if _reply_text is not None:
+                    subj, fresh = _reply_text(raw)
+                    if _is_stop(subj) or _is_stop(fresh):
+                        out[em] = 'stopped'
+                else:
+                    # detector import failed: fail CLOSED on explicit words only (see _is_stop)
+                    if _is_stop(raw.decode('utf-8', 'ignore')):
+                        out[em] = 'stopped'
         M.logout()
     except Exception as e:
         print('  IMAP check failed (skipping this pass):', str(e)[:90])
     return out
 
 
+def _lock_dir():
+    try:
+        import paths as _P
+        return _P.out('cadence.lock')
+    except Exception:
+        return os.path.join(HERE, 'cadence.lock')
+
+
+class _RunLock:
+    """One cadence at a time on this box. mkdir is atomic; a lock older than 6h is treated as
+    abandoned (a killed run) and taken over. Two overlapping runs read one state file and each
+    sends the step the other just sent -- the duplicate-send incident of 2026-08-25/26 had that
+    shape. This does not protect against a SECOND MACHINE (state files are gitignored); that
+    remains the arming rule in MACHINE-HANDOFF.md §1."""
+    def __init__(self):
+        self.d = _lock_dir()
+        self.held = False
+
+    def __enter__(self):
+        try:
+            if os.path.isdir(self.d) and (time.time() - os.path.getmtime(self.d)) > 6 * 3600:
+                os.rmdir(self.d)
+        except OSError:
+            pass
+        try:
+            os.makedirs(os.path.dirname(self.d) or '.', exist_ok=True)
+            os.mkdir(self.d)
+            self.held = True
+        except FileExistsError:
+            self.held = False
+        return self
+
+    def __exit__(self, *a):
+        if self.held:
+            try:
+                os.rmdir(self.d)
+            except OSError:
+                pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry-run', action='store_true', help='render and report only — no mail sent')
     args = ap.parse_args()
+    with _RunLock() as _lk:
+        if not _lk.held:
+            print('another cadence run holds %s — not starting a second one.' % _lk.d)
+            return 3
+        return _run(args)
+
+
+def _run(args):
     today = date.today()
 
     payload = load_json(QUEUE, None)
@@ -307,6 +455,14 @@ def main():
                         'email': lead.get('email'), 'auction': lead.get('auction'), 'log': []}
         elif state[c].get('status') in ('stopped', 'suppressed', 'replied', 'cancelled', 'completed'):
             state[c] = state[c]   # never resurrect a finished sequence by re-exporting
+        elif state[c].get('status') == 'held':
+            # A hold is WORK, not a verdict (see the diligence sweep below). Re-exporting the queue
+            # after clearing the reason is how a held sequence resumes; until 2026-09-25 nothing
+            # ever flipped it back, so 'held' was a silent 'cancelled'.
+            state[c]['status'] = 'active'
+            state[c]['log'].append({'d': str(today), 'ev': 'resumed — re-exported after a hold'})
+            state[c]['owner'] = lead.get('owner'); state[c]['addr'] = lead.get('addr')
+            state[c]['email'] = lead.get('email'); state[c]['auction'] = lead.get('auction')
         else:
             state[c]['owner'] = lead.get('owner'); state[c]['addr'] = lead.get('addr')
             state[c]['email'] = lead.get('email'); state[c]['auction'] = lead.get('auction')
@@ -356,6 +512,7 @@ def main():
     # 'held' is its own status, NOT 'suppressed': suppressed means a human said stop and it is
     # permanent. A diligence hold is WORK — clear the reason, rebuild the queue, and the sequence
     # resumes. Conflating the two would quietly convert a verification task into a dead lead.
+    _compliance_hold = False
     try:
         import diligence_gate as _dg
         _rows = {}
@@ -365,10 +522,53 @@ def main():
                 _rows[_c] = _r
         _held = 0
         _nolookup = 0
+        _wn = {}
+        try:
+            _wnd = load_json(os.path.join(HERE, 'worker_notes.json'), {})
+            _wn = _wnd.get('notes') if isinstance(_wnd, dict) and isinstance(_wnd.get('notes'), dict) else {}
+        except Exception:
+            _wn = {}
         for c, s in list(active.items()):
             _row = _rows.get(c)
             if _row is None:
-                _nolookup += 1          # off the board (auction passed, file rotated) — not a hold
+                # OFF THE BOARD. Until 2026-09-25 this was "left running": a case whose auction
+                # passed or whose file rotated kept receiving "before the sale date" touches with
+                # nothing able to check it. Hold it; a re-export resumes it if it is back.
+                _nolookup += 1
+                s['status'] = 'held'
+                s['log'].append({'d': str(today), 'ev': 'held before send — case not on the board'})
+                active.pop(c)
+                continue
+            # SEND-TIME COMPLIANCE, the checks build_cadence_queue runs at ENROLMENT and this loop
+            # never re-asked: a §362 stay filed after enrolment, a sale that already happened, a
+            # dismissed case, a rep's Dead / wrong-number mark. (2026-09-25)
+            _why = ''
+            if (_row.get('saleBkAct') or _row.get('sale_bk_active')) and not _row.get('saleLift'):
+                _why = 'active §362 bankruptcy stay'
+            elif _row.get('sibclaimed'):
+                _why = 'sibling case sold'
+            elif str(_row.get('cstatus') or _row.get('case_status') or '').strip().upper().startswith('DISM') \
+                    or _row.get('lpDismissed'):
+                _why = 'case dismissed'
+            else:
+                try:
+                    _d = _oe._days(_row)
+                except Exception:
+                    _d = 0
+                if _d is not None and _d < 0:
+                    _why = 'auction already passed'
+            if not _why:
+                _n = _wn.get(c) or {}
+                _st = str(_n.get('status') or '').strip().lower()
+                if _st in ('dead', 'wrong number') or _n.get('wrongown'):
+                    _why = 'rep marked %s on the board' % (_st or 'wrong number')
+            if _why:
+                _held += 1
+                s['status'] = 'cancelled' if _why in ('auction already passed', 'case dismissed') else 'held'
+                s['log'].append({'d': str(today), 'ev': '%s before send — %s' % (s['status'], _why)})
+                active.pop(c)
+                print('  %s (not sent) -> %s  (%s) — %s' % (s['status'].upper(), s.get('email') or c,
+                                                           s.get('owner'), _why))
                 continue
             _g = _dg.gate(_row)
             if _g['hold']:
@@ -381,15 +581,25 @@ def main():
                 print('  HELD (not sent) -> %s  (%s) — diligence %s: %s'
                       % (s.get('email') or c, s.get('owner'), _g['code'], _dg._clip(_g['why'], 120)))
         if _held or _nolookup:
-            print('  diligence sweep: %d sequence(s) held, %d case(s) not found in the lead files '
-                  '(off-board, left running)' % (_held, _nolookup))
+            print('  diligence sweep: %d sequence(s) held/cancelled, %d case(s) not found in the '
+                  'lead files (off-board, HELD until re-exported)' % (_held, _nolookup))
     except Exception as _dge:
-        # A cadence run that cannot diligence-check must still deliver its opt-out sweep and its
-        # reply check. Say the protection is off; do not take the engine down with it.
-        print('  !! diligence sweep SKIPPED (%s) — this run is sending UNGATED.' % str(_dge)[:120])
+        # The sweep is also the §362 / auction / dismissed re-check. If it cannot run, sending
+        # anyway is how a stayed case gets touch 2. Hold the run. The opt-out sweep and the reply
+        # check above already happened; nothing below is mailed.
+        _compliance_hold = True
+        print('  !! send-time compliance sweep FAILED (%s) — every due step HELD this run '
+              '(fail closed).' % str(_dge)[:120])
 
     # 1) reply check FIRST — never send another touch to someone who already wrote back
-    replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred)
+    _since = {}
+    for s in active.values():
+        for ev in (s.get('log') or []):
+            if str(ev.get('ev') or '').startswith('sent step 1'):
+                _since[s['email']] = ev.get('d')
+                break
+    replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred,
+                           since=_since)
     for c, s in active.items():
         got = replies.get(s['email'])
         if got == 'replied':
@@ -417,46 +627,39 @@ def main():
     if stopped and args.dry_run:
         print(f'  [dry-run] would ledger {len(stopped)} opt-out(s): {", ".join(stopped)}')
     elif stopped:
-        opt = load_json(OPTOUTS, {}) or {}
-        if not isinstance(opt, dict):
-            opt = {}
-        opt.setdefault('_dealflow_notes', 1)
-        opt.setdefault('device', 'server-ledger')
-        opt['exported'] = str(today)
-        notes = opt.setdefault('notes', {})
-        sup = load_json(os.path.join(HERE, 'bounced_emails.json'), {})
-        if not isinstance(sup, dict):
-            sup = {}
-        now = datetime.now().isoformat(timespec='seconds')
+        # ONE WRITER (2026-09-25): optout_sync.ledger_add owns the file. This block used to be the
+        # third copy of the write.
+        from optout_sync import ledger_add
         added, sup_new = [], []
         for c, s in stopped.items():
             em = (s.get('email') or '').strip().lower()
-            entry = {'status': 'DO NOT CONTACT', 'optout': str(today),
-                     'note': ('AUTO-LEDGERED by cadence.py: the owner replied with a stop word to '
-                              'the 4-touch sequence. Covers ALL channels: no email, no call, no '
-                              'text, no door. Owner %s, %s.'
-                              % (s.get('owner') or '?', s.get('addr') or '?')),
-                     'optlog': [{'ts': now, 'act': 'opted-out', 'src': 'cadence stop-word (IMAP reply)'}]}
-            for key in (c, ('@' + em) if em else ''):
-                if key and key not in notes:
-                    notes[key] = dict(entry)
-                    added.append(key)
-            if em and em not in sup:
-                sup[em] = {'type': 'optout', 'when': str(today), 'why': 'cadence stop-word reply'}
+            _a, _ = ledger_add([c] + (['@' + em] if em else []),
+                               ('AUTO-LEDGERED by cadence.py: the owner replied with a stop word to '
+                                'the 4-touch sequence. Covers ALL channels: no email, no call, no '
+                                'text, no door. Owner %s, %s.' % (s.get('owner') or '?', s.get('addr') or '?')),
+                               'cadence stop-word (IMAP reply)', emails=[em] if em else ())
+            added += _a
+            if em:
                 sup_new.append(em)
-        if added:
-            tmp = OPTOUTS + '.tmp'
-            json.dump(opt, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
-            os.replace(tmp, OPTOUTS)
-        if sup_new:
-            _b = os.path.join(HERE, 'bounced_emails.json')
-            tmp = _b + '.tmp'
-            json.dump(sup, open(tmp, 'w', encoding='utf-8'), indent=0, ensure_ascii=False)
-            os.replace(tmp, _b)
         print(f'  optouts.json: {len(added)} key(s) ledgered for {len(stopped)} owner(s), '
               f'{len(sup_new)} address(es) hard-suppressed')
 
     # 2) send due steps
+    # LEDGER GATE and the 07:15 SYNC GATE. The bat still runs sync_gate.py before this process.
+    # This process asks the same question, so a hand-started `python cadence.py` is held too.
+    _ledger_hold = ''
+    _sync_hold = ''
+    _bounce_hold = ''
+    if not args.dry_run:
+        _sync_hold = _sync_send_block()
+        if _sync_hold:
+            print('  HELD every due step — %s. Nothing sent; steps stay due.' % _sync_hold)
+        _ledger_hold = _ledger_send_block()
+        if _ledger_hold:
+            print('  HELD every due step — %s. Nothing sent; steps stay due.' % _ledger_hold)
+        _bounce_hold = _bounce_send_block()
+        if _bounce_hold:
+            print('  HELD every due step — %s. Nothing sent; steps stay due.' % _bounce_hold)
     sent = 0
     capped = {}
     ctx = ssl.create_default_context()
@@ -473,6 +676,22 @@ def main():
     if _LANES_OK and cred and not _map_on:
         print(f'  lane map OFF — login {cred[0]} cannot send as the aliases; '
               f'everything leaves as the login (copy bsg_gmail.key to enable).')
+    # THE SAME VERIFIED-ADDRESS GATE AS /send (#83 follow-up, Greptile P1, 2026-09-26). Cadence
+    # mails through _smtp_send directly, so it never passed the bridge's deliverability gate or its
+    # warm-up first-touch routing: an enrolled step-0 touch could go to an address with no delivery
+    # evidence, from a lane sender. Now every due step asks send_server's own gate first
+    # (_pick_recipient on the evidence loaded once per run). No evidence = HELD: the step is NOT
+    # advanced, so it goes out the day evidence exists, never silently consumed. A first touch (an
+    # address never mailed) leaves only from the first_touch.from senders under their cap, through
+    # the same atomic slot reservation the bridge uses. If send_server cannot be imported the gate
+    # cannot run, and that is a hold too (fail closed), not a pass.
+    _ev = None
+    if _LANES_OK:
+        try:
+            _ev = _ss._deliverability_evidence()
+        except Exception as e:
+            print(f'  deliverability evidence unreadable ({str(e)[:80]}) — every step HELD this run')
+    held = 0
     for c, s in active.items():
         due = s.get('next') or str(today)
         if due > str(today):
@@ -481,9 +700,41 @@ def main():
         if step >= 4:
             s['status'] = 'completed'
             continue
+        if _compliance_hold or _ledger_hold or _sync_hold or _bounce_hold:
+            held += 1
+            continue
         subj, body = steps(s, sender)[step]
         lane = _cadence_lane(s, today)
         alias = _ss._lane_from(_cfg, lane) if _map_on else ''
+        _addr = (s.get('email') or '').strip().lower()
+        if _ev is None:
+            held += 1
+            print(f"  HELD step {step+1}/4 -> {s['email']}: the deliverability gate could not run")
+            continue
+        _pk, _vd = _ss._pick_recipient([_addr], _ev)
+        if not _pk:
+            held += 1
+            print(f"  HELD step {step+1}/4 -> {s['email']}: no delivery evidence ("
+                  + '; '.join(f'{_c}: {_w}' for _a, _c, _w in _vd[:1]) + ') — step stays due')
+            continue
+        _first = _pk not in _ev['last_mailed'] and next(_c for _a, _c, _w in _vd if _a == _pk) != 'replied'
+        _ft_slot = ''
+        _ft_senders = _ss._first_touch_senders(_cfg) if _cfg else []
+        if _first and _ft_senders:
+            if not _map_on:
+                held += 1
+                print(f"  HELD step {step+1}/4 -> {s['email']}: first touch, and the login cannot send "
+                      f"as the warm-up senders ({', '.join(_ft_senders)})")
+                continue
+            if args.dry_run or not cred:
+                _ftp, _st = _ss._pick_first_touch_from(_cfg)
+            else:
+                _ftp, _st = _ss._reserve_first_touch_from(_cfg)
+                _ft_slot = _ftp
+            if not _ftp:
+                capped['first-touch'] = capped.get('first-touch', 0) + 1
+                continue
+            alias = _ftp if _ftp != cred[0] else ''
         if args.dry_run or not cred:
             _as = f'  [{lane} -> {alias}]' if alias else f'  [{lane} -> login]'
             print(f"  [dry-run] {s['email']}  step {step+1}/4  '{subj}'{_as}")
@@ -510,10 +761,29 @@ def main():
             mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
                                  subj, body, from_addr=alias or None)
         else:
+            # LEGACY FALLBACK -- reached only when `import send_server` failed at the top of this
+            # file (carried over from #46, 2026-09-26). The lane path above goes through
+            # _ss._smtp_send, which sets List-Unsubscribe and runs mail_guard itself; this branch
+            # built the message by hand and did neither. The LOGIN, not a lane alias:
+            # unsubscribe_header's mailto arm has to land in the mailbox replies.py opens, and this
+            # branch sends as the login anyway.
             msg = MIMEText(body, 'plain', 'utf-8')
             msg['Subject'] = subj
             msg['From'] = formataddr((sender.get('name') or cred[0], cred[0]))
             msg['To'] = s['email']
+            _unsub_hdr = _MG.unsubscribe_header(cred[0])
+            if _unsub_hdr:
+                msg['List-Unsubscribe'] = _unsub_hdr
+            # PRE-SEND GUARD, check() and continue rather than assert_sendable() and raise: nothing
+            # in this loop catches an exception, so a raise would abort the run and every other
+            # owner due today would go unmailed over one bad row. `continue` skips `sent += 1` and
+            # the step advance below, so the touch stays due -- exactly what mail_guard's refusal
+            # text promises ("the message was NOT sent and the step was NOT consumed").
+            _bad = _MG.check(subj, body, s['email'], unsub=_unsub_hdr)
+            if _bad:
+                print(f"  !! REFUSED {s['email']} — {'; '.join(_bad)}. Step {step+1}/4 was NOT "
+                      f"consumed; it stays due. Fix the lead data or the template.")
+                continue
             smtp.send_message(msg)
         sent += 1
         # THE LEDGER ROW — same shape the bridge writes, and the reason the cap above can work at
@@ -534,7 +804,9 @@ def main():
                     'message_id': mid,
                     'test_mode': False,
                     'lane': 'cadence', 'wl': lane,
+                    'touch': 'first' if _first and _ft_senders else '',
                 })
+                _ss._release_first_touch_slot(_ft_slot)   # the ledger row counts it from here on
             except Exception as e:
                 print(f'  WARNING: {s["email"]} was emailed (mid={mid}) but the ledger write '
                       f'failed ({str(e)[:90]}) — this send will not count toward the alias cap.')
@@ -562,10 +834,15 @@ def main():
                   f'({str(e)[:80]}) — this step may be RE-SENT on the next run. Fix the file now.')
     if smtp:
         smtp.quit()
+    if held:
+        print(f'  deliverability gate: {held} step(s) HELD (not consumed; they stay due).')
     for a, n in sorted(capped.items()):
         print(f'  warm-up cap reached on {a} — {n} step(s) held for tomorrow (not consumed).')
 
-    _save_state(state)
+    if not args.dry_run:
+        _save_state(state)
+    else:
+        print('  [dry-run] state NOT written (status flips above are for display only)')
     print(f'done. {sent} sent, {sum(1 for s in state.values() if s.get("status")=="active")} active, '
           f'{sum(1 for s in state.values() if s.get("status")=="replied")} replied-cancelled, '
           f'{sum(1 for s in state.values() if s.get("status")=="suppressed")} suppressed, '

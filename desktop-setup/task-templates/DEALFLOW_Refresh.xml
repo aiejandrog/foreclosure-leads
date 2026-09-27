@@ -11,6 +11,12 @@
   anywhere except the laptop itself, and MACHINE-HANDOFF.md section 4 is a prose summary rather
   than the thing that runs. The table that documents nine tasks had a tracked definition for one.
 
+  The action is run-locked.bat refresh-dealflow.bat, so the cross-machine lease
+  (runner_lock.py) can refuse before the chain starts. The lease is OFF until
+  DEALFLOW_RUNNER_LOCK=1, and refresh-dealflow.bat enters it itself as well, so a
+  task that still points straight at the .bat is covered on the next pull. An export
+  in tasks/ still wins over this template.
+
   THIS DOES NOT OVERRIDE THE LAPTOP. install-tasks.ps1 applies an export in tasks/ over a template
   of the same task name, always. So adding this changes nothing on a machine that already has the
   export; it gives every other machine the hardened definition instead of no definition, and it
@@ -110,7 +116,8 @@
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>__REPO__\refresh-dealflow.bat</Command>
+      <Command>__REPO__\run-locked.bat</Command>
+      <Arguments>refresh-dealflow.bat</Arguments>
       <WorkingDirectory>__REPO__</WorkingDirectory>
     </Exec>
   </Actions>

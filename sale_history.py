@@ -19,7 +19,14 @@ set / cancelled, so unlike a lien chain it must re-check). Writes onto each lead
 Miami-Dade only for now — Broward/Palm Beach dockets sit behind different (captcha-walled) clerk
 portals, the same wall their lien tracers hit; they fall back to the filing-year FRESH/STALLER proxy.
 
-Run:  python sale_history.py [--limit N] [--ttl-days 7] [--case CASE]
+Two Miami-Dade lanes are read (2026-09-26): the AUCTION list (leads_final.json) and the LIS PENDENS
+lane (lp_leads.json, or lis_pendens.json when that is absent) — every LP row whose case is a
+Miami-Dade civil number. An LP case lands in the cache under the same key and in the same format as
+an auction case, which is what stay_gate.py reads; its board row gets the §362 fields the board
+gates on (saleBkAct / saleBkD / saleLift). Order: near sales, then cases never read, then the rest
+oldest-read first, so the --limit budget always reaches an unread case before a re-read.
+
+Run:  python sale_history.py [--limit N] [--ttl-days 7] [--case CASE] [--no-lp]
 """
 import argparse
 import json
@@ -320,7 +327,207 @@ def _load_cache():
     return {}
 
 
-def main():
+# --- LIS PENDENS coverage (2026-09-26) ------------------------------------------------------------
+# Until 2026-09-26 this file read leads_final.json and nothing else, i.e. the Miami AUCTION list. The
+# ~350 Miami-Dade lis pendens leads on the board's Fresh-filings lane carry a real Miami-Dade civil
+# case number (2025-012345-CA-01) the same OCS endpoint answers, and not one of them was ever read.
+# So they had no stay verdict anywhere: the board showed every one of them workable (saleBkAct never
+# set), and the send bridge's fail-closed gate (stay_gate.py, #72) can only refuse them forever as
+# stay_unverified. They are read here now, from the same lane the board merges:
+#   lp_leads.json      the board's LP rows, built by lp_leads.py from lis_pendens.json (already
+#                      deduped, dismissed/closed flags applied). Preferred, and the only file this
+#                      script writes LP stay flags back into.
+#   lis_pendens.json   the raw feed, used only when lp_leads.json is absent, with lp_leads.build's
+#                      own dedupe (owner required; key = case, else owner+date). Read-only.
+# Only rows whose county is Miami-Dade and whose case holds a Miami-Dade civil number are read;
+# Broward / Palm Beach LP numbers sit behind other clerks (see the module docstring).
+# File NAMES, joined to HERE at call time (not import time), so anything that points HERE somewhere
+# else -- the suites do -- moves the LP files with it and can never stamp the real lp_leads.json.
+LP_LEADS = 'lp_leads.json'
+LP_FEED = 'lis_pendens.json'
+_MD_CIVIL = re.compile(r'\b(\d{4}-\d{6}-(?:CA|CC)-\d{2})\b')
+
+
+def md_civil_case(raw):
+    """'2025-012345-CA-01' out of whatever the row carries ('CASE NO 2025-012345-CA-01' included);
+    '' when there is no Miami-Dade civil number in it."""
+    m = _MD_CIVIL.search(str(raw or '').upper())
+    return m.group(1) if m else ''
+
+
+def _lp_filed_key(r):
+    """Sortable filing date from an LP row ('6/8/2026' or '2026-06-08'); '' when unreadable."""
+    d = str(r.get('filedDate') or r.get('filed') or r.get('date') or '').strip().split(' ')[0]
+    m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})$', d)
+    if m:
+        return '%s-%02d-%02d' % (m.group(3), int(m.group(1)), int(m.group(2)))
+    return d[:10] if re.match(r'\d{4}-\d{2}-\d{2}', d) else ''
+
+
+def load_lp_rows(lp_leads=None, lp_feed=None):
+    """(rows, whole_file, source) — the Miami-Dade LP rows to read, with their clean case numbers.
+
+    rows = [(case, row)]. whole_file is the full lp_leads.json list (every county, same objects as
+    in rows) when the rows came from there, else None: lp_leads.json is the one file whose rows reach
+    the board and so the one this script stamps stay flags into. The raw feed is never written."""
+    lp_leads = lp_leads or os.path.join(HERE, LP_LEADS)
+    lp_feed = lp_feed or os.path.join(HERE, LP_FEED)
+    src, rows, writable = '', None, False
+    if os.path.exists(lp_leads):
+        try:
+            rows = json.load(open(lp_leads, encoding='utf-8'))
+            src, writable = os.path.basename(lp_leads), True
+        except Exception as e:
+            print(f'sale_history: {os.path.basename(lp_leads)} unreadable ({str(e)[:80]}) - falling back to the raw feed')
+            rows = None
+    if not isinstance(rows, list):
+        rows, writable = None, False
+        if os.path.exists(lp_feed):
+            try:
+                feed = json.load(open(lp_feed, encoding='utf-8'))
+            except Exception:
+                feed = []
+            rows, seen = [], set()
+            for lp in feed if isinstance(feed, list) else []:
+                # lp_leads.build's dedupe, verbatim: no owner -> not a lead; key = case or owner+date
+                case = str(lp.get('case') or '').strip()
+                owner = str(lp.get('owner') or '').strip()
+                if not owner:
+                    continue
+                key = case or (owner + str(lp.get('date', '')))
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(lp)
+            src = os.path.basename(lp_feed)
+    out = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        if str(r.get('county') or 'MIAMI-DADE').upper() != 'MIAMI-DADE':
+            continue
+        case = md_civil_case(r.get('case'))
+        if case:
+            out.append((case, r))
+    return out, (rows if writable else None), src
+
+
+def _apply_cached(kind, r, ent):
+    """Stamp a cache entry onto a row. Never CLEARS a flag: only a live read may (see below)."""
+    if kind == 'lp':
+        # LP rows are board-slim rows. Only the §362 stay fields are stamped, under the names the board
+        # already gates on (tracker_template reads r.saleBkAct / saleBkD / saleLift). The staller
+        # counts (saleSurv / saleBK) are deliberately NOT stamped: they feed ranking, and moving the
+        # Fresh-filings lane's order is a different change from making its stay status known.
+        if ent.get('a'):
+            r['saleBkAct'] = True; r['saleBkD'] = ent.get('bd', '')
+        if ent.get('sl'):
+            r['saleLift'] = ent['sl']
+        return
+    r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
+    if ent.get('w'): r['sale_who'] = ent['w']
+    if ent.get('b'): r['sale_bk'] = ent['b']
+    if ent.get('a'): r['sale_bk_active'] = True; r['sale_bk_date'] = ent.get('bd', '')
+    if ent.get('sl'): r['sale_stay_lifted'] = ent['sl']
+
+
+def _apply_live(kind, r, surv, sched, who, bk, bkact, bkd, lifted):
+    """Stamp a successful live read onto a row. A live read that says no stay is active CLEARS one."""
+    if kind == 'lp':
+        if bkact:
+            r['saleBkAct'] = True; r['saleBkD'] = bkd
+            r.pop('saleLift', None)
+        else:
+            r.pop('saleBkAct', None); r.pop('saleBkD', None)
+        if lifted: r['saleLift'] = lifted
+        return
+    r['sale_survived'] = surv; r['sale_scheduled'] = sched
+    if who: r['sale_who'] = who
+    if bk: r['sale_bk'] = bk
+    if bkact:
+        r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+        r.pop('sale_stay_lifted', None)      # gates read a lift date as "contact is legal"
+    else:
+        # A LIVE READ saying no stay is active overrides a flag already on the row. Since
+        # 2026-09-24 foreclosure_leads.main() writes the cached stays into leads_final.json
+        # before this step runs, so a stay the docket now shows lifted would otherwise stay
+        # on the row (and gate the lead) until the next scrape. Only a successful fetch
+        # clears; a failed one (dks None) and a cache hit never do.
+        r.pop('sale_bk_active', None); r.pop('sale_bk_date', None)
+    if lifted: r['sale_stay_lifted'] = lifted
+
+
+def _row_prev_stay(kind, r):
+    """(active, filing date) a row already carries, in its own field names."""
+    if kind == 'lp':
+        return bool(r.get('saleBkAct')), r.get('saleBkD') or ''
+    return bool(r.get('sale_bk_active')), r.get('sale_bk_date') or ''
+
+
+def never_read(ent):
+    """No cache entry, or one from before the stay fields existed (v<4, no 'a') — the two states
+    stay_gate.py refuses as stay_unverified. These are read before any re-read of a known case."""
+    return not isinstance(ent, dict) or 'a' not in ent
+
+
+def plan(leads, lp_rows, cache, near):
+    """The fetch order: [(case, [(kind, row), ...], is_near)].
+
+    One entry per case, so a case on both the auction list and the LP lane is fetched once and
+    stamped onto both rows. Order:
+      0. an auction within --near-days (the short-TTL re-read; a petition is likeliest right before
+         a sale — unchanged from before)
+      1. NEVER READ: auction rows first (they have a sale date), then LP rows newest filing first
+      2. everything else, oldest cache read first
+    Fresh entries cost no fetch, so where they sort only matters for which stale ones the --limit
+    budget reaches, and those go oldest-first."""
+    groups, order = {}, []
+    for r in leads:
+        case = (r.get('Case #') or '').strip()
+        # civil MD foreclosure cases only (tax-deed & non-CA cases aren't in OCS)
+        if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
+            continue
+        if case not in groups:
+            groups[case] = {'rows': [], 'near': False, 'fc': False, 'filed': ''}
+            order.append(case)
+        g = groups[case]
+        g['rows'].append(('fc', r)); g['fc'] = True
+        g['near'] = g['near'] or near(r)
+    for case, r in lp_rows:
+        if case not in groups:
+            groups[case] = {'rows': [], 'near': False, 'fc': False, 'filed': ''}
+            order.append(case)
+        g = groups[case]
+        g['rows'].append(('lp', r))
+        g['filed'] = max(g['filed'], _lp_filed_key(r))
+    pos = {c: i for i, c in enumerate(order)}
+
+    def key(c):
+        g, ent = groups[c], cache.get(c)
+        if g['near']:
+            return (0, 0, '', pos[c])
+        if never_read(ent):
+            # auction rows keep their file order; LP rows go newest filing first
+            return (1, 0 if g['fc'] else 1, '' if g['fc'] else _inv(g['filed']), pos[c])
+        return (2, 0, '%020.3f' % float(ent.get('t', 0) or 0), pos[c])
+    return [(c, groups[c]['rows'], groups[c]['near']) for c in sorted(order, key=key)]
+
+
+def _inv(iso):
+    """Sort key that puts a LATER 'YYYY-MM-DD' first; an unknown date sorts last."""
+    if not iso:
+        return '~'
+    return ''.join(chr(ord('9') - int(ch) + ord('0')) if ch.isdigit() else ch for ch in iso)
+
+
+def _dump(obj, path, indent=None):
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, indent=indent)
+    os.replace(tmp, path)
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--limit', type=int, default=0, help='max live fetches this run (0 = unlimited)')
     ap.add_argument('--ttl-days', type=float, default=7.0)
@@ -337,12 +544,20 @@ def main():
                          'common one, and a 7-day-old read cannot see it')
     ap.add_argument('--refresh-bk', action='store_true',
                     help='force-refetch every BK-relevant entry (active stay or any BK count) ignoring TTL')
-    a = ap.parse_args()
+    ap.add_argument('--no-lp', action='store_true',
+                    help='auction list only, the pre-2026-09-26 scope: skip the Miami-Dade lis pendens lane')
+    a = ap.parse_args(argv)
 
     path = os.path.join(HERE, 'leads_final.json')
-    if not os.path.exists(path):
-        print('leads_final.json missing'); return
-    leads = json.load(open(path, encoding='utf-8'))
+    leads = []
+    if os.path.exists(path):
+        leads = json.load(open(path, encoding='utf-8'))
+    else:
+        print('leads_final.json missing - reading the lis pendens lane only')
+    lp_rows, lp_all, lp_src = ([], None, '') if a.no_lp else load_lp_rows()
+    lp_writable = lp_all is not None
+    if not leads and not lp_rows:
+        print('sale_history: no leads_final.json and no Miami-Dade lis pendens rows - nothing to read'); return
     cache = _load_cache()
     now = time.time()
     ttl = a.ttl_days * 86400
@@ -367,43 +582,48 @@ def main():
     # normal steady state: once the cache is warm, a run legitimately fetches nothing. They still
     # have to be written to disk — see the write guard at the bottom.
     applied = 0
+    lp_dirty = False
+    nlp_cases = len({c for c, _ in lp_rows})
+    lp_new = lp_read = 0
+    capped = 0
+    if lp_rows:
+        print(f'sale_history: {len(lp_rows)} Miami-Dade lis pendens row(s) ({nlp_cases} case(s)) from {lp_src}, '
+              f'{sum(1 for c in {c for c, _ in lp_rows} if never_read(cache.get(c)))} never read')
     # NEAR SALES FIRST, ON A SHORT TTL (sweep of all Miami leads, 2026-09-24): three 09-28 sales had
     # a suggestion of bankruptcy filed 09-22 to 09-24, and a 7-day TTL let a read from the week before
     # stand until the sale. A petition is most likely in the days before an auction, so those leads
-    # are re-read every run and fetched before the --limit budget runs out on distant ones.
-    for r in sorted(leads, key=lambda r: not _near(r)):
-        case = (r.get('Case #') or '').strip()
-        if a.case and case != a.case:
-            continue
-        # civil MD foreclosure cases only (tax-deed & non-CA cases aren't in OCS)
-        if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
+    # are re-read every run and fetched before the --limit budget runs out on distant ones. Then
+    # every case never read at all (plan()), then the rest oldest-read first.
+    for case, rows, is_near in plan(leads, lp_rows, cache, _near):
+        if a.case and case != a.case and md_civil_case(a.case) != case:
             continue
         ent = cache.get(case)
-        _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < (near_ttl if _near(r) else ttl)
+        _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < (near_ttl if is_near else ttl)
         _bkforce = a.refresh_bk and ent and (ent.get('a') or ent.get('b'))
         # cache-only: TRUST any structurally-compatible entry (v4+ carries the BK fields) — the
         # point is a fetch-free apply so the early-publish never ships without the compliance layer.
         if a.cache_only:
             if ent and ent.get('v', 0) >= 4:
-                r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
-                if ent.get('w'): r['sale_who'] = ent['w']
-                if ent.get('b'): r['sale_bk'] = ent['b']
-                if ent.get('a'): r['sale_bk_active'] = True; r['sale_bk_date'] = ent.get('bd', '')
-                if ent.get('sl'): r['sale_stay_lifted'] = ent['sl']
-                changed += 1
+                for kind, r in rows:
+                    _apply_cached(kind, r, ent)
+                    changed += 1
+                    lp_dirty = lp_dirty or kind == 'lp'
             continue
         if _fresh and not a.case and not _bkforce:
-            r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
-            if ent.get('w'): r['sale_who'] = ent['w']
-            if ent.get('b'): r['sale_bk'] = ent['b']
-            if ent.get('a'): r['sale_bk_active'] = True; r['sale_bk_date'] = ent.get('bd', '')
-            if ent.get('sl'): r['sale_stay_lifted'] = ent['sl']
-            applied += 1
+            for kind, r in rows:
+                _apply_cached(kind, r, ent)
+                applied += 1
+                lp_dirty = lp_dirty or kind == 'lp'
             continue
         if budget <= 0:
-            break
+            # `continue`, not `break`: a fresh entry later in the order still has to be applied.
+            capped += 1
+            continue
         dks = _fetch(session, case)
         fetched += 1; budget -= 1
+        if any(k == 'lp' for k, _ in rows):
+            lp_read += 1
+            lp_new += int(never_read(ent))
         if dks is not None:
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
@@ -416,8 +636,11 @@ def main():
             # read all keep the stay: a wrongly kept stay costs a call, a wrongly cleared one is a
             # §362 contact.
             _prev = ent if isinstance(ent, dict) else {}
-            if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
-                _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
+            _rowprev = [_row_prev_stay(k, r) for k, r in rows]
+            _row_act = any(act for act, _ in _rowprev)
+            _row_bd = next((d for act, d in _rowprev if act and d), '')
+            if not bkact and (_prev.get('a') or _row_act):
+                _pbd = _prev.get('bd') or _row_bd or ''
                 _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
                 # _bk_stay answers for the NEWEST case only; a newer case closing says nothing
                 # about ours. The stay ends only when ours and every case filed after it each show
@@ -432,20 +655,12 @@ def main():
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'
-            r['sale_survived'] = surv; r['sale_scheduled'] = sched
-            if who: r['sale_who'] = who
-            if bk: r['sale_bk'] = bk
-            if bkact:
-                r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
-                r.pop('sale_stay_lifted', None)      # gates read a lift date as "contact is legal"
-            else:
-                # A LIVE READ saying no stay is active overrides a flag already on the row. Since
-                # 2026-09-24 foreclosure_leads.main() writes the cached stays into leads_final.json
-                # before this step runs, so a stay the docket now shows lifted would otherwise stay
-                # on the row (and gate the lead) until the next scrape. Only a successful fetch
-                # clears; a failed one (dks None) and a cache hit never do.
-                r.pop('sale_bk_active', None); r.pop('sale_bk_date', None)
-            if lifted: r['sale_stay_lifted'] = lifted
+            for kind, r in rows:
+                _apply_live(kind, r, surv, sched, who, bk, bkact, bkd, lifted)
+                lp_dirty = lp_dirty or kind == 'lp'
+            # CACHE FORMAT UNCHANGED: stay_gate.py (#72), outreach_email, healthcheck and
+            # foreclosure_leads.restore_stays_from_cache all read these keys. An LP case lands under
+            # its clean Miami-Dade number exactly like an auction case.
             cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk,
                            'a': bkact, 'bd': bkd, 'sl': lifted, 't': now, 'v': CACHE_VER}
             changed += 1
@@ -457,7 +672,10 @@ def main():
         time.sleep(0.25)
         if fetched % 25 == 0:
             json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
-            json.dump(leads, open(path, 'w', encoding='utf-8'))
+            if leads:
+                json.dump(leads, open(path, 'w', encoding='utf-8'))
+            if lp_dirty and lp_writable:
+                _dump(lp_all, os.path.join(HERE, LP_LEADS), indent=1)
             print(f'  ... {fetched} fetched, {changed} updated')
 
     json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
@@ -467,11 +685,24 @@ def main():
     # from every row, sale-history coverage 100% -> 0%, and 93 active §362 stays stopped reaching the
     # board). The staller count below reads the in-memory list, so the old log line reported healthy
     # numbers for data that was never persisted — the failure was invisible in the log.
-    if changed or applied:
+    if leads and (changed or applied):
         json.dump(leads, open(path, 'w', encoding='utf-8'))
+    # Same rule for the LP lane, and the same file shape lp_leads.py writes (indent=1). Written only
+    # when a row actually took a value: an untouched file keeps its mtime.
+    if lp_dirty and lp_writable:
+        _dump(lp_all, os.path.join(HERE, LP_LEADS), indent=1)
     stallers = sum(1 for r in leads if (r.get('sale_survived') or 0) >= 2)
     print(f'sale_history: {changed} updated, {applied} applied from cache, {fetched} fetched live. '
           f'{stallers} serial stallers (survived >=2 sales) flagged.')
+    if lp_rows:
+        _unread = sum(1 for c in {c for c, _ in lp_rows} if never_read(cache.get(c)))
+        _act = sum(1 for c in {c for c, _ in lp_rows} if isinstance(cache.get(c), dict) and cache[c].get('a') and not cache[c].get('sl'))
+        print(f'  lis pendens: {lp_read} case(s) read live ({lp_new} for the first time); '
+              f'{nlp_cases - _unread} of {nlp_cases} Miami-Dade LP case(s) now carry a stay read, '
+              f'{_unread} still unread, {_act} with an ACTIVE stay'
+              + ('' if lp_writable else f' (from {lp_src}: read-only, no board rows stamped)'))
+    if capped:
+        print(f'  --limit reached: {capped} stale or unread case(s) left for the next run')
 
 
 if __name__ == '__main__':

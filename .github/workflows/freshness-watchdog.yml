@@ -7,8 +7,31 @@ name: DEALFLOW freshness watchdog
 
 on:
   schedule:
-    - cron: '0 15 * * *'      # 15:00 UTC  (~11:00 AM ET) — a couple hours after the 9 AM PC refresh
-  workflow_dispatch: {}        # allow a manual "Run workflow" from the Actions tab
+    - cron: '0 15 * * *'      # 15:00 UTC  (~11:00 AM ET) — the full daily check (both jobs below it)
+    # THE MORNING CHECK, 07:15 ET, before the 08:00 Morning Worker (the first send).
+    # The 11:00 check is three hours after that worker has already used yesterday's board, and
+    # an 08:30 check is still after the send. GitHub cron is UTC-only and New York moves between
+    # UTC-4 and UTC-5, so BOTH crons fire and the job itself only proceeds when it is 07:xx in
+    # America/New_York — 11:15 UTC in summer (EDT), 12:15 UTC in winter (EST). The other one
+    # logs "not 07:xx ET, skipping" and exits green. GitHub can start a scheduled run late on a
+    # busy day, so read this as "about 7:15", not "at 7:15".
+    # A night that already pushed its early "fresh leads" board and is still enriching is not a
+    # miss: the final "auto lead" publish often lands 07:40-08:45, and paging that would be a
+    # false alarm on a healthy morning. The 11:00 check reports a run that never finishes.
+    - cron: '15 11 * * *'
+    - cron: '15 12 * * *'
+  workflow_dispatch:           # allow a manual "Run workflow" from the Actions tab
+    inputs:
+      check:
+        description: 'which check to run by hand'
+        type: choice
+        options: [daily, morning, both]
+        default: daily
+  # The laptop pushes pipeline_alerts.json on its own (counts only). That push is what makes a
+  # 9 PM battery reading email him the same evening, instead of waiting for the 15:00 UTC pass.
+  push:
+    branches: [main]
+    paths: ['pipeline_alerts.json']
 
 permissions:
   issues: write                # so it can open/comment the alert issue with the built-in token
@@ -16,6 +39,10 @@ permissions:
 
 jobs:
   check:
+    # The original daily check: the 15:00 UTC cron, or a manual run that asked for it.
+    if: >-
+      github.event.schedule == '0 15 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check != 'morning')
     runs-on: ubuntu-latest
     steps:
       - name: Check live-site data age
@@ -39,10 +66,14 @@ jobs:
                 `The weekly/daily refresh on your PC likely failed (or the machine was off). ` +
                 `Check \`leads-run.log\`, or just double-click \`refresh-dealflow.bat\` to catch up.\n\n` +
                 `_(This alert is from the free cloud watchdog; it re-checks daily and will comment again if it stays stale.)_`;
+              const title = `DEALFLOW ALERT: live board data is stale (${days} days)`;
               if (open.data.length) {
                 await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+                if (!String(open.data[0].title || '').startsWith('DEALFLOW ALERT: ')) {
+                  await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, title });
+                }
               } else {
-                await github.rest.issues.create({ owner, repo, title: `⚠️ DEALFLOW data is stale (${days} days old)`, body, labels: ['stale-data'] });
+                await github.rest.issues.create({ owner, repo, title, body, labels: ['stale-data'] });
               }
               core.setFailed(`DEALFLOW data is ${days} days stale (>= ${STALE_DAYS}).`);
             } else if (open.data.length) {
@@ -81,6 +112,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // WATCHDOG_NOW exists for _watchdogtest.js only; nothing in this workflow sets it.
+            const NOW_MS = process.env.WATCHDOG_NOW ? Date.parse(process.env.WATCHDOG_NOW) : Date.now();
             const LOOKBACK_DAYS = 4;
             const ENRICH_SILENT_DAYS = 3;   // no "refresh:" publish in this many days = the scrape job is not publishing
             // Committer date this far past author date = the push did not land when it was built.
@@ -91,12 +124,15 @@ jobs:
             // `since` filters on the COMMITTER date, which is what makes check 2 possible at all:
             // a board built on the 14th and pushed on the 17th enters the window on the day it
             // landed, still carrying the 14th as its author date.
-            const since = new Date(Date.now() - LOOKBACK_DAYS * 86400000).toISOString();
+            const since = new Date(NOW_MS - LOOKBACK_DAYS * 86400000).toISOString();
 
             let commits;
             try {
-              const r = await github.rest.repos.listCommits({ owner, repo, sha: 'main', since, per_page: 100 });
-              commits = r.data;
+              // EVERY page, not the first 100 (issue #87, 2026-09-26): a day of PR merges pushed
+              // 267 commits into the 4-day window, the 09-24 refresh publishes fell off page 1,
+              // and this reported "last publish more than 4 days ago" for one 2.4 days old.
+              commits = await github.paginate(github.rest.repos.listCommits,
+                                              { owner, repo, sha: 'main', since, per_page: 100 });
             } catch (e) {
               core.setFailed(`Cannot read the commit log (${e.message}) — refusing to report healthy on an unchecked repo.`);
               return;
@@ -109,11 +145,33 @@ jobs:
             // The scheduled jobs and the exact message each one commits. Anything else is a human
             // or the cloud balloon book, and is none of this check's business.
             const JOBS = [
-              { key: 'phones',  job: 'the 06:00 phones job (run-phones-nightly.bat)',  re: /^phones: nightly refresh/ },
-              { key: 'replies', job: 'the 06:45 reply bake (run-replies-daily.bat)',   re: /^replies: morning scan/ },
-              { key: 'refresh', job: 'the 05:30 refresh (refresh-dealflow.bat)',       re: /^refresh: (auto lead|fresh leads)/ },
+              { key: 'phones',  job: 'the phones job (run-phones-nightly.bat)',  re: /^phones: nightly refresh/ },
+              { key: 'replies', job: 'the reply bake (run-replies-daily.bat)',   re: /^replies: morning scan/ },
+              { key: 'refresh', job: 'the 05:30 refresh (refresh-dealflow.bat)', re: /^refresh: (auto lead|fresh leads)/ },
             ];
             const classify = (msg) => (JOBS.find(j => j.re.test(msg)) || {}).key || null;
+            // ONE REFRESH RUN PUBLISHES TWICE (issue #28, 2026-09-26). refresh-dealflow.bat pushes an
+            // early board as soon as the scrape lands ("refresh: fresh leads", ~05:40) and the final
+            // board after phones and enrichment ("refresh: auto lead + phone update", ~07:40-08:45).
+            // This check counted COMMITS, so every healthy night read as "published 2 times ... two
+            // machines are armed" - 09-23 and 09-24 were both exactly that, one run each. A watchdog
+            // that cries wolf every morning is one the operator learns to skip. So the refresh job
+            // is counted in RUNS: an early publish opens a run, a final publish closes an open one,
+            // and a final publish with no open run (the early push was skipped or gated) is a run of
+            // its own. Two runs on one day still alarm - that is a second machine, or a re-run by
+            // hand, and the message still says which.
+            const stageOf = (msg) => /^refresh: fresh leads/.test(msg) ? 'early'
+                                   : /^refresh: auto lead/.test(msg) ? 'final' : null;
+            const countRuns = (key, group) => {
+              if (key !== 'refresh') return group.length;
+              let runs = 0, open = 0;
+              for (const c of [...group].sort((a, b) => a.authored - b.authored)) {
+                if (stageOf(c.msg) === 'early') { runs++; open++; }
+                else if (open) { open--; }             // closes a run already counted
+                else { runs++; }                       // a final publish with no early one
+              }
+              return runs;
+            };
             const jobOf = (key) => (JOBS.find(j => j.key === key) || {}).job || key;
 
             const scheduled = commits
@@ -147,11 +205,15 @@ jobs:
               byDay.get(k).push(c);
             }
             for (const [k, group] of byDay) {
-              if (group.length < 2) continue;
               const [key, day] = k.split('|');
+              const runs = countRuns(key, group);
+              if (runs < 2) continue;
               const when = group.map(c => `\`${c.sha}\` at ${c.authored.toISOString().slice(11, 16)}Z`).join(', ');
+              const times = key === 'refresh'
+                ? `ran **${runs} times on ${day}** (${group.length} publishes: ${when}; one run = an early "fresh leads" push plus a final "auto lead" push)`
+                : `published **${group.length} times on ${day}** (${when})`;
               problems.push(
-                `**Two runners.** ${jobOf(key)} published **${group.length} times on ${day}** (${when}). ` +
+                `**Two runners.** ${jobOf(key)} ${times}. ` +
                 `That job runs once per machine per day, so two commits means two machines are armed — ` +
                 `against MACHINE-HANDOFF.md §1. Their worker state (\`optouts.json\`, \`worker_notes.json\`, ` +
                 `\`skiptrace_results.json\`) is gitignored and therefore forked, and whichever pushes last ` +
@@ -178,7 +240,7 @@ jobs:
             const lastRefresh = scheduled.filter(c => c.key === 'refresh')
               .sort((a, b) => b.authored - a.authored)[0];
             const refreshAgeDays = lastRefresh
-              ? Math.floor((Date.now() - lastRefresh.authored.getTime()) / 86400000)
+              ? Math.floor((NOW_MS - lastRefresh.authored.getTime()) / 86400000)
               : LOOKBACK_DAYS;
             if (refreshAgeDays >= ENRICH_SILENT_DAYS) {
               problems.push(
@@ -189,6 +251,26 @@ jobs:
                 `, yet the board has been republished since — which is why the "Updated" stamp on the site still ` +
                 `looks current. Check \`leads-run.log\` on the armed machine: does the newest ` +
                 `\`==== REFRESH ====\` banner have a matching \`==== done ====\`?`
+              );
+            }
+
+            // 4. the refresh STARTED today and never finished. The early "fresh leads" push lands
+            //    ~05:40 and the final one by ~08:45 on a healthy night; 09-25 died at 06:53 when the
+            //    laptop slept, which from here looks like an early push (or nothing) and then
+            //    silence. Only judged once the run has had 4.5h, so a slow night is not a failure.
+            const FINISH_HOURS = 4.5;
+            const todayET = dayET(new Date(NOW_MS));
+            const todays = scheduled.filter(c => c.key === 'refresh' && dayET(c.authored) === todayET)
+              .sort((a, b) => a.authored - b.authored);
+            const lastToday = todays[todays.length - 1];
+            if (lastToday && stageOf(lastToday.msg) === 'early' &&
+                (NOW_MS - lastToday.authored.getTime()) / 3600000 > FINISH_HOURS) {
+              problems.push(
+                `**Today's refresh started and did not finish.** ${jobOf('refresh')} pushed its early board ` +
+                `(\`${lastToday.sha}\`, "${lastToday.msg}") at ${lastToday.authored.toISOString().slice(11, 16)}Z and ` +
+                `no final "refresh: auto lead" publish followed within ${FINISH_HOURS}h. The run was killed or is ` +
+                `stuck: the machine slept, rebooted, or a stage hung. Check \`leads-run.log\` for a ` +
+                `\`PREVIOUS RUN NEVER FINISHED\` line or a missing \`REFRESH ENDED\` line.`
               );
             }
 
@@ -213,13 +295,344 @@ jobs:
               `time, and the 06:00 and 06:45 jobs rebuild the board every morning whether or not any new ` +
               `data arrived. This check re-runs daily and closes itself when the runners are clean._`;
 
+            const title = 'DEALFLOW ALERT: runner check failed on origin/main';
             if (existing.data.length) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: existing.data[0].number, body });
+              if (!String(existing.data[0].title || '').startsWith('DEALFLOW ALERT: ')) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: existing.data[0].number, title });
+              }
             } else {
               await github.rest.issues.create({
-                owner, repo,
-                title: `⚠️ DEALFLOW runners: ${problems.length} problem(s) on origin/main`,
-                body, labels: ['runner-drift'] });
+                owner, repo, title, body, labels: ['runner-drift'] });
             }
             core.setFailed(`${problems.length} runner problem(s) — see the runner-drift issue.`);
+
+  # ------------------------------------------------------------------------------------------------
+  # MORNING CHECK (about 07:15 ET). The daily check above runs at 11:00, after the 8:00 AM
+  # Morning Worker has already sent against whatever board was live. This one answers a single
+  # question before that send: did the 05:30 refresh publish anything today, and is the live
+  # board's build stamp today?
+  #
+  # It alarms on:
+  #   MISSED  - no "refresh:" publish (early or final) authored today, Eastern time. That is
+  #             09-26: the laptop slept through 05:30 and nothing ran at all.
+  #   STALE   - the live board's build stamp is not today. At 07:15 only the refresh has rebuilt
+  #             the board (Morning Worker is 08:00, Replies 08:45, Phones 09:30), so yesterday's
+  #             stamp means the night did not publish, whatever the commit log says.
+  #   UNCHECKABLE - the commit log or the live page could not be read. Fail-loud, same rule as
+  #             the steps above: a check that cannot be evaluated alarms rather than passing.
+  # A run that pushed its early board and is still working on the final one is NOT an alarm here.
+  # The final publish on a healthy night lands around 07:40-08:45 (09-22 was 07:40, 09-24 was
+  # 08:45); requiring it by 07:15 would fire on those mornings. The 11:00 check above catches one
+  # that never finishes.
+  #
+  # Same issue the 08:30 check used (label `nightly-missed`): comment while the problem lasts,
+  # close it on the first clean morning, never open a second one. A failing run also fails this
+  # workflow, which is what makes GitHub email the account. No new service.
+  morning:
+    if: >-
+      github.event.schedule == '15 11 * * *' || github.event.schedule == '15 12 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check != 'daily')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Morning check - did last night's refresh publish
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // WATCHDOG_NOW exists for _watchdogtest.js only; nothing in this workflow sets it.
+            const NOW = process.env.WATCHDOG_NOW ? new Date(process.env.WATCHDOG_NOW) : new Date();
+            const TZ = 'America/New_York';
+            const dayET = (d) => d.toLocaleDateString('en-CA', { timeZone: TZ });
+            const hourET = (d) => Number(d.toLocaleString('en-US', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }));
+            if (context.eventName === 'schedule' && hourET(NOW) !== 7) {
+              core.info(`It is ${hourET(NOW)}:xx in New York, not 07:xx - this is the other DST cron. Skipping.`);
+              return;
+            }
+            const today = dayET(NOW);
+            const { owner, repo } = context.repo;
+            const BOARD = 'https://aiejandrog.github.io/dealflow-board/';
+            const problems = [];
+            let clean = [];
+
+            // 1. a refresh publish authored today (Eastern)
+            let commits = null;
+            try {
+              const since = new Date(NOW.getTime() - 36 * 3600000).toISOString();
+              // EVERY page, not the first 100 (issue #87, 2026-09-26): a day of PR merges pushed
+              // 267 commits into the 4-day window, the 09-24 refresh publishes fell off page 1,
+              // and this reported "last publish more than 4 days ago" for one 2.4 days old.
+              commits = await github.paginate(github.rest.repos.listCommits,
+                                              { owner, repo, sha: 'main', since, per_page: 100 });
+            } catch (e) {
+              problems.push(`**Cannot read the commit log** (${e.message}). Refusing to report a healthy night on an unchecked repo.`);
+            }
+            if (commits) {
+              const refresh = commits
+                .filter(c => c.author?.login !== 'github-actions[bot]')
+                .map(c => ({ sha: c.sha.slice(0, 7), msg: (c.commit.message || '').split('\n')[0],
+                             authored: new Date(c.commit.author.date) }))
+                .filter(c => /^refresh: (auto lead|fresh leads)/.test(c.msg) && dayET(c.authored) === today)
+                .sort((a, b) => a.authored - b.authored);
+              if (!refresh.length) {
+                problems.push(
+                  `**MISSED: no refresh published today (${today}).** Nothing matching \`refresh: fresh leads\` ` +
+                  `or \`refresh: auto lead\` reached \`origin/main\` since midnight Eastern. The 05:30 run did not ` +
+                  `start (the runner was asleep or off - 09-26 was exactly this), died before its first push, or ` +
+                  `its push never landed. The 8:00 AM Morning Worker has not run yet; if nothing publishes before ` +
+                  `then, it works YESTERDAY's board. On the armed machine: check \`leads-run.log\` for today's ` +
+                  `\`==== REFRESH\` banner, then run \`refresh-dealflow.bat\` by hand if it is absent.`);
+              } else {
+                const last = refresh[refresh.length - 1];
+                const fin = refresh.find(c => /^refresh: auto lead/.test(c.msg));
+                clean.push(`refresh published today: ${refresh.map(c => '`' + c.sha + '` ' + c.msg).join(', ')}` +
+                           (fin ? '' : ' (final publish still pending - the 11:00 check judges it)'));
+              }
+            }
+
+            // 2. the live board was rebuilt today
+            try {
+              const res = await fetch(BOARD, { cache: 'no-store' });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const html = await res.text();
+              const m = html.match(/id="upddate">(\d{4}-\d{2}-\d{2})/);
+              if (!m) throw new Error('no "Updated" stamp (id="upddate") on the page');
+              if (m[1] !== today) {
+                problems.push(
+                  `**STALE: the live board was last built ${m[1]}, not today (${today}).** At 07:15 only the ` +
+                  `05:30 refresh has rebuilt it (the Morning Worker sends at 08:00, Replies publishes at 08:45, ` +
+                  `Phones at 09:30), so the night did not reach the live site.`);
+              } else {
+                clean.push(`live board built today (${m[1]})`);
+              }
+            } catch (e) {
+              problems.push(`**Cannot read the live board** at ${BOARD} (${e.message}). Unchecked is not healthy.`);
+            }
+
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'nightly-missed' });
+            if (!problems.length) {
+              core.info('Morning check clean: ' + clean.join('; '));
+              if (open.data.length) {
+                await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, state: 'closed' });
+                core.info('Closed the open nightly-missed alert.');
+              }
+              return;
+            }
+            const body =
+              `Morning check for **${today}** (about 07:15 ET, before the 08:00 sends) found:\n\n` +
+              problems.map(p => `- ${p}`).join('\n\n') +
+              (clean.length ? `\n\nWhat did check out: ${clean.join('; ')}.` : '') +
+              `\n\n---\n_This check runs every morning around 07:15 ET, before the 08:00 Morning Worker, ` +
+              `comments here while the problem lasts and closes this issue on the first clean morning. ` +
+              `An early "fresh leads" publish with the final "auto lead" publish still in progress is not ` +
+              `a failure here — that final often lands between 07:40 and 08:45, and the 11:00 daily check ` +
+              `(label \`runner-drift\`) covers two runners, pushes that did not land and runs that never finished._`;
+            // Matched by the nightly-missed label, never by title. An issue opened before the
+            // Gmail subject prefix is renamed in place so a second one is not opened.
+            const title = `DEALFLOW ALERT: nightly refresh missed or stale (${today})`;
+            if (open.data.length) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+              if (!String(open.data[0].title || '').startsWith('DEALFLOW ALERT: ')) {
+                await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, title });
+              }
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body, labels: ['nightly-missed'] });
+            }
+            core.setFailed(`Morning check: ${problems.length} problem(s) - see the nightly-missed issue.`);
+
+  # ------------------------------------------------------------------------------------------------
+  # LAPTOP ALERTS. pipeline_alerts.json is the counts-only file the armed machine pushes (credits,
+  # captcha, the paid-reads cap, the bounce pause, the 07:15 sync, morning-worker sends, healthcheck
+  # FAIL stage names, and the evening power/task check). One open issue per key, label
+  # dealflow-alert. Comment while it stays true, close when the key disappears, and fail this run
+  # only when an alert is new or worse — that failure is the email. A missing file with no open
+  # alert issue means the laptop has not published yet (not armed). A missing file while issues
+  # are open, or a file that is not JSON, fails instead of closing those issues.
+  alerts:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.schedule == '0 15 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check != 'morning')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync pipeline alerts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const STALE_HOURS = 30;
+            const NOW_MS = process.env.WATCHDOG_NOW ? Date.parse(process.env.WATCHDOG_NOW) : Date.now();
+            const RANK = { warn: 1, fail: 2 };
+            const { owner, repo } = context.repo;
+            function unsafe(s) {
+              return /@|https?:\/\//i.test(s)
+                || /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/.test(s)
+                || /\b\d{4}-\d{3,6}-[A-Za-z]{2}-\d{2}\b/.test(s)
+                || /\b\d{10,}\b/.test(s);
+            }
+            function publicText(key, text) {
+              const s = String(text || '').replace(/\s+/g, ' ').trim();
+              if (!s || unsafe(s)) return 'Alert ' + key + ' fired. Detail withheld because it was not public-safe.';
+              return s.slice(0, 600);
+            }
+            function loadRaw() {
+              if (process.env.WATCHDOG_ALERTS_JSON) return process.env.WATCHDOG_ALERTS_JSON;
+              const file = process.env.WATCHDOG_ALERTS_FILE || 'pipeline_alerts.json';
+              return require('fs').readFileSync(file, 'utf8');
+            }
+            let doc;
+            let missing = false;
+            try {
+              doc = JSON.parse(loadRaw());
+            } catch (e) {
+              if (e && e.code === 'ENOENT') missing = true;
+              else {
+                core.setFailed('pipeline_alerts.json is not valid JSON. Refusing to close alerts on an unreadable file.');
+                return;
+              }
+            }
+            const listedOpen = async () => {
+              const listed = await github.rest.issues.listForRepo({
+                owner, repo, state: 'open', labels: 'dealflow-alert', per_page: 100 });
+              return listed.data || [];
+            };
+            if (missing) {
+              let open = [];
+              try { open = await listedOpen(); }
+              catch (e) {
+                core.setFailed('Cannot list alert issues and pipeline_alerts.json is missing. Refusing to report healthy.');
+                return;
+              }
+              if (open.length) core.setFailed('pipeline_alerts.json is missing from main while alert issues are still open.');
+              else core.info('pipeline_alerts.json is not on main yet. Alerts arm when the laptop first publishes it.');
+              return;
+            }
+            if (!doc || !Array.isArray(doc.alerts)) {
+              core.setFailed('pipeline_alerts.json has no alerts array. Refusing to close issues on an unreadable file.');
+              return;
+            }
+            const active = [];
+            const seen = new Set();
+            for (const a of doc.alerts) {
+              if (!a || typeof a.key !== 'string' || !/^[a-z0-9-]{1,40}$/.test(a.key) || seen.has(a.key)) continue;
+              seen.add(a.key);
+              const severity = (a.severity === 'warn' || a.severity === 'fail') ? a.severity : 'fail';
+              active.push({ key: a.key, severity, text: publicText(a.key, a.text) });
+            }
+            const published = Date.parse(doc.published_at || '');
+            if (doc.published_at && Number.isFinite(published) && (NOW_MS - published) > STALE_HOURS * 3600000) {
+              const hours = Math.floor((NOW_MS - published) / 3600000);
+              active.push({
+                key: 'alerts-unpublished', severity: 'fail',
+                text: 'pipeline_alerts.json on main was last published ' + hours + 'h ago (over ' + STALE_HOURS + 'h). The laptop has stopped publishing its checks.',
+              });
+            } else if (doc.published_at && !Number.isFinite(published)) {
+              core.setFailed('pipeline_alerts.json published_at is not a timestamp. Refusing to close alerts.');
+              return;
+            }
+            try {
+              await github.rest.issues.createLabel({
+                owner, repo, name: 'dealflow-alert', color: 'b60205',
+                description: 'Pipeline threat. Counts, percentages, balances, stage names, timestamps only.' });
+            } catch (e) { /* the label already exists */ }
+            let open = [];
+            try { open = await listedOpen(); }
+            catch (e) {
+              core.setFailed('Cannot list alert issues (' + e.message + '). Refusing to report healthy.');
+              return;
+            }
+            function keyOf(issue) {
+              const body = String(issue.body || '');
+              const m = body.match(/^alert-key:\s*([a-z0-9-]+)/m);
+              if (m) return m[1];
+              const bits = String(issue.title || '').match(/\[([a-z][a-z0-9-]*)\]/g) || [];
+              for (const bit of bits) {
+                const k = bit.slice(1, -1);
+                if (k !== 'warn' && k !== 'fail') return k;
+              }
+              return '';
+            }
+            function sevOf(issue) {
+              const b = String(issue.body || '').match(/^severity:\s*(warn|fail)/m);
+              if (b) return b[1];
+              const m = String(issue.title || '').match(/\[(warn|fail)\]/);
+              return m ? m[1] : 'warn';
+            }
+            // Subjects the owner's Gmail filter matches. GitHub notification mail shows the
+            // title, not the label. Stable per key so a rename is once, not every push.
+            const ALERT_TITLES = {
+              'tracerfy-credits': 'Tracerfy credits low',
+              'captcha-balance': '2Captcha balance low',
+              'paid-reads-cap': 'Paid reads near the monthly cap',
+              'bounce-rate': 'First-touch bounce rate high',
+              'optout-sync': 'Opt-out sync missed or failed',
+              'morning-sends': 'Morning Worker sent nothing',
+              'laptop-readiness': 'Laptop not ready to send',
+              'healthcheck-fail': 'Nightly healthcheck failed',
+              'stale-refresh-flag': 'Refresh flag left behind',
+              'alerts-unpublished': 'Pipeline alerts stopped publishing',
+              'alerts-redacted': 'Pipeline alert withheld',
+            };
+            function alertTitle(key) {
+              return 'DEALFLOW ALERT: ' + (ALERT_TITLES[key] || key);
+            }
+            const byKey = new Map();
+            for (const issue of open) {
+              const k = keyOf(issue);
+              if (k && !byKey.has(k)) byKey.set(k, issue);
+            }
+            const created = [];
+            const worsened = [];
+            const footer = [
+              '---',
+              'Public watchdog alert: counts, percentages, balances, stage names and timestamps only.',
+              'This issue stays open while the condition is true, gets a comment instead of a duplicate, and closes when it clears.',
+              'While the wording is unchanged, it is commented at most once per Eastern day, not once per push.',
+              'A new or worsened alert also fails this workflow, which is what emails the repository owner.',
+            ].join('\n');
+            const dayET = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+            function bodyText(issue) {
+              const head = String(issue.body || '').split(/\n---\n/)[0] || '';
+              return head.replace(/^alert-key:.*$/m, '').replace(/^severity:.*$/m, '').replace(/\s+/g, ' ').trim();
+            }
+            for (const a of active) {
+              const title = alertTitle(a.key);
+              const body = 'alert-key: ' + a.key + '\nseverity: ' + a.severity + '\n\n' + a.text + '\n\n' + footer;
+              const existing = byKey.get(a.key);
+              if (!existing) {
+                await github.rest.issues.create({ owner, repo, title, body, labels: ['dealflow-alert'] });
+                created.push(a.key);
+                continue;
+              }
+              const prev = sevOf(existing);
+              const textNow = a.text.replace(/\s+/g, ' ').trim();
+              const unchanged = prev === a.severity && bodyText(existing) === textNow;
+              const touched = Date.parse(existing.updated_at || '');
+              const commentedToday = Number.isFinite(touched) && dayET(touched) === dayET(NOW_MS);
+              const needsTitle = String(existing.title || '') !== title;
+              if (!(unchanged && commentedToday)) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body: a.text });
+                if (a.severity !== prev || bodyText(existing) !== textNow || needsTitle) {
+                  await github.rest.issues.update({ owner, repo, issue_number: existing.number, title, body });
+                }
+              } else if (needsTitle) {
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, title });
+              }
+              if ((RANK[a.severity] || 2) > (RANK[prev] || 1)) worsened.push(a.key);
+            }
+            const activeKeys = new Set(active.map(a => a.key));
+            for (const issue of open) {
+              const k = keyOf(issue);
+              if (!k || activeKeys.has(k)) continue;
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: 'Cleared. The published checks no longer report this condition.' });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+            }
+            if (created.length || worsened.length) {
+              core.setFailed('pipeline alerts: ' + created.length + ' new, ' + worsened.length
+                + ' worsened (' + created.concat(worsened).join(', ') + ').');
+            } else {
+              core.info('pipeline alerts: ' + active.length + ' open condition(s), none new or worsened.');
+            }
