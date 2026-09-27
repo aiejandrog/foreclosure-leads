@@ -3158,7 +3158,8 @@ function dealFlags(r){
   if(r.st!=='TD' && !r.mr && r._equity!=null && r.value && (r._equity/r.value)>0.5 && !nn.jlien && !nn.assess) f.push('Big equity on a bank 1st — pull Official Records for a 2nd mortgage / HELOC. To buy from the owner you clear EVERY mortgage, not just the one foreclosing.');
   if(_hasClock(r) && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
   if((+r.saleBK||0)>=2) f.push('SERIAL BANKRUPTCY FILER — '+r.saleBK+' distinct BK cases on this docket. The automatic stay stops any sale the moment they re-file, so timelines here are unreliable and a rescue deal can be frozen mid-flight. Jose screens these out.');
-  if(r.saleBkAct) f.push('⛔ ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' (filed '+r.saleBkD+')':'')+' — 11 U.S.C. §362 prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. A stay violation carries real sanctions and can unwind work already done. Track it; move when it closes.');
+  if(r.bkWhy) f.push('⛔ '+r.bkWhy+' — no calls, texts, letters, or emails until this federal bankruptcy check is cleared.');
+  else if(r.saleBkAct) f.push('⛔ ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' (filed '+r.saleBkD+')':'')+' — 11 U.S.C. §362 prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. A stay violation carries real sanctions and can unwind work already done. Track it; move when it closes.');
   var _ld = _stayLiftedDays(r);
   if(_ld >= 0 && _ld <= 45) f.push('🔔 STAY LIFTED '+_ld+' days ago ('+r.saleLift+') — the bankruptcy closed, contact is legal again, and the bank will reset the sale shortly. This owner just lost their last shield: peak motivation, minimal competition. Move first.');
   return f;
@@ -3356,7 +3357,7 @@ function _clockBodyHtml(r){
       +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':''))
     + row('Deal deadline', _hasClock(r) ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play')
     + row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')')
-    + (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):''));
+    + (r.bkWhy?row('⛔ BANKRUPTCY','<b class="bad">'+esc(r.bkWhy)+'</b>'):(r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):'')));
 }
 function _daClockHtml(r){
   return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+_clockBodyHtml(r)+'</div>';
@@ -3998,8 +3999,9 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   // is live (federal sanctions, not an FTSA fine). Same preventive pattern as the opt-out guard:
   // blocked by default; proceeding only documents an already-happened contact for the record.
   const _st = (typeof DATA !== 'undefined') && DATA.find(x => x.case === caseId);
-  if(_st && _st.saleBkAct && _OUTREACH_CH[ch]){
-    if(typeof confirm === 'function' && !window.__replaying && !confirm('⛔ ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':'')+'.\n\nThe automatic stay (11 U.S.C. §362) prohibits ALL collection contact right now — calls, letters, door-knocks, WhatsApp. A violation carries federal sanctions. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
+  if(_st && (_st.saleBkAct || _st.bkWhy) && _OUTREACH_CH[ch]){
+    var _bkMsg = _st.bkWhy || ('ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':''));
+    if(typeof confirm === 'function' && !window.__replaying && !confirm('⛔ '+_bkMsg+'.\n\nNo calls, texts, letters, or emails until this is cleared. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
   }
   // WRONG-PERSON guard: once someone has told us "that isn't my property", every number we hold for
   // this lead is suspect. Block further outreach the same preventive way — the identity has to be
@@ -8340,6 +8342,8 @@ function _idChip(r){
 function _stayChip(r){
   // kimi: ACTIVE bankruptcy automatic stay (sale_history._bk_active). 11 U.S.C. §362 bars ALL
   // collection contact while live — this chip outranks every other signal on the row.
+  if(r.bkWhy)
+    return '<span class="frchip fr-stay" title="'+esc(r.bkWhy)+'">⛔ '+esc(String(r.bkWhy).slice(0,72))+'</span> ';
   if(r.saleBkAct)
     return '<span class="frchip fr-stay" title="ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' — filed '+r.saleBkD:'')+'. Federal law (11 U.S.C. §362) prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. Outreach here is a federal violation — track the lead, move when the stay closes.">⛔ BK STAY ACTIVE</span> ';
   // the DOOR: the stay CLOSED recently — the owner just lost the shield, the bank is about to

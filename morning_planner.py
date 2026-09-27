@@ -404,6 +404,19 @@ def _knock_eligible(r):
     # violation, so this one reads both too — and any future writer of either name is covered.
     if (r.get('saleBkAct') or r.get('sale_bk_active')) and not (r.get('saleLift') or r.get('sale_bk_lifted')):
         return False
+    _case = r.get('case') or r.get('Case #')
+    try:
+        import bk_lookup as _BKL
+        if _BKL.federal_hold(_case)[0]:
+            return False
+    except Exception:
+        # Same fallback as Call Mode: hold when this is not a Miami-Dade case number.
+        try:
+            import stay_gate as _SG
+            if not _SG.case_stem(_case):
+                return False
+        except Exception:
+            return False
     if r.get('sibclaimed'):
         return False
     return True

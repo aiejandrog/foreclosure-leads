@@ -511,6 +511,19 @@ def _stay_gate(case):
                 'matched': [], 'bd': '', 'sl': '',
                 'why': 'stay_gate.py could not be imported (%s)' % str(e)[:120]}
     v = _SG.check(case, STAY_CACHE_FILE)
+    if v.get('bk_need') and not v.get('ok'):
+        # CourtListener is the federal provider (PACER registration is parked). One party search
+        # now, under the free-account rate budget. No token, a 429, or a spent budget leaves the
+        # refusal in place. A missing module (an older tree) falls through to the PACER check.
+        try:
+            import bk_lookup as _BK
+            br = _BK.presend_check(case, here=HERE, max_wait=_BK.PRESEND_MAX_WAIT)
+        except Exception as e:
+            br = {'status': 'error', 'why': 'bk_lookup.py could not run (%s)' % str(e)[:120]}
+        v = _SG.check(case, STAY_CACHE_FILE)
+        v['bk_presend'] = br.get('status') or 'error'
+        if not v.get('ok') and br.get('why'):
+            v['why'] = '%s [CourtListener: %s]' % (v.get('why') or '', str(br.get('why'))[:160])
     if v.get('ok') or not v.get('pacer_need'):
         return v
     # PRE-SEND PACER CHECK (2026-09-26, free tier). A lead with no Miami-Dade stem (Broward, Palm
@@ -1870,6 +1883,18 @@ class Handler(BaseHTTPRequestHandler):
         if _th:
             return self._json(200, {'ok': False, 'blocked': 'quo_inbound',
                                     'err': _tw or 'texting held — inbound STOP scan not fresh'})
+        # Confirmed texts are contact. The same §362 gate as /send: a lead with no fresh
+        # federal clear (Broward / Palm Beach) or an open match stays untexted. Opening a
+        # composer (confirmed false) is not a send and is not held here.
+        if bool(d.get('confirmed')):
+            _sv = _stay_gate(case)
+            if not _sv.get('ok'):
+                _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                              'd': dt.date.today().isoformat(), 'gate': 'stay', 'ch': 'text',
+                              'code': _sv.get('code') or 'stay_unverified',
+                              'case': case[:40], 'why': _sv.get('why', '')})
+                return self._json(451, {'ok': False, 'blocked': _sv.get('code') or 'stay_unverified',
+                                        'err': 'text refused — %s' % (_sv.get('why') or 'bankruptcy-stay status unknown')})
         rec = {'d': dt.date.today().isoformat(),
                'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
                'ch': 'text', 'case': case,

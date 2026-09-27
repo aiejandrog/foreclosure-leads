@@ -618,6 +618,15 @@ pacer_newfiler_hits.json
 pacer_newfiler_hits_qa.json
 pacer_newfiler*.tmp
 pacer_newfiler*.lock
+# CourtListener bankruptcy lookup. Filings carry debtor names. Lead cache, overrides, budget
+# and the pull watermark stay in DEALFLOW_DIR; these names are the backstop if one lands here.
+bk_lead_cache.json
+bk_filings.json
+bk_overrides.json
+bk_lookup_status.json
+bk_budget.json
+bk_pull_state.json
+bk_*.tmp
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
 # _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
@@ -643,3 +652,5 @@ worker_marks.applied.jsonl
 !_suppressionfixtest.py
 # _alertstest: pipeline alert trigger/clear on fixtures. No network, no paid call, no push.
 !_alertstest.py
+# _bklookuptest: CourtListener bankruptcy check on stubbed HTTP. Example names only, no token.
+!_bklookuptest.py

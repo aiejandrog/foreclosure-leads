@@ -419,6 +419,13 @@ rem  vars are missing. Every page is reserved against paid_reads (monthly cap) +
 rem  cap first; fails closed.
 python -u pacer_stay.py >> "%LOG%" 2>&1
 
+echo [3g2/5] Federal bankruptcy check - CourtListener, leads stay held without COURTLISTENER_TOKEN...
+rem  ADDED 2026-09-27. Primary provider for the stay gate. PACER above stays parked until an
+rem  account exists. No token: exit 0, no network, a counts-only status, and the pipeline alert
+rem  fails. Cache and the override file live in DEALFLOW_DIR, not this repo. A failed pull does
+rem  not stop the 5:30 refresh; the next echo clears errorlevel the same way the PACER line does.
+python -u bk_lookup.py >> "%LOG%" 2>&1
+
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
 rem  This used to be a manual step a human had to remember after every send day; forgetting it
 rem  is how the account ran a 24-33% bounce rate for a week (provider tolerance ~2%) — the

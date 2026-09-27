@@ -3207,6 +3207,34 @@ def make_tracker(leads):
             print(f"bounce guard (final sweep): {_late} dead address(es) removed from finished cards "
                   f"— they had been re-merged after the queue strip")
 
+    # Federal bankruptcy (CourtListener). Holds only: a case number and a reason, never a name.
+    # Miami-Dade rows are not held just because the lookup has not run; Broward and Palm Beach are.
+    try:
+        import bk_lookup as _BKL
+        _bkf = _BKL.flags_for_cases([d.get('case') for d in slim])
+    except Exception as _bke:
+        _bkf = {}
+        print('federal bankruptcy flags: SKIPPED (%s)' % str(_bke)[:80])
+    if _bkf:
+        _bkh = 0
+        for _d in slim:
+            _key = str(_d.get('case') or '').strip().upper()
+            _f = _bkf.get(_key)
+            if not _f:
+                try:
+                    import stay_gate as _SG
+                    _f = _bkf.get(_SG.pacer_key(_d.get('case')))
+                except Exception:
+                    _f = None
+            if not _f or not _f.get('hold'):
+                continue
+            _d['bkWhy'] = str(_f.get('why') or '')[:180]
+            if not _d.get('saleBkAct'):
+                _d['saleBkAct'] = True
+            _bkh += 1
+        if _bkh:
+            print('federal bankruptcy lookup: %d lead(s) held' % _bkh)
+
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
     # just pollute the checkout with a junk "C:\Users\..." directory + duplicate photo copies.
