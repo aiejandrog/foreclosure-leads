@@ -360,7 +360,10 @@ rem  the in-repo estimate to clear that backlog was ~26 nights. That is a real r
 rem  kept coming back: only 291 leads were ever workable and 82.5% of those had already been worked.
 rem  skiptrace.py still enforces its own --max-spend and the shared bd_budget daily dollar cap, so
 rem  this raises the throughput ceiling without removing the spend guard.
-python -u skiptrace.py --all --limit 100 >> "%LOG%" 2>&1
+rem  MIAMI FIRST 2026-09-27: the pilot order is Miami, then Broward, Palm Beach last. --county-first
+rem  spends the nightly limit on Miami-Dade leads before any other county, soonest sale first
+rem  inside each group. Order only - same leads, same caps, same cost per hit.
+python -u skiptrace.py --all --limit 100 --county-first MIAMI-DADE >> "%LOG%" 2>&1
 rem  3-DAY lane (Jesse, 2026-09-16): sales within 3 business days with face equity and a 2024+ case get
 rem  their phones FIRST (the tier cap above spent on Tier A while 15 of 18 Tuesday leads had no phone),
 rem  and the morning list lands in %USERPROFILE%\DEALFLOW\3DAY-<date>.md for Jesse.

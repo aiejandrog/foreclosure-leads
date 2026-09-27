@@ -137,6 +137,51 @@ UNRESOLVABLE = 'stay_case_unresolvable'
 UNVERIFIED = 'stay_unverified'
 UNAVAILABLE = 'stay_data_unavailable'
 
+# NEVER CONTACT AGAIN. Three leads were contacted after their owner filed bankruptcy (2025-000201
+# by text on 09-18, 2024-008527 and 2024-003696 by email). Each saved docket later read the stay as
+# lifted on an order granting relief, so this gate cleared them (review 2026-09-27). They are on the
+# attorney list, so they are held here, in code, which travels with git to every machine. Only a
+# person, after the attorney answers, takes a case off. More stems can be added without a code
+# change in DEALFLOW_DIR/never_contact.json (a JSON list of case numbers). A missing file adds
+# nothing; a file that exists but cannot be read refuses every send (stay_data_unavailable).
+NEVER_CONTACT = frozenset({'2025-000201', '2024-008527', '2024-003696'})
+NEVER_CONTACT_NAME = 'never_contact.json'
+
+
+class NeverContactError(Exception):
+    pass
+
+
+def _never_contact_path():
+    try:
+        import paths as _P
+        base = _P.DEALFLOW_DIR
+    except Exception:
+        base = os.environ.get('DEALFLOW_DIR') or os.path.join(os.path.expanduser('~'), 'DEALFLOW')
+    return os.path.join(base, NEVER_CONTACT_NAME)
+
+
+def never_contact_stems(path=None):
+    """Every never-contact stem. Raises NeverContactError when the extra file is unreadable."""
+    p = path or _never_contact_path()
+    try:
+        with open(p, encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return NEVER_CONTACT
+    except (OSError, ValueError) as e:
+        raise NeverContactError('%s is unreadable (%s)' % (NEVER_CONTACT_NAME, e))
+    if not isinstance(data, list):
+        raise NeverContactError('%s is not a list of case numbers' % NEVER_CONTACT_NAME)
+    return NEVER_CONTACT | ({case_stem(x) for x in data if isinstance(x, str)} - {''})
+
+
+def never_contact(case, path=None):
+    """True when this case is never contacted again. Raises NeverContactError (see above)."""
+    s = case_stem(case)
+    return bool(s) and s in never_contact_stems(path)
+
+
 _LOCK = threading.Lock()
 _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, entry), ...]}
 _PMEMO = {}         # PACER file: path -> (mtime_ns, size, (by_key, by_stem))
@@ -552,6 +597,17 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
                                          'status cannot be checked')
             return out
         stem = case_stem(raw)
+        if stem:
+            try:
+                never = never_contact(stem)
+            except NeverContactError as e:
+                out.update(code=UNAVAILABLE, why='never-contact list: %s' % e)
+                return out
+            if never:
+                out.update(code=STAY_ACTIVE, src='never_contact', matched=[stem],
+                           why=('case %s was contacted during its bankruptcy and is never contacted '
+                                'again (stay_gate.NEVER_CONTACT)' % stem))
+                return out
         if pacer_path is None:
             pacer_path = _pacer_path(cache_path)
         if hits_path is None:
