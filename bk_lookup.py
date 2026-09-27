@@ -2,9 +2,12 @@
 """bk_lookup.py — federal bankruptcy check for board leads.
 
 CourtListener (Free Law Project) REST API v4 is the provider. PACER registration is not
-available, so this is what lets a Broward or Palm Beach lead be emailed or texted: the
-check has to have run for that lead and found no open matching case. Miami-Dade keeps the
-state-docket stay gate (stay_gate.py, #72). This lookup only ADDS a hold there.
+available. A finished CourtListener search with no open match is not, by itself, a release
+for a Broward or Palm Beach lead: that result stays held (clear_unconfirmed) until the
+owner sets DEALFLOW_BK_ALLOW_CL_CLEAR=1, which is a business decision. Miami-Dade keeps the
+state-docket stay gate (stay_gate.py, #72). This lookup only ADDS a hold there. A Miami
+docket bankruptcy date that does not match an FLSB or FLMB filing within 3 days is
+docket_bk_unconfirmed and never clears.
 
 A PACER Case Locator provider can be dropped in later behind BankruptcyProvider. The parked
 PCL client is still pacer_stay.py; it is not called from here. Set DEALFLOW_BK_PROVIDER=pacer
@@ -38,9 +41,13 @@ TWO READS.
      after the hour window frees.
 
 MATCHING. Names are folded (case, accents, punctuation). Middle initials, Hispanic double
-surnames, LLC/TRUST owners, and joint owners are all read. An exact open-case match is a
-hard hold. Any weaker plausible match is a hold whose reason is
-`possible bankruptcy: <case number>` and is never auto-cleared. A closed case is not a hold.
+surnames, LLC/TRUST owners, and joint owners are all read. An exact open-case match in
+flsb, flmb, or flnb is a hard hold. An exact name match in any other bankruptcy court,
+with no address or county evidence, is only `possible`. Any weaker plausible match is a
+hold whose reason is `possible bankruptcy: <case number>` and is never auto-cleared. A
+closed case is not a hold. A CourtListener clear does not release a Broward or Palm Beach
+lead unless DEALFLOW_BK_ALLOW_CL_CLEAR=1. A Miami docket bankruptcy date that is not
+matched to an FLSB or FLMB filing within 3 days is `docket_bk_unconfirmed` and never clears.
 A manual override file (DEALFLOW_DIR/bk_overrides.json) drops one bankruptcy case number
 for one lead id. Another lead matching that case stays held.
 
@@ -76,6 +83,17 @@ ENV_TOKEN = 'COURTLISTENER_TOKEN'
 ENV_PROVIDER = 'DEALFLOW_BK_PROVIDER'
 ENV_MAX_RUNTIME = 'BK_MAX_RUNTIME_S'
 ENV_FILED_YEARS = 'BK_FILED_AFTER_YEARS'
+# A CourtListener clear is not a PACER clear. Broward and Palm Beach stay held unless
+# the owner sets this to 1. That is a business decision, not the default.
+ENV_ALLOW_CL_CLEAR = 'DEALFLOW_BK_ALLOW_CL_CLEAR'
+VERDICT_CLEAR_UNCONFIRMED = 'clear_unconfirmed'
+VERDICT_DOCKET_UNCONFIRMED = 'docket_bk_unconfirmed'
+DOCKET_WINDOW_DAYS = 3
+DOCKET_PAGE_CAP = 4
+# Miami docket dates are checked against these two courts, not the national list.
+DOCKET_COURTS = ('flsb', 'flmb')
+CLEAR_UNCONFIRMED_WHY = ('CourtListener found no open match — not a confirmed clear, '
+                         'lead stays held')
 DEFAULT_MAX_RUNTIME = 900.0
 DEFAULT_FILED_YEARS = 10
 PRESEND_MAX_WAIT = 3.0
@@ -176,6 +194,10 @@ class BankruptcyProvider:
         """Absolute URL for one page of new filings. Pagination follows the response `next`."""
         raise ProviderError('%s has no filings request' % (self.name or 'provider'))
 
+    def filings_window_request(self, courts, filed_after, filed_before):
+        """Absolute URL for filings in a date window. No party query."""
+        raise ProviderError('%s has no filings window' % (self.name or 'provider'))
+
     def party_request(self, query, filed_after=None, courts=None):
         """Absolute URL for one party-name search. `query` is provider-specific and contains
         no lead id. `courts` is one space-joined court parameter, not repeated keys."""
@@ -235,6 +257,18 @@ class CourtListenerProvider(BankruptcyProvider):
             ('filed_after', filed),
             ('order_by', 'dateFiled desc'),
             ('court', ' '.join(ids)),
+        ]
+        return SEARCH_URL + '?' + urllib.parse.urlencode(params)
+
+    def filings_window_request(self, courts, filed_after, filed_before):
+        """Docket list for a date window. No party query. Both dates are inclusive.
+        `courts` is one space-joined court value."""
+        params = [
+            ('type', 'd'),
+            ('court', ' '.join(courts)),
+            ('filed_after', filed_after),
+            ('filed_before', filed_before),
+            ('order_by', 'dateFiled desc'),
         ]
         return SEARCH_URL + '?' + urllib.parse.urlencode(params)
 
@@ -812,6 +846,12 @@ def narrow_page_cap(cap):
     return max(int(cap), NARROW_PAGE_CAP)
 
 
+def cl_clear_allowed(env=None):
+    """True only when the owner has decided a CourtListener clear may release a lead."""
+    env = os.environ if env is None else env
+    return str((env or {}).get(ENV_ALLOW_CL_CLEAR) or '').strip() == '1'
+
+
 def max_runtime_s(env=None):
     env = os.environ if env is None else env
     raw = str(env.get(ENV_MAX_RUNTIME) or '').strip()
@@ -983,8 +1023,29 @@ def merge_cases(old, new):
     return list(by.values())
 
 
-def cases_from_hits(owners, hits):
-    """Normalized public cases (no party names) for bankruptcy hits that name an owner."""
+def _place_evidence(hit, county, place):
+    """True when the hit text carries this lead's county or place. Name-only is not evidence."""
+    parts = [str(p) for p in (hit.get('parties') or [])]
+    for k in ('address', 'addresses', 'county', 'city', 'zip'):
+        v = hit.get(k)
+        if v:
+            parts.append(str(v))
+    blob = ' '.join(parts).upper()
+    raw_county = ' '.join(str(county or '').upper().split())
+    if raw_county and len(raw_county) >= 4 and raw_county in blob:
+        return True
+    token = str(place or '').upper().strip()
+    if token and len(token) >= 4 and token in blob:
+        return True
+    return False
+
+
+def cases_from_hits(owners, hits, county='', place=''):
+    """Normalized public cases (no party names) for bankruptcy hits that name an owner.
+
+    An exact match outside flsb/flmb/flnb with no address or county evidence is stored as
+    plausible, so it is a possible hold and not a hard hold. Florida exact matches stay exact."""
+    fl = set(FL_BK_COURT_IDS)
     found = []
     for hit in hits or []:
         if not is_bk_court(hit.get('court_id'), hit.get('court')):
@@ -992,6 +1053,9 @@ def cases_from_hits(owners, hits):
         level = match_owners(owners, hit.get('parties') or [])
         if not level:
             continue
+        court_id = str(hit.get('court_id') or '').lower()
+        if level == 'exact' and court_id not in fl and not _place_evidence(hit, county, place):
+            level = 'plausible'
         if not hit.get('open'):
             row = _public_case(hit, level)
             row['open'] = False
@@ -1053,13 +1117,28 @@ def entry_opinion(key, ent, overrides, now):
         return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'why': why,
                 'bk_need': False, 'bd': bd, 'src': 'courtlistener'}
     if verdict == 'clear':
-        fresh = age is not None and limit > 0 and -1 <= age <= limit
-        if fresh:
-            return {'blocks': False, 'ok': True, 'code': 'clear', 'why': why,
+        if ent.get('docket_bk_unconfirmed') or ent.get('verdict') == VERDICT_DOCKET_UNCONFIRMED:
+            # A Miami docket date we could not match is never a clear, including after
+            # the freshness window and when the owner allows a CourtListener clear.
+            return {'blocks': True, 'ok': False, 'code': VERDICT_DOCKET_UNCONFIRMED,
+                    'why': ent.get('why') or 'Miami docket bankruptcy date was not confirmed — lead stays held',
                     'bk_need': False, 'bd': '', 'src': 'courtlistener'}
-        return {'blocks': False, 'ok': False, 'code': 'stay_unverified', 'bk_need': True, 'bd': '',
-                'why': 'federal bankruptcy check is older than %g days — re-check before contact' % (limit or 0),
-                'src': 'courtlistener'}
+        fresh = age is not None and limit > 0 and -1 <= age <= limit
+        if not fresh:
+            return {'blocks': False, 'ok': False, 'code': 'stay_unverified', 'bk_need': True, 'bd': '',
+                    'why': 'federal bankruptcy check is older than %g days — re-check before contact' % (limit or 0),
+                    'src': 'courtlistener'}
+        try:
+            import stay_gate
+            stem = bool(stay_gate.case_stem(key))
+        except Exception:
+            stem = False
+        if not stem and not cl_clear_allowed():
+            # PACER is parked. A CourtListener clear does not release Broward or Palm Beach.
+            return {'blocks': True, 'ok': False, 'code': VERDICT_CLEAR_UNCONFIRMED,
+                    'why': CLEAR_UNCONFIRMED_WHY, 'bk_need': False, 'bd': '', 'src': 'courtlistener'}
+        return {'blocks': False, 'ok': True, 'code': 'clear', 'why': why,
+                'bk_need': False, 'bd': '', 'src': 'courtlistener'}
     return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'why': why,
             'bk_need': True, 'bd': '', 'src': 'courtlistener'}
 
@@ -1469,7 +1548,146 @@ def put_entry(cache, key, cases, searched, ok_check, err_why, now):
         'bd': max((str(c.get('filed') or '') for c in exact), default=''),
         'cases': merged[:12],
     }
+    _relabel_clear(cache[key], key)
     return cache[key]
+
+
+def _has_miami_stem(key):
+    try:
+        import stay_gate
+        return bool(stay_gate.case_stem(key))
+    except Exception:
+        return False
+
+
+def _relabel_clear(entry, key):
+    """A finished CourtListener clear is not a release for Broward or Palm Beach."""
+    if not isinstance(entry, dict) or entry.get('verdict') != 'clear':
+        return entry
+    if _has_miami_stem(key) or cl_clear_allowed():
+        return entry
+    entry['verdict'] = VERDICT_CLEAR_UNCONFIRMED
+    entry['why'] = CLEAR_UNCONFIRMED_WHY
+    return entry
+
+
+def miami_docket_bd(case, here):
+    """Bankruptcy filing date from the Miami sale-history cache, or '' when there is none."""
+    if not here:
+        return ''
+    try:
+        import stay_gate
+    except Exception:
+        return ''
+    if not stay_gate.case_stem(case):
+        return ''
+    path = os.path.join(here, stay_gate.CACHE_NAME)
+    if not os.path.isfile(path):
+        return ''
+    idx, err = stay_gate._load(path)
+    if err or not idx:
+        return ''
+    stem = stay_gate.case_stem(case)
+    best = ''
+    for _k, v in idx.get(stem) or []:
+        if not isinstance(v, dict):
+            continue
+        bd = str(v.get('bd') or '').strip()[:10]
+        if not bd or not _day(bd):
+            continue
+        if stay_gate.entry_stay_active(v):
+            return bd
+        if bd > best:
+            best = bd
+    return best
+
+
+def _docket_windows(bd):
+    """(start, end) inclusive slices: the docket day, then the three days on each side."""
+    day = _day(bd)
+    if not day:
+        return []
+    return [
+        (day, day),
+        (day - dt.timedelta(days=DOCKET_WINDOW_DAYS), day - dt.timedelta(days=1)),
+        (day + dt.timedelta(days=1), day + dt.timedelta(days=DOCKET_WINDOW_DAYS)),
+    ]
+
+
+def _scan_docket_window(provider, transport, budget, clock, start, end, owners, county, place,
+                        max_wait, deadline):
+    """(rows, matched, truncated). Stops early once an open name match is in hand."""
+    url = provider.filings_window_request(DOCKET_COURTS, start.isoformat(), end.isoformat())
+    rows = []
+    seen = 0
+    while url and seen < DOCKET_PAGE_CAP:
+        if seen and not _same_host(url):
+            break
+        _status, payload = http_get(url, provider, transport, budget, clock, reserve=0,
+                                    max_wait=max_wait, deadline=deadline)
+        page = provider.parse_search(payload)
+        rows.extend(page['results'])
+        seen += 1
+        if _open_match(cases_from_hits(owners, page['results'], county=county, place=place)):
+            return rows, True, False
+        url = page.get('next') or ''
+        if url and seen >= DOCKET_PAGE_CAP:
+            return rows, False, True
+    return rows, False, False
+
+
+def _florida_exact(cases):
+    fl = set(FL_BK_COURT_IDS)
+    return any(c.get('open') and c.get('match') == 'exact' and str(c.get('court') or '') in fl
+               for c in (cases or []))
+
+
+def _mark_docket_unconfirmed(entry, bd):
+    entry['docket_bk_unconfirmed'] = True
+    if entry.get('verdict') in ('clear', VERDICT_CLEAR_UNCONFIRMED):
+        entry['verdict'] = VERDICT_DOCKET_UNCONFIRMED
+        entry['why'] = ('Miami docket bankruptcy date %s was not matched to an FLSB or FLMB '
+                        'filing within 3 days — lead stays held' % str(bd)[:10])
+        entry['a'] = False
+        entry['ok_check'] = True
+        entry['err'] = ''
+        entry['searched'] = True
+    return entry
+
+
+def _confirm_docket(cache, entry, ld, owners, here, provider, transport, budget, clock,
+                    max_wait, deadline):
+    """When the Miami docket has a bankruptcy date, match FLSB/FLMB filings within 3 days.
+    No match is docket_bk_unconfirmed and is never a clear."""
+    if not isinstance(entry, dict):
+        return entry
+    if entry.get('verdict') not in ('clear', VERDICT_CLEAR_UNCONFIRMED, 'possible', 'active'):
+        return entry
+    bd = miami_docket_bd(ld.get('case') or ld.get('key'), here)
+    if not bd or _florida_exact(entry.get('cases')):
+        return entry
+    rows = []
+    matched = False
+    try:
+        for start, end in _docket_windows(bd):
+            got, hit, _cut = _scan_docket_window(
+                provider, transport, budget, clock, start, end, owners,
+                ld.get('county') or '', ld.get('place') or '', max_wait, deadline)
+            rows.extend(got)
+            if hit:
+                matched = True
+                break
+    except TimeBudget:
+        _mark_docket_unconfirmed(entry, bd)
+        raise
+    except (BudgetExhausted, RateLimited, ProviderError):
+        matched = False
+    if matched and rows:
+        more = cases_from_hits(owners, rows, county=ld.get('county') or '', place=ld.get('place') or '')
+        entry = put_entry(cache, ld['key'], more, True, True, '', clock.time())
+        entry['docket_bk_unconfirmed'] = False
+        return entry
+    return _mark_docket_unconfirmed(entry, bd)
 
 
 def public_status():
@@ -1578,7 +1796,8 @@ def match_filings_to_leads(leads, items, cache, now):
         for item in items.values():
             if not isinstance(item, dict):
                 continue
-            found.extend(cases_from_hits(owners, [item]))
+            found.extend(cases_from_hits(owners, [item], county=ld.get('county') or '',
+                                     place=ld.get('place') or ''))
         if not found:
             continue
         entry = put_entry(cache, ld['key'], found, searched=False, ok_check=True, err_why='', now=now)
@@ -1613,11 +1832,12 @@ def _open_match(cases):
                for c in (cases or []))
 
 
-def _store_search(cache, key, owners, rows, clock, conclusive, narrow_overflow=False):
+def _store_search(cache, key, owners, rows, clock, conclusive, narrow_overflow=False,
+                  county='', place=''):
     """Combine every hit seen. A match holds. A clear requires a finished eligible search.
     Anything else stays truncated and held, including a narrow pass that overflowed or
     could not be built."""
-    cases = cases_from_hits(owners, rows)
+    cases = cases_from_hits(owners, rows, county=county, place=place)
     matched = _open_match(cases)
     if conclusive:
         return put_entry(cache, key, cases, True, True, '', clock.time())
@@ -1627,15 +1847,16 @@ def _store_search(cache, key, owners, rows, clock, conclusive, narrow_overflow=F
 
 
 def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, deadline=None,
-                page_cap=None):
+                page_cap=None, here=None):
     """One lead's party search. Fail closed on any error.
 
     The eligible search is every bankruptcy court and the configured filed-after window.
     It can clear only when that search finishes inside the page cap. If it overflows, the
     same name query is run again for the Florida bankruptcy courts over a shorter window,
     with more pages. Hits from both passes are kept. A match in either holds the lead.
-    The narrower pass cannot clear. TimeBudget propagates so a cut-off search is not
-    stored as a clear."""
+    The narrower pass cannot clear. A Miami docket bankruptcy date is checked against
+    FLSB/FLMB filings within 3 days and never becomes a clear when nothing matches.
+    TimeBudget propagates so a cut-off search is not stored as a clear."""
     owners = lead_owners(ld)
     if not owners:
         put_entry(cache, ld['key'], [], False, False, 'no owner name on the lead — check cannot run', clock.time())
@@ -1652,17 +1873,26 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
     cap = PARTY_PAGE_CAP if page_cap is None else int(page_cap)
     env = getattr(provider, 'env', None)
     eligible = default_filed_after(env)
+    county = ld.get('county') or ''
+    place = ld.get('place') or ''
     collected = []
+
+    def finish(entry):
+        return _confirm_docket(cache, entry, ld, owners, here, provider, transport, budget, clock,
+                               max_wait, deadline)
+
     try:
         wide, wide_cut = _collect_queries(
             queries, provider, transport, budget, clock, cap, max_wait, deadline,
             filed_after=eligible, courts=BK_COURT_IDS)
         collected.extend(wide)
         if not wide_cut and scope_can_clear(BK_COURT_IDS, eligible, env):
-            return _store_search(cache, ld['key'], owners, collected, clock, True)
+            return finish(_store_search(cache, ld['key'], owners, collected, clock, True,
+                                        county=county, place=place))
         bounds = narrow_bounds(env)
         if not bounds:
-            return _store_search(cache, ld['key'], owners, collected, clock, False, narrow_overflow=True)
+            return finish(_store_search(cache, ld['key'], owners, collected, clock, False,
+                                        narrow_overflow=True, county=county, place=place))
         n_courts, n_filed = bounds
         # The send bridge passes a few-second max_wait. Extra pages there would spend
         # the minute budget and come back as a rate hold. Nightly and the CLI, which
@@ -1674,16 +1904,18 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
         collected.extend(narrow_rows)
         # The narrow scope is not the full window. Finishing it cannot clear.
         can_clear = (not narrow_cut) and scope_can_clear(n_courts, n_filed, env)
-        return _store_search(cache, ld['key'], owners, collected, clock, can_clear,
-                             narrow_overflow=bool(narrow_cut))
+        return finish(_store_search(cache, ld['key'], owners, collected, clock, can_clear,
+                                    narrow_overflow=bool(narrow_cut), county=county, place=place))
     except TimeBudget:
         raise
     except BudgetExhausted as e:
-        put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False, str(e), clock.time())
-        return cache[ld['key']]
+        entry = put_entry(cache, ld['key'], cases_from_hits(owners, collected, county=county, place=place),
+                          False, False, str(e), clock.time())
+        return finish(entry)
     except (RateLimited, ProviderError) as e:
-        put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False, str(e), clock.time())
-        return cache[ld['key']]
+        entry = put_entry(cache, ld['key'], cases_from_hits(owners, collected, county=county, place=place),
+                          False, False, str(e), clock.time())
+        return finish(entry)
 
 
 def _needs_party_search(ent, now):
@@ -1844,7 +2076,7 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
             before = budget.counts(clock.time())['day']
             try:
                 entry = search_lead(ld, provider, transport, budget, clock, cache, deadline=deadline,
-                                    page_cap=party_page_cap(ld))
+                                    page_cap=party_page_cap(ld), here=here)
             except TimeBudget:
                 reason = 'time_budget'
                 log('CourtListener: nightly run hit its time limit. Progress saved.')
@@ -1919,7 +2151,7 @@ def presend_check(case, here=HERE, env=None, transport=None, clock=None, provide
     budget = load_budget(clock.time())
     try:
         entry = search_lead(ld, provider, transport, budget, clock, cache, max_wait=max_wait,
-                            page_cap=page_cap)
+                            page_cap=page_cap, here=here)
     except TimeBudget as e:
         entry = {'err': str(e), 'why': str(e), 'verdict': 'unavailable'}
     save_cache(cache)

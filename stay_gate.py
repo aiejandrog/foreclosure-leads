@@ -426,8 +426,10 @@ def _merge_bk(raw, out):
     No module, or no cache file yet: the verdict already in `out` stands. A non-stem lead that
     is not already clear is flagged bk_need so the send bridge can run one party search.
     A CourtListener hold wins over a clear (fail closed). A fresh CourtListener clear can clear
-    a lead that has no Miami-Dade stem. It cannot clear a PACER active hit or a Miami-Dade
-    docket verdict — those stay as they were."""
+    a lead that has no Miami-Dade stem only when that opinion says ok
+    (DEALFLOW_BK_ALLOW_CL_CLEAR=1). Otherwise the opinion blocks (clear_unconfirmed).
+    It cannot clear a PACER active hit or a Miami-Dade docket verdict — those stay as they were.
+    docket_bk_unconfirmed never clears."""
     try:
         import bk_lookup as _BL
         op = _BL.gate_opinion(raw)
@@ -553,7 +555,7 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
             return out
         held = _merge_bk(raw, dict(out))
         if (not held.get('ok') and held.get('src') == 'courtlistener'
-                and held.get('code') in (STAY_ACTIVE, UNVERIFIED)):
+                and held.get('code') in (STAY_ACTIVE, UNVERIFIED, 'docket_bk_unconfirmed')):
             return held
         lifts = sorted(str(v.get('sl')) for _, v in hits if v.get('sl'))
         out.update(ok=True, code=CLEAR, sl=(lifts[-1] if lifts else ''),
