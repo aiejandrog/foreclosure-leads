@@ -399,7 +399,10 @@ const morningCases = [
   const asrc = extractScript(ALERTS_STEP);
   for (const c of alertCases) {
     let r;
-    try { r = await run(asrc, [], c); }
+    // Every alert case is judged at ALERT_NOW. Six of them used to pass no `now`, so they
+    // read the real clock against a published_at fixed at 2026-09-26T14:00Z and began
+    // raising a spurious alerts-unpublished thirty hours later.
+    try { r = await run(asrc, [], { now: ALERT_NOW, ...c }); }
     catch (e) {
       console.log(`  FAIL  ${c.name} — threw: ${e.message}`);
       fail++; continue;
