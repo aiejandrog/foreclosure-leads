@@ -402,6 +402,9 @@ finally:
 check('it degrades to a complete payload, not a KeyError downstream',
       {'rate', 'lb', 'mailed', 'dead', 'known', 'window', 'ceiling', 'blocked'} <= set(hm))
 check('and does not claim a verdict it cannot support', hm['blocked'] is False)
+check('a missing list is unmeasured and still caps first touches at 10 per domain',
+      hm['ft_measured'] is False and hm['ft_rule'] == 'unmeasured'
+      and S._ft_restart_ceiling(hm) == S.FIRST_TOUCH_RESTART_CAP == 10)
 
 print()
 print('-- one verdict, computed in one place --')
@@ -410,8 +413,8 @@ check('nothing compares the raw rate to the ceiling any more',
       not re.search(r"\[.rate.\]\s*>\s*BOUNCE_CEILING", src),
       'the 09-18 bug was this comparison living in three places')
 check('the /send breaker reads the verdict', "if _hb['blocked'] and not _ft_exempt:" in src)
-check('a first touch in slow restart is exempt from the pre-cutoff trailing block',
-      '_ft_exempt = _first_touch and _hb.get(\'ft_rule\') in (\'slow_restart\', \'clear\')' in src)
+check('a first touch is exempt from the trailing block only via a warm-up sender',
+      "_ft_exempt = bool(_ft_warmup) and _hb.get('ft_rule') in ('slow_restart', 'clear', 'unmeasured')" in src)
 check('/health publishes the same verdict it enforces', "'bounce_blocked': _bh['blocked']," in src)
 check('the breaker message tells the operator both numbers',
       "_hb['lb']" in src and "_hb['rate']" in src)

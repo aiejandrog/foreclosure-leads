@@ -270,7 +270,9 @@ def _first_touch_domain_sent_today(domain):
 
 
 # Passed when the caller already computed the restart ceiling. None means "no extra ceiling"
-# (healthy sample, or no bounce list). 0 means first touches are paused.
+# (the post-cutoff sample is healthy and the warm-up ramp stands on its own). 0 means first
+# touches are paused. A missing bounce list is NOT this None: it is unmeasured, and the
+# slow-restart cap still applies.
 _FT_CEILING_UNSET = object()
 
 
@@ -563,6 +565,22 @@ def _load_ledger():
         return []
 
 
+def _ledger_unreadable():
+    """True when mail_sent.json exists and is not a JSON list.
+
+    A missing file is an empty history. A file that will not parse, or that parses as something
+    other than a list, used to take the same path as a missing file: `_load_ledger()` returns
+    [] and every cap and the bounce cohort read as zero. First touches hold on that (see /send).
+    Callers that only need the rows still get [] from `_load_ledger()`."""
+    if not os.path.exists(SENT_LEDGER):
+        return False
+    try:
+        data = json.load(open(SENT_LEDGER, encoding='utf-8'))
+    except Exception:
+        return True
+    return not isinstance(data, list)
+
+
 def _append_ledger(entry):
     """Atomic write. Lock protects against two concurrent /send requests corrupting the file.
 
@@ -828,7 +846,13 @@ BOUNCE_Z = 1.96           # 95% one-sided-ish confidence for the lower bound bel
 #
 # While the post-cutoff sample is under BOUNCE_DAY_MIN_SAMPLE, `ft_rule` is `slow_restart`:
 # first touches are allowed, capped at FIRST_TOUCH_RESTART_CAP per sending domain and never
-# above a lower warm-up ramp. The backstop sets `ft_rule` to `paused` when EITHER
+# above a lower warm-up ramp. A missing bounced_emails.json is `ft_rule` `unmeasured`
+# (`ft_measured` false) and uses that SAME cap — an absent list is not a clean sample and
+# must not lift the ceiling. Those first touches leave only from a configured warm-up sender
+# (`_reserve_first_touch_from` with the ceiling). No warm-up sender, or a From on
+# `main_domain`, is a 409 hold: the restart cap is not enforced on the login / lane-map path,
+# and that path is the domain that took the 09-19 bounces. The backstop sets `ft_rule` to
+# `paused` when EITHER
 #   - the post-cutoff total (or any one day) is over BOUNCE_DAY_CEILING once at least
 #     BOUNCE_DAY_MIN_SAMPLE have been sent, or
 #   - one day has FIRST_TOUCH_HARD_BOUNCES or more hard bounces, over the same ceiling, once
@@ -1094,19 +1118,32 @@ def _bounce_health():
             'post_lb': post_lb, 'post_trailing_blocked': post_trailing}
 
 
+def _restart_ceiling_on(health):
+    """True when a first touch is under the slow-restart per-domain cap.
+
+    That is the measured `slow_restart` rule, and also a missing bounce list (`unmeasured`,
+    `ft_measured` false). A paused or unreadable list is not this — those refuse the send.
+    A healthy (`clear`) sample is not this either: the warm-up ramp stands on its own.
+    """
+    if not health or health.get('list_unreadable') or health.get('ft_rule') == 'paused':
+        return False
+    if not health.get('ft_measured'):
+        return True
+    return health.get('ft_rule') == 'slow_restart'
+
+
 def _ft_restart_ceiling(health=None):
     """Per-domain first-touch ceiling for this bounce reading.
 
-    None — no extra ceiling (no list to measure, or the post-cutoff sample is healthy and the
-    warm-up ramp stands). 0 — first touches are paused. FIRST_TOUCH_RESTART_CAP while the
-    measured sample is still small. Callers min this with the ramp, so a lower cap is not raised.
+    None — no extra ceiling (the post-cutoff sample is healthy and the warm-up ramp stands).
+    0 — first touches are paused, or the bounce list is unreadable. FIRST_TOUCH_RESTART_CAP
+    while the sample is still small, and while there is no list to measure. Callers min this
+    with the ramp, so a lower cap is not raised.
     """
     h = health if health is not None else _bounce_health()
-    if not h.get('ft_measured'):
-        return None
     if h.get('list_unreadable') or h.get('ft_rule') == 'paused':
         return 0
-    if h.get('ft_rule') == 'slow_restart':
+    if _restart_ceiling_on(h):
         return FIRST_TOUCH_RESTART_CAP
     return None
 
@@ -2164,6 +2201,12 @@ class Handler(BaseHTTPRequestHandler):
         if not meta.get('test'):
             # First touches follow the post-cutoff rule, not the pre-#83 Wilson reading.
             # Follow-ups stay on `blocked` below (proven lane / probe trickle), unchanged.
+            # A ledger that exists but will not parse reads as zero sends. That would lift
+            # every cap and the cohort, so a first touch holds before any of this.
+            if _first_touch and _ledger_unreadable():
+                return self._json(409, {
+                    'ok': False, 'skip': True, 'first_touch_cap': True,
+                    'err': 'first touch held: mail ledger unreadable'})
             if _first_touch and _first_touch_bounce_paused(_hb):
                 return self._json(403, {
                     'ok': False, 'blocked': 'bounce_rate', 'skip': True,
@@ -2177,7 +2220,17 @@ class Handler(BaseHTTPRequestHandler):
                            (_hb.get('day_ceiling') or 0) * 100, _hb.get('day_min') or 0,
                            _hb.get('ft_hard_bounces') or 0, _hb.get('ft_hard_min') or 0)),
                     'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
-            _ft_exempt = _first_touch and _hb.get('ft_rule') in ('slow_restart', 'clear')
+            # The restart cap is applied only inside _reserve_first_touch_from. Exempt a
+            # first touch from the trailing breaker only when that reserve will run: a
+            # configured warm-up sender, not the login and not the lane map. With no
+            # warm-up sender the send would leave from main_domain, which this cap never
+            # sees, so it holds instead.
+            _ft_warmup = _first_touch_senders(_load_senders()) if _first_touch else []
+            if _first_touch and _restart_ceiling_on(_hb) and not _ft_warmup:
+                return self._json(409, {
+                    'ok': False, 'skip': True, 'first_touch_cap': True,
+                    'err': 'first touch held: no warm-up sender configured during slow restart'})
+            _ft_exempt = bool(_ft_warmup) and _hb.get('ft_rule') in ('slow_restart', 'clear', 'unmeasured')
             if _hb['blocked'] and not _ft_exempt:
                 # PROVEN-DELIVERABLE LANE: while the trailing rate is over the ceiling, a send
                 # may still go out if EVERY recipient has direct acceptance evidence (see
@@ -2341,6 +2394,19 @@ class Handler(BaseHTTPRequestHandler):
                 # Only rewrite From: when the lane address differs from the login. Same address =
                 # nothing to rewrite, but it was still metered above.
                 from_addr = _cand if _cand != user else None
+
+        # A first touch under the restart cap (slow_restart, or no bounce list) must leave
+        # from a configured warm-up sender. The reserve above is the normal path; this is
+        # the backstop so a fall-through cannot put main_domain on the envelope. Paused
+        # first touches already returned 403 above and never reach here.
+        if _first_touch and _restart_ceiling_on(_hb):
+            _seen_from = (from_addr or user or '').strip().lower()
+            if _seen_from not in set(_first_touch_senders(_cfg)):
+                _release_recipients(_claimed)
+                _release_first_touch_slot(_ft_slot)
+                return self._json(409, {
+                    'ok': False, 'skip': True, 'first_touch_cap': True,
+                    'err': 'first touch held: no warm-up sender configured during slow restart'})
 
         # ---- send ----
         try:
