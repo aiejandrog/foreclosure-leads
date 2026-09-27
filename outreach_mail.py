@@ -628,7 +628,7 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
             continue
         try:
             import bk_lookup as _BKL
-            _held, _why = _BKL.federal_hold(_case(r))
+            _held, _why = _BKL.send_hold(_case(r))
             if _held:
                 skips['federal-bankruptcy-check'] += 1
                 continue

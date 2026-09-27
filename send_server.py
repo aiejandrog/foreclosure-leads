@@ -450,7 +450,7 @@ def _stay_gate(case):
         # refusal in place. A missing module (an older tree) falls through to the PACER check.
         try:
             import bk_lookup as _BK
-            br = _BK.presend_check(case, here=HERE)
+            br = _BK.presend_check(case, here=HERE, max_wait=_BK.PRESEND_MAX_WAIT)
         except Exception as e:
             br = {'status': 'error', 'why': 'bk_lookup.py could not run (%s)' % str(e)[:120]}
         v = _SG.check(case, STAY_CACHE_FILE)

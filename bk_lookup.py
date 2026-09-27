@@ -15,9 +15,12 @@ AUTH. COURTLISTENER_TOKEN in the environment (a Windows user env var on the lapt
 `Authorization: Token <token>`. The token is never printed, logged, or written to a status
 file. No token means the check is unavailable and the lead stays held.
 
-RATE BUDGET (free account, rolling windows): 5/minute, 50/hour, 125/day. A 429 is retried
-with backoff a bounded number of times, then counted as an error. When the budget is spent,
-leads that were not checked stay held and the status says so.
+RATE BUDGET (free account, rolling windows): 5/minute, 50/hour, 125/day. A full minute
+or hour window waits until a slot frees (the clock is injectable). Only the daily cap, or
+a 429 that survives the bounded retries, stops the run. BK_MAX_RUNTIME_S (default 900)
+caps one nightly run so the 5:30 refresh is not held up; the pull cursor is saved after
+every page and the next run resumes. A cut-off run writes status reason time_budget and
+still exits 0.
 
 TWO READS.
   1. Nightly: new bankruptcy filings in the Southern District of Florida (court id flsb)
@@ -39,7 +42,7 @@ The lead cache and the status file carry case numbers and counts only.
 
     python bk_lookup.py                 # nightly pull + local match + new-lead searches
     python bk_lookup.py --status        # counts only
-    python bk_lookup.py --case CACE-99-000123
+    python bk_lookup.py --case CACE-99-000123 [--case ...]
 """
 import argparse
 import datetime as dt
@@ -64,6 +67,9 @@ RECHECK_DAYS = 14.0
 ENV_MAX_AGE = 'DEALFLOW_BK_MAX_AGE_DAYS'
 ENV_TOKEN = 'COURTLISTENER_TOKEN'
 ENV_PROVIDER = 'DEALFLOW_BK_PROVIDER'
+ENV_MAX_RUNTIME = 'BK_MAX_RUNTIME_S'
+DEFAULT_MAX_RUNTIME = 900.0
+PRESEND_MAX_WAIT = 3.0
 FIRST_PULL_DAYS = 14
 PULL_PAGE_CAP = 20
 PARTY_PAGE_CAP = 2
@@ -105,6 +111,10 @@ class BudgetExhausted(ProviderError):
 
 class RateLimited(ProviderError):
     pass
+
+
+class TimeBudget(Exception):
+    """The nightly run hit BK_MAX_RUNTIME_S. Progress is saved. Not a hard failure."""
 
 
 def log(msg):
@@ -602,13 +612,23 @@ class Budget:
 
 
 def load_budget(now):
+    """A budget file that exists but cannot be parsed is a full day: fail closed, do not reset."""
     data, exists = _load(budget_path())
+    if exists and not isinstance(data, dict):
+        b = Budget([float(now)] * CAP_DAY, now)
+        b.unreadable = True
+        return b
     hits = []
-    if exists and isinstance(data, dict):
+    if isinstance(data, dict):
         hits = data.get('hits') or []
     if not isinstance(hits, list):
-        hits = []
-    return Budget(hits, now)
+        # The file parsed but the hit list is garbage. Same fail-closed rule.
+        b = Budget([float(now)] * CAP_DAY, now)
+        b.unreadable = True
+        return b
+    b = Budget(hits, now)
+    b.unreadable = False
+    return b
 
 
 def save_budget(budget):
@@ -652,25 +672,90 @@ def _retry_after(headers):
         return 0.0
 
 
-def http_get(url, provider, transport, budget, clock, reserve=0):
-    """(status, payload_dict). Records every attempt. Raises BudgetExhausted or RateLimited.
-    The token is not included in any exception text."""
+def max_runtime_s(env=None):
+    env = os.environ if env is None else env
+    raw = str(env.get(ENV_MAX_RUNTIME) or '').strip()
+    try:
+        v = float(raw) if raw else DEFAULT_MAX_RUNTIME
+    except ValueError:
+        return DEFAULT_MAX_RUNTIME
+    return v if v > 0 else DEFAULT_MAX_RUNTIME
+
+
+def _slot_wait(budget, now, reserve=0):
+    """Seconds until a minute/hour slot frees. None when the day cap (plus reserve) is spent."""
+    c = budget.counts(now)
+    if c['day'] + int(reserve) >= CAP_DAY:
+        return None
+    wait = 0.0
+    if c['minute'] >= CAP_MINUTE:
+        oldest = min(t for t in budget.hits if now - t < WIN_MINUTE)
+        wait = max(wait, WIN_MINUTE - (now - oldest) + 0.05)
+    if c['hour'] >= CAP_HOUR:
+        oldest = min(t for t in budget.hits if now - t < WIN_HOUR)
+        wait = max(wait, WIN_HOUR - (now - oldest) + 0.05)
+    return wait
+
+
+def wait_for_slot(budget, clock, reserve=0, max_wait=None, deadline=None):
+    """Block until minute and hour room exists.
+
+    The day cap raises BudgetExhausted and is not waited out. max_wait caps how long a
+    caller (the send bridge) is willing to sleep; a longer wait raises BudgetExhausted
+    without sleeping it. deadline is the nightly runtime limit."""
+    if getattr(budget, 'unreadable', False):
+        raise BudgetExhausted('CourtListener rate budget file is unreadable — lead stays held')
+    slept = 0.0
+    while True:
+        now = clock.time()
+        if deadline is not None and now >= float(deadline):
+            raise TimeBudget('CourtListener nightly run hit its time limit')
+        wait = _slot_wait(budget, now, reserve=reserve)
+        if wait is None:
+            raise BudgetExhausted('CourtListener daily rate budget exhausted — lead stays held')
+        if wait <= 0:
+            return
+        if deadline is not None and now + wait > float(deadline):
+            raise TimeBudget('CourtListener nightly run hit its time limit')
+        if max_wait is not None and slept + wait > float(max_wait) + 1e-9:
+            raise BudgetExhausted('CourtListener rate budget is tight — lead stays held')
+        before = clock.time()
+        clock.sleep(wait)
+        slept += clock.time() - before
+
+
+def http_get(url, provider, transport, budget, clock, reserve=0, max_wait=None, deadline=None):
+    """(status, payload_dict). Records every attempt. Raises BudgetExhausted, RateLimited, or TimeBudget.
+    The token is not included in any exception text. A full minute or hour window waits.
+    max_wait bounds every sleep in this call, including 429 backoff. A longer wait raises
+    instead of sleeping it."""
     headers = provider.auth_headers()
     token = ''
     auth = headers.get('Authorization') or ''
     if auth.lower().startswith('token '):
         token = auth.split(' ', 1)[1]
     attempt = 0
+    slept = 0.0
     while True:
-        if not budget.room(clock.time(), reserve=reserve):
-            raise BudgetExhausted('CourtListener rate budget exhausted — lead stays held')
+        remaining = None if max_wait is None else max(0.0, float(max_wait) - slept)
+        before = clock.time()
+        wait_for_slot(budget, clock, reserve=reserve, max_wait=remaining, deadline=deadline)
+        slept += clock.time() - before
         status, hdrs, body = transport(url, headers)
         budget.record(clock.time())
-        save_budget(budget)
+        if not getattr(budget, 'unreadable', False):
+            save_budget(budget)
         if status == 429 and attempt < RETRY_429:
             wait = _retry_after(hdrs) or RETRY_SLEEP[min(attempt, len(RETRY_SLEEP) - 1)]
             attempt += 1
+            if deadline is not None and clock.time() + wait > float(deadline):
+                raise TimeBudget('CourtListener nightly run hit its time limit')
+            if max_wait is not None and slept + wait > float(max_wait) + 1e-9:
+                raise RateLimited(
+                    'CourtListener returned 429 until the retry budget was spent — lead stays held')
+            before = clock.time()
             clock.sleep(wait)
+            slept += clock.time() - before
             continue
         if status == 429:
             raise RateLimited('CourtListener returned 429 until the retry budget was spent — lead stays held')
@@ -686,19 +771,24 @@ def http_get(url, provider, transport, budget, clock, reserve=0):
         return status, payload
 
 
-def paginate(url, provider, transport, budget, clock, page_cap, reserve=0):
-    """(rows, truncated)."""
+def paginate(url, provider, transport, budget, clock, page_cap, reserve=0, on_page=None,
+             max_wait=None, deadline=None):
+    """(rows, truncated). on_page(page_rows, next_url) runs after each page so a cursor can be saved."""
     rows = []
     seen = 0
     truncated = False
     while url and seen < page_cap:
         if not _same_host(url) and seen:
             break
-        _status, payload = http_get(url, provider, transport, budget, clock, reserve=reserve)
+        _status, payload = http_get(url, provider, transport, budget, clock, reserve=reserve,
+                                    max_wait=max_wait, deadline=deadline)
         page = provider.parse_search(payload)
         rows.extend(page['results'])
         seen += 1
-        url = page.get('next') or ''
+        nxt = page.get('next') or ''
+        if on_page:
+            on_page(page['results'], nxt)
+        url = nxt
         if url and seen >= page_cap:
             truncated = True
             url = ''
@@ -872,14 +962,104 @@ def contact_blocked_reason(case, here=None):
     return True, v.get('why') or 'federal bankruptcy check has not run for this lead'
 
 
-def federal_hold(case, here=None):
-    """(held, why) for stamping saleBkAct on a lead row, and for the letter queue.
+class HoldIndex:
+    """One read of the CourtListener cache, reused for every row of a dial queue."""
 
-    The Miami-Dade docket predicate stays on the exact-key `a` flag outreach_email already
-    merges. This adds a hold when CourtListener blocks (including over a docket clear) or
-    when a keyable non-stem lead is not a fresh clear. It does not relabel a pre-v4 row or
-    a clean sibling as an active stay — stay_gate still refuses those on the send bridge.
-    A case number with fewer than five digits is not a bankruptcy key, so it is not a hold."""
+    def __init__(self, data, exists, overrides, now):
+        self.unreadable = bool(exists and not isinstance(data, dict))
+        self.cache = data if isinstance(data, dict) else {}
+        self.exists = bool(exists and isinstance(data, dict))
+        self.overrides = overrides or {}
+        self.now = now
+        self._memo = {}
+
+    def hold(self, case):
+        """(held, why). Miami is held only when CourtListener flagged it. A keyable
+        non-stem lead is held once a cache file exists and it has no fresh clear.
+        No cache file yet: not a hold (the board bake still stamps saleBkAct)."""
+        key = str(case or '')
+        if key in self._memo:
+            return self._memo[key]
+        try:
+            import stay_gate
+        except Exception:
+            out = (True, 'federal bankruptcy check unavailable — lead stays held')
+            self._memo[key] = out
+            return out
+        pk = stay_gate.pacer_key(case)
+        if not pk:
+            out = (False, '')
+        elif self.unreadable and not stay_gate.case_stem(pk):
+            out = (True, 'federal bankruptcy cache is unreadable — lead stays held')
+        elif not self.exists and not self.unreadable:
+            out = (False, '')
+        else:
+            ent = self.cache.get(pk)
+            if isinstance(ent, dict):
+                op = entry_opinion(pk, ent, self.overrides, self.now)
+                if op and not stay_gate.case_stem(pk) and not op.get('ok'):
+                    op = dict(op)
+                    op['blocks'] = True
+                    if not op.get('why'):
+                        op['why'] = 'federal bankruptcy check has not run for this lead'
+                if op and op.get('blocks'):
+                    out = (True, op.get('why') or 'federal bankruptcy check has not run for this lead')
+                else:
+                    out = (False, '')
+            elif not stay_gate.case_stem(pk):
+                out = (True, 'federal bankruptcy check has not run for this lead')
+            else:
+                out = (False, '')
+        self._memo[key] = out
+        return out
+
+
+_HOLD_MEMO = None  # (signature, HoldIndex) so a planner loop does not re-read the file
+
+
+def _cache_sig():
+    path = cache_path()
+    try:
+        st = os.stat(path)
+        return (path, st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (path, None, None)
+
+
+def federal_hold_index(now=None):
+    """Load the CourtListener cache once. call_rows keeps the returned index for the whole call."""
+    global _HOLD_MEMO
+    sig = _cache_sig()
+    now = time.time() if now is None else now
+    if _HOLD_MEMO and _HOLD_MEMO[0] == sig:
+        _HOLD_MEMO[1].now = now
+        return _HOLD_MEMO[1]
+    data, exists = _load(cache_path())
+    overrides = load_overrides() if exists else {}
+    idx = HoldIndex(data, exists, overrides, now)
+    _HOLD_MEMO = (sig, idx)
+    return idx
+
+
+def federal_hold(case, here=None, index=None):
+    """(held, why) for Call Mode and the knock planner.
+
+    Miami-Dade leads that are not docket-clear (stay_unverified lis pendens included) stay
+    callable unless this cache flags them. A Broward or Palm Beach lead is dropped once the
+    cache file exists and the lead has no fresh clear. `here` is accepted so older callers
+    keep working; the cache does not live beside the sale-history file. Pass `index` from
+    federal_hold_index() so a queue does not re-read the file per row."""
+    if index is None:
+        index = federal_hold_index()
+    return index.hold(case)
+
+
+def send_hold(case, here=None):
+    """(held, why) for stamping saleBkAct and for the letter queue.
+
+    Stricter than federal_hold: a keyable non-stem lead is held even before the cache file
+    exists, because email and letters are sends. Miami is held only when CourtListener
+    blocks. A missing docket clear is not, by itself, a federal hold."""
     try:
         import stay_gate
     except Exception:
@@ -897,31 +1077,6 @@ def federal_hold(case, here=None):
         return False, ''
     if v.get('src') == 'courtlistener' or not stay_gate.case_stem(case):
         return True, v.get('why') or 'federal bankruptcy check has not run for this lead'
-    return False, ''
-
-
-def queue_hold(case):
-    """(held, why) for the dial queue and the knock planner.
-
-    Those queues already skip a baked saleBkAct. This adds the CourtListener result once
-    a cache file exists, so a raw-row queue does not drop every non-stem lead on a machine
-    that has not pulled yet (and so the queue tests, which never write that file, stay put).
-    After the nightly pull writes the cache, a keyable non-stem lead with no fresh clear
-    is held, and so is any CourtListener block. The email and text bridge does not use
-    this: it refuses a non-stem lead with no fresh clear even when the file is absent."""
-    try:
-        import stay_gate
-    except Exception:
-        return False, ''
-    if not stay_gate.pacer_key(case):
-        return False, ''
-    _data, exists = _load(cache_path())
-    if not exists:
-        return False, ''
-    flags = flags_for_cases([case])
-    hit = flags.get(stay_gate.pacer_key(case))
-    if hit and hit.get('hold'):
-        return True, hit.get('why') or 'federal bankruptcy check has not run for this lead'
     return False, ''
 
 
@@ -1003,11 +1158,53 @@ def _read_json(path):
         return None
 
 
+def _note_contact(ld, row):
+    """Remember how soon this lead is contacted, and by which channel. Soonest days win."""
+    raw_days = row.get('days')
+    if raw_days is None:
+        raw_days = row.get('days_to_auction')
+    try:
+        days = int(float(raw_days))
+    except (TypeError, ValueError):
+        days = None
+    if days is not None and days >= 0:
+        prev = ld.get('days')
+        if prev is None or days < prev:
+            ld['days'] = days
+    emails = row.get('emails') if isinstance(row.get('emails'), list) else []
+    if str(row.get('email') or '').strip() or any(str(e or '').strip() for e in emails):
+        ld['email'] = True
+    phones = row.get('phones') if isinstance(row.get('phones'), list) else []
+    if str(row.get('phone') or '').strip() or any(str(p or '').strip() for p in phones):
+        ld['phone'] = True
+    if str(row.get('addr') or row.get('Address') or row.get('mail') or '').strip():
+        ld['mail'] = True
+
+
+def contact_rank(ld):
+    """Sort key. Lower is sooner. Email, a phone, and a letter address pull a lead forward.
+    Miami sits in the same list as every other county."""
+    try:
+        days = int(ld.get('days'))
+    except (TypeError, ValueError):
+        days = 9999
+    if days < 0:
+        days = 9999
+    boost = 0
+    if ld.get('email'):
+        boost -= 3000
+    if ld.get('phone'):
+        boost -= 2000
+    if ld.get('mail'):
+        boost -= 1000
+    return (days + boost, str(ld.get('key') or ''))
+
+
 def load_leads(here=HERE):
     import stay_gate
     leads = {}
 
-    def add(case, county, owner, order):
+    def add(case, county, owner, order, row=None):
         key = stay_gate.pacer_key(case)
         if not key:
             return
@@ -1021,12 +1218,13 @@ def load_leads(here=HERE):
             ld['owners_raw'].append(pair)
         if county and not ld['county']:
             ld['county'] = str(county).upper()
+        _note_contact(ld, row or {})
 
     rows = _read_json(os.path.join(here, 'leads_final.json'))
     for r in rows if isinstance(rows, list) else []:
         if isinstance(r, dict):
             add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', r.get('owners') or r.get('owner_clean'),
-                'first_last')
+                'first_last', r)
     for f in sorted(glob.glob(os.path.join(here, '*_leads.json'))):
         bn = os.path.basename(f)
         if bn in ('leads_final.json', 'leads_raw.json', 'lp_leads.json', 'balloon_leads.json') or bn.startswith('_'):
@@ -1034,11 +1232,11 @@ def load_leads(here=HERE):
         rows = _read_json(f)
         for d in rows if isinstance(rows, list) else []:
             if isinstance(d, dict) and d.get('st') != 'BAL':
-                add(d.get('case'), d.get('county'), d.get('owners'), 'last_first')
+                add(d.get('case'), d.get('county'), d.get('owners'), 'last_first', d)
     lp = _read_json(os.path.join(here, 'lp_leads.json'))
     for d in lp if isinstance(lp, list) else []:
         if isinstance(d, dict) and not d.get('lpDismissed'):
-            add(d.get('case'), d.get('county') or 'MIAMI-DADE', d.get('owners'), 'last_first')
+            add(d.get('case'), d.get('county') or 'MIAMI-DADE', d.get('owners'), 'last_first', d)
     return leads
 
 
@@ -1061,7 +1259,9 @@ def load_cache():
 
 
 def save_cache(data):
+    global _HOLD_MEMO
     _dump(cache_path(), data)
+    _HOLD_MEMO = None
 
 
 def put_entry(cache, key, cases, searched, ok_check, err_why, now):
@@ -1217,8 +1417,9 @@ def match_filings_to_leads(leads, items, cache, now):
     return holds
 
 
-def search_lead(ld, provider, transport, budget, clock, cache):
-    """One lead's party search. Fail closed on any error or a truncated result."""
+def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, deadline=None):
+    """One lead's party search. Fail closed on any error or a truncated result.
+    TimeBudget propagates so a cut-off search is not stored as a clear."""
     owners = lead_owners(ld)
     if not owners:
         put_entry(cache, ld['key'], [], False, False, 'no owner name on the lead — check cannot run', clock.time())
@@ -1237,9 +1438,12 @@ def search_lead(ld, provider, transport, budget, clock, cache):
     try:
         for q in queries[:4]:
             url = provider.party_request(q)
-            rows, cut = paginate(url, provider, transport, budget, clock, PARTY_PAGE_CAP, reserve=0)
+            rows, cut = paginate(url, provider, transport, budget, clock, PARTY_PAGE_CAP, reserve=0,
+                                 max_wait=max_wait, deadline=deadline)
             collected.extend(rows)
             truncated = truncated or cut
+    except TimeBudget:
+        raise
     except BudgetExhausted as e:
         put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False, str(e), clock.time())
         return cache[ld['key']]
@@ -1274,24 +1478,64 @@ def _needs_party_search(ent, now):
     return limit <= 0 or age < -1 or age > limit
 
 
-def pull_filings(provider, transport, budget, clock):
+def _pull_caught_up(state):
+    """True when the flsb cursor is empty and today's window already completed."""
+    if not isinstance(state, dict):
+        return False
+    if str(state.get('cursor') or '').strip():
+        return False
+    return str(state.get('last_success_date') or '')[:10] == dt.date.today().isoformat()
+
+
+def pull_filings(provider, transport, budget, clock, deadline=None, max_wait=None):
+    """Pull flsb filings. The next-page cursor is saved after every page so a cut-off
+    run resumes instead of restarting the lookback. Returns (items, caught_up, n_rows)."""
     state, _exists = _load(pull_state_path())
     if not isinstance(state, dict):
         state = {}
-    last = str(state.get('last_success_date') or '')[:10]
-    try:
-        start = dt.date.fromisoformat(last) - dt.timedelta(days=1)
-    except ValueError:
-        start = dt.date.today() - dt.timedelta(days=FIRST_PULL_DAYS)
-    url = provider.filings_request(FLSB, start.isoformat())
-    rows, truncated = paginate(url, provider, transport, budget, clock, PULL_PAGE_CAP,
-                               reserve=NIGHTLY_PRESEND_RESERVE)
-    items = save_filings(rows, clock.time())
-    if not truncated:
-        state['last_success_date'] = dt.date.today().isoformat()
-        state['last_success_t'] = round(clock.time(), 1)
+    cursor = str(state.get('cursor') or '').strip()
+    if cursor and not _same_host(cursor):
+        cursor = ''
+        state['cursor'] = ''
+    if not cursor and _pull_caught_up(state):
+        items = load_filings().get('items') or {}
+        return (items if isinstance(items, dict) else {}), True, 0
+    if cursor:
+        url = cursor
+    else:
+        last = str(state.get('last_success_date') or '')[:10]
+        try:
+            start = dt.date.fromisoformat(last) - dt.timedelta(days=1)
+        except ValueError:
+            start = dt.date.today() - dt.timedelta(days=FIRST_PULL_DAYS)
+        state['filed_after'] = start.isoformat()
+        state['cursor'] = ''
         _dump(pull_state_path(), state)
-    return items, (not truncated), len(rows)
+        url = provider.filings_request(FLSB, start.isoformat())
+    kept = {}
+    n_rows = [0]
+
+    def on_page(page_rows, nxt):
+        n_rows[0] += len(page_rows or [])
+        saved = save_filings(page_rows or [], clock.time())
+        kept.clear()
+        kept.update(saved)
+        nxt = nxt if nxt and _same_host(nxt) else ''
+        state['cursor'] = nxt
+        state['updated'] = round(clock.time(), 1)
+        if not nxt:
+            state['last_success_date'] = dt.date.today().isoformat()
+            state['last_success_t'] = round(clock.time(), 1)
+        _dump(pull_state_path(), state)
+
+    _rows, truncated = paginate(url, provider, transport, budget, clock, PULL_PAGE_CAP,
+                                reserve=NIGHTLY_PRESEND_RESERVE, on_page=on_page,
+                                max_wait=max_wait, deadline=deadline)
+    if not kept:
+        items = load_filings().get('items') or {}
+        kept = items if isinstance(items, dict) else {}
+    caught = (not truncated) and _pull_caught_up(state)
+    return kept, caught, n_rows[0]
 
 
 def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
@@ -1300,70 +1544,89 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
     clock = clock or Clock()
     transport = transport or urllib_transport
     budget = load_budget(clock.time())
+    deadline = clock.time() + max_runtime_s(env)
     ok_av, why = provider.available(env)
     leads = load_leads(here)
     cache = load_cache()
     errors = 0
     pull_ok = False
     n_rows = 0
+    time_stopped = False
+    reason = 'ok'
+    items = {}
     if not ok_av:
         items = load_filings().get('items') or {}
         if not isinstance(items, dict):
             items = {}
-        reason = 'token_missing' if provider.name == PROVIDER_COURTLISTENER and ENV_TOKEN else 'provider_unavailable'
-        if provider.name != PROVIDER_COURTLISTENER:
-            reason = 'provider_unavailable'
-        if not str(env.get(ENV_TOKEN) or '').strip() and provider.name == PROVIDER_COURTLISTENER:
+        reason = 'provider_unavailable'
+        if provider.name == PROVIDER_COURTLISTENER and not str(env.get(ENV_TOKEN) or '').strip():
             reason = 'token_missing'
         log('CourtListener: check unavailable (%s). Leads that need it stay held.' % reason)
     else:
-        # Bind the token into the provider via the process env the headers read.
         try:
-            items, pull_ok, n_rows = pull_filings(provider, transport, budget, clock)
-            log('CourtListener: pulled %d filing row(s), cache %d.' % (n_rows, len(items)))
+            items, pull_ok, n_rows = pull_filings(
+                provider, transport, budget, clock, deadline=deadline)
+            log('CourtListener: pulled %d filing row(s), cache %d.' % (
+                n_rows, len(items) if isinstance(items, dict) else 0))
+            if not pull_ok:
+                reason = 'pull_truncated'
+                log('CourtListener: pull paused before the last page. The next run resumes.')
+        except TimeBudget:
+            items = load_filings().get('items') or {}
+            st, _exists = _load(pull_state_path())
+            pull_ok = _pull_caught_up(st)
+            reason = 'time_budget'
+            time_stopped = True
+            log('CourtListener: nightly run hit its time limit. Progress saved.')
         except BudgetExhausted:
             items = load_filings().get('items') or {}
-            pull_ok = False
+            st, _exists = _load(pull_state_path())
+            pull_ok = _pull_caught_up(st)
             reason = 'budget'
             errors += 1
-            log('CourtListener: nightly pull stopped, rate budget exhausted. Remaining leads stay held.')
+            time_stopped = True
+            log('CourtListener: nightly pull stopped, daily rate budget exhausted. Remaining leads stay held.')
         except (RateLimited, ProviderError):
             items = load_filings().get('items') or {}
             pull_ok = False
             reason = 'pull_failed'
             errors += 1
             log('CourtListener: nightly pull failed. Leads stay held.')
-        else:
-            reason = 'ok' if pull_ok else 'pull_truncated'
-            if not pull_ok:
-                errors += 1
-                log('CourtListener: pull truncated before the last page. Will retry next run.')
-    if not ok_av:
-        items = load_filings().get('items') or {}
-        if not isinstance(items, dict):
-            items = {}
-    holds = match_filings_to_leads(leads, items if isinstance(items, dict) else {}, cache, clock.time())
+    if not isinstance(items, dict):
+        items = {}
+    match_filings_to_leads(leads, items, cache, clock.time())
     checked = 0
-    if ok_av:
-        # New leads that are not Miami-Dade stems first: that is who the check can clear.
-        import stay_gate
-        order = sorted(leads.values(), key=lambda ld: (0 if not stay_gate.case_stem(ld['key']) else 1, ld['key']))
+    if ok_av and not time_stopped and clock.time() < deadline:
+        # Soonest contact first: first-touch email, then a phone, then a letter.
+        # Miami is in this same order, not after every other county.
+        order = sorted(leads.values(), key=contact_rank)
         for ld in order:
+            if clock.time() >= deadline:
+                reason = 'time_budget'
+                log('CourtListener: nightly run hit its time limit. Progress saved.')
+                break
             ent = cache.get(ld['key'])
             if not _needs_party_search(ent, clock.time()):
                 continue
-            if not budget.room(clock.time(), reserve=NIGHTLY_PRESEND_RESERVE):
+            if _slot_wait(budget, clock.time(), reserve=NIGHTLY_PRESEND_RESERVE) is None:
+                if reason in ('ok', 'pull_truncated'):
+                    reason = 'budget'
                 log('CourtListener: left the rest of the new-lead searches for later (budget). They stay held.')
                 break
             before = budget.counts(clock.time())['day']
-            entry = search_lead(ld, provider, transport, budget, clock, cache)
+            try:
+                entry = search_lead(ld, provider, transport, budget, clock, cache, deadline=deadline)
+            except TimeBudget:
+                reason = 'time_budget'
+                log('CourtListener: nightly run hit its time limit. Progress saved.')
+                break
             if budget.counts(clock.time())['day'] != before or entry.get('searched'):
                 checked += 1
-            if entry.get('verdict') in ('active', 'possible'):
-                holds += 1
             if entry.get('err'):
                 errors += 1
-                if 'budget' in entry['err'] or '429' in entry['err']:
+                if '429' in entry['err'] or 'budget' in entry['err']:
+                    if reason in ('ok', 'pull_truncated'):
+                        reason = 'rate_limit' if '429' in entry['err'] else 'budget'
                     break
     save_cache(cache)
     fields = _budget_fields(budget, clock.time())
@@ -1381,11 +1644,16 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
                  reason=reason, **fields)
     log('CourtListener: status filings=%d checked=%d holds=%d errors=%d requests=%d' % (
         len(items) if isinstance(items, dict) else 0, checked, hold_n, errors, fields['requests_used']))
-    return {'pull_ok': bool(pull_ok), 'checked': checked, 'holds': hold_n, 'errors': errors}
+    return {'pull_ok': bool(pull_ok), 'checked': checked, 'holds': hold_n, 'errors': errors,
+            'reason': reason}
 
 
-def presend_check(case, here=HERE, env=None, transport=None, clock=None, provider=None):
-    """One lead, just before a send. Returns {status, why, verdict}. Does not raise."""
+def presend_check(case, here=HERE, env=None, transport=None, clock=None, provider=None,
+                  max_wait=PRESEND_MAX_WAIT):
+    """One lead, just before a send. Returns {status, why, verdict}. Does not raise.
+
+    max_wait defaults to a few seconds so the send bridge never sleeps out a minute
+    window. Pass None to pace until the search finishes (the CLI does that)."""
     env = os.environ if env is None else env
     provider = provider or get_provider(env=env)
     clock = clock or Clock()
@@ -1415,7 +1683,10 @@ def presend_check(case, here=HERE, env=None, transport=None, clock=None, provide
         save_cache(cache)
         return {'status': 'unsearchable', 'why': cache[key]['why'], 'verdict': cache[key]['verdict']}
     budget = load_budget(clock.time())
-    entry = search_lead(ld, provider, transport, budget, clock, cache)
+    try:
+        entry = search_lead(ld, provider, transport, budget, clock, cache, max_wait=max_wait)
+    except TimeBudget as e:
+        entry = {'err': str(e), 'why': str(e), 'verdict': 'unavailable'}
     save_cache(cache)
     fields = _budget_fields(budget, clock.time())
     err_n = 1 if entry.get('err') else 0
@@ -1435,22 +1706,59 @@ def presend_check(case, here=HERE, env=None, transport=None, clock=None, provide
     return {'status': 'searched', 'why': entry.get('why') or '', 'verdict': entry.get('verdict') or ''}
 
 
-def main(argv=None):
+def case_report(case):
+    """One public line: flagged, match type, bankruptcy case number. No party names."""
+    try:
+        import stay_gate
+        key = stay_gate.pacer_key(case)
+    except Exception:
+        key = ''
+    ent = load_cache().get(key) if key else None
+    cases = []
+    if isinstance(ent, dict):
+        cases = [c for c in (ent.get('cases') or [])
+                 if isinstance(c, dict) and c.get('open') and c.get('no')
+                 and c.get('match') in ('exact', 'plausible')]
+    match = 'none'
+    if any(c.get('match') == 'exact' for c in cases):
+        match = 'exact'
+    elif cases:
+        match = 'plausible'
+    flagged = 'yes' if match != 'none' else 'no'
+    nos = []
+    for c in cases:
+        if c.get('match') == match and c.get('no') not in nos:
+            nos.append(str(c.get('no'))[:40])
+    bk = ','.join(nos[:3]) if nos else '-'
+    return '%s flagged=%s match=%s bk=%s' % (str(case).strip()[:40], flagged, match, bk)
+
+
+def main(argv=None, clock=None, transport=None, here=None):
     ap = argparse.ArgumentParser(description='Federal bankruptcy check (CourtListener)')
     ap.add_argument('--status', action='store_true')
-    ap.add_argument('--case', default='')
+    ap.add_argument('--case', action='append', default=[])
     args = ap.parse_args(argv)
     if args.status:
         st = public_status()
         log('CourtListener status: ' + json.dumps(st, sort_keys=True))
         return 0
-    if args.case:
-        r = presend_check(args.case)
-        # why may contain a bankruptcy case number (public). Never a token or a party name.
-        log('CourtListener case %s -> %s' % (str(args.case)[:40], r.get('status')))
-        return 0 if r.get('status') in ('searched', 'cached', 'unavailable', 'budget', 'rate_limit', 'unsearchable') else 0
+    cases = [str(c).strip() for c in (args.case or []) if str(c or '').strip()]
+    if cases:
+        # Pace the whole search. The send bridge passes a short max_wait of its own.
+        for case in cases:
+            presend_check(case, here=here or HERE, max_wait=None, clock=clock, transport=transport)
+            log(case_report(case))
+        return 0
     try:
-        run_nightly()
+        run_nightly(here=here or HERE, clock=clock, transport=transport)
+    except TimeBudget:
+        log('CourtListener: nightly run hit its time limit. Progress saved.')
+        try:
+            st, _exists = _load(pull_state_path())
+            write_status(pull_ok=_pull_caught_up(st), pull_t=time.time(), pull_ts=_stamp(),
+                         reason='time_budget', provider='courtlistener')
+        except Exception:
+            pass
     except Exception:
         log('CourtListener: nightly run failed. Leads that need the check stay held.')
         try:

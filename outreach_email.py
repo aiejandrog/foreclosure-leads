@@ -382,7 +382,7 @@ def _load_leads():
     try:
         import bk_lookup as _BKL
         for r in leads:
-            _held, _why = _BKL.federal_hold(_case(r), here=HERE)
+            _held, _why = _BKL.send_hold(_case(r), here=HERE)
             if _held:
                 r['sale_bk_active'] = True
                 r['saleBkAct'] = True

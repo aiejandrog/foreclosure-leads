@@ -1465,6 +1465,32 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     import diligence_gate as _DG
     _dg = _DG.Tally()
     _quo = _quo_latest()
+    # CourtListener cache once for this build. A missing module holds anything that is not a
+    # Miami-Dade case number; a Miami lead with no docket clear stays callable unless the cache
+    # flags it.
+    _bk_mod = None
+    _bk_idx = None
+    try:
+        import bk_lookup as _bk_mod
+        _bk_idx = _bk_mod.federal_hold_index()
+    except Exception:
+        _bk_idx = None
+    _sg_mod = None
+    try:
+        import stay_gate as _sg_mod
+    except Exception:
+        _sg_mod = None
+
+    def _federal_held(case):
+        if _bk_idx is not None:
+            try:
+                return bool(_bk_mod.federal_hold(case, index=_bk_idx)[0])
+            except Exception:
+                pass
+        if _sg_mod is not None:
+            return not bool(_sg_mod.case_stem(case))
+        return True
+
     for d in slim:
         case = d.get('case') or ''
         if not case or case in optouts or case in deads:
@@ -1479,12 +1505,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
             continue
-        try:
-            import bk_lookup as _BKL
-            if _BKL.queue_hold(case)[0]:
-                continue
-        except Exception:
-            pass
+        if _federal_held(case):
+            continue
         if d.get('title_status') == 'transferred':          # ownership gate — they no longer own it
             continue
         # DILIGENCE GATE — same class of drop as the ownership gate directly above, and placed with

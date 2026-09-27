@@ -24,7 +24,8 @@ NOW = 1_800_000_000.0
 
 for _k in ('COURTLISTENER_TOKEN', 'DEALFLOW_BK_PROVIDER', 'DEALFLOW_BK_MAX_AGE_DAYS',
            'DEALFLOW_DIR', 'DEALFLOW_BK_CACHE', 'DEALFLOW_BK_FILINGS', 'DEALFLOW_BK_OVERRIDES',
-           'DEALFLOW_BK_STATUS', 'DEALFLOW_BK_BUDGET', 'DEALFLOW_BK_PULL_STATE'):
+           'DEALFLOW_BK_STATUS', 'DEALFLOW_BK_BUDGET', 'DEALFLOW_BK_PULL_STATE',
+           'BK_MAX_RUNTIME_S'):
     os.environ.pop(_k, None)
 os.environ['DEALFLOW_DIR'] = str(TMP / 'boot')
 
@@ -56,6 +57,8 @@ def isolate(name, token=TOKEN):
     os.environ['DEALFLOW_BK_PULL_STATE'] = str(d / 'bk_pull_state.json')
     os.environ.pop('DEALFLOW_BK_PROVIDER', None)
     os.environ.pop('DEALFLOW_BK_MAX_AGE_DAYS', None)
+    os.environ.pop('BK_MAX_RUNTIME_S', None)
+    BL._HOLD_MEMO = None
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)
     else:
@@ -214,12 +217,14 @@ def _no_http(url, headers):
 
 try:
     BL.http_get('https://www.courtlistener.com/api/rest/v4/search/?type=d', cl,
-                _no_http, BL.Budget([now - 5] * 5, now), clock_at(now))
+                _no_http, BL.Budget([now - 5] * 125, now), clock_at(now))
     raised = False
+    err = ''
 except BL.BudgetExhausted as e:
     raised = True
-    check('budget error text does not contain the token', TOKEN not in str(e))
-check('a full minute budget raises before any HTTP', raised and called == [])
+    err = str(e)
+    check('budget error text does not contain the token', TOKEN not in err)
+check('a full day budget raises before any HTTP', raised and called == [])
 
 
 def _echo_token(url, headers):
@@ -358,7 +363,8 @@ leads.mkdir()
 write_leads(leads, [{'case': 'CACE-99-555801', 'county': 'BROWARD', 'owners': 'GARCIA, MARIA ELENA'}])
 stub = Stub(lambda url, headers, n: (429, {'Retry-After': '0'}, {'detail': 'slow ' + TOKEN}))
 with contextlib.redirect_stdout(io.StringIO()):
-    br = BL.presend_check('CACE-99-555801', here=str(leads), transport=stub, clock=clock_at(time.time()))
+    br = BL.presend_check('CACE-99-555801', here=str(leads), transport=stub,
+                          clock=clock_at(time.time()), max_wait=None)
 check('429 exhaustion stops after the bounded retries',
       len(stub.calls) == BL.RETRY_429 + 1 and br.get('status') == 'rate_limit', (len(stub.calls), br))
 check('429 why holds the lead and does not echo the token',
@@ -483,18 +489,19 @@ check('a missing status file raises a fail alert',
 print('-- queues')
 d = isolate('queues')
 check('dial and knock queues do not drop a lead before any cache file exists',
-      BL.queue_hold('CACE-99-555801') == (False, '')
-      and BL.queue_hold('C107') == (False, ''))
-held, why = BL.federal_hold('CACE-99-555801', here=str(d))
+      BL.federal_hold('CACE-99-555801') == (False, '')
+      and BL.federal_hold('C107') == (False, ''))
+held, why = BL.send_hold('CACE-99-555801', here=str(d))
 check('a letter to a keyable non-stem lead is held with no cache file', held is True, why)
 check('a case number this check cannot key is not a letter hold',
-      BL.federal_hold('C107', here=str(d)) == (False, ''))
+      BL.send_hold('C107', here=str(d)) == (False, ''))
 BL._dump(BL.cache_path(), {})
-qheld, qwhy = BL.queue_hold('CACE-99-555801')
+BL._HOLD_MEMO = None
+qheld, qwhy = BL.federal_hold('CACE-99-555801')
 check('once the cache file exists, the dial queue holds an unchecked Broward lead',
       qheld is True and 'has not run' in qwhy, (qheld, qwhy))
 check('the dial queue still does not hold a Miami stem the check has not touched',
-      BL.queue_hold('2099-000555-CA-01') == (False, ''))
+      BL.federal_hold('2099-000555-CA-01') == (False, ''))
 
 
 # ------------------------------------------------------------------------------------ sticky search
@@ -530,6 +537,262 @@ st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
 check('PACER-provider status says unavailable and is not courtlistener',
       st.get('reason') == 'provider_unavailable' and st.get('provider') == 'other', st)
 os.environ.pop('DEALFLOW_BK_PROVIDER', None)
+
+
+# ------------------------------------------------------------------------------------ minute waits
+print('-- minute cap waits')
+d = isolate('minute-wait')
+now = NOW
+budget = BL.Budget([now - 5] * 5, now)
+clock = clock_at(now)
+waited = []
+
+
+def _after_wait(url, headers):
+    waited.append(clock.time())
+    return 200, {}, json.dumps(page([])).encode()
+
+
+try:
+    BL.http_get('https://www.courtlistener.com/api/rest/v4/search/?type=d', cl,
+                _after_wait, budget, clock)
+    minute_raised = False
+except BL.BudgetExhausted:
+    minute_raised = True
+check('a full minute budget waits, then requests, and does not fail',
+      minute_raised is False and len(waited) == 1 and waited[0] >= now + 50, waited)
+
+
+# --------------------------------------------------------------------------------------- time + pull
+print('-- pace, resume, priority')
+d = isolate('pace')
+os.environ['BK_MAX_RUNTIME_S'] = '70'
+leads = d / 'leads'
+leads.mkdir()
+rows = []
+for i in range(30):
+    row = {
+        'case': 'CACE-99-556%03d' % i,
+        'county': 'BROWARD',
+        'owners': 'SAMPLE, LEAD%02d' % i,
+        'st': 'OK',
+        'days': 100 + i,
+        'phones': ['555010%04d' % i],
+    }
+    if i == 0:
+        row = {
+            'case': '2099-000101-CA-01',
+            'county': 'MIAMI-DADE',
+            'owners': 'SAMPLE, LEAD00',
+            'st': 'OK',
+            'days': 2,
+            'emails': ['lead00@example.com'],
+            'phones': ['5550100000'],
+            'addr': '1 MAIN ST, MIAMI, FL 33101',
+        }
+    if i == 29:
+        row = {
+            'case': 'CACE-99-556029',
+            'county': 'BROWARD',
+            'owners': 'SAMPLE, LEAD29',
+            'st': 'OK',
+            'days': 900,
+        }
+    rows.append(row)
+write_leads(leads, rows)
+clock = BL.Clock(now=NOW, sleeper=lambda _s: None)
+pages = []
+violations = []
+
+
+def _pace_route(url, headers, n):
+    q = q_of(url)
+    now_ = clock.time()
+    hits = BL.load_budget(now_).hits
+    minute = sum(1 for t in hits if now_ - t < BL.WIN_MINUTE) + 1
+    hour = sum(1 for t in hits if now_ - t < BL.WIN_HOUR) + 1
+    day = sum(1 for t in hits if now_ - t < BL.WIN_DAY) + 1
+    if minute > BL.CAP_MINUTE or hour > BL.CAP_HOUR or day > BL.CAP_DAY:
+        violations.append((minute, hour, day, url[:80]))
+    if q.get('court') == ['flsb']:
+        cur = int((q.get('cursor') or ['1'])[0])
+        pages.append(cur)
+        nxt = None
+        if cur < 25:
+            nxt = ('https://www.courtlistener.com/api/rest/v4/search/'
+                   '?type=d&court=flsb&cursor=%d' % (cur + 1))
+        return 200, {}, page([recap('26-7%04d' % cur, ['NOMATCH, PERSON'])], nxt)
+    return 200, {}, page([])
+
+
+stub = Stub(_pace_route)
+first = None
+first_state = {}
+caught = False
+for _i in range(40):
+    before = len(stub.calls)
+    with contextlib.redirect_stdout(io.StringIO()):
+        out = BL.run_nightly(here=str(leads), transport=stub, clock=clock)
+    if first is None:
+        first = out
+        first_state = json.loads((d / 'bk_pull_state.json').read_text(encoding='utf-8'))
+    if len(stub.calls) == before:
+        clock.now += 3600
+    if out.get('pull_ok') and len([u for u, _h in stub.calls if q_of(u).get('court') != ['flsb']]) >= 30:
+        caught = True
+        break
+party_urls = [u for u, _h in stub.calls if q_of(u).get('court') != ['flsb']]
+_cur = str(first_state.get('cursor') or '')
+check('runtime limit stops with time_budget and a saved cursor',
+      first and first.get('pull_ok') is False and first.get('reason') == 'time_budget'
+      and 'courtlistener.com' in _cur
+      and q_of(_cur).get('cursor') not in (None, [], ['1']),
+      (first, _cur))
+check('the 25-page pull is resumed, not restarted, and then pull_ok',
+      caught and pages == list(range(1, 26)) and out.get('pull_ok') is True, (pages, out))
+check('minute, hour, and day caps were never exceeded', violations == [], violations[:3])
+check('a Miami lead next to be contacted is searched before a far Broward lead',
+      party_urls and 'LEAD00' in party_urls[0].upper()
+      and any('LEAD29' in u.upper() for u in party_urls)
+      and next(i for i, u in enumerate(party_urls) if 'LEAD00' in u.upper())
+      < next(i for i, u in enumerate(party_urls) if 'LEAD29' in u.upper()),
+      party_urls[:2])
+st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
+check('a caught-up pull is pull_ok and the status has no owner name',
+      st.get('pull_ok') is True and 'SAMPLE' not in json.dumps(st) and TOKEN not in json.dumps(st), st)
+
+
+# ------------------------------------------------------------------------------------ eight requests
+print('-- cli --case')
+d = isolate('cli')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': 'CACE-99-555801', 'county': 'BROWARD',
+    'owners': 'GARCIA, JUAN; LOPEZ, MARIA; NUNEZ, JOSE; RIVERA, ANA', 'st': 'OK',
+}])
+clock = clock_at(NOW)
+
+
+def _eight(url, headers, n):
+    cur = (q_of(url).get('cursor') or ['1'])[0]
+    if cur == '2':
+        return 200, {}, page([])
+    return 200, {}, page([], 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=2')
+
+
+stub = Stub(_eight)
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = BL.main(['--case', 'CACE-99-555801'], clock=clock, transport=stub, here=str(leads))
+text = buf.getvalue()
+check('an 8-request --case finishes and paces past the minute cap',
+      rc == 0 and len(stub.calls) == 8 and clock.time() >= NOW + 50,
+      (rc, len(stub.calls), clock.time() - NOW))
+check('the --case line has no owner name and no token',
+      'flagged=' in text and 'GARCIA' not in text and 'LOPEZ' not in text
+      and 'RIVERA' not in text and TOKEN not in text, text)
+
+d = isolate('cli-two')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [
+    {'case': 'CACE-99-555801', 'county': 'BROWARD', 'owners': 'GARCIA, MARIA ELENA', 'st': 'OK'},
+    {'case': 'CACE-99-555802', 'county': 'BROWARD', 'owners': 'NUNEZ, JOSE', 'st': 'OK'},
+])
+
+
+def _two(url, headers, n):
+    query = (q_of(url).get('q') or [''])[0].upper()
+    if 'MARIA' in query:
+        return 200, {}, page([recap('26-55501', ['Garcia, Maria Elena'])])
+    return 200, {}, page([])
+
+
+stub = Stub(_two)
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = BL.main(['--case', 'CACE-99-555801', '--case', 'CACE-99-555802'],
+                 clock=clock_at(NOW), transport=stub, here=str(leads))
+lines = [ln.strip() for ln in buf.getvalue().splitlines() if 'flagged=' in ln]
+check('two --case arguments print one line each, with no names',
+      rc == 0 and len(lines) == 2
+      and lines[0] == 'CACE-99-555801 flagged=yes match=exact bk=26-55501'
+      and lines[1] == 'CACE-99-555802 flagged=no match=none bk=-'
+      and 'GARCIA' not in buf.getvalue() and 'NUNEZ' not in buf.getvalue()
+      and TOKEN not in buf.getvalue(), lines)
+
+
+# -------------------------------------------------------------------------------- unreadable budget
+print('-- unreadable budget')
+d = isolate('bad-budget')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{'case': 'CACE-99-555801', 'county': 'BROWARD', 'owners': 'GARCIA, MARIA ELENA'}])
+(d / 'bk_budget.json').write_text('not-json', encoding='utf-8')
+b = BL.load_budget(NOW)
+check('an unreadable budget file is a spent day',
+      b.unreadable is True and b.counts(NOW)['day'] >= BL.CAP_DAY, b.counts(NOW))
+stub = Stub(lambda url, headers, n: (200, {}, page([])))
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('CACE-99-555801', here=str(leads), transport=stub, clock=clock_at(NOW))
+check('an unreadable budget holds the lead with no HTTP',
+      stub.calls == [] and br.get('status') == 'budget', br)
+check('the unreadable budget file is not reset',
+      (d / 'bk_budget.json').read_text(encoding='utf-8') == 'not-json')
+
+
+# --------------------------------------------------------------------------------------- call rows
+print('-- call rows')
+d = isolate('callrows')
+BL._dump(BL.cache_path(), {})
+BL._HOLD_MEMO = None
+import call_mode as CM
+import morning_planner as MP
+
+_reads = {'n': 0}
+_orig_index = BL.federal_hold_index
+
+
+def _counting_index():
+    _reads['n'] += 1
+    return _orig_index()
+
+
+BL.federal_hold_index = _counting_index
+miami = {
+    'case': '2099-000427-CA-01', 'county': 'MIAMI-DADE', 'st': 'LP', 'stage': 'LP',
+    'owners': 'ROE,MARY', 'oname': 'Mary Roe', 'addr': '10 EAST ST, Miami, FL 33101',
+    'folio': '555501210050', 'mail': '', 'value': 0, 'judg': 0, 'eq': None, 'eqfake': False,
+    'days': 9999, 'auction': '', 'phones': ['9545550101'], 'phdnc': [False], 'phsrc': ['st'],
+    'phrank': [''], 'phbest': 0, 'emails': [], 'vac': False, 'warn': '', 'ctype': 'Bank/Mortgage',
+}
+broward = dict(miami)
+broward['case'] = 'CACE-99-555801'
+broward['county'] = 'BROWARD'
+broward['addr'] = '10 EAST ST, Sample City, FL 33301'
+try:
+    rows, _n = CM.call_rows([miami, broward], max_days=60)
+finally:
+    BL.federal_hold_index = _orig_index
+cases = {r.get('c') for r in rows}
+check('call_rows keeps an unverified Miami LP lead', '2099-000427-CA-01' in cases, cases)
+check('call_rows drops a Broward lead with no fresh clear', 'CACE-99-555801' not in cases, cases)
+check('call_rows reads the bankruptcy cache once', _reads['n'] == 1, _reads)
+check('the knock planner keeps the Miami lead and drops the Broward lead',
+      MP._knock_eligible(miami) is True and MP._knock_eligible(broward) is False)
+fresh = dict(broward)
+BL._dump(BL.cache_path(), {
+    'CACE-99-555801': {
+        'verdict': 'clear', 'why': 'no open federal bankruptcy matched this owner',
+        'searched': True, 'ok_check': True, 'err': '', 't': time.time(), 'cases': [],
+        'src': 'courtlistener',
+    },
+})
+BL._HOLD_MEMO = None
+rows, _n = CM.call_rows([fresh], max_days=60)
+check('call_rows keeps a Broward lead that has a fresh clear',
+      {r.get('c') for r in rows} == {'CACE-99-555801'}, rows)
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all CourtListener bankruptcy checks passed ====')

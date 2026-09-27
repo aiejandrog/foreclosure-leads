@@ -204,9 +204,17 @@ PACER Case Locator client is still `pacer_stay.py` (#76); it is not called from 
 No token means the check is unavailable and the lead stays held.
 
 **Rate budget (free account, rolling, all concurrent):** 5/minute, 50/hour, 125/day.
-A 429 is retried with backoff a bounded number of times, then the lead stays held. When
-the budget is spent, leads not yet checked stay held and the status says so. The nightly
-pull reserves 10 requests so a pre-send search can still run.
+A full minute or hour window waits until a slot frees. Only the daily cap, or a 429 that
+survives the bounded retries, stops the run. `BK_MAX_RUNTIME_S` (default 900) caps one
+nightly run so the 5:30 refresh is not held up; the flsb cursor is saved after every page
+and the next run resumes that pull instead of restarting the 14 days. `pull_ok` becomes
+true once the cursor is caught up, even if that took several runs. A cut-off run writes
+status reason `time_budget` and still exits 0. The nightly pull reserves 10 requests so a
+pre-send search can still run. The send bridge's pre-send check sleeps at most a few
+seconds (`PRESEND_MAX_WAIT`); a longer wait returns the lead held. `python bk_lookup.py
+--case A --case B` paces fully and prints one line per case (flagged, match type,
+bankruptcy case number) with no names. An unreadable `bk_budget.json` is treated as a
+spent day, not reset.
 
 **Two reads, both cached under `DEALFLOW_DIR` (never the repo):**
 
@@ -217,11 +225,19 @@ pull reserves 10 requests so a pre-send search can still run.
 - Once per lead: a party-name search across federal bankruptcy courts for cases with no
   date terminated and no date closed. Re-checked every 14 days, and again before a first
   touch older than that. Only a fresh completed search with no open match clears a
-  Broward or Palm Beach lead. Email, text, and letters refuse that lead as soon as this
-  module is importable. The dial queue and the knock planner add the same hold once
-  `bk_lead_cache.json` exists; before that they still honor a baked `saleBkAct`, which the
-  board stamps for every unchecked non-stem lead. A case number with fewer than five
-  digits is not a bankruptcy key and is not held by this check.
+  Broward or Palm Beach lead. Email and letters (`send_hold`) refuse a keyable
+  non-stem lead as soon as this module is importable. Text uses that same stay-gate
+  verdict in the send bridge, and its pre-send check will not sleep out a rate window.
+  Call Mode and the knock planner
+  (`federal_hold`) read `bk_lead_cache.json` once per queue build. Before that file
+  exists they still honor a baked `saleBkAct`. Once it exists, a Broward or Palm Beach
+  lead with no fresh clear is dropped, and a Miami lead that is not docket-clear
+  (including a `stay_unverified` lis pendens) stays callable unless CourtListener flagged
+  it. Within the daily budget the nightly search checks leads next to be contacted
+  (email, then phone, then a letter address, soonest auction first), Miami included,
+  not only after every non-Miami lead. A case number with fewer than five digits is not
+  a bankruptcy key and is not held by this check. If the hold cannot be evaluated, the
+  dial queue and the knock planner hold anything that is not a Miami-Dade case number.
 
 **Matching.** Names are folded (case, accents, punctuation). Middle initials, Hispanic
 double surnames, `LLC` / `TRUST` owners, and joint owners are all read. An exact open-case
