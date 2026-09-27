@@ -4938,5 +4938,112 @@ class ThirtyNinthReviewTests(unittest.TestCase):
                          'The Motion is hereby DENIED.')
         self.assertLessEqual(len(CV._disposition_excerpt('x' * 400)), 200)
 
+class FortiethReviewTests(unittest.TestCase):
+    """The resale filter's own premise on a dateless notice, and the round before's excerpt anchor."""
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = ThirtyFourthReviewTests.PAGE
+    case = ThirtyFourthReviewTests.case
+    JUDGED = ThirtyFourthReviewTests.JUDGED
+    SOLD = ThirtyNinthReviewTests.SOLD
+    after_sale = ThirtyNinthReviewTests.after_sale
+
+    # ---- a resale the clerk did not date -------------------------------------------------------
+
+    RESALES = ('Amended Notice of Foreclosure Auction',
+               'Notice of Continued Foreclosure Sale',
+               'Notice of Postponement of Foreclosure Sale',
+               'Notice of Judicial Auction')
+
+    def test_a_resale_notice_the_clerk_did_not_date_still_holds(self):
+        # The filter kept a later unlabelled sale entry only when it printed a date past the
+        # certificate or carried reset/reschedul*. The producer's notice_of_sale row (:214) labels none
+        # of these phrasings, so this filter is the only thing that can hold them - and undated they
+        # read `supported` with the entry named nowhere, while the same line WITH a date was held. A
+        # resale's date is the ordinary thing to be missing: it lives behind the county login.
+        for clerk in self.RESALES:
+            for suffix in ('', ' on 02/10/2027'):
+                t = self.after_sale(clerk + suffix)
+                r = CV.assess(t)
+                self.assertEqual(r['verdict'], 'incomplete', (clerk + suffix, r['missing']))
+                self.assertTrue([m for m in r['missing'] + r['notes'] if '155' in m], clerk + suffix)
+
+    def test_the_clerks_post_sale_paperwork_is_still_not_a_resale(self):
+        # The calibration, and it is the eighteenth review's own argument: proceeds, surplus and
+        # disbursement handling follows a completed sale and notices nothing. "Notice of Disbursement of
+        # Sale Proceeds" is the shape the notice-head rule alone held for ever.
+        for clerk in ('Disbursement of Sale Proceeds', 'Surplus Funds from Sale',
+                      'Certificate of Disbursements', 'Notice of Surplus Funds',
+                      'Notice of Disbursement of Sale Proceeds',
+                      'Notice of Claim to Surplus from Sale',
+                      'Statement of Amounts Due at Sale', "Plaintiff's Bid at Sale",
+                      'Amended Disbursement of Sale Proceeds',
+                      'Amended Statement of Amounts Due at Sale',
+                      'Motion for Writ of Possession'):
+            r = CV.assess(self.after_sale(clerk))
+            self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
+
+    def test_a_routine_live_sale_docket_is_unchanged(self):
+        t = self.built([(1, 'Complaint', '', '01/05/2026', ''),
+                        (2, 'Final Judgment of Foreclosure', '', '02/10/2026', ''),
+                        (150, 'Notice of Foreclosure Sale on 12/28/2026', '', '06/01/2026', '')],
+                       controlling='2', amount=105000.00, pages={'2': self.PAGE})
+        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+
+    # ---- the excerpt anchors on the verb, not the line's end -----------------------------------
+
+    def test_a_grant_in_the_head_does_not_push_the_denial_off_the_end(self):
+        # One Florida ORDERED AND ADJUDGED line routinely disposes of two motions in opposite
+        # directions. Anchoring the cut at the line's END only when NO verb was in the head protected
+        # the wrong verb: a head that GRANTED one motion kept the head-anchored cut, so the report
+        # printed the grant and dropped the "no".
+        line = ("ORDERED AND ADJUDGED that Plaintiff's Motion to Compel discovery is hereby granted, "
+                'and the Court having reviewed the file and heard argument of counsel and being '
+                'otherwise fully advised in the premises, the Motion for Entry of an Amended Final '
+                'Judgment is hereby DENIED.')
+        self.assertGreater(len(line), 200)
+        t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
+                      pages={'140': 'ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT' + chr(10)
+                             + line})
+        said = ' '.join(m for m in CV.assess(t)['missing'] if '140' in m)
+        self.assertIn('DENIED', said)
+
+    def test_the_excerpt_reaches_a_verb_in_the_middle_of_a_recital(self):
+        # What a line-end anchor cannot do at all.
+        line = ('THIS CAUSE having come before the Court upon the Motion for Entry of an Amended Final '
+                'Judgment of Foreclosure, and the Court having reviewed the court file, the pleadings '
+                'and the exhibits, having heard argument of counsel for both parties, and being '
+                'otherwise fully advised in the premises, it is ORDERED that the Motion is hereby '
+                'DENIED, and the Court reserves jurisdiction to award attorneys fees and costs, to '
+                'consider any further relief the parties may request in this cause, to tax costs '
+                'against either party, to determine entitlement to any surplus, and to enforce this '
+                'order and every prior order entered in this cause by all lawful means.')
+        # Verb in the MIDDLE, with more than the limit of text on either side of it, so neither a
+        # head-anchored nor a line-end-anchored cut can reach it.
+        self.assertGreater(line.index('DENIED'), 200)
+        self.assertGreater(len(line) - line.index('DENIED'), 200)
+        self.assertIn('DENIED', CV._disposition_excerpt(line))
+        self.assertLessEqual(len(CV._disposition_excerpt(line)), 200)
+
+    def test_a_line_with_no_verb_at_all_is_still_bounded(self):
+        self.assertLessEqual(len(CV._disposition_excerpt('motion ' + 'x' * 400)), 200)
+
+    # ---- one date per date --------------------------------------------------------------------
+
+    def test_the_same_sale_date_in_two_passages_prints_once(self):
+        # The producer can save the same date twice - the clerk's "on 12/28/2026" and the read notice's
+        # own "December 28, 2026" - and the print site joins this list, so the docket where the document
+        # was OPENED told the reader there were two sale dates.
+        rows = [(1, 'Complaint', '', '01/05/2026', ''),
+                (160, 'Notice of Foreclosure Sale on 12/28/2026', '', '03/01/2026', ''),
+                (2, 'Final Judgment of Foreclosure', '', '04/10/2026', '')]
+        read = self.built(rows, controlling='2', amount=105000.00,
+                          pages={'2': self.PAGE,
+                                 '160': ('NOTICE OF FORECLOSURE SALE' + chr(10)
+                                         + 'The public sale will be held on December 28, 2026.')})
+        entry = next(e for e in read['entries'] if e['entry_id'] == '160')
+        self.assertEqual(CV._sale_dates_of(entry), ['2026-12-28'])
+        r = CV.assess(read)
+        self.assertNotIn('2026-12-28, 2026-12-28', ' '.join(r['missing'] + r['notes']))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

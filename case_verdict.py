@@ -213,6 +213,26 @@ _SALE_WORD_RE = re.compile(r'\b(?:sale|auction)\b', re.I)
 # a document behind the county login, which is the ordinary case for a sale notice. The clerk's
 # proceeds entries after a completed sale carry neither word.
 _RESET_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*)\b', re.I)
+# The same argument as _RESET_WORD_RE's, for the two words the county uses for the same act. Read only
+# at the completed-sale filter, where the question is whether a later entry might be a resale at all.
+# `continu*` and `postpon*` are already this file's vocabulary for CLOSING or MOVING the sale now on
+# the calendar (_CLOSING_WORD_RE), and the producer's notice_of_sale row (:214) labels none of
+# "Notice of Continued Foreclosure Sale", "Notice of Postponement of Foreclosure Sale" or "Amended
+# Notice of Foreclosure Auction", so this filter is the only thing that can hold them. Undated, all
+# three read `supported` after a certificate of sale with the entry named nowhere, while the same line
+# WITH a date was held - the bound satisfied on the dated side of a check and not the dateless side.
+# The date of a resale is the ordinary thing to be missing: it lives in the document behind the county
+# login (fortieth review).
+_RESALE_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*|continu\w*|postpon\w*)\b', re.I)
+# A sale notice by its own head, for the `auction` phrasing, which carries no resale word at all.
+# Asked of the producer's own title strings only, never the body: a judgment's recital of how the clerk
+# shall sell would otherwise make every read judgment cover a resale notice.
+_SALE_NOTICE_HEAD_RE = re.compile(r'\bnotice of\b.{0,20}?\b(?:sale|auction)\b', re.I)
+# And the clerk's post-sale paperwork, which the eighteenth review's argument already names: proceeds,
+# surplus and disbursement handling follows a completed sale and notices nothing. Without it the head
+# rule held "Notice of Sale Proceeds Disbursement" for ever. It narrows only that rule - a resale word
+# still holds an entry whatever else the line says.
+_PROCEEDS_RE = re.compile(r'\b(?:proceeds|surplus|disburs\w*)\b', re.I)
 # The producer's own sale vocabulary, verbatim from :398, for deciding whether a string is a sale
 # passage at all. Distinct from _SALE_WORD_RE above, which asks whether the CLASSIFIER should have
 # labelled an entry and deliberately leaves `sell` out.
@@ -672,7 +692,9 @@ def _sale_state(timeline, status, kind):
                  # resale, and the strictly weaker docket - sale wording only in the read body - must
                  # not read better than the one whose clerk line carries the word too.
                  if any(d > closing_date for d in _sale_dates_of(e, gated=False))
-                 or _RESET_WORD_RE.search(_sale_text(e))]
+                 or _RESALE_WORD_RE.search(_sale_text(e))
+                 or (_SALE_NOTICE_HEAD_RE.search(_producer_text(e))
+                     and not _PROCEEDS_RE.search(_producer_text(e)))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))
@@ -906,10 +928,16 @@ def _disposition_excerpt(line, limit=200):
     if len(line) <= limit:
         return line
     head = line[:limit]
-    verbs = _DENIED_RE.search(line) or _GRANTED_RE.search(line)
-    if verbs and not (_DENIED_RE.search(head) or _GRANTED_RE.search(head)):
-        return '...' + line[-(limit - 3):]
-    return head
+    # Anchored on the MATCH, denial first, not on the line's end. Anchoring at the end only when no
+    # verb was in the head protected the wrong verb: one Florida `ORDERED AND ADJUDGED` line routinely
+    # disposes of two motions in opposite directions, and when the head GRANTED one while the tail
+    # denied the motion for entry, the head-anchored cut printed the grant and dropped the "no" - the
+    # same sentence the round before's third finding was about, one door along. A match anchor also
+    # reaches a verb in the middle of a recital, which a line-end anchor cannot (fortieth review).
+    match = _DENIED_RE.search(line) or _GRANTED_RE.search(line)
+    if match is None or match.end() <= limit:
+        return head
+    return '...' + line[max(0, match.end() - (limit - 3)):match.end()]
 
 
 def _replacement_of_record(judgments):
@@ -1120,7 +1148,13 @@ def _sale_dates_of(entry, gated=True):
         return []
     try:
         import miami_case_timeline
-        return [d for d in (miami_case_timeline._sale_dates(passages) or []) if d]
+        # De-duplicated, in the producer's own order. The producer can save the SAME sale date in two
+        # passages - the clerk's "on 12/28/2026" and the read notice's own "December 28, 2026" - and
+        # the print site joins this list, so the docket where the document was OPENED told the reader a
+        # noticed sale has two sale dates. No caller depends on multiplicity; the resale filter asks
+        # `any()` (fortieth review).
+        dates = [d for d in (miami_case_timeline._sale_dates(passages) or []) if d]
+        return list(dict.fromkeys(dates))
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return []
 

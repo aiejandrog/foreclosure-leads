@@ -797,6 +797,42 @@ printed two earlier grants and hid the "no": reading more of the document hid th
 disposition sits at the END of the sentence. Denials print first now, and `_disposition_excerpt` anchors
 the cut at the end when the verb is not in the head.
 
+**Fortieth review.** Three findings, all three inside the round before's own three changes - family (e)
+for the fifteenth consecutive round. One was a false `supported`; two were the report not printing
+evidence it holds.
+
+The resale filter's own premise was false for an undated notice. It kept a later unlabelled sale entry
+only when the entry printed a sale date past the certificate or carried `reset`/`reschedul*`. The
+producer's `notice_of_sale` row (:214) labels none of "Amended Notice of Foreclosure Auction", "Notice of
+Continued Foreclosure Sale" or "Notice of Postponement of Foreclosure Sale", so this filter is the only
+thing that can hold them - and undated, all three read `supported` after a certificate of sale with the
+entry named nowhere, while the same clerk line WITH a date was held. A resale's date is the ordinary
+thing to be missing: it lives in the document behind the county login, which is `_RESET_WORD_RE`'s own
+stated argument. The rescue is `_RESALE_WORD_RE` now (`reset|reschedul*|continu*|postpon*`, the last two
+already this file's vocabulary for moving the sale on the calendar), plus `_SALE_NOTICE_HEAD_RE` for the
+`auction` phrasing, which carries no resale word at all. That head rule is asked of the producer's title
+strings only, never the body, and it excludes the clerk's post-sale paperwork by `_PROCEEDS_RE`, because
+without that it held "Notice of Disbursement of Sale Proceeds" for ever. Eleven pieces of routine
+completed-sale paperwork and the routine live-sale docket stay `supported`.
+
+`_disposition_excerpt` protected the wrong verb. Anchoring the cut at the line's end only when NO verb
+was in the head is fine until the head grants one motion and the tail denies the one that matters: one
+Florida `ORDERED AND ADJUDGED` line routinely disposes of two motions in opposite directions, and there
+the head-anchored cut printed the grant and dropped the "no" - the same sentence the round before's third
+finding was about, one door along. The cut anchors on the MATCH now, denial first, which also reaches a
+verb in the middle of a recital that neither a head nor a line-end anchor can.
+
+And the duplicate sale date had a second source. The producer can save the same date in two passages -
+the clerk's "on 12/28/2026" and the read notice's own "December 28, 2026" - so the docket where the
+document was OPENED told the reader a noticed sale has two sale dates. `_sale_dates_of` de-duplicates in
+the producer's own order; no caller depends on multiplicity, since the resale filter asks `any()`.
+
+**Reported, not fixed (not this module).** `_watchdogtest.js`'s case "alerts: a fresh empty file stays
+quiet" passes no `now`, so it reads the real clock against a `published_at` fixed at 2026-09-26T14:00Z
+and starts failing thirty hours later, which is 2026-09-27 20:00Z. It is a time bomb in that test's own
+fixture, it has nothing to do with this module, and until it is given an explicit `now` it reds
+`ci_suite.py` for every branch in the repo.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
