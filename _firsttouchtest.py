@@ -178,6 +178,15 @@ print('\n-- live bridge')
 W = T / 'srv'
 W.mkdir()
 seed(W)
+# This block is the deliverability gate. A verified first touch has to have a warm-up
+# sender or the slow-restart rule holds it (no bounce list is not a free pass, and this
+# folder's bounce list makes the rule slow_restart). The gate itself is unchanged.
+(W / 'senders.json').write_text(json.dumps({
+    'main_domain': 'example.com', 'main_domain_cap': 40,
+    'ramp_start': day(40), 'ramp': [{'through_day': 9999, 'per_day': 100}],
+    'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
+    'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
+}), encoding='utf-8')
 port = free_port()
 (W / '_run_bridge.py').write_text(
     'import sys, json, smtplib\n'
@@ -410,6 +419,158 @@ finally:
         proc3.wait(timeout=5)
     except Exception:
         proc3.kill()
+
+
+# ------------------------------------------------------------------ 2c. slow restart cannot leave from the main domain
+print('\n-- slow restart holds a first touch that has no warm-up sender')
+HOLD = 'first touch held: no warm-up sender configured during slow restart'
+LEDGER_HOLD = 'first touch held: mail ledger unreadable'
+LOGIN = 'sender@bsgflorida.com'
+WU_A, WU_C = 'a@one.example', 'c@two.example'
+
+
+def pre_cutoff_block():
+    """8 of 21 mailed before the #83 gate, inside the trailing window. Wilson blocks; the
+    post-cutoff first-touch cohort is empty, so the rule is slow_restart."""
+    rows = [dict(LEDGER[0], **{'from': LOGIN})]
+    bounced = dict(BOUNCED)
+    for i in range(21):
+        addr = 'pre%d@example.com' % i
+        rows.append({'d': '2026-09-25', 'ts_utc': '2026-09-25T15:00:00+00:00', 'ch': 'email',
+                     'from': LOGIN, 'to': addr, 'message_id': '<pre%d@example.com>' % i})
+        if i < 8:
+            bounced[addr] = {'reason': '550'}
+    return rows, bounced
+
+
+def ft_rows_from(frm, n, tag):
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    return [{'d': TODAY.isoformat(), 'ts_utc': now, 'ch': 'email', 'from': frm,
+             'to': '%s%d@example.com' % (tag, i), 'message_id': '<%s%d@example.com>' % (tag, i),
+             'touch': 'first'} for i in range(n)]
+
+
+def boot(name, login, ledger, bounced=None, senders=None, bad_senders=False, drop_bounce=False):
+    d = T / name
+    d.mkdir()
+    seed(d)
+    ver = json.loads((d / 'verified_emails.json').read_text(encoding='utf-8'))
+    for i in range(10, 20):
+        ver['zb%d@example.com' % i] = {'v': 'ok', 'why': 'zerobounce:valid', 'd': day(1)}
+    (d / 'verified_emails.json').write_text(json.dumps(ver), encoding='utf-8')
+    (d / 'mail_sent.json').write_text(json.dumps(ledger), encoding='utf-8')
+    if drop_bounce:
+        (d / 'bounced_emails.json').unlink()
+    elif bounced is not None:
+        (d / 'bounced_emails.json').write_text(json.dumps(bounced), encoding='utf-8')
+    if bad_senders:
+        (d / 'senders.json').write_text('{', encoding='utf-8')
+    elif senders is not None:
+        (d / 'senders.json').write_text(json.dumps(senders), encoding='utf-8')
+    return d, start_bridge(d, login)
+
+
+def stop(pr):
+    pr.terminate()
+    try:
+        pr.wait(timeout=5)
+    except Exception:
+        pr.kill()
+
+
+LANE_ONLY = {'main_domain': 'bsgflorida.com', 'main_domain_cap': 40,
+             'ramp_start': day(40), 'ramp': [{'through_day': 9999, 'per_day': 100}],
+             'lanes': {'default': LOGIN, 'active': LOGIN, 'replied': LOGIN}}
+rows, bounced = pre_cutoff_block()
+for label, slug, kw in (
+        ('senders.json absent', 'absent', {}),
+        ('senders.json unreadable', 'badjson', {'bad_senders': True}),
+        ('no first_touch block', 'nofirst', {'senders': LANE_ONLY})):
+    folder, (pr, port_) = boot('hold-' + slug, LOGIN, rows, bounced, **kw)
+    try:
+        st, hj = call(port_, '/health')
+        rec('%s: rule is slow_restart under the pre-cutoff block' % label,
+            st == 200 and (hj.get('bounce') or {}).get('ft_rule') == 'slow_restart'
+            and (hj.get('bounce') or {}).get('blocked') is True, hj.get('bounce_rule'))
+        before = len(smtp_of(folder))
+        st, j = send_to(port_, 'zb@example.com')
+        rec('%s: verified first touch is held' % label,
+            st == 409 and j.get('skip') is True and j.get('err') == HOLD and '@' not in j.get('err', ''),
+            (st, j))
+        rec('%s: that hold did not send' % label, len(smtp_of(folder)) == before)
+        st, j = send_to(port_, 'delivered@example.com')
+        rec('%s: a proven follow-up still sends' % label,
+            st == 200 and j.get('ok') is True and j.get('first_touch') is False
+            and j.get('sent_from') == LOGIN, (st, j.get('sent_from'), j.get('first_touch'), j.get('err')))
+    finally:
+        stop(pr)
+
+WARM = {'main_domain': 'bsgflorida.com', 'main_domain_cap': 40,
+        'ramp_start': day(40), 'ramp': [{'through_day': 9999, 'per_day': 100}],
+        'lanes': {'default': LOGIN, 'active': LOGIN},
+        'first_touch': {'from': [WU_A, WU_C], 'ramp_start': TODAY.isoformat(),
+                        'ramp': [{'through_day': 9999, 'per_day': 100}]}}
+cap_ledger = ft_rows_from(WU_A, 10, 'cap')
+folder, (pr, port_) = boot('cap', LOGIN, cap_ledger, bounced={}, senders=WARM)
+try:
+    st, hj = call(port_, '/health')
+    senders_h = (hj.get('first_touch_from') or {}).get('senders') or []
+    rec('configured warm-up: slow restart publishes a domain cap of 10',
+        (hj.get('bounce') or {}).get('ft_rule') == 'slow_restart'
+        and [x.get('domain_cap') for x in senders_h] == [10, 10]
+        and [x.get('domain_today') for x in senders_h] == [10, 0], senders_h)
+    st, j = send_to(port_, 'zb10@example.com')
+    rec('a second domain still has room while the first is at 10',
+        st == 200 and j.get('sent_from') == WU_C and j.get('first_touch') is True, (st, j))
+    # 10 + 10 would be 20 clean sends and the rule would clear, lifting the cap. Keep the
+    # sample small and take the full domain's sender away so the 11th on it cannot rotate.
+    only_a = json.loads(json.dumps(WARM))
+    only_a['first_touch']['from'] = [WU_A]
+    (folder / 'senders.json').write_text(json.dumps(only_a), encoding='utf-8')
+    n_smtp = len(smtp_of(folder))
+    st, j = send_to(port_, 'zb11@example.com')
+    rec('the 11th first touch on that full domain is 409',
+        st == 409 and j.get('skip') is True and j.get('first_touch_cap') is True
+        and len(smtp_of(folder)) == n_smtp, (st, j.get('err')))
+finally:
+    stop(pr)
+
+folder, (pr, port_) = boot('nobounce', LOGIN, cap_ledger, senders=WARM, drop_bounce=True)
+try:
+    st, hj = call(port_, '/health')
+    bh = hj.get('bounce') or {}
+    senders_h = (hj.get('first_touch_from') or {}).get('senders') or []
+    rec('missing bounce list: unmeasured, first-touch cap per domain is 10',
+        bh.get('ft_measured') is False and bh.get('ft_rule') == 'unmeasured'
+        and [x.get('domain_cap') for x in senders_h] == [10, 10], bh.get('ft_rule'))
+    st, j = send_to(port_, 'zb12@example.com')
+    rec('missing bounce list: the other domain still sends under that cap',
+        st == 200 and j.get('sent_from') == WU_C, (st, j.get('sent_from'), j.get('err')))
+    full = ft_rows_from(WU_A, 10, 'na') + ft_rows_from(WU_C, 10, 'nc')
+    (folder / 'mail_sent.json').write_text(json.dumps(full), encoding='utf-8')
+    n_smtp = len(smtp_of(folder))
+    st, j = send_to(port_, 'zb13@example.com')
+    rec('missing bounce list: the 11th on a full domain is 409',
+        st == 409 and j.get('skip') is True and len(smtp_of(folder)) == n_smtp, (st, j.get('err')))
+finally:
+    stop(pr)
+
+folder, (pr, port_) = boot('badled', LOGIN, [], bounced={})
+try:
+    (folder / 'mail_sent.json').write_text('not json', encoding='utf-8')
+    st, j = send_to(port_, 'zb@example.com')
+    rec('unreadable mail_sent.json holds a first touch',
+        st == 409 and j.get('skip') is True and j.get('err') == LEDGER_HOLD and not smtp_of(folder),
+        (st, j))
+    (folder / 'mail_sent.json').write_text('{"not": "a list"}', encoding='utf-8')
+    st, j = send_to(port_, 'zb2@example.com')
+    rec('a mail ledger that parses as an object holds a first touch too',
+        st == 409 and j.get('err') == LEDGER_HOLD and not smtp_of(folder), (st, j))
+    st, j = send_to(port_, 'replied@example.com', wl='replied')
+    rec('a reply is not a first touch and still sends when the ledger will not parse',
+        st == 200 and j.get('first_touch') is False, (st, j.get('first_touch'), j.get('err')))
+finally:
+    stop(pr)
 
 
 # ------------------------------------------------------------------ 3. the 07:15 bounce harvest

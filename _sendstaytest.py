@@ -271,6 +271,15 @@ def server():
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
         (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+        # Slow restart holds a first touch with no warm-up sender. This suite is the stay
+        # gate; one fixture sender lets a clear lead reach SMTP.
+        (work / 'senders.json').write_text(json.dumps({
+            'main_domain': 'example.com', 'main_domain_cap': 40,
+            'ramp_start': '2020-01-01', 'ramp': [{'through_day': 9999, 'per_day': 100}],
+            'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
+            'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
+        }), encoding='utf-8')
+        (work / 'bounced_emails.json').write_text('{}', encoding='utf-8')
         # A FRESH, empty opt-out ledger so the 2-day staleness gate does not refuse first.
         (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}),
                                            encoding='utf-8')
@@ -425,10 +434,73 @@ def server():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def no_warmup_hold():
+    """The same clear lead, with no senders.json, must not leave. The restart rule holds it."""
+    print('-- no warm-up sender')
+    port = free_port()
+    work = pathlib.Path(tempfile.mkdtemp(prefix='dfstayhold_'))
+    proc = None
+    try:
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
+            shutil.copy(HERE / f, work / f)
+        write_sync_ok(work)
+        (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
+        (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+        (work / 'bounced_emails.json').write_text('{}', encoding='utf-8')
+        (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}),
+                                           encoding='utf-8')
+        (work / 'sale_history_cache.json').write_text(json.dumps(CACHE), encoding='utf-8')
+        (work / 'verified_emails.json').write_text(json.dumps(
+            {'owner1@example.com': {'v': 'ok', 'why': 'zerobounce:valid', 'd': '2026-09-26'}}),
+            encoding='utf-8')
+        shim = work / '_run_bridge.py'
+        shim.write_text(
+            'import sys, smtplib\n'
+            'class _FakeSMTP:\n'
+            '    def __init__(self, *a, **k): pass\n'
+            '    def __enter__(self): return self\n'
+            '    def __exit__(self, *a): return False\n'
+            '    def login(self, u, p): pass\n'
+            '    def send_message(self, m, **k):\n'
+            '        open("smtp_calls.txt", "a", encoding="utf-8").write(str(m["To"]) + "\\n")\n'
+            '        return {}\n'
+            'smtplib.SMTP_SSL = _FakeSMTP\n'
+            'sys.argv = ["send_server.py", "--port", "%d", "--limit", "50"]\n'
+            'exec(open("send_server.py", encoding="utf-8").read())\n' % port, encoding='utf-8')
+        proc = subprocess.Popen([sys.executable, str(shim)], cwd=str(work),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        up = False
+        for _ in range(60):
+            if call(port, '/health')[0] == 200:
+                up = True
+                break
+            time.sleep(0.25)
+        rec('hold bridge starts', up)
+        if not up:
+            return
+        st, j = call(port, '/send', {
+            'to': 'owner1@example.com', 'subj': 'About 1 Main St',
+            'body': 'Hello Jane, a short note about 1 Main St.',
+            'meta': {'owner': 'Jane', 'addr': '1 Main St', 'wl': 'active', 'c': '2099-000003-CA-01'}})
+        smtp = work / 'smtp_calls.txt'
+        rec('no senders.json: first touch is 409 first_touch_cap and sends nothing',
+            st == 409 and j.get('first_touch_cap') is True and j.get('skip') is True
+            and j.get('err') == 'first touch held: no warm-up sender configured during slow restart'
+            and not smtp.exists(), {'st': st, 'j': j})
+    finally:
+        if proc is not None:
+            try:
+                proc.terminate(); proc.wait(timeout=10)
+            except Exception:
+                pass
+        shutil.rmtree(work, ignore_errors=True)
+
+
 if __name__ == '__main__':
     unit()
     parity()
     server()
+    no_warmup_hold()
     total = len(ok) + len(bad)
     print(f'\n==== {len(ok)}/{total} send-bridge stay checks passed ====')
     if bad:
