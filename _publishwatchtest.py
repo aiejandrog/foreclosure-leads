@@ -15,6 +15,11 @@ and said it was fine" — so the cases below are the ones where a wrong answer c
      fail-loud rule and the reason both files share exit codes.
   5. the mirror repo is DERIVED from board_url.BOARD_URL, never a second hardcoded copy of the
      address. Nine hand-edited copies is what broke the 09-17 move.
+  6. the coverage stamp is read WHOLE however long line 1 gets. The stamp is one line and every
+     census field make_tracker adds lengthens it: a fixed 512-byte window cut the JSON mid-object
+     on 2026-09-27, when the document pipeline's md_* fields landed, and the watch reported "this
+     board carries no stamp" about a board that was published correctly an hour earlier. A window
+     that is too small must never read as a verdict about the board.
 
 Nothing here opens a socket or runs git: sync_mirror, publish_commits and coverage_at are
 replaced with scripted stand-ins.
@@ -235,6 +240,64 @@ def main():
         pw.UNKNOWNS[:] = []
     finally:
         board_url.BOARD_URL = real_url
+
+    # 6. The stamp is read whole however long line 1 is, and a window that is too small is
+    #    CANNOT EVALUATE, never "this board has no stamp".
+    import urllib.request as _ur
+
+    class _FakeResp:
+        def __init__(self, body):
+            self._body = body
+        def read(self, n=None):
+            return self._body if n is None else self._body[:n]
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    def _serve(body_bytes):
+        """A urlopen that honours the Range header the way raw.githubusercontent.com does."""
+        def _open(req, timeout=None):
+            rng = req.headers.get('Range') or req.headers.get('range') or 'bytes=0-511'
+            end = int(rng.split('-')[1])
+            return _FakeResp(body_bytes[:end + 1])
+        return _open
+
+    long_stamp = ('{"leads":2593,"phones":1123,'
+                  + ','.join('"md_%d":%d' % (i, i) for i in range(200))
+                  + ',"built":"2026-09-27T05:41","sig":"5d4745f3f7de"}')
+    real_open = _ur.urlopen
+    try:
+        body = ('<!-- DEALFLOW-COVERAGE %s -->\n<!DOCTYPE html>\n' % long_stamp).encode()
+        check('  and line 1 is longer than 512 bytes, as it is in production',
+              len(body.split(b'\n')[0]) > 512, True)
+        pw.UNKNOWNS[:] = []
+        _ur.urlopen = _serve(body)
+        got = pw.coverage_at('o', 'r', 'a' * 40)
+        check('a stamp longer than the first window is still read whole',
+              (got or {}).get('built'), '2026-09-27T05:41')
+        check('  and reading it records no CANNOT EVALUATE', pw.UNKNOWNS, [])
+
+        # A board whose line 1 really carries no stamp is still reported as such.
+        pw.UNKNOWNS[:] = []
+        _ur.urlopen = _serve(b'<!DOCTYPE html>\n<html><head><title>x</title>\n')
+        check('line 1 with no stamp on it is still reported',
+              (pw.coverage_at('o', 'r', 'b' * 40), len(pw.UNKNOWNS)), (None, 1))
+        check('  and it says the stamp is missing, not that the window was short',
+              'NO DEALFLOW-COVERAGE' in pw.UNKNOWNS[0], True)
+
+        # Line 1 that never ends: cannot evaluate, and it names the knob to raise.
+        pw.UNKNOWNS[:] = []
+        _ur.urlopen = _serve(b'<!-- DEALFLOW-COVERAGE {"leads":1,' + b'x' * 200000)
+        check('a line 1 that runs past every window is CANNOT EVALUATE',
+              (pw.coverage_at('o', 'r', 'c' * 40), len(pw.UNKNOWNS)), (None, 1))
+        check('  and it does not claim the board carries no stamp',
+              'NO DEALFLOW-COVERAGE' not in pw.UNKNOWNS[0], True)
+        check('  and it names HEADER_WINDOWS as the knob',
+              'HEADER_WINDOWS' in pw.UNKNOWNS[0], True)
+        pw.UNKNOWNS[:] = []
+    finally:
+        _ur.urlopen = real_open
 
     print()
     print('%d pass / %d fail' % (CHECKS[0] - len(FAILS), len(FAILS)))

@@ -41,7 +41,7 @@ WHAT IT READS
   * The mirror's commit list, via a blobless clone (`--filter=blob:none`). The built board is
     ~15 MB per commit, so fetching blobs to read a 200-byte header would pull a hundred-odd MB
     a day; the clone carries commits and trees only.
-  * Each publish's DEALFLOW-COVERAGE stamp, via an HTTP Range request for the first 512 bytes
+  * Each publish's DEALFLOW-COVERAGE stamp, via an HTTP Range request for the first few KB
     of docs/index.html at that commit. make_tracker() writes that census on line 1 precisely so
     it can be read without decrypting or downloading the board.
   * This checkout's `origin/main`, to tell whether the live board was built from current code.
@@ -95,7 +95,13 @@ MAIN_AHEAD_H = 24
 STALE_BUILD_H = 6
 
 HTTP_TIMEOUT = 30
-HEADER_BYTES = 512
+
+# The stamp is one line, but that line GROWS: every census field make_tracker adds lands on it.
+# It was ~200 bytes when this file was written and passed 900 by 2026-09-27, when the document
+# pipeline's md_* fields landed and a 512-byte window started cutting the JSON mid-object -- which
+# read as "this board carries no stamp", a false CANNOT EVALUATE every morning. So the window is
+# not a constant any more: read, and widen while line 1 is still unterminated.
+HEADER_WINDOWS = (4096, 16384, 65536)
 
 ALARMS = []
 UNKNOWNS = []
@@ -190,8 +196,12 @@ def publish_commits(cache, limit):
 def coverage_at(owner, repo, sha):
     """The DEALFLOW-COVERAGE census from line 1 of the board at `sha`.
 
-    A Range request, not a download. The built board is ~15 MB; the stamp is ~200 bytes and is
-    on line 1 exactly so that it is cheap to read.
+    A Range request, not a download. The built board is ~15 MB; the stamp is one line and is line 1
+    exactly so that it is cheap to read.
+
+    The window widens while line 1 is unterminated, because the stamp grows whenever make_tracker
+    adds a census field. "No stamp on line 1" is only claimed once the whole of line 1 is in hand;
+    a line still running past the largest window is CANNOT EVALUATE, not a verdict about the board.
 
     A read that fails is CANNOT EVALUATE, never an alarm -- including for the current board.
     ALARMS in this file means "I checked and it is wrong"; not being able to read a board is not
@@ -199,21 +209,32 @@ def coverage_at(owner, repo, sha):
     yesterday's publish produced "the published board has a problem".
     """
     url = 'https://raw.githubusercontent.com/%s/%s/%s/docs/index.html' % (owner, repo, sha)
-    req = urllib.request.Request(url, headers={'Range': 'bytes=0-%d' % HEADER_BYTES,
-                                               'User-Agent': 'dealflow-publish-watch'})
-    try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
-            head = r.read(HEADER_BYTES + 1).decode('utf-8', 'replace')
-    except (urllib.error.URLError, OSError) as e:
-        _unknown('could not read the published board at %s (%s). Without the coverage stamp this '
-                 'run cannot say whether the site is current.' % (sha[:8], e))
-        return None
-    m = COV_MARK.search(head)
-    if not m:
-        _unknown('the published board at %s carries NO DEALFLOW-COVERAGE stamp on line 1. Either '
-                 'docs/index.html was hand-edited -- which CLAUDE.md forbids because the next '
-                 'refresh destroys it -- or it was built by a make_tracker that predates the '
-                 'census.' % sha[:8])
+    head = ''
+    for window in HEADER_WINDOWS:
+        req = urllib.request.Request(url, headers={'Range': 'bytes=0-%d' % window,
+                                                  'User-Agent': 'dealflow-publish-watch'})
+        try:
+            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
+                head = r.read(window + 1).decode('utf-8', 'replace')
+        except (urllib.error.URLError, OSError) as e:
+            _unknown('could not read the published board at %s (%s). Without the coverage stamp '
+                     'this run cannot say whether the site is current.' % (sha[:8], e))
+            return None
+        m = COV_MARK.search(head)
+        if m:
+            break
+        if '\n' in head:
+            # The whole of line 1 is in hand and the stamp is not on it.
+            _unknown('the published board at %s carries NO DEALFLOW-COVERAGE stamp on line 1. '
+                     'Either docs/index.html was hand-edited -- which CLAUDE.md forbids because '
+                     'the next refresh destroys it -- or it was built by a make_tracker that '
+                     'predates the census.' % sha[:8])
+            return None
+        # Line 1 is still running: the stamp is longer than this window. Widen.
+    else:
+        _unknown('line 1 of the published board at %s runs past %d bytes without ending, so the '
+                 'coverage stamp could not be read whole. If the census has grown again, raise '
+                 'HEADER_WINDOWS in publish_watch.py.' % (sha[:8], HEADER_WINDOWS[-1]))
         return None
     try:
         return json.loads(m.group(1))
