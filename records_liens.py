@@ -1003,6 +1003,10 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
     if ow is None:
         # with no usable owner name every row reads as the owner's, so no namesake check can run
         return models, 0, 'no usable owner name to check the placed rows against'
+    # the owner and named co-owners only, before the deed's grantee names are added: a token beside
+    # the surname on the deed may be a second surname ('GARCIA LOPEZ JOSE'), and a stranger of that
+    # double surname must still read as a stranger
+    ow_base = list(ow)
     _o0 = _owner_words(owner)
     if ow and _o0 and _o0[0] == 'person':
         _sn = re.findall(r'[A-Z0-9]+', _o0[1].replace("'", ''))
@@ -1016,6 +1020,9 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
         return ow is None or _maybe_owner(r.get('firsT_PARTY') or '', ow) \
             or _maybe_owner(r.get('seconD_PARTY') or '', ow) \
             or _names_owner(r.get('firsT_PARTY'), ow) or _names_owner(r.get('seconD_PARTY'), ow)
+    def _base_party(r):
+        return _maybe_owner(r.get('firsT_PARTY') or '', ow_base) or _maybe_owner(r.get('seconD_PARTY') or '', ow_base) \
+            or _names_owner(r.get('firsT_PARTY'), ow_base) or _names_owner(r.get('seconD_PARTY'), ow_base)
     def _conveyance(doc):
         return 'DEED' in doc or 'CERTIFICATE OF TITLE' in doc
     # a claim analyze() would tie to a parcel: liens, claims of lien, and the certified orders and
@@ -1028,7 +1035,8 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
     _op = lambda x: ow is None or _maybe_owner(x or '', ow) or _names_owner(x, ow)
     owned_elsewhere = {(r.get('subdiV_NAME', '') or '').strip().upper() for r in models
                        if _conveyance((r.get('doC_TYPE', '') or '').upper())
-                       and _op(r.get('seconD_PARTY')) and not (ow and _op(r.get('firsT_PARTY')))}
+                       and (_op(r.get('seconD_PARTY')) or _op(r.get('firsT_PARTY')))
+                       and not (_op(r.get('seconD_PARTY')) and _op(r.get('firsT_PARTY')))}
     for r in models:
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         if rf == fol:
@@ -1045,9 +1053,11 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
                 # another subdivision with no deed of the owner's there: it may be this parcel's
                 # loan indexed under a variant subdivision name, so it cannot be ruled out
                 return models, 0, 'a mortgage or lien naming the owner sits in a subdivision the owner has no deed in'
-        if not rf and sd == sub and (debt or (re.search(r'JUDGMENT|WARRANT', doc) and not re.search(r'SATISF|RELEASE', doc))) and not _owner_party(r):
+        if not rf and sd == sub and (debt or (re.search(r'JUDGMENT|WARRANT', doc) and not re.search(r'SATISF|RELEASE', doc))
+                                     or ('LIS PEND' in doc and not re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', doc))) \
+                and not _base_party(r):
             # a same-surname stranger's loan in this subdivision would be counted as this parcel's
-            return models, 0, 'another person of the owner\'s surname has a mortgage in this subdivision'
+            return models, 0, 'another person of the owner\'s surname has a debt or lis pendens in this subdivision'
         if (_conveyance(doc) and sd == sub and _owner_party(r)
                 and (rf or _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) not in deed_bps)):
             # a conveyance to or from the owner in the same subdivision that is not this parcel's:
@@ -1511,8 +1521,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         # with no folio in another (or no) subdivision may be this parcel's, indexed under a variant
         # name. It cannot be ruled out, so it is never a clear. Asked of placed searches only, so a
         # search that reached the parcel on its own reads exactly as before.
+        _lo = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w]
         _loose = [dict(r, subdiV_NAME=subj_subdiv) for r in models
                   if 'LIS PEND' in (r.get('doC_TYPE', '') or '').upper()
+                  and _lo and any(_maybe_owner(r.get(k) or '', _lo) or _names_owner(r.get(k), _lo)
+                                  for k in ('firsT_PARTY', 'seconD_PARTY'))
                   and not norm_folio(r.get('foliO_NUMBER', ''))
                   and (r.get('subdiV_NAME', '') or '').strip().upper() != subj_subdiv]
         _rel = [r for r in models if 'LIS PEND' in (r.get('doC_TYPE', '') or '').upper()

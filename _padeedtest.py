@@ -204,6 +204,30 @@ rh = RL.analyze([deed, pm, sat, rec('LIS PENDENS', _lpd, '34000', '5', 0, 'OWNER
                 FOLIO, 20000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
 check('HOA lead: a released loose lis pendens does not block', not rh.get('second_fc_unsure'), rh.get('second_fc_unsure'))
 
+# round 5: a double surname on the deed ('GARCIA LOPEZ JOSE') is not a household given name, so a stranger
+# ANA GARCIA LOPEZ's loose mortgage in the subdivision still refuses placement
+gd = rec('DEED', '2/1/2008', '26100', '0010', 0, 'GARCIA LOPEZ JOSE', first='PRIOR SELLER')
+gm = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, 'LENDER BANK', first='GARCIA LOPEZ JOSE', intangible=700)
+ana = rec('MORTGAGE', '6/6/2019', '31500', '3', 0, 'OTHER BANK', first='GARCIA LOPEZ ANA', intangible=300)
+rg = RL.analyze([gd, gm, ana], FOLIO, 300000, ftype='MORTGAGE', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('a double-surname stranger\'s mortgage in the subdivision refuses placement', rg['parcel_found'] is False,
+      (rg.get('placement_refused'), rg.get('open_count')))
+# round 5: a namesake's lender lis pendens in the subdivision refuses placement (it would flag 2ND FORECLOSURE)
+nlp = rec('LIS PENDENS', _lpd, '34000', '9', 0, 'GARCIA ROBERTO', first='BIG BANK NA')
+rg = RL.analyze([gd, gm, nlp], FOLIO, 20000, ftype='HOA', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('a namesake lender lis pendens in the subdivision refuses placement', rg['parcel_found'] is False and not rg.get('second_fc'),
+      (rg.get('placement_refused'), rg.get('second_fc')))
+# ... but a namesake's lis pendens elsewhere in the county does not block a placed HOA lead's clear
+nlp2 = dict(nlp, subdiV_NAME='')
+rg = RL.analyze([gd, gm, nlp2], FOLIO, 20000, ftype='HOA', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('a namesake lis pendens with no subdivision does not mark an HOA lead unsure', rg['parcel_found'] is True
+      and not rg.get('second_fc_unsure'), (rg.get('placement_refused'), rg.get('second_fc_unsure')))
+# round 5: an owner who sold an earlier home to an outsider still places (that subdivision is another property)
+sold = rec('WARRANTY DEED', '5/5/2006', '24000', '1', 0, 'BUYER PERSON', first='GARCIA JOSE', sub='OLD PLACE')
+oldm = rec('MORTGAGE', '5/5/2003', '21000', '2', 0, 'OLD BANK', first='GARCIA JOSE', intangible=200, sub='OLD PLACE')
+rg = RL.analyze([gd, gm, sold, oldm], FOLIO, 300000, ftype='MORTGAGE', owner='JOSE GARCIA', deed_bps=DEEDS)
+check('an owner who sold an earlier home to an outsider still places', rg['parcel_found'] is True, rg.get('placement_refused'))
+
 # the repull gate asks the appraiser only when no row carries the folio
 _asked = []
 check('_parcel_in does not call the appraiser for a folio-carrying search',
