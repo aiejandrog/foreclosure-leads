@@ -22,6 +22,8 @@ sys.path.insert(0, HERE)
 import tempfile as _tf
 os.environ['DEALFLOW_PAID_LEDGER'] = os.path.join(_tf.mkdtemp(prefix='paidreads_'), 'paid_reads_ledger.json')
 os.environ.pop('DEALFLOW_PAID_MONTHLY_CAP', None)
+# its runs must not call the live Property Appraiser (deed placement has its own suite, _padeedtest)
+os.environ['DEALFLOW_PA_DEED_ANCHOR'] = '0'
 
 import case_dossier as CD
 import equity_state as ES

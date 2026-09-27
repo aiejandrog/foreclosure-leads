@@ -69,6 +69,47 @@ r3 = RL.analyze([bare, rec('MORTGAGE', '2/1/2008', '26100', '11', 0, PLAINTIFF, 
 check('a deed with no subdivision does not place the search', r3['parcel_found'] is False and not r3['placed_by'])
 check('...and cannot read as a documented clear', not ES.coverage_documented(r3))
 
+# review 2026-09-27, finding 1: the owner's mortgage with neither folio nor subdivision cannot be tied
+# to this parcel or ruled out, so placement would read an incomplete chain as CLEAR
+loose = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, PLAINTIFF, first='OWNER TESTER', intangible=700, sub='')
+r5 = RL.analyze([deed, loose], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+check('an unanchorable owner mortgage refuses placement', r5['parcel_found'] is False and not r5['placed_by'],
+      r5.get('placement_refused'))
+check('...and says why', 'no folio and no subdivision' in r5['placement_refused'])
+check('...and is never a documented clear', not ES.coverage_documented(r5))
+stranger = rec('MORTGAGE', '2/1/2008', '26200', '11', 0, PLAINTIFF, first='SOMEONE ELSE', intangible=700, sub='')
+r5b = RL.analyze([deed, mtg, stranger], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+check('a loose mortgage naming someone else does not block placement', r5b['parcel_found'] is True)
+
+# finding 2: an instrument also indexed under another folio covers another parcel
+twin_other = rec('DEED', '2/1/2008', '26100', '10', 0, folio='0100000000999', sub='OTHER PLAT')
+twin_blank = rec('DEED', '2/1/2008', '26100', '10', 0, sub='OTHER PLAT')
+nm = rec('MORTGAGE', '3/3/2015', '29500', '41', 0, 'NAMESAKE BANK', intangible=100, sub='OTHER PLAT')
+r6 = RL.analyze([twin_other, twin_blank, nm], FOLIO, 300000, ftype='MORTGAGE', deed_bps=DEEDS)
+check('a book/page indexed under another folio is not placed', r6['parcel_found'] is False and r6['open_count'] == 0,
+      (r6['parcel_found'], r6['open_count'], r6.get('placement_refused')))
+# ...and placed rows that disagree on subdivision anchor nothing
+wrong = rec('DEED', '2/1/2008', '26100', '10', 0, sub='WRONG PLAT')
+r7 = RL.analyze([wrong, deed, mtg], FOLIO, 300000, ftype='MORTGAGE', deed_bps=DEEDS)
+check('deed rows naming two subdivisions are not placed', r7['parcel_found'] is False and not r7['placed_by'],
+      r7.get('placement_refused'))
+
+# finding 3: the owner's other unit in the same condominium is not this parcel's
+unit = rec('DEED', '2/1/2008', '26100', '10', 0, 'OWNER TESTER', first='PRIOR SELLER', sub='BAY CONDO')
+unit2 = rec('DEED', '6/6/2012', '28000', '3', 0, 'OWNER TESTER', first='ANOTHER SELLER', sub='BAY CONDO')
+unit2_mtg = rec('MORTGAGE', '6/6/2012', '28000', '4', 0, 'UNIT TWO BANK', intangible=300, sub='BAY CONDO')
+r8 = RL.analyze([unit, unit2, unit2_mtg], FOLIO, 300000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+check('another owner deed in the subdivision refuses placement', r8['parcel_found'] is False and not r8['placed_by'],
+      r8.get('placement_refused'))
+
+# finding 5: --repull's gate knows placement, so it does not pay for a search placement answers
+check('_parcel_in sees a placeable search', RL._parcel_in(models, FOLIO, DEEDS) is True)
+check('_parcel_in without the appraiser is unchanged', RL._parcel_in(models, FOLIO) is False)
+check('_parcel_in refuses what placement refuses', RL._parcel_in([deed, loose], FOLIO, DEEDS, 'OWNER TESTER') is False)
+
+# finding 7: a float book/page is the same number
+check('_bp_key reads a whole float as an integer', RL._bp_key(26100.0, 10.0) == ('26100', '10'))
+
 # no appraiser deed on the search: nothing changes
 r4 = RL.analyze(models, FOLIO, 300000, ftype='MORTGAGE', deed_bps={('99999', '1')})
 check('an appraiser book/page not on the search places nothing', r4['parcel_found'] is False and r4['open_count'] == 0)
@@ -95,6 +136,16 @@ check('pa_deed_bookpages reads the official record fields', RL.pa_deed_bookpages
 def _boom(*a, **k): raise RuntimeError('offline')
 RL._PA_DEEDS.clear(); RL.requests.get = _boom
 check('an unreadable appraiser is an empty set', RL.pa_deed_bookpages(FOLIO) == set())
+check('...and is not cached as "no deeds"', FOLIO.lstrip('0') not in RL._PA_DEEDS and FOLIO not in RL._PA_DEEDS)
+# finding 4: three failures in a row stop asking for the rest of the run
+_calls = []
+def _count(*a, **k):
+    _calls.append(1); raise RuntimeError('offline')
+RL.requests.get = _count; RL._PA_FAILS.update(n=0, off=False)
+for i in range(6):
+    RL.pa_deed_bookpages('01000000001%02d' % i)
+check('a dead appraiser is asked three times, not once per lead', len(_calls) == 3, len(_calls))
+RL._PA_FAILS.update(n=0, off=False)
 RL.requests.get = _orig
 
 print('\n%d failure(s)' % len(FAILS))

@@ -211,10 +211,15 @@ def _may_submit():
     return True
 
 
-def _parcel_in(models, folio):
-    """Does a search result carry this folio at all? analyze()'s parcel_found, without the analysis."""
+def _parcel_in(models, folio, deed_bps=None, owner=''):
+    """Does a search result reach this parcel: a row carrying the folio, or (deed_bps given) a row
+    place_by_deed would place? analyze()'s parcel_found, without the analysis."""
     fol = norm_folio(folio)
-    return bool(models) and bool(fol) and any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models)
+    if not (models and fol):
+        return False
+    if any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models):
+        return True
+    return bool(deed_bps) and place_by_deed(models, folio, deed_bps, owner=owner)[1] > 0
 
 
 def _mortgages_narrower(old, new):
@@ -906,21 +911,27 @@ def _other_person(party, owners):
 
 
 def _bp_key(book, page):
-    b = re.sub(r'\D', '', str(book or '')).lstrip('0')
-    p = re.sub(r'\D', '', str(page or '')).lstrip('0')
+    def _d(x):
+        if isinstance(x, float) and x.is_integer():
+            x = int(x)                                # 26100.0 is book 26100, not 261000
+        return re.sub(r'\D', '', str(x or '')).lstrip('0')
+    b, p = _d(book), _d(page)
     return (b, p) if b and p else None
 
 
 PA_PROXY = 'https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx'
 _PA_DEEDS = {}
+_PA_FAILS = {'n': 0, 'off': False}             # consecutive appraiser failures; 3 turn it off for the run
 
 
 def pa_deed_bookpages(folio):
     """The Official Records book/page of every sale the Property Appraiser lists for this folio
     (SalesInfos OfficialRecordBook / OfficialRecordPage). Keyless and free. An empty set when the
-    appraiser has none or cannot be read: the caller then places nothing it could not place before."""
+    appraiser has none or cannot be read: the caller then places nothing it could not place before.
+    Three failures in a row stop asking for the rest of the run, so a dead appraiser costs seconds,
+    not an hour of the nightly refresh."""
     fol = re.sub(r'\D', '', str(folio or ''))
-    if not fol:
+    if not fol or _PA_FAILS['off']:
         return set()
     if fol in _PA_DEEDS:
         return _PA_DEEDS[fol]
@@ -930,35 +941,75 @@ def pa_deed_bookpages(folio):
                                            'clientAppName': 'PropertySearch', 'folioNumber': fol},
                          headers={'User-Agent': UA,
                                   'Referer': 'https://apps.miamidadepa.gov/PropertySearch/'},
-                         timeout=40).json()
+                         timeout=10).json()
         for si in (j.get('SalesInfos') or []):
             k = _bp_key(si.get('OfficialRecordBook'), si.get('OfficialRecordPage'))
             if k:
                 out.add(k)
+        _PA_FAILS['n'] = 0
     except Exception:
-        out = set()
+        _PA_FAILS['n'] += 1
+        if _PA_FAILS['n'] >= 3 and not _PA_FAILS['off']:
+            _PA_FAILS['off'] = True
+            print('  ! Property Appraiser unreachable 3 times in a row; deed placement off for this run')
+        return set()                                  # not cached: a later lead may try again
     _PA_DEEDS[fol] = out
     return out
 
 
-def place_by_deed(models, folio, deed_bps):
+def place_by_deed(models, folio, deed_bps, owner=''):
     """Most Miami-Dade index rows carry no folio (measured 2026-09-27: 3,504 of 3,998 rows on 28
     owner searches), so a search that plainly returned the owner's own records still reads as never
     reaching the parcel, and nothing on it is counted. The Property Appraiser lists the book/page of
-    every deed on the folio. An index row recorded at one of those book/pages IS that deed, whatever
-    its folio field says, so it is given the folio: it then anchors the parcel's subdivision the way
-    a folio-carrying deed always has. A row that carries a DIFFERENT folio is left alone (the index
-    says it is another parcel). Returns (models, number of rows placed)."""
+    every deed on the folio. An index row recorded at one of those book/pages IS that deed, so it is
+    given the folio: it then anchors the parcel's subdivision the way a folio-carrying deed always has.
+
+    Refused (nothing placed, with the reason) whenever the placement could put another parcel's
+    records on this one or read an incomplete search as clear:
+      * a book/page where any row carries a DIFFERENT folio: the instrument covers another parcel;
+      * placed rows that name different subdivisions (or none at all);
+      * a mortgage naming the owner with no folio and no subdivision: it cannot be tied to this
+        parcel or ruled out, so an empty chain here would read as CLEAR;
+      * another deed to or from the owner in the same subdivision that the appraiser does not list
+        for this folio: the owner holds another unit or lot there, whose mortgages would be counted.
+    Returns (models, number of rows placed, refusal reason or '')."""
     fol = norm_folio(folio)
-    if not fol or not deed_bps:
-        return models, 0
-    placed, out = 0, []
-    for r in models or []:
-        if not norm_folio(r.get('foliO_NUMBER', '')) and _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) in deed_bps:
+    if not fol or not deed_bps or not models:
+        return models, 0, ''
+    elsewhere = {_bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) for r in models
+                 if norm_folio(r.get('foliO_NUMBER', '')) and norm_folio(r.get('foliO_NUMBER', '')) != fol}
+    placed, out, subs = 0, [], set()
+    for r in models:
+        k = _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE'))
+        if not norm_folio(r.get('foliO_NUMBER', '')) and k in deed_bps:
+            if k in elsewhere:
+                return models, 0, 'the appraiser deed is also indexed under another folio'
+            subs.add((r.get('subdiV_NAME', '') or '').strip().upper())
             r = dict(r, foliO_NUMBER=fol, _placed_by='appraiser deed book/page')
             placed += 1
         out.append(r)
-    return out, placed
+    if not placed:
+        return models, 0, ''
+    if len(subs) != 1 or '' in subs:
+        return models, 0, ('the appraiser deed carries no subdivision' if subs == {''}
+                           else 'the appraiser deed rows name different subdivisions')
+    sub = next(iter(subs))
+    ow = [w for w in [_owner_words(owner)] if w] or None
+    def _owner_party(r):
+        return ow is None or _maybe_owner(r.get('firsT_PARTY') or '', ow) \
+            or _maybe_owner(r.get('seconD_PARTY') or '', ow) \
+            or _names_owner(r.get('firsT_PARTY'), ow) or _names_owner(r.get('seconD_PARTY'), ow)
+    for r in models:
+        if norm_folio(r.get('foliO_NUMBER', '')):
+            continue
+        doc = (r.get('doC_TYPE', '') or '').upper()
+        sd = (r.get('subdiV_NAME', '') or '').strip().upper()
+        if doc.startswith('MORTGAGE') and not sd and _owner_party(r):
+            return models, 0, 'a mortgage naming the owner carries no folio and no subdivision'
+        if ('DEED' in doc and sd == sub and _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) not in deed_bps
+                and _owner_party(r)):
+            return models, 0, 'the owner has another deed in this subdivision the appraiser does not list here'
+    return out, placed, ''
 
 
 def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=(), deed_bps=None):
@@ -978,9 +1029,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 'ftype': ftype, 'conf': 'none'}
     # deed_bps: book/pages the Property Appraiser lists for this folio's deeds (pa_deed_bookpages).
     # Only asked when no row carries the folio; a row at one of them is the parcel's own deed.
-    placed = 0
+    placed, refused = 0, ''
     if deed_bps and not any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models):
-        models, placed = place_by_deed(models, folio, deed_bps)
+        models, placed, refused = place_by_deed(models, folio, deed_bps, owner=owner)
     # ANCHOR the subject's subdivision from a record that DOES carry the subject folio (usually the deed).
     # folio is blank on most newer mortgages, but subdivision is consistent — so subdivision + owner-name
     # isolates the property, while folio alone would drop the very mortgages we need.
@@ -990,10 +1041,6 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if norm_folio(r.get('foliO_NUMBER', '')) == fol:
             sd = (r.get('subdiV_NAME', '') or '').strip().upper()
             if sd: subj_subdiv = sd; break
-    if placed and not subj_subdiv:
-        # the appraiser's deed was found but the index gives it no subdivision, so nothing else on
-        # the search can be tied to the parcel: an empty chain here would read as CLEAR. Not placed.
-        parcel_found = False
     # a MORTGAGE is satisfied if a SATISFACTION points at its book/page
     satisfied = set()
     for r in models:
@@ -1435,7 +1482,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             'capped': len(models) >= 500, 'parcel_found': parcel_found,
             'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv,
             'placed_by': ('appraiser deed book/page (%d row%s)' % (placed, '' if placed == 1 else 's')
-                          if placed and parcel_found else '')}
+                          if placed and parcel_found else ''),
+            'placement_refused': refused}
 
 
 def main():
@@ -1700,6 +1748,11 @@ def _run(a, ap):
             except Exception:
                 _co = []
             _src = None                                       # which search produced `models`
+            def _deeds_for(_f=folio):
+                # the appraiser's deed book/pages for this folio (free), or None when turned off
+                if os.environ.get('DEALFLOW_PA_DEED_ANCHOR', '1').strip() == '0':
+                    return None
+                return pa_deed_bookpages(_f)
             # a chain an earlier re-read found narrower is searched the widest way there is: the paid
             # surname-only search. The cached token and Camoufox (first AND last name) are what
             # came back narrower, so they are skipped for it.
@@ -1707,7 +1760,7 @@ def _run(a, ap):
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
-                if a.repull and not _parcel_in(models, folio):
+                if a.repull and not _parcel_in(models, folio, _deeds_for(), oc):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
                     # search cannot re-read this parcel, so search afresh (free first) instead of keeping
@@ -1771,7 +1824,7 @@ def _run(a, ap):
             # another empty result, same as now.
             _searched = oc
             _owner_models = _owner_src = None
-            if a.repull and models is not None and not _parcel_in(models, folio):
+            if a.repull and models is not None and not _parcel_in(models, folio, _deeds_for(), oc):
                 # the owner's name does not reach this parcel (a chain first found through a
                 # defendant): try the defendants too, and fall back to this result if they fail
                 _owner_models, models = models, None
@@ -1805,7 +1858,7 @@ def _run(a, ap):
                         models = fetch_via_turnstile(_sp)
                         _src = 'paid'
                         _def_blocked = _def_blocked or models is None
-                    if models is not None and a.repull and not _parcel_in(models, folio):
+                    if models is not None and a.repull and not _parcel_in(models, folio, _deeds_for(), _nm):
                         if _src != 'paid' and _sp[0].upper() not in _paid_sn:
                             _free_miss = True                 # this surname was never asked the paid way
                         models = None                         # not this parcel either; next defendant
@@ -1842,10 +1895,7 @@ def _run(a, ap):
                 pass
             # no row carries the folio: ask the appraiser which book/pages are this parcel's deeds
             # (free, keyless). DEALFLOW_PA_DEED_ANCHOR=0 turns it off.
-            _deeds = None
-            if (os.environ.get('DEALFLOW_PA_DEED_ANCHOR', '1').strip() != '0'
-                    and not _parcel_in(models, folio)):
-                _deeds = pa_deed_bookpages(folio)
+            _deeds = None if _parcel_in(models, folio) else _deeds_for()
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co, deed_bps=_deeds)
             res['searched_as'] = _searched
