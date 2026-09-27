@@ -663,3 +663,12 @@ worker_marks.applied.jsonl
 # _clerkbktest: Broward clerk-docket bankruptcy check on stubbed HTTP. Synthetic docket
 # lines only, no API key, no party names.
 !_clerkbktest.py
+
+# case_verdict's report carries case numbers and judgment amounts. It writes inside
+# paths.DEALFLOW_DIR, which is outside the repo, but a --dossiers run pointed at a folder in
+# here must not be one edit away from committing it.
+case-verdicts.json
+case-verdicts.md
+case-verdicts-report.md
+# _verdicttest: case_verdict.assess on the five pilot cases' states and the conflict/missing edges.
+!_verdicttest.py
