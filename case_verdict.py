@@ -760,16 +760,13 @@ def _sale_text(entry):
 # or an "order on motion", does not say on its face that a judgment was entered, and inferring that
 # would be a classification of ours. The optional motion swallow mirrors classify's own motion prefix
 # list (:141).
-_ORDER_GRANT_HEAD_RE = re.compile(
-    r'(?:amended\s+|agreed\s+|amended\s+agreed\s+)?order\s+(?:granting|awarding)\b'
-    r"(?:\s+(?:the\s+)?(?:plaintiff|defendant|movant)(?:'s|s')?)?"
-    r'(?:\s+(?:(?:amended|emergency|renewed|verified|unopposed)\s+)*motion\s+(?:for|to)'
-    r'\s+(?:enter\s+|entry\s+of\s+)?)?\s*', re.I)
 # The producer's own final_judgment row (:213), read on a string its own check list never reached.
 _FINAL_JUDGMENT_RE = re.compile(r'final judgment', re.I)
-# The producer's own granted/denied vocabulary from motion_disposition_passages (:397), split so a
-# DENIED disposition cannot hold anything.
-_GRANTED_RE = re.compile(r'\b(?:is|hereby|be)\s+granted\b|\bgrants\b', re.I)
+# The producer's own granted/denied vocabulary from motion_disposition_passages (:397), split in two
+# so each half can be read on its own. The producer's own row is
+# r'\bmotion\b' AND r'\b(?:is|hereby|be)\s+(?:granted|denied)\b|\b(?:grants|denies)\b'.
+_GRANTED_RE = re.compile(r'\b(?:is|hereby|be)\s+granted\b|\bgrants\b|\border\s+granting\b', re.I)
+_DENIED_RE = re.compile(r'\b(?:is|hereby|be)\s+denied\b|\bdenies\b|\border\s+denying\b', re.I)
 
 
 def _replacing_words(text):
@@ -803,26 +800,59 @@ def _order_grants_a_replacement(entry):
     Two triggers, both restatements, OR'd. Neither may be the other's precondition: the passage one
     exists only where a page was READ, so requiring it would let the weaker docket read better.
 
-      title  the producer's own granting head stripped off the string the producer took the label
-             from, its own classifier re-run on the rest - the composition `_cover_subject` already
-             makes one check-list row along - and its own `_REPLACES` in that same remainder.
+      title  each of the producer's own strings for this entry, asked whether IT carries the
+             producer's `final judgment` row and a surviving replacing word. The round before
+             demanded an ANCHORED `order (granting|awarding)` head and then `_classify` of the
+             remainder, which is reachable on one of the heads `classify` can emit and not the rest:
+             `order.*motion` at :210 is a SEARCH, so "ORDER ON MOTION FOR ENTRY OF AMENDED FINAL
+             JUDGMENT", "ORDER GRANTING IN PART AND DENYING IN PART MOTION FOR AMENDED FINAL
+             JUDGMENT" (whose remainder classifies as `motion`, not `final_judgment`) and "AMENDED
+             ORDER GRANTING MOTION FOR ENTRY OF FINAL JUDGMENT" (whose head ATE the replacing word
+             the test then looked for) all read `supported`, while the unread twin of each - the
+             same clerk line and no document - was already held. Opening the document made the
+             verdict worse-informed, and `_replaces` on the same entry was True in all three: the
+             precondition was stricter than a test this file trusts elsewhere (thirty-fifth
+             review).
       body   `motion_disposition_passages` (:397), which the producer saves for exactly this kind and
              which nothing here read: a line it recorded as GRANTING, naming a final judgment, with a
              replacing word in it.
     """
-    for text in (str(entry.get('operative_text') or '').strip(), _index_text(entry).strip()):
-        head = _ORDER_GRANT_HEAD_RE.match(text) if text else None
-        if not head:
-            continue
-        rest = text[head.end():]
-        if _classify(rest) == 'final_judgment' and _replacing_words(rest):
+    # Comments included, deliberately. A clerk comment can point at something else on the docket
+    # ("Order Granting Motion for Extension of Time" / "Re: Amended Final Judgment"), so excluding it
+    # was tried - and it is INERT on the unread half, because `operative_text` is `title or index_text`
+    # (:364) and `index_text` is description + comments, so with nothing read the comment is already
+    # inside the string. Excluding it would therefore have made the READ half read better than the
+    # unread one, which is the shape every one of these rounds has been chasing. The hold it produces
+    # is also true on its own terms: that docket line does say an amended final judgment exists which
+    # the reconciliation did not take in, and the sentence says only that which judgment controls is
+    # not settled here.
+    for text in (str(entry.get('operative_text') or '').strip(),
+                 str(entry.get('description') or '').strip(),
+                 str(entry.get('comments') or '').strip()):
+        if text and _says_a_replacing_judgment(text):
             return True
     for line in _rows(entry, 'motion_disposition_passages'):
+        # A saved disposition line is specifically about granting or denying, so this half also asks
+        # the producer's granting vocabulary of it.
         line = str(line or '')
-        if (_GRANTED_RE.search(line) and _FINAL_JUDGMENT_RE.search(line)
-                and _replacing_words(line)):
+        if _GRANTED_RE.search(line) and _says_a_replacing_judgment(line):
             return True
     return False
+
+
+def _says_a_replacing_judgment(text):
+    """True when ONE of the producer's own strings carries its `final judgment` row and a surviving
+    replacing word, and does not read as a pure denial.
+
+    Per STRING and not over the concatenation, so a clerk comment mentioning an amended judgment on an
+    unrelated order does not compose with a `final judgment` elsewhere into a hold.
+    """
+    if not (_FINAL_JUDGMENT_RE.search(text) and _replacing_words(text)):
+        return False
+    # The producer's own two halves, read together: "Order Denying Motion for Corrected Final
+    # Judgment" entered nothing, while "Order Granting in Part and Denying in Part" entered
+    # something, so a denial only excludes when nothing in the same string grants.
+    return not (_DENIED_RE.search(text) and not _GRANTED_RE.search(text))
 
 
 

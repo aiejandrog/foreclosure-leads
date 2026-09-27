@@ -4356,5 +4356,102 @@ class ThirtyFourthReviewTests(unittest.TestCase):
         self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
 
 
+class ThirtyFifthReviewTests(unittest.TestCase):
+    """The round before's own trigger, reachable on one of the heads `classify` can emit and not the
+    rest - so opening the document made the verdict worse-informed.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = ThirtyFourthReviewTests.JUDGED
+    PAGE = ThirtyFourthReviewTests.PAGE
+    case = ThirtyFourthReviewTests.case
+    read = ThirtyFourthReviewTests.read
+
+    MISSED = ('ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT',
+              'ORDER GRANTING IN PART AND DENYING IN PART MOTION FOR AMENDED FINAL JUDGMENT',
+              'AMENDED ORDER GRANTING MOTION FOR ENTRY OF FINAL JUDGMENT')
+
+    def test_the_heads_the_anchored_regex_could_not_reach_now_hold(self):
+        # `order.*motion` at :210 is a SEARCH, so order_on_motion is emitted for far more heads than an
+        # anchored `order (granting|awarding)` covers. The second's remainder classifies as `motion`,
+        # not final_judgment; the third's head ATE the replacing word the test then looked for.
+        for title in self.MISSED:
+            t = self.read(title)
+            entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+            self.assertEqual(entry['kind'], 'order_on_motion', title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if '140' in m], title)
+
+    def test_reading_the_document_never_makes_the_verdict_better(self):
+        # The whole shape, stated directly. Hold the CLERK line at "Notice of Filing Amended Final
+        # Judgment" - which the cover sweep already holds on its own - and vary only whether the
+        # document was opened. Reading it relabelled the entry order_on_motion, which took it out of
+        # the cover sweep and into a trigger that could not reach these heads, so the docket where
+        # MORE was read came out clean.
+        clerk = 'Notice of Filing Amended Final Judgment'
+        unread = CV.assess(self.case([(140, clerk, '', '06/01/2026', '')]))['verdict']
+        self.assertEqual(unread, 'incomplete')
+        for title in self.MISSED:
+            read = CV.assess(self.read(title, clerk=clerk))['verdict']
+            self.assertEqual((title, read), (title, unread))
+
+    def test_the_precondition_is_no_stricter_than_replaces_on_the_same_entry(self):
+        # _replaces was True on all three while the sweep's gate was False: the trigger was stricter
+        # than a test this same file trusts at three other sites.
+        for title in self.MISSED:
+            entry = next(e for e in self.read(title)['entries'] if e['entry_id'] == '140')
+            self.assertTrue(CV._replaces(entry), title)
+            self.assertTrue(CV._order_grants_a_replacement(entry), title)
+
+    def test_the_whole_calibration_set_still_reads_supported(self):
+        # Every one of these is an ordinary Florida foreclosure order. Holding them would hold most
+        # dockets for ever, and nothing a later run reads changes a title.
+        for title in ('ORDER GRANTING AMENDED MOTION',
+                      'ORDER GRANTING MOTION TO AMEND COMPLAINT',
+                      'ORDER GRANTING MOTION TO AMEND THE CASE STYLE',
+                      'ORDER GRANTING MOTION TO SUBSTITUTE PARTY PLAINTIFF',
+                      'ORDER GRANTING MOTION FOR SUMMARY JUDGMENT',
+                      'ORDER GRANTING FINAL JUDGMENT',
+                      'ORDER GRANTING MOTION TO TAX COSTS',
+                      'ORDER GRANTING MOTION FOR EXTENSION OF TIME',
+                      'ORDER GRANTING MOTION TO CANCEL FORECLOSURE SALE'):
+            t = self.read(title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
+
+    def test_a_pure_denial_excludes_and_a_partial_grant_does_not(self):
+        # The producer's two halves read together: an order DENYING a corrected final judgment entered
+        # nothing, while "granting in part and denying in part" entered something. So a denial only
+        # excludes when nothing in the same string grants.
+        for title, verdict in (
+                ('ORDER DENYING MOTION FOR CORRECTED FINAL JUDGMENT', 'supported'),
+                ('ORDER DENYING MOTION TO VACATE AMENDED FINAL JUDGMENT', 'supported'),
+                ('ORDER GRANTING IN PART AND DENYING IN PART MOTION FOR AMENDED FINAL JUDGMENT',
+                 'incomplete')):
+            self.assertEqual(CV.assess(self.read(title))['verdict'], verdict, title)
+
+    def test_the_producers_granted_passage_branch_still_holds_its_own(self):
+        for body, held in (("Plaintiff's Motion for Entry of an Amended Final Judgment is hereby "
+                            'GRANTED.', True),
+                           ('The Motion for Corrected Final Judgment is hereby DENIED.', False),
+                           ('The Motion to Substitute Party Plaintiff is hereby granted.', False)):
+            t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
+                          pages={'140': 'ORDER ON MOTION FOR ENTRY OF JUDGMENT\n' + body})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+            self.assertEqual(CV._order_grants_a_replacement(entry), held, body)
+
+    def test_a_clerk_comment_naming_an_amended_judgment_holds_both_halves_alike(self):
+        # Excluding `comments` from this trigger was tried and reverted: operative_text is
+        # `title or index_text` (:364) and index_text is description + comments, so with nothing read
+        # the comment is already inside the string, and excluding it would have made the READ half read
+        # better than the unread one. The hold is true on its own terms - the line does say an amended
+        # final judgment exists that the reconciliation did not take in.
+        clerk = ('Order Granting Motion for Extension of Time', 'Re: Amended Final Judgment')
+        unread = self.case([(140, clerk[0], clerk[1], '06/01/2026', '')])
+        read = self.case([(140, clerk[0], clerk[1], '06/01/2026', '')],
+                         pages={'140': 'ORDER GRANTING MOTION FOR EXTENSION OF TIME\nGranted.'})
+        self.assertEqual(CV.assess(unread)['verdict'], CV.assess(read)['verdict'])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

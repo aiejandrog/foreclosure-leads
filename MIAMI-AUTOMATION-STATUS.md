@@ -595,6 +595,50 @@ keys on the sale vocabulary, so an OCR-wrapped cancellation whose verb falls on 
 hereby" / "cancelled by agreement...") is saved nowhere and reads `supported`; that one predates these
 rounds and is equally unreachable from here.
 
+**Thirty-fifth review.** One finding, and it was the round before's own trigger reaching one of the
+heads `classify` can emit and not the rest.
+
+`('order_on_motion', r'order.*motion|order (?:granting|denying|awarding)')` at :210 is reached by a
+SEARCH, so the label is emitted for far more heads than an anchored `order (granting|awarding)` covers.
+Three shapes read `supported` with the superseded figure verified to the cent: "ORDER ON MOTION FOR
+ENTRY OF AMENDED FINAL JUDGMENT" (no granting word at all), "ORDER GRANTING IN PART AND DENYING IN
+PART MOTION FOR AMENDED FINAL JUDGMENT" (the head matched, then the remainder classified as `motion`
+rather than `final_judgment`, so the test failed), and "AMENDED ORDER GRANTING MOTION FOR ENTRY OF
+FINAL JUDGMENT" - where the head's own `amended\s+` prefix ATE the replacing word the test then went
+looking for, which is self-inflicted. Hold the clerk line at "Notice of Filing Amended Final Judgment",
+which the cover sweep holds on its own, and vary only whether the document was opened: reading it
+relabelled the entry `order_on_motion`, took it out of the cover sweep, and the docket where MORE was
+read came out clean. `_replaces` on the same entry was True in all three, so the gate was stricter than
+a test this file trusts at three other sites.
+
+The anchored head and the `_classify(rest)` step are gone. `_says_a_replacing_judgment` asks of each of
+the producer's own strings for the entry whether IT carries the producer's `final judgment` row and a
+surviving replacing word, per string rather than over the concatenation, and excludes a pure denial by
+reading the producer's own two halves together: an order DENYING a corrected final judgment entered
+nothing, while "granting in part and denying in part" entered something, so a denial only excludes when
+nothing in the same string grants. Comments are included: excluding them was tried and reverted,
+because `operative_text` is `title or index_text` (:364) and `index_text` is description + comments, so
+with nothing read the comment is already inside the string - excluding it would have made the READ half
+read better than the unread one, which is the shape all of these rounds have been chasing. Nine
+ordinary Florida order titles stay `supported`, and both denial shapes and the partial grant are
+pinned.
+
+The review found nothing else wrong in the diff it was pointed at, with reproductions either way: the
+widened `_PARTY_SUBSTITUTION_RE` can only ever suppress a `substitut*` hit and never one of the other
+five replacing words, so it cannot drop a real replacement (ten real-shaped strings driven); and
+`_closes_a_sale`'s sixty-character window is provably neutral for every guard, since each guard is
+`$`-anchored with a reach of at most 57 characters, so the window cannot clip one the whole prefix
+would have caught.
+
+**Reported, not fixed.** Three `_closes_a_sale` over-fires that predate that helper and come from
+`_CONDITIONAL_RE`'s and the producer's own regex reach rather than from these rounds: a period between
+the marker and the verb blocks the producer's `[^.;]{0,40}$` ("In the event of a bankruptcy filing under
+11 U.S.C. 362, the sale will be cancelled"), and "Plaintiff respectfully moves this Honorable Court for
+an order to cancel the foreclosure sale" and "If the borrower reinstates the loan prior to the sale date
+of 10/28/2026, the sale will be cancelled" both read as the act. All are clause-4 over-fires, none is a
+false `supported`, and the producer flattens and abbreviation-normalises its text before applying the
+guard (:308) where `_sale_text` does not. A round of its own.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
