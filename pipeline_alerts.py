@@ -51,8 +51,8 @@ THRESHOLDS (env overrides; garbage values keep the default):
     CAPTCHA_LOW_USD               1.00  warn below this while one solve still fits
     CAPTCHA_SOLVE_USD             0.003 fail when the balance cannot pay one solve
     PAID_READS_WARN_FRACTION      0.80  warn at/above this share of the monthly cap; fail at 100%
-    BOUNCE_DAY_CEILING            0.05  send_server: more than this of today's first touches
-    BOUNCE_DAY_MIN_SAMPLE         10    send_server: and at least this many were sent
+    BOUNCE_DAY_CEILING            0.05  send_server: more than this of post-cutoff first touches
+    BOUNCE_DAY_MIN_SAMPLE         20    send_server: and at least this many were sent (2 hard bounces in one day of 10 also pauses)
     PIPELINE_ALERT_OPTOUT_HOUR    8     local hour after which a missing 07:15 sync alerts
     PIPELINE_ALERT_SEND_HOUR      9     local hour after which a scheduled zero-send alerts
     READINESS_BATTERY_PCT         50    alert when charge is under this
@@ -257,6 +257,13 @@ def paid_alert(sig, th, at):
     return None
 
 
+def _bounce_rate_over(rate, ceiling):
+    try:
+        return round(float(rate) - float(ceiling), 6) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def bounce_alert(sig, at):
     if not sig or not sig.get('readable', False):
         return None
@@ -264,20 +271,41 @@ def bounce_alert(sig, at):
         return _alert('bounce-rate', 'fail',
                       'Bounce list is unreadable. Every send is refused until the bounce list parses.', at)
     parts = []
-    if sig.get('day_blocked'):
+    rule = str(sig.get('ft_rule') or '')
+    paused = bool(sig.get('day_blocked')) or rule == 'paused'
+    if paused:
         when = str(sig.get('day_date') or '').strip() or 'a recent send day'
-        parts.append('First-touch bounce %.1f%% (%d of %d sent on %s), over the %.0f%% daily ceiling (minimum sample %d).'
-                     % (float(sig.get('day_rate') or 0) * 100,
-                        int(sig.get('day_dead') or 0), int(sig.get('day_sent') or 0), when,
-                        float(sig.get('day_ceiling') or 0) * 100, int(sig.get('day_min') or 0)))
-    if sig.get('trailing_blocked'):
-        parts.append('Trailing %d-day lower bound %.1f%% (raw %.1f%%, %d of %d). Ceiling %.0f%%.'
-                     % (int(sig.get('window') or 7), float(sig.get('lb') or 0) * 100,
-                        float(sig.get('rate') or 0) * 100, int(sig.get('dead') or 0),
-                        int(sig.get('mailed') or 0), float(sig.get('ceiling') or 0) * 100))
+        day_sent = int(sig.get('day_sent') or 0)
+        day_dead = int(sig.get('day_dead') or 0)
+        day_min = int(sig.get('day_min') or 0)
+        ceiling = float(sig.get('day_ceiling') or 0)
+        day_over = _bounce_rate_over(sig.get('day_rate') or 0, ceiling)
+        # The per-day sentence only when THAT day is over the ceiling. An aggregate pause can
+        # leave day_* on a day that is itself under it; the post-cutoff totals below are the verdict.
+        if day_over and day_sent >= day_min:
+            parts.append('First-touch bounce %.1f%% (%d of %d sent on %s), over the %.0f%% daily ceiling (minimum sample %d).'
+                         % (float(sig.get('day_rate') or 0) * 100, day_dead, day_sent, when,
+                            ceiling * 100, day_min))
+        elif day_over and day_dead >= int(sig.get('ft_hard_bounces') or 2):
+            parts.append('First-touch bounce %.1f%% (%d of %d sent on %s): %d hard bounces in that day, over the %.0f%% ceiling.'
+                         % (float(sig.get('day_rate') or 0) * 100, day_dead, day_sent, when,
+                            day_dead, ceiling * 100))
+        why = str(sig.get('ft_why') or 'paused')
+        parts.append('Post-cutoff first touches: %.1f%% (%d of %d bounced). Rule: paused (%s).'
+                     % (float(sig.get('ft_rate') or 0) * 100, int(sig.get('ft_dead') or 0),
+                        int(sig.get('ft_sent') or 0), why))
+        parts.append('First-touch sends are paused.')
+    elif sig.get('post_trailing_blocked'):
+        # A bad week that started after the verified-send gate. The pre-cutoff 09-19 batch is
+        # not this: it stays in the trailing fields and does not open the issue by itself.
+        parts.append('Trailing %d-day lower bound %.1f%% (raw %.1f%%, %d of %d) on mail sent after the verified-send cutoff. Ceiling %.0f%%.'
+                     % (int(sig.get('window') or 7), float(sig.get('post_lb') or 0) * 100,
+                        float(sig.get('post_rate') or 0) * 100, int(sig.get('post_dead') or 0),
+                        int(sig.get('post_mailed') or 0), float(sig.get('ceiling') or 0) * 100))
+        parts.append('Post-cutoff first touches: %d sent, %d bounced. Rule: %s.'
+                     % (int(sig.get('ft_sent') or 0), int(sig.get('ft_dead') or 0), rule or 'clear'))
     if not parts:
         return None
-    parts.append('First-touch sends are paused.')
     return _alert('bounce-rate', 'fail', ' '.join(parts), at)
 
 
@@ -551,22 +579,55 @@ def bounce_signal(health):
         ceiling = float(health.get('ceiling') if health.get('ceiling') is not None else 0.10)
     except (TypeError, ValueError):
         return {'readable': False}
+    def _f(key):
+        try:
+            return float(health.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _i(key):
+        try:
+            return int(health.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    rule = str(health.get('ft_rule') or '')
     return {
         'readable': True,
         'day_date': str(health.get('day_date') or ''),
-        'day_sent': int(health.get('day_sent') or 0),
-        'day_dead': int(health.get('day_dead') or 0),
-        'day_rate': float(health.get('day_rate') or 0),
+        'day_sent': _i('day_sent'),
+        'day_dead': _i('day_dead'),
+        'day_rate': _f('day_rate'),
         'day_ceiling': float(health.get('day_ceiling') if health.get('day_ceiling') is not None else 0.05),
-        'day_min': int(health.get('day_min') or 0),
+        'day_min': _i('day_min'),
         'day_blocked': bool(health.get('day_blocked')),
         'trailing_blocked': lb > ceiling,
         'lb': lb,
-        'rate': float(health.get('rate') or 0),
-        'dead': int(health.get('dead') or 0),
-        'mailed': int(health.get('mailed') or 0),
+        'rate': _f('rate'),
+        'dead': _i('dead'),
+        'mailed': _i('mailed'),
         'window': int(health.get('window') or 7),
         'ceiling': ceiling,
+        # Post-cutoff first-touch rule and counts. Pre-cutoff recipients stay on pre_*;
+        # they do not set ft_rule. No addresses.
+        'ft_cutoff': str(health.get('ft_cutoff') or ''),
+        'ft_rule': rule,
+        'ft_why': str(health.get('ft_why') or ''),
+        'ft_sent': _i('ft_sent'),
+        'ft_dead': _i('ft_dead'),
+        'ft_rate': _f('ft_rate'),
+        'ft_restart_cap': _i('ft_restart_cap'),
+        'ft_hard_bounces': _i('ft_hard_bounces') or 2,
+        'ft_hard_min': _i('ft_hard_min') or 10,
+        'hist_sent': _i('hist_sent'),
+        'hist_dead': _i('hist_dead'),
+        'pre_mailed': _i('pre_mailed'),
+        'pre_dead': _i('pre_dead'),
+        'post_mailed': _i('post_mailed'),
+        'post_dead': _i('post_dead'),
+        'post_rate': _f('post_rate'),
+        'post_lb': _f('post_lb'),
+        'post_trailing_blocked': bool(health.get('post_trailing_blocked')),
     }
 
 

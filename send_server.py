@@ -202,7 +202,12 @@ def _lane_from(cfg, lane, today=None):
 # LOWER of that and the alias's own ramp cap, and every send from the alias (first touch or not) still
 # counts against the alias ramp cap and the global caps, exactly as before. Absent first_touch block =
 # the old lane mapping, unchanged.
+#
+# SLOW RESTART (see _bounce_health): while the post-#83 first-touch sample is still small, that
+# effective cap is also held to FIRST_TOUCH_RESTART_CAP per sending domain. A ramp already under
+# that number is not raised. A healthy sample lifts the extra ceiling and the ramp stands on its own.
 FIRST_TOUCH_DEFAULT_PER_DAY = 10
+FIRST_TOUCH_RESTART_CAP = FIRST_TOUCH_DEFAULT_PER_DAY
 
 
 def _first_touch_cfg(cfg):
@@ -238,33 +243,93 @@ def _first_touch_cap(cfg, addr, today=None):
 def _first_touch_sent_today(from_addr):
     """First-touch sends that left FROM this address today (ledger rows marked touch='first')."""
     today = dt.date.today().isoformat()
+    return sum(1 for e in _load_ledger() if _first_touch_row_today(e, today)
+               and str(e.get('from') or '').lower() == from_addr)
+
+
+def _email_domain(addr):
+    a = str(addr or '').strip().lower()
+    if '@' not in a:
+        return ''
+    return a.rsplit('@', 1)[-1]
+
+
+def _first_touch_row_today(e, today):
+    return (e.get('d') == today and e.get('message_id') and not e.get('test_mode')
+            and not e.get('error') and e.get('touch') == 'first')
+
+
+def _first_touch_domain_sent_today(domain):
+    """First-touch sends today from any address on this sending domain."""
+    today = dt.date.today().isoformat()
+    domain = str(domain or '').lower()
+    if not domain:
+        return 0
     return sum(1 for e in _load_ledger()
-               if e.get('d') == today and str(e.get('from') or '').lower() == from_addr
-               and e.get('message_id') and not e.get('test_mode') and not e.get('error')
-               and e.get('touch') == 'first')
+               if _first_touch_row_today(e, today) and _email_domain(e.get('from')) == domain)
 
 
-def _first_touch_status(cfg, today=None):
-    """[{addr, first_touch_today, first_touch_cap, sent_today, alias_cap}] per warm-up sender."""
-    return [{'addr': a, 'first_touch_today': _first_touch_sent_today(a),
-             'first_touch_cap': _first_touch_cap(cfg, a, today),
-             'sent_today': _alias_sent_today(a), 'alias_cap': _ramp_cap(cfg, a, today)}
-            for a in _first_touch_senders(cfg)]
+# Passed when the caller already computed the restart ceiling. None means "no extra ceiling"
+# (healthy sample, or no bounce list). 0 means first touches are paused.
+_FT_CEILING_UNSET = object()
 
 
-def _pick_first_touch_from(cfg, today=None):
+def _first_touch_status(cfg, today=None, ceiling=_FT_CEILING_UNSET):
+    """[{addr, first_touch_today, first_touch_cap, sent_today, alias_cap}] per warm-up sender.
+
+    `ceiling` is the slow-restart per-domain cap (or 0 when first touches are paused). It never
+    raises the ramp: the number published here is the lower of the two."""
+    if ceiling is _FT_CEILING_UNSET:
+        ceiling = _ft_restart_ceiling()
+    dom_counts = {}
+    out = []
+    for a in _first_touch_senders(cfg):
+        cap = _first_touch_cap(cfg, a, today)
+        extra = {}
+        if ceiling is not None:
+            cap = min(cap, max(0, int(ceiling)))
+            dom = _email_domain(a)
+            if dom not in dom_counts:
+                dom_counts[dom] = _first_touch_domain_sent_today(dom)
+            extra = {'domain_today': dom_counts[dom], 'domain_cap': int(ceiling)}
+        out.append({'addr': a, 'first_touch_today': _first_touch_sent_today(a),
+                    'first_touch_cap': cap,
+                    'sent_today': _alias_sent_today(a), 'alias_cap': _ramp_cap(cfg, a, today),
+                    **extra})
+    return out
+
+
+def _pick_first_touch_from(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     """Rotate: the sender with room under BOTH caps and the fewest first touches today (then fewest
     sends, then list order). ('' , status) when every sender is at a cap. Slots RESERVED by sends
-    still in flight count as used (see _reserve_first_touch_from)."""
-    st = _first_touch_status(cfg, today)
+    still in flight count as used (see _reserve_first_touch_from).
+
+    During the slow restart, `ceiling` is also a per-domain cap: two addresses on one domain share
+    it. A paused rule passes 0, and nothing is picked."""
+    if ceiling is _FT_CEILING_UNSET:
+        ceiling = _ft_restart_ceiling()
+    st = _first_touch_status(cfg, today, ceiling=ceiling)
     day = dt.date.today().isoformat()
     with _FT_SLOT_LOCK:
         held = {a: n for (d, a), n in _FT_SLOTS.items() if d == day}
+        dom_held = {}
+        for (d, a), n in _FT_SLOTS.items():
+            if d != day:
+                continue
+            dom = _email_domain(a)
+            dom_held[dom] = dom_held.get(dom, 0) + n
     for x in st:
         x['first_touch_today'] += held.get(x['addr'], 0)
         x['sent_today'] += held.get(x['addr'], 0)
-    room = [(x['first_touch_today'], x['sent_today'], i, x['addr']) for i, x in enumerate(st)
-            if x['first_touch_today'] < x['first_touch_cap'] and x['sent_today'] < x['alias_cap']]
+        if ceiling is not None and 'domain_today' in x:
+            x['domain_today'] += dom_held.get(_email_domain(x['addr']), 0)
+    room = []
+    for i, x in enumerate(st):
+        if x['first_touch_today'] >= x['first_touch_cap'] or x['sent_today'] >= x['alias_cap']:
+            continue
+        if ceiling is not None and x.get('domain_today', 0) >= int(ceiling):
+            continue
+        room.append((x['first_touch_today'], x['sent_today'], i, x['addr']))
     return (min(room)[3] if room else ''), st
 
 
@@ -280,10 +345,10 @@ _FT_SLOTS = {}
 _FT_SLOT_LOCK = threading.Lock()
 
 
-def _reserve_first_touch_from(cfg, today=None):
+def _reserve_first_touch_from(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     """Atomically pick a first-touch sender and reserve one slot on it. ('' , status) when full."""
     with _FT_RESERVE_LOCK:
-        addr, st = _pick_first_touch_from(cfg, today)
+        addr, st = _pick_first_touch_from(cfg, today, ceiling=ceiling)
         if addr:
             key = (dt.date.today().isoformat(), addr)
             with _FT_SLOT_LOCK:
@@ -744,16 +809,41 @@ def _sent_today_count():
 BOUNCE_WINDOW_DAYS = 7
 BOUNCE_CEILING = 0.10     # refuse bulk outreach above this trailing hard-bounce rate
 BOUNCE_Z = 1.96           # 95% one-sided-ish confidence for the lower bound below
-# DAILY FIRST-TOUCH PAUSE (2026-09-26). The trailing Wilson bound notices a bad week after it
-# has already gone out. A single day's first touches are paused when MORE THAN this fraction
-# bounce, once at least BOUNCE_DAY_MIN_SAMPLE of them have been sent. bounced_emails.json is
-# harvested before the Morning Worker, so a day's bounces are not on the list until the next
-# morning — each send-day inside BOUNCE_WINDOW_DAYS is its own cohort, and any one of them
-# can pause. This only ADDS a reason for `blocked` to be true. It never clears the trailing
-# verdict, and it does not add a second gate: /send still reads `blocked` and still allows
-# the proven-deliverable lane.
+# DAILY FIRST-TOUCH PAUSE (2026-09-26), narrowed 2026-09-27.
+# The trailing Wilson bound notices a bad week after it has already gone out. It still governs
+# FOLLOW-UPS (verified-only while `blocked` is set). It does not, by itself, keep first touches
+# off: the 2026-09-19 batch (31 of 85, Wilson lower bound ~27% vs this 10% ceiling) was mailed
+# before the #83 verified-send gate existed, the pause stopped new first touches, and the rate
+# could not fall.
+#
+# THE COHORT THAT PAUSES FIRST TOUCHES is post-cutoff first-touch rows only. Pre-cutoff sends
+# stay in the trailing fields (`rate`, `lb`, `mailed`, `dead`, `pre_mailed`, `pre_dead`) and do
+# not feed `ft_rule`. Why a cutoff instant and not a ledger marker: #83 puts `gate` on the /send
+# RESPONSE only. The ledger never stored the verdict. `touch='first'` starts with that same
+# release, but the stuck reading is the Wilson bound, which counts every recipient and never
+# reads `touch` — the 09-19 rows are in `mailed`/`dead` with `day_sent` 0. A timestamp is the
+# comparison those rows can fail. FIRST_TOUCH_GATE_CUTOFF is the #83 merge, 2026-09-26
+# 14:21:42 -0400. A row with `ts_utc` is compared to that instant. A row with only a calendar
+# date counts when that date is on or after FIRST_TOUCH_GATE_CUTOFF_DATE.
+#
+# While the post-cutoff sample is under BOUNCE_DAY_MIN_SAMPLE, `ft_rule` is `slow_restart`:
+# first touches are allowed, capped at FIRST_TOUCH_RESTART_CAP per sending domain and never
+# above a lower warm-up ramp. The backstop sets `ft_rule` to `paused` when EITHER
+#   - the post-cutoff total (or any one day) is over BOUNCE_DAY_CEILING once at least
+#     BOUNCE_DAY_MIN_SAMPLE have been sent, or
+#   - one day has FIRST_TOUCH_HARD_BOUNCES or more hard bounces, over the same ceiling, once
+#     that day has sent FIRST_TOUCH_HARD_MIN (one restart day). 2 of 9 stays under that, which
+#     is the thin sample the Wilson bound also refuses to convict.
+# Exactly the ceiling does not trip. bounced_emails.json is harvested before the Morning Worker,
+# so a day's bounces are not on the list until the next morning. This only ADDS a reason for
+# `blocked` to be true. It never clears the trailing verdict.
 BOUNCE_DAY_CEILING = 0.05
-BOUNCE_DAY_MIN_SAMPLE = 10
+BOUNCE_DAY_MIN_SAMPLE = 20
+FIRST_TOUCH_HARD_BOUNCES = 2
+FIRST_TOUCH_HARD_MIN = 10
+# PR #83 merged 2026-09-26 14:21:42 -0400. See the comment above for why this is a timestamp.
+FIRST_TOUCH_GATE_CUTOFF = '2026-09-26T18:21:42+00:00'
+FIRST_TOUCH_GATE_CUTOFF_DATE = '2026-09-26'
 
 
 def _env_unit_float(name, default):
@@ -782,6 +872,30 @@ def _env_pos_int(name, default):
     if v < 1:
         return default
     return v
+
+
+def _gate_cutoff_dt():
+    return dt.datetime.fromisoformat(FIRST_TOUCH_GATE_CUTOFF)
+
+
+def _post_gate_send(e):
+    """True when this ledger row was sent at or after the #83 verified-send gate.
+
+    `ts_utc` wins when it parses: a send on the gate day but before the merge is still the old
+    batch. A row with only `d` counts for the whole calendar day on or after the gate date, so a
+    dateless cohort from that morning is not silently dropped and a 2026-09-19 row is."""
+    ts = str((e or {}).get('ts_utc') or '').strip()
+    if ts:
+        try:
+            parsed = dt.datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=dt.timezone.utc)
+            return parsed.astimezone(dt.timezone.utc) >= _gate_cutoff_dt()
+    d = str((e or {}).get('d') or '')
+    return len(d) >= 10 and d[:10] >= FIRST_TOUCH_GATE_CUTOFF_DATE
 
 
 def _wilson_lower(dead, mailed, z=BOUNCE_Z):
@@ -831,14 +945,23 @@ def _bounce_health():
     """
     day_ceiling = _env_unit_float('BOUNCE_DAY_CEILING', BOUNCE_DAY_CEILING)
     day_min = _env_pos_int('BOUNCE_DAY_MIN_SAMPLE', BOUNCE_DAY_MIN_SAMPLE)
-    thin = {'rate': 0.0, 'lb': 0.0, 'mailed': 0, 'dead': 0, 'known': 0,
+    base = {'rate': 0.0, 'lb': 0.0, 'mailed': 0, 'dead': 0, 'known': 0,
             'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING, 'blocked': False,
             'day_date': '', 'day_sent': 0, 'day_dead': 0, 'day_rate': 0.0,
             'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': False,
-            'list_unreadable': False}
+            'list_unreadable': False,
+            'ft_cutoff': FIRST_TOUCH_GATE_CUTOFF, 'ft_measured': False,
+            'ft_rule': 'unmeasured', 'ft_why': '',
+            'ft_sent': 0, 'ft_dead': 0, 'ft_rate': 0.0,
+            'ft_restart_cap': FIRST_TOUCH_RESTART_CAP,
+            'ft_hard_bounces': FIRST_TOUCH_HARD_BOUNCES, 'ft_hard_min': FIRST_TOUCH_HARD_MIN,
+            'hist_sent': 0, 'hist_dead': 0,
+            'pre_mailed': 0, 'pre_dead': 0,
+            'post_mailed': 0, 'post_dead': 0, 'post_rate': 0.0, 'post_lb': 0.0,
+            'post_trailing_blocked': False}
     path = os.path.join(HERE, 'bounced_emails.json')
     if not os.path.exists(path):
-        return dict(thin)
+        return dict(base)
     try:
         raw = json.load(open(path, encoding='utf-8'))
     except Exception:
@@ -851,50 +974,82 @@ def _bounce_health():
     elif isinstance(raw, list):
         bounced = {str(k).strip().lower() for k in raw if k}
     else:
-        bad = dict(thin)
+        bad = dict(base)
         bad['blocked'] = True
         bad['list_unreadable'] = True
+        bad['ft_measured'] = True
+        bad['ft_rule'] = 'paused'
+        bad['ft_why'] = 'list_unreadable'
         return bad
     cutoff = (dt.date.today() - dt.timedelta(days=BOUNCE_WINDOW_DAYS)).isoformat()
     today = dt.date.today().isoformat()
     mailed = dead = 0
+    pre_mailed = pre_dead = 0
+    post_mailed = post_dead = 0
     cohorts = {}
+    pre_first = {}
     for e in _load_ledger():
         if e.get('ch') != 'email' or not e.get('message_id'):
             continue
         d = str(e.get('d') or '')
+        gated = _post_gate_send(e)
         if d >= cutoff:
             for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
                 a = a.strip().lower()
                 if not a:
                     continue
                 mailed += 1
-                if a in bounced:
+                hit_addr = a in bounced
+                if hit_addr:
                     dead += 1
+                if gated:
+                    post_mailed += 1
+                    if hit_addr:
+                        post_dead += 1
+                else:
+                    pre_mailed += 1
+                    if hit_addr:
+                        pre_dead += 1
         # One cohort per send-day inside the same window the Wilson bound uses. A row is one
         # first-touch email, dead if any recipient is on the bounce list. Today's harvest has
         # not happened yet, so yesterday has to be able to pause on its own. Test sends, error
-        # rows, and rows that never got a message id are not a sample.
+        # rows, and rows that never got a message id are not a sample. Pre-cutoff first touches
+        # are counted in pre_first for the history fields and do not enter the cohort that pauses.
         if (e.get('touch') == 'first' and cutoff <= d <= today
                 and len(d) == 10 and d[4] == '-' and d[7] == '-'
                 and not e.get('test_mode') and not e.get('error')):
-            sent_n, dead_n = cohorts.get(d, (0, 0))
+            bucket = cohorts if gated else pre_first
+            sent_n, dead_n = bucket.get(d, (0, 0))
             recips = [str(e.get('to') or '')] + str(e.get('bcc') or '').split(',')
             hit = any(a.strip().lower() in bounced for a in recips if a.strip())
-            cohorts[d] = (sent_n + 1, dead_n + (1 if hit else 0))
+            bucket[d] = (sent_n + 1, dead_n + (1 if hit else 0))
     lb = _wilson_lower(dead, mailed)
+    post_lb = _wilson_lower(post_dead, post_mailed)
 
     def _cohort_rate(sent_n, dead_n):
         return (dead_n / sent_n) if sent_n else 0.0
 
-    def _cohort_over(sent_n, dead_n):
-        # More than the ceiling, and only once the sample is large enough to mean it. Exactly
-        # 5% does not trip (rounded so 1/20 is not "more than" 0.05 by a float hair).
-        return sent_n >= day_min and round(_cohort_rate(sent_n, dead_n) - day_ceiling, 6) > 0
+    def _over_ceiling(sent_n, dead_n):
+        # Exactly the ceiling does not trip (rounded so 1/20 is not "more than" 0.05 by a float hair).
+        return round(_cohort_rate(sent_n, dead_n) - day_ceiling, 6) > 0
 
-    tripping = [d for d, pair in cohorts.items() if _cohort_over(*pair)]
-    # The pause reports the worst cohort that actually tripped. When none did, the same fields
-    # still describe the worst day in the window, so a 1-of-20 yesterday is visible and clear.
+    def _day_why(sent_n, dead_n):
+        if not _over_ceiling(sent_n, dead_n):
+            return ''
+        if sent_n >= day_min:
+            return 'day_rate'
+        if dead_n >= FIRST_TOUCH_HARD_BOUNCES and sent_n >= FIRST_TOUCH_HARD_MIN:
+            return 'hard_bounces'
+        return ''
+
+    day_why = {d: _day_why(*pair) for d, pair in cohorts.items()}
+    tripping = [d for d, why in day_why.items() if why]
+    ft_sent = sum(p[0] for p in cohorts.values())
+    ft_dead = sum(p[1] for p in cohorts.values())
+    ft_rate = _cohort_rate(ft_sent, ft_dead)
+    agg_over = ft_sent >= day_min and _over_ceiling(ft_sent, ft_dead)
+    # The pause reports the worst post-cutoff cohort that actually tripped. When none did, the
+    # same fields still describe the worst post-cutoff day, so a 1-of-20 yesterday is visible.
     pool = tripping or [d for d, pair in cohorts.items() if pair[0] > 0]
     if pool:
         day_date = max(pool, key=lambda d: (_cohort_rate(*cohorts[d]), d))
@@ -902,15 +1057,68 @@ def _bounce_health():
         day_rate = _cohort_rate(day_sent, day_dead)
     else:
         day_date, day_sent, day_dead, day_rate = '', 0, 0, 0.0
-    day_blocked = bool(tripping)
+    if tripping:
+        ft_why = day_why.get(day_date) or 'day_rate'
+    elif agg_over:
+        ft_why = 'aggregate'
+    else:
+        ft_why = ''
+    day_blocked = bool(tripping) or agg_over
+    if day_blocked:
+        ft_rule = 'paused'
+    elif ft_sent < day_min:
+        ft_rule = 'slow_restart'
+        ft_why = 'slow_restart'
+    else:
+        ft_rule = 'clear'
+        ft_why = 'clear'
     trailing_blocked = lb > BOUNCE_CEILING
+    post_trailing = post_lb > BOUNCE_CEILING
     return {'rate': (dead / mailed) if mailed else 0.0, 'lb': lb,
             'mailed': mailed, 'dead': dead, 'known': len(bounced),
             'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING,
             'blocked': trailing_blocked or day_blocked,
             'day_date': day_date, 'day_sent': day_sent, 'day_dead': day_dead, 'day_rate': day_rate,
             'day_ceiling': day_ceiling, 'day_min': day_min, 'day_blocked': day_blocked,
-            'list_unreadable': False}
+            'list_unreadable': False,
+            'ft_cutoff': FIRST_TOUCH_GATE_CUTOFF, 'ft_measured': True,
+            'ft_rule': ft_rule, 'ft_why': ft_why,
+            'ft_sent': ft_sent, 'ft_dead': ft_dead, 'ft_rate': ft_rate,
+            'ft_restart_cap': FIRST_TOUCH_RESTART_CAP,
+            'ft_hard_bounces': FIRST_TOUCH_HARD_BOUNCES, 'ft_hard_min': FIRST_TOUCH_HARD_MIN,
+            'hist_sent': sum(p[0] for p in pre_first.values()),
+            'hist_dead': sum(p[1] for p in pre_first.values()),
+            'pre_mailed': pre_mailed, 'pre_dead': pre_dead,
+            'post_mailed': post_mailed, 'post_dead': post_dead,
+            'post_rate': (post_dead / post_mailed) if post_mailed else 0.0,
+            'post_lb': post_lb, 'post_trailing_blocked': post_trailing}
+
+
+def _ft_restart_ceiling(health=None):
+    """Per-domain first-touch ceiling for this bounce reading.
+
+    None — no extra ceiling (no list to measure, or the post-cutoff sample is healthy and the
+    warm-up ramp stands). 0 — first touches are paused. FIRST_TOUCH_RESTART_CAP while the
+    measured sample is still small. Callers min this with the ramp, so a lower cap is not raised.
+    """
+    h = health if health is not None else _bounce_health()
+    if not h.get('ft_measured'):
+        return None
+    if h.get('list_unreadable') or h.get('ft_rule') == 'paused':
+        return 0
+    if h.get('ft_rule') == 'slow_restart':
+        return FIRST_TOUCH_RESTART_CAP
+    return None
+
+
+def _first_touch_bounce_paused(health):
+    """True when a first touch must not go out. The trailing Wilson reading is not this.
+
+    Follow-ups still see `blocked`. A first touch is paused only by the post-cutoff rule
+    (or an unreadable bounce list, which refuses every send before this is consulted)."""
+    if not health or not health.get('ft_measured'):
+        return False
+    return bool(health.get('list_unreadable') or health.get('ft_rule') == 'paused')
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
@@ -1479,6 +1687,9 @@ class Handler(BaseHTTPRequestHandler):
                 'text_hold_why': _tw if _th else '',
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
                 'bounce_blocked': _bh['blocked'],
+                # Post-cutoff first-touch rule: slow_restart, paused, clear, or unmeasured.
+                # Counts live on bounce (ft_sent, ft_dead, pre_mailed, pre_dead). No addresses.
+                'bounce_rule': _bh.get('ft_rule') or '',
                 # §362 stay source the /send gate reads. stay_data.ok false = every owner send is
                 # being refused (fail closed) until sale_history_cache.json is readable again.
                 'stay_data': _stay_health(),
@@ -1497,7 +1708,9 @@ class Handler(BaseHTTPRequestHandler):
                 'first_touch_from': {'active': bool(_first_touch_senders(_load_senders()))
                                                and _senders_active(user, _load_senders()),
                                      'rests': str(_load_senders().get('main_domain') or 'bsgflorida.com'),
-                                     'senders': _first_touch_status(_load_senders())},
+                                     'rule': _bh.get('ft_rule') or '',
+                                     'senders': _first_touch_status(
+                                         _load_senders(), ceiling=_ft_restart_ceiling(_bh))},
                 # Lane -> From map and today's per-alias warm-up use (senders.json). senders_active
                 # false = the login cannot send as the aliases (old personal gmail.key), so every
                 # send still leaves as `user`. The board shows this next to the cap.
@@ -1949,7 +2162,23 @@ class Handler(BaseHTTPRequestHandler):
                 'err': 'bounce list is UNREADABLE — refusing every send until '
                        'bounced_emails.json parses'})
         if not meta.get('test'):
-            if _hb['blocked']:
+            # First touches follow the post-cutoff rule, not the pre-#83 Wilson reading.
+            # Follow-ups stay on `blocked` below (proven lane / probe trickle), unchanged.
+            if _first_touch and _first_touch_bounce_paused(_hb):
+                return self._json(403, {
+                    'ok': False, 'blocked': 'bounce_rate', 'skip': True,
+                    'err': (
+                        'BLOCKED: post-cutoff first touches, %d of %d bounced (%.0f%%). '
+                        'Rule: paused (%s). The ceiling is %.0f%% once %d have been sent, '
+                        'or %d hard bounces in one day of at least %d. First touches are '
+                        'paused; follow-ups are unchanged.'
+                        % (_hb.get('ft_dead') or 0, _hb.get('ft_sent') or 0,
+                           (_hb.get('ft_rate') or 0) * 100, _hb.get('ft_why') or 'paused',
+                           (_hb.get('day_ceiling') or 0) * 100, _hb.get('day_min') or 0,
+                           _hb.get('ft_hard_bounces') or 0, _hb.get('ft_hard_min') or 0)),
+                    'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
+            _ft_exempt = _first_touch and _hb.get('ft_rule') in ('slow_restart', 'clear')
+            if _hb['blocked'] and not _ft_exempt:
                 # PROVEN-DELIVERABLE LANE: while the trailing rate is over the ceiling, a send
                 # may still go out if EVERY recipient has direct acceptance evidence (see
                 # _proven_deliverable). One unproven recipient blocks the whole send — bcc
@@ -2065,7 +2294,7 @@ class Handler(BaseHTTPRequestHandler):
                     'err': ('first touch HELD — the login %s cannot send as the warm-up domains '
                             '(%s), and first touches no longer leave from the main domain'
                             % (user, ', '.join(_ft_senders)))})
-            _ftp, _ftst = _reserve_first_touch_from(_cfg)
+            _ftp, _ftst = _reserve_first_touch_from(_cfg, ceiling=_ft_restart_ceiling(_hb))
             if not _ftp:
                 _release_recipients(_claimed)
                 return self._json(409, {

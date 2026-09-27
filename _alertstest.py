@@ -125,6 +125,32 @@ rec("yesterday's 2 of 20 is the cohort the alert names",
 rec("yesterday's 1 of 20 does not alert",
     ycold['day_blocked'] is False and ycold['day_date'] == yday
     and one({'bounce': ycold}, 'bounce-rate') is None)
+rec('the pause names the post-cutoff rule',
+    hot['ft_rule'] == 'paused' and 'Rule: paused' in one({'bounce': hot}, 'bounce-rate')['text']
+    and 'Post-cutoff' in one({'bounce': hot}, 'bounce-rate')['text']
+    and PA.public_ok({'bounce': hot}))
+
+# The 2026-09-19 batch, inside a wide window so the test is not waiting on the 7-day roll-off.
+# It is the Wilson reading (31 of 85) and it must not open the first-touch alert.
+_old_rows = []
+_old_bad = []
+for _i in range(85):
+    _addr = 'old%d@example.com' % _i
+    _old_rows.append({'ch': 'email', 'message_id': '<%d>' % _i, 'd': '2026-09-19',
+                      'ts_utc': '2026-09-19T16:04:00+00:00', 'to': _addr})
+    if _i < 31:
+        _old_bad.append(_addr)
+_saved_window = S.BOUNCE_WINDOW_DAYS
+S.BOUNCE_WINDOW_DAYS = 400
+try:
+    old = PA.bounce_signal(health_rows(_old_rows, set(_old_bad)))
+finally:
+    S.BOUNCE_WINDOW_DAYS = _saved_window
+rec('the pre-cutoff batch is reported and does not alert',
+    old.get('trailing_blocked') is True and (old.get('pre_dead'), old.get('pre_mailed')) == (31, 85)
+    and old.get('ft_sent') == 0 and old.get('ft_rule') == 'slow_restart'
+    and one({'bounce': old}, 'bounce-rate') is None
+    and PA.public_ok({'bounce': old}) and 'example.com' not in json.dumps(old), old)
 
 print('-- opt-out sync --')
 ran = {'readable': True, 'date': '2026-09-27', 'state': 'finished', 'run_ok': True, 'past_cutoff': True}
