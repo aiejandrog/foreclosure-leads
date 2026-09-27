@@ -5045,5 +5045,100 @@ class FortiethReviewTests(unittest.TestCase):
         r = CV.assess(read)
         self.assertNotIn('2026-12-28, 2026-12-28', ' '.join(r['missing'] + r['notes']))
 
+class FortyFirstReviewTests(unittest.TestCase):
+    """The round before's resale rescue, asked of the read body and over a concatenation."""
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = ThirtyFourthReviewTests.PAGE
+    SOLD = ThirtyNinthReviewTests.SOLD
+    after_sale = ThirtyNinthReviewTests.after_sale
+
+    # ---- the word rule belongs on the producer's titles, like its sibling ----------------------
+
+    RECITALS = (
+        ('Certificate of Disbursements',
+         'CERTIFICATE OF DISBURSEMENTS' + chr(10)
+         + 'Disbursement of the proceeds of the foreclosure sale held on July 20, 2026, which was '
+         'continued from June 15, 2026.'),
+        ('Notice of Surplus Funds',
+         'NOTICE OF SURPLUS FUNDS' + chr(10)
+         + 'Surplus remains from the foreclosure sale, originally set for June 15, 2026 and '
+         'continued to July 20, 2026.'),
+        ('Statement of Amounts Due at Sale',
+         'STATEMENT OF AMOUNTS DUE AT SALE' + chr(10)
+         + 'In the event the sale is cancelled or continued, these amounts must be recomputed.'),
+    )
+
+    def test_a_read_body_reciting_the_sales_history_is_not_a_resale(self):
+        # `_sale_text` carries sale_passages, which is every line of every READ page (:398), so a
+        # post-certificate filing whose body merely recites that the sale was continued was held as a
+        # possible resale the moment its document was opened - for ever, with nothing a later run reads
+        # able to clear it. The round before's own calibration list pinned only the UNREAD twins. The
+        # head rule in the same expression was already restricted to the producer's title strings for
+        # exactly this reason; the word rule was not.
+        for clerk, body in self.RECITALS:
+            for label, page in (('unread', None), ('read', body)):
+                r = CV.assess(self.after_sale(clerk, body=page))
+                self.assertEqual(r['verdict'], 'supported', (clerk, label, r['missing']))
+
+    def test_the_conditional_line_the_thirty_third_review_fixed_is_not_re_broken(self):
+        # "In the event the sale is cancelled or continued, these amounts must be recomputed" is the
+        # exact line _closes_a_sale was taught not to read as the act. This filter does not apply that
+        # guard (it is the hold side, deliberately ungated), so keeping the word rule off the body is
+        # what keeps the line from coming back through another door.
+        clerk, body = self.RECITALS[2]
+        self.assertEqual(CV.assess(self.after_sale(clerk, body=body))['verdict'], 'supported')
+
+    def test_a_resale_word_on_the_producers_own_line_still_holds(self):
+        for clerk in ('Notice of Continued Foreclosure Sale',
+                      'Notice of Postponement of Foreclosure Sale',
+                      'Notice of Rescheduled Foreclosure Sale'):
+            r = CV.assess(self.after_sale(clerk))
+            self.assertEqual(r['verdict'], 'incomplete', (clerk, r['missing']))
+            self.assertTrue([m for m in r['missing'] + r['notes'] if '155' in m], clerk)
+
+    # ---- the proceeds exclusion, per string ----------------------------------------------------
+
+    def entry(self, clerk, comments='', body=None):
+        rows = list(self.SOLD) + [(155, clerk, comments, '08/01/2026', '')]
+        pages = {'2': self.PAGE}
+        if body:
+            pages['155'] = body
+        return self.built(rows, controlling='2', amount=105000.00, pages=pages)
+
+    def test_a_proceeds_word_in_another_string_does_not_withdraw_the_hold(self):
+        # `_producer_text` is operative_text + description + comments (:490), and those come from
+        # different sources - a read page-1 title, the clerk's description, the clerk's comment. Asking
+        # both halves of the concatenation let a proceeds word in ONE string turn off a sale-notice head
+        # another string carried, which is the composition _says_a_replacing_judgment is per-string to
+        # avoid. Reading the cover made it worse: opening the document supplied the proceeds word.
+        for comments, body in (('', None),
+                               ('Re: Surplus Funds', None),
+                               ('', 'NOTICE OF FILING DISBURSEMENT OF SALE PROCEEDS' + chr(10)
+                                + 'Filed herewith.')):
+            t = self.entry('Amended Notice of Foreclosure Auction', comments, body)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (comments, body, r['missing']))
+            self.assertTrue([m for m in r['missing'] + r['notes'] if '155' in m], (comments, body))
+
+    def test_a_proceeds_notice_in_the_same_string_is_still_excluded(self):
+        # The exclusion's own case, which is what it was added for: head and proceeds word in the one
+        # string.
+        for clerk in ('Notice of Disbursement of Sale Proceeds',
+                      'Notice of Claim to Surplus from Sale'):
+            r = CV.assess(self.entry(clerk))
+            self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
+
+    def test_the_eleven_item_calibration_survives_both_changes(self):
+        for clerk in ('Disbursement of Sale Proceeds', 'Surplus Funds from Sale',
+                      'Certificate of Disbursements', 'Notice of Surplus Funds',
+                      'Notice of Disbursement of Sale Proceeds',
+                      'Notice of Claim to Surplus from Sale',
+                      'Statement of Amounts Due at Sale', "Plaintiff's Bid at Sale",
+                      'Amended Disbursement of Sale Proceeds',
+                      'Amended Statement of Amounts Due at Sale',
+                      'Motion for Writ of Possession'):
+            r = CV.assess(self.after_sale(clerk))
+            self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

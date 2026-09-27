@@ -692,9 +692,38 @@ def _sale_state(timeline, status, kind):
                  # resale, and the strictly weaker docket - sale wording only in the read body - must
                  # not read better than the one whose clerk line carries the word too.
                  if any(d > closing_date for d in _sale_dates_of(e, gated=False))
-                 or _RESALE_WORD_RE.search(_sale_text(e))
-                 or (_SALE_NOTICE_HEAD_RE.search(_producer_text(e))
-                     and not _PROCEEDS_RE.search(_producer_text(e)))]
+                 # `_producer_text`, not `_sale_text`, and that is the head rule's own stated
+                 # argument applied to its sibling in the same expression. `_sale_text` carries the
+                 # producer's `sale_passages`, which is every line of every READ page (:398), so a
+                 # post-certificate filing whose body merely RECITES the sale's history - "the
+                 # foreclosure sale held on July 20, 2026, which was continued from June 15, 2026",
+                 # "originally set for June 15 and continued to July 20", and the conditional line the
+                 # thirty-third review already fixed on the live side, "in the event the sale is
+                 # cancelled or continued, these amounts must be recomputed" - was held as a possible
+                 # resale the moment its document was opened, for ever, with nothing a later run reads
+                 # able to clear it. A certificate of disbursements, a notice of surplus funds and a
+                 # statement of amounts due all flipped that way, and the round before's own
+                 # calibration list pinned only their UNREAD twins (forty-first review).
+                 #
+                 # The trade, stated: a genuine resale whose resale word lives only in a read body and
+                 # which prints no date is no longer held. Its strictly weaker twin - same clerk line,
+                 # nothing read - already read `supported`, so that is a gap symmetric on both sides
+                 # rather than reading better for being read, and it is the same trade the head rule
+                 # already made. Asking `_PROCEEDS_RE` of the body instead is the one thing not to do:
+                 # a real Florida notice of sale carries the statutory surplus paragraph (s. 45.031),
+                 # so that would suppress genuine resales.
+                 or _RESALE_WORD_RE.search(_producer_text(e))
+                 # PER STRING, the way _says_a_replacing_judgment reads its own: `_producer_text` is
+                 # operative_text + description + comments (:490), and those come from different
+                 # sources - a read page-1 title, the clerk's description, the clerk's comment - so
+                 # asking both halves of the concatenation let a proceeds word in ONE string turn off a
+                 # sale-notice head another string carried. An undated auction notice after a
+                 # certificate read `supported` once a comment said "Re: Surplus Funds", and again once
+                 # the run opened a cover titled "NOTICE OF FILING DISBURSEMENT OF SALE PROCEEDS" -
+                 # reading the document making the verdict worse-informed (forty-first review).
+                 or any(_SALE_NOTICE_HEAD_RE.search(t) and not _PROCEEDS_RE.search(t)
+                        for t in (str(e.get(k) or '')
+                                  for k in ('operative_text', 'description', 'comments')))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))

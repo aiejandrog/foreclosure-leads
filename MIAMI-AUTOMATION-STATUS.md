@@ -833,6 +833,40 @@ and starts failing thirty hours later, which is 2026-09-27 20:00Z. It is a time 
 fixture, it has nothing to do with this module, and until it is given an explicit `now` it reds
 `ci_suite.py` for every branch in the repo.
 
+**Forty-first review.** Two findings, both inside the round before's own resale rescue - family (e) for
+the sixteenth consecutive round. Its other two changes were attacked and held: the excerpt's match anchor
+survived twenty thousand synthetic recitals with no line where the old anchor showed a denial and the new
+one does not, and the date de-duplication cannot lose or reorder a date, since it runs after the
+producer's own `reset or regular` preference and both callers are a print and an `any()`.
+
+The word half of the rescue was asked of `_sale_text`, which carries `sale_passages` - every line of
+every READ page (:398) - while the head half in the same expression was deliberately restricted to the
+producer's title strings, with the stated reason that a read body's sale recital would otherwise hold
+every completed sale. The bound was on one branch of the OR and not the other, so a post-certificate
+filing whose body merely RECITES the sale's history was held as a possible resale the moment its document
+was opened, for ever, with nothing a later run reads able to clear it: "the foreclosure sale held on July
+20, 2026, which was continued from June 15, 2026", "originally set for June 15 and continued to July 20",
+and the conditional line the thirty-third review already fixed on the live side, "in the event the sale is
+cancelled or continued, these amounts must be recomputed". A certificate of disbursements, a notice of
+surplus funds and a statement of amounts due all flipped that way, and the round before's own
+eleven-item calibration pinned only their UNREAD twins. The word rule reads `_producer_text` now.
+
+The trade is stated rather than hidden: a genuine resale whose resale word lives only in a read body and
+which prints no date is no longer held. Its strictly weaker twin - the same clerk line with nothing read -
+already read `supported`, so that is a gap symmetric on both sides rather than a docket reading better
+for being read, and it is the same trade the head rule already made. Asking `_PROCEEDS_RE` of the body
+instead was considered and rejected: a real Florida notice of sale carries the statutory surplus
+paragraph (s. 45.031), so that would suppress genuine resales, which is the unacceptable direction.
+
+And the proceeds exclusion was asked of the whole concatenation. `_producer_text` is operative_text +
+description + comments (:490), from three different sources - a read page-1 title, the clerk's
+description, the clerk's comment - so a proceeds word in ONE string turned off a sale-notice head another
+string carried. An undated auction notice after a certificate read `supported` once a comment said "Re:
+Surplus Funds", and again once the run opened a cover titled "NOTICE OF FILING DISBURSEMENT OF SALE
+PROCEEDS" - reading the document making the verdict worse-informed. It is per string now, the way
+`_says_a_replacing_judgment` has read its own since the thirty-sixth review, and the exclusion's own case
+(head and proceeds word in the one string) still excludes.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
