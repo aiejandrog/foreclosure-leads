@@ -119,11 +119,37 @@ T('investor-lane email uses the approved line', "won't write again" not in tpl
   and "If now's not a good time, just tell me and I won't reach out again." in tpl)
 
 print('== SMS keywords ==')
+_sms_line = "If now's not a good time, just let me know and I won't text you again."
+_sms_es = 'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 for t, want in [('STOP', True), ('Stop.', True), ('stopall', True), ('CANCEL', True), ('End', True),
                 ('quit', True), ('stop the sale', False), ('ok stop', True), ('PARE', True),
                 ('BASTA', True), ('NO MAS', True), ('NO MÁS', True), ('cancelar', True),
-                ('can you stop the auction', False)]:
+                ('can you stop the auction', False),
+                # 2026-09-27: the text line invites a reply. Whole message only, after the line
+                # and punctuation are stripped.
+                ('no', True), ('No.', True), ('nope', True), ('nah', True),
+                ('no thanks', True), ('No thank you!', True), ('not now', True),
+                ('no gracias', True), ('ahora no', True),
+                ('revoke', True), ('lose my number', True),
+                ('wrong number', True), ('you have the wrong number', True),
+                ('wrong person', True), ('wrong #', True), ('Wrong #.', True),
+                ('número equivocado', True), ('numero equivocado', True),
+                ('se equivocó de número', True), ('se equivoco de numero', True),
+                ('sorry, you have the wrong number', True),
+                ('this is the wrong person', True),
+                (_sms_line, False), (_sms_es, False),
+                ('No. ' + _sms_line, True),
+                (_sms_line + ' no', True),
+                ('No.\n' + _sms_line, True),
+                (_sms_es + ' No.', True),
+                ('no problem, call me tomorrow', False),
+                ('can you stop the sale', False),
+                ('not interested', False), ('no me interesa', False),
+                ('no thanks, call me tomorrow', False),
+                ('not now, try me next week', False)]:
     T('sms %-25r -> %s' % (t, want), bool(R.is_sms_stop(t)) == want, R.is_sms_stop(t))
+T('email detector still leaves a bare no alone', R.is_stop_text('no') is False and R.is_stop_text('No.') is False)
+T('email detector still leaves no gracias alone', R.is_stop_text('no gracias') is False)
 
 print('\n%d passed, %d failed' % (pass_n, fail_n))
 sys.exit(1 if fail_n else 0)

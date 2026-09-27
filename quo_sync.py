@@ -361,8 +361,9 @@ def sync(days=7, phones=None, watch=False, verbose=False):
 # WHY (2026-09-25 audit): every outbound text is a 1:1 handset SMS from the Quo line, so no
 # carrier/10DLC STOP handling exists for it, and until now NOTHING read inbound texts: an owner who
 # replied STOP to a text was honoured only if a human noticed and tapped DNC. This pass pulls
-# inbound messages for every number we dialled or texted, runs each through the SAME detector the
-# email path uses (replies.is_sms_stop: carrier keywords + is_stop_text), and ledgers a hit as a
+# inbound messages for every number we dialled or texted, runs each through replies.is_sms_stop
+# (carrier keywords, the short replies the text line invites, wrong-number phrases, is_stop_text),
+# and ledgers a hit as a
 # '#digits' person key -- the shape call_rows()/optPhones() already read back, so the number
 # disappears from the phone and the board on the next build.
 #
@@ -402,10 +403,25 @@ CONV_MAX_RESULTS = 100
 SCAN_OVERLAP_H = 12
 
 
+def _dump_inbound_status(rec):
+    """Atomic replace of the status file. Counts only — never a phone, a key, or a body."""
+    try:
+        tmp = INBOUND_STATUS + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(rec, fh)
+        os.replace(tmp, INBOUND_STATUS)
+    except Exception as e:
+        print('!! could not record inbound-scan status (%s) — texting will hold' % str(e)[:80])
+    return rec
+
+
 def _write_inbound_status(ok, why='', checked=0, stops=0, errors=0, truncated=False,
                           pages=0, conversations=0, window=0):
-    """Record the scan. Counts only — never a phone number or a message body (the repo is public
-    and this file sits next to the code). `window` is how many days createdAfter reached back."""
+    """Record a full scan. Counts only — never a phone number or a message body (the repo is public
+    and this file sits next to the code). `window` is how many days createdAfter reached back.
+
+    Only a full run (no phones=) may call this with ok true. A --phone / --case success uses
+    _record_scoped_counts so it cannot release the hold or move the next window."""
     rec = {
         'ok': bool(ok),
         'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
@@ -415,14 +431,32 @@ def _write_inbound_status(ok, why='', checked=0, stops=0, errors=0, truncated=Fa
         'window': int(window),
         'why': str(why or '')[:240],
     }
+    return _dump_inbound_status(rec)
+
+
+def _record_scoped_counts(checked=0, stops=0, errors=0, pages=0, conversations=0, window=0):
+    """Counts from a --phone / --case scan. ok, ts, and truncated stay as the last full scan left them.
+
+    A scoped success used to write ok:true and a fresh ts. That released the text hold, and the
+    next full scan then treated this narrow run as the last ok read and shortened createdAfter."""
+    prev = {}
     try:
-        tmp = INBOUND_STATUS + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            json.dump(rec, fh)
-        os.replace(tmp, INBOUND_STATUS)
-    except Exception as e:
-        print('!! could not record inbound-scan status (%s) — texting will hold' % str(e)[:80])
-    return rec
+        got = json.load(open(INBOUND_STATUS, encoding='utf-8'))
+        if isinstance(got, dict):
+            prev = got
+    except Exception:
+        prev = {}
+    rec = {
+        'ok': prev.get('ok') is True,
+        'checked': int(checked), 'stops': int(stops), 'errors': int(errors),
+        'truncated': bool(prev.get('truncated')),
+        'pages': int(pages), 'conversations': int(conversations),
+        'window': int(window),
+        'why': str(prev.get('why') or '')[:240],
+    }
+    if prev.get('ts'):
+        rec['ts'] = prev.get('ts')
+    return _dump_inbound_status(rec)
 
 
 def text_hold(path=None, now=None, max_age_h=None):
@@ -864,6 +898,12 @@ def _sync_messages(days=7, phones=None, verbose=False, dry_run=False):
                               checked=len(nums), stops=len(stops), errors=errors, truncated=truncated,
                               pages=pages_read, conversations=conv_scanned, window=window_days)
         return 2
+    # phones= is --phone / --case: one number, not proof the channel is clear. Recording ok:true
+    # here released the hold and shortened the next full scan's window.
+    if phones:
+        _record_scoped_counts(checked=len(nums), stops=len(stops), errors=0,
+                              pages=pages_read, conversations=conv_scanned, window=window_days)
+        return 0
     _write_inbound_status(True, checked=len(nums), stops=len(stops), errors=0, truncated=False,
                           pages=pages_read, conversations=conv_scanned, window=window_days)
     return 0

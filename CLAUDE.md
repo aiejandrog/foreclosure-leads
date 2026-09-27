@@ -88,10 +88,18 @@ as a change to this surface, not as ordinary copy.
 out." or "Responda STOP para no recibir más mensajes." Board batch (`stopEN`/`stopES`), Call Mode
 (`TEXT_OPTOUT`), and `outreach_copy.sms()` use "If now's not a good time, just let me know and I
 won't text you again." and "Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir."
-Inbound detection is unchanged: carrier STOP words, PARE / BASTA / NO MAS, "not a good time" /
-"try next month", "don't text", "remove me", and the rest of `is_stop_text()` stay permanent
-opt-outs. `is_stop_text()` strips this new sentence before matching, the same way it strips the
+`is_stop_text()` strips this new sentence before matching, the same way it strips the
 email line, so quoting it back is not a stop and a real "not a good time" still is.
+
+**2026-09-27:** that line invites a reply, so `is_sms_stop()` opts out a whole-message `no` / `nope` /
+`nah` / `no thanks` / `no thank you` / `not now` / `no gracias` / `ahora no` / `revoke` /
+`lose my number`, after the EN/ES text line and punctuation are stripped. Wrong-number phrases
+(`wrong number`, `you have the wrong number`, `wrong person`, `wrong #`, `número equivocado`,
+`se equivocó de número`) opt out anywhere in the message. `no` and `not now` stay whole-message
+only, so "no problem, call me" is not a stop. "not interested" / "no me interesa" are still
+undecided. Quoting the line and answering `no` is a stop; the line alone is not. A
+`sync_messages(phones=...)` run (`--phone` / `--case`) records counts and does not write `ok: true`
+or refresh `ts`. Only a full scan may release the text hold or move the next window.
 
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the

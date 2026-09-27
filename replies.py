@@ -296,11 +296,47 @@ SMS_STOP_WORDS = {
     'no mas', 'no más', 'nomas', 'nomás',
 }
 
+# The text line invites "just let me know" (2026-09-27). These are opt-outs only when they are the
+# whole reply, after our own EN/ES sentence and punctuation are gone. "no" and "not now" stay in
+# this set so "no problem, call me" and "not now, try me next week" do not match. "not interested"
+# and "no me interesa" are not here; that one is undecided.
+SMS_WHOLE_REPLIES = {
+    'no', 'nope', 'nah',
+    'no thanks', 'no thank you',
+    'not now',
+    'no gracias', 'ahora no',
+    'revoke',
+    'lose my number',
+}
+
+# Wrong number is an opt-out wherever it sits. "wrong #" is matched before punctuation is stripped,
+# or the "#" disappears and the word "wrong" is all that is left.
+_WRONG_NUMBER = re.compile(
+    r'\bwrong\s*#'
+    r'|\bwrong number\b'
+    r'|\bwrong person\b'
+    r'|\bn[uú]mero equivocado\b'
+    r'|\bse equivoc[oó] de n[uú]mero\b',
+    re.I)
+
+
+def _sms_reply(text):
+    """The owner's words, with our own text/email opt-out sentence removed."""
+    return _OUR_OPTOUT_LINE.sub(' ', str(text or ''))
+
 
 def is_sms_stop(text):
-    """True for a text message that is an opt-out: a bare carrier keyword, or is_stop_text()."""
-    t = re.sub(r'[^a-záéíóúñ]+', ' ', str(text or '').lower()).strip()
-    if t in SMS_STOP_WORDS:
+    """True for a text that is an opt-out.
+
+    A bare carrier keyword, a whole-message reply the text line invites, a wrong-number phrase
+    anywhere in the message, or is_stop_text(). Our own sentence alone is not a stop; the same
+    sentence plus "no" is.
+    """
+    raw = _sms_reply(text)
+    if _WRONG_NUMBER.search(raw):
+        return True
+    t = re.sub(r'[^a-záéíóúñ]+', ' ', raw.lower()).strip()
+    if t in SMS_STOP_WORDS or t in SMS_WHOLE_REPLIES:
         return True
     return is_stop_text(text)
 
