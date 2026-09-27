@@ -426,8 +426,11 @@ def _merge_bk(raw, out):
     No module, or no cache file yet: the verdict already in `out` stands. A non-stem lead that
     is not already clear is flagged bk_need so the send bridge can run one party search.
     A CourtListener hold wins over a clear (fail closed). A fresh CourtListener clear can clear
-    a lead that has no Miami-Dade stem. It cannot clear a PACER active hit or a Miami-Dade
-    docket verdict — those stay as they were."""
+    a lead that has no Miami-Dade stem only when that opinion says ok
+    (DEALFLOW_BK_ALLOW_CL_CLEAR=1). Otherwise the opinion blocks (clear_unconfirmed).
+    It cannot clear a PACER active hit or a Miami-Dade docket verdict — those stay as they were.
+    A lifted or closed Miami bankruptcy is not an extra hold. The docket verdict stands
+    unless CourtListener found an open match."""
     try:
         import bk_lookup as _BL
         op = _BL.gate_opinion(raw)

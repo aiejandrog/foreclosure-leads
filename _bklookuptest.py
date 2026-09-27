@@ -26,7 +26,7 @@ NOW = 1_800_000_000.0
 for _k in ('COURTLISTENER_TOKEN', 'DEALFLOW_BK_PROVIDER', 'DEALFLOW_BK_MAX_AGE_DAYS',
            'DEALFLOW_DIR', 'DEALFLOW_BK_CACHE', 'DEALFLOW_BK_FILINGS', 'DEALFLOW_BK_OVERRIDES',
            'DEALFLOW_BK_STATUS', 'DEALFLOW_BK_BUDGET', 'DEALFLOW_BK_PULL_STATE',
-           'BK_MAX_RUNTIME_S', 'BK_FILED_AFTER_YEARS'):
+           'BK_MAX_RUNTIME_S', 'BK_FILED_AFTER_YEARS', 'DEALFLOW_BK_ALLOW_CL_CLEAR'):
     os.environ.pop(_k, None)
 os.environ['DEALFLOW_DIR'] = str(TMP / 'boot')
 
@@ -60,6 +60,7 @@ def isolate(name, token=TOKEN):
     os.environ.pop('DEALFLOW_BK_MAX_AGE_DAYS', None)
     os.environ.pop('BK_MAX_RUNTIME_S', None)
     os.environ.pop('BK_FILED_AFTER_YEARS', None)
+    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
     BL._HOLD_MEMO = None
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)
@@ -292,23 +293,31 @@ juan = SG.check('502026CA005551XXXXMB', sh)
 check('new filing matched -> hard hold',
       maria['ok'] is False and maria['code'] == SG.STAY_ACTIVE
       and maria['why'] == 'open federal bankruptcy 26-55501 (exact match)', maria)
-check('closed case -> no hold, lead can clear',
-      jose['ok'] is True and jose['code'] == SG.CLEAR
-      and 'no open federal bankruptcy' in jose['why'], jose)
+check('a closed case is not a hard hold, and the CourtListener clear stays held',
+      jose['ok'] is False and jose['code'] == 'clear_unconfirmed'
+      and 'not a confirmed clear' in jose['why'], jose)
+os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
+try:
+    jose_ok = SG.check('CACE-99-555802', sh)
+finally:
+    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
+check('a CourtListener clear releases a Broward lead only when the owner allows it',
+      jose_ok['ok'] is True and jose_ok['code'] == SG.CLEAR, jose_ok)
 check('one-of-two surnames -> possible bankruptcy hold',
       juan['ok'] is False and juan['why'] == 'possible bankruptcy: 26-55577', juan)
 
 flags = BL.flags_for_cases(['CACE-99-555801', 'CACE-99-555802', '502026CA005551XXXXMB'])
-check('board flags hold the exact and the plausible lead only',
+check('board flags hold the exact, the plausible, and the unconfirmed clear',
       flags.get('CACE-99-555801', {}).get('hard') is True
-      and 'CACE-99-555802' not in flags
+      and flags.get('CACE-99-555802', {}).get('hold') is True
+      and flags.get('CACE-99-555802', {}).get('hard') is not True
       and flags.get('502026CA005551XXXXMB', {}).get('why') == 'possible bankruptcy: 26-55577', flags)
 
 status = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
 blob = json.dumps(status)
 check('status is counts only',
       status.get('pull_ok') is True and status.get('filings', 0) >= 1
-      and status.get('leads_checked', 0) >= 3 and status.get('holds') == 2
+      and status.get('leads_checked', 0) >= 3 and status.get('holds') == 3
       and status.get('errors') == 0 and status.get('requests_used', 0) >= 1
       and status.get('reason') == 'ok' and 'GARCIA' not in blob and '555-010' not in blob
       and TOKEN not in blob and '26-55501' not in blob, blob)
@@ -419,14 +428,26 @@ sh = str(d / 'sale_history_cache.json')
 a = SG.check('CACE-99-555801', sh)
 b = SG.check('CACE-99-555802', sh)
 c = SG.check('CACE-99-555803', sh)
-check('override clears the one named lead', a['ok'] is True and a['code'] == SG.CLEAR, a)
+check('an override is not a confirmed clear, so the lead stays held',
+      a['ok'] is False and a['code'] == 'clear_unconfirmed', a)
 check('the same case still holds the other lead',
       b['ok'] is False and b['why'] == 'possible bankruptcy: 26-55501', b)
 check('a second open case on the cleared lead still holds',
       c['ok'] is False and '26-55502' in c['why'], c)
 flags = BL.flags_for_cases(['CACE-99-555801', 'CACE-99-555802'])
-check('board drops only the overridden lead',
-      'CACE-99-555801' not in flags and 'CACE-99-555802' in flags, flags)
+check('the board still holds the overridden lead until a clear is allowed',
+      flags.get('CACE-99-555801', {}).get('hold') is True
+      and flags['CACE-99-555801'].get('hard') is not True
+      and 'CACE-99-555802' in flags, flags)
+os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
+try:
+    a2 = SG.check('CACE-99-555801', sh)
+    flags2 = BL.flags_for_cases(['CACE-99-555801', 'CACE-99-555802'])
+finally:
+    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
+check('allowing a CourtListener clear releases only the overridden lead',
+      a2['ok'] is True and a2['code'] == SG.CLEAR
+      and 'CACE-99-555801' not in flags2 and 'CACE-99-555802' in flags2, (a2, flags2))
 
 
 # -------------------------------------------------------------------------------------------- miami
@@ -793,8 +814,23 @@ BL._dump(BL.cache_path(), {
 })
 BL._HOLD_MEMO = None
 rows, _n = CM.call_rows([fresh], max_days=60)
-check('call_rows keeps a Broward lead that has a fresh clear',
-      {r.get('c') for r in rows} == {'CACE-99-555801'}, rows)
+check('call_rows drops a Broward lead whose CourtListener clear is unconfirmed',
+      rows == [], rows)
+held, why = BL.send_hold('CACE-99-555801', here=str(d))
+blocked, bwhy = BL.contact_blocked_reason('CACE-99-555801', here=str(d))
+check('email, letters, and text stay held on an unconfirmed CourtListener clear',
+      held is True and blocked is True and 'not a confirmed clear' in why
+      and 'not a confirmed clear' in bwhy, (held, why, blocked, bwhy))
+os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
+try:
+    BL._HOLD_MEMO = None
+    rows, _n = CM.call_rows([fresh], max_days=60)
+    released = BL.send_hold('CACE-99-555801', here=str(d))
+finally:
+    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
+    BL._HOLD_MEMO = None
+check('those channels release the Broward lead only when a CourtListener clear is allowed',
+      {r.get('c') for r in rows} == {'CACE-99-555801'} and released == (False, ''), rows)
 
 
 def court_params(url):
@@ -936,7 +972,7 @@ with contextlib.redirect_stdout(io.StringIO()):
     br2 = BL.presend_check('CACE-99-555890', here=str(leads), transport=stub, clock=clock_at(NOW))
 added = _named_calls(stub.calls[before:])
 check('a filtered search that fits in the page cap does not run the narrow query',
-      br2.get('verdict') == 'clear' and len(added) == 1
+      br2.get('verdict') == 'clear_unconfirmed' and len(added) == 1
       and set(effective_courts(added[0])) != FL_COURTS
       and len(court_params(added[0])) == 1
       and not re.search(r'\d', party_q(added[0])) and '"' not in party_q(added[0]),
@@ -1055,6 +1091,148 @@ check('a case with no lead is reported and does not write the cache',
       rc == 0 and buf.getvalue().strip() == 'no lead for this case'
       and not (d / 'bk_lead_cache.json').exists() and quiet.calls == [],
       buf.getvalue())
+
+
+# -------------------------------------------------------------------------------- namesake / docket
+print('-- namesake and docket date')
+owners = BL.owners_from('GARCIA, MARIA', 'last_first')
+base = {'parties': ['Garcia, Maria'], 'open': True, 'filed': '2026-03-15'}
+fl_hit = BL.cases_from_hits(owners, [dict(base, court_id='flsb', no='26-10001')])
+tx_hit = BL.cases_from_hits(owners, [dict(base, court_id='txwb', no='24-10002')])
+ev_hit = BL.cases_from_hits(
+    owners, [dict(base, court_id='waeb', no='24-10003', parties=['Garcia, Maria', 'BROWARD COUNTY'])],
+    county='BROWARD')
+check('a Florida exact match stays a hard hold',
+      fl_hit and fl_hit[0]['match'] == 'exact' and BL.verdict_of(fl_hit, True, True)[0] == 'active', fl_hit)
+check('an out-of-state exact name with no address or county is only possible',
+      tx_hit and tx_hit[0]['match'] == 'plausible' and BL.verdict_of(tx_hit, True, True)[0] == 'possible',
+      tx_hit)
+check('county evidence keeps an out-of-state exact match a hard hold',
+      ev_hit and ev_hit[0]['match'] == 'exact' and BL.verdict_of(ev_hit, True, True)[0] == 'active', ev_hit)
+
+BD = '2026-03-15'
+d = isolate('docket-miss')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': '2099-000201-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA', 'st': 'OK',
+}])
+(leads / 'sale_history_cache.json').write_text(json.dumps({
+    '2099-000201-CA-01': {'a': True, 'bd': BD, 'sl': '', 'b': 1, 'v': 5, 't': 0},
+}), encoding='utf-8')
+
+
+def _window_miss(url, headers, n):
+    q = q_of(url)
+    if q.get('q'):
+        return 200, {}, page([])
+    if set(effective_courts(url)) == {'flsb', 'flmb'} and q.get('filed_before'):
+        # A next URL must not be followed: one window, one page.
+        return 200, {}, page(
+            [recap('11-00001', ['Other, Person'], court='flsb', filed=BD)],
+            nxt='https://www.courtlistener.com/api/rest/v4/search/?cursor=more')
+    return 200, {}, page([])
+
+
+stub = Stub(_window_miss)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('2099-000201-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
+windows = [u for u, _h in stub.calls if not party_q(u) and q_of(u).get('filed_before')]
+active_stay = SG.check('2099-000201-CA-01', str(leads / 'sale_history_cache.json'))
+check('an active docket stay is still held, and a missed page does not replace that verdict',
+      active_stay.get('ok') is False and active_stay.get('code') == SG.STAY_ACTIVE
+      and br.get('verdict') != 'docket_bk_unconfirmed'
+      and len(windows) == 1
+      and len(court_params(windows[0])) == 1
+      and set(effective_courts(windows[0])) == {'flsb', 'flmb'}
+      and (q_of(windows[0]).get('filed_after') or [''])[0] == BD
+      and (q_of(windows[0]).get('filed_before') or [''])[0] == BD,
+      (active_stay, br, len(windows), len(stub.calls)))
+
+d = isolate('docket-hit')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': '2099-000202-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA', 'st': 'OK',
+}])
+(leads / 'sale_history_cache.json').write_text(json.dumps({
+    '2099-000202-CA-01': {'a': True, 'bd': BD, 'sl': '', 'b': 1, 'v': 5, 't': 0},
+}), encoding='utf-8')
+
+
+def _window_hit(url, headers, n):
+    q = q_of(url)
+    if q.get('q'):
+        return 200, {}, page([])
+    filed = (q.get('filed_after') or [''])[0]
+    if set(effective_courts(url)) == {'flsb', 'flmb'} and filed == BD:
+        return 200, {}, page([recap('26-15796', ['Garcia, Maria'], court='flsb', filed=BD)])
+    return 200, {}, page([recap('11-00001', ['Other, Person'], court='flmb', filed=BD)])
+
+
+stub = Stub(_window_hit)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('2099-000202-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
+check('a filing inside the docket window is a Florida hard hold, not left unconfirmed',
+      br.get('verdict') == 'active' and '26-15796' in (br.get('why') or '')
+      and br.get('verdict') != 'docket_bk_unconfirmed', br)
+
+d = isolate('docket-lifted')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': '2099-000203-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA', 'st': 'OK',
+}])
+sh = leads / 'sale_history_cache.json'
+sh.write_text(json.dumps({
+    '2099-000203-CA-01': {'a': False, 'bd': BD, 'sl': '2026-04-01', 'b': 1, 'v': 5, 't': 0},
+}), encoding='utf-8')
+
+
+def _lifted_clear(url, headers, n):
+    return 200, {}, page([])
+
+
+stub = Stub(_lifted_clear)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('2099-000203-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
+lifted_windows = [u for u, _h in stub.calls if not party_q(u) and q_of(u).get('filed_before')]
+# The search clock is not wall time. The four readers below use a fresh clear.
+BL._dump(BL.cache_path(), {
+    '2099-000203-CA-01': {
+        'verdict': 'clear', 'why': 'no open federal bankruptcy matched this owner',
+        'searched': True, 'ok_check': True, 'err': '', 't': time.time(), 'cases': [],
+        'src': 'courtlistener',
+    },
+})
+BL._HOLD_MEMO = None
+lifted = SG.check('2099-000203-CA-01', str(sh))
+lifted_dial = BL.federal_hold('2099-000203-CA-01')
+lifted_mail = BL.send_hold('2099-000203-CA-01', here=str(leads))
+lifted_flags = BL.flags_for_cases(['2099-000203-CA-01'])
+check('a lifted docket stay plus a CourtListener clear stays ok',
+      br.get('verdict') == 'clear' and lifted_windows == []
+      and lifted.get('ok') is True and lifted.get('code') == SG.CLEAR
+      and lifted_dial == (False, '') and lifted_mail == (False, '')
+      and '2099-000203-CA-01' not in lifted_flags,
+      (br, lifted, lifted_dial, lifted_mail, lifted_flags, len(stub.calls)))
+BL._dump(BL.cache_path(), {
+    '2099-000203-CA-01': {
+        'verdict': 'docket_bk_unconfirmed', 'docket_bk_unconfirmed': True,
+        'why': 'Miami docket bankruptcy date was not matched',
+        'searched': True, 'ok_check': True, 'err': '', 't': time.time(), 'cases': [],
+        'src': 'courtlistener',
+    },
+})
+BL._HOLD_MEMO = None
+stale = SG.check('2099-000203-CA-01', str(sh))
+stale_dial = BL.federal_hold('2099-000203-CA-01')
+stale_mail = BL.send_hold('2099-000203-CA-01', here=str(leads))
+stale_flags = BL.flags_for_cases(['2099-000203-CA-01'])
+check('a stored unconfirmed date does not hold a lifted Miami stay',
+      stale.get('ok') is True and stale_dial == (False, '') and stale_mail == (False, '')
+      and '2099-000203-CA-01' not in stale_flags,
+      (stale, stale_dial, stale_mail, stale_flags))
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all CourtListener bankruptcy checks passed ====')

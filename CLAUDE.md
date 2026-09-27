@@ -245,14 +245,24 @@ spent day, not reset.
   That count is `truncated` on the status file, not an error. The nightly run and the
   CLI follow more pages on that second pass. The send bridge keeps the short page cap
   and its few-second wait. CLI and leads next to be contacted may follow more pages
-  on the first pass too. Only a fresh completed eligible search with no open
-  match clears a Broward or Palm Beach lead. Email and letters (`send_hold`) refuse a keyable
+  on the first pass too. A finished full-court search with no open match is not, by
+  itself, a release for Broward or Palm Beach. While the PACER provider is parked, that
+  result is `clear_unconfirmed` and stays held for first-touch email, follow-up, letters,
+  text, and Call Mode. `DEALFLOW_BK_ALLOW_CL_CLEAR=1` is the only switch that lets a
+  CourtListener clear release those leads, and setting it is a business decision for the
+  owner. An exact name match outside `flsb`, `flmb`, and `flnb` with no address or county
+  evidence is `possible`, not a hard hold. Florida exact matches stay hard holds. The Miami
+  docket date is cross-checked only while that stay is active (`entry_stay_active`): one
+  page of FLSB and FLMB filings for that day, inside the same 125/day budget. A miss does
+  not add a hold. A lifted or closed docket bankruptcy does not add one either, and the
+  Miami stay-check verdict stays the docket's unless CourtListener found an open match.
+  Email and letters (`send_hold`) refuse a keyable
   non-stem lead as soon as this module is importable. Text uses that same stay-gate
   verdict in the send bridge, and its pre-send check will not sleep out a rate window.
   Call Mode and the knock planner
   (`federal_hold`) read `bk_lead_cache.json` once per queue build. Before that file
   exists they still honor a baked `saleBkAct`. Once it exists, a Broward or Palm Beach
-  lead with no fresh clear is dropped, and a Miami lead that is not docket-clear
+  lead with no confirmed clear is dropped, and a Miami lead that is not docket-clear
   (including a `stay_unverified` lis pendens) stays callable unless CourtListener flagged
   it. Within the daily budget the nightly search checks leads next to be contacted
   (email, then phone, then a letter address, soonest auction first), Miami included,
@@ -262,10 +272,13 @@ spent day, not reset.
 
 **Matching.** Names are folded (case, accents, punctuation). Middle initials, Hispanic
 double surnames, `LLC` / `TRUST` owners, and joint owners are all read. An exact open-case
-match is a hard hold. Any weaker plausible match is a hold whose reason is
-`possible bankruptcy: <case number>` and is never auto-cleared. A closed case is not a
-hold. `DEALFLOW_DIR/bk_overrides.json` drops one bankruptcy case number for one lead id
-after a person has verified the false positive. Another lead on that case stays held.
+match in `flsb`, `flmb`, or `flnb` is a hard hold. The same name in another bankruptcy
+court, with no address or county on the hit, is only `possible`. Any weaker plausible
+match is a hold whose reason is `possible bankruptcy: <case number>` and is never
+auto-cleared. A closed case is not a hold. `DEALFLOW_DIR/bk_overrides.json` drops one
+bankruptcy case number for one lead id after a person has verified the false positive.
+Another lead on that case stays held. Dropping the only case still does not release a
+Broward or Palm Beach lead unless `DEALFLOW_BK_ALLOW_CL_CLEAR=1`.
 
 Miami-Dade keeps the #72 docket gate. This lookup only adds a hold there. A CourtListener
 clear does not lift a docket stay or a PACER active hit.
