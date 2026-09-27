@@ -1473,6 +1473,18 @@ def main(argv):
         print(json.dumps(doc.get('alerts') or [], indent=1))
         return 0
     if cmd == 'evening':
+        # Second bankruptcy pass. The 5:30 run stops on its time budget and the hourly cap.
+        # By 21:00 that hour has freed, so leftover daily budget (still under 125) can check
+        # more leads. This must not fail the evening job, and it does not run inside the
+        # 5:30 refresh.
+        try:
+            import bk_lookup
+            if not str(os.environ.get('COURTLISTENER_TOKEN') or '').strip():
+                _log('bk evening pass skipped: no token')
+            else:
+                bk_lookup.run_nightly()
+        except Exception as exc:
+            _log('bk evening pass failed: %s' % type(exc).__name__)
         return publish(measure=True)
     if cmd == 'publish':
         return publish(measure=False)

@@ -9,6 +9,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import shutil
 import sys
 import tempfile
@@ -25,7 +26,7 @@ NOW = 1_800_000_000.0
 for _k in ('COURTLISTENER_TOKEN', 'DEALFLOW_BK_PROVIDER', 'DEALFLOW_BK_MAX_AGE_DAYS',
            'DEALFLOW_DIR', 'DEALFLOW_BK_CACHE', 'DEALFLOW_BK_FILINGS', 'DEALFLOW_BK_OVERRIDES',
            'DEALFLOW_BK_STATUS', 'DEALFLOW_BK_BUDGET', 'DEALFLOW_BK_PULL_STATE',
-           'BK_MAX_RUNTIME_S'):
+           'BK_MAX_RUNTIME_S', 'BK_FILED_AFTER_YEARS'):
     os.environ.pop(_k, None)
 os.environ['DEALFLOW_DIR'] = str(TMP / 'boot')
 
@@ -58,6 +59,7 @@ def isolate(name, token=TOKEN):
     os.environ.pop('DEALFLOW_BK_PROVIDER', None)
     os.environ.pop('DEALFLOW_BK_MAX_AGE_DAYS', None)
     os.environ.pop('BK_MAX_RUNTIME_S', None)
+    os.environ.pop('BK_FILED_AFTER_YEARS', None)
     BL._HOLD_MEMO = None
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)
@@ -793,6 +795,266 @@ BL._HOLD_MEMO = None
 rows, _n = CM.call_rows([fresh], max_days=60)
 check('call_rows keeps a Broward lead that has a fresh clear',
       {r.get('c') for r in rows} == {'CACE-99-555801'}, rows)
+
+
+def court_params(url):
+    """Every court= value, in order. The live server keeps only the last one."""
+    query = urllib.parse.urlparse(url).query
+    return [v for k, v in urllib.parse.parse_qsl(query, keep_blank_values=True) if k == 'court']
+
+
+def effective_courts(url):
+    vals = court_params(url)
+    if not vals:
+        return []
+    return vals[-1].split()
+
+
+def party_q(url):
+    return (q_of(url).get('q') or [''])[-1]
+
+
+# ---------------------------------------------------------------------------------- filtered search
+print('-- filtered party search')
+url = cl.party_request('party:(GARCIA AND MARIA)')
+pq = q_of(url)
+vals = court_params(url)
+ids = vals[0].split() if len(vals) == 1 else []
+check('party search sends one court value covering the bankruptcy courts',
+      len(vals) == 1 and len(pq.get('court') or []) == 1
+      and 'flsb' in ids and 'flmb' in ids and 'flnb' in ids
+      and all(part.endswith('b') for part in ids) and len(ids) >= 90
+      and pq.get('filed_after') == [BL.default_filed_after()]
+      and pq.get('order_by') == ['dateFiled desc'] and pq.get('type') == ['d'],
+      (len(vals), len(ids), pq.get('filed_after'), pq.get('order_by')))
+os.environ['BK_FILED_AFTER_YEARS'] = '3'
+check('filed-after years are configurable',
+      BL.default_filed_after()[:4] == str(BL.dt.date.today().year - 3))
+os.environ.pop('BK_FILED_AFTER_YEARS', None)
+check('the narrow window is shorter than the eligible window',
+      BL.narrow_filed_after() > BL.default_filed_after())
+nurl = cl.party_request('party:(GARCIA AND MARIA)', filed_after=BL.narrow_filed_after(),
+                        courts=BL.FL_BK_COURT_IDS)
+nq = party_q(nurl)
+check('the narrow request is the three Florida bankruptcy courts and the name only',
+      court_params(nurl) == ['flsb flmb flnb']
+      and not re.search(r'\d', nq) and 'MIAMI' not in nq.upper() and '"' not in nq
+      and q_of(nurl).get('filed_after') == [BL.narrow_filed_after()],
+      (court_params(nurl), nq))
+saved_ids, saved_fl = BL.BK_COURT_IDS, BL.FL_BK_COURT_IDS
+try:
+    BL.BK_COURT_IDS = BL.FL_BK_COURT_IDS
+    os.environ['BK_FILED_AFTER_YEARS'] = '1'
+    check('a narrow scope that is not narrower is not built', BL.narrow_bounds() is None)
+finally:
+    BL.BK_COURT_IDS = saved_ids
+    BL.FL_BK_COURT_IDS = saved_fl
+    os.environ.pop('BK_FILED_AFTER_YEARS', None)
+check('a phone lead may follow more pages than a lead with no channel',
+      BL.party_page_cap({'phone': True}) == BL.PRIORITY_PAGE_CAP
+      and BL.party_page_cap({}) == BL.PARTY_PAGE_CAP
+      and BL.party_page_cap({}, cli=True) == BL.CLI_PAGE_CAP
+      and BL.narrow_page_cap(BL.PARTY_PAGE_CAP) >= BL.NARROW_PAGE_CAP)
+
+
+FL_COURTS = {'flsb', 'flmb', 'flnb'}
+
+
+def _live_server(url, headers, n):
+    """Behaves like CourtListener: only the last court= value counts, and party: is names.
+    A ZIP or city inside party: matches nothing. Repeated court= keys therefore search
+    vib alone and come back empty."""
+    ids = effective_courts(url)
+    q = party_q(url)
+    qu = q.upper()
+    cur = (q_of(url).get('cursor') or [''])[-1]
+    if q and (re.search(r'\d', q) or 'MIAMI' in qu):
+        return 200, {}, page([])
+    if ids == ['vib']:
+        return 200, {}, page([])
+    if 'LOPEZ' in qu or cur.startswith('lp'):
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=lp%d' % n
+        return 200, {}, page([], nxt)
+    if set(ids) == FL_COURTS:
+        if 'GARCIA' in qu and 'MARIA' in qu:
+            return 200, {}, page([recap('26-15796', ['Garcia, Maria'])])
+        return 200, {}, page([])
+    if 'flsb' in ids and len(ids) > 3:
+        if 'NUNEZ' in qu:
+            return 200, {}, page([])
+        if 'RIVERA' in qu:
+            nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=riv2'
+            return 200, {}, page([recap('15-10001', ['Rivera, Ana'])], nxt)
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=w2'
+        return 200, {}, page([recap('11-00001', ['Other, Person'])], nxt)
+    if cur == 'w2':
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=w3'
+        return 200, {}, page([recap('11-00001', ['Other, Person'])], nxt)
+    if cur == 'riv2':
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=riv3'
+        return 200, {}, page([recap('11-00001', ['Other, Person'])], nxt)
+    return 200, {}, page([])
+
+
+def _named_calls(calls):
+    """Party-search URLs (they carry q=). Cursor follow-ups do not."""
+    return [u for u, _h in calls if party_q(u)]
+
+
+print('-- narrow after overflow')
+d = isolate('narrow')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [
+    {'case': '2025-000201-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA',
+     'addr': '10 EAST ST, MIAMI, FL 33101', 'st': 'OK', 'days': 900},
+    {'case': 'CACE-99-555890', 'county': 'BROWARD', 'owners': 'NUNEZ, JOSE', 'st': 'OK', 'days': 900},
+])
+stub = Stub(_live_server)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('2025-000201-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
+opened = _named_calls(stub.calls)
+wide = [u for u in opened if set(effective_courts(u)) != FL_COURTS]
+narrow = [u for u in opened if set(effective_courts(u)) == FL_COURTS]
+narrow_q = party_q(narrow[0]) if narrow else ''
+check('a common name that overflows is held by the narrow search, not left without the case',
+      br.get('verdict') in ('possible', 'active') and '26-15796' in (br.get('why') or '')
+      and 'truncated' not in (br.get('why') or '') and len(narrow) == 1 and len(wide) == 1,
+      (br, len(wide), len(narrow), narrow_q))
+check('the request has one court value, and the narrow query has no digits or city',
+      wide and len(court_params(wide[0])) == 1
+      and 'flsb' in effective_courts(wide[0]) and 'flmb' in effective_courts(wide[0])
+      and 'flnb' in effective_courts(wide[0]) and len(effective_courts(wide[0])) >= 90
+      and narrow and court_params(narrow[0]) == ['flsb flmb flnb']
+      and not re.search(r'\d', narrow_q) and 'MIAMI' not in narrow_q.upper() and '"' not in narrow_q,
+      (court_params(wide[0])[:1], court_params(narrow[0]) if narrow else None, narrow_q))
+check('the narrow query is not sent until the filtered search overflows',
+      stub.calls and set(effective_courts(opened[0])) != FL_COURTS
+      and set(effective_courts(opened[-1])) == FL_COURTS)
+before = len(stub.calls)
+with contextlib.redirect_stdout(io.StringIO()):
+    br2 = BL.presend_check('CACE-99-555890', here=str(leads), transport=stub, clock=clock_at(NOW))
+added = _named_calls(stub.calls[before:])
+check('a filtered search that fits in the page cap does not run the narrow query',
+      br2.get('verdict') == 'clear' and len(added) == 1
+      and set(effective_courts(added[0])) != FL_COURTS
+      and len(court_params(added[0])) == 1
+      and not re.search(r'\d', party_q(added[0])) and '"' not in party_q(added[0]),
+      br2)
+
+
+print('-- wide hit is kept')
+d = isolate('keep-wide')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': 'CACE-99-555892', 'county': 'BROWARD', 'owners': 'RIVERA, ANA',
+    'addr': '10 EAST ST, MIAMI, FL 33101', 'st': 'OK', 'days': 900,
+}])
+stub = Stub(_live_server)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('CACE-99-555892', here=str(leads), transport=stub, clock=clock_at(NOW))
+check('a match from the first search is kept when the narrow search is empty',
+      br.get('verdict') in ('possible', 'active') and '15-10001' in (br.get('why') or '')
+      and br.get('verdict') != 'clear',
+      br)
+
+
+print('-- narrow finishes without a match')
+d = isolate('narrow-empty')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': 'CACE-99-555893', 'county': 'BROWARD', 'owners': 'DOE, JANE',
+    'addr': '10 EAST ST, MIAMI, FL 33101', 'st': 'OK', 'days': 900,
+}])
+stub = Stub(_live_server)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('CACE-99-555893', here=str(leads), transport=stub, clock=clock_at(NOW))
+st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
+check('a finished narrow search does not clear when the eligible search overflowed',
+      br.get('verdict') != 'clear' and 'truncated' in (br.get('why') or '')
+      and st.get('truncated') == 1 and int(st.get('errors') or 0) == 0,
+      (br, st))
+
+
+print('-- narrow also overflows')
+d = isolate('still-trunc')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': 'CACE-99-555891', 'county': 'BROWARD', 'owners': 'LOPEZ, MARIA',
+    'addr': '10 EAST ST, MIAMI, FL 33101', 'st': 'OK', 'days': 900,
+}])
+stub = Stub(_live_server)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('CACE-99-555891', here=str(leads), transport=stub, clock=clock_at(NOW),
+                          max_wait=None)
+st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
+opened = _named_calls(stub.calls)
+narrow = [u for u in opened if set(effective_courts(u)) == FL_COURTS]
+narrow_at = next(i for i, (u, _h) in enumerate(stub.calls) if u in narrow)
+check('a narrow query that also overflows is truncated, and that is not an error',
+      'truncated' in (br.get('why') or '') and st.get('truncated') == 1 and int(st.get('errors') or 0) == 0
+      and narrow and not re.search(r'\d', party_q(narrow[0])) and 'MIAMI' not in party_q(narrow[0]).upper()
+      and len(stub.calls) - narrow_at >= BL.NARROW_PAGE_CAP,
+      (br, st, len(stub.calls) - narrow_at))
+
+
+# --------------------------------------------------------------------------------------------- clock
+print('-- request clock')
+ticks = {'t': NOW}
+
+
+def _wall():
+    return ticks['t']
+
+
+clock = BL.Clock(wall=_wall, sleeper=lambda _s: None)
+
+
+def _slow_http(url, headers):
+    ticks['t'] += 3.5
+    return 200, {}, json.dumps(page([])).encode()
+
+
+budget = BL.Budget([], NOW)
+BL.http_get('https://www.courtlistener.com/api/rest/v4/search/?type=d', cl, _slow_http, budget, clock)
+check('a request timestamp includes time spent waiting on HTTP',
+      budget.hits and abs(budget.hits[-1] - (NOW + 3.5)) < 0.01, budget.hits)
+real = BL.Clock()
+check('the production clock is the real clock', abs(real.time() - time.time()) < 2)
+
+
+# --------------------------------------------------------------------------------------- short case
+print('-- short case id')
+d = isolate('short')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': '2025-000201-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA', 'st': 'OK',
+}])
+stub = Stub(lambda url, headers, n: (200, {}, page([])))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = BL.main(['--case', '2025-000201'], clock=clock_at(NOW), transport=stub, here=str(leads))
+text = buf.getvalue()
+cache = json.loads((d / 'bk_lead_cache.json').read_text(encoding='utf-8'))
+check('a short Miami case id resolves to the -CA-01 lead',
+      rc == 0 and '2025-000201-CA-01 flagged=' in text and '2025-000201-CA-01' in cache
+      and 'GARCIA' not in text and TOKEN not in text, text)
+d = isolate('nolead')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [])
+quiet = Stub(lambda url, headers, n: (200, {}, page([])))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = BL.main(['--case', '2099-000199'], clock=clock_at(NOW), transport=quiet, here=str(leads))
+check('a case with no lead is reported and does not write the cache',
+      rc == 0 and buf.getvalue().strip() == 'no lead for this case'
+      and not (d / 'bk_lead_cache.json').exists() and quiet.calls == [],
+      buf.getvalue())
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all CourtListener bankruptcy checks passed ====')

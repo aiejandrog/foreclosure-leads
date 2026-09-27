@@ -208,7 +208,13 @@ A full minute or hour window waits until a slot frees. Only the daily cap, or a 
 survives the bounded retries, stops the run. `BK_MAX_RUNTIME_S` (default 900) caps one
 nightly run so the 5:30 refresh is not held up; the flsb cursor is saved after every page
 and the next run resumes that pull instead of restarting the 14 days. `pull_ok` becomes
-true once the cursor is caught up, even if that took several runs. A cut-off run writes
+true once the cursor is caught up, even if that took several runs. The 5:30 run does not
+wait out a full hour. `pipeline_alerts.py evening` (the existing 21:00 task) runs a second
+pass when `COURTLISTENER_TOKEN` is set, so leftover daily budget is used after that hour
+frees, still under 125/day. Request timestamps use the real clock, so time spent waiting
+on HTTP counts toward the windows and toward `BK_MAX_RUNTIME_S`. `python bk_lookup.py
+--case 2025-000201` resolves a Miami stem to the `-CA-01` lead. A number with no lead
+prints `no lead for this case` and does not write the cache. A cut-off run writes
 status reason `time_budget` and still exits 0. The nightly pull reserves 10 requests so a
 pre-send search can still run. The send bridge's pre-send check sleeps at most a few
 seconds (`PRESEND_MAX_WAIT`); a longer wait returns the lead held. `python bk_lookup.py
@@ -222,10 +228,25 @@ spent day, not reset.
   bankruptcy filings in the Southern District of Florida, court id `flsb`, since the last
   successful pull. Search `type=d`, `court` + `filed_after`, paginated. Matched locally.
   The index can hold a lead. It cannot clear one.
-- Once per lead: a party-name search across federal bankruptcy courts for cases with no
-  date terminated and no date closed. Re-checked every 14 days, and again before a first
-  touch older than that. Only a fresh completed search with no open match clears a
-  Broward or Palm Beach lead. Email and letters (`send_hold`) refuse a keyable
+- Once per lead: a party-name search of federal bankruptcy courts only (CourtListener
+  court ids ending in `b`, including `flsb`, `flmb`, and `flnb`), filed within
+  `BK_FILED_AFTER_YEARS` (default 10), newest first. The court list is one `court`
+  parameter with the ids separated by spaces. Repeated `court=` keys are not a list —
+  CourtListener keeps the last one — so that form searches a single court and must not
+  be used. Re-checked every 14 days, and again before a first touch older than that.
+  If that search still overflows the page cap, the same name-token query is run again,
+  limited to `flsb flmb flnb` and a shorter filed-after window, with more pages. A
+  city, ZIP, or exact phrase is not put in `party:` (that field is names, and party
+  names are filed in both orders). Hits from both passes are kept. An open exact or
+  plausible match from either pass holds the lead. A lead can clear only when the
+  full-court, full-window search finishes without overflowing and finds no open match.
+  If the narrow pass overflows or cannot be built, the lead stays truncated and held.
+  A finished narrow pass also cannot clear, because it does not cover the whole window.
+  That count is `truncated` on the status file, not an error. The nightly run and the
+  CLI follow more pages on that second pass. The send bridge keeps the short page cap
+  and its few-second wait. CLI and leads next to be contacted may follow more pages
+  on the first pass too. Only a fresh completed eligible search with no open
+  match clears a Broward or Palm Beach lead. Email and letters (`send_hold`) refuse a keyable
   non-stem lead as soon as this module is importable. Text uses that same stay-gate
   verdict in the send bridge, and its pre-send check will not sleep out a rate window.
   Call Mode and the knock planner
@@ -250,7 +271,7 @@ Miami-Dade keeps the #72 docket gate. This lookup only adds a hold there. A Cour
 clear does not lift a docket stay or a PACER active hit.
 
 **Status.** Counts only (`bk_lookup_status.json`: last pull time, filings cached, leads
-checked, holds, errors, requests used) go into `pipeline_alerts` as `bk-lookup`. A failed
+checked, holds, errors, truncated, requests used) go into `pipeline_alerts` as `bk-lookup`. A failed
 pull, a missing status file, or a pull older than 36 hours is a fail alert. Filings carry
 debtor names and stay in `DEALFLOW_DIR`. Nothing from this check is committed or published
 with a name, a phone, or the token.
