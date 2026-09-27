@@ -627,6 +627,12 @@ bk_lookup_status.json
 bk_budget.json
 bk_pull_state.json
 bk_*.tmp
+# Clerk-docket bankruptcy check. Verdicts only, kept in DEALFLOW_DIR. These names are the
+# backstop if a cache or status file is written inside the repo.
+clerk_bk_cache.json
+clerk_bk_status.json
+clerk_bk_cache.json.tmp
+clerk_bk_status.json.tmp
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
 # _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
@@ -654,3 +660,6 @@ worker_marks.applied.jsonl
 !_alertstest.py
 # _bklookuptest: CourtListener bankruptcy check on stubbed HTTP. Example names only, no token.
 !_bklookuptest.py
+# _clerkbktest: Broward clerk-docket bankruptcy check on stubbed HTTP. Synthetic docket
+# lines only, no API key, no party names.
+!_clerkbktest.py
