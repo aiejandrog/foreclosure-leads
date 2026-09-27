@@ -54,6 +54,15 @@ The gate still requires every other check. A clerk "none" or "lifted" does not o
 CourtListener hold, a PACER active hit, or DEALFLOW_BK_ALLOW_CL_CLEAR. Miami-Dade is not
 read here.
 
+COUNTY. county_of() recognizes a Broward civil number and a Palm Beach UCN. The gate also
+reads the county stored on the lead (bk_lookup.load_leads), memoized on those files'
+mtimes. While the flag is on, a lead recorded as Broward or Palm Beach stays held unless
+the number is a Broward civil case with a fresh full read of none or lifted. A tax deed,
+a bare number, an FMCE or PR-C number, a Palm Beach small-claims number, or a CASE label
+is not a clerk-readable civil case. A Miami-Dade lead whose number has no stem keeps the
+verdict it already had. If the lead files cannot be read, every case with no Miami-Dade
+stem stays held.
+
 CACHE. DEALFLOW_DIR/clerk_bk_cache.json (override DEALFLOW_CLERK_BK_CACHE). Case key, county,
 verdict, dates, counts. No party name, no docket text, no API key. Status file
 clerk_bk_status.json is counts only.
@@ -73,6 +82,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -136,8 +146,14 @@ STALE_WHY = 'Broward clerk docket read is older than %g days. Lead stays held.'
 ACTIVE_WHY = ('ACTIVE bankruptcy stay on the clerk docket (filed %s). '
               'Contact stays held.')
 UNREADABLE_WHY = 'Clerk docket cache is unreadable. Lead stays held.'
+NOT_READABLE_WHY = 'not a clerk-readable civil case. Lead stays held.'
+LEAD_LIST_WHY = 'Lead list is unreadable. Lead stays held.'
+_RECORDED_HOLD = ('BROWARD', 'PALM BEACH')
 
 _MEMO = None  # (path, mtime_ns, size, data)
+_LEADS_HERE = None  # tests point this at a temp directory; production uses the repo
+_COUNTY_MEMO = None  # (leads-file sig, ok, {case key: county})
+_COUNTY_LOCK = threading.Lock()
 
 
 def log(msg):
@@ -719,27 +735,126 @@ def _fresh_clear(ent, now, env=None):
     return age is not None and limit > 0 and -1 <= age <= limit
 
 
-def gate_opinion(case, now=None, env=None):
-    """stay_gate / bk_lookup view. None when the flag is off or this is not Broward/Palm Beach.
+def leads_root():
+    """Directory load_leads reads. Tests set _LEADS_HERE; production is the repo."""
+    if _LEADS_HERE:
+        return _LEADS_HERE
+    import bk_lookup
+    return bk_lookup.HERE
 
-    blocks True means this source holds. A fresh full read of none or lifted does not block.
-    An active stay blocks even when the read is old. Never raises."""
-    env = os.environ if env is None else env
-    if not enabled(env):
+
+def _norm_county(value):
+    return ' '.join(str(value or '').upper().split())
+
+
+def _county_file_sig(here):
+    """(path, mtime_ns, size) per lead file, or None when a directory cannot be stated.
+
+    A missing file is (path, None, None). That is a readable empty contribution, not a failure."""
+    import bk_lookup
+    try:
+        paths = bk_lookup.lead_paths(here)
+    except Exception:
         return None
-    county = county_of(case)
-    if county not in ('broward', 'palmbeach'):
-        return None
-    now = time.time() if now is None else now
+    sig = []
+    for path in paths:
+        try:
+            st = os.stat(path)
+        except FileNotFoundError:
+            sig.append((path, None, None))
+            continue
+        except OSError:
+            return None
+        sig.append((path, st.st_mtime_ns, st.st_size))
+    return tuple(sig)
+
+
+def county_sig(here=None):
+    """Stable signature of the lead files. ('unreadable',) when they cannot be stated."""
+    sig = _county_file_sig(here or leads_root())
+    if sig is None:
+        return ('unreadable',)
+    return sig
+
+
+def _hold(why):
+    return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'bd': '',
+            'why': why, 'src': SRC}
+
+
+def _has_stem(case):
+    try:
+        import stay_gate
+        return bool(stay_gate.case_stem(case))
+    except Exception:
+        return False
+
+
+def _build_counties(here, sig):
+    """({case key: county}, ok) from one already-stated signature."""
+    if all(slot[1] is None for slot in sig):
+        return {}, True
+    for path, mtime, _size in sig:
+        if mtime is None:
+            continue
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            return {}, False
+        if not isinstance(data, list):
+            return {}, False
+    try:
+        import bk_lookup
+        leads = bk_lookup.load_leads(here)
+    except Exception:
+        return {}, False
+    if not isinstance(leads, dict):
+        return {}, False
+    mapping = {}
+    for key, ld in leads.items():
+        if isinstance(ld, dict):
+            mapping[str(key)] = _norm_county(ld.get('county'))
+    return mapping, True
+
+
+def county_index(here=None):
+    """({case key: county}, ok). ok is False when a lead file exists and cannot be read.
+
+    Memoized on lead_paths' mtimes and sizes. Missing files are an empty map, which is
+    readable. Never raises."""
+    global _COUNTY_MEMO
+    try:
+        here = here or leads_root()
+        sig = _county_file_sig(here)
+    except Exception:
+        return {}, False
+    if sig is None:
+        return {}, False
+    with _COUNTY_LOCK:
+        memo = _COUNTY_MEMO
+    if memo and memo[0] == sig:
+        return memo[2], memo[1]
+    try:
+        mapping, ok = _build_counties(here, sig)
+    except Exception:
+        mapping, ok = {}, False
+    with _COUNTY_LOCK:
+        current = _COUNTY_MEMO
+        if current and current[0] == sig:
+            return current[2], current[1]
+        _COUNTY_MEMO = (sig, ok, mapping)
+    return mapping, ok
+
+
+def _opinion_readable(case, county, now, env):
+    """Opinion for a number county_of already called broward or palmbeach."""
     key = case_key(case)
     if not key:
-        return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'bd': '',
-                'why': 'case number cannot be keyed to a clerk docket. Lead stays held.',
-                'src': SRC}
+        return _hold('case number cannot be keyed to a clerk docket. Lead stays held.')
     data, exists, err = load_cache()
     if err or data is None:
-        return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'bd': '',
-                'why': UNREADABLE_WHY, 'src': SRC}
+        return _hold(UNREADABLE_WHY)
     ent = data.get(key) if isinstance(data, dict) else None
     if _fresh_clear(ent, now, env):
         return {'blocks': False, 'ok': True, 'code': 'clear', 'bd': '', 'sl': ent.get('sl') or '',
@@ -758,8 +873,45 @@ def gate_opinion(case, now=None, env=None):
         why = PALM_WHY
     else:
         why = UNREAD_WHY
-    return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'bd': '',
-            'why': why, 'src': SRC}
+    return _hold(why)
+
+
+def gate_opinion(case, now=None, env=None):
+    """stay_gate / bk_lookup view. None when the flag is off, this is a Miami-Dade stem,
+    or the lead is not recorded as Broward or Palm Beach.
+
+    A Broward civil number can clear on a fresh full read of none or lifted. Any other
+    lead recorded as Broward or Palm Beach blocks. If the lead list cannot be read, every
+    case without a Miami-Dade stem blocks. An active stay blocks even when the read is
+    old. Never raises."""
+    env = os.environ if env is None else env
+    if not enabled(env):
+        return None
+    try:
+        if _has_stem(case):
+            return None
+        now = time.time() if now is None else now
+        try:
+            counties, ok = county_index()
+        except Exception:
+            counties, ok = {}, False
+        county = county_of(case)
+        known = county in ('broward', 'palmbeach')
+        op = _opinion_readable(case, county, now, env) if known else None
+        if not ok:
+            if isinstance(op, dict) and op.get('blocks'):
+                return op
+            return _hold(LEAD_LIST_WHY)
+        if known:
+            return op
+        recorded = _norm_county(counties.get(case_key(case)))
+        if recorded in _RECORDED_HOLD:
+            return _hold(NOT_READABLE_WHY)
+        return None
+    except Exception:
+        if _has_stem(case):
+            return None
+        return _hold('clerk docket check failed. Lead stays held.')
 
 
 def health_counts(now=None):

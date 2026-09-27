@@ -306,6 +306,16 @@ unparseable docket, or a check that throws holds. A clerk clear does not overrid
 CourtListener hold, a PACER active hit, or a Miami docket stay. `DEALFLOW_BK_ALLOW_CL_CLEAR`
 is unchanged: a CourtListener clear alone still does not release Broward or Palm Beach.
 
+The county is the one on the lead record (`bk_lookup.load_leads`), memoized on those files'
+mtimes. It is not inferred from a missing Miami-Dade stem. A lead recorded as Broward or
+Palm Beach stays held while the flag is on unless the number is a Broward civil case and
+this source has a fresh full read of none or lifted. A tax deed, a bare number, an FMCE or
+PR-C number, a Palm Beach small-claims number, or a CASE label is not a clerk-readable
+civil case, so that lead stays held. A Miami-Dade lead with no stem keeps the verdict it
+already had. If the lead list cannot be read, every case without a Miami-Dade stem stays
+held while the flag is on. The stay gate, the dial queue, and the board flags all apply
+that hold. The dial queue judges the clerk read at the queue's own clock.
+
 Broward is read only through the clerk's Commercial Data API (`api.browardclerk.org`),
 two GETs per case: `case.json` and `events_and_documents.json`. The key is the Windows
 user env var `BROWARD_CLERK_API_KEY`. It is never printed or stored. The public Case

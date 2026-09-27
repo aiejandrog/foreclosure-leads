@@ -77,12 +77,16 @@ How the gate uses it:
     A number with fewer than five digits ('CASE', 'OTHER', an LP- placeholder) is never looked up
     and stays stay_case_unresolvable.
 CLERK DOCKET (clerk_bk.py). Off unless DEALFLOW_CLERK_BK=1, so a merge does not change who
-can be contacted. When it is on, a Broward or Palm Beach number this function would otherwise
-clear stays held until that case's own clerk docket has been fully read and shows no active
-stay. An active stay on that docket refuses (stay_active) even if another source would clear.
-A missing, stale, partial, or unreadable docket refuses a lead this function would have
-cleared, and leaves an existing refusal as it was. Miami-Dade stems are not read by it.
-DEALFLOW_BK_ALLOW_CL_CLEAR is unchanged.
+can be contacted. When it is on, a lead recorded as Broward or Palm Beach that this function
+would otherwise clear stays held until a Broward civil number has a fresh full clerk read
+of no active stay. Any other number on those leads (a tax deed, a bare number, FMCE, PR-C,
+small claims, a CASE label) is not a clerk-readable civil case and stays held. The county
+is the one on the lead record, not the absence of a Miami-Dade stem: a Miami-Dade lead with
+no stem keeps the verdict it already had. If the lead files cannot be read, every case
+without a Miami-Dade stem stays held. An active stay on a Broward docket refuses
+(stay_active) even if another source would clear. A missing, stale, partial, or unreadable
+docket refuses a lead this function would have cleared, and leaves an existing refusal as
+it was. Miami-Dade stems are not read by it. DEALFLOW_BK_ALLOW_CL_CLEAR is unchanged.
 
 A clear is a point-in-time fact about a name search: it goes stale, so it stops clearing after the
 max age. On the free PACER tier the search is done ON DEMAND: check() sets 'pacer_need' True when a
@@ -472,11 +476,14 @@ def _merge_bk(raw, out):
 
 
 def _apply_clerk(raw, out):
-    """Clerk-docket opinion, only for a non-Miami case, and only when DEALFLOW_CLERK_BK=1.
+    """Clerk-docket opinion for a case with no Miami-Dade stem, only when DEALFLOW_CLERK_BK=1.
 
     An active stay replaces whatever this function was about to return. Any other clerk hold
     replaces a clear only, so an existing CourtListener or PACER refusal is left as it was.
-    If the flag is on and the check throws, the lead stays held."""
+    That includes a lead recorded as Broward or Palm Beach whose number is not a
+    clerk-readable civil case, and, when the lead list cannot be read, any non-stem case
+    this function would have cleared. If the flag is on and the check throws, the lead
+    stays held. Miami-Dade stems are returned unchanged."""
     if case_stem(raw):
         return out
     if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() != '1':

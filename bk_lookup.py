@@ -1230,7 +1230,7 @@ class HoldIndex:
                 out = (True, 'federal bankruptcy check has not run for this lead')
             else:
                 out = (False, '')
-        out = _apply_clerk_hold(case, out)
+        out = _apply_clerk_hold(case, out, self.now)
         self._memo[key] = out
         return out
 
@@ -1249,22 +1249,23 @@ def _cache_sig():
     if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1':
         try:
             import clerk_bk
-            extra = clerk_bk.cache_sig()
+            extra = (clerk_bk.cache_sig(), clerk_bk.county_sig())
         except Exception:
             extra = ('clerk-unreadable',)
     return (base, extra)
 
 
-def _apply_clerk_hold(case, out):
+def _apply_clerk_hold(case, out, now=None):
     """(held, why). With DEALFLOW_CLERK_BK off this is `out` unchanged. An active clerk stay
-    replaces a weaker answer. Any other clerk hold replaces a clear only. A throw while the
-    flag is on holds."""
+    replaces a weaker answer. Any other clerk hold replaces a clear only, including a lead
+    recorded as Broward or Palm Beach whose number is not a clerk-readable civil case. A
+    throw while the flag is on holds. `now` is the HoldIndex clock."""
     held, why = out
     if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() != '1':
         return out
     try:
         import clerk_bk
-        op = clerk_bk.gate_opinion(case)
+        op = clerk_bk.gate_opinion(case, now)
     except Exception:
         return True, 'clerk docket check failed. Lead stays held.'
     if not isinstance(op, dict) or not op.get('blocks'):
@@ -1294,7 +1295,10 @@ def federal_hold(case, here=None, index=None):
 
     Miami-Dade leads that are not docket-clear (stay_unverified lis pendens included) stay
     callable unless this cache flags them. A Broward or Palm Beach lead is dropped once the
-    cache file exists and the lead has no fresh clear. `here` is accepted so older callers
+    cache file exists and the lead has no fresh clear. With DEALFLOW_CLERK_BK=1, a lead
+    recorded as Broward or Palm Beach is also dropped unless it is a Broward civil number
+    with a fresh full clerk read of no active stay, and an unreadable lead list drops every
+    case that has no Miami-Dade stem. `here` is accepted so older callers
     keep working; the cache does not live beside the sale-history file. Pass `index` from
     federal_hold_index() so a queue does not re-read the file per row."""
     if index is None:
@@ -1329,7 +1333,11 @@ def send_hold(case, here=None):
 
 
 def flags_for_cases(cases, now=None):
-    """{pacer_key: {hold, why, hard}} for the board bake. Counts and case numbers only."""
+    """{pacer_key: {hold, why, hard}} for the board bake. Counts and case numbers only.
+
+    With DEALFLOW_CLERK_BK=1, a lead recorded as Broward or Palm Beach is a hold unless it
+    is a Broward civil number with a fresh full clerk read of no active stay. An unreadable
+    lead list holds every case that has no Miami-Dade stem."""
     try:
         import stay_gate
     except Exception:
@@ -1494,6 +1502,23 @@ def contact_rank(ld):
     return (days + boost, str(ld.get('key') or ''))
 
 
+def lead_paths(here=HERE):
+    """The files load_leads reads, in that order.
+
+    leads_final.json and lp_leads.json are always listed, even when they are missing, so a
+    county map keyed on mtimes notices when one appears. The middle paths are the county
+    *_leads.json files this function already keeps."""
+    paths = [os.path.join(here, 'leads_final.json')]
+    skip = ('leads_final.json', 'leads_raw.json', 'lp_leads.json', 'balloon_leads.json')
+    for f in sorted(glob.glob(os.path.join(here, '*_leads.json'))):
+        bn = os.path.basename(f)
+        if bn in skip or bn.startswith('_'):
+            continue
+        paths.append(f)
+    paths.append(os.path.join(here, 'lp_leads.json'))
+    return paths
+
+
 def load_leads(here=HERE):
     import stay_gate
     leads = {}
@@ -1514,20 +1539,18 @@ def load_leads(here=HERE):
             ld['county'] = str(county).upper()
         _note_contact(ld, row or {})
 
-    rows = _read_json(os.path.join(here, 'leads_final.json'))
+    paths = lead_paths(here)
+    rows = _read_json(paths[0])
     for r in rows if isinstance(rows, list) else []:
         if isinstance(r, dict):
             add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', r.get('owners') or r.get('owner_clean'),
                 'first_last', r)
-    for f in sorted(glob.glob(os.path.join(here, '*_leads.json'))):
-        bn = os.path.basename(f)
-        if bn in ('leads_final.json', 'leads_raw.json', 'lp_leads.json', 'balloon_leads.json') or bn.startswith('_'):
-            continue
+    for f in paths[1:-1]:
         rows = _read_json(f)
         for d in rows if isinstance(rows, list) else []:
             if isinstance(d, dict) and d.get('st') != 'BAL':
                 add(d.get('case'), d.get('county'), d.get('owners'), 'last_first', d)
-    lp = _read_json(os.path.join(here, 'lp_leads.json'))
+    lp = _read_json(paths[-1])
     for d in lp if isinstance(lp, list) else []:
         if isinstance(d, dict) and not d.get('lpDismissed'):
             add(d.get('case'), d.get('county') or 'MIAMI-DADE', d.get('owners'), 'last_first', d)

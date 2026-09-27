@@ -58,6 +58,8 @@ def isolate(name):
     os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
     os.environ['CLERK_BK_MIN_INTERVAL'] = '0'
     CK._MEMO = None
+    CK._COUNTY_MEMO = None
+    CK._LEADS_HERE = None
     BL._HOLD_MEMO = None
     return d
 
@@ -389,6 +391,229 @@ try:
 finally:
     CK.gate_opinion = real
     os.environ.pop('DEALFLOW_CLERK_BK', None)
+
+
+# --------------------------------------------------------------------------------------- lead county
+print('-- lead county')
+# Numbers that do not match the Broward civil or Palm Beach UCN patterns. Made up.
+SHAPES = (
+    ('5099-1234TD', 'PALM BEACH'),             # tax deed
+    ('12345', 'BROWARD'),                       # bare 5-digit
+    ('FMCE-26-000123', 'BROWARD'),
+    ('PR-C-26-000123', 'PALM BEACH'),
+    ('509999SC000123XXXANB', 'PALM BEACH'),     # small claims
+    ('CASE 26-0001234', 'BROWARD'),             # CASE label
+)
+MIAMI_ODD = '2019-12345'                        # Miami-Dade lead, no stem
+CIVIL = 'CACE-99-000177'
+check('these shapes are not a clerk county by number alone',
+      all(CK.county_of(case) == '' for case, _county in SHAPES) and CK.county_of(MIAMI_ODD) == '')
+check('the CASE label keys to its number', SG.pacer_key('CASE 26-0001234') == '26-0001234')
+check('a 5-digit Miami-Dade number has no stem', SG.case_stem(MIAMI_ODD) == '')
+
+
+def _lead_rows():
+    rows = [{'case': case, 'county': county, 'owners': ''} for case, county in SHAPES]
+    rows.append({'case': MIAMI_ODD, 'county': 'MIAMI-DADE', 'owners': ''})
+    rows.append({'case': CIVIL, 'county': 'BROWARD', 'owners': ''})
+    return rows
+
+
+def _arm_clears(cases):
+    data = {}
+    for case in cases:
+        key = SG.pacer_key(case)
+        data[key] = {
+            'verdict': 'clear', 'why': 'no open federal bankruptcy matched this owner',
+            'searched': True, 'ok_check': True, 'err': '', 't': time.time(), 'cases': [],
+            'src': 'courtlistener',
+        }
+    BL._dump(BL.cache_path(), data)
+    BL._HOLD_MEMO = None
+
+
+def _view(case, sh):
+    verdict = SG.check(case, sh)
+    flag = BL.flags_for_cases([case]).get(SG.pacer_key(case))
+    return (
+        verdict.get('ok'), verdict.get('code'), verdict.get('src'), verdict.get('why'),
+        BL.federal_hold(case), flag,
+    )
+
+
+d = isolate('lead-county')
+CK._LEADS_HERE = str(d)
+(d / 'sample_leads.json').write_text(json.dumps(_lead_rows()), encoding='utf-8')
+_arm_clears([case for case, _county in SHAPES] + [MIAMI_ODD, CIVIL])
+sh = str(d / 'sale_history_cache.json')
+os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
+try:
+    calls = {'n': 0}
+    real_load = BL.load_leads
+
+    def _counting(here=BL.HERE):
+        calls['n'] += 1
+        return real_load(here)
+
+    BL.load_leads = _counting
+    try:
+        CK._COUNTY_MEMO = None
+        loaded, ok_map = CK.county_index()
+        again, ok_again = CK.county_index()
+        check('the county map is memoized on the lead files',
+              ok_map and ok_again and calls['n'] == 1 and loaded == again
+              and loaded.get('12345') == 'BROWARD'
+              and loaded.get('5099-1234TD') == 'PALM BEACH'
+              and loaded.get('FMCE-26-000123') == 'BROWARD'
+              and loaded.get('PR-C-26-000123') == 'PALM BEACH'
+              and loaded.get('509999SC000123XXXANB') == 'PALM BEACH'
+              and loaded.get('26-0001234') == 'BROWARD'
+              and loaded.get(MIAMI_ODD) == 'MIAMI-DADE'
+              and loaded.get(CIVIL) == 'BROWARD', loaded)
+    finally:
+        BL.load_leads = real_load
+
+    os.environ.pop('DEALFLOW_CLERK_BK', None)
+    BL._HOLD_MEMO = None
+    off = {case: _view(case, sh) for case, _county in SHAPES}
+    off_miami = _view(MIAMI_ODD, sh)
+    check('flag off: each unreadable shape still releases on a CourtListener clear',
+          all(v[0] is True and v[1] == SG.CLEAR and v[2] == 'courtlistener' and v[4] == (False, '')
+              and v[5] is None for v in list(off.values()) + [off_miami]),
+          off)
+    os.environ['DEALFLOW_CLERK_BK'] = '1'
+    BL._HOLD_MEMO = None
+    for case, county in SHAPES:
+        verdict, hold, flag = SG.check(case, sh), BL.federal_hold(case), BL.flags_for_cases([case])
+        key = SG.pacer_key(case)
+        row = flag.get(key) or {}
+        check('flag on: %s (%s) is held on the stay gate' % (case, county),
+              verdict.get('ok') is False and verdict.get('code') == SG.UNVERIFIED
+              and verdict.get('src') == 'clerk_docket'
+              and 'not a clerk-readable civil case' in (verdict.get('why') or ''), verdict)
+        check('flag on: %s is held on the dial queue' % case,
+              hold[0] is True and 'not a clerk-readable civil case' in hold[1], hold)
+        check('flag on: %s is held on the board flag' % case,
+              row.get('hold') is True and row.get('hard') is False
+              and 'not a clerk-readable civil case' in (row.get('why') or ''), row)
+    on_miami = _view(MIAMI_ODD, sh)
+    check('flag on: a Miami-Dade lead with no stem is unchanged', on_miami == off_miami, on_miami)
+    os.environ.pop('DEALFLOW_CLERK_BK', None)
+    BL._HOLD_MEMO = None
+    check('flag off again matches the first pass',
+          {case: _view(case, sh) for case, _county in SHAPES} == off
+          and _view(MIAMI_ODD, sh) == off_miami)
+
+    os.environ['DEALFLOW_CLERK_BK'] = '1'
+    CK.save_cache({SG.pacer_key(CIVIL): CK._entry('broward', 'none', True, events=2, now=time.time())})
+    BL._HOLD_MEMO = None
+    civil = _view(CIVIL, sh)
+    check('flag on: a Broward civil number with a fresh full read can still release',
+          civil[0] is True and civil[1] == SG.CLEAR and civil[4] == (False, '') and civil[5] is None,
+          civil)
+    still = BL.federal_hold('5099-1234TD')
+    check('that fresh civil read does not release a tax-deed number',
+          still[0] is True and 'not a clerk-readable civil case' in still[1], still)
+
+    rows = _lead_rows()
+    for row in rows:
+        if row['case'] == '12345':
+            row['county'] = 'MIAMI-DADE'
+    (d / 'sample_leads.json').write_text(json.dumps(rows), encoding='utf-8')
+    moved, moved_ok = CK.county_index()
+    check('a rewritten lead file changes the memoized county',
+          moved_ok and moved.get('12345') == 'MIAMI-DADE' and moved.get('5099-1234TD') == 'PALM BEACH',
+          moved.get('12345'))
+    check('the dial queue follows the rewritten county without a manual cache clear',
+          BL.federal_hold('12345') == (False, ''))
+    check('the stay gate follows the rewritten county',
+          SG.check('12345', sh).get('ok') is True)
+    kept = BL.flags_for_cases(['5099-1234TD']).get('5099-1234TD') or {}
+    check('a Palm Beach tax deed in that same file stays held',
+          kept.get('hold') is True and 'not a clerk-readable civil case' in (kept.get('why') or ''), kept)
+finally:
+    CK._LEADS_HERE = None
+    CK._COUNTY_MEMO = None
+    os.environ.pop('DEALFLOW_CLERK_BK', None)
+    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
+
+d = isolate('lead-unreadable')
+CK._LEADS_HERE = str(d)
+(d / 'broward_leads.json').write_text('{', encoding='utf-8')
+UNREAD_CIVIL = 'CACE-99-000188'
+UNREAD_ACTIVE = 'CACE-99-000189'
+os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
+_arm_clears([UNREAD_CIVIL, UNREAD_ACTIVE, MIAMI_ODD])
+CK.save_cache({
+    SG.pacer_key(UNREAD_CIVIL): CK._entry('broward', 'none', True, events=2, now=time.time()),
+    SG.pacer_key(UNREAD_ACTIVE): CK._entry(
+        'broward', 'active', True, bd='2026-01-02', now=time.time()),
+})
+(d / 'sale_history_cache.json').write_text(json.dumps({
+    MIAMI: {'a': False, 'bd': '', 'sl': ''},
+}), encoding='utf-8')
+sh = str(d / 'sale_history_cache.json')
+try:
+    os.environ.pop('DEALFLOW_CLERK_BK', None)
+    BL._HOLD_MEMO = None
+    off_civil = _view(UNREAD_CIVIL, sh)
+    off_odd = _view(MIAMI_ODD, sh)
+    off_stem = _view(MIAMI, sh)
+    check('flag off: an unreadable lead list does not change a clear',
+          off_civil[0] is True and off_civil[4] == (False, '') and off_civil[5] is None
+          and off_odd[0] is True and off_stem[0] is True and off_stem[1] == SG.CLEAR,
+          (off_civil, off_odd, off_stem))
+    os.environ['DEALFLOW_CLERK_BK'] = '1'
+    BL._HOLD_MEMO = None
+    for case, label in ((UNREAD_CIVIL, 'Broward civil clear'), (MIAMI_ODD, 'Miami-Dade number with no stem')):
+        verdict = SG.check(case, sh)
+        hold = BL.federal_hold(case)
+        row = BL.flags_for_cases([case]).get(SG.pacer_key(case)) or {}
+        check('unreadable lead list, flag on: %s stays held on the stay gate' % label,
+              verdict.get('ok') is False and verdict.get('code') == SG.UNVERIFIED
+              and 'unreadable' in (verdict.get('why') or ''), verdict)
+        check('unreadable lead list, flag on: %s stays held on the dial queue' % label,
+              hold[0] is True and 'unreadable' in hold[1], hold)
+        check('unreadable lead list, flag on: %s stays held on the board flag' % label,
+              row.get('hold') is True and 'unreadable' in (row.get('why') or ''), row)
+    on_stem = _view(MIAMI, sh)
+    check('unreadable lead list, flag on: a Miami-Dade stem is unchanged',
+          on_stem == off_stem, on_stem)
+    active = SG.check(UNREAD_ACTIVE, sh)
+    active_flag = BL.flags_for_cases([UNREAD_ACTIVE]).get(SG.pacer_key(UNREAD_ACTIVE)) or {}
+    check('unreadable lead list still reports an active clerk stay',
+          active.get('code') == SG.STAY_ACTIVE and 'ACTIVE' in (active.get('why') or '')
+          and active_flag.get('hard') is True, (active, active_flag))
+finally:
+    CK._LEADS_HERE = None
+    CK._COUNTY_MEMO = None
+    os.environ.pop('DEALFLOW_CLERK_BK', None)
+    os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
+
+d = isolate('clerk-clock')
+os.environ['DEALFLOW_BK_ALLOW_CL_CLEAR'] = '1'
+os.environ['DEALFLOW_CLERK_BK'] = '1'
+key = SG.pacer_key(CASE)
+
+def _cl_at(t):
+    BL._dump(BL.cache_path(), {
+        key: {'verdict': 'clear', 'why': 'no open federal bankruptcy matched this owner',
+              'searched': True, 'ok_check': True, 'err': '', 't': t, 'cases': [],
+              'src': 'courtlistener'},
+    })
+    BL._HOLD_MEMO = None
+
+_cl_at(NOW)
+CK.save_cache({key: CK._entry('broward', 'none', True, events=4, now=NOW)})
+BL._HOLD_MEMO = None
+fresh = BL.federal_hold_index(now=NOW).hold(CASE)
+check('the dial queue judges a clerk read at the index clock', fresh == (False, ''), fresh)
+_cl_at(NOW + 20 * 86400)
+aged = BL.federal_hold_index(now=NOW + 20 * 86400).hold(CASE)
+check('the same read is held once it is older than the max age at that clock',
+      aged[0] is True and 'clerk docket read is older' in aged[1], aged)
+os.environ.pop('DEALFLOW_CLERK_BK', None)
+os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
 
 
 # --------------------------------------------------------------------------------------- nightly
