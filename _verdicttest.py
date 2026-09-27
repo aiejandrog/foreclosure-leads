@@ -3824,10 +3824,13 @@ class ThirtyFirstReviewTests(unittest.TestCase):
             'read': True, 'limited_scope': False, 'in_rem_only': False, 'deficiency': None,
             'defendants_named': 1, 'defendants_not_named': ['SUNSHINE CONDOMINIUM ASSOCIATION']})
         r = CV.assess(t)
-        said = [n for n in r['notes'] if 'SUNSHINE' in n]
+        said = [n for n in r['notes'] if 'not named in the controlling judgment' in n]
         self.assertTrue(said, r['notes'])
         self.assertIn('not a finding', said[0])
         self.assertEqual(r['verdict'], 'supported', r['missing'])
+        # Count only: naming them changed what this report carries (thirty-second review).
+        self.assertNotIn('SUNSHINE', ' '.join(r['conflicts'] + r['missing'] + r['notes']
+                                              + r['supported_by']))
 
     def test_no_read_body_for_the_controlling_judgments_scope_is_restated(self):
         t = self.built(self.JUDGED, controlling='2', amount=105000.00, pages={})
@@ -3901,6 +3904,157 @@ class ThirtyFirstReviewTests(unittest.TestCase):
                          'read')
         r = CV.assess(t)
         self.assertTrue([m for m in r['missing'] if 'producers disagree' in m], r['missing'])
+
+
+class ThirtySecondReviewTests(unittest.TestCase):
+    """The sale scans reading a narrower text than the producer saved, and the round before's own
+    widening of _replaces reopening the exhibit calibration on a caption line.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $105,000.00'
+    PROCEEDS = ('STIPULATION\n'
+                'The parties agree the foreclosure sale set for 12/28/2026 shall proceed as '
+                'scheduled.')
+
+    def case(self, extra=(), pages=None):
+        pg = {'2': self.PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + list(extra), controlling='2', amount=105000.00, pages=pg)
+
+    def bland(self, extra=(), pages=None):
+        """The entry the CLERK indexed with no sale word, so only the read body carries one."""
+        return self.case(list(extra) + [(140, 'Stipulation', '', '06/01/2026', '')],
+                         dict({'140': self.PROCEEDS}, **(pages or {})))
+
+    def indexed(self, extra=(), pages=None):
+        """The strictly STRONGER twin: the same read document, plus a clerk line that says sale."""
+        return self.case(list(extra) + [(140, 'Stipulation as to foreclosure sale', '',
+                                         '06/01/2026', '')],
+                         dict({'140': self.PROCEEDS}, **(pages or {})))
+
+    def test_the_producer_saves_the_body_sale_line_and_the_title_does_not_carry_it(self):
+        # The producer fact the rest of this class rests on: :395/:398 save the read body's sale
+        # lines in sale_passages, while operative_text is the page-1 TITLE line only and STIPULATION
+        # is not in _body_kind's whitelist, so it is the clerk's line.
+        entry = next(e for e in self.bland()['entries'] if e['entry_id'] == '140')
+        self.assertEqual(entry['operative_text'], 'Stipulation')
+        self.assertTrue([p for p in entry['sale_passages'] if '12/28/2026' in p],
+                        entry['sale_passages'])
+        self.assertNotIn('sale', CV._producer_text(entry).lower())
+
+    def test_a_read_document_saying_a_sale_is_set_holds_the_case(self):
+        # _sale_state's unlabelled scan asked _producer_text, so the sentence the producer had
+        # already saved was invisible: `supported`, amount vouched for to the cent, entry named
+        # nowhere. This module's own _sale_dates_of reads that same field and returns the date.
+        t = self.bland()
+        self.assertEqual(CV._sale_dates_of(next(e for e in t['entries']
+                                                if e['entry_id'] == '140')), ['2026-12-28'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+
+    def test_the_bland_and_the_indexed_docket_now_read_the_same(self):
+        # The whole shape: the docket where LESS is indexed must not read better.
+        self.assertEqual(CV.assess(self.bland())['verdict'],
+                         CV.assess(self.indexed())['verdict'])
+
+    def test_a_read_sale_line_under_a_bankruptcy_stay_holds_the_case(self):
+        # The worst posture this reaches: a stay in force, a read document saying a foreclosure sale
+        # is set, and the report vouching for the amount with the sale named nowhere.
+        bk = [(3, 'Suggestion of Bankruptcy', '', '05/01/2026', '')]
+        t = self.bland(bk)
+        self.assertIs(t['stay_in_effect'], True)
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+        self.assertEqual(r['verdict'], CV.assess(self.indexed(bk))['verdict'])
+
+    def test_a_read_cancellation_is_not_called_no_cancellation_on_the_docket(self):
+        # The same root cause claiming the opposite: the conflict sentence said "with no cancellation
+        # or certificate on or after it" over a file whose own sale_passages hold a later line saying
+        # the sale is cancelled. A claim the producer's own field refutes.
+        cancel = ('STIPULATION\n'
+                  'The foreclosure sale set for 12/28/2026 is hereby cancelled by agreement.')
+        t = self.case([(3, 'Notice of Foreclosure Sale', 'SALE SET FOR 12/28/2026', '05/01/2026', ''),
+                       (4, 'Suggestion of Bankruptcy', '', '05/15/2026', ''),
+                       (140, 'Stipulation', '', '06/01/2026', '')], pages={'140': cancel})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertTrue([p for p in entry['sale_passages'] if 'cancelled' in p])
+        r = CV.assess(t)
+        self.assertFalse([c for c in r['conflicts'] if 'no cancellation' in c], r['conflicts'])
+
+    def test_the_judgments_own_sell_words_still_do_not_hold_a_routine_docket(self):
+        # The calibration the docstring at _sale_state records: sale_passages also catches the
+        # judgment's own "shall sell the property". The scans are scoped to entries the classifier
+        # left unlabelled, so a final_judgment never enters them.
+        t = self.case(pages={'2': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                   'The clerk shall sell the property at public sale.\n'
+                                   'Total $105,000.00')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '2')
+        self.assertTrue([p for p in entry['sale_passages'] if 'sell' in p])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['notes']))
+
+    def test_routine_sale_paperwork_read_in_full_still_does_not_hold_the_docket(self):
+        # The twentieth review's calibration against the WIDER text: the routine paperwork of a
+        # noticed sale carries the word in its body too, and the closing-word filter is what keeps
+        # it out, not the narrowness of the input.
+        t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '', '06/01/2026', ''),
+                       (141, 'Statement of Amounts Due at Sale', '', '06/05/2026', '')],
+                      pages={'141': ('STATEMENT OF AMOUNTS DUE AT SALE\n'
+                                     'Amounts due at the foreclosure sale of 10/28/2026.')})
+        r = CV.assess(t)
+        self.assertFalse([m for m in r['missing'] if '141' in m], r['missing'])
+
+    # ---- the round before's own widening of _replaces ------------------------------------------
+
+    def test_a_caption_line_in_the_attached_title_is_not_a_replacement(self):
+        # _body_kind :236 appends up to two following ALL-CAPS lines to the title, so caption text
+        # lands in attached_document_title - and the round before searched the whole string, so
+        # "SUBSTITUTED PLAINTIFF US BANK NA" matched `substitut\w*` and a plain copy of the
+        # controlling judgment filed under a common foreclosure caption read `incomplete`.
+        t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')],
+                      pages={'140': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                     'SUBSTITUTED PLAINTIFF US BANK NA\n'
+                                     'Total $105,000.00')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertIn('SUBSTITUTED PLAINTIFF', entry['attached_document_title'])
+        self.assertFalse(CV._replaces(entry))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['notes']))
+
+    def test_an_amending_title_is_still_a_replacement_because_the_word_is_a_prefix(self):
+        # The thirty-first review's finding must still hold. _body_kind's whitelist anchors the
+        # document noun after an optional `amended |agreed |amended agreed ` prefix, so a real
+        # amending signal in an attached title is always a prefix of it.
+        for title in ('AMENDED FINAL JUDGMENT OF FORECLOSURE\nTOTAL $225,000.00',
+                      'AMENDED AGREED FINAL JUDGMENT OF FORECLOSURE\nTOTAL $225,000.00'):
+            t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')], pages={'140': title})
+            self.assertTrue(CV._replaces(next(e for e in t['entries'] if e['entry_id'] == '140')))
+            self.assertEqual(CV.assess(t)['verdict'], 'incomplete', title)
+
+    def test_the_clerks_own_line_is_still_searched_unanchored(self):
+        # Only the TITLE is anchored. reconcile_judgments searches its own text unanchored (:754),
+        # and this has to keep mirroring that.
+        t = self.case([(140, 'Notice of Filing of Amended Final Judgment', '', '06/01/2026', '')],
+                      pages={'140': 'AMENDED FINAL JUDGMENT OF FORECLOSURE\nTOTAL $225,000.00'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertTrue(CV._replaces(entry))
+
+    # ---- the scope notes -----------------------------------------------------------------------
+
+    def test_the_in_rem_note_carries_the_producers_own_passage(self):
+        # in_rem_only is a bare `\bin\s+rem\b` over up to 30,000 characters, so the note asserted a
+        # conclusion a reader could not check. The producer already saves the passage.
+        t = self.case(pages={'2': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                   'Judgment is entered against the borrower in rem.\n'
+                                   'Total $105,000.00')})
+        self.assertIs(t['judgments']['controlling_scope']['in_rem_only'], True)
+        said = [n for n in CV.assess(t)['notes'] if 'in_rem_only' in n]
+        self.assertTrue(said)
+        self.assertIn('the producer saved the passage', said[0])
 
 
 if __name__ == '__main__':

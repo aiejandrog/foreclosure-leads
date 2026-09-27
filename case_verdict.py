@@ -508,7 +508,7 @@ def _sale_state(timeline, status, kind):
             closing = _newer(closing, entry)
         elif labels & set(SALE_NOTICE_KINDS):
             opening = _newer(opening, entry)
-        elif labels <= set(UNLABELLED_KINDS) and _SALE_WORD_RE.search(_producer_text(entry)):
+        elif labels <= set(UNLABELLED_KINDS) and _SALE_WORD_RE.search(_sale_text(entry)):
             # The classifier saw the word and did not label the entry. That is a limit of the
             # classifier, not evidence either way, and it is not this module's to resolve.
             unlabelled.append(entry)
@@ -531,7 +531,7 @@ def _sale_state(timeline, status, kind):
             # reach it: "Statement of Amounts Due at Sale" and "Plaintiff's Bid at Sale" held the
             # ordinary live-lead docket incomplete (twentieth review). The final branch below asks a
             # different question - a FRESH notice after a cancellation - and is not filtered.
-            out = [e for e in out if _CLOSING_WORD_RE.search(_producer_text(e))]
+            out = [e for e in out if _CLOSING_WORD_RE.search(_sale_text(e))]
         return out
 
     # The floor for the LIVE-sale branches. Those ask whether an unlabelled entry might be the
@@ -640,7 +640,7 @@ def _sale_state(timeline, status, kind):
         # a rescheduled-sale notice does.
         later = [e for e in later
                  if any(d > closing_date for d in _sale_dates_of(e))
-                 or _RESET_WORD_RE.search(_producer_text(e))]
+                 or _RESET_WORD_RE.search(_sale_text(e))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))
@@ -669,6 +669,30 @@ def _classify(text):
         return None
 
 
+def _sale_text(entry):
+    """`_producer_text` plus the producer's OWN record of this entry's sale words.
+
+    build_timeline (:395, :398) saves `sale_passages`: the docket line when it carries "sale", plus
+    every line of every READ page matching its sale vocabulary. `_producer_text` is
+    `operative_text` + `description` + `comments`, and `operative_text` is `title or index_text`
+    (:364) - the page-1 TITLE line, and only when `_body_kind`'s whitelist recognised it (:234). So a
+    read document whose page 1 is titled STIPULATION, or whose title the producer moved to
+    `attached_document_title` and nulled (:358), contributed no body text at all: a read stipulation
+    saying "the foreclosure sale set for 12/28/2026 shall proceed as scheduled" was invisible to the
+    scans while the producer's own field held the sentence, and the case read `supported` with the
+    amount vouched for to the cent and the sale named nowhere - under a bankruptcy stay in one shape.
+    The docket whose CLERK line also said "sale", strictly more indexed, was `incomplete`
+    (thirty-second review).
+
+    `_sale_dates_of` already reads this field for the DATES, and its docstring already says why:
+    "Reading only the docket words gave the producer's parser a narrower input than the producer gave
+    it." The nineteenth review fixed that side and not this one.
+    """
+    parts = [_producer_text(entry)]
+    parts += [str(p) for p in _rows(entry, 'sale_passages') if str(p or '').strip()]
+    return ' '.join(x for x in parts if x)
+
+
 def _replaces(entry):
     """True when this entry's own words say it REPLACES an earlier judgment.
 
@@ -690,12 +714,24 @@ def _replaces(entry):
     the superseded figure printed verified to the cent (thirty-first review). The string is the
     producer's own, saved at :370 from the page it read.
     """
-    text = ' '.join(x for x in (_producer_text(entry), str(entry.get('attached_document_title') or '')) if x)
-    if not text.strip():
+    text = _producer_text(entry)
+    title = str(entry.get('attached_document_title') or '').strip()
+    if not text.strip() and not title:
         return False
     try:
         import miami_case_timeline
-        return bool(miami_case_timeline._REPLACES.search(text))
+        if miami_case_timeline._REPLACES.search(text):
+            return True
+        # ANCHORED on the title, and that is the producer's own construction, not a bound of ours.
+        # `_body_kind`'s whitelist (:234) anchors the document noun at the start of the line after an
+        # optional `amended |agreed |amended agreed ` prefix, so an amending signal the producer can
+        # put in an attached title is always a PREFIX of it - and :236 then appends up to two
+        # following ALL-CAPS lines, which is caption text. Searching the whole string made
+        # "FINAL JUDGMENT OF FORECLOSURE SUBSTITUTED PLAINTIFF US BANK NA" - a plain copy of the
+        # controlling judgment under a common foreclosure caption - match `substitut\w*` and reopened
+        # the twelfth review's exhibit calibration (thirty-second review, on the round before's own
+        # fix).
+        return bool(title and miami_case_timeline._REPLACES.match(title))
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return False
 
@@ -1133,21 +1169,32 @@ def assess(timeline, dossier=None):
                 notes.append("the controlling judgment's own body reads as limited in scope "
                              '(judgment_scope limited_scope), so whether it disposes of the whole '
                              'case is a question to check on the image')
+            # in_rem_only is a bare `\bin\s+rem\b` search over up to 30,000 characters (:611, :637),
+            # so it also fires on "the motion for an in rem judgment was denied". The producer already
+            # saves the surrounding passage; printing the conclusion without it asserted something a
+            # reader could not check (thirty-second review).
+            passages = [str(x).strip() for x in (scope.get('passages') or []) if str(x or '').strip()]
+            cite = (' - the producer saved the passage: %r' % passages[0][:240]) if passages else ''
             if scope.get('in_rem_only'):
                 notes.append("the controlling judgment's own body says in rem (judgment_scope "
-                             'in_rem_only)')
+                             'in_rem_only)' + cite)
             if scope.get('deficiency'):
                 notes.append("the controlling judgment's own body records the deficiency as %s "
-                             '(judgment_scope deficiency)' % scope.get('deficiency'))
+                             '(judgment_scope deficiency)' % scope.get('deficiency') + cite)
             unnamed = [str(d) for d in (scope.get('defendants_not_named') or []) if str(d).strip()]
             if unnamed:
-                # The producer's own qualification, not a finding of ours: "a defendant the body does
-                # not name may still be bound through a caption or exhibit; verify on the image".
+                # COUNT ONLY, and deliberately. defendants_not_named comes from docket_defendants
+                # (:666), which includes individual homeowner defendants, and for thirty-one rounds
+                # case-verdicts.json/.md carried only case numbers, entry ids and amounts. The write
+                # is already guarded into DEALFLOW_DIR by case_review.output_path, so naming them
+                # broke no rule - but it changed what this report carries as a side effect of a note,
+                # and the count plus the entry id asks the same question (thirty-second review).
+                # The rest of the sentence is the producer's own qualification, not a finding of ours.
                 notes.append('%d docket defendant(s) are not named in the controlling judgment\'s '
-                             'body (%s); the producer records that a body can still bind a party '
-                             'through a caption or exhibit, so this is a question to check, not a '
-                             'finding' % (len(unnamed), '; '.join(sorted(unnamed)[:5])
-                                          + ('; and %d more' % (len(unnamed) - 5) if len(unnamed) > 5 else '')))
+                             'body (entry %s; the names are in judgment_scope, not repeated here); '
+                             'the producer records that a body can still bind a party through a '
+                             'caption or exhibit, so this is a question to check, not a finding'
+                             % (len(unnamed), judgments.get('controlling_entry') or '?'))
 
     # --- the bankruptcy stay -------------------------------------------------------------------
     stay = timeline.get('stay_in_effect')

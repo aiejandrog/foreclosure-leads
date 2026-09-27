@@ -447,6 +447,46 @@ document was opened; the twenty-ninth review's single-walled-row case still prin
 there: `AGREEING_STATES`' `read_partial` pair is dead at that site, since `read_partial` lives in
 `PART_READ` and never in the three tuples tested, so only the `not_enumerated` pair is ever consulted.
 
+**Thirty-second review.** The sale scans were reading a narrower text than the producer saved, and
+the round before's own widening of `_replaces` had reopened a calibration.
+
+`_sale_state`'s three scans asked `_producer_text` - `operative_text` + `description` + `comments` -
+while the producer saves `sale_passages` (:395, :398): the docket line when it carries "sale", plus
+every line of every READ page matching its sale vocabulary. `operative_text` is the page-1 TITLE line
+and only when `_body_kind`'s whitelist recognised it (:234), so a read document titled STIPULATION
+contributed no body text at all. A read stipulation saying "the foreclosure sale set for 12/28/2026
+shall proceed as scheduled" was invisible to the scans while the producer's own field held the
+sentence: `supported`, the amount vouched for to the cent, the entry named nowhere - and `supported`
+again with a s362 stay in force. The docket whose CLERK line also said "sale", strictly more indexed,
+was `incomplete`. The same gap claimed the opposite in another shape: the conflict sentence said "with
+no cancellation or certificate on or after it" over a file whose own `sale_passages` hold a later line
+saying the sale is cancelled. `_sale_dates_of` has read that field since the nineteenth review and its
+docstring already says why - "Reading only the docket words gave the producer's parser a narrower input
+than the producer gave it" - so this was that fix applied to the DATES side and not the WORDS side. The
+calibrations hold: the judgment's own "shall sell the property" never enters, because the scans are
+scoped to entries the classifier left unlabelled, and the twentieth review's routine sale paperwork is
+kept out by the closing-word filter rather than by the narrowness of the input.
+
+`_replaces` had been widened to search the whole of `attached_document_title`, and `_body_kind` (:236)
+appends up to two following ALL-CAPS lines to a title, which is caption text. So "FINAL JUDGMENT OF
+FORECLOSURE SUBSTITUTED PLAINTIFF US BANK NA" - a plain copy of the controlling judgment under a common
+foreclosure caption - matched `substitut\w*` and reopened the twelfth review's exhibit calibration. The
+title test is ANCHORED now, and that is the producer's own construction rather than a bound of ours:
+the whitelist anchors the document noun at the start of the line after an optional
+`amended |agreed |amended agreed ` prefix, so an amending signal the producer can put in an attached
+title is always a prefix of it. The clerk's own line is still searched unanchored, because
+`reconcile_judgments` searches its text unanchored.
+
+Two smaller things from the same round. The `in_rem_only` note now prints the passage the producer
+already saved, since `in_rem_only` is a bare `\bin\s+rem\b` search over up to 30,000 characters (:611,
+:637) that also fires on "the motion for an in rem judgment was denied", and the note had asserted a
+conclusion a reader could not check. And the unnamed-defendant note is a COUNT plus the entry id, not
+the names: `defendants_not_named` comes from `docket_defendants` (:666), which includes individual
+homeowner defendants, and for thirty-one rounds `case-verdicts.json`/`.md` carried only case numbers,
+entry ids and amounts. The write is already guarded into `DEALFLOW_DIR` by `case_review.output_path`,
+so naming them broke no rule, but it changed what this report carries as a side effect of a note, and
+the count asks the same question.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
