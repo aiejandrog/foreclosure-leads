@@ -166,17 +166,24 @@ APPROVED_EN = ("Hi HILL, this is Alejandro Gonzalez with Biscayne Solutions Grou
                "filed at the courthouse on 1887 NW 44 ST. Right now you have the most choices, and "
                "most take weeks to set up. Our senior advisor maps them free in 5 minutes. What do "
                "you want to do with the house?"
-               # 2026-09-26: Alejandro -- "Reply STOP" on texts. Appended by stopEN, nothing else moved.
-               " Reply STOP to opt out.")
+               # 2026-09-26: attorney replaced "Reply STOP". Appended by stopEN, nothing else moved.
+               " If now's not a good time, just let me know and I won't text you again.")
 APPROVED_ES = ("Hola HILL, le escribe Alejandro Gonzalez de Biscayne Solutions Group. Acaban de "
                "abrir un caso en la corte sobre 1887 NW 44 ST. Hoy es cuando más opciones tiene, y "
                "toman semanas. Nuestro asesor principal se las explica gratis en 5 minutos. "
                "¿Qué quiere hacer con la casa?"
-               " Responda STOP para no recibir más mensajes.")
+               " Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.")
 rec('the English just-filed body is the approved wording, character for character',
     MATRIX['cold|LP']['en'] == APPROVED_EN, MATRIX['cold|LP']['en'])
 rec('the Spanish just-filed body is the approved wording, character for character',
     MATRIX['cold|LP']['es'] == APPROVED_ES, MATRIX['cold|LP']['es'])
+_LINE_EN = "If now's not a good time, just let me know and I won't text you again."
+_LINE_ES = 'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+rec('every board text carries its line and not the carrier-keyword instruction',
+    all(_LINE_EN in v['en'] and 'Reply STOP' not in v['en']
+        and _LINE_ES in v['es'] and 'Responda STOP' not in v['es']
+        for _k, v in list(_bodies) + [('_nofirst', MATRIX['_nofirst']),
+                                       ('_nostreet', MATRIX['_nostreet_es'])]))
 
 # ─────────────────────────────────────────────────────────── 4. nobody copied them
 # The point of the whole change. Two phrases that appear in no comment anywhere, one per language.

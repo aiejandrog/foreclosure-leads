@@ -57,7 +57,8 @@ def unit_ledger():
 
     tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfsup_'))
     oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
-    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get)
+    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get,
+           Q.dialed_numbers, Q._inbound_text_rows)
     try:
         O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
         fresh_ledger(oo)
@@ -134,8 +135,40 @@ def unit_ledger():
         rec('ES NO MAS is ledgered', '#5550100102' in notes)
         rec('ES BASTA is ledgered', '#5550100103' in notes)
         rec('"can you stop the sale" is not ledgered', '#5550100104' not in notes, sorted(notes))
+        st = json.loads(status.read_text(encoding='utf-8'))
         held, why = Q.text_hold()
-        rec('a clean inbound scan does not hold texting', held is False, why)
+        rec('a phone-scoped scan does not write ok:true or release the hold',
+            rc == 0 and st.get('ok') is not True and held is True, (st.get('ok'), why))
+
+        short = {'5550100106': 'No.', '5550100107': 'Wrong number'}
+
+        def _get_short(key, path, params=None):
+            if path == '/phone-numbers':
+                return {'data': [{'id': 'PN1'}]}
+            if path == Q.CONVERSATIONS_PATH:
+                return {'data': [], 'totalItems': 0}
+            if path == Q.MESSAGES_PATH:
+                n10 = str((params or {}).get('participants') or '')[-10:]
+                return {'data': [{'direction': 'incoming', 'text': short.get(n10, ''),
+                                  'createdAt': '2026-09-26T12:00:00Z'}]}
+            raise AssertionError(path)
+
+        Q._get = _get_short
+        rc = Q.sync_messages(days=2, phones=['5550100106', '5550100107'])
+        notes = notes_of(oo)
+        rec('incoming "No." is ledgered as #digits',
+            rc == 0 and (notes.get('#5550100106') or {}).get('status') == 'DO NOT CONTACT', sorted(notes))
+        rec('incoming "Wrong number" is ledgered as #digits',
+            (notes.get('#5550100107') or {}).get('status') == 'DO NOT CONTACT', sorted(notes))
+
+        Q.dialed_numbers = lambda days: []
+        Q._inbound_text_rows = lambda: []
+        Q._get = _get
+        rc = Q.sync_messages(days=2)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        rec('a full scan writes ok:true and does not hold texting',
+            rc == 0 and st.get('ok') is True and held is False, (rc, st.get('ok'), why))
 
         def _get_fail(key, path, params=None):
             if path == '/phone-numbers':
@@ -148,7 +181,8 @@ def unit_ledger():
         rec('a failed inbound read returns non-zero and holds texting', rc != 0 and held is True, (rc, why))
         rec('the text hold says email is not held', 'mail is not held' in why.lower(), why)
     finally:
-        O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get = old
+        (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get,
+         Q.dialed_numbers, Q._inbound_text_rows) = old
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -959,11 +993,26 @@ def coverage_gap():
         rc = Q.sync_messages(days=3, phones=['5550100130'])
         st = json.loads(status.read_text(encoding='utf-8'))
         age = (datetime.datetime.now(datetime.timezone.utc) - window_since[0]).total_seconds() / 86400
+        planted = last.isoformat()
+        held, why = Q.text_hold()
         rec('a scan 5 days ago with --days 3 still reaches a STOP from 4 days ago',
             rc == 0 and age >= 5 and '#5550100130' in notes_of(oo)
             and isinstance(st.get('window'), int) and st.get('window') >= 5
             and '5550100130' not in json.dumps(st),
             (age, st.get('window'), rc))
+        rec('a phone-scoped scan keeps that ok scan\'s ts and the hold',
+            st.get('ok') is True and st.get('ts') == planted and held is True, (st.get('ts'), planted, why))
+        nxt, nxt_window = Q._message_window(3)
+        nxt_age = (datetime.datetime.now(datetime.timezone.utc)
+                   - datetime.datetime.fromisoformat(nxt)).total_seconds() / 86400
+        rec('the next full window still starts from that scan',
+            nxt_age >= 5 and nxt_window >= 5, (nxt_age, nxt_window))
+        rc = Q.sync_messages(days=3)
+        st = json.loads(status.read_text(encoding='utf-8'))
+        held, why = Q.text_hold()
+        rec('only a full scan writes a fresh ok ts and releases the hold',
+            rc == 0 and st.get('ok') is True and st.get('ts') != planted and held is False,
+            (st.get('ts'), planted, why))
 
         status.write_text('{', encoding='utf-8')
         window_since.clear()
@@ -1006,10 +1055,10 @@ def coverage_gap():
             rc == 0 and conv_calls and all(c.get('maxResults') == 100 for c in conv_calls),
             conv_calls)
         rec('paging stops once a whole page is older than the lookback',
-            rc == 0 and st.get('ok') is True and st.get('truncated') is False
+            rc == 0 and st.get('truncated') is not True
             and not extra_page and '+15550100140' in asked
             and '+15550100141' not in asked and '+15550100142' not in asked,
-            (len(conv_calls), asked, st.get('truncated')))
+            (len(conv_calls), asked, st.get('truncated'), st.get('ok')))
 
         torn = tmp / 'torn-optouts.json'
         torn.write_text('{', encoding='utf-8')

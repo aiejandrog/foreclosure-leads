@@ -6182,13 +6182,11 @@ function _textBodies(o){
   const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
   const stEN = o.stEN || 'your property', stES = o.stES || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
-  /* The STOP line is BACK on every batch text (2026-09-26, Alejandro: "Reply STOP" for texts).
-     These were empty strings since they were written, so no batch text ever told the owner how to
-     stop; a STOP reply is a per se valid revocation under the FCC's 2025 rules only if we honour
-     it, and the FTSA cure safe harbor turns on the owner being told. Same words as
-     call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
-  const stopEN = ' Reply STOP to opt out.';
-  const stopES = ' Responda STOP para no recibir más mensajes.';
+  /* Opt-out on every batch text (2026-09-26, attorney: not the carrier-keyword instruction). The owner is
+     told to say it is not a good time; inbound STOP / PARE / "not a good time" still opt out.
+     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
+  const stopEN = " If now's not a good time, just let me know and I won't text you again.";
+  const stopES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.';
   let en, es;
   /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
      plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the

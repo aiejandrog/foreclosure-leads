@@ -43,6 +43,13 @@ CASES = [
     ("Yes! You wrote: If now's not a good time, just tell me and I won't reach out again. It is.", False),
     ("Si ahora no es buen momento, solo digamelo y no lo vuelvo a contactar. Llámeme mañana", False),
     ('Is now a good time? call me', False),
+    # 2026-09-26: the text line replaced "Reply STOP". Quoting it back is not a stop.
+    ("If now's not a good time, just let me know and I won't text you again.", False),
+    ("If now’s not a good time, just let me know and I won’t text you again", False),
+    ('Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.', False),
+    ('Si ahora no es buen momento, solo digamelo y no le vuelvo a escribir. Llame mañana', False),
+    ("Not a good time. If now's not a good time, just let me know and I won't text you again.", True),
+    ("don't text", True), ("don't text me", True), ('remove me', True),
 ]
 
 pass_n = fail_n = 0
@@ -88,27 +95,61 @@ T('mail_guard sees the EN line as the body opt-out',
 T('mail_guard sees the ES line as the body opt-out',
   not MG.check('Asunto', 'Carta.\n\n' + OC.OPTOUT_LINE_ES, 'a@b.com', unsub=''))
 _sms = OC.sms('Maria')
-T('outreach_copy.sms carries Reply STOP and the ES line',
-  'Reply STOP to opt out.' in _sms and _sms.endswith('Responda STOP para no recibir más mensajes.'))
-T('outreach_copy.sms still fits two segments', len(OC.sms('Maria')) <= 320, len(OC.sms('Maria')))
-T('the STOP keyword it names is one the detector honours', R.is_sms_stop('STOP') is True)
+_EN = "If now's not a good time, just let me know and I won't text you again."
+_ES = 'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+T('outreach_copy.sms carries the new EN and ES lines',
+  _sms.endswith(_EN + ' ' + _ES) and 'Reply STOP' not in _sms, _sms[-160:])
+T('the text line alone is not a stop', R.is_stop_text(_EN) is False and R.is_stop_text(_ES) is False)
+T('a real not-a-good-time still is', R.is_stop_text('not a good time') is True)
+T('STOP replies still opt out', R.is_sms_stop('STOP') is True and R.is_sms_stop('PARE') is True)
 src_cad = open('cadence.py', encoding='utf-8').read()
 T('cadence touches use the shared line, not the old keyword sentence',
   "OPTOUT_LINE_EN as _OPTOUT_LINE" in src_cad and "reply 'stop' and you won't" not in src_cad)
 T('cadence legacy fallback sets List-Unsubscribe and runs the guard',
   "msg['List-Unsubscribe'] = _unsub_hdr" in src_cad and '_MG.check(subj, body, s[\'email\'], unsub=_unsub_hdr)' in src_cad)
 tpl = open('tracker_template.html', encoding='utf-8').read()
-T('board batch texts carry Reply STOP (EN)', "const stopEN = ' Reply STOP to opt out.';" in tpl)
-T('board batch texts carry the STOP line (ES)', "const stopES = ' Responda STOP para no recibir más mensajes.';" in tpl)
+T('board batch texts carry the new EN line',
+  'const stopEN = " ' + _EN + '";' in tpl and 'Reply STOP' not in tpl)
+T('board batch texts carry the new ES line',
+  "const stopES = ' " + _ES + "';" in tpl and 'Responda STOP' not in tpl)
+cm = open('call_mode.py', encoding='utf-8').read()
+T('Call Mode texts carry the new lines and not Reply STOP',
+  _EN in cm and _ES in cm and 'Reply STOP to opt out.' not in cm)
 T('investor-lane email uses the approved line', "won't write again" not in tpl
   and "If now's not a good time, just tell me and I won't reach out again." in tpl)
 
 print('== SMS keywords ==')
+_sms_line = "If now's not a good time, just let me know and I won't text you again."
+_sms_es = 'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 for t, want in [('STOP', True), ('Stop.', True), ('stopall', True), ('CANCEL', True), ('End', True),
                 ('quit', True), ('stop the sale', False), ('ok stop', True), ('PARE', True),
                 ('BASTA', True), ('NO MAS', True), ('NO MÁS', True), ('cancelar', True),
-                ('can you stop the auction', False)]:
+                ('can you stop the auction', False),
+                # 2026-09-27: the text line invites a reply. Whole message only, after the line
+                # and punctuation are stripped.
+                ('no', True), ('No.', True), ('nope', True), ('nah', True),
+                ('no thanks', True), ('No thank you!', True), ('not now', True),
+                ('no gracias', True), ('ahora no', True),
+                ('revoke', True), ('lose my number', True),
+                ('wrong number', True), ('you have the wrong number', True),
+                ('wrong person', True), ('wrong #', True), ('Wrong #.', True),
+                ('número equivocado', True), ('numero equivocado', True),
+                ('se equivocó de número', True), ('se equivoco de numero', True),
+                ('sorry, you have the wrong number', True),
+                ('this is the wrong person', True),
+                (_sms_line, False), (_sms_es, False),
+                ('No. ' + _sms_line, True),
+                (_sms_line + ' no', True),
+                ('No.\n' + _sms_line, True),
+                (_sms_es + ' No.', True),
+                ('no problem, call me tomorrow', False),
+                ('can you stop the sale', False),
+                ('not interested', False), ('no me interesa', False),
+                ('no thanks, call me tomorrow', False),
+                ('not now, try me next week', False)]:
     T('sms %-25r -> %s' % (t, want), bool(R.is_sms_stop(t)) == want, R.is_sms_stop(t))
+T('email detector still leaves a bare no alone', R.is_stop_text('no') is False and R.is_stop_text('No.') is False)
+T('email detector still leaves no gracias alone', R.is_stop_text('no gracias') is False)
 
 print('\n%d passed, %d failed' % (pass_n, fail_n))
 sys.exit(1 if fail_n else 0)
