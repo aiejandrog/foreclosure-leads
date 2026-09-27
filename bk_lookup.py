@@ -26,9 +26,13 @@ TWO READS.
   1. Nightly: new bankruptcy filings in the Southern District of Florida (court id flsb)
      since the last successful pull. Search API type=d, court + filed_after, paginated.
      Cached under DEALFLOW_DIR (not the repo). Matched locally against every lead.
-  2. Once per lead: a party-name search across federal bankruptcy courts for cases that
-     are still open (no date terminated / closed). Cached 14 days. Re-checked before a
-     first touch older than that.
+  2. Once per lead: a party-name search of federal bankruptcy courts (court ids ending
+     in b) for cases still open (no date terminated / closed), filed within
+     BK_FILED_AFTER_YEARS (default 10), newest first. A result set that still overflows
+     the page cap is searched again more narrowly (surname, first name, and the lead's
+     city or ZIP, or an exact phrase). Cached 14 days. Re-checked before a first touch
+     older than that. The 5:30 run stops at BK_MAX_RUNTIME_S. The 21:00 evening check
+     runs a second pass so the leftover daily budget is used after the hour window frees.
 
 MATCHING. Names are folded (case, accents, punctuation). Middle initials, Hispanic double
 surnames, LLC/TRUST owners, and joint owners are all read. An exact open-case match is a
@@ -68,11 +72,15 @@ ENV_MAX_AGE = 'DEALFLOW_BK_MAX_AGE_DAYS'
 ENV_TOKEN = 'COURTLISTENER_TOKEN'
 ENV_PROVIDER = 'DEALFLOW_BK_PROVIDER'
 ENV_MAX_RUNTIME = 'BK_MAX_RUNTIME_S'
+ENV_FILED_YEARS = 'BK_FILED_AFTER_YEARS'
 DEFAULT_MAX_RUNTIME = 900.0
+DEFAULT_FILED_YEARS = 10
 PRESEND_MAX_WAIT = 3.0
 FIRST_PULL_DAYS = 14
 PULL_PAGE_CAP = 20
 PARTY_PAGE_CAP = 2
+PRIORITY_PAGE_CAP = 6
+CLI_PAGE_CAP = 8
 NIGHTLY_PRESEND_RESERVE = 10
 RETRY_429 = 3
 RETRY_SLEEP = (2.0, 4.0, 8.0)
@@ -97,7 +105,21 @@ GEN = {'JR', 'SR', 'II', 'III', 'IV', 'V'}
 TAILS = {'LLC', 'INC', 'CORP', 'CORPORATION', 'TRUST', 'TRUSTEE', 'LP', 'LLP', 'PLLC',
          'LTD', 'LIMITED', 'COMPANY', 'CO', 'NA', 'ASSOC', 'ASSOCIATION', 'FOUNDATION',
          'PARTNERSHIP', 'LLLP'}
-_BK_COURT = re.compile(r'^[a-z]{2,6}b$')
+_BK_COURT = re.compile(r'^[a-z]{2,12}b$')
+# CourtListener jurisdiction=FB, 2026-09-27. Every id ends in b. Party search sends this
+# list so a common name is not paged across district courts. nebraskab and tennesseeb are
+# ids the courts API actually returns.
+BK_COURT_IDS = (
+    'almb', 'alnb', 'alsb', 'akb', 'arb', 'areb', 'arwb', 'cacb', 'caeb', 'canb', 'casb',
+    'cob', 'ctb', 'deb', 'dcb', 'flmb', 'flnb', 'flsb', 'gamb', 'ganb', 'gasb', 'hib', 'idb',
+    'ilcb', 'ilnb', 'ilsb', 'innb', 'insb', 'ianb', 'iasb', 'ksb', 'kyeb', 'kywb', 'laeb',
+    'lamb', 'lawb', 'meb', 'mdb', 'mab', 'mieb', 'miwb', 'mnb', 'msnb', 'mssb', 'moeb',
+    'mowb', 'mtb', 'nebraskab', 'nvb', 'nhb', 'njb', 'nmb', 'nyeb', 'nynb', 'nysb', 'nywb',
+    'nceb', 'ncmb', 'ncwb', 'ndb', 'ohnb', 'ohsb', 'okeb', 'oknb', 'okwb', 'orb', 'paeb',
+    'pamb', 'pawb', 'rib', 'scb', 'sdb', 'tneb', 'tnmb', 'tnwb', 'tennesseeb', 'txeb',
+    'txnb', 'txsb', 'txwb', 'utb', 'vtb', 'vaeb', 'vawb', 'waeb', 'wawb', 'wvnb', 'wvsb',
+    'wieb', 'wiwb', 'wyb', 'gub', 'nmib', 'prb', 'vib',
+)
 _IN_RE = re.compile(r'^(?:IN\s+RE|IN\s+THE\s+MATTER\s+OF)\s+', re.I)
 
 
@@ -191,8 +213,15 @@ class CourtListenerProvider(BankruptcyProvider):
         })
         return SEARCH_URL + '?' + q
 
-    def party_request(self, query):
-        return SEARCH_URL + '?' + urllib.parse.urlencode({'type': 'd', 'q': query})
+    def party_request(self, query, filed_after=None):
+        """Bankruptcy courts only, newest first, with a filed-after bound.
+        An unfiltered type=d search pages across every court and truncates common names."""
+        filed = filed_after or default_filed_after(self.env)
+        params = [('type', 'd'), ('q', query), ('filed_after', filed),
+                  ('order_by', 'dateFiled desc')]
+        for court in BK_COURT_IDS:
+            params.append(('court', court))
+        return SEARCH_URL + '?' + urllib.parse.urlencode(params)
 
     def parse_search(self, payload):
         if not isinstance(payload, dict) or not isinstance(payload.get('results'), list):
@@ -636,18 +665,52 @@ def save_budget(budget):
 
 
 class Clock:
-    def __init__(self, now=None, sleeper=None):
-        self.now = time.time() if now is None else float(now)
+    """Wall time for request timestamps.
+
+    A simulated clock (now= or wall=) advances when sleep() is called and when advance()
+    is called for time spent waiting on HTTP. The real clock is time.time(), which already
+    moves during urlopen, so a request is stamped when the response arrives rather than at
+    the last sleep. Tests inject wall= or now=."""
+
+    def __init__(self, now=None, sleeper=None, wall=None):
         self._sleeper = time.sleep if sleeper is None else sleeper
+        self._real = wall is None and now is None
+        if wall is not None:
+            self._wall = wall
+        elif now is not None:
+            self._box = [float(now)]
+            self._wall = lambda: self._box[0]
+        else:
+            self._wall = time.time
+        self._extra = 0.0
 
     def time(self):
-        return self.now
+        if self._real:
+            return float(self._wall())
+        return float(self._wall()) + self._extra
+
+    @property
+    def now(self):
+        return self.time()
+
+    @now.setter
+    def now(self, value):
+        if self._real:
+            return
+        self._extra = float(value) - float(self._wall())
+
+    def advance(self, seconds):
+        """Count time that passed outside sleep, such as an HTTP round trip."""
+        if self._real:
+            return
+        self._extra += float(seconds)
 
     def sleep(self, seconds):
         seconds = max(0.0, min(float(seconds), MAX_SLEEP))
         if seconds:
             self._sleeper(seconds)
-        self.now += seconds
+        if not self._real:
+            self._extra += seconds
 
 
 def urllib_transport(url, headers, timeout=45):
@@ -670,6 +733,23 @@ def _retry_after(headers):
         return max(0.0, min(float(raw), MAX_SLEEP))
     except (TypeError, ValueError):
         return 0.0
+
+
+def default_filed_after(env=None, today=None):
+    """ISO date. Party search ignores dockets older than this. BK_FILED_AFTER_YEARS, default 10."""
+    env = os.environ if env is None else env
+    raw = str((env or {}).get(ENV_FILED_YEARS) or '').strip()
+    try:
+        years = int(raw) if raw else DEFAULT_FILED_YEARS
+    except ValueError:
+        years = DEFAULT_FILED_YEARS
+    if years < 1:
+        years = DEFAULT_FILED_YEARS
+    today = dt.date.today() if today is None else today
+    try:
+        return today.replace(year=today.year - years).isoformat()
+    except ValueError:
+        return (today - dt.timedelta(days=365 * years)).isoformat()
 
 
 def max_runtime_s(env=None):
@@ -1179,6 +1259,65 @@ def _note_contact(ld, row):
         ld['phone'] = True
     if str(row.get('addr') or row.get('Address') or row.get('mail') or '').strip():
         ld['mail'] = True
+    place = _place_token(row)
+    if place and not ld.get('place'):
+        ld['place'] = place
+
+
+def _place_token(row):
+    """ZIP if the row has one, otherwise a city token. Used only to narrow an overflowing search."""
+    for key in ('zip', 'Zip', 'postal'):
+        z = re.search(r'\b(\d{5})\b', str(row.get(key) or ''))
+        if z:
+            return z.group(1)
+    blob = ' '.join(str(row.get(k) or '') for k in ('addr', 'Address', 'mail', 'city'))
+    z = re.search(r'\b(\d{5})\b', blob)
+    if z:
+        return z.group(1)
+    addr = str(row.get('addr') or row.get('Address') or row.get('mail') or '')
+    parts = [p.strip() for p in addr.split(',') if p.strip()]
+    if len(parts) >= 2:
+        tail = parts[-1]
+        city = parts[-2] if re.search(r'\b[A-Z]{2}\b', tail, re.I) else parts[-1]
+        city = re.sub(r'\d', '', city)
+        city = re.sub(r'[^A-Za-z ]', '', city).strip()
+        if len(city) >= 3:
+            return city.upper()
+    return ''
+
+
+def party_page_cap(ld, cli=False):
+    """CLI and leads next to be contacted may follow more pages. Everyone else stays at 2."""
+    if cli:
+        return CLI_PAGE_CAP
+    if ld.get('email') or ld.get('phone'):
+        return PRIORITY_PAGE_CAP
+    return PARTY_PAGE_CAP
+
+
+def narrow_query_for(owner, place):
+    """Surname + first name + city/ZIP, or an exact phrase when there is no place."""
+    place = re.sub(r'[^A-Z0-9 ]', '', str(place or '').upper()).strip()
+    bit = place.split()[0] if place else ''
+    if owner.get('kind') == 'entity':
+        toks = [t for t in (owner.get('tokens') or []) if len(t) > 1][:3]
+        if not toks:
+            return ''
+        if bit:
+            return 'party:(' + ' AND '.join(toks + [bit]) + ')'
+        return 'party:"%s"' % ' '.join(toks)
+    readings = owner.get('readings') or []
+    if not readings:
+        return ''
+    reading = max(readings, key=lambda r: (len(r.get('surnames') or []), len(r.get('first') or '')))
+    first = str(reading.get('first') or '')
+    surnames = list(reading.get('surnames') or [])
+    last = surnames[-1] if surnames else ''
+    if len(first) < 2 or len(last) < 2:
+        return ''
+    if bit:
+        return 'party:(%s AND %s AND %s)' % (last, first, bit)
+    return 'party:"%s %s"' % (first, last)
 
 
 def contact_rank(ld):
@@ -1323,6 +1462,7 @@ def public_status():
         'holds': num('holds'),
         'errors': num('errors'),
         'requests_used': num('requests_used'),
+        'truncated': num('truncated'),
         'provider': 'courtlistener' if data.get('provider') in (None, '', 'courtlistener') else 'other',
     }
 
@@ -1333,8 +1473,8 @@ def write_status(**fields):
         cur = {}
     # Drop anything that is not a count, a bool, or a short safe label.
     allowed = ('pull_ok', 'pull_t', 'pull_ts', 'filings', 'leads_checked', 'holds', 'errors',
-               'requests_used', 'requests_minute', 'requests_hour', 'requests_day', 'provider',
-               'reason')
+               'requests_used', 'requests_minute', 'requests_hour', 'requests_day', 'truncated',
+               'provider', 'reason')
     for k, v in fields.items():
         if k not in allowed:
             continue
@@ -1417,9 +1557,27 @@ def match_filings_to_leads(leads, items, cache, now):
     return holds
 
 
-def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, deadline=None):
-    """One lead's party search. Fail closed on any error or a truncated result.
-    TimeBudget propagates so a cut-off search is not stored as a clear."""
+def _collect_queries(queries, provider, transport, budget, clock, page_cap, max_wait, deadline):
+    """(rows, truncated). Stops paging a query once it overflows; the caller may narrow."""
+    collected = []
+    truncated = False
+    for q in queries:
+        url = provider.party_request(q)
+        rows, cut = paginate(url, provider, transport, budget, clock, page_cap, reserve=0,
+                             max_wait=max_wait, deadline=deadline)
+        collected.extend(rows)
+        if cut:
+            truncated = True
+    return collected, truncated
+
+
+def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, deadline=None,
+                page_cap=None):
+    """One lead's party search. Fail closed on any error.
+
+    The filtered bankruptcy-court search is conclusive when it fits in the page cap.
+    If it overflows, one narrower query is run. The lead stays truncated only when that
+    also overflows. TimeBudget propagates so a cut-off search is not stored as a clear."""
     owners = lead_owners(ld)
     if not owners:
         put_entry(cache, ld['key'], [], False, False, 'no owner name on the lead — check cannot run', clock.time())
@@ -1433,15 +1591,27 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
         put_entry(cache, ld['key'], [], False, False,
                   'owner name cannot be searched — lead stays held', clock.time())
         return cache[ld['key']]
+    cap = PARTY_PAGE_CAP if page_cap is None else int(page_cap)
     collected = []
-    truncated = False
     try:
-        for q in queries[:4]:
-            url = provider.party_request(q)
-            rows, cut = paginate(url, provider, transport, budget, clock, PARTY_PAGE_CAP, reserve=0,
-                                 max_wait=max_wait, deadline=deadline)
-            collected.extend(rows)
-            truncated = truncated or cut
+        collected, truncated = _collect_queries(
+            queries, provider, transport, budget, clock, cap, max_wait, deadline)
+        if truncated:
+            narrows = []
+            for owner in owners[:4]:
+                nq = narrow_query_for(owner, ld.get('place'))
+                if nq and nq not in narrows and nq not in queries:
+                    narrows.append(nq)
+            if not narrows:
+                put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False,
+                          'CourtListener party search truncated — lead stays held', clock.time())
+                return cache[ld['key']]
+            collected, truncated = _collect_queries(
+                narrows, provider, transport, budget, clock, cap, max_wait, deadline)
+            if truncated:
+                put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False,
+                          'CourtListener party search truncated — lead stays held', clock.time())
+                return cache[ld['key']]
     except TimeBudget:
         raise
     except BudgetExhausted as e:
@@ -1450,12 +1620,7 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
     except (RateLimited, ProviderError) as e:
         put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False, str(e), clock.time())
         return cache[ld['key']]
-    found = cases_from_hits(owners, collected)
-    if truncated:
-        put_entry(cache, ld['key'], found, False, False,
-                  'CourtListener party search truncated — lead stays held', clock.time())
-        return cache[ld['key']]
-    put_entry(cache, ld['key'], found, True, True, '', clock.time())
+    put_entry(cache, ld['key'], cases_from_hits(owners, collected), True, True, '', clock.time())
     return cache[ld['key']]
 
 
@@ -1596,6 +1761,7 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
         items = {}
     match_filings_to_leads(leads, items, cache, clock.time())
     checked = 0
+    truncated_n = 0
     if ok_av and not time_stopped and clock.time() < deadline:
         # Soonest contact first: first-touch email, then a phone, then a letter.
         # Miami is in this same order, not after every other county.
@@ -1615,18 +1781,23 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
                 break
             before = budget.counts(clock.time())['day']
             try:
-                entry = search_lead(ld, provider, transport, budget, clock, cache, deadline=deadline)
+                entry = search_lead(ld, provider, transport, budget, clock, cache, deadline=deadline,
+                                    page_cap=party_page_cap(ld))
             except TimeBudget:
                 reason = 'time_budget'
                 log('CourtListener: nightly run hit its time limit. Progress saved.')
                 break
             if budget.counts(clock.time())['day'] != before or entry.get('searched'):
                 checked += 1
-            if entry.get('err'):
+            err = entry.get('err') or ''
+            if 'truncated' in err:
+                # A common-name overflow is not an HTTP failure. It is counted on its own.
+                truncated_n += 1
+            elif err:
                 errors += 1
-                if '429' in entry['err'] or 'budget' in entry['err']:
+                if '429' in err or 'budget' in err:
                     if reason in ('ok', 'pull_truncated'):
-                        reason = 'rate_limit' if '429' in entry['err'] else 'budget'
+                        reason = 'rate_limit' if '429' in err else 'budget'
                     break
     save_cache(cache)
     fields = _budget_fields(budget, clock.time())
@@ -1639,17 +1810,18 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
                 hold_n += 1
     write_status(pull_ok=bool(pull_ok), pull_t=clock.time(), pull_ts=_stamp(),
                  filings=len(items) if isinstance(items, dict) else 0,
-                 leads_checked=checked, holds=hold_n, errors=errors,
+                 leads_checked=checked, holds=hold_n, errors=errors, truncated=truncated_n,
                  provider='courtlistener' if provider.name == PROVIDER_COURTLISTENER else 'other',
                  reason=reason, **fields)
-    log('CourtListener: status filings=%d checked=%d holds=%d errors=%d requests=%d' % (
-        len(items) if isinstance(items, dict) else 0, checked, hold_n, errors, fields['requests_used']))
+    log('CourtListener: status filings=%d checked=%d holds=%d errors=%d truncated=%d requests=%d' % (
+        len(items) if isinstance(items, dict) else 0, checked, hold_n, errors, truncated_n,
+        fields['requests_used']))
     return {'pull_ok': bool(pull_ok), 'checked': checked, 'holds': hold_n, 'errors': errors,
-            'reason': reason}
+            'truncated': truncated_n, 'reason': reason}
 
 
 def presend_check(case, here=HERE, env=None, transport=None, clock=None, provider=None,
-                  max_wait=PRESEND_MAX_WAIT):
+                  max_wait=PRESEND_MAX_WAIT, page_cap=None):
     """One lead, just before a send. Returns {status, why, verdict}. Does not raise.
 
     max_wait defaults to a few seconds so the send bridge never sleeps out a minute
@@ -1684,16 +1856,20 @@ def presend_check(case, here=HERE, env=None, transport=None, clock=None, provide
         return {'status': 'unsearchable', 'why': cache[key]['why'], 'verdict': cache[key]['verdict']}
     budget = load_budget(clock.time())
     try:
-        entry = search_lead(ld, provider, transport, budget, clock, cache, max_wait=max_wait)
+        entry = search_lead(ld, provider, transport, budget, clock, cache, max_wait=max_wait,
+                            page_cap=page_cap)
     except TimeBudget as e:
         entry = {'err': str(e), 'why': str(e), 'verdict': 'unavailable'}
     save_cache(cache)
     fields = _budget_fields(budget, clock.time())
-    err_n = 1 if entry.get('err') else 0
+    err = entry.get('err') or ''
     cur = public_status()
-    write_status(leads_checked=int(cur.get('leads_checked') or 0) + 1,
-                 errors=int(cur.get('errors') or 0) + err_n,
-                 **fields)
+    extra = {}
+    if 'truncated' in err:
+        extra['truncated'] = int(cur.get('truncated') or 0) + 1
+    elif err:
+        extra['errors'] = int(cur.get('errors') or 0) + 1
+    write_status(leads_checked=int(cur.get('leads_checked') or 0) + 1, **extra, **fields)
     if entry.get('err'):
         err = entry['err']
         if '429' in err:
@@ -1704,6 +1880,29 @@ def presend_check(case, here=HERE, env=None, transport=None, clock=None, provide
             status = 'error'
         return {'status': status, 'why': entry['why'], 'verdict': entry.get('verdict') or ''}
     return {'status': 'searched', 'why': entry.get('why') or '', 'verdict': entry.get('verdict') or ''}
+
+
+def resolve_lead(case, here=HERE):
+    """The lead row for a case number. A Miami stem without the -CA-01 suffix matches that lead.
+    None when nothing on file matches. Does not write the cache."""
+    import stay_gate
+    leads = load_leads(here)
+    raw = str(case or '').strip()
+    key = stay_gate.pacer_key(raw)
+    if key and key in leads:
+        return leads[key]
+    stem = stay_gate.case_stem(raw)
+    if not stem:
+        return None
+    matches = [ld for ld in leads.values() if stay_gate.case_stem(ld.get('case') or '') == stem]
+    if not matches:
+        return None
+    ca = [ld for ld in matches if str(ld.get('case') or '').upper().endswith('-CA-01')]
+    if len(ca) == 1:
+        return ca[0]
+    if len(matches) == 1:
+        return matches[0]
+    return ca[0] if ca else matches[0]
 
 
 def case_report(case):
@@ -1744,10 +1943,16 @@ def main(argv=None, clock=None, transport=None, here=None):
         return 0
     cases = [str(c).strip() for c in (args.case or []) if str(c or '').strip()]
     if cases:
-        # Pace the whole search. The send bridge passes a short max_wait of its own.
+        # Pace the whole search and follow more pages than the send bridge will.
+        root = here or HERE
         for case in cases:
-            presend_check(case, here=here or HERE, max_wait=None, clock=clock, transport=transport)
-            log(case_report(case))
+            ld = resolve_lead(case, root)
+            if ld is None:
+                log('no lead for this case')
+                continue
+            presend_check(ld.get('case') or case, here=root, max_wait=None, clock=clock,
+                          transport=transport, page_cap=CLI_PAGE_CAP)
+            log(case_report(ld.get('case') or case))
         return 0
     try:
         run_nightly(here=here or HERE, clock=clock, transport=transport)

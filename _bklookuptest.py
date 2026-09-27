@@ -25,7 +25,7 @@ NOW = 1_800_000_000.0
 for _k in ('COURTLISTENER_TOKEN', 'DEALFLOW_BK_PROVIDER', 'DEALFLOW_BK_MAX_AGE_DAYS',
            'DEALFLOW_DIR', 'DEALFLOW_BK_CACHE', 'DEALFLOW_BK_FILINGS', 'DEALFLOW_BK_OVERRIDES',
            'DEALFLOW_BK_STATUS', 'DEALFLOW_BK_BUDGET', 'DEALFLOW_BK_PULL_STATE',
-           'BK_MAX_RUNTIME_S'):
+           'BK_MAX_RUNTIME_S', 'BK_FILED_AFTER_YEARS'):
     os.environ.pop(_k, None)
 os.environ['DEALFLOW_DIR'] = str(TMP / 'boot')
 
@@ -58,6 +58,7 @@ def isolate(name, token=TOKEN):
     os.environ.pop('DEALFLOW_BK_PROVIDER', None)
     os.environ.pop('DEALFLOW_BK_MAX_AGE_DAYS', None)
     os.environ.pop('BK_MAX_RUNTIME_S', None)
+    os.environ.pop('BK_FILED_AFTER_YEARS', None)
     BL._HOLD_MEMO = None
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)
@@ -793,6 +794,157 @@ BL._HOLD_MEMO = None
 rows, _n = CM.call_rows([fresh], max_days=60)
 check('call_rows keeps a Broward lead that has a fresh clear',
       {r.get('c') for r in rows} == {'CACE-99-555801'}, rows)
+
+
+# ---------------------------------------------------------------------------------- filtered search
+print('-- filtered party search')
+url = cl.party_request('party:(GARCIA AND MARIA)')
+pq = q_of(url)
+courts = pq.get('court') or []
+check('party search is bankruptcy courts, newest first, with a filed-after bound',
+      'flsb' in courts and 'flmb' in courts and 'flnb' in courts
+      and all(str(c).endswith('b') for c in courts) and len(courts) >= 90
+      and pq.get('filed_after') == [BL.default_filed_after()]
+      and pq.get('order_by') == ['dateFiled desc'] and pq.get('type') == ['d'],
+      (len(courts), pq.get('filed_after'), pq.get('order_by')))
+os.environ['BK_FILED_AFTER_YEARS'] = '3'
+check('filed-after years are configurable',
+      BL.default_filed_after()[:4] == str(BL.dt.date.today().year - 3))
+os.environ.pop('BK_FILED_AFTER_YEARS', None)
+check('a phone lead may follow more pages than a lead with no channel',
+      BL.party_page_cap({'phone': True}) == BL.PRIORITY_PAGE_CAP
+      and BL.party_page_cap({}) == BL.PARTY_PAGE_CAP
+      and BL.party_page_cap({}, cli=True) == BL.CLI_PAGE_CAP)
+
+
+print('-- narrow after overflow')
+d = isolate('narrow')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [
+    {'case': '2025-000201-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA',
+     'addr': '10 EAST ST, MIAMI, FL 33101', 'st': 'OK', 'days': 900},
+    {'case': 'CACE-99-555890', 'county': 'BROWARD', 'owners': 'NUNEZ, JOSE', 'st': 'OK', 'days': 900},
+])
+
+
+def _narrow_route(url, headers, n):
+    q = q_of(url)
+    query = (q.get('q') or [''])[0].upper()
+    if 'NUNEZ' in query:
+        return 200, {}, page([])
+    if '33101' in query:
+        return 200, {}, page([recap('26-15796', ['Garcia, Maria'])])
+    cur = (q.get('cursor') or ['1'])[0]
+    nxt = None
+    if cur == '1':
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=w2'
+    elif cur == 'w2':
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=w3'
+    return 200, {}, page([recap('11-00001', ['Other, Person'])], nxt)
+
+
+stub = Stub(_narrow_route)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('2025-000201-CA-01', here=str(leads), transport=stub, clock=clock_at(NOW))
+wide = [u for u, _h in stub.calls if '33101' not in u.upper() and 'NUNEZ' not in u.upper()]
+narrow = [u for u, _h in stub.calls if '33101' in u.upper()]
+check('a common name that overflows is finished by the narrow query, not left truncated',
+      br.get('verdict') in ('possible', 'active') and '26-15796' in (br.get('why') or '')
+      and 'truncated' not in (br.get('why') or '') and len(narrow) == 1 and len(wide) == 2,
+      (br, len(wide), len(narrow)))
+check('the narrow query is not sent until the filtered search overflows',
+      stub.calls and '33101' not in stub.calls[0][0] and '33101' in stub.calls[-1][0])
+before = len(stub.calls)
+with contextlib.redirect_stdout(io.StringIO()):
+    br2 = BL.presend_check('CACE-99-555890', here=str(leads), transport=stub, clock=clock_at(NOW))
+added = stub.calls[before:]
+check('a filtered search that fits in the page cap does not run the narrow query',
+      br2.get('verdict') == 'clear' and added and all('33101' not in u and '"' not in u for u, _h in added),
+      br2)
+
+
+print('-- narrow also overflows')
+d = isolate('still-trunc')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': 'CACE-99-555891', 'county': 'BROWARD', 'owners': 'GARCIA, MARIA',
+    'addr': '10 EAST ST, MIAMI, FL 33101', 'st': 'OK', 'days': 900,
+}])
+
+
+def _always_next(url, headers, n):
+    cur = (q_of(url).get('cursor') or ['1'])[0]
+    nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=more'
+    if cur == 'more':
+        nxt = 'https://www.courtlistener.com/api/rest/v4/search/?type=d&cursor=more2'
+    return 200, {}, page([], nxt)
+
+
+stub = Stub(_always_next)
+with contextlib.redirect_stdout(io.StringIO()):
+    br = BL.presend_check('CACE-99-555891', here=str(leads), transport=stub, clock=clock_at(NOW))
+st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
+check('a narrow query that also overflows is truncated, and that is not an error',
+      'truncated' in (br.get('why') or '') and st.get('truncated') == 1 and int(st.get('errors') or 0) == 0,
+      (br, st))
+
+
+# --------------------------------------------------------------------------------------------- clock
+print('-- request clock')
+ticks = {'t': NOW}
+
+
+def _wall():
+    return ticks['t']
+
+
+clock = BL.Clock(wall=_wall, sleeper=lambda _s: None)
+
+
+def _slow_http(url, headers):
+    ticks['t'] += 3.5
+    return 200, {}, json.dumps(page([])).encode()
+
+
+budget = BL.Budget([], NOW)
+BL.http_get('https://www.courtlistener.com/api/rest/v4/search/?type=d', cl, _slow_http, budget, clock)
+check('a request timestamp includes time spent waiting on HTTP',
+      budget.hits and abs(budget.hits[-1] - (NOW + 3.5)) < 0.01, budget.hits)
+real = BL.Clock()
+check('the production clock is the real clock', abs(real.time() - time.time()) < 2)
+
+
+# --------------------------------------------------------------------------------------- short case
+print('-- short case id')
+d = isolate('short')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [{
+    'case': '2025-000201-CA-01', 'county': 'MIAMI-DADE', 'owners': 'GARCIA, MARIA', 'st': 'OK',
+}])
+stub = Stub(lambda url, headers, n: (200, {}, page([])))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = BL.main(['--case', '2025-000201'], clock=clock_at(NOW), transport=stub, here=str(leads))
+text = buf.getvalue()
+cache = json.loads((d / 'bk_lead_cache.json').read_text(encoding='utf-8'))
+check('a short Miami case id resolves to the -CA-01 lead',
+      rc == 0 and '2025-000201-CA-01 flagged=' in text and '2025-000201-CA-01' in cache
+      and 'GARCIA' not in text and TOKEN not in text, text)
+d = isolate('nolead')
+leads = d / 'leads'
+leads.mkdir()
+write_leads(leads, [])
+quiet = Stub(lambda url, headers, n: (200, {}, page([])))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = BL.main(['--case', '2099-000199'], clock=clock_at(NOW), transport=quiet, here=str(leads))
+check('a case with no lead is reported and does not write the cache',
+      rc == 0 and buf.getvalue().strip() == 'no lead for this case'
+      and not (d / 'bk_lead_cache.json').exists() and quiet.calls == [],
+      buf.getvalue())
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all CourtListener bankruptcy checks passed ====')
