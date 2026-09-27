@@ -412,6 +412,14 @@ def bridge():
             'started_at': time.time() - 120, 'finished_at': time.time() - 60, 'steps': []}), encoding='utf-8')
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
         (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+        # Slow restart holds a first touch with no warm-up sender. This block is the
+        # text-hold / ledger gate; one fixture sender lets a clean email still reach SMTP.
+        (work / 'senders.json').write_text(json.dumps({
+            'main_domain': 'example.com', 'main_domain_cap': 40,
+            'ramp_start': '2020-01-01', 'ramp': [{'through_day': 9999, 'per_day': 100}],
+            'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
+            'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
+        }), encoding='utf-8')
         oo = work / 'optouts.json'
         fresh_ledger(oo)
         (work / 'sale_history_cache.json').write_text(json.dumps({

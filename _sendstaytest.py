@@ -271,6 +271,14 @@ def server():
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
         (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+        # Slow restart holds a first touch with no warm-up sender. This suite is the stay
+        # gate; one fixture sender lets a clear lead reach SMTP.
+        (work / 'senders.json').write_text(json.dumps({
+            'main_domain': 'example.com', 'main_domain_cap': 40,
+            'ramp_start': '2020-01-01', 'ramp': [{'through_day': 9999, 'per_day': 100}],
+            'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
+            'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
+        }), encoding='utf-8')
         # A FRESH, empty opt-out ledger so the 2-day staleness gate does not refuse first.
         (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}),
                                            encoding='utf-8')
