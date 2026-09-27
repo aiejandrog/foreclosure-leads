@@ -26,7 +26,8 @@ NOW = 1_800_000_000.0
 for _k in ('COURTLISTENER_TOKEN', 'DEALFLOW_BK_PROVIDER', 'DEALFLOW_BK_MAX_AGE_DAYS',
            'DEALFLOW_DIR', 'DEALFLOW_BK_CACHE', 'DEALFLOW_BK_FILINGS', 'DEALFLOW_BK_OVERRIDES',
            'DEALFLOW_BK_STATUS', 'DEALFLOW_BK_BUDGET', 'DEALFLOW_BK_PULL_STATE',
-           'BK_MAX_RUNTIME_S', 'BK_FILED_AFTER_YEARS', 'DEALFLOW_BK_ALLOW_CL_CLEAR'):
+           'BK_MAX_RUNTIME_S', 'BK_FILED_AFTER_YEARS', 'DEALFLOW_BK_ALLOW_CL_CLEAR',
+           'DEALFLOW_CLERK_BK'):
     os.environ.pop(_k, None)
 os.environ['DEALFLOW_DIR'] = str(TMP / 'boot')
 
@@ -61,6 +62,7 @@ def isolate(name, token=TOKEN):
     os.environ.pop('BK_MAX_RUNTIME_S', None)
     os.environ.pop('BK_FILED_AFTER_YEARS', None)
     os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
+    os.environ.pop('DEALFLOW_CLERK_BK', None)
     BL._HOLD_MEMO = None
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)

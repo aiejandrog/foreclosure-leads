@@ -76,6 +76,14 @@ How the gate uses it:
         'clear', from production, queried within the max age       -> clear
     A number with fewer than five digits ('CASE', 'OTHER', an LP- placeholder) is never looked up
     and stays stay_case_unresolvable.
+CLERK DOCKET (clerk_bk.py). Off unless DEALFLOW_CLERK_BK=1, so a merge does not change who
+can be contacted. When it is on, a Broward or Palm Beach number this function would otherwise
+clear stays held until that case's own clerk docket has been fully read and shows no active
+stay. An active stay on that docket refuses (stay_active) even if another source would clear.
+A missing, stale, partial, or unreadable docket refuses a lead this function would have
+cleared, and leaves an existing refusal as it was. Miami-Dade stems are not read by it.
+DEALFLOW_BK_ALLOW_CL_CLEAR is unchanged.
+
 A clear is a point-in-time fact about a name search: it goes stale, so it stops clearing after the
 max age. On the free PACER tier the search is done ON DEMAND: check() sets 'pacer_need' True when a
 fresh per-lead search could change the answer (no-stem lead, keyable number, no entry / an entry
@@ -463,6 +471,35 @@ def _merge_bk(raw, out):
     return out
 
 
+def _apply_clerk(raw, out):
+    """Clerk-docket opinion, only for a non-Miami case, and only when DEALFLOW_CLERK_BK=1.
+
+    An active stay replaces whatever this function was about to return. Any other clerk hold
+    replaces a clear only, so an existing CourtListener or PACER refusal is left as it was.
+    If the flag is on and the check throws, the lead stays held."""
+    if case_stem(raw):
+        return out
+    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() != '1':
+        return out
+    try:
+        import clerk_bk as _CK
+        op = _CK.gate_opinion(raw)
+    except Exception:
+        op = {'blocks': True, 'code': UNVERIFIED,
+              'why': 'clerk docket check failed. Lead stays held.', 'src': 'clerk_docket'}
+    if not isinstance(op, dict) or not op.get('blocks'):
+        return out
+    if op.get('code') == STAY_ACTIVE or out.get('ok'):
+        out = dict(out)
+        out.update(ok=False, code=op.get('code') or UNVERIFIED,
+                   why=op.get('why') or out.get('why') or '',
+                   src=op.get('src') or 'clerk_docket', pacer_need=False, bk_need=False)
+        if op.get('bd'):
+            out['bd'] = op['bd']
+        return out
+    return out
+
+
 def _hit_on_stem(stem, hits_path, pacer_path):
     """(key, hit) of a blocking new-filer hit on this Miami-Dade stem, else None. Additive only."""
     if not hits_path:
@@ -513,7 +550,7 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
         if hits_path is None:
             hits_path = _hits_path(cache_path)
         if not stem:
-            return _merge_bk(raw, _check_pacer(raw, out, pacer_path, hits_path))
+            return _apply_clerk(raw, _merge_bk(raw, _check_pacer(raw, out, pacer_path, hits_path)))
         idx, err = _load(cache_path)
         if err:
             out.update(code=UNAVAILABLE, why=err)
@@ -580,8 +617,14 @@ def health(cache_path):
         bk = _BL.health_counts()
     except Exception:
         bk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0, 'err': 'bk_lookup unavailable'}
+    clerk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0}
+    try:
+        import clerk_bk as _CK
+        clerk = _CK.health_counts()
+    except Exception:
+        clerk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0, 'err': 'clerk_bk unavailable'}
     return {'ok': True, 'err': '', 'cases': n, 'active': act, 'pacer': pacer_health(cache_path),
-            'newfilers': newfiler_health(cache_path), 'bk': bk}
+            'newfilers': newfiler_health(cache_path), 'bk': bk, 'clerk': clerk}
 
 
 def pacer_health(cache_path):

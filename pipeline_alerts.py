@@ -545,6 +545,46 @@ def read_bk_lookup():
     return sig if isinstance(sig, dict) else {'readable': False}
 
 
+def clerk_bk_alert(sig, at):
+    """Fail when the clerk-docket check is on and its last run is missing, failed, or old.
+
+    The check defaults off. A missing status file is not an alert until the owner sets
+    DEALFLOW_CLERK_BK=1. The text is counts and ages only."""
+    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() != '1':
+        return None
+    try:
+        import clerk_bk as CK
+        if not CK.enabled():
+            return None
+    except Exception:
+        return _alert('clerk-bk', 'fail',
+                      'Clerk docket bankruptcy check could not be read. Broward and Palm Beach stay held.', at)
+    if not isinstance(sig, dict) or not sig.get('readable'):
+        return _alert('clerk-bk', 'fail',
+                      'Clerk docket bankruptcy check has no status file. Broward and Palm Beach stay held.', at)
+    if not sig.get('pull_ok'):
+        return _alert('clerk-bk', 'fail',
+                      'Clerk docket bankruptcy check did not finish. Broward and Palm Beach stay held.', at)
+    try:
+        age = float(sig.get('pull_age_h'))
+    except (TypeError, ValueError):
+        age = None
+    if age is None or age > 36:
+        shown = 'unknown' if age is None else ('%.0f' % age)
+        return _alert('clerk-bk', 'fail',
+                      'Clerk docket bankruptcy check is %sh old (limit 36h).' % shown, at)
+    return None
+
+
+def read_clerk_bk():
+    try:
+        import clerk_bk as CK
+        sig = CK.public_status()
+    except Exception:
+        return {'readable': False}
+    return sig if isinstance(sig, dict) else {'readable': False}
+
+
 def stale_flag_alert(sig, at):
     """A refresh-running.flag older than the task limit. Publishing ignored it."""
     if not isinstance(sig, dict) or not sig.get('stale'):
@@ -580,6 +620,7 @@ def alerts_from(signals, now, th=None):
         health_alert(signals.get('health_fails'), at),
         stale_flag_alert(signals.get('refresh_flag'), at),
         bk_lookup_alert(signals.get('bk_lookup'), at),
+        clerk_bk_alert(signals.get('clerk_bk'), at),
     ]
     return sorted((a for a in found if a), key=lambda a: a['key'])
 
@@ -1089,6 +1130,7 @@ def gather(now, th, measure=False):
         'morning_sends': _try(lambda: read_morning(now, th), {'readable': False}),
         'health_fails': _try(lambda: read_health(now.date().isoformat()), {'fresh': False, 'names': []}),
         'bk_lookup': _try(read_bk_lookup, {'readable': False}),
+        'clerk_bk': _try(read_clerk_bk, {'readable': False}),
         'readiness': measure_readiness(now, th['port']) if measure else None,
     }
 

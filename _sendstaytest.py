@@ -36,6 +36,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+os.environ.pop('DEALFLOW_CLERK_BK', None)
 import stay_gate as SG  # noqa: E402
 
 ok, bad = [], []

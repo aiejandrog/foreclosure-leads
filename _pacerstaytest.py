@@ -37,6 +37,7 @@ TMP = pathlib.Path(tempfile.mkdtemp(prefix='pacerstay_'))
 os.environ['DEALFLOW_PAID_LEDGER'] = str(TMP / 'paid_reads_ledger.json')
 os.environ.pop('DEALFLOW_PAID_MONTHLY_CAP', None)
 os.environ.pop('DEALFLOW_PACER_MAX_AGE_DAYS', None)
+os.environ.pop('DEALFLOW_CLERK_BK', None)
 for _k in ('PACER_USERNAME', 'PACER_PASSWORD', 'PACER_OTP_SECRET', 'PACER_CLIENT_CODE', 'PACER_ENV',
            'PACER_QUARTER_CAP', 'PACER_RUN_MAX', 'PACER_QUARTER_LEDGER', 'PACER_REDACT_FLAG'):
     os.environ.pop(_k, None)

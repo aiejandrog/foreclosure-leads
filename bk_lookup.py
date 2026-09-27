@@ -1230,6 +1230,7 @@ class HoldIndex:
                 out = (True, 'federal bankruptcy check has not run for this lead')
             else:
                 out = (False, '')
+        out = _apply_clerk_hold(case, out)
         self._memo[key] = out
         return out
 
@@ -1241,9 +1242,36 @@ def _cache_sig():
     path = cache_path()
     try:
         st = os.stat(path)
-        return (path, st.st_mtime_ns, st.st_size)
+        base = (path, st.st_mtime_ns, st.st_size)
     except OSError:
-        return (path, None, None)
+        base = (path, None, None)
+    extra = None
+    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1':
+        try:
+            import clerk_bk
+            extra = clerk_bk.cache_sig()
+        except Exception:
+            extra = ('clerk-unreadable',)
+    return (base, extra)
+
+
+def _apply_clerk_hold(case, out):
+    """(held, why). With DEALFLOW_CLERK_BK off this is `out` unchanged. An active clerk stay
+    replaces a weaker answer. Any other clerk hold replaces a clear only. A throw while the
+    flag is on holds."""
+    held, why = out
+    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() != '1':
+        return out
+    try:
+        import clerk_bk
+        op = clerk_bk.gate_opinion(case)
+    except Exception:
+        return True, 'clerk docket check failed. Lead stays held.'
+    if not isinstance(op, dict) or not op.get('blocks'):
+        return out
+    if op.get('code') == 'stay_active' or not held:
+        return True, (op.get('why') or why)
+    return out
 
 
 def federal_hold_index(now=None):
@@ -1334,6 +1362,17 @@ def flags_for_cases(cases, now=None):
         if op and op.get('blocks'):
             out[key] = {'hold': True, 'why': str(op.get('why') or '')[:180],
                         'hard': op.get('code') == 'stay_active'}
+        try:
+            import clerk_bk
+            cop = clerk_bk.gate_opinion(key, now)
+        except Exception:
+            cop = ({'blocks': True, 'code': 'stay_unverified',
+                    'why': 'clerk docket check failed. Lead stays held.'}
+                   if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1' else None)
+        if isinstance(cop, dict) and cop.get('blocks'):
+            if cop.get('code') == 'stay_active' or key not in out:
+                out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
+                            'hard': cop.get('code') == 'stay_active'}
     return out
 
 
@@ -2250,7 +2289,20 @@ def main(argv=None, clock=None, transport=None, here=None):
                          provider='courtlistener')
         except Exception:
             pass
+    _maybe_clerk_docket()
     return 0
+
+
+def _maybe_clerk_docket():
+    """The 5:30 refresh already runs this file. The clerk docket check rides along only when
+    DEALFLOW_CLERK_BK=1. A failure here does not change this process's exit code."""
+    try:
+        import clerk_bk
+        if not clerk_bk.enabled():
+            return
+        clerk_bk.run_nightly(here=HERE)
+    except Exception:
+        log('Clerk docket check failed. Broward and Palm Beach stay held while that check is on.')
 
 
 if __name__ == '__main__':

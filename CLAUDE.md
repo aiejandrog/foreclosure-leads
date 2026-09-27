@@ -293,6 +293,47 @@ with a name, a phone, or the token.
 is asking Free Law Project. Until that is answered, keep the provider swappable and do
 not add a second CourtListener client.
 
+## Clerk docket bankruptcy check (Broward / Palm Beach)
+
+`clerk_bk.py` reads the foreclosure case's own docket for a bankruptcy stay. It is off
+unless `DEALFLOW_CLERK_BK=1`. With the flag off, sending is unchanged, including
+`DEALFLOW_BK_ALLOW_CL_CLEAR`. Miami-Dade is not read here.
+
+With the flag on, a Broward or Palm Beach lead can be contacted only when this source has
+fully read the docket and found no active stay, and every other gate still passes. An
+active stay holds. A missing read, a stale read, a partial list, a captcha, a bad key, an
+unparseable docket, or a check that throws holds. A clerk clear does not override a
+CourtListener hold, a PACER active hit, or a Miami docket stay. `DEALFLOW_BK_ALLOW_CL_CLEAR`
+is unchanged: a CourtListener clear alone still does not release Broward or Palm Beach.
+
+Broward is read only through the clerk's Commercial Data API (`api.browardclerk.org`),
+two GETs per case: `case.json` and `events_and_documents.json`. The key is the Windows
+user env var `BROWARD_CLERK_API_KEY`. It is never printed or stored. The public Case
+Search site is captcha-gated and its terms forbid commercial use, so this module does not
+scrape it and does not solve a captcha. No key means Broward is not read.
+
+Palm Beach eCaseView is captcha-gated and its terms limit the site to non-commercial use.
+There is no official docket API. This module does not call it. With the flag on, a Palm
+Beach lead stays held.
+
+The 5:30 refresh already runs `bk_lookup.py`, which calls this check only when the flag
+is on, and that step still exits 0. `CLERK_BK_MAX_RUNTIME_S` (default 900),
+`CLERK_BK_MAX_CASES` (default 25), and `CLERK_BK_MIN_INTERVAL` (default 2.5 seconds)
+bound a run. `DEALFLOW_CLERK_BK_MAX_AGE_DAYS` (default 14) is how long a full read keeps
+clearing. Cache and status (`clerk_bk_cache.json`, `clerk_bk_status.json`) live in
+`DEALFLOW_DIR` and carry counts, verdicts, and dates only.
+
+Acceptance, on the laptop, against real case numbers, one line each and no party names:
+
+```
+python clerk_bk_accept.py --case CACE-99-000123
+python clerk_bk_accept.py --case 509999CA000123XXXAMB
+python clerk_bk_accept.py --entries docket.json --case CACE-99-000123
+```
+
+`--entries` classifies a local JSON file (`{"status": "Pending", "entries": [{"date", "text"}]}`).
+It is not a live read and it does not clear a lead.
+
 ## Scheduled tasks
 
 Register/enable/disable only via `pwsh .\desktop-setup\install-tasks.ps1` — **`pwsh`, not
