@@ -213,6 +213,10 @@ _SALE_WORD_RE = re.compile(r'\b(?:sale|auction)\b', re.I)
 # a document behind the county login, which is the ordinary case for a sale notice. The clerk's
 # proceeds entries after a completed sale carry neither word.
 _RESET_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*)\b', re.I)
+# The producer's own sale vocabulary, verbatim from :398, for deciding whether a string is a sale
+# passage at all. Distinct from _SALE_WORD_RE above, which asks whether the CLASSIFIER should have
+# labelled an entry and deliberately leaves `sell` out.
+_PRODUCER_SALE_WORD_RE = re.compile(r'\b(?:sale|sell|auction|reset|reschedul\w*)\b', re.I)
 # What an entry must say to be a candidate for CLOSING or MOVING the sale now on the calendar. The
 # question those branches ask is narrow, and every phrasing they exist for carries one of these.
 # Not a producer regex: the one narrowing this file makes to `_REPLACES`, and only over an attached
@@ -454,7 +458,13 @@ def _index_text(entry):
     that was neither labelled a sale notice nor flagged as unlabelled, so a live sale under a stay
     vanished from the file entirely (_casetimelinetest :362, :461 carry both real shapes).
     """
-    return ' '.join(str(entry.get(k) or '') for k in ('description', 'comments'))
+    # Empties DROPPED, exactly as the producer composes it (:346). Joining them gave a comment-less
+    # entry - the common case - a trailing space the producer's own `index_text` does not have, so
+    # `text not in passages` never matched and _sale_dates_of parsed the docket line twice: the report
+    # told the reader a noticed sale under a stay had two sale dates where the producer has one
+    # (thirty-eighth review).
+    return ' '.join(x for x in (str(entry.get('description') or ''),
+                                str(entry.get('comments') or '')) if x)
 
 
 def _producer_text(entry):
@@ -844,44 +854,41 @@ def _order_grants_a_replacement(entry):
     # is also true on its own terms: that docket line does say an amended final judgment exists which
     # the reconciliation did not take in, and the sentence says only that which judgment controls is
     # not settled here.
-    dispositions = [str(l or '') for l in _rows(entry, 'motion_disposition_passages') if str(l or '').strip()]
-    # The producer's own saved disposition wins over any title. :397 saves a
-    # motion_disposition_passages row for exactly this kind, from the read body, for every line that
-    # says a motion is granted or denied. So when the producer recorded rows and NONE of them grants,
-    # the document itself says the motion was denied and nothing was entered - and the title branch
-    # below was reading "ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT", which carries no
-    # denial word of its own, as a GRANT, over a saved row reading "the Motion for Amended Final
-    # Judgment is hereby DENIED". A printed reason contradicted by the producing module's own state
-    # is the thing this file must never do (thirty-sixth review).
+    # NO EXEMPTION from a saved disposition row, and that is a reversal of the two rounds before.
+    # :397's rows are per-LINE - r'\bmotion\b' AND the granted/denied vocabulary - and the producer
+    # records nothing about WHICH motion a row belongs to. So every attempt to read one as "the
+    # document's answer about the motion for entry" has produced a false `supported` within one round:
+    # the unscoped version let "The Motion to Continue the Sale is hereby DENIED." withdraw the hold
+    # (thirty-seventh review), and scoping it to rows naming a replacing final judgment let
+    # "Defendant's Motion to Vacate the Amended Final Judgment is hereby DENIED." and the same for
+    # ENFORCE, for rehearing, for relief from, do it - the latter withdrawing a hold the round before
+    # had explicitly decided must stand. Both vouched a superseded judgment's figure to the cent with
+    # the entry named nowhere (thirty-eighth review). Any discriminator here is a guess about motion
+    # identity the producer does not save, and a read-side exemption is the one shape that can make
+    # reading a document produce a WORSE-informed verdict.
     #
-    # This does make the READ half read better than the unread one, and that is the one direction
-    # that is sound: the read page carries positive evidence that nothing was entered, where the
-    # unread docket carries no evidence either way and holds. The family these rounds keep finding is
-    # the opposite - reading making a verdict CONFIDENT on less.
-    #
-    # SCOPED to rows about this subject, which is the whole force of the guard. :397's test is
-    # per-LINE - r'\bmotion\b' AND the granted/denied vocabulary - and records nothing about WHICH
-    # motion a row belongs to, so an unscoped guard let one read line denying an unrelated motion
-    # ("The Motion to Continue the Sale is hereby DENIED.") cancel the hold that the SAME page without
-    # that line read still raised: the docket where one more line was read vouched to the cent for the
-    # superseded judgment and named the entry nowhere. The premise the round before wrote down - "the
-    # document itself says the motion was denied" - was false about that field (thirty-seventh review).
-    # The two tests below are the ones this file already trusts to say a string is about a replacing
-    # final judgment, so nothing new is classified here.
-    subject = [l for l in dispositions if _FINAL_JUDGMENT_RE.search(l) and _replacing_words(l)]
-    if subject and not any(_GRANTED_RE.search(l) for l in subject):
-        return False
+    # So the hold stands whatever the rows say, and the reason CARRIES them instead. That keeps the
+    # contract the exemption existed for - the sentence never asserts a grant the producer contradicts,
+    # because the producer's own denial is printed beside it - while removing the exemption that kept
+    # generating the opposite defect. What is left is a clause-4 over-fire: an order whose read body
+    # denies the motion is held, with the denial in front of the reader, which is seconds of a human's
+    # time rather than a silent false `supported`.
     for text in (str(entry.get('operative_text') or '').strip(),
                  _index_text(entry).strip(),
                  str(entry.get('comments') or '').strip()):
         if text and _says_a_replacing_judgment(text):
             return True
-    for line in dispositions:
+    for line in _disposition_rows(entry):
         # A saved disposition line is specifically about granting or denying, so this half also asks
         # the producer's granting vocabulary of it.
         if _GRANTED_RE.search(line) and _says_a_replacing_judgment(line):
             return True
     return False
+
+
+def _disposition_rows(entry):
+    """The producer's own saved `motion_disposition_passages` rows for this entry (:397), non-empty."""
+    return [str(l or '') for l in _rows(entry, 'motion_disposition_passages') if str(l or '').strip()]
 
 
 def _replacement_of_record(judgments):
@@ -1074,8 +1081,13 @@ def _sale_dates_of(entry):
     symmetric.
     """
     passages = [str(p) for p in _rows(entry, 'sale_passages') if str(p or '').strip()]
-    text = _index_text(entry)
-    if text.strip() and text not in passages:
+    text = _index_text(entry).strip()
+    # Gated on the producer's own :398 vocabulary, which is what the paragraph above is actually
+    # about. Appended unconditionally, any dated clerk string reached the producer's sale-date parser
+    # even with no sale word in it at all, so a bare "Notice of Filing 07/07/2026" printed its FILING
+    # date as this entry's sale date while the same line without a date printed nothing - a reason the
+    # producer's own state does not carry (thirty-eighth review).
+    if text and _PRODUCER_SALE_WORD_RE.search(text) and text not in passages:
         passages.append(text)
     if not passages:
         return []
@@ -1845,6 +1857,14 @@ def assess(timeline, dossier=None):
                           if of_record else
                           'no summary this verdict rests on took that judgment in',
                           ' - the run read the title %r' % named[:200] if named else ''))
+        # The producer's own saved disposition lines, printed rather than acted on. See
+        # _order_grants_a_replacement: two rounds running tried to read one of these as the document's
+        # answer about the motion for entry, and each produced a false `supported`. A reader decides
+        # this in seconds with the line in front of them; this file cannot decide it at all.
+        rows = _disposition_rows(entry)
+        if rows:
+            missing[-1] += (' - the run also read %s'
+                            % '; '.join(repr(l.strip()[:200]) for l in rows[:2]))
     # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
     # one net for these - :519 forces status 'unclear' for every undated entry `_transition`
     # recognises - and `_transition` returns None for exactly the kinds that then reach nothing else:

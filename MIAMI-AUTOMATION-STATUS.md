@@ -729,6 +729,46 @@ entry `classify` leaves `'other'` (a bare "Chapter 13 Plan") reaches no check; c
 scan rather than a restatement, and it over-fires on any judgment reciting "no bankruptcy is pending", so
 it wants a round that calibrates it deliberately.
 
+**Thirty-eighth review.** Three findings, all three in the round before's own two changes. One was a
+false `supported`; two were report-only and both new in that commit.
+
+The scoped disposition guard asked the wrong question. Scoping it to rows that NAME a replacing final
+judgment is not the same as scoping it to rows about the motion for ENTRY of one, and :397 records no
+motion identity at all, so a read line denying a DIFFERENT motion that names the same judgment - to
+vacate it, to enforce it, for rehearing of it, to set it aside, to cancel the sale it set - still
+withdrew the hold that the same page without that line raises. The sharpest case withdrew a hold the
+thirty-sixth review had decided deliberately must stand: an order on a motion to ENFORCE the amended
+final judgment holds, and one read line denying that very motion made the case `supported` with the
+superseded judgment's figure verified to the cent and the entry named nowhere.
+
+The guard is gone, and that is a reversal of both rounds before it. Two consecutive attempts to read one
+of those rows as the document's answer about the motion for entry each produced a false `supported`
+within one round, because any such reading is a guess about motion identity the producer does not save,
+and a read-side exemption is the one shape that can make reading a document produce a worse-informed
+verdict. The hold now stands whatever the rows say, and the reason CARRIES them: the producer's own
+"... is hereby DENIED" line is printed beside the sentence, which keeps the contract the guard existed
+for - the reason never asserts a grant the producer contradicts - without the exemption that kept
+breaking the other one. What is left is a clause-4 over-fire: an order whose read body denies the motion
+is held, with the denial in front of the reader. Three pinned tests were rewritten to say this, and the
+reversal is written into each of them rather than quietly applied.
+
+`_sale_dates_of` appended the docket line unconditionally, so any dated clerk string reached the
+producer's sale-date parser even with no sale word in it: a bare "Notice of Filing 07/07/2026" printed
+its FILING date as that entry's sale date, while the same line without the date printed nothing. The
+producer seeds that field only on its own sale vocabulary (:395, :398), so the appended line is gated on
+that vocabulary now.
+
+And `_index_text` joined `description` and `comments` including the empty one, while the producer drops
+empties (:346). A comment-less entry - the common case - therefore carried a trailing space the
+producer's string does not have, `text not in passages` never matched, and the docket line was parsed
+twice: the report told the reader a noticed sale under a stay had two sale dates where the producer has
+one. It composes the way the producer does now, which is also what its own docstring always claimed.
+
+The review cleared the rest with reproductions: combining the two sale inputs cannot produce a false
+`supported` through the producer's `reset or regular` preference, since any reset-context date implies
+the reset word is inside `_sale_text` and the `_RESET_WORD_RE` branch rescues the entry; and the round
+before's scoping did fix the direction it claimed.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and

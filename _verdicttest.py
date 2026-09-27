@@ -4516,20 +4516,29 @@ class ThirtySixthReviewTests(unittest.TestCase):
 
     # ---- a denial the producer recorded, read as a grant ---------------------------------------
 
-    def test_a_saved_denial_is_not_read_as_a_grant(self):
+    def test_a_saved_denial_is_printed_and_not_acted_on(self):
         # :397 saves a motion_disposition_passages row for this kind from every read line that grants
-        # or denies a motion. The title branch was reading "ORDER ON MOTION FOR ENTRY OF AMENDED
-        # FINAL JUDGMENT" - which carries no denial word of its own - as a grant, over the producer's
-        # own saved row saying the motion was DENIED, and printed "its own words say it grants a
-        # judgment replacing an earlier one" about a document that entered nothing.
+        # or denies a motion. The defect this round found was the REASON: the title branch read
+        # "ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT" - which carries no denial word of its
+        # own - as a grant, over the producer's own saved row saying the motion was DENIED.
+        #
+        # This test first pinned the fix as an EXEMPTION - the saved denial made the case `supported`.
+        # Reversed in the thirty-eighth review, and the reversal is the point: the rows are per-line
+        # and carry no motion identity, so every way of reading one as the document's answer about the
+        # motion for entry produced a false `supported` within one round. The hold stands now and the
+        # producer's own line is printed beside it, which keeps the contract this fix existed for
+        # without the exemption that kept breaking the other one.
         t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
                       pages={'140': ('ORDER ON MOTION FOR ENTRY OF AMENDED FINAL JUDGMENT' + chr(10)
                                      + "Plaintiff's Motion for Entry of an Amended Final Judgment "
                                      'is hereby DENIED.')})
         entry = next(e for e in t['entries'] if e['entry_id'] == '140')
         self.assertTrue(entry['motion_disposition_passages'])
-        self.assertFalse(CV._order_grants_a_replacement(entry))
-        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+        said = ' '.join(m for m in r['missing'] if '140' in m)
+        self.assertNotIn('grants', said)
+        self.assertIn('is hereby DENIED', said)
 
     def test_a_granted_row_beside_a_denied_one_still_holds(self):
         # An order granting one motion and denying another entered something, so the saved denial
@@ -4636,23 +4645,18 @@ class ThirtySeventhReviewTests(unittest.TestCase):
                               'favor of Plaintiff.')
         self.assertEqual(CV.assess(stronger)['verdict'], 'incomplete')
 
-    def test_a_denial_of_this_motion_beside_an_unrelated_grant_still_exempts(self):
-        # The other direction of the same scoping: the producer's row denying THIS motion is the
-        # document's answer about it, and a grant on some other motion does not turn it into a grant.
-        entry = next(e for e in self.order(
-            "Plaintiff's Motion for Entry of an Amended Final Judgment is hereby DENIED." + chr(10)
-            + 'The Motion to Continue the Sale is hereby GRANTED.')['entries']
-            if e['entry_id'] == '140')
-        self.assertFalse(CV._order_grants_a_replacement(entry))
-
-    def test_the_round_before_s_own_two_shapes_are_unchanged(self):
-        for body, held in (("Plaintiff's Motion for Entry of an Amended Final Judgment is hereby "
-                            'DENIED.', False),
-                           ('The Motion to Continue is hereby DENIED.' + chr(10)
-                            + 'The Motion for Entry of an Amended Final Judgment is hereby '
-                            'GRANTED.', True)):
+    def test_no_saved_row_exempts_the_entry_any_more(self):
+        # This round's scoping, and the round before's guard it replaced, are both gone: the rows are
+        # per-line and carry no motion identity, so no reading of one can be trusted to withdraw the
+        # hold (thirty-eighth review). Every shape holds, and the row is printed.
+        for body in ("Plaintiff's Motion for Entry of an Amended Final Judgment is hereby DENIED.",
+                     "Plaintiff's Motion for Entry of an Amended Final Judgment is hereby DENIED."
+                     + chr(10) + 'The Motion to Continue the Sale is hereby GRANTED.',
+                     'The Motion to Continue is hereby DENIED.' + chr(10)
+                     + 'The Motion for Entry of an Amended Final Judgment is hereby GRANTED.'):
             entry = next(e for e in self.order(body)['entries'] if e['entry_id'] == '140')
-            self.assertEqual(CV._order_grants_a_replacement(entry), held, body)
+            self.assertTrue(CV._order_grants_a_replacement(entry), body)
+            self.assertEqual(CV.assess(self.order(body))['verdict'], 'incomplete', body)
 
     # ---- the sale-date reader, on both of the producer's inputs --------------------------------
 
@@ -4704,6 +4708,123 @@ class ThirtySeventhReviewTests(unittest.TestCase):
             t = self.built(rows, controlling='2', amount=105000.00, pages=pg)
             r = CV.assess(t)
             self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
+
+class ThirtyEighthReviewTests(unittest.TestCase):
+    """The read-side exemption withdrawn for good, and two report-only defects the round before
+    introduced.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = ThirtyFourthReviewTests.JUDGED
+    PAGE = ThirtyFourthReviewTests.PAGE
+    case = ThirtyFourthReviewTests.case
+    order = ThirtySeventhReviewTests.order
+    HEAD = ThirtySeventhReviewTests.HEAD
+
+    # ---- no saved row withdraws the hold ------------------------------------------------------
+
+    OTHER_MOTIONS = ("Defendant's Motion to Vacate the Amended Final Judgment is hereby DENIED.",
+                     'The Motion to Enforce the Amended Final Judgment is hereby DENIED.',
+                     "Defendant's Motion for Rehearing of the Amended Final Judgment is hereby "
+                     'DENIED.',
+                     'The Motion to Set Aside the Amended Final Judgment is hereby DENIED.',
+                     'The Motion to Cancel the Sale set by the Amended Final Judgment is hereby '
+                     'DENIED.')
+
+    def test_a_denial_of_a_different_motion_naming_the_judgment_does_not_withdraw_the_hold(self):
+        # The round before scoped the guard to rows naming a replacing final judgment, which is a
+        # different question from whether the row is about the motion for ENTRY. A denial of a motion
+        # to vacate, to enforce, for rehearing of, to set aside that judgment satisfies the scope test,
+        # so one more read line withdrew the hold the same page without it raises - and the case
+        # vouched to the cent for the superseded judgment with the entry named nowhere.
+        self.assertEqual(CV.assess(self.order())['verdict'], 'incomplete')
+        for body in self.OTHER_MOTIONS:
+            r = CV.assess(self.order(body))
+            self.assertEqual(r['verdict'], 'incomplete', (body, r['missing']))
+            self.assertTrue([m for m in r['missing'] if '140' in m], body)
+
+    def test_a_hold_the_round_before_pinned_is_not_withdrawn_by_reading_the_denial(self):
+        # The sharpest shape: the thirty-sixth review decided deliberately that an order on a motion to
+        # ENFORCE the amended final judgment holds, because nothing the producer saves discriminates a
+        # restatement. One read line denying that very motion took the hold away again.
+        page = ('ORDER ON MOTION TO ENFORCE THE AMENDED FINAL JUDGMENT' + chr(10)
+                + 'The Motion to Enforce the Amended Final Judgment is hereby DENIED.')
+        t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')], pages={'140': page})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+
+    def test_the_saved_rows_are_printed_so_a_reader_decides(self):
+        # What replaces the exemption: the producer's own line, in the reason, unacted on. The sentence
+        # still never asserts a grant, so the contract the exemption existed for is kept.
+        said = ' '.join(m for m in CV.assess(self.order(self.OTHER_MOTIONS[0]))['missing']
+                        if '140' in m)
+        self.assertIn('Motion to Vacate the Amended Final Judgment is hereby DENIED', said)
+        self.assertNotIn('grants', said)
+
+    def test_an_ordinary_order_with_no_replacing_words_is_still_not_held(self):
+        # The calibration for the reversal: an order denying an ordinary motion, with nothing about a
+        # replacing judgment anywhere, must not be held by this sweep.
+        for page in ('ORDER ON MOTION FOR EXTENSION OF TIME' + chr(10)
+                     + 'The Motion for Extension of Time is hereby DENIED.',
+                     'ORDER ON MOTION TO COMPEL' + chr(10)
+                     + 'The Motion to Compel is hereby GRANTED.',
+                     'ORDER GRANTING MOTION TO SUBSTITUTE PARTY PLAINTIFF' + chr(10)
+                     + 'The Motion to Substitute Party Plaintiff is hereby GRANTED.'):
+            t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')], pages={'140': page})
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (page, r['missing']))
+
+    # ---- the sale-date reader, gated on the producer's own vocabulary --------------------------
+
+    STAYED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '02/10/2026', ''),
+              (165, 'Order Staying Sale', '', '08/15/2026', '')]
+
+    def sale_entry(self, clerk, body='NOTICE OF FORECLOSURE SALE'):
+        rows = list(self.STAYED) + [(160, clerk, '', '08/01/2026', '')]
+        return self.built(rows, controlling='2', amount=105000.00,
+                          pages={'2': self.PAGE, '160': body})
+
+    def test_a_filing_date_is_not_printed_as_a_sale_date(self):
+        # Appended unconditionally, any dated clerk string reached the producer's sale-date parser even
+        # with no sale word in it, so a bare "Notice of Filing 07/07/2026" printed its FILING date as
+        # this entry's sale date while the same line without the date printed nothing. The producer
+        # seeds that field only on its own sale vocabulary (:395, :398).
+        def state(clerk):
+            t = self.sale_entry(clerk)
+            entry = next(e for e in t['entries'] if e['entry_id'] == '160')
+            r = CV.assess(t)
+            return (CV._sale_dates_of(entry),
+                    ' '.join(m for m in r['missing'] + r['notes'] if 'entry 160' in m))
+        dates, said = state('Notice of Filing 07/07/2026')
+        self.assertEqual(dates, [])                    # the producer has no sale date here
+        self.assertNotIn('2026-07-07', said)
+        # And the date in the clerk line changes nothing about this entry at all, which is the
+        # weaker-vs-stronger statement.
+        self.assertEqual(state('Notice of Filing'), (dates, said))
+
+    def test_a_sale_worded_clerk_line_is_still_read(self):
+        # The round before's fix, intact: the docket line's own date survives a read body that has none.
+        entry = next(e for e in self.sale_entry('Notice of Foreclosure Sale on 12/28/2026')['entries']
+                     if e['entry_id'] == '160')
+        self.assertIn('2026-12-28', CV._sale_dates_of(entry))
+
+    def test_the_docket_line_is_not_parsed_twice(self):
+        # `_index_text` joined description and comments including the empty one, so a comment-less entry
+        # - the common case - got a trailing space the producer's own index_text (:346) does not have,
+        # `text not in passages` never matched, and the report told the reader a noticed sale under a
+        # stay had two sale dates where the producer has one.
+        t = self.sale_entry('Notice of Foreclosure Sale on 12/28/2026')
+        entry = next(e for e in t['entries'] if e['entry_id'] == '160')
+        self.assertEqual(CV._sale_dates_of(entry), ['2026-12-28'])
+        said = ' '.join(m for m in CV.assess(t)['missing'] + CV.assess(t)['notes'] if '160' in m)
+        self.assertNotIn('2026-12-28, 2026-12-28', said)
+
+    def test_index_text_composes_the_way_the_producer_does(self):
+        self.assertEqual(CV._index_text({'description': 'Notice of Sale', 'comments': ''}),
+                         'Notice of Sale')
+        self.assertEqual(CV._index_text({'description': 'Notice:', 'comments': 'OF SALE'}),
+                         'Notice: OF SALE')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
