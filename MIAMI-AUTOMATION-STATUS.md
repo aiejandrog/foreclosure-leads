@@ -113,7 +113,7 @@ iterates `sorted(glob('*.json'))` over sha256 filenames, so which attachment sup
 multi-document entry's label is arbitrary.
 
 **Entries after the run's cutoff, and entries with no date at all.** `miami_case_timeline` skips both
-where it decides a posture (:446, `reconcile_judgments` :675, `sale_held` :544) and compensates for the
+where it decides a posture (:460, `reconcile_judgments` :755, `sale_held` :568) and compensates for the
 undated half by forcing status `unclear` - but only for entries `_transition` recognises. `case_verdict`
 mirrors the first half and deliberately not the second: an entry dated after `as_of` says nothing about
 the case at it and is dropped, while an undated entry is never dropped, because it is more unknown, not
@@ -123,12 +123,12 @@ classifier does not label, stopped raising the unlabelled-sale gap and a case un
 stay read `supported` (fourteenth review).
 
 Two more of each half were open a round later. `sale_held` bounds its money-row scan by the cutoff
-(:544) and its certificate scan (:550) does not, so a certificate dated after the run's own `as_of`
+(:568) and its certificate scan (:574) does not, so a certificate dated after the run's own `as_of`
 sets `sale_held['certificate']`; reading that bare field suppressed the held-sale gap and a sale the
 clerk held before the cutoff, under a live stay, read `supported`. And the producer's one net for
-undated entries - :505 forces status `unclear` - covers only the kinds `_transition` recognises, which
+undated entries - :519 forces status `unclear` - covers only the kinds `_transition` recognises, which
 excludes `sale_bid` and `sale_deposit` (not in its map) and a limited-scope satisfaction or dismissal
-(returned `None` at :248), while `reconcile_judgments` :673 skips every undated entry. An undated "Bid
+(returned `None` at :248), while `reconcile_judgments` :753 skips every undated entry. An undated "Bid
 Amount" over a read judgment, and an undated partial satisfaction of that judgment, both read
 `supported` with nothing in `missing`. Each now raises a gap naming the entry and the label it carries
 (fifteenth review).
@@ -138,7 +138,7 @@ off this page - is a sale still running - and for fifteen rounds `assess` consul
 `if stay is True`. On every other docket the answer was computed and discarded: a sale noticed for
 2026-04-01, a cutoff in September, nothing on the docket cancelling it and no certificate, read
 `supported`. Nothing else covered it, because `sale_outcome` is written only while the FINAL status is
-`sale_scheduled` with a parsed sale date (:508) and a later judgment entry moves the status off it,
+`sale_scheduled` with a parsed sale date (:522) and a later judgment entry moves the status off it,
 while the held-sale block needs the clerk's sale-day money rows, which a sale nobody has held does not
 have. The gap is now raised whenever the producer's labels leave a sale live or unreadable and the
 status is `judgment_entered` - the only settled posture that can sit over an unresolved sale, since the
@@ -192,7 +192,7 @@ final branch, which asks about a FRESH notice after a cancellation, is deliberat
 **A judgment superseded by one filed under a covering title.** `_FILED_ABOUT_RE`'s bare `notice\b`
 matches "Notice of Filing Amended Final Judgment of Foreclosure", so the producer moves the real label
 to `attached_document_kind` and leaves `kind` as `notice_of_filing`. `_transition` has no entry for that
-kind and `reconcile_judgments` keys on `kind == 'final_judgment'` (:672), so the superseded judgment
+kind and `reconcile_judgments` keys on `kind == 'final_judgment'` (:752), so the superseded judgment
 stays `operative` and controlling and the verdict vouched for the OLD figure to the cent with the
 amendment named nowhere. `attached_document_kind == 'final_judgment'` is still excluded - a judgment
 body on page 1 of a motion, memorandum or status report is an exhibit, and holding those made routine
@@ -231,8 +231,8 @@ what the producer saved. That is CLAUDE.md's own rule: document metadata and key
 be represented as documents read (twenty-second review).
 
 **A satisfaction attached to a judgment row that is not the controlling one.** `reconcile_judgments`
-writes a satisfaction onto the judgment whose date the entry's text CITES (`_target` :783 filters by
-role, not by status) and onto that row alone (:741). `_judgment_record` read only the controlling row
+writes a satisfaction onto the judgment whose date the entry's text CITES (`_target` :863 filters by
+role, not by status) and onto that row alone (:821). `_judgment_record` read only the controlling row
 and the `unmatched` sweep held only satisfactions with no target at all, so the middle case reached
 nothing: an original judgment, an amended one, and a satisfaction citing the original's date read
 `supported` with the amount vouched to the cent, while the same satisfaction on a docket carrying one
@@ -253,11 +253,11 @@ commit, and `classify` reaches `order.*stay` before `order.*motion`, so an "Orde
 Stay Discovery" from 2024 held a docket whose own later entries are a final judgment, a noticed sale and
 a certificate of title `incomplete` for ever. An older one is a note.
 
-**A second judgment row the reconciliation left operative.** `reconcile_judgments` (:678) tests
+**A second judgment row the reconciliation left operative.** `reconcile_judgments` (:758) tests
 `_ADDS_TO` before `_REPLACES` over `operative_text` + `description` + `comments`, so an entry whose
 words say BOTH "Amended Final Judgment of Foreclosure" AND "awarding attorneys fees and costs" is typed
 `role='supplemental'`: that branch only records `adds_to` and never calls `_target`, so the judgment it
-amends is never marked `superseded`, and :752 keeps supplemental rows out of `operative` - leaving the
+amends is never marked `superseded`, and :832 keeps supplemental rows out of `operative` - leaving the
 ORIGINAL judgment controlling with its figure vouched to the cent and the amendment named nowhere.
 Deleting the fee words from the same docket line, knowing strictly less, was already `incomplete`. A
 self-declared amendment (the producer's own `_REPLACES` over its own docket words) now holds the case; a
@@ -266,7 +266,7 @@ judgment's alone and understates the total (twenty-fourth review).
 
 **Two producers disagreeing about whether a filing was read.** `document_coverage` :152 emits
 `restricted_likely` for a docket-linked document the docket counts as 0, and it does so BEFORE it looks
-at the rows actually acquired, while `build_timeline` :403 sets `image_status` `'read'` for the same
+at the rows actually acquired, while `build_timeline` :417 sets `image_status` `'read'` for the same
 entry once its pages are read. So once one of those filings is obtained the two disagree for good, and
 the report printed "behind the clerk's login" beside "amount verified to the cent" on that entry's own
 court copy - a sentence the same file refutes - and held the case `incomplete` however much was read.
@@ -285,7 +285,7 @@ The same round closed the other half of the eighth review's defect. `_transition
 from `sale_passages` - the docket line plus the body lines of READ pages - and falls back to the
 entry's own date only for a calendar event (:264). A notice of sale whose description carries no
 parseable date and whose document sits behind the county login therefore leaves `sale_date` None, and
-:508's past-sale check is written `and status.get('sale_date') and ... < today`, so it never runs and
+:522's past-sale check is written `and status.get('sale_date') and ... < today`, so it never runs and
 no `sale_outcome` is saved. The docket where LESS was known was the one reading `supported`: the same
 docket with the date printed in its description was already `incomplete`. A status of `sale_scheduled`
 with no parsed date is now a gap of its own. The acceptance fixture for 2024-014878 had hidden this
@@ -295,7 +295,7 @@ the same failure mode as the coverage fixture's missing `document` (thirteenth r
 **A regex given a narrower text than the producer it mirrors.** `_replaces` asks
 `miami_case_timeline._REPLACES` - the producer's own regex - whether an entry's words say it replaces a
 judgment, and that is right; it asked it about `description` + `comments`, and that was not.
-`reconcile_judgments` builds its role text at :675 as `operative_text` + `description` + `comments`, and
+`reconcile_judgments` builds its role text at :755 as `operative_text` + `description` + `comments`, and
 `operative_text` is the TITLE OF THE DOCUMENT the run actually read (:363, `title or index_text`). So the
 docket whose amending judgment was OPENED - the strictly stronger evidence - was the one reading
 `supported`: `_ADDS_TO` matched "ATTORNEYS FEES" in the title the producer saw, the row went
@@ -350,8 +350,8 @@ order settles nothing about what that order stays. Third, `_cover_subject`'s par
 filed a file that parses fine under `broken` (twenty-seventh review).
 
 **The same fix again, one level in, in both its halves.** `_was_read` tested `image_status == 'read'`,
-and two other statuses only exist when the run HAD pages for the entry: `unreadable_pages` (:401, where
-`failed` is a subset of `pages`) and `missing_attachments` (:412, which tests `and pages` explicitly).
+and two other statuses only exist when the run HAD pages for the entry: `unreadable_pages` (:415, where
+`failed` is a subset of `pages`) and `missing_attachments` (:426, which tests `and pages` explicitly).
 This module's own NAMES table already calls `unreadable_pages` **part_read**. So a document whose page 2
 failed OCR - strictly LESS known than one fully read - printed "nobody opened it", indistinguishable
 from an entry nothing was fetched for. And there was a fourth shape: `kind_source` `'document'` means the
@@ -367,7 +367,7 @@ no false `supported`, and both had been drawn to the newest code; this one went 
 recent round touched and found one in the bankruptcy sweep, untouched since the sixth review.
 `BANKRUPTCY_KINDS` lists the labels that RAISE a stay, which is right, and the stay-ENDING labels were
 left out of the docket sweep entirely, which was not: an order granting relief from a bankruptcy stay, or
-dismissing or discharging the bankruptcy, can only exist if the bankruptcy existed BEFORE it. :462 skips
+dismissing or discharging the bankruptcy, can only exist if the bankruptcy existed BEFORE it. :476 skips
 undated and post-`as_of` entries before building `stay_history`, so on a docket whose only bankruptcy
 entry was one of those three, dated after the cutoff, the history was empty, `stay_in_effect` None, the
 sweep returned nothing, and the case read `supported` with the stay column saying "none on the docket"
@@ -379,11 +379,50 @@ and does not hold the case, which is the sixth review's fixture. Two wordings we
 two-producer disagreement check tested `image_status == 'read'` exactly, three hundred lines after
 `OPENED_STATUSES` was added for that same question, so the docket whose page 2 failed OCR got the
 "behind the clerk's login" sentence that block exists to prevent; and the round before's claim that
-`unassessed_pages` means no page was read is false - :414-422 OVERWRITES `image_status`, `'read'`
+`unassessed_pages` means no page was read is false - :428-422 OVERWRITES `image_status`, `'read'`
 included - so `_was_read` now reads the discriminator the producer saves in that entry's own gap row
 (twenty-ninth review).
 
-**Reported, not changed (`miami_case_timeline`, not this module's surface).** :505 overwrites the
+**A label the producer now saves, and a judgment status with no reader.** Two false `supported`, both on
+ground no round had revisited, plus two sentences the round before's own fixes got wrong.
+
+main's E1 work saves the label the calendar override replaces, in `pre_calendar_kind` (:393), and nothing
+in the repo read it. On the one `_producer_labels` branch that can recover the label no other way -
+`'document_passage'`, where the passage overwrote `operative_text` - a READ order saying the automatic
+stay is reinstated returned the clerk's bland `index_kind`, so `stay_history` was empty, the bankruptcy
+sweep never saw the entry, `_relabelled` skipped it as post-cutoff, and the case read `supported` with
+the stay column saying "none on the docket" over a docket whose own read document puts a §362 stay back
+in force. The saved label is now read, and it decides the SENTENCE only - holding on every saved label
+would hold a notice of appearance, which is the eleventh review's regression. The old sentence "which is
+saved nowhere" was true when written and is not any more.
+
+The producer's judgment `status` vocabulary is operative / docket_duplicate_inferred / superseded /
+unclear / satisfied / vacated / partially_vacated. `unclear` forces `controlling_entry` None, which is
+already a gap; superseded and docket_duplicate_inferred are read; satisfied is read since the
+twenty-third review. `vacated` had no reader at all - and `_target` filters candidates by ROLE, not
+status, exactly as it does for satisfactions, so a vacatur citing the ORIGINAL judgment's date marks the
+superseded row vacated and leaves the amending row controlling. An order VACATING a final judgment then
+appeared nowhere in the verdict, with the amending judgment's figure verified to the cent, while the same
+docket with a satisfaction in place of the vacatur - weaker evidence against the posture - was already
+`incomplete`.
+
+Two wordings from the round before: widening the coverage disagreement check to `OPENED_STATUSES`
+swallowed the pairs where the two producers say the SAME fact (coverage's `read_partial` is the
+timeline's `unreadable_pages`, `not_enumerated` is `missing_attachments`) while the sentence still
+hard-coded `'read'`, so it named a status the file does not carry, claimed a disagreement that was not
+there, and its `continue` ate the accurate "only partly read" line; and `_was_read`'s gap-row
+discriminator matched the producer's GENERIC per-entry row, whose `pages` holds the pages that FAILED
+and is empty when none did, so `1 not in []` made it claim a document was read when not one page of it
+was - the twenty-seventh review's defect in the worse direction. Only the per-document rows carry the
+discriminator, and every one of them has to exclude page 1 (thirtieth review).
+
+**Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
+its first half and about eighty in its judgments half, so every citation in this file and in
+`case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
+spot-checked against the anchors; `judgment_money`, `document_coverage` and `_casetimelinetest` citations
+were left alone.
+
+**Reported, not changed (`miami_case_timeline`, not this module's surface).** :519 overwrites the
 whole status when any undated dispositive entry exists, including a status already carrying one of the
 three evidence-vs-evidence contradiction reasons. A docket with both a same-date conflict and an
 undated dispositive entry therefore reaches `case_verdict` with reason "Undated dispositive entry
@@ -402,12 +441,12 @@ there is nothing there for it to see, and the case reads `supported` with the su
 is typed `role: supplemental`, excluded from `operative`, and the case reads "no operative judgment"
 and therefore `incomplete`. Also upstream, also reported rather than fixed here.
 
-**The limitation behind most of this, stated plainly.** `miami_case_timeline` :380 does
+**The limitation behind most of this, stated plainly.** `miami_case_timeline` :394 does
 `if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'`, so any docket entry
 whose OCS eventType is a hearing loses its real label, and every summary the producer builds afterwards
-is keyed on the label that is gone: `stay_history` and `stay_in_effect` (:462), `sale_held` with its
-certificate and its sale-day bankruptcy list (:544, :550, :552), `_transition`'s status kind (:247) and
-`reconcile_judgments` (:722). Ten review rounds each found this reaching one more summary than the last
+is keyed on the label that is gone: `stay_history` and `stay_in_effect` (:476), `sale_held` with its
+certificate and its sale-day bankruptcy list (:568, :574, :576), `_transition`'s status kind (:247) and
+`reconcile_judgments` (:802). Ten review rounds each found this reaching one more summary than the last
 round had enumerated, so `case_verdict` stopped chasing sites: where a posture-deciding label was lost,
 it names the entry and holds the case, whatever consumed it. An earlier version of this paragraph said
 the case is held "as a gap" as though that covered the whole override; it covered the stay path only,
@@ -415,12 +454,12 @@ and a vacated judgment, a satisfied one and an order resetting a sale each read 
 
 `case_verdict` cannot do better than a gap here, and neither could a fix in the producer without
 evidence this repo does not hold. A calendar event genuinely can be a hearing ABOUT a motion rather
-than the thing itself, which is what :380 is for, and nothing in a saved timeline says which a given
+than the thing itself, which is what :394 is for, and nothing in a saved timeline says which a given
 entry is. Deciding it needs a count of how often OCS puts a hearing eventType on an order row, which
 is the desktop's to measure; a read-only script for that is in the project files. The producer is
 therefore left alone on purpose, not by the earlier reasoning in this paragraph, which said the fix
 would move the §362 stay flags the board hard-gates on. That was wrong and was checked: the board's
-`saleBkAct` / `sale_bk_active` is built by `sale_history.py` (:391-447) from its own fresh docket pull,
+`saleBkAct` / `sale_bk_active` is built by `sale_history.py` (:405-447) from its own fresh docket pull,
 that module has no `eventType` reference at all, and nothing outside `case_verdict`, `miami_ranking`
 and `document_prioritizer` reads the timeline's stay state.
 

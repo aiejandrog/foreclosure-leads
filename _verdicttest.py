@@ -3552,5 +3552,169 @@ class TwentyNinthReviewTests(unittest.TestCase):
         self.assertTrue([m for m in said if 'was read' in m], said)
         self.assertFalse([m for m in said if 'nobody opened it' in m], said)
 
+class ThirtiethReviewTests(unittest.TestCase):
+    """Two false `supported` on ground no round had revisited - a label the producer now saves and a
+    judgment status with no reader - and two sentences the round before's own fixes got wrong.
+    """
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $500,000.00'
+
+    @staticmethod
+    def built(rows, docs_extra=(), as_of='2026-09-23', controlling='140', amount=500000.0):
+        import miami_case_timeline as MCT
+        docs = [{'source_ref': '140', 'document_hash': 'h140', 'manifest': {'sha256': 'h140'},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                        'text': ThirtiethReviewTests.PAGE}]}}] + list(docs_extra)
+        entries = [{'source_id': str(n), 'source_ref': str(n), 'expected_documents': 1,
+                    'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': t,
+                                 'comments': c, 'eventType': ev}}
+                   for n, t, c, d, ev in rows]
+        t = MCT.build_timeline('SYNTHETIC', {'entries': entries, 'pagination_verified': True},
+                               docs, as_of)
+        t['judgments'] = dict(t['judgments'] or {}, controlling_entry=controlling,
+                              docket_duplicates_inferred=[])
+        if not (t['judgments'].get('judgments') or []):
+            t['judgments']['judgments'] = [judgment_row(controlling)]
+        t['amount_vision'] = {'amount_checks': [ok_check(controlling, 'court:%s:1' % controlling,
+                                                         amount)]}
+        t['coverage'] = {'attachments': [read_attachment(controlling)], 'complete': False}
+        return t
+
+    JUDGED = [(100, 'Complaint', '', '01/05/2026', ''),
+              (140, 'Final Judgment of Foreclosure', '', '03/10/2026', '')]
+    STAY_DOC = {'source_ref': '7', 'document_hash': 'h7', 'manifest': {'sha256': 'h7'},
+                'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                       'text': 'ORDER\nThe automatic stay is hereby reinstated in '
+                                               'full force and effect.'}]}}
+
+    def test_a_stay_reinstated_in_a_read_passage_on_a_calendar_event_is_named(self):
+        # miami_case_timeline keeps the label the calendar override replaced, in pre_calendar_kind,
+        # and nothing in the repo read it. On the one _producer_labels branch that can recover the
+        # label no other way - 'document_passage', where the passage overwrote operative_text - a READ
+        # order saying the automatic stay is reinstated returned the clerk's bland index_kind, so
+        # stay_history was empty, the bankruptcy sweep never saw the entry, _relabelled skipped it as
+        # post-cutoff, and the case read `supported` with the stay column saying "none on the docket".
+        t = self.built(self.JUDGED + [(7, 'Notice of Filing', '', '10/01/2026', 'Hearing')],
+                       [self.STAY_DOC])
+        e = next(x for x in t['entries'] if x['entry_id'] == '7')
+        self.assertEqual((e['kind'], e['kind_source']), ('hearing', 'document_passage'))
+        self.assertEqual(e.get('pre_calendar_kind'), 'stay_reinstated')
+        self.assertEqual(CV._producer_labels(e), ('stay_reinstated',))
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if 'entry 7' in m], r['missing'])
+        self.assertEqual(CV._stay_word(r['stay_in_effect'], r['stay_history_count'],
+                                       r['bankruptcy_entry_count']), 'unknown')
+
+    def test_an_ordinary_calendar_event_still_reads_supported(self):
+        # Contract 5, and the guard on that fix: the saved label decides the SENTENCE, never whether
+        # the case is held. Holding on every saved label holds a notice of appearance, which is the
+        # eleventh review's regression.
+        doc = {'source_ref': '7', 'document_hash': 'h7', 'manifest': {'sha256': 'h7'},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text', 'text': 'NOTICE OF APPEARANCE'}]}}
+        t = self.built(self.JUDGED + [(7, 'Notice of Appearance', '', '05/12/2026', 'Hearing')], [doc])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['conflicts']))
+
+    def vacatur_case(self):
+        import miami_case_timeline as MCT
+        rows = [(1, 'Complaint', '', '01/02/2024', ''),
+                (2, 'Final Judgment of Foreclosure', '', '01/10/2024', ''),
+                (3, 'Amended Final Judgment of Foreclosure',
+                 'AMENDING THE FINAL JUDGMENT ENTERED 01/10/2024', '03/01/2024', ''),
+                (4, 'Order Vacating Final Judgment',
+                 'VACATING THE FINAL JUDGMENT ENTERED 01/10/2024', '05/01/2024', ''),
+                (5, 'Notice of Foreclosure Sale', 'SALE SET FOR 09/01/2024', '06/01/2024', '')]
+        docs = [{'source_ref': '3', 'document_hash': 'h3', 'manifest': {'sha256': 'h3'},
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                        'text': 'AMENDED FINAL JUDGMENT OF FORECLOSURE\n'
+                                                'Total $600,000.00'}]}}]
+        t = MCT.build_timeline('SYNTHETIC', {'entries': [
+            {'source_id': str(n), 'source_ref': str(n), 'expected_documents': 1,
+             'metadata': {'eventID': n, 'eventDate': d, 'docketDescrition': x, 'comments': c,
+                          'eventType': ev}} for n, x, c, d, ev in rows],
+            'pagination_verified': True}, docs, '2024-12-31')
+        ctl = str(t['judgments'].get('controlling_entry'))
+        t['amount_vision'] = {'amount_checks': [ok_check(ctl, 'court:%s:1' % ctl, 600000.0)]}
+        t['coverage'] = {'attachments': [read_attachment(ctl)], 'complete': False}
+        return t
+
+    def test_a_vacated_non_controlling_judgment_row_is_named(self):
+        # _target filters candidates by ROLE, not status - the hole round 23 found for satisfactions -
+        # so a vacatur citing the ORIGINAL judgment's date marks the superseded row `vacated` and
+        # leaves the amending row controlling. `vacated` was the one value in the producer's status
+        # vocabulary with no reader here, so an order VACATING a final judgment appeared nowhere in the
+        # verdict while the amending judgment's figure was vouched to the cent.
+        t = self.vacatur_case()
+        rows = {r['entry_id']: (r.get('role'), r.get('status')) for r in t['judgments']['judgments']}
+        self.assertEqual(rows.get('2'), ('judgment', 'vacated'), rows)
+        self.assertEqual(t['judgments']['controlling_entry'], '3')
+        r = CV.assess(t)
+        self.assertTrue([m for m in r['missing'] if 'entry 2' in m and 'vacated' in m], r['missing'])
+
+    def test_the_satisfaction_twin_was_already_named(self):
+        # The asymmetry: the same docket with a SATISFACTION - weaker evidence against the posture -
+        # was caught by round 23.
+        t = self.vacatur_case()
+        for row in t['judgments']['judgments']:
+            if row['entry_id'] == '2':
+                row.update(status='operative', satisfaction='satisfied',
+                           reason='satisfaction 4 (cites its date 2024-01-10)')
+        r = CV.assess(t)
+        self.assertTrue([m for m in r['missing'] if 'entry 2' in m and 'satisf' in m], r['missing'])
+
+    def coverage_case(self, status, state):
+        t = self.built(self.JUDGED)
+        next(e for e in t['entries'] if e['entry_id'] == '140')['image_status'] = status
+        t['coverage'] = {'attachments': [{'entry_id': '140', 'kind': 'final_judgment',
+                                          'state': state, 'detail': [], 'document': None}],
+                         'complete': False}
+        return CV.assess(t)['missing']
+
+    def test_the_agreeing_coverage_pairs_are_not_called_a_disagreement(self):
+        # Round 29 widened the timeline side of this check to OPENED_STATUSES and left the sentence
+        # hard-coding 'read'. That swallowed the pairs where the two producers say the SAME fact -
+        # coverage's read_partial is the timeline's unreadable_pages, not_enumerated is
+        # missing_attachments - printing a status the file does not carry, claiming a disagreement
+        # that is not there, and eating the accurate line with its `continue`.
+        for status, state, phrase in (('unreadable_pages', 'read_partial', 'only partly read'),
+                                      ('missing_attachments', 'not_enumerated', 'never reached')):
+            said = self.coverage_case(status, state)
+            self.assertTrue([m for m in said if phrase in m], (status, state, said))
+            self.assertFalse([m for m in said if 'producers disagree' in m], (status, state, said))
+
+    def test_a_real_coverage_disagreement_names_the_actual_status(self):
+        for status in ('read', 'unreadable_pages'):
+            said = self.coverage_case(status, 'restricted_likely')
+            hit = [m for m in said if 'producers disagree' in m]
+            self.assertTrue(hit, (status, said))
+            self.assertIn(repr(status), hit[0])
+            self.assertFalse([m for m in said if "behind the clerk's login" in m], said)
+
+    def test_unassessed_pages_with_no_page_read_is_not_read(self):
+        # The producer appends a generic gap row per entry whose image_status is not 'read', with the
+        # status as its kind and `pages` = the pages that FAILED - empty when none did. `1 not in []`
+        # is true, so matching any row made _was_read claim a document was read when not one page of
+        # it was: the twenty-seventh review's defect in the worse direction.
+        doc = {'source_ref': '7', 'document_hash': 'h7', 'manifest': {'sha256': 'h7', 'pages': 2},
+               'reading': {'pages': []}}
+        t = self.built(self.JUDGED + [(7, 'Notice of Filing Satisfaction of Judgment', '',
+                                       '05/12/2026', '')], [doc])
+        e = next(x for x in t['entries'] if x['entry_id'] == '7')
+        self.assertEqual(e['image_status'], 'unassessed_pages')
+        self.assertFalse(CV._was_read(e, t))
+        said = [m for m in CV.assess(t)['missing'] if 'entry 7' in m]
+        self.assertTrue([m for m in said if 'nobody opened it' in m], said)
+
+    def test_a_document_whose_first_page_was_read_is_still_read(self):
+        # The other side of that fix: one document, manifest 2 pages, page 1 read.
+        doc = {'source_ref': '7', 'document_hash': 'h7', 'manifest': {'sha256': 'h7', 'pages': 2},
+               'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                      'text': 'IN THE CIRCUIT COURT\nfiled stamp'}]}}
+        t = self.built(self.JUDGED + [(7, 'Notice of Filing Satisfaction of Judgment', '',
+                                       '05/12/2026', '')], [doc])
+        e = next(x for x in t['entries'] if x['entry_id'] == '7')
+        self.assertEqual(e['image_status'], 'unassessed_pages')
+        self.assertTrue(CV._was_read(e, t))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
