@@ -268,6 +268,13 @@ def _cases_from_file(path):
     return _CASES_FILE_CACHE[path]
 
 
+def _county_key(c):
+    """'MIAMI-DADE', 'Miami-Dade', 'miami dade' and 'MIAMI' are one county; 'PALM BEACH' and
+    'palmbeach' are one. Letters only, upper case, with the Dade suffix dropped."""
+    k = re.sub(r'[^A-Z]', '', str(c or '').upper())
+    return 'MIAMI' if k.startswith('MIAMI') else k
+
+
 def select(leads, args, llcs=None):
     """Attach a trace target to every eligible lead. Human owners trace their own mailing address;
     company owners trace the Sunbiz officer/agent behind the LLC (r['_trace_*']), so a company-owned
@@ -484,6 +491,9 @@ def main():
     ap.add_argument('--check-key', action='store_true',
                     help='confirm a key is loaded for the provider and exit (0 present, 1 missing). '
                          'No API call, no spend. The nightly job can gate on this.')
+    ap.add_argument('--county-first', default='', metavar='COUNTY',
+                    help='trace this county\'s leads before any other county (e.g. MIAMI-DADE), each '
+                         'group still soonest auction first. Order only: same leads, same cost, same caps.')
     ap.add_argument('--retry-empty', type=int, default=0, metavar='DAYS',
                     help='also re-queue cached leads whose phones came back EMPTY and were traced '
                          'more than DAYS ago (opt-in; re-spends). Default 0 = off.')
@@ -561,9 +571,14 @@ def main():
         age = _lp_age_days(r.get('filed'))
         return (1, 0, age if isinstance(age, int) else 10 ** 6)
 
-    todo.sort(key=_urgency)
+    first = _county_key(args.county_first)
+    todo.sort(key=lambda r: ((0 if _county_key(r.get('county') or 'MIAMI-DADE') == first else 1) if first else 0,)
+              + _urgency(r))
     if args.limit:
         todo = todo[:args.limit]
+    if first:
+        print(f"  --county-first {args.county_first}: {sum(1 for r in todo if _county_key(r.get('county') or 'MIAMI-DADE') == first)}"
+              f" of {len(todo)} to trace are in that county")
 
     _cached = len(picked) - len([r for r in picked if args.refresh or (_case(r) not in results)
                                  or _stale_empty(_case(r))])

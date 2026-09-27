@@ -318,6 +318,30 @@ code, res, sess = run([_lead('C1')], [requests.exceptions.Timeout('t')], ['--all
 day = _today()
 rec('batchdata timeout still charges $0.15', day and _near((day.get('by') or {}).get('skiptrace-batchdata'), 0.15), day)
 
+# --county-first: order only. Miami-Dade leads trace before other counties, each group soonest
+# auction first; a lead with no county field is Miami-Dade (leads_final.json rows carry none).
+def _cl(case, county, days):
+    r = _lead(case); r['days_to_auction'] = days
+    if county is None:
+        r.pop('county', None)
+    else:
+        r['county'] = county
+    return r
+_mix = [_cl('B1', 'BROWARD', 2), _cl('P1', 'PALM BEACH', 3), _cl('M1', 'MIAMI-DADE', 40),
+        _cl('M2', None, 20), _cl('B2', 'BROWARD', 1)]
+code, res, sess = run(_mix, [FakeResp(200, PHONES)] * 2, ['--all', '--limit', '2', '--county-first', 'miami-dade'])
+rec('--county-first MIAMI-DADE spends the --limit on Miami leads before a sooner Broward sale',
+    code == 0 and sorted(res) == ['M1', 'M2'], sorted(res))
+code, res, sess = run(_mix, [FakeResp(200, PHONES)] * 2, ['--all', '--limit', '2'])
+rec('without --county-first the order is unchanged (soonest auction first, any county)',
+    code == 0 and sorted(res) == ['B1', 'B2'], sorted(res))
+code, res, sess = run(_mix, [FakeResp(200, PHONES)] * 3, ['--all', '--limit', '3', '--county-first', 'MIAMI'])
+rec('--county-first fills the rest of the limit from other counties, soonest first',
+    code == 0 and sorted(res) == ['B2', 'M1', 'M2'], sorted(res))
+rec('county names fold: Miami-Dade / MIAMI / miami dade are one key, Palm Beach two spellings one',
+    ST._county_key('Miami-Dade') == ST._county_key('MIAMI') == ST._county_key('miami dade')
+    and ST._county_key('PALM BEACH') == ST._county_key('palmbeach') != ST._county_key('BROWARD'))
+
 total = len(ok) + len(bad)
 print(f'\n==== {len(ok)}/{total} skiptrace hardening checks passed ====')
 raise SystemExit(1 if bad else 0)

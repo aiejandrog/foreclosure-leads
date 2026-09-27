@@ -1301,9 +1301,25 @@ def federal_hold(case, here=None, index=None):
     case that has no Miami-Dade stem. `here` is accepted so older callers
     keep working; the cache does not live beside the sale-history file. Pass `index` from
     federal_hold_index() so a queue does not re-read the file per row."""
+    nc = _never_contact_hold(case)
+    if nc:
+        return nc
     if index is None:
         index = federal_hold_index()
     return index.hold(case)
+
+
+def _never_contact_hold(case):
+    """(True, why) for a case on stay_gate.NEVER_CONTACT, or when that list cannot be read;
+    None otherwise. Every contact path holds these, whatever a docket or federal check says."""
+    try:
+        import stay_gate
+        held = stay_gate.never_contact(case)
+    except Exception as e:
+        return True, 'never-contact list unreadable (%s) -- lead stays held' % str(e)[:80]
+    if held:
+        return True, 'contacted during its bankruptcy -- never contacted again'
+    return None
 
 
 def send_hold(case, here=None):
@@ -1312,6 +1328,9 @@ def send_hold(case, here=None):
     Stricter than federal_hold: a keyable non-stem lead is held even before the cache file
     exists, because email and letters are sends. Miami is held only when CourtListener
     blocks. A missing docket clear is not, by itself, a federal hold."""
+    nc = _never_contact_hold(case)
+    if nc:
+        return nc
     try:
         import stay_gate
     except Exception:

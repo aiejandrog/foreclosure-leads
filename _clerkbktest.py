@@ -149,15 +149,16 @@ check('an order dismissing the bankruptcy lifts the stay',
 check('a motion for relief from stay does not lift it',
       CK.classify(rows(('01/02/2026', 'Suggestion of Bankruptcy'),
                        ('02/02/2026', 'Motion for Relief from Stay')))['verdict'] == 'active')
-check('an order granting relief from stay lifts it',
+# 2026-09-27: relief from stay goes to one creditor while the bankruptcy stays open (sale_history).
+check('an order granting relief from stay does not lift it',
       CK.classify(rows(('01/02/2026', 'Suggestion of Bankruptcy'),
-                       ('02/02/2026', 'Order Granting Relief from Stay')))['verdict'] == 'lifted')
+                       ('02/02/2026', 'Order Granting Relief from Stay')))['verdict'] == 'active')
 check('an order denying relief from stay leaves it active',
       CK.classify(rows(('01/02/2026', 'Suggestion of Bankruptcy'),
                        ('02/02/2026', 'Order Denying Motion for Relief from Stay')))['verdict'] == 'active')
-check('an order lifting the stay lifts it',
+check('an order lifting the stay does not lift it (it may be relief for one creditor)',
       CK.classify(rows(('01/02/2026', 'Suggestion of Bankruptcy'),
-                       ('02/02/2026', 'Order Lifting Stay')))['verdict'] == 'lifted')
+                       ('02/02/2026', 'Order Lifting Stay')))['verdict'] == 'active')
 check('a motion to lift the stay does not',
       CK.classify(rows(('01/02/2026', 'Suggestion of Bankruptcy'),
                        ('02/02/2026', 'Motion to Lift Stay')))['verdict'] == 'active')
@@ -205,10 +206,10 @@ d = isolate('lifted')
 os.environ['BROWARD_CLERK_API_KEY'] = KEY
 stub = Stub(routes_for([
     ('01/02/2026', 'Suggestion of Bankruptcy', '', ''),
-    ('02/02/2026', 'Order Granting Relief from Stay', '', 'Order Granting Relief from Stay'),
+    ('02/02/2026', 'Order', '', 'Order Dismissing Bankruptcy Case'),
 ]))
 entry = CK.read_broward_case(CASE, KEY, stub, clock())
-check('the document title is read with the event, and a relief order lifts',
+check('the document title is read with the event, and a dismissal order lifts',
       entry['ok_read'] and entry['verdict'] == 'lifted', entry)
 
 d = isolate('partial')
