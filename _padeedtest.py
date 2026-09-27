@@ -51,7 +51,7 @@ check('without the appraiser: never reaches the parcel', before['parcel_found'] 
 check('without the appraiser: no mortgage counted', before['open_count'] == 0, before['open_count'])
 check('without the appraiser: never a documented clear', not ES.coverage_documented(before))
 
-after = RL.analyze(models, FOLIO, 300000, ftype='MORTGAGE', plaintiff=PLAINTIFF, deed_bps=DEEDS)
+after = RL.analyze(models, FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', plaintiff=PLAINTIFF, deed_bps=DEEDS)
 check('the deed at the appraiser book/page places the search', after['parcel_found'] is True)
 check('placement is labelled', after['placed_by'].startswith('appraiser deed'), after.get('placed_by'))
 check('its subdivision anchors the parcel', after['subdiv'] == 'TEST GARDENS', after['subdiv'])
@@ -85,7 +85,7 @@ check('the caller\'s rows are not mutated', deed['foliO_NUMBER'] == '')
 
 # a row the index files under a DIFFERENT folio is another parcel, even at a listed book/page
 other = rec('DEED', '2/1/2008', '26100', '10', 0, folio='0100000000999')
-r2 = RL.analyze([other, mtg], FOLIO, 300000, ftype='MORTGAGE', deed_bps=DEEDS)
+r2 = RL.analyze([other, mtg], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
 check('a row carrying another folio is never placed', r2['parcel_found'] is False and not r2['placed_by'])
 
 # a placed deed with no subdivision ties nothing else: not placed, so an empty chain is never CLEAR
@@ -111,12 +111,12 @@ check('a loose mortgage naming someone else does not block placement', r5b['parc
 twin_other = rec('DEED', '2/1/2008', '26100', '10', 0, folio='0100000000999', sub='OTHER PLAT')
 twin_blank = rec('DEED', '2/1/2008', '26100', '10', 0, sub='OTHER PLAT')
 nm = rec('MORTGAGE', '3/3/2015', '29500', '41', 0, 'NAMESAKE BANK', intangible=100, sub='OTHER PLAT')
-r6 = RL.analyze([twin_other, twin_blank, nm], FOLIO, 300000, ftype='MORTGAGE', deed_bps=DEEDS)
+r6 = RL.analyze([twin_other, twin_blank, nm], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
 check('a book/page indexed under another folio is not placed', r6['parcel_found'] is False and r6['open_count'] == 0,
       (r6['parcel_found'], r6['open_count'], r6.get('placement_refused')))
 # ...and placed rows that disagree on subdivision anchor nothing
 wrong = rec('DEED', '2/1/2008', '26100', '10', 0, sub='WRONG PLAT')
-r7 = RL.analyze([wrong, deed, mtg], FOLIO, 300000, ftype='MORTGAGE', deed_bps=DEEDS)
+r7 = RL.analyze([wrong, deed, mtg], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
 check('deed rows naming two subdivisions are not placed', r7['parcel_found'] is False and not r7['placed_by'],
       r7.get('placement_refused'))
 
@@ -159,15 +159,60 @@ rel = rec('RELEASE OF LIEN', '5/5/2021', '31500', '8', 0, 'OWNER TESTER', first=
 rr = RL.analyze([deed, mtg, rel], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
 check('a loose release does not refuse placement', rr['parcel_found'] is True, rr.get('placement_refused'))
 
+# round 4, finding 1: this parcel's quit-claim (owner to owner and spouse) and its refi, both indexed under a
+# variant subdivision, must not make that subdivision "another property" and drop the refi
+pm = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, 'FIRST BANK NA', intangible=700)
+sat = rec('SATISFACTION', '5/5/2016', '30010', '3', 0, 'FIRST BANK NA', oriG_REC_BOOK='26100', oriG_REC_PAGE='11')
+qcd = rec('QUIT CLAIM DEED', '4/4/2016', '30000', '19', 0, 'OWNER TESTER & HELEN', first='OWNER TESTER', sub='TEST GARDENS SEC 1')
+vref = rec('MORTGAGE', '4/4/2016', '30000', '20', 0, 'REFI LENDER LLC', intangible=500, sub='TEST GARDENS SEC 1')
+rq = RL.analyze([deed, pm, sat, qcd, vref], FOLIO, 20000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+check('an owner-to-owner quit-claim does not make a variant subdivision another property',
+      rq['parcel_found'] is False and not ES.coverage_documented(rq), rq.get('placement_refused'))
+# round 4, finding 2: a same-surname stranger's claim of lien or city lien in the subdivision
+for doc, lienor, first in (('CLAIM OF LIEN', 'OWNER TESTER', 'TEST GARDENS HOMEOWNERS ASSOCIATION INC'),
+                           ('LIEN', 'CITY OF MIAMI', 'TESTER MARIA')):
+    nl = rec(doc, '5/5/2020', '32000', '7', 9000, 'TESTER MARIA' if lienor == 'OWNER TESTER' else lienor,
+             first=first if lienor != 'OWNER TESTER' else first)
+    nl['seconD_PARTY'], nl['firsT_PARTY'] = (first, 'TESTER MARIA') if doc == 'CLAIM OF LIEN' else ('CITY OF MIAMI', 'TESTER MARIA')
+    rn = RL.analyze([deed, pm, sat, nl], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+    check('a namesake %s in the subdivision refuses placement' % doc.lower(),
+          rn['parcel_found'] is False and not rn.get('hoa_open') and not rn.get('code_open'), rn.get('placement_refused'))
+# round 4, finding 4: no usable owner name means no namesake check, so no placement
+nm = rec('MORTGAGE', '5/5/2017', '30500', '9', 0, 'NAMESAKE BANK', first='TESTER MARIA', intangible=200)
+r0 = RL.analyze([deed, pm, sat, nm], FOLIO, 300000, ftype='MORTGAGE', owner='', deed_bps=DEEDS)
+check('no owner name refuses placement', r0['parcel_found'] is False, r0.get('placement_refused'))
+# the ordinary household still places: deed, paid-off purchase loan, a refi, and another house elsewhere
+refi = rec('MORTGAGE', '4/4/2016', '30000', '20', 0, 'REFI LENDER LLC', intangible=500)
+for ft in ('MORTGAGE', 'HOA'):
+    rp = RL.analyze([deed, pm, sat, refi, elsewhere_deed, elsewhere_mtg], FOLIO, 300000, ftype=ft,
+                    owner='OWNER TESTER', deed_bps=DEEDS)
+    check('an ordinary household still places (%s lead)' % ft, rp['parcel_found'] is True and rp['open_count'] == 1,
+          (rp.get('placement_refused'), rp.get('open_count')))
+
+# round 4, finding 3: an HOA lead placed by the deed, with a lender's lis pendens naming the owner that
+# carries no folio (no subdivision, or a variant one), is never a documented clear
+import datetime as _dt
+_lpd = (_dt.date.today() - _dt.timedelta(days=200)).strftime('%m/%d/%Y')
+for _sub in ('', 'TEST GARDENS SEC 1'):
+    lp = rec('LIS PENDENS', _lpd, '34000', '5', 0, 'OWNER TESTER', first='BIG BANK NA', sub=_sub)
+    rh = RL.analyze([deed, pm, sat, lp], FOLIO, 20000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+    check('HOA lead: a loose lender lis pendens (sub %r) blocks a documented clear' % _sub,
+          not ES.coverage_documented(rh) and rh.get('second_fc_unsure'), (rh.get('parcel_found'), rh.get('second_fc_unsure')))
+lpr = rec('LIS PENDENS RELEASE', _lpd, '34100', '1', 0, 'OWNER TESTER', first='BIG BANK NA', sub='',
+          oriG_REC_BOOK='34000', oriG_REC_PAGE='5')
+rh = RL.analyze([deed, pm, sat, rec('LIS PENDENS', _lpd, '34000', '5', 0, 'OWNER TESTER', first='BIG BANK NA', sub=''), lpr],
+                FOLIO, 20000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+check('HOA lead: a released loose lis pendens does not block', not rh.get('second_fc_unsure'), rh.get('second_fc_unsure'))
+
 # the repull gate asks the appraiser only when no row carries the folio
 _asked = []
 check('_parcel_in does not call the appraiser for a folio-carrying search',
       RL._parcel_in([dict(deed, foliO_NUMBER=FOLIO)], FOLIO, lambda: _asked.append(1) or DEEDS) is True and not _asked)
-check('_parcel_in calls it lazily otherwise', RL._parcel_in(models, FOLIO, lambda: _asked.append(1) or DEEDS) is True
+check('_parcel_in calls it lazily otherwise', RL._parcel_in(models, FOLIO, lambda: _asked.append(1) or DEEDS, 'OWNER TESTER') is True
       and len(_asked) == 1)
 
 # finding 5: --repull's gate knows placement, so it does not pay for a search placement answers
-check('_parcel_in sees a placeable search', RL._parcel_in(models, FOLIO, DEEDS) is True)
+check('_parcel_in sees a placeable search', RL._parcel_in(models, FOLIO, DEEDS, 'OWNER TESTER') is True)
 check('_parcel_in without the appraiser is unchanged', RL._parcel_in(models, FOLIO) is False)
 check('_parcel_in refuses what placement refuses', RL._parcel_in([deed, loose], FOLIO, DEEDS, 'OWNER TESTER') is False)
 
@@ -175,13 +220,13 @@ check('_parcel_in refuses what placement refuses', RL._parcel_in([deed, loose], 
 check('_bp_key reads a whole float as an integer', RL._bp_key(26100.0, 10.0) == ('26100', '10'))
 
 # no appraiser deed on the search: nothing changes
-r4 = RL.analyze(models, FOLIO, 300000, ftype='MORTGAGE', deed_bps={('99999', '1')})
+r4 = RL.analyze(models, FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps={('99999', '1')})
 check('an appraiser book/page not on the search places nothing', r4['parcel_found'] is False and r4['open_count'] == 0)
 
 # a search that already carries the folio is analysed exactly as before
 withf = [dict(deed, foliO_NUMBER=FOLIO), mtg, mtg2]
-a = RL.analyze(withf, FOLIO, 300000, ftype='MORTGAGE')
-b = RL.analyze(withf, FOLIO, 300000, ftype='MORTGAGE', deed_bps=DEEDS)
+a = RL.analyze(withf, FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER')
+b = RL.analyze(withf, FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
 check('a folio-carrying search is unchanged by the appraiser', a == b)
 
 check('_bp_key strips leading zeros', RL._bp_key('026100', '0010') == ('26100', '10'))

@@ -1000,6 +1000,9 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
     # lien rides like the owner's own. And, as analyze() does, every given name recorded beside the
     # owner's surname on the GRANTEE side of the deed being placed ('TESTER OWNER & HELEN').
     ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
+    if ow is None:
+        # with no usable owner name every row reads as the owner's, so no namesake check can run
+        return models, 0, 'no usable owner name to check the placed rows against'
     _o0 = _owner_words(owner)
     if ow and _o0 and _o0[0] == 'person':
         _sn = re.findall(r'[A-Z0-9]+', _o0[1].replace("'", ''))
@@ -1022,8 +1025,10 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
                                             r'|WAIVER|CONTEST|SUBORDINAT|CERTIFICATE OF TITLE', doc))
     # subdivisions where the search shows a conveyance to or from the owner: an owner-named loan
     # there is plainly another property of theirs, not this parcel's under another spelling
+    _op = lambda x: ow is None or _maybe_owner(x or '', ow) or _names_owner(x, ow)
     owned_elsewhere = {(r.get('subdiV_NAME', '') or '').strip().upper() for r in models
-                       if _conveyance((r.get('doC_TYPE', '') or '').upper()) and _owner_party(r)}
+                       if _conveyance((r.get('doC_TYPE', '') or '').upper())
+                       and _op(r.get('seconD_PARTY')) and not (ow and _op(r.get('firsT_PARTY')))}
     for r in models:
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         if rf == fol:
@@ -1040,7 +1045,7 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
                 # another subdivision with no deed of the owner's there: it may be this parcel's
                 # loan indexed under a variant subdivision name, so it cannot be ruled out
                 return models, 0, 'a mortgage or lien naming the owner sits in a subdivision the owner has no deed in'
-        if not rf and sd == sub and doc.startswith('MORTGAGE') and not _owner_party(r):
+        if not rf and sd == sub and (debt or (re.search(r'JUDGMENT|WARRANT', doc) and not re.search(r'SATISF|RELEASE', doc))) and not _owner_party(r):
             # a same-surname stranger's loan in this subdivision would be counted as this parcel's
             return models, 0, 'another person of the owner\'s surname has a mortgage in this subdivision'
         if (_conveyance(doc) and sd == sub and _owner_party(r)
@@ -1501,6 +1506,20 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # a lender filing on one of this owner's units in the building, unit not established: never a
     # 2ND FORECLOSURE flag on this parcel, never a clear either (equity_state.coverage_documented)
     second_fc_unsure = _fc if _fc and _fc.get('unsure') else None
+    if ftype == 'HOA' and placed and not _fc:
+        # placed by the appraiser's deed, not by a row carrying the folio: a lender's lis pendens
+        # with no folio in another (or no) subdivision may be this parcel's, indexed under a variant
+        # name. It cannot be ruled out, so it is never a clear. Asked of placed searches only, so a
+        # search that reached the parcel on its own reads exactly as before.
+        _loose = [dict(r, subdiV_NAME=subj_subdiv) for r in models
+                  if 'LIS PEND' in (r.get('doC_TYPE', '') or '').upper()
+                  and not norm_folio(r.get('foliO_NUMBER', ''))
+                  and (r.get('subdiV_NAME', '') or '').strip().upper() != subj_subdiv]
+        _rel = [r for r in models if 'LIS PEND' in (r.get('doC_TYPE', '') or '').upper()
+                and re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', (r.get('doC_TYPE', '') or '').upper())]
+        _lf = bank_foreclosure(_loose + _rel, fol, subj_subdiv) if _loose else None
+        if _lf:
+            second_fc_unsure = dict(_lf, unsure=True)
     # SEARCH COVERAGE, written down so a CLEAR can be checked rather than trusted (equity_state
     # .coverage_documented): how many records the search returned, what anchored the parcel, and
     # the mortgages whose amount the index does not publish.
