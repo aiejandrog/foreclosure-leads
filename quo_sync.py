@@ -84,14 +84,40 @@ def _key():
 
 
 def _get(key, path, params=None):
-    """One authed GET. Quo auth is the bare key in Authorization -- no 'Bearer' prefix."""
+    """One authed GET. Quo auth is the bare key in Authorization -- no 'Bearer' prefix.
+
+    429 comes back as `{'_retry': 429}` so a caller can back off. It is not a page of data."""
     r = requests.get(BASE + path, headers={'Authorization': key}, params=params or {}, timeout=30)
     if r.status_code == 402 or r.status_code == 403:
         return {'_denied': r.status_code}          # plan-gated (transcripts below Business) or scope
     if r.status_code == 404:
         return None
+    if r.status_code == 429:
+        return {'_retry': 429}
     r.raise_for_status()
     return r.json()
+
+
+# Four tries, then the 429 stands. The pause is its own function so a fixture can skip the wait.
+RETRY_LIMIT = 4
+RETRY_BASE_S = 1.0
+
+
+def _pause(seconds):
+    time.sleep(seconds)
+
+
+def _get_retry(key, path, params=None):
+    """`_get`, retried on 429. The sentinel is returned only after the budget is spent."""
+    res = None
+    for attempt in range(RETRY_LIMIT):
+        res = _get(key, path, params)
+        if not (isinstance(res, dict) and res.get('_retry') == 429):
+            return res
+        if attempt + 1 >= RETRY_LIMIT:
+            return res
+        _pause(RETRY_BASE_S * (2 ** attempt))
+    return res
 
 
 def _digits(s):
@@ -231,8 +257,8 @@ def sync(days=7, phones=None, watch=False, verbose=False):
         print('one line into quo.key in this folder (gitignored). Nothing synced.')
         return 0
 
-    pn = _get(key, '/phone-numbers')
-    if not pn or '_denied' in (pn if isinstance(pn, dict) else {}):
+    pn = _get_retry(key, '/phone-numbers')
+    if not isinstance(pn, dict) or pn.get('_denied') or pn.get('_retry'):
         print('quo_sync: /phone-numbers failed -- key invalid or lacks scope. Nothing synced.')
         return 1
     pn_ids = [p.get('id') for p in (pn.get('data') or []) if p.get('id')]
@@ -261,10 +287,13 @@ def sync(days=7, phones=None, watch=False, verbose=False):
                                      .strftime('%Y-%m-%dT%H:%M:%SZ')
             for pid in pn_ids:
                 try:
-                    res = _get(key, '/calls', {'phoneNumberId': pid, 'participants': '+1' + e164,
-                                               'maxResults': 10, 'createdAfter': after})
+                    res = _get_retry(key, '/calls', {'phoneNumberId': pid, 'participants': '+1' + e164,
+                                                     'maxResults': 10, 'createdAfter': after})
                 except Exception as ex:
                     print('  %s: %s' % (e164, str(ex)[:70]))
+                    continue
+                if isinstance(res, dict) and res.get('_retry'):
+                    print('  %s: 429' % e164)
                     continue
                 for call in ((res or {}).get('data') or []):
                     cid = call.get('id')
@@ -272,19 +301,19 @@ def sync(days=7, phones=None, watch=False, verbose=False):
                         continue
                     if call.get('status') not in ('completed', 'answered', 'no-answer', 'missed'):
                         continue
-                    tr = _get(key, '/call-transcripts/%s' % cid)
-                    sm = _get(key, '/call-summaries/%s' % cid)
-                    rec_ = _get(key, '/call-recordings/%s' % cid)
-                    denied = isinstance(tr, dict) and tr.get('_denied')
+                    tr = _get_retry(key, '/call-transcripts/%s' % cid)
+                    sm = _get_retry(key, '/call-summaries/%s' % cid)
+                    rec_ = _get_retry(key, '/call-recordings/%s' % cid)
+                    denied = isinstance(tr, dict) and (tr.get('_denied') or tr.get('_retry'))
                     dur = call.get('duration') or 0
                     flags = [] if denied else coach(tr, dur, record_on)
                     summary = []
-                    if isinstance(sm, dict) and not sm.get('_denied'):
+                    if isinstance(sm, dict) and not sm.get('_denied') and not sm.get('_retry'):
                         summary = (sm.get('data') or {}).get('summary') or []
                         if isinstance(summary, str):
                             summary = [summary]
                     rec_url = ''
-                    if isinstance(rec_, dict) and not rec_.get('_denied'):
+                    if isinstance(rec_, dict) and not rec_.get('_denied') and not rec_.get('_retry'):
                         rd = rec_.get('data')
                         if isinstance(rd, list) and rd:
                             rec_url = rd[0].get('url') or ''
@@ -337,12 +366,13 @@ def sync(days=7, phones=None, watch=False, verbose=False):
 # '#digits' person key -- the shape call_rows()/optPhones() already read back, so the number
 # disappears from the phone and the board on the next build.
 #
-# ENDPOINT NOTE: MESSAGES_PATH and its query names follow the OpenPhone v1 messages listing
-# (phoneNumberId + participants + createdAfter). Quo is OpenPhone rebranded and /calls uses the
-# same parameter shape above, but this exact endpoint has NOT been exercised against the live API
-# from a machine holding quo.key. If it 4xx's, the run prints the error and ledgers nothing --
-# it never fails silent. Verify with:  python quo_sync.py --messages --days 2 --phone <number>
+# ENDPOINT NOTE: GET /v1/conversations and GET /v1/messages were checked against the live
+# account on 2026-09-26. Conversations come back as {data, nextPageToken, totalItems}; each
+# item has participants, phoneNumberId, lastActivityAt. A message body is in `text` and an
+# inbound direction is `incoming`. /calls query names were verified against the live docs on
+# 2026-09-01. This tree does not call the API; fixtures stub `_get`.
 MESSAGES_PATH = '/messages'
+CONVERSATIONS_PATH = '/conversations'
 # Written after every inbound scan, success or failure. text_hold() is what Call Mode and the
 # send bridge read. A missing or unreadable file is a hold: we have not proved we saw today's
 # STOP texts. Email does not read this file.
@@ -351,22 +381,38 @@ INBOUND_STATUS = os.path.join(HERE, 'quo_inbound_status.json')
 # next night's scan never lands. A failed read holds immediately, whatever the age.
 INBOUND_MAX_AGE_H = 36
 # Who to ask about is NOT the message window. `days` is how far back each thread is read.
-# A STOP can sit on a number we dialled or texted weeks ago, so the number set is its own
-# lookback. Assumed, same as the listing itself: not checked against a live quo.key.
+# The number set is every Quo participant whose conversation was active in this window,
+# unioned with dials and texts from the same window. The first live check had 21
+# conversations and none of them were in the dial/text set; one of those threads held a STOP.
 INBOUND_NUMBER_LOOKBACK_DAYS = 60
+# text_sent.json is the bridge SMS ledger. mail_sent.json can carry the same text rows.
+# A missing file is an empty list. A file that exists and will not parse is an error:
+# those numbers are skipped and texting is held.
+TEXT_SENT = os.path.join(HERE, 'text_sent.json')
+MAIL_SENT = os.path.join(HERE, 'mail_sent.json')
 # OpenPhone's listing returns nextPageToken and takes pageToken. Ten pages is the cap.
 # Hitting it with a token still outstanding is a partial read, which holds texting.
 MESSAGE_PAGE_CAP = 10
+# Live /conversations defaults to about 10 per page, so the page cap is ~100 threads and
+# will eventually stick texting on hold. Ask for 100. The list is newest-activity first;
+# a page that is entirely older than the lookback ends the read.
+CONV_MAX_RESULTS = 100
+# Overlap so a STOP that arrived just before the last ok scan is not missed when the
+# next run's --days window starts later.
+SCAN_OVERLAP_H = 12
 
 
-def _write_inbound_status(ok, why='', checked=0, stops=0, errors=0, truncated=False):
+def _write_inbound_status(ok, why='', checked=0, stops=0, errors=0, truncated=False,
+                          pages=0, conversations=0, window=0):
     """Record the scan. Counts only — never a phone number or a message body (the repo is public
-    and this file sits next to the code)."""
+    and this file sits next to the code). `window` is how many days createdAfter reached back."""
     rec = {
         'ok': bool(ok),
         'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'checked': int(checked), 'stops': int(stops), 'errors': int(errors),
         'truncated': bool(truncated),
+        'pages': int(pages), 'conversations': int(conversations),
+        'window': int(window),
         'why': str(why or '')[:240],
     }
     try:
@@ -434,13 +480,15 @@ def _e164(raw):
 def _response_error(res):
     """'' when `res` is a listing object. Otherwise a short kind: no body, no key, no number.
 
-    `_get` maps 402/403 to `{'_denied': code}` and 404 to None, and that used to fall through
-    here as an empty page — a success — which released the text hold."""
+    `_get` maps 402/403 to `{'_denied': code}`, 404 to None, and an exhausted 429 to
+    `{'_retry': 429}`. Any of those used to be readable as an empty page, which released the hold."""
     if res is None:
         return '404'
     if isinstance(res, dict) and res.get('_denied'):
         code = str(res.get('_denied') or '')
         return 'denied %s' % code if code.isdigit() else 'denied'
+    if isinstance(res, dict) and res.get('_retry') == 429:
+        return '429'
     if not isinstance(res, dict) or not isinstance(res.get('data'), list):
         return 'malformed'
     return ''
@@ -463,20 +511,191 @@ def _page_token(res):
     return ''
 
 
+def _list_file_problem(path, label):
+    """'' when `path` is missing or a JSON list. '<label> unreadable' when it exists and will
+    not parse, or parsed as something other than a list."""
+    if not path or not os.path.exists(path):
+        return ''
+    try:
+        with open(path, encoding='utf-8') as fh:
+            got = json.load(fh)
+    except Exception:
+        return '%s unreadable' % label
+    if not isinstance(got, list):
+        return '%s unreadable' % label
+    return ''
+
+
+def _text_sent_problem():
+    """'' when text_sent.json is missing or a list. Otherwise an error the caller holds on."""
+    return _list_file_problem(TEXT_SENT, 'text_sent')
+
+
+def _mail_sent_problem():
+    """Same rule as text_sent.json. A torn mail_sent.json used to be skipped with no hold."""
+    return _list_file_problem(MAIL_SENT, 'mail_sent')
+
+
 def _inbound_text_rows():
     """Bridge text rows. text_sent.json is the SMS ledger; mail_sent.json can carry the same
-    shape. A missing file is an empty list. An unreadable one is not a reason to skip the
-    numbers we can still see — the caller holds if the Quo read itself fails."""
+    shape. A missing file is an empty list. An unreadable file contributes no rows; the caller
+    counts that and holds texting."""
     rows = []
-    for name in ('text_sent.json', 'mail_sent.json'):
-        got = _load(os.path.join(HERE, name), [])
+    if not _text_sent_problem():
+        got = _load(TEXT_SENT, [])
+        if isinstance(got, list):
+            rows.extend(x for x in got if isinstance(x, dict))
+    if not _mail_sent_problem():
+        got = _load(MAIL_SENT, [])
         if isinstance(got, list):
             rows.extend(x for x in got if isinstance(x, dict))
     return rows
 
 
-def _numbers_to_scan(phones):
-    """E.164 numbers. An explicit `phones=` list is that list. Otherwise 60 days of dials
+def _parse_when(stamp):
+    """Aware UTC timestamp, or None."""
+    if stamp is None or not str(stamp).strip():
+        return None
+    try:
+        when = datetime.datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
+    except Exception:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+    return when
+
+
+def _message_window(days, path=None, now=None):
+    """(createdAfter iso, window days).
+
+    The earlier of (now − days) and (last ok scan − 12h), and never further back than 60 days.
+    No ok scan, or a status file that will not parse, uses the 60-day lookback. `window` is
+    that span in whole days, a count, not a timestamp."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    cap = now - datetime.timedelta(days=INBOUND_NUMBER_LOOKBACK_DAYS)
+    try:
+        asked = int(days)
+    except (TypeError, ValueError):
+        asked = 0
+    if asked < 0:
+        asked = 0
+    requested = now - datetime.timedelta(days=asked)
+    since = cap
+    path = INBOUND_STATUS if path is None else path
+    try:
+        with open(path, encoding='utf-8') as fh:
+            prev = json.load(fh)
+    except Exception:
+        prev = None
+    if isinstance(prev, dict) and prev.get('ok') is True:
+        when = _parse_when(prev.get('ts'))
+        if when is not None:
+            since = min(requested, when - datetime.timedelta(hours=SCAN_OVERLAP_H))
+            if since < cap:
+                since = cap
+    span = (now - since).total_seconds() / 86400.0
+    window = int(span)
+    if span - window > 1e-6:
+        window += 1
+    if window > INBOUND_NUMBER_LOOKBACK_DAYS:
+        window = INBOUND_NUMBER_LOOKBACK_DAYS
+    if window < 0:
+        window = 0
+    return since.isoformat(), window
+
+
+def _in_lookback(stamp):
+    """True when lastActivityAt is inside the 60-day window.
+
+    No timestamp, or one that will not parse, is included: a STOP on a thread we cannot date
+    is the miss this scan exists to close. A timestamp we can read that is older than the
+    window is left out."""
+    if stamp is None or not str(stamp).strip():
+        return True
+    try:
+        when = datetime.datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
+    except Exception:
+        return True
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - when) <= datetime.timedelta(days=INBOUND_NUMBER_LOOKBACK_DAYS)
+
+
+def _participant_raw(value):
+    """Phone-like values on one participant. Live items use a list of E.164 strings; a dict
+    with a phone field is accepted so a shape change does not drop the thread."""
+    if isinstance(value, dict):
+        for key in ('phoneNumber', 'phone', 'e164', 'number', 'value'):
+            if value.get(key):
+                return [value.get(key)]
+        return []
+    if isinstance(value, list):
+        out = []
+        for item in value:
+            out.extend(_participant_raw(item))
+        return out
+    if value:
+        return [value]
+    return []
+
+
+def _list_conversations(key):
+    """(numbers, pages, scanned, error, truncated).
+
+    `numbers` is every participant on a thread active in the lookback. `scanned` counts
+    conversation items examined, including ones outside the window. A failed or truncated
+    read is an error the caller must hold on; numbers already collected are still returned
+    so a STOP on an earlier page is not dropped."""
+    found = set()
+    pages = 0
+    scanned = 0
+    token = ''
+    truncated = False
+    while True:
+        if pages >= MESSAGE_PAGE_CAP:
+            if token:
+                truncated = True
+            break
+        params = {'maxResults': CONV_MAX_RESULTS}
+        if token:
+            params['pageToken'] = token
+        try:
+            res = _get_retry(key, CONVERSATIONS_PATH, params or None)
+        except json.JSONDecodeError:
+            return found, pages, scanned, 'conversations malformed', truncated
+        except Exception as e:
+            return found, pages, scanned, 'conversations %s' % type(e).__name__, truncated
+        err = _response_error(res)
+        if err:
+            return found, pages, scanned, 'conversations %s' % err, truncated
+        pages += 1
+        data = []
+        for item in res.get('data') or []:
+            if not isinstance(item, dict):
+                continue
+            data.append(item)
+            scanned += 1
+            if not _in_lookback(item.get('lastActivityAt')):
+                continue
+            for raw in _participant_raw(item.get('participants')):
+                n = _e164(raw)
+                if n:
+                    found.add(n)
+        token = _page_token(res)
+        if not token:
+            break
+        # Newest activity first. Once a whole page is older than the lookback, later pages
+        # are older too. An undated thread is not "older", so that page does not end the read.
+        if data and all(not _in_lookback(item.get('lastActivityAt')) for item in data):
+            break
+    return found, pages, scanned, '', truncated
+
+
+def _numbers_to_scan(phones, extra=()):
+    """E.164 numbers. Quo conversation participants (`extra`) are always included.
+
+    An explicit `phones=` list is that list plus `extra`. Otherwise 60 days of dials
     (tuples from dialed_numbers) plus text touches in the same window — not the message window."""
     found = set()
 
@@ -485,6 +704,8 @@ def _numbers_to_scan(phones):
         if n:
             found.add(n)
 
+    for raw in extra or ():
+        add(raw)
     if phones:
         for p in phones:
             add(p)
@@ -520,52 +741,70 @@ def sync_messages(days=7, phones=None, verbose=False, dry_run=False):
 
 
 def _sync_messages(days=7, phones=None, verbose=False, dry_run=False):
+    # Read the previous status before this run replaces it. A failed scan must not be what
+    # decides how far back the next attempt looks.
+    since, window_days = _message_window(days)
     key = _key()
     if not key:
         print('quo.key missing -- inbound STOP scan skipped')
-        _write_inbound_status(False, 'quo.key missing')
+        _write_inbound_status(False, 'quo.key missing', window=window_days)
         return 1
     try:
         from replies import is_sms_stop
         from optout_sync import ledger_add
     except Exception as e:
         print('!! inbound STOP scan cannot run (%s) -- replies/optout_sync import failed' % type(e).__name__)
-        _write_inbound_status(False, 'import failed: %s' % type(e).__name__)
+        _write_inbound_status(False, 'import failed: %s' % type(e).__name__, window=window_days)
         return 1
     try:
-        pn = _get(key, '/phone-numbers')
+        pn = _get_retry(key, '/phone-numbers')
     except json.JSONDecodeError:
-        _write_inbound_status(False, 'phone-numbers malformed')
+        _write_inbound_status(False, 'phone-numbers malformed', window=window_days)
         return 1
     except Exception as e:
-        _write_inbound_status(False, 'phone-numbers %s' % type(e).__name__)
+        _write_inbound_status(False, 'phone-numbers %s' % type(e).__name__, window=window_days)
         return 1
     pn_err = _response_error(pn)
     if pn_err:
         print('phone-numbers %s -- nothing scanned, texting held' % pn_err)
-        _write_inbound_status(False, 'phone-numbers %s' % pn_err)
+        _write_inbound_status(False, 'phone-numbers %s' % pn_err, window=window_days)
         return 1
     pids = [x.get('id') for x in (pn.get('data') or []) if isinstance(x, dict) and x.get('id')]
     if not pids:
         print('no Quo phone numbers visible to this key -- nothing to scan')
-        _write_inbound_status(False, 'no Quo phone numbers visible to this key')
+        _write_inbound_status(False, 'no Quo phone numbers visible to this key', window=window_days)
         return 1
-    nums = _numbers_to_scan(phones)
-    since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).isoformat()
-    stops, scanned, errors, truncated = [], 0, 0, False
+    conv_nums, conv_pages, conv_scanned, conv_err, conv_trunc = _list_conversations(key)
+    pages_read = conv_pages
+    stops, scanned, errors, truncated = [], 0, 0, bool(conv_trunc)
     kinds = []
 
     def note(kind):
         if kind and kind not in kinds:
             kinds.append(kind)
 
+    if conv_err:
+        errors += 1
+        note(conv_err)
+    if conv_trunc:
+        note('conversations truncated')
+    text_problem = _text_sent_problem()
+    if text_problem:
+        errors += 1
+        note(text_problem)
+    mail_problem = _mail_sent_problem()
+    if mail_problem:
+        errors += 1
+        note(mail_problem)
+    nums = _numbers_to_scan(phones, extra=conv_nums)
+
     for e164 in sorted(nums):
         n10 = e164[-10:]
         for pid in pids:
             token = ''
-            pages = 0
+            page_n = 0
             while True:
-                if pages >= MESSAGE_PAGE_CAP:
+                if page_n >= MESSAGE_PAGE_CAP:
                     if token:
                         truncated = True
                         note('truncated')
@@ -575,7 +814,7 @@ def _sync_messages(days=7, phones=None, verbose=False, dry_run=False):
                 if token:
                     params['pageToken'] = token
                 try:
-                    res = _get(key, MESSAGES_PATH, params)
+                    res = _get_retry(key, MESSAGES_PATH, params)
                 except json.JSONDecodeError:
                     errors += 1
                     note('messages malformed')
@@ -589,12 +828,14 @@ def _sync_messages(days=7, phones=None, verbose=False, dry_run=False):
                     errors += 1
                     note('messages %s' % err)
                     break
-                pages += 1
+                page_n += 1
+                pages_read += 1
                 saw_stop = False
                 for m in res.get('data') or []:
                     if not isinstance(m, dict) or not _inbound(m):
                         continue
                     scanned += 1
+                    # Live messages carry the body in `text`. `content` / `body` stay as fallbacks.
                     body = str(m.get('content') or m.get('text') or m.get('body') or '')
                     if is_sms_stop(body):
                         stops.append((n10, body[:120], str(m.get('createdAt') or '')[:19]))
@@ -615,13 +856,16 @@ def _sync_messages(days=7, phones=None, verbose=False, dry_run=False):
                                  n10, body[:60]))
     print('inbound texts: %d number(s) checked, %d inbound message(s) read, %d STOP(s), %d fetch error(s)'
           % (len(nums), scanned, len(stops), errors))
-    # Any fetch error or a page cap holds texting. A partial read can miss the one STOP that
-    # matters, and a quiet success is not a success we did not finish. `why` is the kind only.
+    # Any fetch error or a page cap holds texting. A partial conversations read is the same
+    # kind of miss as a partial message read: the one STOP can be on the page we did not get.
+    # `why` is the kind only. pages and conversations are counts, never numbers.
     if errors or truncated:
         _write_inbound_status(False, '; '.join(kinds) or 'message fetch error',
-                              checked=len(nums), stops=len(stops), errors=errors, truncated=truncated)
+                              checked=len(nums), stops=len(stops), errors=errors, truncated=truncated,
+                              pages=pages_read, conversations=conv_scanned, window=window_days)
         return 2
-    _write_inbound_status(True, checked=len(nums), stops=len(stops), errors=0, truncated=False)
+    _write_inbound_status(True, checked=len(nums), stops=len(stops), errors=0, truncated=False,
+                          pages=pages_read, conversations=conv_scanned, window=window_days)
     return 0
 
 

@@ -155,14 +155,14 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
             'optlog': [{'ts': when, 'act': 'opted-out', 'src': src},
                        {'ts': now, 'act': 'ledgered', 'src': 'optout_sync.ledger_add'}],
         }
-    # Read the bounce list BEFORE either write, and only when this call would change it.
-    # _load() turns a torn file into {} and the next add used to replace the real list with
-    # only the new addresses, which also empties the #98 bounce block. Same refusal as the
-    # opt-out ledger: backup, do not write, raise. A call with no new addresses does not open
-    # the file, so a torn bounce list cannot block an unrelated opt-out key.
+    # Opt-out keys land first. A torn bounce list used to raise before this write, so an
+    # email STOP never reached optouts.json and the next send could still mail that person
+    # if something else was reading only the ledger. The bounce file is still refused: backup,
+    # do not replace it, raise. _load() turning a torn file into {} is what used to wipe the
+    # #98 bounce block. A call with no addresses does not open the bounce file.
     want = [e.strip().lower() for e in set(emails or ()) if e and e.strip()]
-    sup, sup_new = {}, []
-    if want:
+
+    def bounce_update():
         sup = _read_ledger_for_write(SUPPRESS)
         if sup is None:
             sup = {}
@@ -173,7 +173,18 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
             _refuse_unreadable_ledger(SUPPRESS, 'parsed but is not an object or a list (%s)'
                                       % type(sup).__name__)
         sup_new = [e for e in want if e not in sup]
+        if not sup_new or dry_run:
+            return
+        for e in sup_new:
+            sup[e] = {'type': 'optout', 'when': now[:10], 'why': src}
+        tmp = SUPPRESS + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(sup, fh, indent=0, ensure_ascii=False)
+        os.replace(tmp, SUPPRESS)
+
     if dry_run:
+        if want:
+            bounce_update()
         return added, already
     if added:
         opt['exported'] = now[:10]
@@ -181,13 +192,8 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
         with open(tmp, 'w', encoding='utf-8') as fh:
             json.dump(opt, fh, indent=1, ensure_ascii=False)
         os.replace(tmp, OPTOUTS)
-    if sup_new:
-        for e in sup_new:
-            sup[e] = {'type': 'optout', 'when': now[:10], 'why': src}
-        tmp = SUPPRESS + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            json.dump(sup, fh, indent=0, ensure_ascii=False)
-        os.replace(tmp, SUPPRESS)
+    if want:
+        bounce_update()
     return added, already
 
 

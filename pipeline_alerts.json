@@ -1,19 +1,19 @@
 {
  "alerts": [
   {
-   "at": "2026-09-26T18:04:35-04:00",
+   "at": "2026-09-26T19:33:26-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "Trailing 7-day lower bound 27.0% (raw 36.5%, 31 of 85). Ceiling 10%. First-touch sends are paused."
   },
   {
-   "at": "2026-09-26T18:04:35-04:00",
+   "at": "2026-09-26T19:33:26-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: 1 DEALFLOW task(s) disabled (DEALFLOW Daily Scrape); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness: on battery; 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   }
  ],
- "published_at": "2026-09-26T18:04:35-04:00",
+ "published_at": "2026-09-26T19:33:26-04:00",
  "signals": {
   "bounce": {
    "ceiling": 0.1,
@@ -55,6 +55,10 @@
    "scheduled": false,
    "sent": 0
   },
+  "optout_ledger": {
+   "readable": true,
+   "unreadable": false
+  },
   "optout_sync": {
    "date": "2026-09-26",
    "failed_steps": [],
@@ -71,12 +75,13 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-09-26T18:04:35-04:00",
+   "at": "2026-09-26T19:33:26-04:00",
    "battery_present": true,
-   "disabled": 1,
-   "disabled_names": [
-    "DEALFLOW Daily Scrape"
-   ],
+   "degraded": 0,
+   "degraded_codes": [],
+   "degraded_names": [],
+   "disabled": 0,
+   "disabled_names": [],
    "failed": 1,
    "failed_names": [
     "DEALFLOW Refresh"
@@ -87,12 +92,15 @@
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": true,
-   "pct": 80,
+   "on_ac": false,
+   "pct": 75,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
+  },
+  "refresh_flag": {
+   "stale": false
   },
   "tracerfy": {
    "credits": 991
