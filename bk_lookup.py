@@ -28,11 +28,14 @@ TWO READS.
      Cached under DEALFLOW_DIR (not the repo). Matched locally against every lead.
   2. Once per lead: a party-name search of federal bankruptcy courts (court ids ending
      in b) for cases still open (no date terminated / closed), filed within
-     BK_FILED_AFTER_YEARS (default 10), newest first. A result set that still overflows
-     the page cap is searched again more narrowly (surname, first name, and the lead's
-     city or ZIP, or an exact phrase). Cached 14 days. Re-checked before a first touch
-     older than that. The 5:30 run stops at BK_MAX_RUNTIME_S. The 21:00 evening check
-     runs a second pass so the leftover daily budget is used after the hour window frees.
+     BK_FILED_AFTER_YEARS (default 10), newest first. CourtListener keeps a single
+     `court` parameter, so the id list is space-separated in that one value. A result
+     set that still overflows is searched again with the same name tokens, limited to
+     the Florida bankruptcy courts and a shorter filed-after window, with more pages.
+     A city, ZIP, or exact phrase is not put in `party:`. Cached 14 days. Re-checked
+     before a first touch older than that. The 5:30 run stops at BK_MAX_RUNTIME_S.
+     The 21:00 evening check runs a second pass so the leftover daily budget is used
+     after the hour window frees.
 
 MATCHING. Names are folded (case, accents, punctuation). Middle initials, Hispanic double
 surnames, LLC/TRUST owners, and joint owners are all read. An exact open-case match is a
@@ -81,6 +84,8 @@ PULL_PAGE_CAP = 20
 PARTY_PAGE_CAP = 2
 PRIORITY_PAGE_CAP = 6
 CLI_PAGE_CAP = 8
+# The second pass follows more pages than the default lead cap.
+NARROW_PAGE_CAP = 8
 NIGHTLY_PRESEND_RESERVE = 10
 RETRY_429 = 3
 RETRY_SLEEP = (2.0, 4.0, 8.0)
@@ -107,8 +112,8 @@ TAILS = {'LLC', 'INC', 'CORP', 'CORPORATION', 'TRUST', 'TRUSTEE', 'LP', 'LLP', '
          'PARTNERSHIP', 'LLLP'}
 _BK_COURT = re.compile(r'^[a-z]{2,12}b$')
 # CourtListener jurisdiction=FB, 2026-09-27. Every id ends in b. Party search sends this
-# list so a common name is not paged across district courts. nebraskab and tennesseeb are
-# ids the courts API actually returns.
+# list as one space-separated court value so a common name is not paged across district
+# courts. nebraskab and tennesseeb are ids the courts API actually returns.
 BK_COURT_IDS = (
     'almb', 'alnb', 'alsb', 'akb', 'arb', 'areb', 'arwb', 'cacb', 'caeb', 'canb', 'casb',
     'cob', 'ctb', 'deb', 'dcb', 'flmb', 'flnb', 'flsb', 'gamb', 'ganb', 'gasb', 'hib', 'idb',
@@ -120,6 +125,9 @@ BK_COURT_IDS = (
     'txnb', 'txsb', 'txwb', 'utb', 'vtb', 'vaeb', 'vawb', 'waeb', 'wawb', 'wvnb', 'wvsb',
     'wieb', 'wiwb', 'wyb', 'gub', 'nmib', 'prb', 'vib',
 )
+# Florida bankruptcy courts. The narrow pass searches only these.
+FL_BK_COURT_IDS = ('flsb', 'flmb', 'flnb')
+TRUNC_WHY = 'CourtListener party search truncated — lead stays held'
 _IN_RE = re.compile(r'^(?:IN\s+RE|IN\s+THE\s+MATTER\s+OF)\s+', re.I)
 
 
@@ -168,9 +176,9 @@ class BankruptcyProvider:
         """Absolute URL for one page of new filings. Pagination follows the response `next`."""
         raise ProviderError('%s has no filings request' % (self.name or 'provider'))
 
-    def party_request(self, query):
+    def party_request(self, query, filed_after=None, courts=None):
         """Absolute URL for one party-name search. `query` is provider-specific and contains
-        no lead id."""
+        no lead id. `courts` is one space-joined court parameter, not repeated keys."""
         raise ProviderError('%s has no party request' % (self.name or 'provider'))
 
     def parse_search(self, payload):
@@ -213,14 +221,21 @@ class CourtListenerProvider(BankruptcyProvider):
         })
         return SEARCH_URL + '?' + q
 
-    def party_request(self, query, filed_after=None):
+    def party_request(self, query, filed_after=None, courts=None):
         """Bankruptcy courts only, newest first, with a filed-after bound.
-        An unfiltered type=d search pages across every court and truncates common names."""
+
+        CourtListener accepts one `court` value and splits it on spaces. Repeated
+        `court=` keys are not a list: the server keeps the last key only, so a loop
+        that appends every court id searches `vib` and nothing else."""
         filed = filed_after or default_filed_after(self.env)
-        params = [('type', 'd'), ('q', query), ('filed_after', filed),
-                  ('order_by', 'dateFiled desc')]
-        for court in BK_COURT_IDS:
-            params.append(('court', court))
+        ids = tuple(courts) if courts else BK_COURT_IDS
+        params = [
+            ('type', 'd'),
+            ('q', query),
+            ('filed_after', filed),
+            ('order_by', 'dateFiled desc'),
+            ('court', ' '.join(ids)),
+        ]
         return SEARCH_URL + '?' + urllib.parse.urlencode(params)
 
     def parse_search(self, payload):
@@ -735,8 +750,7 @@ def _retry_after(headers):
         return 0.0
 
 
-def default_filed_after(env=None, today=None):
-    """ISO date. Party search ignores dockets older than this. BK_FILED_AFTER_YEARS, default 10."""
+def _filed_years(env=None):
     env = os.environ if env is None else env
     raw = str((env or {}).get(ENV_FILED_YEARS) or '').strip()
     try:
@@ -745,11 +759,57 @@ def default_filed_after(env=None, today=None):
         years = DEFAULT_FILED_YEARS
     if years < 1:
         years = DEFAULT_FILED_YEARS
+    return years
+
+
+def _years_ago(years, today=None):
     today = dt.date.today() if today is None else today
     try:
-        return today.replace(year=today.year - years).isoformat()
+        return today.replace(year=today.year - int(years)).isoformat()
     except ValueError:
-        return (today - dt.timedelta(days=365 * years)).isoformat()
+        return (today - dt.timedelta(days=365 * int(years))).isoformat()
+
+
+def default_filed_after(env=None, today=None):
+    """ISO date. Party search ignores dockets older than this. BK_FILED_AFTER_YEARS, default 10."""
+    return _years_ago(_filed_years(env), today)
+
+
+def narrow_filed_after(env=None, today=None):
+    """A shorter window than default_filed_after. Half the configured years, at least 1.
+    A finished search at this date cannot clear: older open cases would be invisible."""
+    years = _filed_years(env)
+    tight = max(1, years // 2)
+    if tight >= years and years > 1:
+        tight = years - 1
+    return _years_ago(tight, today)
+
+
+def narrow_bounds(env=None, today=None):
+    """(courts, filed_after) for the second pass, or None when it would not be narrower.
+
+    Same name tokens. Florida bankruptcy courts, and a shorter filed-after when the
+    configured window is longer than a year. No city, ZIP, or quoted phrase."""
+    courts = FL_BK_COURT_IDS
+    filed = narrow_filed_after(env, today)
+    eligible = default_filed_after(env, today)
+    tighter_courts = set(courts) < set(BK_COURT_IDS)
+    tighter_date = filed > eligible
+    if not tighter_courts and not tighter_date:
+        return None
+    return courts, filed
+
+
+def scope_can_clear(courts, filed_after, env=None, today=None):
+    """True when a finished search of this scope covered every court and year the lead
+    is eligible for. A Florida-only search or a shorter window can hold. It cannot clear."""
+    if set(BK_COURT_IDS) - set(courts or ()):
+        return False
+    return str(filed_after or '9999') <= default_filed_after(env, today)
+
+
+def narrow_page_cap(cap):
+    return max(int(cap), NARROW_PAGE_CAP)
 
 
 def max_runtime_s(env=None):
@@ -1265,7 +1325,8 @@ def _note_contact(ld, row):
 
 
 def _place_token(row):
-    """ZIP if the row has one, otherwise a city token. Used only to narrow an overflowing search."""
+    """ZIP if the row has one, otherwise a city token. Stored on the lead only.
+    CourtListener `party:` is names, so this is never added to a search query."""
     for key in ('zip', 'Zip', 'postal'):
         z = re.search(r'\b(\d{5})\b', str(row.get(key) or ''))
         if z:
@@ -1293,31 +1354,6 @@ def party_page_cap(ld, cli=False):
     if ld.get('email') or ld.get('phone'):
         return PRIORITY_PAGE_CAP
     return PARTY_PAGE_CAP
-
-
-def narrow_query_for(owner, place):
-    """Surname + first name + city/ZIP, or an exact phrase when there is no place."""
-    place = re.sub(r'[^A-Z0-9 ]', '', str(place or '').upper()).strip()
-    bit = place.split()[0] if place else ''
-    if owner.get('kind') == 'entity':
-        toks = [t for t in (owner.get('tokens') or []) if len(t) > 1][:3]
-        if not toks:
-            return ''
-        if bit:
-            return 'party:(' + ' AND '.join(toks + [bit]) + ')'
-        return 'party:"%s"' % ' '.join(toks)
-    readings = owner.get('readings') or []
-    if not readings:
-        return ''
-    reading = max(readings, key=lambda r: (len(r.get('surnames') or []), len(r.get('first') or '')))
-    first = str(reading.get('first') or '')
-    surnames = list(reading.get('surnames') or [])
-    last = surnames[-1] if surnames else ''
-    if len(first) < 2 or len(last) < 2:
-        return ''
-    if bit:
-        return 'party:(%s AND %s AND %s)' % (last, first, bit)
-    return 'party:"%s %s"' % (first, last)
 
 
 def contact_rank(ld):
@@ -1557,12 +1593,13 @@ def match_filings_to_leads(leads, items, cache, now):
     return holds
 
 
-def _collect_queries(queries, provider, transport, budget, clock, page_cap, max_wait, deadline):
+def _collect_queries(queries, provider, transport, budget, clock, page_cap, max_wait, deadline,
+                     filed_after=None, courts=None):
     """(rows, truncated). Stops paging a query once it overflows; the caller may narrow."""
     collected = []
     truncated = False
     for q in queries:
-        url = provider.party_request(q)
+        url = provider.party_request(q, filed_after=filed_after, courts=courts)
         rows, cut = paginate(url, provider, transport, budget, clock, page_cap, reserve=0,
                              max_wait=max_wait, deadline=deadline)
         collected.extend(rows)
@@ -1571,13 +1608,34 @@ def _collect_queries(queries, provider, transport, budget, clock, page_cap, max_
     return collected, truncated
 
 
+def _open_match(cases):
+    return any(c.get('open') and c.get('match') in ('exact', 'plausible') and c.get('no')
+               for c in (cases or []))
+
+
+def _store_search(cache, key, owners, rows, clock, conclusive, narrow_overflow=False):
+    """Combine every hit seen. A match holds. A clear requires a finished eligible search.
+    Anything else stays truncated and held, including a narrow pass that overflowed or
+    could not be built."""
+    cases = cases_from_hits(owners, rows)
+    matched = _open_match(cases)
+    if conclusive:
+        return put_entry(cache, key, cases, True, True, '', clock.time())
+    if matched and not narrow_overflow:
+        return put_entry(cache, key, cases, True, True, '', clock.time())
+    return put_entry(cache, key, cases, False, False, TRUNC_WHY, clock.time())
+
+
 def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, deadline=None,
                 page_cap=None):
     """One lead's party search. Fail closed on any error.
 
-    The filtered bankruptcy-court search is conclusive when it fits in the page cap.
-    If it overflows, one narrower query is run. The lead stays truncated only when that
-    also overflows. TimeBudget propagates so a cut-off search is not stored as a clear."""
+    The eligible search is every bankruptcy court and the configured filed-after window.
+    It can clear only when that search finishes inside the page cap. If it overflows, the
+    same name query is run again for the Florida bankruptcy courts over a shorter window,
+    with more pages. Hits from both passes are kept. A match in either holds the lead.
+    The narrower pass cannot clear. TimeBudget propagates so a cut-off search is not
+    stored as a clear."""
     owners = lead_owners(ld)
     if not owners:
         put_entry(cache, ld['key'], [], False, False, 'no owner name on the lead — check cannot run', clock.time())
@@ -1592,26 +1650,32 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
                   'owner name cannot be searched — lead stays held', clock.time())
         return cache[ld['key']]
     cap = PARTY_PAGE_CAP if page_cap is None else int(page_cap)
+    env = getattr(provider, 'env', None)
+    eligible = default_filed_after(env)
     collected = []
     try:
-        collected, truncated = _collect_queries(
-            queries, provider, transport, budget, clock, cap, max_wait, deadline)
-        if truncated:
-            narrows = []
-            for owner in owners[:4]:
-                nq = narrow_query_for(owner, ld.get('place'))
-                if nq and nq not in narrows and nq not in queries:
-                    narrows.append(nq)
-            if not narrows:
-                put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False,
-                          'CourtListener party search truncated — lead stays held', clock.time())
-                return cache[ld['key']]
-            collected, truncated = _collect_queries(
-                narrows, provider, transport, budget, clock, cap, max_wait, deadline)
-            if truncated:
-                put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False,
-                          'CourtListener party search truncated — lead stays held', clock.time())
-                return cache[ld['key']]
+        wide, wide_cut = _collect_queries(
+            queries, provider, transport, budget, clock, cap, max_wait, deadline,
+            filed_after=eligible, courts=BK_COURT_IDS)
+        collected.extend(wide)
+        if not wide_cut and scope_can_clear(BK_COURT_IDS, eligible, env):
+            return _store_search(cache, ld['key'], owners, collected, clock, True)
+        bounds = narrow_bounds(env)
+        if not bounds:
+            return _store_search(cache, ld['key'], owners, collected, clock, False, narrow_overflow=True)
+        n_courts, n_filed = bounds
+        # The send bridge passes a few-second max_wait. Extra pages there would spend
+        # the minute budget and come back as a rate hold. Nightly and the CLI, which
+        # pass no max_wait, follow the longer narrow cap.
+        ncap = narrow_page_cap(cap) if max_wait is None else cap
+        narrow_rows, narrow_cut = _collect_queries(
+            queries, provider, transport, budget, clock, ncap, max_wait, deadline,
+            filed_after=n_filed, courts=n_courts)
+        collected.extend(narrow_rows)
+        # The narrow scope is not the full window. Finishing it cannot clear.
+        can_clear = (not narrow_cut) and scope_can_clear(n_courts, n_filed, env)
+        return _store_search(cache, ld['key'], owners, collected, clock, can_clear,
+                             narrow_overflow=bool(narrow_cut))
     except TimeBudget:
         raise
     except BudgetExhausted as e:
@@ -1620,8 +1684,6 @@ def search_lead(ld, provider, transport, budget, clock, cache, max_wait=None, de
     except (RateLimited, ProviderError) as e:
         put_entry(cache, ld['key'], cases_from_hits(owners, collected), False, False, str(e), clock.time())
         return cache[ld['key']]
-    put_entry(cache, ld['key'], cases_from_hits(owners, collected), True, True, '', clock.time())
-    return cache[ld['key']]
 
 
 def _needs_party_search(ent, now):

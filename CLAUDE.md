@@ -230,13 +230,23 @@ spent day, not reset.
   The index can hold a lead. It cannot clear one.
 - Once per lead: a party-name search of federal bankruptcy courts only (CourtListener
   court ids ending in `b`, including `flsb`, `flmb`, and `flnb`), filed within
-  `BK_FILED_AFTER_YEARS` (default 10), newest first. Re-checked every 14 days, and again
-  before a first touch older than that. If that filtered search still overflows the page
-  cap, one narrower query is run (surname, first name, and the lead's city or ZIP, or an
-  exact phrase). The lead stays truncated only when the narrow query also overflows.
-  That count is `truncated` on the status file, not an error. CLI and leads next to be
-  contacted may follow more pages. Only a fresh completed search with no open match
-  clears a Broward or Palm Beach lead. Email and letters (`send_hold`) refuse a keyable
+  `BK_FILED_AFTER_YEARS` (default 10), newest first. The court list is one `court`
+  parameter with the ids separated by spaces. Repeated `court=` keys are not a list —
+  CourtListener keeps the last one — so that form searches a single court and must not
+  be used. Re-checked every 14 days, and again before a first touch older than that.
+  If that search still overflows the page cap, the same name-token query is run again,
+  limited to `flsb flmb flnb` and a shorter filed-after window, with more pages. A
+  city, ZIP, or exact phrase is not put in `party:` (that field is names, and party
+  names are filed in both orders). Hits from both passes are kept. An open exact or
+  plausible match from either pass holds the lead. A lead can clear only when the
+  full-court, full-window search finishes without overflowing and finds no open match.
+  If the narrow pass overflows or cannot be built, the lead stays truncated and held.
+  A finished narrow pass also cannot clear, because it does not cover the whole window.
+  That count is `truncated` on the status file, not an error. The nightly run and the
+  CLI follow more pages on that second pass. The send bridge keeps the short page cap
+  and its few-second wait. CLI and leads next to be contacted may follow more pages
+  on the first pass too. Only a fresh completed eligible search with no open
+  match clears a Broward or Palm Beach lead. Email and letters (`send_hold`) refuse a keyable
   non-stem lead as soon as this module is importable. Text uses that same stay-gate
   verdict in the send bridge, and its pre-send check will not sleep out a rate window.
   Call Mode and the knock planner
