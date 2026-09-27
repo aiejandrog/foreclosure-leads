@@ -339,6 +339,7 @@ const morningCases = [
   const freshDoc = (alerts, published_at) => JSON.stringify({
     version: 1, published_at: published_at || '2026-09-26T14:00:00Z', alerts,
   });
+  const hoursAgo = n => new Date(Date.now() - n * 3600000).toISOString();
   const openAlert = (key, severity) => ({
     number: 41, title: '⚠️ [' + severity + '] [' + key + '] old',
     body: 'alert-key: ' + key + '\nseverity: ' + severity + '\n\nold text',
@@ -395,11 +396,30 @@ const morningCases = [
       alertsJson: freshDoc([], '2026-09-25T08:00:00Z'), now: ALERT_NOW, fire: true, creates: 'alerts-unpublished' },
     { name: 'alerts: published_at 29h ago is not stale',
       alertsJson: freshDoc([], '2026-09-25T10:00:00Z'), now: ALERT_NOW, fire: false },
+    // These two are the only cases that let the step read the real clock, which is what it
+    // does in production - nothing in the workflow sets WATCHDOG_NOW. `now: null` opts out of
+    // the block's default, and the publish times are relative, so they never expire. Without
+    // them, breaking that fallback (`: 0`, say) silently stops alerts-unpublished from ever
+    // firing and the whole suite stays green.
+    { name: 'alerts: on the real clock, a publish 31h ago is its own alert',
+      alertsJson: freshDoc([], hoursAgo(31)), now: null, fire: true, creates: 'alerts-unpublished' },
+    { name: 'alerts: on the real clock, a publish 29h ago is not stale',
+      alertsJson: freshDoc([], hoursAgo(29)), now: null, fire: false },
+    // The sibling of the staleness branch: a published_at that is present but not a timestamp
+    // refuses to close anything rather than treating the file as fresh. Untested until now, so
+    // that refusal could have become a core.info with the suite green.
+    { name: 'alerts: an unparseable published_at fails and does not close',
+      alertsJson: JSON.stringify({ version: 1, published_at: 'yesterday afternoon', alerts: [] }),
+      openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true, noCreate: true },
   ];
   const asrc = extractScript(ALERTS_STEP);
   for (const c of alertCases) {
     let r;
-    try { r = await run(asrc, [], c); }
+    // Alert cases are judged at ALERT_NOW unless they pass their own `now`, and `now: null`
+    // opts out to the real clock. Ten of the fourteen used to pass none, so they read the real
+    // clock against a published_at fixed at 2026-09-26T14:00Z and began raising a spurious
+    // alerts-unpublished thirty hours later.
+    try { r = await run(asrc, [], { now: ALERT_NOW, ...c }); }
     catch (e) {
       console.log(`  FAIL  ${c.name} — threw: ${e.message}`);
       fail++; continue;
