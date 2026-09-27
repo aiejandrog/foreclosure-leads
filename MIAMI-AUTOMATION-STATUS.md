@@ -416,6 +416,37 @@ and is empty when none did, so `1 not in []` made it claim a document was read w
 was - the twenty-seventh review's defect in the worse direction. Only the per-document rows carry the
 discriminator, and every one of them has to exclude page 1 (thirtieth review).
 
+**Thirty-first review.** Three producer fields with no reader here at all.
+
+`attached_document_title`: on the one path where the producer moves the label to
+`attached_document_kind` it also sets `title = None` (:358), so `operative_text` falls back to the
+CLERK's line and the read document's own title survives in that field alone (:370). `_replaces` was
+asked about the clerk's line, so the docket whose index read "Notice of Filing Amended Final Judgment"
+was `incomplete` while the SAME read document under a bland "Notice of Filing" read `supported`, with
+the superseded figure printed verified to the cent. It reproduced on every cover line the producer
+routes that way - `Notice of Filing`, `Notice of Filing Order`, `Certificate of Service`, `Affidavit`.
+`_replaces` now reads that title too, and the sentence prints it, so a person sees WHICH judgment the
+cover carried. The twelfth review's calibration still holds: a plain copy of the same judgment filed as
+an exhibit carries no replacing word in any producer string, and a page whose own title says PROPOSED
+gets no `attached_document_kind` from the producer at all. The calibration test's fixture had used the
+AMENDED page, which contradicted its own stated rationale; it uses a plain copy now, and the amended
+page is pinned in the other direction.
+
+`judgments['controlling_scope']`: :546 writes `judgment_scope` for every read final judgment and :549
+copies the controlling one in. A judgment reading "as to Count II only", "in rem only" and "no
+deficiency", and a docket defendant the judgment body never names, reached no page. They are NOTES and
+not gaps, deliberately: the producer's own docstring says the field never moves the verdict, and
+`scope_of` sets `limited` off a bare `\bcount\s+[IVX\d]+` (:590) that an ordinary judgment reciting
+"Count I of the Complaint" trips, so a gap there would hold routine dockets forever.
+
+The coverage disagreement check compared a PER-DOCUMENT state (`document_coverage` emits one row per
+attachment) against a PER-ENTRY `image_status`. On an entry with two attachments, one read and one
+behind the county login, both producers are right and neither disagrees - and the `continue` ate the
+accurate "behind the clerk's login" line. The claim now requires that no row for the entry says a
+document was opened; the twenty-ninth review's single-walled-row case still prints it. Recorded while
+there: `AGREEING_STATES`' `read_partial` pair is dead at that site, since `read_partial` lives in
+`PART_READ` and never in the three tuples tested, so only the `not_enumerated` pair is ever consulted.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
@@ -429,12 +460,15 @@ undated dispositive entry therefore reaches `case_verdict` with reason "Undated 
 prevents reliable chronology", so the verdict is `incomplete` on a file that also holds a
 contradiction. `case_verdict` restates the producer faithfully; the loss is upstream.
 
-`attached_document_kind` discards the document's own title (:357 does
-`attached, body_kind, title = body_kind, None, None`), so a bare "Notice of Filing" whose document reads
-AMENDED FINAL JUDGMENT OF FORECLOSURE saves only `attached_document_kind='final_judgment'` and nothing
-in the file distinguishes it from an exhibit copy. `_replaces` now reads the producer's own `operative_text` +
-`description` + `comments` (twenty-fifth review), but this path nulls the title before it is saved, so
-there is nothing there for it to see, and the case reads `supported` with the superseded figure. Closing it needs the producer to keep the title (an `attached_document_title`).
+CLOSED in the thirty-first review. main's E1 work made the producer keep the attachment's own title in
+`attached_document_title` (:370), which is what this item said closing it would need, and `_replaces`
+and the sentence both read it now.
+
+`_body_kind`'s title whitelist (:237) allows only the `amended |agreed |amended agreed ` prefixes, so a
+page 1 reading CORRECTED FINAL JUDGMENT OF FORECLOSURE or RE-ENTERED FINAL JUDGMENT yields no
+`body_kind`, hence no `attached_document_kind` and no `attached_document_title` - although `corrected`
+and `re-?entered` are both in the producer's own `_REPLACES` (:697). That docket reads `supported` and no
+change to `case_verdict.py` reaches it, because the producer saved nothing for it to read.
 
 `reconcile_judgments`' `_ADDS_TO` matches a bare `attorney'?s? fees?` over `operative_text` plus
 `description` plus `comments`, so a final judgment whose clerk comments merely mention attorney's fees

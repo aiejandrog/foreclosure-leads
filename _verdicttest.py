@@ -2677,15 +2677,22 @@ class TwentiethReviewTests(unittest.TestCase):
         self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
         self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
 
+    # A plain copy of the SAME judgment, which is what this calibration is about. The fixture used
+    # self.AMENDED until the thirty-first review, which contradicted the comment below: the producer
+    # saves that page's title in attached_document_title, so the amending word WAS in the producer's
+    # own text for the entry and the case that read `supported` was the one carrying an amendment.
+    COPY = 'FINAL JUDGMENT OF FORECLOSURE\nTOTAL $105,000.00'
+    EXHIBIT_TITLES = ('Notice of Filing Proposed Final Judgment', 'Memorandum of Law',
+                      'Status Report', 'Request for Judicial Notice', 'Motion for Summary Judgment',
+                      'Affidavit of Indebtedness', 'Notice of Filing Final Judgment')
+
     def test_a_judgment_copy_filed_as_an_exhibit_still_reads_supported(self):
         # The twelfth review's calibration, which is why final_judgment is excluded at all: a judgment
         # body on page 1 of a motion, memorandum, status report or proposed order is an exhibit, and
         # holding those made routine dockets incomplete for good. None of these carries a _REPLACES
         # word, which is the producer's own test for a replacement.
-        for title in ('Notice of Filing Proposed Final Judgment', 'Memorandum of Law',
-                      'Status Report', 'Request for Judicial Notice', 'Motion for Summary Judgment',
-                      'Affidavit of Indebtedness', 'Notice of Filing Final Judgment'):
-            t = self.case([(140, title, '', '06/01/2026', '')], pages={'140': self.AMENDED})
+        for title in self.EXHIBIT_TITLES:
+            t = self.case([(140, title, '', '06/01/2026', '')], pages={'140': self.COPY})
             r = CV.assess(t)
             self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
 
@@ -3715,6 +3722,186 @@ class ThirtiethReviewTests(unittest.TestCase):
         e = next(x for x in t['entries'] if x['entry_id'] == '7')
         self.assertEqual(e['image_status'], 'unassessed_pages')
         self.assertTrue(CV._was_read(e, t))
+
+class ThirtyFirstReviewTests(unittest.TestCase):
+    """Three producer fields with no reader: the attachment's own title, the controlling judgment's
+    scope, and the per-document coverage state compared against a per-entry image_status.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $105,000.00'
+    AMENDED = 'AMENDED FINAL JUDGMENT OF FORECLOSURE\nTOTAL $225,000.00'
+
+    def case(self, extra=(), pages=None):
+        pg = {'2': self.PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + list(extra), controlling='2', amount=105000.00, pages=pg)
+
+    # ---- 1: attached_document_title, the only field that keeps the read title on this path -----
+
+    def test_an_amending_judgment_under_a_bland_cover_line_is_not_supported(self):
+        # miami_case_timeline :358 sets `title = None` when it moves the label to
+        # attached_document_kind, so operative_text falls back to the CLERK's line and the read
+        # document's own title survives only in attached_document_title (:370). _replaces was asked
+        # about the clerk's line alone, so the docket whose index says "Notice of Filing Amended Final
+        # Judgment" was incomplete while the SAME read document under a bland "Notice of Filing" read
+        # `supported`, vouching for the superseded figure to the cent. Less known in the index, better
+        # verdict - the shape every round finds.
+        t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')], pages={'140': self.AMENDED})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertEqual((entry['operative_text'], entry['attached_document_kind']),
+                         ('Notice of Filing', 'final_judgment'))
+        self.assertIn('AMENDED', entry['attached_document_title'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue([m for m in r['missing'] if '140' in m], r['missing'])
+
+    def test_the_attachments_own_title_is_printed_so_the_reader_sees_which_judgment(self):
+        # The label alone said a final_judgment was under the cover and left the reader to guess
+        # whether it amended the one the same report just vouched for to the cent.
+        t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')], pages={'140': self.AMENDED})
+        said = [m for m in CV.assess(t)['missing'] if '140' in m]
+        self.assertTrue(said)
+        self.assertIn('AMENDED FINAL JUDGMENT OF FORECLOSURE', said[0])
+
+    def test_every_cover_line_the_producer_routes_this_way_is_held(self):
+        # Not one wording: _FILED_ABOUT_RE routes each of these, and each read `supported` before.
+        for line in ('Notice of Filing', 'Notice of Filing Order', 'Notice of Filing Judgment',
+                     'Certificate of Service', 'Affidavit'):
+            t = self.case([(140, line, '', '06/01/2026', '')], pages={'140': self.AMENDED})
+            self.assertEqual(CV.assess(t)['verdict'], 'incomplete', line)
+
+    def test_a_plain_judgment_copy_as_an_exhibit_is_still_supported(self):
+        # The twelfth review's calibration, which the fix must not break: a plain copy of the SAME
+        # judgment filed as an exhibit carries no _REPLACES word in any of the producer's strings.
+        for title in TwentiethReviewTests.EXHIBIT_TITLES:
+            t = self.case([(140, title, '', '06/01/2026', '')],
+                          pages={'140': TwentiethReviewTests.COPY})
+            self.assertEqual(CV.assess(t)['verdict'], 'supported', title)
+
+    def test_a_proposed_amending_judgment_is_still_supported(self):
+        # The producer separates the proposal itself: _body_kind's whitelist (:237) allows only the
+        # `amended |agreed |amended agreed ` prefixes, so a page titled "PROPOSED AMENDED FINAL
+        # JUDGMENT" yields no attached_document_kind at all and nothing here can fire on it.
+        t = self.case([(140, 'Notice of Filing Proposed Final Judgment', '', '06/01/2026', '')],
+                      pages={'140': 'PROPOSED AMENDED FINAL JUDGMENT OF FORECLOSURE\nTOTAL $225,000.00'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertIsNone(entry.get('attached_document_kind'))
+        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+
+    # ---- 2: judgments['controlling_scope'], computed every run and printed nowhere -------------
+
+    def test_the_controlling_judgments_own_scope_reaches_the_report(self):
+        # :546 writes judgment_scope for every read final judgment and :549 copies the controlling
+        # one into judgments['controlling_scope']. A judgment reading "as to Count II only", "in rem
+        # only" and "no deficiency" reached no page at all.
+        t = self.case(pages={'2': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                   'Final judgment as to Count II only. This judgment is in rem only.\n'
+                                   'No deficiency judgment shall be entered.\nTotal $105,000.00')})
+        scope = t['judgments']['controlling_scope']
+        self.assertEqual((scope['limited_scope'], scope['in_rem_only'], scope['deficiency']),
+                         (True, True, 'denied_or_waived'))
+        r = CV.assess(t)
+        text = ' '.join(r['notes'])
+        for word in ('limited_scope', 'in_rem_only', 'deficiency'):
+            self.assertIn(word, text, r['notes'])
+
+    def test_the_scope_is_a_note_and_never_holds_a_routine_docket(self):
+        # The producer's own docstring says judgment_scope "never moves the case verdict", and
+        # scope_of sets limited off a bare `\bcount\s+[IVX\d]+`, which an ordinary judgment reciting
+        # "Count I of the Complaint" trips. A gap here would hold routine dockets forever.
+        t = self.case(pages={'2': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                   'On Count I of the Complaint.\nTotal $105,000.00')})
+        self.assertTrue(t['judgments']['controlling_scope']['limited_scope'])
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', (r['missing'], r['notes']))
+        self.assertTrue([n for n in r['notes'] if 'limited_scope' in n], r['notes'])
+
+    def test_a_docket_defendant_the_judgment_body_never_names_is_a_question(self):
+        t = self.case()
+        t['judgments'] = dict(t['judgments'], controlling_scope={
+            'read': True, 'limited_scope': False, 'in_rem_only': False, 'deficiency': None,
+            'defendants_named': 1, 'defendants_not_named': ['SUNSHINE CONDOMINIUM ASSOCIATION']})
+        r = CV.assess(t)
+        said = [n for n in r['notes'] if 'SUNSHINE' in n]
+        self.assertTrue(said, r['notes'])
+        self.assertIn('not a finding', said[0])
+        self.assertEqual(r['verdict'], 'supported', r['missing'])
+
+    def test_no_read_body_for_the_controlling_judgments_scope_is_restated(self):
+        t = self.built(self.JUDGED, controlling='2', amount=105000.00, pages={})
+        self.assertIs(t['judgments']['controlling_scope']['read'], False)
+        self.assertTrue([n for n in CV.assess(t)['notes'] if 'no readable body' in n])
+
+    # ---- 3: a per-document coverage state against a per-entry image_status ---------------------
+
+    @staticmethod
+    def two_document_case(second):
+        """Entry 2 with TWO expected documents: the first read, the second in `second`'s state."""
+        import document_coverage as DC
+        import miami_case_timeline as T
+        docs = [{'source_ref': 'court:2:1', 'document_hash': 'h1',
+                 'manifest': {'sha256': 'h1', 'pages': 1}, 'acquisition_status': 'done',
+                 'reading': {'pages': [{'page': 1, 'outcome': 'text',
+                                        'text': ThirtyFirstReviewTests.PAGE}]}},
+                dict({'source_ref': 'court:2:2', 'document_hash': 'h2', 'manifest': {}}, **second)]
+        inv = {'pagination_verified': True, 'entries': [
+            {'source_id': '1', 'source_ref': '1', 'expected_documents': 0,
+             'metadata': {'eventID': 1, 'eventDate': '01/05/2026',
+                          'docketDescrition': 'Complaint', 'comments': '', 'eventType': ''}},
+            {'source_id': '2', 'source_ref': '2', 'expected_documents': 2,
+             'metadata': {'eventID': 2, 'eventDate': '06/10/2026',
+                          'docketDescrition': 'Final Judgment of Foreclosure', 'comments': '',
+                          'eventType': ''}}]}
+        t = T.build_timeline('SYNTHETIC', inv, docs, '2026-09-23')
+        t['coverage'] = DC.coverage(inv, docs, entries=t['entries'])
+        t['judgments'] = dict(t['judgments'] or {}, controlling_entry='2',
+                              docket_duplicates_inferred=[])
+        if not (t['judgments'].get('judgments') or []):
+            t['judgments']['judgments'] = [
+                {'entry_id': '2', 'date': '2026-06-10', 'title': 'FJ', 'role': 'judgment',
+                 'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found',
+                 'reason': ''}]
+        t['amount_vision'] = {'amount_checks': [
+            {'entry_id': '2', 'source_ref': 'court:2:1', 'amount': 105000.00, 'ok': True,
+             'reason': 'ok', 'pages': [1], 'run': 'r', 'disagreeing_subtotals': []}]}
+        return t
+
+    def test_two_producers_that_agree_are_not_reported_as_disagreeing(self):
+        # document_coverage's state is PER DOCUMENT (:163); image_status is PER ENTRY (:415-436). On
+        # an entry with one document read and one behind the county login both producers are right,
+        # and the check compared the walled ROW against the entry-level 'read'.
+        t = self.two_document_case({'acquisition_status': 'gap',
+                                    'acquisition_gap': 'the county returned its login page'})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '2')
+        self.assertEqual(entry['image_status'], 'read')
+        states = sorted(r['state'] for r in t['coverage']['attachments'] if r['entry_id'] == '2')
+        self.assertEqual(states, ['read', 'restricted'])
+        r = CV.assess(t)
+        self.assertFalse([m for m in r['missing'] if 'producers disagree' in m], r['missing'])
+
+    def test_the_accurate_login_line_is_not_eaten_by_the_disagreement_claim(self):
+        # The `continue` suppressed this module's own correct sentence about a filing on the
+        # judgment's entry that nobody read.
+        t = self.two_document_case({'acquisition_status': 'gap',
+                                    'acquisition_gap': 'the county returned its login page'})
+        r = CV.assess(t)
+        self.assertTrue([m for m in r['missing'] if "behind the clerk's login" in m], r['missing'])
+        self.assertEqual(r['verdict'], 'incomplete')
+
+    def test_a_single_walled_row_against_a_read_entry_is_still_a_disagreement(self):
+        # The twenty-ninth review's calibration, which the fix must not undo: when NO row for the
+        # entry says a document was opened, the two producers really do disagree.
+        t = self.case()
+        t['coverage'] = {'attachments': [{'entry_id': '2', 'kind': 'final_judgment',
+                                          'state': 'restricted', 'detail': [],
+                                          'document': 'court:2:1'}], 'complete': False}
+        self.assertEqual(next(e for e in t['entries'] if e['entry_id'] == '2')['image_status'],
+                         'read')
+        r = CV.assess(t)
+        self.assertTrue([m for m in r['missing'] if 'producers disagree' in m], r['missing'])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

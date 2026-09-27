@@ -681,8 +681,16 @@ def _replaces(entry):
     JUDGMENT ... AND AWARD OF ATTORNEYS FEES" while the clerk's line says only "Judgment" - was the
     one that read `supported`, because _ADDS_TO matched in the title the producer saw and _REPLACES
     was asked about a text that did not contain it (twenty-fifth review).
+
+    `attached_document_title` joins it, because on the one path where the producer moves the label to
+    `attached_document_kind` it also sets `title = None` (miami_case_timeline :358), so
+    `operative_text` falls back to the clerk's line and the read document's own title survives in
+    that field alone. A docket whose clerk line said "Notice of Filing Amended Final Judgment" was
+    `incomplete` while the SAME read document under a bland "Notice of Filing" read `supported`, with
+    the superseded figure printed verified to the cent (thirty-first review). The string is the
+    producer's own, saved at :370 from the page it read.
     """
-    text = _producer_text(entry)
+    text = ' '.join(x for x in (_producer_text(entry), str(entry.get('attached_document_title') or '')) if x)
     if not text.strip():
         return False
     try:
@@ -1103,6 +1111,44 @@ def assess(timeline, dossier=None):
                              % (row.get('entry_id') or '?', row.get('role'),
                                 row.get('adds_to') or 'no entry'))
 
+    # --- what the controlling judgment's own body says about its reach -------------------------
+    # miami_case_timeline :546 writes judgment_scope for every read final judgment and :549 copies
+    # the controlling one into judgments['controlling_scope']. Nothing in the repo read it, so a
+    # judgment reading "as to Count II only", "in rem only" and "no deficiency", and a docket
+    # defendant the judgment body never names, reached no page at all (thirty-first review).
+    #
+    # NOTES, not gaps, and deliberately: the producer's own docstring says "Report only: it never
+    # moves the case verdict or the controlling judgment", and scope_of sets limited off a bare
+    # `\bcount\s+[IVX\d]+` (:590), which an ordinary judgment reciting "Count I of the Complaint"
+    # trips. Holding on that would hold routine dockets forever, which is the other half of the
+    # contract. Every string below is the producer's own key or value.
+    scope = judgments.get('controlling_scope') if isinstance(judgments, dict) else None
+    if isinstance(scope, dict):
+        if scope.get('read') is False:
+            notes.append("the run recorded no readable body for the controlling judgment's scope "
+                         '(%s), so what it binds is not read here'
+                         % (scope.get('reason') or 'no reason recorded'))
+        else:
+            if scope.get('limited_scope'):
+                notes.append("the controlling judgment's own body reads as limited in scope "
+                             '(judgment_scope limited_scope), so whether it disposes of the whole '
+                             'case is a question to check on the image')
+            if scope.get('in_rem_only'):
+                notes.append("the controlling judgment's own body says in rem (judgment_scope "
+                             'in_rem_only)')
+            if scope.get('deficiency'):
+                notes.append("the controlling judgment's own body records the deficiency as %s "
+                             '(judgment_scope deficiency)' % scope.get('deficiency'))
+            unnamed = [str(d) for d in (scope.get('defendants_not_named') or []) if str(d).strip()]
+            if unnamed:
+                # The producer's own qualification, not a finding of ours: "a defendant the body does
+                # not name may still be bound through a caption or exhibit; verify on the image".
+                notes.append('%d docket defendant(s) are not named in the controlling judgment\'s '
+                             'body (%s); the producer records that a body can still bind a party '
+                             'through a caption or exhibit, so this is a question to check, not a '
+                             'finding' % (len(unnamed), '; '.join(sorted(unnamed)[:5])
+                                          + ('; and %d more' % (len(unnamed) - 5) if len(unnamed) > 5 else '')))
+
     # --- the bankruptcy stay -------------------------------------------------------------------
     stay = timeline.get('stay_in_effect')
     history = _rows(timeline, 'stay_history')
@@ -1309,6 +1355,14 @@ def assess(timeline, dossier=None):
     read_per_timeline = next((e.get('image_status') for e in _rows(timeline, 'entries')
                               if isinstance(e, dict)
                               and str(e.get('entry_id')) == str(entry_id)), None)
+    # `state` is PER DOCUMENT - document_coverage emits one row per attachment (:163) - while
+    # image_status is PER ENTRY (:415-436). On an entry with two attachments, one read and one behind
+    # the county login, both producers are right and neither disagrees; the check below compared the
+    # walled ROW against the entry-level 'read' and printed a conflict that was not there, and its
+    # `continue` ate the accurate "behind the clerk's login" line (thirty-first review). The claim is
+    # only defensible when NO row for this entry says a document was opened.
+    coverage_opened = any(isinstance(r, dict) and r.get('state') in ('read',) + PART_READ
+                          for r in mine)
     for row in mine:
         state = row.get('state')
         # OPENED_STATUSES, not 'read' alone: this is the same question _was_read asks, and testing
@@ -1321,8 +1375,11 @@ def assess(timeline, dossier=None):
         # disagreed when they did not, and its `continue` ate the accurate "only partly read" line
         # below (thirtieth review). A disagreement is coverage saying the filing was never reachable
         # while the timeline says it was opened; anything else falls through to its own sentence.
+        # AGREEING_STATES' read_partial pair is dead at this site - read_partial lives in PART_READ
+        # and never in the three tuples tested here - so only the not_enumerated pair is consulted.
         if (state in LOGIN_WALLED + NO_IMAGE + NOT_REACHED
                 and read_per_timeline in OPENED_STATUSES
+                and not coverage_opened
                 and (state, read_per_timeline) not in AGREEING_STATES):
             missing.append("document_coverage records the controlling judgment's filing as %s while "
                            "the timeline's own image_status for that entry is %r; the two "
@@ -1408,7 +1465,12 @@ def assess(timeline, dossier=None):
             # FILING SATISFACTION OF FINAL JUDGMENT"), so the producer took the cover label from the
             # page it read and attached_document_kind stayed None. Saying "nobody opened it" there is
             # a claim the same file refutes, which is the twenty-second review's defect mirrored.
-            missing.append(
+            # The producer saves the attachment's own title on the attached path (:370) so a person
+            # can see WHICH judgment the cover carried. Printing the label alone told the reader a
+            # final_judgment was under there and left them to guess whether it amended the one this
+            # file just vouched for to the cent (thirty-first review).
+            named = str(entry.get('attached_document_title') or '').strip()
+            said = (
                 ('entry %s was read and the document\'s own title is itself a filing about '
                  'something else, naming a %s; the producer labelled the entry by that cover, so '
                  'the run did not fold it into the case\'s posture, and whether it decides this '
@@ -1443,6 +1505,9 @@ def assess(timeline, dossier=None):
                  'reads as %s, which the run therefore did not fold into the case\'s posture; '
                  'whether it decides this case is not settled in this file')
                 % (entry.get('entry_id') or '?', attached))
+            if named:
+                said += ' - the document\'s own first page is titled %r' % named[:200]
+            missing.append(said)
     # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
     # one net for these - :519 forces status 'unclear' for every undated entry `_transition`
     # recognises - and `_transition` returns None for exactly the kinds that then reach nothing else:
