@@ -626,6 +626,21 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
         if (_g(r, 'saleBkAct') or _g(r, 'sale_bk_active')) and not _g(r, 'saleLift'):
             skips['active-bankruptcy-stay'] += 1
             continue
+        try:
+            import bk_lookup as _BKL
+            _held, _why = _BKL.contact_blocked_reason(_case(r))
+            if _held:
+                skips['federal-bankruptcy-check'] += 1
+                continue
+        except Exception:
+            try:
+                import stay_gate as _SG
+                if not _SG.case_stem(_case(r)):
+                    skips['federal-bankruptcy-check'] += 1
+                    continue
+            except Exception:
+                skips['federal-bankruptcy-check'] += 1
+                continue
         # DILIGENCE GATE — a HARD backstop, OUTSIDE `if not trust_selection`, on the same reasoning
         # the §362 comment above spells out. A human picking the lead in the tracker proves he wants
         # to mail it; it does not prove anybody answered the title question. And mail is the channel

@@ -486,6 +486,37 @@ def health_alert(sig, at):
                   'healthcheck FAIL stages: %s.' % ', '.join(kept), at)
 
 
+def bk_lookup_alert(sig, at):
+    """Fail when the nightly CourtListener pull did not succeed or is older than 36h.
+
+    A missing status file is the same as a pull that has never completed: Broward and
+    Palm Beach stay held until one does. The text is counts and ages only."""
+    if not isinstance(sig, dict) or not sig.get('readable'):
+        return _alert('bk-lookup', 'fail',
+                      'Federal bankruptcy pull has no status file. Non-Miami leads stay held.', at)
+    if not sig.get('pull_ok'):
+        return _alert('bk-lookup', 'fail',
+                      'Federal bankruptcy pull failed. Non-Miami leads stay held.', at)
+    try:
+        age = float(sig.get('pull_age_h'))
+    except (TypeError, ValueError):
+        age = None
+    if age is None or age > 36:
+        shown = 'unknown' if age is None else ('%.0f' % age)
+        return _alert('bk-lookup', 'fail',
+                      'Federal bankruptcy pull is %sh old (limit 36h).' % shown, at)
+    return None
+
+
+def read_bk_lookup():
+    try:
+        import bk_lookup as BL
+        sig = BL.public_status()
+    except Exception:
+        return {'readable': False}
+    return sig if isinstance(sig, dict) else {'readable': False}
+
+
 def stale_flag_alert(sig, at):
     """A refresh-running.flag older than the task limit. Publishing ignored it."""
     if not isinstance(sig, dict) or not sig.get('stale'):
@@ -520,6 +551,7 @@ def alerts_from(signals, now, th=None):
         readiness_alert(signals.get('readiness'), now, th, at),
         health_alert(signals.get('health_fails'), at),
         stale_flag_alert(signals.get('refresh_flag'), at),
+        bk_lookup_alert(signals.get('bk_lookup'), at),
     ]
     return sorted((a for a in found if a), key=lambda a: a['key'])
 
@@ -995,6 +1027,7 @@ def gather(now, th, measure=False):
         'optout_ledger': _try(read_optout_ledger, {'unreadable': False}),
         'morning_sends': _try(lambda: read_morning(now, th), {'readable': False}),
         'health_fails': _try(lambda: read_health(now.date().isoformat()), {'fresh': False, 'names': []}),
+        'bk_lookup': _try(read_bk_lookup, {'readable': False}),
         'readiness': measure_readiness(now, th['port']) if measure else None,
     }
 

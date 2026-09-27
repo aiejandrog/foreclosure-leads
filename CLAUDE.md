@@ -189,6 +189,56 @@ publish does not cost one board, it costs the reference.
 If you add a fourth publish path, gate it in the same commit. `grep -l publish_guard *.bat` is the
 check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
 
+## Federal bankruptcy check (CourtListener)
+
+Broward and Palm Beach have no Miami-Dade docket stay. They stay held until a federal
+bankruptcy check has run for that lead and found no open matching case. The check is
+`bk_lookup.py`. CourtListener (Free Law Project) REST API v4 is the provider. The parked
+PACER Case Locator client is still `pacer_stay.py` (#76); it is not called from here.
+`BankruptcyProvider` is the seam: `CourtListenerProvider` searches, and
+`PacerCaseLocatorProvider.available()` stays false until a PCL account exists.
+`DEALFLOW_BK_PROVIDER=pacer` selects that stub and holds every lead that needs the check.
+
+**Token.** `COURTLISTENER_TOKEN`, a Windows user env var on the laptop. Sent as
+`Authorization: Token <token>`. Never log it, print it, or write it into a status file.
+No token means the check is unavailable and the lead stays held.
+
+**Rate budget (free account, rolling, all concurrent):** 5/minute, 50/hour, 125/day.
+A 429 is retried with backoff a bounded number of times, then the lead stays held. When
+the budget is spent, leads not yet checked stay held and the status says so. The nightly
+pull reserves 10 requests so a pre-send search can still run.
+
+**Two reads, both cached under `DEALFLOW_DIR` (never the repo):**
+
+- Nightly, step `[3g2/5]` of `refresh-dealflow.bat` (not a new scheduled task): new
+  bankruptcy filings in the Southern District of Florida, court id `flsb`, since the last
+  successful pull. Search `type=d`, `court` + `filed_after`, paginated. Matched locally.
+  The index can hold a lead. It cannot clear one.
+- Once per lead: a party-name search across federal bankruptcy courts for cases with no
+  date terminated and no date closed. Re-checked every 14 days, and again before a first
+  touch older than that. Only a fresh completed search with no open match clears a
+  Broward or Palm Beach lead.
+
+**Matching.** Names are folded (case, accents, punctuation). Middle initials, Hispanic
+double surnames, `LLC` / `TRUST` owners, and joint owners are all read. An exact open-case
+match is a hard hold. Any weaker plausible match is a hold whose reason is
+`possible bankruptcy: <case number>` and is never auto-cleared. A closed case is not a
+hold. `DEALFLOW_DIR/bk_overrides.json` drops one bankruptcy case number for one lead id
+after a person has verified the false positive. Another lead on that case stays held.
+
+Miami-Dade keeps the #72 docket gate. This lookup only adds a hold there. A CourtListener
+clear does not lift a docket stay or a PACER active hit.
+
+**Status.** Counts only (`bk_lookup_status.json`: last pull time, filings cached, leads
+checked, holds, errors, requests used) go into `pipeline_alerts` as `bk-lookup`. A failed
+pull, a missing status file, or a pull older than 36 hours is a fail alert. Filings carry
+debtor names and stay in `DEALFLOW_DIR`. Nothing from this check is committed or published
+with a name, a phone, or the token.
+
+**Terms.** CourtListener's terms may restrict revenue-positive commercial use. Alejandro
+is asking Free Law Project. Until that is answered, keep the provider swappable and do
+not add a second CourtListener client.
+
 ## Scheduled tasks
 
 Register/enable/disable only via `pwsh .\desktop-setup\install-tasks.ps1` — **`pwsh`, not

@@ -404,6 +404,18 @@ def _knock_eligible(r):
     # violation, so this one reads both too — and any future writer of either name is covered.
     if (r.get('saleBkAct') or r.get('sale_bk_active')) and not (r.get('saleLift') or r.get('sale_bk_lifted')):
         return False
+    try:
+        import bk_lookup as _BKL
+        _held, _why = _BKL.contact_blocked_reason(r.get('case') or r.get('Case #'))
+        if _held:
+            return False
+    except Exception:
+        try:
+            import stay_gate as _SG
+            if not _SG.case_stem(r.get('case') or r.get('Case #')):
+                return False
+        except Exception:
+            return False
     if r.get('sibclaimed'):
         return False
     return True

@@ -1479,6 +1479,17 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
             continue
+        try:
+            import bk_lookup as _BKL
+            if _BKL.contact_blocked_reason(case)[0]:
+                continue
+        except Exception:
+            try:
+                import stay_gate as _SG
+                if not _SG.case_stem(case):
+                    continue
+            except Exception:
+                continue
         if d.get('title_status') == 'transferred':          # ownership gate — they no longer own it
             continue
         # DILIGENCE GATE — same class of drop as the ownership gate directly above, and placed with

@@ -420,6 +420,46 @@ def _check_pacer(raw, out, pacer_path, hits_path=None):
     return out
 
 
+def _merge_bk(raw, out):
+    """CourtListener opinion layered on a PACER/docket verdict.
+
+    No module, or no cache file yet: the verdict already in `out` stands. A non-stem lead that
+    is not already clear is flagged bk_need so the send bridge can run one party search.
+    A CourtListener hold wins over a clear (fail closed). A fresh CourtListener clear can clear
+    a lead that has no Miami-Dade stem. It cannot clear a PACER active hit or a Miami-Dade
+    docket verdict — those stay as they were."""
+    try:
+        import bk_lookup as _BL
+        op = _BL.gate_opinion(raw)
+    except Exception:
+        op = None
+    if not isinstance(op, dict):
+        if (not out.get('ok') and not case_stem(raw) and pacer_key(raw)
+                and out.get('code') != STAY_ACTIVE):
+            out['bk_need'] = True
+        return out
+    if op.get('blocks') and op.get('code'):
+        out.update(ok=False, code=op['code'], why=op.get('why') or out.get('why') or '',
+                   src=op.get('src') or 'courtlistener', bk_need=bool(op.get('bk_need')))
+        if op.get('bd'):
+            out['bd'] = op['bd']
+        return out
+    if op.get('ok') and not case_stem(raw) and out.get('code') != STAY_ACTIVE:
+        out.update(ok=True, code=CLEAR, bk_need=False, pacer_need=False, src='courtlistener',
+                   why=op.get('why') or 'no open federal bankruptcy matched this owner')
+        return out
+    if op.get('bk_need') and not out.get('ok'):
+        out['bk_need'] = True
+        # A non-stem lead has no docket stay to fall back on. Say why the federal check
+        # is not a clear (stale, not run, budget). Do not rewrite a PACER active hit.
+        if (not case_stem(raw) and op.get('why') and out.get('code') != STAY_ACTIVE):
+            out['why'] = op['why']
+            if op.get('code'):
+                out['code'] = op['code']
+            out['src'] = op.get('src') or 'courtlistener'
+    return out
+
+
 def _hit_on_stem(stem, hits_path, pacer_path):
     """(key, hit) of a blocking new-filer hit on this Miami-Dade stem, else None. Additive only."""
     if not hits_path:
@@ -470,7 +510,7 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
         if hits_path is None:
             hits_path = _hits_path(cache_path)
         if not stem:
-            return _check_pacer(raw, out, pacer_path, hits_path)
+            return _merge_bk(raw, _check_pacer(raw, out, pacer_path, hits_path))
         idx, err = _load(cache_path)
         if err:
             out.update(code=UNAVAILABLE, why=err)
@@ -511,6 +551,10 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
                        bd=max((str(c.get('filed') or '') for c in cases), default=''),
                        why=_hit_why(v) + ' (the state docket does not show it yet)')
             return out
+        held = _merge_bk(raw, dict(out))
+        if (not held.get('ok') and held.get('src') == 'courtlistener'
+                and held.get('code') in (STAY_ACTIVE, UNVERIFIED)):
+            return held
         lifts = sorted(str(v.get('sl')) for _, v in hits if v.get('sl'))
         out.update(ok=True, code=CLEAR, sl=(lifts[-1] if lifts else ''),
                    why=('stay lifted %s' % lifts[-1]) if lifts else 'no active stay on record')
@@ -527,8 +571,14 @@ def health(cache_path):
         return {'ok': False, 'err': err, 'cases': 0, 'active': 0}
     n = sum(len(v) for v in idx.values())
     act = sum(1 for v in idx.values() for _, e in v if isinstance(e, dict) and entry_stay_active(e))
+    bk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0}
+    try:
+        import bk_lookup as _BL
+        bk = _BL.health_counts()
+    except Exception:
+        bk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0, 'err': 'bk_lookup unavailable'}
     return {'ok': True, 'err': '', 'cases': n, 'active': act, 'pacer': pacer_health(cache_path),
-            'newfilers': newfiler_health(cache_path)}
+            'newfilers': newfiler_health(cache_path), 'bk': bk}
 
 
 def pacer_health(cache_path):
