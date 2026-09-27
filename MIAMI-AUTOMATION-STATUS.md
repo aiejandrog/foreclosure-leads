@@ -867,6 +867,38 @@ PROCEEDS" - reading the document making the verdict worse-informed. It is per st
 `_says_a_replacing_judgment` has read its own since the thirty-sixth review, and the exclusion's own case
 (head and proceeds word in the one string) still excludes.
 
+**Forty-second review.** Two findings, both inside the round before's own resale-filter edit - family
+(e) for the seventeenth consecutive round - and the first was a false `supported` over a published
+resale.
+
+The producer's own parser ends `return reset or regular` (:33): one date whose preceding 55 characters
+carry `reset|reschedul*` discards every other date it found in the entry. That is right when the
+question is what date an entry MEANS, and wrong when the question is whether any date here could be a
+later sale. Asked over the whole entry, "Affidavit of Publication of sale 12/28/2026" whose read page
+says "The sale was rescheduled from June 15, 2026" kept only 2026-06-15, which is before the
+certificate of sale - and with the resale word rule moved off the read body in the same round, nothing
+else held the entry, so the docket whose document was OPENED read `supported` with the published
+resale named nowhere while its unread twin was held. That is not the trade the round before recorded:
+it scoped the trade to a resale "which prints no date", and this one prints its date on the clerk's own
+line. A dateless clerk line whose read body printed both a future sale date and a reset recital of an
+earlier one went the same way, which shows the stated precondition did not bound the trade even on the
+body's own dates.
+
+`_sale_dates_each` asks the parser one passage at a time, which is monotone by construction - another
+passage can only add dates - so reading a document can never take a date away from this clause.
+`_sale_dates_of` is unchanged: where the question is what the entry means, the producer's own
+preference still decides, and that is pinned in both directions.
+
+The per-string head check had the same non-monotonicity in the sibling clause. Unread, `operative_text`
+IS `index_text` (:364), so a sale-notice head spanning the description/comments join was judged on that
+string - and once a document was read, `operative_text` became its title and no candidate carried the
+head any more. `_index_text` is the fourth candidate now, which is not the old concatenation the round
+before correctly removed: the round before's own two cases still hold, and the exclusion's own case
+(head and proceeds word in one string) still excludes. That shape is a mechanism-level regression
+rather than a docket anyone expects - the review said plainly it could not find a real Miami-Dade line
+where the head straddles that join - and it is fixed because it is one line and the same defect as the
+clause above.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and

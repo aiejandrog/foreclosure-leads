@@ -691,7 +691,18 @@ def _sale_state(timeline, status, kind):
                  # PRINTED as a sale date; here the question is only whether a later entry might be a
                  # resale, and the strictly weaker docket - sale wording only in the read body - must
                  # not read better than the one whose clerk line carries the word too.
-                 if any(d > closing_date for d in _sale_dates_of(e, gated=False))
+                 # ONE PASSAGE AT A TIME. The producer's parser ends `return reset or regular`
+                 # (:33), so a single date whose preceding 55 characters carry reset/reschedul*
+                 # DISCARDS every other date it found in the whole entry - including the future sale
+                 # date the clerk's own line prints. With the word rule moved off the read body by the
+                 # round before, that left nothing holding the entry at all: "Affidavit of Publication
+                 # of sale 12/28/2026" whose read page says "The sale was rescheduled from June 15,
+                 # 2026" kept only 2026-06-15, which is before the certificate, so the docket whose
+                 # document was OPENED read `supported` with the published resale named nowhere, while
+                 # its unread twin was held. Asked per passage the scan is monotone by construction -
+                 # more passages can only add dates - so reading a document can never take a date away
+                 # (forty-second review).
+                 if any(d > closing_date for d in _sale_dates_each(e))
                  # `_producer_text`, not `_sale_text`, and that is the head rule's own stated
                  # argument applied to its sibling in the same expression. `_sale_text` carries the
                  # producer's `sale_passages`, which is every line of every READ page (:398), so a
@@ -721,9 +732,16 @@ def _sale_state(timeline, status, kind):
                  # certificate read `supported` once a comment said "Re: Surplus Funds", and again once
                  # the run opened a cover titled "NOTICE OF FILING DISBURSEMENT OF SALE PROCEEDS" -
                  # reading the document making the verdict worse-informed (forty-first review).
+                 # `_index_text` is the fourth candidate, not the old concatenation the round before
+                 # correctly removed. Unread, `operative_text` IS `index_text` (:364), so a sale-notice
+                 # head that spans the description/comments join was judged on that string - and once a
+                 # document was read, `operative_text` became its title and no candidate carried the
+                 # head any more. Same non-monotonicity as the clause above, in its sibling
+                 # (forty-second review).
                  or any(_SALE_NOTICE_HEAD_RE.search(t) and not _PROCEEDS_RE.search(t)
-                        for t in (str(e.get(k) or '')
-                                  for k in ('operative_text', 'description', 'comments')))]
+                        for t in ([_index_text(e)]
+                                  + [str(e.get(k) or '')
+                                     for k in ('operative_text', 'description', 'comments')]))]
     if later:
         return 'unknown', ('%s, so whether a sale is pending cannot be told from this file'
                            % _unlabelled_phrase(later))
@@ -1186,6 +1204,22 @@ def _sale_dates_of(entry, gated=True):
         return list(dict.fromkeys(dates))
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return []
+
+
+def _sale_dates_each(entry):
+    """Every sale date the producer's parser finds in this entry, asked ONE passage at a time.
+
+    `_sale_dates_of` inherits the producer's own `reset or regular` preference (:33), which is right
+    when the question is "what date does this entry mean" and wrong when the question is "could any
+    date here be a later sale": one reset-worded date suppresses every other date in the entry. Asked
+    per passage, the answer is monotone - another passage can only add dates - so reading a document
+    can never remove one (forty-second review).
+    """
+    dates = []
+    for passage in [_index_text(entry)] + [str(p) for p in _rows(entry, 'sale_passages')]:
+        if str(passage or '').strip():
+            dates += _sale_dates_of({'sale_passages': [passage]}, gated=False)
+    return list(dict.fromkeys(dates))
 
 
 def _newer(current, entry):

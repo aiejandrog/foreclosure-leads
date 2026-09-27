@@ -5140,5 +5140,98 @@ class FortyFirstReviewTests(unittest.TestCase):
             r = CV.assess(self.after_sale(clerk))
             self.assertEqual(r['verdict'], 'supported', (clerk, r['missing']))
 
+class FortySecondReviewTests(unittest.TestCase):
+    """The producer's `reset or regular` preference read over a whole entry, and the per-string head
+    check losing the string its unread twin was judged on.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    PAGE = ThirtyNinthReviewTests.PAGE
+    SOLD = ThirtyNinthReviewTests.SOLD
+    after_sale = ThirtyNinthReviewTests.after_sale
+
+    def entry(self, clerk, comments='', body=None, ident=155):
+        rows = list(self.SOLD) + [(ident, clerk, comments, '08/01/2026', '')]
+        pages = {'2': self.PAGE}
+        if body:
+            pages[str(ident)] = body
+        return self.built(rows, controlling='2', amount=105000.00, pages=pages)
+
+    # ---- one reset date must not discard the rest ----------------------------------------------
+
+    PUBLISHED = 'Affidavit of Publication of sale 12/28/2026'
+    RESET_BODY = ('AFFIDAVIT OF PUBLICATION' + chr(10) + 'Attached is the published notice.' + chr(10)
+                  + 'The sale was rescheduled from June 15, 2026.')
+
+    def test_reading_a_reset_recital_does_not_take_the_published_date_away(self):
+        # The producer's parser ends `return reset or regular` (:33), so one date whose preceding 55
+        # characters carry reset/reschedul* discards every other date in the entry - including the
+        # future sale date the clerk's own line prints. With the resale word rule moved off the read
+        # body the round before, nothing else held the entry, so the docket whose document was OPENED
+        # read `supported` with the published resale named nowhere while its unread twin was held.
+        for label, body in (('unread', None), ('read', self.RESET_BODY)):
+            t = self.entry(self.PUBLISHED, body=body)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (label, r['missing']))
+            self.assertTrue([m for m in r['missing'] + r['notes'] if '155' in m], label)
+
+    def test_the_scan_is_monotone_in_the_passages(self):
+        # The property that makes the clause safe, stated directly: another passage can only add dates.
+        bare = next(e for e in self.entry(self.PUBLISHED)['entries'] if e['entry_id'] == '155')
+        read = next(e for e in self.entry(self.PUBLISHED, body=self.RESET_BODY)['entries']
+                    if e['entry_id'] == '155')
+        self.assertTrue(set(CV._sale_dates_each(bare)) <= set(CV._sale_dates_each(read)))
+
+    def test_a_body_that_prints_both_dates_still_holds(self):
+        # The same mechanism with no dated clerk line at all: the read body prints a future sale date
+        # AND a reset recital of an earlier one, and `reset or regular` kept only the earlier.
+        body = ('AFFIDAVIT OF PUBLICATION' + chr(10)
+                + 'The property will be sold at public sale on December 28, 2026.' + chr(10)
+                + 'This sale was rescheduled from June 15, 2026.')
+        r = CV.assess(self.entry('Affidavit of Publication', body=body))
+        self.assertEqual(r['verdict'], 'incomplete', r['missing'])
+
+    def test_the_entrys_own_meaning_still_prefers_the_reset_date(self):
+        # _sale_dates_of is unchanged: where the question is what date this entry MEANS, the producer's
+        # own preference still decides. Only the "could any date here be a later sale" clause asks per
+        # passage.
+        entry = next(e for e in self.entry(self.PUBLISHED, body=self.RESET_BODY)['entries']
+                     if e['entry_id'] == '155')
+        self.assertEqual(CV._sale_dates_of(entry, gated=False), ['2026-06-15'])
+
+    # ---- the head check keeps the string the unread twin was judged on --------------------------
+
+    def test_a_head_spanning_the_description_and_comment_survives_reading(self):
+        # Unread, operative_text IS index_text (:364), so a sale-notice head that spans the join was
+        # judged on that string - and once a document was read, operative_text became its title and no
+        # candidate carried the head any more.
+        for label, body in (('unread', None), ('read', 'NOTICE OF FILING' + chr(10)
+                                               + 'Filed herewith.')):
+            r = CV.assess(self.entry('Amended Notice of', 'Foreclosure Auction', body))
+            self.assertEqual(r['verdict'], 'incomplete', (label, r['missing']))
+
+    def test_the_round_befores_two_cases_still_behave(self):
+        for comments, body in (('Re: Surplus Funds', None),
+                               ('', 'NOTICE OF FILING DISBURSEMENT OF SALE PROCEEDS' + chr(10)
+                                + 'Filed herewith.')):
+            r = CV.assess(self.entry('Amended Notice of Foreclosure Auction', comments, body))
+            self.assertEqual(r['verdict'], 'incomplete', (comments, r['missing']))
+        for clerk in ('Notice of Disbursement of Sale Proceeds',
+                      'Notice of Claim to Surplus from Sale'):
+            self.assertEqual(CV.assess(self.entry(clerk))['verdict'], 'supported', clerk)
+
+    def test_the_completed_sale_calibration_survives_both_changes(self):
+        for clerk in ('Disbursement of Sale Proceeds', 'Surplus Funds from Sale',
+                      'Certificate of Disbursements', 'Notice of Surplus Funds',
+                      'Statement of Amounts Due at Sale', "Plaintiff's Bid at Sale",
+                      'Amended Disbursement of Sale Proceeds',
+                      'Amended Statement of Amounts Due at Sale',
+                      'Motion for Writ of Possession'):
+            for body in (None,
+                         'CERTIFICATE' + chr(10)
+                         + 'Proceeds of the foreclosure sale held on July 20, 2026, which was '
+                         'continued from June 15, 2026.'):
+                r = CV.assess(self.after_sale(clerk, body=body))
+                self.assertEqual(r['verdict'], 'supported', (clerk, bool(body), r['missing']))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
