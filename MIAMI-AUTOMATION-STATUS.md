@@ -487,6 +487,52 @@ entry ids and amounts. The write is already guarded into `DEALFLOW_DIR` by `case
 so naming them broke no rule, but it changed what this report carries as a side effect of a note, and
 the count asks the same question.
 
+**Thirty-third review.** Two of the round before's own fixes, and one of them was a false
+`supported` again.
+
+The anchor on `attached_document_title` rested on a premise that is false. `_body_kind`'s whitelist
+(:234) anchors the DOCUMENT NOUN, and `order ` is one of the nouns it accepts, so the amending word
+need not be first: "ORDER AMENDING FINAL JUDGMENT OF FORECLOSURE" - which the producer's own
+`_REPLACES` matches, and which `classify` reads as `final_judgment` through its bare `final judgment`
+substring (:213) - has the word at position 6 and was dropped. That put the thirty-first review's
+false `supported` straight back, with the superseding order's own $225,000.00 on the page the run
+read. "FINAL JUDGMENT OF FORECLOSURE RE-ENTERED" too. The title is SEARCHED again, and the one shape
+the anchor existed for is excluded on its own terms: a `substitut*` naming a party role is not a
+substituted judgment, which is the producer's own sentence (`superseded` at :730 reads "an
+amended/corrected/substituted JUDGMENT replaces it"), and it only withdraws the signal when it is the
+title's only replacing word. That exclusion is the one bound in this file that is not the producer's,
+and it is written where it can be seen.
+
+The `controlling_scope` notes cited one passage for two facts. `judgment_scope` appends the deficiency
+window first (:635) and the in-rem window after it (:639), so `passages[0]` is the deficiency one
+whenever a deficiency label matched - the ordinary pairing on a Florida foreclosure judgment. The
+in-rem note was therefore handed the deficiency window, truncated before the words "in rem" appear,
+so the passage offered as the check could not perform it, and the judgment whose body said MORE got
+the wrong citation. Each note cites its own passage now.
+
+Pointing the closing-word filter at `sale_passages` over-fired. That field takes EVERY body line
+matching its sale vocabulary (:398) with no requirement that the line be operative, so the clerk's
+routine "Statement of Amounts Due at Sale", whose body carries the ordinary conditional "In the event
+the sale is cancelled or continued, these amounts must be recomputed", held a live noticed sale
+`incomplete` for good - and the twin where that statement was never opened read `supported`, so
+reading more made the verdict permanently worse. `_closes_a_sale` now asks whether a closing word is
+the ACT, using the producer's own `_NOT_OPERATIVE_RE` (:294) the way the producer uses it, against the
+text ending right before the match. Its vocabulary has no "in the event", so this file adds the
+conditional openers that vocabulary needs; that is the second bound here that is not the producer's,
+and it can only withdraw a hold from a phrasing that is not the act.
+
+**Found while testing the above, reported and not fixed.** "ORDER GRANTING CORRECTED FINAL JUDGMENT"
+on page 1 of an entry the clerk indexed "Notice of Filing" reads `supported` with the superseded
+figure vouched for. It is a DIFFERENT path from the one above: `classify` reads that line as
+`order_on_motion`, so the producer labels the entry from the document (`kind_source='document'`) and
+`attached_document_kind` stays None, and neither the cover block nor `_cover_subject` reaches a
+deciding kind. `_replaces` on the producer's own text is True, so the signal is there. Closing it
+needs a producer-grounded answer to "does this order's own text say it replaces a JUDGMENT", and
+"Order Granting Amended Motion" shows why the naive form over-fires. Left for the next round rather
+than patched blind in the same pass, which is how the last eight rounds each produced the next one's
+defect. The producer also saves `motion_disposition_passages` (:397) for exactly this kind, and
+nothing here reads it.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and

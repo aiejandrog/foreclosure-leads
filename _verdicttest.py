@@ -4057,5 +4057,157 @@ class ThirtySecondReviewTests(unittest.TestCase):
         self.assertIn('the producer saved the passage', said[0])
 
 
+class ThirtyThirdReviewTests(unittest.TestCase):
+    """Two of the round before's own fixes: an anchor built on a false premise about the producer's
+    whitelist, and one passage cited for two different facts.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $105,000.00'
+
+    def case(self, extra=(), pages=None):
+        pg = {'2': self.PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + list(extra), controlling='2', amount=105000.00, pages=pg)
+
+    def cover(self, title):
+        """Entry 140 under a bland "Notice of Filing" whose read page 1 is titled `title`."""
+        return self.case([(140, 'Notice of Filing', '', '06/01/2026', '')],
+                         pages={'140': title + '\nTOTAL $225,000.00'})
+
+    # ---- the anchor the round before put on the attached title ---------------------------------
+
+    def test_the_producers_whitelist_accepts_order_as_a_line_start(self):
+        # The producer fact that made the anchor wrong. _body_kind's whitelist (:234) anchors the
+        # DOCUMENT NOUN, and `order ` is one of the nouns, so the amending word need not be first -
+        # and classify reads the line as final_judgment through its bare `final judgment` substring.
+        import miami_case_timeline as MCT
+        entry = next(e for e in self.cover('ORDER AMENDING FINAL JUDGMENT OF FORECLOSURE')['entries']
+                     if e['entry_id'] == '140')
+        self.assertEqual(entry['attached_document_kind'], 'final_judgment')
+        self.assertIn('AMENDING', entry['attached_document_title'])
+        self.assertTrue(MCT._REPLACES.search(entry['attached_document_title']))
+
+    def test_an_amending_word_that_is_not_the_first_token_still_holds_the_case(self):
+        # The anchor dropped every one of these, putting the thirty-first review's false `supported`
+        # straight back with the superseding order's own $225,000.00 on the page the run read.
+        # "ORDER GRANTING CORRECTED FINAL JUDGMENT" is deliberately NOT here: classify reads it as
+        # order_on_motion, so the producer labels the entry from the document and
+        # attached_document_kind stays None. That docket also reads `supported`, but by a different
+        # path and not because of the anchor; it is recorded in MIAMI-AUTOMATION-STATUS.md as found
+        # and not fixed rather than patched blind in the same pass.
+        for title in ('ORDER AMENDING FINAL JUDGMENT OF FORECLOSURE',
+                      'FINAL JUDGMENT OF FORECLOSURE RE-ENTERED'):
+            t = self.cover(title)
+            entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+            self.assertTrue(CV._replaces(entry), title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if '140' in m], title)
+
+    def test_a_prefix_amending_word_still_holds_the_case(self):
+        # The thirty-first review's own case, which must not regress either way.
+        t = self.cover('AMENDED FINAL JUDGMENT OF FORECLOSURE')
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_a_substituted_party_in_the_caption_is_still_not_a_replacement(self):
+        # The thirty-second review's over-fire, which the anchor was the wrong tool for. :236 appends
+        # up to two following ALL-CAPS lines to a title, and a party substitution is not a
+        # substituted judgment - the producer's own `superseded` docstring (:730) says the word
+        # describes the JUDGMENT.
+        t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')],
+                      pages={'140': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                     'SUBSTITUTED PLAINTIFF US BANK NA\n'
+                                     'Total $105,000.00')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+        self.assertIn('SUBSTITUTED PLAINTIFF', entry['attached_document_title'])
+        self.assertFalse(CV._replaces(entry))
+        self.assertEqual(CV.assess(t)['verdict'], 'supported')
+
+    def test_a_substituted_judgment_beside_a_substituted_party_still_holds(self):
+        # The narrowing is only for a title whose ONLY replacing word names a party role. A title
+        # that says both keeps the signal.
+        t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')],
+                      pages={'140': ('AMENDED FINAL JUDGMENT OF FORECLOSURE\n'
+                                     'SUBSTITUTED PLAINTIFF US BANK NA\n'
+                                     'TOTAL $225,000.00')})
+        self.assertTrue(CV._replaces(next(e for e in t['entries'] if e['entry_id'] == '140')))
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    # ---- one passage cited for two facts -------------------------------------------------------
+
+    BOTH = ('FINAL JUDGMENT OF FORECLOSURE\n'
+            'No deficiency judgment is awarded to the plaintiff herein.\n'
+            'Judgment is entered against the borrower in rem.\n'
+            'Total $105,000.00')
+
+    def test_the_passages_are_positional_in_the_producers_own_order(self):
+        # judgment_scope appends the deficiency window first (:635) and the in-rem window after it
+        # (:639), so passages[0] is the deficiency one whenever a deficiency label matched.
+        scope = self.case(pages={'2': self.BOTH})['judgments']['controlling_scope']
+        self.assertEqual((scope['deficiency'], scope['in_rem_only']), ('denied_or_waived', True))
+        self.assertEqual(len(scope['passages']), 2)
+        self.assertIn('deficiency', scope['passages'][0].lower())
+
+    def test_each_scope_note_cites_the_passage_that_belongs_to_it(self):
+        # One cite off passages[0] handed the in-rem note the DEFICIENCY window, truncated before the
+        # words "in rem" appear, so the passage offered as the check could not perform it.
+        notes = CV.assess(self.case(pages={'2': self.BOTH}))['notes']
+        in_rem = [n for n in notes if 'in_rem_only' in n]
+        defic = [n for n in notes if 'judgment_scope deficiency' in n]
+        self.assertTrue(in_rem and defic, notes)
+        self.assertIn('in rem', in_rem[0].split('the producer saved the passage')[1])
+        self.assertIn('deficiency', defic[0].split('the producer saved the passage')[1].lower())
+
+    def test_the_weaker_docket_that_says_only_in_rem_still_cites_its_passage(self):
+        # The judgment whose body said MORE was the one getting the wrong citation.
+        t = self.case(pages={'2': ('FINAL JUDGMENT OF FORECLOSURE\n'
+                                   'Judgment is entered against the borrower in rem.\n'
+                                   'Total $105,000.00')})
+        said = [n for n in CV.assess(t)['notes'] if 'in_rem_only' in n]
+        self.assertTrue(said)
+        self.assertIn('in rem', said[0].split('the producer saved the passage')[1])
+
+    # ---- the closing-word filter over the producer's wider text --------------------------------
+
+    def test_a_conditional_closing_line_does_not_hold_a_live_sale(self):
+        # sale_passages takes EVERY body line matching its sale vocabulary (:398), operative or not,
+        # so the clerk's routine statement of amounts due held a live noticed sale incomplete for
+        # good - and the twin where it was never opened read `supported`, so reading more made the
+        # verdict permanently worse.
+        t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '', '06/01/2026', ''),
+                       (141, 'Statement of Amounts Due at Sale', '', '06/05/2026', '')],
+                      pages={'141': ('STATEMENT OF AMOUNTS DUE AT SALE\n'
+                                     'Amounts due at the foreclosure sale of 10/28/2026.\n'
+                                     'In the event the sale is cancelled or continued, these '
+                                     'amounts must be recomputed.')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '141')
+        self.assertTrue([p for p in entry['sale_passages'] if 'In the event' in p])
+        # The verdict first, so this fails on the previous head for the behaviour and not for the
+        # helper below being absent there.
+        r = CV.assess(t)
+        self.assertFalse([m for m in r['missing'] if '141' in m], r['missing'])
+        self.assertFalse(CV._closes_a_sale(entry))
+
+    def test_a_read_cancellation_that_is_the_act_still_counts(self):
+        # The thirty-second review's finding, which this must not undo.
+        t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '', '06/01/2026', ''),
+                       (141, 'Stipulation', '', '06/05/2026', '')],
+                      pages={'141': ('STIPULATION\n'
+                                     'The foreclosure sale set for 10/28/2026 is hereby cancelled '
+                                     'by agreement.')})
+        self.assertTrue(CV._closes_a_sale(next(e for e in t['entries'] if e['entry_id'] == '141')))
+
+    def test_a_motion_to_cancel_is_not_the_act_either(self):
+        # The producer's own _NOT_OPERATIVE_RE, used as the producer uses it.
+        t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '', '06/01/2026', ''),
+                       (141, 'Statement of Amounts Due at Sale', '', '06/05/2026', '')],
+                      pages={'141': ('STATEMENT OF AMOUNTS DUE AT SALE\n'
+                                     'Amounts due at the foreclosure sale of 10/28/2026, unless '
+                                     'cancelled.')})
+        self.assertFalse(CV._closes_a_sale(next(e for e in t['entries'] if e['entry_id'] == '141')))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

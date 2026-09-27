@@ -205,6 +205,10 @@ _SALE_WORD_RE = re.compile(r'\bsale\b', re.I)
 _RESET_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*)\b', re.I)
 # What an entry must say to be a candidate for CLOSING or MOVING the sale now on the calendar. The
 # question those branches ask is narrow, and every phrasing they exist for carries one of these.
+# Not a producer regex: the one narrowing this file makes to `_REPLACES`, and only over an attached
+# title's caption text. See _replaces for why, and for the producer's own sentence that grounds it.
+_PARTY_SUBSTITUTION_RE = re.compile(r'substitut\w*\s+(?:party\s+)?'
+                                    r'(?:plaintiff|defendant|trustee|servicer|lender)s?\b', re.I)
 _CLOSING_WORD_RE = re.compile(r'\b(?:cancel\w*|vacat\w*|withdraw\w*|reset|reschedul\w*|'
                               r'continu\w*|postpon\w*)\b', re.I)
 # Entry kinds that RAISE a stay (miami_case_timeline :483, :577). Relief, dismissal and discharge
@@ -531,7 +535,7 @@ def _sale_state(timeline, status, kind):
             # reach it: "Statement of Amounts Due at Sale" and "Plaintiff's Bid at Sale" held the
             # ordinary live-lead docket incomplete (twentieth review). The final branch below asks a
             # different question - a FRESH notice after a cancellation - and is not filtered.
-            out = [e for e in out if _CLOSING_WORD_RE.search(_sale_text(e))]
+            out = [e for e in out if _closes_a_sale(e)]
         return out
 
     # The floor for the LIVE-sale branches. Those ask whether an unlabelled entry might be the
@@ -669,6 +673,47 @@ def _classify(text):
         return None
 
 
+_CONDITIONAL_RE = re.compile(r'\b(?:in the event(?: that)?|in case|should the|provided that)\b'
+                             r'[^.;]{0,40}$', re.I)
+
+
+def _closes_a_sale(entry):
+    """True when a closing word in this entry's text is the ACT and not a condition or a request.
+
+    The filter this backs asks one question - could this entry BE the cancellation or the
+    rescheduling of the sale now on the calendar? - and the thirty-second review pointed it at the
+    producer's `sale_passages`, which takes EVERY body line matching its sale vocabulary (:398) with
+    no requirement that the line be operative. So the clerk's routine "Statement of Amounts Due at
+    Sale", whose body carries the ordinary conditional "In the event the sale is cancelled or
+    continued, these amounts must be recomputed", held a live noticed sale `incomplete` for good -
+    and the twin where that statement was never opened read `supported`, so reading more made the
+    verdict permanently worse (thirty-third review, on the round before's own fix).
+
+    miami_case_timeline._NOT_OPERATIVE_RE is the producer's own answer to "the word is here but this
+    is not the act", written for the stay side: a motion or request TO do it, or an `if` / `unless` /
+    `until`. It is used as the producer uses it, against the text ending right before the match. Its
+    vocabulary has no "in the event", so `_CONDITIONAL_RE` above adds the conditional openers this
+    vocabulary needs - the one bound in this function that is not the producer's, and it can only
+    withdraw a hold from a phrasing that is not the act, never from "the sale is hereby cancelled".
+    """
+    text = _sale_text(entry)
+    if not text.strip():
+        return False
+    try:
+        import miami_case_timeline
+        not_operative = miami_case_timeline._NOT_OPERATIVE_RE
+    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
+        not_operative = None
+    for hit in _CLOSING_WORD_RE.finditer(text):
+        before = text[:hit.start()]
+        if not_operative is not None and not_operative.search(before):
+            continue
+        if _CONDITIONAL_RE.search(before):
+            continue
+        return True
+    return False
+
+
 def _sale_text(entry):
     """`_producer_text` plus the producer's OWN record of this entry's sale words.
 
@@ -722,16 +767,28 @@ def _replaces(entry):
         import miami_case_timeline
         if miami_case_timeline._REPLACES.search(text):
             return True
-        # ANCHORED on the title, and that is the producer's own construction, not a bound of ours.
-        # `_body_kind`'s whitelist (:234) anchors the document noun at the start of the line after an
-        # optional `amended |agreed |amended agreed ` prefix, so an amending signal the producer can
-        # put in an attached title is always a PREFIX of it - and :236 then appends up to two
-        # following ALL-CAPS lines, which is caption text. Searching the whole string made
-        # "FINAL JUDGMENT OF FORECLOSURE SUBSTITUTED PLAINTIFF US BANK NA" - a plain copy of the
-        # controlling judgment under a common foreclosure caption - match `substitut\w*` and reopened
-        # the twelfth review's exhibit calibration (thirty-second review, on the round before's own
-        # fix).
-        return bool(title and miami_case_timeline._REPLACES.match(title))
+        if not title:
+            return False
+        # SEARCHED, not anchored. The round before anchored this, on the premise that an amending
+        # signal the producer can put in an attached title is always a prefix of it. That premise was
+        # false: `_body_kind`'s whitelist (:234) anchors the DOCUMENT NOUN, and `order ` is one of the
+        # nouns it accepts, so "ORDER AMENDING FINAL JUDGMENT OF FORECLOSURE" - which the producer's
+        # own regex matches, and which `classify` reads as final_judgment through its bare
+        # `final judgment` substring (:213) - has the amending word at position 6 and was dropped.
+        # That put the thirty-first review's false `supported` straight back, with the superseding
+        # order's own $225,000.00 on the page the run read (thirty-third review). Same for
+        # "FINAL JUDGMENT OF FORECLOSURE RE-ENTERED". The anchor was the wrong tool for what it was
+        # fixing, so only that one shape is excluded now, and everything else holds.
+        hits = list(miami_case_timeline._REPLACES.finditer(title))
+        if not hits:
+            return False
+        # The one shape the anchor existed for. :236 appends up to two following ALL-CAPS lines to a
+        # title, which is caption text, and "SUBSTITUTED PLAINTIFF US BANK NA" under a plain
+        # "FINAL JUDGMENT OF FORECLOSURE" is a party substitution, not a substituted judgment. The
+        # producer says which it means: reconcile_judgments' own `superseded` docstring (:730) reads
+        # "an amended/corrected/substituted JUDGMENT replaces it". So a `substitut*` naming a party
+        # role is not that word, and when it is the ONLY hit in the title there is no signal left.
+        return not all(_PARTY_SUBSTITUTION_RE.match(title, h.start()) for h in hits)
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return False
 
@@ -1173,14 +1230,26 @@ def assess(timeline, dossier=None):
             # so it also fires on "the motion for an in rem judgment was denied". The producer already
             # saves the surrounding passage; printing the conclusion without it asserted something a
             # reader could not check (thirty-second review).
+            # POSITIONAL, and the order is the producer's: judgment_scope appends the deficiency
+            # window first (:635) and the in-rem window after it (:639). One `cite` off passages[0]
+            # therefore handed the in-rem note the DEFICIENCY passage whenever both facts were
+            # present - the ordinary pairing on a Florida foreclosure judgment - truncated before the
+            # words "in rem" appear, so the passage offered as the check could not perform it, and
+            # the judgment whose body said MORE got the wrong citation (thirty-third review, on the
+            # round before's own fix). The in-rem window is always the last one when in_rem_only is
+            # set, since it is appended last and nothing follows it.
             passages = [str(x).strip() for x in (scope.get('passages') or []) if str(x or '').strip()]
-            cite = (' - the producer saved the passage: %r' % passages[0][:240]) if passages else ''
+
+            def _cite(passage):
+                return (' - the producer saved the passage: %r' % passage[:240]) if passage else ''
+
             if scope.get('in_rem_only'):
                 notes.append("the controlling judgment's own body says in rem (judgment_scope "
-                             'in_rem_only)' + cite)
+                             'in_rem_only)' + _cite(passages[-1] if passages else ''))
             if scope.get('deficiency'):
                 notes.append("the controlling judgment's own body records the deficiency as %s "
-                             '(judgment_scope deficiency)' % scope.get('deficiency') + cite)
+                             '(judgment_scope deficiency)' % scope.get('deficiency')
+                             + _cite(passages[0] if passages else ''))
             unnamed = [str(d) for d in (scope.get('defendants_not_named') or []) if str(d).strip()]
             if unnamed:
                 # COUNT ONLY, and deliberately. defendants_not_named comes from docket_defendants
