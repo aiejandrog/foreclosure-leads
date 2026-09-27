@@ -102,6 +102,44 @@ r8 = RL.analyze([unit, unit2, unit2_mtg], FOLIO, 300000, ftype='HOA', owner='OWN
 check('another owner deed in the subdivision refuses placement', r8['parcel_found'] is False and not r8['placed_by'],
       r8.get('placement_refused'))
 
+# second review, finding A: the owner's other unit counts even when its deed carries its own folio,
+# or came by certificate of title
+unit2f = rec('DEED', '6/6/2012', '28000', '3', 0, 'OWNER TESTER', first='ANOTHER SELLER', sub='BAY CONDO',
+             folio='0100000000555')
+r9 = RL.analyze([unit, unit2f, unit2_mtg], FOLIO, 300000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+check('another unit deed carrying its own folio refuses placement', r9['parcel_found'] is False and r9['open_count'] == 0,
+      (r9['open_count'], r9.get('placement_refused')))
+unit2c = rec('CERTIFICATE OF TITLE', '6/6/2012', '28000', '3', 0, 'OWNER TESTER', first='CLERK OF COURT', sub='BAY CONDO')
+r10 = RL.analyze([unit, unit2c, unit2_mtg], FOLIO, 300000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+check('another unit bought by certificate of title refuses placement', r10['parcel_found'] is False,
+      r10.get('placement_refused'))
+
+# finding B: a co-owner's loose mortgage is the household's, as analyze() reads co_owners
+spouse = rec('MORTGAGE', '2/1/2010', '27000', '5', 0, 'SPOUSE BANK', first='TESTER MARIA', intangible=400, sub='')
+r11 = RL.analyze([deed, spouse], FOLIO, 300000, ftype='MORTGAGE', owner='JOSE TESTER',
+                 co_owners=(('TESTER', 'MARIA'),), deed_bps=DEEDS)
+check('a co-owner loose mortgage refuses placement', r11['parcel_found'] is False and not ES.coverage_documented(r11),
+      r11.get('placement_refused'))
+check('_parcel_in reads co-owners too',
+      RL._parcel_in([deed, spouse], FOLIO, DEEDS, 'JOSE TESTER', (('TESTER', 'MARIA'),)) is False)
+
+# finding C: a loose association or code lien naming the owner would be dropped as another property
+for doc, lienor in (('CLAIM OF LIEN', 'BAY CONDOMINIUM ASSOCIATION INC'), ('LIEN', 'CITY OF MIAMI')):
+    ln = rec(doc, '5/5/2020', '31000', '7', 1200, 'OWNER TESTER', first=lienor, sub='')
+    rl = RL.analyze([deed, ln], FOLIO, 300000, ftype='HOA', owner='OWNER TESTER', deed_bps=DEEDS)
+    check('a loose %s naming the owner refuses placement' % doc.lower(),
+          rl['parcel_found'] is False and not ES.coverage_documented(rl), rl.get('placement_refused'))
+rel = rec('RELEASE OF LIEN', '5/5/2021', '31500', '8', 0, 'OWNER TESTER', first='CITY OF MIAMI', sub='')
+rr = RL.analyze([deed, mtg, rel], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+check('a loose release does not refuse placement', rr['parcel_found'] is True, rr.get('placement_refused'))
+
+# the repull gate asks the appraiser only when no row carries the folio
+_asked = []
+check('_parcel_in does not call the appraiser for a folio-carrying search',
+      RL._parcel_in([dict(deed, foliO_NUMBER=FOLIO)], FOLIO, lambda: _asked.append(1) or DEEDS) is True and not _asked)
+check('_parcel_in calls it lazily otherwise', RL._parcel_in(models, FOLIO, lambda: _asked.append(1) or DEEDS) is True
+      and len(_asked) == 1)
+
 # finding 5: --repull's gate knows placement, so it does not pay for a search placement answers
 check('_parcel_in sees a placeable search', RL._parcel_in(models, FOLIO, DEEDS) is True)
 check('_parcel_in without the appraiser is unchanged', RL._parcel_in(models, FOLIO) is False)

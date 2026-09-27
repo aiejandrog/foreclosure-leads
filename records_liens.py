@@ -211,7 +211,7 @@ def _may_submit():
     return True
 
 
-def _parcel_in(models, folio, deed_bps=None, owner=''):
+def _parcel_in(models, folio, deed_bps=None, owner='', co_owners=()):
     """Does a search result reach this parcel: a row carrying the folio, or (deed_bps given) a row
     place_by_deed would place? analyze()'s parcel_found, without the analysis."""
     fol = norm_folio(folio)
@@ -219,7 +219,9 @@ def _parcel_in(models, folio, deed_bps=None, owner=''):
         return False
     if any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models):
         return True
-    return bool(deed_bps) and place_by_deed(models, folio, deed_bps, owner=owner)[1] > 0
+    if callable(deed_bps):
+        deed_bps = deed_bps()                          # asked only when no row carries the folio
+    return bool(deed_bps) and place_by_deed(models, folio, deed_bps, owner=owner, co_owners=co_owners)[1] > 0
 
 
 def _mortgages_narrower(old, new):
@@ -957,7 +959,7 @@ def pa_deed_bookpages(folio):
     return out
 
 
-def place_by_deed(models, folio, deed_bps, owner=''):
+def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
     """Most Miami-Dade index rows carry no folio (measured 2026-09-27: 3,504 of 3,998 rows on 28
     owner searches), so a search that plainly returned the owner's own records still reads as never
     reaching the parcel, and nothing on it is counted. The Property Appraiser lists the book/page of
@@ -994,20 +996,29 @@ def place_by_deed(models, folio, deed_bps, owner=''):
         return models, 0, ('the appraiser deed carries no subdivision' if subs == {''}
                            else 'the appraiser deed rows name different subdivisions')
     sub = next(iter(subs))
-    ow = [w for w in [_owner_words(owner)] if w] or None
+    # the owner and the case's other named people, as analyze() reads them: a spouse's mortgage or
+    # lien rides like the owner's own
+    ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
     def _owner_party(r):
         return ow is None or _maybe_owner(r.get('firsT_PARTY') or '', ow) \
             or _maybe_owner(r.get('seconD_PARTY') or '', ow) \
             or _names_owner(r.get('firsT_PARTY'), ow) or _names_owner(r.get('seconD_PARTY'), ow)
     for r in models:
-        if norm_folio(r.get('foliO_NUMBER', '')):
+        rf = norm_folio(r.get('foliO_NUMBER', ''))
+        if rf == fol:
             continue
         doc = (r.get('doC_TYPE', '') or '').upper()
         sd = (r.get('subdiV_NAME', '') or '').strip().upper()
-        if doc.startswith('MORTGAGE') and not sd and _owner_party(r):
-            return models, 0, 'a mortgage naming the owner carries no folio and no subdivision'
-        if ('DEED' in doc and sd == sub and _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) not in deed_bps
-                and _owner_party(r)):
+        if not rf and not sd and _owner_party(r) and (
+                doc.startswith('MORTGAGE')
+                or (re.search(r'\bLIEN\b|CLAIM', doc) and not re.search(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE', doc))):
+            # a mortgage or a lien naming the owner that cannot be tied to this parcel or ruled out:
+            # dropped as "another property", it would leave an empty chain that reads as CLEAR
+            return models, 0, 'a mortgage or lien naming the owner carries no folio and no subdivision'
+        if (('DEED' in doc or 'CERTIFICATE OF TITLE' in doc) and sd == sub and _owner_party(r)
+                and (rf or _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) not in deed_bps)):
+            # a conveyance to or from the owner in the same subdivision that is not this parcel's:
+            # another unit or lot, whose loans would be counted here
             return models, 0, 'the owner has another deed in this subdivision the appraiser does not list here'
     return out, placed, ''
 
@@ -1031,7 +1042,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # Only asked when no row carries the folio; a row at one of them is the parcel's own deed.
     placed, refused = 0, ''
     if deed_bps and not any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models):
-        models, placed, refused = place_by_deed(models, folio, deed_bps, owner=owner)
+        models, placed, refused = place_by_deed(models, folio, deed_bps, owner=owner, co_owners=co_owners)
     # ANCHOR the subject's subdivision from a record that DOES carry the subject folio (usually the deed).
     # folio is blank on most newer mortgages, but subdivision is consistent — so subdivision + owner-name
     # isolates the property, while folio alone would drop the very mortgages we need.
@@ -1760,7 +1771,7 @@ def _run(a, ap):
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
-                if a.repull and not _parcel_in(models, folio, _deeds_for(), oc):
+                if a.repull and not _parcel_in(models, folio, _deeds_for, oc, _co):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
                     # search cannot re-read this parcel, so search afresh (free first) instead of keeping
@@ -1824,7 +1835,7 @@ def _run(a, ap):
             # another empty result, same as now.
             _searched = oc
             _owner_models = _owner_src = None
-            if a.repull and models is not None and not _parcel_in(models, folio, _deeds_for(), oc):
+            if a.repull and models is not None and not _parcel_in(models, folio, _deeds_for, oc, _co):
                 # the owner's name does not reach this parcel (a chain first found through a
                 # defendant): try the defendants too, and fall back to this result if they fail
                 _owner_models, models = models, None
@@ -1858,7 +1869,7 @@ def _run(a, ap):
                         models = fetch_via_turnstile(_sp)
                         _src = 'paid'
                         _def_blocked = _def_blocked or models is None
-                    if models is not None and a.repull and not _parcel_in(models, folio, _deeds_for(), _nm):
+                    if models is not None and a.repull and not _parcel_in(models, folio, _deeds_for, _nm, _co):
                         if _src != 'paid' and _sp[0].upper() not in _paid_sn:
                             _free_miss = True                 # this surname was never asked the paid way
                         models = None                         # not this parcel either; next defendant
