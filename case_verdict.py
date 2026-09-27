@@ -207,8 +207,12 @@ _RESET_WORD_RE = re.compile(r'\b(?:reset|reschedul\w*)\b', re.I)
 # question those branches ask is narrow, and every phrasing they exist for carries one of these.
 # Not a producer regex: the one narrowing this file makes to `_REPLACES`, and only over an attached
 # title's caption text. See _replaces for why, and for the producer's own sentence that grounds it.
-_PARTY_SUBSTITUTION_RE = re.compile(r'substitut\w*\s+(?:party\s+)?'
-                                    r'(?:plaintiff|defendant|trustee|servicer|lender)s?\b', re.I)
+# `substitution OF counsel` broke the pattern on the `of`, and `substituted service` is service of
+# process and names no party at all; both held a routine docket incomplete for ever, since nothing a
+# later run reads changes a caption (thirty-fourth review).
+_PARTY_SUBSTITUTION_RE = re.compile(r'substitut\w*\s+(?:of\s+)?(?:party\s+)?'
+                                    r'(?:plaintiff|defendant|trustee|servicer|lender|counsel|'
+                                    r'attorneys?|service)s?\b', re.I)
 _CLOSING_WORD_RE = re.compile(r'\b(?:cancel\w*|vacat\w*|withdraw\w*|reset|reschedul\w*|'
                               r'continu\w*|postpon\w*)\b', re.I)
 # Entry kinds that RAISE a stay (miami_case_timeline :483, :577). Relief, dismissal and discharge
@@ -673,6 +677,14 @@ def _classify(text):
         return None
 
 
+# "until further notice" and "until further order" are not conditions on the act - "the sale set for
+# 10/28/2026 is, until further notice, cancelled" IS the cancellation. The producer's own
+# _NOT_OPERATIVE_RE guards `until` because on the stay side it reads "until the stay is reinstated",
+# and borrowing it wholesale dropped that cancellation and read `supported` over a live sale a read
+# document says is off - the fix of the round before turning into a false `supported` of its own
+# (thirty-fourth review). The idiom is removed from the window before the producer's guard sees it,
+# which leaves every other `until` the producer's to judge.
+_UNTIL_FURTHER_RE = re.compile(r'\buntil\s+further\s+(?:notice|order)s?\b,?', re.I)
 _CONDITIONAL_RE = re.compile(r'\b(?:in the event(?: that)?|in case|should the|provided that)\b'
                              r'[^.;]{0,40}$', re.I)
 
@@ -705,7 +717,11 @@ def _closes_a_sale(entry):
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         not_operative = None
     for hit in _CLOSING_WORD_RE.finditer(text):
-        before = text[:hit.start()]
+        # SIXTY characters, which is the window the producer itself uses at its own call site (:310).
+        # Searching the whole prefix let a marker anywhere earlier in the text guard this verb, and
+        # `_sale_text` joins its parts with a bare space, so there is not even a sentence boundary
+        # between the docket line and each body line (thirty-fourth review).
+        before = _UNTIL_FURTHER_RE.sub(' ', text[max(0, hit.start() - 60):hit.start()])
         if not_operative is not None and not_operative.search(before):
             continue
         if _CONDITIONAL_RE.search(before):
@@ -738,6 +754,78 @@ def _sale_text(entry):
     return ' '.join(x for x in parts if x)
 
 
+# classify's own order_on_motion head (miami_case_timeline :210,
+# r'order.*motion|order (?:granting|denying|awarding)'), which its check list reaches BEFORE its bare
+# ('final_judgment', r'final judgment') row (:213). Only the GRANTING dispositions: an order denying,
+# or an "order on motion", does not say on its face that a judgment was entered, and inferring that
+# would be a classification of ours. The optional motion swallow mirrors classify's own motion prefix
+# list (:141).
+_ORDER_GRANT_HEAD_RE = re.compile(
+    r'(?:amended\s+|agreed\s+|amended\s+agreed\s+)?order\s+(?:granting|awarding)\b'
+    r"(?:\s+(?:the\s+)?(?:plaintiff|defendant|movant)(?:'s|s')?)?"
+    r'(?:\s+(?:(?:amended|emergency|renewed|verified|unopposed)\s+)*motion\s+(?:for|to)'
+    r'\s+(?:enter\s+|entry\s+of\s+)?)?\s*', re.I)
+# The producer's own final_judgment row (:213), read on a string its own check list never reached.
+_FINAL_JUDGMENT_RE = re.compile(r'final judgment', re.I)
+# The producer's own granted/denied vocabulary from motion_disposition_passages (:397), split so a
+# DENIED disposition cannot hold anything.
+_GRANTED_RE = re.compile(r'\b(?:is|hereby|be)\s+granted\b|\bgrants\b', re.I)
+
+
+def _replacing_words(text):
+    """The producer's own _REPLACES hits in `text`, minus the caption party substitutions.
+
+    The same narrowing `_replaces` makes on an attached title, in one place so it cannot be applied
+    on one side of a check and not the other.
+    """
+    try:
+        import miami_case_timeline
+    except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
+        return []
+    return [h for h in miami_case_timeline._REPLACES.finditer(str(text or ''))
+            if not _PARTY_SUBSTITUTION_RE.match(str(text or ''), h.start())]
+
+
+def _order_grants_a_replacement(entry):
+    """True when an entry the producer labelled `order_on_motion` says, in the producer's own words,
+    that it GRANTED a judgment replacing an earlier one.
+
+    `classify`'s check list reaches ('order_on_motion', r'order.*motion|order (?:granting|denying|
+    awarding)') at :210, six rows before its bare ('final_judgment', r'final judgment') at :213. So a
+    read page titled "ORDER GRANTING CORRECTED FINAL JUDGMENT" is labelled by the DISPOSITION: it is
+    not in `_DISPOSITIVE_BODIES` (:279), so :353 never moves it to `attached_document_kind`, the cover
+    sweep's `_cover_subject` cannot strip an `order ` head with `_FILED_ABOUT_RE` (which has no
+    `order` noun, :273), and `reconcile_judgments` keys on kind == 'final_judgment' (:752). The
+    superseded judgment stayed operative and controlling and the case read `supported` with its figure
+    verified to the cent, while the same document titled "ORDER AMENDING FINAL JUDGMENT" - strictly no
+    more known - held (thirty-fourth review).
+
+    Two triggers, both restatements, OR'd. Neither may be the other's precondition: the passage one
+    exists only where a page was READ, so requiring it would let the weaker docket read better.
+
+      title  the producer's own granting head stripped off the string the producer took the label
+             from, its own classifier re-run on the rest - the composition `_cover_subject` already
+             makes one check-list row along - and its own `_REPLACES` in that same remainder.
+      body   `motion_disposition_passages` (:397), which the producer saves for exactly this kind and
+             which nothing here read: a line it recorded as GRANTING, naming a final judgment, with a
+             replacing word in it.
+    """
+    for text in (str(entry.get('operative_text') or '').strip(), _index_text(entry).strip()):
+        head = _ORDER_GRANT_HEAD_RE.match(text) if text else None
+        if not head:
+            continue
+        rest = text[head.end():]
+        if _classify(rest) == 'final_judgment' and _replacing_words(rest):
+            return True
+    for line in _rows(entry, 'motion_disposition_passages'):
+        line = str(line or '')
+        if (_GRANTED_RE.search(line) and _FINAL_JUDGMENT_RE.search(line)
+                and _replacing_words(line)):
+            return True
+    return False
+
+
+
 def _replaces(entry):
     """True when this entry's own words say it REPLACES an earlier judgment.
 
@@ -765,7 +853,12 @@ def _replaces(entry):
         return False
     try:
         import miami_case_timeline
-        if miami_case_timeline._REPLACES.search(text):
+        # `_replacing_words`, not a bare search, on THIS side too. The round before narrowed only the
+        # title branch, and `_producer_text` carries the clerk's `comments`, where OCS dockets put
+        # "Substituted Plaintiff: US Bank NA" - so that boilerplate held a routine docket incomplete
+        # while the same docket without the comment read `supported`: the narrowing applied on one
+        # side of a check and not the other (thirty-fourth review).
+        if _replacing_words(text):
             return True
         if not title:
             return False
@@ -779,7 +872,7 @@ def _replaces(entry):
         # order's own $225,000.00 on the page the run read (thirty-third review). Same for
         # "FINAL JUDGMENT OF FORECLOSURE RE-ENTERED". The anchor was the wrong tool for what it was
         # fixing, so only that one shape is excluded now, and everything else holds.
-        hits = list(miami_case_timeline._REPLACES.finditer(title))
+        hits = _replacing_words(title)
         if not hits:
             return False
         # The one shape the anchor existed for. :236 appends up to two following ALL-CAPS lines to a
@@ -788,7 +881,7 @@ def _replaces(entry):
         # producer says which it means: reconcile_judgments' own `superseded` docstring (:730) reads
         # "an amended/corrected/substituted JUDGMENT replaces it". So a `substitut*` naming a party
         # role is not that word, and when it is the ONLY hit in the title there is no signal left.
-        return not all(_PARTY_SUBSTITUTION_RE.match(title, h.start()) for h in hits)
+        return bool(hits)
     except Exception:                                  # noqa: BLE001 - a missing parser is not a verdict
         return False
 
@@ -1624,6 +1717,23 @@ def assess(timeline, dossier=None):
             if named:
                 said += ' - the document\'s own first page is titled %r' % named[:200]
             missing.append(said)
+    # An order the producer labelled by its DISPOSITION, granting a judgment that replaces the one
+    # this file vouches for. See _order_grants_a_replacement: the label comes from classify's
+    # order_on_motion row, which its check list reaches before its own final_judgment row, so no
+    # check above sees it (thirty-fourth review).
+    for entry in _rows(timeline, 'entries'):
+        if (not isinstance(entry, dict) or _after_cutoff(entry, timeline.get('as_of'))
+                or entry.get('attached_document_kind') is not None
+                or 'order_on_motion' not in _producer_labels(entry)
+                or not _order_grants_a_replacement(entry)):
+            continue
+        named = str(entry.get('operative_text') or '').strip()
+        missing.append('entry %s is an order the run labelled order_on_motion by its disposition, '
+                       'and its own words say it grants a judgment replacing an earlier one, which '
+                       'no summary this verdict rests on took in; which judgment controls is not '
+                       'settled in this file%s'
+                       % (entry.get('entry_id') or '?',
+                          ' - the run read the title %r' % named[:200] if named else ''))
     # An entry the producer LABELLED a posture-deciding kind and could not DATE. build_timeline has
     # one net for these - :519 forces status 'unclear' for every undated entry `_transition`
     # recognises - and `_transition` returns None for exactly the kinds that then reach nothing else:

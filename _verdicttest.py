@@ -4209,5 +4209,152 @@ class ThirtyThirdReviewTests(unittest.TestCase):
         self.assertFalse(CV._closes_a_sale(next(e for e in t['entries'] if e['entry_id'] == '141')))
 
 
+class ThirtyFourthReviewTests(unittest.TestCase):
+    """An order the producer labels by its disposition, and the round before's own guard dropping a
+    real cancellation.
+    """
+    built = staticmethod(EleventhReviewTests.__dict__['built'].__func__)
+    JUDGED = [(1, 'Complaint', '', '01/05/2026', ''),
+              (2, 'Final Judgment of Foreclosure', '', '02/10/2026', '')]
+    PAGE = 'FINAL JUDGMENT OF FORECLOSURE\nTotal $105,000.00'
+
+    def case(self, extra=(), pages=None):
+        pg = {'2': self.PAGE}
+        pg.update(pages or {})
+        return self.built(self.JUDGED + list(extra), controlling='2', amount=105000.00, pages=pg)
+
+    def read(self, title, clerk='Notice of Filing'):
+        return self.case([(140, clerk, '', '06/01/2026', '')],
+                         pages={'140': title + '\nTOTAL $225,000.00'})
+
+    # ---- an order labelled by its disposition --------------------------------------------------
+
+    def test_classify_reaches_order_on_motion_before_its_own_final_judgment_row(self):
+        # The producer fact the whole finding rests on: ('order_on_motion', r'order.*motion|order
+        # (?:granting|denying|awarding)') is at :210, six rows before ('final_judgment',
+        # r'final judgment') at :213, and order_on_motion is not in _DISPOSITIVE_BODIES (:279), so
+        # :353 never moves the label to attached_document_kind.
+        entry = next(e for e in self.read('ORDER GRANTING CORRECTED FINAL JUDGMENT')['entries']
+                     if e['entry_id'] == '140')
+        self.assertEqual((entry['kind'], entry['kind_source']), ('order_on_motion', 'document'))
+        self.assertIsNone(entry.get('attached_document_kind'))
+        self.assertTrue(CV._replaces(entry))            # the signal was there and unread
+
+    def test_an_order_granting_a_replacing_judgment_holds_the_case(self):
+        for title in ('ORDER GRANTING CORRECTED FINAL JUDGMENT',
+                      'ORDER GRANTING AMENDED FINAL JUDGMENT OF FORECLOSURE',
+                      'ORDER GRANTING MOTION FOR CORRECTED FINAL JUDGMENT',
+                      "ORDER GRANTING PLAINTIFF'S MOTION FOR AMENDED FINAL JUDGMENT"):
+            t = self.read(title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'incomplete', (title, r['missing']))
+            self.assertTrue([m for m in r['missing'] if '140' in m], title)
+
+    def test_the_unread_half_reads_no_better_than_the_read_half(self):
+        # The same words on the CLERK's line with no document at all. Scoping the check to
+        # operative_text alone would have let the weaker docket read better.
+        t = self.case([(140, 'Order Granting Corrected Final Judgment', '', '06/01/2026', '')])
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+    def test_the_ordinary_orders_on_a_routine_docket_do_not_hold_it(self):
+        # The calibration. None of these says a replacing judgment was entered, and holding them
+        # would hold most foreclosure dockets for ever.
+        for title in ('ORDER GRANTING AMENDED MOTION',
+                      'ORDER GRANTING MOTION TO AMEND COMPLAINT',
+                      'ORDER GRANTING MOTION TO AMEND THE CASE STYLE',
+                      'ORDER GRANTING MOTION TO SUBSTITUTE PARTY PLAINTIFF',
+                      'ORDER GRANTING MOTION FOR SUMMARY JUDGMENT',
+                      'ORDER GRANTING FINAL JUDGMENT',
+                      'ORDER DENYING MOTION FOR CORRECTED FINAL JUDGMENT'):
+            t = self.read(title)
+            r = CV.assess(t)
+            self.assertEqual(r['verdict'], 'supported', (title, r['missing']))
+
+    def test_the_exhibit_calibration_survives(self):
+        # The twelfth review's, again: a plain copy of the same judgment filed as an exhibit.
+        for clerk in ('Motion for Summary Judgment', 'Memorandum of Law', 'Status Report',
+                      'Proposed Order', 'Notice of Filing'):
+            t = self.case([(140, clerk, '', '06/01/2026', '')],
+                          pages={'140': 'FINAL JUDGMENT OF FORECLOSURE\nTOTAL $105,000.00'})
+            self.assertEqual(CV.assess(t)['verdict'], 'supported', clerk)
+
+    def test_the_producers_own_granted_passage_is_the_second_trigger(self):
+        # motion_disposition_passages (:397) is saved for exactly this kind and nothing here read it.
+        # It is an OR-branch and never a precondition: the producer saves it only from pages it READ,
+        # so requiring it would let the less-read docket read better.
+        for body, held in (('The Motion for Corrected Final Judgment is hereby GRANTED.', True),
+                           ('The Motion for Corrected Final Judgment is hereby DENIED.', False),
+                           ('The Motion to Substitute Party Plaintiff is hereby granted.', False)):
+            t = self.case([(140, 'Order on Motion', '', '06/01/2026', '')],
+                          pages={'140': 'ORDER ON MOTION FOR ENTRY OF JUDGMENT\n' + body})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+            self.assertEqual(entry['kind'], 'order_on_motion')
+            self.assertTrue(entry['motion_disposition_passages'], body)
+            self.assertEqual(CV._order_grants_a_replacement(entry), held, body)
+            self.assertEqual(CV.assess(t)['verdict'], 'incomplete' if held else 'supported', body)
+
+    # ---- the round before's own guard --------------------------------------------------------
+
+    def test_a_cancellation_qualified_until_further_notice_still_counts(self):
+        # The producer's _NOT_OPERATIVE_RE guards `until` because on the STAY side it reads "until the
+        # stay is reinstated". Borrowed wholesale, it dropped "the sale set for 10/28/2026 is, until
+        # further notice, cancelled" - which IS the cancellation - and the case read `supported` over a
+        # live sale a read document says is off. The round before's fix became a false `supported`.
+        t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '', '06/01/2026', ''),
+                       (141, 'Stipulation', '', '06/05/2026', '')],
+                      pages={'141': ('STIPULATION\nThe foreclosure sale set for 10/28/2026 is, '
+                                     'until further notice, cancelled.')})
+        entry = next(e for e in t['entries'] if e['entry_id'] == '141')
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'incomplete', (r['missing'], r['notes']))
+        self.assertTrue(CV._closes_a_sale(entry))
+
+    def test_the_conditional_and_motion_guards_still_hold(self):
+        # Both calibrations the guard exists for, unchanged.
+        for body, closes in (
+                ('Amounts due at the foreclosure sale of 10/28/2026, unless cancelled.', False),
+                ('In the event the sale is cancelled or continued, these amounts must be '
+                 'recomputed.', False),
+                ('The foreclosure sale set for 10/28/2026 is hereby cancelled by agreement.', True)):
+            t = self.case([(140, 'Notice of Foreclosure Sale set for 10/28/2026', '',
+                            '06/01/2026', ''),
+                           (141, 'Statement of Amounts Due at Sale', '', '06/05/2026', '')],
+                          pages={'141': 'STATEMENT OF AMOUNTS DUE AT SALE\n' + body})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '141')
+            self.assertEqual(CV._closes_a_sale(entry), closes, body)
+
+    # ---- one narrowing, on every side of every check -------------------------------------------
+
+    def test_the_clerks_substituted_plaintiff_comment_does_not_hold_a_routine_docket(self):
+        # _producer_text carries the clerk's `comments`, where OCS dockets put "Substituted
+        # Plaintiff: ...". The round before narrowed only the TITLE branch, so that boilerplate held
+        # a routine docket while the same docket without the comment read `supported`.
+        t = self.case([(140, 'Notice of Filing Final Judgment',
+                        'Substituted Plaintiff: US Bank NA as trustee', '06/01/2026', '')],
+                      pages={'140': 'FINAL JUDGMENT OF FORECLOSURE\nTOTAL $105,000.00'})
+        r = CV.assess(t)
+        self.assertEqual(r['verdict'], 'supported', r['missing'])
+
+    def test_the_caption_phrasings_the_role_list_missed(self):
+        # "substitution OF counsel" broke the pattern on the `of`, and "substituted service" is
+        # service of process and names no party at all. Both held a routine docket for ever.
+        for caption in ('SUBSTITUTED PLAINTIFF US BANK NA', 'SUBSTITUTED PARTY PLAINTIFF WELLS FARGO',
+                        'SUBSTITUTED SERVICE ON DEFENDANT JONES',
+                        'SUBSTITUTION OF COUNSEL FOR PLAINTIFF'):
+            t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')],
+                          pages={'140': ('FINAL JUDGMENT OF FORECLOSURE\n' + caption
+                                         + '\nTotal $105,000.00')})
+            entry = next(e for e in t['entries'] if e['entry_id'] == '140')
+            self.assertFalse(CV._replaces(entry), caption)
+            self.assertEqual(CV.assess(t)['verdict'], 'supported', caption)
+
+    def test_a_real_replacement_beside_a_substituted_party_still_holds(self):
+        t = self.case([(140, 'Notice of Filing', '', '06/01/2026', '')],
+                      pages={'140': ('AMENDED FINAL JUDGMENT OF FORECLOSURE\n'
+                                     'SUBSTITUTED PLAINTIFF US BANK NA\nTOTAL $225,000.00')})
+        self.assertTrue(CV._replaces(next(e for e in t['entries'] if e['entry_id'] == '140')))
+        self.assertEqual(CV.assess(t)['verdict'], 'incomplete')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -533,6 +533,68 @@ than patched blind in the same pass, which is how the last eight rounds each pro
 defect. The producer also saves `motion_disposition_passages` (:397) for exactly this kind, and
 nothing here reads it.
 
+**Thirty-fourth review.** The gap the round before left open, closed; and that round's own fix had
+become a false `supported` of its own.
+
+`classify`'s check list reaches `('order_on_motion', r'order.*motion|order (?:granting|denying|
+awarding)')` at :210, six rows before its bare `('final_judgment', r'final judgment')` at :213, and
+`order_on_motion` is not in `_DISPOSITIVE_BODIES` (:279). So a read page titled "ORDER GRANTING
+CORRECTED FINAL JUDGMENT" is labelled by its DISPOSITION: :353 never moves the label to
+`attached_document_kind`, the cover sweep's gate needs `index_kind` and only gets it when the calendar
+override fired, `_FILED_ABOUT_RE` (:274) has no `order` noun so the head could not be stripped anyway,
+and `reconcile_judgments` keys on `kind == 'final_judgment'` (:752). The superseded judgment stayed
+operative and controlling and the case read `supported` with its figure verified to the cent, while the
+same document titled "ORDER AMENDING FINAL JUDGMENT" - no more known - held. Four title shapes reach
+it, and so does the clerk line alone on the unread half. `order_on_motion` is the only `classify` label
+that both can carry a read judgment-replacing title and reaches no check here; every other route was
+driven and is covered.
+
+`_order_grants_a_replacement` restates and invents nothing. The producer's own granting head is
+stripped off the string the producer took the label from, its own classifier is re-run on the
+remainder, and its own `_REPLACES` must match in that same remainder - the composition
+`_cover_subject` already makes, one check-list row along. Only the GRANTING dispositions: an order
+denying, or a bare "order on motion", does not say on its face that a judgment was entered, and
+deciding that it did would be a classification of ours. It is applied to `operative_text` AND the index
+text, so the unread half cannot read better. The second trigger is
+`motion_disposition_passages` (:397), which the producer saves for exactly this kind and nothing here
+read - an OR-branch and never a precondition, because the producer saves it only from pages it READ, so
+requiring it would let the less-read docket read better. The producer's granted/denied vocabulary is
+split, so a DENIED line holds nothing. Calibration driven: "Order Granting Amended Motion", "...Motion
+to Amend Complaint", "...to Amend the Case Style", "...to Substitute Party Plaintiff", "...for Summary
+Judgment", "Order Granting Final Judgment" and "Order Denying Motion for Corrected Final Judgment" all
+stay `supported`, and the twelfth review's exhibit calibration survives under all five covers.
+
+The round before's `_closes_a_sale` had become a false `supported`. The producer's
+`_NOT_OPERATIVE_RE` guards `until` because on the STAY side it reads "until the stay is reinstated";
+borrowed wholesale for the sale side it dropped "the foreclosure sale set for 10/28/2026 is, until
+further notice, cancelled" - which IS the cancellation - and the case read `supported` over a live sale
+a read document says is off. That docket was `incomplete` at 03d7821 and `supported` at 2b3c469, so the
+fix caused it. The idiom is removed from the window before the producer's guard sees it, which leaves
+every other `until` the producer's to judge, and the window is now the SIXTY characters the producer
+itself uses at its own call site (:310) - searching the whole prefix let a marker anywhere earlier
+guard this verb, and `_sale_text` joins its parts with a bare space, so there is not even a sentence
+boundary between the docket line and each body line.
+
+And the round before's `_PARTY_SUBSTITUTION_RE` narrowing was applied on one side of a check and not
+the other - the same family as most of these rounds. `_producer_text` carries the clerk's `comments`,
+where OCS dockets put "Substituted Plaintiff: US Bank NA", and that branch had no narrowing at all, so
+the boilerplate held a routine docket `incomplete` while the same docket without the comment read
+`supported`. There is one `_replacing_words` helper now, used by every branch. Its role list also
+missed two caption phrasings that held a routine docket for ever, since nothing a later run reads
+changes a caption: "substitution OF counsel" broke the pattern on the `of`, and "substituted service"
+is service of process and names no party at all.
+
+**Reported, not fixed (producer surface).** A read page 1 titled "CORRECTED FINAL JUDGMENT OF
+FORECLOSURE" under a bland "Notice of Filing" reads `supported`. `_body_kind`'s prefix list (:234)
+allows only `amended |agreed |amended agreed ` before the document noun, so a line starting CORRECTED
+is not a title at all: `body_kind` is None, `attached_document_title` is absent, and no producer field
+carries the string, so nothing here can read it - the producer's two lists disagree with each other,
+since its own `_REPLACES` (:697) does treat `corrected` and `re-?entered` as replacing words. The
+prefix list should accept the words that regex recognises. Also: `sale_passages` (:398) is per-line and
+keys on the sale vocabulary, so an OCR-wrapped cancellation whose verb falls on the next line ("...is
+hereby" / "cancelled by agreement...") is saved nowhere and reads `supported`; that one predates these
+rounds and is equally unreachable from here.
+
 **Producer line citations re-pointed.** main's E1 commit moved `miami_case_timeline` by fourteen lines in
 its first half and about eighty in its judgments half, so every citation in this file and in
 `case_verdict.py` was stale. 90 were remapped by matching each cited line's text to its new position and
