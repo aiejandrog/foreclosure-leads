@@ -997,25 +997,53 @@ def place_by_deed(models, folio, deed_bps, owner='', co_owners=()):
                            else 'the appraiser deed rows name different subdivisions')
     sub = next(iter(subs))
     # the owner and the case's other named people, as analyze() reads them: a spouse's mortgage or
-    # lien rides like the owner's own
+    # lien rides like the owner's own. And, as analyze() does, every given name recorded beside the
+    # owner's surname on the GRANTEE side of the deed being placed ('TESTER OWNER & HELEN').
     ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
+    _o0 = _owner_words(owner)
+    if ow and _o0 and _o0[0] == 'person':
+        _sn = re.findall(r'[A-Z0-9]+', _o0[1].replace("'", ''))
+        for r in out:
+            if r.get('_placed_by') and 'DEED' in (r.get('doC_TYPE', '') or '').upper():
+                toks = re.findall(r'[A-Z0-9]+', (r.get('seconD_PARTY') or '').upper().replace("'", ''))
+                if _sn and all(t in toks for t in _sn):
+                    ow += [('person', _o0[1], g) for g in toks
+                           if len(g) > 1 and g not in _sn and g not in _NOT_GIVEN and not g.isdigit()]
     def _owner_party(r):
         return ow is None or _maybe_owner(r.get('firsT_PARTY') or '', ow) \
             or _maybe_owner(r.get('seconD_PARTY') or '', ow) \
             or _names_owner(r.get('firsT_PARTY'), ow) or _names_owner(r.get('seconD_PARTY'), ow)
+    def _conveyance(doc):
+        return 'DEED' in doc or 'CERTIFICATE OF TITLE' in doc
+    # a claim analyze() would tie to a parcel: liens, claims of lien, and the certified orders and
+    # notices a city files its code liens as; never a release, a waiver or a certificate of title
+    _claim = lambda doc: (bool(re.search(r'\bLIEN\b|CLAIM|^CERT|^NOTICE', doc))
+                          and not re.search(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE|NOTICE OF COMMENCEMENT'
+                                            r'|WAIVER|CONTEST|SUBORDINAT|CERTIFICATE OF TITLE', doc))
+    # subdivisions where the search shows a conveyance to or from the owner: an owner-named loan
+    # there is plainly another property of theirs, not this parcel's under another spelling
+    owned_elsewhere = {(r.get('subdiV_NAME', '') or '').strip().upper() for r in models
+                       if _conveyance((r.get('doC_TYPE', '') or '').upper()) and _owner_party(r)}
     for r in models:
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         if rf == fol:
             continue
         doc = (r.get('doC_TYPE', '') or '').upper()
         sd = (r.get('subdiV_NAME', '') or '').strip().upper()
-        if not rf and not sd and _owner_party(r) and (
-                doc.startswith('MORTGAGE')
-                or (re.search(r'\bLIEN\b|CLAIM', doc) and not re.search(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE', doc))):
-            # a mortgage or a lien naming the owner that cannot be tied to this parcel or ruled out:
-            # dropped as "another property", it would leave an empty chain that reads as CLEAR
-            return models, 0, 'a mortgage or lien naming the owner carries no folio and no subdivision'
-        if (('DEED' in doc or 'CERTIFICATE OF TITLE' in doc) and sd == sub and _owner_party(r)
+        debt = doc.startswith('MORTGAGE') or _claim(doc)
+        if not rf and debt and _owner_party(r):
+            if not sd:
+                # cannot be tied to this parcel or ruled out: dropped as "another property", it
+                # would leave an empty chain that reads as CLEAR
+                return models, 0, 'a mortgage or lien naming the owner carries no folio and no subdivision'
+            if sd != sub and sd not in owned_elsewhere:
+                # another subdivision with no deed of the owner's there: it may be this parcel's
+                # loan indexed under a variant subdivision name, so it cannot be ruled out
+                return models, 0, 'a mortgage or lien naming the owner sits in a subdivision the owner has no deed in'
+        if not rf and sd == sub and doc.startswith('MORTGAGE') and not _owner_party(r):
+            # a same-surname stranger's loan in this subdivision would be counted as this parcel's
+            return models, 0, 'another person of the owner\'s surname has a mortgage in this subdivision'
+        if (_conveyance(doc) and sd == sub and _owner_party(r)
                 and (rf or _bp_key(r.get('reC_BOOK'), r.get('reC_PAGE')) not in deed_bps)):
             # a conveyance to or from the owner in the same subdivision that is not this parcel's:
             # another unit or lot, whose loans would be counted here

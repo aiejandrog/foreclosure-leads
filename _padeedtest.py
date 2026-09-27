@@ -41,7 +41,9 @@ deed = rec('DEED', '2/1/2008', '26100', '0010', 0, 'OWNER TESTER', first='PRIOR 
 mtg = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, PLAINTIFF, intangible=700)       # $350,000 face
 mtg2 = rec('MORTGAGE', '3/3/2015', '29500', '40', 0, 'OTHER LENDER', intangible=100)
 elsewhere_mtg = rec('MORTGAGE', '4/4/2016', '30000', '5', 0, 'THIRD LENDER', intangible=200, sub='ELSEWHERE ESTATES')
-models = [deed, mtg, mtg2, elsewhere_mtg]
+# the owner's other house: its own deed is on the search, so its loan is plainly not this parcel's
+elsewhere_deed = rec('DEED', '4/4/2016', '30000', '4', 0, 'OWNER TESTER', first='A SELLER', sub='ELSEWHERE ESTATES')
+models = [deed, mtg, mtg2, elsewhere_deed, elsewhere_mtg]
 DEEDS = {('26100', '10')}                      # the appraiser's book/page, leading zeros stripped
 
 before = RL.analyze(models, FOLIO, 300000, ftype='MORTGAGE', plaintiff=PLAINTIFF)
@@ -55,6 +57,30 @@ check('placement is labelled', after['placed_by'].startswith('appraiser deed'), 
 check('its subdivision anchors the parcel', after['subdiv'] == 'TEST GARDENS', after['subdiv'])
 check('both mortgages in that subdivision are counted', after['open_count'] == 2, after['open_count'])
 check('a mortgage in another subdivision is not', all('THIRD' not in (l.get('party') or '') for l in after['liens']))
+
+# third review, finding 4: an owner loan in a subdivision the owner holds no deed in may be this
+# parcel's under a variant subdivision name ('TEST GARDENS SEC 1'), so it cannot be ruled out
+variant = rec('MORTGAGE', '4/4/2016', '30000', '5', 0, 'THIRD LENDER', intangible=200, sub='TEST GARDENS SEC 1')
+r12 = RL.analyze([deed, mtg, variant], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+check('an owner loan in a subdivision with no owner deed refuses placement', r12['parcel_found'] is False,
+      r12.get('placement_refused'))
+# finding 3: a same-surname stranger's loan in the subdivision would be counted as this parcel's
+namesake = rec('MORTGAGE', '5/5/2017', '30500', '9', 0, 'NAMESAKE BANK', first='TESTER MARIA', intangible=200)
+r13 = RL.analyze([deed, mtg, namesake], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+check('a namesake loan in the subdivision refuses placement', r13['parcel_found'] is False and r13['open_count'] == 0,
+      (r13['open_count'], r13.get('placement_refused')))
+# finding 1: the city files code liens as certified orders and notices
+for doc in ('CERTIFIED COPY OF ORDER', 'NOTICE - NOT'):
+    cl = rec(doc, '5/5/2020', '31000', '7', 1200, 'OWNER TESTER', first='CITY OF MIAMI', sub='')
+    rc = RL.analyze([deed, cl], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+    check('a loose %s naming the owner refuses placement' % doc.lower(),
+          rc['parcel_found'] is False and not ES.coverage_documented(rc), rc.get('placement_refused'))
+# finding 2: a spouse named only on the deed's grantee side is household, as analyze() reads it
+hdeed = rec('DEED', '2/1/2008', '26100', '10', 0, 'TESTER OWNER & HELEN', first='PRIOR SELLER')
+hmtg = rec('MORTGAGE', '2/1/2012', '27500', '2', 0, 'HELEN BANK', first='TESTER HELEN', intangible=300, sub='')
+r14 = RL.analyze([hdeed, hmtg], FOLIO, 300000, ftype='MORTGAGE', owner='OWNER TESTER', deed_bps=DEEDS)
+check('a deed-named spouse loose mortgage refuses placement', r14['parcel_found'] is False and not ES.coverage_documented(r14),
+      r14.get('placement_refused'))
 check('the caller\'s rows are not mutated', deed['foliO_NUMBER'] == '')
 
 # a row the index files under a DIFFERENT folio is another parcel, even at a listed book/page
