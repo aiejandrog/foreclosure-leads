@@ -104,6 +104,26 @@ def balance():
     return int((call('check_balance') or {}).get('credits') or 0)
 
 
+def balance_soft(timeout=15):
+    """Credits remaining, or None. check_balance is free — this records nothing in the spend ledger.
+
+    The `balance` command above is the same probe and exits if tracerfy_mcp.url is missing. A
+    health check cannot do that, and it cannot treat a DNS failure as "0 credits". None means
+    the probe did not answer; a real empty account is 0.
+    """
+    try:
+        if not os.path.exists(MCP_URL_F):
+            return None
+        if not open(MCP_URL_F, encoding='utf-8').read().strip():
+            return None
+        data = call('check_balance', timeout=timeout) or {}
+        if not isinstance(data, dict) or 'credits' not in data or isinstance(data.get('credits'), bool):
+            return None
+        return int(data['credits'])
+    except (Exception, SystemExit):
+        return None
+
+
 # ---- shared eligibility (skiptrace's own logic, never a re-implementation) ---------------------
 def _board():
     leads = SK.load_all_leads()

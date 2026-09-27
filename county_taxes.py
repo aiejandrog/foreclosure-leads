@@ -54,7 +54,28 @@ takes roughly 45 minutes, which is why the cloud step is capped and backfills ac
 A parcel that does not render is NEVER cached, so it simply retries next run — no false $0.
 Requests are jittered to stay a polite neighbour on a public county server.
 
-Run:  python county_taxes.py                      # both counties, uncached, capped
+NEAR-SALE FIRST, AND READS GO STALE (Tax1, 2026-09-26)
+Before this, a folio read once was cached FOREVER: a parcel checked in August at $0 stayed $0 on the
+board through a September tax-certificate sale, and the per-run cap went to whichever folios the
+shuffle happened to pick. Now each run picks by plan_targets():
+  1. sale in the next 45 days, soonest first (the reads a deal decision actually waits on),
+  2. parcels with a SOLD CERTIFICATE (the tax-deed clock; see cert_followup),
+  3. never read,
+  4. everything else whose read has gone stale, oldest first; past sales last.
+"Stale" depends on how close the sale is (max_age_days): 3 days inside 14 days of sale, 7 days
+inside 45 days or with a certificate, 30 days otherwise -- the same 30 days miami_ranking's
+freshness gate uses. A parcel that fails to render keeps its previous read (never a false $0).
+board_fields() is what the rebuild bakes: the amount, a taxStale age when the read is out of date
+(including a stale "$0" -- which is the dangerous one), and the certificate follow-up.
+
+CERTIFICATE FOLLOW-UP (FS 197.502(1), 197.482(1))
+A certificate holder may apply for a tax deed once two years have passed since April 1 of the year
+the certificate was issued, and a certificate with no application expires seven years after
+issuance. cert_followup() dates both and re-reads certificate parcels weekly; a page that mentions a
+tax-deed application or sale is flagged. Every certificate on the page is kept (certs), not only the
+first.
+
+Run:  python county_taxes.py                      # both counties, near-sale first, capped
       python county_taxes.py --limit 200          # raise the per-run cap
       python county_taxes.py --county MIAMI-DADE  # one county
       python county_taxes.py --conc 8             # more parallelism
@@ -62,6 +83,7 @@ Run:  python county_taxes.py                      # both counties, uncached, cap
       python county_taxes.py --refresh            # ignore the cache
 """
 import asyncio
+import datetime
 import json
 import os
 import random
@@ -95,14 +117,158 @@ def _load(p, d):
 
 def _folios(county):
     """folio -> case for every board lead in this county carrying a full-length folio."""
+    return {f: v['case'] for f, v in _folio_rows(county).items()}
+
+
+def _sale_date(row):
+    """The lead's auction date (MM/DD/YYYY on the board rows, ISO elsewhere), or None."""
+    s = str((row or {}).get('auction') or (row or {}).get('AuctionDate') or (row or {}).get('sale') or '').strip()
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m/%d/%y'):
+        try:
+            return datetime.datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _folio_rows(county, rows=None):
+    """folio -> {'case', 'sale'} for every board lead in this county carrying a full-length folio."""
     sub, fn, ln = COUNTIES[county]
     out = {}
-    for r in _load(os.path.join(HERE, fn), []) or []:
+    rows = _load(os.path.join(HERE, fn), []) if rows is None else rows
+    for r in rows or []:
         # leads_final.json is Miami-Dade only; the county files carry their own rows
         f = re.sub(r'\D', '', str(r.get('folio') or r.get('Folio') or ''))
         c = str(r.get('case') or r.get('Case #') or '').strip()
         if len(f) == ln and c:
-            out[f] = c
+            sale = _sale_date(r)
+            prev = out.get(f)
+            # two cases on one folio: the SOONER upcoming sale decides how fresh the read must be
+            if prev and prev['sale'] and (not sale or prev['sale'] <= sale):
+                continue
+            out[f] = {'case': c, 'sale': sale}
+    return out
+
+
+# ---- Tax1: how fresh a read must be, and which parcels to read first ---------------------------
+FRESH_NEAR_DAYS, FRESH_NEAR_AGE = 14, 3     # sale inside 14 days: re-read after 3 days
+FRESH_SOON_DAYS, FRESH_SOON_AGE = 45, 7     # inside 45 days (or a sold certificate): after 7
+FRESH_CERT_AGE = 7
+FRESH_DEFAULT_AGE = 30                      # = miami_ranking.TAX_MAX_AGE
+
+
+def _as_date(s):
+    try:
+        return datetime.date.fromisoformat(str(s or '')[:10])
+    except ValueError:
+        return None
+
+
+def days_to_sale(sale, today):
+    return (sale - today).days if sale else None
+
+
+def max_age_days(dts, has_cert=False):
+    """How old a read may be before it is stale, given days to the sale (None = no date)."""
+    if dts is not None and 0 <= dts <= FRESH_NEAR_DAYS:
+        return FRESH_NEAR_AGE
+    if (dts is not None and 0 <= dts <= FRESH_SOON_DAYS) or has_cert:
+        return min(FRESH_SOON_AGE, FRESH_CERT_AGE)
+    return FRESH_DEFAULT_AGE
+
+
+def read_age(rec, today):
+    d = _as_date((rec or {}).get('checked'))
+    return (today - d).days if d else None
+
+
+def is_stale(rec, dts, today):
+    """True when there is no dated read, or the read is older than max_age_days allows."""
+    age = read_age(rec, today)
+    if age is None:
+        return True
+    return age > max_age_days(dts, bool((rec or {}).get('cert')))
+
+
+def plan_targets(folio_rows, cache, today, limit):
+    """[(county, folio)] to read this run, most decision-relevant first. See the docstring.
+
+    folio_rows: {county: {folio: {'case', 'sale'}}}. Only stale or never-read parcels are picked."""
+    cand = []
+    for county, rows in folio_rows.items():
+        for f, v in rows.items():
+            rec = cache.get(f)
+            dts = days_to_sale(v.get('sale'), today)
+            if not is_stale(rec, dts, today):
+                continue
+            age = read_age(rec, today)
+            if dts is not None and 0 <= dts <= FRESH_SOON_DAYS:
+                key = (0, dts, 0)
+            elif rec and rec.get('cert'):
+                key = (1, -(age or 0), 0)
+            elif rec is None or age is None:
+                key = (2, dts if (dts is not None and dts >= 0) else 99999, 0)
+            elif dts is not None and dts < 0:
+                key = (4, -(age or 0), 0)
+            else:
+                key = (3, -(age or 0), 0)
+            cand.append((key, county, f))
+    cand.sort(key=lambda x: (x[0], x[2]))
+    return [(c, f) for _, c, f in cand[:max(0, limit)]]
+
+
+def cert_followup(cert, today):
+    """Dates for a sold certificate: when a tax-deed application becomes possible (2 years after
+    April 1 of the issuance year, FS 197.502(1)) and when an unapplied certificate expires (7 years
+    after issuance, FS 197.482(1)). None when the issue date cannot be read."""
+    d = None
+    s = str((cert or {}).get('date') or '').strip()
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            d = datetime.datetime.strptime(s, fmt).date()
+            break
+        except ValueError:
+            continue
+    if not d:
+        return None
+    tda_from = datetime.date(d.year + 2, 4, 1)
+    try:
+        expires = d.replace(year=d.year + 7)
+    except ValueError:                       # Feb 29
+        expires = d.replace(year=d.year + 7, day=28)
+    state = ('expired' if today >= expires else
+             'tax_deed_application_possible' if today >= tda_from else 'holding')
+    return {'issued': d.isoformat(), 'tda_possible_from': tda_from.isoformat(),
+            'expires': expires.isoformat(), 'state': state,
+            'days_to_tda_window': max(0, (tda_from - today).days)}
+
+
+def board_fields(rec, sale, today):
+    """What the rebuild bakes for one lead from its cached read. {} when nothing to say."""
+    out = {}
+    dts = days_to_sale(sale, today)
+    age = read_age(rec, today)
+    if rec and rec.get('due'):
+        out['taxDue'] = int(rec['due'])
+        out['taxYears'] = [y.get('year') for y in (rec.get('years') or []) if y.get('year')]
+        out['taxCert'] = bool(rec.get('cert'))
+        out['taxChecked'] = rec.get('checked', '')
+    # STALE-READ GATE: a read older than the sale-aware window is flagged, $0 reads included. A
+    # stale $0 is the dangerous case: no chip at all used to read as "no back taxes".
+    if not rec or age is None:
+        if dts is not None and dts >= 0:
+            out['taxStale'] = 'never'
+    elif age > max_age_days(dts, bool(rec.get('cert'))):
+        out['taxStale'] = age
+        out['taxChecked'] = rec.get('checked', '')
+    certs = (rec or {}).get('certs') or ([rec['cert']] if (rec or {}).get('cert') else [])
+    certs = [c for c in certs if isinstance(c, dict)]      # an old-shape `cert: true` has no date
+    fu = [c for c in (cert_followup(c, today) for c in certs) if c]
+    if fu:
+        out['taxCertFollow'] = fu[0] if len(fu) == 1 else sorted(fu, key=lambda x: x['tda_possible_from'])[0]
+        out['taxCertN'] = len(certs)
+    if (rec or {}).get('tax_deed_signal'):
+        out['taxDeedSignal'] = rec['tax_deed_signal']
     return out
 
 
@@ -115,15 +281,23 @@ def _parse(text):
     years = []
     for ym in re.finditer(r'(20\d\d)\s+Annual bill\s+\$([\d,]+\.\d\d)\s+Unpaid', text, re.I):
         years.append({'year': ym.group(1), 'amt': float(ym.group(2).replace(',', ''))})
-    cert = None
-    cm = re.search(r'Certificate\s*#?\s*(\d+)\s+Issued\s+([\d/]+)[^$]*\$([\d,]+\.\d\d)[^%]*?([\d.]+)%',
-                   text, re.I)
-    if cm:
-        cert = {'num': cm.group(1), 'date': cm.group(2),
-                'face': float(cm.group(3).replace(',', '')), 'rate': cm.group(4)}
+    certs = []
+    for cm in re.finditer(r'Certificate\s*#?\s*(\d+)\s+Issued\s+([\d/]+)[^$]*?\$([\d,]+\.\d\d)[^%]*?([\d.]+)%',
+                          text, re.I):
+        c = {'num': cm.group(1), 'date': cm.group(2),
+             'face': float(cm.group(3).replace(',', '')), 'rate': cm.group(4)}
+        if all(c['num'] != x['num'] for x in certs):
+            certs.append(c)
+    cert = certs[0] if certs else None
     if not due and years:
         due = round(sum(y['amt'] for y in years), 2)
-    return {'due': int(round(due)), 'years': years, 'unpaid': len(years), 'cert': cert}
+    out = {'due': int(round(due)), 'years': years, 'unpaid': len(years), 'cert': cert}
+    if len(certs) > 1:
+        out['certs'] = certs
+    sig = re.search(r'.{0,40}tax\s+deed\s+(?:application|applied|sale|auction|file)[^.\n]{0,60}', text, re.I)
+    if sig:
+        out['tax_deed_signal'] = re.sub(r'\s+', ' ', sig.group(0)).strip()[:120]
+    return out
 
 
 READ_JS = """() => {
@@ -230,18 +404,18 @@ def main():
         return
 
     cache = {} if refresh else _load(CACHE, {})
-    targets, pool = [], 0
-    for county in COUNTIES:
-        if only and county != only:
-            continue
-        fol = _folios(county)
-        pool += len(fol)
-        targets += [(county, f) for f in fol if f not in cache]
-    random.shuffle(targets)                    # spread load across both counties
-    targets = targets[:limit]
-    print('%d folio(s) in scope · %d uncached · checking %d this run (cap %d, concurrency %d)'
-          % (pool, pool - len([1 for c in COUNTIES for f in _folios(c) if f in cache]),
-             len(targets), limit, conc))
+    today = datetime.date.today()
+    rows = {c: _folio_rows(c) for c in COUNTIES if not only or c == only}
+    pool = sum(len(v) for v in rows.values())
+    uncached = sum(1 for v in rows.values() for f in v if f not in cache)
+    # Tax1: near-sale first, then certificates, then never-read, then stale -- see plan_targets.
+    targets = plan_targets(rows, cache, today, limit)
+    stale_n = len(plan_targets(rows, cache, today, 10 ** 9))
+    near = sum(1 for v in rows.values() for x in v.values()
+               if x['sale'] and 0 <= (x['sale'] - today).days <= FRESH_SOON_DAYS)
+    print('%d folio(s) in scope · %d never read · %d due for a (re)read · %d with a sale in %d days '
+          '· checking %d this run (cap %d, concurrency %d)'
+          % (pool, uncached, stale_n, near, FRESH_SOON_DAYS, len(targets), limit, conc))
     if not targets:
         print('nothing to do'); return
 

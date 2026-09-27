@@ -379,6 +379,7 @@ def main(argv=None):
     import run_documents as RD
     import case_review
     import document_store as DS
+    from pathlib import Path
     from miami_search_budget import CaptchaBudget, CappedNameSearcher
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', action='append', required=True, type=validate_case)
@@ -386,6 +387,11 @@ def main(argv=None):
     parser.add_argument('--vision-max-spend', type=float, required=True)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--report-only', action='store_true', help='reconcile saved private evidence without network or spending')
+    # F2 (2026-09-26): the nightly chain (run_title_chain.py) keeps its OWN ledger file. The default
+    # ledger may lower but never raise its cap, so a nightly writing its nominal cap into the shared
+    # file would lock a later manual run with a bigger cap out. Default unchanged.
+    parser.add_argument('--captcha-ledger', default='captcha-budget.json',
+                        help='ledger file name inside the private title_discovery folder')
     parser.add_argument('--sunbiz', action='store_true',
                         help='look up entity owners on Sunbiz (free public registry; cache only with --report-only)')
     args = parser.parse_args(argv)
@@ -430,7 +436,8 @@ def main(argv=None):
     cache_path = private / 'records_qs.json'
     qs = RD._load(RD.QS_CACHE, {})
     qs.update(RD._load(cache_path, {}))
-    with CaptchaBudget(private / 'captcha-budget.json', captcha_max_spend=args.captcha_max_spend) as budget:
+    ledger = Path(args.captcha_ledger).name or 'captcha-budget.json'   # a name, never a path out of `private`
+    with CaptchaBudget(private / ledger, captcha_max_spend=args.captcha_max_spend) as budget:
         searcher = CappedNameSearcher(budget, qs)
         try:
             for entry in entries:

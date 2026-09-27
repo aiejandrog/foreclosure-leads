@@ -166,8 +166,12 @@ rec('the trigger is 05:30 daily',
     and root.find('.//t:ScheduleByDay/t:DaysInterval', NS) is not None,
     trig.text if trig is not None else 'no trigger')
 cmd = root.find('.//t:Actions/t:Exec/t:Command', NS)
-rec('it runs refresh-dealflow.bat', cmd is not None and cmd.text.endswith('refresh-dealflow.bat'),
-    cmd.text if cmd is not None else 'no command')
+args = root.find('.//t:Actions/t:Exec/t:Arguments', NS)
+rec('it runs refresh-dealflow.bat under run-locked.bat',
+    cmd is not None and cmd.text.endswith('run-locked.bat')
+    and args is not None and args.text == 'refresh-dealflow.bat',
+    '%s %s' % (cmd.text if cmd is not None else 'no command',
+               args.text if args is not None else 'no arguments'))
 
 print('\n-- the superseded installers cannot quietly undo any of it --')
 for f, only in (('setup-automation.ps1', 'Refresh'),

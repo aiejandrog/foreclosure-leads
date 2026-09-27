@@ -141,10 +141,14 @@ def main():
         try: M.logout()
         except Exception: pass
 
-    prior = {}
-    if os.path.exists(OUT):
-        try: prior = json.load(open(OUT, encoding='utf-8'))
-        except Exception: prior = {}
+    try:
+        prior = load_bounce_list(OUT)
+    except Exception as e:
+        # A torn list must not become {}. Replacing it would drop every harvested bounce and
+        # the send-time block that reads this file. The backup sits beside the original.
+        print('!! bounced_emails.json is unreadable (%s). Original left in place. Nothing written.'
+              % type(e).__name__)
+        return 1
 
     new = {k: v for k, v in found.items() if k not in prior}
     merged = dict(prior); merged.update(found)
@@ -156,9 +160,9 @@ def main():
 
     if a.dry_run:
         print('(dry run — bounced_emails.json not written)')
-        return
+        return 0
 
-    json.dump(merged, open(OUT, 'w', encoding='utf-8'), indent=1)
+    save_bounce_list(OUT, merged)
     print(f'-> {OUT} (gitignored)')
     if new:
         print('Rebuild the board so these stop being queued: '
@@ -166,5 +170,33 @@ def main():
               'F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
 
 
+def load_bounce_list(path=None):
+    """The current list, or {} when the file does not exist yet.
+
+    Exists-but-unreadable raises after a timestamped backup. The caller must not replace it."""
+    path = path or OUT
+    if not os.path.exists(path):
+        return {}
+    from optout_sync import _read_ledger_for_write, _refuse_unreadable_ledger
+    d = _read_ledger_for_write(path)
+    if d is None:
+        return {}
+    if isinstance(d, list):
+        return {str(x).strip().lower(): {'type': 'legacy'} for x in d if x}
+    if not isinstance(d, dict):
+        _refuse_unreadable_ledger(path, 'parsed but is not an object or a list (%s)' % type(d).__name__)
+    return d
+
+
+def save_bounce_list(path, data):
+    """Atomic replace. A crash mid-write leaves the previous file in place."""
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, indent=1)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main() or 0)

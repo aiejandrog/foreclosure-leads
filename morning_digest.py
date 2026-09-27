@@ -47,9 +47,12 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HERE, 'digest_state.json')
 
-# Desktop, because that is where deliverables land and because a file nobody opens is not a digest.
-DESK = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop')
-if not os.path.isdir(DESK):
+# Count-only status file. It may sit on the synced Desktop (CLAUDE.md allows count-only files
+# there) but the DECISION belongs to paths.py, not to a hardcoded OneDrive string (2026-09-25).
+try:
+    import paths as _P
+    DESK = _P.DESKTOP
+except Exception:
     DESK = os.path.join(os.path.expanduser('~'), 'Desktop')
 
 ABSENT = object()          # distinct from [] and from 0 -- see rule 2 in the docstring

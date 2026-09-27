@@ -201,6 +201,72 @@ def coverage(inventory, rows, entries=(), recorded=(), case=''):
                               'the same instrument; it does not make the court attachment read.')}
 
 
+ALT_FETCH_LIMIT = 6     # recorded instruments fetched per case per run; each is one free image request
+
+
+def fetch_alternates(needed, case, index=None, collector=None, ocr=None, limit=ALT_FETCH_LIMIT,
+                     collect=None):
+    """E1: fetch the public Official Records copy of each unread court attachment the docket cites
+    by book/page. FREE: the book/page resolves to its CFN out of records_index.json (the index the
+    nightly owner searches fill; book/page alone cannot address the image endpoint), and the image
+    comes off the anonymous OR endpoint through miami_judgment.collect_recorded, stored under THIS
+    case -- so the next coverage() finds it among the case's recorded copies and links it as
+    same_instrument_unverified by its own rules. Nothing here marks a court attachment read.
+
+    -> one row per cited book/page: status 'fetched' | 'not_in_index' | 'fetch_<status>' |
+    'error' | 'limit', plus the entries that cite nothing ('no_citation').
+    """
+    out = []
+    todo = []
+    for n in needed or ():
+        cites = [c for c in (n.get('cited_book_page') or []) if c]
+        if not cites:
+            out.append({'entry_id': n.get('entry_id'), 'book_page': None, 'status': 'no_citation',
+                        'reason': 'the docket text cites no book/page for this instrument'})
+        for c in cites:
+            todo.append((n.get('entry_id'), c))
+    seen = set()
+    fetched = 0
+    for entry_id, bp in todo:
+        if bp in seen:
+            continue
+        seen.add(bp)
+        if fetched >= limit:
+            out.append({'entry_id': entry_id, 'book_page': bp, 'status': 'limit',
+                        'reason': 'per-run alternate fetch limit (%d) reached; next run continues' % limit})
+            continue
+        book, _, page = bp.partition('-')
+        try:
+            if index is None:
+                import document_walk as W
+                index = W.RecordIndex()
+            hit = index.get(book, page)
+        except Exception as exc:
+            out.append({'entry_id': entry_id, 'book_page': bp, 'status': 'error',
+                        'reason': 'record index unreadable: %s' % type(exc).__name__})
+            continue
+        if not hit:
+            out.append({'entry_id': entry_id, 'book_page': bp, 'status': 'not_in_index',
+                        'reason': 'book/page not in records_index.json yet, so its CFN is unknown'})
+            continue
+        fetched += 1
+        try:
+            if collect is None:
+                import miami_judgment as MJ
+                collect = MJ.collect_recorded
+            rows = collect(case, [dict(hit)], collector=collector, ocr=ocr, resume=True)
+            row = rows[0] if rows else {}
+            st = row.get('status')
+            out.append({'entry_id': entry_id, 'book_page': bp,
+                        'status': 'fetched' if st == 'stored' else 'fetch_%s' % (st or 'missing'),
+                        'source_ref': row.get('source_ref'),
+                        'reason': '' if st == 'stored' else str(row.get('reason') or '')[:200]})
+        except Exception as exc:
+            out.append({'entry_id': entry_id, 'book_page': bp, 'status': 'error',
+                        'reason': '%s: %s' % (type(exc).__name__, str(exc)[:120])})
+    return out
+
+
 def alternate_copies(unread, recorded, case):
     """Recorded Official Records copies that may stand in for court attachments we could not read.
 

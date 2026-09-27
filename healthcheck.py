@@ -6,6 +6,7 @@ Prints a PASS/WARN/FAIL report, writes health.json (baked into the site header),
 """
 import json, os, re, sys, time
 import requests
+import skiptrace_health
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
@@ -234,20 +235,28 @@ try:
             _tds.append(_dt2.date.fromisoformat(str(_v.get('traced') or '')))
         except Exception:
             pass
+    # "the nightly skiptrace is not running" is a claim about the SYSTEM. Only the runner is
+    # entitled to make it — everywhere else an old trace date just means an old copy. And on the
+    # runner a stale date is not, by itself, that claim: 2026-09-18 through 09-24 the nightly ran
+    # and Tracerfy refused it for credits, and this line said the job was not running. The latest
+    # run slice of the two logs, and the free balance probe, pick the reason. The probe fails soft.
+    _st_logs = skiptrace_health.latest_skiptrace_logs(HERE) if IS_RUNNER else ''
+    _st_bal = skiptrace_health.probe_tracerfy_balance()
     if _tds:
         _sage = (_dt2.date.today() - max(_tds)).days
-        _slvl = 'FAIL' if _sage > 4 else ('WARN' if _sage > 2 else 'PASS')
-        # "the nightly skiptrace is not running" is a claim about the SYSTEM. Only the runner is
-        # entitled to make it — everywhere else an old trace date just means an old copy.
-        add(_slvl, 'skiptrace freshness', f'newest trace {max(_tds).isoformat()} ({_sage}d old, {len(_str)} cached)'
-            + (('' if not IS_RUNNER else ' — the nightly skiptrace is not running') + _STALE_NOTE
-               if _slvl != 'PASS' else ''))
+        skiptrace_health.report_skiptrace_health(
+            add, age_days=_sage, when_iso=max(_tds).isoformat(), cached=len(_str),
+            is_runner=IS_RUNNER, stale_note=_STALE_NOTE, log_text=_st_logs, balance=_st_bal)
     else:
         add('WARN', 'skiptrace freshness', 'no dated traces in skiptrace_results.json')
+        _bw = skiptrace_health.tracerfy_balance_warning(_st_bal)
+        if _bw:
+            add(*_bw)
     _rl = os.path.join(HERE, 'leads-run.log')
     if os.path.exists(_rl):
         _log = open(_rl, encoding='utf-8', errors='replace').read()
-        _cut = _log.rfind('REFRESH ')                     # most recent run only — old stops are history
+        # the run HEADER, not any 'REFRESH ': the tail's 'REFRESH ENDED rc=' line would cut to nothing
+        _cut = _log.rfind('==================== REFRESH ')   # most recent run only — old stops are history
         _tail = _log[_cut:] if _cut >= 0 else _log[-120000:]
         if 'DAILY BUDGET REACHED' in _tail:
             add('WARN', 'skiptrace early stop', 'last run stopped mid-queue on a budget cap — '
@@ -474,6 +483,44 @@ def chk_shipped():
             'best single value source covers %d/%d (%d%%)' % (val, shipped, round(val / shipped * 100)))
 
 
+def _index_file_texts(root, paths):
+    """Text of each path as git has it in the index (staged, or HEAD when nothing is staged).
+
+    A working-tree edit is not included. The nightly publish runs on a laptop that also holds
+    local caches; reading those files from disk let a cache edit fail the committed-secrets
+    check and block the publish. `git cat-file --batch` of `:<path>` is the index blob.
+    """
+    import subprocess
+    if not paths:
+        return []
+    proc = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=root,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    req = ''.join(':%s\n' % p for p in paths).encode()
+    out, _err = proc.communicate(req, timeout=60)
+    texts, i = [], 0
+    while i < len(out):
+        nl = out.find(b'\n', i)
+        if nl < 0:
+            break
+        header = out[i:nl].decode('utf-8', 'replace')
+        i = nl + 1
+        parts = header.split()
+        if len(parts) >= 2 and parts[-1] == 'missing':
+            texts.append(None)
+            continue
+        if len(parts) < 3:
+            break
+        size = int(parts[-1])
+        body = out[i:i + size]
+        i += size
+        if i < len(out) and out[i:i + 1] == b'\n':
+            i += 1
+        texts.append(body.decode('utf-8', 'ignore'))
+    if len(texts) != len(paths):
+        raise RuntimeError('index read returned %d bodies for %d paths' % (len(texts), len(paths)))
+    return texts
+
+
 def chk_committed_secrets():
     """No live access code may sit in a file git actually tracks.
 
@@ -488,33 +535,51 @@ def chk_committed_secrets():
     import subprocess
     codes = []
     p_codes = os.path.join(HERE, 'site.codes')
-    if not os.path.exists(p_codes):
-        add('WARN', 'committed secrets', 'no site.codes here — cannot check for leaked codes')
-        return
-    try:
-        for line in open(p_codes, encoding='utf-8'):
-            m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
-            if m:
-                codes.append(m.group(1))
-    except Exception as e:
-        add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
-        return
+    have_codes = os.path.exists(p_codes)
+    if have_codes:
+        try:
+            for line in open(p_codes, encoding='utf-8'):
+                m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
+                if m:
+                    codes.append(m.group(1))
+        except Exception as e:
+            add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
+            have_codes = False
+    # SHAPE SCAN, even with no site.codes (2026-09-25): a code that was pasted into a tracked file
+    # by another machine is invisible to the exact-match check above when THIS box's site.codes
+    # differs or is absent (the 2026-09-03 leak was exactly that -- a code in MACHINE-HANDOFF.md).
+    # A live code is DEALFLOW- plus 8 symbols with at least one digit; DEALFLOW-COVERAGE /
+    # DEALFLOW-STATUS and friends are all-letter words and do not match.
+    _shape = re.compile(r'\bDEALFLOW-(?=[A-Z0-9]{8}\b)(?=[A-Z]*\d)[A-Z0-9]{8}\b')
+    # Skip-traced phone numbers next to owner names in a tracked JSON: the other leak class
+    # (pre_foreclosure_doors.json, 2026-09-01). Public-record names are one thing; bought phones
+    # are not public record.
+    _phone_row = re.compile(r'"(?:ph|phone|phones?)"\s*:\s*\[?\s*"\d{10}"')
     try:
         tracked = subprocess.run(['git', 'ls-files'], cwd=HERE, capture_output=True,
                                  text=True, timeout=30).stdout.split()
     except Exception as e:
         add('WARN', 'committed secrets', 'git ls-files failed (%s)' % e)
         return
+    files = [f for f in tracked if not f.startswith('docs/') and f != 'healthcheck.py']
+    try:
+        bodies = _index_file_texts(HERE, files)
+    except Exception as e:
+        add('WARN', 'committed secrets', 'could not read the index (%s)' % e)
+        return
     hits = []
-    for f in tracked:
-        fp = os.path.join(HERE, f)
-        try:
-            body = open(fp, encoding='utf-8', errors='ignore').read()
-        except Exception:
-            continue
+    for f, body in zip(files, bodies):
+        if body is None:
+            continue        # the encrypted board and this file's own docstring are already filtered
         for c in codes:
             if c in body:
                 hits.append('%s carries %s...' % (f, c[:13]))
+        for m in _shape.finditer(body):
+            if not any(m.group(0) == c for c in codes):
+                hits.append('%s carries a code-shaped token %s...' % (f, m.group(0)[:13]))
+        if f.endswith('.json') and '"owner"' in body and _phone_row.search(body):
+            hits.append('%s pairs owner names with 10-digit phone numbers (skip-trace data in git)' % f)
+    hits = sorted(set(hits))
     if hits:
         add('FAIL', 'committed secrets',
             '%d live access code(s) in TRACKED files on a PUBLIC repo — ROTATE them, deleting the '
@@ -571,6 +636,19 @@ if os.path.exists(docs):
 else:
     add('FAIL', 'docs/index.html', 'not built')
 
+# ---- Official Records daily file (optional, report-only) ---------------------------------------
+# Paid Clerk CDS "Records" folder. Off unless DEALFLOW_OR_DAILY=1, and the bytes never
+# enter this repo. A machine that has never enabled it has no status file and adds no
+# row here. Near expiry, a units drop, or a logged gap warns. None of those is a
+# compliance fail, and none of them blocks the publish.
+try:
+    import or_daily_file as _or_daily
+    for _lvl, _name, _detail in _or_daily.health_checks():
+        add(_lvl, _name, _detail)
+except Exception as _or_e:
+    if (os.environ.get('DEALFLOW_OR_DAILY') or '').strip() == '1':
+        add('WARN', 'official records daily', 'check errored: %s' % str(_or_e)[:80])
+
 # ---- report + health.json ---------------------------------------------------------------------
 fails = [x for x in R if x[0] == 'FAIL']; warns = [x for x in R if x[0] == 'WARN']
 icon = {'PASS': 'ok  ', 'WARN': 'WARN', 'FAIL': 'FAIL'}
@@ -605,7 +683,10 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
 #   exit 1 = coverage-floor FAIL only -> advisory; caller may publish if publish_guard is clean
 #   exit 0 = healthy
 _CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources',
-                  'entity claim in published board'}
+                  'entity claim in published board',
+                  # 2026-09-25: a committed access code was ADVISORY (exit 1) when the 09-03 leak
+                  # happened, so the publish went ahead. It blocks now.
+                  'committed secrets'}
 _crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
 if _crit:
     print(f"  !! COMPLIANCE FAIL (blocks publish): {', '.join(_crit)}")

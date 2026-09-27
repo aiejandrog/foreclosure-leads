@@ -354,7 +354,7 @@ def build_timeline(case, inventory, document_rows, as_of):
             # The docket says this entry is a motion, affidavit or certificate; a judgment on its
             # first page is an exhibit or the thing it certifies, not a new judgment (6828 #49,
             # #58, #65). The docket description alone decides, not its comments.
-            attached, body_kind, title = body_kind, None, None
+            attached, attached_title, body_kind, title = body_kind, title, None, None
             ik = classify(description)
         e = {'entry_id': ident, 'date': _date(meta.get('eventDate') or item.get('date')),
              'description': description, 'comments': comments, 'filed_by': meta.get('filedBy') or meta.get('filed_by') or 'unknown',
@@ -364,10 +364,18 @@ def build_timeline(case, inventory, document_rows, as_of):
              'operative_text': title or index_text, 'calendar_event': str(meta.get('eventType', '')).lower() == 'hearing'}
         if attached:
             e['attached_document_kind'] = attached
+            if attached_title:
+                # E1: the attachment's own title is kept (reported, not used to relabel the entry),
+                # so a person can see WHICH judgment the motion or certificate carried (#66).
+                e['attached_document_title'] = attached_title
         e['limited_scope'], e['dismissed_parties'] = scope_of(e['kind'], scope_text, defendants)
         if e['kind'] in ('final_judgment', 'vacatur', 'satisfaction'):
             # Only for linking judgments to what acts on them; dropped before the timeline is saved.
             e['_body'] = '\n'.join(str(p.get('text') or '') for p in pages[:3])[:6000]
+        if e['kind'] == 'final_judgment' and pages:
+            # E1: the WHOLE body, for scope (who it binds, in rem, deficiency). _body stays three
+            # pages: it drives judgment linking, and a longer text there would change what links.
+            e['_scope_body'] = '\n'.join(str(p.get('text') or '') for p in pages)[:30000]
         # A bankruptcy filing often carries the bankruptcy court's own order as an attachment.
         # 2023-020247's reinstated stay was on pages 3-4 of such a filing, and the docket title only
         # said "suggestion of bankruptcy", so the index never saw it (desktop replay, 2026-09-24).
@@ -377,7 +385,13 @@ def build_timeline(case, inventory, document_rows, as_of):
                 e.update(kind='stay_reinstated', kind_source='document_passage',
                          stay_passages=passages, index_agrees=e['index_kind'] == 'stay_reinstated',
                          operative_text=passages[0]['passage'])
-        if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'
+        if e['calendar_event'] and e['kind'] != 'notice_of_sale':
+            # E1: the calendar override still wins (unchanged), but the label it replaced is kept
+            # so the override can be MEASURED -- calendar_override_counts() -- before anyone
+            # decides whether to narrow it (roadmap row 9, "calendar events lose their real label").
+            if e['kind'] != 'hearing':
+                e['pre_calendar_kind'] = e['kind']
+            e['kind'] = 'hearing'
         e['sale_passages'] = [index_text] if re.search(r'\bsale\b', index_text, re.I) else []
         body_lines = [line for p in pages for line in str(p.get('text') or '').splitlines()]
         e['motion_disposition_passages'] = [line for line in body_lines if re.search(r'\bmotion\b', line, re.I) and re.search(r'\b(?:is|hereby|be)\s+(?:granted|denied)\b|\b(?:grants|denies)\b', line, re.I)] if e['kind'] in ('final_judgment', 'order_on_motion') else []
@@ -524,10 +538,20 @@ def build_timeline(case, inventory, document_rows, as_of):
         if last == 'limited_relief' or (last == 'relief_not_bankruptcy' and stay_now):
             stay_now = None
     judgments = reconcile_judgments(entries, today)
+    defendants_all = docket_defendants(inventory)
     for e in entries:
         e.pop('_body', None)
+        sb = e.pop('_scope_body', None)
+        if sb is not None:
+            e['judgment_scope'] = judgment_scope(sb, defendants_all)
+    ctl = judgments.get('controlling_entry') if isinstance(judgments, dict) else None
+    if ctl:
+        js = next((e.get('judgment_scope') for e in entries if e['entry_id'] == ctl), None)
+        judgments['controlling_scope'] = js or {'read': False,
+                                                'reason': 'the controlling judgment has no read body'}
     return {'case': case, 'county': 'MIAMI-DADE', 'as_of': today, 'entries': entries, 'status': status,
             'judgments': judgments,
+            'calendar_override': calendar_override_counts({'entries': entries}),
             'stay_history': stay_history, 'stay_in_effect': stay_now, 'sale_held': held,
             'pending': pending, 'amounts': amounts, 'gaps': gaps, 'coverage_complete': not gaps,
             'qualification': 'Status is derived from available docket evidence, not confirmation of a complete court record. Amount extractions are not verified balances or equity inputs.'}
@@ -576,6 +600,62 @@ def scope_of(kind, text, defendants=()):
     if re.search(r'\bas to all (?:defendants|parties)\b', text, re.I) and not re.search(r'\bcount\s+[IVX\d]+', text, re.I):
         limited = False
     return limited, named
+
+
+_DEFICIENCY = (
+    ('reserved', re.compile(r'deficiency[^.]{0,160}?\breserv\w*|\breserv\w*[^.]{0,80}?deficiency', re.I)),
+    ('denied_or_waived', re.compile(r'\b(?:no|without)\s+(?:a\s+)?deficiency|deficiency[^.]{0,100}?\b(?:denied|waived)\b', re.I)),
+    ('awarded', re.compile(r'deficiency\s+(?:judgment\s+)?(?:is\s+|shall\s+be\s+)?(?:hereby\s+)?(?:entered|awarded|granted)', re.I)),
+)
+_IN_REM = re.compile(r'\bin\s+rem\b', re.I)
+
+
+def judgment_scope(body, defendants=()):
+    """E1: what the final judgment's own body says about its reach. Report only: it never moves
+    the case verdict or the controlling judgment.
+
+    Reads: whether the text limits scope (scope_of), whether it is in rem only, what it says about
+    a deficiency, and which docket defendants its body names. A docket defendant the body never
+    names may not have been foreclosed out -- a junior interest that can survive the sale -- but
+    the body can also bind a party through a caption or exhibit, so that is a question to check,
+    not a finding."""
+    text = str(body or '')
+    if not text.strip():
+        return {'read': False, 'reason': 'no readable judgment body'}
+    flat = ' '.join(text.split())
+    limited, _ = scope_of('final_judgment', flat, defendants)
+    words = set(re.split(r'[^A-Z0-9]+', flat.upper()))
+    named = [d for d in defendants if _name_tokens(d) and _name_tokens(d) <= words]
+    unnamed = [d for d in defendants if _name_tokens(d) and d not in named]
+    deficiency, passages = None, []
+    for label, rx in _DEFICIENCY:
+        m = rx.search(flat)
+        if m:
+            deficiency = label
+            passages.append(flat[max(0, m.start() - 60):m.end() + 60].strip())
+            break
+    m = _IN_REM.search(flat)
+    if m:
+        passages.append(flat[max(0, m.start() - 80):m.end() + 80].strip())
+    return {'read': True, 'limited_scope': limited, 'in_rem_only': bool(m), 'deficiency': deficiency,
+            'defendants_named': len(named), 'defendants_not_named': unnamed,
+            'passages': passages[:5],
+            'qualification': ('Read from the judgment body text. A defendant the body does not name '
+                              'may still be bound through a caption or exhibit; verify on the image '
+                              'before relying on it.')}
+
+
+def calendar_override_counts(timeline):
+    """E1: measure the calendar-hearing override. -> counts only (no names): how many calendar
+    entries there are, how many had a different label before the override replaced it, and which."""
+    entries = (timeline or {}).get('entries') or []
+    cal = [e for e in entries if e.get('calendar_event')]
+    by = {}
+    for e in cal:
+        k = e.get('pre_calendar_kind')
+        if k:
+            by[k] = by.get(k, 0) + 1
+    return {'calendar_entries': len(cal), 'relabelled': sum(by.values()), 'by_original_kind': by}
 
 
 def docket_defendants(inventory):

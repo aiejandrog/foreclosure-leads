@@ -57,26 +57,48 @@ BOOKING_URL_INVESTOR = 'cal.com/bsgflorida/investor-refi-call'
 # desktop session) and must not require the recipient to log in or type anything.
 UNSUB_URL = ''
 
+# THE EMAIL OPT-OUT LINE (2026-09-26, Alejandro approved the English wording). One sentence, every
+# email body, every send path: outreach_copy (board cold), outreach_email (inline bodies), cadence
+# (all four touches) and the investor lane in tracker_template.html. It replaces the old "reply with
+# the word unsubscribe" keyword line, which read like a mailing list, and it keeps the CAN-SPAM
+# "clear and conspicuous" opt-out IN THE BODY rather than leaning on a List-Unsubscribe header some
+# clients hide (#46 removed the body line entirely; this is the replacement, not the removal).
+#
+# WHAT HONOURS IT: replies.is_stop_text() treats "not a good time" / "no es buen momento" and every
+# "don't contact / don't reach out" form as an opt-out, and strips THIS sentence out of a reply
+# before it looks, so an owner who quotes it back unmarked is not suppressed by our own words.
+# mail_guard._OPTOUT_SENTENCE recognises it as the body's opt-out. Change the wording HERE only --
+# and it is a legal call (CLAUDE.md, "Disclaimers"), so raise it rather than editing it.
+#
+# The Spanish line is the same promise, approved with the English on 2026-09-26. Accent on
+# dígamelo is the wording Alejandro signed; the detector accepts the unaccented form too.
+OPTOUT_LINE_EN = "If now's not a good time, just tell me and I won't reach out again."
+OPTOUT_LINE_ES = 'Si ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.'
+# Texts (2026-09-26, attorney signed off): do not say "Reply STOP". The owner is invited to say
+# it is not a good time, which is_stop_text() already treats as a permanent opt-out, and the
+# detector strips THESE sentences before matching so quoting them back is not itself a stop.
+# Same words as call_mode.TEXT_OPTOUT and the board's stopEN/stopES. Inbound STOP keywords stay.
+SMS_OPTOUT_EN = " If now's not a good time, just let me know and I won't text you again."
+SMS_OPTOUT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+
 
 def _unsub(url=None, lang='en'):
     """The opt-out sentence. Never empty -- that is the whole point of this function.
 
-    The word each language asks for is one replies.is_stop_text() already matches: "unsubscribe"
-    hits OPTOUT_PHRASES directly, and so does a bare "quitar". Naming a word the detector does not
-    know would be the worst outcome available here -- an opt-out the owner believes they sent and
-    that nothing in the system ever acts on. Spanish stays unaccented to match the bodies it sits
-    under.
+    Whatever the line invites the owner to say has to be something replies.is_stop_text() acts
+    on: "not a good time", "no es buen momento", "don't reach out", "no me contacte" all are, and
+    _stoptexttest pins them. Inviting a reply the detector does not know would be the worst outcome
+    available here -- an opt-out the owner believes they sent and that nothing in the system ever
+    acts on. Spanish uses the approved accented line (dígamelo); the detector accepts either spelling.
     """
     u = UNSUB_URL if url is None else url
     if lang == 'es':
         if u:
             return 'Para dejar de recibir estos correos, cancele su suscripcion aqui: %s' % u
-        return ('Si prefiere no recibir mas mensajes mios, responda con la palabra QUITAR '
-                'y lo saco de la lista.')
+        return OPTOUT_LINE_ES
     if u:
         return 'To stop receiving these emails, unsubscribe here: %s' % u
-    return ("If you'd rather not hear from me again, reply with the word unsubscribe "
-            "and I'll take you off the list.")
+    return OPTOUT_LINE_EN
 
 
 def _first_of(signer):
@@ -372,7 +394,7 @@ def outreach_subject(street, sale_date='', td=False, lang='en', style='measured'
 
 
 # ---------------------------------------------------------------------------------------------
-# SMS — same offer, compressed. Statutory core + STOP.
+# SMS — same offer, compressed. The opt-out sentences are the attorney lines, both languages.
 # ---------------------------------------------------------------------------------------------
 def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
     ds = _short_date(sale_date)
@@ -380,8 +402,8 @@ def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
     when = ('Your home is scheduled for foreclosure auction %s' % ds if ds
             else 'Your home is scheduled for foreclosure auction')
     return ("%sI'm %s with %s. %s. Free %s-minute call, no obligation - I'll lay out every option you "
-            "have. Call/text %s."
-            % (who, signer, company, when, CALL_MINUTES_N, phone))
+            "have. Call/text %s.%s"
+            % (who, signer, company, when, CALL_MINUTES_N, phone, SMS_OPTOUT_EN + SMS_OPTOUT_ES))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -445,22 +467,24 @@ def cross_surface_check():
 
 
 def selftest():
-    """The disclosure must be present on every channel, SMS must fit two segments, and every
-    surface must promise the same call length."""
+    """The disclosure must be present on every channel, and every surface must promise the same
+    call length. Both attorney text sentences together are longer than two SMS segments."""
     d = dt.date(2026, 9, 16)
     fails = []
     for name, body, need in (
-        ('email_long', email_body('Maria', d), ()),
-        ('email_short', email_body_short('Maria', d), ()),
+        ('email_long', email_body('Maria', d), (OPTOUT_LINE_EN,)),
+        ('email_short', email_body_short('Maria', d), (OPTOUT_LINE_EN,)),
         ('letter', letter('Maria', d), ()),
-        ('sms', sms('Maria', d), ()),
+        ('sms', sms('Maria', d), (SMS_OPTOUT_EN.strip(), SMS_OPTOUT_ES.strip())),
     ):
         for m in need:
             if m not in body:
                 fails.append('%s: missing %r' % (name, m))
     s = sms('Maria', d)
-    if len(s) > 320:
-        fails.append('sms %d chars (>320 = 3 segments)' % len(s))
+    if 'Reply STOP' in s:
+        fails.append('sms still says Reply STOP')
+    if len(s) > 400:
+        fails.append('sms %d chars (both opt-out sentences should stay under 400)' % len(s))
     print('outreach_copy selftest: %s' % ('OK' if not fails else 'FAILED'))
     for f in fails:
         print('   !', f)

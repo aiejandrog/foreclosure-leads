@@ -6,8 +6,11 @@ import glob, json, os, subprocess, sys
 from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DESKTOP = os.path.expanduser(r'~\OneDrive\Desktop')
-if not os.path.isdir(DESKTOP):
+# Count-only status file; the Desktop location is paths.py's call, not a hardcoded OneDrive path.
+try:
+    import paths as _P
+    DESKTOP = _P.DESKTOP
+except Exception:
     DESKTOP = os.path.expanduser(r'~\Desktop')
 STATUS = os.path.join(DESKTOP, 'DEALFLOW-STATUS.txt')
 
