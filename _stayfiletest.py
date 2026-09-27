@@ -315,6 +315,12 @@ try:
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting In Rem Relief from Stay; Prior Case Dismissed'))[0] is True)
     check('relief as to a discharged co-debtor does not end the case',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay as to Discharged Co-Debtor'))[0] is True)
+    for _end in ('Order Granting Motion for Relief from Stay; Case Dismissed',
+                 'Order Granting Relief from Automatic Stay - Debtor Discharged',
+                 'Notice that Bankruptcy was Dismissed and Stay Lifted',
+                 'Notice of Termination of Automatic Stay upon Dismissal'):
+        check('a line that lifts the stay AND ends the case ends it: %s' % _end,
+              _stay(BK('02/01/2026'), CLOSE('03/01/2026', _end))[0] is False)
     check('a discharge ends it', _stay(BK('02/01/2026'), CLOSE('06/01/2026', 'Order of Discharge of Debtor, Chapter 7'))[0] is False)
     check('a relief order with no petition line on the docket still shows a bankruptcy (held)',
           _stay(CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay'))[0] is True)

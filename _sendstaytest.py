@@ -104,6 +104,7 @@ def unit():
 
         # ---- never contact again (the three leads contacted during their bankruptcy) ----
         ncp = tmp / 'never_contact.json'
+        import bk_lookup as _BL
         _ncpath = SG._never_contact_path
         SG._never_contact_path = lambda: str(ncp)
         try:
@@ -126,6 +127,16 @@ def unit():
             rec('a case added in never_contact.json is refused', not r['ok'] and r['code'] == SG.STAY_ACTIVE, r)
             r = c('2099-000002-CA-01')
             rec('a case not on either list still clears', r['ok'] and r['code'] == SG.CLEAR, r)
+            ncp.write_text(json.dumps(['CACE-99-001234']), encoding='utf-8')
+            r = c('CACE-99-001234')
+            rec('a Broward number in never_contact.json is refused too',
+                not r['ok'] and r['code'] == SG.STAY_ACTIVE and r.get('src') == 'never_contact', r)
+            rec('...and held for letters and Call Mode', _BL.send_hold('CACE-99-001234')[0] is True
+                and _BL.federal_hold('CACE-99-001234')[0] is True)
+            ncp.write_text(json.dumps(['not a case']), encoding='utf-8')
+            r = c('2099-000002-CA-01')
+            rec('an entry that is not a case number refuses every send rather than being ignored',
+                not r['ok'] and r['code'] == SG.UNAVAILABLE, r)
             ncp.write_text('{not json', encoding='utf-8')
             r = c('2099-000002-CA-01')
             rec('an unreadable never_contact.json refuses every send (stay_data_unavailable)',

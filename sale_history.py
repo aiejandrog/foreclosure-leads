@@ -167,6 +167,9 @@ _BKDONE = {   # what an order says when it does the thing: granted, or the verb 
 # The dismissal must be what THIS order does to the case: 'Prior Case Dismissed' (the usual ground
 # for in-rem relief) and 'as to Discharged Co-Debtor' describe something else.
 _BKEND_DONE = re.compile(_GRANTOF + r'(?:dismiss|discharg)|'
+                         r'(?<!prior )(?<!previous )(?<!earlier )\b(?:case|debtors?|bankruptcy)\s+'
+                         r'(?:(?:was|is|has\s+been)\s+)?(?:dismissed|discharged)\b|'
+                         r'\bupon\s+(?:the\s+)?(?:dismissal|discharge)\b|'
                          r'\b(?:dismissing|discharging)\s+(?:the\s+)?(?:(?!and\b)\w+\s+){0,3}?(?:case|debtors?)\b', re.I)
 
 

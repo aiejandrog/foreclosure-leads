@@ -173,13 +173,20 @@ def never_contact_stems(path=None):
         raise NeverContactError('%s is unreadable (%s)' % (NEVER_CONTACT_NAME, e))
     if not isinstance(data, list):
         raise NeverContactError('%s is not a list of case numbers' % NEVER_CONTACT_NAME)
-    return NEVER_CONTACT | ({case_stem(x) for x in data if isinstance(x, str)} - {''})
+    out = set(NEVER_CONTACT)
+    for x in data:
+        k = (case_stem(x) or pacer_key(x)) if isinstance(x, str) else ''
+        if not k:                                    # an entry we cannot key would be silently ignored
+            raise NeverContactError('%s entry %r is not a case number' % (NEVER_CONTACT_NAME, str(x)[:40]))
+        out.add(k)
+    return frozenset(out)
 
 
 def never_contact(case, path=None):
-    """True when this case is never contacted again. Raises NeverContactError (see above)."""
-    s = case_stem(case)
-    return bool(s) and s in never_contact_stems(path)
+    """True when this case is never contacted again: a Miami-Dade stem, or any other county's
+    number keyed the way PACER results are. Raises NeverContactError (see above)."""
+    keys = {case_stem(case), pacer_key(case)} - {''}
+    return bool(keys) and bool(keys & never_contact_stems(path))
 
 
 _LOCK = threading.Lock()
@@ -597,16 +604,16 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
                                          'status cannot be checked')
             return out
         stem = case_stem(raw)
-        if stem:
+        if stem or pacer_key(raw):
             try:
-                never = never_contact(stem)
+                never = never_contact(raw)
             except NeverContactError as e:
                 out.update(code=UNAVAILABLE, why='never-contact list: %s' % e)
                 return out
             if never:
-                out.update(code=STAY_ACTIVE, src='never_contact', matched=[stem],
+                out.update(code=STAY_ACTIVE, src='never_contact', matched=[stem or pacer_key(raw)],
                            why=('case %s was contacted during its bankruptcy and is never contacted '
-                                'again (stay_gate.NEVER_CONTACT)' % stem))
+                                'again (stay_gate.NEVER_CONTACT)' % (stem or raw[:40])))
                 return out
         if pacer_path is None:
             pacer_path = _pacer_path(cache_path)
