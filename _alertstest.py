@@ -16,6 +16,26 @@ from zoneinfo import ZoneInfo
 import pipeline_alerts as PA
 import send_server as S
 
+# Same clock as _bouncesampletest.py: on the #83 gate's calendar day, yesterday is
+# before FIRST_TOUCH_GATE_CUTOFF_DATE and a first-touch cohort dated then does not pause.
+_gate_day = S.dt.date.fromisoformat(S.FIRST_TOUCH_GATE_CUTOFF_DATE)
+_real_today = S.dt.date.today()
+_clock_day = _gate_day + S.dt.timedelta(days=1) if _real_today <= _gate_day else _real_today
+if _clock_day != _real_today:
+    class _ClockDate(S.dt.date):
+        @classmethod
+        def today(cls):
+            return _clock_day
+
+    class _ClockDT:
+        date = _ClockDate
+        datetime = S.dt.datetime
+        timedelta = S.dt.timedelta
+        timezone = S.dt.timezone
+        time = S.dt.time
+
+    S.dt = _ClockDT()
+
 ET = ZoneInfo('America/New_York')
 NOW = dt.datetime(2026, 9, 27, 21, 5, tzinfo=ET)   # ramp has started; evening; after both judge hours
 EARLY = dt.datetime(2026, 9, 27, 7, 20, tzinfo=ET)
@@ -115,6 +135,8 @@ rec('an unreadable opt-out ledger alerts',
 rec('a readable opt-out ledger does not alert',
     one({'optout_ledger': {'readable': True, 'unreadable': False}}, 'optout-ledger') is None)
 rec('the public bounce signal has no address', clean(json.dumps(hot)) and hot.get('day_date'))
+# Prior post-cutoff cohort day (see the clock above). Not date.today()-1, which is
+# before the gate when this file runs on FIRST_TOUCH_GATE_CUTOFF_DATE.
 yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
 yhot = PA.bounce_signal(health_rows(*ft_rows(2, 20, day=yday)))
 ycold = PA.bounce_signal(health_rows(*ft_rows(1, 20, day=yday)))

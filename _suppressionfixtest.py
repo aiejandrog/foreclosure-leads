@@ -420,6 +420,7 @@ def bridge():
             'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
             'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
         }), encoding='utf-8')
+        (work / 'bounced_emails.json').write_text('{}', encoding='utf-8')
         oo = work / 'optouts.json'
         fresh_ledger(oo)
         (work / 'sale_history_cache.json').write_text(json.dumps({

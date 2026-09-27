@@ -1202,6 +1202,7 @@ write_sync_ok(srv)
     'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
     'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
 }), encoding='utf-8')
+(srv / 'bounced_emails.json').write_text('{}', encoding='utf-8')
 (srv / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
 # first-touch deliverability gate (2026-09-26): these fresh fake addresses would be held as
 # unverified; mark them ZeroBounce-valid so this block keeps testing the STAY gate.
@@ -1315,6 +1316,7 @@ write_sync_ok(srv19)
     'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
     'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
 }), encoding='utf-8')
+(srv19 / 'bounced_emails.json').write_text('{}', encoding='utf-8')
 (srv19 / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}), encoding='utf-8')
 # first-touch deliverability gate (2026-09-26): these fresh fake addresses would be held as
 # unverified; mark them ZeroBounce-valid so this block keeps testing the STAY gate.

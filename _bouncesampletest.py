@@ -24,6 +24,29 @@ import tempfile
 import pipeline_alerts as PA
 import send_server as S
 
+# Cohort days have to fall on or after the #83 gate. On the gate's own calendar day,
+# date.today()-1 is the day before FIRST_TOUCH_GATE_CUTOFF_DATE, so those rows are not
+# in the post-cutoff sample and "yesterday" would not pause. When the local date has not
+# passed the gate yet, move this process's clock to the next day. send_server reads the
+# same dt, so the window and the row dates stay aligned in any timezone.
+_gate_day = S.dt.date.fromisoformat(S.FIRST_TOUCH_GATE_CUTOFF_DATE)
+_real_today = S.dt.date.today()
+_clock_day = _gate_day + S.dt.timedelta(days=1) if _real_today <= _gate_day else _real_today
+if _clock_day != _real_today:
+    class _ClockDate(S.dt.date):
+        @classmethod
+        def today(cls):
+            return _clock_day
+
+    class _ClockDT:
+        date = _ClockDate
+        datetime = S.dt.datetime
+        timedelta = S.dt.timedelta
+        timezone = S.dt.timezone
+        time = S.dt.time
+
+    S.dt = _ClockDT()
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 _ok = _n = 0
 
@@ -159,6 +182,8 @@ htest = health_rows(*ft_rows(20, 20, test_mode=True))
 check('test sends are not a first-touch sample', htest['day_sent'] == 0 and htest['day_blocked'] is False)
 herr = health_rows(*ft_rows(20, 20, error=True))
 check('error rows are not a first-touch sample', herr['day_sent'] == 0 and herr['day_blocked'] is False)
+# The prior cohort day, not the calendar yesterday. On the gate day that yesterday is
+# pre-cutoff; this is the day before the clock above, which is always post-cutoff.
 yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
 hy = health_rows(*ft_rows(2, 20, day=yday))
 check("yesterday's 2 of 20, with nothing sent today, pauses on that cohort",
