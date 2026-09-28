@@ -210,15 +210,99 @@ def _person_optout_fn(optouts):
     return test
 
 
+def _hold_reason_fn():
+    """Label for a row call_rows did not return: the FIRST of call_rows' own checks it fails, in
+    call_rows' order. This only names the reason for the summary; call_rows alone decides who is
+    held. 'other' means none of these matched (for example two rows of one sale collapsed by
+    call_rows' calendar dedupe), so a large 'other' says this labeller has drifted from call_rows."""
+    idx, bk = None, None
+    try:
+        import bk_lookup as bk
+        idx = bk.federal_hold_index()
+    except Exception:
+        idx = None
+    try:
+        import stay_gate as sg
+    except Exception:
+        sg = None
+    try:
+        import diligence_gate as dgm
+        tally = dgm.Tally()
+    except Exception:
+        tally = None
+    floor = float(os.environ.get('CALLMODE_EQ_FLOOR', '-25'))
+
+    def federal(case):
+        if idx is not None:
+            try:
+                return bool(bk.federal_hold(case, index=idx)[0])
+            except Exception:
+                pass
+        if sg is not None:
+            return not bool(sg.case_stem(case))
+        return True
+
+    def reason(d, deads):
+        case = str(d.get('case') or '')
+        is_bal = d.get('st') == 'BAL'
+        if not case:
+            return 'no_case_number'
+        if case in deads:
+            return 'dead_ledger'
+        if d.get('sibclaimed'):
+            return 'sibling_case_sold'
+        if d.get('saleBkAct'):
+            return 'bankruptcy_federal_flag' if d.get('bkWhy') else 'bankruptcy_stay_on_docket'
+        if d.get('lpDismissed'):
+            return 'lis_pendens_dismissed'
+        if federal(case):
+            return 'bankruptcy_federal_hold'
+        if d.get('title_status') == 'transferred':
+            return 'title_transferred'
+        if tally is not None and not is_bal:
+            try:
+                if tally.check(d).get('hold'):
+                    return 'diligence_hold'
+            except Exception:
+                return 'diligence_unevaluable'
+        try:
+            eq = float(d.get('eq'))
+        except (TypeError, ValueError):
+            eq = None
+        if eq is not None and eq <= floor:
+            return 'equity_below_floor'
+        dnc, src = d.get('phdnc') or [], d.get('phsrc') or []
+        if not any(RL.digits10(p) and not (dnc[i] if i < len(dnc) else False)
+                   and (src[i] if i < len(src) else '') not in ('ag', 'xl')
+                   for i, p in enumerate(d.get('phones') or [])):
+            return 'no_dialable_phone'
+        try:
+            days = int(d.get('days'))
+        except (TypeError, ValueError):
+            days = 9999
+        is_lp = d.get('st') == 'LP'
+        if not is_lp and not is_bal and days < 0:
+            return 'auction_passed'
+        if is_lp and d.get('auction') and days < 0:
+            return 'lis_pendens_sale_passed'
+        if d.get('vac'):
+            return 'vacant_land'
+        if re.search(r'timeshare|parcel not linked', str(d.get('warn') or ''), re.I):
+            return 'timeshare_or_unlinked_parcel'
+        return 'other'
+    return reason
+
+
 def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check):
     """-> (passed [(row, phones)], counts). Order follows `rows`."""
     import call_mode
     dial, _total = call_mode.call_rows(rows, optouts=optouts, deads=deads,
                                        max_days=10 ** 6, cap=10 ** 9)
     phones_by_case = {r['c']: list(r.get('p') or []) for r in dial}
-    counts = {'held_call_mode': 0, 'held_no_dialable_phone': 0, 'held_stay_gate': 0,
-              'held_optout': 0, 'stay_codes': {}}
+    counts = {'held_optout': 0, 'held_call_mode': 0, 'held_call_mode_by_reason': {},
+              'held_stay_gate': 0, 'stay_codes': {}}
     person_optout = _person_optout_fn(optouts)
+    reason_of = _hold_reason_fn()
     passed = []
     for row in rows:
         case = str(row.get('case') or '')
@@ -228,10 +312,10 @@ def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check):
             counts['held_optout'] += 1
             continue
         if case not in phones_by_case:
-            usable = [p for i, p in enumerate(row.get('phones') or [])
-                      if not ((row.get('phdnc') or [])[i:i + 1] or [False])[0] and RL.digits10(p)]
-            key = 'held_no_dialable_phone' if not usable else 'held_call_mode'
-            counts[key] += 1
+            counts['held_call_mode'] += 1
+            why = reason_of(row, deads)
+            by = counts['held_call_mode_by_reason']
+            by[why] = by.get(why, 0) + 1
             continue
         v = stay_check(case)
         if not v.get('ok'):
@@ -318,6 +402,12 @@ def default_list_name(rows, today):
     return '%s Pre-Foreclosure %s' % (where, today.strftime('%Y-%m'))
 
 
+def norm_county(c):
+    """Comparison key only: 'palm-beach', 'Palm_Beach', 'PALM BEACH' -> 'PALMBEACH';
+    'MIAMI-DADE', 'miami dade' -> 'MIAMIDADE'."""
+    return re.sub(r'[^A-Z]', '', str(c or '').upper())
+
+
 def _sort_key(row):
     d = row.get('days')
     try:
@@ -331,7 +421,13 @@ def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
           county=None, stay_check=default_stay_check):
     """-> (leads, summary). Pure given its inputs; main() supplies the real ones."""
     if county:
-        rows = [r for r in rows if str(r.get('county') or '').upper() == county.upper()]
+        want = norm_county(county)
+        present = {norm_county(r.get('county')): str(r.get('county')).upper()
+                   for r in rows if r.get('county')}
+        if not want or want not in present:
+            raise ExportError('--county %r matches no lead. Counties on the board: %s'
+                              % (county, ', '.join(sorted(present.values())) or 'none'))
+        rows = [r for r in rows if norm_county(r.get('county')) == want]
     rows = sorted(rows, key=_sort_key)
     passed, counts = gate_rows(rows, optouts, opt_cases, deads, stay_check=stay_check)
     leads, no_addr = [], 0
@@ -349,7 +445,8 @@ def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
         'rows_in': len(rows),
         'held_optout': counts['held_optout'],
         'held_call_mode': counts['held_call_mode'],
-        'held_no_dialable_phone': counts['held_no_dialable_phone'],
+        'held_call_mode_by_reason': dict(sorted(counts['held_call_mode_by_reason'].items(),
+                                                key=lambda kv: -kv[1])),
         'held_stay_gate': counts['held_stay_gate'],
         'stay_codes': counts['stay_codes'],
         'dropped_missing_address': no_addr,
@@ -358,6 +455,8 @@ def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
         'written_without_email': sum(1 for ld in leads if not ld.emails),
         'written_without_zip': sum(1 for ld in leads if not ld.zip),
         'written_equity_verified': sum(1 for ld in leads if ld.equity_verified),
+        'equity_note': ('Est Equity % is the board percent. It is a guess unless Equity Verified '
+                        'is Yes (the recorded mortgage chain was traced).'),
     }
     return leads, summary
 
@@ -385,7 +484,7 @@ def main(argv=None):
         deads = load_deads()
         bounced = load_bounced()
         list_name = a.list_name or default_list_name(
-            [r for r in rows if not a.county or str(r.get('county') or '').upper() == a.county.upper()], today)
+            [r for r in rows if not a.county or norm_county(r.get('county')) == norm_county(a.county)], today)
         leads, summary = build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
                                county=a.county or None)
     except ExportError as e:

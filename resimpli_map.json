@@ -1,5 +1,5 @@
 {
- "_note": "PLACEHOLDER HEADERS. Replace each 'header' with the exact text from REsimpli's List Stacking (Residential) sample template; 'field' names come from resimpli_lead.Lead. A list field takes 'index' (one element) or 'join' (all, joined). 'value' writes a constant. est_equity is a PERCENT and is unverified unless 'Equity Verified' is Yes.",
+ "_note": "PLACEHOLDER HEADERS. Replace each 'header' with the exact text from REsimpli's List Stacking (Residential) sample template; 'field' names come from resimpli_lead.Lead. A list field takes 'index' (one element) or 'join' (all, joined). 'value' writes a constant. Est Equity % is the board percent and a guess unless Equity Verified is Yes (also stated in the export summary). verdict and lis_pendens_amount stay on Lead but are not exported: both are always blank today.",
  "columns": [
   {"header": "First Name", "field": "owner_first"},
   {"header": "Last Name", "field": "owner_last"},
@@ -21,12 +21,10 @@
   {"header": "Filing Date", "field": "filing_date"},
   {"header": "Auction Date", "field": "auction_date"},
   {"header": "Plaintiff", "field": "plaintiff"},
-  {"header": "Lis Pendens Amount", "field": "lis_pendens_amount"},
   {"header": "Est ARV", "field": "est_arv"},
   {"header": "Est Owed", "field": "est_owed"},
-  {"header": "Est Equity % (unverified unless Equity Verified = Yes)", "field": "est_equity"},
+  {"header": "Est Equity %", "field": "est_equity"},
   {"header": "Equity Verified", "field": "equity_verified"},
-  {"header": "DealFlow Verdict", "field": "verdict"},
   {"header": "List Name", "field": "list_name"},
   {"header": "Tags", "field": "tags", "join": ", "},
   {"header": "Lead Source", "field": "source"}

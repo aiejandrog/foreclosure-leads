@@ -73,7 +73,7 @@ rec('list index -> one phone per column', row.get('Phone 1') == '3055550001' and
 rec('list join -> tags', row.get('Tags') == 'DealFlow, Miami-Dade', row.get('Tags'))
 rec('None renders blank, never 0', row.get('Est Owed') == '')
 rec('bool renders Yes/No', row.get('Equity Verified') == 'No')
-rec('whole float renders as integer', row.get('Est Equity % (unverified unless Equity Verified = Yes)') == '42')
+rec('whole float renders as integer', row.get('Est Equity %') == '42')
 
 custom = os.path.join(TMP, 'map.json')
 json.dump({'columns': [{'header': 'Owner Last', 'field': 'owner_last'},
@@ -144,7 +144,15 @@ rec('only the clean lead is written', cases == ['2099-000101-CA-01'], cases)
 rec('case opt-out held', '2099-000102-CA-01' not in cases and s['held_optout'] >= 1)
 rec('identity (email) opt-out held', '2099-000103-CA-01' not in cases)
 rec('identity (phone) opt-out held, even on a DNC-flagged number', '2099-000112-CA-01' not in cases)
-rec('all-DNC lead held as no dialable phone', '2099-000104-CA-01' not in cases and s['held_no_dialable_phone'] >= 1)
+by = s['held_call_mode_by_reason']
+rec('all-DNC lead held as no dialable phone', '2099-000104-CA-01' not in cases and by.get('no_dialable_phone') == 2, by)  # 104 all-DNC, 110 agent-only
+rec('held_call_mode broken out by reason, and the reasons add up',
+    sum(by.values()) == s['held_call_mode'] and by.get('bankruptcy_stay_on_docket') == 1
+    and by.get('dead_ledger') == 1 and by.get('title_transferred') == 1 and not by.get('other'), by)
+rec('equity caveat lives in the summary, not a header',
+    'Equity Verified' in s['equity_note'] and all('(' not in c['header'] for c in EX.load_map()))
+rec('always-blank columns are not exported',
+    not {'verdict', 'lis_pendens_amount'} & {c.get('field') for c in EX.load_map()})
 rec('board stay flag held', '2099-000105-CA-01' not in cases)
 rec('stay_gate refusal held and counted by code', s['held_stay_gate'] == 1 and s['stay_codes'].get('stay_active') == 1, s)
 rec('dead ledger held', '2099-000107-CA-01' not in cases)
@@ -153,7 +161,7 @@ rec('dupe dropped and counted', s['dupes_dropped'] == 1, s)
 rec('not-the-owner-only lead held', '2099-000110-CA-01' not in cases)
 rec('title-transferred lead held', '2099-000111-CA-01' not in cases)
 rec('every input row is accounted for',
-    s['rows_in'] == s['held_optout'] + s['held_call_mode'] + s['held_no_dialable_phone'] + s['held_stay_gate']
+    s['rows_in'] == s['held_optout'] + s['held_call_mode'] + s['held_stay_gate']
     + s['dropped_missing_address'] + s['dupes_dropped'] + s['rows_written'], s)
 w = leads[0]
 rec('DNC number never written', '3055550102' not in w.phones, w.phones)
@@ -169,6 +177,16 @@ blob = open(p, encoding='utf-8').read()
 leak = [x for x in ('3055550102', '3055550201', '3055550301', 'stop@example.com', '3055550401',
                     '3055550501', '3055550601', '3055550701', 'dead@example.com', '3055551201') if x in blob]
 rec('no held phone or email appears anywhere in the CSV', not leak, leak)
+
+# --county is checked against the counties actually on the board
+rows_pb = rows + [mk('50-2099-CA-000113-XXXX-MB', '1 PALM ST, WEST PALM BEACH, FL 33401', ['5615550001'], county='PALM BEACH')]
+_, spb = EX.build(rows_pb, optouts, opt_cases, opt_emails, deads, set(), 'T', county='palm-beach', stay_check=stay)
+rec('hyphenated county name resolves to PALM BEACH', spb['rows_in'] == 1, spb)
+try:
+    EX.build(rows_pb, optouts, opt_cases, opt_emails, deads, set(), 'T', county='PALM-BEECH', stay_check=stay)
+    rec('unknown --county fails loudly instead of writing an empty file', False)
+except EX.ExportError as e:
+    rec('unknown --county fails loudly instead of writing an empty file', 'MIAMI-DADE' in str(e), e)
 
 # real stay_gate: the never-contact list refuses even with no cache on disk
 v = EX.default_stay_check('2025-000201-CA-01')
