@@ -1,43 +1,37 @@
 {
  "alerts": [
   {
-   "at": "2026-09-27T21:01:30-04:00",
-   "key": "healthcheck-fail",
-   "severity": "fail",
-   "text": "healthcheck FAIL stages: upstream sources."
-  },
-  {
-   "at": "2026-09-27T21:01:30-04:00",
+   "at": "2026-09-28T09:03:36-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: send server port 8823 is not listening; 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-09-27T21:01:30-04:00",
+   "at": "2026-09-28T09:03:36-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 11 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 12 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-09-27T21:01:30-04:00",
+   "at": "2026-09-28T09:03:36-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-09-27T21:01:30-04:00",
+ "published_at": "2026-09-28T09:03:36-04:00",
  "signals": {
   "bk_lookup": {
    "errors": 0,
-   "filings": 744,
-   "holds": 58,
-   "leads_checked": 0,
+   "filings": 762,
+   "holds": 83,
+   "leads_checked": 31,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.47,
    "pull_ok": true,
    "readable": true,
-   "requests_used": 116,
-   "truncated": 0
+   "requests_used": 84,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -75,16 +69,14 @@
    "window": 7
   },
   "captcha": {
-   "usd": 1.57151
+   "usd": 1.18872
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
    "fresh": true,
-   "names": [
-    "upstream sources"
-   ]
+   "names": []
   },
   "morning_sends": {
    "addresses": 2,
@@ -93,8 +85,8 @@
     10,
     10
    ],
-   "date": "2026-09-27",
-   "eligible": 11,
+   "date": "2026-09-28",
+   "eligible": 12,
    "judged": true,
    "readable": true,
    "scheduled": true,
@@ -105,19 +97,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-09-27",
+   "date": "2026-09-28",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1790507701,
+   "started_at": 1790594102,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-09",
    "readable": true,
-   "spent": 1.0629
+   "spent": 1.8765
   },
   "readiness": {
    "at": "2026-09-27T21:01:30-04:00",
