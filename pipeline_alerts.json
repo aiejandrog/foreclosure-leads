@@ -1,64 +1,103 @@
 {
  "alerts": [
   {
-   "at": "2026-09-26T21:00:01-04:00",
-   "key": "bounce-rate",
+   "at": "2026-09-27T21:01:30-04:00",
+   "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "Trailing 7-day lower bound 27.0% (raw 36.5%, 31 of 85). Ceiling 10%. First-touch sends are paused."
+   "text": "healthcheck FAIL stages: upstream sources."
   },
   {
-   "at": "2026-09-26T21:00:01-04:00",
+   "at": "2026-09-27T21:01:30-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: 2 DEALFLOW task(s) last result failed (DEALFLOW Refresh, DealFlow Sheets CRM); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness: send server port 8823 is not listening; 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-09-26T21:00:01-04:00",
+   "at": "2026-09-27T21:01:30-04:00",
+   "key": "morning-sends",
+   "severity": "fail",
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 11 leads were eligible, but 0 first-touch emails were sent."
+  },
+  {
+   "at": "2026-09-27T21:01:30-04:00",
    "key": "tracerfy-credits",
-   "severity": "warn",
-   "text": "Tracerfy balance 991 credits, warn under 1500."
+   "severity": "fail",
+   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-09-26T21:00:01-04:00",
+ "published_at": "2026-09-27T21:01:30-04:00",
  "signals": {
+  "bk_lookup": {
+   "errors": 0,
+   "filings": 744,
+   "holds": 58,
+   "leads_checked": 0,
+   "provider": "courtlistener",
+   "pull_age_h": 0.0,
+   "pull_ok": true,
+   "readable": true,
+   "requests_used": 116,
+   "truncated": 0
+  },
   "bounce": {
    "ceiling": 0.1,
    "day_blocked": false,
    "day_ceiling": 0.05,
    "day_date": "",
    "day_dead": 0,
-   "day_min": 10,
+   "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 31,
-   "lb": 0.2702916275231961,
-   "mailed": 85,
-   "rate": 0.36470588235294116,
+   "dead": 0,
+   "ft_cutoff": "2026-09-26T18:21:42+00:00",
+   "ft_dead": 0,
+   "ft_hard_bounces": 2,
+   "ft_hard_min": 10,
+   "ft_rate": 0.0,
+   "ft_restart_cap": 10,
+   "ft_rule": "slow_restart",
+   "ft_sent": 0,
+   "ft_why": "slow_restart",
+   "hist_dead": 0,
+   "hist_sent": 0,
+   "lb": 0.0,
+   "mailed": 0,
+   "post_dead": 0,
+   "post_lb": 0.0,
+   "post_mailed": 0,
+   "post_rate": 0.0,
+   "post_trailing_blocked": false,
+   "pre_dead": 0,
+   "pre_mailed": 0,
+   "rate": 0.0,
    "readable": true,
-   "trailing_blocked": true,
+   "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 2.09059
+   "usd": 1.57151
+  },
+  "clerk_bk": {
+   "readable": false
   },
   "health_fails": {
-   "fresh": false,
+   "fresh": true,
    "names": [
-    "skiptrace freshness"
+    "upstream sources"
    ]
   },
   "morning_sends": {
    "addresses": 2,
-   "cap": 0,
+   "cap": 10,
    "caps": [
-    0,
-    0
+    10,
+    10
    ],
-   "date": "2026-09-26",
+   "date": "2026-09-27",
    "eligible": 11,
    "judged": true,
    "readable": true,
-   "scheduled": false,
+   "scheduled": true,
    "sent": 0
   },
   "optout_ledger": {
@@ -66,32 +105,31 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-09-26",
+   "date": "2026-09-27",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1790443372,
+   "started_at": 1790507701,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-09",
    "readable": true,
-   "spent": 0.0
+   "spent": 1.0629
   },
   "readiness": {
-   "at": "2026-09-26T21:00:01-04:00",
+   "at": "2026-09-27T21:01:30-04:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
    "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 2,
+   "failed": 1,
    "failed_names": [
-    "DEALFLOW Refresh",
-    "DealFlow Sheets CRM"
+    "DEALFLOW Refresh"
    ],
    "interactive": 3,
    "interactive_names": [
@@ -100,8 +138,8 @@
     "DealFlow Replies"
    ],
    "on_ac": true,
-   "pct": 80,
-   "port_open": true,
+   "pct": 79,
+   "port_open": false,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
@@ -110,7 +148,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 991
+   "credits": 1
   }
  },
  "version": 1
