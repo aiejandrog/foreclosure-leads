@@ -8,8 +8,8 @@ cd /d "%~dp0"
 rem  CROSS-MACHINE LEASE. Same entry as refresh-dealflow.bat. Off unless DEALFLOW_RUNNER_LOCK=1.
 rem  This bat skip-traces, so with the gate on it also has to be DEALFLOW_ARMED_MACHINE.
 rem  No setlocal in this file, so the exit below is just exit /b.
-set "LOCKMARK=%DEALFLOW_LOCK_INNER%"
-if "%LOCKMARK:~0,5%"=="held-" goto :runner_lock_held
+set "LOCKMARK=_%DEALFLOW_LOCK_INNER%"
+if "%LOCKMARK:~0,6%"=="_held-" goto :runner_lock_held
 python -u runner_lock.py run --runner "%~nx0" -- cmd /c "%~f0" >> "%~dp0runner-lock.log" 2>&1
 set "LOCKRC=%errorlevel%"
 if not "%LOCKRC%"=="0" echo [%date% %time%] %~nx0 did not start - cross-machine lease exit %LOCKRC%. See runner-lock.log.>> "%~dp0phones-run.log"
