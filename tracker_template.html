@@ -4526,6 +4526,7 @@ function _wpHousehold(r){
     return '<div class="wpown">'
       + '<div class="wpownh"><b>'+esc(o.name||'?')+'</b>'
       + (atProp ? ' <span class="wptag wpon">AT THE PROPERTY — knock</span>' : ' <span class="wptag wpoff">ABSENTEE '+esc(locTxt)+' — call, don\'t knock</span>')
+      + (o.notOwner ? ' <span class="wptag wpoff" title="Whitepages lists this person on the parcel, but the name does not match the owner on our records. Ask for the owner.">NOT THE OWNER ON OUR RECORDS</span>' : '')
       + '</div>'
       + (phList ? '<div class="wpphs">'+phList+'</div>' : '<div class="csmut">no phones on WP for this owner</div>')
       + (emList ? '<div class="wpems">'+emList+'</div>' : '')
@@ -4557,6 +4558,59 @@ function _wpHousehold(r){
       + '</div>';
   }
   return head + rows + residHtml + '</div>';
+}
+// RELATIVES (r.wpRelatives, baked from the Whitepages Person layer by wp_contacts.py). CALL ONLY.
+// They live in their own field and never enter r.phones, so textablePhones, the worker, the send
+// bridge and Call Mode cannot reach them. Shown only when the owner cannot be reached: no dialable
+// owner-grade number on the row (skip trace 'st' or deed/address-verified Whitepages 'wp', DNC or
+// not), or 3+
+// unanswered call attempts over 2+ days with no conversation. Every hold hides them outright.
+// Calling a relative about someone's foreclosure is a privacy and TCPA question: the script is the
+// attorney's to approve. Until then the sheet says to ask only that they pass a number along.
+function _ownerUnreachable(r){
+  // A DNC owner number still counts: board policy keeps it manually dialable about the owner's own
+  // foreclosure, and a relative's unscrubbed number is not a better first call than that.
+  var ph = r.phones||[], src = r.phsrc||[];
+  var ownerDial = ph.some(function(p,i){ var t = src[i]||'st'; return t==='st' || t==='wp'; });
+  if(!ownerDial) return true;
+  var ts = ((notes[r.case]||{}).touches||[]).filter(function(t){ return (t.ch||'')==='call'; });
+  if(ts.some(function(t){ return /talk|reached|spoke|interest|call ?back|appoint|convers/i.test(t.out||''); })) return false;
+  var miss = ts.filter(function(t){ return /no ?answer|voicemail|\bvm\b|wrong|disconnect|not in service|busy/i.test(t.out||''); });
+  var days = {}; miss.forEach(function(t){ days[t.d||''] = 1; });
+  return miss.length >= 3 && Object.keys(days).length >= 2;
+}
+function _relativesHeld(r){
+  if(_textContactBlocked(r)) return true;
+  if(r.ddhold || r.sibclaimed || r.lpDismissed) return true;
+  if(typeof isFlaggedDead === 'function' && isFlaggedDead(r)) return true;
+  var st = String((notes[r.case]||{}).status||'').toUpperCase();
+  return st==='DEAD' || st==='DO NOT CONTACT' || st==='OPTED OUT';
+}
+function _wpRelatives(r){
+  var rel = (r && r.wpRelatives) || []; if(!rel.length) return '';
+  if(_relativesHeld(r)) return '';
+  var withPh = rel.filter(function(x){ return (x.phones||[]).length; }).length;
+  if(!_ownerUnreachable(r)){
+    return '<div class="csmut" style="margin:6px 0 10px">👪 '+rel.length+' relative'+(rel.length===1?'':'s')
+      +' on file ('+withPh+' with a number). Hidden while the owner still has a number to try.</div>';
+  }
+  var fmtPh = function(n){ n = String(n||'').replace(/\D/g,''); return n.length===10 ? n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6) : n; };
+  var own = (r.oname || String(r.owners||'').split(';')[0] || 'the owner');
+  var rows = rel.map(function(x){
+    var ph = (x.phones||[]).map(function(p){
+      var d = String(p.n||'').replace(/\D/g,'');
+      return '<a class="wpph" href="'+esc(_telNum(d))+'">'+esc(fmtPh(d))+'</a><span class="wpt">'+esc(p.type||'?')+'</span>';
+    }).join(' ');
+    return '<div class="wpresidrow"><b>'+esc(x.name||'?')+'</b>'
+      + (x.rel ? ' <span class="wpt">'+esc(x.rel)+'</span>' : '')
+      + (ph ? '<div class="wpphs">'+ph+'</div>' : '<div class="csmut">no number on file</div>')
+      + '</div>';
+  }).join('');
+  return '<div class="cssec">👪 RELATIVES — CALL ONLY</div><div class="csbody"><div class="wpresid">'
+    + '<div class="wpabs">⚠ Shown because the owner could not be reached. <b>Call only</b>: never text, email or add to a batch. '
+    + 'Say who you are and ask them to pass your number to '+esc(own)+'. <b>Do not mention the foreclosure or the case.</b> '
+    + 'These numbers are not DNC-scrubbed. The script needs the attorney\'s OK.</div>'
+    + rows + '</div></div>';
 }
 // GOVERNMENT / CODE-ENFORCEMENT defendants: when the county, a city, code enforcement, or the IRS/US is
 // named as a defendant on THIS case, its lien (if any exists) is only foreclosed OUT if that party stays
@@ -4921,7 +4975,7 @@ function _callSheet(r){
       (s.sale?' — sale '+esc(s.sale):'')+(s.title?', Certificate of Title <b>'+esc(s.title)+'</b>':'')+
       (s.tpb?' to <b>'+esc(s.tpb)+'</b>':'')+'. The owner here no longer owns it. Do not knock, call, or mail. '+
       'Only live angle: a registry SURPLUS belongs to the former owner (FS 45.031).</div>'; })() : '';
-  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
+  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+_wpRelatives(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+

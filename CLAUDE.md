@@ -189,6 +189,27 @@ publish does not cost one board, it costs the reference.
 If you add a fourth publish path, gate it in the same commit. `grep -l publish_guard *.bat` is the
 check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
 
+## Whitepages Pro (owner phones + relatives)
+
+`whitepages_lookup.py` is the paid caller; `wp_contacts.py` decides whose number is whose, and
+both the lookup report and the `make_tracker` bake import it. Key: gitignored `whitepages.key`,
+created by Alejandro on the laptop. Never ask for it in chat, never print it.
+
+- **Spend.** $0.22 per request that reaches Whitepages (Essentials plan price, last verified
+  2026-08-15), 404 misses included. `--max-spend` caps a run (default `WP_MAX_SPEND`, $2.00) and
+  `WP_DAILY_CAP` caps the day ($5.00). Whitepages no longer draws on the BatchData cap; it has
+  its own, like Tracerfy. `--relatives` adds one Person call per lead.
+- **Owner bar.** A number is the owner's (`wp`) only when the name clears
+  `ownership_gate.owner_relation()` as `same` with two shared tokens including a surname. A
+  Person-layer record must also place the owner at the property address; name only stays `nm`.
+  A record that fails the name bar (a namesake) is dropped.
+- **Relatives** go in `r.wpRelatives` and nowhere else. Never `phones`, `emails`, a text batch,
+  the worker, the send bridge or Call Mode. The board shows them call-only, and only when the
+  owner has no `st`/`wp` number or has missed 3 calls over 2 days with no conversation. Any hold
+  (stay, never-contact, opt-out, wrong owner, diligence, dead, claimed) hides them, and the bake
+  strips them from held leads. The call script is the attorney's to approve.
+- Tests: `python _wpcontactstest.py`.
+
 ## Federal bankruptcy check (CourtListener)
 
 Broward and Palm Beach have no Miami-Dade docket stay. They stay held until a federal
