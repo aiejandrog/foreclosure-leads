@@ -1,25 +1,25 @@
 {
  "alerts": [
   {
-   "at": "2026-09-28T09:03:36-04:00",
+   "at": "2026-09-28T09:31:29-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: send server port 8823 is not listening; 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-09-28T09:03:36-04:00",
+   "at": "2026-09-28T09:31:29-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 12 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-09-28T09:03:36-04:00",
+   "at": "2026-09-28T09:31:29-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-09-28T09:03:36-04:00",
+ "published_at": "2026-09-28T09:31:29-04:00",
  "signals": {
   "bk_lookup": {
    "errors": 0,
@@ -27,7 +27,7 @@
    "holds": 83,
    "leads_checked": 31,
    "provider": "courtlistener",
-   "pull_age_h": 0.47,
+   "pull_age_h": 0.94,
    "pull_ok": true,
    "readable": true,
    "requests_used": 84,
