@@ -108,13 +108,17 @@ def _seat_csv_rows(rows):
     """One spreadsheet row per dial row: who, every phone, where, when, and blank Result/Notes."""
     out = []
     for i, r in enumerate(rows, 1):
-        lp = r.get('st') == 'LP'
+        # call_rows ships x = auction date, or the filing date on a lis pendens with no sale yet
+        # (lp:1, d 9999). Say which, so a filing date never reads as an auction date.
+        dated = r.get('d', 9999) < 9999
+        filed_only = bool(r.get('lp')) and not dated
         eq = ('%d%%' % round(r['e'])) if r.get('e') is not None else ''
         if eq and r.get('eqv'):
             eq += ' verified'
         out.append([i, r.get('on') or r.get('o') or '', ', '.join(_fmt_phone(x) for x in (r.get('p') or [])),
-                    r.get('a') or '', '' if lp else (r.get('x') or ''), (r.get('x') or '') if lp else '',
-                    '' if r.get('d', 9999) >= 9999 else r.get('d'), eq, r.get('c') or '', '', ''])
+                    r.get('a') or '', '' if filed_only else (r.get('x') or ''),
+                    (r.get('x') or '') if filed_only else '',
+                    r.get('d') if dated else '', eq, r.get('c') or '', '', ''])
     return out
 
 
