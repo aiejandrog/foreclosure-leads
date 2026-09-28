@@ -25,7 +25,7 @@ if errorlevel 1 (echo REPO GUARD refused this checkout - nothing traced, built o
 echo ==== phones run %date% %time% ====
 rem  --all, not the Tier A default: on 2026-09-28 a hand run with 1,001 credits traced nothing
 rem  because all 62 Tier A leads were already cached, while 43 other owners had no phone.
-rem  Miami first, 80 at most (~$8, under bd_budget's $10 daily cap, so a budget stop cannot fail the run).
+rem  Miami first, 80 at most (~$8, under bd_budget's $10 daily cap on a day nothing else has traced).
 python skiptrace.py --all --county-first MIAMI-DADE --limit 80
 if errorlevel 1 (echo TRACE FAILED - nothing rebuilt or pushed & pause & exit /b 1)
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"
