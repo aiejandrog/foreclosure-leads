@@ -31,6 +31,7 @@ import broward_liens as B                      # noqa: E402  (_curl, start_sessi
 
 CODE_CACHE = os.path.join(HERE, 'broward_doctypes.json')
 FALLBACK_LP_CODE = '158'                       # observed at discovery, 2026-08-11
+SESSION_RETRY_WAITS = (30, 90)                 # seconds between session attempts (3 tries total)
 
 
 def _lp_code(sess):
@@ -64,7 +65,17 @@ def sweep(days=30):
     """-> list of canonical LP rows (county='BROWARD'), or None when the portal blocked us.
     None vs [] matters: an empty week is data, a blocked session is not."""
     from lis_pendens import LENDER_RE, HOA_RE
-    sess = B.start_session()
+    # Cloudflare challenges AcclaimWeb at a coin-flip rate (broward_liens._curl), and a start
+    # that lands on a bad stretch used to drop the whole county for the night: on 2026-09-28 the
+    # one attempt got no session and Broward, the largest county, kept yesterday's rows. Each
+    # retry is a fresh jar (start_session deletes it), spaced out so the next try is a new roll.
+    sess = None
+    for attempt, wait in enumerate(SESSION_RETRY_WAITS + (None,), 1):
+        sess = B.start_session()
+        if sess or wait is None:
+            break
+        print(f'BROWARD: no session on try {attempt} — retrying in {wait}s', file=sys.stderr)
+        time.sleep(wait)
     if not sess:
         print('BROWARD: no session (Cloudflare) — sweep skipped, not empty', file=sys.stderr)
         return None
