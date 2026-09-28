@@ -313,7 +313,11 @@ for name in ('refresh-dealflow.bat', 'run-phones-nightly.bat', 'run-phones.bat',
              'run-replies-daily.bat', 'run-leads.bat'):
     body = (HERE / name).read_text(encoding='utf-8')
     rec('%s enters through runner_lock.py unless already inside a held- child' % name,
-        'runner_lock.py run --runner "%~nx0"' in body and 'LOCKMARK:~0,5' in body and ':runner_lock_held' in body)
+        'runner_lock.py run --runner "%~nx0"' in body and 'LOCKMARK:~0,6%"=="_held-"' in body and ':runner_lock_held' in body)
+    # LOCKMARK is never empty: a substring of an UNDEFINED variable is not an empty string in cmd,
+    # and on 2026-09-28 a hand-run run-phones.bat died on it ("The syntax of the command is incorrect").
+    rec('%s keeps LOCKMARK defined before taking a substring of it' % name,
+        'set "LOCKMARK=_%DEALFLOW_LOCK_INNER%"' in body)
 cad = (HERE / 'cadence-daily.bat').read_text(encoding='utf-8')
 gate_at = cad.find('runner_lock.py run --runner cadence-daily.bat -- python -u cadence.py')
 sync_at = cad.find('python -u sync_gate.py')
