@@ -1,5 +1,5 @@
 @echo off
-rem One-click phone refresh (licensed skip-trace). Traces Tier-A owners -> rebuilds the tracker
+rem One-click phone refresh (licensed skip-trace). Traces every untraced owner, Miami first -> rebuilds the tracker
 rem with phones baked in -> pushes to the live site.
 rem PREREQ: a provider key present (gitignored) - tracerfy.key (no minimum) or batchdata.key.
 rem   skiptrace.py auto-detects whichever key exists (tracerfy preferred).
@@ -23,7 +23,10 @@ rem  ahead of skiptrace.py also means a wrong-folder run costs nothing at the pr
 call repo_guard.bat "%~dp0" "phones-run.log"
 if errorlevel 1 (echo REPO GUARD refused this checkout - nothing traced, built or pushed. & pause & exit /b 1)
 echo ==== phones run %date% %time% ====
-python skiptrace.py
+rem  --all, not the Tier A default: on 2026-09-28 a hand run with 1,001 credits traced nothing
+rem  because all 62 Tier A leads were already cached, while 43 other owners had no phone.
+rem  Miami first, 80 at most (~$8, under bd_budget's $10 daily cap, so a budget stop cannot fail the run).
+python skiptrace.py --all --county-first MIAMI-DADE --limit 80
 if errorlevel 1 (echo TRACE FAILED - nothing rebuilt or pushed & pause & exit /b 1)
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"
 if errorlevel 1 (echo REBUILD FAILED - nothing pushed & pause & exit /b 1)
