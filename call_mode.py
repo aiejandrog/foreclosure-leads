@@ -3909,7 +3909,27 @@ function pool(){
     if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
     if(_clmOwner(r.c)){ _CLMN++; return false; }
     return true; });
-  return keep;
+  return _freshFirst(keep, lane);
+}
+/* NEVER-CALLED FIRST (2026-09-28). supReason() hides a no-answer for its 24h cooldown, and the
+   next day it comes back at its old rank -- above every lead nobody has dialled yet, because the
+   rank (sale date, equity) never changes. Alejandro, 09-28: "i have the same old people on my
+   dealflow call mode list". Order only: nothing is added or removed here, supReason() and the seat
+   and claim filters above still decide who is in the list. Leads with no logged call go first,
+   then retries; each group keeps its rank order. On Fresh filings the never-called group is
+   newest filing first, because the first call on a new filing is the edge. */
+function _filedMs(r){
+  var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return new Date(+m[3], +m[1]-1, +m[2]).getTime();
+  var t = Date.parse(String(r.x||'')); return isFinite(t) ? t : 0;
+}
+function _freshFirst(rows, ln){
+  var tagged = rows.map(function(r, ix){
+    var called = false; try{ called = !!lastCall(notes[r.c]); }catch(e){}
+    return {r:r, ix:ix, t:called ? 1 : 0, f:(ln==='lp' && !called) ? _filedMs(r) : 0};
+  });
+  tagged.sort(function(a, b){ return (a.t - b.t) || (b.f - a.f) || (a.ix - b.ix); });
+  return tagged.map(function(o){ return o.r; });
 }
 var _SEATN = 0, _CLMN = 0;
 function quoScanFresh(q){
@@ -4093,7 +4113,12 @@ function advance(workedC, nextC){
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
-  for(k=0;k<P.length;k++) if(P[k].c===workedC){ i=k+1; return render(); }
+  for(k=0;k<P.length;k++) if(P[k].c===workedC){
+    /* A lead just dialled drops behind the never-called ones (_freshFirst), so the next lead has
+       already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
+    var _moved = false; try{ _moved = k > i && !!lastCall(notes[workedC]); }catch(e){}
+    if(!_moved) i=k+1;
+    return render(); }
   render();
 }
 /* WHICH SCREEN IS UP. The board's extracted mergeNotes ends with `render()` — harmless on the
