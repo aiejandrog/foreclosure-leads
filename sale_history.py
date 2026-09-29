@@ -129,6 +129,13 @@ _BKSTAYREL = re.compile(r'relief from (?:the )?(?:automatic )?stay|'
                         r'automatic stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', re.I)
 # A reinstatement, or an order vacating a dismissal: the case is back. Only ever read on a line
 # already about a bankruptcy.
+# What ENDS a bankruptcy case on the state docket: a dismissal or a discharge. Stay relief
+# (relief from stay, lifting / terminating / annulling the stay) is usually granted to one creditor
+# so it can resume the foreclosure while the bankruptcy stays open; the house is still estate
+# property and the owner is still a debtor in a pending case. 2024-008527 read 'lifted' four months
+# after its petition on a relief order (review 2026-09-27). A relief line is the case acting, not
+# its end.
+_BKEND = re.compile(r'dismiss|discharg', re.I)
 _BKREINSTATE = re.compile(r'reinstat|vacat\w*\s+(?:the\s+)?(?:order\s+(?:of\s+)?)?dismiss', re.I)
 # A dismissal, stay relief or reinstatement counts only once it is ORDERED. A motion, request or
 # hearing notice asking for one is not granted until an order says so, and an order DENYING one is
@@ -152,6 +159,35 @@ _BKDONE = {   # what an order says when it does the thing: granted, or the verb 
     'reinstate': re.compile(_GRANTOF + r'(?:reinstat|vacat\w*' + _UNDISMISS + r')|'
                             r'\b(?:order|judgment)\b.*?\b(?:reinstating|reinstated|vacat(?:ing|ed)' + _UNDISMISS + r')', re.I),
 }
+
+
+# A line that grants stay relief AND names a dismissal ends the case only when the dismissal itself
+# is ordered: 'Order Granting Relief from Stay and Dismissing Case' ends it, 'Order Granting Relief
+# from Stay; Motion to Dismiss' does not.
+# The dismissal must be what THIS order does to the case: 'Prior Case Dismissed' (the usual ground
+# for in-rem relief) and 'as to Discharged Co-Debtor' describe something else.
+_BKEND_DONE = re.compile(_GRANTOF + r'(?:dismiss|discharg)|'
+                         r'(?<!prior )(?<!previous )(?<!earlier )\b(?:case|debtors?|bankruptcy)\s+'
+                         r'(?:(?:was|is|has\s+been)\s+)?(?:dismissed|discharged)\b|'
+                         r'\bupon\s+(?:the\s+)?(?:dismissal|discharge)\b|'
+                         r'\b(?:dismissing|discharging)\s+(?:the\s+)?(?:(?!and\b)\w+\s+){0,3}?(?:case|debtors?)\b', re.I)
+
+
+# Dismissing a filing inside the case is not dismissing the case: 'Order Dismissing Motion for Relief
+# from Stay', 'Order Dismissing Objection to Claim'.
+_BKDISMISS_FILING = re.compile(r'dismiss\w*\s+(?:the\s+|an?\s+)?(?:(?!and\b)\w+\s+){0,2}?'
+                               r'(?:motion|objection|application|claim|complaint|adversary|appeal)', re.I)
+
+
+def _bk_ends(tx):
+    """True when an ordered closing line ends the bankruptcy case rather than relieving its stay."""
+    if not (re.search(r'discharg', tx, re.I) or len(re.findall(r'dismiss', tx, re.I))
+            > len(_BKDISMISS_FILING.findall(tx))):
+        return False
+    if _BKSTAYREL.search(tx) or re.search(r'lift\w* (?:the )?(?:automatic )?stay|stay (?:is |was )?'
+                                          r'(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', tx, re.I):
+        return bool(_BKEND_DONE.search(tx))
+    return True
 
 
 def _bk_not_ordered(tx, kind):
@@ -188,17 +224,22 @@ def _bk_lines(dks):
             continue                                   # asked for or denied: the case stands as it was
         if kind == 'reinstate':
             opens.append((iso, nums, False))           # the case is back: its stay is live again
-        elif kind == 'close':
+        elif kind == 'close' and _bk_ends(tx):
             closes.append((iso, nums))
+        elif kind == 'close':
+            opens.append((iso, nums, None))            # stay relief: the case is still open (None: not a filing date)
         else:
             opens.append((iso, nums, bool(_BKSTART.search(t))))  # 'CANCELLED PER BANKRUPTCY' = the stay acting
     return opens, closes
 
 
 def _bk_events(dks):
-    """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket."""
+    """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket. A stay-relief
+    line keeps its case open but is not a filing date, so it is left out of the opening dates
+    unless the docket has no other bankruptcy line."""
     opens, closes = _bk_lines(dks)
-    return [o[0] for o in opens], [c[0] for c in closes]
+    dated = [o[0] for o in opens if o[2] is not None]
+    return (dated or [o[0] for o in opens]), [c[0] for c in closes]
 
 
 def _bk_cases(dks):
@@ -457,6 +498,26 @@ def _apply_live(kind, r, surv, sched, who, bk, bkact, bkd, lifted):
     if lifted: r['sale_stay_lifted'] = lifted
 
 
+def _never_contact(case):
+    """True for a case on the never-contact list (stay_gate.NEVER_CONTACT). An unreadable extra
+    file still holds the built-in cases here; stay_gate.check refuses every send in that state."""
+    import stay_gate as SG
+    try:
+        return SG.never_contact(case)
+    except SG.NeverContactError:
+        return SG.case_stem(case) in SG.NEVER_CONTACT
+
+
+def _hold_row(kind, r, bd):
+    """Stamp a never-contact case as an active stay and drop any lift date the row carries."""
+    if kind == 'lp':
+        r['saleBkAct'] = True; r['saleBkD'] = r.get('saleBkD') or bd
+        r.pop('saleLift', None)
+    else:
+        r['sale_bk_active'] = True; r['sale_bk_date'] = r.get('sale_bk_date') or bd
+        r.pop('sale_stay_lifted', None)
+
+
 def _row_prev_stay(kind, r):
     """(active, filing date) a row already carries, in its own field names."""
     if kind == 'lp':
@@ -598,6 +659,16 @@ def main(argv=None):
         if a.case and case != a.case and md_civil_case(a.case) != case:
             continue
         ent = cache.get(case)
+        _never = _never_contact(case)
+        if _never:
+            # stay_gate.NEVER_CONTACT: held whatever the docket says, on every path below,
+            # including a run whose --limit budget is spent before this case is read.
+            if isinstance(ent, dict) and (not ent.get('a') or ent.get('sl')):
+                ent = cache[case] = dict(ent, a=True, sl='')
+            for kind, r in rows:
+                _hold_row(kind, r, (ent or {}).get('bd', ''))
+                lp_dirty = lp_dirty or kind == 'lp'
+            changed += 1
         _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < (near_ttl if is_near else ttl)
         _bkforce = a.refresh_bk and ent and (ent.get('a') or ent.get('b'))
         # cache-only: TRUST any structurally-compatible entry (v4+ carries the BK fields) — the
@@ -606,12 +677,16 @@ def main(argv=None):
             if ent and ent.get('v', 0) >= 4:
                 for kind, r in rows:
                     _apply_cached(kind, r, ent)
+                    if _never:
+                        _hold_row(kind, r, ent.get('bd', ''))
                     changed += 1
                     lp_dirty = lp_dirty or kind == 'lp'
             continue
         if _fresh and not a.case and not _bkforce:
             for kind, r in rows:
                 _apply_cached(kind, r, ent)
+                if _never:
+                    _hold_row(kind, r, ent.get('bd', ''))
                 applied += 1
                 lp_dirty = lp_dirty or kind == 'lp'
             continue
@@ -652,6 +727,8 @@ def main(argv=None):
                     # still active: drop any lift date from an OLDER closed stay in this read, since
                     # the board's gates read a lift date as "contact is legal again"
                     bkact, bkd, lifted = True, _pbd or bkd, ''
+            if _never:
+                bkact, bkd, lifted = True, bkd or _prev.get('bd') or _row_bd or '', ''
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'

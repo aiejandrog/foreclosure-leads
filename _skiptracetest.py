@@ -89,6 +89,11 @@ def run(leads, actions, argv, seed=None, ledger=None):
     # fine in production; the test just must not depend on which key files happen to exist.
     if '--provider' not in argv:
         argv = argv + ['--provider', 'batchdata']
+    # The Tracerfy preflight calls the free balance probe. Tests must not touch the network,
+    # and a missing tracerfy_mcp.url used to sys.exit out of that "non-fatal" probe.
+    if 'tracerfy' in argv:
+        import tracerfy_mcp
+        tracerfy_mcp.balance_soft = lambda *a, **k: None
     sys.argv = ['skiptrace.py'] + argv
     code = 0
     try:
@@ -199,6 +204,143 @@ code2, res2, sess2 = run([_lead('D1')], [FakeResp(200, PHONES)], ['--all'], ledg
 rec('a SECOND run the same day is refused (shared ledger, not per-run)',
     sess2.calls == 0 and code2 == 5, f'{sess2.calls} calls, exit {code2}')
 os.environ['BATCHDATA_DAILY_CAP'] = '9999'
+
+
+def _today():
+    led = bd_budget._load()
+    return led.get(str(__import__('datetime').date.today()))
+
+
+def _near(got, want):
+    try:
+        return abs(float(got) - float(want)) < 1e-9
+    except (TypeError, ValueError):
+        return False
+
+
+# 10 ─ Tracerfy bills only what the response says it billed ------------------------------------
+# Instant lookup: credits_deducted 5 on a hit (~$0.10), 0 on a miss. A 402 refusal, a timeout
+# and a DNS failure used to record $0.10 before the call's fate was known.
+TFY_HIT = {'hit': True, 'credits_deducted': 5, 'persons': [
+    {'phones': [{'number': '3055551212', 'type': 'Mobile', 'rank': 1}],
+     'emails': [{'email': 'j@example.com'}]}]}
+TFY_MISS = {'hit': False, 'credits_deducted': 0, 'persons_count': 0, 'persons': []}
+TFY_402 = {'error': 'Insufficient credits. Instant trace requires 5 credits per lookup. You have 1 credits.'}
+TFY_AMBIG = {'persons': [{'phones': [{'number': '3055551212', 'type': 'Mobile', 'rank': 1}]}]}
+
+_saved_tfy_cap = ST.TRACERFY_DAILY_CAP
+try:
+    code, res, sess = run([_lead('C1'), _lead('C2')], [FakeResp(402, TFY_402)],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy 402 still aborts the run (exit 2)', code == 2, f'exit {code}')
+    rec('tracerfy 402 stops after one call', sess.calls == 1, f'{sess.calls} calls')
+    rec('tracerfy 402 records no spend (the refusal was not billed)',
+        day is None or _near((day or {}).get('total'), 0), day)
+
+    code, res, sess = run([_lead('C1'), _lead('C2')],
+                          [FakeResp(200, TFY_MISS), FakeResp(200, TFY_HIT)],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy miss then hit exits 0', code == 0, f'exit {code}')
+    rec('tracerfy miss is cached and not re-charged next time',
+        res.get('C1', {}).get('phones') == [], res.get('C1'))
+    rec('tracerfy hit is cached', bool(res.get('C2', {}).get('phones')), res.get('C2'))
+    rec('tracerfy miss records $0 and the hit records $0.10',
+        day and _near(day.get('total'), 0.10) and _near((day.get('by') or {}).get('skiptrace-tracerfy'), 0.10)
+        and 'skiptrace-tracerfy-unconfirmed' not in (day.get('by') or {}), day)
+
+    code, res, sess = run([_lead('C1')], [requests.exceptions.Timeout('timed out')],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy timeout does not abort a single strike (exit 0)', code == 0, f'exit {code}')
+    rec('tracerfy timeout is counted toward the cap but labeled unconfirmed',
+        day and _near((day.get('by') or {}).get('skiptrace-tracerfy-unconfirmed'), 0.10)
+        and 'skiptrace-tracerfy' not in (day.get('by') or {}), day)
+    rec('the tracerfy cap includes that unconfirmed dollar',
+        _near(ST._tracerfy_spent_today(), 0.10), ST._tracerfy_spent_today())
+
+    code, res, sess = run([_lead('C1')],
+                          [requests.exceptions.ConnectionError('Name or service not known')],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy DNS failure is unconfirmed spend, not a confirmed hit',
+        day and _near((day.get('by') or {}).get('skiptrace-tracerfy-unconfirmed'), 0.10)
+        and 'skiptrace-tracerfy' not in (day.get('by') or {}), day)
+
+    code, res, sess = run([_lead('C1')], [FakeResp(200, TFY_AMBIG)],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy 200 with no receipt is unconfirmed, and the phone is still kept',
+        code == 0 and bool(res.get('C1', {}).get('phones'))
+        and day and _near((day.get('by') or {}).get('skiptrace-tracerfy-unconfirmed'), 0.10), day)
+
+    code, res, sess = run([_lead('C1')], [FakeResp(500, {'error': 'temporarily unavailable'})],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy 500 is unconfirmed spend',
+        day and _near((day.get('by') or {}).get('skiptrace-tracerfy-unconfirmed'), 0.10), day)
+
+    code, res, sess = run([_lead('C1')],
+                          [FakeResp(429, {'message': 'slow down'}), FakeResp(200, TFY_HIT)],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('tracerfy 429 is not billed; the following hit is billed once',
+        code == 0 and sess.calls == 2 and day and _near(day.get('total'), 0.10)
+        and _near((day.get('by') or {}).get('skiptrace-tracerfy'), 0.10), day)
+
+    # Cap stays conservative: unconfirmed dollars consume TRACERFY_DAILY_CAP.
+    ST.TRACERFY_DAILY_CAP = 0.10
+    code, res, sess = run([_lead('C1'), _lead('C2')],
+                          [requests.exceptions.Timeout('t1'), requests.exceptions.Timeout('t2')],
+                          ['--all', '--provider', 'tracerfy'])
+    rec('unconfirmed spend trips the tracerfy cap before the next call (exit 5)',
+        code == 5 and sess.calls == 1, f'exit {code}, {sess.calls} calls')
+
+    # Misses are free, so they must not consume the cap: two misses and a hit all run at $0.10.
+    ST.TRACERFY_DAILY_CAP = 0.10
+    code, res, sess = run([_lead('C1'), _lead('C2'), _lead('C3')],
+                          [FakeResp(200, TFY_MISS), FakeResp(200, TFY_MISS), FakeResp(200, TFY_HIT)],
+                          ['--all', '--provider', 'tracerfy'])
+    day = _today()
+    rec('free misses do not eat the tracerfy cap out from under a later hit',
+        code == 0 and sess.calls == 3 and day and _near(day.get('total'), 0.10),
+        f'exit {code}, {sess.calls} calls, {day}')
+finally:
+    ST.TRACERFY_DAILY_CAP = _saved_tfy_cap
+
+# BatchData still charges a miss and a timeout — that provider bills the request, not the hit.
+code, res, sess = run([_lead('C1')], [FakeResp(200, EMPTY)], ['--all'])
+day = _today()
+rec('batchdata miss still charges $0.15', day and _near(day.get('total'), 0.15)
+    and _near((day.get('by') or {}).get('skiptrace-batchdata'), 0.15), day)
+code, res, sess = run([_lead('C1')], [requests.exceptions.Timeout('t')], ['--all'])
+day = _today()
+rec('batchdata timeout still charges $0.15', day and _near((day.get('by') or {}).get('skiptrace-batchdata'), 0.15), day)
+
+# --county-first: order only. Miami-Dade leads trace before other counties, each group soonest
+# auction first; a lead with no county field is Miami-Dade (leads_final.json rows carry none).
+def _cl(case, county, days):
+    r = _lead(case); r['days_to_auction'] = days
+    if county is None:
+        r.pop('county', None)
+    else:
+        r['county'] = county
+    return r
+_mix = [_cl('B1', 'BROWARD', 2), _cl('P1', 'PALM BEACH', 3), _cl('M1', 'MIAMI-DADE', 40),
+        _cl('M2', None, 20), _cl('B2', 'BROWARD', 1)]
+code, res, sess = run(_mix, [FakeResp(200, PHONES)] * 2, ['--all', '--limit', '2', '--county-first', 'miami-dade'])
+rec('--county-first MIAMI-DADE spends the --limit on Miami leads before a sooner Broward sale',
+    code == 0 and sorted(res) == ['M1', 'M2'], sorted(res))
+code, res, sess = run(_mix, [FakeResp(200, PHONES)] * 2, ['--all', '--limit', '2'])
+rec('without --county-first the order is unchanged (soonest auction first, any county)',
+    code == 0 and sorted(res) == ['B1', 'B2'], sorted(res))
+code, res, sess = run(_mix, [FakeResp(200, PHONES)] * 3, ['--all', '--limit', '3', '--county-first', 'MIAMI'])
+rec('--county-first fills the rest of the limit from other counties, soonest first',
+    code == 0 and sorted(res) == ['B2', 'M1', 'M2'], sorted(res))
+rec('county names fold: Miami-Dade / MIAMI / miami dade are one key, Palm Beach two spellings one',
+    ST._county_key('Miami-Dade') == ST._county_key('MIAMI') == ST._county_key('miami dade')
+    and ST._county_key('PALM BEACH') == ST._county_key('palmbeach') != ST._county_key('BROWARD'))
 
 total = len(ok) + len(bad)
 print(f'\n==== {len(ok)}/{total} skiptrace hardening checks passed ====')

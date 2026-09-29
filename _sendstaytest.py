@@ -36,6 +36,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+os.environ.pop('DEALFLOW_CLERK_BK', None)
 import stay_gate as SG  # noqa: E402
 
 ok, bad = [], []
@@ -100,6 +101,56 @@ def unit():
         r = c('2099-000004-CA-01')
         rec('a pre-v4 entry with no stay fields is refused, not read as clear',
             not r['ok'] and r['code'] == SG.UNVERIFIED, r)
+
+        # ---- never contact again (the three leads contacted during their bankruptcy) ----
+        ncp = tmp / 'never_contact.json'
+        import bk_lookup as _BL
+        _ncpath = SG._never_contact_path
+        SG._never_contact_path = lambda: str(ncp)
+        try:
+            nc = dict(CACHE)
+            for stem in sorted(SG.NEVER_CONTACT):
+                nc[stem + '-CA-01'] = {'a': False, 'bd': '2025-01-01', 'sl': '2025-06-01', 'b': 1, 'v': 5, 't': 0}
+            pathlib.Path(cp).write_text(json.dumps(nc), encoding='utf-8')
+            for stem in sorted(SG.NEVER_CONTACT):
+                r = c(stem + '-CA-01')
+                rec('never-contact %s is refused although its cache entry reads lifted' % stem,
+                    not r['ok'] and r['code'] == SG.STAY_ACTIVE and r.get('src') == 'never_contact', r)
+            import bk_lookup as _BL
+            for stem in sorted(SG.NEVER_CONTACT):
+                rec('never-contact %s: letters/email stamp (send_hold) hold it' % stem, _BL.send_hold(stem + '-CA-01')[0] is True)
+                rec('never-contact %s: Call Mode / planner (federal_hold) hold it' % stem, _BL.federal_hold(stem + '-CA-01')[0] is True)
+            rec('the three stay-contact cases are on the built-in list',
+                SG.NEVER_CONTACT == {'2025-000201', '2024-008527', '2024-003696'})
+            ncp.write_text(json.dumps(['CASE NO 2099-000003-CA-01']), encoding='utf-8')
+            r = c('2099-000003-CA-01')
+            rec('a case added in never_contact.json is refused', not r['ok'] and r['code'] == SG.STAY_ACTIVE, r)
+            r = c('2099-000002-CA-01')
+            rec('a case not on either list still clears', r['ok'] and r['code'] == SG.CLEAR, r)
+            ncp.write_text(json.dumps(['CACE-99-001234']), encoding='utf-8')
+            r = c('CACE-99-001234')
+            rec('a Broward number in never_contact.json is refused too',
+                not r['ok'] and r['code'] == SG.STAY_ACTIVE and r.get('src') == 'never_contact', r)
+            rec('...and held for letters and Call Mode', _BL.send_hold('CACE-99-001234')[0] is True
+                and _BL.federal_hold('CACE-99-001234')[0] is True)
+            ncp.write_text(json.dumps(['not a case']), encoding='utf-8')
+            r = c('2099-000002-CA-01')
+            rec('an entry that is not a case number refuses every send rather than being ignored',
+                not r['ok'] and r['code'] == SG.UNAVAILABLE, r)
+            ncp.write_text('{not json', encoding='utf-8')
+            r = c('2099-000002-CA-01')
+            rec('an unreadable never_contact.json refuses every send (stay_data_unavailable)',
+                not r['ok'] and r['code'] == SG.UNAVAILABLE, r)
+            rec('an unreadable never_contact.json holds letters and Call Mode too',
+                _BL.send_hold('2099-000002-CA-01')[0] is True and _BL.federal_hold('2099-000002-CA-01')[0] is True)
+            ncp.write_text(json.dumps({'2099-000002': 1}), encoding='utf-8')
+            r = c('2099-000002-CA-01')
+            rec('a never_contact.json that is not a list refuses every send',
+                not r['ok'] and r['code'] == SG.UNAVAILABLE, r)
+        finally:
+            SG._never_contact_path = _ncpath
+            ncp.unlink(missing_ok=True)
+            pathlib.Path(cp).write_text(json.dumps(CACHE), encoding='utf-8')
 
         # ---- stem matching (first 11 chars) ----
         r = c('2099-000001')
@@ -271,11 +322,26 @@ def server():
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
         (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+        # Slow restart holds a first touch with no warm-up sender. This suite is the stay
+        # gate; one fixture sender lets a clear lead reach SMTP.
+        (work / 'senders.json').write_text(json.dumps({
+            'main_domain': 'example.com', 'main_domain_cap': 40,
+            'ramp_start': '2020-01-01', 'ramp': [{'through_day': 9999, 'per_day': 100}],
+            'lanes': {'default': 'tester@example.com', 'active': 'tester@example.com'},
+            'first_touch': {'from': ['warm@wu.example'], 'per_day': 100},
+        }), encoding='utf-8')
+        (work / 'bounced_emails.json').write_text('{}', encoding='utf-8')
         # A FRESH, empty opt-out ledger so the 2-day staleness gate does not refuse first.
         (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}),
                                            encoding='utf-8')
         cp = work / 'sale_history_cache.json'
         cp.write_text(json.dumps(CACHE), encoding='utf-8')
+        # The first-touch deliverability gate (2026-09-26) holds an address with no delivery
+        # evidence, and every send below is a first touch to a fresh fake address. Mark those fake
+        # addresses ZeroBounce-valid so this suite keeps testing the STAY gate, not that one.
+        (work / 'verified_emails.json').write_text(json.dumps(
+            {'owner%d@example.com' % i: {'v': 'ok', 'why': 'zerobounce:valid', 'd': '2026-09-26'}
+             for i in range(1, 60)}), encoding='utf-8')
         shim = work / '_run_bridge.py'
         shim.write_text(
             'import sys, smtplib\n'
@@ -419,10 +485,73 @@ def server():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def no_warmup_hold():
+    """The same clear lead, with no senders.json, must not leave. The restart rule holds it."""
+    print('-- no warm-up sender')
+    port = free_port()
+    work = pathlib.Path(tempfile.mkdtemp(prefix='dfstayhold_'))
+    proc = None
+    try:
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
+            shutil.copy(HERE / f, work / f)
+        write_sync_ok(work)
+        (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
+        (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+        (work / 'bounced_emails.json').write_text('{}', encoding='utf-8')
+        (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {}}),
+                                           encoding='utf-8')
+        (work / 'sale_history_cache.json').write_text(json.dumps(CACHE), encoding='utf-8')
+        (work / 'verified_emails.json').write_text(json.dumps(
+            {'owner1@example.com': {'v': 'ok', 'why': 'zerobounce:valid', 'd': '2026-09-26'}}),
+            encoding='utf-8')
+        shim = work / '_run_bridge.py'
+        shim.write_text(
+            'import sys, smtplib\n'
+            'class _FakeSMTP:\n'
+            '    def __init__(self, *a, **k): pass\n'
+            '    def __enter__(self): return self\n'
+            '    def __exit__(self, *a): return False\n'
+            '    def login(self, u, p): pass\n'
+            '    def send_message(self, m, **k):\n'
+            '        open("smtp_calls.txt", "a", encoding="utf-8").write(str(m["To"]) + "\\n")\n'
+            '        return {}\n'
+            'smtplib.SMTP_SSL = _FakeSMTP\n'
+            'sys.argv = ["send_server.py", "--port", "%d", "--limit", "50"]\n'
+            'exec(open("send_server.py", encoding="utf-8").read())\n' % port, encoding='utf-8')
+        proc = subprocess.Popen([sys.executable, str(shim)], cwd=str(work),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        up = False
+        for _ in range(60):
+            if call(port, '/health')[0] == 200:
+                up = True
+                break
+            time.sleep(0.25)
+        rec('hold bridge starts', up)
+        if not up:
+            return
+        st, j = call(port, '/send', {
+            'to': 'owner1@example.com', 'subj': 'About 1 Main St',
+            'body': 'Hello Jane, a short note about 1 Main St.',
+            'meta': {'owner': 'Jane', 'addr': '1 Main St', 'wl': 'active', 'c': '2099-000003-CA-01'}})
+        smtp = work / 'smtp_calls.txt'
+        rec('no senders.json: first touch is 409 first_touch_cap and sends nothing',
+            st == 409 and j.get('first_touch_cap') is True and j.get('skip') is True
+            and j.get('err') == 'first touch held: no warm-up sender configured during slow restart'
+            and not smtp.exists(), {'st': st, 'j': j})
+    finally:
+        if proc is not None:
+            try:
+                proc.terminate(); proc.wait(timeout=10)
+            except Exception:
+                pass
+        shutil.rmtree(work, ignore_errors=True)
+
+
 if __name__ == '__main__':
     unit()
     parity()
     server()
+    no_warmup_hold()
     total = len(ok) + len(bad)
     print(f'\n==== {len(ok)}/{total} send-bridge stay checks passed ====')
     if bad:

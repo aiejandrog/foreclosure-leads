@@ -1765,6 +1765,14 @@ def _run(a, ap):
                     # captcha) or was only asked for free, so a later run retries. A search the clerk
                     # answered with nothing on this parcel is marked below, as 'old chain kept'.
                 continue
+            # C2: every OR search result feeds records_index.json (recording keys only), so a code
+            # lien this owner's search returned has a CFN when code_lien_amounts asks for it by
+            # book/page. Free, never fatal.
+            try:
+                import code_lien_amounts as _CLA
+                _CLA.index_models(models)
+            except Exception:
+                pass
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)
             res['searched_as'] = _searched

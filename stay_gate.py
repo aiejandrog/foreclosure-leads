@@ -76,6 +76,18 @@ How the gate uses it:
         'clear', from production, queried within the max age       -> clear
     A number with fewer than five digits ('CASE', 'OTHER', an LP- placeholder) is never looked up
     and stays stay_case_unresolvable.
+CLERK DOCKET (clerk_bk.py). Off unless DEALFLOW_CLERK_BK=1, so a merge does not change who
+can be contacted. When it is on, a lead recorded as Broward or Palm Beach that this function
+would otherwise clear stays held until a Broward civil number has a fresh full clerk read
+of no active stay. Any other number on those leads (a tax deed, a bare number, FMCE, PR-C,
+small claims, a CASE label) is not a clerk-readable civil case and stays held. The county
+is the one on the lead record, not the absence of a Miami-Dade stem: a Miami-Dade lead with
+no stem keeps the verdict it already had. If the lead files cannot be read, every case
+without a Miami-Dade stem stays held. An active stay on a Broward docket refuses
+(stay_active) even if another source would clear. A missing, stale, partial, or unreadable
+docket refuses a lead this function would have cleared, and leaves an existing refusal as
+it was. Miami-Dade stems are not read by it. DEALFLOW_BK_ALLOW_CL_CLEAR is unchanged.
+
 A clear is a point-in-time fact about a name search: it goes stale, so it stops clearing after the
 max age. On the free PACER tier the search is done ON DEMAND: check() sets 'pacer_need' True when a
 fresh per-lead search could change the answer (no-stem lead, keyable number, no entry / an entry
@@ -124,6 +136,58 @@ NO_CASE = 'stay_no_case'
 UNRESOLVABLE = 'stay_case_unresolvable'
 UNVERIFIED = 'stay_unverified'
 UNAVAILABLE = 'stay_data_unavailable'
+
+# NEVER CONTACT AGAIN. Three leads were contacted after their owner filed bankruptcy (2025-000201
+# by text on 09-18, 2024-008527 and 2024-003696 by email). Each saved docket later read the stay as
+# lifted on an order granting relief, so this gate cleared them (review 2026-09-27). They are on the
+# attorney list, so they are held here, in code, which travels with git to every machine. Only a
+# person, after the attorney answers, takes a case off. More stems can be added without a code
+# change in DEALFLOW_DIR/never_contact.json (a JSON list of case numbers). A missing file adds
+# nothing; a file that exists but cannot be read refuses every send (stay_data_unavailable).
+NEVER_CONTACT = frozenset({'2025-000201', '2024-008527', '2024-003696'})
+NEVER_CONTACT_NAME = 'never_contact.json'
+
+
+class NeverContactError(Exception):
+    pass
+
+
+def _never_contact_path():
+    try:
+        import paths as _P
+        base = _P.DEALFLOW_DIR
+    except Exception:
+        base = os.environ.get('DEALFLOW_DIR') or os.path.join(os.path.expanduser('~'), 'DEALFLOW')
+    return os.path.join(base, NEVER_CONTACT_NAME)
+
+
+def never_contact_stems(path=None):
+    """Every never-contact stem. Raises NeverContactError when the extra file is unreadable."""
+    p = path or _never_contact_path()
+    try:
+        with open(p, encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return NEVER_CONTACT
+    except (OSError, ValueError) as e:
+        raise NeverContactError('%s is unreadable (%s)' % (NEVER_CONTACT_NAME, e))
+    if not isinstance(data, list):
+        raise NeverContactError('%s is not a list of case numbers' % NEVER_CONTACT_NAME)
+    out = set(NEVER_CONTACT)
+    for x in data:
+        k = (case_stem(x) or pacer_key(x)) if isinstance(x, str) else ''
+        if not k:                                    # an entry we cannot key would be silently ignored
+            raise NeverContactError('%s entry %r is not a case number' % (NEVER_CONTACT_NAME, str(x)[:40]))
+        out.add(k)
+    return frozenset(out)
+
+
+def never_contact(case, path=None):
+    """True when this case is never contacted again: a Miami-Dade stem, or any other county's
+    number keyed the way PACER results are. Raises NeverContactError (see above)."""
+    keys = {case_stem(case), pacer_key(case)} - {''}
+    return bool(keys) and bool(keys & never_contact_stems(path))
+
 
 _LOCK = threading.Lock()
 _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, entry), ...]}
@@ -420,6 +484,81 @@ def _check_pacer(raw, out, pacer_path, hits_path=None):
     return out
 
 
+def _merge_bk(raw, out):
+    """CourtListener opinion layered on a PACER/docket verdict.
+
+    No module, or no cache file yet: the verdict already in `out` stands. A non-stem lead that
+    is not already clear is flagged bk_need so the send bridge can run one party search.
+    A CourtListener hold wins over a clear (fail closed). A fresh CourtListener clear can clear
+    a lead that has no Miami-Dade stem only when that opinion says ok
+    (DEALFLOW_BK_ALLOW_CL_CLEAR=1). Otherwise the opinion blocks (clear_unconfirmed).
+    It cannot clear a PACER active hit or a Miami-Dade docket verdict — those stay as they were.
+    A lifted or closed Miami bankruptcy is not an extra hold. The docket verdict stands
+    unless CourtListener found an open match."""
+    try:
+        import bk_lookup as _BL
+        op = _BL.gate_opinion(raw)
+    except Exception:
+        op = None
+    if not isinstance(op, dict):
+        if (not out.get('ok') and not case_stem(raw) and pacer_key(raw)
+                and out.get('code') != STAY_ACTIVE):
+            out['bk_need'] = True
+        return out
+    if op.get('blocks') and op.get('code'):
+        out.update(ok=False, code=op['code'], why=op.get('why') or out.get('why') or '',
+                   src=op.get('src') or 'courtlistener', bk_need=bool(op.get('bk_need')))
+        if op.get('bd'):
+            out['bd'] = op['bd']
+        return out
+    if op.get('ok') and not case_stem(raw) and out.get('code') != STAY_ACTIVE:
+        out.update(ok=True, code=CLEAR, bk_need=False, pacer_need=False, src='courtlistener',
+                   why=op.get('why') or 'no open federal bankruptcy matched this owner')
+        return out
+    if op.get('bk_need') and not out.get('ok'):
+        out['bk_need'] = True
+        # A non-stem lead has no docket stay to fall back on. Say why the federal check
+        # is not a clear (stale, not run, budget). Do not rewrite a PACER active hit.
+        if (not case_stem(raw) and op.get('why') and out.get('code') != STAY_ACTIVE):
+            out['why'] = op['why']
+            if op.get('code'):
+                out['code'] = op['code']
+            out['src'] = op.get('src') or 'courtlistener'
+    return out
+
+
+def _apply_clerk(raw, out):
+    """Clerk-docket opinion for a case with no Miami-Dade stem, only when DEALFLOW_CLERK_BK=1.
+
+    An active stay replaces whatever this function was about to return. Any other clerk hold
+    replaces a clear only, so an existing CourtListener or PACER refusal is left as it was.
+    That includes a lead recorded as Broward or Palm Beach whose number is not a
+    clerk-readable civil case, and, when the lead list cannot be read, any non-stem case
+    this function would have cleared. If the flag is on and the check throws, the lead
+    stays held. Miami-Dade stems are returned unchanged."""
+    if case_stem(raw):
+        return out
+    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() != '1':
+        return out
+    try:
+        import clerk_bk as _CK
+        op = _CK.gate_opinion(raw)
+    except Exception:
+        op = {'blocks': True, 'code': UNVERIFIED,
+              'why': 'clerk docket check failed. Lead stays held.', 'src': 'clerk_docket'}
+    if not isinstance(op, dict) or not op.get('blocks'):
+        return out
+    if op.get('code') == STAY_ACTIVE or out.get('ok'):
+        out = dict(out)
+        out.update(ok=False, code=op.get('code') or UNVERIFIED,
+                   why=op.get('why') or out.get('why') or '',
+                   src=op.get('src') or 'clerk_docket', pacer_need=False, bk_need=False)
+        if op.get('bd'):
+            out['bd'] = op['bd']
+        return out
+    return out
+
+
 def _hit_on_stem(stem, hits_path, pacer_path):
     """(key, hit) of a blocking new-filer hit on this Miami-Dade stem, else None. Additive only."""
     if not hits_path:
@@ -465,12 +604,23 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
                                          'status cannot be checked')
             return out
         stem = case_stem(raw)
+        if stem or pacer_key(raw):
+            try:
+                never = never_contact(raw)
+            except NeverContactError as e:
+                out.update(code=UNAVAILABLE, why='never-contact list: %s' % e)
+                return out
+            if never:
+                out.update(code=STAY_ACTIVE, src='never_contact', matched=[stem or pacer_key(raw)],
+                           why=('case %s was contacted during its bankruptcy and is never contacted '
+                                'again (stay_gate.NEVER_CONTACT)' % (stem or raw[:40])))
+                return out
         if pacer_path is None:
             pacer_path = _pacer_path(cache_path)
         if hits_path is None:
             hits_path = _hits_path(cache_path)
         if not stem:
-            return _check_pacer(raw, out, pacer_path, hits_path)
+            return _apply_clerk(raw, _merge_bk(raw, _check_pacer(raw, out, pacer_path, hits_path)))
         idx, err = _load(cache_path)
         if err:
             out.update(code=UNAVAILABLE, why=err)
@@ -511,6 +661,10 @@ def check(case, cache_path, pacer_path=None, hits_path=None):
                        bd=max((str(c.get('filed') or '') for c in cases), default=''),
                        why=_hit_why(v) + ' (the state docket does not show it yet)')
             return out
+        held = _merge_bk(raw, dict(out))
+        if (not held.get('ok') and held.get('src') == 'courtlistener'
+                and held.get('code') in (STAY_ACTIVE, UNVERIFIED)):
+            return held
         lifts = sorted(str(v.get('sl')) for _, v in hits if v.get('sl'))
         out.update(ok=True, code=CLEAR, sl=(lifts[-1] if lifts else ''),
                    why=('stay lifted %s' % lifts[-1]) if lifts else 'no active stay on record')
@@ -527,8 +681,20 @@ def health(cache_path):
         return {'ok': False, 'err': err, 'cases': 0, 'active': 0}
     n = sum(len(v) for v in idx.values())
     act = sum(1 for v in idx.values() for _, e in v if isinstance(e, dict) and entry_stay_active(e))
+    bk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0}
+    try:
+        import bk_lookup as _BL
+        bk = _BL.health_counts()
+    except Exception:
+        bk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0, 'err': 'bk_lookup unavailable'}
+    clerk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0}
+    try:
+        import clerk_bk as _CK
+        clerk = _CK.health_counts()
+    except Exception:
+        clerk = {'ok': False, 'cases': 0, 'holds': 0, 'clear': 0, 'err': 'clerk_bk unavailable'}
     return {'ok': True, 'err': '', 'cases': n, 'active': act, 'pacer': pacer_health(cache_path),
-            'newfilers': newfiler_health(cache_path)}
+            'newfilers': newfiler_health(cache_path), 'bk': bk, 'clerk': clerk}
 
 
 def pacer_health(cache_path):

@@ -30,6 +30,8 @@ import time
 
 import requests
 
+import paths as P
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import _carlos_route as CR              # noqa: E402
@@ -291,9 +293,10 @@ def main():
               % (name, len(feats), len(by_folio), len(cands), len(scored),
                  len(packet[name])))
 
-    with open(os.path.join(HERE, 'deep_zone_doors.json'), 'w', encoding='utf-8') as fh:
+    dest = P.out('deep_zone_doors.json')
+    with open(dest, 'w', encoding='utf-8') as fh:
         json.dump(packet, fh, indent=1)
-    print('wrote deep_zone_doors.json')
+    print('wrote %s' % dest)
 
 
 if __name__ == '__main__':

@@ -96,7 +96,8 @@ try:
     # [4/5] rebuild's make_tracker restore must not put it back from the (now updated) cache.
     import sale_history as SH
     BK = lambda d, n='': {'docketDescrition': 'Suggestion of Bankruptcy', 'eventDate': d, 'comments': n}
-    CLOSE = lambda d, t='Order Granting Relief from Automatic Stay', n='': {'docketDescrition': t, 'eventDate': d, 'comments': n}
+    # The default closing line is a dismissal: since 2026-09-27 stay relief does not end the case.
+    CLOSE = lambda d, t='Order Dismissing Chapter 13 Case', n='': {'docketDescrition': t, 'eventDate': d, 'comments': n}
     DISMISS = lambda d, n='': CLOSE(d, 'Order of Dismissal', n)
     dockets = {                                               # real docket arrays through the real parser
         '2099-000001-CA-01': [BK('09/01/2026'), CLOSE('09/20/2026')],     # lifted since it was cached
@@ -280,8 +281,10 @@ try:
                  'comments': 'reinstatement amount 230283.71'}) == (False, '', ''))
     check("lifting the state court's own stay (mediation, abatement) never ends a bankruptcy stay",
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Lifting Stay of Proceedings'))[0] is True)
-    check('an order terminating the automatic stay ends it',
-          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Terminating Automatic Stay'))[0] is False)
+    # 2026-09-27: stay relief goes to one creditor while the bankruptcy stays open. It no longer
+    # ends the stay; only a dismissal or a discharge does (2024-008527 read lifted on a relief order).
+    check('an order terminating the automatic stay does not end the case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Terminating Automatic Stay'))[0] is True)
     # Greptile on #60: a request is not an order, and a denied order is the opposite of one.
     check('a motion to terminate the automatic stay does not end it',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Motion to Terminate the Automatic Stay'))[0] is True)
@@ -295,8 +298,32 @@ try:
     check('an order denying reinstatement, with no motion named, leaves the dismissed case closed',
           _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
                 NOF('01/31/2024', 'Order Denying Reinstatement of Chapter 13 Case'))[0] is False)
-    check('an order GRANTING a motion for relief from stay ends it',
-          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Agreed Order Granting Motion for Relief from Stay'))[0] is False)
+    check('an order GRANTING a motion for relief from stay does not end the case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Agreed Order Granting Motion for Relief from Stay'))[0] is True)
+    check('relief, then a dismissal of the case, ends it on the dismissal date',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Agreed Order Granting Motion for Relief from Stay'),
+                CLOSE('05/01/2026', 'Order Dismissing Chapter 13 Case')) == (False, '2026-02-01', '2026-05-01'))
+    check('an order granting relief AND dismissing the case ends it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Relief from Stay and Dismissing Chapter 13 Case'))[0] is False)
+    check('an order granting relief that only names a motion to dismiss does not end it',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Relief from Stay; Motion to Dismiss Set for Hearing'))[0] is True)
+    check('an order dismissing the relief MOTION does not end the case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Dismissing Motion for Relief from Automatic Stay'))[0] is True)
+    check('an order dismissing an objection to a claim does not end the case',
+          _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', 'Order Dismissing Objection to Claim, Chapter 13 Case 26-11111'))[0] is True)
+    check('in-rem relief citing a PRIOR case dismissed does not end this case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting In Rem Relief from Stay; Prior Case Dismissed'))[0] is True)
+    check('relief as to a discharged co-debtor does not end the case',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay as to Discharged Co-Debtor'))[0] is True)
+    for _end in ('Order Granting Motion for Relief from Stay; Case Dismissed',
+                 'Order Granting Relief from Automatic Stay - Debtor Discharged',
+                 'Notice that Bankruptcy was Dismissed and Stay Lifted',
+                 'Notice of Termination of Automatic Stay upon Dismissal'):
+        check('a line that lifts the stay AND ends the case ends it: %s' % _end,
+              _stay(BK('02/01/2026'), CLOSE('03/01/2026', _end))[0] is False)
+    check('a discharge ends it', _stay(BK('02/01/2026'), CLOSE('06/01/2026', 'Order of Discharge of Debtor, Chapter 7'))[0] is False)
+    check('a relief order with no petition line on the docket still shows a bankruptcy (held)',
+          _stay(CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay'))[0] is True)
     check('a trustee motion to dismiss the chapter 13 case does not end the stay',
           _stay(BK('02/01/2026', '26-11111'), NOF('03/01/2026', "Trustee's Motion to Dismiss Chapter 13 Case"))[0] is True)
     check('an order denying reinstatement leaves the dismissed case closed',
@@ -334,8 +361,8 @@ try:
     check('a continuance of the hearing on a motion to reinstate leaves the case closed',
           _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
                 NOF('01/31/2024', 'Order Granting Continuance of Hearing on Motion to Reinstate Chapter 13 Case'))[0] is False)
-    check('relief from the automatic stay still ends it with no bankruptcy word on the line',
-          _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
+    check('relief from the automatic stay does not end it, with no bankruptcy word on the line either',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Order Granting Relief from Automatic Stay'))[0] is True)
     # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to
     # 09-24 on 09-28 sales, under a 7-day TTL a read from the week before stood until the auction.
     _nt = tempfile.mkdtemp()
@@ -362,6 +389,58 @@ try:
             setattr(SH, k, v)
         sys.argv = _argv
     _near = {r['Case #']: r for r in json.load(open(os.path.join(_nt, 'leads_final.json')))}
+    # NEVER CONTACT (review 2026-09-27): a case on stay_gate.NEVER_CONTACT is written as an active
+    # stay with no lift date, on a live read that shows it dismissed and on a fresh cached lift alike.
+    _nc = tempfile.mkdtemp()
+    json.dump({'2099-000041-CA-01': dict(_old, a=False, bd='2026-01-01', sl='2026-02-01', t=_now)},
+              open(os.path.join(_nc, 'sale_history_cache.json'), 'w'))
+    json.dump([{'Case #': '2099-000041-CA-01', 'sale_stay_lifted': '2026-02-01'},
+               {'Case #': '2099-000042-CA-01', 'sale_stay_lifted': '2026-02-01'}],
+              open(os.path.join(_nc, 'leads_final.json'), 'w'))
+    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time', '_never_contact')}
+    try:
+        SH.HERE = _nc; SH.CACHE = os.path.join(_nc, 'sale_history_cache.json')
+        SH._fetch = lambda session, case: [BK('01/01/2026'), CLOSE('02/01/2026')]
+        SH._never_contact = lambda case: str(case).startswith('2099-00004')
+        SH.time = types.SimpleNamespace(time=__import__('time').time, sleep=lambda s: None)
+        sys.argv = ['sale_history.py']
+        SH.main()
+    finally:
+        for k, v in _sh.items():
+            setattr(SH, k, v)
+        sys.argv = _argv
+    _ncr = {r['Case #']: r for r in json.load(open(os.path.join(_nc, 'leads_final.json')))}
+    _ncc = json.load(open(os.path.join(_nc, 'sale_history_cache.json')))
+    check('never contact: a fresh cached lift is rewritten as an active stay with no lift date',
+          _ncc['2099-000041-CA-01'].get('a') is True and not _ncc['2099-000041-CA-01'].get('sl')
+          and _ncr['2099-000041-CA-01'].get('sale_bk_active') is True
+          and not _ncr['2099-000041-CA-01'].get('sale_stay_lifted'), (_ncc, _ncr))
+    check('never contact: a live read showing the case dismissed still writes an active stay',
+          _ncc['2099-000042-CA-01'].get('a') is True and not _ncc['2099-000042-CA-01'].get('sl')
+          and _ncr['2099-000042-CA-01'].get('sale_bk_active') is True
+          and not _ncr['2099-000042-CA-01'].get('sale_stay_lifted'), (_ncc, _ncr))
+    # and when the --limit budget runs out before a never-contact case is read, its row is still held
+    _cp = tempfile.mkdtemp()
+    json.dump({c: dict(_old, a=False, bd='2026-01-01', sl='2026-02-01', t=_now - 30 * 86400)
+               for c in ('2099-000043-CA-01', '2099-000044-CA-01')},
+              open(os.path.join(_cp, 'sale_history_cache.json'), 'w'))
+    json.dump([{'Case #': c, 'sale_stay_lifted': '2026-02-01'} for c in ('2099-000043-CA-01', '2099-000044-CA-01')],
+              open(os.path.join(_cp, 'leads_final.json'), 'w'))
+    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time', '_never_contact')}
+    try:
+        SH.HERE = _cp; SH.CACHE = os.path.join(_cp, 'sale_history_cache.json')
+        SH._fetch = lambda session, case: [BK('01/01/2026'), CLOSE('02/01/2026')]
+        SH._never_contact = lambda case: str(case).startswith('2099-00004')
+        SH.time = types.SimpleNamespace(time=__import__('time').time, sleep=lambda s: None)
+        sys.argv = ['sale_history.py', '--limit', '1']
+        SH.main()
+    finally:
+        for k, v in _sh.items():
+            setattr(SH, k, v)
+        sys.argv = _argv
+    _cpr = json.load(open(os.path.join(_cp, 'leads_final.json')))
+    check('never contact: a case the --limit budget never reached is still held on its row',
+          all(r.get('sale_bk_active') is True and not r.get('sale_stay_lifted') for r in _cpr), _cpr)
     check('a near sale is re-read although its cached read is 3 days old, and shows the new stay',
           '2099-000031-CA-01' in _fetched and _near['2099-000031-CA-01'].get('sale_bk_active') is True, _fetched)
     check('a far sale keeps its 3-day-old read (7-day TTL)', '2099-000032-CA-01' not in _fetched, _fetched)

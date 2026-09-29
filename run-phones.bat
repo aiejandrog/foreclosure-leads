@@ -1,10 +1,21 @@
 @echo off
-rem One-click phone refresh (licensed skip-trace). Traces Tier-A owners -> rebuilds the tracker
+rem One-click phone refresh (licensed skip-trace). Traces every untraced owner, Miami first -> rebuilds the tracker
 rem with phones baked in -> pushes to the live site.
 rem PREREQ: a provider key present (gitignored) - tracerfy.key (no minimum) or batchdata.key.
 rem   skiptrace.py auto-detects whichever key exists (tracerfy preferred).
 rem To change how many you spend on: add  --limit N  or  --tier B  after skiptrace.py below.
 cd /d "%~dp0"
+rem  CROSS-MACHINE LEASE. Same entry as refresh-dealflow.bat. Off unless DEALFLOW_RUNNER_LOCK=1.
+rem  This bat skip-traces, so with the gate on it also has to be DEALFLOW_ARMED_MACHINE.
+rem  No setlocal in this file, so the exit below is just exit /b.
+set "LOCKMARK=_%DEALFLOW_LOCK_INNER%"
+if "%LOCKMARK:~0,6%"=="_held-" goto :runner_lock_held
+python -u runner_lock.py run --runner "%~nx0" -- cmd /c "%~f0" >> "%~dp0runner-lock.log" 2>&1
+set "LOCKRC=%errorlevel%"
+if not "%LOCKRC%"=="0" echo [%date% %time%] %~nx0 did not start - cross-machine lease exit %LOCKRC%. See runner-lock.log.>> "%~dp0phones-run.log"
+echo %~nx0 lease exit %LOCKRC%. See runner-lock.log.
+exit /b %LOCKRC%
+:runner_lock_held
 rem  REPO GUARD FIRST, and before the skip-trace spend. This was the only publish path with no
 rem  `call repo_guard.bat` - the other four have had it since 2026-09-17, the day a publish run
 rem  from a folder that was not the checkout replaced main on GitHub with one commit. Running it
@@ -12,7 +23,10 @@ rem  ahead of skiptrace.py also means a wrong-folder run costs nothing at the pr
 call repo_guard.bat "%~dp0" "phones-run.log"
 if errorlevel 1 (echo REPO GUARD refused this checkout - nothing traced, built or pushed. & pause & exit /b 1)
 echo ==== phones run %date% %time% ====
-python skiptrace.py
+rem  --all, not the Tier A default: on 2026-09-28 a hand run with 1,001 credits traced nothing
+rem  because all 62 Tier A leads were already cached, while 43 other owners had no phone.
+rem  Miami first, 80 at most (~$8, under bd_budget's $10 daily cap on a day nothing else has traced).
+python skiptrace.py --all --county-first MIAMI-DADE --limit 80
 if errorlevel 1 (echo TRACE FAILED - nothing rebuilt or pushed & pause & exit /b 1)
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"
 if errorlevel 1 (echo REBUILD FAILED - nothing pushed & pause & exit /b 1)

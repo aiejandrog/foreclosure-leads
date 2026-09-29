@@ -17,7 +17,9 @@ WHAT IT PINS
      shows sync_ok=false and the reason; a clean sync today -> the same send goes through; a
      failed sync -> held again and the reason names the step.
   4. The wiring: cadence-daily.bat asks sync_gate.py before cadence.py and a hold never reaches
-     cadence.py; run-optout-sync.bat never builds or pushes; the 07:15 task template is valid,
+     cadence.py; run-optout-sync.bat never builds or pushes the board (the one extra
+     command is pipeline_alerts.py, counts only, and it cannot change the exit code);
+     the 07:15 task template is valid,
      wakes the machine, catches up, and fires at least 30 minutes before the 08:00 Morning Worker.
 
     python _syncgatetest.py
@@ -306,7 +308,9 @@ finally:
 # ---- 4. wiring
 cad = (HERE / 'cadence-daily.bat').read_text(encoding='utf-8').splitlines()
 ix = lambda pat: next((i for i, l in enumerate(cad) if re.match(pat, l)), None)
-g, e, c, h_ = ix(r'python -u sync_gate\.py'), ix(r'if errorlevel 1 goto :held'), ix(r'python -u cadence\.py'), ix(r':held\s*$')
+g, e, c, h_ = (ix(r'python -u sync_gate\.py'), ix(r'if errorlevel 1 goto :held'),
+               ix(r'python -u runner_lock\.py run --runner cadence-daily\.bat -- python -u cadence\.py'),
+               ix(r':held\s*$'))
 rec('cadence-daily.bat asks sync_gate.py before cadence.py', None not in (g, e, c) and g < e < c, (g, e, c))
 rec('...a hold jumps to :held, which sits after the final exit and never reaches cadence.py',
     h_ is not None and h_ > c and not any('cadence.py' in l for l in cad[h_:]) and
@@ -314,7 +318,13 @@ rec('...a hold jumps to :held, which sits after the final exit and never reaches
 rs = '\n'.join(l for l in (HERE / 'run-optout-sync.bat').read_text(encoding='utf-8').splitlines()
                if not l.strip().lower().startswith('rem'))     # commands only, not the header
 rec('run-optout-sync.bat runs repo_guard then morning_sync.py', rs.find('repo_guard.bat') < rs.find('morning_sync.py') and 'repo_guard.bat' in rs)
-rec('run-optout-sync.bat never builds, gates or pushes', not any(w in rs.lower() for w in ('git push', 'git add', 'git commit', 'make_tracker', 'publish')))
+# The bat itself must not git-add, commit, or push, and must not rebuild the board.
+# pipeline_alerts.py publish is the one allowed "publish": it commits counts only, from
+# inside that script, and the line above has already saved RC so its exit cannot hold sends.
+_rs = rs.lower()
+rec('run-optout-sync.bat never builds, gates or pushes the board',
+    not any(w in _rs for w in ('git push', 'git add', 'git commit', 'make_tracker', 'publish_guard'))
+    and _rs.count('publish') == 1 and 'python -u pipeline_alerts.py publish' in _rs)
 x = (HERE / 'desktop-setup' / 'task-templates' / 'DealFlow_OptoutSync.xml').read_bytes()
 rec('07:15 template is UTF-8 without BOM', not x.startswith(b'\xef\xbb\xbf'))
 NS = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}

@@ -11,6 +11,7 @@ _*.py
 !_gatetest.py
 !_suppressiontest.py
 !_wplinktest.py
+!_wpcontactstest.py
 !_textbatchtest.py
 !_calldetailtest.py
 !_batsyntaxtest.py
@@ -25,6 +26,7 @@ _*.py
 !_presenttitletest.py
 # _legalmatchtest: index-legal parsing and deed-to-parcel matching on synthetic Miami index rows.
 !_legalmatchtest.py
+!_sunbizblocktest.py
 !_rankingtest.py
 # _salehistlptest: sale_history.py reads the Miami-Dade lis pendens lane too (never-read first) and
 # writes LP cases into sale_history_cache.json in the auction format stay_gate.py reads.
@@ -55,6 +57,13 @@ BSG_Mail_Campaign_*.pdf
 !_casestatustest.py
 !_workeremailtest.py
 !_codelientest.py
+# _taxschedtest: Tax1 near-sale scheduling, stale-read gate, certificate follow-up; invented folios.
+!_taxschedtest.py
+# code_lien_amounts.py (C2): per-lien estimates keyed by book/page. County records, local only.
+code_lien_amounts.json
+code_lien_amounts.json.tmp
+# _codelienamounttest: parser/estimate/board-bake checks on invented lien text only.
+!_codelienamounttest.py
 !_fieldsheettest.py
 !_taxtest.py
 # paid_reads.py: the monthly paid-reads cap setting ({"monthly_cap": 50}) is per machine, and so is
@@ -113,6 +122,15 @@ paid_reads_ledger.json.*
 or_rows*.json
 *_rows.json
 pilot*.json
+# Clerk CDS daily Official Records. The zip, the .exp, and the sqlite database
+# live under ~/DEALFLOW/or_daily, outside this repo. These names are the backstop
+# if a copy is ever dropped in the tree. This repo is public.
+or_daily/
+dly_records_*
+or_daily.sqlite
+or_daily.sqlite-journal
+or_daily.sqlite-wal
+or_daily.sqlite-shm
 documents/
 dossiers/
 _*.html
@@ -203,12 +221,16 @@ tax_links.json
 cadence_state.json
 cadence_queue.json
 optouts.json
+optouts.json.corrupt-*
 # the 07:15 opt-out sync's record of its last run (sync_gate.py reads it) and its log -- per machine.
 sync_status.json
 clerk_session_status.json
 clerk_session_status.json.tmp
 sync_status.json.tmp
 optout-sync-run.log
+# Counts-only alert publisher log. The json it commits is pipeline_alerts.json (public, no PII).
+pipeline-alerts.log
+pipeline_alerts.json.tmp
 gmail.key
 whitepages.key
 whitepages_lookup.json
@@ -254,6 +276,8 @@ bd_budget.json
 
 # hard-bounced homeowner addresses (bounces.py) — real emails, PUBLIC repo, never commit
 bounced_emails.json
+bounced_emails.json.corrupt-*
+bounced_emails.json.tmp
 # same, forward-looking: verify_emails.py classifies every address on the board, so this file is a
 # complete roster of homeowner mailboxes. Never commit.
 verified_emails.json
@@ -339,6 +363,7 @@ badnum_quarantine.json
 # officers with home/agent addresses. See v13->v14 note in refresh.yml.
 hardmoney_enriched.json
 llc_officers.json
+llc_officers_status.json
 judgment_dates_misses.json
 # county-PA value fallback cache: resolved folios + owner names for people in foreclosure —
 # public repo, keep it out (same reason as skiptrace_results.json / lp_addresses.json)
@@ -470,6 +495,10 @@ send_outreach_bundle.py
 send_cal_link.py
 quo.key
 quo_calls.json
+# quo_sync --messages writes this after every inbound STOP scan. Machine state, not a secret,
+# but it must not be a committed "the scan is fresh" that a clone would trust.
+quo_inbound_status.json
+quo_inbound_status.json.tmp
 # call-mode team seats: guards the no-double-dial property — must survive a clone
 !_seattest.py
 # ...and the suite that guards the BUILD-TIME seat split + the lane table. Same rule as
@@ -571,6 +600,12 @@ sale_results.json
 sale_results.json.tmp
 # _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
 !_saleresultstest.py
+# _sendgatefollowtest: #83 review follow-ups -- mailed address archived, first-touch sender slot race, /health worker-mailable pool.
+!_sendgatefollowtest.py
+# _cadencegatetest: #83 review follow-up -- cadence steps pass the verified-address gate; first touches from warm-up senders.
+!_cadencegatetest.py
+# _saleresultstaletest: AR1 -- old decisive sale results ship flagged stale; passed sales with no read show UNREAD.
+!_saleresultstaletest.py
 !_judgmentpasstest.py
 # pacer_stay.py: federal bankruptcy verdicts per lead (case-keyed, local data) + the local PACER
 # quarter-spend ledger (money state). Never commit either; the repo is public.
@@ -588,5 +623,57 @@ pacer_newfiler_hits.json
 pacer_newfiler_hits_qa.json
 pacer_newfiler*.tmp
 pacer_newfiler*.lock
+# CourtListener bankruptcy lookup. Filings carry debtor names. Lead cache, overrides, budget
+# and the pull watermark stay in DEALFLOW_DIR; these names are the backstop if one lands here.
+bk_lead_cache.json
+bk_filings.json
+bk_overrides.json
+bk_lookup_status.json
+bk_budget.json
+bk_pull_state.json
+bk_*.tmp
+# Clerk-docket bankruptcy check. Verdicts only, kept in DEALFLOW_DIR. These names are the
+# backstop if a cache or status file is written inside the repo.
+clerk_bk_cache.json
+clerk_bk_status.json
+clerk_bk_cache.json.tmp
+clerk_bk_status.json.tmp
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
+# _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
+!_titlechaintest.py
+# _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
+!_judgmentscopetest.py
+# _ordailytest: Clerk CDS daily-file ingest, match, and day-file comparison. Synthetic fixtures only.
+!_ordailytest.py
+# _tracerfytest: skip-trace freshness reason (credits vs not running) and the Tracerfy spend receipt.
+# Fixtures only — no key, no network, no ledger write.
+!_tracerfytest.py
+
+# 2026-09-25: homeowner names/addresses/skip-traced phones — generated door lists and the worker activity log. Never tracked.
+pre_foreclosure_doors.json
+deep_zone_doors.json
+worker_marks.applied.jsonl
+!_stoptexttest.py
+!_cadencetest.py
+!_plannertest.py
+# _suppressionfixtest: notes DNC, inbound SMS STOP, quoted replies, "not a good time",
+# cadence send-time re-check, Quo-read failure holds texting but not email, and a clean
+# eligible lead still sends. Synthetic fixtures only.
+!_suppressionfixtest.py
+# _alertstest: pipeline alert trigger/clear on fixtures. No network, no paid call, no push.
+!_alertstest.py
+# _bklookuptest: CourtListener bankruptcy check on stubbed HTTP. Example names only, no token.
+!_bklookuptest.py
+# _clerkbktest: Broward clerk-docket bankruptcy check on stubbed HTTP. Synthetic docket
+# lines only, no API key, no party names.
+!_clerkbktest.py
+
+# case_verdict's report carries case numbers and judgment amounts. It writes inside
+# paths.DEALFLOW_DIR, which is outside the repo, but a --dossiers run pointed at a folder in
+# here must not be one edit away from committing it.
+case-verdicts.json
+case-verdicts.md
+case-verdicts-report.md
+# _verdicttest: case_verdict.assess on the five pilot cases' states and the conflict/missing edges.
+!_verdicttest.py

@@ -3,7 +3,11 @@ rem =====================================================================
 rem  DealFlow Opt-out Sync - daily 07:15, before the 08:00 Morning Worker.
 rem  Runs morning_sync.py: replies.py (inbox scan) -> optout_sync.py (the
 rem  one ledger writer, ledger_add) -> ledger_sync.py (add-only union with
-rem  the other machine). No rebuild, no publish, no push to this repo.
+rem  the other machine). No board rebuild and no docs/ publish. The only extra
+rem  step is pipeline_alerts.py, which commits the counts-only alert file and
+rem  always exits 0, so it cannot change whether sends hold.
+rem  Then bounces.py harvests hard bounces into bounced_emails.json. That one
+rem  is logged only: a failed bounce scan never holds sends or changes rc.
 rem  It records the result in sync_status.json; unless TODAY's run finished
 rem  OK, send_server /send and cadence-daily.bat HOLD every send
 rem  (sync_gate.py). Re-run this by hand after fixing a failure; the hold
@@ -17,5 +21,10 @@ call repo_guard.bat "%~dp0" "%LOG%"
 if errorlevel 1 exit /b 1
 python -u morning_sync.py >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
+rem  Counts-only alert file. After RC is saved, so this cannot change whether sends hold
+rem  and cannot fail the sync. While refresh-running.flag or a live runner lease is
+rem  present it only writes the file — no fetch, no commit — so it does not take the
+rem  git lock the 05:30 refresh still holds (that run often lasts until 07:40-08:45).
+python -u pipeline_alerts.py publish >> "%LOG%" 2>&1
 echo ==== optout-sync ENDED rc=%RC% %date% %time% ====>> "%LOG%"
 endlocal & exit /b %RC%

@@ -52,7 +52,7 @@ const sandbox = {
   optPhones: () => ({}), caller: () => 'Alejandro', hardSuppressed: null,
 };
 
-const names = ['agoTxt', 'lastCall', 'hardSuppressed', 'suppressed'];
+const names = ['agoTxt', 'lastCall', 'hardSuppressed', '_wasLp', 'noState', 'suppressed'];   // 2026-09-25: the policy lives in noState()/_wasLp()
 const missing = names.filter(n => !extract(n));
 const body = names.map(extract).filter(Boolean).join('\n');
 let fns = {};

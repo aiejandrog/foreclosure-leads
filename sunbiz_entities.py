@@ -68,6 +68,8 @@ def strict_fetch(url):
         raise SunbizUnreachable('curl not runnable: %s' % exc)
     if result.returncode != 0 or not result.stdout.strip():
         raise SunbizUnreachable('curl exit %s: %s' % (result.returncode, (result.stderr or '').strip()[:160]))
+    if LO._is_blocked(result.stdout):
+        raise SunbizUnreachable('Cloudflare challenge page (%d bytes)' % len(result.stdout))
     return result.stdout
 
 
