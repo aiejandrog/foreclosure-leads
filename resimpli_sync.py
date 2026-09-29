@@ -11,52 +11,73 @@ WHAT GETS IN
   * A row is used only when its property street, unit and ZIP match a board lead that has a case
     number AND one of the row's owners is one of that lead's owners: a surname in common and a
     given name in common, read from REsimpli's own first/last columns. A shared surname alone (a
-    relative), a shared first name alone (two unrelated Marias), a company, an estate or heirs, and
-    a lead flagged ownerMismatch / lpDismissed / lpClosed all skip. So does a different unit in the
-    same building, or a unit on one side only: those numbers belong to someone else (the
-    Cooney/Cardenas failure in contact_trust.py).
+    relative), a shared first name alone (two unrelated Marias), a Jr against a Sr, a company, an
+    estate or heirs, and a lead flagged ownerMismatch / lpDismissed / lpClosed all skip. So does a
+    different unit in the same building, or a unit on one side only: those numbers belong to someone
+    else (the Cooney/Cardenas failure in contact_trust.py). A county-roll line that names two people
+    ('PEREZ JOSE & GARCIA MARIA') is two people, not one who is Jose Garcia. A lis pendens keyed by
+    a name instead of a case number ('LP-<owner>') has no case number to check and gets nothing.
   * Numbers are attributed by owner. REsimpli lists Phone_1..5 under the row's first owner and
     Phone_6..10 under the second. In the 2026-09-28 export every company-owned row carries phones
     only in 6..10 (the person found behind the company) and no single-owner row carries any there.
     A number goes to a lead only when that lead matches the owner the number is listed under; the
     other owner's numbers are counted (numbers_other_owner) and left out. This is read off the
     export, not documented by REsimpli.
+  * A lead ends up with at most phone_src.MAX_PHONES numbers, the number the board bake keeps. The
+    bake sorts a lead's numbers (clean, mobile first) and cuts the rest, and the person-level
+    opt-out checks read the cut row, so numbers this tool appended must never push one the cache
+    already holds off it. Clean mobiles fill the room first; what does not fit is counted
+    (numbers_over_cap) and not added.
   * Rows with no matching lead are counted, never added as leads. They have no case number, so no
     bankruptcy / stay check can run on them; a new lead source is a product decision.
   * Numbers are ADDED. An existing number, entry, or provider is never removed or replaced, and a
     number already in the cache is recognised however it is written ('13055550101' = '3055550101').
     A number REsimpli flags DNC is stored only next to a callable number from the same export: on
     its own it would give a lead a phone list of nothing dialable, which stops skiptrace.py from
-    ever tracing it (it only traces cases that have no entry).
+    ever tracing it (it only traces cases that have no entry). A lead that gets its first number
+    here is also not traced by Tracerfy afterwards, whatever that number's type.
   * Emails are not merged: they are unverified and would feed first-touch email.
 
 DNC IS ABOUT THE NUMBER, AND IT ONLY TIGHTENS
 A phone counts as clean only when REsimpli says so in plain words (DNC "No", status "[]", litigator
 blank or No). Yes, blank, an unrecognised value, or any other status is DNC. A row with a truthy
-`opt` is treated as opted out: its numbers are flagged and it is not merged. A file with no _DNC or
-_status column for a phone slot is refused, not read as clean.
-Every number any export flags is then flagged DNC on EVERY phone in the cache that has those digits,
-on this lead or another, and recorded in dnc_scrub.json, the sidecar the board bake already applies
-to every entry (foreclosure_leads.make_tracker). That is what keeps the flag when skiptrace.py later
-replaces a lead's entry wholesale, or traces a lead this tool skipped and its own modeled flag says
-clean. Nothing here ever clears a flag, and an existing dnc_scrub.json verdict is only tightened.
-A dnc_scrub.json that cannot be read is left exactly as found and said so.
+`opt` is treated as opted out: its numbers are flagged and it is not merged. A file with no `opt`
+column, or no _DNC, _status or _IsLitigator column for a phone slot, is refused, not read as clean.
+A number any export flags is flagged DNC on every phone in the cache that has those digits, on this
+lead or another, and a number the cache already holds as DNC on any lead is DNC on the lead it is
+added to, even when REsimpli lists it clean. Each flagged number is also recorded in dnc_scrub.json,
+the sidecar the board bake applies to every cached skip-trace phone (foreclosure_leads.make_tracker).
+That is what keeps the flag when skiptrace.py later replaces a lead's entry wholesale, or traces a
+lead this tool skipped and its own modeled flag says clean. The bake looks a number up by its exact
+stored string, so each one gets a key in the 10-digit spelling, in the 11-digit spelling a provider
+can return, and as the cache spells it. The record carries source 'resimpli', which
+tracerfy_mcp.py's paid 30-day DNC re-scrub leaves alone: a registry miss must not replace a
+REsimpli opt-out or litigator flag. Nothing here ever clears a flag, and an existing dnc_scrub.json
+verdict is only tightened. A dnc_scrub.json that cannot be read is left exactly as found and said so.
+The bake does not apply the sidecar to phones it appends later from other sources.
 
 WHICH FILES
 Every CSV passed on the command line, or with none: every SkipTrace_*.csv in Downloads / Desktop
 plus DEALFLOW_DIR/imports/resimpli/. All of them are processed, not the newest: the merge is
 add-only and dedupes by number, so re-reading a file adds nothing and no file has to be picked.
-A file that is not a REsimpli skip-trace export, or is not UTF-8 (do not open and re-save it in
-Excel; download it again), is refused by name. Found files are copied into
-DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive); the originals stay put.
+A stray text file whose header is plainly not a REsimpli export is skipped by name. An export that
+cannot be read in full (not UTF-8, so do not open and re-save it in Excel; a flag column missing) is
+REFUSED by name and stops the run, even when the other exports are fine: the numbers it lists as
+DNC would be missing from the merge while an older export lists them clean. Found files are copied
+into DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is
+written; the originals stay put.
 
 OUTPUT
 Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts plus the case numbers
-of any unconfirmed leads (no names, no phone numbers). A backup of the cache and of
-dnc_scrub.json is written to DEALFLOW_DIR/backups/ before every write. A missing cache stops the
-run (wrong machine) unless --create. If the cache changes while the merge is running, nothing is
-written (exit 3): skiptrace.py, contact_trust.py --write and tracerfy_mcp.py each rewrite the whole
-file from what they loaded at start, so do not run this while one of them is running.
+of any unconfirmed leads (no names, no phone numbers). Exit 0 = done (or nothing to do), 1 = no
+usable export, 2 = refused (a file or the cache; nothing written), 3 = the cache or dnc_scrub.json
+changed while this ran, or a write failed.
+A missing cache stops the run (wrong machine) unless --create. Both files are written beside the
+originals under this tool's own temp name (.resimpli.tmp, flushed to disk), a backup of each goes to
+DEALFLOW_DIR/backups/, and the signatures of both are checked once more before anything is
+replaced: skiptrace.py, contact_trust.py --write and tracerfy_mcp.py each rewrite a whole file from
+what they loaded at start, so do not run this while one of them is running. The sidecar is replaced
+first (it only tightens), the cache last. A failed write says what already landed.
 Each run also counts the cached numbers tagged src=resimpli that today's rules would not attach
 (resimpli_unconfirmed). They come from an earlier, looser merge; nothing is removed.
 `traced` on a new entry is REsimpli's own skip-trace date. healthcheck.py reads max(traced) as the
@@ -74,6 +95,7 @@ import csv
 import datetime
 import glob
 import hashlib
+import io
 import json
 import os
 import re
@@ -85,9 +107,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import contact_trust as CT          # the repo's one definition of an entity, a placeholder, a role suffix
+import phone_src as PS              # MAX_PHONES: how many numbers per lead the board bake keeps
 
-REQUIRED = ('propertyStreetAddress', 'propertyZipCode', 'firstName', 'lastName')
-SLOT_FLAG_COLS = ('_DNC', '_status')          # a phone slot without these cannot be read as clean
+REQUIRED = ('propertyStreetAddress', 'propertyZipCode', 'firstName', 'lastName', 'opt')
+SLOT_FLAG_COLS = ('_DNC', '_status', '_IsLitigator')    # a phone slot without these cannot be read as clean
 SLOTS_PER_OWNER = 5
 OWNER_COLS = (('firstName', 'lastName'), ('firstName2', 'lastName2'))
 OWNER_FIELDS = ('owners', 'owner', 'oname', 'rname', 'Owner', 'owner_clean')
@@ -107,21 +130,42 @@ NAME_STOP = {'DE', 'DEL', 'LA', 'LAS', 'LOS', 'EL', 'DA', 'DAS', 'DO', 'DOS', 'D
              'AND', 'OF'}
 # not a living owner to phone: the number belongs to someone else (an heir, a personal representative)
 NOT_A_PERSON = re.compile(r'\b(ESTATE|EST|DECD|DECEASED|HEIRS?|UNKNOWN|UNK)\b', re.I)
+# 'JOSE PEREZ JR' and 'JOSE PEREZ SR' at one address are two people. A marker on one side only is
+# not evidence either way (most county rolls leave it off).
+GENERATION = re.compile(r'\b(JR|SR|II|III|IV)\b')
+# a county-roll line can name two people: 'PEREZ JOSE & GARCIA MARIA', 'PEREZ JOSE & MARIA'
+CO_OWNER = re.compile(r'\s*&\s*|\s+AND\s+', re.I)
 
 COUNT_KEYS = ('rows', 'rows_with_phone', 'unmatched_rows_with_phone', 'unit_mismatch',
               'unit_conflict_same_person', 'entity_rows', 'flagged_lead_rows', 'owner_mismatch',
               'opt_rows', 'matched_rows', 'numbers_other_owner', 'leads_matched', 'leads_had_phone',
-              'leads_new_phone', 'leads_dnc_only_skipped', 'entries_unusable', 'new_numbers',
-              'new_numbers_dnc', 'new_mobile_clean', 'numbers_unreadable', 'flags_unexpected')
+              'leads_new_phone', 'leads_dnc_only_skipped', 'entries_unusable', 'numbers_over_cap',
+              'new_numbers', 'new_numbers_dnc', 'new_mobile_clean', 'numbers_unreadable',
+              'flags_unexpected')
 GLOBAL_KEYS = ('dnc_flagged_numbers', 'dnc_tightened', 'dnc_sidecar_added', 'dnc_sidecar_tightened',
-               'cache_resimpli_numbers', 'resimpli_confirmed', 'resimpli_unconfirmed')
+               'cache_resimpli_numbers', 'resimpli_confirmed', 'resimpli_unconfirmed',
+               'resimpli_unconfirmed_leads')
 
 
 class SyncError(Exception):
-    pass
+    """skippable: a stray file that is plainly not a REsimpli export. Anything else that stops a file
+    from being read in full is not skippable: its DNC flags would be silently missing from the merge."""
+    def __init__(self, msg, skippable=False):
+        super().__init__(msg)
+        self.skippable = skippable
 
 
 # ---------------------------------------------------------------- addresses
+
+def join_unit(tokens):
+    """['1', '23'] -> '1-23', ['12', '3'] -> '12-3' (two units of one tower), ['4', 'B'] -> '4B'."""
+    out = ''
+    for t in tokens:
+        if out and not (len(t) == 1 and t.isalpha() and out[-1].isdigit()):
+            out += '-'
+        out += t
+    return out
+
 
 def split_address(s):
     """'8425 Sw 152nd Ave Apt 405, Miami' -> ('8425 SW 152 AVE', '405'). The unit is part of the
@@ -137,7 +181,7 @@ def split_address(s):
                 unit.append(w)
         else:
             street.append(re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', SUF.get(w, w)))
-    return ' '.join(street), ''.join(unit)
+    return ' '.join(street), join_unit(unit)
 
 
 def row_address(x):
@@ -161,20 +205,32 @@ def fold(s):
 
 def person_tokens(s):
     """Upper-case name tokens of ONE person, or an empty set when the string is not a living
-    person: a company, a placeholder, an estate or heirs. Role suffixes (TRS, LE, JR, H/E ...) are
-    dropped, and O'CONNOR reads as the county roll's OCONNOR."""
+    person: a company, a placeholder, an estate or heirs. Role suffixes (TRS, LE, H/E ...) are
+    dropped, and O'CONNOR reads as the county roll's OCONNOR. A generation marker (JR, SR, II ...)
+    rides along as an '@JR' token that person_matches compares and then ignores."""
     s = fold(s)
     if not s.strip() or CT.PLACEHOLDER.search(s) or CT.ENTITY.search(s) or NOT_A_PERSON.search(s):
         return set()
+    gen = {'@' + m.group(1) for m in GENERATION.finditer(s.upper())}
     s = CT.SUFFIX.sub(' ', s).replace("'", '')
-    return {w for w in re.sub(r'[^A-Za-z ]', ' ', s).upper().split() if len(w) >= 2 and w not in NAME_STOP}
+    words = {w for w in re.sub(r'[^A-Za-z ]', ' ', s).upper().split() if len(w) >= 2 and w not in NAME_STOP}
+    return words | gen if words else set()
+
+
+def _bare(tokens):
+    return {w for w in tokens if not w.startswith('@')}
 
 
 def person_matches(first, last, owner):
     """The REsimpli person (given-name tokens, surname tokens) is this owner: a surname in common
     AND a given name in common among the owner's remaining tokens. Word order does not matter,
     which is what lets 'GARCIA, MARIA' and 'Maria Garcia' agree. A surname alone or a first name
-    alone does not (contact_trust.py: two unrelated Marias must not read as one household)."""
+    alone does not (contact_trust.py: two unrelated Marias must not read as one household), and
+    a Jr against a Sr is two people."""
+    gen_a, gen_b = set(first | last) - _bare(first | last), set(owner) - _bare(owner)
+    if gen_a and gen_b and gen_a != gen_b:
+        return False
+    first, last, owner = _bare(first), _bare(last), _bare(owner)
     return bool(last & owner) and bool(first & (owner - last))
 
 
@@ -193,13 +249,24 @@ def row_people(x):
 
 
 def owner_people(r):
-    """Token sets of the board lead's human owners: every ';'-separated owner in every owner field."""
+    """Token sets of the board lead's human owners: every ';'-separated owner in every owner field,
+    and every person of a line that names two ('PEREZ JOSE & GARCIA MARIA' is two people, and is
+    not one person who is Jose Garcia). A second name of one word ('PEREZ JOSE & MARIA') shares the
+    first person's surname."""
     out = []
     for f in OWNER_FIELDS:
         for chunk in str(r.get(f) or '').split(';'):
-            t = person_tokens(chunk)
-            if t and t not in out:
-                out.append(t)
+            lead_tokens = None
+            for part in CO_OWNER.split(chunk):
+                t = person_tokens(part)
+                if not t:
+                    continue
+                if lead_tokens is not None and len(_bare(t)) == 1:
+                    t = t | _bare(lead_tokens)
+                if lead_tokens is None:
+                    lead_tokens = t
+                if t not in out:
+                    out.append(t)
     return out
 
 
@@ -247,7 +314,7 @@ def read_flags(x, i):
         dnc = True
     elif cell != 'no':
         dnc = odd = True
-    if status not in ('', '[]'):
+    if status != '[]':                                   # blank is not "clean" either; every number in the export has one
         dnc = True
         odd = odd or status != '["DNC"]'
     if lit in ('yes', 'true', 'y', '1'):
@@ -262,8 +329,10 @@ def opted_out(x):
 
 
 def slots_of(rows):
-    """Phone slot numbers in the export, read off the header (every row of a DictReader has it)."""
-    return sorted(int(m.group(1)) for k in (rows[0] if rows else ()) for m in [re.fullmatch(r'Phone_(\d+)', k)] if m)
+    """Phone slot numbers in the export, read off the header (every row of a DictReader has it; a
+    trailing delimiter adds a None key, which is not a column)."""
+    return sorted(int(m.group(1)) for k in (rows[0] if rows else ()) if isinstance(k, str)
+                  for m in [re.fullmatch(r'Phone_(\d+)', k)] if m)
 
 
 def owner_of(slot):
@@ -317,11 +386,30 @@ def row_traced(x, today):
 
 # ---------------------------------------------------------------- merge
 
+def real_case(c):
+    """A case number a stay or bankruptcy check can key on. lp_leads.py keys a lis pendens row that
+    has none 'LP-<owner name>': that is not a case number, and it must neither receive phones nor
+    end up, name and all, in the status file."""
+    return bool(re.search(r'\d{5,}', str(c or '')))
+
+
+def phones_of(ent):
+    """The phone dicts of one cache entry; anything malformed reads as no phones."""
+    ph = ent.get('phones') if isinstance(ent, dict) else None
+    return [p for p in ph if isinstance(p, dict)] if isinstance(ph, list) else []
+
+
+def cached_dnc(results):
+    """Digits of every phone the cache already holds as DNC, on any lead. A number one lead's entry
+    says never to contact is not clean on the next lead because REsimpli lists it there."""
+    return {norm_number(p.get('number')) for ent in results.values() for p in phones_of(ent) if p.get('dnc')}
+
+
 def build_index(leads, case_of, addr_of):
     """(street, zip) -> [(lead, unit)] for every lead that has a case number and a usable address."""
     idx = {}
     for r in leads:
-        if not case_of(r):
+        if not real_case(case_of(r)):
             continue
         a = addr_of(r)
         street, unit = split_address(a)
@@ -334,11 +422,12 @@ def build_index(leads, case_of, addr_of):
 def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=None, state=None):
     """Add matching rows' phones into `results` in place. Returns counts (no names, no numbers).
 
-    flagged: numbers to treat as DNC wherever they appear (flagged_numbers over every export).
+    flagged: numbers to treat as DNC wherever they appear (flagged_numbers over every export). The
+             numbers `results` already holds as DNC, on any lead, are added to it here.
     pairs:   optional set collecting every (case, number) this run attributes to a lead (audit()).
     state:   optional dict shared across files, so a lead two files both match counts once."""
     today = today or datetime.date.today().isoformat()
-    flagged = set(flagged)
+    flagged = set(flagged) | cached_dnc(results)
     st = state if state is not None else {}
     touched = st.setdefault('touched', set())
     dnc_only = st.setdefault('dnc_only', set())
@@ -405,7 +494,7 @@ def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=No
             mine = [c for g in sorted(groups) for c in by_owner.get(g, [])]
             if pairs is not None:
                 pairs.update((case, c['number']) for c in mine)
-            have = {norm_number(p.get('number')) for p in (ent or {}).get('phones') or [] if isinstance(p, dict)}
+            have = {norm_number(p.get('number')) for p in phones_of(ent)}
             added, seen = [], set()
             for c in mine:
                 if c['number'] in have or c['number'] in seen:
@@ -413,6 +502,14 @@ def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=No
                 seen.add(c['number'])
                 added.append({'number': c['number'], 'type': c['type'], 'carrier': '', 'dnc': c['dnc'],
                               'src': 'resimpli'})
+            # The board bake sorts a lead's numbers (clean, mobile first) and keeps MAX_PHONES. Numbers
+            # this run adds must never push one the cache already holds off the row, so the entry is
+            # filled up to that many and no further: clean mobiles first, DNC numbers last.
+            added.sort(key=lambda p: (p['dnc'], p['type'] != 'Mobile'))
+            room = max(0, PS.MAX_PHONES - len((ent or {}).get('phones') or []))
+            if len(added) > room:
+                n['numbers_over_cap'] += len(added) - room
+                added = added[:room]
             if not added:
                 continue
             if all(p['dnc'] for p in added):
@@ -446,10 +543,8 @@ def tighten(results, flagged):
     `flagged` becomes dnc=True. Nothing here ever clears a flag. Returns how many phones changed."""
     n = 0
     for ent in results.values():
-        if not isinstance(ent, dict):
-            continue
-        for p in ent.get('phones') or []:
-            if isinstance(p, dict) and not p.get('dnc') and norm_number(p.get('number')) in flagged:
+        for p in phones_of(ent):
+            if not p.get('dnc') and norm_number(p.get('number')) in flagged:
                 p['dnc'] = True
                 n += 1
     return n
@@ -459,18 +554,19 @@ def audit(results, pairs):
     """Cached numbers tagged src=resimpli that today's rules did not attach in this run: left by an
     earlier, looser merge. -> (counts, case numbers)"""
     held = {(case, norm_number(p.get('number')))
-            for case, ent in results.items() if isinstance(ent, dict)
-            for p in ent.get('phones') or [] if isinstance(p, dict) and p.get('src') == 'resimpli'}
+            for case, ent in results.items() for p in phones_of(ent) if p.get('src') == 'resimpli'}
     bad = {k for k in held if k not in pairs}
     return ({'cache_resimpli_numbers': len(held), 'resimpli_confirmed': len(held) - len(bad),
-             'resimpli_unconfirmed': len(bad)}, sorted({c for c, _ in bad}))
+             'resimpli_unconfirmed': len(bad), 'resimpli_unconfirmed_leads': len({c for c, _ in bad})},
+            sorted({c for c, _ in bad if real_case(c)}))
 
 
 def sidecar_plan(path, flagged, results, today):
     """dnc_scrub.json with REsimpli's flagged numbers merged in. -> (doc or None, added, tightened,
-    state). Keyed the way make_tracker reads it: the exact stored string of the number, so a cache
-    number written '13055550101' gets its own key beside the 10-digit one. doc is None when there is
-    nothing to write or when the file exists and cannot be read: a torn sidecar is left as found."""
+    state). make_tracker looks a cached number up by its exact stored string, so each flagged number
+    gets a key in the 10-digit spelling, in the 11-digit spelling a provider can return, and in the
+    spelling of every cached phone that has those digits. doc is None when there is nothing to write
+    or when the file exists and cannot be read: a torn sidecar is left as found."""
     try:
         with open(path, encoding='utf-8') as f:
             cur = json.load(f)
@@ -480,12 +576,11 @@ def sidecar_plan(path, flagged, results, today):
         return None, 0, 0, 'unreadable'
     if not isinstance(cur, dict):
         return None, 0, 0, 'unreadable'
-    keys = set(flagged)
+    keys = set(flagged) | {'1' + n for n in flagged}
     for ent in results.values():
-        if isinstance(ent, dict):
-            for p in ent.get('phones') or []:
-                if isinstance(p, dict) and norm_number(p.get('number')) in flagged:
-                    keys.add(str(p.get('number')))
+        for p in phones_of(ent):
+            if norm_number(p.get('number')) in flagged:
+                keys.add(str(p.get('number')))
     added = tightened = 0
     for k in sorted(keys):
         v = cur.get(k)
@@ -493,6 +588,7 @@ def sidecar_plan(path, flagged, results, today):
             if not (v.get('national_dnc') or v.get('state_dnc')):
                 v['national_dnc'] = True                # a registry verdict is only ever tightened
                 v['resimpli'] = today
+                v['source'] = 'resimpli'                # so tracerfy_mcp's 30-day re-scrub leaves it alone
                 tightened += 1
         else:
             # REsimpli says DNC without naming the registry; the seam needs one of the two flags
@@ -505,23 +601,40 @@ def sidecar_plan(path, flagged, results, today):
 # ---------------------------------------------------------------- files
 
 def read_export(path):
+    """The rows of one REsimpli skip-trace export. A file whose header says it is not one (a stray
+    SkipTrace_*.csv) raises a skippable SyncError. A file that is one but cannot be read in full (not
+    UTF-8, a flag column missing, a read error) raises a hard one: skipping it would drop its DNC
+    flags while the other exports still merge their numbers as clean."""
     name = os.path.basename(path)
     try:
-        with open(path, encoding='utf-8-sig', newline='') as f:
-            rd = csv.DictReader(f)
-            fields = rd.fieldnames or []
-            slots = [int(m.group(1)) for c in fields for m in [re.fullmatch(r'Phone_(\d+)', c)] if m]
-            missing = [c for c in REQUIRED if c not in fields]
-            if not slots:
-                missing.append('Phone_1')
-            missing += ['Phone_%d%s' % (i, s) for i in sorted(slots) for s in SLOT_FLAG_COLS
-                        if 'Phone_%d%s' % (i, s) not in fields]
-            if missing:
-                raise SyncError('%s is not a REsimpli skip-trace export (missing %s)'
-                                % (name, ', '.join(missing[:6])))
-            return list(rd)
+        with open(path, 'rb') as fb:
+            head = fb.readline(1 << 20)
+    except OSError as e:
+        raise SyncError('%s could not be read (%s)' % (name, type(e).__name__))
+    not_utf8 = SyncError('%s is not UTF-8 text (was it re-saved in Excel? download it from REsimpli again)' % name)
+    try:
+        first = head.decode('utf-8-sig')
     except UnicodeDecodeError:
-        raise SyncError('%s is not UTF-8 text (was it re-saved in Excel? download it from REsimpli again)' % name)
+        raise not_utf8
+    if '\x00' in first:                                     # UTF-16 without a byte-order mark
+        raise not_utf8
+    fields = next(csv.reader(io.StringIO(first)), [])
+    slots = [int(m.group(1)) for c in fields for m in [re.fullmatch(r'Phone_(\d+)', c)] if m]
+    if not slots and 'propertyStreetAddress' not in fields:
+        raise SyncError('%s is not a REsimpli skip-trace export' % name, skippable=True)
+    missing = [c for c in REQUIRED if c not in fields]
+    if not slots:
+        missing.append('Phone_1')
+    missing += ['Phone_%d%s' % (i, s) for i in sorted(slots) for s in SLOT_FLAG_COLS
+                if 'Phone_%d%s' % (i, s) not in fields]
+    if missing:
+        raise SyncError('%s is not a complete REsimpli skip-trace export (missing %s)'
+                        % (name, ', '.join(missing[:6])))
+    try:
+        with open(path, encoding='utf-8-sig', newline='') as f:
+            return list(csv.DictReader(f))
+    except UnicodeDecodeError:
+        raise not_utf8
     except (OSError, csv.Error) as e:
         raise SyncError('%s could not be read (%s)' % (name, type(e).__name__))
 
@@ -578,10 +691,23 @@ def backup(path, stem, bdir):
     return dst
 
 
+def drop(paths):
+    """Remove leftover temp files; a temp file that is already gone is fine."""
+    for p in paths:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
 def write_tmp(path, obj):
-    tmp = path + '.tmp'
+    """Write `obj` beside `path` under this tool's own temp name (tracerfy_mcp.py and skiptrace.py use
+    '.tmp', so the two never write one file) and flush it to disk before anything replaces `path`."""
+    tmp = path + '.resimpli.tmp'
     with open(tmp, 'w', encoding='utf-8') as fh:
         json.dump(obj, fh, indent=1)
+        fh.flush()
+        os.fsync(fh.fileno())
     return tmp
 
 
@@ -611,7 +737,6 @@ def main(argv=None):
         try:
             h = sha256(f)
         except OSError as e:
-            h = None
             err = SyncError('%s could not be read (%s)' % (os.path.basename(f), type(e).__name__))
         else:
             if h in seen:
@@ -623,8 +748,11 @@ def main(argv=None):
             except SyncError as e:
                 err = e
         if err:
-            if a.files:                     # a file named on the command line is a mistake worth stopping for
-                print('REFUSED:', err)
+            if a.files or not err.skippable:    # a file named on the command line, or one that is an export
+                print('REFUSED:', err)            # we cannot read in full, is worth stopping for
+                if not a.files:
+                    print('Its DNC flags would be missing from the merge, so nothing was read further. '
+                          'Move or delete that file (or download it again from REsimpli), then run again.')
                 return 2
             print('SKIPPED:', err)          # a stray SkipTrace_*.csv must not block the real exports
             skipped.append(os.path.basename(f))
@@ -665,6 +793,7 @@ def main(argv=None):
                  n['new_numbers'], n['new_numbers_dnc'], n['leads_new_phone']))
     tightened = tighten(results, flagged)
     aud, bad_cases = audit(results, pairs)
+    side_sig0 = cache_sig(side_path)
     side_doc, side_added, side_tight, side_state = sidecar_plan(side_path, flagged, results, today)
     total.update(dnc_flagged_numbers=len(flagged), dnc_tightened=tightened,
                  dnc_sidecar_added=side_added, dnc_sidecar_tightened=side_tight, **aud)
@@ -681,14 +810,51 @@ def main(argv=None):
     if aud['resimpli_unconfirmed']:
         print('NOTE: %d cached REsimpli numbers on %d leads are not attached by today\'s rules (an earlier, '
               'looser merge). They are still in the cache and on the board; nothing was removed.'
-              % (aud['resimpli_unconfirmed'], len(bad_cases)))
+              % (aud['resimpli_unconfirmed'], aud['resimpli_unconfirmed_leads']))
 
     if a.dry_run:
         print('DRY RUN - nothing written')
         return 0
 
     cache_changed = bool(total['new_numbers'] or tightened)
-    wrote = []
+    wrote, tmps = [], []
+    try:
+        # 1. prepare: both files are written beside the originals; nothing is replaced yet
+        side_tmp = write_tmp(side_path, side_doc) if side_doc is not None else None
+        cache_tmp = write_tmp(res_path, results) if cache_changed else None
+        tmps = [t for t in (side_tmp, cache_tmp) if t]
+        # 2. back up what is about to be replaced, then check that no other tool wrote either file
+        #    while this ran (skiptrace.py, contact_trust.py --write and tracerfy_mcp.py each rewrite a
+        #    file whole from what they loaded at start)
+        if side_tmp:
+            backup(side_path, 'dnc_scrub', bdir)
+        bak = backup(res_path, 'skiptrace_results', bdir) if cache_tmp else None
+        if tmps and (cache_sig(res_path) != sig0 or cache_sig(side_path) != side_sig0):
+            print('CHANGED: %s or dnc_scrub.json was modified while this ran (skiptrace.py, contact_trust.py '
+                  'or tracerfy_mcp.py?). Nothing was replaced. Wait for it to finish and run again.'
+                  % os.path.basename(res_path))
+            drop(tmps)
+            return 3
+        # 3. replace: the sidecar first (it only ever tightens), then the cache
+        if side_tmp:
+            os.replace(side_tmp, side_path)
+            wrote.append('dnc_scrub.json')
+            print('dnc_scrub.json updated (%d entries added, %d tightened)' % (side_added, side_tight))
+        if cache_tmp:
+            if bak:
+                print('backup ->', bak)
+            os.replace(cache_tmp, res_path)
+            wrote.append('skiptrace_results.json')
+            print('skiptrace_results.json updated')
+        else:
+            print('nothing new - skiptrace_results.json unchanged')
+    except OSError as e:
+        drop(tmps)
+        print('FAILED: could not write (%s). Written before the failure: %s.'
+              % (type(e).__name__, ', '.join(wrote) or 'nothing'))
+        return 3
+    # 4. what stays behind: a copy of each export outside the repo and OneDrive, and the status file.
+    #    The data is already written, so a failure here is a warning, not a failed run.
     try:
         os.makedirs(import_dir, exist_ok=True)
         for f, h, _ in exports:
@@ -697,37 +863,11 @@ def main(argv=None):
             dst = os.path.join(import_dir, '%s_%s' % (h[:8], os.path.basename(f)))
             if not os.path.exists(dst):
                 shutil.copy2(f, dst)
-        if (cache_changed or side_doc is not None) and cache_sig(res_path) != sig0:
-            print('CHANGED: %s was modified while this ran (skiptrace.py or tracerfy_mcp.py?); nothing '
-                  'written. Wait for it to finish and run again.' % os.path.basename(res_path))
-            return 3
-        if side_doc is not None:
-            backup(side_path, 'dnc_scrub', bdir)
-            tmp = write_tmp(side_path, side_doc)
-            os.replace(tmp, side_path)
-            wrote.append('dnc_scrub.json')
-            print('dnc_scrub.json updated (%d entries added, %d tightened)' % (side_added, side_tight))
-        if cache_changed:
-            bak = backup(res_path, 'skiptrace_results', bdir)
-            if bak:
-                print('backup ->', bak)
-            tmp = write_tmp(res_path, results)
-            if cache_sig(res_path) != sig0:
-                os.remove(tmp)
-                print('CHANGED: %s was modified while this ran; nothing written to it.'
-                      % os.path.basename(res_path))
-                return 3
-            os.replace(tmp, res_path)
-            wrote.append('skiptrace_results.json')
-            print('skiptrace_results.json updated')
-        else:
-            print('nothing new - skiptrace_results.json unchanged')
+        with open(os.path.join(P.DEALFLOW_DIR, 'resimpli_sync_status.json'), 'w', encoding='utf-8') as fh:
+            json.dump(status, fh, indent=1)
     except OSError as e:
-        print('FAILED: could not write (%s). Written before the failure: %s.'
-              % (type(e).__name__, ', '.join(wrote) or 'nothing'))
-        return 3
-    with open(os.path.join(P.DEALFLOW_DIR, 'resimpli_sync_status.json'), 'w', encoding='utf-8') as fh:
-        json.dump(status, fh, indent=1)
+        print('WARNING: the phone data was written, but the export copies or the status file could not be '
+              '(%s).' % type(e).__name__)
     return 0
 
 

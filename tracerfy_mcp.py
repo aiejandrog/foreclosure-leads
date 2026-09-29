@@ -172,6 +172,8 @@ def _dnc_targets():
             if len(n) != 10 or p.get('dnc') is not False:
                 continue
             d = done.get(n)
+            if d and d.get('source') == 'resimpli' and (d.get('national_dnc') or d.get('state_dnc')):
+                continue                       # resimpli_sync's flag (opt-out, litigator, DNC): a registry miss must not replace it
             if d and (d.get('checked') or '') >= cutoff:
                 continue
             out.append((case, n))
