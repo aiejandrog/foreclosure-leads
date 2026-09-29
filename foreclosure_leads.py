@@ -2564,7 +2564,12 @@ def make_tracker(leads):
     if os.path.exists(_wpf) or _wp_ids:
         try:
             _wp = json.load(open(_wpf, encoding='utf-8')) if os.path.exists(_wpf) else {}
-            _wn = _wpn = _wpe = _wid = 0
+            _wn = _wpn = _wpe = _wid = _wrel = 0
+            try:
+                import wp_contacts as _WPC
+            except Exception as _wpce:
+                _WPC = None
+                print('wp_contacts unavailable, Whitepages owner bar and relatives skipped:', _wpce)
             def _prop_city_state(r):
                 a = r.get('addr') or r.get('Address') or ''
                 p = [s.strip() for s in a.split(',')]
@@ -2606,6 +2611,13 @@ def make_tracker(leads):
                 _po = _oi.get('person_owners') or []
                 _pc, _ = _prop_city_state(_r)
                 _owns = [_wp_own(o, _pc) for o in _po]
+                # WHO IS THE OWNER (wp_contacts). A person Whitepages lists on the parcel is tagged
+                # the owner's only when the name clears the same bar ownership_gate uses to decide
+                # the defendant still owns the house, tightened to two shared name tokens. Anyone
+                # else on the parcel is household, not the homeowner.
+                _lown, _laddr = (_r.get('owners') or _r.get('oname') or ''), (_r.get('addr') or '')
+                for _o in _owns:
+                    _o['notOwner'] = (_WPC.grade_property_owner(_lown, _o['name']) != 'wp') if _WPC else False
                 _person_recs = _hit.get('_person') or []
                 # Person-only cache rows (LP/upcoming with no address) have no property owners —
                 # still bake phones from the Person layer. Bare _prop_id stamps without a lookup
@@ -2616,11 +2628,12 @@ def make_tracker(leads):
                     continue
                 # dedup phones + emails across owners; mobile first, absentee-owner phones tagged
                 _seen_ph, _all_ph = set(), []
-                for _o in _owns:
+                for _o in sorted(_owns, key=lambda o: 1 if o.get('notOwner') else 0):
                     for _p in sorted(_o['phones'], key=_rank):
                         if _p['n'] in _seen_ph: continue
                         _seen_ph.add(_p['n'])
-                        _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _o['name'], 'absentee': _o['absentee']})
+                        _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _o['name'], 'absentee': _o['absentee'],
+                                        'resident': bool(_o.get('notOwner'))})
                 _seen_em, _all_em = set(), []
                 for _o in _owns:
                     for _e in _o['emails']:
@@ -2654,6 +2667,12 @@ def make_tracker(leads):
                 _person_emails = []
                 for _pr in _person_recs:
                     for _rec in (_pr.get('response') or []):
+                        # Fuzzy name search: a record that is not our owner (wp_contacts bar) is a
+                        # namesake and contributes nothing. One that also places the owner at this
+                        # address is as good as the deed ('person-verified' -> wp tag).
+                        _grade = _WPC.grade_person_record(_lown, _laddr, _rec) if _WPC else 'nm'
+                        if _grade is None:
+                            continue
                         for _p in (_rec.get('phones') or []):
                             _n = ''.join(c for c in (_p.get('number') or '') if c.isdigit())
                             if len(_n) == 11 and _n.startswith('1'): _n = _n[1:]
@@ -2661,7 +2680,8 @@ def make_tracker(leads):
                             if _n in _seen_ph: continue
                             _seen_ph.add(_n)
                             _pt = (_p.get('type') or '').lower()
-                            _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False, 'source': 'person'})
+                            _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False,
+                                                   'source': 'person-verified' if _grade == 'wp' else 'person'})
                         for _e in (_rec.get('emails') or []):
                             _ea = _e.get('address') or _e.get('email') or ''
                             if _ea and _ea.lower() not in _seen_em:
@@ -2672,6 +2692,16 @@ def make_tracker(leads):
                 _all_em.extend(_person_emails)
                 _r['wpOwners'] = _owns
                 if _residents: _r['wpResidents'] = _residents
+                # RELATIVES: their own field, call-only. Never merged into phones/emails, so no send
+                # path (textablePhones, worker, send bridge, Call Mode) can reach them. Stripped
+                # again below once every stay / never-contact hold is on the row.
+                if _WPC and _person_recs:
+                    _have = set(_seen_ph) | {''.join(c for c in str(_x) if c.isdigit())[-10:]
+                                             for _x in (_r.get('phones') or [])}
+                    _rels = _WPC.extract_relatives(_lown, _laddr, _person_recs, _have)
+                    if _rels:
+                        _r['wpRelatives'] = _rels
+                        _wrel += 1
                 _r['wpAllPhones'] = _all_ph
                 _r['wpAllEmails'] = _all_em
                 _r['wpPersonRecs'] = len(_person_recs)
@@ -2730,6 +2760,8 @@ def make_tracker(leads):
                 print(f"WhitepagesPro: enriched {_wn} leads (+{_wpn} phones, +{_wpe} emails, absentee-owner flags set)")
             if _wid:
                 print(f"Whitepages property deep-links: {_wid} leads with wpPropId")
+            if _wrel:
+                print(f"Whitepages relatives: {_wrel} leads carry a call-only relatives list")
         except Exception as _e:
             print('WhitepagesPro merge skipped:', _e)
 
@@ -3235,6 +3267,25 @@ def make_tracker(leads):
         if _bkh:
             print('federal bankruptcy lookup: %d lead(s) held' % _bkh)
 
+    # Relatives are the most sensitive numbers on a row (third parties about someone else's
+    # foreclosure). Now that every hold is on the row, strip them from any lead that is held.
+    try:
+        import wp_contacts as _WPC2
+        import stay_gate as _SG2
+        _nc = _SG2.never_contact
+    except Exception as _rge:
+        _WPC2 = None
+        print('relatives gate unavailable (%s): every relatives list stripped' % str(_rge)[:80])
+    _rst = 0
+    for _d in slim:
+        if not _d.get('wpRelatives'):
+            continue
+        if _WPC2 is None or not _WPC2.relatives_allowed(_d, _nc):
+            _d.pop('wpRelatives', None)
+            _rst += 1
+    if _rst:
+        print('relatives gate: stripped from %d held lead(s)' % _rst)
+
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
     # just pollute the checkout with a junk "C:\Users\..." directory + duplicate photo copies.
@@ -3334,7 +3385,7 @@ def make_tracker(leads):
         # change and is left alone here — a one-word fix, but not one to smuggle into a phone PR
         # without checking what the public-payload tests assert.)
         nophone = [{k: v for k, v in d.items()
-                    if k not in ('phones', 'phdnc', 'phsrc', 'emails')} for d in slim]
+                    if k not in ('phones', 'phdnc', 'phsrc', 'emails', 'wpRelatives')} for d in slim]
         _payload = _esc_json(nophone)
     # BUILD SIGNATURE — identifies this build, and NOT by the clock. 'built' is minute-resolution,
     # so two builds inside the same minute (a code added just as the nightly refresh runs) share a

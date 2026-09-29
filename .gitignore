@@ -11,6 +11,7 @@ _*.py
 !_gatetest.py
 !_suppressiontest.py
 !_wplinktest.py
+!_wpcontactstest.py
 !_textbatchtest.py
 !_calldetailtest.py
 !_batsyntaxtest.py
@@ -23,6 +24,9 @@ _*.py
 !_moneytest.py
 !_coveragetest.py
 !_presenttitletest.py
+# _legalmatchtest: index-legal parsing and deed-to-parcel matching on synthetic Miami index rows.
+!_legalmatchtest.py
+!_sunbizblocktest.py
 !_rankingtest.py
 # _salehistlptest: sale_history.py reads the Miami-Dade lis pendens lane too (never-read first) and
 # writes LP cases into sale_history_cache.json in the auction format stay_gate.py reads.
@@ -363,6 +367,7 @@ badnum_quarantine.json
 # officers with home/agent addresses. See v13->v14 note in refresh.yml.
 hardmoney_enriched.json
 llc_officers.json
+llc_officers_status.json
 judgment_dates_misses.json
 # county-PA value fallback cache: resolved folios + owner names for people in foreclosure —
 # public repo, keep it out (same reason as skiptrace_results.json / lp_addresses.json)
@@ -579,10 +584,16 @@ deal_desk.json
 # the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
+
 # _archivefilltest guards the auction archive merge: a real number may fill a hole, nothing may
 # overwrite a number already held. Untracked, the suite that proves the equity pair keeps filling
 # would live on one laptop.
 !_archivefilltest.py
+
+# publish_watch.py is the only guard in this repo that checks the PUBLISHED site rather than the
+# local build, so it is also the only one that can run from a machine that is not the laptop. Its
+# suite needs no network, no board and no keys precisely so it runs wherever the watch does.
+!_publishwatchtest.py
 !_boardaccuracytest.py
 !_docboardtest.py
 # _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that

@@ -292,6 +292,12 @@ _pph, _phum = round(100 * _hasphone / _tot), round(100 * _human / _tot)
 add('PASS' if _pph >= 60 else 'WARN', 'auto-phone coverage', f'{_hasphone}/{len(_cl)} have a dialable number ({_pph}%)')
 add('PASS' if _phum >= 90 else 'WARN', 'human-contact coverage',
     f'{_human}/{len(_cl)} name a person to call ({_phum}%)' + (f'; {len(_shell)} shell LLCs left — run llc_officers.py' if _shell else ''))
+# llc_officers.py stops and records `blocked` when Sunbiz answers with a challenge page instead of
+# data (2026-09-29). Without this line the shell-LLC count above just stops moving, silently.
+_los = load('llc_officers_status.json') or {}
+if _los.get('blocked'):
+    add('WARN', 'Sunbiz officer lookup',
+        f"BLOCKED at {_los.get('ts', '?')} ({str(_los['blocked'])[:80]}) — officer enrichment is not running")
 # geocode coverage — lat/lng per lead is what the origin-anchored door route + Near-home filter need;
 # a lead with no coordinates silently drops out of both, so watch it like the other coverages.
 _geo = load('geocode_cache.json') or {}
@@ -415,6 +421,12 @@ def chk_entity():
     st, ok = entity.status(), entity.verified()
     if ok:
         add('PASS', 'entity claim', f"{st.get('matched') or raw} ACTIVE doc={st.get('doc') or '?'}")
+    elif st.get('error'):
+        # A failed lookup is not an absence. Since 2026-09-29 Sunbiz serves curl a Cloudflare
+        # challenge, and this line used to read that as "not verified (never checked)".
+        add('WARN', 'entity claim',
+            f"{raw} Sunbiz LOOKUP FAILED ({str(st.get('error'))[:80]}) — suffix withheld; "
+            f"no daily run lifts this until Sunbiz answers entity_check.py again")
     else:
         add('WARN', 'entity claim',
             f"{raw} not verified ({st.get('status') or 'never checked'}) — suffix withheld; run entity_check.py")
