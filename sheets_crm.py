@@ -86,7 +86,36 @@ def _leads():
             if c and c not in seen:
                 seen.add(c)
                 out.append(r)
-    return out
+    return _hold_unbaked(out)
+
+
+def _hold_unbaked(rows):
+    """Bankruptcy holds for the raw county-file fallback (2026-09-29).
+
+    The twin's rows carry the board bake's saleBkAct (federal, docket, never-contact). These do
+    not: a Broward or Palm Beach lead with no fresh clear used to reach the CRM dial tab, the door
+    picks and Jesse's 3-DAY list (three_day reads this function) with no hold at all. Ask the send
+    bridge's stay verdict for every row, the strictest there is, since a missing twin is already
+    a degraded state. Any failure holds the row."""
+    try:
+        import bk_lookup as BL
+        verdict = lambda c: BL.contact_blocked_reason(c, here=HERE)
+    except Exception:
+        verdict = None
+    held = 0
+    for r in rows:
+        try:
+            h, why = verdict(r.get('case')) if verdict else (True, 'bankruptcy check unavailable')
+        except Exception:
+            h, why = True, 'bankruptcy check unavailable'
+        if h:
+            r['saleBkAct'] = True
+            r['bkWhy'] = str(why or 'bankruptcy check not cleared')[:180]
+            r.pop('saleLift', None)
+            held += 1
+    if held:
+        print('fallback rows: %d of %d held by the bankruptcy stay check' % (held, len(rows)))
+    return rows
 
 
 def _human_touches(n):

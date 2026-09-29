@@ -240,6 +240,12 @@ def cadence_recheck():
         C.OPTOUTS = str(ctmp / 'optouts.json')
         S.SENT_LEDGER = str(ctmp / 'mail_sent.json')
         json.dump([], open(S.SENT_LEDGER, 'w'))
+        # cadence asks the send bridge's stay verdict at send time (2026-09-29). 301-304 have a
+        # docket read with no stay; 305's cache entry is an ACTIVE stay its lead row does not carry.
+        _clr = {'a': False, 'bd': '', 'sl': '', 's': 0, 'n': 0, 'd': 0, 'w': '', 'b': 0, 't': 0, 'v': 5}
+        _shc = {'2099-00030%d-CA-01' % i: dict(_clr) for i in range(1, 5)}
+        _shc['2099-000305-CA-01'] = dict(_clr, a=True, bd='2099-01-02')
+        json.dump(_shc, open(str(ctmp / 'sale_history_cache.json'), 'w'))
         fresh_ledger(C.OPTOUTS)
         today = datetime.date.today().isoformat()
 
@@ -291,6 +297,7 @@ def cadence_recheck():
             {'case': '2099-000302-CA-01', 'owner': 'Pass', 'email': 'passed@example.com', 'step': 0},
             {'case': '2099-000303-CA-01', 'owner': 'Opt', 'email': 'opted@example.com', 'step': 0},
             {'case': '2099-000304-CA-01', 'owner': 'Clean', 'email': 'clean@example.com', 'step': 0},
+            {'case': '2099-000305-CA-01', 'owner': 'CacheStay', 'email': 'cachestay@example.com', 'step': 0},
         ]
         json.dump({'sender': {'name': 'Test Sender'}, 'queue': rows}, open(C.QUEUE, 'w'))
         leads = {
@@ -298,6 +305,7 @@ def cadence_recheck():
             '2099-000302-CA-01': {'case': '2099-000302-CA-01', 'days': -3},
             '2099-000303-CA-01': {'case': '2099-000303-CA-01', 'days': 40},
             '2099-000304-CA-01': {'case': '2099-000304-CA-01', 'days': 40},
+            '2099-000305-CA-01': {'case': '2099-000305-CA-01', 'days': 40},
         }
         C._oe._load_optouts = lambda: {'opted@example.com'}
         C._oe._load_leads = lambda: list(leads.values())
@@ -309,7 +317,7 @@ def cadence_recheck():
         S._deliverability_evidence = lambda: {
             'bounced': set(), 'replied': set(), 'proven': set(),
             'ver': {'clean@example.com': zb, 'stayed@example.com': zb,
-                    'passed@example.com': zb, 'opted@example.com': zb},
+                    'passed@example.com': zb, 'opted@example.com': zb, 'cachestay@example.com': zb},
             'last_mailed': {}}
         S._load_senders = lambda: {
             'main_domain': 'example.com', 'main_domain_cap': 40,
@@ -338,6 +346,10 @@ def cadence_recheck():
         rec('an address already on the opt-out ledger is suppressed and not mailed',
             st['2099-000303-CA-01']['status'] == 'suppressed' and 'opted@example.com' not in sent,
             st['2099-000303-CA-01']['status'])
+        rec('a stay only the cache knows (the row flag was lost) is held at send time and not mailed',
+            st['2099-000305-CA-01']['status'] == 'held' and 'cachestay@example.com' not in sent
+            and 'bankruptcy stay check' in str(st['2099-000305-CA-01'].get('log')),
+            (st['2099-000305-CA-01'], sent))
         rec('a clean eligible lead is still sent', 'clean@example.com' in sent, sent)
         rec('the clean lead advances one step', st['2099-000304-CA-01']['step'] == 1, st['2099-000304-CA-01'])
 

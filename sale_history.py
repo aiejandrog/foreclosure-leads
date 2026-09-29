@@ -32,6 +32,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import sys
 import time
 from datetime import datetime
 
@@ -359,13 +361,26 @@ def _fetch(session, case):
         return None
 
 
+class CacheUnreadable(Exception):
+    """sale_history_cache.json exists but is not a readable dict."""
+
+
 def _load_cache():
-    if os.path.exists(CACHE):
-        try:
-            return json.load(open(CACHE, encoding='utf-8'))
-        except Exception:
-            return {}
-    return {}
+    """The durable stay cache. {} only when the file does not exist yet.
+
+    Raises CacheUnreadable when it exists but will not parse or is not a dict (2026-09-29). It
+    used to return {}, and main() then overwrote the durable file with only what it fetched that
+    night, erasing every active stay it did not re-read. Nothing else keeps those stays."""
+    if not os.path.exists(CACHE):
+        return {}
+    try:
+        with open(CACHE, encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        raise CacheUnreadable('%s (%s)' % (type(e).__name__, str(e)[:80]))
+    if not isinstance(data, dict):
+        raise CacheUnreadable('not a dict (%s)' % type(data).__name__)
+    return data
 
 
 # --- LIS PENDENS coverage (2026-09-26) ------------------------------------------------------------
@@ -498,14 +513,38 @@ def _apply_live(kind, r, surv, sched, who, bk, bkact, bkd, lifted):
     if lifted: r['sale_stay_lifted'] = lifted
 
 
+_NC_WARNED = []
+
+
 def _never_contact(case):
     """True for a case on the never-contact list (stay_gate.NEVER_CONTACT). An unreadable extra
-    file still holds the built-in cases here; stay_gate.check refuses every send in that state."""
+    file still holds the built-in cases here; stay_gate.check refuses every send in that state,
+    federal_hold holds every Call Mode row, and bk_lookup.flags_for_cases holds every board row.
+    Not every row here: this run writes a=True into the durable cache for never-contact cases,
+    and doing that to every case would outlive the bad file."""
     import stay_gate as SG
     try:
         return SG.never_contact(case)
-    except SG.NeverContactError:
+    except SG.NeverContactError as e:
+        if not _NC_WARNED:
+            _NC_WARNED.append(1)
+            print('!! sale_history: %s. Only the built-in never-contact cases are held on the lead '
+                  'files this run; the board, Call Mode and the send bridge hold every lead until '
+                  'the file is fixed.' % str(e)[:160])
         return SG.case_stem(case) in SG.NEVER_CONTACT
+
+
+def _hold_from_stale(ent, rows):
+    """Hold rows from a cache entry this run did NOT re-read (budget spent or the fetch failed).
+
+    Only an ACTIVE, unlifted stay is applied, through _hold_row: it can add a hold and drop a lift
+    date, never clear one, and it does not touch the cache entry (the next live read decides).
+    Returns True when a hold was applied."""
+    if not (isinstance(ent, dict) and ent.get('a') and not ent.get('sl')):
+        return False
+    for kind, r in rows:
+        _hold_row(kind, r, ent.get('bd', ''))
+    return True
 
 
 def _hold_row(kind, r, bd):
@@ -619,7 +658,22 @@ def main(argv=None):
     lp_writable = lp_all is not None
     if not leads and not lp_rows:
         print('sale_history: no leads_final.json and no Miami-Dade lis pendens rows - nothing to read'); return
-    cache = _load_cache()
+    try:
+        cache = _load_cache()
+    except CacheUnreadable as e:
+        # Fail closed and write NOTHING: the file stays as it is, so every reader keeps treating it
+        # as unreadable (stay_gate refuses every send, the board bake holds every Miami-Dade row).
+        # Restore sale_history_cache.json.bak (the last good copy) or the git version to recover.
+        print('!! sale_history: sale_history_cache.json is unreadable (%s). Nothing read, nothing '
+              'written. Restore sale_history_cache.json.bak or `git checkout -- '
+              'sale_history_cache.json`, then re-run.' % str(e)[:120])
+        return 2
+    if cache and os.path.exists(CACHE):
+        # The last copy that parsed, for the recovery above. Taken before this run writes anything.
+        try:
+            shutil.copyfile(CACHE, CACHE + '.bak')
+        except OSError as e:
+            print('sale_history: could not keep sale_history_cache.json.bak (%s)' % type(e).__name__)
     now = time.time()
     ttl = a.ttl_days * 86400
     near_ttl = a.near_ttl_hours * 3600
@@ -647,6 +701,7 @@ def main(argv=None):
     nlp_cases = len({c for c, _ in lp_rows})
     lp_new = lp_read = 0
     capped = 0
+    held_stale = 0
     if lp_rows:
         print(f'sale_history: {len(lp_rows)} Miami-Dade lis pendens row(s) ({nlp_cases} case(s)) from {lp_src}, '
               f'{sum(1 for c in {c for c, _ in lp_rows} if never_read(cache.get(c)))} never read')
@@ -693,12 +748,21 @@ def main(argv=None):
         if budget <= 0:
             # `continue`, not `break`: a fresh entry later in the order still has to be applied.
             capped += 1
+            # A stale entry that says ACTIVE still holds the rows it was not re-read for. LP rows
+            # are rebuilt flagless by lp_leads.py every night, so skipping this lost the stay.
+            if _hold_from_stale(ent, rows):
+                lp_dirty = lp_dirty or any(k == 'lp' for k, _ in rows)
+                held_stale += 1
             continue
         dks = _fetch(session, case)
         fetched += 1; budget -= 1
         if any(k == 'lp' for k, _ in rows):
             lp_read += 1
             lp_new += int(never_read(ent))
+        if dks is None and _hold_from_stale(ent, rows):
+            # A failed read is not a clear: the stay the cache already knew still holds.
+            lp_dirty = lp_dirty or any(k == 'lp' for k, _ in rows)
+            held_stale += 1
         if dks is not None:
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
@@ -748,22 +812,24 @@ def main(argv=None):
                       + (f', stay LIFTED {lifted}' if lifted else ''))
         time.sleep(0.25)
         if fetched % 25 == 0:
-            json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
+            # Atomic (tmp + os.replace): a run killed mid-write used to leave a truncated cache,
+            # which _load_cache then read as empty.
+            _dump(cache, CACHE)
             if leads:
-                json.dump(leads, open(path, 'w', encoding='utf-8'))
+                _dump(leads, path)
             if lp_dirty and lp_writable:
                 _dump(lp_all, os.path.join(HERE, LP_LEADS), indent=1)
             print(f'  ... {fetched} fetched, {changed} updated')
 
-    json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
+    _dump(cache, CACHE)
     # WRITE WHENEVER ANY VALUE WAS APPLIED, not only when something was fetched live. Guarding this
     # on `changed` alone silently discarded the whole in-memory merge on any day the cache was fully
     # warm (2026-08-09: 0 fetched -> file never written -> sale_survived and sale_bk_active vanished
     # from every row, sale-history coverage 100% -> 0%, and 93 active §362 stays stopped reaching the
     # board). The staller count below reads the in-memory list, so the old log line reported healthy
     # numbers for data that was never persisted — the failure was invisible in the log.
-    if leads and (changed or applied):
-        json.dump(leads, open(path, 'w', encoding='utf-8'))
+    if leads and (changed or applied or held_stale):
+        _dump(leads, path)
     # Same rule for the LP lane, and the same file shape lp_leads.py writes (indent=1). Written only
     # when a row actually took a value: an untouched file keeps its mtime.
     if lp_dirty and lp_writable:
@@ -780,7 +846,10 @@ def main(argv=None):
               + ('' if lp_writable else f' (from {lp_src}: read-only, no board rows stamped)'))
     if capped:
         print(f'  --limit reached: {capped} stale or unread case(s) left for the next run')
+    if held_stale:
+        print(f'  {held_stale} case(s) not re-read (budget or a failed read) kept the ACTIVE stay '
+              f'their cached entry holds')
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main() or 0)

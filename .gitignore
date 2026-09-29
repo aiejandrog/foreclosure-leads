@@ -243,6 +243,11 @@ optout-sync-run.log
 # Counts-only alert publisher log. The json it commits is pipeline_alerts.json (public, no PII).
 pipeline-alerts.log
 pipeline_alerts.json.tmp
+# sale_history.py writes its cache and the lead files atomically (tmp + os.replace) and keeps the
+# last good cache as sale_history_cache.json.bak (*.bak above) for recovery.
+sale_history_cache.json.tmp
+leads_final.json.tmp
+lp_leads.json.tmp
 gmail.key
 whitepages.key
 whitepages_lookup.json
@@ -687,6 +692,9 @@ worker_marks.applied.jsonl
 # _bkfailclosedtest: board bake, flags_for_cases and Call Mode hold every lead when the
 # bankruptcy check breaks. Synthetic case numbers only, no names, no network.
 !_bkfailclosedtest.py
+# _staygatesfailclosedtest: sale_history, the bake, cadence, letters, CRM and 3-DAY hold when the
+# Miami-Dade stay data breaks. Temp folders and synthetic case numbers only, no network.
+!_staygatesfailclosedtest.py
 # _clerkbktest: Broward clerk-docket bankruptcy check on stubbed HTTP. Synthetic docket
 # lines only, no API key, no party names.
 !_clerkbktest.py

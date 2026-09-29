@@ -558,6 +558,18 @@ def _run(args):
                 if _d is not None and _d < 0:
                     _why = 'auction already passed'
             if not _why:
+                # THE SEND BRIDGE'S OWN STAY VERDICT (2026-09-29). The row flags above come from
+                # outreach_email's cache merge, which reads a missing or corrupt
+                # sale_history_cache.json as "no stays", and this loop sends through _smtp_send,
+                # not /send, so nothing else asks. contact_blocked_reason is stay_gate.check: docket
+                # stays read from the cache itself, federal, never-contact, and a refusal whenever
+                # any of that data is unavailable. It does not raise; an import failure lands in
+                # the except below and holds the whole run.
+                import bk_lookup as _BKL
+                _bh, _bw = _BKL.contact_blocked_reason(c, here=HERE)
+                if _bh:
+                    _why = 'bankruptcy stay check: %s' % (_bw or 'not cleared')
+            if not _why:
                 _n = _wn.get(c) or {}
                 _st = str(_n.get('status') or '').strip().lower()
                 if _st in ('dead', 'wrong number') or _n.get('wrongown'):

@@ -371,7 +371,16 @@ if _ALL:
     # build carried ZERO — every one an outreach-enabled federal landmine. If the cache says stays
     # exist but the merged board carries none, the compliance layer got stripped somewhere between
     # cache and build. That is never a WARN.
-    _shc = load('sale_history_cache.json') or {}
+    _shraw = load('sale_history_cache.json')
+    if not isinstance(_shraw, dict) or not _shraw:
+        # The rule below compares against the cache, so a bad cache skipped it with no word at all
+        # (and a JSON list crashed on .values()). WARN, not FAIL: the build that just ran holds every
+        # Miami-Dade lead on a bad cache (hold_miami_on_bad_stay_cache, bk-bake alert), and blocking
+        # the publish would keep yesterday's LESS-held board live. (2026-09-29)
+        add('WARN', 'RULE: §362 stay data readable',
+            'sale_history_cache.json is missing, unreadable or empty - the board holds every '
+            'Miami-Dade lead; restore sale_history_cache.json.bak')
+    _shc = _shraw if isinstance(_shraw, dict) else {}
     cache_act = sum(1 for e in _shc.values() if isinstance(e, dict) and e.get('a'))
     lead_act = sum(1 for r in _ALL if r.get('sale_bk_active') or r.get('saleBkAct'))
     # The count above is the LEAD FILES, not the build — this rule was named for an artifact it

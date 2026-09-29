@@ -1666,6 +1666,14 @@ def restore_stays_from_cache(leads):
     if os.path.exists(_shf):
         try: _shc = json.load(open(_shf, encoding='utf-8'))
         except Exception: _shc = {}
+        if not isinstance(_shc, dict) or not _shc:
+            # Restores nothing ON PURPOSE: these rows are written back to leads_final.json, and
+            # sale_history treats a row's own stay flag as a stay that ends only on a docket
+            # closing, so a blanket hold here would outlive the bad file. The board holds every
+            # Miami-Dade row instead (hold_miami_on_bad_stay_cache), and sends refuse on their own.
+            print('!! sale-history cache is unreadable or empty: no stay flags restored. The board '
+                  'holds every Miami-Dade lead until it is fixed.')
+            _shc = {}
     _restored = 0
     if _shc:
         for r in leads:
@@ -1731,6 +1739,49 @@ def stamp_first_touch_hint(slim):
     print('first-touch hint: %d lead(s) have no address the bridge would accept yet'
           % held)
     return held
+
+MIAMI_STAY_DATA_WHY = 'Miami-Dade docket stay data unavailable on this build. Lead stays held.'
+
+
+def hold_miami_on_bad_stay_cache(slim):
+    """Hold every Miami-Dade row on THIS build when sale_history_cache.json is not readable stay
+    data (missing, unreadable, not a dict, or empty: stay_gate.check's refusal test). Returns the
+    degraded reason, '' when the cache is fine.
+
+    The Miami docket stays reach the board only as row flags restored from that file, and
+    restore_stays_from_cache restores none when it is bad. So a corrupt cache used to publish every
+    stayed Miami owner with live Text and Call buttons (2026-09-29). Slim rows only: nothing here
+    is written back to leads_final.json (see restore_stays_from_cache)."""
+    try:
+        import bk_lookup as _BKL
+        err = _BKL.stay_cache_error(HERE)
+    except Exception as e:
+        err = 'stay check unavailable (%s)' % type(e).__name__
+    if not err:
+        return ''
+    try:
+        import stay_gate as _SG
+        _miami = lambda c: bool(_SG.case_stem(c))
+    except Exception:
+        _miami = lambda c: True                      # cannot tell Miami apart: hold every row
+    held = 0
+    for d in slim:
+        case = str(d.get('case') or '').strip()
+        try:
+            miami = case and _miami(case)
+        except Exception:
+            miami = bool(case)
+        if not miami:
+            continue
+        if not d.get('saleBkAct'):
+            d['bkWhy'] = MIAMI_STAY_DATA_WHY
+        d['saleBkAct'] = True
+        d.pop('saleLift', None)
+        d.pop('sale_bk_lifted', None)
+        held += 1
+    print('Miami-Dade stay data DEGRADED: %s -> %d Miami-Dade lead(s) held for this build. '
+          'Fix sale_history_cache.json before anyone calls or texts.' % (err[:100], held))
+    return 'stay data unavailable'
 
 
 def stamp_federal_bk(slim):
@@ -3400,8 +3451,11 @@ def make_tracker(leads):
     # final bounce sweep so it judges the addresses the card actually carries.
     stamp_first_touch_hint(slim)
 
+    # Miami-Dade docket stays: a bad sale_history_cache.json holds every Miami row on this build.
+    _stay_degraded = hold_miami_on_bad_stay_cache(slim)
     # Federal bankruptcy (CourtListener). Fails closed: see stamp_federal_bk.
     _bk_held, _bk_degraded = stamp_federal_bk(slim)
+    _bk_degraded = '; '.join(x for x in (_stay_degraded, _bk_degraded) if x)
 
     # Relatives are the most sensitive numbers on a row (third parties about someone else's
     # foreclosure). Now that every hold is on the row, strip them from any lead that is held.
