@@ -11,14 +11,25 @@ Pins the rules that matter for Call Mode:
   * a lead that would get nothing dialable gets no entry, so skiptrace.py can still trace it
   * existing numbers and entries are never removed or replaced; a rerun adds nothing
   * a number the cache already holds as DNC, on any lead, is DNC on the lead it is added to
-  * a lead never ends up with more numbers than the board bake keeps (phone_src.MAX_PHONES)
-  * a line that names two people ('PEREZ JOSE & GARCIA MARIA') is two people; Jr and Sr are two people
+  * a lead never ends up with more numbers than the board bake keeps (phone_src.MAX_PHONES), and that
+    counts the Whitepages numbers the bake appends after the skip-trace ones: nothing this tool adds
+    pushes a number the row already shows off it
+  * a line that names two people ('PEREZ JOSE & GARCIA MARIA') is two people; Jr and Sr are two people;
+    a company, trust or estate anywhere on a line makes it nobody; a one-word second name borrows only
+    the first person's surname
+  * a number dnc_scrub.json holds as registry-listed is DNC on the lead it is added to
   * a missing, unreadable or concurrently changed cache or sidecar stops the run before anything is
-    replaced; a torn sidecar is left alone; a failed write says what already landed
+    replaced; a torn sidecar is left alone, and stops the run when it has anything to flag; a
+    failed write says what already landed and leaves no temp file, and a refused run no backup
   * every file is read (no newest-by-mtime pick); a duplicate download counts once
   * a stray text file is skipped by name; an export that cannot be read in full (not UTF-8, a flag
-    column missing) is refused, because its DNC flags would be missing from the merge
-  * tracerfy_mcp's paid DNC lane does not re-scrub a number this tool flagged
+    column missing, another delimiter, an `opt` value that is neither yes nor no) is refused, because
+    its DNC flags would be missing from the merge
+  * opting out is about the person: a row that names someone another row (in any export) has opted out
+    is held like that row, and a line cut short before its `opt` cell is held too
+  * ZIP separates two homes with one street address; an error nobody planned for is one line and exit 4
+  * every record dnc_scrub.json holds for a number REsimpli flags carries the REsimpli marker, and
+    tracerfy_mcp's paid DNC lane does not re-scrub a marked, listed number
 """
 import contextlib, csv, datetime, io, json, os, pathlib, shutil, sys, tempfile
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -93,8 +104,8 @@ def write_csv(path, rows, header=HDR, encoding='utf-8'):
         w.writerows(rows)
 
 
-def lead(n, addr, owners, **extra):
-    d = {'Case #': case(n), 'Address': addr + ', MIAMI, FL, 33100', 'owners': owners}
+def lead(n, addr, owners, zipc='33100', **extra):
+    d = {'Case #': case(n), 'Address': '%s, MIAMI, FL, %s' % (addr, zipc), 'owners': owners}
     d.update(extra)
     return d
 
@@ -105,6 +116,7 @@ def case(n):
 
 RES = os.path.join(TMP, 'skiptrace_results.json')
 SIDE = os.path.join(TMP, 'dnc_scrub.json')
+WPF = os.path.join(TMP, 'whitepages_lookup.json')
 STATUS = os.path.join(DFDIR, 'resimpli_sync_status.json')
 TMPR, TMPS = RES + '.resimpli.tmp', SIDE + '.resimpli.tmp'      # this tool's own temp names
 S.RESULTS = RES
@@ -222,8 +234,8 @@ ROWS = [
 ]
 
 
-def fresh(cache=None, side=None):
-    for p in (RES, SIDE, RES + '.tmp', SIDE + '.tmp', TMPR, TMPS):
+def fresh(cache=None, side=None, wp=None):
+    for p in (RES, SIDE, WPF, RES + '.tmp', SIDE + '.tmp', TMPR, TMPS):
         if os.path.exists(p):
             os.remove(p)
     shutil.rmtree(DFDIR, ignore_errors=True)
@@ -235,6 +247,9 @@ def fresh(cache=None, side=None):
     if side is not None:
         with open(SIDE, 'w') as f:
             json.dump(side, f)
+    if wp is not None:
+        with open(WPF, 'w') as f:
+            json.dump(wp, f)
 
 
 def run(args=(), files=None, encoding='utf-8'):
@@ -262,6 +277,17 @@ def snapshot():
             p = os.path.join(base, f)
             out[p] = open(p, 'rb').read()
     return out
+
+
+@contextlib.contextmanager
+def with_leads(extra):
+    """The board leads for one scenario: the standing ones plus `extra`."""
+    real = S.load_all_leads
+    S.load_all_leads = lambda: LEADS + extra
+    try:
+        yield
+    finally:
+        S.load_all_leads = real
 
 
 try:
@@ -308,9 +334,9 @@ try:
         RS.read_flags({'Phone_1_DNC': 'Maybe', 'Phone_1_status': '[]'}, 1) == (True, True) and
         RS.read_flags({'Phone_1_DNC': 'No', 'Phone_1_status': '["Wrong Number"]'}, 1) == (True, True) and
         RS.read_flags({'Phone_1_DNC': 'Yes', 'Phone_1_status': '["DNC"]'}, 1) == (True, False))
-    rec('opt: No / blank is fine, anything else is opted out',
-        [RS.opted_out({'opt': v}) for v in ('No', '', 'no', 'Yes', 'true', '1', 'Opted out')] ==
-        [False, False, False, True, True, True, True])
+    rec('opt: No / False / N / 0 / blank is not opted out, anything else is; no cell at all (a line cut short) is',
+        [RS.opted_out({'opt': v}) for v in ('No', '', 'no', 'FALSE', 'n', '0', ' No ', 'Yes', 'true', '1', 'Opted out')] ==
+        [False] * 7 + [True] * 4 and RS.opted_out({}) and RS.opted_out({'opt': None}))
     today = TODAY.isoformat()
     rec('traced: epoch ms and seconds and ISO read; the future is clamped to today; junk is empty',
         RS.row_traced({'skipTracedDate': epoch_ms(YESTERDAY)}, today) == YESTERDAY.isoformat() and
@@ -360,6 +386,52 @@ try:
         not same('Jose', 'Perez Jr', 'PEREZ, JOSE SR') and not same('Jose Jr', 'Perez', 'PEREZ, JOSE SR') and
         same('Jose', 'Perez Sr', 'PEREZ, JOSE SR') and same('Jose', 'Perez', 'PEREZ, JOSE SR') and
         same('Jose', 'Perez Jr', 'PEREZ, JOSE') and not same('Jose', 'Perez Iii', 'PEREZ, JOSE II'))
+    rec('names: a company, trust or estate anywhere on a line makes it nobody, so no co-owner on it is an owner',
+        not same('John', 'Smith', 'SMITH JOHN & MARY TR') and not same('Mary', 'Smith', 'SMITH JOHN & MARY TR') and
+        not same('John', 'Smith', 'SMITH JOHN TR & SMITH MARY TR') and not same('Jose', 'Perez', 'JOSE PEREZ AND SONS INC') and
+        not same('Jose', 'Garcia', 'GARCIA MARIA EST & GARCIA JOSE') and not same('Maria', 'Garcia', 'GARCIA MARIA EST & GARCIA JOSE') and
+        RS.owner_people({'owners': 'SMITH JOHN & MARY TR'}) == [] and
+        same('John', 'Smith', 'SMITH JOHN & MARY') and same('Jose', 'Perez', 'PEREZ JOSE & GARCIA MARIA H/E') and
+        same('Mary', 'Smith', 'SMITH JOHN TR; SMITH MARY'),
+        RS.owner_people({'owners': 'SMITH JOHN & MARY TR'}))
+    rec('names: a one-word second name borrows the first person\'s surname and nothing else, never into a fragment cut at the roll\'s ceiling',
+        same('Mary', 'Thomas', 'THOMAS JAMES & MARY') and same('James', 'Thomas', 'THOMAS JAMES & MARY') and
+        not same('Mary', 'James', 'THOMAS JAMES & MARY') and
+        len('MARTINEZ JOSE ANTONIO & GARCIA') == 30 and not same('Jose', 'Garcia', 'MARTINEZ JOSE ANTONIO & GARCIA') and
+        not same('Antonio', 'Garcia', 'MARTINEZ JOSE ANTONIO & GARCIA') and same('Jose', 'Martinez', 'MARTINEZ JOSE ANTONIO & GARCIA') and
+        len('RODRIGUEZ JOSE LUIS & PEREZ M') == 29 and not same('Luis', 'Perez', 'RODRIGUEZ JOSE LUIS & PEREZ M') and
+        same('Jose', 'Rodriguez', 'RODRIGUEZ JOSE LUIS & PEREZ M') and
+        len('PEREZ JOSE MANUEL ANTONIO & MARIA') >= 30 and not same('Maria', 'Perez', 'PEREZ JOSE MANUEL ANTONIO & MARIA') and
+        same('Maria', 'Perez', 'PEREZ JOSE & MARIA'))
+    rec('names: the ceiling is exactly 30 characters: a line of 29 is whole, so its one-word second name inherits; a line '
+        'of 30 may be cut, so it does not; and only the last part of a cut line is a fragment',
+        len('SMITH JOHN ANTHONY & MARYANNE') == 29 and same('Maryanne', 'Smith', 'SMITH JOHN ANTHONY & MARYANNE') and
+        len('SMITH JOHN ANTHONY & MARYANNEE') == 30 and not same('Maryannee', 'Smith', 'SMITH JOHN ANTHONY & MARYANNEE') and
+        len('SMITH JOHN & MARY & JONES ANTHONY') >= 30 and same('Mary', 'Smith', 'SMITH JOHN & MARY & JONES ANTHONY') and
+        not same('Garcia', 'Martinez', 'MARTINEZ JOSE ANTONIO & GARCIA'))
+    rec('names: every one-word second name borrows the FIRST person\'s surname, not the previous one\'s',
+        len('SMITH JO & JONES AL & MARY') < 30 and same('Mary', 'Smith', 'SMITH JO & JONES AL & MARY') and
+        not same('Mary', 'Jones', 'SMITH JO & JONES AL & MARY'))
+    rec('name words keep the order written: role suffixes, particles and initials dropped',
+        RS.name_words('PEREZ, JOSE L TRS') == ['PEREZ', 'JOSE'] and RS.name_words("O'Connor, Mary") == ['OCONNOR', 'MARY'] and
+        RS.name_words('DE LA CRUZ ANA') == ['CRUZ', 'ANA'])
+    rec('whitepages numbers: owners, residents and every person-search record count, by digits; odd shapes read as none',
+        RS.wp_numbers({'result': {'ownership_info': {'person_owners': [{'phones': [{'number': '(305) 555-0001'},
+                                                                                     {'number': '1-305-555-0001'}]}]},
+                                  'residents': [{'phones': [{'number': '3055550002'}]}]},
+                       '_person': [{'name': 'X', 'response': [{'phones': [{'number': '305.555.0003'}]}]}]}) ==
+        {'3055550001', '3055550002', '3055550003'} and
+        RS.wp_numbers(None) == set() and RS.wp_numbers('x') == set() and RS.wp_numbers({}) == set() and
+        RS.wp_numbers({'result': None, '_person': 'x'}) == set() and
+        RS.wp_numbers({'_prop_id': 'abc', '_http': 404}) == set() and
+        RS.wp_numbers({'result': {'ownership_info': 'x', 'residents': [None, 'x', {'phones': 'x'},
+                                                                        {'phones': [None, 5, {'number': None}, {'number': '123'}]}]},
+                       '_person': [None, {'response': 'x'}, {'response': [None, {'phones': None}]}]}) == set())
+    rec('registry digits: national or state listed, whatever the spelling of the key, ten digits only',
+        RS.registry_digits({'3055550001': {'national_dnc': True}, '13055550002': {'state_dnc': True},
+                            '(305) 555-0003': {'national_dnc': True}, '3055550004': {'national_dnc': False, 'state_dnc': False},
+                            '3055550005': 'x', '12345': {'national_dnc': True}}) == {'3055550001', '3055550002', '3055550003'} and
+        RS.registry_digits(None) == set() and RS.registry_digits({}) == set())
     rec('units: two units of one tower do not collapse into one, and "4 B" is "4B"',
         RS.split_address('1 A ST BLDG 1 APT 23')[1] != RS.split_address('1 A ST BLDG 12 APT 3')[1] and
         RS.split_address('1 A ST BLDG 1 APT 23')[1] == RS.split_address('1 A ST UNIT 1-23')[1] and
@@ -444,9 +516,9 @@ try:
     want_keys = set(flagged6) | {'1' + n for n in flagged6} | {'305-555-9980'}    # the seam looks a number up by its exact stored string
     rec('dnc_scrub.json got every flagged number in the 10-digit and the 11-digit spelling, and as the cache spells it',
         set(side) == want_keys, sorted(side))
-    rec('sidecar entries say where the flag came from and set a flag the board bake reads',
+    rec('sidecar entries say where the flag came from, carry the REsimpli marker and set a flag the board bake reads',
         all(v['national_dnc'] is True and v['source'] == 'resimpli' and v['checked'] == TODAY.isoformat()
-            for v in side.values()))
+            and v['resimpli'] == TODAY.isoformat() for v in side.values()))
     rec('the numbers REsimpli says are clean are not recorded', '3055551001' not in side and '3055550101' not in side)
 
     rec('counts',
@@ -456,7 +528,8 @@ try:
         (29, 29, 2, 4, 3, 1, 1, 5, 1, 15, 2), t)
     rec('every row with a phone falls in exactly one bucket',
         t['rows_with_phone'] == sum(t[k] for k in ('unmatched_rows_with_phone', 'unit_mismatch', 'entity_rows',
-                                                  'flagged_lead_rows', 'owner_mismatch', 'opt_rows', 'matched_rows')))
+                                                  'flagged_lead_rows', 'owner_mismatch', 'opt_rows', 'opt_person_rows',
+                                                  'matched_rows')))
     rec('lead and number counts',
         (t['leads_matched'], t['leads_had_phone'], t['leads_new_phone'], t['leads_dnc_only_skipped'],
          t['new_numbers'], t['new_numbers_dnc'], t['new_mobile_clean'], t['entries_unusable']) ==
@@ -464,7 +537,9 @@ try:
     rec('unreadable cells are counted, flags all in the expected vocabulary',
         (t['numbers_unreadable'], t['flags_unexpected']) == (1, 0), t)
     rec('global DNC counts',
-        (t['dnc_flagged_numbers'], t['dnc_tightened'], t['dnc_sidecar_added'], t['dnc_sidecar_tightened']) == (6, 3, 13, 0), t)
+        (t['dnc_flagged_numbers'], t['dnc_tightened'], t['dnc_sidecar_added'], t['dnc_sidecar_tightened'],
+         t['dnc_sidecar_marked']) == (6, 3, 13, 0, 0), t)
+    rec('the status file records how many Whitepages leads were read (none here), counts only', st['whitepages_cases'] == 0)
     rec('audit: the earlier merge\'s namesake number is unconfirmed, the right one is confirmed',
         (t['cache_resimpli_numbers'], t['resimpli_confirmed'], t['resimpli_unconfirmed'], t['resimpli_unconfirmed_leads']) == (15, 13, 2, 1) and
         st['resimpli_unconfirmed_cases'] == [case(3)], (t, st['resimpli_unconfirmed_cases']))
@@ -497,28 +572,88 @@ try:
                        '3055550801': {'national_dnc': False, 'state_dnc': True, 'states': ['FL'], 'checked': '2026-01-01'}})
     rc, out = run([], files={'SkipTrace_1.csv': ROWS})
     side, t = load(SIDE), load(STATUS)['total']
-    rec('sidecar: an earlier registry miss is tightened, a hit (national or state) is left alone, strangers are untouched',
+    rec('sidecar: an earlier registry miss is tightened; a registry hit (national or state) keeps its verdict and gains the '
+        'REsimpli marker; strangers are untouched',
         side['3055550102'] == {'national_dnc': True, 'state_dnc': False, 'states': [], 'case': 'X',
                                'checked': '2026-01-01', 'resimpli': TODAY.isoformat(), 'source': 'resimpli'} and
-        side['3055550400'] == {'national_dnc': True, 'state_dnc': False, 'checked': '2026-01-01'} and
+        side['3055550400'] == {'national_dnc': True, 'state_dnc': False, 'checked': '2026-01-01',
+                               'resimpli': TODAY.isoformat()} and
         side['9999999999'] == {'national_dnc': False, 'state_dnc': False, 'checked': '2026-01-01'} and
-        side['3055550801'] == {'national_dnc': False, 'state_dnc': True, 'states': ['FL'], 'checked': '2026-01-01'}, side)
-    rec('sidecar: counts', (t['dnc_sidecar_added'], t['dnc_sidecar_tightened']) == (10, 1), t)
+        side['3055550801'] == {'national_dnc': False, 'state_dnc': True, 'states': ['FL'], 'checked': '2026-01-01',
+                               'resimpli': TODAY.isoformat()}, side)
+    rec('sidecar: counts', (t['dnc_sidecar_added'], t['dnc_sidecar_tightened'], t['dnc_sidecar_marked']) == (10, 1, 2), t)
+    snap = snapshot()
+    rc, out = run([])
+    rec('sidecar: a rerun changes nothing, marked records included', rc == 0 and
+        {k: v for k, v in snapshot().items() if not k.endswith('resimpli_sync_status.json')} ==
+        {k: v for k, v in snap.items() if not k.endswith('resimpli_sync_status.json')} and
+        load(STATUS)['total']['dnc_sidecar_marked'] == 0, out[-300:])
     rec('sidecar: backed up before it changed',
         any(f.startswith('dnc_scrub.pre-resimpli-') for f in os.listdir(os.path.join(DFDIR, 'backups'))))
 
+    def nothing_written():
+        return (load(RES) == CACHE and not os.path.exists(STATUS) and not os.path.exists(os.path.join(DFDIR, 'backups'))
+                and not os.path.exists(os.path.join(DFDIR, 'imports')) and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)))
     garbage = b'{"3055550102": {"national_dnc": tru'
+    for extra in ([], ['--dry-run']):
+        fresh(CACHE)
+        open(SIDE, 'wb').write(garbage)
+        rc, out = run(extra, files={'SkipTrace_1.csv': ROWS})
+        rec('a torn sidecar while the run has numbers to flag: refused, exit 2, everything left as found%s'
+            % (' (also on a dry run)' if extra else ''),
+            rc == 2 and 'REFUSED: dnc_scrub.json exists but cannot be read' in out and 'numbers to flag as DNC' in out
+            and open(SIDE, 'rb').read() == garbage and nothing_written() and 'TOTAL' not in out, out[-500:])
+    fay = [row('Fay', 'Flag', '800 Se 8th Ct', '33100', g1=[M(801, 'Mobile', True), M(802)])]     # the cache holds 13055550801, clean
     fresh(CACHE)
     open(SIDE, 'wb').write(garbage)
-    rc, out = run([], files={'SkipTrace_1.csv': ROWS})
-    rec('a torn sidecar is left exactly as found, said so, and the cache still updates',
+    rc, out = run([], files={'SkipTrace_1.csv': fay})
+    rec('a torn sidecar is refused even when the number to flag is already in the cache: skiptrace.py can replace that '
+        'entry, and the flag with it, and the sidecar is what would keep it',
+        rc == 2 and open(SIDE, 'rb').read() == garbage and nothing_written(), out[-300:])
+    clean1 = [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101), M(102)])]              # nothing here is flagged
+    fresh(CACHE)
+    open(SIDE, 'wb').write(garbage)
+    rc, out = run([], files={'SkipTrace_1.csv': clean1})
+    rec('a torn sidecar when the run has nothing to flag: left exactly as found, said so, and the cache still updates',
         rc == 0 and open(SIDE, 'rb').read() == garbage and 'WARNING: dnc_scrub.json exists but cannot be read' in out
         and load(STATUS)['dnc_scrub_json'] == 'unreadable' and nums(load(RES), 1) == ['3055550101', '3055550102'], out[-400:])
     fresh(CACHE, side=['not', 'a', 'dict'])
-    rc, out = run([], files={'SkipTrace_1.csv': ROWS})
-    rec('a sidecar that is not an object is left alone too', rc == 0 and load(SIDE) == ['not', 'a', 'dict'])
+    rc, out = run([], files={'SkipTrace_1.csv': fay})
+    rec('a sidecar that is not an object is a torn one: refused when there is something to flag',
+        rc == 2 and load(SIDE) == ['not', 'a', 'dict'] and nothing_written(), out[-300:])
+    fresh(CACHE, side=['not', 'a', 'dict'])
+    rc, out = run([], files={'SkipTrace_1.csv': clean1})
+    rec('...and left alone when there is nothing to flag',
+        rc == 0 and load(SIDE) == ['not', 'a', 'dict'] and nums(load(RES), 1) == ['3055550101', '3055550102'], out[-300:])
 
     # ---------------------------------------------------------------- the cache
+    fresh(CACHE)
+    real_leads = S.load_all_leads
+    def unreadable_leads():
+        raise FileNotFoundError(2, 'No such file or directory', 'leads_final.json')
+    S.load_all_leads = unreadable_leads
+    try:
+        rc, out = run([], files={'SkipTrace_1.csv': ROWS})
+    finally:
+        S.load_all_leads = real_leads
+    rec('no board leads file (wrong folder): refused with exit 2, nothing written, no traceback',
+        rc == 2 and 'board leads cannot be read' in out and load(RES) == CACHE and not os.path.exists(SIDE)
+        and not os.path.exists(STATUS), out[-300:])
+
+    fresh(CACHE)
+    open(WPF, 'w').write('{"2026-000001-CA-01": {"result": [')
+    rc, out = run([], files={'SkipTrace_1.csv': ROWS})
+    rec('a torn whitepages_lookup.json is refused: it decides how many numbers a lead can take; nothing written',
+        rc == 2 and 'whitepages_lookup.json' in out and 'cannot be read' in out and load(RES) == CACHE and not os.path.exists(SIDE)
+        and not os.path.exists(STATUS) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
+    fresh(CACHE, wp=['a', 'list'])
+    rc, out = run([], files={'SkipTrace_1.csv': ROWS})
+    rec('a whitepages_lookup.json that is not an object is refused', rc == 2 and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
+    fresh(CACHE, wp={case(50): {'_http': 404}})
+    rc, out = run([], files={'SkipTrace_1.csv': ROWS})
+    rec('a readable whitepages_lookup.json changes nothing for leads it has no numbers for; the status file counts its leads',
+        rc == 0 and nums(load(RES), 1) == ['3055550101', '3055550102'] and load(STATUS)['whitepages_cases'] == 1, out[-300:])
+
     fresh()
     rc, out = run([], files={'SkipTrace_1.csv': ROWS})
     rec('no cache: refused (wrong machine), nothing created',
@@ -549,9 +684,11 @@ try:
         rc, out = run([])
     finally:
         RS.merge = real_merge
-    rec('the cache changed while the merge ran: nothing replaced (exit 3), no temp, no sidecar, no status, no import copies',
+    rec('the cache changed while the merge ran: nothing replaced (exit 3), no temp, no sidecar, no backup, no status, '
+        'no import copies',
         rc == 3 and 'CHANGED' in out and 'Nothing was replaced' in out and open(RES, 'rb').read() == before
         and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)) and not os.path.exists(SIDE)
+        and not os.path.exists(os.path.join(DFDIR, 'backups'))
         and not os.path.exists(STATUS) and not os.path.exists(os.path.join(DFDIR, 'imports')), out[-300:])
 
     # the same, but the change lands while the temp file is being written
@@ -570,9 +707,10 @@ try:
     finally:
         RS.write_tmp = real_write_tmp
     rec('the cache changed while the temp file was written: nothing replaced (exit 3), temps removed, no sidecar, '
-        'no status, no import copies',
+        'no backup, no status, no import copies',
         rc == 3 and 'Nothing was replaced' in out and open(RES, 'rb').read() == before
         and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)) and not os.path.exists(SIDE)
+        and not os.path.exists(os.path.join(DFDIR, 'backups'))
         and not os.path.exists(STATUS) and not os.path.exists(os.path.join(DFDIR, 'imports')), out[-300:])
 
     # a write that fails stops the run, says what already landed, and never half-writes the cache
@@ -660,6 +798,84 @@ try:
     rec('a binary file named like an export is refused too, by name, rather than guessed at',
         rc == 2 and 'SkipTrace_bin.csv' in out and 'Move or delete that file' in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
 
+    # an export re-saved with another list separator, or with a line above the header, is not "some other CSV":
+    # skipping it would drop its DNC flags while an older export lists the same numbers clean
+    def write_delimited(path, rows, delimiter=',', pre=None, header=HDR):
+        with open(path, 'w', encoding='utf-8', newline='') as fh:
+            if pre:
+                fh.write(pre + '\r\n')
+            w = csv.DictWriter(fh, fieldnames=header, delimiter=delimiter, extrasaction='ignore')
+            w.writeheader()
+            w.writerows(rows)
+    for label, kw in (("';' as the list separator", dict(delimiter=';')), ('tab-delimited', dict(delimiter='\t')),
+                      ("a 'sep=,' line above the header", dict(pre='sep=,')),
+                      ('lower-cased column names', dict(header=[h.lower() for h in HDR]))):
+        fresh(CACHE)
+        write_csv(os.path.join(DL, 'SkipTrace_a.csv'), [clean])
+        write_delimited(os.path.join(DL, 'SkipTrace_b.csv'), [flags_it], **kw)
+        rc, out = run([])
+        rec('refused, nothing merged, nothing left behind: an export re-saved with %s next to a good one' % label,
+            rc == 2 and 'REFUSED' in out and 'SkipTrace_b.csv' in out and 'column names' in out and 'Move or delete that file' in out
+            and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS)
+            and not os.path.exists(os.path.join(DFDIR, 'imports')) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
+    for label, hdr in (('only its address column name', ['propertyStreetAddress', 'firstName']), ('only its phone column name', ['Phone_1', 'a'])):
+        fresh(CACHE)
+        write_csv(os.path.join(DL, 'SkipTrace_a.csv'), [clean])
+        write_delimited(os.path.join(DL, 'SkipTrace_b.csv'), [dict.fromkeys(hdr, '1')], delimiter=';', header=hdr)
+        rc, out = run([])
+        rec('refused, not skipped: a ";"-separated file that shows %s' % label,
+            rc == 2 and 'SkipTrace_b.csv' in out and 'column names' in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_a.csv'), [clean])
+    write_delimited(os.path.join(DL, 'SkipTrace_c.csv'), [{'a': '1'}], header=['a'])
+    rc, out = run([])
+    rec('a file with none of REsimpli\'s column names is still just skipped by name', rc == 0 and 'SKIPPED' in out and 'SkipTrace_c.csv' in out
+        and nums(load(RES), 1) == ['3055550101'], out[-300:])
+
+    # ---------------------------------------------------------------- the `opt` column is read in plain words or not at all
+    one = [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])]
+    for val in ('None', 'NULL', 'N/A', '-', 'Unknown', 'nan', 'Opted Out', '2'):
+        refused('opt_%s.csv' % val.replace('/', '_'), HDR, 'of value in its `opt` column', rows=[dict(one[0], opt=val)])
+    refused_dir('an export whose `opt` column says None next to a good one',
+                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([dict(clean, opt='None')], HDR, 'utf-8')},
+                'SkipTrace_b.csv')
+    fresh(CACHE)
+    path = os.path.join(TMP, 'opt_num.csv')
+    write_csv(path, [dict(one[0], opt='3055550101'), dict(one[0], opt='Zzz'), dict(one[0], opt='Qqq'), dict(one[0], opt='Ppp')])
+    rc, out = run([path])
+    rec('the refusal names how many kinds of value and shows at most three, never one with a digit in it',
+        rc == 2 and '4 kinds of value' in out and "'<number>'" in out and '305555' not in out and 'Zzz' not in out and ', ...' in out,
+        out[-300:])
+    fresh(CACHE)
+    path = os.path.join(TMP, 'opt_long.csv')
+    write_csv(path, [dict(one[0], opt='Opted Out Forever And Ever')])
+    rc, out = run([path])
+    rec('a long odd `opt` value is cut short in the refusal', rc == 2 and "'Opted Out Fo'" in out and 'Forever' not in out, out[-300:])
+    good_vals = ('', 'No', 'no', 'NO', 'False', 'FALSE', 'N', 'n', '0', ' No ', 'Yes', 'yes', 'TRUE', 'True', 'Y', '1')
+    path = os.path.join(TMP, 'opt_vocab.csv')
+    write_csv(path, [dict(one[0], opt=v) for v in good_vals])
+    try:
+        got, err = RS.read_export(path), None
+    except RS.SyncError as e:
+        got, err = [], e
+    rec('every spelling of yes and no (any case, padded, blank) is read, and read the right way round',
+        len(got) == len(good_vals) and [RS.opted_out(x) for x in got] == [False] * 10 + [True] * 6, err)
+    # a line cut short before its `opt` cell (here `opt` is the last column) has no answer: it is held
+    hdr_last = [h for h in HDR if h != 'opt'] + ['opt']
+    fresh(CACHE)
+    p_short = os.path.join(DL, 'SkipTrace_1.csv')
+    write_csv(p_short, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)]),
+                        row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[M(201)])], header=hdr_last)
+    text = open(p_short, newline='').read()
+    with open(p_short, 'w', newline='') as fh:
+        fh.write(text.rstrip('\r\n').rsplit(',', 1)[0] + '\r\n')                # the last line loses its final cell
+    rc, out = run([])
+    d, t = load(RES), load(STATUS)['total']
+    rec('a line cut short before its `opt` cell is opted out, not read as "no": its number is flagged and not merged, '
+        'and the complete line above it merges',
+        rc == 0 and nums(d, 1) == ['3055550101'] and nums(d, 2) == ['3055550200'] and t['opt_rows'] == 1 and
+        '3055550201' in load(SIDE) and '3055550101' not in load(SIDE), (t, nums(d, 2), out[-200:]))
+
     # ---------------------------------------------------------------- flags, end to end
     def flagged_row(**kw):
         return row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[dict(n='3055550101', **kw)])
@@ -743,6 +959,23 @@ try:
         [('3055553102', False), ('3055551001', True), ('3055553103', True)] and
         d[case(10)] == CACHE[case(10)] and d[case(41)] == elsewhere[case(41)], (t, d.get(case(31))))
 
+    # ---------------------------------------------------------------- a number the registry lists
+    reg = {'3055553001': {'national_dnc': True, 'state_dnc': False, 'states': [], 'case': 'X', 'checked': '2026-09-01'},
+           '13055553101': {'national_dnc': False, 'state_dnc': True, 'states': ['FL'], 'case': 'X', 'checked': '2026-09-01'}}
+    other = {case(50): {'phones': [{'number': '3055553001', 'type': 'Mobile', 'dnc': False}], 'source': 'tracerfy'}}
+    fresh(dict(CACHE, **other), side=reg)
+    rc, out = run([], files={'SkipTrace_1.csv': [
+        row('Carl', 'Carry', '3000 Nw 30th St', '33100', g1=[M(3001)]),
+        row('Cara', 'Carry', '3100 Nw 31st St', '33100', g1=[M(3101), M(3102)])]})
+    d, t, sd = load(RES), load(STATUS)['total'], load(SIDE)
+    rec('a number the registry lists is DNC on the lead it is added to whatever REsimpli says: alone it gives no entry '
+        '(skiptrace can still trace the lead), beside a clean number it lands flagged, last',
+        rc == 0 and case(30) not in d and t['leads_dnc_only_skipped'] == 1 and
+        [(p['number'], p['dnc']) for p in d[case(31)]['phones']] == [('3055553102', False), ('3055553101', True)], (t, d.get(case(31))))
+    rec('...and nothing else changes: another lead holding the number as clean is left to the bake, and the registry records '
+        'get no REsimpli marker, since REsimpli did not flag them',
+        d[case(50)] == other[case(50)] and sd == reg and t['dnc_tightened'] == 0 and t['dnc_sidecar_added'] == 0, (t, sd))
+
     # ---------------------------------------------------------------- the board bake keeps MAX_PHONES numbers per lead
     was_max = RS.PS.MAX_PHONES
     RS.PS.MAX_PHONES = 7
@@ -767,8 +1000,61 @@ try:
         t = load(STATUS)['total']
         rec('an entry already over the cap gets nothing, and the overflow is counted',
             rc == 0 and open(RES, 'rb').read() == before and t['new_numbers'] == 0 and t['numbers_over_cap'] == 3, t)
+        # the bake appends a lead's Whitepages numbers after its skip-trace numbers and cuts the row again, and the
+        # person-level opt-out checks read that row: what this tool adds must leave room for them
+        four = {case(32): {'phones': [{'number': '30555532%02d' % i, 'type': 'Landline', 'dnc': False} for i in range(1, 5)],
+                           'source': 'tracerfy'}}
+        cand = [row('Cass', 'Cap', '3200 Nw 32nd St', '33100', g1=[M(3212), M(3214), M(3216)])]
+        def wp_rec(owner=(), resident=(), person=()):
+            return {'result': {'ownership_info': {'person_owners': [{'name': 'X', 'phones': [{'number': n, 'type': 'MOBILE'} for n in owner]}]},
+                               'residents': [{'name': 'Y', 'phones': [{'number': n} for n in resident]}]},
+                    '_person': [{'name': 'Z', 'response': [{'phones': [{'number': n} for n in person]}]}]}
+        def union(d, wp):
+            return {RS.norm_number(p['number']) for p in d[case(32)]['phones']} | RS.wp_numbers(wp.get(case(32)))
+        wp3 = {case(32): wp_rec(owner=('305-555-9901',), resident=('3055559902',), person=('13055559903',))}
+        fresh(four, wp=wp3)
+        before = open(RES, 'rb').read()
+        rc, out = run([], files={'SkipTrace_1.csv': cand})
+        t = load(STATUS)['total']
+        rec('whitepages numbers fill the row: 4 cache numbers plus 3 Whitepages (owner, resident, person search) is MAX_PHONES, '
+            'so nothing is added, the cache is not rewritten, and the held numbers are counted',
+            rc == 0 and open(RES, 'rb').read() == before and t['new_numbers'] == 0 and t['numbers_over_cap'] == 3, t)
+        wp1 = {case(32): wp_rec(owner=('3055559901',))}
+        fresh(four, wp=wp1)
+        rc, out = run([], files={'SkipTrace_1.csv': cand})
+        d, t = load(RES), load(STATUS)['total']
+        rec('one Whitepages number leaves room for two: clean mobiles first, the third is counted, and the cache and '
+            'Whitepages numbers together are exactly MAX_PHONES',
+            rc == 0 and nums(d, 32)[4:] == ['3055553212', '3055553214'] and t['new_numbers'] == 2 and t['numbers_over_cap'] == 1
+            and len(union(d, wp1)) == 7, (t, nums(d, 32)))
+        wpdup = {case(32): wp_rec(owner=('3055553201', '3055559901'))}          # one of them is already a cache number
+        fresh(four, wp=wpdup)
+        rc, out = run([], files={'SkipTrace_1.csv': cand})
+        d, t = load(RES), load(STATUS)['total']
+        rec('a Whitepages number the cache already holds is not counted twice',
+            rc == 0 and t['new_numbers'] == 2 and len(union(d, wpdup)) == 7, (t, nums(d, 32)))
+        wpp = {case(32): wp_rec(person=('3055559901', '3055559902', '3055559903', '3055559904'))}
+        fresh(four, wp=wpp)
+        rc, out = run([], files={'SkipTrace_1.csv': cand})
+        rec('person-search numbers count too, whether or not the bake would keep them (over-counting only leaves room)',
+            rc == 0 and load(STATUS)['total']['new_numbers'] == 0 and load(RES) == four, out[-200:])
+        fresh(four, wp={case(99): wp_rec(owner=('3055559901',), resident=('3055559902',), person=('3055559903',))})
+        rc, out = run([], files={'SkipTrace_1.csv': cand})
+        rec('another lead\'s Whitepages numbers do not take this lead\'s room', rc == 0 and load(STATUS)['total']['new_numbers'] == 3)
     finally:
         RS.PS.MAX_PHONES = was_max
+
+    # the same at the real MAX_PHONES: 6 skip-trace numbers, 1 Whitepages number, and 4 clean REsimpli mobiles is one too many
+    room = RS.PS.MAX_PHONES
+    fresh({case(32): {'phones': [{'number': '30555532%02d' % i, 'type': 'Landline', 'dnc': False} for i in range(1, room - 3)],
+                      'source': 'tracerfy'}},
+          wp={case(32): {'result': {'ownership_info': {'person_owners': [{'phones': [{'number': '3055559901'}]}]}}}})
+    rc, out = run([], files={'SkipTrace_1.csv': [row('Cass', 'Cap', '3200 Nw 32nd St', '33100',
+                                                      g1=[M(3212), M(3214), M(3216), M(3218)])]})
+    d, t = load(RES), load(STATUS)['total']
+    rec('with the real cap: a lead with MAX-4 skip-trace numbers and a Whitepages number takes 3 of 4 clean mobiles, so the '
+        'Whitepages number stays on the baked row',
+        rc == 0 and len(d[case(32)]['phones']) == room - 1 and t['new_numbers'] == 3 and t['numbers_over_cap'] == 1, (t, len(d[case(32)]['phones'])))
 
     # ---------------------------------------------------------------- two people on one county-roll line
     fresh(CACHE)
@@ -780,6 +1066,63 @@ try:
     d, t = load(RES), load(STATUS)['total']
     rec('"PEREZ JOSE & GARCIA MARIA": Maria Garcia is an owner and "Jose Garcia" is a stranger; each person on an oname line is an owner',
         nums(d, 34) == ['3055553402'] and nums(d, 35) == ['3055553501', '3055553502'] and t['owner_mismatch'] == 1, (t, nums(d, 34), nums(d, 35)))
+
+    # ---------------------------------------------------------------- opting out is about the person, not the row
+    ol = [lead(43, '4300 NW 43 ST', 'OPTED, OLGA'),
+          lead(44, '4400 NW 44 ST', 'OPTED, OLGA; OPTED, OMAR'),
+          lead(45, '4500 NW 45 ST', 'PERSON, PAT')]
+    oa = row('Olga', 'Opted', '4300 Nw 43rd St', '33100', g1=[M(4301)], owner2=('Pat', 'Person'), opt='Yes')   # her co-owner is out too
+    ob = row('Olga', 'Opted', '4400 Nw 44th St', '33100', g1=[M(4401), M(4402)])                     # her other property, opt blank there
+    oc = row('Omar', 'Opted', '4400 Nw 44th St', '33100', g1=[M(4403)])                              # someone else at that address
+    od = row('', 'Big Corp LLC', '4400 Nw 44th St', '33100', g2=[M(4404)], owner2=('Olga', 'Opted'))  # a company, Olga behind it
+    oe = row('Pat', 'Person', '4500 Nw 45th St', '33100', g1=[M(4501)])                              # the co-owner of the opted-out row
+    ope = RS.opt_people_of([('f', 'h', [oa])])
+    def held(r, people=None):
+        return RS.row_opted_out(r, RS.row_people(r), ope if people is None else people)
+    jr = RS.opt_people_of([('f', 'h', [row('Jose', 'Perez Jr', '1 A St', '33100', g1=[M(1)], opt='Yes')])])
+    rec('opt person: a Jr opted out does not hold a Sr, nor the other way round',
+        held(row('Jose', 'Perez Jr', '2 A St', '33100', g1=[M(2)]), jr) and not held(row('Jose', 'Perez Sr', '2 A St', '33100', g1=[M(2)]), jr) and
+        not held(row('Jose', 'Perez Jr', '2 A St', '33100', g1=[M(2)]),
+                 RS.opt_people_of([('f', 'h', [row('Jose', 'Perez Sr', '1 A St', '33100', g1=[M(1)], opt='Yes')])])))
+    rec('opt person: the person on an opted-out row, and her co-owner on that row, are held wherever else they are named, in '
+        'either owner slot; a relative, a namesake with another surname, and a company with nobody behind it are not',
+        len(ope) == 2 and held(oa) and held(ob) and held(od) and held(oe) and not held(oc) and
+        not held(row('Olga', 'Other', '1 A St', '33100', g1=[M(1)])) and not held(row('Rita', 'Opted', '1 A St', '33100', g1=[M(1)])) and
+        not held(row('', 'Acme Holdings LLC', '1 A St', '33100', g1=[M(1)])) and
+        RS.flagged_numbers([ob], ope) == {'3055554401', '3055554402'} and RS.flagged_numbers([ob]) == set() and
+        RS.opt_people_of([]) == [])
+    for label, files in (('one export', {'SkipTrace_1.csv': [oa, ob, oc, od, oe]}),
+                         ('the opted-out row in the older export', {'SkipTrace_a.csv': [oa], 'SkipTrace_b.csv': [ob, oc, od, oe]}),
+                         ('the opted-out row in the newer export', {'SkipTrace_a.csv': [ob, oc, od, oe], 'SkipTrace_b.csv': [oa]})):
+        with with_leads(ol):
+            fresh(CACHE)
+            rc, out = run([], files=files)
+            d, t, sd = load(RES), load(STATUS)['total'], load(SIDE)
+        rec('opt person, %s: the same person under another property is held and her numbers flagged; her opted-out row '
+            'is held; another owner of that lead still merges' % label,
+            rc == 0 and case(43) not in d and nums(d, 44) == ['3055554403'] and
+            case(45) not in d and (t['opt_rows'], t['opt_person_rows'], t['matched_rows']) == (1, 3, 1) and
+            {'3055554301', '3055554401', '3055554402', '3055554404', '3055554501'} <= set(sd) and '3055554403' not in sd and
+            t['rows_with_phone'] == sum(t[k] for k in ('unmatched_rows_with_phone', 'unit_mismatch', 'entity_rows',
+                                                      'flagged_lead_rows', 'owner_mismatch', 'opt_rows', 'opt_person_rows',
+                                                      'matched_rows')), (t, sorted(sd), nums(d, 44)))
+
+    # ---------------------------------------------------------------- the ZIP separates two homes with one street address
+    zl = [lead(38, '12345 NW 45 ST', 'FIVE, FRED'),                                # a five-digit house number is not a ZIP
+          lead(39, '3900 NW 39 ST', 'ZIP, ZED', zipc='33101'),
+          lead(40, '3900 NW 39 ST', 'ZIP, ZED', zipc='33102')]
+    with with_leads(zl):
+        fresh(CACHE)
+        rc, out = run([], files={'SkipTrace_1.csv': [
+            row('Fred', 'Five', '12345 Nw 45th St', '33100', g1=[M(3801)]),
+            row('Zed', 'Zip', '3900 Nw 39th St', '33101', g1=[M(3901)]),
+            row('Zed', 'Zip', '3900 Nw 39th St', '33102', g1=[M(4001)]),
+            row('Zed', 'Zip', '3900 Nw 39th St', '33103', g1=[M(4101)])]})
+        d, t = load(RES), load(STATUS)['total']
+    rec('the same street address in two ZIPs is two homes: each row reaches the lead in its own ZIP, a ZIP with no lead '
+        'is unmatched, and a five-digit house number is not read as the lead\'s ZIP',
+        rc == 0 and nums(d, 38) == ['3055553801'] and nums(d, 39) == ['3055553901'] and nums(d, 40) == ['3055554001'] and
+        t['unmatched_rows_with_phone'] == 1 and '3055554101' not in json.dumps(d), (t, sorted(d)))
 
     # ---------------------------------------------------------------- a Jr at the address of a Sr
     fresh(CACHE)
@@ -816,13 +1159,25 @@ try:
     def registry(nat, **kw):
         return dict({'national_dnc': nat, 'state_dnc': False, 'states': [], 'case': 'X', 'checked': '2026-01-01'}, **kw)
     TM._board = lambda: LEADS
-    TM._cache = lambda: {case(40): {'phones': [{'number': '30555540%02d' % i, 'type': 'Mobile', 'dnc': False} for i in (1, 2, 3, 4, 5)]}}
-    TM._dnc_scrubbed = lambda: {'3055554001': registry(True, source='resimpli'),     # REsimpli's flag: a registry miss must not replace it
+    TM._cache = lambda: {case(40): {'phones': [{'number': '30555540%02d' % i, 'type': 'Mobile', 'dnc': False} for i in (1, 2, 3, 4, 5, 6)]}}
+    TM._dnc_scrubbed = lambda: {'3055554001': registry(True, source='resimpli'),     # a record the first version of this tool wrote
                                 '3055554002': registry(False),                        # a registry miss past its TTL
                                 '3055554003': registry(True),                         # the lane's own hit past its TTL
-                                '3055554005': registry(False, source='resimpli')}     # nothing to protect
-    rec('tracerfy_mcp dnc lane: a REsimpli verdict is never re-scrubbed; stale registry records and unchecked numbers still are',
+                                '3055554005': registry(False, source='resimpli'),     # nothing to protect
+                                '3055554006': registry(True, resimpli='2026-09-29')}  # the lane's own hit, marked by this tool
+    rec('tracerfy_mcp dnc lane: a REsimpli verdict, marked or tagged, is never re-scrubbed; stale registry records and '
+        'unchecked numbers still are',
         [n for _, n in TM._dnc_targets()] == ['3055554002', '3055554003', '3055554004', '3055554005'], TM._dnc_targets())
+    fresh(CACHE, side={'3055550400': registry(True), '3055559999': registry(True)})    # two lane hits, past their 30 days
+    rc, out = run([], files={'SkipTrace_1.csv': ROWS})
+    disk = load(SIDE)
+    TM._dnc_scrubbed = lambda: disk
+    TM._cache = lambda: {case(60): {'phones': [{'number': '3055550400', 'type': 'Mobile', 'dnc': False},     # skiptrace traced them again,
+                                                {'number': '3055559999', 'type': 'Mobile', 'dnc': False}]}}  # its modeled flag says clean
+    rec('end to end: a number the lane already listed and REsimpli then flags is not re-scrubbed after 30 days (a registry miss '
+        'would replace the flag); a lane hit REsimpli did not flag still is',
+        rc == 0 and disk['3055550400'].get('resimpli') == TODAY.isoformat() and disk['3055550400']['national_dnc'] is True
+        and 'resimpli' not in disk['3055559999'] and [n for _, n in TM._dnc_targets()] == ['3055559999'], TM._dnc_targets())
 
     # ---------------------------------------------------------------- the sidecar is checked like the cache
     for label, side0 in (('the sidecar changed while the run was writing (a tracerfy dnc checkpoint)',
@@ -846,10 +1201,11 @@ try:
             rc, out = run([])
         finally:
             RS.write_tmp = real_write_tmp
-        rec(label + ': nothing replaced (exit 3), temps removed, no status, no import copies',
+        rec(label + ': nothing replaced (exit 3), temps removed, no backup, no status, no import copies',
             rc == 3 and 'Nothing was replaced' in out and open(RES, 'rb').read() == before_c
             and (open(SIDE, 'rb').read() == before_s if side0 is not None else open(SIDE).read() == '{}')
             and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)) and not os.path.exists(STATUS)
+            and not os.path.exists(os.path.join(DFDIR, 'backups'))
             and not os.path.exists(os.path.join(DFDIR, 'imports')), out[-300:])
 
     # the windows before the temp files: the cache changes right after it was read, the sidecar right after
@@ -861,7 +1217,7 @@ try:
             return r
         return wrapper
     for label, attr, target in (('the cache changed right after it was read', 'load_cache', RES),
-                                ('the sidecar changed right after it was read', 'sidecar_plan', SIDE)):
+                                ('the sidecar changed right after it was read', 'load_sidecar', SIDE)):
         fresh(CACHE, side={'9999999999': {'national_dnc': False, 'state_dnc': False, 'checked': '2026-01-01'}})
         write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
         before_c, before_s = open(RES, 'rb').read(), open(SIDE, 'rb').read()
@@ -871,9 +1227,9 @@ try:
             rc, out = run([])
         finally:
             setattr(RS, attr, real_fn)
-        rec(label + ': nothing replaced (exit 3)',
+        rec(label + ': nothing replaced (exit 3), no temp, no backup',
             rc == 3 and 'Nothing was replaced' in out and open(RES, 'rb').read() == before_c and open(SIDE, 'rb').read() == before_s
-            and not any(os.path.exists(x) for x in (TMPR, TMPS)), out[-300:])
+            and not any(os.path.exists(x) for x in (TMPR, TMPS)) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
 
     # ---------------------------------------------------------------- what a failed write leaves behind
     fresh(CACHE)
@@ -893,6 +1249,42 @@ try:
         rc == 3 and 'Written before the failure: dnc_scrub.json' in out and load(RES) == CACHE and load(SIDE) is not None
         and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)) and not os.path.exists(STATUS)
         and not os.path.exists(os.path.join(DFDIR, 'imports')), out[-300:])
+
+    # a disk that fills while the cache temp file is written leaves no half-written phone file behind, and neither temp file
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
+    real_dump = json.dump
+    def dump_fails_for_cache(obj, fh, **k):
+        if fh.name.endswith('skiptrace_results.json.resimpli.tmp'):
+            fh.write('{"partial": [')
+            raise OSError(28, 'No space left on device')
+        return real_dump(obj, fh, **k)
+    json.dump = dump_fails_for_cache
+    try:
+        rc, out = run([])
+    finally:
+        json.dump = real_dump
+    rec('the disk fills while the cache temp file is written: exit 3, both temp files gone, cache untouched, no sidecar, '
+        'no backup, no status',
+        rc == 3 and 'FAILED: could not write' in out and 'Written before the failure: nothing' in out and load(RES) == CACHE
+        and not os.path.exists(SIDE) and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS))
+        and not os.path.exists(os.path.join(DFDIR, 'backups')) and not os.path.exists(STATUS), out[-300:])
+    def dump_raises_type_error(obj, fh, **k):
+        if fh.name.endswith('skiptrace_results.json.resimpli.tmp'):
+            raise TypeError('boom')
+        return real_dump(obj, fh, **k)
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
+    json.dump = dump_raises_type_error
+    raised = False
+    try:
+        run([])
+    except TypeError:
+        raised = True
+    finally:
+        json.dump = real_dump
+    rec('any other error while the temp files are written also leaves none behind (and is not swallowed)',
+        raised and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)) and load(RES) == CACHE and not os.path.exists(SIDE))
 
     fresh(CACHE)
     os.makedirs(DFDIR)
@@ -918,6 +1310,125 @@ try:
         'the sidecar first, the cache last',
         rc == 0 and events == ['fsync', 'fsync', 'replace dnc_scrub.json.resimpli.tmp -> dnc_scrub.json',
                                'replace skiptrace_results.json.resimpli.tmp -> skiptrace_results.json'], events)
+
+    # ---------------------------------------------------------------- line endings, a header csv cannot parse, glob characters
+    fresh(CACHE)
+    p_cr = os.path.join(DL, 'SkipTrace_1.csv')
+    write_csv(p_cr, ROWS[:1])
+    text = open(p_cr, newline='').read()
+    with open(p_cr, 'w', newline='') as fh:
+        fh.write(text.replace('\r\n', '\r'))
+    rc, out = run([])
+    rec('a CSV with old-Mac (CR-only) line endings is read in full, not a traceback',
+        rc == 0 and nums(load(RES), 1) == ['3055550101', '3055550102'] and [p['dnc'] for p in load(RES)[case(1)]['phones']] == [False, True], out[-300:])
+    fresh(CACHE)
+    p_huge = os.path.join(TMP, 'huge.csv')
+    with open(p_huge, 'w') as fh:
+        fh.write('x' * 200000 + '\n' + 'a\n')
+    rc, out = run([p_huge])
+    rec('a header line csv cannot parse is refused by name, not a traceback',
+        rc == 2 and 'huge.csv' in out and 'cannot be read as CSV' in out and load(RES) == CACHE, out[-300:])
+
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_a.csv'), [clean])
+    with open(os.path.join(DL, 'SkipTrace_b.csv'), 'w') as fh:
+        fh.write('x' * 200000 + '\n')
+    rc, out = run([])
+    rec('...and in discovery mode it stops the run too: it cannot be shown to be "not an export"',
+        rc == 2 and 'SkipTrace_b.csv' in out and 'Move or delete that file' in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
+
+    real_main, real_merge = RS.main, RS.merge
+    def cli_out(argv=()):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            return RS.cli(list(argv)), buf.getvalue()
+    def main_raises(argv=None):
+        raise KeyError('PEREZ JOSE')
+    RS.main = main_raises
+    try:
+        rc, out = cli_out()
+    finally:
+        RS.main = real_main
+    rec('an error nothing anticipated ends as one line and exit 4: its type and where, never its message (it can be a name)',
+        rc == 4 and out.startswith('FAILED: unexpected error (KeyError at _resimplisynctest.py:') and 'PEREZ' not in out
+        and out.count('\n') == 1, out)
+    def main_exits(argv=None):
+        sys.exit(7)
+    RS.main = main_exits
+    try:
+        try:
+            RS.cli([])
+            code = None
+        except SystemExit as e:
+            code = e.code
+    finally:
+        RS.main = real_main
+    rec('a SystemExit passes through cli untouched', code == 7)
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
+    rc, out = cli_out(['--dry-run'])
+    rec('cli returns main\'s own exit code', rc == 0 and 'DRY RUN - nothing written' in out and not os.path.exists(SIDE), out[-200:])
+    def merge_raises(*a, **k):
+        raise RuntimeError('boom')
+    RS.merge = merge_raises
+    try:
+        rc, out = cli_out()
+    finally:
+        RS.merge = real_merge
+    rec('an unexpected error in the middle of a real run: exit 4 and nothing written',
+        rc == 4 and 'FAILED: unexpected error (RuntimeError at' in out and load(RES) == CACHE and not os.path.exists(SIDE)
+        and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)) and not os.path.exists(STATUS), out[-300:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
+    def dump_raises_type_error2(obj, fh, **k):
+        if fh.name.endswith('skiptrace_results.json.resimpli.tmp'):
+            raise TypeError('boom')
+        return real_dump(obj, fh, **k)
+    json.dump = dump_raises_type_error2
+    try:
+        rc, out = cli_out()
+    finally:
+        json.dump = real_dump
+    rec('an unexpected error while the temp files are written: exit 4, and the temp files are still removed',
+        rc == 4 and 'FAILED: unexpected error (TypeError at' in out and load(RES) == CACHE and not os.path.exists(SIDE)
+        and not any(os.path.exists(x) for x in (RES + '.tmp', TMPR, TMPS)), out[-300:])
+
+    # run as a script: the entry point is cli(), so the same error is exit 4 there too
+    import runpy
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
+    real_lal, real_argv = S.load_all_leads, sys.argv
+    def leads_raise():
+        raise RuntimeError('boom')
+    S.load_all_leads = leads_raise
+    sys.argv = ['resimpli_sync.py']
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            runpy.run_path(str(HERE / 'resimpli_sync.py'), run_name='__main__')
+        code = None
+    except SystemExit as e:
+        code = e.code
+    finally:
+        S.load_all_leads, sys.argv = real_lal, real_argv
+    rec('run as a script, an unexpected error is exit 4 with one line',
+        code == 4 and buf.getvalue().startswith('FAILED: unexpected error (RuntimeError at') and load(RES) == CACHE, (code, buf.getvalue()[-200:]))
+
+    real_home = os.environ['HOME']
+    weird = os.path.join(TMP, 'ho[me]')
+    weird_imports = os.path.join(TMP, 'DEAL[FLOW]', 'imports', 'resimpli')
+    os.makedirs(os.path.join(weird, 'Downloads'))
+    os.makedirs(weird_imports)
+    open(os.path.join(weird, 'Downloads', 'SkipTrace_9.csv'), 'w').write('a\n')
+    open(os.path.join(weird_imports, 'abcd1234_SkipTrace_old.csv'), 'w').write('a\n')
+    os.environ['HOME'] = weird
+    try:
+        found = RS.discover(weird_imports)
+    finally:
+        os.environ['HOME'] = real_home
+    rec('a profile folder or DEALFLOW folder with [ ] in its name is a folder name, not a pattern',
+        [os.path.basename(f) for f in found] == ['SkipTrace_9.csv', 'abcd1234_SkipTrace_old.csv'] or
+        sorted(os.path.basename(f) for f in found) == ['SkipTrace_9.csv', 'abcd1234_SkipTrace_old.csv'], found)
 
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
