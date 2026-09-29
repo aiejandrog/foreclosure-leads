@@ -1677,6 +1677,56 @@ def restore_stays_from_cache(leads):
     return _restored
 
 
+def stamp_federal_bk(slim):
+    """Federal bankruptcy (CourtListener) holds onto baked rows: saleBkAct + bkWhy. Holds only: a
+    case number and a reason, never a name. Miami-Dade rows are not held just because the lookup
+    has not run; Broward and Palm Beach are. Returns the number of rows held.
+
+    Fails CLOSED (2026-09-29). This block used to catch any bk_lookup error, print SKIPPED and
+    hold nothing, and texting, the Morning Worker and cadence read saleBkAct, not the Call Mode
+    index. Now a bk_lookup that will not import or raises holds every row that has a case number
+    for this build, and the log says DEGRADED. flags_for_cases fails closed the same way inside."""
+    try:
+        import bk_lookup as _BKL
+        flags = _BKL.flags_for_cases([d.get('case') for d in slim])
+        degraded = str(getattr(_BKL, 'FLAGS_DEGRADED', '') or '')
+        if not isinstance(flags, dict):
+            raise TypeError('flags_for_cases returned %s' % type(flags).__name__)
+    except Exception as e:
+        flags = None
+        degraded = 'bk_lookup failed (%s)' % type(e).__name__
+    try:
+        import stay_gate as _SG
+        _pk = _SG.pacer_key
+    except Exception:
+        _pk = None
+    held = 0
+    for d in slim:
+        case = str(d.get('case') or '').strip()
+        if flags is None:
+            f = {'hold': True, 'why': 'federal bankruptcy check unavailable on this build. '
+                                      'Lead stays held.'} if case else None
+        else:
+            f = flags.get(case.upper())
+            if not f and _pk is not None:
+                try:
+                    f = flags.get(_pk(d.get('case')))
+                except Exception:
+                    f = None
+        if not f or not f.get('hold'):
+            continue
+        d['bkWhy'] = str(f.get('why') or '')[:180]
+        if not d.get('saleBkAct'):
+            d['saleBkAct'] = True
+        held += 1
+    if degraded:
+        print('federal bankruptcy lookup DEGRADED: %s -> %d lead(s) held for this build. '
+              'Fix it before anyone calls or texts.' % (degraded, held))
+    elif held:
+        print('federal bankruptcy lookup: %d lead(s) held' % held)
+    return held
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -3264,33 +3314,8 @@ def make_tracker(leads):
             print(f"bounce guard (final sweep): {_late} dead address(es) removed from finished cards "
                   f"— they had been re-merged after the queue strip")
 
-    # Federal bankruptcy (CourtListener). Holds only: a case number and a reason, never a name.
-    # Miami-Dade rows are not held just because the lookup has not run; Broward and Palm Beach are.
-    try:
-        import bk_lookup as _BKL
-        _bkf = _BKL.flags_for_cases([d.get('case') for d in slim])
-    except Exception as _bke:
-        _bkf = {}
-        print('federal bankruptcy flags: SKIPPED (%s)' % str(_bke)[:80])
-    if _bkf:
-        _bkh = 0
-        for _d in slim:
-            _key = str(_d.get('case') or '').strip().upper()
-            _f = _bkf.get(_key)
-            if not _f:
-                try:
-                    import stay_gate as _SG
-                    _f = _bkf.get(_SG.pacer_key(_d.get('case')))
-                except Exception:
-                    _f = None
-            if not _f or not _f.get('hold'):
-                continue
-            _d['bkWhy'] = str(_f.get('why') or '')[:180]
-            if not _d.get('saleBkAct'):
-                _d['saleBkAct'] = True
-            _bkh += 1
-        if _bkh:
-            print('federal bankruptcy lookup: %d lead(s) held' % _bkh)
+    # Federal bankruptcy (CourtListener). Fails closed: see stamp_federal_bk.
+    stamp_federal_bk(slim)
 
     # Relatives are the most sensitive numbers on a row (third parties about someone else's
     # foreclosure). Now that every hold is on the row, strip them from any lead that is held.

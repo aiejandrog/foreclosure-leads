@@ -678,6 +678,9 @@ worker_marks.applied.jsonl
 !_alertstest.py
 # _bklookuptest: CourtListener bankruptcy check on stubbed HTTP. Example names only, no token.
 !_bklookuptest.py
+# _bkfailclosedtest: board bake, flags_for_cases and Call Mode hold every lead when the
+# bankruptcy check breaks. Synthetic case numbers only, no names, no network.
+!_bkfailclosedtest.py
 # _clerkbktest: Broward clerk-docket bankruptcy check on stubbed HTTP. Synthetic docket
 # lines only, no API key, no party names.
 !_clerkbktest.py
