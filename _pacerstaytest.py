@@ -973,7 +973,10 @@ check('gate: Miami-Dade docket clear but owner is a new flsb filer -> stay_activ
 r = SG.check('CACE-99-001605', sh16)
 check('gate: NOT in the index never clears -- a lead with no per-lead PACER verdict is still refused, and flagged for a pre-send check',
       r['ok'] is False and r['code'] in (SG.UNRESOLVABLE, SG.UNVERIFIED) and r['pacer_need'] is True, r)
-pc = {'CACE-99-001601': {'verdict': 'clear', 'a': False, 'env': 'prod', 't': NOW + 5, 'q': 'x', 'src': 'pacer_pcl'}}
+_q = dt.date.fromtimestamp(NOW)
+pc = {'CACE-99-001601': {'verdict': 'clear', 'a': False, 'env': 'prod', 't': NOW + 5, 'q': _q.isoformat(),
+                         'src': 'pacer_pcl', 'region': 'national',
+                         'lookback_from': PS.lookback_from(_q, PS.LOOKBACK_YEARS)}}
 (g16 / 'pacer_stay_cache.json').write_text(json.dumps(pc))
 check('a per-lead PACER clear queried AFTER the hit\'s rows were pulled supersedes the hit (it saw the current status)',
       SG.check('CACE-99-001601', sh16)['ok'] is True)

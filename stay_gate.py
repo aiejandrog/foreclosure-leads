@@ -361,6 +361,29 @@ def _pacer_age_days(ent, now=None):
     return ((time.time() if now is None else now) - t) / 86400.0
 
 
+# pacer_stay.LOOKBACK_YEARS; _bklookuptest checks the two agree.
+PACER_LOOKBACK_YEARS = 8
+
+
+def _pacer_full_scope(ent):
+    """True only when the search behind a PACER entry covered every court nationwide and the
+    full PACER_LOOKBACK_YEARS back from its query date. A --region fl run or a shorter
+    --lookback-years writes a 'clear' that cannot see an older or out-of-state open case."""
+    try:
+        import datetime as _dt
+        if ent.get('region') != 'national':
+            return False
+        q = _dt.date.fromisoformat(str(ent.get('q') or '')[:10])
+        lf = _dt.date.fromisoformat(str(ent.get('lookback_from') or '')[:10])
+        try:
+            need = q.replace(year=q.year - PACER_LOOKBACK_YEARS)
+        except ValueError:                             # Feb 29
+            need = q.replace(year=q.year - PACER_LOOKBACK_YEARS, day=28)
+        return lf <= need
+    except Exception:
+        return False
+
+
 def pacer_verdict(ent, now=None):
     """(code, why) for ONE pacer_stay_cache.json entry. Only a fresh production 'clear' clears."""
     if not isinstance(ent, dict):
@@ -388,6 +411,11 @@ def pacer_verdict(ent, now=None):
     if age < -1 or age > limit:
         return UNVERIFIED, ('PACER clear is %.0f days old (older than %g) -- re-run pacer_stay.py'
                             % (age, limit))
+    if not _pacer_full_scope(ent):
+        return UNVERIFIED, ('PACER clear came from a narrowed search (region %s, back to %s) -- only a '
+                            'nationwide %d-year search clears' % (ent.get('region') or 'not recorded',
+                                                                str(ent.get('lookback_from') or 'not recorded')[:10],
+                                                                PACER_LOOKBACK_YEARS))
     return CLEAR, 'no open federal bankruptcy for the owner in PACER (checked %s)' % str(ent.get('q') or '')[:10]
 
 

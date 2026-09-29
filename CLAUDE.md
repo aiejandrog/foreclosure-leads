@@ -302,7 +302,8 @@ Another lead on that case stays held. Dropping the only case still does not rele
 Broward or Palm Beach lead unless `DEALFLOW_BK_ALLOW_CL_CLEAR=1`.
 
 **PACER release (2026-09-28, Alejandro has a PACER account).** A fresh production per-lead
-`clear` in `pacer_stay_cache.json` (`stay_gate.pacer_verdict`, 14-day max age) with no blocking
+`clear` in `pacer_stay_cache.json` (`stay_gate.pacer_verdict`, 14-day max age, and only from a nationwide 8-year search: a `--region fl`
+or short `--lookback-years` clear is `stay_unverified`) with no blocking
 new-filer hit releases a Broward or Palm Beach lead: `bk_lookup.pacer_confirmed()`, used by the send
 gate (`gate_opinion`), the dial queue (`HoldIndex`) and the board flags (`flags_for_cases`). It only
 completes a CourtListener result that failed to confirm (clear_unconfirmed, stale, not run,

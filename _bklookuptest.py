@@ -1256,7 +1256,8 @@ BL._dump(BL.cache_path(), {
     'CACE-99-556004': cl_possible, 'CACE-99-556005': cl_stale, 'CACE-99-556006': cl_clear,
     'CACE-99-556008': cl_clear,
 })
-pc_clear = {'verdict': 'clear', 'a': False, 'env': 'prod', 't': now - 3600, 'q': '2026-09-28', 'src': 'pacer_pcl'}
+pc_clear = {'verdict': 'clear', 'a': False, 'env': 'prod', 't': now - 3600, 'q': '2026-09-28', 'src': 'pacer_pcl',
+            'region': 'national', 'lookback_from': '2018-09-28'}
 (d / SG.PACER_NAME).write_text(json.dumps({
     'CACE-99-556001': pc_clear,                                             # CL clear + PACER clear
     'CACE-99-556003': pc_clear,                                             # CL exact match wins
@@ -1300,6 +1301,18 @@ check('a new-filer hit pulled after the PACER clear holds again',
       BL.pacer_confirmed('CACE-99-556001', now) is False and BL.federal_hold('CACE-99-556001')[0] is True
       and SG.check('CACE-99-556001', sh)['ok'] is False)
 (d / SG.HITS_NAME).unlink()
+for _label, _ent in (('a --region fl PACER clear', dict(pc_clear, region='fl')),
+                     ('a short-lookback PACER clear', dict(pc_clear, lookback_from='2024-09-28')),
+                     ('a PACER clear with no recorded scope', {k: w for k, w in pc_clear.items()
+                                                              if k not in ('region', 'lookback_from')})):
+    (d / SG.PACER_NAME).write_text(json.dumps({'CACE-99-556007': _ent}), encoding='utf-8')
+    BL._HOLD_MEMO = None
+    check(_label + ' does not release',
+          BL.pacer_confirmed('CACE-99-556007', now) is False and BL.federal_hold('CACE-99-556007')[0] is True
+          and SG.check('CACE-99-556007', sh)['ok'] is False)
+import pacer_stay as _PS
+check('stay_gate and pacer_stay agree on the full PACER lookback', SG.PACER_LOOKBACK_YEARS == _PS.LOOKBACK_YEARS,
+      (SG.PACER_LOOKBACK_YEARS, _PS.LOOKBACK_YEARS))
 (d / SG.PACER_NAME).write_text('{not json', encoding='utf-8')
 BL._HOLD_MEMO = None
 check('an unreadable PACER cache releases nothing',
