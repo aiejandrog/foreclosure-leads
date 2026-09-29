@@ -856,6 +856,40 @@ def cl_clear_allowed(env=None):
     return str((env or {}).get(ENV_ALLOW_CL_CLEAR) or '').strip() == '1'
 
 
+PACER_ROOT = None   # folder holding pacer_stay_cache.json; None = beside stay_gate.py (tests override)
+
+
+def pacer_confirmed(key, now=None):
+    """True only when PACER itself says this lead is clear: a fresh production per-lead
+    'clear' in pacer_stay_cache.json (stay_gate.pacer_verdict) and no blocking new-filer hit.
+
+    This is the confirmed clear Broward and Palm Beach have been waiting on. A missing,
+    unreadable, stale, QA, 'unverifiable' or 'active' entry is False, and so is any error:
+    the lead stays held. It never overrides a CourtListener hold; callers only ask it about
+    leads CourtListener did not flag. The files live beside sale_history_cache.json, where
+    pacer_stay.py writes them and stay_gate.check() reads them."""
+    try:
+        import stay_gate
+        if stay_gate.never_contact(key):
+            return False                               # contacted during a bankruptcy: never released
+        root = PACER_ROOT or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, err, exists = stay_gate._load_pacer(os.path.join(root, stay_gate.PACER_NAME))
+        if not exists or err or not idx:
+            return False
+        ent = idx[0].get(key)
+        if stay_gate.pacer_verdict(ent, now)[0] != stay_gate.CLEAR:
+            return False
+        hidx, herr, hexists = stay_gate._load_hits(os.path.join(root, stay_gate.HITS_NAME))
+        if herr:
+            return False
+        hit = hidx[0].get(key) if (hexists and hidx) else None
+        if hit is not None and stay_gate.hit_blocks(hit, ent, now):
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def max_runtime_s(env=None):
     env = os.environ if env is None else env
     raw = str(env.get(ENV_MAX_RUNTIME) or '').strip()
@@ -1134,8 +1168,9 @@ def entry_opinion(key, ent, overrides, now):
             stem = bool(stay_gate.case_stem(key))
         except Exception:
             stem = False
-        if not stem and not cl_clear_allowed():
-            # PACER is parked. A CourtListener clear does not release Broward or Palm Beach.
+        if not stem and not cl_clear_allowed() and not pacer_confirmed(key, now):
+            # A CourtListener clear alone does not release Broward or Palm Beach. A fresh
+            # PACER per-lead clear does (pacer_confirmed).
             return {'blocks': True, 'ok': False, 'code': VERDICT_CLEAR_UNCONFIRMED,
                     'why': CLEAR_UNCONFIRMED_WHY, 'bk_need': False, 'bd': '', 'src': 'courtlistener'}
         return {'blocks': False, 'ok': True, 'code': 'clear', 'why': why,
@@ -1166,7 +1201,12 @@ def gate_opinion(case, now=None):
     if not isinstance(ent, dict):
         return {'blocks': False, 'ok': False, 'code': '', 'why': '', 'bk_need': True, 'bd': '',
                 'src': 'courtlistener'}
-    return entry_opinion(key, ent, load_overrides(), now)
+    op = entry_opinion(key, ent, load_overrides(), now)
+    # Release direction only: a Broward / Palm Beach lead CourtListener could not confirm is
+    # cleared when PACER has a fresh clear. Everything else is returned exactly as before.
+    if op and not op.get('ok') and not stay_gate.case_stem(key):
+        op = _pacer_release(key, op, now) or op
+    return op
 
 
 def contact_blocked_reason(case, here=None):
@@ -1180,6 +1220,38 @@ def contact_blocked_reason(case, here=None):
     if v.get('ok'):
         return False, ''
     return True, v.get('why') or 'federal bankruptcy check has not run for this lead'
+
+
+def _pacer_release(key, op, now):
+    """The clear opinion for a Broward / Palm Beach lead when PACER has a fresh clear and
+    CourtListener found nothing against the owner; None otherwise.
+
+    CourtListener evidence always wins: an open exact match (stay_active), a plausible match
+    (possible: blocks with no further search wanted), and an unreadable cache all return None.
+    Only a CourtListener result that failed to CONFIRM a clear (clear_unconfirmed, stale, not
+    run, truncated, errored) can be completed by PACER's national per-lead search."""
+    if op:
+        code = op.get('code')
+        if code == 'stay_active':
+            return None
+        if op.get('blocks') and not op.get('bk_need') and code != VERDICT_CLEAR_UNCONFIRMED:
+            return None
+    if not pacer_confirmed(key, now):
+        return None
+    return {'blocks': False, 'ok': True, 'code': 'clear', 'bk_need': False, 'bd': '',
+            'why': 'no open federal bankruptcy for the owner in PACER', 'src': 'pacer_pcl'}
+
+
+def _non_stem_opinion(key, op, now):
+    """A Broward / Palm Beach lead CourtListener did not clear: held unless _pacer_release."""
+    rel = _pacer_release(key, op, now)
+    if rel:
+        return rel
+    op = dict(op)
+    op['blocks'] = True
+    if not op.get('why'):
+        op['why'] = 'federal bankruptcy check has not run for this lead'
+    return op
 
 
 class HoldIndex:
@@ -1218,15 +1290,12 @@ class HoldIndex:
             if isinstance(ent, dict):
                 op = entry_opinion(pk, ent, self.overrides, self.now)
                 if op and not stay_gate.case_stem(pk) and not op.get('ok'):
-                    op = dict(op)
-                    op['blocks'] = True
-                    if not op.get('why'):
-                        op['why'] = 'federal bankruptcy check has not run for this lead'
+                    op = _non_stem_opinion(pk, op, self.now)
                 if op and op.get('blocks'):
                     out = (True, op.get('why') or 'federal bankruptcy check has not run for this lead')
                 else:
                     out = (False, '')
-            elif not stay_gate.case_stem(pk):
+            elif not stay_gate.case_stem(pk) and not pacer_confirmed(pk, self.now):
                 out = (True, 'federal bankruptcy check has not run for this lead')
             else:
                 out = (False, '')
@@ -1377,11 +1446,8 @@ def flags_for_cases(cases, now=None):
             # A stale clear is not a pass. Broward and Palm Beach stay held until a fresh
             # search says no open match. Miami-Dade is not held for a stale or missing check.
             if op and not stay_gate.case_stem(key) and not op.get('ok'):
-                op = dict(op)
-                op['blocks'] = True
-                if not op.get('why'):
-                    op['why'] = 'federal bankruptcy check has not run for this lead'
-        elif not stay_gate.case_stem(key):
+                op = _non_stem_opinion(key, op, now)
+        elif not stay_gate.case_stem(key) and not pacer_confirmed(key, now):
             op = {'blocks': True, 'code': 'stay_unverified',
                   'why': 'federal bankruptcy check has not run for this lead'}
         else:

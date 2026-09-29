@@ -280,6 +280,17 @@ bankruptcy case number for one lead id after a person has verified the false pos
 Another lead on that case stays held. Dropping the only case still does not release a
 Broward or Palm Beach lead unless `DEALFLOW_BK_ALLOW_CL_CLEAR=1`.
 
+**PACER release (2026-09-28, Alejandro has a PACER account).** A fresh production per-lead
+`clear` in `pacer_stay_cache.json` (`stay_gate.pacer_verdict`, 14-day max age) with no blocking
+new-filer hit releases a Broward or Palm Beach lead: `bk_lookup.pacer_confirmed()`, used by the send
+gate (`gate_opinion`), the dial queue (`HoldIndex`) and the board flags (`flags_for_cases`). It only
+completes a CourtListener result that failed to confirm (clear_unconfirmed, stale, not run,
+truncated, errored). A CourtListener exact or plausible match, an unreadable cache, a QA entry, a
+stale PACER clear, and any never-contact case stay held. Login: `DEALFLOW_DIR\pacer.pass` (JSON
+username/password, written on the laptop by Alejandro) or the PACER_* env vars. `PACER_BULK=callable`
+searches Broward / Palm Beach leads that have a phone on the board twin, inside
+`PACER_QUARTER_CAP` (default $25, under the $30 quarterly waiver) and the $50/month paid-reads cap.
+
 Miami-Dade keeps the #72 docket gate. This lookup only adds a hold there. A CourtListener
 clear does not lift a docket stay or a PACER active hit.
 

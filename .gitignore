@@ -674,3 +674,7 @@ case-verdicts.md
 case-verdicts-report.md
 # _verdicttest: case_verdict.assess on the five pilot cases' states and the conflict/missing edges.
 !_verdicttest.py
+
+# PACER login (DEALFLOW_DIR/pacer.pass is the real location; this blocks a stray copy)
+pacer.pass
+*.pass
