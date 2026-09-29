@@ -49,7 +49,7 @@ class UnanchoredDeedTests(unittest.TestCase):
         self.assertEqual(got['possible_later_conveyances'], ['7/1'])
         self.assertEqual(got['comparison_status'], 'unknown_possible_later_conveyance')
         self.assertTrue(any('may already have conveyed' in g for g in got['gaps']))
-        self.assertIn('OWNER PERSON is an anchored-deed grantee', got['unanchored_deeds'][0]['chain_link'])
+        self.assertIn('OWNER PERSON is a folio-anchored deed grantee', got['unanchored_deeds'][0]['chain_link'])
 
     def test_earlier_unanchored_deed_does_not_question_the_current_deed(self):
         rows = [deed('2', '1/1/2020', 'SELLER', 'OWNER PERSON'),
@@ -110,7 +110,10 @@ class SunbizTests(unittest.TestCase):
         self.assertFalse(raw['not_found'])
         self.assertEqual(raw['status'], 'ACTIVE')
         self.assertEqual(len(calls), 2)
-        self.assertTrue(LO._lookup('NOBODY LLC', fetch=lambda u: '')['not_found'])
+        # rows that do not match are an absence; an empty page is not an answer at all (2026-09-29)
+        self.assertTrue(LO._lookup('NOBODY LLC', fetch=lambda u: SEARCH_HTML)['not_found'])
+        with self.assertRaises(LO.SunbizBlocked):
+            LO._lookup('NOBODY LLC', fetch=lambda u: '')
 
     def test_found_entity_carries_no_authority_and_is_never_call_ready(self):
         fetch = lambda u: DETAIL_HTML if 'SearchResultDetail' in u else SEARCH_HTML

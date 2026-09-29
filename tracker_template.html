@@ -1373,7 +1373,9 @@ input.ph::placeholder{color:#8FBFA0}
    the scrollbar length stable so offscreen cards still reserve their space. Scoped to #cards .card
    so the print/doc .card is untouched. Purely presentational — no logic, no math, no DOM change.
    scrollIntoView (the #case= deep-link) and find-in-page both work with content-visibility:auto. */
-#cards .card{content-visibility:auto;contain-intrinsic-size:0 1700px}
+/* `auto` = once a card has been on screen, hold its REAL height while it is off screen. Without it
+   every card that scrolled away snapped back to the 1700px guess, so everything below it moved. */
+#cards .card{content-visibility:auto;contain-intrinsic-size:auto 1700px}
 .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--muted-2)}
 .card.v3::before{background:var(--green)}
 .card.v2::before{background:var(--amber)}
@@ -4526,6 +4528,7 @@ function _wpHousehold(r){
     return '<div class="wpown">'
       + '<div class="wpownh"><b>'+esc(o.name||'?')+'</b>'
       + (atProp ? ' <span class="wptag wpon">AT THE PROPERTY — knock</span>' : ' <span class="wptag wpoff">ABSENTEE '+esc(locTxt)+' — call, don\'t knock</span>')
+      + (o.notOwner ? ' <span class="wptag wpoff" title="Whitepages lists this person on the parcel, but the name does not match the owner on our records. Ask for the owner.">NOT THE OWNER ON OUR RECORDS</span>' : '')
       + '</div>'
       + (phList ? '<div class="wpphs">'+phList+'</div>' : '<div class="csmut">no phones on WP for this owner</div>')
       + (emList ? '<div class="wpems">'+emList+'</div>' : '')
@@ -4557,6 +4560,59 @@ function _wpHousehold(r){
       + '</div>';
   }
   return head + rows + residHtml + '</div>';
+}
+// RELATIVES (r.wpRelatives, baked from the Whitepages Person layer by wp_contacts.py). CALL ONLY.
+// They live in their own field and never enter r.phones, so textablePhones, the worker, the send
+// bridge and Call Mode cannot reach them. Shown only when the owner cannot be reached: no dialable
+// owner-grade number on the row (skip trace 'st' or deed/address-verified Whitepages 'wp', DNC or
+// not), or 3+
+// unanswered call attempts over 2+ days with no conversation. Every hold hides them outright.
+// Calling a relative about someone's foreclosure is a privacy and TCPA question: the script is the
+// attorney's to approve. Until then the sheet says to ask only that they pass a number along.
+function _ownerUnreachable(r){
+  // A DNC owner number still counts: board policy keeps it manually dialable about the owner's own
+  // foreclosure, and a relative's unscrubbed number is not a better first call than that.
+  var ph = r.phones||[], src = r.phsrc||[];
+  var ownerDial = ph.some(function(p,i){ var t = src[i]||'st'; return t==='st' || t==='wp'; });
+  if(!ownerDial) return true;
+  var ts = ((notes[r.case]||{}).touches||[]).filter(function(t){ return (t.ch||'')==='call'; });
+  if(ts.some(function(t){ return /talk|reached|spoke|interest|call ?back|appoint|convers/i.test(t.out||''); })) return false;
+  var miss = ts.filter(function(t){ return /no ?answer|voicemail|\bvm\b|wrong|disconnect|not in service|busy/i.test(t.out||''); });
+  var days = {}; miss.forEach(function(t){ days[t.d||''] = 1; });
+  return miss.length >= 3 && Object.keys(days).length >= 2;
+}
+function _relativesHeld(r){
+  if(_textContactBlocked(r)) return true;
+  if(r.ddhold || r.sibclaimed || r.lpDismissed) return true;
+  if(typeof isFlaggedDead === 'function' && isFlaggedDead(r)) return true;
+  var st = String((notes[r.case]||{}).status||'').toUpperCase();
+  return st==='DEAD' || st==='DO NOT CONTACT' || st==='OPTED OUT';
+}
+function _wpRelatives(r){
+  var rel = (r && r.wpRelatives) || []; if(!rel.length) return '';
+  if(_relativesHeld(r)) return '';
+  var withPh = rel.filter(function(x){ return (x.phones||[]).length; }).length;
+  if(!_ownerUnreachable(r)){
+    return '<div class="csmut" style="margin:6px 0 10px">👪 '+rel.length+' relative'+(rel.length===1?'':'s')
+      +' on file ('+withPh+' with a number). Hidden while the owner still has a number to try.</div>';
+  }
+  var fmtPh = function(n){ n = String(n||'').replace(/\D/g,''); return n.length===10 ? n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6) : n; };
+  var own = (r.oname || String(r.owners||'').split(';')[0] || 'the owner');
+  var rows = rel.map(function(x){
+    var ph = (x.phones||[]).map(function(p){
+      var d = String(p.n||'').replace(/\D/g,'');
+      return '<a class="wpph" href="'+esc(_telNum(d))+'">'+esc(fmtPh(d))+'</a><span class="wpt">'+esc(p.type||'?')+'</span>';
+    }).join(' ');
+    return '<div class="wpresidrow"><b>'+esc(x.name||'?')+'</b>'
+      + (x.rel ? ' <span class="wpt">'+esc(x.rel)+'</span>' : '')
+      + (ph ? '<div class="wpphs">'+ph+'</div>' : '<div class="csmut">no number on file</div>')
+      + '</div>';
+  }).join('');
+  return '<div class="cssec">👪 RELATIVES — CALL ONLY</div><div class="csbody"><div class="wpresid">'
+    + '<div class="wpabs">⚠ Shown because the owner could not be reached. <b>Call only</b>: never text, email or add to a batch. '
+    + 'Say who you are and ask them to pass your number to '+esc(own)+'. <b>Do not mention the foreclosure or the case.</b> '
+    + 'These numbers are not DNC-scrubbed. The script needs the attorney\'s OK.</div>'
+    + rows + '</div></div>';
 }
 // GOVERNMENT / CODE-ENFORCEMENT defendants: when the county, a city, code enforcement, or the IRS/US is
 // named as a defendant on THIS case, its lien (if any exists) is only foreclosed OUT if that party stays
@@ -4921,7 +4977,7 @@ function _callSheet(r){
       (s.sale?' — sale '+esc(s.sale):'')+(s.title?', Certificate of Title <b>'+esc(s.title)+'</b>':'')+
       (s.tpb?' to <b>'+esc(s.tpb)+'</b>':'')+'. The owner here no longer owns it. Do not knock, call, or mail. '+
       'Only live angle: a registry SURPLUS belongs to the former owner (FS 45.031).</div>'; })() : '';
-  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
+  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+_wpRelatives(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
@@ -7025,7 +7081,7 @@ function _wqShow(){
     // the tel:/find anchors fall through to the global contact-intent listener on purpose
   });
   document.body.appendChild(bar);
-  const el = document.querySelector('#tb tr[data-case="'+CSS.escape(r.case)+'"], #cards .card[data-case="'+CSS.escape(r.case)+'"]');
+  const el = _paintEnsure(r.case);     // the lead may sit past the part of the list streamed in so far
   if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'center'});
 }
 function _wqCount(){ try{ return _workQueue().length; }catch(e){ return 0; } }
@@ -16970,71 +17026,185 @@ function _firstMoverScore(r){
 // screenful is painted synchronously and the remainder streams in slices. The board is usable in
 // ~40ms instead of seconds, and a new render cancels any pending stream so a fast typist never
 // stacks work.
-let _pendRows = null, _pendIdx = 0, _rowObs = null;
-const _ROWS_FIRST = 120, _ROWS_SLICE = 160;
-// Append the next slice when a 1px SENTINEL row at the end of the table comes into view. A sentinel
-// + IntersectionObserver works no matter which ancestor actually scrolls (window, .tblwrap, or a
-// future wrapper) — reading scrollTop meant guessing, and guessing wrong shipped a board that
-// stopped at 60 rows (caught in functional test, 2026-08-12).
-function _rowSentinel(tb){
-  let s = document.getElementById('rowsentinel');
+// ===== KEEP YOUR PLACE ACROSS A REPAINT (2026-09-28) =========================================
+// "The scrolling stays fixed and it glitches" (Alejandro, 2026-09-28). render() runs on every
+// link tap (400ms later), every pin, every logged touch, every team-sync pull and every return to
+// the tab. It used to throw the whole list away and rebuild it:
+//   - PHONE: all ~2,600 cards at once, ~13KB each = ~34MB of HTML parsed in one task. Measured on a
+//     2,632-lead fake board at 4x CPU throttle: 13.6s with the page frozen. Then the rebuilt cards
+//     came back at the 1700px content-visibility placeholder instead of their real height, so the
+//     page landed a card or more away from where he was ("glitch"). The first 24 cards also re-ran
+//     their fade-in on every repaint.
+//   - DESKTOP: the table restarted at 120 rows, so anyone scrolled past row 120 had the page cut
+//     short under them and the browser clamped the scroll position up the list.
+// Now both lists (#tb rows, #cards cards) go through _paintList():
+//   1. same leads in the same order (the common case: a note, a pin, a tick) -> patch in place,
+//      replacing only the items whose markup changed. Nothing else is touched or re-animated.
+//   2. a different list (filter, sort, search) -> write the first screenful, stream the rest in
+//      slices as a 1px sentinel nears the viewport (the table already did this; cards now do too).
+//   3. either way, the lead that was at the top of the screen stays at the same spot on screen.
+// A sentinel + IntersectionObserver works no matter which ancestor actually scrolls (window,
+// .tblwrap, or a future wrapper) — reading scrollTop meant guessing, and guessing wrong shipped a
+// board that stopped at 60 rows (caught in functional test, 2026-08-12).
+const _PAINT_CFG = {
+  tb:    {first:120, slice:160, margin:'1200px 0px'},
+  // cards are ~1,700px each: 8 fill the first screens, 12 more per slice, fetched 5,000px ahead
+  cards: {first:8,   slice:12,  margin:'5000px 0px'}
+};
+const _PAINT = {};   // host id -> {keys, items, idx, obs}
+function _paintState(host){
+  return _PAINT[host.id] || (_PAINT[host.id] = {keys:null, items:null, idx:0, obs:null});
+}
+// Anything that writes the host directly (empty states, the other layout being cleared) calls this
+// so the next render() does a full write instead of patching against children that are gone.
+function _paintReset(host){
+  if(!host) return;
+  const s = _PAINT[host.id]; if(!s) return;
+  if(s.obs){ s.obs.disconnect(); s.obs = null; }
+  s.keys = null; s.items = null; s.idx = 0;
+  const sn = document.getElementById(host.id + 'sentinel'); if(sn) sn.remove();
+}
+function _paintSentinel(host){
+  const id = host.id + 'sentinel';
+  let s = document.getElementById(id);
   if(!s){
-    s = document.createElement('tr');
-    s.id = 'rowsentinel';
-    s.innerHTML = '<td colspan="12" style="height:1px;padding:0;border:0"></td>';
+    if(host.id === 'tb'){
+      s = document.createElement('tr');
+      s.innerHTML = '<td colspan="12" style="height:1px;padding:0;border:0"></td>';
+    } else {
+      s = document.createElement('div');
+      s.style.height = '1px';
+    }
+    s.id = id;
   }
-  tb.appendChild(s);                    // always last
+  host.appendChild(s);                  // always last
   return s;
 }
-function _pumpRows(){
-  if(!_pendRows) return;
-  const tb = document.getElementById('tb'); if(!tb) return;
-  if(_pendIdx >= _pendRows.length){
-    _pendRows = null;
-    const s = document.getElementById('rowsentinel'); if(s) s.remove();
-    if(_rowObs){ _rowObs.disconnect(); _rowObs = null; }
+function _paintArm(host){
+  const s = _paintState(host), cfg = _PAINT_CFG[host.id] || _PAINT_CFG.tb;
+  const sn = _paintSentinel(host);
+  if(!('IntersectionObserver' in window)){   // no IO -> just finish the list
+    while(s.items && s.idx < s.items.length) _paintPump(host);
     return;
   }
-  const slice = _pendRows.slice(_pendIdx, _pendIdx + _ROWS_SLICE).join('');
-  _pendIdx += _ROWS_SLICE;
-  const sent = document.getElementById('rowsentinel');
-  if(sent) sent.insertAdjacentHTML('beforebegin', slice);
-  else tb.insertAdjacentHTML('beforeend', slice);
-  _lzArm(tb);
-  _armRowObs(tb);                        // re-observe: the sentinel moved down
+  if(s.obs) s.obs.disconnect();
+  s.obs = new IntersectionObserver(function(en){
+    for(const e of en){ if(e.isIntersecting){ _paintPump(host); break; } }
+  }, {root:null, rootMargin:cfg.margin, threshold:0});
+  s.obs.observe(sn);
 }
-function _armRowObs(tb){
-  const s = _rowSentinel(tb);
-  if(!('IntersectionObserver' in window)){   // no IO -> just finish the table
-    while(_pendRows && _pendIdx < _pendRows.length) _pumpRows();
-    return;
+function _paintDone(host){
+  const s = _paintState(host);
+  if(s.obs){ s.obs.disconnect(); s.obs = null; }
+  const sn = document.getElementById(host.id + 'sentinel'); if(sn) sn.remove();
+}
+// Append up to n more items (default one slice). Returns true while more remain.
+function _paintPump(host, n){
+  const s = _paintState(host); if(!s.items) return false;
+  if(s.idx >= s.items.length){ _paintDone(host); return false; }
+  const cfg = _PAINT_CFG[host.id] || _PAINT_CFG.tb;
+  const end = Math.min(s.items.length, s.idx + (n || cfg.slice));
+  const html = s.items.slice(s.idx, end).join('');
+  s.idx = end;
+  const sn = document.getElementById(host.id + 'sentinel');
+  if(sn) sn.insertAdjacentHTML('beforebegin', html);
+  else host.insertAdjacentHTML('beforeend', html);
+  if(host.id === 'tb') _lzArm(host);
+  if(s.idx >= s.items.length){ _paintDone(host); return false; }
+  _paintArm(host);                      // re-observe: the sentinel moved down
+  return true;
+}
+// The lead at the top of the screen and how far it sits from the top of the viewport.
+function _paintAnchor(host){
+  if(!host || !host.children.length || window.scrollY < 1) return null;
+  const kids = host.children;
+  let lo = 0, hi = kids.length - 1, hit = -1;
+  while(lo <= hi){                      // first child whose bottom is below the viewport top
+    const mid = (lo + hi) >> 1;
+    if(kids[mid].getBoundingClientRect().bottom > 0){ hit = mid; hi = mid - 1; } else lo = mid + 1;
   }
-  if(_rowObs) _rowObs.disconnect();
-  _rowObs = new IntersectionObserver(function(en){
-    for(const e of en){ if(e.isIntersecting){ _pumpRows(); break; } }
-  }, {root:null, rootMargin:'1200px 0px', threshold:0});
-  _rowObs.observe(s);
+  for(let i = Math.max(0, hit); hit >= 0 && i < kids.length; i++){
+    const c = kids[i].getAttribute('data-case');
+    if(c) return {c: c, top: kids[i].getBoundingClientRect().top};
+  }
+  return null;
 }
-function _writeRows(tb, trs){
-  if(_lzObs){ _lzObs.disconnect(); _lzObs = null; }   // previous rows are about to be destroyed
-  if(_rowObs){ _rowObs.disconnect(); _rowObs = null; }
-  _pendRows = null; _pendIdx = 0;
-  const sOld = document.getElementById('rowsentinel'); if(sOld) sOld.remove();
-  tb.innerHTML = trs.slice(0, _ROWS_FIRST).join('');
-  _lzArm(tb);
-  if(trs.length > _ROWS_FIRST){ _pendRows = trs; _pendIdx = _ROWS_FIRST; _armRowObs(tb); }
+function _paintRestore(host, a){
+  if(!a) return;
+  let el = null;
+  try{ el = host.querySelector('[data-case="' + CSS.escape(a.c) + '"]'); }catch(_e){}
+  if(!el) return;
+  const d = el.getBoundingClientRect().top - a.top;
+  if(Math.abs(d) < 1) return;
+  // html{scroll-behavior:smooth} would turn the correction into a visible glide; this must be a jump
+  const de = document.documentElement, prev = de.style.scrollBehavior;
+  de.style.scrollBehavior = 'auto';
+  window.scrollTo(0, window.scrollY + d);
+  de.style.scrollBehavior = prev;
 }
-// Anything that needs the WHOLE table present (print, select-all copy) forces the rest in.
-function _rowsFillAll(){
-  if(!_pendRows) return;
-  const tb = document.getElementById('tb');
-  const sent = document.getElementById('rowsentinel');
-  const rest = _pendRows.slice(_pendIdx).join('');
-  if(sent){ sent.insertAdjacentHTML('beforebegin', rest); sent.remove(); }
-  else if(tb) tb.insertAdjacentHTML('beforeend', rest);
-  _pendRows = null;
-  if(_rowObs){ _rowObs.disconnect(); _rowObs = null; }
-  if(tb) _lzArm(tb);
+// items[i] is the markup of one child; keys[i] the lead it belongs to (the table has two children
+// per lead: the data row and its links row). Returns true on a full write (the caller animates it).
+function _paintList(host, items, keys){
+  if(!host) return false;
+  const s = _paintState(host), cfg = _PAINT_CFG[host.id] || _PAINT_CFG.tb;
+  const anchor = _paintAnchor(host);
+  const sig = keys.join('\u0001');
+  const sn = document.getElementById(host.id + 'sentinel');
+  const live = s.items ? host.children.length - (sn ? 1 : 0) : -1;
+  if(s.items && s.keys === sig && live === s.idx){
+    // 1. same list: patch only what changed
+    let tpl = null, lz = false;
+    for(let i = 0; i < s.idx; i++){
+      if(items[i] === s.items[i]) continue;
+      tpl = tpl || document.createElement('template');
+      tpl.innerHTML = items[i];
+      const nu = tpl.content.firstElementChild;
+      if(nu){ host.children[i].replaceWith(nu); lz = true; }
+    }
+    s.items = items;
+    if(host.id === 'tb'){
+      // a links row whose markup did not change keeps links filled on an earlier pass; refill any
+      // whose links did (a full rewrite used to do this for free)
+      host.querySelectorAll('tr.lrow[data-lz-done]').forEach(function(tr){
+        const h = _lzLinks.get(tr.dataset.lz);
+        if(h != null && tr._lzHtml !== h){ const w = tr.querySelector('.lwrap'); if(w){ w.innerHTML = h; tr._lzHtml = h; } }
+      });
+      if(lz) _lzArm(host);
+    }
+    _paintRestore(host, anchor);
+    return false;
+  }
+  // 2. new list: first screenful now (and at least down to where he was), the rest streamed
+  _paintReset(host);
+  if(host.id === 'tb' && _lzObs){ _lzObs.disconnect(); _lzObs = null; }   // old rows are about to go
+  let first = cfg.first;
+  if(anchor){ const ai = keys.indexOf(anchor.c); if(ai >= 0) first = Math.max(first, ai + cfg.slice); }
+  s.keys = sig; s.items = items; s.idx = Math.min(first, items.length);
+  host.innerHTML = items.slice(0, s.idx).join('');
+  if(host.id === 'tb') _lzArm(host);
+  if(s.idx < items.length) _paintArm(host);
+  _paintRestore(host, anchor);
+  return true;
+}
+// Anything that needs the WHOLE list present (print, select-all copy, jumping to a lead) forces
+// the rest in.
+function _paintFillAll(host){
+  if(!host) return;
+  const s = _paintState(host);
+  if(s.items && s.idx < s.items.length) _paintPump(host, s.items.length - s.idx);
+}
+function _rowsFillAll(){ _paintFillAll(document.getElementById('tb')); }
+// Stream in just far enough that this lead's row/card exists, and return it.
+function _paintEnsure(c){
+  for(const id of ['tb', 'cards']){
+    const host = document.getElementById(id); if(!host) continue;
+    const s = _PAINT[id]; if(!s || !s.items) continue;
+    const want = s.keys ? s.keys.split('\u0001').indexOf(c) : -1;
+    if(want >= s.idx) _paintPump(host, want - s.idx + 1);
+  }
+  try{
+    return document.querySelector('#tb tr[data-case="'+CSS.escape(c)+'"], #cards .card[data-case="'+CSS.escape(c)+'"]');
+  }catch(_e){ return null; }
 }
 const _lzLinks = new Map();
 let _lzObs = null;
@@ -17044,6 +17214,7 @@ function _lzFill(tr){
   const html = _lzLinks.get(tr.dataset.lz);
   if(html == null) return;
   w.innerHTML = html;
+  tr._lzHtml = html;                    // lets a patch-in-place repaint spot links that changed
   tr.dataset.lzDone = '1';
 }
 function _lzArm(root){
@@ -17065,7 +17236,7 @@ function _lzArm(root){
 }
 // Anything that needs EVERY link present (print, select-all copy) calls this first.
 function _lzFillAll(){ document.querySelectorAll('tr.lrow[data-lz]').forEach(_lzFill); }
-window.addEventListener('beforeprint', function(){ if(typeof _rowsFillAll==='function') _rowsFillAll(); _lzFillAll(); });
+window.addEventListener('beforeprint', function(){ if(typeof _rowsFillAll==='function') _rowsFillAll(); _paintFillAll(document.getElementById('cards')); _lzFillAll(); });
 function view(){
   // Smart auto-recovery (2026-07-20): a filter that depends on a set which is now empty drops
   // itself instead of stranding you on a blank board. Remove your last saved lead while the
@@ -17651,6 +17822,7 @@ function render(){
       const msg = '<div class="empty"><div class="empty-t">🌱 Fresh filings — the front of the funnel</div>'+
         '<div class="empty-s" style="max-width:520px;margin:8px auto 0">These are foreclosures the day they\'re <b>filed</b> (Lis Pendens) — 8-14 months before the auction, when nobody else is calling yet. The daily refresh pulls them from county records. If it\'s empty, the Lis-Pendens sweep hasn\'t run yet or found nothing new this window.</div>'+
         '<button class="empty-reset" type="button" style="margin-top:14px">Back to the board</button></div>';
+      _paintReset(document.getElementById('tb')); _paintReset(cc);
       document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>';
       if(cc) cc.innerHTML = msg;
       return;
@@ -17662,6 +17834,7 @@ function render(){
       : '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
         '<button class="empty-reset" type="button">Clear all filters</button>';
     const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+cta+'</div>';
+    _paintReset(document.getElementById('tb')); _paintReset(cc);
     document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>';
     if(cc) cc.innerHTML = msg;
     return;
@@ -17669,9 +17842,17 @@ function render(){
   // inject ONLY the visible layout and CLEAR the hidden one, so the DOM never holds both at once
   // (halves node count / memory for good, not just until the first resize). The breakpoint listener
   // rebuilds the other side the instant the width crosses 860px, so nothing is ever left blank.
+  // _paintList patches in place when the list is unchanged and keeps the lead on screen where it
+  // was (see KEEP YOUR PLACE ACROSS A REPAINT). Only a genuinely new list plays the entrance.
   const _tb = document.getElementById('tb');
-  if(_mob){ if(cc) cc.innerHTML = cards.join(''); if(_tb) _tb.innerHTML = ''; if(window._fxEnter) window._fxEnter(cc); }
-  else { if(_tb) _writeRows(_tb, trs); if(cc) cc.innerHTML = ''; if(window._fxEnter) window._fxEnter(_tb); }
+  if(_mob){
+    if(_tb && _tb.firstChild){ _paintReset(_tb); if(_lzObs){ _lzObs.disconnect(); _lzObs = null; } _tb.innerHTML = ''; }
+    if(_paintList(cc, cards, rows.map(r => r.case)) && window._fxEnter) window._fxEnter(cc);
+  } else {
+    const _keys = []; rows.forEach(r => { _keys.push(r.case, r.case); });   // data row + links row
+    if(cc && cc.firstChild){ _paintReset(cc); cc.innerHTML = ''; }
+    if(_paintList(_tb, trs, _keys) && window._fxEnter) window._fxEnter(_tb);
+  }
 }
 // PERF companion to the visible-layout-only render: when the viewport crosses the 860px breakpoint,
 // the newly-shown layout was skipped on the last render and would be empty — repaint once on the

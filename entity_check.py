@@ -26,7 +26,8 @@ RUN
 EXIT CODES
     0  verified ACTIVE  (the gate is open)
     1  not verified     (the gate stays shut -- this is SAFE, not an error to route around)
-    2  the lookup itself failed (network/markup drift) -- treat as not verified
+    2  the lookup itself failed (network/markup drift, or the Cloudflare challenge Sunbiz began
+       serving curl on 2026-09-29) -- treat as not verified. No daily run lifts this by itself.
 """
 import argparse
 import io
@@ -135,6 +136,9 @@ def main():
     # ---- availability screening (does not touch entity_status.json) --------------------------
     if a.available:
         v = check(a.available)
+        if v['error']:
+            print('LOOKUP FAILED for %s -- %s. No answer either way.' % (a.available, v['error']))
+            return 2
         near = v['neighbours'] or neighbours(a.available)
         if v['status'] == 'NOT_FOUND':
             print('AVAILABLE (no exact match): %s' % a.available)

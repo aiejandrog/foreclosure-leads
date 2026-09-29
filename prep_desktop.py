@@ -82,6 +82,11 @@ def main():
             z.write(os.path.join(HERE, f), 'ledgers/' + f); n += 1
         for f in data:
             z.write(os.path.join(HERE, f), 'data/' + f); n += 1
+        # The owner-search token cache left the repo root for DEALFLOW_DIR on 2026-09-24, so
+        # ignored_files() no longer sees it. It rides in data/ and lands in the target's repo
+        # root, where paths.records_qs() merges it into that machine's cache on first use.
+        if 'records_qs.json' not in data and os.path.exists(P.RECORDS_QS):
+            z.write(P.RECORDS_QS, 'data/records_qs.json'); n += 1
         # Claude Code brain: global instructions + the 117-file memory
         for f in ('CLAUDE.md', 'agents.md', 'quality-framework.md', 'alejandro-context.md',
                   'settings.json'):

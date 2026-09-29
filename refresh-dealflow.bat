@@ -14,8 +14,8 @@ rem  CROSS-MACHINE LEASE. runner_lock.py, off unless DEALFLOW_RUNNER_LOCK=1. The
 rem  starts has DEALFLOW_LOCK_INNER=held-<pid>; anything else (unset, or a value typed by
 rem  hand) falls through and takes the lease before any scrape, spend or publish. A refusal
 rem  exits here: nothing scraped, nothing spent, live site untouched. See runner_lock.py.
-set "LOCKMARK=%DEALFLOW_LOCK_INNER%"
-if "%LOCKMARK:~0,5%"=="held-" goto :runner_lock_held
+set "LOCKMARK=_%DEALFLOW_LOCK_INNER%"
+if "%LOCKMARK:~0,6%"=="_held-" goto :runner_lock_held
 python -u runner_lock.py run --runner "%~nx0" -- cmd /c "%~f0" >> "%~dp0runner-lock.log" 2>&1
 set "LOCKRC=%errorlevel%"
 if not "%LOCKRC%"=="0" echo [%date% %time%] %~nx0 did not start - cross-machine lease exit %LOCKRC%. See runner-lock.log.>> "%~dp0leads-run.log"
@@ -292,6 +292,18 @@ rem  a night on average (~$0.003 each, $1.50 a month at most, and never past the
 rem  paid-reads cap). Without DEALFLOW_TITLE=1 it prints one line and exits. Never fatal. Reports go
 rem  to DEALFLOW_DIR\title_discovery, outside the repo.
 python -u run_title_chain.py >> "%LOG%" 2>&1
+
+echo [2f/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
+rem  run_documents.py's documented nightly line, with --token-budget 0: no paid owner-search tokens.
+rem  #53 routes token minting through PaidCutoffSolver, so raising it is a separate one-line change
+rem  that must add --captcha-max-spend and needs the owner's go. Setting DEALFLOW_DOCS=1 is the decision to spend up to $1.00 a
+rem  night on vision reads; it is off until someone sets it on purpose. Exit code deliberately
+rem  unread: a document stage failing must never stop or mark the board rebuild.
+rem  --max-minutes 20: no new case starts after twenty minutes. A case already running finishes, so
+rem  one slow case can still overrun; the cap bounds the stage, it does not guarantee it.
+rem  --limit 10: the $1.00 vision cap is split evenly across the cases picked, and 10 gives each
+rem  $0.10, enough for one three-page judgment at the measured $0.0675. 25 left each $0.04.
+if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
