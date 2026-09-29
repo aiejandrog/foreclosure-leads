@@ -175,6 +175,9 @@ rec('...the List-Unsubscribe header alone satisfies it',
 rec('...and a sentence in the body alone satisfies it',
     not G.check('Subject here', 'Reply unsubscribe and I will take you off the list.',
                 'a@b.com', unsub=''))
+rec('...and so does the approved line (2026-09-26)',
+    not G.check('Subject here', "Ordinary letter.\n\nIf now's not a good time, just tell me and I "
+                "won't reach out again.", 'a@b.com', unsub=''))
 # The reason the rule is opt-in rather than always-on: a hand-typed reply mid-conversation goes
 # through the same choke point, and an unsubscribe footer does not belong on one.
 rec('a caller that passes no unsub at all is not judged on it',
@@ -233,7 +236,7 @@ rec('...and still holds every required token', _OC.missing_tokens(_OC.email_body
 # UNSUB_URL is the one-line switch from the reply-based opt-out to the hosted page. Empty today
 # because nothing in this system serves HTTP; a link that records nothing is a broken promise.
 rec('UNSUB_URL empty renders the reply line, set renders the link',
-    'unsubscribe' in _OC._unsub('').lower()
+    _OC._unsub('') == _OC.OPTOUT_LINE_EN          # the approved reply line (2026-09-26)
     and _OC._unsub('https://bsgflorida.com/u').endswith('https://bsgflorida.com/u'))
 
 

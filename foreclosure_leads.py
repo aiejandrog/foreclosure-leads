@@ -416,6 +416,20 @@ def enrich(leads):
 
 CLERK = "https://www2.miamidadeclerk.gov"
 
+def _hoa_own_out(chain):
+    """Did the chain find the plaintiff association's own claim and leave it out of hoa_open? Only
+    then may the board stop netting the judgment against orhoa. A claim indexed under a spelling the
+    analyzer could not tie to the plaintiff is still IN hoa_open, and a re-read that kept an older
+    analyzer's larger association total without taking the claim out (hoa_own_in) still holds it."""
+    # the plaintiff's own FINAL JUDGMENT is an own-case association row too, but it is not the claim of
+    # lien: only a recognised claim proves the claim is out of hoa_open
+    return (isinstance(chain, dict) and not chain.get('hoa_own_in')
+            and any(isinstance(o, dict) and o.get('own_case') and o.get('kind') == 'association'
+                    and re.search(r'\bLIEN\b', str(o.get('doc') or ''), re.I)
+                    and not re.search(r'JUDG|LIS PENDENS', str(o.get('doc') or ''), re.I)
+                    for o in chain.get('other') or []))
+
+
 def classify(case_type, plaintiff):
     ct = (case_type or '').upper()
     pl = (plaintiff or '').upper()
@@ -1957,9 +1971,14 @@ def make_tracker(leads):
             d['orliens'] = rlh.get('liens', [])          # the recorded mortgage chain (open/satisfied + amounts)
             d['orjunior'] = rlh.get('junior', 0)         # suggested surviving 2nd (open mtgs beyond the foreclosing 1st)
             d['orconf'] = rlh.get('conf', '')            # 'ok' = isolated + sane; 'low' = common name / verify
-            # kimi: non-mortgage open liens + junior-payoff split for the deal-modal prefills
+            d['orjuniors'] = rlh.get('juniors_post', 0)
+        if rlh:
+            # kimi: non-mortgage open liens for the deal-modal prefills. Outside the mortgage gate: a
+            # City lien on a parcel with no mortgage is exactly the debt that must not read as $0.
             d['orhoa'] = rlh.get('hoa_open', 0); d['orcode'] = rlh.get('code_open', 0)
-            d['orirs'] = rlh.get('irs_open', 0); d['orjuniors'] = rlh.get('juniors_post', 0)
+            d['orirs'] = rlh.get('irs_open', 0)
+            if _hoa_own_out(rlh):
+                d['orhoaown'] = 1       # the plaintiff's own claim of lien is already out of orhoa
         if rlh:
             _fwd_flags(d, rlh, _ft)                       # surviving-1st / TAKEN / 2nd-foreclosure flags
             # JUNIOR-FORECLOSURE GUARD (the Echeverri lesson, MD side): the traced chain shows an
@@ -2180,9 +2199,13 @@ def make_tracker(leads):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)
                     _d['orconf'] = _h.get('conf', '')
-                    # kimi: non-mortgage open liens + junior-payoff split for the deal-modal prefills
+                    _d['orjuniors'] = _h.get('juniors_post', 0)
+                if _h:
+                    # non-mortgage open liens for the deal-modal prefills, mortgages or not (see above)
                     _d['orhoa'] = _h.get('hoa_open', 0); _d['orcode'] = _h.get('code_open', 0)
-                    _d['orirs'] = _h.get('irs_open', 0); _d['orjuniors'] = _h.get('juniors_post', 0)
+                    _d['orirs'] = _h.get('irs_open', 0)
+                    if _hoa_own_out(_h):
+                        _d['orhoaown'] = 1
                 if _h:
                     _fwd_flags(_d, _h, _cft)                          # surviving-1st / TAKEN / 2nd-foreclosure flags
                 _es.demote_for_bank_fc(_d)                            # CLEAR beside a 2ND FORECLOSURE -> UNVERIFIED
@@ -2289,10 +2312,27 @@ def make_tracker(leads):
     if os.path.exists(_clf):
         try:
             _cl = json.load(open(_clf, encoding='utf-8')); _cn = 0
+            # C2: the ESTIMATE read off each recorded lien (code_lien_amounts.json), by book/page.
+            # Shown next to the chip as an estimate; never added to equity, never a payoff.
+            _cla = {}
+            try:
+                import code_lien_amounts as _CLA
+                _cla = _CLA.for_board(json.load(open(os.path.join(HERE, 'code_lien_amounts.json'),
+                                                     encoding='utf-8')))
+            except Exception:
+                _cla = {}
+
+            def _CLA_key(ref):
+                try:
+                    _b, _p = str(ref or '').split('/', 1)
+                    return '%d/%d' % (int(_b), int(_p))
+                except (ValueError, TypeError):
+                    return ''
             for _r in slim:
                 _f = str(_r.get('folio') or '').strip().replace('-', '')
                 _hits = _cl.get(_f)
                 if _hits:
+                    _hits = [dict(h, **_cla.get(_CLA_key(h.get('lienRef')), {})) for h in _hits]
                     _r['codeliens'] = _hits[:6]
                     # worst-first: county-foreclosing > recorded-lien > open/referred
                     if any(h.get('st') == '9' for h in _hits):   _r['codeConcern'] = 'foreclosing'
@@ -2343,25 +2383,38 @@ def make_tracker(leads):
     # second, separate tax-deed foreclosure clock is already running on the parcel.
     # PALM BEACH IS DELIBERATELY ABSENT: its collector is not on the county-taxes.com platform
     # (DNN/__VIEWSTATE postback), so no PB lead ever gets a taxDue and none gets a false $0 either.
+    # Tax1 (2026-09-26): the bake also reads the READ CACHE (every read, $0 ones included, each
+    # with its `checked` date) through county_taxes.board_fields(), so a read that has gone stale for
+    # how close the sale is carries taxStale -- a stale "$0" most of all -- and a sold certificate
+    # carries its tax-deed follow-up dates. The amount logic is unchanged.
     _ctf = os.path.join(HERE, 'county_taxes.json')
-    if os.path.exists(_ctf):
+    if os.path.exists(_ctf) or os.path.exists(os.path.join(HERE, '_county_taxes_cache.json')):
         try:
-            _ct = json.load(open(_ctf, encoding='utf-8')); _ctn = 0
+            import county_taxes as _CT
+            _ct = _CT._load(_ctf, {})
+            _ctc = _CT._load(_CT.CACHE, {})
+            _ctn = _cts = _ctcf = 0
+            _today_ct = datetime.now().date()
             for _r in slim:
                 _cty = str(_r.get('county') or 'MIAMI-DADE')
                 if _cty not in ('MIAMI-DADE', 'BROWARD'):
                     continue
                 _f = re.sub(r'\D', '', str(_r.get('folio') or ''))
-                _h = _ct.get(_f)
+                if not _f:
+                    continue
+                _h = _ctc.get(_f) or _ct.get(_f)
                 # guard the join: only apply a record scraped for THIS lead's county
-                if _h and _h.get('due') and str(_h.get('county') or _cty) == _cty:
-                    _r['taxDue'] = int(_h['due'])
-                    _r['taxYears'] = [y.get('year') for y in (_h.get('years') or []) if y.get('year')]
-                    _r['taxCert'] = bool(_h.get('cert'))
-                    _r['taxChecked'] = _h.get('checked', '')
-                    _ctn += 1
-            if _ctn:
-                print(f"county taxes: {_ctn} lead(s) carry verified delinquent taxes")
+                if _h and str(_h.get('county') or _cty) != _cty:
+                    continue
+                _bf = _CT.board_fields(_h, _CT._sale_date(_r), _today_ct)
+                if _bf:
+                    _r.update(_bf)
+                    _ctn += bool(_bf.get('taxDue'))
+                    _cts += 'taxStale' in _bf
+                    _ctcf += 'taxCertFollow' in _bf
+            if _ctn or _cts:
+                print(f"county taxes: {_ctn} lead(s) carry verified delinquent taxes; "
+                      f"{_cts} tax read(s) stale for their sale date; {_ctcf} certificate follow-up(s)")
         except Exception as e:
             print(f"county_taxes.json skipped ({e})")
 
@@ -2511,7 +2564,12 @@ def make_tracker(leads):
     if os.path.exists(_wpf) or _wp_ids:
         try:
             _wp = json.load(open(_wpf, encoding='utf-8')) if os.path.exists(_wpf) else {}
-            _wn = _wpn = _wpe = _wid = 0
+            _wn = _wpn = _wpe = _wid = _wrel = 0
+            try:
+                import wp_contacts as _WPC
+            except Exception as _wpce:
+                _WPC = None
+                print('wp_contacts unavailable, Whitepages owner bar and relatives skipped:', _wpce)
             def _prop_city_state(r):
                 a = r.get('addr') or r.get('Address') or ''
                 p = [s.strip() for s in a.split(',')]
@@ -2553,6 +2611,13 @@ def make_tracker(leads):
                 _po = _oi.get('person_owners') or []
                 _pc, _ = _prop_city_state(_r)
                 _owns = [_wp_own(o, _pc) for o in _po]
+                # WHO IS THE OWNER (wp_contacts). A person Whitepages lists on the parcel is tagged
+                # the owner's only when the name clears the same bar ownership_gate uses to decide
+                # the defendant still owns the house, tightened to two shared name tokens. Anyone
+                # else on the parcel is household, not the homeowner.
+                _lown, _laddr = (_r.get('owners') or _r.get('oname') or ''), (_r.get('addr') or '')
+                for _o in _owns:
+                    _o['notOwner'] = (_WPC.grade_property_owner(_lown, _o['name']) != 'wp') if _WPC else False
                 _person_recs = _hit.get('_person') or []
                 # Person-only cache rows (LP/upcoming with no address) have no property owners —
                 # still bake phones from the Person layer. Bare _prop_id stamps without a lookup
@@ -2563,11 +2628,12 @@ def make_tracker(leads):
                     continue
                 # dedup phones + emails across owners; mobile first, absentee-owner phones tagged
                 _seen_ph, _all_ph = set(), []
-                for _o in _owns:
+                for _o in sorted(_owns, key=lambda o: 1 if o.get('notOwner') else 0):
                     for _p in sorted(_o['phones'], key=_rank):
                         if _p['n'] in _seen_ph: continue
                         _seen_ph.add(_p['n'])
-                        _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _o['name'], 'absentee': _o['absentee']})
+                        _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _o['name'], 'absentee': _o['absentee'],
+                                        'resident': bool(_o.get('notOwner'))})
                 _seen_em, _all_em = set(), []
                 for _o in _owns:
                     for _e in _o['emails']:
@@ -2601,6 +2667,12 @@ def make_tracker(leads):
                 _person_emails = []
                 for _pr in _person_recs:
                     for _rec in (_pr.get('response') or []):
+                        # Fuzzy name search: a record that is not our owner (wp_contacts bar) is a
+                        # namesake and contributes nothing. One that also places the owner at this
+                        # address is as good as the deed ('person-verified' -> wp tag).
+                        _grade = _WPC.grade_person_record(_lown, _laddr, _rec) if _WPC else 'nm'
+                        if _grade is None:
+                            continue
                         for _p in (_rec.get('phones') or []):
                             _n = ''.join(c for c in (_p.get('number') or '') if c.isdigit())
                             if len(_n) == 11 and _n.startswith('1'): _n = _n[1:]
@@ -2608,7 +2680,8 @@ def make_tracker(leads):
                             if _n in _seen_ph: continue
                             _seen_ph.add(_n)
                             _pt = (_p.get('type') or '').lower()
-                            _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False, 'source': 'person'})
+                            _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False,
+                                                   'source': 'person-verified' if _grade == 'wp' else 'person'})
                         for _e in (_rec.get('emails') or []):
                             _ea = _e.get('address') or _e.get('email') or ''
                             if _ea and _ea.lower() not in _seen_em:
@@ -2619,6 +2692,16 @@ def make_tracker(leads):
                 _all_em.extend(_person_emails)
                 _r['wpOwners'] = _owns
                 if _residents: _r['wpResidents'] = _residents
+                # RELATIVES: their own field, call-only. Never merged into phones/emails, so no send
+                # path (textablePhones, worker, send bridge, Call Mode) can reach them. Stripped
+                # again below once every stay / never-contact hold is on the row.
+                if _WPC and _person_recs:
+                    _have = set(_seen_ph) | {''.join(c for c in str(_x) if c.isdigit())[-10:]
+                                             for _x in (_r.get('phones') or [])}
+                    _rels = _WPC.extract_relatives(_lown, _laddr, _person_recs, _have)
+                    if _rels:
+                        _r['wpRelatives'] = _rels
+                        _wrel += 1
                 _r['wpAllPhones'] = _all_ph
                 _r['wpAllEmails'] = _all_em
                 _r['wpPersonRecs'] = len(_person_recs)
@@ -2677,6 +2760,8 @@ def make_tracker(leads):
                 print(f"WhitepagesPro: enriched {_wn} leads (+{_wpn} phones, +{_wpe} emails, absentee-owner flags set)")
             if _wid:
                 print(f"Whitepages property deep-links: {_wid} leads with wpPropId")
+            if _wrel:
+                print(f"Whitepages relatives: {_wrel} leads carry a call-only relatives list")
         except Exception as _e:
             print('WhitepagesPro merge skipped:', _e)
 
@@ -3154,6 +3239,53 @@ def make_tracker(leads):
             print(f"bounce guard (final sweep): {_late} dead address(es) removed from finished cards "
                   f"— they had been re-merged after the queue strip")
 
+    # Federal bankruptcy (CourtListener). Holds only: a case number and a reason, never a name.
+    # Miami-Dade rows are not held just because the lookup has not run; Broward and Palm Beach are.
+    try:
+        import bk_lookup as _BKL
+        _bkf = _BKL.flags_for_cases([d.get('case') for d in slim])
+    except Exception as _bke:
+        _bkf = {}
+        print('federal bankruptcy flags: SKIPPED (%s)' % str(_bke)[:80])
+    if _bkf:
+        _bkh = 0
+        for _d in slim:
+            _key = str(_d.get('case') or '').strip().upper()
+            _f = _bkf.get(_key)
+            if not _f:
+                try:
+                    import stay_gate as _SG
+                    _f = _bkf.get(_SG.pacer_key(_d.get('case')))
+                except Exception:
+                    _f = None
+            if not _f or not _f.get('hold'):
+                continue
+            _d['bkWhy'] = str(_f.get('why') or '')[:180]
+            if not _d.get('saleBkAct'):
+                _d['saleBkAct'] = True
+            _bkh += 1
+        if _bkh:
+            print('federal bankruptcy lookup: %d lead(s) held' % _bkh)
+
+    # Relatives are the most sensitive numbers on a row (third parties about someone else's
+    # foreclosure). Now that every hold is on the row, strip them from any lead that is held.
+    try:
+        import wp_contacts as _WPC2
+        import stay_gate as _SG2
+        _nc = _SG2.never_contact
+    except Exception as _rge:
+        _WPC2 = None
+        print('relatives gate unavailable (%s): every relatives list stripped' % str(_rge)[:80])
+    _rst = 0
+    for _d in slim:
+        if not _d.get('wpRelatives'):
+            continue
+        if _WPC2 is None or not _WPC2.relatives_allowed(_d, _nc):
+            _d.pop('wpRelatives', None)
+            _rst += 1
+    if _rst:
+        print('relatives gate: stripped from %d held lead(s)' % _rst)
+
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
     # just pollute the checkout with a junk "C:\Users\..." directory + duplicate photo copies.
@@ -3228,6 +3360,17 @@ def make_tracker(leads):
         'docs':      sum(1 for d in slim if d.get('docs')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
+    # PER-LIEN-TYPE COUNTS for the Miami-Dade rows (lien_census.py): the lien detail files are
+    # gitignored and the board is encrypted, so without these nobody off the laptop can tell how much
+    # of Miami's lien picture a build carries (mortgages open/satisfied, HOA, money judgments, tax
+    # liens, taxes, code, municipal/utility, lis pendens, and how much of it is unpriced). Flat ints
+    # only -- every reader cuts the marker with a non-greedy {.*?} -- and census-only (not in
+    # publish_guard.FIELDS). Never fatal: a census bug must not stop a publish.
+    try:
+        from lien_census import md_counts as _md_counts
+        _cov.update(_md_counts(slim, rl))
+    except Exception as _lce:
+        print('lien census: skipped (%s)' % str(_lce)[:100])
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)
     if codes:
         # {rows, side} since 2026-09-17 — `side` carries the reply text and dead reasons that used to
@@ -3242,7 +3385,7 @@ def make_tracker(leads):
         # change and is left alone here — a one-word fix, but not one to smuggle into a phone PR
         # without checking what the public-payload tests assert.)
         nophone = [{k: v for k, v in d.items()
-                    if k not in ('phones', 'phdnc', 'phsrc', 'emails')} for d in slim]
+                    if k not in ('phones', 'phdnc', 'phsrc', 'emails', 'wpRelatives')} for d in slim]
         _payload = _esc_json(nophone)
     # BUILD SIGNATURE — identifies this build, and NOT by the clock. 'built' is minute-resolution,
     # so two builds inside the same minute (a code added just as the nightly refresh runs) share a

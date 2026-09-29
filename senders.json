@@ -20,5 +20,17 @@
     "early": "alejandro@bsgfl.com",
     "balloon": "alejandro@biscaynesolutionsgroup.com",
     "default": "alejandro@bsgflorida.com"
+  },
+  "first_touch": {
+    "_comment": "2026-09-26. FIRST TOUCHES (a recipient this system has never mailed) leave ONLY from these warm-up addresses, rotating between them (fewest first touches today goes next). bsgflorida.com took the 2026-09-19 bounces (31 of 85) and RESTS from first touches; it still carries replies, and a follow-up leaves from whichever address last mailed that person so the thread stays on one sender. Per-address first-touch cap = the ramp below (same shape as the alias ramp above, days since first_touch.ramp_start), and never more than that alias's own ramp cap. Starts LOW on purpose: warm-up so far went to company-owned inboxes with no replies, so real reputation is thin. The global daily caps and every alias ramp cap still apply. Remove this block and first touches go back to the lane map. Read by send_server.py on every /send, no restart needed.",
+    "from": ["alejandro@bsgfl.com", "alejandro@biscaynesolutionsgroup.com"],
+    "ramp_start": "2026-09-27",
+    "ramp": [
+      {"through_day": 7, "per_day": 10},
+      {"through_day": 14, "per_day": 15},
+      {"through_day": 21, "per_day": 20},
+      {"through_day": 28, "per_day": 30},
+      {"through_day": 9999, "per_day": 40}
+    ]
   }
 }

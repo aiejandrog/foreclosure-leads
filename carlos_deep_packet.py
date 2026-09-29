@@ -41,8 +41,27 @@ def _maps(origin, chunk):
             + '&waypoints=' + quote_plus('|'.join(chunk[:-1]), safe='|'))
 
 
+def _packet_path():
+    """Door packets are homeowner addresses. They live in ~/DEALFLOW, not in git.
+
+    A copy left next to this script (the old path, now gitignored) still renders, so a packet
+    built before the move is not stranded. Missing both is a clean exit, not a traceback."""
+    via = P.out('deep_zone_doors.json')
+    if os.path.isfile(via):
+        return via
+    local = os.path.join(HERE, 'deep_zone_doors.json')
+    if os.path.isfile(local):
+        return local
+    return None
+
+
 def main():
-    packet = json.load(open(os.path.join(HERE, 'deep_zone_doors.json'), encoding='utf-8'))
+    path = _packet_path()
+    if not path:
+        print('deep_zone_doors.json is not in ~/DEALFLOW and not next to this script. '
+              'It is homeowner door data and is not in the repo. Run carlos_deep_zones.py to build it.')
+        return 1
+    packet = json.load(open(path, encoding='utf-8'))
     refuted = set()
     rp = os.path.join(HERE, 'refuted_doors.json')
     if os.path.exists(rp):
@@ -151,4 +170,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main() or 0)

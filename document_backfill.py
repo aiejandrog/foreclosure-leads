@@ -6,6 +6,7 @@ an interrupted API call retains its worst-case reservation instead of becoming f
 """
 import hashlib
 import json
+import re
 import math
 import os
 from pathlib import Path
@@ -163,12 +164,37 @@ class State:
         steps = self.data['cases'].get(entry['case'], {}).get('steps', {})
         self.data['cases'][entry['case']] = {
             'fingerprint': fingerprint(entry),
-            'status': ('budget_paused' if paused else
-                       'complete' if dossier.get('complete') is True else 'assessed_with_gaps'),
+            # A documents step stopped by a spending cap is paused too, so the next run takes the
+            # case up again without --retry-gaps (an audit of #53: it read as done-with-gaps).
+            'status': ('budget_paused' if paused or any(
+                (steps.get(k) or {}).get('status') == 'budget' for k in ('documents', 'timeline'))
+                       else 'complete' if dossier.get('complete') is True else 'assessed_with_gaps'),
             'open_gaps': dossier.get('open_gaps', []),
             'steps': steps,
         }
         self.save()
+
+
+# case_dossier writes a paid reader's refusal as "page N not bought - budget: ..." when the
+# reader stopped mid-document, and "page * not bought - budget_exhausted: ..." when the case's
+# share was gone before the document (miami_judgment).
+_VISION_STOP_RE = re.compile(r'\bnot bought - budget(?:_exhausted)?:')
+# run_case_timeline's amount-read gap reasons: "budget: ..." from the reader mid-document,
+# "budget_exhausted: ..." for a document the case's share never reached.
+_TIMELINE_STOP_RE = re.compile(r'^budget(?:_exhausted)?:')
+
+
+def _documents_step_status(dossier):
+    """'done' only for a complete dossier. A dossier with gaps is 'gap' (redone by --retry-gaps);
+    one that stopped on a spending cap is 'budget', redone on every run, so a raised cap or a new
+    day reads the refused pages. Re-running is spend-safe: settled pages come back free from the
+    page ledger and uncertain ones stay blocked."""
+    if dossier.get('complete') is True:
+        return 'done'
+    # Only the paid reader's refusal. The walk's document-count cap and --token-budget also say
+    # "budget" and are not spending stops.
+    stopped = any(_VISION_STOP_RE.search(str(g)) for g in dossier.get('open_gaps') or [])
+    return 'budget' if stopped else 'gap'
 
 
 class PersistentBudget(Budget):
@@ -249,7 +275,11 @@ def _timeline_step(args, runner, state, entry, budget, target, dossier):
             'timeline: %d gap(s) in the whole-case docket' % len(timeline.get('gaps') or [])]
     if earlier or not timeline.get('coverage_complete'):
         DS.pipeline_write(target, dossier)
-    state.mark_step(case, 'timeline', fp, 'done', status_kind=(timeline.get('status') or {}).get('kind'),
+    # A timeline whose paid reads stopped on the case's share is 'budget', never done, so the
+    # same day's rerun with a raised cap reads what the share did not reach.
+    stopped = any(_TIMELINE_STOP_RE.match(str(g.get('reason') if isinstance(g, dict) else g))
+                  for g in timeline.get('gaps') or [])
+    state.mark_step(case, 'timeline', fp, 'budget' if stopped else 'done', status_kind=(timeline.get('status') or {}).get('kind'),
                     controlling_judgment=(timeline.get('judgments') or {}).get('controlling_entry'))
     return dossier
 
@@ -284,6 +314,13 @@ def run(args, runner):
           'remaining ceiling $%.6f' % (args.vision_max_spend, charged,
                                      max(0, args.vision_max_spend - charged)))
     print('  This is a spending ceiling, NOT a price to finish every case. Captcha spend: $0.00.')
+    try:
+        import paid_reads
+        _m = paid_reads.status()
+        print('  monthly paid-reads cap (shared with every paid read): $%.2f of $%.2f spent in %s%s'
+              % (_m['spent'], _m['cap'], _m['month'], '' if _m['ok'] else ' -- PAID WORK OFF: ' + _m['why']))
+    except Exception as exc:                        # informational only; the run itself re-checks
+        print('  monthly paid-reads cap: status unavailable (%s)' % type(exc).__name__)
     print('  resume checkpoint: %s' % path)
     print('  order: auctions in next 45 days first, nearest date first; then later auctions, '
           'past auctions nearest first, unknown dates last')
@@ -299,6 +336,19 @@ def run(args, runner):
             print('  PAUSED: cumulative cap exhausted; no API client started.')
             print('  progress: %s' % json.dumps(progress(picked, state.data), sort_keys=True))
             return 4
+        if budget:
+            # SHARED MONTHLY CAP (paid_reads.py), on top of this backfill's own cumulative ceiling,
+            # which stays exactly as it was. Every read is debited to the month at its worst case
+            # before the call and settled after, so the backfill both counts toward and respects the
+            # same $50/month every paid read shares. A month with nothing left pauses the backfill
+            # here (resume next month, or when the cap is raised) without starting an API client.
+            import paid_reads
+            if paid_reads.remaining('run_documents backfill') <= 0:
+                print('  PAUSED: the monthly paid-reads cap has nothing left (see python paid_reads.py); '
+                      'no API client started.')
+                print('  progress: %s' % json.dumps(progress(picked, state.data), sort_keys=True))
+                return 4
+            budget = paid_reads.cap_budget(budget, 'run_documents backfill')
         if budget:
             import document_vision
             document_vision.VisionReader().client()
@@ -323,7 +373,8 @@ def run(args, runner):
                 # restart when this exact step already finished for this exact entry.
                 docs_fp = fingerprint(dict(entry, _processing={
                     k: v for k, v in entry['_processing'].items() if k != 'timeline'}))
-                saved = DS.pipeline_load(target) if state.step_done(case, 'documents', docs_fp) else None
+                saved = (DS.pipeline_load(target)
+                         if state.step_done(case, 'documents', docs_fp, args.retry_gaps) else None)
                 if saved is not None:
                     dossier = saved
                 else:
@@ -333,9 +384,15 @@ def run(args, runner):
                         keep_images=args.keep_images, vision_budget=budget,
                         walk_depth=args.walk_depth if args.walk_cites else 0,
                         walk_budget=args.walk_budget, resume=True, reuse_done=True)
+                    # The saved dossier is about to be replaced, so a timeline step recorded as
+                    # done would reload it without its own gaps and could call the case complete.
+                    # Dropped and saved BEFORE the write, so a crash between the two cannot leave
+                    # the old checkpoint over the new dossier (Greptile on #65).
+                    if state.steps(case).pop('timeline', None) is not None:
+                        state.save()
                     target.parent.mkdir(parents=True, exist_ok=True)
                     DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
-                    state.mark_step(case, 'documents', docs_fp, 'done')
+                    state.mark_step(case, 'documents', docs_fp, _documents_step_status(dossier))
                 # STEP 2, timeline: the whole-case docket and its filings, through the SAME
                 # ledger and the SAME per-case share (run_case_timeline.timeline_case).
                 if getattr(args, 'timeline', False):

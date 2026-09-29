@@ -585,6 +585,93 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(r['status']['kind'], 'judgment_entered')
         self.assertFalse(r['stay_in_effect'])
 
+    def test_an_older_bankruptcys_dismissal_leaves_the_newer_stay(self):
+        # Two petitions on one docket: dismissing the first must not end the second's stay (the
+        # failure #58 fixed in sale_history; review of #53's code on #55).
+        first, second = 'Case No. 26-11111', 'Case No. 26-22222'
+        base = [entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy ' + first),
+                entry(3, 'Suggestion of Bankruptcy ' + second),
+                entry(4, 'Notice of Filing: Order Dismissing Chapter 13 ' + first)]
+        r = run(base)
+        self.assertTrue(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'stayed_by_bankruptcy')
+        r = run(base + [entry(5, 'Notice of Filing: Order Dismissing Chapter 13 ' + second)])
+        self.assertFalse(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'judgment_entered')
+
+    def test_a_stay_order_for_a_second_bankruptcy_is_its_own_stay(self):
+        # Greptile on #65: a stay ORDER citing a new number joined the open case, so dismissing
+        # the first case ended both.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy Case No. 26-11111'),
+                 entry(3, 'Order staying action, automatic stay, Bankruptcy Case No. 26-22222'),
+                 entry(4, 'Notice of Filing: Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertTrue(r['stay_in_effect'])
+
+    def test_a_number_cited_later_may_be_a_second_petition(self):
+        # Greptile on #65: naming the numberless case with a later number meant dismissing that
+        # number ended the numberless filing too, which may be a different bankruptcy.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order staying action, automatic stay, Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Notice of Filing: Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_a_numberless_dismissal_of_linked_filings_is_unknown(self):
+        # Greptile on #65: closing the linked pair on one numberless line reads two possible
+        # petitions as dismissed by one order.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order dismissing bankruptcy')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_linked_filings_each_closed_read_as_no_stay(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order dismissing bankruptcy'),
+                 entry(5, 'Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertIsNone(r['stay_in_effect'])
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order dismissing bankruptcy'),
+                 entry(5, 'Order Dismissing Chapter 13 Case No. 26-11111'),
+                 entry(6, 'Order dismissing bankruptcy')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_the_numberless_filing_closes_on_its_own_later_dismissal(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy Case No. 26-11111'),
+                 entry(4, 'Order Dismissing Chapter 13 Case No. 26-11111'),
+                 entry(5, 'Order dismissing bankruptcy')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_a_dismissal_naming_a_number_closes_the_only_numberless_filing(self):
+        # One start filing is one petition in evidence; its dismissal supplies the number.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order Dismissing Chapter 13 Case No. 26-11111')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_a_numberless_dismissal_with_two_open_bankruptcies_is_unknown(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy Case No. 26-11111'),
+                 entry(3, 'Suggestion of Bankruptcy Case No. 26-22222'),
+                 entry(4, 'Order Dismissing Chapter 13 Bankruptcy')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_a_repeated_numberless_notice_is_the_same_bankruptcy(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Bankruptcy'), entry(4, 'Order dismissing bankruptcy')])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_an_order_lifting_stay_that_names_no_bankruptcy_does_not_end_it(self):
+        # A bare "Order Lifting Stay" can lift a state-court stay; it cannot lift the federal
+        # automatic stay (Board accuracy's #60 found the same on 2025-012246).
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order Lifting Stay')])
+        self.assertIsNone(r['stay_in_effect'])
+        self.assertEqual(r['status']['kind'], 'unclear')
+        self.assertEqual(r['stay_history'][-1]['event'], 'relief_not_bankruptcy')
+
     def test_a_dismissed_bankruptcy_is_not_a_dismissed_foreclosure(self):
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
                  entry(3, 'Notice of dismissal of bankruptcy')])

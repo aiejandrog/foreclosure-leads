@@ -186,6 +186,15 @@ PLAINTIFFS = [
     'FEDERAL NATIONAL MORTGAGE', 'FEDERAL HOME LOAN MORTGAGE', 'SECRETARY OF HOUSING', 'LOANCARE',
     'SHELLPOINT', 'CITIBANK', 'CITIMORTGAGE', 'TRUIST', 'FLAGSTAR', 'MIDFIRST', 'PLANET HOME',
     'REVERSE MORTGAGE', 'ROCKET MORTGAGE', 'AJAX MORTGAGE', 'REGIONS BANK', 'BANK OF AMERICA',
+    # Added 2026-09-28 off the bank-first plaintiffs on Broward and Palm Beach LP filings, whose sweeps
+    # are whole-doctype and so show which lenders file in South Florida. The Miami list caught 341 of
+    # those 615 filings. 'U S BANK' is the largest miss: the recorders index U.S. Bank with a space
+    # (46 Broward filings as 'U S BANK ...'), and a 'US BANK' name search found 4 in Miami.
+    'U S BANK', 'PNC BANK', 'M&T BANK', 'TD BANK', 'HSBC BANK', 'UMB BANK', 'FIRST CITIZENS BANK',
+    'CITY NATIONAL BANK', 'SELECT PORTFOLIO', 'FAY SERVICING', 'ONITY MORTGAGE', 'COMPUTERSHARE',
+    'FINANCE OF AMERICA', 'LONGBRIDGE FINANCIAL', 'AMERIHOME MORTGAGE', 'CROSSCOUNTRY MORTGAGE',
+    'LOANDEPOT', 'UNITED WHOLESALE MORTGAGE', 'NEW AMERICAN FUNDING', 'PLAZA HOME MORTGAGE',
+    '21ST MORTGAGE', 'ONSLOW BAY', 'LOAN FUNDER', 'NAVY FEDERAL CREDIT UNION', 'TROPICAL FINANCIAL',
 ]
 
 
@@ -222,12 +231,23 @@ def lp_sweep(days=30, tries=3):
     each major foreclosure plaintiff over an ISO date window and keep the LIS PENDENS docs, unioned +
     deduped. The front of the funnel — the owner the day their case is filed, months before the crowd."""
     import urllib.parse
-    from captcha_solver import solve_turnstile
+    from captcha_solver import solve_turnstile as _solve
+    import paid_reads
     import records_liens as R
+    # Every solve here is a paid 2Captcha read: checked against the shared monthly cap and counted
+    # before it is submitted (paid_reads.py). A refused solve returns None, like any failed one.
+    solve_turnstile = paid_reads.guarded(_solve, 'lis_pendens')
     d_from, d_to = _win(days)
     print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
     out = {}
     for i, name in enumerate(PLAINTIFFS, 1):
+        if not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]:
+            # FAIL CLOSED, and say so: the names not searched count as blocked, so main() reports
+            # Miami-Dade failed/partial instead of a clean sweep over a window it never looked at.
+            SWEEP_BLOCKED.extend(PLAINTIFFS[i - 1:])
+            print(f'  monthly paid-reads cap: {len(PLAINTIFFS) - i + 1} plaintiff name(s) not searched '
+                  f'this run (Miami-Dade sweep stops here; the rest resume when the cap allows)')
+            break
         url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
                + '&dateRangeFrom=' + urllib.parse.quote(d_from) + '&dateRangeTo=' + urllib.parse.quote(d_to)
                + '&documentType=&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))

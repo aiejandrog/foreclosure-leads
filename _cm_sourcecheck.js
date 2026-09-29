@@ -42,7 +42,7 @@ const sandbox = {
   caller: () => 'Alejandro',
   hardSuppressed: () => '',            // isolate the QUEUE cooldown/sibling logic specifically
 };
-const body = ['agoTxt', 'lastCall', 'suppressed'].map(extract).join('\n');
+const body = ['agoTxt', 'lastCall', '_wasLp', 'noState', 'suppressed'].map(extract).join('\n');   // 2026-09-25: suppressed() consults noState()
 const run = new Function('ctx', 'with (ctx) { ' + body + '; return { suppressed: suppressed }; }');
 const fns = run(sandbox);
 
@@ -71,6 +71,13 @@ console.log('\n== source-level fail-capability: a no-answer 30h ago with 24h coo
 sandbox.notes = { 'CASE-C': { cooldownH: 24,
   touches: [{ ch: 'call', out: 'No answer', tsu: NOW - 30 * 3600000, by: 'Alejandro' }] } };
 T('expired ordinary cooldown does NOT suppress (proves the test can go red)', !fns.suppressed(C), fns.suppressed(C));
+
+console.log('\n== source-level: outbound texts use the attorney line, not Reply STOP ==');
+T('Call Mode opt-out is the new EN sentence',
+  SRC.indexOf("If now's not a good time, just let me know and I won't text you again.") >= 0);
+T('Call Mode opt-out is the new ES sentence',
+  SRC.indexOf('Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.') >= 0);
+T('Call Mode does not tell them to reply STOP', SRC.indexOf('Reply STOP to opt out.') < 0);
 
 console.log('\n================================');
 console.log(pass + ' passed, ' + fail + ' failed' + (fail ? '  << source guards broken' : '  << GREEN: guards correct in source'));

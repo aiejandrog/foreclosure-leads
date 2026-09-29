@@ -122,8 +122,18 @@ def main(argv=None):
     import captcha_solver
     key = args.key_file.read_text().strip() if args.key_file else captcha_solver._key()
     if not key: parser.error('CAPTCHA key unavailable')
+    import paid_reads
+    if paid_reads.remaining('run_owner_tokens') <= 0:
+        # FAIL CLOSED before a single browser or paid task: the shared monthly cap is spent or
+        # cannot be read (paid_reads.py says which). Exit 4, the same "paused on a cap" code the
+        # document backfill uses.
+        print(json.dumps({'stopped': 'monthly_paid_reads_cap', 'captcha_spent_usd': 0}), flush=True)
+        return 4
     with State(args.state) as state:
-        solver = PaidCutoffSolver(state, args.captcha_max_spend, key)
+        # Its own $1.50 cutoff stays; every paid task ALSO debits the shared monthly cap first and
+        # is settled to its real receipt after (paid_reads.CutoffGuard). A refusal raises
+        # CutoffStopped, which process() already treats as "stop".
+        solver = paid_reads.CutoffGuard(PaidCutoffSolver(state, args.captcha_max_spend, key), 'run_owner_tokens')
         ladder = TokenLadder(cache, solver)
         try:
             result = process(entries, cache, args.token_budget, solver, state, args.qs_cache,

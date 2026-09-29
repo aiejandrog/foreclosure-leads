@@ -125,6 +125,17 @@ class FactTests(unittest.TestCase):
         stale = R.contact_fact({'name': 'JANE OWNER', 'phones': ['1'], 'traced': '2025-01-01'}, present(), TODAY)
         self.assertFalse(stale['call_ready'])
 
+    def test_a_parcel_trace_or_a_flagged_trace_is_not_call_ready(self):
+        # An audit of #53: tracerfy's parcel lane stores the owner label as `name`, so it matched
+        # the deed whoever the numbers belong to; contact_trust's stamps were never read.
+        parcel = R.contact_fact({'name': 'OWNER, JANE', 'phones': ['1'], 'traced': '2026-09-01',
+                                 'source': 'tracerfy-parcel'}, present(), TODAY)
+        self.assertEqual((parcel['state'], parcel['call_ready']), ('parcel_trace_person_unnamed', False))
+        for stamp in ('SUSPECT: traced X does not match owner', 'UNVERIFIED: owner never resolved'):
+            got = R.contact_fact({'name': 'OWNER, JANE', 'phones': ['1'], 'traced': '2026-09-01',
+                                  'contact_trust': stamp}, present(), TODAY)
+            self.assertEqual((got['state'], got['call_ready']), ('contact_trust_flagged', False))
+
 
 class RankingTests(unittest.TestCase):
     def item(self, case, **kw):

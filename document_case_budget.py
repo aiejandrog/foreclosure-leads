@@ -192,6 +192,14 @@ class CaseBudget:
                 'a paid read of this page was started on an earlier run and never settled; it is '
                 'not repeated automatically (reservation %s)'
                 % self.allocator.uncertain[key]['reservation'])
+        # The same within one run: a request that died mid-flight (a reset after it left) leaves
+        # its reservation open, and a second read of that page must not pay again (audit of #53).
+        reserved = self.allocator.state.data['reserved']
+        for rid, meta in (self.allocator.batch.get('reservation_keys') or {}).items():
+            if rid in reserved and isinstance(meta, dict) and meta.get('key') == key:
+                raise UncertainPaidCall(
+                    'a paid read of this page was started in this run and never settled; it is '
+                    'not repeated automatically (reservation %s)' % rid)
         self._key = key
         return None
 
@@ -200,6 +208,12 @@ class CaseBudget:
         allowance = self.allocator.allowance(self.case)
         if worst > allowance:
             self._exhausted = True
+            data = self.budget.state.data if hasattr(self.budget, 'state') else None
+            if data is not None and self.budget.limit - data['actual_usd'] - sum(
+                    data['reserved'].values()) < worst:
+                # The cumulative cap itself refused, not only this case's share: say so, or a
+                # backfill never pauses and finishes every remaining case as done-with-gaps.
+                self.budget.exhausted = True
             raise BudgetExhausted(
                 'budget_exhausted: next page could cost $%.4f and %s has $%.4f left of its share; '
                 'other pending cases\' shares are protected' % (worst, self.case, allowance))

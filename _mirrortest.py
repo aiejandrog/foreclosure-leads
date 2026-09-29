@@ -193,24 +193,64 @@ with sync_playwright() as p:
     body = js['body']
     for probe in ('Your home is scheduled for foreclosure auction on',
                   'We specialize in Urgent Foreclosure Cases',
-                  '15-minute private phone consultation',
+                  # THE CALL LENGTH IS TWO NUMBERS NOW AND THIS PROBE MUST NOT CARRY ITS OWN COPY
+                  # OF EITHER. It read '15-minute private phone consultation' and went red the day
+                  # outreach_copy split the promise from the slot: CALL_MINUTES is what a guarded
+                  # owner is asked for, SLOT_MINUTES is what the calendar actually blocks, and the
+                  # comment above them says in so many words that the two had already drifted
+                  # across four surfaces once. A test that hardcodes either number is a fifth copy
+                  # of the words — the exact thing this suite exists to make impossible. Build the
+                  # sentence from the constants so the probe moves when Alejandro moves the copy.
+                  'Most take about %s minutes; I block %s' % (OC.CALL_MINUTES, OC.SLOT_MINUTES),
                   'There are no tricks, no hidden fees, and no pressure.',
                   'Reply now or call me today.'):
         rec('his copy present: %r' % probe[:48], probe in body)
-    rec('URGENT framing is on the subject', js['subj'].startswith('URGENT:'), js['subj'][:48])
+    # SUBJECT_STYLE is a switch and this check hardcoded one side of it — `startswith('URGENT:')`,
+    # while BOTH files have carried SUBJECT_STYLE='measured' since the bounce-rate change
+    # (outreach_email.py:88, tracker_template.html:15276). So it has been red on every run since,
+    # on a subject builder that is doing exactly what it was told. What this suite is for is the
+    # two paths AGREEING, not which side of the switch is live: assert the framing the live switch
+    # calls for, on both sides. Flip SUBJECT_STYLE back to 'urgent' in both files and this check
+    # starts demanding the URGENT prefix again, with no edit here.
+    _style = pg.evaluate("()=>SUBJECT_STYLE")
+    _want_urgent = (str(_style).lower() != 'measured')
+    rec('subject framing matches SUBJECT_STYLE=%r on BOTH paths' % _style,
+        js['subj'].startswith('URGENT:') == _want_urgent
+        and py['subj'].startswith('URGENT:') == _want_urgent,
+        'want_urgent=%s js=%r' % (_want_urgent, js['subj'][:56]))
 
     # ---- and it is still compliant ---------------------------------------------------------------
     import disclaimer as D
     rec('identity disclosure baked from disclaimer.py',
         D.identity('en', as_html=False) in body)
-    rec('MARS block present on BOTH paths',
-        ('may not agree to change your loan' in body and 'stop doing business' in body
-         and 'may not agree to change your loan' in py['body']))
+    # MARS. outreach_copy._mars() returns '' — Alejandro's 2026-09-01 directive, recorded there as
+    # taken under protest. That is a policy decision, not a code defect, and this check asserted
+    # the block was PRESENT, so it has been red ever since without naming anything a code change
+    # could fix. This suite's job is the two senders AGREEING; whether the block ships is _mars()'s
+    # call. So assert both paths carry whatever _mars() currently yields. Re-enable _mars() and
+    # this check starts demanding the block on both sides again, with no edit here.
+    # NOT a silent downgrade of a compliance assertion: the drift it guards against — one path
+    # disclosing and the other not — is still caught, and it is the only failure mode a test can
+    # catch. Whether MARS is required at all is 12 CFR 1015.4(a) and Alejandro's to answer.
+    _mars_on = bool(str(OC._mars()).strip())
+    _mars_probe = 'may not agree to change your loan'
+    rec('MARS block state is IDENTICAL on both paths and matches outreach_copy._mars()',
+        (_mars_probe in body) == _mars_on and (_mars_probe in py['body']) == _mars_on,
+        '_mars() enabled=%s js=%s py=%s' % (_mars_on, _mars_probe in body,
+                                            _mars_probe in py['body']))
     rec('CAN-SPAM physical mailing address present', SENDER['addr'] in body)
     rec('signature carries title + phone + email',
         SENDER['title'] in body and 'Phone: ' + SENDER['phone'] in body
         and 'Email: ' + SENDER['email'] in body)
-    rec('opt-out line present', 'reply STOP' in body)
+    # CAN-SPAM 15 U.S.C. 7704(a)(3) opt-out. The probe was the literal 'reply STOP'; the sentence
+    # outreach_copy._unsub() actually ships names "unsubscribe" instead, and deliberately — the
+    # comment above it explains that it picked a word replies.OPTOUT_PHRASES already matches
+    # (`\bunsubscribe\b`, replies.py:62), so the word the homeowner is told to send is one the
+    # detector reads. Sourcing the probe from _unsub() keeps this a real assertion that an opt-out
+    # route is in the body, on both paths, without a second copy of the sentence.
+    _unsub = OC._unsub()
+    rec('opt-out sentence present on BOTH paths, sourced from outreach_copy._unsub()',
+        bool(_unsub) and _unsub in body and _unsub in py['body'], _unsub[:64])
     rec('no sentinel survived into the sent body',
         not any(t in body for t in OC.TOK.values()),
         'tokens found: %s' % [k for k, t in OC.TOK.items() if t in body])

@@ -36,6 +36,15 @@ Env:
   WP_KEY_FILE            key file path (default: whitepages.key)
   WP_CONCURRENCY         parallel workers (default 1 — trial keys 429 hard)
   WP_THROTTLE_S          delay between calls (default 0.6)
+  WP_DAILY_CAP           dollars per calendar day across every run (default 5.00), Tracerfy-style
+  WP_MAX_SPEND           dollars per run when --max-spend is not given (default 2.00)
+
+Spend. Every request that reaches Whitepages is charged WP_EST_COST in bd_budget's shared ledger
+under a 'wp' note, 404 misses included. Two ceilings, checked before each request: --max-spend for
+this run, and WP_DAILY_CAP for the day. Whitepages used to share the BatchData cap (default $1.50,
+about six lookups a day); it now has its own, the same way Tracerfy got one.
+
+Who a number belongs to (owner / household / name-only / relative) is decided in wp_contacts.py.
 """
 import argparse, glob as _glob, json, os, re, sys, time, threading, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -51,6 +60,8 @@ BASE  = 'https://api.whitepages.com/v2'
 MAX_PER_RUN = int(os.environ.get('WP_MAX_CALLS_PER_RUN', '200'))
 CONCURRENCY = max(1, int(os.environ.get('WP_CONCURRENCY', '1')))     # trial keys cap ~1 req/sec; verified 2026-07-24
 THROTTLE_S  = float(os.environ.get('WP_THROTTLE_S', '0.6'))          # polite delay between calls (single-worker mode)
+WP_DAILY_CAP = float(os.environ.get('WP_DAILY_CAP', '5') or 5)
+WP_MAX_SPEND = float(os.environ.get('WP_MAX_SPEND', '2') or 2)
 THIN_PHONES = 5                                     # Property returned <5 phones on top owner -> add Person
 COMPANY_RE  = re.compile(r'\b(LLC|INC\b|CORP|COMPANY|CO\.|LTD|LP\b|LLP|ASSN|ASSOCIATION|CONDOMINIUM|CHURCH|TRUST|BANK|HOLDINGS)\b', re.I)
 # wp_prop_ids.json stores hex-encoded ids; see normalize_prop_id() for why and for the decode rules.
@@ -69,6 +80,50 @@ _progress_lock = threading.Lock()
 _stats = {'ok': 0, 'miss': 0, 'err': 0, 'person': 0, 'person_miss': 0, 'phones_added': 0, 'rate_limited': 0}
 _stop_run = threading.Event()   # set on sustained 429 wall OR budget exhaustion
 _stop_why = {'why': ''}         # which one - the operator decision differs (top up WP vs raise the cap)
+_spend_lock = threading.Lock()
+_run = {'spent': 0.0, 'max': WP_MAX_SPEND, 'calls': 0, 'inflight': 0.0}
+
+
+def wp_spent_today():
+    """Dollars charged to Whitepages today in the shared ledger ('wp', 'wp-miss', ...)."""
+    import bd_budget
+    from datetime import date
+    day = bd_budget._load().get(str(date.today()))
+    if not isinstance(day, dict):
+        return 0.0
+    return sum(v for k, v in (day.get('by') or {}).items() if str(k).startswith('wp'))
+
+
+def _require_wp(cost):
+    """Reserve `cost` for one request, or raise BudgetExhausted when it would cross the run cap or
+    the day cap. Requests already in flight count, so parallel workers cannot overshoot together.
+    Call with _spend_lock held; every reservation ends in _charge_wp() or _release_wp()."""
+    import bd_budget
+    if _run['spent'] + _run['inflight'] + cost > _run['max'] + 1e-9:
+        raise bd_budget.BudgetExhausted(
+            f"run cap ${_run['max']:.2f} reached (${_run['spent']:.2f} spent this run). "
+            f"Raise with --max-spend.")
+    s = wp_spent_today() + _run['inflight']
+    if s + cost > WP_DAILY_CAP + 1e-9:
+        raise bd_budget.BudgetExhausted(
+            f"Whitepages daily cap ${WP_DAILY_CAP:.2f} reached (${s:.2f} spent today). "
+            f"Raise with env WP_DAILY_CAP.")
+    _run['inflight'] = round(_run['inflight'] + cost, 4)
+
+
+def _release_wp():
+    """The request never reached billing (429, network error): give the reservation back."""
+    with _spend_lock:
+        _run['inflight'] = max(0.0, round(_run['inflight'] - WP_EST_COST, 4))
+
+
+def _charge_wp(note):
+    import bd_budget
+    with _spend_lock:
+        _run['inflight'] = max(0.0, round(_run['inflight'] - WP_EST_COST, 4))
+        _run['spent'] = round(_run['spent'] + WP_EST_COST, 4)
+        _run['calls'] += 1
+        bd_budget.charge(WP_EST_COST, note)
 
 
 def _load_key():
@@ -166,33 +221,33 @@ def _http_get(url, key, retries=3):
     other errors. Retries on 429 with exponential backoff (WP Pro trial keys rate-limit hard).
     Exits on 401/403 (bad key). After retries exhausted, sets _stop_run so the batch exits cleanly.
 
-    Every call runs through bd_budget's SHARED daily-dollar ledger. Whitepages used to escape the
-    ceiling entirely (per-run cap only) — which is the exact multi-spender hole the ledger was built
-    to close. A request that REACHED the provider is charged (200 and 404 alike — a miss still
-    bills); 429s and network errors never reached billing and are not charged."""
+    Every call is recorded in bd_budget's SHARED daily-dollar ledger (note 'wp' / 'wp-miss') and
+    gated by Whitepages' own ceilings: --max-spend for the run and WP_DAILY_CAP for the day (see
+    _require_wp). A request that REACHED the provider is charged (200 and 404 alike — a miss still
+    bills); 429s and network errors never reached billing and are not charged. Other HTTP errors
+    are treated as not billed, which is an assumption, not a documented Whitepages rule."""
     import bd_budget
     for attempt in range(retries + 1):
         if _stop_run.is_set():
             return None
         try:
-            bd_budget.require(WP_EST_COST, 'whitepages_lookup')
+            with _spend_lock:
+                _require_wp(WP_EST_COST)
         except bd_budget.BudgetExhausted as e:
             _log(f'  BUDGET: {e}')
-            _stop_why['why'] = _stop_why['why'] or 'daily budget reached'
+            _stop_why['why'] = _stop_why['why'] or 'spend cap reached'
             _stop_run.set()
             return None
         req = urllib.request.Request(url, headers={'X-Api-Key': key, 'User-Agent': UA})
         try:
             with urllib.request.urlopen(req, timeout=25) as r:
-                out = json.loads(r.read().decode('utf-8'))
-                bd_budget.charge(WP_EST_COST, 'wp')
-                return out
+                raw = r.read()
         except urllib.error.HTTPError as e:
             body = ''
             try: body = e.read().decode('utf-8', 'replace')[:200]
             except Exception: pass
             if e.code == 404:
-                bd_budget.charge(WP_EST_COST, 'wp-miss')
+                _charge_wp('wp-miss')
                 return {'_http': 404, 'result': None}
             if e.code == 429:
                 wait = min(120, 20 * (2 ** attempt))          # 20, 40, 80, 120
@@ -203,14 +258,23 @@ def _http_get(url, key, retries=3):
                 _log(f'  RATE LIMIT (429) sleeping {wait}s (attempt {attempt + 1}/{retries + 1})'
                      + (f'  provider said: {body}' if body else ''))
                 _stats['rate_limited'] += 1
+                _release_wp()
                 time.sleep(wait); continue
+            _release_wp()
             if e.code in (401, 403):
                 _log(f'  AUTH ERROR ({e.code}) — key rejected. Stopping. {body}')
                 os._exit(2)
             _log(f'  HTTP {e.code}: {body}')
             return None
         except Exception as e:
+            _release_wp()
             _log(f'  network error: {e}')
+            return None
+        _charge_wp('wp')                            # a 200 reached billing, parseable or not
+        try:
+            return json.loads(raw.decode('utf-8'))
+        except Exception as e:
+            _log(f'  unparseable 200 from Whitepages (charged): {e}')
             return None
     _log('  RATE LIMIT: exhausted retries — pausing run (resume-safe; cache untouched for this lead)')
     _stats['rate_limited'] += 1
@@ -299,15 +363,22 @@ def _stamp_prop_id(entry, case):
         pass
 
 
-def _run_person_layer(lead, city, prop, entry, key, deep, force=False):
-    """Layer 2 Person Search. Returns (person_records, phones_added, ran)."""
+def _run_person_layer(lead, city, prop, entry, key, deep, force=False, relatives=False):
+    """Layer 2 Person Search. Returns (person_records, phones_added, ran).
+
+    relatives=True runs it even when Property found owners, because relatives only come back on a
+    Person record. It searches ONE name, the property owner who clears wp_contacts' owner bar
+    against our lead (else the lead's own first owner), so the extra cost is one call per lead."""
     ow_ct = len(((prop.get('result') or {}).get('ownership_info') or {}).get('person_owners') or [])
-    should_run = force or deep or (ow_ct == 0)
+    should_run = force or deep or relatives or (ow_ct == 0)
     person_records = list(entry.get('_person') or [])
     person_added_phones = 0
     if not should_run:
         return person_records, 0, False
     names = _owner_names_from_property(prop)
+    if relatives and not deep:
+        import wp_contacts
+        names = [n for n in names if wp_contacts.name_grade(_lead_owners(lead), n) == 'owner'][:1]
     if not names:
         n = _first_owner_name(_lead_owners(lead))
         if n: names.append(n)
@@ -321,7 +392,7 @@ def _run_person_layer(lead, city, prop, entry, key, deep, force=False):
             flipped.append(n)
     names = flipped
     seen_names = {p.get('name', '').upper() for p in person_records}
-    for name in names[:2]:
+    for name in names[:(1 if relatives and not deep else 2)]:
         if name.upper() in seen_names: continue
         if THROTTLE_S > 0: time.sleep(THROTTLE_S)
         pr = person_lookup(name, city, 'FL', key)
@@ -350,7 +421,7 @@ def _run_person_layer(lead, city, prop, entry, key, deep, force=False):
     return person_records, person_added_phones, True
 
 
-def enrich_one(lead, key, deep, cache):
+def enrich_one(lead, key, deep, cache, relatives=False):
     """One lead: Property + (auto-fallback) Person layer. Writes to cache incrementally.
 
     Address-less LP/upcoming rows still get Person Search using owner name + county city —
@@ -375,7 +446,7 @@ def enrich_one(lead, key, deep, cache):
         prop = {'result': entry.get('result'), '_http': entry.get('_http') or 0}
         if THROTTLE_S > 0: time.sleep(THROTTLE_S)
         person_records, person_added_phones, _ran = _run_person_layer(
-            lead, city, prop, entry, key, deep, force=True)
+            lead, city, prop, entry, key, deep, force=True, relatives=relatives)
         entry['_person'] = person_records
         entry['_http'] = entry.get('_http') or 0
         entry['_ts'] = int(time.time())
@@ -411,7 +482,7 @@ def enrich_one(lead, key, deep, cache):
     # Layer 2: Person (auto on Property MISS / --deep). Skip re-search when Property already
     # returned owners — same phones, wastes trial quota (verified 2026-07-24).
     person_records, person_added_phones, should_run_person = _run_person_layer(
-        lead, city, prop, entry, key, deep, force=False)
+        lead, city, prop, entry, key, deep, force=False, relatives=relatives)
     entry['_person'] = person_records
     _stamp_prop_id(entry, case)
     _stats['phones_added'] += person_added_phones
@@ -472,14 +543,79 @@ def _cache_looked(entry):
     return False
 
 
+def _is_miami(r):
+    c = re.sub(r'[^A-Z]', '', _lead_county(r))
+    if c:
+        return c.startswith('MIAMI') or c == 'MD'
+    return bool(re.match(r'^\d{4}-\d{6}-CA-\d{2}$', _lead_key(r)))   # Miami-Dade civil case form
+
+
+def contact_hold(r):
+    """Why no money should be spent on this lead's contacts, or ''.
+
+    Paying for numbers we are not allowed to use is waste, so the same holds the board and the send
+    bridge apply are read here before a request goes out: a never-contact case (stay_gate), a
+    bankruptcy stay flag on the lead, a dismissed or closed case, an owner mismatch. This only
+    READS those verdicts; it does not decide any of them. An unreadable never-contact list holds."""
+    if r.get('sale_bk_active') or r.get('saleBkAct') or r.get('bkWhy'):
+        return 'bankruptcy stay flag'
+    if r.get('lpDismissed') or r.get('lpClosed') or r.get('ownerMismatch'):
+        return 'dismissed/closed/owner mismatch'
+    try:
+        import stay_gate
+        if stay_gate.never_contact(_lead_key(r)):
+            return 'never-contact list'
+    except ImportError:
+        return 'stay_gate not importable'
+    except Exception as e:
+        return 'never-contact list unreadable (%s)' % str(e)[:60]
+    return ''
+
+
+def _days_to_sale(r):
+    try:
+        return int(r.get('days_to_auction') if r.get('days_to_auction') is not None else r.get('days'))
+    except (TypeError, ValueError):
+        return 9999
+
+
+def pick_miami(leads, cache, n):
+    """The n Miami-Dade leads this test should spend on: person-owned, with a property address,
+    no contact hold, not already Person-searched, soonest sale first."""
+    out, held = [], 0
+    for r in leads:
+        if not _is_miami(r) or not _split_addr(_lead_addr(r)):
+            continue
+        if _is_company_owner(_lead_owners(r)):
+            continue
+        if (cache.get(_lead_key(r)) or {}).get('_person'):
+            continue
+        if contact_hold(r):
+            held += 1
+            continue
+        out.append(r)
+    out.sort(key=lambda r: (_days_to_sale(r), _lead_key(r)))
+    _log(f'  --pick-miami: {len(out)} eligible, {held} skipped for a contact hold; taking {min(n, len(out))}')
+    return out[:n]
+
+
 def build_todo(leads, cache, args, skiptrace=None):
     """Return the (deduped, skip-LLC when applicable) work list, respecting --tier / --refresh / --upgrade."""
     skiptrace = skiptrace if skiptrace is not None else {}
     todo = []
+    if getattr(args, 'pick_miami', 0):
+        return pick_miami(leads, cache, args.pick_miami)
     if args.case:
         by = {_lead_key(r): r for r in leads}
-        if args.case not in by: sys.exit(f'case {args.case} not on the board')
-        return [by[args.case]]
+        out = []
+        for c in args.case:
+            if c not in by: sys.exit(f'case {c} not on the board')
+            why = contact_hold(by[c])
+            if why:
+                _log(f'  SKIP {c}: {why} — not spending on it')
+                continue
+            out.append(by[c])
+        return out
     if getattr(args, 'gap', False):
         # (a) person-owned + zero phones (skiptrace/county), OR (b) person-owned + never WP-looked.
         # Zero-phone first (highest need), then never-looked that already have some BatchData phones.
@@ -537,9 +673,83 @@ def build_todo(leads, cache, args, skiptrace=None):
     return []
 
 
+def lead_contacts(lead, entry):
+    """Grade one cache entry against one lead -> {owner, household, name_only, dropped, relatives}.
+    The same rules make_tracker bakes with (wp_contacts), so this report is what the board shows."""
+    import wp_contacts as W
+    owners, addr = _lead_owners(lead), _lead_addr(lead)
+    res = (entry or {}).get('result') or {}
+    out = {'owner': set(), 'household': set(), 'name_only': set(), 'dropped': 0,
+           'relatives': 0, 'relative_phones': 0}
+    for o in ((res.get('ownership_info') or {}).get('person_owners') or []):
+        tag = W.grade_property_owner(owners, o.get('name'))
+        for p in W._phones_of(o):
+            (out['owner'] if tag == 'wp' else out['household']).add(p['n'])
+    for o in (res.get('residents') or []):
+        for p in W._phones_of(o):
+            out['household'].add(p['n'])
+    for pr in ((entry or {}).get('_person') or []):
+        for rec in (pr.get('response') or []):
+            g = W.grade_person_record(owners, addr, rec)
+            phs = [p['n'] for p in W._phones_of(rec)]
+            if g is None:
+                out['dropped'] += len(phs)
+            else:
+                (out['owner'] if g == 'wp' else out['name_only']).update(phs)
+    out['household'] -= out['owner']
+    out['name_only'] -= out['owner'] | out['household']
+    rels = W.extract_relatives(owners, addr, (entry or {}).get('_person') or [],
+                               out['owner'] | out['household'] | out['name_only'])
+    out['relatives'] = len(rels)
+    out['relative_phones'] = sum(len(r['phones']) for r in rels)
+    return out
+
+
+def report(leads, cache, cases):
+    """One line per lead: counts only. Safe to paste into chat."""
+    by = {_lead_key(r): r for r in leads}
+    print('\nper-lead result (counts only):')
+    print('  case                      owner  household  name-only  dropped-namesake  relatives(with #)')
+    for c in cases:
+        r, e = by.get(c), cache.get(c)
+        if not r or not e:
+            print(f'  {c:24s}  not looked up'); continue
+        k = lead_contacts(r, e)
+        print(f"  {c:24s}  {len(k['owner']):5d}  {len(k['household']):9d}  {len(k['name_only']):9d}  "
+              f"{k['dropped']:16d}  {k['relatives']:3d} ({k['relative_phones']} #)")
+
+
+def schema(cache):
+    """Which keys Whitepages actually returns, so the relatives key is confirmed, not guessed."""
+    from collections import Counter
+    top, rec_keys, rel_keys = Counter(), Counter(), Counter()
+    for e in cache.values():
+        top.update((e.get('result') or {}).keys())
+        for pr in e.get('_person') or []:
+            for rec in pr.get('response') or []:
+                if isinstance(rec, dict):
+                    rec_keys.update(rec.keys())
+                    for k in ('relatives', 'associated_people', 'related_people', 'relations'):
+                        for rel in rec.get(k) or []:
+                            if isinstance(rel, dict):
+                                rel_keys.update(k + '.' + kk for kk in rel.keys())
+    print('property result keys:', dict(top.most_common()))
+    print('person record keys:  ', dict(rec_keys.most_common()))
+    print('relative entry keys: ', dict(rel_keys.most_common()) or 'none cached yet')
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--case', help='single lead by ID')
+    ap.add_argument('--case', action='append', help='lead by ID (repeatable)')
+    ap.add_argument('--pick-miami', type=int, default=0, metavar='N',
+                    help='the N soonest-sale Miami-Dade person-owned leads with no contact hold')
+    ap.add_argument('--relatives', action='store_true',
+                    help="also run Person Search on the matched owner to get relatives (+1 call/lead)")
+    ap.add_argument('--max-spend', type=float, default=None, metavar='USD',
+                    help=f'dollar cap for this run (default env WP_MAX_SPEND = {WP_MAX_SPEND:.2f})')
+    ap.add_argument('--dry-run', action='store_true', help='show what would be looked up and the cost')
+    ap.add_argument('--report', action='store_true', help='per-lead counts for --case, no names/numbers')
+    ap.add_argument('--schema', action='store_true', help='key names in cached WP records, no values')
     ap.add_argument('--all', action='store_true', help='every uncached lead (respects --limit)')
     ap.add_argument('--upgrade', action='store_true', help='re-scan cached leads with <5 phones + no Person layer yet')
     ap.add_argument('--gap', action='store_true',
@@ -575,7 +785,8 @@ def main():
     if stamped:
         _save_cache(cache)
         print(f'stamped {stamped} wp_prop_id(s) into cache (Marisela preserved)', flush=True)
-    if args.ensure_prop_ids and not (args.gap or args.all or args.upgrade or args.case or args.stats):
+    if args.ensure_prop_ids and not (args.gap or args.all or args.upgrade or args.case or args.stats
+                                     or args.pick_miami or args.report or args.schema):
         return
 
     if args.stats:
@@ -613,15 +824,39 @@ def main():
         print(f'--gap remaining: {gap_zero + gap_never} ({gap_zero} zero-phone, {gap_never} never-looked w/ phones)')
         return
 
-    key = _load_key()
+    if args.report:
+        report(leads, cache, args.case or [])
+        return
+    if args.schema:
+        schema(cache)
+        return
+
+    if args.max_spend is not None:
+        _run['max'] = float(args.max_spend)
     todo = build_todo(leads, cache, args, skiptrace=skiptrace)
+    if not args.case and not args.pick_miami:
+        _before = len(todo)
+        todo = [r for r in todo if not contact_hold(r)]
+        if len(todo) != _before:
+            _log(f'  skipped {_before - len(todo)} lead(s) with a contact hold (stay / never-contact / closed)')
     cap = min(args.limit, MAX_PER_RUN)
     todo = todo[:cap]
     if not todo: print('nothing to do.'); return
 
-    est_calls = len(todo) * (2 if args.deep else 1)                  # rough (Person may not fire on some)
+    per_lead = 1 if not (args.deep or args.relatives) else (2 if args.relatives and not args.deep else 3)
+    est_calls = len(todo) * per_lead                                 # worst case; cached layers cost 0
     # est at WP_EST_COST, not the retired $0.10 - the banner understated real exposure 2.2x
-    print(f'{len(todo)} lookup(s) queued (concurrency={CONCURRENCY}, throttle={THROTTLE_S}s, deep={args.deep}, ~{est_calls} API calls, est ${est_calls*WP_EST_COST:.2f})', flush=True)
+    print(f'{len(todo)} lookup(s) queued (concurrency={CONCURRENCY}, throttle={THROTTLE_S}s, deep={args.deep}, '
+          f'relatives={args.relatives}, up to {est_calls} API calls = ${est_calls*WP_EST_COST:.2f} at '
+          f'${WP_EST_COST:.2f}/query)', flush=True)
+    print(f'caps: this run ${_run["max"]:.2f} (--max-spend) · today ${wp_spent_today():.2f} spent of '
+          f'${WP_DAILY_CAP:.2f} (WP_DAILY_CAP)', flush=True)
+    if args.dry_run:
+        for r in todo:
+            print(f'  would look up: {_lead_key(r)}  (sale in {_days_to_sale(r)}d)')
+        print('(dry run — no API calls made)')
+        return
+    key = _load_key()
 
     t0 = time.time()
     # Serial when CONCURRENCY=1 (default) — ThreadPool still works but sequential is clearer for 429s
@@ -630,10 +865,10 @@ def main():
             if _stop_run.is_set():
                 _log(f"  stopping early — {_stop_why['why'] or 'stop requested'} (rerun --gap to resume)")
                 break
-            enrich_one(lead, key, args.deep, cache)
+            enrich_one(lead, key, args.deep, cache, args.relatives)
     else:
         with ThreadPoolExecutor(max_workers=CONCURRENCY) as ex:
-            futures = [ex.submit(enrich_one, lead, key, args.deep, cache) for lead in todo]
+            futures = [ex.submit(enrich_one, lead, key, args.deep, cache, args.relatives) for lead in todo]
             for _ in as_completed(futures):
                 if _stop_run.is_set():
                     break
@@ -643,6 +878,10 @@ def main():
           f'429s={_stats["rate_limited"]} · '
           f'Person layer ran on {_stats["person"] + _stats["person_miss"]} (added {_stats["phones_added"]} phones)')
     print(f'cache -> whitepages_lookup.json ({len(cache)} entries)')
+    print(f'spend: {_run["calls"]} billed request(s) = ${_run["spent"]:.2f} this run · '
+          f'${wp_spent_today():.2f} today')
+    if args.relatives or args.case or args.pick_miami:
+        report(leads, cache, [_lead_key(r) for r in todo])
     if _stop_run.is_set():
         print('RESUME: python whitepages_lookup.py --gap --limit 25')
         print('        (or: python wp_gap_loop.py)')

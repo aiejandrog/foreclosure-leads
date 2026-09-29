@@ -375,6 +375,31 @@ def _load_leads():
                 r.setdefault('sale_bk_date', ent.get('bd', ''))
             if isinstance(ent, dict) and ent.get('sl') and not r.get('saleLift'):
                 r['saleLift'] = ent['sl']
+    # Federal bankruptcy (CourtListener). A hold here is what cadence's pre-send already reads
+    # (saleBkAct) without that sweep being edited. A clear is not stamped: Miami's docket result
+    # stands, and a Broward/Palm Beach lead with no successful check stays saleBkAct so it is
+    # not mailed.
+    try:
+        import bk_lookup as _BKL
+        for r in leads:
+            _held, _why = _BKL.send_hold(_case(r), here=HERE)
+            if _held:
+                r['sale_bk_active'] = True
+                r['saleBkAct'] = True
+                r.pop('saleLift', None)
+                r.pop('sale_bk_lifted', None)
+                if _why:
+                    r['bkWhy'] = _why[:180]
+    except Exception:
+        try:
+            import stay_gate as _SG
+            for r in leads:
+                if not _SG.case_stem(_case(r)):
+                    r['sale_bk_active'] = True
+                    r['saleBkAct'] = True
+                    r['bkWhy'] = 'federal bankruptcy check unavailable — lead stays held'
+        except Exception:
+            pass
     return leads
 
 
@@ -394,9 +419,17 @@ def _load_optouts():
     if isinstance(data, list):
         return {str(x).strip().lower().lstrip('@') for x in data}
     notes = data.get('notes') if isinstance(data, dict) else None
+    out = set()
     if isinstance(notes, dict):
-        return {str(k).strip().lower().lstrip('@') for k, v in notes.items() if v}
-    return set()
+        out = {str(k).strip().lower().lstrip('@') for k, v in notes.items() if v}
+    # Rep-logged DNC from the board/phone notes (worker_notes.json) gates here too -- a hard no
+    # tapped in Call Mode must stop the CLI even if the ledger sync has not run yet (2026-09-25).
+    try:
+        from optout_sync import notes_dnc_keys
+        out |= {k.lstrip('@') for k in notes_dnc_keys() if not k.startswith('#')}
+    except Exception:
+        pass
+    return out
 
 
 _BOUNCED = None
@@ -571,6 +604,18 @@ def _eligible(r, ledger, optouts, min_hours):
     # carry 'sale_bk_active'. Testing only one silently disables the gate for the other source.
     if (r.get('saleBkAct') or r.get('sale_bk_active')) and not r.get('saleLift'):
         return False, 'active bankruptcy stay'
+    try:
+        import bk_lookup as _BKL
+        _held, _why = _BKL.contact_blocked_reason(_case(r), here=HERE)
+        if _held:
+            return False, _why or 'federal bankruptcy check has not run for this lead'
+    except Exception:
+        try:
+            import stay_gate as _SG
+            if not _SG.case_stem(_case(r)):
+                return False, 'federal bankruptcy check unavailable — lead stays held'
+        except Exception:
+            return False, 'federal bankruptcy check unavailable — lead stays held'
     if r.get('sibclaimed'):
         return False, 'sibling case sold'
     # DILIGENCE GATE. Sits with the other compliance drops, not with the judgment filters.

@@ -110,7 +110,10 @@ class SunbizTests(unittest.TestCase):
         self.assertFalse(raw['not_found'])
         self.assertEqual(raw['status'], 'ACTIVE')
         self.assertEqual(len(calls), 2)
-        self.assertTrue(LO._lookup('NOBODY LLC', fetch=lambda u: '')['not_found'])
+        # rows that do not match are an absence; an empty page is not an answer at all (2026-09-29)
+        self.assertTrue(LO._lookup('NOBODY LLC', fetch=lambda u: SEARCH_HTML)['not_found'])
+        with self.assertRaises(LO.SunbizBlocked):
+            LO._lookup('NOBODY LLC', fetch=lambda u: '')
 
     def test_found_entity_carries_no_authority_and_is_never_call_ready(self):
         fetch = lambda u: DETAIL_HTML if 'SearchResultDetail' in u else SEARCH_HTML
