@@ -64,6 +64,7 @@ The lead cache and the status file carry case numbers and counts only.
 import argparse
 import datetime as dt
 import glob
+import http.client
 import json
 import os
 import re
@@ -167,6 +168,15 @@ class RateLimited(ProviderError):
 
 class TimeBudget(Exception):
     """The nightly run hit BK_MAX_RUNTIME_S. Progress is saved. Not a hard failure."""
+
+
+class NetworkError(ProviderError):
+    """The request never got an HTTP status back (timeout, reset, DNS, a cut-off body)."""
+
+
+# A nightly run stops its per-lead searches after this many network failures. One slow
+# search should not end the night; a dead connection should not burn BK_MAX_RUNTIME_S.
+NIGHTLY_NET_ERROR_LIMIT = 3
 
 
 def log(msg):
@@ -925,7 +935,15 @@ def http_get(url, provider, transport, budget, clock, reserve=0, max_wait=None, 
         before = clock.time()
         wait_for_slot(budget, clock, reserve=reserve, max_wait=remaining, deadline=deadline)
         slept += clock.time() - before
-        status, hdrs, body = transport(url, headers)
+        try:
+            status, hdrs, body = transport(url, headers)
+        except (OSError, http.client.HTTPException) as e:
+            # Count it: the request may have reached CourtListener before the connection died.
+            # The exception text is not kept -- only its class, which carries no name or token.
+            budget.record(clock.time())
+            if not getattr(budget, 'unreadable', False):
+                save_budget(budget)
+            raise NetworkError('CourtListener network error (%s)' % type(e).__name__)
         budget.record(clock.time())
         if not getattr(budget, 'unreadable', False):
             save_budget(budget)
@@ -1783,6 +1801,7 @@ def public_status():
         'requests_used': num('requests_used'),
         'truncated': num('truncated'),
         'provider': 'courtlistener' if data.get('provider') in (None, '', 'courtlistener') else 'other',
+        'reason': re.sub(r'[^a-z0-9_:-]', '', str(data.get('reason') or '').lower())[:40],
     }
 
 
@@ -2063,12 +2082,17 @@ def pull_filings(provider, transport, budget, clock, deadline=None, max_wait=Non
     return kept, caught, n_rows[0]
 
 
-def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
+def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None, progress=None):
+    """progress, when given, is a dict this run keeps current (stage, budget, filings, checked,
+    errors, truncated) so main() can write real counters if the run dies part way."""
+    prog = progress if isinstance(progress, dict) else {}
+    prog['stage'] = 'start'
     env = os.environ if env is None else env
     provider = provider or get_provider(env=env)
     clock = clock or Clock()
     transport = transport or urllib_transport
     budget = load_budget(clock.time())
+    prog['budget'] = budget
     deadline = clock.time() + max_runtime_s(env)
     ok_av, why = provider.available(env)
     leads = load_leads(here)
@@ -2088,6 +2112,7 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
             reason = 'token_missing'
         log('CourtListener: check unavailable (%s). Leads that need it stay held.' % reason)
     else:
+        prog['stage'] = 'pull'
         try:
             items, pull_ok, n_rows = pull_filings(
                 provider, transport, budget, clock, deadline=deadline)
@@ -2119,9 +2144,12 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
             log('CourtListener: nightly pull failed. Leads stay held.')
     if not isinstance(items, dict):
         items = {}
+    prog.update(filings=len(items), pull_ok=bool(pull_ok), errors=errors, stage='match')
     match_filings_to_leads(leads, items, cache, clock.time())
     checked = 0
     truncated_n = 0
+    net_errors = 0
+    prog.update(checked=0, truncated=0, stage='search')
     if ok_av and not time_stopped and clock.time() < deadline:
         # Soonest contact first: first-touch email, then a phone, then a letter.
         # Miami is in this same order, not after every other county.
@@ -2155,12 +2183,25 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None):
                 truncated_n += 1
             elif err:
                 errors += 1
+                if 'network error' in err:
+                    net_errors += 1
                 if '429' in err or 'budget' in err:
                     if reason in ('ok', 'pull_truncated'):
                         reason = 'rate_limit' if '429' in err else 'budget'
+                    prog.update(checked=checked, errors=errors, truncated=truncated_n)
                     break
+                if net_errors >= NIGHTLY_NET_ERROR_LIMIT:
+                    if reason in ('ok', 'pull_truncated'):
+                        reason = 'network'
+                    log('CourtListener: %d network failures, left the rest of the new-lead searches '
+                        'for later. They stay held.' % net_errors)
+                    prog.update(checked=checked, errors=errors, truncated=truncated_n)
+                    break
+            prog.update(checked=checked, errors=errors, truncated=truncated_n)
+    prog['stage'] = 'save'
     save_cache(cache)
     fields = _budget_fields(budget, clock.time())
+    prog['stage'] = 'holds'
     overrides = load_overrides()
     hold_n = 0
     for k, ent in cache.items():
@@ -2292,6 +2333,44 @@ def case_report(case):
     return '%s flagged=%s match=%s bk=%s' % (str(case).strip()[:40], flagged, match, bk)
 
 
+def _crash_site(exc):
+    """'file.py:123 func' for the innermost frame of exc. No values, no message."""
+    tb = getattr(exc, '__traceback__', None)
+    last = None
+    while tb is not None:
+        last = tb
+        tb = tb.tb_next
+    if last is None:
+        return 'unknown'
+    code = last.tb_frame.f_code
+    return '%s:%d %s' % (os.path.basename(code.co_filename), last.tb_lineno, code.co_name)
+
+
+def _crash_status(progress, exc):
+    """Status fields for a nightly run that raised. The counters are this run's, not the last
+    good run's: a crash that left yesterday's numbers in place read as a run that made no calls.
+    pull_ok stays False so the bk-lookup alert still fires. holds is not recounted."""
+    prog = progress if isinstance(progress, dict) else {}
+    fields = {'pull_ok': False, 'pull_t': time.time(), 'pull_ts': _stamp(),
+              'provider': 'courtlistener',
+              'reason': 'crash:' + type(exc).__name__,
+              'errors': int(prog.get('errors') or 0) + 1,
+              'leads_checked': int(prog.get('checked') or 0),
+              'truncated': int(prog.get('truncated') or 0)}
+    if 'filings' in prog:
+        fields['filings'] = int(prog.get('filings') or 0)
+    else:
+        items = load_filings().get('items') or {}
+        fields['filings'] = len(items) if isinstance(items, dict) else 0
+    budget = prog.get('budget')
+    if budget is not None:
+        try:
+            fields.update(_budget_fields(budget, time.time()))
+        except Exception:
+            pass
+    return fields
+
+
 def main(argv=None, clock=None, transport=None, here=None):
     ap = argparse.ArgumentParser(description='Federal bankruptcy check (CourtListener)')
     ap.add_argument('--status', action='store_true')
@@ -2314,8 +2393,9 @@ def main(argv=None, clock=None, transport=None, here=None):
                           transport=transport, page_cap=CLI_PAGE_CAP)
             log(case_report(ld.get('case') or case))
         return 0
+    progress = {}
     try:
-        run_nightly(here=here or HERE, clock=clock, transport=transport)
+        run_nightly(here=here or HERE, clock=clock, transport=transport, progress=progress)
     except TimeBudget:
         log('CourtListener: nightly run hit its time limit. Progress saved.')
         try:
@@ -2324,11 +2404,14 @@ def main(argv=None, clock=None, transport=None, here=None):
                          reason='time_budget', provider='courtlistener')
         except Exception:
             pass
-    except Exception:
-        log('CourtListener: nightly run failed. Leads that need the check stay held.')
+    except Exception as e:
+        # The class, the stage and the line say where it died. The exception text does not go
+        # out: it can carry an owner name from a lead row or a filing.
+        stage = str(progress.get('stage') or 'start')
+        log('CourtListener: nightly run failed during %s (%s at %s). Leads that need the check '
+            'stay held.' % (stage, type(e).__name__, _crash_site(e)))
         try:
-            write_status(pull_ok=False, pull_t=time.time(), pull_ts=_stamp(), reason='pull_failed',
-                         provider='courtlistener')
+            write_status(**_crash_status(progress, e))
         except Exception:
             pass
     _maybe_clerk_docket()
