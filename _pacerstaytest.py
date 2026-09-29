@@ -973,7 +973,10 @@ check('gate: Miami-Dade docket clear but owner is a new flsb filer -> stay_activ
 r = SG.check('CACE-99-001605', sh16)
 check('gate: NOT in the index never clears -- a lead with no per-lead PACER verdict is still refused, and flagged for a pre-send check',
       r['ok'] is False and r['code'] in (SG.UNRESOLVABLE, SG.UNVERIFIED) and r['pacer_need'] is True, r)
-pc = {'CACE-99-001601': {'verdict': 'clear', 'a': False, 'env': 'prod', 't': NOW + 5, 'q': 'x', 'src': 'pacer_pcl'}}
+_q = dt.date.fromtimestamp(NOW)
+pc = {'CACE-99-001601': {'verdict': 'clear', 'a': False, 'env': 'prod', 't': NOW + 5, 'q': _q.isoformat(),
+                         'src': 'pacer_pcl', 'region': 'national',
+                         'lookback_from': PS.lookback_from(_q, PS.LOOKBACK_YEARS)}}
 (g16 / 'pacer_stay_cache.json').write_text(json.dumps(pc))
 check('a per-lead PACER clear queried AFTER the hit\'s rows were pulled supersedes the hit (it saw the current status)',
       SG.check('CACE-99-001601', sh16)['ok'] is True)
@@ -1152,6 +1155,41 @@ h = FakeHTTP()
 g18 = work({'broward_leads.json': leads18, 'leads_final.json': lf18})
 rc, out = run(g18, h, args=['--no-pull', '--bulk', 'all', '--max-spend', '1'], raw=True)
 check('--bulk all (paid mode) still searches every due lead', len(h.finds()) == 3, [c[2] for c in h.finds()])
+reset_ledgers()
+leads18c = leads18 + [{'county': 'BROWARD', 'case': 'CACE-99-001904', 'owners': 'NOPHONE BETTY', 'auction': mdy(6)}]
+twin18 = TMP / 'twin18.html'
+twin18.write_text('<script>var RAW = ' + json.dumps([
+    {'case': 'CACE-99-001901', 'phones': ['3055550101']}, {'case': 'CACE-99-001904', 'phones': []},
+    {'case': '2099-001902-CA-01', 'phones': ['3055550102']}]) + ';</script>', encoding='utf-8')
+h = FakeHTTP()
+g18 = work({'broward_leads.json': leads18c, 'leads_final.json': lf18})
+rc, out = run(g18, h, env(PACER_BULK='callable', PACER_TWIN_PATH=str(twin18)), args=['--no-pull', '--max-spend', '1'], raw=True)
+check('--bulk callable: only Broward / Palm Beach leads with a phone on the board are searched',
+      [c[2]['lastName'] for c in h.finds()] == ['BULKBR'] and '1 board lead(s) with a phone' not in out
+      and 'board lead(s) with a phone' in out, ([c[2] for c in h.finds()], out[-400:]))
+reset_ledgers()
+h = FakeHTTP()
+g18 = work({'broward_leads.json': leads18c, 'leads_final.json': lf18})     # fresh cache: nothing searched yet
+rc, out = run(g18, h, env(PACER_BULK='callable', PACER_TWIN_PATH=str(TMP / 'missing.html')), args=['--no-pull', '--max-spend', '1'], raw=True)
+check('--bulk callable with no readable twin: every Broward lead, never a Miami-Dade one, and says so',
+      sorted(c[2]['lastName'] for c in h.finds()) == ['BULKBR', 'NOPHONE'] and 'not filtering on phones' in out,
+      ([c[2] for c in h.finds()], out[-400:]))
+cf = TMP / 'pacer.pass'
+check('no credential file -> no credentials', PS.credentials({}, cred_path=str(cf)) is None)
+cf.write_text(json.dumps({'username': 'fileuser', 'password': 'file-pass-1', 'client_code': 'cc'}), encoding='utf-8')
+c_ = PS.credentials({}, cred_path=str(cf))
+check('pacer.pass supplies the login when the environment has none',
+      c_ and c_['user'] == 'fileuser' and c_['pw'] == 'file-pass-1' and c_['client'] == 'cc', c_)
+c_ = PS.credentials({'PACER_USERNAME': 'envuser', 'PACER_PASSWORD': 'env-pass'}, cred_path=str(cf))
+check('environment credentials win over pacer.pass', c_ and c_['user'] == 'envuser', c_)
+check('an explicit env dict never reads the real pacer.pass', PS.credentials({}) is None)
+cf.write_text('{not json', encoding='utf-8')
+import io as _io, contextlib as _cl
+_b = _io.StringIO()
+with _cl.redirect_stdout(_b):
+    c_ = PS.credentials({}, cred_path=str(cf))
+check('an unreadable pacer.pass is no credentials, and the password is never printed',
+      c_ is None and 'file-pass-1' not in _b.getvalue() and 'unreadable' in _b.getvalue(), _b.getvalue())
 rc, out = run(g18, FakeHTTP(), env(PACER_BULK='sometimes'), raw=True)
 check('PACER_BULK junk: refused (exit 3)', rc == 3)
 reset_ledgers()

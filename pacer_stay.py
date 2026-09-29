@@ -129,7 +129,9 @@ case number has no Miami-Dade stem (Broward, Palm Beach, an LP row carrying anot
 goes first: for it PACER is the only stay source the gate has, while a Miami-Dade case already has
 the docket read (and PACER can only add a block to it, never a clear).
 
-CREDENTIALS come ONLY from the environment: PACER_USERNAME, PACER_PASSWORD, optional
+CREDENTIALS come from the environment, or from DEALFLOW_DIR/pacer.pass (JSON: username, password,
+optional otp_secret, client_code; written on the laptop by the owner, outside the repo and OneDrive).
+Environment: PACER_USERNAME, PACER_PASSWORD, optional
 PACER_OTP_SECRET (base32 MFA secret; a TOTP is computed per login), PACER_CLIENT_CODE,
 PACER_REDACT_FLAG=1 (filer accounts only), PACER_ENV=prod|qa. Missing username/password: the
 lookup is OFF, says so once, exits 0 (the nightly refresh carries on). Nothing is ever printed about
@@ -217,10 +219,55 @@ def log(msg):
 # --------------------------------------------------------------------------------------------------
 # settings
 # --------------------------------------------------------------------------------------------------
-def credentials(env=None):
+CRED_FILE_NAME = 'pacer.pass'
+BULK_MODES = ('off', 'md-near', 'callable', 'all')
+
+
+def cred_file_path():
+    """DEALFLOW_DIR/pacer.pass: outside the repo and outside OneDrive (paths.py)."""
+    try:
+        import paths as P
+        return os.path.join(P.DEALFLOW_DIR, CRED_FILE_NAME)
+    except Exception:
+        return ''
+
+
+def _file_credentials(path):
+    """{PACER_USERNAME, PACER_PASSWORD, ...} from a JSON credential file, or {}. The file is
+    written on the laptop by the owner (the setup paste reads the password with Read-Host);
+    it is never printed, logged or committed. Keys: username, password, optional otp_secret,
+    client_code."""
+    if not path:
+        return {}
+    try:
+        with open(path, encoding='utf-8-sig') as f:
+            d = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        log('PACER: %s is unreadable -- federal bankruptcy lookup stays off until it is rewritten'
+            % CRED_FILE_NAME)
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    return {'PACER_USERNAME': d.get('username') or '', 'PACER_PASSWORD': d.get('password') or '',
+            'PACER_OTP_SECRET': d.get('otp_secret') or '', 'PACER_CLIENT_CODE': d.get('client_code') or ''}
+
+
+def credentials(env=None, cred_path=None):
+    """Environment first. When reading the real environment (or when cred_path is given), a
+    missing username/password falls back to DEALFLOW_DIR/pacer.pass."""
+    real = env is None or env is os.environ
     env = os.environ if env is None else env
     user = str(env.get('PACER_USERNAME') or '').strip()
     pw = str(env.get('PACER_PASSWORD') or '')
+    if (not user or not pw) and (real or cred_path):
+        f = _file_credentials(cred_path or cred_file_path())
+        if f.get('PACER_USERNAME') and f.get('PACER_PASSWORD'):
+            env = dict(f, **{k: v for k, v in env.items() if k.startswith('PACER_') and v and
+                             k not in ('PACER_USERNAME', 'PACER_PASSWORD')})
+            user = str(env.get('PACER_USERNAME') or '').strip()
+            pw = str(env.get('PACER_PASSWORD') or '')
     if not user or not pw:
         return None
     return {'user': user, 'pw': pw,
@@ -1112,6 +1159,32 @@ def load_leads(here=HERE):
     return leads, skipped
 
 
+def phoned_keys(twin_path=None):
+    """(set of pacer keys whose board row carries at least one phone, why) from the plaintext
+    board twin (paths.TWIN), the only file that holds phones. (None, why) when the twin cannot be
+    read: --bulk callable then searches every Broward / Palm Beach lead in plan order, which only
+    spends the same capped budget on leads that may not be dialable. Counts only are logged."""
+    import stay_gate
+    try:
+        if twin_path is None:
+            import paths as P
+            twin_path = P.TWIN
+        h = open(twin_path, encoding='utf-8').read()
+        i = h.find('RAW = ')
+        if i < 0:
+            return None, 'board twin has no RAW payload; not filtering on phones'
+        rows, _ = json.JSONDecoder().raw_decode(h, i + len('RAW = '))
+    except Exception as e:
+        return None, 'board twin unreadable (%s); not filtering on phones' % type(e).__name__
+    keys = set()
+    for r in rows if isinstance(rows, list) else []:
+        if isinstance(r, dict) and r.get('phones'):
+            k = stay_gate.pacer_key(r.get('case'))
+            if k:
+                keys.add(k)
+    return keys, '%d board lead(s) with a phone' % len(keys)
+
+
 def recheck_days(ent, near):
     if ent.get('err'):
         return RECHECK['error']
@@ -1760,9 +1833,11 @@ def _log_status(quarter, idx, today, env):
 def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     env = os.environ if env is None else env
     ap = argparse.ArgumentParser(description='Federal bankruptcy (PACER PCL) stay lookup for board leads')
-    ap.add_argument('--bulk', choices=('off', 'md-near', 'all'), default=None,
+    ap.add_argument('--bulk', choices=BULK_MODES, default=None,
                     help="nightly per-lead search: off (default; PACER_BULK overrides), md-near (near-sale "
-                         "Miami-Dade leads with surplus pre-send money only), all (paid mode)")
+                         "Miami-Dade leads with surplus pre-send money only), callable (Broward / Palm Beach "
+                         "leads that have a phone on the board, soonest sale first, inside the caps), "
+                         "all (paid mode)")
     ap.add_argument('--no-pull', action='store_true', help='skip the daily flsbk new-filer pull')
     ap.add_argument('--max-spend', default='auto',
                     help="per-run dollar cap for --bulk all; 'auto' = quarter remaining / nights left (<= PACER_RUN_MAX)")
@@ -1783,8 +1858,8 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         log('PACER: PACER_ENV=%r is neither prod nor qa -- federal bankruptcy lookup not run' % env.get('PACER_ENV'))
         return 3
     bulk = (a.bulk or str(env.get(ENV_BULK) or 'off')).strip().lower()
-    if bulk not in ('off', 'md-near', 'all'):
-        log('PACER: %s=%r is not off / md-near / all -- not run' % (ENV_BULK, env.get(ENV_BULK)))
+    if bulk not in BULK_MODES:
+        log('PACER: %s=%r is not %s -- not run' % (ENV_BULK, env.get(ENV_BULK), ' / '.join(BULK_MODES)))
         return 3
     quarter = QuarterLedger(env=env, today=today)
     idx_path, hits_path = nf_paths(here, env_name)
@@ -1802,6 +1877,11 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         queue = []
     elif bulk == 'md-near':
         queue = [(ld, t, n) for ld, t, n in queue if t == 0 and stay_gate.case_stem(ld['key'])]
+    elif bulk == 'callable':
+        phoned, pwhy = phoned_keys(str(env.get('PACER_TWIN_PATH') or '') or None)
+        queue = [(ld, t, n) for ld, t, n in queue if not stay_gate.case_stem(ld['key'])
+                 and (phoned is None or ld['key'] in phoned)]
+        log('PACER: bulk callable -- %s' % pwhy)
     date_from = lookback_from(today, a.lookback_years)
     by = summarize_plan(leads, queue, skipped, today)
     log('PACER: %d lead(s) with a usable case number (%s); per-lead bulk %s: %d due%s' % (
@@ -1885,7 +1965,7 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             if prob:
                 log('PACER: %s -- no per-lead bulk tonight' % prob)
                 queue = []
-            elif bulk == 'all':
+            elif bulk in ('all', 'callable'):
                 if str(a.max_spend).lower() == 'auto':
                     run_cap = auto_run_cap(qs, today, run_max)
                 else:

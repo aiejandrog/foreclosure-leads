@@ -1236,6 +1236,98 @@ check('a stored unconfirmed date does not hold a lifted Miami stay',
       and '2099-000203-CA-01' not in stale_flags,
       (stale, stale_dial, stale_mail, stale_flags))
 
+
+# ------------------------------------------------------------------------------------ pacer clear
+print('-- a fresh PACER clear releases Broward / Palm Beach (2026-09-28)')
+d = isolate('pacer')
+BL.PACER_ROOT = str(d)
+now = time.time()
+cl_clear = {'verdict': 'clear', 'why': 'no open federal bankruptcy matched this owner', 'searched': True,
+            'ok_check': True, 'err': '', 't': now, 'cases': [], 'src': 'courtlistener'}
+cl_stale = dict(cl_clear, t=now - 400 * 86400)
+cl_exact = {'verdict': 'active', 'why': 'open federal bankruptcy 26-55601 (exact match)', 'searched': True,
+            'ok_check': True, 'err': '', 't': now, 'src': 'courtlistener',
+            'cases': [{'no': '26-55601', 'court': 'flsb', 'open': True, 'match': 'exact', 'filed': '2026-09-01'}]}
+cl_possible = {'verdict': 'possible', 'why': 'possible bankruptcy: 26-55602', 'searched': True,
+               'ok_check': True, 'err': '', 't': now, 'src': 'courtlistener',
+               'cases': [{'no': '26-55602', 'court': 'flsb', 'open': True, 'match': 'plausible', 'filed': '2026-09-02'}]}
+BL._dump(BL.cache_path(), {
+    'CACE-99-556001': cl_clear, 'CACE-99-556002': cl_clear, 'CACE-99-556003': cl_exact,
+    'CACE-99-556004': cl_possible, 'CACE-99-556005': cl_stale, 'CACE-99-556006': cl_clear,
+    'CACE-99-556008': cl_clear,
+})
+pc_clear = {'verdict': 'clear', 'a': False, 'env': 'prod', 't': now - 3600, 'q': '2026-09-28', 'src': 'pacer_pcl',
+            'region': 'national', 'lookback_from': '2018-09-28'}
+(d / SG.PACER_NAME).write_text(json.dumps({
+    'CACE-99-556001': pc_clear,                                             # CL clear + PACER clear
+    'CACE-99-556003': pc_clear,                                             # CL exact match wins
+    'CACE-99-556004': pc_clear,                                             # CL possible match wins
+    'CACE-99-556005': pc_clear,                                             # CL stale, PACER completes
+    'CACE-99-556006': dict(pc_clear, t=now - 40 * 86400),                   # PACER clear too old
+    'CACE-99-556007': pc_clear,                                             # no CL entry at all
+    'CACE-99-556008': dict(pc_clear, env='qa'),                             # QA data never clears
+}), encoding='utf-8')
+sh = str(d / 'sale_history_cache.json')
+BL._HOLD_MEMO = None
+v = {k: SG.check(k, sh) for k in ('CACE-99-556001', 'CACE-99-556002', 'CACE-99-556003', 'CACE-99-556004',
+                                  'CACE-99-556005', 'CACE-99-556006', 'CACE-99-556007', 'CACE-99-556008')}
+dial = {k: BL.federal_hold(k) for k in v}
+flg = BL.flags_for_cases(list(v))
+def released(k):
+    return v[k]['ok'] is True and dial[k] == (False, '') and k not in flg
+def held(k):
+    return v[k]['ok'] is False and dial[k][0] is True and flg.get(k, {}).get('hold') is True
+check('CourtListener clear + fresh PACER clear -> released on the send gate, Call Mode and the board',
+      released('CACE-99-556001'), (v['CACE-99-556001'], dial['CACE-99-556001'], flg.get('CACE-99-556001')))
+check('CourtListener clear with no PACER entry stays clear_unconfirmed and held',
+      held('CACE-99-556002') and v['CACE-99-556002']['code'] == 'clear_unconfirmed', v['CACE-99-556002'])
+check('a CourtListener exact match holds even with a PACER clear',
+      held('CACE-99-556003') and v['CACE-99-556003']['code'] == SG.STAY_ACTIVE
+      and flg['CACE-99-556003'].get('hard') is True, v['CACE-99-556003'])
+check('a CourtListener possible match holds even with a PACER clear',
+      held('CACE-99-556004'), v['CACE-99-556004'])
+check('a stale CourtListener clear is completed by a fresh PACER clear',
+      released('CACE-99-556005'), (v['CACE-99-556005'], dial['CACE-99-556005']))
+check('a PACER clear older than the max age does not release',
+      held('CACE-99-556006'), v['CACE-99-556006'])
+check('a fresh PACER clear releases a lead CourtListener has not searched',
+      released('CACE-99-556007'), (v['CACE-99-556007'], dial['CACE-99-556007'], flg.get('CACE-99-556007')))
+check('a QA-environment PACER clear never releases', held('CACE-99-556008'), v['CACE-99-556008'])
+(d / SG.HITS_NAME).write_text(json.dumps({'CACE-99-556001': {
+    'env': 'prod', 't': now, 'seen_t': now, 'cases': [{'no': '26-55700', 'filed': '2026-09-27'}]}}),
+    encoding='utf-8')
+BL._HOLD_MEMO = None
+check('a new-filer hit pulled after the PACER clear holds again',
+      BL.pacer_confirmed('CACE-99-556001', now) is False and BL.federal_hold('CACE-99-556001')[0] is True
+      and SG.check('CACE-99-556001', sh)['ok'] is False)
+(d / SG.HITS_NAME).unlink()
+for _label, _ent in (('a --region fl PACER clear', dict(pc_clear, region='fl')),
+                     ('a short-lookback PACER clear', dict(pc_clear, lookback_from='2024-09-28')),
+                     ('a PACER clear with no recorded scope', {k: w for k, w in pc_clear.items()
+                                                              if k not in ('region', 'lookback_from')})):
+    (d / SG.PACER_NAME).write_text(json.dumps({'CACE-99-556007': _ent}), encoding='utf-8')
+    BL._HOLD_MEMO = None
+    check(_label + ' does not release',
+          BL.pacer_confirmed('CACE-99-556007', now) is False and BL.federal_hold('CACE-99-556007')[0] is True
+          and SG.check('CACE-99-556007', sh)['ok'] is False)
+import pacer_stay as _PS
+check('stay_gate and pacer_stay agree on the full PACER lookback', SG.PACER_LOOKBACK_YEARS == _PS.LOOKBACK_YEARS,
+      (SG.PACER_LOOKBACK_YEARS, _PS.LOOKBACK_YEARS))
+(d / SG.PACER_NAME).write_text('{not json', encoding='utf-8')
+BL._HOLD_MEMO = None
+check('an unreadable PACER cache releases nothing',
+      BL.pacer_confirmed('CACE-99-556001', now) is False and BL.federal_hold('CACE-99-556001')[0] is True)
+(d / SG.NEVER_CONTACT_NAME).write_text(json.dumps(['2026A00258']), encoding='utf-8')
+(d / SG.PACER_NAME).write_text(json.dumps({'2026A00258': pc_clear, 'CACE-99-556009': pc_clear}), encoding='utf-8')
+_ncp = SG._never_contact_path
+SG._never_contact_path = lambda: str(d / SG.NEVER_CONTACT_NAME)   # paths.DEALFLOW_DIR is fixed at import
+try:
+    check('a never-contact case is never released by PACER',
+          BL.pacer_confirmed('2026A00258', now) is False and BL.pacer_confirmed('CACE-99-556009', now) is True)
+finally:
+    SG._never_contact_path = _ncp
+BL.PACER_ROOT = None
+
 # ------------------------------------------------------------------ 2026-09-29: failures leave a record
 print('-- a failed nightly run records why and its own counters')
 d = isolate('netfail')
