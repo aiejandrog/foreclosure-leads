@@ -4369,7 +4369,7 @@ function seatMenu(){
    before e.d existed, show as a quiet "older errors" link that still opens the same log. */
 function errChip(){
   var log=[]; try{ log=JSON.parse(localStorage.getItem('fcErrLog')||'[]'); }catch(e){}
-  if(!log.length) return '';
+  if(!Array.isArray(log) || !log.length) return '';
   var td=today(), n=0;
   for(var k=0;k<log.length;k++){ if(log[k] && log[k].d===td) n++; }
   var old=log.length-n;
@@ -4379,6 +4379,7 @@ function errChip(){
 }
 function showErrs(){
   var log=[]; try{ log=JSON.parse(localStorage.getItem('fcErrLog')||'[]'); }catch(e){}
+  if(!Array.isArray(log)) log=[];
   // alert() so it can be screenshotted whole, then offer to clear
   var td=today();
   alert(log.map(function(e){ return (e.d===td?'TODAY ':'')+e.t+' ['+e.w+'] '+e.m+'\n'+e.s; }).join('\n\n') || 'empty');
