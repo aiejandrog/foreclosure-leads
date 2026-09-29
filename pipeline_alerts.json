@@ -1,19 +1,37 @@
 {
  "alerts": [
   {
-   "at": "2026-09-28T21:05:24-04:00",
+   "at": "2026-09-29T09:23:01-04:00",
+   "key": "bk-lookup",
+   "severity": "fail",
+   "text": "Federal bankruptcy pull failed. Non-Miami leads stay held."
+  },
+  {
+   "at": "2026-09-29T09:23:01-04:00",
+   "key": "captcha-balance",
+   "severity": "warn",
+   "text": "2Captcha balance $0.71, warn under $1.00."
+  },
+  {
+   "at": "2026-09-29T09:23:01-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-09-28T21:05:24-04:00",
+   "at": "2026-09-29T09:23:01-04:00",
+   "key": "morning-sends",
+   "severity": "fail",
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
+  },
+  {
+   "at": "2026-09-29T09:23:01-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
-   "text": "Tracerfy balance 831 credits, warn under 1500."
+   "text": "Tracerfy balance 456 credits, warn under 1500."
   }
  ],
- "published_at": "2026-09-28T21:05:24-04:00",
+ "published_at": "2026-09-29T09:23:01-04:00",
  "signals": {
   "bk_lookup": {
    "errors": 0,
@@ -21,8 +39,8 @@
    "holds": 83,
    "leads_checked": 31,
    "provider": "courtlistener",
-   "pull_age_h": 12.51,
-   "pull_ok": true,
+   "pull_age_h": 0.55,
+   "pull_ok": false,
    "readable": true,
    "requests_used": 84,
    "truncated": 1
@@ -63,7 +81,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 1.18872
+   "usd": 0.70588
   },
   "clerk_bk": {
    "readable": false
@@ -79,31 +97,31 @@
     10,
     10
    ],
-   "date": "2026-09-28",
-   "eligible": 78,
+   "date": "2026-09-29",
+   "eligible": 69,
    "judged": true,
    "readable": true,
    "scheduled": true,
-   "sent": 6
+   "sent": 0
   },
   "optout_ledger": {
    "readable": true,
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-09-28",
+   "date": "2026-09-29",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1790594102,
+   "started_at": 1790680502,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-09",
    "readable": true,
-   "spent": 3.0765
+   "spent": 4.1175
   },
   "readiness": {
    "at": "2026-09-28T21:05:24-04:00",
@@ -136,7 +154,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 831
+   "credits": 456
   }
  },
  "version": 1
