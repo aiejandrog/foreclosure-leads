@@ -33,11 +33,40 @@ CO = re.compile(r'\b(LLC|L\.L\.C|CORP|INC|TRUST|COMPANY|HOLDINGS|LP|LTD|PROPERT|
 BASE = 'https://search.sunbiz.org'
 
 
-def _curl(u):
-    r = subprocess.run([CURL, '-s', '-L', '--max-time', '25', '-A', UA,
-                        '-H', 'Accept: text/html,application/xhtml+xml', u],
-                       capture_output=True, text=True, encoding='utf-8', errors='replace')
-    return r.stdout or ''
+class SunbizBlocked(RuntimeError):
+    """Sunbiz did not answer with a Sunbiz page: empty body, or a Cloudflare challenge.
+
+    Added 2026-09-29. Sunbiz started serving a ~6KB "Just a moment... Enable JavaScript and cookies
+    to continue" page to every curl request. _curl returned that page, _lookup found no result
+    links in it and said not_found, and entity_check reported BISCAYNE SOLUTIONS GROUP LLC (Active,
+    L26000444293) as NOT_FOUND -- exit 1, "the guard working", with a promise that the next daily
+    run would lift it. No run could. A blocked fetch must be a failure, never an answer."""
+
+
+_CHALLENGE = re.compile(r'Just a moment|cf-chl|challenge-platform|Enable JavaScript and cookies', re.I)
+STATUS = os.path.join(HERE, 'llc_officers_status.json')     # counts only; healthcheck reads it
+
+
+def _is_blocked(html):
+    return not (html or '').strip() or bool(_CHALLENGE.search(html))
+
+
+def _curl(u, tries=3, pause=3):
+    """GET a Sunbiz page. Raises SunbizBlocked rather than hand back an empty or challenge body.
+    Retries a couple of times first: broward_liens saw Cloudflare challenge per request at a
+    coin-flip rate, and a retry rode through there."""
+    out = ''
+    for i in range(tries):
+        r = subprocess.run([CURL, '-s', '-L', '--max-time', '25', '-A', UA,
+                            '-H', 'Accept: text/html,application/xhtml+xml', u],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace')
+        out = r.stdout or ''
+        if not _is_blocked(out):
+            return out
+        if i < tries - 1:
+            time.sleep(pause)
+    raise SunbizBlocked('%s after %d tries (%d bytes)' % (
+        'Cloudflare challenge page' if out.strip() else 'empty response', tries, len(out)))
 
 
 SUFFIX_ONLY = re.compile(r'^(?:LLC|L\.?L\.?C\.?|INC|CORP|LP|LTD|TRUST|CO)\.?,?$', re.I)
@@ -139,18 +168,22 @@ def _lookup(entity, fetch=None):
     be identical, or identical once the corporate suffix is dropped (LLC vs L.L.C. vs INC drift).
     Anything else -> not_found, and the UI says so.
 
-    `fetch` replaces _curl. _curl returns '' when Sunbiz is unreachable, which reads here as
-    not_found; a caller that must tell the two apart passes a fetch that raises instead."""
+    `fetch` replaces _curl. Both raise when Sunbiz does not answer (SunbizBlocked from _curl).
+    A search page with NO result rows raises too: Sunbiz lists alphabetically FROM the term, so a
+    real answer always carries rows, and a page without any is a block page this code does not
+    recognise yet. Reading it as not_found is how the 2026-09-29 false NOT_FOUND happened."""
     fetch = fetch or _curl
     h = fetch(BASE + '/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&searchTerm='
               + urllib.parse.quote(entity))
+    if _is_blocked(h):
+        raise SunbizBlocked('search returned a challenge or empty page')
     links = re.findall(r'href="(/Inquiry/CorporationSearch/SearchResultDetail[^"]+)"[^>]*>([^<]+)</a>', h)
+    if not links:
+        raise SunbizBlocked('search page carried no result rows (%d bytes)' % len(h))
     # Sunbiz returns HTML-escaped names ("ANGEL&#39;S NEWS LLC"). Unescape BEFORE any comparison:
     # the raw entity's digits ('39') otherwise read as a sibling-numbering token and blocked a
     # legitimate apostrophe match.
     links = [(href, _html.unescape(txt)) for href, txt in links]
-    if not links:
-        return {'not_found': True, 'officers': [], 'ra': '', 'ra_addr': '', 'status': '', 'exact': False}
     tgt, tgt_ns = _norm(entity), _strip_suffix(entity)
     hit = ([l for l in links if _norm(l[1]) == tgt]
            or [l for l in links if tgt_ns and _strip_suffix(l[1]) == tgt_ns])
@@ -170,7 +203,10 @@ def _lookup(entity, fetch=None):
     if not hit:
         return {'not_found': True, 'officers': [], 'ra': '', 'ra_addr': '', 'status': '',
                 'exact': False, 'near': [l[1].strip() for l in links[:3]]}
-    d = _parse_detail(fetch(BASE + hit[0][0].replace('&amp;', '&')))
+    dh = fetch(BASE + hit[0][0].replace('&amp;', '&'))
+    if _is_blocked(dh):
+        raise SunbizBlocked('detail page returned a challenge or empty page')
+    d = _parse_detail(dh)
     d['matched'] = hit[0][1].strip()
     d['exact'] = True
     d['typo'] = typo
@@ -236,6 +272,7 @@ def main():
     by_entity = {}                       # dedupe: one Sunbiz pull per entity name per run
     budget = a.limit if a.limit > 0 else 10 ** 9
     fetched = hits = 0
+    blocked = ''
     for case, owners in leads:
         if a.case and case != a.case:
             continue
@@ -249,7 +286,13 @@ def main():
         else:
             if budget <= 0:
                 break
-            d = _lookup(ent)
+            try:
+                d = _lookup(ent)
+            except SunbizBlocked as e:
+                # Stop the run. Caching this as not-found would mark the lead nf and skip it on
+                # every later run, so a block would quietly become permanent data.
+                blocked = str(e)
+                break
             fetched += 1; budget -= 1
             by_entity[ent] = d
             time.sleep(1.2)
@@ -276,7 +319,17 @@ def main():
     withppl = sum(1 for v in cache.values() if v.get('officers') or v.get('ra'))
     print(f'llc_officers: {fetched} Sunbiz lookups this run, {hits} new hits. '
           f'{withppl}/{len(cache)} cached LLC leads carry humans/RA.')
+    try:
+        json.dump({'ts': time.strftime('%Y-%m-%dT%H:%M:%S'), 'fetched': fetched, 'hits': hits,
+                   'blocked': blocked}, open(STATUS, 'w', encoding='utf-8'), indent=1)
+    except OSError:
+        pass
+    if blocked:
+        print(f'llc_officers: SUNBIZ BLOCKED ({blocked}) -- run stopped, nothing cached as not-found. '
+              f'Officer enrichment is not running until Sunbiz answers curl again.')
+        return 2
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
