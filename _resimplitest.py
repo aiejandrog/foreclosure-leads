@@ -123,11 +123,13 @@ rows = [
     mk('2099-000110-CA-01', '100 SW 10TH ST, MIAMI, FL 33130', ['3055551001'], phsrc=['ag']),  # agent number only
     mk('2099-000111-CA-01', '110 SW 11TH ST, MIAMI, FL 33130', ['3055551101'], title_status='transferred'),
     mk('2099-000112-CA-01', '120 SW 12TH ST, MIAMI, FL 33130', ['3055551201', '3055551202'], [False, True]),  # phone opt-out on its DNC number
+    mk('2099-000114-CA-01', '140 SW 14TH ST, MIAMI, FL 33130', ['3055551401', '13055551402']),  # 11-digit spelling of an opted-out number
 ]
 optouts, opt_cases, opt_emails = EX.load_suppression(
     optouts_path=(lambda p: (json.dump({'notes': {'2099-000102-CA-01': {'optout': 'stop'},
                                                   '@stop@example.com': {'optout': 'stop'},
-                                                  '#3055551202': {'optout': 'stop'}}}, open(p, 'w')), p)[1])(
+                                                  '#3055551202': {'optout': 'stop'},
+                                                  '#3055551402': {'optout': 'stop'}}}, open(p, 'w')), p)[1])(
         os.path.join(TMP, 'optouts.json')),
     notes_keys=set())
 deads = {'2099-000107-CA-01': {'status': 'Dead'}}
@@ -144,6 +146,7 @@ rec('only the clean lead is written', cases == ['2099-000101-CA-01'], cases)
 rec('case opt-out held', '2099-000102-CA-01' not in cases and s['held_optout'] >= 1)
 rec('identity (email) opt-out held', '2099-000103-CA-01' not in cases)
 rec('identity (phone) opt-out held, even on a DNC-flagged number', '2099-000112-CA-01' not in cases)
+rec('phone opt-out matches an 11-digit spelling of the same number', '2099-000114-CA-01' not in cases)
 by = s['held_call_mode_by_reason']
 rec('all-DNC lead held as no dialable phone', '2099-000104-CA-01' not in cases and by.get('no_dialable_phone') == 2, by)  # 104 all-DNC, 110 agent-only
 rec('held_call_mode broken out by reason, and the reasons add up',
@@ -175,7 +178,7 @@ p = os.path.join(TMP, 'gated.csv')
 EX.write_csv(leads, EX.load_map(), p)
 blob = open(p, encoding='utf-8').read()
 leak = [x for x in ('3055550102', '3055550201', '3055550301', 'stop@example.com', '3055550401',
-                    '3055550501', '3055550601', '3055550701', 'dead@example.com', '3055551201') if x in blob]
+                    '3055550501', '3055550601', '3055550701', 'dead@example.com', '3055551201', '3055551401') if x in blob]
 rec('no held phone or email appears anywhere in the CSV', not leak, leak)
 
 # --county is checked against the counties actually on the board

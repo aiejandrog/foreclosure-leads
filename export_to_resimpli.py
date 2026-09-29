@@ -152,7 +152,12 @@ def load_suppression(optouts_path=OPTOUTS_FILE, notes_keys=None):
             emails.add(k[1:].strip().lower())
             optouts['@' + k[1:].strip().lower()] = {'optout': 1}
         elif k[0] == '#':
-            optouts['#' + re.sub(r'\D', '', k[1:])] = {'optout': 1}
+            d = re.sub(r'\D', '', k[1:])
+            optouts['#' + d] = {'optout': 1}
+            # '13055550101' and '3055550101' are one number (resimpli_sync.norm_number); key both
+            # spellings so an 11-digit ledger entry still matches a 10-digit phone and back.
+            if RL.digits10(d):
+                optouts['#' + RL.digits10(d)] = {'optout': 1}
         elif '@' in k:                                # a bare address in a list-shaped ledger
             emails.add(k.lower())
             optouts['@' + k.lower()] = {'optout': 1}
@@ -204,8 +209,10 @@ def _person_optout_fn(optouts):
                 return True
         for p in (row.get('phones') or []):
             p = re.sub(r'\D', '', str(p or ''))
-            if p and (('#' + p) in ident or (ak and ('#' + ak(p)) in ident)):
-                return True
+            # both spellings: a cache can hold '13055550101' (skiptrace.py keeps what it was sent)
+            for q in {p, RL.digits10(p)} - {''}:
+                if ('#' + q) in ident or (ak and ('#' + ak(q)) in ident):
+                    return True
         return False
     return test
 
