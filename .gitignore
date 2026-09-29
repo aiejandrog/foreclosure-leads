@@ -24,6 +24,8 @@ _*.py
 !_moneytest.py
 !_coveragetest.py
 !_presenttitletest.py
+# _legalmatchtest: index-legal parsing and deed-to-parcel matching on synthetic Miami index rows.
+!_legalmatchtest.py
 !_sunbizblocktest.py
 !_rankingtest.py
 # _salehistlptest: sale_history.py reads the Miami-Dade lis pendens lane too (never-read first) and
