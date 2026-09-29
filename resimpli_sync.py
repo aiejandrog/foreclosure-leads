@@ -34,20 +34,26 @@ WHAT GETS IN
     numbers (whitepages_lookup.json) and cuts the row again, and the person-level opt-out checks read
     the cut row. So the numbers this tool adds must never push one the row already shows off it, a
     Whitepages number included: an entry is filled up to MAX_PHONES minus the numbers it already holds
-    minus the Whitepages numbers it does not. Clean mobiles fill the room first; what does not fit is
-    counted (numbers_over_cap) and not added. Every Whitepages number of the lead counts, including
-    the person-search records the bake would drop, so this can only leave more room than needed.
+    minus the Whitepages numbers it does not. Callable mobiles fill the room first, then the other
+    callable numbers, then the ones REsimpli flags DNC; what does not fit is counted (numbers_over_cap)
+    and not added. Every Whitepages number of the lead counts, including the person-search records the
+    bake would drop, so this can only leave more room than needed.
   * Rows with no matching lead are counted, never added as leads. They have no case number, so no
     bankruptcy / stay check can run on them; a new lead source is a product decision.
   * Numbers are ADDED. An existing number, entry, or provider is never removed or replaced, and a
     number already in the cache is recognised however it is written ('13055550101' = '3055550101').
-    A number REsimpli flags DNC is stored next to a callable number from the same export, or on a
-    lead whose entry already has phones. On a lead with none, on its own, it would give a phone list
-    of nothing dialable, which stops skiptrace.py from ever tracing it (it traces cases that have no
-    entry, and retries a no-hit entry only while its phones are empty). On a lead that already has
-    phones it costs nothing, and the bake then shows that number DNC where it would otherwise append
-    a Whitepages copy of it as clean. A lead that gets its first number here is also not traced by
-    Tracerfy afterwards, whatever that number's type.
+    A number REsimpli flags DNC is added last (settle()): after every callable number of the run has
+    been placed, only to a lead that has phones by then, and only into the room that is left. Which
+    numbers a lead ends up with therefore does not depend on the order the rows or the files come in,
+    and a flagged number never takes the room a callable one wants. On a lead with no phone, a flagged
+    number on its own would give a phone list of nothing dialable, which stops skiptrace.py from ever
+    tracing it (it traces cases that have no entry, and retries a no-hit entry only while its phones
+    are empty), so that lead gets no entry (leads_dnc_only_skipped; the flag is still recorded in
+    dnc_scrub.json). On a lead that has phones the number is stored as DNC, and the bake then shows it
+    DNC where it would otherwise append a Whitepages copy of it as clean; a number Whitepages also
+    lists for the lead takes the place that copy would have had, so it needs a free place in the entry
+    and no other on the row. A lead that gets its first number here is also not traced by Tracerfy
+    afterwards, whatever that number's type.
   * Emails are not merged: they are unverified and would feed first-touch email.
 
 DNC IS ABOUT THE NUMBER, AND IT ONLY TIGHTENS
@@ -104,8 +110,11 @@ csv cannot parse. Found files are copied into DEALFLOW_DIR/imports/resimpli/ (ou
 outside OneDrive) after the data is written; the originals stay put.
 
 OUTPUT
-Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts plus the case numbers
-of any unconfirmed leads (no names, no phone numbers). Exit 0 = done (or nothing to do), 1 = no
+Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts (per file: what that file
+added that is callable; the flagged numbers are placed after every file has been read, so they are in
+the totals only) plus the case numbers of any unconfirmed leads (unconfirmed_cases) and of the leads a
+person-level hold kept a row off (opt_person_cases), and how many other exports a one-file run did not
+read (unread_files). No names, no phone numbers. Exit 0 = done (or nothing to do), 1 = no
 usable export, 2 = refused (an export, the cache, whitepages_lookup.json, the board leads, or a torn
 dnc_scrub.json with numbers to flag; nothing written; a command-line usage error also exits 2), 3 =
 the cache or dnc_scrub.json changed while this ran, or a write failed, 4 = an error nothing
@@ -141,11 +150,16 @@ KNOWN LIMITS (reported here, not fixed)
     touch what Tracerfy already cached for that person on her own lead. If `opt` means "do not contact
     this person", that is a larger gap and a policy call for Alejandro.
   * The person-level hold is rebuilt on every run from the exports the run reads (the ones passed plus
-    the copies in DEALFLOW_DIR/imports/resimpli/). prep_desktop.py and make_transfer.py carry the phone
-    cache and dnc_scrub.json but not that folder, and dnc_scrub.json holds the flagged numbers, not the
-    people, so a machine set up from a transfer holds only the exports it has until the earlier ones
-    are copied there. opt_people_held says how many people the hold was built from, and the NOTE about
-    unconfirmed numbers fires when earlier exports are missing.
+    the copies in DEALFLOW_DIR/imports/resimpli/). Neither prep_desktop.py (it carries the gitignored
+    files at the repo root: the phone cache, dnc_scrub.json) nor make_transfer.py (the phone cache; its
+    lists do not name dnc_scrub.json) carries that folder, and dnc_scrub.json holds the flagged numbers,
+    not the people, so a machine set up from a transfer holds only the exports it has until the earlier
+    ones are copied there. opt_people_held says how many people the hold was built from. The NOTE about
+    unconfirmed numbers fires only when the cache holds numbers those earlier exports attached.
+  * A run that is killed between writing its temp files and replacing the cache or the sidecar leaves
+    <file>.resimpli.<random>.tmp behind. They are gitignored and no later run removes them: delete them
+    by hand. Two runs at the same time are caught only by the changed-file check, which can miss two
+    that finish together (the later replace wins and both exit 0); a lock file would close that.
   * The bake appends a lead's Whitepages numbers with phdnc False and applies dnc_scrub.json to cached
     skip-trace phones only, so a number REsimpli flags that Whitepages also lists on a lead whose entry
     lacks it reaches the baked row as clean. flagged_also_whitepages counts those numbers; the seam is
@@ -225,6 +239,7 @@ COUNT_KEYS = ('rows', 'rows_with_phone', 'unmatched_rows_with_phone', 'unit_mism
               'leads_new_phone', 'leads_dnc_only_skipped', 'entries_unusable', 'numbers_over_cap',
               'new_numbers', 'new_numbers_dnc', 'new_mobile_clean', 'numbers_unreadable',
               'flags_unexpected')
+SETTLE_KEYS = ('new_numbers_dnc', 'leads_dnc_only_skipped')     # counted by settle() once the run is read, not per file
 GLOBAL_KEYS = ('dnc_flagged_numbers', 'dnc_tightened', 'dnc_sidecar_added', 'dnc_sidecar_tightened',
                'dnc_sidecar_marked', 'opt_people_held', 'flagged_also_whitepages', 'cache_resimpli_numbers',
                'resimpli_confirmed', 'resimpli_unconfirmed', 'resimpli_unconfirmed_leads')
@@ -383,12 +398,14 @@ def norm_number(v):
 
 def parse_number(v):
     """The 10-digit US number in one CSV cell, else ''. '3055550101.0' (a column Excel turned into
-    a float) is read; '3.05555E+09' (precision already lost), an extension, or a number that cannot
-    be a US line is not guessed at: the caller counts it."""
+    a float) is read. Anything that is not digits and phone punctuation (spaces, + ( ) - .) is not
+    guessed at, and the caller counts it: '3.05555E+09' (precision already lost), an extension, a
+    note, a letter, another script's digit (stripped, it would leave a different number that still
+    has ten digits), and a number that cannot be a US line."""
     s = unicodedata.normalize('NFKC', str(v or '')).strip()
     if re.fullmatch(r'[0-9]+\.0+', s):
         s = s.split('.')[0]
-    if re.fullmatch(r'[0-9](\.[0-9]+)?[eE][+-]?[0-9]+', s):
+    if re.search(r'[^0-9 ()+.\-]', s):
         return ''
     d = norm_number(s)
     return d if re.fullmatch(r'[2-9][0-9]{2}[2-9][0-9]{6}', d) else ''
@@ -626,7 +643,8 @@ def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=No
     flagged:  numbers to treat as DNC wherever they appear (flagged_numbers over every export). The
               numbers `results` already holds as DNC, on any lead, are added to it here.
     pairs:    optional set collecting every (case, number) this run attributes to a lead (audit()).
-    state:    optional dict shared across files, so a lead two files both match counts once.
+    state:    optional dict shared across files, so a lead two files both match counts once, and the
+              numbers REsimpli flags DNC (state['dnc_held'], case -> numbers) wait there for settle().
     registry: numbers dnc_scrub.json holds as registry-listed (registry_digits): DNC on the lead they
               are added to, because that is what the bake will make them, whatever REsimpli says.
     wp:       whitepages_lookup.json, {case: record}: the numbers the bake will append to a lead's
@@ -637,8 +655,8 @@ def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=No
     flagged = set(flagged) | cached_dnc(results) | set(registry)
     st = state if state is not None else {}
     touched = st.setdefault('touched', set())
-    dnc_only = st.setdefault('dnc_only', set())
     held_cases = st.setdefault('opt_person_cases', set())
+    dnc_held = st.setdefault('dnc_held', {})
     slots = slots_of(rows)
     n = dict.fromkeys(COUNT_KEYS, 0)
     n['rows'] = len(rows)
@@ -715,30 +733,25 @@ def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=No
                 if c['number'] in have or c['number'] in seen:
                     continue
                 seen.add(c['number'])
-                added.append({'number': c['number'], 'type': c['type'], 'carrier': '', 'dnc': c['dnc'],
-                              'src': 'resimpli'})
+                p = {'number': c['number'], 'type': c['type'], 'carrier': '', 'dnc': c['dnc'], 'src': 'resimpli'}
+                # A number REsimpli flags DNC is not added here. It is set aside for settle(), which places
+                # it after every callable number of the run: a flagged number never takes the room a callable
+                # one wants, and which numbers a lead ends up with does not depend on the order the rows and
+                # the files come in.
+                (dnc_held.setdefault(case, []) if c['dnc'] else added).append(p)
             # The board bake sorts a lead's skip-trace numbers (clean, mobile first), cuts them to
             # MAX_PHONES, appends the lead's Whitepages numbers, and cuts the row again. The person-level
             # opt-out checks read that cut row, so a number this run adds must never push one the row
             # already shows off it, a Whitepages number included: the entry is filled up to what is left
             # of MAX_PHONES after the cache's own numbers and the Whitepages numbers it does not hold,
-            # and no further. Clean mobiles first, DNC numbers last.
-            added.sort(key=lambda p: (p['dnc'], p['type'] != 'Mobile'))
+            # and no further. Mobiles first.
+            added.sort(key=lambda p: p['type'] != 'Mobile')
             wp_extra = len(wp_numbers((wp or {}).get(case)) - have)
             room = max(0, PS.MAX_PHONES - len((ent or {}).get('phones') or []) - wp_extra)
             if len(added) > room:
                 n['numbers_over_cap'] += len(added) - room
                 added = added[:room]
             if not added:
-                continue
-            if all(p['dnc'] for p in added) and not had:
-                # Nothing dialable to add, and nothing on the lead yet. The flag is still recorded
-                # (tighten + dnc_scrub.json); the lead gets no entry and no phones, so skiptrace.py can
-                # still trace it. A lead that already has phones takes the number as DNC: that costs it
-                # nothing, and the bake then shows it DNC where it would append a Whitepages copy as clean.
-                if case not in dnc_only:
-                    dnc_only.add(case)
-                    n['leads_dnc_only_skipped'] += 1
                 continue
             if ent is None:
                 ent = {'name': (r.get('owners') or r.get('owner') or '').split(';')[0].strip(),
@@ -754,9 +767,49 @@ def merge(rows, idx, results, case_of, addr_of, today=None, flagged=(), pairs=No
             ent['phones'].extend(added)
             ent['resimpli'] = today
             n['new_numbers'] += len(added)
-            n['new_numbers_dnc'] += sum(1 for p in added if p['dnc'])
-            n['new_mobile_clean'] += sum(1 for p in added if not p['dnc'] and p['type'] == 'Mobile')
+            n['new_mobile_clean'] += sum(1 for p in added if p['type'] == 'Mobile')
     return n
+
+
+def settle(results, state, wp=None, today=None):
+    """Add the DNC-flagged numbers merge() set aside (state['dnc_held']), once every export has been read.
+
+    They go after every callable number of the run, so a flagged number never takes the room a callable
+    one wants, and in a fixed order (mobiles first, then by number), so the order the rows and the
+    files come in decides nothing. A lead that has phones by now takes them, within what is left of
+    MAX_PHONES: the bake shows a stored number DNC where it would otherwise append a Whitepages copy of
+    it as clean. A number Whitepages also lists for the lead takes the place the Whitepages copy would
+    have had, so it needs a free place in the entry, not another one on the row. A lead with nothing
+    dialable gets nothing (the flag is in dnc_scrub.json and skiptrace.py can still trace it).
+    -> the counts the totals take from this step."""
+    today = today or datetime.date.today().isoformat()
+    out = dict.fromkeys(('new_numbers', 'numbers_over_cap') + SETTLE_KEYS, 0)
+    for case, held in state.get('dnc_held', {}).items():
+        ent = results.get(case)
+        if not phones_of(ent):
+            out['leads_dnc_only_skipped'] += 1
+            continue
+        have = {norm_number(p.get('number')) for p in phones_of(ent)}
+        wp_left = wp_numbers((wp or {}).get(case)) - have           # what the bake would append after the entry
+        pending, seen = [], set()
+        for p in sorted(held, key=lambda p: (p['type'] != 'Mobile', p['number'], p['type'])):
+            if p['number'] not in have and p['number'] not in seen:
+                seen.add(p['number'])
+                pending.append(p)
+        taken = 0
+        for p in pending:
+            room = PS.MAX_PHONES - len(ent['phones']) - len(wp_left)
+            if room + (p['number'] in wp_left) < 1:
+                out['numbers_over_cap'] += 1
+                continue
+            ent['phones'].append(p)
+            wp_left.discard(p['number'])
+            taken += 1
+        if taken:
+            ent['resimpli'] = today
+            out['new_numbers'] += taken
+            out['new_numbers_dnc'] += taken
+    return out
 
 
 def tighten(results, flagged):
@@ -895,8 +948,9 @@ def read_export(path):
         raise SyncError('%s has %d kind%s of value in its `opt` column that this tool cannot read as yes or no '
                         '(%s%s). Nothing was read: a guess would either opt out the whole list or let an opt-out '
                         'through. If REsimpli really writes that word, tell Claude and it will be added. To go on '
-                        'now, change those cells to Yes (opted out) or No in a copy of the file and run that copy; '
-                        'if the cells look like a corrupt download, download the export from REsimpli again.'
+                        'now, change those cells to Yes (opted out) or No in a copy of the file (save it as CSV UTF-8) and '
+                        'run that copy, then delete the original; if the cells look like a corrupt download, download '
+                        'the export from REsimpli again.'
                         % (name, len(odd), '' if len(odd) == 1 else 's', shown, ', ...' if len(odd) > 3 else ''))
     return rows
 
@@ -1044,10 +1098,18 @@ def main(argv=None):
         if err:
             if os.path.abspath(f) in named or not err.skippable:    # a file named on the command line, or one that
                 print('REFUSED:', err)                              # is an export we cannot read in full
-                if os.path.abspath(f) not in named:
-                    print('That file is in %s. Its DNC flags would be missing from the merge, so nothing was read '
-                          'further. Move or delete that file (or download it again from REsimpli), then run again.'
-                          % os.path.dirname(os.path.abspath(f)))
+                folder = os.path.dirname(os.path.abspath(f))
+                if folder == os.path.abspath(import_dir):
+                    print('That file is in %s, where this tool keeps a copy of every export it has read, and it was '
+                          'changed after it was kept. Its opt-outs and DNC flags would be missing from the merge, so '
+                          'nothing was read further. Deleting it forgets them. Put the original export back over it '
+                          '(download it from REsimpli again if you no longer have it), then run again.' % folder)
+                elif os.path.abspath(f) not in named:
+                    print('That file is in %s. If it is a REsimpli export, its opt-outs and DNC flags would be missing '
+                          'from the merge, so nothing was read further. Move or delete that file, then run again (a '
+                          'real export: download it from REsimpli again; something else, such as another vendor\'s '
+                          'skip-trace file or a list of ours: rename it so it no longer starts with SkipTrace_).'
+                          % folder)
                 return 2
             print('SKIPPED:', err)          # a stray SkipTrace_*.csv must not block the real exports
             skipped.append(os.path.basename(f))
@@ -1084,22 +1146,37 @@ def main(argv=None):
     registry = registry_digits(side_cur)
     wp_all = set().union(*(wp_numbers(rec) for rec in wp.values()))
     print('opt-out hold: %d people, from %d exports (%d files found)' % (len(opt_people), len(exports), len(files)))
+    unread = 0                  # exports waiting in Downloads / Desktop that this run did not read (naming a file reads
+    for f in discover(import_dir):                                  # that file and the kept copies, nothing else)
+        try:
+            unread += sha256(f) not in seen
+        except OSError:
+            unread += 1
+    if unread:
+        print('NOTE: %d other SkipTrace_*.csv file%s in Downloads / Desktop %s not read: naming a file reads that '
+              'file and the copies kept in %s, nothing else. An opt-out or DNC flag in %s is not in force in this '
+              'run. Run without a path to read every export.'
+              % (unread, '' if unread == 1 else 's', 'was' if unread == 1 else 'were', import_dir,
+                 'it' if unread == 1 else 'them'))
 
     status = {'ts': datetime.datetime.now().isoformat(timespec='seconds'), 'dry_run': a.dry_run,
               'board_leads_indexed': sum(len(v) for v in idx.values()), 'whitepages_cases': len(wp),
-              'skipped_files': skipped, 'files': []}
+              'unread_files': unread, 'skipped_files': skipped, 'files': []}
     total = dict.fromkeys(COUNT_KEYS, 0)
     state, pairs = {}, set()
     for f, h, rows in exports:
         n = merge(rows, idx, results, S._case, S._propaddr, today, flagged, pairs, state, registry, wp,
                   opt_people)
-        status['files'].append({'file': os.path.basename(f), 'sha256': h[:16], **n})
+        status['files'].append({'file': os.path.basename(f), 'sha256': h[:16],
+                                **{k: v for k, v in n.items() if k not in SETTLE_KEYS}})
         for k in COUNT_KEYS:
             total[k] += n[k]
-        print('%s: %d rows, %d with phones, %d leads matched, %d new numbers (%d DNC-flagged), '
-              '%d leads had no phone'
+        print('%s: %d rows, %d with phones, %d leads matched, %d new callable numbers, %d leads had no phone'
               % (os.path.basename(f), n['rows'], n['rows_with_phone'], n['leads_matched'],
-                 n['new_numbers'], n['new_numbers_dnc'], n['leads_new_phone']))
+                 n['new_numbers'], n['leads_new_phone']))
+    settled = settle(results, state, wp, today)
+    for k in ('new_numbers', 'numbers_over_cap') + SETTLE_KEYS:
+        total[k] += settled[k]                 # the flagged numbers, placed after every callable one
     tightened = tighten(results, flagged)
     aud, bad_cases = audit(results, pairs)
     side_doc, side_added, side_tight, side_marked = None, 0, 0, 0

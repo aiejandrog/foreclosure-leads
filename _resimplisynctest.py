@@ -49,10 +49,13 @@ os.makedirs(DL)
 import resimpli_sync as RS
 import skiptrace as S
 
-ok, bad = [], []
+ok, bad, skips = [], [], []
 def rec(n, cond, d=''):
     (ok if cond else bad).append(n)
     print(('  PASS ' if cond else '  FAIL ') + n + ((' | ' + str(d)) if d else ''))
+def skip(n):
+    skips.append(n)
+    print('  SKIP ' + n)
 
 TODAY = datetime.date.today()
 YESTERDAY = TODAY - datetime.timedelta(days=1)
@@ -470,7 +473,7 @@ try:
     write_csv(os.path.join(DL, 'SkipTrace_2.csv'), ROWS[:1])                            # older subset file
     write_csv(os.path.join(DL, 'SkipTrace_junk.csv'), [{'a': '1'}], header=['a'])       # not an export
     rc, out = run([])
-    d, side, st = load(RES), load(SIDE), load(STATUS)
+    d, side, st = load(RES), (load(SIDE) or {}), load(STATUS)
     t = st['total']
     rec('exit 0', rc == 0, out[-400:])
     rec('duplicate download counted once, subset file still read', len(st['files']) == 2, [f['file'] for f in st['files']])
@@ -585,7 +588,7 @@ try:
                        '9999999999': {'national_dnc': False, 'state_dnc': False, 'checked': '2026-01-01'},
                        '3055550801': {'national_dnc': False, 'state_dnc': True, 'states': ['FL'], 'checked': '2026-01-01'}})
     rc, out = run([], files={'SkipTrace_1.csv': ROWS})
-    side, t = load(SIDE), load(STATUS)['total']
+    side, t = (load(SIDE) or {}), load(STATUS)['total']
     rec('sidecar: an earlier registry miss is tightened; a registry hit (national or state) keeps its verdict and gains the '
         'REsimpli marker; strangers are untouched',
         side['3055550102'] == {'national_dnc': True, 'state_dnc': False, 'states': [], 'case': 'X',
@@ -888,7 +891,7 @@ try:
     rec('a line cut short before its `opt` cell is opted out, not read as "no": its number is flagged and not merged, '
         'and the complete line above it merges',
         rc == 0 and nums(d, 1) == ['3055550101'] and nums(d, 2) == ['3055550200'] and t['opt_rows'] == 1 and
-        '3055550201' in load(SIDE) and '3055550101' not in load(SIDE), (t, nums(d, 2), out[-200:]))
+        '3055550201' in (load(SIDE) or {}) and '3055550101' not in (load(SIDE) or {}), (t, nums(d, 2), out[-200:]))
 
     # ---------------------------------------------------------------- flags, end to end
     def flagged_row(**kw):
@@ -899,7 +902,7 @@ try:
         fresh(CACHE)
         rc, out = run([], files={'SkipTrace_1.csv': [flagged_row(**kw)]})
         rec('flag read as DNC, so the lead gets no dialable number: ' + label,
-            rc == 0 and case(1) not in load(RES) and '3055550101' in load(SIDE), out[-200:])
+            rc == 0 and case(1) not in load(RES) and '3055550101' in (load(SIDE) or {}), out[-200:])
     fresh(CACHE)
     rc, out = run([], files={'SkipTrace_1.csv': [flagged_row()]})
     rec('a number REsimpli calls clean in every column lands clean', nums(load(RES), 1) == ['3055550101'] and
@@ -918,7 +921,7 @@ try:
     t = load(STATUS)['total']
     rec('a number flagged by another row is DNC on this lead too: no entry, not even a DNC-only one, '
         'and the lead counts once however many rows say so',
-        rc == 0 and case(26) not in load(RES) and '3055552601' in load(SIDE) and t['leads_dnc_only_skipped'] == 1
+        rc == 0 and case(26) not in load(RES) and '3055552601' in (load(SIDE) or {}) and t['leads_dnc_only_skipped'] == 1
         and t['new_numbers'] == 0, (t, out[-200:]))
 
     # the other flags that make skiptrace.py skip a lead
@@ -981,7 +984,7 @@ try:
     rc, out = run([], files={'SkipTrace_1.csv': [
         row('Carl', 'Carry', '3000 Nw 30th St', '33100', g1=[M(3001)]),
         row('Cara', 'Carry', '3100 Nw 31st St', '33100', g1=[M(3101), M(3102)])]})
-    d, t, sd = load(RES), load(STATUS)['total'], load(SIDE)
+    d, t, sd = load(RES), load(STATUS)['total'], (load(SIDE) or {})
     rec('a number the registry lists is DNC on the lead it is added to whatever REsimpli says: alone it gives no entry '
         '(skiptrace can still trace the lead), beside a clean number it lands flagged, last',
         rc == 0 and case(30) not in d and t['leads_dnc_only_skipped'] == 1 and
@@ -1111,7 +1114,7 @@ try:
         with with_leads(ol):
             fresh(CACHE)
             rc, out = run([], files=files)
-            d, t, sd = load(RES), load(STATUS)['total'], load(SIDE)
+            d, t, sd = load(RES), load(STATUS)['total'], (load(SIDE) or {})
         rec('opt person, %s: the same person under another property is held and her numbers flagged; her opted-out row '
             'is held; another owner of that lead still merges' % label,
             rc == 0 and case(43) not in d and nums(d, 44) == ['3055554403'] and
@@ -1481,7 +1484,7 @@ try:
             all(CL._clean_owner(raw) == d['oname'] and CL._rec_name(raw) == d['rname'] for raw, d in DERIVED.items()),
             [(raw, CL._clean_owner(raw), CL._rec_name(raw)) for raw in DERIVED])
     else:
-        print('  SKIP the derived owner fields were not checked against county_leads (%s)' % _why)
+        skip('the derived owner fields were not checked against county_leads (%s)' % _why)
 
     dl = [lead(80 + i, '%d NW %d ST' % ((80 + i) * 100, 80 + i), raw, **d) for i, (raw, d) in enumerate(DERIVED.items())]
     dl.append(lead(86, '8600 NW 86 ST', 'PEREZ, JOSE SR', **DERIVED['PEREZ, JOSE SR']))
@@ -1518,7 +1521,7 @@ try:
         pb = os.path.join(TMP, 'named_b.csv')
         write_csv(pb, [ob, oc, od, oe])
         rc, out = run([pb])                                                   # run 2: one file, named, from another folder
-        d, t, sd, st = load(RES), load(STATUS)['total'], load(SIDE), load(STATUS)
+        d, t, sd, st = load(RES), load(STATUS)['total'], (load(SIDE) or {}), load(STATUS)
     rec('one-file mode reads the kept copies too: the person an earlier export opted out is held under another property, '
         'her numbers are flagged, and another owner of that lead still merges',
         rc == 0 and nums(d, 44) == ['3055554403'] and case(43) not in d and case(45) not in d and
@@ -1557,7 +1560,8 @@ try:
     write_csv(os.path.join(imp_dir, 'abcd1234_SkipTrace_bad.csv'), [flags_it], encoding='cp1252')       # 'José Núñez': not UTF-8
     rc, out = run([pc])
     rec('an unreadable kept copy refuses a one-file run and names the folder it is in',
-        rc == 2 and 'abcd1234_SkipTrace_bad.csv' in out and imp_dir in out and 'Move or delete that file' in out and load(RES) == {}, out[-400:])
+        rc == 2 and 'abcd1234_SkipTrace_bad.csv' in out and imp_dir in out and 'Deleting it forgets them' in out and
+        'Put the original export back over it' in out and 'Move or delete that file' not in out and load(RES) == {}, out[-500:])
     fresh({})
     write_csv(os.path.join(DL, 'SkipTrace_bad.csv'), [flags_it], encoding='cp1252')
     write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
@@ -1589,7 +1593,7 @@ try:
         rc, out = run([], files={'SkipTrace_1.csv': [
             row('Gus', 'Gone', '7300 Nw 73rd St', '33100', g1=[], opt='Yes'),        # opted out, not one phone on the row
             row('Gus', 'Gone', '7200 Nw 72nd St', '33100', g1=[M(7201)])]})          # the same person, another property
-        d, t, sd = load(RES), load(STATUS)['total'], load(SIDE)
+        d, t, sd = load(RES), load(STATUS)['total'], (load(SIDE) or {})
     rec('an opted-out row with no phone still holds its person wherever else they are listed',
         rc == 0 and case(72) not in d and t['opt_person_rows'] == 1 and '3055557201' in sd and t['opt_people_held'] == 1, (t, sorted(sd)))
 
@@ -1701,7 +1705,8 @@ try:
         if refuse:
             rec('refused, not skipped: a file with %s' % label,
                 rc == 2 and 'SkipTrace_b.csv' in out and 'not a complete REsimpli skip-trace export' in out and
-                load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-300:])
+                'If it is a REsimpli export' in out and 'rename it so it no longer starts with SkipTrace_' in out and
+                load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-500:])
         else:
             rec('still just skipped by name: a file with %s' % label,
                 rc == 0 and 'SKIPPED' in out and 'SkipTrace_b.csv' in out and nums(load(RES), 1) == ['3055550101'], out[-300:])
@@ -1736,7 +1741,7 @@ try:
     fresh({case(1): {'phones': [{'number': '3055550101', 'type': 'Mobile', 'dnc': False}], 'source': 'tracerfy'}})
     rc, out = run([], files={'SkipTrace_1.csv': [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[dict(n='３０５５５５０１０１', DNC='Yes')])]})
     rec('a DNC flag on a number written in fullwidth digits flags the number written normally',
-        rc == 0 and load(RES)[case(1)]['phones'][0]['dnc'] is True and '3055550101' in load(SIDE), out[-300:])
+        rc == 0 and load(RES)[case(1)]['phones'][0]['dnc'] is True and '3055550101' in (load(SIDE) or {}), out[-300:])
 
     # ---------------------------------------------------------------- a flag on a cell that holds more than one number
     rec('numbers written in a cell of text: an extension, a note or two numbers are found; a short, foreign or sci-notation cell is not',
@@ -1751,7 +1756,7 @@ try:
         row('Zed', 'Nobody', '999 Nowhere Rd', '33100', g1=[dict(n='305-555-0104, 305-555-0105')], opt='Yes'),   # opted out, two numbers
         row('Dan', 'Deez', '400 Se 4th Terrace', '33100', g1=[M(101)]),                                          # the same number, clean, elsewhere
         row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[dict(n='305-555-0106 x3')])]})                       # clean, and not one number
-    d, sd, t = load(RES), load(SIDE), load(STATUS)['total']
+    d, sd, t = load(RES), (load(SIDE) or {}), load(STATUS)['total']
     rec('a flag on a cell that is not one number still flags the numbers written in it, so the same number listed clean on '
         'another row is DNC there (no entry for a lead with nothing else); a clean row\'s odd cell flags nothing',
         rc == 0 and {'3055550101', '3055550104', '3055550105'} <= set(sd) and '3055550106' not in sd and case(4) not in d and
@@ -1781,7 +1786,8 @@ try:
     rc, out2 = run([path])
     rec('the `opt` refusal counts kinds of value, and padding does not make a second kind', rc == 2 and 'has 1 kind of value' in out2, out2[-300:])
     rec('the `opt` refusal says how to go on: tell Claude, or change the cells in a copy, or download again',
-        rc == 2 and 'tell Claude' in out and 'in a copy of the file' in out and 'download the export from REsimpli again' in out, out[-500:])
+        rc == 2 and 'tell Claude' in out and 'in a copy of the file (save it as CSV UTF-8)' in out and 'then delete the original' in out and
+        'download the export from REsimpli again' in out, out[-500:])
 
     # ---------------------------------------------------------------- what to do about a torn sidecar or a torn Whitepages file
     fresh(CACHE)
@@ -1822,8 +1828,339 @@ try:
     rec('...none with no Whitepages file, and the full run holds one opted-out person',
         (t['flagged_also_whitepages'], t['opt_people_held']) == (0, 1) and 'Whitepages numbers of some lead' not in out, t)
 
+    # ================================================================ what the fourth look found
+    # ---------------------------------------------------------------- a temp file left by a killed run is gitignored
+    gi_path = os.path.join(RS.HERE, '.gitignore')
+    if os.path.exists(gi_path):
+        import fnmatch as _fnmatch
+        gi = [ln.strip() for ln in open(gi_path, encoding='utf-8') if ln.strip() and not ln.strip().startswith(('#', '!'))]
+        made = [RS.write_tmp(RES, {}), RS.write_tmp(SIDE, {})]
+        tmp_names = [os.path.basename(m) for m in made] + ['skiptrace_results.json.resimpli.tmp', 'dnc_scrub.json.resimpli.tmp']
+        RS.drop(made)
+        loose = [n for n in tmp_names if not any(_fnmatch.fnmatchcase(n, g) for g in gi)]
+        rec('the temp files a killed run leaves beside the cache and the sidecar (this version\'s random names and the earlier fixed '
+            'ones) are gitignored: a crash between writing them and replacing the files must not leave homeowner numbers one '
+            '`git add` from a public repo', not loose, loose)
+    else:
+        skip('.gitignore is not beside resimpli_sync.py: the temp file names were not checked against it')
+
+    # ---------------------------------------------------------------- the order the rows come in decides nothing
+    st_leads = [lead(94, '9400 NW 94 ST', 'SETTLE, SAM'), lead(95, '9500 NW 95 ST', 'ONLY, DEE'), lead(96, '9600 NW 96 ST', 'CAPPED, CAL'),
+                lead(97, '9700 NW 97 ST', 'TWICE, TIM'), lead(98, '9800 NW 98 ST', 'FULL, FLO'), lead(99, '9900 NW 99 ST', 'SWAP, SUE')]
+
+    def phones_at(d, n):
+        return [(p['number'], p['dnc']) for p in (d.get(case(n)) or {}).get('phones', [])]
+
+    dnc_first = row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9401, 'Mobile', True), M(9402, 'Landline', True)])      # all DNC
+    callable_ = row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9403), M(9404, 'Landline')])                         # the same lead, dialable
+    only = row('Dee', 'Only', '9500 Nw 95th St', '33100', g1=[M(9501, 'Mobile', True), M(9502, 'Landline', True)])           # a lead with nothing but DNC
+    want94 = [('3055559403', False), ('3055559404', False), ('3055559401', True), ('3055559402', True)]
+    finals = {}
+    for label, files in (('one file, the flagged row first', {'SkipTrace_1.csv': [dnc_first, callable_, only]}),
+                         ('one file, the callable row first', {'SkipTrace_1.csv': [callable_, dnc_first, only]}),
+                         ('the flagged export sorts first', {'SkipTrace_a.csv': [dnc_first, only], 'SkipTrace_b.csv': [callable_]}),
+                         ('the flagged export sorts last', {'SkipTrace_a.csv': [callable_], 'SkipTrace_b.csv': [dnc_first, only]})):
+        with with_leads(st_leads):
+            fresh(CACHE, wp={case(94): {'result': {'residents': [{'phones': [{'number': '3055559401'}]}]}}})
+            rc, out = run([], files=files)
+            d, t = load(RES), load(STATUS)['total']
+        finals[label] = (phones_at(d, 94), phones_at(d, 95))
+        rec('flagged numbers are placed after every callable one, whichever row or export comes first (%s): the lead ends with its '
+            'callable numbers, then the flagged ones (mobile first); a lead with only flagged numbers gets nothing and is counted once' % label,
+            rc == 0 and phones_at(d, 94) == want94 and phones_at(d, 95) == [] and case(95) not in d and
+            (t['leads_dnc_only_skipped'], t['new_numbers'], t['new_numbers_dnc'], t['new_mobile_clean'], t['numbers_over_cap']) == (1, 4, 2, 1, 0),
+            (t, phones_at(d, 94)))
+    rec('...and the four orders end with the same phones', len({repr(v) for v in finals.values()}) == 1, finals)
+
+    # what is placed at the end is in the totals, and not in the per-file lines and entries, which are what each file added
+    with with_leads(st_leads):
+        fresh(CACHE)
+        rc, out = run([], files={'SkipTrace_1.csv': [dnc_first, callable_]})
+        st = load(STATUS)
+    f0 = st['files'][0]
+    rec('the flagged numbers are counted in the totals, not per file: the per-file entry and line say what the file added that is callable',
+        rc == 0 and st['total']['new_numbers'] == 4 and st['total']['new_numbers_dnc'] == 2 and st['total']['leads_dnc_only_skipped'] == 0 and
+        f0['new_numbers'] == 2 and 'new_numbers_dnc' not in f0 and 'leads_dnc_only_skipped' not in f0 and
+        'SkipTrace_1.csv: 2 rows, 2 with phones, 1 leads matched, 2 new callable numbers, 1 leads had no phone' in out, (st['total'], f0, out[:300]))
+
+    # the room is shared: callable numbers first, then what still fits, the rest counted
+    def with_cap(n, fn):
+        was = RS.PS.MAX_PHONES
+        RS.PS.MAX_PHONES = n
+        try:
+            return fn()
+        finally:
+            RS.PS.MAX_PHONES = was
+
+    flagged3 = row('Cal', 'Capped', '9600 Nw 96th St', '33100', g1=[M(9601, 'Mobile', True), M(9602, 'Mobile', True), M(9603, 'Mobile', True)])
+    dialable4 = row('Cal', 'Capped', '9600 Nw 96th St', '33100', g1=[M(9604), M(9605), M(9606), M(9607)])
+    for label, rows_ in (('flagged row first', [flagged3, dialable4]), ('flagged row last', [dialable4, flagged3])):
+        def go():
+            with with_leads(st_leads):
+                fresh(CACHE)
+                rc_, out_ = run([], files={'SkipTrace_1.csv': rows_})
+                return rc_, load(RES), load(STATUS)['total']
+        rc, d, t = with_cap(5, go)
+        rec('the cap: 4 callable numbers fill the entry first, the one flagged number that still fits follows, the other two are counted, '
+            'not added (%s)' % label,
+            rc == 0 and phones_at(d, 96) == [('3055559604', False), ('3055559605', False), ('3055559606', False), ('3055559607', False),
+                                             ('3055559601', True)] and (t['numbers_over_cap'], t['new_numbers'], t['new_numbers_dnc']) == (2, 5, 1),
+            (t, phones_at(d, 96)))
+
+    # a lead that already holds nine numbers has room for one more: the callable number gets it, whichever row comes first
+    full = {case(98): {'phones': [{'number': '30555598%02d' % i, 'type': 'Mobile', 'dnc': False} for i in range(9)], 'source': 'tracerfy'}}
+    flagged_row = row('Flo', 'Full', '9800 Nw 98th St', '33100', g1=[M(9891, 'Mobile', True)])
+    callable_row = row('Flo', 'Full', '9800 Nw 98th St', '33100', g1=[M(9892)])
+    for label, rows_ in (('flagged row first', [flagged_row, callable_row]), ('callable row first', [callable_row, flagged_row])):
+        with with_leads(st_leads):
+            fresh(full)
+            rc, out = run([], files={'SkipTrace_1.csv': rows_})
+            d, t = load(RES), load(STATUS)['total']
+        rec('a flagged number never takes the last place a callable one wants on a lead that already has phones (%s)' % label,
+            rc == 0 and phones_at(d, 98)[9:] == [('3055559892', False)] and len(phones_at(d, 98)) == 10 and
+            (t['numbers_over_cap'], t['new_numbers'], t['new_numbers_dnc'], t['new_mobile_clean']) == (1, 1, 0, 1), (t, phones_at(d, 98)[8:]))
+
+    # a flagged number Whitepages also lists for the lead moves from the Whitepages part of the row to the entry: it needs no extra place
+    wp_swap = {case(99): {'result': {'residents': [{'phones': [{'number': '3055559991'}]}]}}}
+    at_cap = {case(99): {'phones': [{'number': '30555599%02d' % i, 'type': 'Mobile', 'dnc': False} for i in range(4)], 'source': 'tracerfy'}}
+    both = row('Sue', 'Swap', '9900 Nw 99th St', '33100', g1=[M(9992, 'Mobile', True), M(9991, 'Landline', True)])
+    def swap_run():
+        with with_leads(st_leads):
+            fresh(at_cap, wp=wp_swap)
+            rc_, out_ = run([], files={'SkipTrace_1.csv': [both]})
+            first, t1_ = load(RES), load(STATUS)['total']
+            rc2_, out2_ = run([])
+            return rc_ or rc2_, first, t1_, load(RES), load(STATUS)['total']
+    rc, d, t, d2, t2 = with_cap(5, swap_run)
+    rec('at the cap, the flagged number Whitepages lists for the lead is stored (the bake would otherwise append that copy as clean), '
+        'the other flagged number is counted over the cap, and a second run changes nothing',
+        rc == 0 and phones_at(d, 99)[4:] == [('3055559991', True)] and len(phones_at(d, 99)) == 5 and
+        (t['new_numbers'], t['new_numbers_dnc'], t['numbers_over_cap']) == (1, 1, 1) and d2 == d and
+        (t2['new_numbers'], t2['numbers_over_cap']) == (0, 1), (t, t2, phones_at(d, 99)))
+
+    # the same flagged number on two rows is stored once
+    with with_leads(st_leads):
+        fresh(CACHE)
+        rc, out = run([], files={'SkipTrace_1.csv': [
+            row('Tim', 'Twice', '9700 Nw 97th St', '33100', g1=[M(9701, 'Mobile', True)]),
+            row('Tim', 'Twice', '9700 Nw 97th St', '33100', g1=[M(9701, 'Mobile', True)]),
+            row('Tim', 'Twice', '9700 Nw 97th St', '33100', g1=[M(9702)])]})
+        d, t = load(RES), load(STATUS)['total']
+    rec('a flagged number listed on two rows is stored once, after the callable one', phones_at(d, 97) == [('3055559702', False), ('3055559701', True)] and
+        (t['new_numbers'], t['new_numbers_dnc']) == (2, 1), (t, phones_at(d, 97)))
+
+    # a lead whose entry already has phones takes the flagged numbers too, after them
+    with with_leads(st_leads):
+        fresh({case(94): {'phones': [{'number': '3055559400', 'type': 'Mobile', 'dnc': False}], 'source': 'tracerfy'}})
+        rc, out = run([], files={'SkipTrace_1.csv': [dnc_first]})
+        t = load(STATUS)['total']
+    rec('a lead that already has phones takes the flagged numbers (mobile first), and is not counted as skipped',
+        rc == 0 and phones_at(load(RES), 94) == [('3055559400', False), ('3055559401', True), ('3055559402', True)] and
+        (t['leads_dnc_only_skipped'], t['new_numbers'], t['new_numbers_dnc']) == (0, 2, 2), (t, phones_at(load(RES), 94)))
+
+    # ---------------------------------------------------------------- a cell is digits and phone punctuation, or it is not read
+    rec('numbers: only digits and phone punctuation are read; a letter, another script\'s digit, a note or a slash is not guessed at',
+        [RS.parse_number(v) for v in ('(305) 555-0101', '+1 305 555 0101', '305.555.0101', '3055550101.0', '305555٠101.0', '305555O101.0',
+                                      'Mobile 305-555-0101', '305/555/0101', '3٠' + '5-555-0101', '305 555 0101 ext')] ==
+        ['3055550101', '3055550101', '3055550101', '3055550101', '', '', '', '', '', ''])
+    fresh(CACHE)
+    rc, out = run([], files={'SkipTrace_1.csv': [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[dict(n='305555٠101.0'), dict(n='305555O101.0')])]})
+    rec('a cell that would read as a different valid number once its odd characters are dropped adds nothing to any lead',
+        rc == 0 and case(1) not in load(RES) and load(STATUS)['total']['numbers_unreadable'] == 2, out[-300:])
+    # only the flagged slot's odd cell flags the numbers written in it, not another odd cell on the same row
+    fresh(CACHE)
+    rc, out = run([], files={'SkipTrace_1.csv': [row('Ana', 'Tester', '100 Sw 10th Ct', '33100',
+                                                     g1=[dict(n='305-555-0104 x1', DNC='Yes'), dict(n='305-555-0105 x2')])]})
+    sd = load(SIDE) or {}
+    rec('an unreadable cell flags the numbers written in it only when its own slot is flagged: a second, clean odd cell on the row flags nothing',
+        rc == 0 and '3055550104' in sd and '3055550105' not in sd and load(STATUS)['total']['numbers_unreadable'] == 2, sorted(sd))
+
+    # ---------------------------------------------------------------- naming one file says how many other exports it did not read
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_waiting.csv'), [row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[M(201)])])       # another export in Downloads
+    write_csv(os.path.join(DL, 'SkipTrace_same.csv'), one)                                                                        # a copy of the named file
+    pn = os.path.join(TMP, 'named_n.csv')
+    write_csv(pn, one)
+    rc, out = run([pn])
+    st = load(STATUS)
+    rec('one-file mode says how many other exports in Downloads / Desktop it did not read (a copy of the named file is not one), '
+        'and the status file counts them',
+        rc == 0 and 'NOTE: 1 other SkipTrace_*.csv file in Downloads / Desktop was not read' in out and st['unread_files'] == 1 and
+        nums(load(RES), 2) == ['3055550200'], (st['unread_files'], out[:600]))
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_waiting.csv'), [row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[M(201)])])
+    write_csv(os.path.join(DL, 'SkipTrace_more.csv'), [row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[M(202)])])
+    rc, out = run([pn])
+    rec('...in the plural too', rc == 0 and 'NOTE: 2 other SkipTrace_*.csv files in Downloads / Desktop were not read' in out and
+        'An opt-out or DNC flag in them is not in force' in out and load(STATUS)['unread_files'] == 2, out[:600])
+    fresh(CACHE)
+    rc, out = run([], files={'SkipTrace_a.csv': one})
+    rec('...and a run with no path reads every export, so has none to report', rc == 0 and 'not read' not in out and load(STATUS)['unread_files'] == 0, out[:400])
+
+    # a file named by a relative path is still a named file: a stray one is refused, not skipped
+    stray_hdr = ['name', 'email', 'phone']
+    write_csv(os.path.join(TMP, 'stray.csv'), [dict.fromkeys(stray_hdr, '1')], header=stray_hdr)
+    fresh(CACHE)
+    cwd0 = os.getcwd()
+    os.chdir(TMP)
+    try:
+        rc, out = run(['stray.csv'])
+    finally:
+        os.chdir(cwd0)
+    rec('a stray file named by a relative path is refused like one named by a full path (exit 2, nothing written)',
+        rc == 2 and 'REFUSED' in out and load(RES) == CACHE and not os.path.exists(STATUS), out[:300])
+
+    # the kept copies are the .csv files in the folder, nothing else that happens to be there
+    fresh(CACHE)
+    kept_dir = os.path.join(DFDIR, 'imports', 'resimpli')
+    os.makedirs(kept_dir)
+    open(os.path.join(kept_dir, 'notes.txt'), 'w').write('not an export\n')
+    rc, out = run([pn])
+    rec('a file in the kept-copies folder that is not a .csv is left alone', rc == 0 and 'from 1 exports (1 files found)' in out, out[:300])
+
+    # ---------------------------------------------------------------- settle() places flagged numbers in a fixed order
+    # two flagged rows for one lead with room for one: the winner is the same whichever row is read first
+    rx = row('Cal', 'Capped', '9600 Nw 96th St', '33100', g1=[M(9603, 'Mobile', True)])
+    ry = row('Cal', 'Capped', '9600 Nw 96th St', '33100', g1=[M(9601, 'Landline', True)])
+    for label, rows_ in (('the higher number first', [rx, ry, dialable4]), ('the lower number first', [ry, rx, dialable4])):
+        def go():
+            with with_leads(st_leads):
+                fresh(CACHE)
+                rc_, out_ = run([], files={'SkipTrace_1.csv': rows_})
+                return rc_, load(RES), load(STATUS)['total']
+        rc, d, t = with_cap(5, go)
+        rec('with room for one flagged number of two, the mobile one is stored, not the one that was read first (%s)' % label,
+            rc == 0 and phones_at(d, 96)[4:] == [('3055559603', True)] and len(phones_at(d, 96)) == 5 and t['numbers_over_cap'] == 1, (t, phones_at(d, 96)))
+
+    rz1 = row('Cal', 'Capped', '9600 Nw 96th St', '33100', g1=[M(9603, 'Mobile', True)])
+    rz2 = row('Cal', 'Capped', '9600 Nw 96th St', '33100', g1=[M(9601, 'Mobile', True)])
+    for label, rows_ in (('the higher number first', [rz1, rz2, dialable4]), ('the lower number first', [rz2, rz1, dialable4])):
+        def go():
+            with with_leads(st_leads):
+                fresh(CACHE)
+                rc_, out_ = run([], files={'SkipTrace_1.csv': rows_})
+                return rc_, load(RES)
+        rc, d = with_cap(5, go)
+        rec('with room for one of two flagged mobiles, the lower number is stored whichever row was read first (%s)' % label,
+            rc == 0 and phones_at(d, 96)[4:] == [('3055559601', True)] and len(phones_at(d, 96)) == 5, phones_at(d, 96))
+
+    # flagged numbers set aside while reading several exports are all placed, after the callable ones, on both leads
+    with with_leads(st_leads):
+        fresh(CACHE)
+        rc, out = run([], files={
+            'SkipTrace_a.csv': [row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9401, 'Mobile', True)])],
+            'SkipTrace_b.csv': [row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9402, 'Landline', True)]),
+                                row('Tim', 'Twice', '9700 Nw 97th St', '33100', g1=[M(9701, 'Mobile', True)])],
+            'SkipTrace_c.csv': [callable_, row('Tim', 'Twice', '9700 Nw 97th St', '33100', g1=[M(9702)])]})
+        d, t = load(RES), load(STATUS)['total']
+    rec('flagged numbers set aside while reading three exports are all placed after the callable ones, on both leads',
+        rc == 0 and phones_at(d, 94) == want94 and phones_at(d, 97) == [('3055559702', False), ('3055559701', True)] and
+        (t['new_numbers'], t['new_numbers_dnc'], t['leads_dnc_only_skipped']) == (6, 3, 0), (t, phones_at(d, 94), phones_at(d, 97)))
+    fresh({case(8): {'phones': [{'number': '13055550801', 'type': 'Mobile', 'dnc': False}], 'source': 'tracerfy'}})
+    rc, out = run([], files={'SkipTrace_1.csv': [row('Fay', 'Flag', '800 Se 8th Ct', '33100', g1=[M(801), M(802)])]})
+    rec('a number the cache holds in its 11-digit spelling is not added again by a row that lists it in ten digits',
+        rc == 0 and nums(load(RES), 8) == ['13055550801', '3055550802'], (nums(load(RES), 8), out[-200:]))
+
+    # a Whitepages number the entry lacks keeps its place on the row: a flagged number that is not one of them cannot take it
+    reserved = {case(99): {'phones': [{'number': '30555599%02d' % i, 'type': 'Mobile', 'dnc': False} for i in range(3)], 'source': 'tracerfy'}}
+    two_flagged = row('Sue', 'Swap', '9900 Nw 99th St', '33100', g1=[M(9993, 'Mobile', True), M(9994, 'Mobile', True)])
+    def reserve_run():
+        with with_leads(st_leads):
+            fresh(reserved, wp={case(99): {'result': {'residents': [{'phones': [{'number': '3055559909'}]}]}}})      # a clean number, not flagged
+            rc_, out_ = run([], files={'SkipTrace_1.csv': [two_flagged]})
+            return rc_, load(RES), load(STATUS)['total']
+    rc, d, t = with_cap(5, reserve_run)
+    rec('a place the bake will give a Whitepages number is kept for it: with 3 numbers, 1 Whitepages number and room for 5, one of two flagged '
+        'numbers is stored and the other is counted over the cap',
+        rc == 0 and len(phones_at(d, 99)) == 4 and phones_at(d, 99)[3] == ('3055559993', True) and t['numbers_over_cap'] == 1, (t, phones_at(d, 99)))
+
+    # a lead at its cap takes no flagged number, and its entry is left exactly as it was
+    capped_entry = {case(98): {'phones': [{'number': '30555598%02d' % i, 'type': 'Mobile', 'dnc': False} for i in range(10)], 'source': 'tracerfy'}}
+    with with_leads(st_leads):
+        fresh(capped_entry)
+        rc, out = run([], files={'SkipTrace_1.csv': [flagged_row]})
+        d, t = load(RES), load(STATUS)['total']
+    rec('a lead at its cap takes no flagged number: the entry is exactly as it was (no marker either) and the number is counted over the cap',
+        rc == 0 and d == capped_entry and (t['new_numbers'], t['numbers_over_cap'], t['leads_dnc_only_skipped']) == (0, 1, 0), (t, out[-200:]))
+
+    # the marker the sync leaves on an entry it changed is left by the flagged numbers too
+    with with_leads(st_leads):
+        fresh({case(94): {'phones': [{'number': '3055559400', 'type': 'Mobile', 'dnc': False}], 'source': 'tracerfy'}})
+        rc, out = run([], files={'SkipTrace_1.csv': [dnc_first]})
+        d = load(RES)
+    rec('an entry that only gained flagged numbers carries the sync marker (today\'s date)', rc == 0 and d[case(94)].get('resimpli') == TODAY.isoformat(), d.get(case(94)))
+
+    # settle() on its own, on random leads: the order the numbers were held in changes nothing, nothing is duplicated or lost,
+    # the entry and the Whitepages numbers together never outgrow the room the bake has, and only held numbers are added
+    import copy as _copy
+    r2 = _random.Random(20260930)
+    POOLN = ['30555590%02d' % i for i in range(40)]
+    def held_phone(n, t):
+        return {'number': n, 'type': t, 'carrier': '', 'dnc': True, 'src': 'resimpli'}
+    def wp_rec(ns):
+        return {'result': {'residents': [{'phones': [{'number': n} for n in ns]}]}}
+    problems, seen_kinds = [], {'added': 0, 'over': 0, 'swap': 0, 'already_held': 0, 'none': 0}
+    was_max = RS.PS.MAX_PHONES
+    try:
+        for trial in range(600):
+            RS.PS.MAX_PHONES = cap = r2.randint(3, 10)
+            have_n = r2.sample(POOLN, r2.randint(1, cap))
+            wp_n = r2.sample(POOLN, r2.randint(0, 3))
+            held = [held_phone(r2.choice(POOLN), r2.choice(['Mobile', 'Landline', ''])) for _ in range(r2.randint(1, 9))]
+            entry = {'phones': [{'number': ('1' + n) if r2.random() < 0.3 else n, 'type': 'Mobile', 'dnc': False} for n in have_n]}
+            runs = []
+            for k in range(3):
+                held_k = list(held)
+                r2.shuffle(held_k)
+                res = {'C': _copy.deepcopy(entry)}
+                counts = RS.settle(res, {'dnc_held': {'C': held_k}}, {'C': wp_rec(wp_n)}, '2026-09-30')
+                runs.append((json.dumps(res, sort_keys=True), counts))
+            res, counts = json.loads(runs[0][0]), runs[0][1]
+            got = res['C']['phones']
+            added = got[len(have_n):]
+            added_n = [p['number'] for p in added]
+            got_n = {RS.norm_number(p['number']) for p in got}
+            before = len(have_n) + len(set(wp_n) - set(have_n))
+            after = len(got) + len(set(wp_n) - got_n)
+            ok_ = (len({r[0] for r in runs}) == 1 and all(r[1] == runs[0][1] for r in runs) and          # the order held in decides nothing
+                   got[:len(have_n)] == entry['phones'] and len(got_n) == len(got) and    # nothing lost or doubled
+                   all(p['dnc'] is True and p['number'] in {h['number'] for h in held} and p['number'] not in have_n for p in added) and
+                   (after <= max(cap, before)) and len(got) <= max(cap, len(have_n)) and                # never outgrows the room
+                   counts['new_numbers'] == counts['new_numbers_dnc'] == len(added) and
+                   ('resimpli' in res['C']) == bool(added) and counts['leads_dnc_only_skipped'] == 0 and
+                   counts['numbers_over_cap'] == len({h['number'] for h in held} - set(have_n) - set(added_n)) and
+                   all(cap - len(got) - len(set(wp_n) - got_n) + (h['number'] in set(wp_n) - got_n) < 1
+                       for h in held if h['number'] not in have_n and h['number'] not in added_n))         # nothing that still fits was left out
+            if not ok_:
+                problems.append((trial, cap, have_n, wp_n, [(h['number'], h['type']) for h in held], added_n, counts))
+            seen_kinds['added'] += bool(added)
+            seen_kinds['over'] += counts['numbers_over_cap'] > 0
+            seen_kinds['swap'] += any(n in wp_n for n in added_n)
+            seen_kinds['already_held'] += any(h['number'] in have_n for h in held)
+            seen_kinds['none'] += not added
+    finally:
+        RS.PS.MAX_PHONES = was_max
+    rec('settle(): on 600 random leads, the order the numbers were held in changes nothing, no number is lost or doubled, the entry '
+        'and its Whitepages numbers never outgrow the room, and every kind of case came up (numbers added, numbers over the cap, a number '
+        'Whitepages also lists, a held number the entry has, a lead with nothing added)',
+        not problems and all(v > 15 for v in seen_kinds.values()), problems[:2] or seen_kinds)
+    # a lead that has no phones at the end gets nothing and is counted, whatever else was held for other leads
+    res = {'A': {'phones': []}, 'B': {'phones': [{'number': '3055559000', 'type': 'Mobile', 'dnc': False}]}}
+    counts = RS.settle(res, {'dnc_held': {'A': [held_phone('3055559001', 'Mobile')], 'B': [held_phone('3055559002', 'Mobile')],
+                                          'Z': [held_phone('3055559003', 'Mobile')]}}, {}, '2026-09-30')
+    rec('settle(): a lead with an empty entry, or no entry, gets nothing and is counted once each; another lead is served',
+        res['A'] == {'phones': []} and 'Z' not in res and [p['number'] for p in res['B']['phones']] == ['3055559000', '3055559002'] and
+        (counts['leads_dnc_only_skipped'], counts['new_numbers'], counts['numbers_over_cap']) == (2, 1, 0), (res, counts))
+
+    # ---------------------------------------------------------------- an export that cannot be read still counts as not read
+    fresh(CACHE)
+    os.mkdir(os.path.join(DL, 'SkipTrace_dir.csv'))                # matches the pattern, cannot be read as a file
+    rc, out = run([pn])
+    rec('one-file mode counts a file in Downloads it cannot read as not read (the safe side), and still runs',
+        rc == 0 and 'NOTE: 1 other SkipTrace_*.csv file in Downloads / Desktop was not read' in out and load(STATUS)['unread_files'] == 1, out[:300])
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 
-print('\n%d passed, %d failed' % (len(ok), len(bad)))
+print('\n%d passed, %d failed%s' % (len(ok), len(bad), ', %d skipped (see SKIP above)' % len(skips) if skips else ''))
 sys.exit(1 if bad else 0)
