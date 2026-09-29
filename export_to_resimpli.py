@@ -360,7 +360,7 @@ def _hold_reason_fn():
     return reason
 
 
-def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check, notes=None):
+def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check, notes=None, all_rows=None):
     """-> (passed [(row, phones)], counts). Order follows `rows`."""
     import call_mode
     dial, _total = call_mode.call_rows(rows, optouts=optouts, deads=deads,
@@ -370,7 +370,9 @@ def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check, no
               'held_notes': 0, 'held_notes_by_reason': {}, 'held_stay_gate': 0, 'stay_codes': {}}
     notes = notes or {}
     person_cases = {}
-    for r in rows:
+    # the WHOLE board, not the --county slice: a hard no on the person's Broward case must still
+    # hold their Miami-Dade case (the page walks r.pcs, built from every row)
+    for r in (all_rows if all_rows is not None else rows):
         if r.get('pkey') and r.get('case'):
             person_cases.setdefault(r['pkey'], []).append(str(r['case']))
     person_optout = _person_optout_fn(optouts)
@@ -515,6 +517,7 @@ def _sort_key(row):
 def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
           county=None, stay_check=default_stay_check, notes=None):
     """-> (leads, summary). Pure given its inputs; main() supplies the real ones."""
+    all_rows = rows
     if county:
         want = norm_county(county)
         present = {norm_county(r.get('county')): str(r.get('county')).upper()
@@ -524,7 +527,8 @@ def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
                               % (county, ', '.join(sorted(present.values())) or 'none'))
         rows = [r for r in rows if norm_county(r.get('county')) == want]
     rows = sorted(rows, key=_sort_key)
-    passed, counts = gate_rows(rows, optouts, opt_cases, deads, stay_check=stay_check, notes=notes)
+    passed, counts = gate_rows(rows, optouts, opt_cases, deads, stay_check=stay_check, notes=notes,
+                              all_rows=all_rows)
     leads, no_addr = [], 0
     for row, phones in passed:
         emails = [e for e in (row.get('emails') or [])
@@ -588,6 +592,10 @@ def main(argv=None):
     except ExportError as e:
         print('EXPORT FAILED — nothing written: %s' % e)
         return 2
+    if not os.path.exists(NOTES_FILE):
+        summary['notes_warning'] = ('worker_notes.json not found on this machine: rep notes '
+                                    '(wrong number, soft no, bad / do-not-text numbers) were NOT applied')
+        print('WARNING: ' + summary['notes_warning'])
     summary.update({'list_name': list_name, 'date': today.isoformat(), 'dry_run': bool(a.dry_run),
                     'county': a.county or 'ALL'})
     print(json.dumps(summary, indent=1))

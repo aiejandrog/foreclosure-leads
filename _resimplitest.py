@@ -236,6 +236,13 @@ except EX.ExportError:
     rec('unreadable worker_notes.json refuses the export', True)
 rec('missing worker_notes.json = no notes', EX.load_notes(os.path.join(TMP, 'nope.json')) == {})
 
+xrows = [mk('2099-000401-CA-01', '401 NW 1ST ST, MIAMI, FL 33128', ['3055554011'], pkey='PX'),
+         mk('CACE-99-000402', '402 NW 2ND ST, FORT LAUDERDALE, FL 33311', ['9545554021'], pkey='PX', county='BROWARD')]
+xl, _ = EX.build(xrows, optouts, opt_cases, opt_emails, {}, set(), 'T', county='MIAMI-DADE', stay_check=stay,
+                 notes={'CACE-99-000402': {'no': 'hard'}})
+rec('--county still sees the person\'s cases in other counties (hard no in Broward holds Miami)', not xl,
+    [ld.case_number for ld in xl])
+
 # ---------------------------------------------------------------- one case, two rows
 print('duplicate case rows')
 drows = [mk('2099-000301-CA-01', '301 NE 1ST AVE, MIAMI, FL 33132', ['3055553011'], saleBkAct=True, days=5),
