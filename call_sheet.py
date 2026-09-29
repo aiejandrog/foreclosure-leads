@@ -97,10 +97,53 @@ def write(rows, total, top=40):
         open(os.path.join(OUTDIR, 'Call-Sheet-TODAY.txt'), 'w', encoding='utf-8').write(text)
         print('call sheet: %d dialable (%d verified) -> %s'
               % (stats['dialable'], stats['verified'], os.path.basename(path)))
+        write_seat_csvs(rows)
         return path
     except Exception as e:
         print('call sheet: could not write (%s) — not fatal' % str(e)[:70])
         return ''
+
+
+def _seat_csv_rows(rows):
+    """One spreadsheet row per dial row: who, every phone, where, when, and blank Result/Notes."""
+    out = []
+    for i, r in enumerate(rows, 1):
+        # call_rows ships x = auction date, or the filing date on a lis pendens with no sale yet
+        # (lp:1, d 9999). Say which, so a filing date never reads as an auction date.
+        dated = r.get('d', 9999) < 9999
+        filed_only = bool(r.get('lp')) and not dated
+        eq = ('%d%%' % round(r['e'])) if r.get('e') is not None else ''
+        if eq and r.get('eqv'):
+            eq += ' verified'
+        out.append([i, r.get('on') or r.get('o') or '', ', '.join(_fmt_phone(x) for x in (r.get('p') or [])),
+                    r.get('a') or '', '' if filed_only else (r.get('x') or ''),
+                    (r.get('x') or '') if filed_only else '',
+                    r.get('d') if dated else '', eq, r.get('c') or '', '', ''])
+    return out
+
+
+def write_seat_csvs(rows):
+    """Call-Sheet-<seat>.csv per caller (2026-09-28), for dialing from a spreadsheet instead of the
+    phone page. Same rows Call Mode ships, cut with the same seat_rows() split, so the two callers
+    never share a homeowner and every gate Call Mode applied has already been applied. Written to
+    DEALFLOW_DIR only (names and phones, never the repo or a synced folder). utf-8-sig so Excel
+    opens accented names correctly."""
+    import csv
+    import call_mode as CM
+    rows = [r for r in rows if r.get('st') != 'BAL']
+    head = ['#', 'Name', 'Phones', 'Address', 'Sale date', 'Filed', 'Days', 'Equity', 'Case',
+            'Result', 'Notes']
+    for n, i, who in [s for s in CM.CALL_SEATS if s]:
+        mine = CM.seat_rows(rows, n, i)
+        try:
+            path = os.path.join(OUTDIR, 'Call-Sheet-%s.csv' % who)
+            with open(path, 'w', encoding='utf-8-sig', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(head)
+                w.writerows(_seat_csv_rows(mine))
+            print('call sheet/%s: %d row(s) -> %s' % (who.lower(), len(mine), os.path.basename(path)))
+        except Exception as e:
+            print('call sheet/%s: could not write (%s) — not fatal' % (who.lower(), str(e)[:70]))
 
 
 def main():

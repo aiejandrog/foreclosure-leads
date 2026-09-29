@@ -186,6 +186,15 @@ PLAINTIFFS = [
     'FEDERAL NATIONAL MORTGAGE', 'FEDERAL HOME LOAN MORTGAGE', 'SECRETARY OF HOUSING', 'LOANCARE',
     'SHELLPOINT', 'CITIBANK', 'CITIMORTGAGE', 'TRUIST', 'FLAGSTAR', 'MIDFIRST', 'PLANET HOME',
     'REVERSE MORTGAGE', 'ROCKET MORTGAGE', 'AJAX MORTGAGE', 'REGIONS BANK', 'BANK OF AMERICA',
+    # Added 2026-09-28 off the bank-first plaintiffs on Broward and Palm Beach LP filings, whose sweeps
+    # are whole-doctype and so show which lenders file in South Florida. The Miami list caught 341 of
+    # those 615 filings. 'U S BANK' is the largest miss: the recorders index U.S. Bank with a space
+    # (46 Broward filings as 'U S BANK ...'), and a 'US BANK' name search found 4 in Miami.
+    'U S BANK', 'PNC BANK', 'M&T BANK', 'TD BANK', 'HSBC BANK', 'UMB BANK', 'FIRST CITIZENS BANK',
+    'CITY NATIONAL BANK', 'SELECT PORTFOLIO', 'FAY SERVICING', 'ONITY MORTGAGE', 'COMPUTERSHARE',
+    'FINANCE OF AMERICA', 'LONGBRIDGE FINANCIAL', 'AMERIHOME MORTGAGE', 'CROSSCOUNTRY MORTGAGE',
+    'LOANDEPOT', 'UNITED WHOLESALE MORTGAGE', 'NEW AMERICAN FUNDING', 'PLAZA HOME MORTGAGE',
+    '21ST MORTGAGE', 'ONSLOW BAY', 'LOAN FUNDER', 'NAVY FEDERAL CREDIT UNION', 'TROPICAL FINANCIAL',
 ]
 
 

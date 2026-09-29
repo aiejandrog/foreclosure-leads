@@ -24,6 +24,7 @@ _*.py
 !_moneytest.py
 !_coveragetest.py
 !_presenttitletest.py
+!_sunbizblocktest.py
 !_rankingtest.py
 # _salehistlptest: sale_history.py reads the Miami-Dade lis pendens lane too (never-read first) and
 # writes LP cases into sale_history_cache.json in the auction format stay_gate.py reads.
@@ -360,6 +361,7 @@ badnum_quarantine.json
 # officers with home/agent addresses. See v13->v14 note in refresh.yml.
 hardmoney_enriched.json
 llc_officers.json
+llc_officers_status.json
 judgment_dates_misses.json
 # county-PA value fallback cache: resolved folios + owner names for people in foreclosure —
 # public repo, keep it out (same reason as skiptrace_results.json / lp_addresses.json)
