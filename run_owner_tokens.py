@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 import document_store as DS
+import paths as P
 from document_backfill import State, select_cases
 from miami_search_budget import search_name_parts
 from document_walk import NameSearcher
@@ -100,7 +101,7 @@ def process(entries, qs_cache, token_budget, solver, state, cache_path, mint=Non
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--leads-file', type=Path, required=True)
-    parser.add_argument('--qs-cache', type=Path, default=Path(__file__).with_name('records_qs.json'))
+    parser.add_argument('--qs-cache', type=Path, default=Path(P.records_qs()))
     parser.add_argument('--state', type=Path, required=True)
     parser.add_argument('--key-file', type=Path)
     parser.add_argument('--token-budget', type=int, required=True)
