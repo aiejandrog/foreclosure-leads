@@ -698,3 +698,9 @@ pacer.pass
 !_resimplisynctest.py
 # _sheetscrmtest: sheets_crm exit code when the Sheets push fails. No network, example rows only.
 !_sheetscrmtest.py
+# REsimpli bridge (2026-09-28). The suite uses invented people only; exports/logs carry homeowner
+# data and never belong in this public repo (the exporter writes to DEALFLOW_DIR by default anyway).
+!_resimplitest.py
+exports/
+logs/
+.env

@@ -1,0 +1,32 @@
+{
+ "_note": "PLACEHOLDER HEADERS. Replace each 'header' with the exact text from REsimpli's List Stacking (Residential) sample template; 'field' names come from resimpli_lead.Lead. A list field takes 'index' (one element) or 'join' (all, joined). 'value' writes a constant. Est Equity % is the board percent and a guess unless Equity Verified is Yes (also stated in the export summary). verdict and lis_pendens_amount stay on Lead but are not exported: both are always blank today.",
+ "columns": [
+  {"header": "First Name", "field": "owner_first"},
+  {"header": "Last Name", "field": "owner_last"},
+  {"header": "Property Address", "field": "property_address"},
+  {"header": "Property City", "field": "city"},
+  {"header": "Property State", "field": "state"},
+  {"header": "Property Zip", "field": "zip"},
+  {"header": "Property County", "field": "county"},
+  {"header": "Mailing Address", "field": "mailing_address"},
+  {"header": "Phone 1", "field": "phones", "index": 0},
+  {"header": "Phone 2", "field": "phones", "index": 1},
+  {"header": "Phone 3", "field": "phones", "index": 2},
+  {"header": "Phone 4", "field": "phones", "index": 3},
+  {"header": "Phone 5", "field": "phones", "index": 4},
+  {"header": "Email 1", "field": "emails", "index": 0},
+  {"header": "Email 2", "field": "emails", "index": 1},
+  {"header": "Email 3", "field": "emails", "index": 2},
+  {"header": "Case Number", "field": "case_number"},
+  {"header": "Filing Date", "field": "filing_date"},
+  {"header": "Auction Date", "field": "auction_date"},
+  {"header": "Plaintiff", "field": "plaintiff"},
+  {"header": "Est ARV", "field": "est_arv"},
+  {"header": "Est Owed", "field": "est_owed"},
+  {"header": "Est Equity %", "field": "est_equity"},
+  {"header": "Equity Verified", "field": "equity_verified"},
+  {"header": "List Name", "field": "list_name"},
+  {"header": "Tags", "field": "tags", "join": ", "},
+  {"header": "Lead Source", "field": "source"}
+ ]
+}
