@@ -21,6 +21,8 @@ row leaves only if it passes the same checks as a dial, and a held row is COUNTE
     * Call Mode's selection                              call_mode.call_rows(): case and person-level
       opt-outs, dead ledger, active stay flags, federal bankruptcy hold, title transferred,
       diligence hold, DNC numbers and not-the-owner numbers removed, no dialable number -> out
+    * Call Mode's page-side note gates (worker_notes.json): hard/soft no and opt-out person-wide,
+      wrong number, Dead; dead (badph) and do-not-text (dntph) numbers removed
     * the send bridge's stay verdict, cache only        stay_gate.check(): never_contact.json, the
       §362 stay cache, PACER/CourtListener caches. Unlike /send it never triggers a paid or rate-
       limited lookup; an unverified case is simply held.
@@ -180,6 +182,64 @@ def load_deads(path=DEADS_FILE):
             in ('DEAD', 'CLOSED', 'LOST - SOLD AT AUCTION')}
 
 
+NOTES_FILE = os.path.join(HERE, 'worker_notes.json')
+
+
+def load_notes(path=NOTES_FILE):
+    """The rep notes Call Mode's page gates on (the bridge's backup of board + phone notes).
+    Missing = none on this machine. A file that exists and does not parse is an error: those notes
+    are where a wrong number, a soft no, a dead number or a do-not-text lives."""
+    if not os.path.exists(path):
+        return {}
+    try:
+        d = json.load(open(path, encoding='utf-8'))
+    except Exception as e:
+        raise ExportError('worker_notes.json is unreadable (%s)' % str(e)[:80])
+    notes = d.get('notes') if isinstance(d, dict) and isinstance(d.get('notes'), dict) else d
+    if not isinstance(notes, dict):
+        raise ExportError('worker_notes.json is not a notes object')
+    return notes
+
+
+def _digits_set(xs):
+    out = set()
+    for x in xs or []:
+        d = re.sub(r'\D', '', str(x or ''))
+        out |= {d, RL.digits10(d)} - {''}
+    return out
+
+
+def notes_verdict(case, person_cases, notes):
+    """-> (reason, blocked_numbers). reason '' = the notes do not hold this lead.
+
+    Call Mode's page gates on these at dial time (call_mode.py hardSuppressed / noState /
+    nextLivePh / dntph), not in call_rows, so the export applies them itself:
+      person-wide over every case the person owns: hard no, opt-out, DO NOT CONTACT, soft no or
+      'Not interested'. A soft no is RETIRED here outright: REsimpli would call it on its own
+      schedule, so the page's one event-driven resurface cannot be honoured outside the page.
+      this case: wrong number reported, status Dead.
+      numbers: badph (dead) and dntph (do-not-text) on any of the person's cases are removed."""
+    blocked = set()
+    for c in [case] + [x for x in person_cases if x != case]:
+        n = notes.get(c) or {}
+        if not isinstance(n, dict):
+            continue
+        if n.get('no') == 'hard':
+            return 'hard_no', blocked
+        if n.get('optout') or str(n.get('status') or '').upper() in ('DO NOT CONTACT', 'OPTED OUT', 'DNC'):
+            return 'opted_out_in_notes', blocked
+        if n.get('no') == 'soft' or (not n.get('no') and n.get('status') == 'Not interested'):
+            return 'soft_no_retired', blocked
+        blocked |= _digits_set(n.get('badph')) | _digits_set(n.get('dntph'))
+    n = notes.get(case) or {}
+    if isinstance(n, dict):
+        if n.get('wrongown'):
+            return 'wrong_number_reported', blocked
+        if str(n.get('status') or '').upper() == 'DEAD':
+            return 'dead_in_notes', blocked
+    return '', blocked
+
+
 def load_bounced():
     try:
         import outreach_email as _oe
@@ -300,14 +360,19 @@ def _hold_reason_fn():
     return reason
 
 
-def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check):
+def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check, notes=None):
     """-> (passed [(row, phones)], counts). Order follows `rows`."""
     import call_mode
     dial, _total = call_mode.call_rows(rows, optouts=optouts, deads=deads,
                                        max_days=10 ** 6, cap=10 ** 9)
     phones_by_case = {r['c']: list(r.get('p') or []) for r in dial}
     counts = {'held_optout': 0, 'held_call_mode': 0, 'held_call_mode_by_reason': {},
-              'held_stay_gate': 0, 'stay_codes': {}}
+              'held_notes': 0, 'held_notes_by_reason': {}, 'held_stay_gate': 0, 'stay_codes': {}}
+    notes = notes or {}
+    person_cases = {}
+    for r in rows:
+        if r.get('pkey') and r.get('case'):
+            person_cases.setdefault(r['pkey'], []).append(str(r['case']))
     person_optout = _person_optout_fn(optouts)
     reason_of = _hold_reason_fn()
     passed = []
@@ -318,11 +383,23 @@ def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check):
         if case.upper() in opt_cases or person_optout(row):
             counts['held_optout'] += 1
             continue
-        if case not in phones_by_case:
+        why = reason_of(row, deads)
+        # call_rows answers per CASE (it collapses two calendar rows of one sale), so a case it
+        # returned can still arrive here on a row it held. Re-check the row itself: any reason the
+        # labeller finds on a row call_rows passed is a hold, never a pass.
+        if case not in phones_by_case or why != 'other':
             counts['held_call_mode'] += 1
-            why = reason_of(row, deads)
             by = counts['held_call_mode_by_reason']
             by[why] = by.get(why, 0) + 1
+            continue
+        nwhy, blocked = notes_verdict(case, person_cases.get(row.get('pkey')) or [], notes)
+        phones = [p for p in phones_by_case[case] if not ({p, RL.digits10(p)} & blocked)]
+        if not nwhy and not phones:
+            nwhy = 'every_number_bad_or_do_not_text'
+        if nwhy:
+            counts['held_notes'] += 1
+            nb = counts['held_notes_by_reason']
+            nb[nwhy] = nb.get(nwhy, 0) + 1
             continue
         v = stay_check(case)
         if not v.get('ok'):
@@ -330,7 +407,7 @@ def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check):
             code = v.get('code') or 'unknown'
             counts['stay_codes'][code] = counts['stay_codes'].get(code, 0) + 1
             continue
-        passed.append((row, phones_by_case[case]))
+        passed.append((row, phones))
     return passed, counts
 
 
@@ -359,6 +436,17 @@ def load_map(path=MAP_FILE):
     return cols
 
 
+_NUMERIC = re.compile(r'^-?\d+(\.\d+)?$')
+
+
+def _safe(text):
+    """A text cell Excel would read as a formula gets a leading apostrophe. Plain numbers
+    (a negative equity percent) are left alone."""
+    if text and text[0] in '=+-@\t\r' and not _NUMERIC.match(text):
+        return "'" + text
+    return text
+
+
 def _cell(v):
     if v is None:
         return ''
@@ -374,7 +462,7 @@ def render_row(lead, cols):
     out = []
     for c in cols:
         if 'value' in c:
-            out.append(_cell(c['value']))
+            out.append(_safe(_cell(c['value'])))
             continue
         v = d.get(c['field'])
         if isinstance(v, list):
@@ -383,7 +471,7 @@ def render_row(lead, cols):
                 v = v[i] if i < len(v) else ''
             else:
                 v = c.get('join', ', ').join(str(x) for x in v)
-        out.append(_cell(v))
+        out.append(_safe(_cell(v)))
     return out
 
 
@@ -425,7 +513,7 @@ def _sort_key(row):
 
 
 def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
-          county=None, stay_check=default_stay_check):
+          county=None, stay_check=default_stay_check, notes=None):
     """-> (leads, summary). Pure given its inputs; main() supplies the real ones."""
     if county:
         want = norm_county(county)
@@ -436,7 +524,7 @@ def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
                               % (county, ', '.join(sorted(present.values())) or 'none'))
         rows = [r for r in rows if norm_county(r.get('county')) == want]
     rows = sorted(rows, key=_sort_key)
-    passed, counts = gate_rows(rows, optouts, opt_cases, deads, stay_check=stay_check)
+    passed, counts = gate_rows(rows, optouts, opt_cases, deads, stay_check=stay_check, notes=notes)
     leads, no_addr = [], 0
     for row, phones in passed:
         emails = [e for e in (row.get('emails') or [])
@@ -454,6 +542,8 @@ def build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
         'held_call_mode': counts['held_call_mode'],
         'held_call_mode_by_reason': dict(sorted(counts['held_call_mode_by_reason'].items(),
                                                 key=lambda kv: -kv[1])),
+        'held_notes': counts['held_notes'],
+        'held_notes_by_reason': counts['held_notes_by_reason'],
         'held_stay_gate': counts['held_stay_gate'],
         'stay_codes': counts['stay_codes'],
         'dropped_missing_address': no_addr,
@@ -490,10 +580,11 @@ def main(argv=None):
         optouts, opt_cases, opt_emails = load_suppression()
         deads = load_deads()
         bounced = load_bounced()
+        notes = load_notes()
         list_name = a.list_name or default_list_name(
             [r for r in rows if not a.county or norm_county(r.get('county')) == norm_county(a.county)], today)
         leads, summary = build(rows, optouts, opt_cases, opt_emails, deads, bounced, list_name,
-                               county=a.county or None)
+                               county=a.county or None, notes=notes)
     except ExportError as e:
         print('EXPORT FAILED — nothing written: %s' % e)
         return 2

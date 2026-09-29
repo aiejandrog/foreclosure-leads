@@ -39,7 +39,8 @@ rec('city and state parsed', parsed[0][1:3] == ('MIAMI', 'FL'), parsed[0])
 rec('uppercase + USPS suffix', RL.parse_address('100 Park Avenue North, Miami Beach, FL 33139')[0] == '100 PARK AVE N')
 rec('only the last word is a suffix', RL.parse_address('12 Court Street, Miami, FL 33101')[0] == '12 COURT ST')
 rec('bad ZIP dropped, not guessed', RL.parse_address('1 MAIN ST, MIAMI, FL 3313')[3] == '')
-rec('street-only address still keys (street + city)', RL.dedupe_key('3120 CORAL WAY', '', '') == '3120 CORAL WAY|~')
+rec('street with city but no ZIP keys on street + city', RL.dedupe_key('3120 CORAL WAY', '', 'Miami') == '3120 CORAL WAY|~MIAMI')
+rec('street with neither ZIP nor city is never merged', RL.dedupe_key('3120 CORAL WAY', '', '') == '')
 rec('different unit, different key',
     RL.dedupe_key('842 NW 9TH ST APT 4', '33136') != RL.dedupe_key('842 NW 9TH ST APT 5', '33136'))
 rec('same street, different ZIP, different key',
@@ -190,6 +191,68 @@ try:
     rec('unknown --county fails loudly instead of writing an empty file', False)
 except EX.ExportError as e:
     rec('unknown --county fails loudly instead of writing an empty file', 'MIAMI-DADE' in str(e), e)
+
+# ---------------------------------------------------------------- rep notes (Call Mode page gates)
+print('rep notes')
+nrows = [mk('2099-000201-CA-01', '201 NW 1ST ST, MIAMI, FL 33128', ['3055552011'], pkey='P201'),
+         mk('2099-000202-CA-01', '202 NW 2ND ST, MIAMI, FL 33128', ['3055552021'], pkey='P202'),
+         mk('2099-000203-CA-01', '203 NW 3RD ST, MIAMI, FL 33128', ['3055552031'], pkey='P203'),
+         mk('2099-000204-CA-01', '204 NW 4TH ST, MIAMI, FL 33128', ['3055552041', '3055552042'], pkey='P204'),
+         mk('2099-000205-CA-01', '205 NW 5TH ST, MIAMI, FL 33128', ['3055552051'], pkey='P205'),
+         mk('2099-000206-CA-01', '206 NW 6TH ST, MIAMI, FL 33128', ['3055552061'], pkey='P206'),
+         # one person, two cases: a hard no on the OTHER case holds this one
+         mk('2099-000207-CA-01', '207 NW 7TH ST, MIAMI, FL 33128', ['3055552071'], pkey='P207'),
+         mk('2099-000208-CA-01', '208 NW 8TH ST, MIAMI, FL 33128', ['3055552081'], pkey='P207'),
+         mk('2099-000209-CA-01', '209 NW 9TH ST, MIAMI, FL 33128', ['3055552091'], pkey='P209')]
+notes = {'2099-000201-CA-01': {'wrongown': 1},
+         '2099-000202-CA-01': {'status': 'Not interested'},
+         '2099-000203-CA-01': {'status': 'Dead'},
+         '2099-000204-CA-01': {'status': 'Callback', 'dntph': ['3055552041'], 'badph': ['13055552042']},
+         '2099-000205-CA-01': {'status': 'Callback', 'dntph': ['3055552051']},
+         '2099-000206-CA-01': {'no': 'soft'},
+         '2099-000208-CA-01': {'no': 'hard'}}
+nl, ns = EX.build(nrows, optouts, opt_cases, opt_emails, {}, set(), 'T', stay_check=stay, notes=notes)
+nc = [ld.case_number for ld in nl]
+print('  notes summary:', json.dumps(ns['held_notes_by_reason']))
+rec('wrong number reported -> held', '2099-000201-CA-01' not in nc)
+rec('legacy "Not interested" -> held (soft no retired)', '2099-000202-CA-01' not in nc)
+rec('status Dead in notes -> held', '2099-000203-CA-01' not in nc)
+rec('do-not-text + dead number (11-digit spelling) removed; nothing left -> held', '2099-000204-CA-01' not in nc)
+rec('only number is do-not-text -> held', '2099-000205-CA-01' not in nc)
+rec('soft no -> held', '2099-000206-CA-01' not in nc)
+rec('hard no on a sibling case holds the whole person', '2099-000207-CA-01' not in nc and '2099-000208-CA-01' not in nc)
+rec('clean lead still written', nc == ['2099-000209-CA-01'], nc)
+rec('notes holds counted', ns['held_notes'] == 8, ns)
+nrows2 = [mk('2099-000210-CA-01', '210 NW 10TH ST, MIAMI, FL 33128', ['3055552101', '3055552102'])]
+nl2, _ = EX.build(nrows2, optouts, opt_cases, opt_emails, {}, set(), 'T', stay_check=stay,
+                  notes={'2099-000210-CA-01': {'dntph': ['3055552101']}})
+rec('do-not-text number dropped, the other kept', nl2 and nl2[0].phones == ['3055552102'], nl2 and nl2[0].phones)
+bad = os.path.join(TMP, 'notes_bad.json')
+open(bad, 'w').write('{not json')
+try:
+    EX.load_notes(bad)
+    rec('unreadable worker_notes.json refuses the export', False)
+except EX.ExportError:
+    rec('unreadable worker_notes.json refuses the export', True)
+rec('missing worker_notes.json = no notes', EX.load_notes(os.path.join(TMP, 'nope.json')) == {})
+
+# ---------------------------------------------------------------- one case, two rows
+print('duplicate case rows')
+drows = [mk('2099-000301-CA-01', '301 NE 1ST AVE, MIAMI, FL 33132', ['3055553011'], saleBkAct=True, days=5),
+         mk('2099-000301-CA-01', '301 NE 1ST AVE UNIT 2, MIAMI, FL 33132', ['3055553012'], days=30)]
+dl, ds = EX.build(drows, optouts, opt_cases, opt_emails, {}, set(), 'T', stay_check=stay)
+rec('a held row never rides on its case twin passing call_rows',
+    all('3055553011' not in ld.phones for ld in dl) and all(ld.property_address != '301 NE 1ST AVE' for ld in dl),
+    [(ld.property_address, ld.phones) for ld in dl])
+
+# ---------------------------------------------------------------- CSV formula cells
+print('CSV formula cells')
+evil = RL.Lead(owner_last='=HYPERLINK("http://x","y")', plaintiff='+SUM(A1)', property_address='1 MAIN ST',
+               est_equity=-12.0, case_number='@cmd', tags=['-x'])
+er = dict(zip([c['header'] for c in cols], EX.render_row(evil, cols)))
+rec('formula-looking text gets a leading apostrophe',
+    er['Last Name'].startswith("'=") and er['Plaintiff'].startswith("'+") and er['Case Number'] == "'@cmd", er)
+rec('a negative number is left as a number', er['Est Equity %'] == '-12', er['Est Equity %'])
 
 # real stay_gate: the never-contact list refuses even with no cache on disk
 v = EX.default_stay_check('2025-000201-CA-01')

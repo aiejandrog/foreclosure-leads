@@ -180,13 +180,17 @@ def normalize_address(s):
 
 def dedupe_key(street, zp, city=''):
     """normalized street + ZIP. With no ZIP, street + city (so one house still dedupes, and two
-    same-numbered streets in different cities do not). '' when there is no street."""
+    same-numbered streets in different cities do not). '' when there is no street, or neither a
+    ZIP nor a city (nothing safe to merge on)."""
     street = _norm_street(street) if street else ''
     if not street:
         return ''
     # APT 4 / UNIT 4 / # 4 / STE 4 are one unit written three ways; the key must not split them
     street = re.sub(r'\b(APT|STE)\b', 'UNIT', street)
-    return '%s|%s' % (street, zp) if zp else '%s|~%s' % (street, (city or '').upper())
+    if zp:
+        return '%s|%s' % (street, zp)
+    # no ZIP and no city: the same street line can exist in two cities, so do not merge on it
+    return '%s|~%s' % (street, city.upper()) if city else ''
 
 
 # ---------------------------------------------------------------- names
