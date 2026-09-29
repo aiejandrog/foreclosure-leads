@@ -156,6 +156,10 @@ diligence_server.log
 batchdata.key
 site.pass
 skiptrace_results.json
+# the write-then-replace temp of the same file (resimpli_sync.py, tracerfy_mcp.py): a crash between
+# the two steps must not leave homeowner phone numbers one `git add` from a public repo
+skiptrace_results.json.tmp
+skiptrace_results.json.resimpli.tmp
 # lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
 code_liens.json
@@ -182,6 +186,8 @@ site.codes
 tracerfy.key
 tracerfy_mcp.url
 dnc_scrub.json
+dnc_scrub.json.tmp
+dnc_scrub.json.resimpli.tmp
 cases_qs.json
 records_qs.json
 # book/page -> recording keys, accumulated from every recordingModels list the pipeline pulls.
@@ -684,5 +690,6 @@ case-verdicts.md
 case-verdicts-report.md
 # _verdicttest: case_verdict.assess on the five pilot cases' states and the conflict/missing edges.
 !_verdicttest.py
+!_resimplisynctest.py
 # _sheetscrmtest: sheets_crm exit code when the Sheets push fails. No network, example rows only.
 !_sheetscrmtest.py
