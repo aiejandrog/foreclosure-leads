@@ -6,6 +6,7 @@ a substitute for reading; and reading a document never moves a lead into an equi
 
 Run:  python _dossiertest.py       (needs PyMuPDF)
 """
+import json
 import os
 import sys
 import tempfile
@@ -343,6 +344,57 @@ class StageTests(unittest.TestCase):
         self.assertNotEqual(one, two)
         self.assertEqual(RD.captcha_ledger_name('captcha/fixed.json'), 'captcha/fixed.json')
 
+    def _ledger(self, day, **data):
+        import case_review
+        path = case_review.output_path('captcha/rd-test-%s.json' % day)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        base = {'version': 1, 'cases': {}, 'actual_usd': 0.0, 'reserved': {},
+                'captcha_cutoff_decimal': '1.00'}
+        base.update(data)
+        path.write_text(json.dumps(base), encoding='utf-8')
+        self.addCleanup(lambda: path.exists() and path.unlink())
+        return path
+
+    def test_an_earlier_nights_unknown_charge_holds_minting(self):
+        from datetime import datetime as _dt
+        tpl, now = 'captcha/rd-test-{day}.json', _dt(2026, 9, 30, 5, 30)
+        self.assertEqual(RD.carried_captcha_stop(tpl, 1.00, now), '')
+        self._ledger('2026-09-28', captcha_halted='Spend (balance drop or receipts) exceeds approved cutoff')
+        self.assertEqual(RD.carried_captcha_stop(tpl, 1.00, now), '')   # its own cutoff: clears
+        self._ledger('2026-09-29', captcha_pending={'stage': 'polling', 'task_id': 1},
+                     captcha_halted='Polling deadline reached; pending charge retained')
+        self.assertIn('unknown cost', RD.carried_captcha_stop(tpl, 1.00, now))
+
+    def test_an_earlier_nights_other_halt_or_lower_cutoff_holds_minting(self):
+        from datetime import datetime as _dt
+        tpl, now = 'captcha/rd-test-{day}.json', _dt(2026, 9, 30, 5, 30)
+        self._ledger('2026-09-27', captcha_halted='Account balance unavailable; paid work stopped')
+        self.assertIn('reconcile', RD.carried_captcha_stop(tpl, 1.00, now))
+        os.unlink(str(RD.case_review.output_path('captcha/rd-test-2026-09-27.json')))
+        self._ledger('2026-09-26', captcha_cutoff_decimal='0.50')
+        self.assertIn('above the $0.50', RD.carried_captcha_stop(tpl, 1.00, now))
+        self.assertEqual(RD.carried_captcha_stop(tpl, 0.50, now), '')
+
+    def test_an_unreadable_earlier_ledger_holds_minting_and_tonights_is_ignored(self):
+        from datetime import datetime as _dt
+        tpl, now = 'captcha/rd-test-{day}.json', _dt(2026, 9, 30, 5, 30)
+        self._ledger('2026-09-30', captcha_pending={'stage': 'submitting'})   # tonight's own file
+        self.assertEqual(RD.carried_captcha_stop(tpl, 1.00, now), '')
+        bad = self._ledger('2026-09-25')
+        bad.write_text('{not json', encoding='utf-8')
+        self.assertIn('cannot be read', RD.carried_captcha_stop(tpl, 1.00, now))
+
+    def test_optional_tokens_without_a_key_still_runs_the_rest(self):
+        import captcha_solver
+        real = captcha_solver.has_key
+        captcha_solver.has_key = lambda: False
+        try:
+            rc = RD.main(['--enable', '--token-budget', '5', '--captcha-max-spend', '1.00',
+                          '--optional-tokens', '--dry-run'])
+            self.assertIn(rc, (0, None))
+        finally:
+            captcha_solver.has_key = real
+
     def test_the_nightly_line_mints_ten_under_a_one_dollar_cutoff(self):
         here = os.path.dirname(os.path.abspath(__file__))
         with open(os.path.join(here, 'refresh-dealflow.bat'), encoding='utf-8', errors='replace') as fh:
@@ -350,7 +402,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         line = lines[0]
         self.assertTrue(line.startswith('if "%DEALFLOW_DOCS%"=="1" '))
-        for part in ('--limit 10', '--vision-max-spend 1.00', '--token-budget 10',
+        for part in ('--limit 10', '--vision-max-spend 1.00', '--token-budget 10', '--optional-tokens',
                      '--captcha-max-spend 1.00', '--captcha-state captcha/run_documents-{day}.json'):
             self.assertIn(part, line)
         self.assertIn(line.split('>>')[0].strip(), RD.__doc__)

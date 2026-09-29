@@ -302,11 +302,14 @@ rem  stop or mark the board rebuild.
 rem  --captcha-state ...-{day}.json: one captcha ledger per night. The cutoff counts the drop in the
 rem  whole 2Captcha account balance, and other stages spend from that account too, so a single
 rem  lasting ledger would halt for good within days.
+rem  A fresh ledger does not clear an earlier night's unknown charge or stop: run_documents holds
+rem  minting until someone reconciles it. --optional-tokens: no key, or such a stop, means no tokens
+rem  tonight with a warning, and the vision reads still run.
 rem  --max-minutes 20: no new case starts after twenty minutes. A case already running finishes, so
 rem  one slow case can still overrun; the cap bounds the stage, it does not guarantee it.
 rem  --limit 10: the $1.00 vision cap is split evenly across the cases picked, and 10 gives each
 rem  $0.10, enough for one three-page judgment at the measured $0.0675. 25 left each $0.04.
-if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 10 --captcha-max-spend 1.00 --captcha-state captcha/run_documents-{day}.json --max-minutes 20 >> "%LOG%" 2>&1
+if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 10 --captcha-max-spend 1.00 --captcha-state captcha/run_documents-{day}.json --optional-tokens --max-minutes 20 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
