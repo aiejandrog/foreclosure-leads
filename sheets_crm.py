@@ -43,6 +43,7 @@ import csv
 import json
 import os
 import re
+import urllib.parse
 import urllib.request
 from datetime import datetime
 import diligence_gate as _DG
@@ -418,10 +419,24 @@ def push_sheet(rows, prospects=None):
         # NEVER let a sheet outage break the refresh - the CSV is already on disk. The exit code
         # still says it failed (see EXIT CODE above).
         print('sheets: push FAILED (%s) - CSV still written' % str(e)[:120])
-        if getattr(e, 'code', None) in (404, 410):
-            print('sheets: the Apps Script URL no longer answers. It was redeployed or deleted: '
-                  'Deploy > Manage deployments in the sheet\'s script, copy the web app URL into '
-                  'sheets_crm_webhook.url.')
+        # Apps Script runs doPost on the POST to /exec, then 302s to script.googleusercontent.com
+        # for the reply; urllib follows that as a GET (so do browsers and requests). A 404 on
+        # THAT hop means the POST was accepted and only the reply fetch failed, so the tab may
+        # well have updated. It is still a failure here: nothing confirmed the rows landed.
+        # 2026-09-29: a 404 with the URL itself answering GET 200 -- rotating it would not help.
+        code = getattr(e, 'code', None)
+        final = ''
+        try:
+            final = urllib.parse.urlparse(e.geturl() or '').hostname or ''
+        except Exception:
+            final = ''
+        if code in (404, 410) and final.endswith('googleusercontent.com'):
+            print('sheets: Apps Script took the POST but its reply page returned %s. Check the '
+                  'DealFlow tab\'s stamp before touching the webhook URL.' % code)
+        elif code in (404, 410):
+            print('sheets: the webhook URL itself returned %s. If it also fails in a browser, the '
+                  'deployment was replaced: Deploy > Manage deployments, copy the web app URL into '
+                  'sheets_crm_webhook.url.' % code)
         return False
 
 

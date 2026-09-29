@@ -86,11 +86,24 @@ APPS = 'https://script.google.com/macros/s/EXAMPLE/exec'
 rc, out, csv_ok = run([], urlopen=gone, url=APPS)
 check('a 404 from the webhook exits PUSH_FAILED_RC', rc == S.PUSH_FAILED_RC and rc != 0, (rc, out))
 check('a 404 still writes the CSV', csv_ok, out)
-check('a 404 says the deployment URL is gone', 'no longer answers' in out, out)
+check('a 404 on the /exec URL itself points at the deployment', 'webhook URL itself returned 404' in out, out)
+
+
+def echo_gone(req, timeout=None):
+    # The 09-29 shape: the POST was taken, the redirected reply fetch 404'd.
+    raise urllib.error.HTTPError('https://script.googleusercontent.com/macros/echo?user_content_key=x',
+                                 404, 'Not Found', {}, None)
+
+
+rc, out, csv_ok = run([], urlopen=echo_gone, url=APPS)
+check('a 404 after the redirect still exits PUSH_FAILED_RC', rc == S.PUSH_FAILED_RC, (rc, out))
+check('a 404 after the redirect says the POST was taken, not to rotate the URL',
+      'took the POST' in out and 'Manage deployments' not in out, out)
 
 rc, out, csv_ok = run([], urlopen=down, url=APPS)
 check('a network failure exits PUSH_FAILED_RC', rc == S.PUSH_FAILED_RC, (rc, out))
-check('a network failure does not claim the URL is gone', 'no longer answers' not in out, out)
+check('a network failure does not blame the deployment', 'Manage deployments' not in out
+      and 'took the POST' not in out, out)
 
 rc, out, csv_ok = run([], urlopen=lambda req, timeout=None: _Resp(), url=APPS)
 check('a push that lands exits 0', rc == 0 and 'pushed 1 row' in out, (rc, out))
