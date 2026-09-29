@@ -408,6 +408,31 @@ def enrich(leads):
                 'widow': _has_widow(benefits),
                 'last_sale_price': last_sale.get('SalePrice',0), 'last_sale_date': last_sale.get('DateOfSale',''),
             })
+            # SITE ADDRESS. This response has always carried it (SiteAddress[0].Address — the same
+            # field stub_resolve.py:230 reads off the same endpoint), and this block never took it.
+            # A RealAuction stub that publishes no address still enriches fine off its folio, so it
+            # ended up with owners, value, beds, homestead and sale history but no street — invisible
+            # to every address-keyed consumer: skiptrace's _propaddr, the route builder, comps, and
+            # any cross-source phone merge. Measured 2026-09-29: 38 of the 175 address-less
+            # leads_final rows carry a folio, and 37 of them resolve to a site address here (PaGis
+            # returns the same 37 independently). FILL ONLY WHEN EMPTY — the auction/court address
+            # is what the filing published and outranks the roll; this is a backfill, not an
+            # override. The appraiser's roll is a county record, not a guess, so unlike addrGuess
+            # (lp_leads.py:14) it is safe to let outreach and skiptrace see it.
+            if not str(r.get('Address') or '').strip():
+                _sa = ((d.get('SiteAddress') or [{}])[0]) or {}
+                _street = str(_sa.get('Address') or '').split(',')[0].strip()
+                if _street:
+                    # Rebuilt from parts, not taken whole, for the two reasons lp_leads._full_addr
+                    # already documents: the roll writes "Unincorporated County" where there is no
+                    # municipality (not a city any geocoder or skip-trace provider accepts, and
+                    # undeliverable if mailed), and it stores ZIP+4, which the providers reject.
+                    _city = str(_sa.get('City') or '').strip()
+                    if _city.lower().startswith('unincorporated'):
+                        _city = 'Miami'
+                    _zip = str(_sa.get('Zip') or '').strip()[:5]
+                    r['Address'] = ', '.join(x for x in (_street, _city, 'FL ' + _zip if _zip else 'FL') if x)
+                    r['addr_src'] = 'pa-folio'     # provenance: backfilled from the appraiser roll
         except Exception as e:
             print("PA fail", folio, e); time.sleep(1); continue
         if (i+1) % 20 == 0: print(f"enriched {i+1}/{len(leads)}")
