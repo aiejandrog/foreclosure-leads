@@ -251,7 +251,7 @@ def from_board_row(row, phones, emails=(), list_name='', source='DealFlow'):
     mail = row.get('mail') or ''
     mail_n = normalize_address(mail) if mail else ''
     prop_n = normalize_address(row.get('addr'))
-    if mail_n and mail_n.split(', ')[0] == (prop_n.split(', ')[0] if prop_n else ''):
+    if mail_n and mail_n == prop_n:
         mail_n = ''
     first, last = split_owner(row.get('owners') or row.get('oname'), row.get('oname'),
                               is_company=bool(row.get('co')) or None)

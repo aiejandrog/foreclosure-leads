@@ -366,6 +366,9 @@ def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check, no
     dial, _total = call_mode.call_rows(rows, optouts=optouts, deads=deads,
                                        max_days=10 ** 6, cap=10 ** 9)
     phones_by_case = {r['c']: list(r.get('p') or []) for r in dial}
+    # call_rows keeps ONE row per case (calendar dedupe); remember which by its address, so a
+    # sibling row of the same case at another address or unit is not exported on its phones
+    addr_by_case = {r['c']: RL.normalize_address(r.get('a')) for r in dial}
     counts = {'held_optout': 0, 'held_call_mode': 0, 'held_call_mode_by_reason': {},
               'held_notes': 0, 'held_notes_by_reason': {}, 'held_stay_gate': 0, 'stay_codes': {}}
     notes = notes or {}
@@ -389,6 +392,8 @@ def gate_rows(rows, optouts, opt_cases, deads, stay_check=default_stay_check, no
         # call_rows answers per CASE (it collapses two calendar rows of one sale), so a case it
         # returned can still arrive here on a row it held. Re-check the row itself: any reason the
         # labeller finds on a row call_rows passed is a hold, never a pass.
+        if case in phones_by_case and RL.normalize_address(row.get('addr')) != addr_by_case.get(case):
+            why = 'duplicate_case_row_not_selected'
         if case not in phones_by_case or why != 'other':
             counts['held_call_mode'] += 1
             by = counts['held_call_mode_by_reason']

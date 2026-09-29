@@ -252,6 +252,18 @@ rec('a held row never rides on its case twin passing call_rows',
     all('3055553011' not in ld.phones for ld in dl) and all(ld.property_address != '301 NE 1ST AVE' for ld in dl),
     [(ld.property_address, ld.phones) for ld in dl])
 
+drows2 = [mk('2099-000302-CA-01', '302 NE 2ND AVE, MIAMI, FL 33132', ['3055553021'], days=5),
+          mk('2099-000302-CA-01', '302 NE 2ND AVE UNIT 9, MIAMI, FL 33132', ['3055553022'], days=30)]
+dl2, ds2 = EX.build(drows2, optouts, opt_cases, opt_emails, {}, set(), 'T', stay_check=stay)
+rec('two clean rows of one case: only the row call_rows kept is written', len(dl2) == 1,
+    [(ld.property_address, ld.phones) for ld in dl2])
+
+print('mailing address')
+lm = RL.from_board_row({'addr': '1 MAIN ST, MIAMI, FL 33101', 'mail': '1 Main Street, Homestead, FL 33030'}, [])
+rec('same street line in another city is kept as the mailing address', lm.mailing_address.startswith('1 MAIN ST, HOMESTEAD'), lm.mailing_address)
+ls = RL.from_board_row({'addr': '1 MAIN ST, MIAMI, FL 33101', 'mail': '1 Main Street, Miami, FL 33101-0001'}, [])
+rec('mailing address equal to the property is blanked', ls.mailing_address == '', ls.mailing_address)
+
 # ---------------------------------------------------------------- CSV formula cells
 print('CSV formula cells')
 evil = RL.Lead(owner_last='=HYPERLINK("http://x","y")', plaintiff='+SUM(A1)', property_address='1 MAIN ST',
