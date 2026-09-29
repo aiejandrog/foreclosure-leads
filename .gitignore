@@ -591,6 +591,7 @@ deal_desk.json
 # suite needs no network, no board and no keys precisely so it runs wherever the watch does.
 !_publishwatchtest.py
 !_boardaccuracytest.py
+!_recordsqstest.py
 !_docboardtest.py
 # _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
 # file before the sale-history cache restored them (the restore ran only inside make_tracker, in
