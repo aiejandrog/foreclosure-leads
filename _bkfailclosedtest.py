@@ -305,6 +305,24 @@ check('bake, healthy: an open federal case does replace it, and stays held',
 check('bake never clears a saleBkAct another gate stamped (a federal clear included)',
       plain.get('saleBkAct') is True, plain)
 
+# A lifted docket stay must not lift a federal hold: the board's door gate reads saleBkAct && !saleLift.
+tpl = (HERE / 'tracker_template.html').read_text(encoding='utf-8')
+check('board door gate still reads saleBkAct && !saleLift (why the bake drops saleLift)',
+      "if(r.saleBkAct && !r.saleLift) return {ok:false" in tpl)
+lifted = {'case': MIA_ACTIVE, 'saleLift': '2099-01-03'}
+clear_lifted = {'case': MIA_CLEAR, 'saleLift': '2099-01-03'}
+healthy_cache()
+bake([lifted, clear_lifted])
+check('bake, open federal case on a lifted docket row: held and saleLift dropped',
+      lifted.get('saleBkAct') is True and 'saleLift' not in lifted, lifted)
+check('bake, a federal clear keeps a lifted row lifted', 'saleLift' in clear_lifted
+      and not clear_lifted.get('saleBkAct'), clear_lifted)
+lifted = {'case': MIA_NONE, 'saleLift': '2099-01-03'}
+with blocked('bk_lookup'):
+    bake([lifted])
+check('bake, degraded: a lifted row is held and saleLift dropped',
+      lifted.get('saleBkAct') is True and 'saleLift' not in lifted, lifted)
+
 # ------------------------------------------------------------------------ census + owner alert
 src = (HERE / 'foreclosure_leads.py').read_text(encoding='utf-8')
 check('census: the bake result feeds bkdeg',

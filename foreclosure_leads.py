@@ -1722,6 +1722,11 @@ def stamp_federal_bk(slim):
         if not d.get('saleBkAct') or f.get('hard'):
             d['bkWhy'] = str(f.get('why') or '')[:180]
         d['saleBkAct'] = True
+        # A lifted docket stay does not lift a federal hold. The board's door gate
+        # (_knockEligible) and the STAY LIFTED lane read `saleBkAct && !saleLift`, so a held
+        # row that kept saleLift went on the knock route. outreach_email drops it the same way.
+        d.pop('saleLift', None)
+        d.pop('sale_bk_lifted', None)
         held += 1
     if degraded:
         print('federal bankruptcy lookup DEGRADED: %s -> %d lead(s) held for this build. '
