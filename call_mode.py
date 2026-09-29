@@ -2674,6 +2674,7 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
      background:#0f1d3a;color:var(--mut);font-size:12px;font-weight:800;touch-action:manipulation}
 .lchip.on{border-color:var(--gold);color:var(--gold)}
 .errchip{color:#ff8a80;font-weight:700;cursor:pointer;text-decoration:underline}
+.errold{color:var(--mut,#9aa);cursor:pointer;text-decoration:underline}
 .sub{font-size:12px;color:var(--mut);margin-top:6px;text-align:center}
 .vm{background:#0f1d3a;border:1px solid #2a3f6b;border-radius:10px;padding:12px;margin-top:10px;font-size:17px;line-height:1.5}
 .vmlang{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:12px 0 3px}
@@ -4361,14 +4362,26 @@ function seatMenu(){
   alert('Seat '+idx+' of '+n+'.\n\nYou now see about 1/'+n+' of the list and your teammate sees the rest — '
       + 'the same lead is never on both phones at once.\n\nUse "show all" if you finish early and want to work outside your lane.');
 }
+/* TODAY vs OLDER. The log is a ring buffer that never expires, so an error from last week kept the
+   red "6 errors logged" chip up on a morning with 0 dials (2026-09-29) and read as "the page is
+   broken, don't dial". Only errors stamped today (e.d) go red; older ones, and entries written
+   before e.d existed, show as a quiet "older errors" link that still opens the same log. */
 function errChip(){
-  var n=0; try{ n=(JSON.parse(localStorage.getItem('fcErrLog')||'[]')).length; }catch(e){}
-  return n ? (' &middot; <span class="errchip" onclick="showErrs()">'+n+' error'+(n===1?'':'s')+' logged &mdash; tap</span>') : '';
+  var log=[]; try{ log=JSON.parse(localStorage.getItem('fcErrLog')||'[]'); }catch(e){}
+  if(!Array.isArray(log) || !log.length) return '';
+  var td=today(), n=0;
+  for(var k=0;k<log.length;k++){ if(log[k] && log[k].d===td) n++; }
+  var old=log.length-n;
+  return n ? (' &middot; <span class="errchip" onclick="showErrs()">'+n+' error'+(n===1?'':'s')+' today &mdash; tap</span>'
+              + (old ? ' <span class="errold" onclick="showErrs()">+'+old+' older</span>' : ''))
+           : (' &middot; <span class="errold" onclick="showErrs()">'+old+' older error'+(old===1?'':'s')+' (not today)</span>');
 }
 function showErrs(){
   var log=[]; try{ log=JSON.parse(localStorage.getItem('fcErrLog')||'[]'); }catch(e){}
+  if(!Array.isArray(log)) log=[];
   // alert() so it can be screenshotted whole, then offer to clear
-  alert(log.map(function(e){ return e.t+' ['+e.w+'] '+e.m+'\n'+e.s; }).join('\n\n') || 'empty');
+  var td=today();
+  alert(log.map(function(e){ return (e.d===td?'TODAY ':'')+e.t+' ['+e.w+'] '+e.m+'\n'+e.s; }).join('\n\n') || 'empty');
   if(confirm('Clear the error log?')){ try{ localStorage.removeItem('fcErrLog'); }catch(e){} render(); }
 }
 /* FTSA calling window, 8am-8pm EASTERN. WARN, never block — same call the board makes: a hard block
@@ -5932,7 +5945,7 @@ function toast(t,opts){
 function logErr(err, where){
   try{
     var log = JSON.parse(localStorage.getItem('fcErrLog')||'[]');
-    log.push({t: nowTS(), w: where||'', m: String(err && err.message || err).slice(0,200),
+    log.push({t: nowTS(), d: today(), w: where||'', m: String(err && err.message || err).slice(0,200),
               s: String(err && err.stack || '').slice(0,300)});
     localStorage.setItem('fcErrLog', JSON.stringify(log.slice(-20)));
   }catch(e){}

@@ -13864,7 +13864,10 @@ function genMorningWorker(lane, autostart){
     +       'post("skip"); return advance();'
     +     '}'
     +     'if(step.why){'
-    +       'addLog("fail", r.first||r.owner, step.k.toUpperCase()+" failed: "+step.why+" → trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"), "warn");'
+    // Not a failure: this is the channel ladder doing its job ("3 emails sent" / "no email on file"
+    // -> next channel). Logged as FAIL (!) it read as 40 errors in one early-lane run (2026-09-29).
+    // Real failures below (bridge error, no reachable channel) keep kind "fail".
+    +       'addLog("next", r.first||r.owner, "no "+step.k.toUpperCase()+": "+step.why+" → trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"));'
     +       'healing=setTimeout(function(){ attempt(r, idx+1, 0); }, 900); return;'
     +     '}'
     // EMAIL goes through doSend — the same path the manual button uses. Previously this branch
