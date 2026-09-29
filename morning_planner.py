@@ -410,13 +410,10 @@ def _knock_eligible(r):
         if _BKL.federal_hold(_case)[0]:
             return False
     except Exception:
-        # Same fallback as Call Mode: hold when this is not a Miami-Dade case number.
-        try:
-            import stay_gate as _SG
-            if not _SG.case_stem(_case):
-                return False
-        except Exception:
-            return False
+        # Fails closed, like Call Mode's federal_hold_fn (2026-09-29): a broken check holds every
+        # case. The old fallback held only non-Miami numbers, which put Miami leads the cache had
+        # flagged with an open federal case on the door-knock route.
+        return False
     if r.get('sibclaimed'):
         return False
     return True

@@ -548,6 +548,30 @@ def read_bk_lookup():
     return sig if isinstance(sig, dict) else {'readable': False}
 
 
+def bake_bk_alert(sig, at):
+    """Fail when the last board build could not run the federal bankruptcy check.
+
+    foreclosure_leads.stamp_federal_bk then held every lead it could not judge, so Call Mode,
+    texting and the Morning Worker are empty on purpose. The pull status above can read clean
+    on the same night (the break is in the bake), and without this the only trace is a
+    DEGRADED line in leads-run.log. Census flag only: no count, case or name."""
+    if not isinstance(sig, dict) or not sig.get('degraded'):
+        return None
+    return _alert('bk-bake', 'fail',
+                  'Board build could not run the federal bankruptcy check, so it held every lead '
+                  'it could not judge (no calls, texts or emails). See DEGRADED in leads-run.log.', at)
+
+
+def read_bake_bk(here=None):
+    """{'degraded': bool} from the built board's DEALFLOW-COVERAGE marker (census 'bkdeg')."""
+    p = os.path.join(here or HERE, 'docs', 'index.html')
+    with open(p, encoding='utf-8', errors='replace') as f:
+        head = f.read(4000)
+    m = re.search(r'DEALFLOW-COVERAGE (\{.*?\})', head)
+    cov = json.loads(m.group(1)) if m else {}
+    return {'degraded': bool(isinstance(cov, dict) and cov.get('bkdeg'))}
+
+
 def clerk_bk_alert(sig, at):
     """Fail when the clerk-docket check is on and its last run is missing, failed, or old.
 
@@ -623,6 +647,7 @@ def alerts_from(signals, now, th=None):
         health_alert(signals.get('health_fails'), at),
         stale_flag_alert(signals.get('refresh_flag'), at),
         bk_lookup_alert(signals.get('bk_lookup'), at),
+        bake_bk_alert(signals.get('bake_bk'), at),
         clerk_bk_alert(signals.get('clerk_bk'), at),
     ]
     return sorted((a for a in found if a), key=lambda a: a['key'])
@@ -1133,6 +1158,7 @@ def gather(now, th, measure=False):
         'morning_sends': _try(lambda: read_morning(now, th), {'readable': False}),
         'health_fails': _try(lambda: read_health(now.date().isoformat()), {'fresh': False, 'names': []}),
         'bk_lookup': _try(read_bk_lookup, {'readable': False}),
+        'bake_bk': _try(read_bake_bk, {'degraded': False}),
         'clerk_bk': _try(read_clerk_bk, {'readable': False}),
         'readiness': measure_readiness(now, th['port']) if measure else None,
     }

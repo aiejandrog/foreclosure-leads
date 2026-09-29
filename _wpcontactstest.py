@@ -114,7 +114,7 @@ rec('bake: relatives are assigned only to r.wpRelatives',
     FL.count("_r['wpRelatives'] = _rels") == 1 and not re.search(r"_ph\.append\([^)]*_rels", FL))
 rec('bake: namesake Person records are skipped', 'if _grade is None:\n                            continue' in FL)
 rec('bake: held leads lose relatives after every hold is set',
-    FL.index('relatives gate: stripped') > FL.index("federal bankruptcy lookup: %d lead(s) held"))
+    FL.index('relatives gate: stripped') > FL.index('\n    _bk_held, _bk_degraded = stamp_federal_bk(slim)'))
 
 # ------------------------------------------------------------------ 4. the board render
 TPL = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()

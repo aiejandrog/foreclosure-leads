@@ -1680,12 +1680,16 @@ def restore_stays_from_cache(leads):
 def stamp_federal_bk(slim):
     """Federal bankruptcy (CourtListener) holds onto baked rows: saleBkAct + bkWhy. Holds only: a
     case number and a reason, never a name. Miami-Dade rows are not held just because the lookup
-    has not run; Broward and Palm Beach are. Returns the number of rows held.
+    has not run; Broward and Palm Beach are. Returns (rows held, degraded reason or '').
 
     Fails CLOSED (2026-09-29). This block used to catch any bk_lookup error, print SKIPPED and
     hold nothing, and texting, the Morning Worker and cadence read saleBkAct, not the Call Mode
     index. Now a bk_lookup that will not import or raises holds every row that has a case number
-    for this build, and the log says DEGRADED. flags_for_cases fails closed the same way inside."""
+    for this build, and the log says DEGRADED. flags_for_cases fails closed the same way inside.
+    The degraded reason goes into the census as bkdeg so pipeline_alerts can raise it.
+
+    A row another gate already held (a docket stay from sale_history) keeps its own wording
+    unless this is an open federal case: "check unavailable" must not replace "ACTIVE STAY"."""
     try:
         import bk_lookup as _BKL
         flags = _BKL.flags_for_cases([d.get('case') for d in slim])
@@ -1715,16 +1719,16 @@ def stamp_federal_bk(slim):
                     f = None
         if not f or not f.get('hold'):
             continue
-        d['bkWhy'] = str(f.get('why') or '')[:180]
-        if not d.get('saleBkAct'):
-            d['saleBkAct'] = True
+        if not d.get('saleBkAct') or f.get('hard'):
+            d['bkWhy'] = str(f.get('why') or '')[:180]
+        d['saleBkAct'] = True
         held += 1
     if degraded:
         print('federal bankruptcy lookup DEGRADED: %s -> %d lead(s) held for this build. '
               'Fix it before anyone calls or texts.' % (degraded, held))
     elif held:
         print('federal bankruptcy lookup: %d lead(s) held' % held)
-    return held
+    return held, degraded
 
 
 def make_tracker(leads):
@@ -3315,7 +3319,7 @@ def make_tracker(leads):
                   f"— they had been re-merged after the queue strip")
 
     # Federal bankruptcy (CourtListener). Fails closed: see stamp_federal_bk.
-    stamp_federal_bk(slim)
+    _bk_held, _bk_degraded = stamp_federal_bk(slim)
 
     # Relatives are the most sensitive numbers on a row (third parties about someone else's
     # foreclosure). Now that every hold is on the row, strip them from any lead that is held.
@@ -3394,6 +3398,10 @@ def make_tracker(leads):
         # upstream, the rule passes while the board ships unprotected. Publishing the count here
         # lets the rule read the artifact instead of its ingredients.
         'bkstay': sum(1 for d in slim if d.get('saleBkAct') or d.get('sale_bk_active')),
+        # 1 when stamp_federal_bk could not run the federal check and held every lead it could
+        # not judge. Neither guard blocks on it (blocking would keep yesterday's LESS-held board
+        # live); pipeline_alerts.bake_bk_alert reads it so the owner hears why nobody is callable.
+        'bkdeg': 1 if _bk_degraded else 0,
         # FOUR ENRICHERS HAD NO CENSUS FIELD AT ALL, so publish_guard was blind to them: a build
         # with ZERO code liens, ZERO verified taxes, ZERO judgment dates and ZERO ownership checks
         # produced a census byte-identical to a fully enriched one, and the guard reported "no

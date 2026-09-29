@@ -375,10 +375,18 @@ def _load_leads():
                 r.setdefault('sale_bk_date', ent.get('bd', ''))
             if isinstance(ent, dict) and ent.get('sl') and not r.get('saleLift'):
                 r['saleLift'] = ent['sl']
-    # Federal bankruptcy (CourtListener). A hold here is what cadence's pre-send already reads
-    # (saleBkAct) without that sweep being edited. A clear is not stamped: Miami's docket result
-    # stands, and a Broward/Palm Beach lead with no successful check stays saleBkAct so it is
-    # not mailed.
+    return _stamp_federal_holds(leads)
+
+
+def _stamp_federal_holds(leads):
+    """Federal bankruptcy (CourtListener). A hold here is what cadence's pre-send already reads
+    (saleBkAct) without that sweep being edited. A clear is not stamped: Miami's docket result
+    stands, and a Broward/Palm Beach lead with no successful check stays saleBkAct so it is
+    not mailed.
+
+    Fails closed (2026-09-29): if bk_lookup will not import or raises, every row is held,
+    Miami included. The old fallback held only non-Miami numbers, and nothing at all when
+    stay_gate would not import either."""
     try:
         import bk_lookup as _BKL
         for r in leads:
@@ -391,15 +399,12 @@ def _load_leads():
                 if _why:
                     r['bkWhy'] = _why[:180]
     except Exception:
-        try:
-            import stay_gate as _SG
-            for r in leads:
-                if not _SG.case_stem(_case(r)):
-                    r['sale_bk_active'] = True
-                    r['saleBkAct'] = True
-                    r['bkWhy'] = 'federal bankruptcy check unavailable — lead stays held'
-        except Exception:
-            pass
+        for r in leads:
+            r['sale_bk_active'] = True
+            r['saleBkAct'] = True
+            r.pop('saleLift', None)
+            r.pop('sale_bk_lifted', None)
+            r['bkWhy'] = 'federal bankruptcy check unavailable — lead stays held'
     return leads
 
 
@@ -610,12 +615,8 @@ def _eligible(r, ledger, optouts, min_hours):
         if _held:
             return False, _why or 'federal bankruptcy check has not run for this lead'
     except Exception:
-        try:
-            import stay_gate as _SG
-            if not _SG.case_stem(_case(r)):
-                return False, 'federal bankruptcy check unavailable — lead stays held'
-        except Exception:
-            return False, 'federal bankruptcy check unavailable — lead stays held'
+        # Fails closed (2026-09-29): Miami included, like Call Mode's federal_hold_fn.
+        return False, 'federal bankruptcy check unavailable — lead stays held'
     if r.get('sibclaimed'):
         return False, 'sibling case sold'
     # DILIGENCE GATE. Sits with the other compliance drops, not with the judgment filters.

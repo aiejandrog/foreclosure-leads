@@ -1284,8 +1284,9 @@ class HoldIndex:
         self._memo = {}
 
     def hold(self, case):
-        """(held, why). Miami is held only when CourtListener flagged it. A keyable
-        non-stem lead is held once a cache file exists and it has no fresh clear.
+        """(held, why). Miami is held only when CourtListener flagged it, or when the cache
+        file exists but cannot be read (it may be the one flagging it). A keyable non-stem
+        lead is held once a cache file exists and it has no fresh clear.
         No cache file yet: not a hold (the board bake still stamps saleBkAct)."""
         key = str(case or '')
         if key in self._memo:
@@ -1299,7 +1300,7 @@ class HoldIndex:
         pk = stay_gate.pacer_key(case)
         if not pk:
             out = (False, '')
-        elif self.unreadable and not stay_gate.case_stem(pk):
+        elif self.unreadable:
             out = (True, 'federal bankruptcy cache is unreadable — lead stays held')
         elif not self.exists and not self.unreadable:
             out = (False, '')
@@ -1465,9 +1466,11 @@ def flags_for_cases(cases, now=None):
     one case that raised took the whole call down to the bake's `except`, which also held
     nothing: every Broward and Palm Beach lead reached texting and the Morning Worker with no
     saleBkAct. Now: stay_gate missing or the cache unloadable -> every case held. One case
-    raising -> that case held, the rest still judged. An unreadable cache holds every non-stem
-    case with no PACER release, the same rule HoldIndex.hold applies for Call Mode.
-    FLAGS_DEGRADED says which of these happened, for the bake log."""
+    raising -> that case held, the rest still judged, and the clerk check still runs for it.
+    An unreadable cache holds every keyed case, Miami included, with no PACER release: the
+    file that would say a Miami lead has an open federal case cannot be read, and the send
+    gate (gate_opinion) and HoldIndex.hold hold on the same state. FLAGS_DEGRADED says which
+    of these happened, for the bake log and the census."""
     global FLAGS_DEGRADED
     FLAGS_DEGRADED = ''
     cases = list(cases or [])
@@ -1489,13 +1492,19 @@ def flags_for_cases(cases, now=None):
     out = {}
     errored = 0
     for raw in cases:
-        key = ''
         try:
             key = stay_gate.pacer_key(raw)
-            if not key:
-                continue
+        except Exception:
+            errored += 1
+            k = str(raw or '').strip().upper()
+            if k:
+                out[k] = {'hold': True, 'why': HOLD_ERRORED, 'hard': False}
+            continue
+        if not key:
+            continue
+        try:
             ent = data.get(key) if isinstance(data, dict) else None
-            if unreadable and not stay_gate.case_stem(key):
+            if unreadable:
                 op = {'blocks': True, 'code': 'stay_unverified',
                       'why': 'federal bankruptcy cache is unreadable. Lead stays held.'}
             elif isinstance(ent, dict):
@@ -1512,24 +1521,27 @@ def flags_for_cases(cases, now=None):
             if op and op.get('blocks'):
                 out[key] = {'hold': True, 'why': str(op.get('why') or '')[:180],
                             'hard': op.get('code') == 'stay_active'}
-            try:
-                import clerk_bk
-                cop = clerk_bk.gate_opinion(key, now)
-            except Exception:
-                cop = ({'blocks': True, 'code': 'stay_unverified',
-                        'why': 'clerk docket check failed. Lead stays held.'}
-                       if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1' else None)
-            if isinstance(cop, dict) and cop.get('blocks'):
-                if cop.get('code') == 'stay_active' or key not in out:
-                    out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
-                                'hard': cop.get('code') == 'stay_active'}
         except Exception:
             errored += 1
-            k = key or str(raw or '').strip().upper()
-            if k and k not in out:
-                out[k] = {'hold': True, 'why': HOLD_ERRORED, 'hard': False}
+            if key not in out:
+                out[key] = {'hold': True, 'why': HOLD_ERRORED, 'hard': False}
+        try:
+            import clerk_bk
+            cop = clerk_bk.gate_opinion(key, now)
+        except Exception:
+            cop = ({'blocks': True, 'code': 'stay_unverified',
+                    'why': 'clerk docket check failed. Lead stays held.'}
+                   if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1' else None)
+        if isinstance(cop, dict) and cop.get('blocks'):
+            if cop.get('code') == 'stay_active' or key not in out:
+                out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
+                            'hard': cop.get('code') == 'stay_active'}
+    why = []
+    if unreadable:
+        why.append('cache unreadable')
     if errored:
-        FLAGS_DEGRADED = '%d case(s) errored' % errored
+        why.append('%d case(s) errored' % errored)
+    FLAGS_DEGRADED = '; '.join(why)
     return out
 
 
