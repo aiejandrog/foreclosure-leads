@@ -1,37 +1,37 @@
 {
  "alerts": [
   {
-   "at": "2026-09-29T09:23:01-04:00",
+   "at": "2026-09-29T09:30:58-04:00",
    "key": "bk-lookup",
    "severity": "fail",
    "text": "Federal bankruptcy pull failed. Non-Miami leads stay held."
   },
   {
-   "at": "2026-09-29T09:23:01-04:00",
+   "at": "2026-09-29T09:30:58-04:00",
    "key": "captcha-balance",
    "severity": "warn",
    "text": "2Captcha balance $0.71, warn under $1.00."
   },
   {
-   "at": "2026-09-29T09:23:01-04:00",
+   "at": "2026-09-29T09:30:58-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-09-29T09:23:01-04:00",
+   "at": "2026-09-29T09:30:58-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-09-29T09:23:01-04:00",
+   "at": "2026-09-29T09:30:58-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 456 credits, warn under 1500."
   }
  ],
- "published_at": "2026-09-29T09:23:01-04:00",
+ "published_at": "2026-09-29T09:30:58-04:00",
  "signals": {
   "bk_lookup": {
    "errors": 0,
@@ -39,7 +39,7 @@
    "holds": 83,
    "leads_checked": 31,
    "provider": "courtlistener",
-   "pull_age_h": 0.55,
+   "pull_age_h": 0.68,
    "pull_ok": false,
    "readable": true,
    "requests_used": 84,
