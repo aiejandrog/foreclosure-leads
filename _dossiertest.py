@@ -332,6 +332,29 @@ class StageTests(unittest.TestCase):
         finally:
             captcha_solver.has_key = real
 
+    def test_the_nightly_captcha_ledger_is_one_file_per_night(self):
+        # PaidCutoffSolver counts the account-wide balance drop since its first read, and other
+        # stages spend from the same 2Captcha account, so a ledger kept for good would halt.
+        from datetime import datetime as _dt
+        name = 'captcha/run_documents-{day}.json'
+        one = RD.captcha_ledger_name(name, _dt(2026, 9, 29, 5, 30))
+        two = RD.captcha_ledger_name(name, _dt(2026, 9, 30, 5, 30))
+        self.assertEqual(one, 'captcha/run_documents-2026-09-29.json')
+        self.assertNotEqual(one, two)
+        self.assertEqual(RD.captcha_ledger_name('captcha/fixed.json'), 'captcha/fixed.json')
+
+    def test_the_nightly_line_mints_ten_under_a_one_dollar_cutoff(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, 'refresh-dealflow.bat'), encoding='utf-8', errors='replace') as fh:
+            lines = [l for l in fh if 'run_documents.py' in l and not l.lstrip().lower().startswith('rem')]
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertTrue(line.startswith('if "%DEALFLOW_DOCS%"=="1" '))
+        for part in ('--limit 10', '--vision-max-spend 1.00', '--token-budget 10',
+                     '--captcha-max-spend 1.00', '--captcha-state captcha/run_documents-{day}.json'):
+            self.assertIn(part, line)
+        self.assertIn(line.split('>>')[0].strip(), RD.__doc__)
+
     def test_dossiers_land_outside_the_repo_and_outside_onedrive(self):
         path = str(RD.dossier_path('MIAMI-DADE', CASE))
         self.assertTrue(path.startswith(_TMP))

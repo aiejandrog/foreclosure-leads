@@ -74,12 +74,19 @@ always was — reading a document does not move a lead into a FACT state.
 
 THE NIGHTLY LINE is refresh-dealflow.bat's [2f/5] stage, after the [2b/5] records step:
 
-    if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
+    if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 10 --captcha-max-spend 1.00 --captcha-state captcha/run_documents-{day}.json --max-minutes 20 >> "%LOG%" 2>&1
 
 It does nothing until DEALFLOW_DOCS=1 is set; setting it is the decision to spend up to $1.00 a
-night on vision reads. --token-budget stays 0 (no paid owner-search tokens). #53 now routes token
-minting through PaidCutoffSolver, so raising it is possible, but it is a separate one-line change
-that must add --captcha-max-spend and needs the owner's go on the spend.
+night on vision reads and up to $1.00 a night on owner-search tokens. The owner approved the token
+half on 2026-09-25: at most 10 mints a night (~$0.003 each, so about $0.03), each one through
+PaidCutoffSolver and the shared paid_reads monthly cap.
+
+{day} in --captcha-state becomes today's date, so each night gets its own captcha ledger. The
+ledger has to be per night. PaidCutoffSolver fixes the 2Captcha balance it first sees as its
+baseline and counts every later drop against the cutoff, and that balance is account-wide: the
+records and token stages spend from the same account every night. One ledger kept for good would
+reach $1.00 on other stages' spend within days and then stay halted. The stages run one after
+another, so on a fresh ledger the drop during [2f/5] is this stage's own spend.
 
 --max-minutes 20 starts no new case after twenty minutes. A case already running is allowed to
 finish, so one slow case can still overrun: the flag bounds the stage, it does not guarantee it.
@@ -294,6 +301,11 @@ def mint_token(owner, qs_cache, ladder=None):
         # The token still works for THIS run; it just will not be free next time.
         return token, 'token minted but not cached (%s)' % exc
     return token, ''
+
+
+def captcha_ledger_name(template, now=None):
+    """The --captcha-state name with {day} replaced by the local date (YYYY-MM-DD)."""
+    return template.replace('{day}', (now or datetime.now()).strftime('%Y-%m-%d'))
 
 
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
@@ -544,7 +556,9 @@ def main(argv=None):
                              'dollars, at most 1.50, enforced by captcha_cost_cutoff against the '
                              'account balance. It is cumulative on its ledger and cannot be raised.')
     parser.add_argument('--captcha-state', default='captcha/run_documents-captcha.json',
-                        help='captcha ledger under DEALFLOW_DIR (default %(default)s)')
+                        help='captcha ledger under DEALFLOW_DIR (default %(default)s). {day} in '
+                             'the name becomes today\'s date, one ledger per night; the '
+                             'nightly line uses that')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     if args.backfill:
@@ -683,7 +697,7 @@ def main(argv=None):
         from captcha_cost_cutoff import PaidCutoffSolver
         from document_backfill import State
         from run_owner_tokens import TokenLadder
-        ledger = case_review.output_path(args.captcha_state)
+        ledger = case_review.output_path(captcha_ledger_name(args.captcha_state))
         ledger.parent.mkdir(parents=True, exist_ok=True)
         captcha_state = State(ledger).__enter__()
         try:
