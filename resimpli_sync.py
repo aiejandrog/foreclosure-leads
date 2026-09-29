@@ -7,15 +7,19 @@ skiptrace_results.json, the same local cache skiptrace.py writes, so the next bo
 them into r.phones / r.phdnc / r.phtype and Call Mode applies every gate it already applies.
 
 WHAT GETS IN
-  * A row is used only when its property street + ZIP match a board lead that has a case number
-    AND a REsimpli owner surname appears in that lead's owner names. Same house with a different
-    owner on file is counted and skipped: those numbers belong to someone else.
+  * A row is used only when its property street, unit and ZIP match a board lead that has a case
+    number AND a REsimpli owner surname appears in that lead's owner names. A different unit in
+    the same building, or the same house with a different owner on file, is counted and skipped:
+    those numbers belong to someone else. A unit on one side and none on the other is a skip too.
   * Rows with no matching lead are counted, never added as leads. They have no case number, so
     no bankruptcy / stay check can run on them; a new lead source is a product decision.
-  * Numbers are ADDED. An existing number, entry, or provider is never removed or replaced.
+  * Numbers are ADDED. An existing number, entry, or provider is never removed or replaced, and
+    a number already in the cache is recognised however it is written ('13055550101' = '3055550101').
   * REsimpli's per-phone DNC flag (Phone_N_DNC = Yes, or "DNC" in Phone_N_status) and a litigator
     flag become dnc=True, which foreclosure_leads.make_tracker turns into phdnc and Call Mode
-    withholds. Emails are not merged: they are unverified and would feed first-touch email.
+    withholds. The same flag on a number the cache already holds as clean turns that number DNC
+    (counted as dnc_tightened). One-way: nothing here ever clears a DNC flag. Emails are not
+    merged: they are unverified and would feed first-touch email.
   * A lead with no cache entry gets one only if at least one new number is not DNC-flagged, so an
     all-DNC row does not stop skiptrace.py from tracing that lead later.
 
@@ -59,15 +63,17 @@ SUF = {'STREET': 'ST', 'AVENUE': 'AVE', 'AV': 'AVE', 'COURT': 'CT', 'ROAD': 'RD'
        'CIRCLE': 'CIR', 'HIGHWAY': 'HWY', 'PARKWAY': 'PKWY', 'NORTH': 'N', 'SOUTH': 'S',
        'EAST': 'E', 'WEST': 'W', 'NORTHWEST': 'NW', 'NORTHEAST': 'NE', 'SOUTHWEST': 'SW',
        'SOUTHEAST': 'SE'}
-UNIT_WORDS = {'UNIT', 'APT', 'STE', 'SUITE', 'BLDG'}
+UNIT_MARKS = {'UNIT', 'APT', 'STE', 'SUITE', 'BLDG', 'LOT', '#'}
+UNIT_FILLER = {'NO', 'NUM', 'NUMBER'}
 NAME_STOP = {'LLC', 'INC', 'TRUST', 'TR', 'TRUSTEE', 'ESTATE', 'OF', 'THE', 'AND', 'JR', 'SR',
              'II', 'III', 'LE', 'ET', 'AL', 'UNKNOWN', 'HEIRS', 'SPOUSE', 'TENANT', 'DE', 'DEL',
              'LA', 'LOS', 'Y'}
 OWNER_FIELDS = ('owners', 'owner', 'oname', 'rname', 'Owner')
-COUNT_KEYS = ('rows', 'rows_with_phone', 'addr_match', 'owner_mismatch', 'matched_rows',
-              'leads_matched', 'leads_had_phone', 'leads_new_phone', 'new_numbers',
-              'new_numbers_dnc', 'new_mobile_clean', 'skipped_all_dnc_new_lead',
-              'unmatched_rows_with_phone')
+COUNT_KEYS = ('rows', 'rows_with_phone', 'addr_match', 'unit_mismatch',
+              'unit_conflict_same_surname', 'owner_mismatch',
+              'matched_rows', 'leads_matched', 'leads_had_phone', 'leads_new_phone',
+              'new_numbers', 'new_numbers_dnc', 'new_mobile_clean', 'dnc_tightened',
+              'skipped_all_dnc_new_lead', 'unmatched_rows_with_phone')
 
 
 class SyncError(Exception):
@@ -76,17 +82,35 @@ class SyncError(Exception):
 
 # ---------------------------------------------------------------- normalizing
 
-def street_key(s):
-    """'7164 Sw 163rd Ct' and '7164 SW 163 COURT, MIAMI, FL' -> '7164 SW 163 CT'. Units dropped:
-    sources disagree on them, and the building plus the owner check is the key."""
-    s = re.sub(r'[^A-Z0-9 ]', ' ', (s or '').upper().split(',')[0])
-    out = []
-    for w in s.split():
-        if w in UNIT_WORDS:
-            break
-        w = re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', SUF.get(w, w))
-        out.append(w)
-    return ' '.join(out)
+def split_address(s):
+    """'8425 Sw 152nd Ave Apt 405, Miami' -> ('8425 SW 152 AVE', '405'). The unit is part of the
+    identity: two condos in one building are two homes, and a shared surname between them is not
+    the same household. '#405', 'Unit 405' and 'Apt 405' all read as unit '405'."""
+    raw = re.sub(r'[^A-Z0-9# ]', ' ', (s or '').upper().split(',')[0].replace('#', ' # '))
+    street, unit, in_unit = [], [], False
+    for w in raw.split():
+        if w in UNIT_MARKS:
+            in_unit = True
+        elif in_unit:
+            if w not in UNIT_FILLER:
+                unit.append(w)
+        else:
+            street.append(re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', SUF.get(w, w)))
+    return ' '.join(street), ''.join(unit)
+
+
+def row_address(x):
+    """A REsimpli row's (street, unit): the unit column when it has one, else one written inline."""
+    street, unit = split_address(x.get('propertyStreetAddress'))
+    unit2 = split_address('0 UNIT ' + (x.get('propertyStreetAddress2') or ''))[1]
+    return street, (unit2 or unit)
+
+
+def norm_number(v):
+    """Digits only, and an 11-digit US number loses its leading 1, so '13055550101' (which
+    skiptrace.py keeps as returned) and '3055550101' are the same number."""
+    d = re.sub(r'\D', '', str(v or ''))
+    return d[1:] if len(d) == 11 and d.startswith('1') else d
 
 
 def zip_of(s):
@@ -99,16 +123,19 @@ def name_tokens(s):
             if len(w) > 2 and w not in NAME_STOP}
 
 
+def owner_tokens(r):
+    return name_tokens(' '.join(str(r.get(f) or '') for f in OWNER_FIELDS))
+
+
 def row_phones(x):
     out = []
     for i in range(1, MAX_PHONES_PER_ROW + 1):
-        num = re.sub(r'\D', '', x.get('Phone_%d' % i) or '')
-        if len(num) == 11 and num.startswith('1'):
-            num = num[1:]
+        num = norm_number(x.get('Phone_%d' % i))
         if len(num) != 10:
             continue
+        status = (x.get('Phone_%d_status' % i) or '').upper()
         dnc = ((x.get('Phone_%d_DNC' % i) or '').strip().lower() == 'yes'
-               or 'DNC' in (x.get('Phone_%d_status' % i) or '').upper()
+               or 'DNC' in status or 'LITIGATOR' in status
                or (x.get('Phone_%d_IsLitigator' % i) or '').strip().lower() in ('yes', 'true'))
         out.append({'number': num, 'type': (x.get('Phone_%d_type' % i) or '').strip(),
                     'carrier': '', 'dnc': dnc, 'src': 'resimpli'})
@@ -118,14 +145,16 @@ def row_phones(x):
 # ---------------------------------------------------------------- merge
 
 def build_index(leads, case_of, addr_of):
+    """(street, zip) -> [(lead, unit)] for every lead that has a case number and a usable address."""
     idx = {}
     for r in leads:
         if not case_of(r):
             continue
         a = addr_of(r)
-        k = (street_key(a), zip_of(a))
+        street, unit = split_address(a)
+        k = (street, zip_of(a))
         if k[0] and k[1]:
-            idx.setdefault(k, []).append(r)
+            idx.setdefault(k, []).append((r, unit))
     return idx
 
 
@@ -139,7 +168,8 @@ def merge(rows, idx, results, case_of, addr_of, today=None):
         phones = row_phones(x)
         if phones:
             n['rows_with_phone'] += 1
-        k = (street_key(x.get('propertyStreetAddress')), (x.get('propertyZipCode') or '').strip()[:5])
+        street, row_unit = row_address(x)
+        k = (street, (x.get('propertyZipCode') or '').strip()[:5])
         hits = idx.get(k) or []
         if not hits:
             if phones:
@@ -149,8 +179,15 @@ def merge(rows, idx, results, case_of, addr_of, today=None):
         rs = set()
         for f in ('fullName', 'fullName2', 'lastName', 'lastName2'):
             rs |= name_tokens(x.get(f))
-        ok = [r for r in hits
-              if rs & name_tokens(' '.join(str(r.get(f) or '') for f in OWNER_FIELDS))]
+        same_unit = [r for r, u in hits if u == row_unit]
+        if not same_unit:
+            n['unit_mismatch'] += 1
+            if any(rs & owner_tokens(r) for r, _ in hits):
+                # Same building, same surname, other unit: what a building-level match would have
+                # attached to the wrong home. Expect 0 wherever the unit rule has always been on.
+                n['unit_conflict_same_surname'] += 1
+            continue
+        ok = [r for r in same_unit if rs & owner_tokens(r)]
         if not ok:
             n['owner_mismatch'] += 1
             continue
@@ -162,7 +199,19 @@ def merge(rows, idx, results, case_of, addr_of, today=None):
             if case not in touched:
                 n['leads_matched'] += 1
                 n['leads_had_phone'] += had
-            have = {p.get('number') for p in (ent or {}).get('phones') or []}
+            have = {norm_number(p.get('number')): p
+                    for p in (ent or {}).get('phones') or [] if isinstance(p, dict)}
+            # One-way, like the registry override in make_tracker: a number REsimpli flags DNC that
+            # the cache holds as clean becomes DNC. Nothing here ever clears a flag.
+            tightened = 0
+            for p in phones:
+                q = have.get(p['number'])
+                if q is not None and p['dnc'] and not q.get('dnc'):
+                    q['dnc'] = True
+                    tightened += 1
+            if tightened:
+                n['dnc_tightened'] += tightened
+                ent['resimpli'] = today
             added = [p for p in phones if p['number'] not in have]
             if not added:
                 touched.add(case)
@@ -191,13 +240,17 @@ def merge(rows, idx, results, case_of, addr_of, today=None):
 # ---------------------------------------------------------------- files
 
 def read_export(path):
-    with open(path, encoding='utf-8-sig', newline='') as f:
-        rd = csv.DictReader(f)
-        missing = [c for c in REQUIRED if c not in (rd.fieldnames or [])]
-        if missing:
-            raise SyncError('%s is not a REsimpli skip-trace export (missing %s)'
-                            % (os.path.basename(path), ', '.join(missing)))
-        return list(rd)
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding='utf-8-sig', newline='') as f:
+            rd = csv.DictReader(f)
+            missing = [c for c in REQUIRED if c not in (rd.fieldnames or [])]
+            if missing:
+                raise SyncError('%s is not a REsimpli skip-trace export (missing %s)'
+                                % (name, ', '.join(missing)))
+            return list(rd)
+    except (OSError, UnicodeDecodeError, csv.Error) as e:
+        raise SyncError('%s could not be read (%s)' % (name, type(e).__name__))
 
 
 def discover(import_dir):
@@ -234,17 +287,31 @@ def main(argv=None):
         return 1
 
     # one copy of each distinct file, by content: the same export downloaded twice is one file
-    seen, exports = set(), []
+    seen, exports, skipped = set(), [], []
     for f in files:
-        h = sha256(f)
-        if h in seen:
-            continue
-        seen.add(h)
         try:
-            exports.append((f, h, read_export(f)))
-        except SyncError as e:
-            print('REFUSED:', e)
-            return 2
+            h = sha256(f)
+        except OSError as e:
+            h = None
+            err = SyncError('%s could not be read (%s)' % (os.path.basename(f), type(e).__name__))
+        else:
+            if h in seen:
+                continue
+            seen.add(h)
+            err = None
+            try:
+                exports.append((f, h, read_export(f)))
+            except SyncError as e:
+                err = e
+        if err:
+            if a.files:                     # a file named on the command line is a mistake worth stopping for
+                print('REFUSED:', err)
+                return 2
+            print('SKIPPED:', err)          # a stray SkipTrace_*.csv must not block the real exports
+            skipped.append(os.path.basename(f))
+    if not exports:
+        print('no usable REsimpli export found')
+        return 1
 
     leads = S.load_all_leads()
     idx = build_index(leads, S._case, S._propaddr)
@@ -252,16 +319,18 @@ def main(argv=None):
     results = json.load(open(res_path, encoding='utf-8')) if os.path.exists(res_path) else {}
 
     status = {'ts': datetime.datetime.now().isoformat(timespec='seconds'), 'dry_run': a.dry_run,
-              'board_leads_indexed': sum(len(v) for v in idx.values()), 'files': []}
+              'board_leads_indexed': sum(len(v) for v in idx.values()), 'skipped_files': skipped,
+              'files': []}
     total = dict.fromkeys(COUNT_KEYS, 0)
     for f, h, rows in exports:
         n = merge(rows, idx, results, S._case, S._propaddr)
         status['files'].append({'file': os.path.basename(f), 'sha256': h[:16], **n})
         for k in COUNT_KEYS:
             total[k] += n[k]
-        print('%s: %d rows, %d leads matched, %d new numbers (%d DNC-flagged), %d leads had no phone'
+        print('%s: %d rows, %d leads matched, %d new numbers (%d DNC-flagged), %d leads had no phone, '
+              '%d existing numbers newly DNC-flagged'
               % (os.path.basename(f), n['rows'], n['leads_matched'], n['new_numbers'],
-                 n['new_numbers_dnc'], n['leads_new_phone']))
+                 n['new_numbers_dnc'], n['leads_new_phone'], n['dnc_tightened']))
     status['total'] = total
     print('TOTAL')
     for k in COUNT_KEYS:
@@ -276,7 +345,7 @@ def main(argv=None):
         dst = os.path.join(import_dir, os.path.basename(f))
         if os.path.abspath(f) != os.path.abspath(dst) and not os.path.exists(dst):
             shutil.copy2(f, dst)
-    if total['new_numbers']:
+    if total['new_numbers'] or total['dnc_tightened']:
         if os.path.exists(res_path):
             bdir = os.path.join(P.DEALFLOW_DIR, 'backups')
             os.makedirs(bdir, exist_ok=True)
