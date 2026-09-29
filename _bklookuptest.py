@@ -1315,6 +1315,80 @@ finally:
     SG._never_contact_path = _ncp
 BL.PACER_ROOT = None
 
+# ------------------------------------------------------------------ 2026-09-29: failures leave a record
+print('-- a failed nightly run records why and its own counters')
+d = isolate('netfail')
+leads = d
+write_leads(d, [
+    {'case': 'CACE-99-556%03d' % i, 'county': 'BROWARD', 'owners': 'GARCIA, MARIA %s' % chr(65 + i),
+     'st': 'OK'} for i in range(6)
+])
+
+
+def net_route(url, headers, n):
+    if q_of(url).get('court') == ['flsb']:
+        return 200, {}, page([recap('26-55501', ['Someone, Else'])])
+    raise TimeoutError('timed out reading GARCIA')
+
+
+stub = Stub(net_route)
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    out = BL.run_nightly(here=str(leads), transport=stub, clock=clock_at(time.time()))
+st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
+party_calls = [u for u, _h in stub.calls if q_of(u).get('court') != ['flsb']]
+check('a network error on a party search does not end the run', out.get('pull_ok') is True, out)
+check('the searches stop after the network-error limit',
+      out.get('reason') == 'network' and out.get('errors') == BL.NIGHTLY_NET_ERROR_LIMIT
+      and len(party_calls) == BL.NIGHTLY_NET_ERROR_LIMIT, (out, len(party_calls)))
+check('the status file carries that run, not an older one',
+      st.get('reason') == 'network' and st.get('errors') == BL.NIGHTLY_NET_ERROR_LIMIT
+      and st.get('requests_used') == len(stub.calls), st)
+held = [BL.send_hold('CACE-99-556%03d' % i, here=str(leads))[0] for i in range(6)]
+check('every lead the failed searches did not clear stays held', all(held), held)
+check('the network error text is not kept', 'GARCIA' not in buf.getvalue()
+      and 'GARCIA' not in json.dumps(json.loads((d / 'bk_lead_cache.json').read_text(encoding='utf-8'))
+                                     .get('CACE-99-556000', {}).get('why', '')), buf.getvalue())
+
+d = isolate('crash')
+leads = d
+write_leads(d, [{'case': 'CACE-99-557001', 'county': 'BROWARD', 'owners': 'GARCIA, MARIA', 'st': 'OK'}])
+BL.write_status(pull_ok=True, pull_t=NOW - 86400, filings=762, leads_checked=31, errors=0,
+                requests_used=84, reason='ok', provider='courtlistener')
+_real_match = BL.match_filings_to_leads
+
+
+def _boom(*_a, **_k):
+    raise KeyError('GARCIA, MARIA')
+
+
+BL.match_filings_to_leads = _boom
+buf = io.StringIO()
+try:
+    with contextlib.redirect_stdout(buf):
+        stub = Stub(lambda url, headers, n: (200, {}, page([recap('26-5560%d' % n, ['Other, Person'])])))
+        rc = BL.main([], clock=clock_at(time.time()), transport=stub, here=str(leads))
+finally:
+    BL.match_filings_to_leads = _real_match
+log = buf.getvalue()
+st = json.loads((d / 'bk_lookup_status.json').read_text(encoding='utf-8'))
+pub = BL.public_status()
+check('a crash after the pull still exits 0', rc == 0, rc)
+check('the crash log names the stage, the class and the line, not the value',
+      'during match' in log and 'KeyError' in log and 'bk_lookup' not in log.split('at ')[0]
+      and '_bklookuptest.py:' in log and 'GARCIA' not in log, log)
+check('the crash status carries a reason and this run\'s counters',
+      st.get('reason') == 'crash:keyerror' and st.get('pull_ok') is False and st.get('errors') == 1
+      and st.get('filings') == 1 and st.get('leads_checked') == 0
+      and st.get('requests_used') == len(stub.calls) and st.get('requests_used') != 84, st)
+check('public status passes the reason through', pub.get('reason') == 'crash:keyerror', pub)
+al = PA.bk_lookup_alert(pub, 'now')
+check('the bk-lookup alert names the reason',
+      al and 'failed (crash:keyerror)' in al.get('text', ''), al)
+al = PA.bk_lookup_alert({'readable': True, 'pull_ok': False}, 'now')
+check('an alert without a reason keeps the old wording',
+      al and al.get('text') == 'Federal bankruptcy pull failed. Non-Miami leads stay held.', al)
+
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all CourtListener bankruptcy checks passed ====')
 for f_ in FAILS:

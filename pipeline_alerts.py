@@ -523,8 +523,11 @@ def bk_lookup_alert(sig, at):
         return _alert('bk-lookup', 'fail',
                       'Federal bankruptcy pull has no status file. Non-Miami leads stay held.', at)
     if not sig.get('pull_ok'):
+        # reason is a short [a-z0-9_:-] label (crash:timeouterror, network, pull_truncated ...).
+        why = re.sub(r'[^a-z0-9_:-]', '', str(sig.get('reason') or '').lower())[:40]
         return _alert('bk-lookup', 'fail',
-                      'Federal bankruptcy pull failed. Non-Miami leads stay held.', at)
+                      'Federal bankruptcy pull failed%s. Non-Miami leads stay held.'
+                      % ((' (' + why + ')') if why else ''), at)
     try:
         age = float(sig.get('pull_age_h'))
     except (TypeError, ValueError):

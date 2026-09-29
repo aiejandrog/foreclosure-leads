@@ -29,12 +29,21 @@ TWO OUTPUTS, EVERY RUN
 RUN
   python sheets_crm.py            # CSV + push (if webhook configured)
   python sheets_crm.py --csv-only
+
+EXIT CODE (2026-09-29): 0 when the push landed, or when no webhook is configured (CSV-only is a
+choice). PUSH_FAILED_RC when a webhook IS configured and the push did not land. The "DealFlow Sheets
+CRM" task calls this directly, so that code becomes the task's Last Result, which pipeline_alerts'
+laptop-readiness check reports as a failed task. Before this the task read 0 while the webhook 404'd,
+and Carlos's tab quietly stopped updating. refresh-dealflow.bat does not check this step's
+errorlevel, so the nightly refresh is unaffected.
 """
 import argparse
+import sys
 import csv
 import json
 import os
 import re
+import urllib.parse
 import urllib.request
 from datetime import datetime
 import diligence_gate as _DG
@@ -386,10 +395,14 @@ def build_rows(rows_src, notes, st, pbl):
     return rows
 
 
+PUSH_FAILED_RC = 3
+
+
 def push_sheet(rows, prospects=None):
+    """True pushed, None no webhook configured (CSV-only), False configured and it failed."""
     if not os.path.exists(WEBHOOK_F):
         print('sheets: no sheets_crm_webhook.url - CSV only. One-time setup: sheets_crm_SETUP.txt')
-        return False
+        return None
     url = open(WEBHOOK_F, encoding='utf-8').read().strip()
     if not url.startswith('https://script.google.com/'):
         print('sheets: webhook url does not look like an Apps Script deployment - not pushing')
@@ -403,8 +416,27 @@ def push_sheet(rows, prospects=None):
         print('sheets: pushed %d row(s) -> %s' % (len(rows), out))
         return True
     except Exception as e:
-        # NEVER let a sheet outage break the refresh - the CSV is already on disk.
+        # NEVER let a sheet outage break the refresh - the CSV is already on disk. The exit code
+        # still says it failed (see EXIT CODE above).
         print('sheets: push FAILED (%s) - CSV still written' % str(e)[:120])
+        # Apps Script runs doPost on the POST to /exec, then 302s to script.googleusercontent.com
+        # for the reply; urllib follows that as a GET (so do browsers and requests). A 404 on
+        # THAT hop means the POST was accepted and only the reply fetch failed, so the tab may
+        # well have updated. It is still a failure here: nothing confirmed the rows landed.
+        # 2026-09-29: a 404 with the URL itself answering GET 200 -- rotating it would not help.
+        code = getattr(e, 'code', None)
+        final = ''
+        try:
+            final = urllib.parse.urlparse(e.geturl() or '').hostname or ''
+        except Exception:
+            final = ''
+        if code in (404, 410) and final.endswith('googleusercontent.com'):
+            print('sheets: Apps Script took the POST but its reply page returned %s. Check the '
+                  'DealFlow tab\'s stamp before touching the webhook URL.' % code)
+        elif code in (404, 410):
+            print('sheets: the webhook URL itself returned %s. If it also fails in a browser, the '
+                  'deployment was replaced: Deploy > Manage deployments, copy the web app URL into '
+                  'sheets_crm_webhook.url.' % code)
         return False
 
 
@@ -427,9 +459,10 @@ def main():
         w.writerows(rows)
     print('csv: %d working lead(s) -> %s' % (len(rows), out))
     print('prospects: %d consult tab(s): %s' % (len(prospects), ', '.join(p['tab'] for p in prospects)[:200]))
-    if not a.csv_only:
-        push_sheet(rows, prospects)
+    if not a.csv_only and push_sheet(rows, prospects) is False:
+        return PUSH_FAILED_RC
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

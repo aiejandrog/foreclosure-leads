@@ -69,6 +69,67 @@ def out(*parts):
     return os.path.join(DEALFLOW_DIR, *parts)
 
 
+# The owner-keyed Miami Official Records search-token cache (owner_clean -> qs). Every key is a
+# homeowner's name, so it belongs here and not in the checkout, where it sat until 2026-09-24.
+RECORDS_QS = os.path.join(DEALFLOW_DIR, 'records_qs.json')
+_REPO = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_DIR = os.path.join(_HOME, 'DEALFLOW')
+
+
+def _same_dir(a, b):
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def _readable_map(path):
+    import json as _json
+    try:
+        with open(path, encoding='utf-8') as fh:
+            return isinstance(_json.load(fh), dict)
+    except (OSError, ValueError):
+        return False
+
+
+def records_qs():
+    """Path of the Official Records token cache, moving a legacy checkout copy in first.
+
+    A records_qs.json still in the repo folder is merged into RECORDS_QS (keys already there win)
+    and then deleted, so the first run after the pull does the move and every later one is a stat.
+    Only when DEALFLOW_DIR resolves to the default ~/DEALFLOW (set explicitly or not): tests and
+    GitHub Actions point it at a throwaway folder, and a move there would carry the real cache into
+    a directory about to be deleted. If the move fails, the legacy file is left untouched and
+    whichever copy is readable is returned, so no token is lost or hidden.
+    """
+    legacy = os.path.join(_REPO, 'records_qs.json')
+    if not os.path.exists(legacy) or not _same_dir(DEALFLOW_DIR, _DEFAULT_DIR):
+        ensure()           # a fresh machine: writers must not mint a token and then fail to save it
+        return RECORDS_QS
+    import json as _json
+    try:
+        with open(legacy, encoding='utf-8') as fh:
+            old = _json.load(fh)
+        cur = {}
+        if os.path.exists(RECORDS_QS):
+            with open(RECORDS_QS, encoding='utf-8') as fh:
+                cur = _json.load(fh)
+        if not isinstance(old, dict) or not isinstance(cur, dict):
+            raise ValueError('records_qs.json is not an owner -> token map')
+        for k, v in old.items():
+            cur.setdefault(k, v)
+        ensure()
+        tmp = RECORDS_QS + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            _json.dump(cur, fh, indent=1, sort_keys=True)
+        os.replace(tmp, RECORDS_QS)
+        os.remove(legacy)
+    except (OSError, ValueError) as exc:
+        import sys as _sys
+        print('paths: records_qs.json left in the repo folder, not moved (%s)' % exc, file=_sys.stderr)
+        # Use whichever copy can actually be read: an unreadable destination must not hide the
+        # valid tokens still sitting in the legacy file.
+        return RECORDS_QS if _readable_map(RECORDS_QS) or not _readable_map(legacy) else legacy
+    return RECORDS_QS
+
+
 def ensure():
     """Create DEALFLOW_DIR and return it."""
     os.makedirs(DEALFLOW_DIR, exist_ok=True)
