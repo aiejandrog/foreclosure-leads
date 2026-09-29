@@ -368,7 +368,7 @@ class StageTests(unittest.TestCase):
     def test_an_earlier_nights_other_halt_or_lower_cutoff_holds_minting(self):
         from datetime import datetime as _dt
         tpl, now = 'captcha/rd-test-{day}.json', _dt(2026, 9, 30, 5, 30)
-        self._ledger('2026-09-27', captcha_halted='Account balance unavailable; paid work stopped')
+        self._ledger('2026-09-27', captcha_halted='Cost settlement could not be persisted; stop for reconciliation')
         self.assertIn('reconcile', RD.carried_captcha_stop(tpl, 1.00, now))
         os.unlink(str(RD.case_review.output_path('captcha/rd-test-2026-09-27.json')))
         self._ledger('2026-09-26', captcha_cutoff_decimal='0.50')
@@ -383,6 +383,27 @@ class StageTests(unittest.TestCase):
         bad = self._ledger('2026-09-25')
         bad.write_text('{not json', encoding='utf-8')
         self.assertIn('cannot be read', RD.carried_captcha_stop(tpl, 1.00, now))
+
+    def test_a_failed_closing_balance_read_does_not_block_later_nights(self):
+        from datetime import datetime as _dt
+        tpl, now = 'captcha/rd-test-{day}.json', _dt(2026, 10, 29, 5, 30)
+        self._ledger('2026-09-28', captcha_halted='Account balance unavailable; paid work stopped')
+        self.assertEqual(RD.carried_captcha_stop(tpl, 1.00, now), '')
+
+    def test_a_pending_charge_in_the_manual_ledger_holds_nightly_minting(self):
+        import case_review
+        from datetime import datetime as _dt
+        path = case_review.output_path(RD._MANUAL_LEDGER)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({'version': 1, 'cases': {}, 'actual_usd': 0.0, 'reserved': {},
+                                    'captcha_cutoff_decimal': '0.25'}), encoding='utf-8')
+        self.addCleanup(lambda: path.exists() and path.unlink())
+        tpl, now = 'captcha/rd-test-{day}.json', _dt(2026, 9, 30, 5, 30)
+        self.assertEqual(RD.carried_captcha_stop(tpl, 1.00, now), '')   # its lower cutoff is its own
+        path.write_text(json.dumps({'version': 1, 'cases': {}, 'actual_usd': 0.0, 'reserved': {},
+                                    'captcha_pending': {'stage': 'polling', 'task_id': 3}}),
+                        encoding='utf-8')
+        self.assertIn('unknown cost', RD.carried_captcha_stop(tpl, 1.00, now))
 
     def test_optional_tokens_without_a_key_still_runs_the_rest(self):
         import captcha_solver

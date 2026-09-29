@@ -89,8 +89,8 @@ reach $1.00 on other stages' spend within days and then stay halted. The stages 
 another, so on a fresh ledger the drop during [2f/5] is this stage's own spend (another spender
 on the account at the same moment would only make it stop early). A fresh file does not wipe what
 an earlier night left for a person: carried_captcha_stop() holds minting while any earlier nightly
-ledger has a charge of unknown cost, a reservation, a halt other than reaching its own cutoff, or a
-lower cutoff. --optional-tokens turns that stop, and a missing 2Captcha key, into "no tokens
+ledger, or the manual runs' ledger, has a charge of unknown cost or a reservation, or an earlier
+nightly one has a halt that left something to reconcile or ran under a lower cutoff. --optional-tokens turns that stop, and a missing 2Captcha key, into "no tokens
 tonight" with a warning, so the night's vision reads still run.
 
 --max-minutes 20 starts no new case after twenty minutes. A case already running is allowed to
@@ -313,9 +313,16 @@ def captcha_ledger_name(template, now=None):
     return template.replace('{day}', (now or datetime.now()).strftime('%Y-%m-%d'))
 
 
-# Halts a new night may clear: both only mean that night's cutoff was reached.
+# Halts a new night may clear, because they leave nothing to reconcile: that night's cutoff was
+# reached, a closing balance read failed after every charge was receipted, or a task's cost was
+# recorded but it returned no token. Any of them with a pending charge still stops (checked first).
 _NIGHTLY_HALTS = ('Spend (balance drop or receipts) exceeds approved cutoff',
-                  'Next task could exceed the approved cutoff; paid work stopped')
+                  'Next task could exceed the approved cutoff; paid work stopped',
+                  'Account balance unavailable; paid work stopped',
+                  'Completed task had no token; actual cost recorded')
+# The manual runs' ledger (the --captcha-state default). It spends from the same 2Captcha account,
+# so a charge of unknown cost left there holds nightly minting too.
+_MANUAL_LEDGER = 'captcha/run_documents-captcha.json'
 
 
 def carried_captcha_stop(template, limit, now=None):
@@ -331,8 +338,10 @@ def carried_captcha_stop(template, limit, now=None):
     pattern = str(case_review.output_path(template.replace('{day}', '*')))
     dated = re.compile(re.escape(os.path.basename(template)).replace(re.escape('{day}'),
                                                                       r'\d{4}-\d{2}-\d{2}') + '$')
-    for path in sorted(glob.glob(pattern)):
-        if path == tonight or not dated.match(os.path.basename(path)):
+    manual = str(case_review.output_path(_MANUAL_LEDGER))
+    paths = sorted(p for p in glob.glob(pattern) if dated.match(os.path.basename(p)))
+    for path in paths + ([manual] if os.path.exists(manual) else []):
+        if path == tonight:
             continue
         name = os.path.basename(path)
         try:
@@ -340,6 +349,8 @@ def carried_captcha_stop(template, limit, now=None):
                 data = json.load(fh)
             if data.get('captcha_pending') or data.get('reserved'):
                 return '%s has a captcha charge of unknown cost; reconcile it, then clear it' % name
+            if path == manual:
+                continue           # its halts and cutoff belong to the manual runs
             halted = data.get('captcha_halted')
             if halted and halted not in _NIGHTLY_HALTS:
                 return '%s stopped paid work (%s); reconcile it, then clear it' % (name, halted)
@@ -759,13 +770,28 @@ def main(argv=None):
         from run_owner_tokens import TokenLadder
         ledger = case_review.output_path(captcha_ledger_name(args.captcha_state))
         ledger.parent.mkdir(parents=True, exist_ok=True)
-        captcha_state = State(ledger).__enter__()
         try:
-            solver = PaidCutoffSolver(captcha_state, args.captcha_max_spend, captcha_solver._key())
-        except ValueError as exc:
-            captcha_state.__exit__(None, None, None)
-            parser.exit(2, 'captcha cutoff refused: %s\n' % exc)
-        token_budget['ladder'] = TokenLadder(qs_cache, solver)
+            captcha_state = State(ledger).__enter__()
+        except (RuntimeError, ValueError, OSError) as exc:    # held by another run, or torn
+            captcha_state = None
+            if not args.optional_tokens:
+                parser.exit(2, 'captcha ledger refused: %s\n' % exc)
+            print('run_documents: WARNING no tokens minted tonight: captcha ledger %s: %s'
+                  % (ledger.name, exc))
+            token_budget = None
+        if captcha_state is not None:
+            try:
+                solver = PaidCutoffSolver(captcha_state, args.captcha_max_spend, captcha_solver._key())
+            except ValueError as exc:
+                captcha_state.__exit__(None, None, None)
+                captcha_state = None
+                if not args.optional_tokens:
+                    parser.exit(2, 'captcha cutoff refused: %s\n' % exc)
+                print('run_documents: WARNING no tokens minted tonight: captcha cutoff refused: %s'
+                      % exc)
+                token_budget = None
+        if token_budget:
+            token_budget['ladder'] = TokenLadder(qs_cache, solver)
     queue = DocumentQueue()
     written = read_ok = 0
     dossiers = []
