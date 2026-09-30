@@ -2749,8 +2749,19 @@ try:
             fh.write(csv_text(quirks, header=HDR + ['Notes']))
         rc, out = run([])
         t = load(STATUS)['total']
-    rec('...while quotes that are closed (a comma, a doubled quote, a line break inside a quoted cell, a bare quote inside an unquoted one) still read: every row is there, '
+    rec('...while quotes that are closed (a comma, a doubled quote, a line break inside a quoted cell) still read: every row is there, '
         'the opt-out and the DNC flag with them', rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
+    bare = csv_text(quote_rows).split('\r\n')
+    assert bare[1].startswith('Ann,')
+    bare[1] = 'An"n,' + bare[1][len('Ann,'):]                       # a quote inside an unquoted cell does not open a quoted one: it is only a character
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
+            fh.write('\r\n'.join(bare))
+        rc, out = run([])
+        t = load(STATUS)['total']
+    rec('...and so does a bare quote inside an unquoted cell (An"n): it is only a character, every row is there, the opt-out and the DNC flag with them',
+        rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
     # a row with more or fewer cells than the header: a comma put into a cell (or taken out) moves every column after it one place, so the cell that held
     # an opt-out or a flag is read from its neighbour's place; a file cut short has lost rows besides. Refused, not read.
     shift_rows = [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)]),
