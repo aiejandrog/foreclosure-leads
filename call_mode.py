@@ -1726,7 +1726,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'pcs': (_groups.get(d.get('pkey') or '') if len(_groups.get(d.get('pkey') or '') or []) > 1 else None),
             # ---- money (null = not checked) ----
             'v': _n('value'), 'py': _n('payoff'), 'ja': _n('jaccr'), 'jg': _n('judg'),
-            'jd': _s('jdate', 10), 'arv': _n('arv'), 'an': _n('arvn'),
+            'jd': _s('jdate', 10), 'jf': _s('jfloordate', 10), 'arv': _n('arv'), 'an': _n('arvn'),
             'e': eq if (eq is not None and (d.get('value') or 0)) else None,
             # recorded-lien dollars already taken off `e`, so the card can say so (2026-09-30)
             'el': (round(_eq_lien) if (_eq_lien and eq is not None and (d.get('value') or 0)) else None),
@@ -5171,7 +5171,7 @@ function screenLead(){
   clock += '</div>';
 
   var mny = '<div class="grid">'
-    + kv('They owe (with interest)', money(r.py))
+    + kv('They owe (with interest)', (r.jf && r.py!=null ? 'at least ' : '') + money(r.py))
     + kv('Property value', money(r.v))
     + kv('Equity', r.e==null ? '<span class="nc">not known</span>' : (Math.round(r.e)+'%'+(has(r,'E')?' <span class="nc">gross</span>':'')
          // Say which kind of number this is, on the surface where it gets spoken out loud. A
@@ -5183,7 +5183,8 @@ function screenLead(){
     + kv('Surviving 1st', r.ss==null ? '<span class="nc">not checked</span>' : (r.ss===0?'none':money(r.ss)), 1)
     + '</div>';
   var mc='';
-  if(r.py!=null && r.ja) mc += '<span class="chip">includes $'+Math.round(r.ja).toLocaleString()+' interest'+(r.jd?(' since '+esc(r.jd)):'')+'</span>';
+  // jf = no judgment entry on the docket; interest runs from the notice of sale, a MINIMUM
+  if(r.py!=null && r.ja) mc += '<span class="chip">includes '+(r.jf?'at least ':'')+'$'+Math.round(r.ja).toLocaleString()+' interest'+(r.jd?(' since '+esc(r.jd)):(r.jf?(' since the notice of sale '+esc(r.jf)):''))+'</span>';
   if(r.py==null && r.jg!=null) mc += '<span class="chip">judgment as entered $'+Math.round(r.jg).toLocaleString()+'</span>';
   if(has(r,'J')) mc += '<span class="chip bad">judgment not posted</span>';
   if(has(r,'M')) mc += '<span class="chip bad">a 1st mortgage SURVIVES this sale</span>';

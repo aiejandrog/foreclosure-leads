@@ -341,7 +341,15 @@ def render_html(b):
                  f'<td class="n">?</td></tr>')
 
     # ---- payoff line, sourced
-    if b['accrued']:
+    if b['accrued'] and r.get('jfloor'):
+        # no final-judgment entry on the docket: interest runs from the notice of sale, which is
+        # published only after the judgment (FS 45.031), so this is a MINIMUM, not the payoff
+        pay_note = (f"Judgment {_money(b['judg'])} + at least {_money(r.get('jaccr'))} post-judgment "
+                    f"interest (FS 55.03), counted from the notice of sale on "
+                    f"{_esc(r.get('jfloordate',''))} = <b>at least {_money(b['payoff'])}</b> on "
+                    f"{_esc(r.get('jasof',''))}. The entry date is not on the docket, so the real "
+                    f"payoff is higher. Confirm with the plaintiff's payoff letter.")
+    elif b['accrued']:
         pay_note = (f"Judgment {_money(b['judg'])} entered {_esc(r.get('jdate',''))} + "
                     f"{_money(r.get('jaccr'))} post-judgment interest (FS 55.03, rate resets each "
                     f"Jan 1) = <b>{_money(b['payoff'])}</b> to satisfy on {_esc(r.get('jasof',''))}. "
@@ -612,7 +620,8 @@ def main():
         print(f'{len(up)} upcoming sale(s) with a published judgment:\n')
         for r in up[:a.limit]:
             pay = float(r.get('payoff') or r.get('judg') or 0)
-            flag = '' if r.get('jaccrued') else '  (judgment as-entered)'
+            flag = ('  (at least: from the notice of sale)' if r.get('jfloor')
+                    else '' if r.get('jaccrued') else '  (judgment as-entered)')
             print(f"  {r.get('auction')}  {str(r.get('case')):22} {str(r.get('addr'))[:40]:40} "
                   f"payoff {_money(pay):>12}{flag}")
         return 0

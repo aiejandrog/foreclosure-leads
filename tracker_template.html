@@ -2213,7 +2213,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="hv" class="active" title="Hide deals you've marked Seen. ON by default so you don't re-see the same properties when you hop back on. Tap Seen on any deal to file it here. Turn this off to browse viewed deals again.">Hide viewed</button>
 <button id="newonly" title="Only leads that appeared on the board since your last visit — the shortlist of what's actually new to you. Composes with every other filter.">🆕 New only</button>
 <button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
-<button id="eq30" title="Only leads with 30%+ REAL owner equity: value minus the full payoff (judgment PLUS accrued FS 55.03 interest) and every lien we know about — surviving mortgage, juniors, assessments, municipal liens, back taxes. Excludes gross/unverified equity and anything the records flagged dead. ON A FORECLOSURE this is the same number printed on the row. ON A TAX DEED the row prints your PROFIT MARGIN instead (capped near 20% by the bid model), so a tax deed can read &quot;19% margin&quot; and still belong here — the owner&rsquo;s equity is what got it in.">30%+ equity</button>
+<button id="eq30" title="Only leads with 30%+ REAL owner equity, and only where the judgment is posted and the recorded lien search VERIFIED the property (clear or priced). Value minus the full payoff (judgment PLUS accrued FS 55.03 interest) and every lien we know about — surviving mortgage, juniors, assessments, municipal liens, back taxes. Excludes gross/unverified equity and anything the records flagged dead. ON A FORECLOSURE this is the same number printed on the row. ON A TAX DEED the row prints your PROFIT MARGIN instead (capped near 20% by the bid model), so a tax deed can read &quot;19% margin&quot; and still belong here — the owner&rsquo;s equity is what got it in.">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
@@ -2790,9 +2790,59 @@ function _dTyped(v){ return v != null && v !== ''; }
    accrued one in another — that inconsistency is worse than either number alone. */
 function _payoffOf(r){ return (+((r||{}).payoff) > 0) ? +r.payoff : (+((r||{}).judg) || 0); }
 function _isAccrued(r){ return !!((r||{}).jaccrued) && (+((r||{}).payoff) > 0); }
+/* DEBT UNKNOWN (2026-09-30). A foreclosure whose judgment is not posted (r.ju) and every lis pendens
+   row (no judgment exists yet) have _payoffOf() == 0. That is an UNKNOWN debt, not $0 owed, and
+   subtracting nothing made _netEqOf() return the whole house value: the row read "judgment not
+   posted · 100% eq" and the 30%+ equity filter let it through. Tax deeds price off the opening bid
+   and balloon rows off their own loan, so neither is this case. */
+function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_payoffOf(r) > 0); }
+/* LIENS VERIFIED. equity_state.py stamps eqstate on every lead; only 'clear' and 'priced' are
+   facts. 'unpriced' / 'none' / 'unchecked' mean liens the recorded search did not establish are
+   counted as $0, so the equity shown is the MOST it can be: a ceiling, rendered with "≤". */
+function _liensVerified(r){ return !!r && (r.eqstate === 'clear' || r.eqstate === 'priced'); }
+function _eqCeiling(r){ return !!r && r.st !== 'TD' && !_liensVerified(r); }
+/* One text for "net equity" wherever a dollar figure is printed. fmtFn formats dollars. */
+// ROW + CARD equity text. Precedence: no worth -> nothing; debt unknown -> "eq unknown"; a gross or
+// condo figure -> "~"; liens not verified -> "≤" (the most it can be); else the plain figure.
+var _EQ_TIP_APPROX = 'Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).';
+var _EQ_TIP_UNKNOWN = 'Equity unknown — no final judgment is posted, so the debt is not known. It is not zero. Pull the docket or ask the owner what they owe.';
+var _EQ_TIP_CEIL = 'At most this much — the recorded lien search is not verified for this property, so any mortgage or lien it missed is counted as $0. Ask the owner what they owe.';
+function _eqRowHtml(r){
+  if(!_basisOf(r)) return '';
+  if(_debtUnknown(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_UNKNOWN+'">eq unknown</span>';
+  var p = _eqPct(r);
+  if(r.eqfake||(r.st!=='TD'&&r.condo)) return ' · <span class="eqfake" title="'+_EQ_TIP_APPROX+'">~'+p+'% eq</span>';
+  if(_eqCeiling(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_CEIL+'">≤'+p+'% eq</span>';
+  return ' · '+p+'% '+(r.st==='TD'?'margin':'eq');
+}
+function _eqStatTxt(r){
+  if(!_basisOf(r)) return '—';
+  if(_debtUnknown(r)) return 'unknown';
+  var p = _eqPct(r);
+  if(r.eqfake||(r.st!=='TD'&&r.condo)) return '~'+p+'%';
+  if(_eqCeiling(r)) return '≤'+p+'%';
+  return p+'%';
+}
+function _netEqTxt(r, fmtFn){
+  if(_debtUnknown(r)) return 'unknown — ' + (r.st === 'LP' ? 'no judgment yet, loan balance not known' : 'judgment not posted');
+  var f = fmtFn || fmtMoney, n = _netEqOf(r);
+  return (_eqCeiling(r) && n > 0) ? ('at most ' + f(n) + ' (liens not verified)') : f(n);
+}
 function _accrNote(r, long){
   if(!_isAccrued(r)) return (+((r||{}).judg) > 0 && long)
     ? 'as entered — post-judgment interest not accrued (entry date unverified)' : '';
+  // jfloor: no entry date on the docket, so interest runs from the first NOTICE OF SALE, which the
+  // clerk publishes only after the judgment (FS 45.031). The true interest is HIGHER, never lower,
+  // so the label says "at least" and never calls that date the entry date.
+  if(r.jfloor){
+    var fd = String(r.jfloordate||'').split('-'), fds = fd.length===3 ? (fd[1]+'/'+fd[2]+'/'+fd[0]) : (r.jfloordate||'');
+    return long
+      ? ('judgment ' + fmtMoney(r.judg) + ' + at least ' + fmtMoney(r.jaccr)
+         + ' post-judgment interest (FS 55.03), counted from the notice of sale ' + fds
+         + ' because the entry date was not found — the real payoff is higher than ' + fmtMoney(r.payoff)
+         + (r.jasof ? ' on ' + r.jasof : ''))
+      : ('+' + fmtMoney(r.jaccr) + '+ interest (at least; since the ' + fds + ' notice of sale)');
+  }
   var d = String(r.jdate||'').split('-'), ent = d.length===3 ? (d[1]+'/'+d[2]+'/'+d[0]) : (r.jdate||'');
   return long
     ? ('judgment ' + fmtMoney(r.judg) + ' entered ' + ent + ' + ' + fmtMoney(r.jaccr)
@@ -3602,7 +3652,8 @@ function _cureMath(r){
   var fees = 4500;                                 // FL uncontested foreclosure attorney fees + costs
   return {payoff: payoff, piti: piti, months: mo,
           reinstate: (arrears!=null) ? arrears+fees : null,
-          postJudgment: !!r.jdate,
+          // a notice-of-sale floor proves a judgment exists (FS 45.031) even with no entry date
+          postJudgment: !!(r.jdate || r.jfloor),
           equityAfter: val ? val - payoff : null};
 }
 function _cureBlock(r){
@@ -3610,8 +3661,12 @@ function _cureBlock(r){
   if(!c) return '';
   var fm = function(n){ return (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—'; };
   var h = '<div class="cssec">MONEY TO CURE — what stops the sale</div><div class="csbody">';
-  h += '<div class="csrow"><span class="csk">Pay it off (exact)</span><span class="csvv"><b>'+fm(c.payoff)+'</b>'
-     + (_isAccrued(r)?' <span class="csmut">judgment + FS 55.03 interest</span>':' <span class="csmut">judgment as entered</span>')+'</span></div>';
+  // "exact" only with interest from a verified entry date. A floor, or a bare judgment, is a MINIMUM.
+  var _payExact = _isAccrued(r) && !r.jfloor;
+  h += '<div class="csrow"><span class="csk">Pay it off ('+(_payExact?'exact':'at least')+')</span><span class="csvv"><b>'+fm(c.payoff)+'</b>'
+     + (_payExact?' <span class="csmut">judgment + FS 55.03 interest</span>'
+        : r.jfloor?' <span class="csmut">judgment + FS 55.03 interest from the notice of sale — the real payoff is higher</span>'
+        :' <span class="csmut">judgment as entered, no interest added</span>')+'</span></div>';
   if(c.reinstate!=null){
     h += '<div class="csrow"><span class="csk">Reinstate (ESTIMATE)</span><span class="csvv"><b>'+fm(c.reinstate)+'</b>'
        + ' <span class="csmut">~'+c.months+' mo &times; '+fm(c.piti)+' PITI + $4,500 fees</span></span></div>';
@@ -3619,9 +3674,9 @@ function _cureBlock(r){
     h += '<div class="csrow"><span class="csk">Reinstate</span><span class="csvv"><span class="csmut">no filing date — cannot estimate arrears</span></span></div>';
   }
   if(c.equityAfter!=null)
-    h += '<div class="csrow"><span class="csk">His equity if sold</span><span class="csvv"><b>'+fm(c.equityAfter)+'</b> <span class="csmut">value − payoff, before costs</span></span></div>';
+    h += '<div class="csrow"><span class="csk">His equity if sold</span><span class="csvv"><b>'+(_payExact?'':'at most ')+fm(c.equityAfter)+'</b> <span class="csmut">value − payoff, before costs'+(_payExact?'':'; the payoff above is a minimum')+'</span></span></div>';
   if(c.postJudgment)
-    h += '<div class="cswarn">⚠ <b>FINAL JUDGMENT ENTERED '+esc(r.jdate||'')+'.</b> In Florida the RIGHT to reinstate '
+    h += '<div class="cswarn">⚠ <b>FINAL JUDGMENT ENTERED '+(r.jdate ? esc(r.jdate) : 'on or before '+esc(r.jfloordate||'the notice of sale'))+'.</b> In Florida the RIGHT to reinstate '
        + 'generally ends at judgment — after that it is the servicer&rsquo;s discretion, not his. Do not promise a '
        + 'reinstatement. With real equity the faster exits are <b>sell before the sale</b> or <b>refinance/hard-money payoff</b>.</div>';
   h += '<div class="cswarn" style="background:#fff8e6;border-color:#c9a227">📞 <b>The only real number is a WRITTEN payoff/reinstatement '
@@ -3774,7 +3829,7 @@ function _csScriptBody(r){
       '</div>' +
       '<table class="scriptknow-t"><tbody>' +
         rows.map(([k, v, p]) => '<tr><td>' + k + '</td><td><b>' + v + '</b></td><td class="prov">' + p + '</td></tr>').join('') +
-        '<tr class="tot"><td>' + totLabel + '</td><td><b>' + (ne ? _fmk(ne) : '—') + '</b></td><td class="prov">' + (td ? 'after quiet title + carry' : 'after judg + survivors + liens') + '</td></tr>' +
+        '<tr class="tot"><td>' + totLabel + '</td><td><b>' + (_debtUnknown(r) ? 'unknown' : (ne ? (_eqCeiling(r) ? '≤ ' : '') + _fmk(ne) : '—')) + '</b></td><td class="prov">' + (td ? 'after quiet title + carry' : 'after judg + survivors + liens') + '</td></tr>' +
         (!td && oe > 0 ? '<tr class="tot"><td>Owner equity (what THEY have)</td><td><b>' + _fmk(oe) + '</b></td><td class="prov">value − everything recorded</td></tr>' : '') +
         (r.zprice && r.zstatus === 'LISTED' ? '<tr><td>Actively listed at</td><td><b>' + _fmk(+r.zprice) + '</b></td><td class="prov">Zillow ' + esc(r.zstatus) + '</td></tr>' : '') +
         (+r.rfval > 0 ? '<tr><td>Redfin Estimate</td><td><b>' + _fmk(+r.rfval) + '</b></td><td class="prov">independent AVM · advisory</td></tr>' : '') +
@@ -4670,7 +4725,8 @@ function _advisorBrief(r){
   var owed = _payoffOf(r);
   L.push('Money: value ' + (r.value ? money(r.value) + ' (county)' : 'UNKNOWN')
     + ' | owed ' + (owed ? money(owed)
-                            + ((+r.payoff > 0) ? ' payoff (incl. interest' + (r.jdate ? ', as of ' + r.jdate : '') + ')'
+                            + ((+r.payoff > 0) ? (r.jfloor ? ' payoff AT LEAST (interest counted from the notice of sale ' + (r.jfloordate || '') + '; real payoff is higher)'
+                                                           : ' payoff (incl. interest' + (r.jdate ? ', as of ' + r.jdate : '') + ')')
                                                : ' judgment' + (r.jdate ? ' (' + r.jdate + ')' : '')
                                                  + (r.jaccr ? ' + ' + money(r.jaccr) + ' interest accrued' : ''))
                   : (r.ju ? 'NOT POSTED yet' : 'unknown')));
@@ -4908,7 +4964,7 @@ function _callSheet(r){
       : big(_isAccrued(r)?'PAYOFF — what they owe today':'FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':(_isAccrued(r)?_accrNote(r,false)+' · ':'')+'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn'))+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
     survBox+
-    big(_netEqLabel(r,1), fm(netEq), (r.st==='TD'||survChecked)?_netEqSub(r):'⚠ assumes nothing survives — pull the chain', 'good')+
+    big(_netEqLabel(r,1), _netEqTxt(r, fm), _debtUnknown(r)?'⚠ debt unknown — not zero; pull the docket or ask what they owe':((r.st==='TD'||survChecked)?_netEqSub(r):'⚠ assumes nothing survives — pull the chain'), _debtUnknown(r)?'warn':'good')+
   '</div>';
 
   // THE CLOCK + DEBT — shared bodies with Deal analysis so the two screens cannot drift.
@@ -5383,7 +5439,7 @@ function _copyCallSheet(c){
       ? 'SURVIVES SALE:   mortgages WIPED (FS 197.552) — check municipal/code liens + covenants'
       : 'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+survLabel+']':'$0  ['+survLabel+']')),
     (jr>0 && r.st!=='TD') ? 'JUNIOR / 2ND:   '+fm(jr)+'  (payoff only on direct purchase; wiped at auction if named)' : '',
-    (_netEqLabel(r,1)+':').padEnd(17)+fm(_netEqOf(r))+(r.st==='TD'?'   (at est. winning bid '+fm(r._purchase||0)+')':''),
+    (_netEqLabel(r,1)+':').padEnd(17)+_netEqTxt(r, fm)+(r.st==='TD'?'   (at est. winning bid '+fm(r._purchase||0)+')':''),
     '',
     'AUCTION:  '+r.auction+' 9am'+(_hasClock(r)?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
     'PROPERTY: '+(r.dor_desc||'')+(r.beds?', '+r.beds+'bd/'+r.baths+'ba':'')+(r.sqft?', '+(+r.sqft).toLocaleString()+'sf':'')+(r.bought?', owned since '+r.bought:''),
@@ -7211,10 +7267,12 @@ function _ownerStackOf(r){
 }
 function _ownerEqOf(r){
   var v = _basisOf(r); if(!v) return 0;
+  if(_debtUnknown(r)) return 0;              // no claim: the debt is unknown, not zero
   return Math.max(0, v - _ownerOwedOf(r) - _ownerStackOf(r));
 }
 function _netEqOf(r){
   var v = _basisOf(r); if(!v) return 0;
+  if(_debtUnknown(r)) return 0;              // no claim: the debt is unknown, not zero (see _debtUnknown)
   // TAX DEED IS NOT A FORECLOSURE. Subtracting the stack models "you acquire at the opening bid" —
   // true at a foreclosure sale, a fantasy at a tax deed, where the parcel is auctioned to the highest
   // bidder and an equity parcel gets run up toward market. You cannot win a $2.6M Delray house for its
@@ -7296,7 +7354,7 @@ function _joseMsg(r){
           + 'Modeled profit after quiet title + carry: ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
         : 'Foreclosing judgment: '+(r.judg?'$'+(+r.judg).toLocaleString():'not posted')+'\n'
           + 'Surviving senior mortgage: '+senior+'\n'
-          + 'Net equity after the stack: ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n')
+          + 'Net equity after the stack: '+_netEqTxt(r, function(n){ return '~$'+Math.round(n).toLocaleString(); })+'\n')
     + 'Tracker verdict: '+(r._verdict||'—')+(r.zstatus?'  ·  '+r.zstatus:'')+'\n\n'
     + 'Go / no-go? What do you want the first move to be?\n'
     + _deepLink(r);
@@ -7336,7 +7394,7 @@ function _liveMsg(r){
           // live walk-away off a survivor the tracker knows exists.
           + ' · senior '+(function(){var s=(r._slien!=null)?+r._slien:(+r._chainSurv||0),t=!!r._slienSet;
               return s?'$'+Math.round(s).toLocaleString()+(t?' (you verified)':(r.orconf==='ok'?' (verified)':' (~est)')):(t?'none — you verified':'not traced');})()
-          + ' · net ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n')
+          + ' · net '+_netEqTxt(r, function(n){ return '~$'+Math.round(n).toLocaleString(); })+'\n')
     + 'Drop what you\'re doing — research this while I hold them. Say PATCH when you\'re ready.\n'
     + _deepLink(r);
 }
@@ -8510,7 +8568,11 @@ function _profitPaths(r){
   if(fc && (+r.days||0) > 0){
     add('Stop the sale — the floor', '$2,500 fee + $330 court costs, through the attorney (FS 501.1377). Buys 60–90 days to run every other play below.'+(fresh?'':' Case is old — expect a seasoned staller; qualify hard before spending effort.'), ['keep','sell','walk']);
   }
-  if(netEq >= 100000){
+  if(_debtUnknown(r)){
+    // no posted judgment (or a lis pendens): _ownerEqOf is 0 because the debt is unknown, not
+    // because the owner has no equity. Sizing a play here would be a guess either way.
+    add('Equity unknown — get the balance first', 'No judgment is posted, so what they owe is not known. Ask the owner for the loan balance or a payoff letter before picking a play. It could be anywhere from deep equity to underwater.', ['sell','walk','keep']);
+  } else if(netEq >= 100000){
     var loan = Math.round(val * 0.65);
     add('Hard-equity loan referral', '~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
     // quote the SAME quantity as the tier below (net equity), then the discount-buy spread on top —
@@ -10026,7 +10088,9 @@ function genAttyPacket(r){
   var eqSpec = '';
   if(r && _basisOf(r)){
     var eqd = _netEqOf(r), eqp = netEqPct(r);
-    if(isFinite(eqd) && eqd > 0){
+    if(_debtUnknown(r)){
+      eqSpec = 'unknown <span class="mini">(no final judgment posted — the debt is not known — ATTORNEY TO VERIFY)</span>';
+    } else if(isFinite(eqd) && eqd > 0){
       eqSpec = fmtMoney(eqd) + (isFinite(eqp) ? ' <span class="mini">(~'+Math.round(eqp)+'% of value)</span>' : '')
              + ' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
     } else if(isFinite(eqd)){
@@ -10697,7 +10761,7 @@ function genFieldSheet(r){
     +     box('Owed (judgment)', fm(judg), r.auction?'what stops the sale':'', 'red')
     +     box('Worth', fm(basis), (r.arv?('ARV · '+r.arvn+' comps'):'county roll'), '')
     +     box('Survives the sale', fm(surv), (r.orconf==='ok'?'records-verified':(surv?'verify payoff':'nothing found')), surv?'amber':'green')
-    +     box('Net equity', fm(netEq), 'the reason we are here', 'gold')
+    +     box('Net equity', _netEqTxt(r, fm), 'the reason we are here', 'gold')
     +   '</div>'
     +   (codeNote ? '<div class="fwarn">&#9888; '+esc(codeNote)+'</div>' : '')
 
@@ -11191,6 +11255,7 @@ function genDealSnapshot(r){
   var surv = (r._slien!=null?+r._slien:(+r._chainSurv||0));
   var basis = _basisOf(r) || (arv>0 ? arv : val);
   var spread = _netEqOf(r);
+  var _dunk = _debtUnknown(r);               // debt unknown: never print value as "owed" or 0 as spread
   var owed = basis>0 ? Math.max(0, basis - spread) : 0;
   var flags = [];
   if(r.sibclaimed) flags.push({t:'CLAIMED — sibling case already sold', c:'#8a1c1c'});
@@ -11199,7 +11264,8 @@ function genDealSnapshot(r){
   if(r.ju) flags.push({t:'Final judgment not posted — debt unknown', c:'#a35a10'});
   if(r.condo && !r._assessSet) flags.push({t:'Condo — pull the estoppel (special assessment risk)', c:'#a35a10'});
   if(r.co) flags.push({t:'Company-owned — call Sunbiz officer, not the LLC', c:'#5b6472'});
-  var bestExit = spread >= 40000 ? 'BUY — cash offer at 70% of ARV, resell or hold' :
+  var bestExit = _dunk ? 'VERIFY — the debt is unknown; get the payoff before picking an exit' :
+                 spread >= 40000 ? 'BUY — cash offer at 70% of ARV, resell or hold' :
                  spread >= 15000 ? 'WHOLESALE — assign to a cash buyer for a fee' :
                  spread > 0      ? 'SHORT SALE — negotiate the lender down' :
                                    'PASS or SURPLUS RECOVERY only';
@@ -11232,7 +11298,7 @@ function genDealSnapshot(r){
     +       (+r.orhoa>0    ? '<div class="dsl"><span>HOA / COA lien</span><span class="n">'+fm(+r.orhoa)+'</span></div>' : '')
     +       (+r.orcode>0   ? '<div class="dsl"><span>Code enforcement</span><span class="n">'+fm(+r.orcode)+'</span></div>' : '')
     +       (+r.orirs>0    ? '<div class="dsl"><span>IRS lien (120-day redemption)</span><span class="n">'+fm(+r.orirs)+'</span></div>' : '')
-    +       '<div class="dsl" style="border-top:1px solid #d5dae4;margin-top:5px;padding-top:6px"><span><b>Total owed</b></span><span class="n">'+fm(owed)+'</span></div>'
+    +       '<div class="dsl" style="border-top:1px solid #d5dae4;margin-top:5px;padding-top:6px"><span><b>Total owed</b></span><span class="n">'+(_dunk?'unknown':fm(owed))+'</span></div>'
     +     '</div>'
     +     '<div class="dsbox"><h4>Value &amp; upside</h4>'
     +       '<div class="dsl"><span>County value</span><span class="n">'+fm(val)+'</span></div>'
@@ -11243,7 +11309,7 @@ function genDealSnapshot(r){
     +       '<div class="dsl"><span>Beds / Baths / Sqft</span><span class="n">'+(r.beds||'—')+' / '+(r.baths||'—')+' / '+(r.sqft?(+r.sqft).toLocaleString():'—')+'</span></div>'
     +     '</div>'
     +   '</div>'
-    +   '<div class="dsspread"><span>Gross spread (basis − total owed)</span><span class="s">'+fm(spread)+'</span></div>'
+    +   '<div class="dsspread"><span>Gross spread (basis − total owed)</span><span class="s">'+_netEqTxt(r, fm)+'</span></div>'
     +   '<div class="dsexit"><b>Best exit:</b> '+esc(bestExit)+'</div>'
     +   (flags.length ? '<div style="margin-top:12px">'+flags.map(function(x){return '<div class="dsflag" style="border-left-color:'+x.c+';color:'+x.c+'">'+esc(x.t)+'</div>';}).join('')+'</div>' : '')
     +   '<div style="margin-top:16px;font:12px "Segoe UI";color:#8a94a8;text-align:center">DEALFLOW · '+esc(new Date().toLocaleString())+' · fund/pass before Alejandro parks</div>'
@@ -15367,7 +15433,7 @@ function genScript(r){
       ${(+r._jlien||0)>0?`<tr><td>Junior / 2nd</td><td><b>${_fmk(+r._jlien)}</b></td><td class="prov">payoff only on direct purchase</td></tr>`:''}
       ${(+r._assess||0)>0?`<tr><td>HOA / assessment</td><td><b>${_fmk(+r._assess)}</b></td><td class="prov">recorded — estoppel still confirms</td></tr>`:''}
       <tr><td>Annual property tax</td><td><b>${r.etax?_fmk(r.etax):'—'}</b></td><td class="prov">${r.etax?(r.etaxest?'~ roll model':'billed'):'not pulled'}</td></tr>
-      <tr class="tot"><td>${td?'Modeled profit at winning bid':'Net equity (our number)'}</td><td><b>${_ne?_fmk(_ne):'—'}</b></td><td class="prov">${td?'after quiet title + carry':'after judg + survivors + liens'}</td></tr>
+      <tr class="tot"><td>${td?'Modeled profit at winning bid':'Net equity (our number)'}</td><td><b>${_debtUnknown(r)?'unknown':(_ne?(_eqCeiling(r)?'≤ ':'')+_fmk(_ne):'—')}</b></td><td class="prov">${td?'after quiet title + carry':'after judg + survivors + liens'}</td></tr>
       ${(!td&&_oe>0)?`<tr class="tot"><td>Owner equity (what THEY have)</td><td><b>${_fmk(_oe)}</b></td><td class="prov">value − everything recorded against them</td></tr>`:''}
       ${(r.zprice&&r.zstatus==='LISTED')?`<tr><td>Actively listed at</td><td><b>${_fmk(+r.zprice)}</b></td><td class="prov">Zillow ${r.zstatus||''}</td></tr>`:''}
       </tbody></table>
@@ -17351,6 +17417,10 @@ function view(){
     if(eq30Only) rows = rows.filter(r => {
       const b = _basisOf(r); if(!b) return false;
       const pct = Math.round((_ownerEqOf(r) / b) * 100);
+      // The button promises REAL equity and "excludes gross/unverified equity". A debt that is not
+      // known (_ownerEqOf already returns 0) or a lien search that did not verify the property
+      // (a ceiling, rendered "≤") is not real equity yet, so neither passes.
+      if(_debtUnknown(r) || (r.st !== 'TD' && !_liensVerified(r))) return false;
       return pct >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r);
     });
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
@@ -17738,7 +17808,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+_saleResultChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_docChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+_saleResultChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_docChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+_eqRowHtml(r)+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -17799,7 +17869,7 @@ function render(){
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
         // _eqPct, not raw r.eq: the baked gross ignored every lien, so this tile said "Equity 94%"
         // while the submeta two lines below said "41% eq" — on the phone, the device he calls from.
-        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+((r.eqfake||(r.st!=='TD'&&r.condo))?' eqfake':'')+'">'+(function(){var p=_eqPct(r);return _basisOf(r)?(((r.eqfake||(r.st!=='TD'&&r.condo))?'~':'')+p+'%'):'—';})()+'</div></div>'+
+        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+((r.eqfake||(r.st!=='TD'&&r.condo)||(_basisOf(r)&&(_debtUnknown(r)||_eqCeiling(r))))?' eqfake':'')+'">'+_eqStatTxt(r)+'</div></div>'+
       '</div>':'')+
       (r._verdict!=='VERIFY'?mrText(r):'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
@@ -17807,7 +17877,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+_saleResultChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_docChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+_saleResultChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_docChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+_eqRowHtml(r)+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
@@ -18758,7 +18828,7 @@ document.getElementById('exp').onclick = () => {
   const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(_netEqOf(r)),_netEqLabel(r),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,netEqPct(r),r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),((r.emails||[]).join(' | ')),(n.touches&&n.touches.length?n.touches[n.touches.length-1].d:''),(n.touches?n.touches.length:0),(n.touches&&n.touches.length?(n.touches[n.touches.length-1].ch+' '+n.touches[n.touches.length-1].out):''),(n.next||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),(_debtUnknown(r)?'':Math.round(_netEqOf(r))),_netEqLabel(r),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,(_debtUnknown(r)?'':netEqPct(r)),r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),((r.emails||[]).join(' | ')),(n.touches&&n.touches.length?n.touches[n.touches.length-1].d:''),(n.touches?n.touches.length:0),(n.touches&&n.touches.length?(n.touches[n.touches.length-1].ch+' '+n.touches[n.touches.length-1].out):''),(n.next||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
