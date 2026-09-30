@@ -43,7 +43,7 @@ def node(js):
         os.remove(path)
 
 
-NAMES = ('lastCall', '_navPush', '_navSeek', '_navHasBack', 'navBack', 'navNext', 'advance')
+NAMES = ('lastCall', '_inbound', 'lastOutreach', '_contactTier', '_navPush', '_navSeek', '_navHasBack', 'navBack', 'navNext', 'advance')
 FNS = ''.join(grab_fn(n) for n in NAMES)
 rec('state declared once', SRC.count('var _NAVB=[], _NAVF=[];') == 1)
 rec('lead card carries Back and Next', "id=\"navback\"" in SRC and '_navRow()' in SRC)
@@ -53,7 +53,7 @@ nav = SRC[SRC.find('function _navPush('):SRC.find('function _navRow(')]
 for bad in ('saveNotes', 'queueSync', 'logOutcome', '_WORKED', 'notes[', 'dials', 'cooldown'):
     rec('nav code never touches ' + bad, bad not in nav)
 
-HARNESS = 'var _NAVB=[], _NAVF=[];\n' + FNS + r"""
+HARNESS = 'var _NAVB=[], _NAVF=[], OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n' + FNS + r"""
 var notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null, toasts = [], writes = 0;
 var ALL = [{c:'A'}, {c:'B'}, {c:'C'}, {c:'D'}], GONE = {};
 function pool(){ return ALL.filter(function(r){ return !GONE[r.c]; }); }
