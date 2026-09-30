@@ -638,6 +638,29 @@ ping('source · RealForeclose (scrape)', chk_rf)
 if len(_SRC_DOWN) >= 2:
     add('FAIL', 'upstream sources', f'{len(_SRC_DOWN)} sources unreachable at once ({", ".join(s.split("·")[-1].strip() for s in _SRC_DOWN)}) — systemic, not a blip')
 
+# ---- 3b. lead data freshness ------------------------------------------------------------------
+# (2026-09-30) "site freshness" below is the board file's mtime, and every rebuild resets it: on
+# 09-30 DNS was dead at 05:30, the scrape never ran, and the 09:30 phones job rebuilt a board
+# stamped that morning over a leads_final.json from the previous morning. The 05:30 refresh writes
+# leads_final.json about 05:41 once its scrape succeeds (foreclosure_leads.py, then the refresh-only
+# enrichers stub_resolve / listing_status / sale_history rewrite it in the same run; a failed
+# scrape skips them all), so its age IS the age of the leads. 25h, not 30: every job that runs
+# this check runs after that write on a good day (refresh itself, Replies 08:45, Phones 09:30,
+# about 4h at most), and on a missed day Phones at 09:30 sees ~27.8h, which a 28h bar let through.
+# FAIL is advisory (exit 1), not a publish block: it reaches pipeline_alerts as a failed stage,
+# which is the alarm that was missing. On a box that is not the runner the file is a frozen
+# snapshot, so there it only warns. A hand run of listing_status.py resets the mtime; don't.
+_lf = os.path.join(HERE, 'leads_final.json')
+if os.path.exists(_lf):
+    _lf_h = (time.time() - os.path.getmtime(_lf)) / 3600
+    _lf_max = float(os.environ.get('HEALTH_LEADS_MAX_AGE_H', '25'))
+    if _lf_h > _lf_max:
+        add('FAIL' if IS_RUNNER else 'WARN', 'lead data freshness',
+            f'leads_final.json is {_lf_h:.0f}h old (over {_lf_max:.0f}h): the nightly scrape has not '
+            f'succeeded since, so any board built now carries old leads' + _STALE_NOTE)
+    else:
+        add('PASS', 'lead data freshness', f'leads scraped {_lf_h:.0f}h ago')
+
 # ---- 4. shipped site freshness ----------------------------------------------------------------
 docs = os.path.join(HERE, 'docs', 'index.html')
 if os.path.exists(docs):
@@ -674,6 +697,14 @@ if not IS_RUNNER:
     print("     For real numbers, read health.json from the armed runner. (MACHINE-HANDOFF §1, §3.)")
 for lvl, name, detail in R:
     print(f"  [{icon[lvl]}] {name:32} {detail}")
+# (the tiered-exit set is explained at the exit below; it is computed here so health.json can
+# say which FAILs block the publish, and run_report can grade DOWN without copying the list)
+_CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources',
+                  'entity claim in published board',
+                  # 2026-09-25: a committed access code was ADVISORY (exit 1) when the 09-03 leak
+                  # happened, so the publish went ahead. It blocks now.
+                  'committed secrets'}
+_crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
 status = 'DOWN' if fails else ('DEGRADED' if warns else 'HEALTHY')
 print(f"\n  STATUS: {status}   ({len(R)-len(fails)-len(warns)} ok · {len(warns)} warn · {len(fails)} fail)")
 json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
@@ -681,6 +712,7 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
            # real report from a non-runner's snapshot. Absent this flag they look identical.
            'runner': IS_RUNNER, 'runner_note': _NOT_RUNNER_WHY,
            'checks': [{'level': l, 'name': n, 'detail': d} for l, n, d in R],
+           'critical': _crit,
            'sources_ok': sum(1 for l, n, d in R if n.startswith('source') and l == 'PASS'),
            'sources_total': sum(1 for l, n, d in R if n.startswith('source'))},
           open(os.path.join(HERE, 'health.json'), 'w', encoding='utf-8'), indent=1)
@@ -694,12 +726,6 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
 #   exit 2 = compliance/systemic FAIL -> caller MUST skip publish
 #   exit 1 = coverage-floor FAIL only -> advisory; caller may publish if publish_guard is clean
 #   exit 0 = healthy
-_CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources',
-                  'entity claim in published board',
-                  # 2026-09-25: a committed access code was ADVISORY (exit 1) when the 09-03 leak
-                  # happened, so the publish went ahead. It blocks now.
-                  'committed secrets'}
-_crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
 if _crit:
     print(f"  !! COMPLIANCE FAIL (blocks publish): {', '.join(_crit)}")
 sys.exit(2 if _crit else (1 if fails else 0))

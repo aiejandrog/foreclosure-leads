@@ -87,7 +87,8 @@ async function run(src, commits, opts = {}) {
     },
   };
   const context = { repo: { owner: 'aiejandrog', repo: 'foreclosure-leads' },
-                    eventName: opts.eventName || 'schedule' };
+                    eventName: opts.eventName || 'schedule',
+                    payload: opts.schedule ? { schedule: opts.schedule } : {} };
   const fetchStub = async () => {
     out.fetched++;
     if (opts.html instanceof Error) throw opts.html;
@@ -273,6 +274,13 @@ const morningCases = [
     fx: WINTER_OK, now: AT_0715_EST, html: board('2026-01-15'), fire: false },
   { name: 'morning: #87 today\'s refresh behind 150 newer commits is still found',
     fx: MORNING_PAGED_OK, now: AT_0715_EDT, html: board('2026-07-15'), fire: false },
+  { name: 'morning: the summer 07:15 cron started 47 min late is still judged, not skipped',
+    fx: MORNING_MISSED, now: '2026-07-15T12:02:00Z', schedule: '15 11 * * *', html: board('2026-07-14'),
+    fire: true, want: /MISSED/ },
+  { name: 'morning: the winter cron firing in summer still skips even when it starts on time',
+    fx: MORNING_MISSED, now: AT_0815_EDT, schedule: '15 12 * * *', html: board('2026-07-14'), fire: false, noCalls: true },
+  { name: 'morning: winter, the 07:15 EST cron started late is still judged',
+    fx: MORNING_MISSED, now: '2026-01-15T13:05:00Z', schedule: '15 12 * * *', html: board('2026-01-14'), fire: true, want: /MISSED/ },
   { name: 'morning: a manual run at 08:15 is not skipped by the hour gate',
     fx: MORNING_MISSED, now: AT_0815_EDT, html: board('2026-07-14'), eventName: 'workflow_dispatch', fire: true, want: /MISSED/ },
 ];
@@ -408,6 +416,8 @@ const morningCases = [
     // The sibling of the staleness branch: a published_at that is present but not a timestamp
     // refuses to close anything rather than treating the file as fresh. Untested until now, so
     // that refusal could have become a core.info with the suite green.
+    { name: 'alerts: a file with no published_at is its own alert',
+      alertsJson: JSON.stringify({ version: 1, alerts: [] }), now: ALERT_NOW, fire: true, creates: 'alerts-unpublished' },
     { name: 'alerts: an unparseable published_at fails and does not close',
       alertsJson: JSON.stringify({ version: 1, published_at: 'yesterday afternoon', alerts: [] }),
       openIssues: [openAlert('tracerfy-credits', 'fail')], fire: true, noClose: true, noCreate: true },
