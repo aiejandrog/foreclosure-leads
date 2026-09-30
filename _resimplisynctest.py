@@ -19,14 +19,17 @@ Pins the rules that matter for Call Mode:
     the first person's surname
   * a number dnc_scrub.json holds as registry-listed is DNC on the lead it is added to
   * a missing, unreadable or concurrently changed cache or sidecar stops the run before anything is
-    replaced; a torn sidecar is left alone, and stops the run when it has anything to flag; a
+    replaced; a torn sidecar is left alone and stops every run, a dry run included (it holds the
+    registry's verdicts, which every number a run adds is checked against); a
     failed write says what already landed and leaves no temp file, and a refused run no backup
   * every file is read (no newest-by-mtime pick); a duplicate download counts once
   * a stray text file is skipped by name; an export that cannot be read in full (not UTF-8, a flag
-    column missing, another delimiter, an `opt` value that is neither yes nor no) is refused, because
-    its DNC flags would be missing from the merge
+    column missing, another delimiter, an `opt` value that is neither yes nor no, a quote that is
+    never closed, a row with more or fewer cells than the header has columns) is refused, because its
+    DNC flags would be missing from the merge or would sit one column off
   * opting out is about the person: a row that names someone another row (in any export) has opted out
-    is held like that row, and a line cut short before its `opt` cell is held too
+    is held like that row; an opted-out row with an owner the tool cannot read as a person (either
+    owner) is counted and said
   * ZIP separates two homes with one street address; an error nobody planned for is one line and exit 4
   * every record dnc_scrub.json holds for a number REsimpli flags carries the REsimpli marker, and
     tracerfy_mcp's paid DNC lane does not re-scrub a marked, listed number
@@ -400,6 +403,11 @@ try:
     rec('names: a second name of one word shares the first person\'s surname',
         same('Maria', 'Perez', 'PEREZ JOSE & MARIA') and same('Jose', 'Perez', 'PEREZ JOSE & MARIA') and
         not same('Maria', 'Garcia', 'PEREZ JOSE & MARIA') and same('Mary', 'Smith', 'SMITH JOHN AND MARY'))
+    rec('names: a role suffix contact_trust.py knows (TRS, TRUSTEE) is dropped, so the second name still borrows the surname; TTEE and PERS REP are not in its list, so a second name '
+        'that ends with one keeps its own words and does not (a missed match, the safe side), and the person they follow still matches',
+        same('Maria', 'Perez', 'PEREZ JOSE & MARIA TRS') and same('Maria', 'Perez', 'PEREZ JOSE & MARIA TRUSTEE') and
+        not same('Maria', 'Perez', 'PEREZ JOSE & MARIA TTEE') and not same('Maria', 'Perez', 'PEREZ JOSE & MARIA PERS REP') and
+        same('Jose', 'Perez', 'PEREZ JOSE TTEE') and same('Jose', 'Perez', 'PEREZ JOSE PERS REP') and same('Jose', 'Perez', 'PEREZ JOSE & MARIA TTEE'))
     rec('names: Jr and Sr are two people; a marker on one side only is not evidence either way',
         not same('Jose', 'Perez Jr', 'PEREZ, JOSE SR') and not same('Jose Jr', 'Perez', 'PEREZ, JOSE SR') and
         same('Jose', 'Perez Sr', 'PEREZ, JOSE SR') and same('Jose', 'Perez', 'PEREZ, JOSE SR') and
@@ -619,13 +627,14 @@ try:
         return (load(RES) == CACHE and not os.path.exists(STATUS) and not os.path.exists(os.path.join(DFDIR, 'backups'))
                 and not os.path.exists(os.path.join(DFDIR, 'imports')) and not left())
     garbage = b'{"3055550102": {"national_dnc": tru'
+    TORN_WORDS = ('REFUSED: dnc_scrub.json exists but cannot be read', 'Nothing was written', 'Do not just move it aside')
     for extra in ([], ['--dry-run']):
         fresh(CACHE)
         open(SIDE, 'wb').write(garbage)
         rc, out = run(extra, files={'SkipTrace_1.csv': ROWS})
         rec('a torn sidecar while the run has numbers to flag: refused, exit 2, everything left as found%s'
             % (' (also on a dry run)' if extra else ''),
-            rc == 2 and 'REFUSED: dnc_scrub.json exists but cannot be read' in out and 'numbers to flag as DNC' in out
+            rc == 2 and all(w in out for w in TORN_WORDS)
             and open(SIDE, 'rb').read() == garbage and nothing_written() and 'TOTAL' not in out, out[-500:])
     fay = [row('Fay', 'Flag', '800 Se 8th Ct', '33100', g1=[M(801, 'Mobile', True), M(802)])]     # the cache holds 13055550801, clean
     fresh(CACHE)
@@ -635,20 +644,30 @@ try:
         'entry, and the flag with it, and the sidecar is what would keep it',
         rc == 2 and open(SIDE, 'rb').read() == garbage and nothing_written(), out[-300:])
     clean1 = [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101), M(102)])]              # nothing here is flagged
+    for extra in ([], ['--dry-run']):
+        fresh(CACHE)
+        open(SIDE, 'wb').write(garbage)
+        rc, out = run(extra, files={'SkipTrace_1.csv': clean1})
+        rec('a torn sidecar when the run has nothing to flag is refused too: the registry verdicts it holds are what every '
+            'number a run adds is checked against, flagged or not, and the run that would have gone on says nothing of them%s'
+            % (' (also on a dry run)' if extra else ''),
+            rc == 2 and all(w in out for w in TORN_WORDS) and open(SIDE, 'rb').read() == garbage and nothing_written()
+            and 'WARNING' not in out and 'TOTAL' not in out, out[-400:])
+    for label, files_ in (('with something to flag', {'SkipTrace_1.csv': fay}), ('with nothing to flag', {'SkipTrace_1.csv': clean1})):
+        fresh(CACHE, side=['not', 'a', 'dict'])
+        rc, out = run([], files=files_)
+        rec('a sidecar that is not an object is a torn one: refused %s' % label,
+            rc == 2 and load(SIDE) == ['not', 'a', 'dict'] and nothing_written() and 'WARNING' not in out, out[-300:])
     fresh(CACHE)
-    open(SIDE, 'wb').write(garbage)
+    open(SIDE, 'wb').write(b'')
     rc, out = run([], files={'SkipTrace_1.csv': clean1})
-    rec('a torn sidecar when the run has nothing to flag: left exactly as found, said so, and the cache still updates',
-        rc == 0 and open(SIDE, 'rb').read() == garbage and 'WARNING: dnc_scrub.json exists but cannot be read' in out
-        and load(STATUS)['dnc_scrub_json'] == 'unreadable' and nums(load(RES), 1) == ['3055550101', '3055550102'], out[-400:])
-    fresh(CACHE, side=['not', 'a', 'dict'])
-    rc, out = run([], files={'SkipTrace_1.csv': fay})
-    rec('a sidecar that is not an object is a torn one: refused when there is something to flag',
-        rc == 2 and load(SIDE) == ['not', 'a', 'dict'] and nothing_written(), out[-300:])
-    fresh(CACHE, side=['not', 'a', 'dict'])
+    rec('an empty sidecar file is a torn one too (a killed writer leaves that), and is refused, not read as a fresh start',
+        rc == 2 and open(SIDE, 'rb').read() == b'' and nothing_written(), out[-300:])
+    fresh(CACHE)
     rc, out = run([], files={'SkipTrace_1.csv': clean1})
-    rec('...and left alone when there is nothing to flag',
-        rc == 0 and load(SIDE) == ['not', 'a', 'dict'] and nums(load(RES), 1) == ['3055550101', '3055550102'], out[-300:])
+    rec('no sidecar at all is a fresh start, not a torn one: the run goes through and the status file says the sidecar was ok',
+        rc == 0 and nums(load(RES), 1) == ['3055550101', '3055550102'] and load(STATUS)['dnc_scrub_json'] == 'ok',
+        (rc, load(STATUS).get('dnc_scrub_json') if os.path.exists(STATUS) else None, out[-300:]))
 
     # ---------------------------------------------------------------- the cache
     fresh(CACHE)
@@ -660,8 +679,10 @@ try:
         rc, out = run([], files={'SkipTrace_1.csv': ROWS})
     finally:
         S.load_all_leads = real_leads
-    rec('no board leads file (wrong folder): refused with exit 2, nothing written, no traceback, and told to run it from the repo folder',
-        rc == 2 and 'board leads cannot be read' in out and 'Run this from the repo folder that holds leads_final.json' in out and 'half-written' not in out and
+    rec('no board leads file: refused with exit 2, nothing written, no traceback, and told where it is looked for (next to skiptrace.py, not the folder this is run from) and to run on the machine that builds the board',
+        rc == 2 and 'board leads cannot be read' in out and
+        'leads_final.json is read from %s (next to skiptrace.py, whatever folder this is run from)' % os.path.dirname(os.path.abspath(S.LEADS)) in out and
+        'run this on the machine that builds the board' in out and 'Run this from the repo folder' not in out and 'half-written' not in out and
         load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-300:])
     fresh(CACHE)
     def torn_leads():
@@ -785,6 +806,15 @@ try:
     for col in ('firstName', 'lastName', 'propertyStreetAddress', 'propertyZipCode'):
         refused('no_%s.csv' % col, [h for h in HDR if h != col], col)
     refused('no_phones.csv', [h for h in HDR if not h.startswith('Phone_')], 'Phone_1')
+    # a column that is missing may be there under another name; an empty one added by hand reads as "No" on every row and drops every opt-out the real one holds
+    for col in ('opt', 'Phone_2_DNC'):
+        fresh(CACHE)
+        pm = os.path.join(TMP, 'named_missing_%s.csv' % col)
+        write_csv(pm, [row('Ana', 'Tester', '1 A St', '33100', g1=[M(1)])], header=[h for h in HDR if h != col])
+        rc, out = run([pm])
+        rec('a missing `%s` column is met with "rename it back to REsimpli\'s spelling", and with "do not add an empty one" and why' % col,
+            rc == 2 and 'missing %s)' % col in out and "rename it back to REsimpli's spelling" in out and
+            'do not add an empty one, which reads as No and would drop every opt-out the real column holds' in out, out[-400:])
     refused('slot11_no_flags.csv', HDR + ['Phone_11'], 'Phone_11_DNC')
     refused('cp1252.csv', HDR, 'not UTF-8', rows=[row('José', 'Núñez', '1 A St', '33100', g1=[M(1)])], encoding='cp1252')
     refused('utf16.csv', HDR, 'not UTF-8', rows=[row('Ana', 'Tester', '1 A St', '33100', g1=[M(1)])], encoding='utf-16')
@@ -813,7 +843,8 @@ try:
         rc, out = run([])
         rec('refused, nothing merged, nothing left behind: ' + name,
             rc == 2 and 'REFUSED' in out and expect in out and ((FOUND_NOTE in out) == found_note) and load(RES) == CACHE
-            and (found_note or (out.rstrip().splitlines()[-1] == 'That file is in %s.' % DL and 'that file itself' in out)) and not os.path.exists(SIDE) and not os.path.exists(STATUS)
+            and (found_note or (out.rstrip().splitlines()[-1] == 'That file is in %s.' % DL and 'that file itself' in out and
+                                'download the export from REsimpli again and put the new file over this one' in out)) and not os.path.exists(SIDE) and not os.path.exists(STATUS)
             and not os.path.exists(os.path.join(DFDIR, 'imports')) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
     clean = row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])
     flags_it = row('José', 'Núñez', '1500 Sw 15th St', '33100', g1=[M(101, 'Mobile', True)])      # the same number, DNC
@@ -899,7 +930,8 @@ try:
         got, err = [], e
     rec('every spelling of yes and no (any case, padded, blank) is read, and read the right way round',
         len(got) == len(good_vals) and [RS.opted_out(x) for x in got] == [False] * 10 + [True] * 6, err)
-    # a line cut short before its `opt` cell (here `opt` is the last column) has no answer: it is held
+    # a line cut short before its `opt` cell (here `opt` is the last column): the file is damaged, and whatever came after the cut is gone with it,
+    # so it is refused, not read with that line held and the rest taken as complete
     hdr_last = [h for h in HDR if h != 'opt'] + ['opt']
     fresh(CACHE)
     p_short = os.path.join(DL, 'SkipTrace_1.csv')
@@ -908,12 +940,11 @@ try:
     text = open(p_short, newline='').read()
     with open(p_short, 'w', newline='') as fh:
         fh.write(text.rstrip('\r\n').rsplit(',', 1)[0] + '\r\n')                # the last line loses its final cell
+    before = snapshot()
     rc, out = run([])
-    d, t = load(RES), load(STATUS)['total']
-    rec('a line cut short before its `opt` cell is opted out, not read as "no": its number is flagged and not merged, '
-        'and the complete line above it merges',
-        rc == 0 and nums(d, 1) == ['3055550101'] and nums(d, 2) == ['3055550200'] and t['opt_rows'] == 1 and
-        '3055550201' in (load(SIDE) or {}) and '3055550101' not in (load(SIDE) or {}), (t, nums(d, 2), out[-200:]))
+    rec('a line cut short before its `opt` cell refuses the file: nothing is read, so the complete line above it does not merge either, and nothing is written',
+        rc == 2 and 'SkipTrace_1.csv has 1 row with a different number of cells than its %d header columns (line 3)' % len(hdr_last) in out and
+        snapshot() == before and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-300:])
 
     # ---------------------------------------------------------------- flags, end to end
     def flagged_row(**kw):
@@ -1184,6 +1215,7 @@ try:
         not any(x in json.dumps(st) + out for x in ('DOE', 'LP-')), (t, out[-300:]))
 
     # ---------------------------------------------------------------- a trailing delimiter on the data rows
+    # it cannot be told from a shifted row (an unquoted comma in a cell whose row ends in empty cells shows past the header as one empty cell), so it is refused too
     fresh(CACHE)
     p = os.path.join(DL, 'SkipTrace_1.csv')
     write_csv(p, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])])
@@ -1191,7 +1223,8 @@ try:
     with open(p, 'w', newline='') as fh:
         fh.write('\r\n'.join([lines[0]] + [ln + ',' for ln in lines[1:]]) + '\r\n')
     rc, out = run([])
-    rec('a trailing delimiter on every data row does not stop the run', rc == 0 and nums(load(RES), 1) == ['3055550101'], out[-300:])
+    rec('a trailing delimiter on the data rows is refused like any cell past the header (one row: it cannot be told from a row one place off), and nothing is written',
+        rc == 2 and 'SkipTrace_1.csv has 1 row with a different number of cells than its %d header columns (line 2)' % len(HDR) in out and load(RES) == CACHE and not os.path.exists(STATUS), out[-300:])
 
     # ---------------------------------------------------------------- the paid DNC lane in tracerfy_mcp.py
     import tracerfy_mcp as TM
@@ -2236,7 +2269,7 @@ try:
         'area code or exchange that cannot be one, twenty digits with nothing between them, and a word are not numbers',
         got_in == [e for _, e in table_in], [(v, g, e) for (v, e), g in zip(table_in, got_in) if g != e])
     # a generator of ways to write a number, and the two properties that make the flag reader trustworthy: it never loses a number that is written
-    # in order with something that is not a digit between its groups, whatever else the cell holds; and it never reads less than the reader it replaced
+    # in order with something that is not a digit between its groups, whatever else the cell holds (up to the 60 groups of digits it reads); and it never reads less than the reader it replaced in a cell of that size
     import re as _re, unicodedata as _ud
     r4 = _random.Random(20260930)
     SEPCH = list(' -–—‐‑−/\\,;:._·\t\u200b()[]{}#*+~|') + ['x', 'ext', 'ext.', ' x', ' ext ', 'ext:', ' -- ', '  ', ' / ', 'or', 'call', '(work)', '\u00a0', '\n']
@@ -2386,10 +2419,11 @@ try:
             rc, out = run(args, files={'SkipTrace_1.csv': [
                 row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': c, 'DNC': 'Yes', 'status': '["DNC"]'} for c in unread_cells]),
                 row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6103)])]})
-            t = (load(STATUS) or {}).get('total', {'flag_cells_unread': 4, 'numbers_unreadable': 4})       # a dry run writes no status file
+            st = load(STATUS)                                                              # a dry run writes no status file
+        tot = (st or {}).get('total', {})
         rec('a flagged phone cell that holds no number anything can read is counted and said (%s): its flag cannot land on a number' % (args or ['a real run']),
-            rc == 0 and t['flag_cells_unread'] == 4 and t['numbers_unreadable'] == 4 and 'NOTE: 4 flagged phone cells' in out and
-            '  flag_cells_unread            4' in out, (t, out[-400:]))
+            rc == 0 and 'NOTE: 4 flagged phone cells' in out and '  %-28s %d' % ('flag_cells_unread', 4) in out and '  %-28s %d' % ('numbers_unreadable', 4) in out and
+            ((st is None) if args else (tot.get('flag_cells_unread') == 4 and tot.get('numbers_unreadable') == 4)), (st, out[-400:]))
     with with_leads(odd_leads):
         fresh(odd_cache)
         rc, out = run([], files={'SkipTrace_1.csv': [
@@ -2416,13 +2450,14 @@ try:
         t = load(STATUS)['total']
     rec('an opted-out row whose person cannot be named (an initial for a first name, a company) is counted and said: that person cannot be held on other rows, '
         'though the row itself is', rc == 0 and t['opt_rows_unnamed'] == 2 and t['opt_people_held'] == 1 and t['opt_rows'] == 3 and
-        'NOTE: 2 opted-out rows name nobody' in out and '  opt_rows_unnamed             2' in out, (t, out[-500:]))
+        'NOTE: 2 opted-out rows have an owner this tool cannot read as a person' in out and '  opt_rows_unnamed             2' in out and
+        'so that owner cannot be held on their other rows or in other exports. The numbers on the rows themselves are still flagged.' in out, (t, out[-500:]))
     with with_leads(odd_leads):
         fresh(odd_cache)
         rc, out = run([], files={'SkipTrace_1.csv': [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6105)], opt='Yes'),
                                                      row('J', 'Initial', '6200 Nw 62nd St', '33100', g1=[M(6106)])]})
         t = load(STATUS)['total']
-    rec('...and a named opted-out row, or a row that is not opted out, is not counted', rc == 0 and t['opt_rows_unnamed'] == 0 and 'name nobody' not in out, (t, out[-400:]))
+    rec('...and a named opted-out row, or a row that is not opted out, is not counted', rc == 0 and t['opt_rows_unnamed'] == 0 and 'cannot read as a person' not in out, (t, out[-400:]))
 
     with with_leads(odd_leads):
         fresh(odd_cache)
@@ -2433,8 +2468,46 @@ try:
                                 row('Acme', 'Holdings LLC', '6400 Nw 64th St', '33100', g1=[M(6105)], opt='Yes')]})
         t = load(STATUS)['total']
     rec('...and both counts run over every export read, not the first one only',
-        rc == 0 and t['flag_cells_unread'] == 3 and t['opt_rows_unnamed'] == 2 and 'NOTE: 3 flagged phone cells' in out and 'NOTE: 2 opted-out rows name nobody' in out,
+        rc == 0 and t['flag_cells_unread'] == 3 and t['opt_rows_unnamed'] == 2 and 'NOTE: 3 flagged phone cells' in out and 'NOTE: 2 opted-out rows have an owner this tool cannot read as a person' in out,
         (t, out[-500:]))
+
+    # ---------------------------------------------------------------- an owner of an opted-out row that cannot be read is counted, whichever slot it is in
+    ur = RS.unread_owners
+    A_ = ('6100 Nw 61st St', '33100')
+    rec('unread_owners: a readable owner 1 and an owner 2 with an initial for a first name counts 1: it is the second owner that cannot be held on other rows',
+        ur(row('Ana', 'Lopez', *A_, owner2=('J', 'Perez'), opt='Yes')) == 1)
+    rec('...an empty owner 2 counts 0', ur(row('Ana', 'Lopez', *A_, opt='Yes')) == 0)
+    rec('...an owner 2 who is a person counts 0', ur(row('Ana', 'Lopez', *A_, owner2=('Jose', 'Perez'), opt='Yes')) == 0)
+    rec('...an owner 2 with a name in the last-name column only, or the first-name column only, counts 1',
+        ur(row('Ana', 'Lopez', *A_, owner2=('', 'Perez'), opt='Yes')) == 1 and ur(row('Ana', 'Lopez', *A_, owner2=('Jose', ''), opt='Yes')) == 1)
+    rec('...a company in owner 2 counts 1, and a company in owner 1 with a person in owner 2 counts 1',
+        ur(row('Ana', 'Lopez', *A_, owner2=('Acme', 'Holdings LLC'), opt='Yes')) == 1 and
+        ur(row('Acme', 'Holdings LLC', *A_, owner2=('Jose', 'Perez'), opt='Yes')) == 1)
+    whole_only = row('Ana', 'Lopez', *A_, owner2=('Jose', 'Perez'), opt='Yes')
+    whole_only.update(firstName='', lastName='', firstName2='', lastName2='')                 # a whole name, and neither part of it
+    rec('...an owner whose whole name is there and neither part is (both, or either) counts 1, so the person is counted, not lost',
+        ur(whole_only) == 2 and ur(dict(whole_only, fullName='')) == 1 and ur(dict(whole_only, fullName2='')) == 1 and ur(dict(whole_only, fullName='', fullName2='')) == 0)
+    rec('...a part of a name with no whole-name cell counts 1, in either slot (the whole-name column is not what says an owner is there)',
+        ur(dict(row('Ana', 'Lopez', *A_, owner2=('J', 'Perez'), opt='Yes'), fullName2='')) == 1 and
+        ur(dict(row('J', 'Lopez', *A_, opt='Yes'), fullName='')) == 1 and
+        ur(dict(row('Ana', 'Lopez', *A_, owner2=('Jose', ''), opt='Yes'), fullName2='')) == 1)
+    rec('...both owners unreadable count 2 (one per owner), and an owner with only a blank or spaces in its columns is empty, not unread',
+        ur(row('J', 'Lopez', *A_, owner2=('Acme', 'Holdings LLC'), opt='Yes')) == 2 and ur(row('Ana', 'Lopez', *A_, owner2=(' ', '  '), opt='Yes')) == 0)
+    two_owner_cases = (('a readable owner 1 and an owner 2 with an initial for a first name',
+                        row('Ana', 'Lopez', '6100 Nw 61st St', '33100', g1=[M(6102)], owner2=('J', 'Perez'), opt='Yes'), 1, 1),
+                       ('a readable owner 1 and no owner 2', row('Ana', 'Lopez', '6100 Nw 61st St', '33100', g1=[M(6102)], opt='Yes'), 0, 1),
+                       ('a readable owner 1 and a readable owner 2', row('Ana', 'Lopez', '6100 Nw 61st St', '33100', g1=[M(6102)], owner2=('Jose', 'Perez'), opt='Yes'), 0, 2),
+                       ('two owners it cannot read (an initial for a first name, a company): one row, counted once, and nobody to hold',
+                        row('J', 'Lopez', '6100 Nw 61st St', '33100', g1=[M(6102)], owner2=('Acme', 'Holdings LLC'), opt='Yes'), 1, 0))
+    for label, r_, want_unnamed, want_held in two_owner_cases:
+        with with_leads(odd_leads):
+            fresh(odd_cache)
+            rc, out = run([], files={'SkipTrace_1.csv': [r_]})
+            t = load(STATUS)['total']
+        rec('an opted-out row with %s: opt_rows_unnamed %d, %d %s held, and the NOTE is %s'
+            % (label, want_unnamed, want_held, 'person' if want_held == 1 else 'people', 'said' if want_unnamed else 'not said'),
+            rc == 0 and t['opt_rows_unnamed'] == want_unnamed and t['opt_people_held'] == want_held and t['opt_rows'] == 1 and
+            (('NOTE: 1 opted-out rows have an owner this tool cannot read as a person' in out) == bool(want_unnamed)), (t, out[-400:]))
 
     # ---------------------------------------------------------------- a callable number Whitepages also lists costs the row nothing
     sw_leads = [lead(64, '6400 NW 64 ST', 'SWAP, SAL'), lead(65, '6500 NW 65 ST', 'ROOMY, RAY')]
@@ -2572,7 +2645,8 @@ try:
         'was changed after it was kept' not in out and 'run that copy' not in out and 'Deleting it forgets its opt-outs' in out and
         'put the original' not in out and 'download it from REsimpli again if you no longer have it' not in out and load(RES) == CACHE, out[-700:])
     rec('...and it is told to change the cells in that copy itself, which is where the opt-outs are kept, and not to delete it',
-        'change the cells in that copy itself' in out and 'Delete it' not in out and 'where this tool keeps a copy of every export it has read' in out, out[-500:])
+        'change the cells in that copy itself' in out and 'delete it' not in out.lower() and 'Move or delete' not in out and
+        'where this tool keeps a copy of every export it has read' in out, out[-500:])
     write_csv(os.path.join(kept, 'abcd1234_SkipTrace_odd.csv'), [dict(one[0], opt='Yes')])
     rc, out = run([pc2])
     rec('...and editing the kept copy the way the message says lets the next run go through (and the person it opts out is held)',
@@ -2626,7 +2700,7 @@ try:
     rc, out = run([p_bigcell])
     rec('a file whose rows csv cannot read (a cell past its field-size limit) is refused by name as unreadable content, not as a file another '
         'program has open, and nothing is written',
-        rc == 2 and 'named_bigcell.csv could not be read as CSV (a cell longer than %d characters' % csv.field_size_limit() in out and
+        rc == 2 and 'named_bigcell.csv could not be read as CSV: a cell is longer than %d characters' % csv.field_size_limit() in out and
         'another program has it open' not in out and snapshot() == before, out[-300:])
     fresh(CACHE)
     write_csv(os.path.join(DL, 'SkipTrace_bigcell.csv'), [dict(one[0], firstName='x' * 200000)])
@@ -2634,9 +2708,142 @@ try:
     rc, out = run([])
     rec('...and the same file found by looking is a file that is not readable in full: it is told not to be moved (a real export) or renamed (not one), not '
         'told to close it, and not given the advice for an `opt` word',
-        rc == 2 and 'SkipTrace_bigcell.csv could not be read as CSV (a cell longer than %d characters' % csv.field_size_limit() in out and FOUND_NOTE in out and
+        rc == 2 and 'SkipTrace_bigcell.csv could not be read as CSV: a cell is longer than %d characters' % csv.field_size_limit() in out and FOUND_NOTE in out and
         'rename it so it no longer starts with SkipTrace_' in out and 'another program has it open' not in out and 'that file itself' in out and
         load(RES) == CACHE, out[-500:])
+    # a stray or unclosed quote in a hand-edited export used to swallow the rows below it, an opt-out and a DNC flag with them, and read as fine
+    def csv_text(rows, header=HDR):
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=header, extrasaction='ignore', lineterminator='\r\n')
+        w.writeheader()
+        w.writerows(rows)
+        return buf.getvalue()
+    quote_rows = [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)]),
+                  row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6201)], opt='Yes'),                 # opted out
+                  row('Cy', 'Third', '6300 Nw 63rd St', '33100', g1=[M(6301, 'Mobile', True)])]             # a DNC number
+    good = csv_text(quote_rows).split('\r\n')
+    first_cell, rest_cells = good[1].split(',', 1)
+    for label, lines_ in (('an unclosed quote in the last cell of the first row', [good[0], good[1] + '"'] + good[2:]),
+                          ('text right after a closing quote', [good[0], '"%s"x,%s' % (first_cell, rest_cells)] + good[2:])):
+        fresh(CACHE)
+        for pq in (os.path.join(DL, 'SkipTrace_quote.csv'), os.path.join(TMP, 'named_quote.csv')):
+            with open(pq, 'w', encoding='utf-8', newline='') as fh:
+                fh.write('\r\n'.join(lines_))
+        write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+        rc, out = run([])
+        rec('a found export with %s is refused, not read with the rows below it swallowed (their opt-out and DNC flag with them), and is told not to be moved' % label,
+            rc == 2 and 'SkipTrace_quote.csv could not be read as CSV: a cell is longer than' in out and 'a quote is never closed or has text right after it' in out and
+            'would otherwise swallow the rows below it, opt-outs and DNC flags included' in out and
+            FOUND_NOTE in out and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-500:])
+        fresh(CACHE)
+        with open(os.path.join(TMP, 'named_quote.csv'), 'w', encoding='utf-8', newline='') as fh:
+            fh.write('\r\n'.join(lines_))
+        before = snapshot()
+        rc, out = run([os.path.join(TMP, 'named_quote.csv')])
+        rec('...and the same file named on the command line is refused by name with no advice about where it is (%s)' % label,
+            rc == 2 and 'named_quote.csv could not be read as CSV' in out and FOUND_NOTE not in out and 'That file is in' not in out and snapshot() == before, out[-400:])
+    quirks = [dict(r, Notes=n) for r, n in zip(quote_rows, ('said "hi", then left', 'two\nlines', '5\'10" tall'))]
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
+            fh.write(csv_text(quirks, header=HDR + ['Notes']))
+        rc, out = run([])
+        t = load(STATUS)['total']
+    rec('...while quotes that are closed (a comma, a doubled quote, a line break inside a quoted cell, a bare quote inside an unquoted one) still read: every row is there, '
+        'the opt-out and the DNC flag with them', rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
+    # a row with more or fewer cells than the header: a comma put into a cell (or taken out) moves every column after it one place, so the cell that held
+    # an opt-out or a flag is read from its neighbour's place; a file cut short has lost rows besides. Refused, not read.
+    shift_rows = [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)]),
+                  row('Bea', 'Plain', '6200 Nw 62nd St', '', g1=[M(6201)], opt='Yes'),                      # opted out, and no ZIP for a shift to put in `opt`
+                  row('Cy', 'Third', '6300 Nw 63rd St', '33100', g1=[M(6301, 'Mobile', True)])]             # a DNC number
+    sgood = csv_text(shift_rows).split('\r\n')
+    dnc_cell = '"[""DNC""]"'
+    assert dnc_cell in sgood[3] and sgood[-1] == ''
+    bea = csv_text([row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6201)], opt='Yes', traced='')]).split('\r\n')      # opted out, and no skip-trace date
+    bea_cells = bea[1].split(',')
+    assert bea_cells[HDR.index('opt')] == 'Yes' and bea_cells[HDR.index('skipTracedDate')] == '' and len(bea_cells) == len(HDR)
+    zip_opt = bea_cells[:HDR.index('propertyZipCode')] + [bea_cells[HDR.index('propertyZipCode')] + 'Yes'] + bea_cells[HDR.index('opt') + 1:]   # the comma between ZIP and `opt` taken out
+    N_ = len(HDR)
+    shifted = (('a status written with an unquoted comma (`[DNC, Wireless]`)', sgood[:3] + [sgood[3].replace(dnc_cell, '[DNC, Wireless]', 1)] + sgood[4:], 4),
+               ('a comma at the end of the first row', [sgood[0], sgood[1] + ','] + sgood[2:], 2),
+               ('an empty cell slipped in after the first cell of the opted-out row (a comma typed into a name), which pushes only the empty last cell off '
+                'the end and puts the empty ZIP in `opt`', sgood[:2] + [sgood[2].replace(',', ',,', 1)] + sgood[3:], 3),
+               ('a comma at the end of one row only', sgood[:2] + [sgood[2] + ','] + sgood[3:], 3),
+               ('the comma between the ZIP and `opt` of an opted-out row taken out, so `opt` reads the empty date after it and the row is one cell short',
+                [bea[0], ','.join(zip_opt)], 2),
+               ('the last row cut off in the middle of its phone cells (the download stopped)', sgood[:3] + [sgood[3][:sgood[3].index('6301') + 2]], 4),
+               ('a row that ends before its number\'s flag columns', sgood[:3] + [','.join(sgood[3].split(',')[:HDR.index('Phone_1_type')])], 4))
+    for label, lines_, where in shifted:
+        for kind in ('found', 'named'):
+            fresh(CACHE)
+            pq = os.path.join(DL, 'SkipTrace_extra.csv') if kind == 'found' else os.path.join(TMP, 'named_extra.csv')
+            with open(pq, 'w', encoding='utf-8', newline='') as fh:
+                fh.write('\r\n'.join(lines_))
+            if kind == 'found':
+                write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+            before = snapshot()
+            rc, out = run([] if kind == 'found' else [pq])
+            rec('a %s export with %s is refused, not read with a row one place off: the line number is named, nothing is written%s'
+                % (kind, label, ', and it is told not to be moved' if kind == 'found' else ', with no advice about where the file is'),
+                rc == 2 and '%s has 1 row with a different number of cells than its %d header columns (line %d)' % (os.path.basename(pq), N_, where) in out and
+                'or a file cut short moves every column after it' in out and 'Nothing was read.' in out and
+                ((FOUND_NOTE in out) if kind == 'found' else (FOUND_NOTE not in out and 'That file is in' not in out)) and
+                snapshot() == before and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-500:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 5)
+    cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
+    with open(os.path.join(DL, 'SkipTrace_extra.csv'), 'w', newline='') as fh:
+        fh.write('\r\n'.join([cut[0]] + [ln + ',,,,' if ln else ln for ln in cut[1:]]))
+    rc, out = run([])
+    rec('...five rows with four extra cells each are counted, and only the first three lines are named, with a "..." after them',
+        rc == 2 and 'SkipTrace_extra.csv has 5 rows with a different number of cells than its %d header columns (lines 2, 3, 4, ...)' % N_ in out, out[-400:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 3)
+    cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
+    with open(os.path.join(DL, 'SkipTrace_extra.csv'), 'w', newline='') as fh:
+        fh.write('\r\n'.join([cut[0]] + [ln + ',' if ln else ln for ln in cut[1:]]))
+    rc, out = run([])
+    rec('...and a comma at the end of every data row is refused too, every line named',
+        rc == 2 and 'SkipTrace_extra.csv has 3 rows with a different number of cells than its %d header columns (lines 2, 3, 4)' % N_ in out and
+        'a comma at the end of a row cannot be told from that' in out, out[-400:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 3)
+    cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
+    with open(os.path.join(DL, 'SkipTrace_extra.csv'), 'w', newline='') as fh:
+        fh.write('\r\n'.join([cut[0]] + [ln.rsplit(',', 1)[0] if ln else ln for ln in cut[1:]]))
+    rc, out = run([])
+    rec('...and so is a file whose every data row is one cell short (its header has a comma at the end)',
+        rc == 2 and 'SkipTrace_extra.csv has 3 rows with a different number of cells than its %d header columns (lines 2, 3, 4)' % N_ in out, out[-400:])
+    fresh(CACHE)
+    with open(os.path.join(DL, 'SkipTrace_extra.csv'), 'w', newline='') as fh:
+        fh.write('\r\n'.join([sgood[0], sgood[1].rsplit(',', 1)[0], sgood[2] + ',', sgood[3], '']))
+    rc, out = run([])
+    rec('...a short row and a long row in one file are both counted, in file order',
+        rc == 2 and 'SkipTrace_extra.csv has 2 rows with a different number of cells than its %d header columns (lines 2, 3)' % N_ in out, out[-400:])
+    for label, lines_ in (('a status cell that is quoted properly, comma and all', sgood[:3] + [sgood[3].replace(dnc_cell, '"[""DNC"", ""Wireless""]"', 1)] + sgood[4:]),):
+        with with_leads(odd_leads):
+            fresh(odd_cache)
+            with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
+                fh.write('\r\n'.join(lines_))
+            rc, out = run([])
+            t = load(STATUS)['total']
+        rec('...while %s still reads: every row is there, the opt-out and the DNC flag with them' % label,
+            rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
+            fh.write(csv_text(shift_rows))                                                                    # every row exactly as wide as the header, empty cells at the end included
+        rc, out = run([])
+        t = load(STATUS)['total']
+    rec('...and a file whose every row has exactly the header\'s number of cells, blank ones at the end included, reads', rc == 0 and t['rows'] == 3, (t, out[-300:]))
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
+            fh.write('\r\n'.join([sgood[0], sgood[1], '', sgood[2], sgood[3], '', '']))                     # blank lines between and after the rows
+        rc, out = run([])
+        t = load(STATUS)['total']
+    rec('...and blank lines between the rows and at the end are not rows: every row is there, the opt-out and the DNC flag with them',
+        rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
     pc_odd = os.path.join(TMP, 'named_odd.csv')
     write_csv(pc_odd, [dict(one[0], opt='Maybe')])
     fresh(CACHE)

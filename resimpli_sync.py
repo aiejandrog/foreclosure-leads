@@ -70,22 +70,22 @@ groups or around them (numbers_in: dashes of every kind, a slash, a comma, an un
 spaces inside the brackets, a tab, a zero-width space, digits of another script, an extension after
 it, two numbers to a cell); a flag that is lost is a homeowner called. Digits with nothing between
 them are one group: twelve of them run together are not searched for a number, and only the first 60
-groups of a cell are read. A flagged cell that holds no number numbers_in can find is counted
-(flag_cells_unread) and said: its flag lands on nothing. A row with `opt` set (Yes / True / Y / 1,
-or Opted Out / Opt-Out / Unsubscribed / Stop / DNC) is opted out: its numbers are flagged and it is
-not merged. So is a row, in any export this run reads, that names a person such a row names (same
-surname and given name, either owner slot, either word order): opting out is about the person, so the
-same person listed under another property with another number has not come back (opt_person_rows;
-opt_person_cases lists the leads it kept a row off, opt_people_held how many people the hold was
-built from). A namesake is held too; that is the safe side. An opted-out row that names nobody this
-tool can read (a company, an initial for a first name, a name in one column only) is counted
-(opt_rows_unnamed) and said: its own numbers are flagged, but that person cannot be held on other
-rows. `opt` blank or No / False / N / 0 is
+groups of a cell are read (a number after the 60th is not flagged). A flagged cell that holds no
+number numbers_in can find is counted (flag_cells_unread) and said: its flag lands on nothing. A row
+with `opt` set (Yes / True / Y / 1, or Opted Out / Opt-Out / Unsubscribed / Stop / DNC) is opted out:
+its numbers are flagged and it is not merged. So is a row, in any export this run reads, that names a
+person such a row names (same surname and given name, either owner slot, either word order): opting
+out is about the person, so the same person listed under another property with another number has not
+come back (opt_person_rows; opt_person_cases lists the leads it kept a row off, opt_people_held how
+many people the hold was built from). A namesake is held too; that is the safe side. An opted-out row
+with an owner (either one) this tool cannot read as a person (a company, an initial for a first name,
+a name in one column only) is counted (opt_rows_unnamed) and said: its own numbers are flagged, but
+that owner cannot be held on other rows or in other exports. `opt` blank or No / False / N / 0 is
 not opted out; a value that is none of these refuses the file, since reading it as "no" lets an
 opt-out through and reading it as "yes" flags every number in the list (1.0 and 0.0, what a
 spreadsheet makes of 1 and 0, read as 1 and 0). A file with no `opt` column, or no _DNC, _status or
-_IsLitigator column for a phone slot, is refused, not read as clean. A row with no `opt` cell at all
-(a line cut short) is opted out.
+_IsLitigator column for a phone slot, is refused, not read as clean. A file with a row that is short of
+cells is refused (see below); opted_out() itself still reads a missing `opt` cell as opted out.
 A number any export flags is flagged DNC on every phone in the cache that has those digits, on this
 lead or another, and a number the cache already holds as DNC on any lead is DNC on the lead it is
 added to, even when REsimpli lists it clean, and so is a number dnc_scrub.json holds as registry-listed
@@ -99,10 +99,11 @@ can return, and as the cache spells it. Every record for a flagged number carrie
 marker (`resimpli`: the date), including one the registry lane already holds as listed. That marker
 is what tracerfy_mcp.py's paid 30-day DNC re-scrub leaves alone: a registry miss must not replace a
 REsimpli opt-out or litigator flag. Nothing here ever clears a flag, and an existing dnc_scrub.json
-verdict is only tightened. A dnc_scrub.json that cannot be read is left exactly as found, and a run
-that has any number to flag stops (exit 2): the sidecar is what keeps a flag when skiptrace.py replaces
-an entry, and the only record of one on a lead with no entry or on no lead. The bake does not apply
-the sidecar to phones it appends later from other sources (Whitepages numbers).
+verdict is only tightened. A dnc_scrub.json that cannot be read is left exactly as found and stops
+every run (exit 2, a dry run included), whether or not the run has a number to flag: it holds the
+registry's verdicts, which every number this run adds is checked against, and it is what keeps a flag
+when skiptrace.py replaces an entry and the only record of one on a lead with no entry or on no lead.
+The bake does not apply the sidecar to phones it appends later from other sources (Whitepages numbers).
 
 WHICH FILES
 With no path: every SkipTrace_*.csv in Downloads / Desktop plus DEALFLOW_DIR/imports/resimpli/. With
@@ -117,9 +118,15 @@ That covers a file that is not UTF-8 (do not open and re-save it in Excel), one 
 missing, one with any of REsimpli's own column names that is not a complete export (a re-save that
 renamed the phone or address columns), one whose `opt` column holds a value this tool cannot read as
 yes or no, one with REsimpli's column names that do not read as comma-separated columns on the first
-line (a re-save with another delimiter, or with a 'sep=' line above the header), and a header line
-csv cannot parse. Found files are copied into DEALFLOW_DIR/imports/resimpli/ (outside the repo and
-outside OneDrive) after the data is written; the originals stay put.
+line (a re-save with another delimiter, or with a 'sep=' line above the header), a header line
+csv cannot parse, a quote that is never closed or has text right after it (the csv is read strictly:
+one stray quote would otherwise swallow the rows below it, an opt-out and a DNC flag with them), and a
+row with more or fewer cells than the header has columns, an empty extra one included (a comma put in
+a cell, or taken out, moves every column after it, so a number's flags and the `opt` cell are read
+from a neighbour's place, and a file cut short has lost rows besides; a comma at the end of a row
+cannot be told from that). Found files are copied into
+DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written; the
+originals stay put.
 
 OUTPUT
 Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts (per file: what that file
@@ -128,7 +135,7 @@ the totals only) plus the case numbers of any unconfirmed leads (unconfirmed_cas
 person-level hold kept a row off (opt_person_cases), and how many other exports a one-file run did not
 read (unread_files). No names, no phone numbers. Exit 0 = done (or nothing to do), 1 = no
 usable export, 2 = refused (an export, the cache, whitepages_lookup.json, the board leads, or a torn
-dnc_scrub.json with numbers to flag; nothing written; a command-line usage error also exits 2), 3 =
+dnc_scrub.json; nothing written; a command-line usage error also exits 2), 3 =
 the cache or dnc_scrub.json changed while this ran, or a write failed, 4 = an error nothing
 anticipated (one line: its type and where, never its message; what was written before it is in the
 lines above).
@@ -159,21 +166,30 @@ KNOWN LIMITS (reported here, not fixed)
     the cache's own `dnc` flag, as they already do for every registry hit the Tracerfy lane found.
   * A line that joins two people with a comma, ' Y ', a slash, a plus, W/ or C/O (Broward's PA-page
     fallback keeps ',' and '/') is read as one person, so a name made of one owner's given name and the
-    other's surname can match; the address still has to match. TRS, TRUSTEE, TTEE, PERS REP and P/R are
-    role suffixes in contact_trust.py and are dropped, so the person they follow still matches (TR, a
-    trust, is nobody); JUNIOR, SENIOR and 2ND are not read as generation markers.
+    other's surname can match; the address still has to match. Only the role suffixes in contact_trust.py's
+    SUFFIX (TRS, TRUSTEE, LE, H/E ...) are dropped, so the person they follow still matches (TR, a trust,
+    is nobody). TTEE and PERS REP are not in that list: they stay on the name as extra words, which does
+    not stop that person from matching, but a second name that ends with one ('PEREZ JOSE & MARIA TTEE')
+    keeps its own words and no longer borrows the first person's surname, so a Maria Perez row does not
+    match it (a missed match, the safe side). JUNIOR, SENIOR and 2ND are not read as generation markers.
   * The person-level opt-out checks read the row the bake cuts to MAX_PHONES. tighten() turns a cached
     number DNC, the bake sorts it last, and on an entry that holds more than MAX_PHONES numbers
     (skiptrace.py's _collect never caps) that can cut it off the row and pull a different number on,
     so an identity the ledger holds as '#<number>' (an inbound STOP) may no longer be found on the row.
     It predates this tool (the Tracerfy DNC lane does the same) and belongs to the bake and the
     suppression owner: reported, not fixed. Nothing here adds a number past the limit.
-  * A header that names a column twice (csv keeps the last one) or spells a phone or `opt` column
-    differently (`phone_1`, `Phone_01`, a trailing space) is not caught: that column is ignored and its
-    flags are lost. A downloaded export does not have this; a hand-edited one could.
+  * A header that names a column twice (csv keeps the last one, so a flag or an opt-out in the first is
+    lost) or spells a phone NUMBER column differently (`phone_1`, `Phone_01`, `Phone_1 `) is not caught:
+    no number is read from that column, so a flag on it lands on nothing. A misspelled `opt` column, or
+    a misspelled `_DNC` / `_status` / `_IsLitigator` column of a slot whose number column is spelled
+    right, is refused as missing. A downloaded export has none of this; a hand-edited one could.
+  * A quote that is never closed, or that has text right after it, is refused (the csv is read strictly),
+    and so is a row with more or fewer cells than the header has columns. A quote that opens on one line
+    and is closed by another on a later line is not: the rows between them read as one cell, opt-outs
+    and flags included. Only a hand-edited or damaged export does any of this.
   * tracerfy_mcp.py reads a dnc_scrub.json it cannot parse as empty, and its DNC lane then rewrites the
-    whole file, dropping every record, REsimpli's included. This tool refuses to run on a torn sidecar
-    it has flags for; tracerfy_mcp.py is another script's.
+    whole file, dropping every record, REsimpli's included. This tool refuses to run on a torn sidecar;
+    tracerfy_mcp.py is another script's.
   * A cached number stored as a float (3055550101.0, not a string) is not recognised: it is not
     tightened or keyed, and the same number can be added again. skiptrace.py stores strings.
   * REsimpli's `opt` becomes a number-level DNC flag and a person-level hold in this tool. It never
@@ -242,6 +258,7 @@ OPT_YES = ('yes', 'true', 'y', '1', 'opted out', 'opted-out', 'opt out', 'opt-ou
 # (its street-address names are caught by the sniff in read_export, before this list is read)
 OURS = ('propertyzipcode', 'firstname2', 'lastname2', 'fullname2', 'skiptraceddate')
 OWNER_COLS = (('firstName', 'lastName'), ('firstName2', 'lastName2'))
+OWNER_FULL = ('fullName', 'fullName2')       # the same owners' whole names: never read as a name, only to see that an owner is there
 # the raw owner line only: owner_clean (Miami), oname and rname (county rolls, lis pendens) are copies of it with
 # the Jr / Sr, trust and company words taken out, everything after an '&' dropped, or two people welded into one
 OWNER_FIELDS = ('owners', 'owner', 'Owner')
@@ -394,6 +411,15 @@ def row_people(x):
         if f and l:
             out.append((g, f, l))
     return out
+
+
+def unread_owners(x):
+    """How many of the row's owner slots hold a name this tool cannot read as one person (a company, an
+    initial for a first name, a name in one column only, a whole name with neither part). An empty slot
+    is not one."""
+    named = {g for g, _, _ in row_people(x)}
+    return sum(1 for g, cols in enumerate(OWNER_COLS, 1)
+               if g not in named and any((x.get(k) or '').strip() for k in cols + (OWNER_FULL[g - 1],)))
 
 
 def owner_people(r):
@@ -1009,18 +1035,34 @@ def read_export(path):
     missing += ['Phone_%d%s' % (i, s) for i in sorted(slots) for s in SLOT_FLAG_COLS
                 if 'Phone_%d%s' % (i, s) not in fields]
     if missing:
-        raise SyncError('%s is not a complete REsimpli skip-trace export (missing %s)'
+        raise SyncError('%s is not a complete REsimpli skip-trace export (missing %s). If a column is there under '
+                        'another name, rename it back to REsimpli\'s spelling; do not add an empty one, which reads as '
+                        'No and would drop every opt-out the real column holds'
                         % (name, ', '.join(missing[:6])))
+    rows, ragged = [], []
     try:
         with open(path, encoding='utf-8-sig', newline='') as f:
-            rows = list(csv.DictReader(f))
+            rd = csv.DictReader(f, strict=True)             # strict: a stray or unclosed quote is an error, not a guess
+            for x in rd:
+                if x.get(None) or any(v is None for v in x.values()):   # a cell past the header's last column (an empty one too) or one short
+                    ragged.append(rd.line_num)                          # of it: a comma put in or taken out moves every column after it
+                rows.append(x)
     except UnicodeDecodeError:
         raise not_utf8
     except OSError as e:
         raise SyncError('%s could not be read (%s)' % (name, type(e).__name__), kind='io')
     except csv.Error:
-        raise SyncError('%s could not be read as CSV (a cell longer than %d characters, a NUL byte or a broken '
-                        'quote?)' % (name, csv.field_size_limit()))
+        raise SyncError('%s could not be read as CSV: a cell is longer than %d characters, a quote is never closed '
+                        'or has text right after it (a stray quote would otherwise swallow the rows below it, opt-outs '
+                        'and DNC flags included), or the file has a NUL byte' % (name, csv.field_size_limit()))
+    if ragged:
+        raise SyncError('%s has %d row%s with a different number of cells than its %d header columns (line%s %s%s). A comma '
+                        'typed into a cell, one taken out, or a file cut short moves every column after it, so a number\'s '
+                        'flags and the `opt` cell can be read from the wrong place, and a comma at the end of a row cannot '
+                        'be told from that. Nothing was read.'
+                        % (name, len(ragged), '' if len(ragged) == 1 else 's', len(rd.fieldnames),
+                           '' if len(ragged) == 1 else 's', ', '.join(str(n) for n in ragged[:3]),
+                           ', ...' if len(ragged) > 3 else ''))
     # `opt` decides whether a whole row (and, through opt_people_of, a person) is held. A value this
     # tool does not know how to read is not guessed at: 'None' on every row would flag every number in
     # the file as DNC across the whole cache, and a value read as "no" would let an opt-out through.
@@ -1033,7 +1075,8 @@ def read_export(path):
                         'through. If REsimpli really writes that word, tell Claude and it will be added. To go on '
                         'now, change those cells to Yes (opted out) or No in that file itself (save it as CSV UTF-8) and '
                         'run again; if you are not sure what a cell meant, put Yes, which opts that person out. If the '
-                        'cells look like a corrupt download, download the export from REsimpli again.'
+                        'cells look like a corrupt download, download the export from REsimpli again and put the new file over this '
+                        'one (a copy beside it would be read too, and this one would keep refusing).'
                         % (name, len(odd), '' if len(odd) == 1 else 's', shown, ', ...' if len(odd) > 3 else ''),
                         kind='opt')
     return rows
@@ -1236,12 +1279,27 @@ def main(argv=None):
         print('REFUSED:', e)
         return 2
     side_cur, side_state = load_sidecar(side_path)
+    if side_state == 'unreadable':
+        # It holds the registry's verdicts, which every number this run adds is checked against, and it is where this
+        # run's flags are kept (the phone cache alone loses them when skiptrace.py replaces a lead's entry).
+        print('REFUSED: dnc_scrub.json exists but cannot be read. It holds the registry\'s DNC verdicts, which every number '
+              'this run adds is checked against, and it is where this run\'s own flags are recorded. Nothing was '
+              'written. Restore it from a copy (DEALFLOW\\backups holds dnc_scrub.pre-resimpli-*.json only after an '
+              'earlier run of this tool, so there may be none), then run again. Do not just move it aside: a new '
+              'sidecar would hold only REsimpli\'s flags, and every registry verdict the Tracerfy DNC lane recorded in '
+              'the old one would be gone without a word. Until it is fixed the board bake cannot apply registry '
+              'verdicts at all.')
+        return 2
     today = datetime.date.today().isoformat()
     try:
         leads = S.load_all_leads()
     except (OSError, ValueError) as e:
         print('REFUSED: the board leads cannot be read (%s); nothing written. %s'
-              % (type(e).__name__, 'Run this from the repo folder that holds leads_final.json.' if isinstance(e, OSError)
+              % (type(e).__name__,
+                 'leads_final.json is read from %s (next to skiptrace.py, whatever folder this is run from) and is '
+                 'missing there or cannot be opened: run this on the machine that builds the board, and check that a '
+                 'refresh is not rewriting it, then run again.' % os.path.dirname(os.path.abspath(S.LEADS))
+                 if isinstance(e, OSError)
                  else 'leads_final.json is half-written or damaged (a refresh may still be running): wait for it to '
                       'finish, or rebuild it, then run again.'))
         return 2
@@ -1254,11 +1312,11 @@ def main(argv=None):
     registry = registry_digits(side_cur)
     wp_all = set().union(*(wp_numbers(rec) for rec in wp.values()))
     print('opt-out hold: %d people, from %d exports (%d files found)' % (len(opt_people), len(exports), len(files)))
-    unnamed = sum(1 for _, _, rows in exports for x in rows if opted_out(x) and not row_people(x))
+    unnamed = sum(1 for _, _, rows in exports for x in rows if opted_out(x) and unread_owners(x))
     if unnamed:
-        print('NOTE: %d opted-out rows name nobody this tool can read (a company, an initial for a first name, a name in one '
-              'column only), so those people cannot be held on their other rows or in other exports. The numbers on the '
-              'rows themselves are still flagged.' % unnamed)
+        print('NOTE: %d opted-out rows have an owner this tool cannot read as a person (a company, an initial for a first '
+              'name, a name in one column only), so that owner cannot be held on their other rows or in other exports. '
+              'The numbers on the rows themselves are still flagged.' % unnamed)
     if cells['flag_cells_unread']:
         print('NOTE: %d flagged phone cells (the row is opted out, or the number is marked DNC) hold no number this tool can '
               'read, so that flag could not be applied to any number. Nothing was guessed.' % cells['flag_cells_unread'])
@@ -1295,22 +1353,7 @@ def main(argv=None):
         total[k] += settled[k]                 # the flagged numbers, placed after every callable one
     tightened = tighten(results, flagged)
     aud, bad_cases = audit(results, pairs)
-    side_doc, side_added, side_tight, side_marked = None, 0, 0, 0
-    if side_state == 'unreadable':
-        # The sidecar is what keeps a flag when skiptrace.py later replaces a lead's entry wholesale, and
-        # the only record of one on a lead with no entry (DNC-only) or on no lead at all (an unmatched
-        # row). With it unreadable none of that can be written, so a run that has anything to flag stops.
-        if flagged:
-            print('REFUSED: dnc_scrub.json exists but cannot be read, and this run has %d numbers to flag as DNC '
-                  'that would then be recorded only in the phone cache, which skiptrace.py can replace. Nothing '
-                  'was written. Restore it from a copy (DEALFLOW\\backups holds dnc_scrub.pre-resimpli-*.json only '
-                  'after an earlier run of this tool, so there may be none), then run again. Do not just move it '
-                  'aside: a new sidecar would hold only REsimpli\'s flags, and every registry verdict the Tracerfy '
-                  'DNC lane recorded in the old one would be gone without a word. Until it is fixed the board bake '
-                  'cannot apply registry verdicts at all.' % len(flagged))
-            return 2
-    else:
-        side_doc, side_added, side_tight, side_marked = sidecar_plan(side_cur, flagged, results, today)
+    side_doc, side_added, side_tight, side_marked = sidecar_plan(side_cur, flagged, results, today)
     total.update(dnc_flagged_numbers=len(flagged), dnc_tightened=tightened, dnc_sidecar_added=side_added,
                  dnc_sidecar_tightened=side_tight, dnc_sidecar_marked=side_marked, opt_people_held=len(opt_people),
                  flagged_also_whitepages=len(flagged & wp_all), flag_cells_unread=cells['flag_cells_unread'],
@@ -1322,9 +1365,6 @@ def main(argv=None):
     print('TOTAL')
     for k in COUNT_KEYS + GLOBAL_KEYS:
         print('  %-28s %d' % (k, total[k]))
-    if side_state == 'unreadable':
-        print('WARNING: dnc_scrub.json exists but cannot be read; left untouched. The board bake cannot '
-              'apply registry verdicts until it is fixed. This run had nothing to flag.')
     if aud['resimpli_unconfirmed']:
         print('NOTE: %d cached REsimpli numbers on %d leads are not attached by any export this run read (an '
               'earlier, looser merge, or an earlier export that is not in %s). They are still in the cache and '
