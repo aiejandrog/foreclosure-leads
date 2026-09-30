@@ -99,6 +99,8 @@ _rows = [{'c': 'A'}, {'c': 'B', 'pcs': ['Z']}, {'c': 'C'}]
 _n = _ns['stamp_ledger'](_rows, {'A': {'n': 2, 'last': 5}, 'Z': {'n': 1, 'last': 9}}, {'A': {'n': 1, 'last': 7}})
 rec('stamp_ledger stamps le/lt, walks pcs, counts stamped rows',
     _rows == [{'c': 'A', 'le': 5, 'lt': 7}, {'c': 'B', 'pcs': ['Z'], 'le': 9}, {'c': 'C'}] and _n == 2, _rows)
+rec('stamp_ledger ignores a text composer opened but never sent',
+    _ns['stamp_ledger']([{'c': 'O'}], {}, {'O': {'n': 0, 'opens': 1, 'last': 8}}) == 0)
 rec('stamp_ledger tolerates missing ledgers', _ns['stamp_ledger']([{'c': 'Q'}], None, None) == 0)
 _sr = SRC[SRC.find('function supReason('):SRC.find('\n}\n', SRC.find('function supReason('))]
 _su = SRC[SRC.find('function suppressed('):SRC.find('\n}\n', SRC.find('function suppressed('))]

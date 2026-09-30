@@ -1975,7 +1975,10 @@ def stamp_ledger(rows, mail_log=None, text_log=None):
     for r in rows:
         cs = [r.get('c')] + list(r.get('pcs') or [])
         le = max([int((mail_log.get(c) or {}).get('last') or 0) for c in cs if c] or [0])
-        lt = max([int((text_log.get(c) or {}).get('last') or 0) for c in cs if c] or [0])
+        # `last` in the text ledger also moves on an unconfirmed composer open; only a case with
+        # confirmed sends (`n`) counts as texted.
+        lt = max([int((text_log.get(c) or {}).get('last') or 0) for c in cs
+                  if c and (text_log.get(c) or {}).get('n')] or [0])
         if le:
             r['le'] = le
         if lt:
