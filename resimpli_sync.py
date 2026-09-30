@@ -37,7 +37,8 @@ WHAT GETS IN
     minus the Whitepages numbers it does not. Within a row, mobiles take the room first; the numbers
     REsimpli flags DNC go in last, after every callable number of the run (settle()); what does not fit
     is counted (numbers_over_cap) and not added. A number Whitepages also lists for the lead takes the
-    place its Whitepages copy would have had, so it costs the row nothing. Every Whitepages number of
+    place its Whitepages copy would have had, so it costs the row nothing (a row already over the
+    limit takes nothing more, that number included). Every Whitepages number of
     the lead counts, including the person-search records the bake would drop, so this can only leave
     more room than needed. A callable number is placed as its row is read, so when two rows or two
     files match the same lead and the room is short for both, the one read first takes it (a landline
@@ -55,8 +56,8 @@ WHAT GETS IN
     only while its phones are empty), so that lead gets no entry (leads_dnc_only_skipped; the flag is
     still recorded in dnc_scrub.json). On a lead that has phones the number is stored as DNC, and the
     bake then shows it DNC where it would otherwise append a Whitepages copy of it as clean; a number
-    Whitepages also lists for the lead takes the place that copy would have had, so it needs a free
-    place in the entry and no other on the row. A lead that gets its first number here is also not
+    Whitepages also lists for the lead takes the place that copy would have had, so it adds nothing to
+    the row and is taken unless the row is already over the limit. A lead that gets its first number here is also not
     traced by Tracerfy afterwards, whatever that number's type.
   * Emails are not merged: they are unverified and would feed first-touch email.
 
@@ -64,15 +65,22 @@ DNC IS ABOUT THE NUMBER, AND IT ONLY TIGHTENS
 A phone counts as clean only when REsimpli says so in plain words (DNC "No", status "[]", litigator
 blank or No). Yes, blank, an unrecognised value, or any other status is DNC. A cell that is not a
 single number (two numbers, or one with an extension or a note) is not merged, but when its row or
-slot is flagged, every number written in it is flagged too, however it is punctuated (numbers_in:
-dashes of every kind, a slash, a comma, an underscore, a dot, a tab, a zero-width space, digits of
-another script, two numbers to a cell); a flag that is lost is a homeowner called. A row with `opt` set (Yes / True / Y / 1,
+slot is flagged, every number written in it is flagged too, whatever is written between its digit
+groups or around them (numbers_in: dashes of every kind, a slash, a comma, an underscore, letters,
+spaces inside the brackets, a tab, a zero-width space, digits of another script, an extension after
+it, two numbers to a cell); a flag that is lost is a homeowner called. Digits with nothing between
+them are one group: twelve of them run together are not searched for a number, and only the first 60
+groups of a cell are read. A flagged cell that holds no number numbers_in can find is counted
+(flag_cells_unread) and said: its flag lands on nothing. A row with `opt` set (Yes / True / Y / 1,
 or Opted Out / Opt-Out / Unsubscribed / Stop / DNC) is opted out: its numbers are flagged and it is
 not merged. So is a row, in any export this run reads, that names a person such a row names (same
 surname and given name, either owner slot, either word order): opting out is about the person, so the
 same person listed under another property with another number has not come back (opt_person_rows;
 opt_person_cases lists the leads it kept a row off, opt_people_held how many people the hold was
-built from). A namesake is held too; that is the safe side. `opt` blank or No / False / N / 0 is
+built from). A namesake is held too; that is the safe side. An opted-out row that names nobody this
+tool can read (a company, an initial for a first name, a name in one column only) is counted
+(opt_rows_unnamed) and said: its own numbers are flagged, but that person cannot be held on other
+rows. `opt` blank or No / False / N / 0 is
 not opted out; a value that is none of these refuses the file, since reading it as "no" lets an
 opt-out through and reading it as "yes" flags every number in the list (1.0 and 0.0, what a
 spreadsheet makes of 1 and 0, read as 1 and 0). A file with no `opt` column, or no _DNC, _status or
@@ -149,6 +157,25 @@ KNOWN LIMITS (reported here, not fixed)
     this tool adds it to, but is not copied onto other leads' cached phones. Readers of the raw cache
     (call_list.py, sheets_crm, bsg_daily_routes, _carlos_route, three_day.py, deal_desk.py) see only
     the cache's own `dnc` flag, as they already do for every registry hit the Tracerfy lane found.
+  * A line that joins two people with a comma, ' Y ', a slash, a plus, W/ or C/O (Broward's PA-page
+    fallback keeps ',' and '/') is read as one person, so a name made of one owner's given name and the
+    other's surname can match; the address still has to match. TRS, TRUSTEE, TTEE, PERS REP and P/R are
+    role suffixes in contact_trust.py and are dropped, so the person they follow still matches (TR, a
+    trust, is nobody); JUNIOR, SENIOR and 2ND are not read as generation markers.
+  * The person-level opt-out checks read the row the bake cuts to MAX_PHONES. tighten() turns a cached
+    number DNC, the bake sorts it last, and on an entry that holds more than MAX_PHONES numbers
+    (skiptrace.py's _collect never caps) that can cut it off the row and pull a different number on,
+    so an identity the ledger holds as '#<number>' (an inbound STOP) may no longer be found on the row.
+    It predates this tool (the Tracerfy DNC lane does the same) and belongs to the bake and the
+    suppression owner: reported, not fixed. Nothing here adds a number past the limit.
+  * A header that names a column twice (csv keeps the last one) or spells a phone or `opt` column
+    differently (`phone_1`, `Phone_01`, a trailing space) is not caught: that column is ignored and its
+    flags are lost. A downloaded export does not have this; a hand-edited one could.
+  * tracerfy_mcp.py reads a dnc_scrub.json it cannot parse as empty, and its DNC lane then rewrites the
+    whole file, dropping every record, REsimpli's included. This tool refuses to run on a torn sidecar
+    it has flags for; tracerfy_mcp.py is another script's.
+  * A cached number stored as a float (3055550101.0, not a string) is not recognised: it is not
+    tightened or keyed, and the same number can be added again. skiptrace.py stores strings.
   * REsimpli's `opt` becomes a number-level DNC flag and a person-level hold in this tool. It never
     reaches the opt-out ledger (optouts.json), which is another session's surface, and it does not
     touch what Tracerfy already cached for that person on her own lead. If `opt` means "do not contact
@@ -252,14 +279,17 @@ COUNT_KEYS = ('rows', 'rows_with_phone', 'unmatched_rows_with_phone', 'unit_mism
 SETTLE_KEYS = ('new_numbers_dnc', 'leads_dnc_only_skipped')     # counted by settle() once the run is read, not per file
 GLOBAL_KEYS = ('dnc_flagged_numbers', 'dnc_tightened', 'dnc_sidecar_added', 'dnc_sidecar_tightened',
                'dnc_sidecar_marked', 'opt_people_held', 'flagged_also_whitepages', 'cache_resimpli_numbers',
-               'resimpli_confirmed', 'resimpli_unconfirmed', 'resimpli_unconfirmed_leads')
+               'resimpli_confirmed', 'resimpli_unconfirmed', 'resimpli_unconfirmed_leads', 'flag_cells_unread',
+               'opt_rows_unnamed')
 
 
 class SyncError(Exception):
     """skippable: a stray file that is plainly not a REsimpli export. Anything else that stops a file
     from being read in full is not skippable: its DNC flags would be silently missing from the merge.
     kind: 'io' when the file could not be opened or read at all (open in Excel, gone): the refusal
-    then says to close it, not that its content is wrong."""
+    then says to close it, not that its content is wrong. 'opt' when its `opt` column holds a word
+    this tool cannot read: the refusal itself says how to fix those cells in that file, so the note
+    after it does not tell the operator to move or replace the file."""
     def __init__(self, msg, skippable=False, kind=''):
         super().__init__(msg)
         self.skippable = skippable
@@ -424,31 +454,37 @@ def parse_number(v):
     return d if re.fullmatch(r'[2-9][0-9]{2}[2-9][0-9]{6}', d) else ''
 
 
-# A US number written anywhere in a cell of text: '305-555-0101 x22', '(305) 555-0101', '+1 305 555 0101'.
-# Between the groups: up to three characters that are not a letter or a digit (a dash of any kind, a slash,
-# a comma, an underscore, a middle dot, a tab, a zero-width space). This reader decides what gets FLAGGED,
-# and a flag has to hold however the number was typed; parse_number, which decides what gets ADDED, is
-# the strict one.
-_SEP = r'[\W_]{0,3}'
-NUMBER_IN_TEXT = re.compile(r'(?<![0-9])(?:1%s)?\(?([2-9][0-9]{2})\)?%s([2-9][0-9]{2})%s([0-9]{4})(?![0-9])'
-                            % (_SEP, _SEP, _SEP))
+# A US number written anywhere in a cell: '305-555-0101 x22', '(305) 555-0101', '+1 305 555 0101', '305x555x0101'.
+# This reader decides what gets FLAGGED, and a flag has to hold however the number was typed; parse_number,
+# which decides what gets ADDED, is the strict one.
+NANP = re.compile(r'[2-9][0-9]{2}[2-9][0-9]{6}')
+MAX_GROUPS = 60             # digit groups read from one cell: a phone cell has a handful, a longer one is not a phone cell
 
 
 def numbers_in(v):
-    """Every US number written anywhere in one cell, as ten digits. parse_number reads a cell that IS
-    a number; a cell with two numbers, or one with an extension or a note, or with punctuation it does
-    not know, is not read as a phone (it is counted and never merged), but a flag on its row still
-    holds for the numbers it shows. So this is deliberately generous: the numbers found by pattern,
-    and the cell's digits alone when they make one number however they were separated or interrupted
-    (what an earlier version of this tool read as the number). A flag that lands on a digit string
-    nobody has is harmless; a flag that is lost is a homeowner called. Another script's digits are read
-    as the digits they are here (parse_number, which decides what gets added, refuses them)."""
+    """Every US number written in one cell, as ten digits. parse_number reads a cell that IS a number
+    and decides what gets ADDED; a cell with two numbers, an extension, a note or punctuation it does
+    not know is never added, but a flag on its row or slot still holds for the numbers it shows, and
+    this decides which. So it is deliberately generous: a number is ten digits (eleven with a leading
+    1) that make up consecutive digit groups of the cell, whatever is written between the groups and
+    whatever comes before or after them: '305-555-0101 x12', '( 305 ) - 555 - 0101 ext 2', '305x555x0101',
+    '305 -- 555 -- 0101 / 305-555-0102', '1 (305) 555-0101', '30 55 55 01 01'. Another script's digits
+    are read as the digits they are (parse_number refuses them). A flag that lands on a digit string
+    nobody has is harmless; a flag that is lost is a homeowner called. Digits with nothing between
+    them are one group and are read only as a whole number, so twelve of them run together are not
+    searched for one, and only the first MAX_GROUPS groups of a cell are read."""
     s = unicodedata.normalize('NFKC', str(v or ''))
     s = ''.join(str(unicodedata.decimal(c)) if c.isdecimal() else c for c in s)
-    out = {''.join(m) for m in NUMBER_IN_TEXT.findall(s)}
-    d = norm_number(s)
-    if re.fullmatch(r'[2-9][0-9]{2}[2-9][0-9]{6}', d):
-        out.add(d)
+    groups = re.findall(r'[0-9]+', s)[:MAX_GROUPS]
+    out = set()
+    for i in range(len(groups)):
+        d = ''
+        for g in groups[i:i + 11]:
+            d += g
+            if len(d) == 10 and NANP.fullmatch(d):
+                out.add(d)
+            elif len(d) == 11 and d[0] == '1' and NANP.fullmatch(d[1:]):
+                out.add(d[1:])
     return out
 
 
@@ -563,11 +599,12 @@ def parse_cells(x, slots, n=None, opt=None):
     return out
 
 
-def flagged_numbers(rows, opt_people=()):
+def flagged_numbers(rows, opt_people=(), n=None):
     """Every number any of these rows flags DNC (or lists under an opt-out), matched or not. DNC
     belongs to the number: main() makes it DNC on every cached phone with those digits, on any lead,
     and records it in dnc_scrub.json. The bake applies that sidecar to cached skip-trace phones only,
-    not to the Whitepages numbers it appends later."""
+    not to the Whitepages numbers it appends later. `n` (a dict): flag_cells_unread counts the flagged
+    cells that hold no number numbers_in can find, whose flag therefore lands on nothing."""
     slots = slots_of(rows)
     out = set()
     for x in rows:
@@ -576,7 +613,10 @@ def flagged_numbers(rows, opt_people=()):
         for i in slots:
             raw = str(x.get('Phone_%d' % i) or '').strip()
             if raw and not parse_number(raw) and (opt or read_flags(x, i)[0]):
-                out |= numbers_in(raw)      # not one number, but the numbers written in it are flagged with it
+                found = numbers_in(raw)     # not one number, but the numbers written in it are flagged with it
+                out |= found
+                if not found and n is not None:
+                    n['flag_cells_unread'] += 1
     return out
 
 
@@ -656,9 +696,9 @@ def fit(count, wp_left, cands):
     """Which of `cands` (phone dicts, in the order they are wanted) one entry can take, and which it
     cannot. The entry holds `count` numbers now; the bake will append the `wp_left` Whitepages numbers
     it does not hold and cut the row to MAX_PHONES, and nothing this tool adds may push a number off
-    that row. A number Whitepages also lists for the lead takes the place its Whitepages copy would
-    have had, so it needs a free place in the entry and no other on the row; any other number takes
-    a new one. -> (taken, refused)"""
+    that row. A number takes one place on the row, except one Whitepages also lists for the lead: it
+    takes the place its Whitepages copy would have had, so it adds nothing and is taken as long as the
+    row is not already over the limit. -> (taken, refused)"""
     wp_left = set(wp_left)
     taken, refused = [], []
     for p in cands:
@@ -978,8 +1018,9 @@ def read_export(path):
         raise not_utf8
     except OSError as e:
         raise SyncError('%s could not be read (%s)' % (name, type(e).__name__), kind='io')
-    except csv.Error as e:
-        raise SyncError('%s could not be read (%s)' % (name, type(e).__name__))
+    except csv.Error:
+        raise SyncError('%s could not be read as CSV (a cell longer than %d characters, a NUL byte or a broken '
+                        'quote?)' % (name, csv.field_size_limit()))
     # `opt` decides whether a whole row (and, through opt_people_of, a person) is held. A value this
     # tool does not know how to read is not guessed at: 'None' on every row would flag every number in
     # the file as DNC across the whole cache, and a value read as "no" would let an opt-out through.
@@ -993,7 +1034,8 @@ def read_export(path):
                         'now, change those cells to Yes (opted out) or No in that file itself (save it as CSV UTF-8) and '
                         'run again; if you are not sure what a cell meant, put Yes, which opts that person out. If the '
                         'cells look like a corrupt download, download the export from REsimpli again.'
-                        % (name, len(odd), '' if len(odd) == 1 else 's', shown, ', ...' if len(odd) > 3 else ''))
+                        % (name, len(odd), '' if len(odd) == 1 else 's', shown, ', ...' if len(odd) > 3 else ''),
+                        kind='opt')
     return rows
 
 
@@ -1004,17 +1046,27 @@ def refusal_note(err, path, named, import_dir):
         return ('That file is in %s. If another program has it open (Excel keeps a lock on a file it has open), close '
                 'it and run again; otherwise check that it is still there and can be read. Nothing was read further: '
                 'its opt-outs and DNC flags would be missing from the merge.' % folder)
-    if folder == os.path.abspath(import_dir):
+    kept = folder == os.path.abspath(import_dir)
+    if err.kind == 'opt':
+        # the line above already says how to fix the cells in that file itself; a replacement download would have the
+        # same words, and moving or deleting the file would drop its opt-outs
+        if kept:
+            return ('That file is in %s, where this tool keeps a copy of every export it has read. Deleting it forgets '
+                    'its opt-outs: change the cells in that copy itself, as the line above says, then run again.' % folder)
+        return '' if named else 'That file is in %s.' % folder
+    if kept:
         return ('That file is in %s, where this tool keeps a copy of every export it has read. This tool cannot read '
                 'it in full, so its opt-outs and DNC flags would be missing from the merge and nothing was read '
                 'further. Deleting it forgets them. Fix what the line above says in that file itself, or put the '
                 'original export back over it (download it from REsimpli again if you no longer have it), then run '
                 'again.' % folder)
     if not named:
-        return ('That file is in %s. If it is a REsimpli export, its opt-outs and DNC flags would be missing from the '
-                'merge, so nothing was read further. Move or delete that file, then run again (a real export: '
-                'download it from REsimpli again; something else, such as another vendor\'s skip-trace file or a list '
-                'of ours: rename it so it no longer starts with SkipTrace_).' % folder)
+        # a real export must not be told to get out of the way: moving it aside drops its opt-outs from the next run
+        return ('That file is in %s. If it is a REsimpli export, do not move or delete it: its opt-outs and DNC flags '
+                'would be missing from the merge, and nothing was read further. Fix what the line above says in that '
+                'file itself, or put the original export back over it (download it from REsimpli again if you no '
+                'longer have it), then run again. If it is something else, such as another vendor\'s skip-trace file '
+                'or a list of ours, rename it so it no longer starts with SkipTrace_, then run again.' % folder)
     return ''
 
 
@@ -1063,8 +1115,8 @@ def load_wp(path):
     except (OSError, ValueError) as e:
         raise SyncError('whitepages_lookup.json at %s cannot be read (%s); it decides how many numbers a lead '
                         'can take, so nothing was written. An interrupted whitepages_lookup.py run can leave it '
-                        'torn: restore a copy of it, or run whitepages_lookup.py again for the leads it lost, '
-                        'then run this again.' % (path, type(e).__name__))
+                        'torn: restore a copy of it (whitepages_lookup.py cannot read it either, so running that '
+                        'first does not help), then run this again.' % (path, type(e).__name__))
     if not isinstance(wp, dict):
         raise SyncError('whitepages_lookup.json at %s is not a JSON object; nothing written' % path)
     return wp
@@ -1188,18 +1240,28 @@ def main(argv=None):
     try:
         leads = S.load_all_leads()
     except (OSError, ValueError) as e:
-        print('REFUSED: the board leads cannot be read (%s); nothing written. Run this from the repo folder '
-              'that holds leads_final.json.' % type(e).__name__)
+        print('REFUSED: the board leads cannot be read (%s); nothing written. %s'
+              % (type(e).__name__, 'Run this from the repo folder that holds leads_final.json.' if isinstance(e, OSError)
+                 else 'leads_final.json is half-written or damaged (a refresh may still be running): wait for it to '
+                      'finish, or rebuild it, then run again.'))
         return 2
     idx = build_index(leads, S._case, S._propaddr)
 
     opt_people = opt_people_of(exports)
-    flagged = set()
+    flagged, cells = set(), {'flag_cells_unread': 0}
     for f, h, rows in exports:
-        flagged |= flagged_numbers(rows, opt_people)
+        flagged |= flagged_numbers(rows, opt_people, cells)
     registry = registry_digits(side_cur)
     wp_all = set().union(*(wp_numbers(rec) for rec in wp.values()))
     print('opt-out hold: %d people, from %d exports (%d files found)' % (len(opt_people), len(exports), len(files)))
+    unnamed = sum(1 for _, _, rows in exports for x in rows if opted_out(x) and not row_people(x))
+    if unnamed:
+        print('NOTE: %d opted-out rows name nobody this tool can read (a company, an initial for a first name, a name in one '
+              'column only), so those people cannot be held on their other rows or in other exports. The numbers on the '
+              'rows themselves are still flagged.' % unnamed)
+    if cells['flag_cells_unread']:
+        print('NOTE: %d flagged phone cells (the row is opted out, or the number is marked DNC) hold no number this tool can '
+              'read, so that flag could not be applied to any number. Nothing was guessed.' % cells['flag_cells_unread'])
     unread = 0                  # exports waiting in Downloads / Desktop that this run did not read (naming a file reads
     for f in discover(import_dir):                                  # that file and the kept copies, nothing else)
         try:
@@ -1251,7 +1313,8 @@ def main(argv=None):
         side_doc, side_added, side_tight, side_marked = sidecar_plan(side_cur, flagged, results, today)
     total.update(dnc_flagged_numbers=len(flagged), dnc_tightened=tightened, dnc_sidecar_added=side_added,
                  dnc_sidecar_tightened=side_tight, dnc_sidecar_marked=side_marked, opt_people_held=len(opt_people),
-                 flagged_also_whitepages=len(flagged & wp_all), **aud)
+                 flagged_also_whitepages=len(flagged & wp_all), flag_cells_unread=cells['flag_cells_unread'],
+                 opt_rows_unnamed=unnamed, **aud)
     status['total'] = total
     status['dnc_scrub_json'] = side_state
     status['resimpli_unconfirmed_cases'] = bad_cases

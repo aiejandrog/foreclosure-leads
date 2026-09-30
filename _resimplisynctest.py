@@ -404,6 +404,12 @@ try:
         not same('Jose', 'Perez Jr', 'PEREZ, JOSE SR') and not same('Jose Jr', 'Perez', 'PEREZ, JOSE SR') and
         same('Jose', 'Perez Sr', 'PEREZ, JOSE SR') and same('Jose', 'Perez', 'PEREZ, JOSE SR') and
         same('Jose', 'Perez Jr', 'PEREZ, JOSE') and not same('Jose', 'Perez Iii', 'PEREZ, JOSE II'))
+    rec('names: each word that says the owner is not a living person (estate, heirs, deceased, unknown) makes the line nobody on its own, so none rides on another rule',
+        all(RS.owner_people({'owners': 'PEREZ JOSE %s' % w}) == [] for w in ('ESTATE', 'EST', 'DECD', 'DECEASED', 'HEIR', 'HEIRS', 'UNK', 'UNKNOWN')) and
+        all(RS.owner_people({'owners': 'PEREZ JOSE & GARCIA MARIA %s' % w}) == [] for w in ('HEIRS', 'DECD', 'UNK')) and
+        all(RS.owner_people({'owners': 'Perez Jose %s' % w}) == [] for w in ('Estate', 'estate', 'Est', 'Decd', 'Deceased', 'Heir', 'Heirs', 'heirs', 'Unk', 'unk', 'Unknown')) and
+        RS.row_people({'firstName': 'Jose', 'lastName': 'Perez Heirs'}) == [] and RS.row_people({'firstName': 'Jose Perez', 'lastName': 'Estate'}) == [] and
+        RS.owner_people({'owners': 'PEREZ JOSE'}) != [])
     rec('names: a company, trust or estate anywhere on a line makes it nobody, so no co-owner on it is an owner',
         not same('John', 'Smith', 'SMITH JOHN & MARY TR') and not same('Mary', 'Smith', 'SMITH JOHN & MARY TR') and
         not same('John', 'Smith', 'SMITH JOHN TR & SMITH MARY TR') and not same('Jose', 'Perez', 'JOSE PEREZ AND SONS INC') and
@@ -654,9 +660,20 @@ try:
         rc, out = run([], files={'SkipTrace_1.csv': ROWS})
     finally:
         S.load_all_leads = real_leads
-    rec('no board leads file (wrong folder): refused with exit 2, nothing written, no traceback',
-        rc == 2 and 'board leads cannot be read' in out and load(RES) == CACHE and not os.path.exists(SIDE)
-        and not os.path.exists(STATUS), out[-300:])
+    rec('no board leads file (wrong folder): refused with exit 2, nothing written, no traceback, and told to run it from the repo folder',
+        rc == 2 and 'board leads cannot be read' in out and 'Run this from the repo folder that holds leads_final.json' in out and 'half-written' not in out and
+        load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-300:])
+    fresh(CACHE)
+    def torn_leads():
+        raise ValueError('Expecting value: line 1 column 1 (char 0)')
+    S.load_all_leads = torn_leads
+    try:
+        rc, out = run([], files={'SkipTrace_1.csv': ROWS})
+    finally:
+        S.load_all_leads = real_leads
+    rec('a board leads file that is there but half-written or damaged is refused too, and not told to change folder',
+        rc == 2 and 'board leads cannot be read (ValueError)' in out and 'half-written or damaged' in out and 'repo folder' not in out and
+        load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-300:])
 
     fresh(CACHE)
     open(WPF, 'w').write('{"2026-000001-CA-01": {"result": [')
@@ -751,6 +768,8 @@ try:
     rec('an entry with phones: null is a lead with no phones', nums(d, 9) == ['3055550901'] and d[case(9)]['source'] == 'tracerfy')
 
     # ---------------------------------------------------------------- refusals
+    # what the refusal of a file found by looking says about that file: a real export is told NOT to get it out of the way (moving it aside drops its opt-outs)
+    FOUND_NOTE = 'do not move or delete it'
     def refused(name, header, expect, rows=None, encoding='utf-8'):
         fresh(CACHE)
         snap = open(RES, 'rb').read()
@@ -785,15 +804,17 @@ try:
 
     # an export that is one but cannot be read in full is NOT skipped: its DNC flags would be missing while
     # the other exports merge their numbers as clean
-    def refused_dir(name, files, expect):
+    def refused_dir(name, files, expect, found_note=True):
+        """found_note: the refusal carries the note for a file found by looking (it is a REsimpli export: do not move it, fix it or put
+        the original back; something else: rename it). Not for an `opt` refusal, whose own text says to fix the cells in that file."""
         fresh(CACHE)
         for fname, (rows, hdr, enc) in files.items():
             write_csv(os.path.join(DL, fname), rows, header=hdr, encoding=enc)
         rc, out = run([])
         rec('refused, nothing merged, nothing left behind: ' + name,
-            rc == 2 and 'REFUSED' in out and expect in out and 'Move or delete that file' in out and load(RES) == CACHE
-            and not os.path.exists(SIDE) and not os.path.exists(STATUS) and not os.path.exists(os.path.join(DFDIR, 'imports'))
-            and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
+            rc == 2 and 'REFUSED' in out and expect in out and ((FOUND_NOTE in out) == found_note) and load(RES) == CACHE
+            and (found_note or (out.rstrip().splitlines()[-1] == 'That file is in %s.' % DL and 'that file itself' in out)) and not os.path.exists(SIDE) and not os.path.exists(STATUS)
+            and not os.path.exists(os.path.join(DFDIR, 'imports')) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
     clean = row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])
     flags_it = row('José', 'Núñez', '1500 Sw 15th St', '33100', g1=[M(101, 'Mobile', True)])      # the same number, DNC
     refused_dir('a newer export re-saved in Excel (cp1252) lists as DNC the number the older one lists clean',
@@ -814,7 +835,7 @@ try:
     write_csv(os.path.join(DL, 'SkipTrace_a.csv'), [clean])
     rc, out = run([])
     rec('a binary file named like an export is refused too, by name, rather than guessed at',
-        rc == 2 and 'SkipTrace_bin.csv' in out and 'Move or delete that file' in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
+        rc == 2 and 'SkipTrace_bin.csv' in out and FOUND_NOTE in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
 
     # an export re-saved with another list separator, or with a line above the header, is not "some other CSV":
     # skipping it would drop its DNC flags while an older export lists the same numbers clean
@@ -833,7 +854,7 @@ try:
         write_delimited(os.path.join(DL, 'SkipTrace_b.csv'), [flags_it], **kw)
         rc, out = run([])
         rec('refused, nothing merged, nothing left behind: an export re-saved with %s next to a good one' % label,
-            rc == 2 and 'REFUSED' in out and 'SkipTrace_b.csv' in out and 'column names' in out and 'Move or delete that file' in out
+            rc == 2 and 'REFUSED' in out and 'SkipTrace_b.csv' in out and 'column names' in out and FOUND_NOTE in out
             and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS)
             and not os.path.exists(os.path.join(DFDIR, 'imports')) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
     for label, hdr in (('only its address column name', ['propertyStreetAddress', 'firstName']), ('only its phone column name', ['Phone_1', 'a'])):
@@ -854,9 +875,9 @@ try:
     one = [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])]
     for val in ('None', 'NULL', 'N/A', '-', 'Unknown', 'nan', 'Maybe', '2'):
         refused('opt_%s.csv' % val.replace('/', '_'), HDR, 'of value in its `opt` column', rows=[dict(one[0], opt=val)])
-    refused_dir('an export whose `opt` column says None next to a good one',
+    refused_dir('an export whose `opt` column says None next to a good one: the refusal says to fix the cells in that file, not to move it',
                 {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([dict(clean, opt='None')], HDR, 'utf-8')},
-                'SkipTrace_b.csv')
+                'SkipTrace_b.csv', found_note=False)
     fresh(CACHE)
     path = os.path.join(TMP, 'opt_num.csv')
     write_csv(path, [dict(one[0], opt='3055550101'), dict(one[0], opt='Zzz'), dict(one[0], opt='Qqq'), dict(one[0], opt='Ppp')])
@@ -1355,7 +1376,7 @@ try:
         fh.write('x' * 200000 + '\n')
     rc, out = run([])
     rec('...and in discovery mode it stops the run too: it cannot be shown to be "not an export"',
-        rc == 2 and 'SkipTrace_b.csv' in out and 'Move or delete that file' in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
+        rc == 2 and 'SkipTrace_b.csv' in out and FOUND_NOTE in out and load(RES) == CACHE and not os.path.exists(SIDE), out[-300:])
 
     real_main, real_merge = RS.main, RS.merge
     def cli_out(argv=()):
@@ -1563,13 +1584,17 @@ try:
     rec('an unreadable kept copy refuses a one-file run and names the folder it is in',
         rc == 2 and 'abcd1234_SkipTrace_bad.csv' in out and imp_dir in out and 'Deleting it forgets them' in out and
         'put the original export back over it' in out and 'that file itself' in out and 'was changed after it was kept' not in out and
-        'Move or delete that file' not in out and load(RES) == {}, out[-500:])
+        FOUND_NOTE not in out and load(RES) == {}, out[-500:])
     fresh({})
     write_csv(os.path.join(DL, 'SkipTrace_bad.csv'), [flags_it], encoding='cp1252')
     write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
     rc, out = run([])
-    rec('...and a refused file found by discovery says which folder it is in, and to move it, not where the kept copies are',
-        rc == 2 and DL in out and 'SkipTrace_bad.csv' in out and 'Move or delete that file' in out and 'keeps a copy' not in out, out[-400:])
+    rec('...and a refused file found by discovery says which folder it is in, that a real export must not be moved or deleted (its opt-outs would be '
+        'dropped from the next run) but fixed or put back, and that only a file that is not an export is renamed; not where the kept copies are',
+        rc == 2 and DL in out and 'SkipTrace_bad.csv' in out and FOUND_NOTE in out and 'keeps a copy' not in out and
+        'Fix what the line above says in that file itself, or put the original export back over it' in out and
+        '(download it from REsimpli again if you no longer have it), then run again. If it is something else' in out and
+        'rename it so it no longer starts with SkipTrace_, then run again' in out and 'Move or delete that file' not in out, out[-600:])
 
     # ---------------------------------------------------------------- the kept copies are found in a folder with [ ] in its name
     import paths as _P
@@ -1802,7 +1827,8 @@ try:
     fresh(CACHE)
     open(WPF, 'w').write('{"2026-000001-CA-01": {"result": [')
     rc, out = run([], files={'SkipTrace_1.csv': ROWS})
-    rec('a torn whitepages_lookup.json: the refusal says what to do', rc == 2 and 'restore a copy' in out and 'whitepages_lookup.py' in out, out[-500:])
+    rec('a torn whitepages_lookup.json: the refusal says to restore a copy, and that running whitepages_lookup.py does not help (it cannot read the file either)',
+        rc == 2 and 'restore a copy' in out and 'whitepages_lookup.py cannot read it either' in out and 'again for the leads it lost' not in out, out[-500:])
 
     # ---------------------------------------------------------------- a run that only tightens still writes the cache
     fresh({case(1): {'phones': [{'number': '3055550101', 'type': 'Mobile', 'dnc': False}], 'source': 'tracerfy'}})
@@ -1854,7 +1880,7 @@ try:
     def phones_at(d, n):
         return [(p['number'], p['dnc']) for p in (d.get(case(n)) or {}).get('phones', [])]
 
-    dnc_first = row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9401, 'Mobile', True), M(9402, 'Landline', True)])      # all DNC
+    dnc_first = row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9402, 'Landline', True), M(9401, 'Mobile', True)])      # all DNC, the landline listed first
     callable_ = row('Sam', 'Settle', '9400 Nw 94th St', '33100', g1=[M(9403), M(9404, 'Landline')])                         # the same lead, dialable
     only = row('Dee', 'Only', '9500 Nw 95th St', '33100', g1=[M(9501, 'Mobile', True), M(9502, 'Landline', True)])           # a lead with nothing but DNC
     want94 = [('3055559403', False), ('3055559404', False), ('3055559401', True), ('3055559402', True)]
@@ -2188,11 +2214,94 @@ try:
         ('555-0101', []), ('123-456-7890', []), ('305-155-0101', []), ('305-555-010', []), ('', []), (None, []), ('abc', []), ('1 2 3', []),
         ('3.05555E+09', []), ('30555501011', []), ('23055550101', []), ('30555501013055550102', []), ('305-555-010\u2776', []),
         ('1-305-555x0101', one_n),                     # a country code and a letter in the number: the digits alone are eleven, and the 1 is dropped
-        ('(305) - 555 - 0101 or (305) - 555 - 0102', two_n)]      # brackets and dashes: four characters between the area code and the exchange
+        ('(305) - 555 - 0101 or (305) - 555 - 0102', two_n),      # brackets and dashes: four characters between the area code and the exchange
+        # the groups are read in order whatever is written between them or around them: wide separators, letters and spaces inside the number,
+        # together with an extension or a second number in the same cell (the digits alone are then more than one number)
+        ('(305)  -  555-0101 ext 2', one_n), ('( 305 ) - 555 - 0101 x2', one_n), ('305x555x0101 x12', one_n),
+        ('305 -- 555 -- 0101 / 305-555-0102', two_n), ('305 -- 555 -- 0101 / 305 -- 555 -- 0102 x7', two_n),
+        ('30 55 55 01 01', one_n), ('3055 550101', one_n), ('305555-0101', one_n), ('3 0 5 5 5 5 0 1 0 1', one_n),
+        ('1 3 0 5 5 5 5 0 1 0 1', one_n),              # eleven one-digit groups: a country code and the ten
+        ('ext 5: 305-555-0101', one_n), ('1 305 555 0101 x2', one_n), ('#2 (305) 555-0101 [work]', one_n), ('305\u200b555\u200b0101 x12', one_n),
+        ('305 555 0101 or 786 555 0102', ['3055550101', '7865550102']),
+        ('305-555-0101 / 305-555-0102 / 305-555-0103', ['3055550101', '3055550102', '3055550103']),     # nothing is read across the seams
+        ('+1 (305) 555-0101 x12; +1 (786) 555-0102', ['3055550101', '7865550102']),
+        ('1 ' * 40 + '305-555-0101', one_n),                # forty groups in, still read
+        ('1 ' * 70 + '305-555-0101', []),                   # past the groups a cell is read through: not a phone cell
+        ('1 ' * 57 + '305-555-0101', one_n),                # the sixtieth group is the last one read: a number that ends there is found
+        ('1 ' * 58 + '305-555-0101', []),                   # and one that needs the sixty-first is not
+        ('305-555-0101 \u1369\u19da\u24f5', one_n), ('\u1369\u1369 305 555 0101 \u24ff', one_n),      # digit-like marks that are not decimal digits are not digits
+        ('305-555-0101 3', one_n), ('3 305-555-0101', one_n), ('305-555-010 1', one_n)]
     got_in = [sorted(RS.numbers_in(v)) for v, _ in table_in]
     rec("numbers_in: a number is found however it is punctuated, in whichever script its digits are, alone or two to a cell; a short number, an "
         'area code or exchange that cannot be one, twenty digits with nothing between them, and a word are not numbers',
         got_in == [e for _, e in table_in], [(v, g, e) for (v, e), g in zip(table_in, got_in) if g != e])
+    # a generator of ways to write a number, and the two properties that make the flag reader trustworthy: it never loses a number that is written
+    # in order with something that is not a digit between its groups, whatever else the cell holds; and it never reads less than the reader it replaced
+    import re as _re, unicodedata as _ud
+    r4 = _random.Random(20260930)
+    SEPCH = list(' -–—‐‑−/\\,;:._·\t\u200b()[]{}#*+~|') + ['x', 'ext', 'ext.', ' x', ' ext ', 'ext:', ' -- ', '  ', ' / ', 'or', 'call', '(work)', '\u00a0', '\n']
+    def rand_sep(nonempty):
+        out = ''
+        for _ in range(r4.randint(1 if nonempty else 0, 8)):
+            out += r4.choice(SEPCH)
+        return out or (r4.choice(SEPCH) if nonempty else '')
+    def rand_number():
+        return '%d%02d%d%02d%04d' % (r4.randint(2, 9), r4.randint(0, 99), r4.randint(2, 9), r4.randint(0, 99), r4.randint(0, 9999))
+    def spell(n10, glue_cc):
+        cuts = sorted(r4.sample(range(1, 10), r4.choice([0, 1, 2, 2, 3, 4, 9])))
+        parts, last = [], 0
+        for c in cuts + [10]:
+            parts.append(n10[last:c])
+            last = c
+        cc = r4.choice(['', '', '1', '+1', '1 (', '+1 ']) if glue_cc else ''
+        return cc + parts[0] + ''.join(rand_sep(False) + q for q in parts[1:])
+    bad_spell, exact_bad, sample = [], [], []
+    for trial in range(6000):
+        n10 = rand_number()
+        body = spell(n10, True)
+        junk_before = r4.choice(['', '', 'call ', 'ext 5: ', '#2 ', '2026-09-29 ', 'tel: ']) if r4.random() < 0.5 else ''
+        junk_after = (rand_sep(True) + r4.choice(['12', '2', '5555', '99999', '7'])) if r4.random() < 0.5 else ''
+        cell = junk_before + body + junk_after
+        got = RS.numbers_in(cell)
+        if n10 not in got:
+            bad_spell.append((cell, n10, sorted(got)))
+        if not junk_before[-1:].isdigit() and not junk_after and junk_before in ('', 'call ', 'tel: ') and got != {n10}:
+            exact_bad.append((cell, n10, sorted(got)))                        # nothing but the number's own digits in the cell: nothing else is read
+        if trial < 6:
+            sample.append(cell)
+    rec('numbers_in: 6000 random ways to write a number (any grouping, separators of up to eight characters of any kind, a country code, an '
+        'extension or a note before or after) all still flag it', not bad_spell, bad_spell[:3])
+    rec('...and when the cell holds nothing but the number, nothing else is read out of it', not exact_bad, exact_bad[:3])
+    OLD_SEP = r'[\W_]{0,3}'
+    OLD_RX = _re.compile(r'(?<![0-9])(?:1%s)?\(?([2-9][0-9]{2})\)?%s([2-9][0-9]{2})%s([0-9]{4})(?![0-9])' % (OLD_SEP, OLD_SEP, OLD_SEP))
+    def old_numbers_in(v):
+        t = _ud.normalize('NFKC', str(v or ''))
+        t = ''.join(str(_ud.decimal(c)) if c.isdecimal() else c for c in t)
+        out = {''.join(m) for m in OLD_RX.findall(t)}
+        d = RS.norm_number(t)
+        if _re.fullmatch(r'[2-9][0-9]{2}[2-9][0-9]{6}', d):
+            out.add(d)
+        return out
+    alphabet = '0123456789' * 3 + ' -/(),.+x_\t\u2013\u200bab' + '\u0665\uff13'
+    lost_old = []
+    for trial in range(8000):
+        cell = ''.join(r4.choice(alphabet) for _ in range(r4.randint(5, 45))) if trial % 2 else spell(rand_number(), True) + r4.choice(['', ' x3', ' / 305-555-0102'])
+        if not old_numbers_in(cell) <= RS.numbers_in(cell):
+            lost_old.append((cell, sorted(old_numbers_in(cell) - RS.numbers_in(cell))))
+    rec('numbers_in reads everything the reader it replaced read: 8000 random cells, none loses a number', not lost_old, lost_old[:3])
+    import time as _time
+    hostile = ['5' * 131072, '1-' * 65536, '(' * 131072, '3 ' * 65536, '305-555-0101 ' * 10000, ''.join(chr(0x660 + i % 10) for i in range(131072)),
+               ''.join(r4.choice(alphabet) for _ in range(131072))]
+    t0 = _time.time()
+    sizes = [len(RS.numbers_in(h)) for h in hostile]
+    took = _time.time() - t0
+    rec('numbers_in on cells of 131072 characters (the largest csv reads) neither fails nor slows down, and finds a bounded set', took < 10 and max(sizes) < 200,
+        (round(took, 2), sizes))
+
+    rec('numbers_in reads ten digits made of consecutive digit groups, so a date or an id beside a number can add a string of its own that nobody has '
+        '(harmless: a flag on a number nobody has changes nothing), and never hides the number',
+        RS.numbers_in('2026-09-29 14:30:00 305-555-0101') >= {'3055550101'} and RS.numbers_in('ID 4417 305-555-0101 09/29') >= {'3055550101'} and
+        RS.numbers_in('305 -- 555 -- 6101 / 305-555-6104') >= {'3055556101', '3055556104'})
     rec('parse_number stays strict about what gets added: an odd separator, another script, a stray mark or a letter is not a number to add',
         [RS.parse_number(v) for v in ('305–555–0101', '305/555/0101', '305,555,0101', '305_555_0101', in_script(ONE, AR), "'3055550101",
                                       '305x555x0101')] == [''] * 7)
@@ -2216,6 +2325,31 @@ try:
     rec('a DNC flag on a phone cell holds however its number was punctuated (dashes of every kind, slash, comma, underscore, tab, middle dot, '
         'zero-width space): the same number written plainly on another lead is stored DNC, the copy Tracerfy cached on a third turns DNC, it is in '
         'dnc_scrub.json, and the odd cell itself is not added to anyone', not lost, lost)
+    hard = [('(305)  -  555-6101 ext 2', {'3055556101'}), ('( 305 ) - 555 - 6101 x2', {'3055556101'}), ('305x555x6101 x12', {'3055556101'}),
+            ('305 -- 555 -- 6101 / 305-555-6104', {'3055556101', '3055556104'}), ('call 305 - 555 - 6101 or ext 12', {'3055556101'})]
+    lost = []
+    for cell, want in hard:
+        with with_leads(odd_leads):
+            fresh(odd_cache)
+            rc, out = run([], files={'SkipTrace_1.csv': [
+                row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': cell, 'DNC': 'Yes', 'status': '["DNC"]'}, M(6102)]),
+                row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6103), M(6101)])]})
+            d, sd, t = load(RES), load(SIDE) or {}, load(STATUS)['total']
+        if not (rc == 0 and {n for n, f in phones_at(d, 63) if f} == want and {RS.norm_number(k) for k in sd} >= want and t['dnc_flagged_numbers'] >= len(want) and
+                t['numbers_unreadable'] == 1 and phones_at(d, 61) == [('3055556102', False)] and dict(phones_at(d, 62))['3055556101'] is True):
+            lost.append((cell, phones_at(d, 63), sorted(sd), t['dnc_flagged_numbers']))
+    rec('a DNC flag on a cell with an extension or a second number, written with wide separators, spaces inside the brackets or letters between the '
+        'groups, still flags the numbers written in it: stored DNC on the lead that lists one plainly, turned DNC on the copy Tracerfy cached, '
+        'in dnc_scrub.json, and the odd cell itself is not added', not lost, lost)
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        rc, out = run([], files={'SkipTrace_1.csv': [
+            row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': '( 305 ) - 555 - 6101 x2', 'DNC': 'No'}, {'n': '305 -- 555 -- 6104 / 305-555-6105'}], opt='Yes'),
+            row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6103)])]})
+        d, sd = load(RES), load(SIDE) or {}
+    rec('...and on an opted-out row, every number written in an odd cell is flagged',
+        rc == 0 and [p['dnc'] for p in d[case(63)]['phones']] == [True, True, True] and
+        {RS.norm_number(k) for k in sd} >= {'3055556101', '3055556104', '3055556105'}, (phones_at(d, 63), sorted(sd)))
     with with_leads(odd_leads):
         fresh(odd_cache)
         rc, out = run([], files={'SkipTrace_1.csv': [
@@ -2243,6 +2377,64 @@ try:
     rec('...but an odd cell whose slot is clean flags nothing, and is not added either',
         rc == 0 and [p['dnc'] for p in d[case(63)]['phones']] == [False] * 3 and '3055556101' not in sd and phones_at(d, 61) == [('3055556102', False)] and
         load(STATUS)['total']['numbers_unreadable'] == 1, (phones_at(d, 63), sorted(sd)))
+
+    # ---------------------------------------------------------------- a flag that lands on nothing is counted and said
+    unread_cells = ['3O5-555-6101', '3.05555E+09', '0013055556101', '305555610122']       # no number can be read out of any of these
+    for args in ([], ['--dry-run']):
+        with with_leads(odd_leads):
+            fresh(odd_cache)
+            rc, out = run(args, files={'SkipTrace_1.csv': [
+                row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': c, 'DNC': 'Yes', 'status': '["DNC"]'} for c in unread_cells]),
+                row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6103)])]})
+            t = (load(STATUS) or {}).get('total', {'flag_cells_unread': 4, 'numbers_unreadable': 4})       # a dry run writes no status file
+        rec('a flagged phone cell that holds no number anything can read is counted and said (%s): its flag cannot land on a number' % (args or ['a real run']),
+            rc == 0 and t['flag_cells_unread'] == 4 and t['numbers_unreadable'] == 4 and 'NOTE: 4 flagged phone cells' in out and
+            '  flag_cells_unread            4' in out, (t, out[-400:]))
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        rc, out = run([], files={'SkipTrace_1.csv': [
+            row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': '305 -- 555 -- 6101 x2', 'DNC': 'Yes'}, {'n': '3O5-555-6104', 'DNC': 'No'}, {'n': 'call me', 'DNC': 'No'}]),
+            row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6103)])]})
+        t = load(STATUS)['total']
+    rec('...but one whose flag lands on a number, and two on clean slots, are not counted, and nothing is said',
+        rc == 0 and t['flag_cells_unread'] == 0 and t['numbers_unreadable'] == 3 and 'flagged phone cells' not in out, (t, out[-400:]))
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        rc, out = run([], files={'SkipTrace_1.csv': [
+            row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': '3O5-555-6101', 'DNC': 'No'}, M(6102)], opt='Yes'),
+            row('Bea', 'Plain', '6200 Nw 62nd St', '33100', g1=[M(6103)])]})
+        t = load(STATUS)['total']
+    rec('...and an unreadable cell on an opted-out row is counted (the row flags every number on it)',
+        rc == 0 and t['flag_cells_unread'] == 1 and 'NOTE: 1 flagged phone cells' in out, (t, out[-400:]))
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        rc, out = run([], files={'SkipTrace_1.csv': [
+            row('J', 'Initial', '6100 Nw 61st St', '33100', g1=[M(6102)], opt='Yes'),               # an initial for a first name
+            row('Acme', 'Holdings LLC', '6300 Nw 63rd St', '33100', g1=[M(6104)], opt='Yes'),       # a company
+            row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6105)], opt='Yes'),                 # a person: held
+            row('J', 'Initial', '6200 Nw 62nd St', '33100', g1=[M(6106)])]})                         # not opted out
+        t = load(STATUS)['total']
+    rec('an opted-out row whose person cannot be named (an initial for a first name, a company) is counted and said: that person cannot be held on other rows, '
+        'though the row itself is', rc == 0 and t['opt_rows_unnamed'] == 2 and t['opt_people_held'] == 1 and t['opt_rows'] == 3 and
+        'NOTE: 2 opted-out rows name nobody' in out and '  opt_rows_unnamed             2' in out, (t, out[-500:]))
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        rc, out = run([], files={'SkipTrace_1.csv': [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6105)], opt='Yes'),
+                                                     row('J', 'Initial', '6200 Nw 62nd St', '33100', g1=[M(6106)])]})
+        t = load(STATUS)['total']
+    rec('...and a named opted-out row, or a row that is not opted out, is not counted', rc == 0 and t['opt_rows_unnamed'] == 0 and 'name nobody' not in out, (t, out[-400:]))
+
+    with with_leads(odd_leads):
+        fresh(odd_cache)
+        rc, out = run([], files={
+            'SkipTrace_1.csv': [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[{'n': '3O5-555-6101', 'DNC': 'Yes'}, M(6102, 'Mobile', True)]),        # a flag that lands, and one that does not
+                                row('J', 'Initial', '6200 Nw 62nd St', '33100', g1=[M(6103)], opt='Yes')],                                              # an opted-out row that names nobody
+            'SkipTrace_2.csv': [row('Bea', 'Plain', '6300 Nw 63rd St', '33100', g1=[{'n': '3O5-555-6104', 'DNC': 'Yes'}, {'n': 'call me', 'DNC': 'Yes'}]),
+                                row('Acme', 'Holdings LLC', '6400 Nw 64th St', '33100', g1=[M(6105)], opt='Yes')]})
+        t = load(STATUS)['total']
+    rec('...and both counts run over every export read, not the first one only',
+        rc == 0 and t['flag_cells_unread'] == 3 and t['opt_rows_unnamed'] == 2 and 'NOTE: 3 flagged phone cells' in out and 'NOTE: 2 opted-out rows name nobody' in out,
+        (t, out[-500:]))
 
     # ---------------------------------------------------------------- a callable number Whitepages also lists costs the row nothing
     sw_leads = [lead(64, '6400 NW 64 ST', 'SWAP, SAL'), lead(65, '6500 NW 65 ST', 'ROOMY, RAY')]
@@ -2377,7 +2569,10 @@ try:
     rec('a kept copy whose `opt` column holds a word this tool cannot read: the refusal says to fix that file itself, does not say it was changed after '
         'it was kept, does not say to run a copy, and says what to put when unsure',
         rc == 2 and 'abcd1234_SkipTrace_odd.csv' in out and 'that file itself' in out and 'put Yes, which opts that person out' in out and
-        'was changed after it was kept' not in out and 'run that copy' not in out and 'Deleting it forgets them' in out and load(RES) == CACHE, out[-700:])
+        'was changed after it was kept' not in out and 'run that copy' not in out and 'Deleting it forgets its opt-outs' in out and
+        'put the original' not in out and 'download it from REsimpli again if you no longer have it' not in out and load(RES) == CACHE, out[-700:])
+    rec('...and it is told to change the cells in that copy itself, which is where the opt-outs are kept, and not to delete it',
+        'change the cells in that copy itself' in out and 'Delete it' not in out and 'where this tool keeps a copy of every export it has read' in out, out[-500:])
     write_csv(os.path.join(kept, 'abcd1234_SkipTrace_odd.csv'), [dict(one[0], opt='Yes')])
     rc, out = run([pc2])
     rec('...and editing the kept copy the way the message says lets the next run go through (and the person it opts out is held)',
@@ -2387,7 +2582,7 @@ try:
     write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
     rc, out = run([])
     rec('a found file that cannot be opened says to close it, names the folder it is in, and does not tell the operator to move it or where the kept copies are',
-        rc == 2 and 'another program has it open' in out and 'SkipTrace_locked.csv' in out and DL in out and 'Move or delete that file' not in out and 'keeps a copy' not in out, out[-500:])
+        rc == 2 and 'another program has it open' in out and 'SkipTrace_locked.csv' in out and DL in out and FOUND_NOTE not in out and 'keeps a copy' not in out, out[-500:])
 
 
     # the two places read_export() opens the file itself. main() has already read it once to hash it, so these are a file that opened a
@@ -2416,7 +2611,7 @@ try:
         rec('a named file that opens for the hash and then cannot be read (%s) says which error, says another program has it open and where the '
             'file is, and writes nothing' % where,
             rc == 2 and 'REFUSED: %s could not be read (PermissionError)' % name in out and 'another program has it open' in out and 'close it and run again' in out and TMP in out and
-            'Move or delete that file' not in out and snapshot() == before, out[-400:])
+            FOUND_NOTE not in out and snapshot() == before, out[-400:])
     os.mkdir(os.path.join(TMP, 'named_dir.csv'))
     fresh(CACHE)
     before = snapshot()
@@ -2431,14 +2626,32 @@ try:
     rc, out = run([p_bigcell])
     rec('a file whose rows csv cannot read (a cell past its field-size limit) is refused by name as unreadable content, not as a file another '
         'program has open, and nothing is written',
-        rc == 2 and 'named_bigcell.csv could not be read (Error)' in out and 'another program has it open' not in out and snapshot() == before, out[-300:])
+        rc == 2 and 'named_bigcell.csv could not be read as CSV (a cell longer than %d characters' % csv.field_size_limit() in out and
+        'another program has it open' not in out and snapshot() == before, out[-300:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_bigcell.csv'), [dict(one[0], firstName='x' * 200000)])
+    write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+    rc, out = run([])
+    rec('...and the same file found by looking is a file that is not readable in full: it is told not to be moved (a real export) or renamed (not one), not '
+        'told to close it, and not given the advice for an `opt` word',
+        rc == 2 and 'SkipTrace_bigcell.csv could not be read as CSV (a cell longer than %d characters' % csv.field_size_limit() in out and FOUND_NOTE in out and
+        'rename it so it no longer starts with SkipTrace_' in out and 'another program has it open' not in out and 'that file itself' in out and
+        load(RES) == CACHE, out[-500:])
+    pc_odd = os.path.join(TMP, 'named_odd.csv')
+    write_csv(pc_odd, [dict(one[0], opt='Maybe')])
+    fresh(CACHE)
+    before = snapshot()
+    rc, out = run([pc_odd])
+    rec('a named file whose `opt` column holds a word this tool cannot read is refused by name: the line itself says how to fix the cells, and nothing '
+        'says where the file is, to move it, or where the kept copies are', rc == 2 and 'named_odd.csv has 1 kind of value in its `opt` column' in out and
+        'That file is in' not in out and FOUND_NOTE not in out and 'keeps a copy' not in out and snapshot() == before, out[-500:])
     # where the file is decides the rest of the advice: a file the operator named needs none, a file found by looking says to move it
     pc_bad = os.path.join(TMP, 'named_bad.csv')
     write_csv(pc_bad, [flags_it], encoding='cp1252')
     fresh({})
     rc, out = run([pc_bad])
     rec('a named file that is not UTF-8 is refused by name with no advice about where it is or about the kept copies',
-        rc == 2 and 'named_bad.csv is not UTF-8' in out and 'Move or delete that file' not in out and 'keeps a copy' not in out and
+        rc == 2 and 'named_bad.csv is not UTF-8' in out and FOUND_NOTE not in out and 'keeps a copy' not in out and
         'another program has it open' not in out, out[-400:])
     try:
         rel_bad = os.path.relpath(pc_bad)                       # as an operator types it, from the folder they are in
@@ -2448,7 +2661,7 @@ try:
         fresh({})
         rc, out = run([rel_bad])
         rec('...and typed as a relative path it is still a file the operator named',
-            rc == 2 and 'named_bad.csv is not UTF-8' in out and 'Move or delete that file' not in out and 'keeps a copy' not in out, out[-400:])
+            rc == 2 and 'named_bad.csv is not UTF-8' in out and FOUND_NOTE not in out and 'keeps a copy' not in out, out[-400:])
     else:
         skip('a named file typed as a relative path (no relative path from here)')
 finally:
