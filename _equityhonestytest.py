@@ -14,6 +14,9 @@ Five defects, one suite:
   5. judgment_interest.py: "judgement" spelling, the notice-of-sale floor, a clerk non-answer is
      not cached as a miss, and the bake labels a floor as a minimum without calling it the entry.
 
+The board checks (1-3, and the floor wording on the board) live in board_suite(), run by
+_equityboardtest.py because CI has no browser. This file runs everything else, in CI too.
+
 Runs on any checkout: synthetic rows only (invented names/cases), a headless page built the way
 build_preview.py builds one but written to a temp file, so nothing tracked is touched.
 """
@@ -24,7 +27,6 @@ sys.path.insert(0, HERE)
 import foreclosure_leads as F
 import disclaimer as _D
 import judgment_interest as JI
-from playwright.sync_api import sync_playwright
 
 CHECKS, FAILS = [], []
 
@@ -116,6 +118,7 @@ PROBE = r"""() => {
 
 
 def board_suite():
+    from playwright.sync_api import sync_playwright   # browser half only: _equityboardtest.py
     html = build_html(ROWS)
     fd, path = tempfile.mkstemp(suffix='.html', prefix='eqhonesty_')
     with os.fdopen(fd, 'w', encoding='utf-8') as f:
@@ -316,6 +319,6 @@ if __name__ == '__main__':
     interest_suite()
     bake_suite()
     surfaces_suite()
-    board_suite()
+    # the board half drives Chromium, which CI does not install: it runs as _equityboardtest.py
     print('\n%d checks, %d failed' % (len(CHECKS), len(FAILS)))
     sys.exit(1 if FAILS else 0)
