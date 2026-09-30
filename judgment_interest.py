@@ -25,6 +25,11 @@ stay UNACCRUED and are labelled as such. That asymmetry is deliberate:
 An invented date produces an invented payoff, which is the exact failure this module exists to
 kill. No date -> no accrual -> the board says "as entered" instead of pretending.
 
+The ONE exception is not a guess (2026-09-30): when the docket has no final-judgment entry but
+does carry a notice of sale, that notice is published only after the judgment (FS 45.031), so its
+date is a proven LOWER BOUND. Interest from it is a minimum, stored as `floor`, never as `d`, and
+the board labels it "at least". See FLOOR_PATTERN.
+
 Usage:
   python judgment_interest.py --case 2018-011148-CA-01   # one case, prove it
   python judgment_interest.py --all                       # every MD lead with a judgment
@@ -53,13 +58,35 @@ LATEST_RATE_YEAR = max(JAN1_RATES)
 
 # Docket labels that mean "final judgment entered". Ordered: we take the EARLIEST match, because
 # accrual runs from the original entry. An amended/reset judgment does not restart the clock.
+# `judge?ment`: the clerk's own docket text spells it both ways ("FINAL JUDGEMENT OF FORECLOSURE"),
+# and a strict 'judgment' left those cases with no date and so no interest at all.
 FJ_PATTERNS = [
-    r'summary final judgment',
-    r'default final judgment',
-    r'final judgment of foreclosure',
-    r'^final judgment',
-    r'\bfinal judgment\b',
+    r'summary final judge?ment',
+    r'default final judge?ment',
+    r'final judge?ment of foreclosure',
+    r'^final judge?ment',
+    r'\bfinal judge?ment\b',
 ]
+# Entries that NAME a final judgment without being one, and are filed BEFORE it: the motion for
+# it, the hearing on it, the plaintiff's proposed judgment and its notice of filing, and the
+# affidavits filed in support of it (indebtedness, amounts due, fees). Taking one
+# of those as the entry date would start interest too early and label an overstatement verified.
+FJ_EXCLUDE = (r'\bmotion\b|\bhearing\b|\bproposed\b|\bnotice\s+of\s+filing\b|\baffidavit\b'
+              r'|\bin\s+support\s+of\b')
+
+# THE FLOOR, when the docket shows no final-judgment entry but a judgment amount IS published.
+# Under FS 45.031 the clerk's notice of sale is published only AFTER a final judgment sets the
+# sale, so the earliest "Notice of Sale" entry is a date on or after the true entry date. Accruing
+# from it is NOT a guessed date: it is a proven lower bound on the interest (the real figure is
+# higher, never lower), and the board says "at least". Motions, hearings, and the plaintiff's
+# proposed notice of sale (filed with the proposed judgment) are excluded, because each can name
+# a sale before any judgment exists.
+FLOOR_PATTERN = r'\bnotice\s+of\s+(?:foreclosure\s+|judicial\s+)?sale\b'
+FLOOR_EXCLUDE = FJ_EXCLUDE    # a proposed notice of sale is filed with the proposed judgment
+
+# A cached miss is re-checked after this many days: the case has a published judgment, so an
+# empty docket read is more likely a slow docket than a real absence.
+MISS_RECHECK_DAYS = 7
 
 
 def _parse_date(s):
@@ -139,7 +166,7 @@ def fj_from_docket(rec):
     for pat in FJ_PATTERNS:
         for x in rows:
             desc = str(x.get('docketDescrition') or '').strip()
-            if not re.search(pat, desc, re.I):
+            if not re.search(pat, desc, re.I) or re.search(FJ_EXCLUDE, desc, re.I):
                 continue
             d = _parse_date(x.get('eventDate') or x.get('oDate'))
             if d and (best is None or d < best):
@@ -147,6 +174,57 @@ def fj_from_docket(rec):
         if best:
             break          # earliest match on the most specific pattern wins
     return best, best_label
+
+
+def sale_floor_from_docket(rec):
+    """(date, label) of the EARLIEST notice-of-sale entry, or (None, ''). See FLOOR_PATTERN."""
+    if not isinstance(rec, dict):
+        return None, ''
+    best, best_label = None, ''
+    for x in rec.get('dockets') or []:
+        desc = str(x.get('docketDescrition') or '').strip()
+        if not re.search(FLOOR_PATTERN, desc, re.I) or re.search(FLOOR_EXCLUDE, desc, re.I):
+            continue
+        d = _parse_date(x.get('eventDate') or x.get('oDate'))
+        if d and (best is None or d < best):
+            best, best_label = d, desc
+    return best, best_label
+
+
+def accrual_start(entry):
+    """(date, is_floor) for a judgment_dates.json entry, or (None, False).
+
+    A verified entry date wins. Without one, a notice-of-sale floor gives a MINIMUM accrual."""
+    entry = entry or {}
+    d = _parse_date(entry.get('d')) if entry.get('d') else None
+    if d and _bad_fj_label(entry):
+        d = None           # a motion/proposed-judgment date cached before FJ_EXCLUDE existed
+    if d:
+        return d, False
+    f = _parse_date(entry.get('floor')) if entry.get('floor') else None
+    if f:
+        return f, True
+    return None, False
+
+
+def _bad_fj_label(entry):
+    """True when a cached entry date came from a filing FJ_EXCLUDE now rejects (a motion for final
+    judgment, a hearing on it, a proposed judgment). Earlier pulls stored those as verified dates,
+    and a found date is otherwise never re-read, so this is how they get corrected."""
+    return isinstance(entry, dict) and bool(entry.get('d')) and \
+        bool(re.search(FJ_EXCLUDE, str(entry.get('label') or ''), re.I))
+
+
+def _stale_miss(entry, today=None):
+    """A cached entry with no entry date, checked MISS_RECHECK_DAYS or more ago (or never dated),
+    or one whose date came from a filing that is not the judgment (re-read at once)."""
+    if _bad_fj_label(entry):
+        return True
+    if not isinstance(entry, dict) or entry.get('d'):
+        return False
+    chk = _parse_date(entry.get('checked'))
+    today = today or datetime.date.today()
+    return chk is None or (today - chk).days >= MISS_RECHECK_DAYS
 
 
 def load_cache():
@@ -198,6 +276,42 @@ def _selftest():
         print('  FAIL: annual rate reset not applied'); ok = False
     else:
         print(f'  PASS: rate resets applied (2022 ${a["interest"]:,.0f} vs 2024 ${b["interest"]:,.0f})')
+    # judgement spelling and the notice-of-sale floor
+    rec = {'dockets': [
+        {'docketDescrition': 'MOTION TO RESET FORECLOSURE SALE', 'eventDate': '01/05/2024'},
+        {'docketDescrition': 'NOTICE OF HEARING ON NOTICE OF SALE', 'eventDate': '02/01/2024'},
+        {'docketDescrition': 'NOTICE OF SALE', 'eventDate': '03/10/2024'},
+        {'docketDescrition': 'Notice of Foreclosure Sale', 'eventDate': '02/20/2024'},
+        {'docketDescrition': 'NOTICE OF SALE PURSUANT TO CHAPTER 45 (PROPOSED)', 'eventDate': '01/10/2024'},
+        {'docketDescrition': 'NOTICE OF FILING PROPOSED FINAL JUDGMENT AND NOTICE OF SALE',
+         'eventDate': '01/09/2024'},
+    ]}
+    fd, _ = sale_floor_from_docket(rec)
+    if fd != datetime.date(2024, 2, 20):
+        print(f'  FAIL: floor {fd}, expected 2024-02-20 (motions and hearings excluded)'); ok = False
+    else:
+        print('  PASS: notice-of-sale floor skips motions, hearings and proposed notices')
+    jd, _ = fj_from_docket({'dockets': [
+        {'docketDescrition': 'MOTION FOR SUMMARY FINAL JUDGEMENT', 'eventDate': '01/01/2020'},
+        {'docketDescrition': 'NOTICE OF HEARING ON MOTION FOR FINAL JUDGMENT', 'eventDate': '03/01/2020'},
+        {'docketDescrition': 'NOTICE OF FILING PROPOSED FINAL JUDGMENT', 'eventDate': '06/01/2023'},
+        {'docketDescrition': 'AFFIDAVIT OF INDEBTEDNESS IN SUPPORT OF FINAL JUDGMENT', 'eventDate': '07/01/2023'},
+        {'docketDescrition': 'FINAL JUDGEMENT OF FORECLOSURE', 'eventDate': '11/02/2023'}]})
+    if jd != datetime.date(2023, 11, 2):
+        print(f'  FAIL: entry date {jd}, expected 2023-11-02 (judgement spelling, motions excluded)'); ok = False
+    else:
+        print('  PASS: "judgement" spelling read; motion, hearing and proposed judgment skipped')
+    if accrual_start({'d': '2023-11-02', 'floor': '2024-02-20'}) != (datetime.date(2023, 11, 2), False) \
+            or accrual_start({'d': '', 'floor': '2024-02-20'}) != (datetime.date(2024, 2, 20), True) \
+            or accrual_start({'d': ''}) != (None, False) \
+            or accrual_start({'d': '2020-01-01', 'label': 'MOTION FOR SUMMARY FINAL JUDGMENT',
+                              'floor': '2024-02-20'}) != (datetime.date(2024, 2, 20), True) \
+            or not _stale_miss({'d': '2020-01-01', 'label': 'MOTION FOR SUMMARY FINAL JUDGMENT',
+                                'checked': datetime.date.today().isoformat()}):
+        print('  FAIL: accrual_start precedence'); ok = False
+    else:
+        print('  PASS: verified date beats the floor; no date and no floor accrues nothing;'
+              ' a cached motion date is not trusted and is re-read')
     print('SELFTEST', 'OK' if ok else 'FAILED')
     return 0 if ok else 1
 
@@ -279,7 +393,10 @@ def main():
         return 0
 
     if not a.refresh:
-        targets = [c for c in targets if c not in cache]
+        # a cached MISS on a case that has a published judgment is re-read after
+        # MISS_RECHECK_DAYS; a found date is kept for good unless it came from a motion or a
+        # proposed judgment (_bad_fj_label), which is re-read at once
+        targets = [c for c in targets if c not in cache or _stale_miss(cache.get(c))]
     if a.limit:
         targets = targets[:a.limit]
 
@@ -304,9 +421,17 @@ def main():
     print(f'{len(targets)} case(s) to pull')
 
     s = requests.Session()
-    hit = miss = 0
+    hit = miss = err = floors = 0
     for i, c in enumerate(targets, 1):
         rec = _ocs_case(s, c)
+        if not isinstance(rec, dict):
+            # THE CLERK DID NOT ANSWER. That is not "this docket has no final judgment", and it used
+            # to be cached as exactly that: a miss the next run skipped for good, so one bad night
+            # left a case with no interest for ever. Nothing is written; the next run tries again.
+            err += 1
+            print(f'  [{i}/{len(targets)}] {c}  clerk did not answer - not cached, retried next run')
+            time.sleep(0.5)
+            continue
         d, label = fj_from_docket(rec)
         if d:
             cache[c] = {'d': d.isoformat(), 'rate': None, 'src': 'mdc-ocs-docket',
@@ -318,13 +443,20 @@ def main():
             # docket genuinely has no FJ entry (dismissed, pre-judgment, LP-only).
             cache[c] = {'d': '', 'rate': None, 'src': 'mdc-ocs-docket', 'label': '',
                         'checked': datetime.date.today().isoformat()}
+            fd, flabel = sale_floor_from_docket(rec)
+            if fd:
+                cache[c]['floor'] = fd.isoformat()
+                cache[c]['floor_label'] = flabel[:60]
+                floors += 1
             miss += 1
-            print(f'  [{i}/{len(targets)}] {c}  no final-judgment entry found')
+            print(f'  [{i}/{len(targets)}] {c}  no final-judgment entry found'
+                  + (f' - interest floor from {fd.isoformat()} ({flabel[:30]})' if fd else ''))
         if i % 10 == 0:
             save_cache(cache)
         time.sleep(0.5)
     save_cache(cache)
-    print(f'\nDONE: {hit} judgment date(s) found, {miss} without one -> {os.path.basename(CACHE)}')
+    print(f'\nDONE: {hit} judgment date(s) found, {miss} without one ({floors} with a notice-of-sale '
+          f'floor), {err} not answered by the clerk -> {os.path.basename(CACHE)}')
     return 0
 
 
