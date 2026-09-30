@@ -193,6 +193,7 @@ _LOCK = threading.Lock()
 _MEMO = {}          # path -> (mtime_ns, size, index)  -- index = {stem: [(key, entry), ...]}
 _PMEMO = {}         # PACER file: path -> (mtime_ns, size, (by_key, by_stem))
 _HMEMO = {}         # new-filer hits file: same shape
+_ERRMEMO = {}       # path -> (mtime_ns, size, err) for a file that did not parse; cleared by any change to it
 
 
 def case_stem(case):
@@ -314,6 +315,9 @@ def _load_keyed(path, name, memo_map):
         memo = memo_map.get(path)
         if memo and memo[0] == st.st_mtime_ns and memo[1] == st.st_size:
             return memo[2], '', True
+        bad = _ERRMEMO.get(path)
+        if bad and bad[0] == st.st_mtime_ns and bad[1] == st.st_size:
+            return None, bad[2], True                # same unreadable bytes: do not re-parse and sleep
     data, err = None, ''
     for attempt in range(2):
         try:
@@ -331,6 +335,12 @@ def _load_keyed(path, name, memo_map):
     if err:
         with _LOCK:
             memo_map.pop(path, None)
+            try:
+                st2 = os.stat(path)
+                if st2.st_mtime_ns == st.st_mtime_ns and st2.st_size == st.st_size:
+                    _ERRMEMO[path] = (st.st_mtime_ns, st.st_size, err)
+            except OSError:
+                pass
         return None, err, True
     by_key, by_stem = {}, {}
     for k, v in data.items():
@@ -346,6 +356,7 @@ def _load_keyed(path, name, memo_map):
     idx = (by_key, by_stem)
     with _LOCK:
         memo_map[path] = (st.st_mtime_ns, st.st_size, idx)
+        _ERRMEMO.pop(path, None)
     return idx, '', True
 
 

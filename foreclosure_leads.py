@@ -3537,6 +3537,12 @@ def make_tracker(leads):
         # leads were on no phone at all. Each seat gets the full per-phone budget now.
         _cm_seats = len([s for s in call_mode.CALL_SEATS if s]) or 1
         _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads, cap=400 * _cm_seats)
+        # Server-confirmed emails and texts (mail_sent.json / text_sent.json) onto the dial rows, so a
+        # lead cadence already mailed stops sorting as never-contacted on the phone. Order and the
+        # "already contacted" bar only; Call Mode's hiding rules do not read these fields.
+        _cm_led = call_mode.stamp_ledger(_cm_all[0], _mlog, _tlog)
+        if _cm_led:
+            print('call mode: %d dial row(s) carry a server email/text send date' % _cm_led)
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,

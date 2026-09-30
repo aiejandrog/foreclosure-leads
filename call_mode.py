@@ -1957,6 +1957,37 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     return out[:cap], total
 
 
+def stamp_ledger(rows, mail_log=None, text_log=None):
+    """Stamp each dial row with the newest CONFIRMED server-side email (`le`) and text (`lt`), epoch ms.
+
+    Alejandro, 2026-09-30: "every lead i see there ive contacted already". The page only knew what
+    was in the synced notes store. Emails cadence.py and the send bridge deliver land in
+    mail_sent.json, texts in text_sent.json, and neither writes a touch into notes, so a lead mailed
+    three times by cadence looked never-contacted on the phone and sorted to the TOP as fresh. The
+    board has read these ledgers since 08-08 (MAILLOG / TEXTLOG); the phone never got them.
+
+    ORDER AND DISPLAY ONLY. The page reads `le`/`lt` in _contactTier() and priorBar(), never in
+    supReason(), so nothing is hidden that was not hidden before. Walks r.pcs so the same human on a
+    sibling case counts. Inside the encrypted payload, like every other row field. Returns how many
+    rows got a stamp."""
+    mail_log, text_log = (mail_log or {}), (text_log or {})
+    n = 0
+    for r in rows:
+        cs = [r.get('c')] + list(r.get('pcs') or [])
+        le = max([int((mail_log.get(c) or {}).get('last') or 0) for c in cs if c] or [0])
+        # `last` in the text ledger also moves on an unconfirmed composer open; only a case with
+        # confirmed sends (`n`) counts as texted.
+        lt = max([int((text_log.get(c) or {}).get('last') or 0) for c in cs
+                  if c and (text_log.get(c) or {}).get('n')] or [0])
+        if le:
+            r['le'] = le
+        if lt:
+            r['lt'] = lt
+        if le or lt:
+            n += 1
+    return n
+
+
 def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     """-> (rows, n_suppressed) : one SLIM row for every lead the dial queue does not carry.
 
@@ -3931,28 +3962,44 @@ function pool(){
     if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
     if(_clmOwner(r.c)){ _CLMN++; return false; }
     return true; });
-  return _freshFirst(keep, lane);
+  var _ff = _freshFirst(keep, lane);
+  _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; else break; }
+  return _ff;
 }
 /* NEVER-CALLED FIRST (2026-09-28). supReason() hides a no-answer for its 24h cooldown, and the
    next day it comes back at its old rank -- above every lead nobody has dialled yet, because the
    rank (sale date, equity) never changes. Alejandro, 09-28: "i have the same old people on my
    dealflow call mode list". Order only: nothing is added or removed here, supReason() and the seat
-   and claim filters above still decide who is in the list. Leads with no logged call go first,
-   then retries; each group keeps its rank order. On Fresh filings the never-called group is
-   newest filing first, because the first call on a new filing is the edge. */
+   and claim filters above still decide who is in the list.
+   NEVER-CONTACTED FIRST (2026-09-30). The 09-28 split only asked lastCall(), so a lead emailed three
+   times by cadence or texted by the worker still counted as "never called" and sat at the TOP with
+   the genuinely untouched ones. Alejandro, 09-30: "every lead i see there ive contacted already".
+   Three groups now: 0 = no outreach on any channel we can see (notes touches plus the baked server
+   ledgers r.le / r.lt), 1 = reached another way but never called, 2 = called. Each group keeps its
+   rank order; on Fresh filings group 0 is newest filing first, because the first call on a new
+   filing is the edge. */
 function _filedMs(r){
   var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(m) return new Date(+m[3], +m[1]-1, +m[2]).getTime();
   var t = Date.parse(String(r.x||'')); return isFinite(t) ? t : 0;
 }
+function _contactTier(r){
+  try{ if(lastCall(notes[r.c])) return 2; }catch(e){}
+  if(r.le || r.lt) return 1;
+  try{ for(var k in lastOutreach(r)) return 1; }catch(e){}
+  return 0;
+}
 function _freshFirst(rows, ln){
   var tagged = rows.map(function(r, ix){
-    var called = false; try{ called = !!lastCall(notes[r.c]); }catch(e){}
-    return {r:r, ix:ix, t:called ? 1 : 0, f:(ln==='lp' && !called) ? _filedMs(r) : 0};
+    var t = _contactTier(r);
+    return {r:r, ix:ix, t:t, f:(ln==='lp' && t === 0) ? _filedMs(r) : 0};
   });
   tagged.sort(function(a, b){ return (a.t - b.t) || (b.f - a.f) || (a.ix - b.ix); });
   return tagged.map(function(o){ return o.r; });
 }
+/* How many leads in the lane just painted nobody has reached on any channel. Shown in head() so a
+   list that is all retries says so instead of looking like fresh leads. */
+var _FRESHN = -1;
 var _SEATN = 0, _CLMN = 0;
 function quoScanFresh(q){
   /* Same window as quo_sync.INBOUND_MAX_AGE_H. A bake with no ok scan, or an old one, is not fresh. */
@@ -4018,7 +4065,9 @@ function start(){
     var _lk = $('lkbtn');
     if(_lk){ _lk.style.display = 'block'; _lk.onclick = function(){ screenLookup(); }; }
   }catch(e){}
-  i=0; render(); freshCheck();
+  i=0;
+  try{ _posRestore(); }catch(e){ i=0; }   // back to the lead he was on, same lane, same day
+  render(); freshCheck();
   paintSync();
   try{ pollTextHold(); }catch(e){}
 }
@@ -4131,17 +4180,101 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
+  _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
   for(k=0;k<P.length;k++) if(P[k].c===workedC){
-    /* A lead just dialled drops behind the never-called ones (_freshFirst), so the next lead has
-       already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
-    var _moved = false; try{ _moved = k > i && !!lastCall(notes[workedC]); }catch(e){}
+    /* A lead just dialled or texted drops behind the never-contacted ones (_freshFirst), so the next
+       lead has already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
+    var _moved = false; try{ _moved = k > i && _contactTier(P[k]) > 0; }catch(e){}
     if(!_moved) i=k+1;
     return render(); }
   render();
+}
+/* BACK / NEXT (2026-09-30). View-only moves through the lane, like Skip.
+
+   Both are BY IDENTITY, for the same reason advance() is: pool() re-sorts on every render
+   (_freshFirst drops a dialled lead behind the never-called ones), so "slot i-1" is not the lead he
+   just saw. _NAVB is the trail of leads left behind, _NAVF the ones Back stepped away from, each
+   tagged with its lane. A move re-seeks the code in a FRESH pool(), so a lead that has since been
+   suppressed (do-not-contact, opted out, claimed by the teammate, other seat) is not in the pool
+   and is stepped over, never reopened. Nothing here writes a note, a dial, an outcome, a cooldown
+   or _WORKED, and nothing syncs: Back never undoes or re-logs anything. */
+var _NAVB=[], _NAVF=[];
+function _navPush(c){ if(c){ _NAVB.push({c:c, l:lane}); if(_NAVB.length>300) _NAVB.shift(); } }
+/* Walks this lane's entries newest first and removes each one it passes, found or not. Other
+   lanes' entries stay put, so switching lanes and back keeps that lane's trail. The lead already on
+   screen (e.g. opened from the lookup) is passed over, so a move always changes the lead. */
+function _navSeek(stack, here){
+  var P=pool(), e, j, k;
+  for(j=stack.length-1;j>=0;j--){ e=stack[j]; if(e.l!==lane) continue;
+    stack.splice(j,1); if(e.c===here) continue;
+    for(k=0;k<P.length;k++) if(P[k].c===e.c) return k; }
+  return -1;
+}
+/* WHERE HE WAS (2026-09-30). `i`, the lane and the Back/Next trail lived only in memory, so any
+   reload -- pull-to-refresh, freshCheck() reloading silently for a new build when he comes back
+   from another app, iOS evicting the tab while the dialer is open -- dropped him on slot 0 of the
+   default lane. Every lead he had stepped past with Next is still in pool() (Next writes nothing),
+   so slot 0 was the start of the leads he had already been through. Alejandro, 09-30: "refresh it
+   takes me to the beginning of the leads I've called already".
+   So each lead paint records the lane, the lead on screen, the next few leads after it and the
+   trail, per page (each seat has its own URL), and start() puts him back. Restored BY IDENTITY in a
+   fresh pool(): the lead on screen if it is still due, else the first of the ones that followed it,
+   else the first lead he has not stepped past. Same calendar day only, so tomorrow's list starts at
+   the top. Order and position only: pool() still decides who is shown, and nothing here writes a
+   note, a dial or an outcome. */
+var _POSK = 'fcCallPos:' + (typeof location !== 'undefined' ? location.pathname.replace(/index\.html?$/i, '') : '');
+function _posSave(P, k){
+  try{
+    var a = [];
+    for(var j = k + 1; j < P.length && a.length < 40; j++) a.push(P[j].c);
+    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane,
+      c:(k < P.length && P[k]) ? P[k].c : null, a:a, b:_NAVB.slice(-150), f:_NAVF.slice(-150)}));
+  }catch(e){}
+}
+function _posRestore(){
+  var s = null;
+  try{ s = JSON.parse(localStorage.getItem(_POSK) || 'null'); }catch(e){ s = null; }
+  if(!s || typeof s !== 'object' || s.d !== new Date().toDateString()) return false;
+  if(!LANES.some(function(L){ return L.k === s.l; })) return false;
+  var ok = function(x){ return !!x && typeof x.c === 'string' && typeof x.l === 'string'; };
+  _NAVB = (Array.isArray(s.b) ? s.b : []).filter(ok);
+  _NAVF = (Array.isArray(s.f) ? s.f : []).filter(ok);
+  var was = lane; lane = s.l;
+  var P = pool(), at = {}, k;
+  if(!P.length){ lane = was; pool(); return false; }   // that lane emptied since: open as usual
+  for(k = 0; k < P.length; k++) at[P[k].c] = k;
+  var want = [s.c].concat(Array.isArray(s.a) ? s.a : []);
+  for(k = 0; k < want.length; k++) if(want[k] && at[want[k]] !== undefined){ i = at[want[k]]; return true; }
+  var past = {};
+  _NAVB.forEach(function(e){ if(e.l === lane) past[e.c] = 1; });
+  for(k = 0; k < P.length; k++) if(!past[P[k].c]){ i = k; return true; }
+  i = 0;   // every lead left was stepped past today: show them, never a false "Queue clear"
+  return true;
+}
+function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
+function navBack(){
+  var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
+  var k=_navSeek(_NAVB, cur && cur.c);
+  if(k<0){ toast('No earlier lead in this lane'); return; }
+  if(from) _NAVF.push({c:from, l:lane});
+  if(cur) delete cur._rcStay;
+  SCREEN='lead'; i=k; render();
+}
+function navNext(){
+  var from = cur && cur.c, k=_navSeek(_NAVF, from);
+  if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
+  _navPush(from);
+  if(cur) delete cur._rcStay;
+  SCREEN='lead'; i=k; render();
+}
+function _navRow(){
+  return '<div style="display:flex;gap:10px">'
+    + '<button class="big" id="navback" style="flex:1;background:#2a3f6b'+(_navHasBack()?'':';opacity:.45')+'">&lsaquo; Back</button>'
+    + '<button class="big" id="skip" style="flex:1;background:#2a3f6b">Next &rsaquo;</button></div>';
 }
 /* WHICH SCREEN IS UP. The board's extracted mergeNotes ends with `render()` — harmless on the
    board, where render repaints a static list, and CATASTROPHIC here, where the page is a wizard.
@@ -4174,13 +4307,15 @@ function render(){
      but the two diverge the moment an outcome removes a lead: log 5 do-not-contacts and the pool is
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
-  if(i>=P.length){ $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
-      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div></div>'
-      +'<div class="sheetpad"></div>'; wire(); return; }
+  if(i>=P.length){ _posSave(P, i); $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
+      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div>'
+      +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
+      +'<div class="sheetpad"></div>'; if($('navback')) $('navback').onclick=navBack; wire(); return; }
   /* Keep the NUMBER position when the lead is unchanged. A legitimate lead-screen render (sync merge
      landing while he reads the card on number 2) must not snap him back to number 1. */
   var pc=cur&&cur.c, pp=phIdx;
   cur=P[i]; phIdx=(cur&&cur.c===pc&&pp<cur.p.length)?pp:0;
+  _posSave(P, i);
   /* NEVER LAND ON A DEAD NUMBER. A lead can carry a number marked bad here or on the laptop's
      worker card; without this the card offers it as the one to dial. pool() has already dropped
      leads whose numbers are ALL bad, so this normally finds one — the second call is belt and
@@ -4225,6 +4360,12 @@ function head(){
     /* TIER 3, on its own line and never folded into the number above it. "Opted out" and "we
        emailed them Tuesday" are different facts; a caller who cannot tell them apart cannot tell
        whether the list is short because it is clean or short because it is stale. */
+    /* ALL RETRIES, SAID OUT LOUD (2026-09-30). When every lead left in the lane has been reached
+       before, the list is a follow-up list, and it must read like one. */
+    +((_FRESHN >= 0)?('<div class="supn">'+(_FRESHN
+          ? ('<b>'+_FRESHN+'</b> never contacted at the top &middot; everything after is a retry')
+          : '<b>No fresh leads left in this lane</b> &mdash; every lead here was already called, emailed or texted. '
+            +'New ones arrive with the next board rebuild.')+'</div>'):'')
     +(_SUPT?('<div class="supn">'+_SUPT+' more hidden &mdash; <b>we already reached them another way</b> '
           +'(email, text, letter or door) within '+COOL_DEFAULT_H+'h</div>'):'')
     /* SEAT CHIP. Always rendered, even solo, because "am I splitting the list right now" is a
@@ -4433,6 +4574,10 @@ function band(lbl,inner){ return '<div class="band"><div class="blab">'+lbl+'</d
    after its cooldown expired and now looks brand new. */
 function priorBar(r){
   var lo = lastOutreach(r), best = null;
+  /* The server send ledgers (stamp_ledger): cadence and bridge deliveries that never wrote a touch
+     into notes. Display copy only -- `lo` here is local to this function. */
+  if(r.le && (!lo.email || r.le > lo.email.ts)) lo.email = {ts:r.le, by:'auto'};
+  if(r.lt && (!lo.text || r.lt > lo.text.ts)) lo.text = {ts:r.lt, by:'auto'};
   for(var k in lo){ if(!best || lo[k].ts > best.ts) best = {ch:k, ts:lo[k].ts, by:lo[k].by}; }
   if(!best) return '';
   var chips = Object.keys(lo).sort(function(a,b){ return lo[b].ts - lo[a].ts; })
@@ -5103,7 +5248,7 @@ function screenLead(){
        on these two it is "is <owner> home?" instead. */
     +     (_phSrcNote(r, phIdx) ? '<br><b>'+_phSrcNote(r, phIdx)+'</b>' : '')
     +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
-    +   '<button class="big" id="skip" style="background:#2a3f6b">Skip</button>'
+    +   _navRow()
     + '</div>'
     + '<div class="sub">'+(i+1)+' of '+pool().length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
     + '<div class="sheetpad"></div>';
@@ -5157,7 +5302,8 @@ function screenLead(){
      reachable without any teammate involvement: in the worker lane retireFromWorkerQ() shrinks the
      pool on the first logged number, so i++ from there lands one past the next person. Skipping is
      also the one action that must NOT count as work, so it does not touch _WORKED. */
-  $('skip').onclick=function(){ advance(cur.c, null); };
+  $('skip').onclick=function(){ navNext(); };
+  $('navback').onclick=function(){ navBack(); };
   wireBrief(document, cur);
   wire();
   // Refresh the sheet for THIS lead. It is not re-created — it lives outside #app — so its
@@ -6391,7 +6537,7 @@ $('peek').onclick=sheetToggle;
 $('pill').onclick=function(){
   /* The pill sits above the sheet grip and used to reload INSTANTLY — mid-call, unconfirmed.
      Off the lead screen (call in progress), reloading needs a deliberate yes. */
-  if(SCREEN!=='lead' && !confirm('Load the newer list now? Your logs are saved, but the screen resets to the top of the queue.')) return;
+  if(SCREEN!=='lead' && !confirm('Load the newer list now? Log this call first. Your logs are saved, and you come back to your place in the list.')) return;
   location.reload();
 };
 /* Returning to the page means he just finished a call. Pull then (teammate opt-outs matter before

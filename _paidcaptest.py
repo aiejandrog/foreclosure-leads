@@ -369,6 +369,20 @@ nb('k', 'u')
 check('CutoffGuard: a task that never billed is refunded to $0 on the ledger',
       PR.status()['spent'] == 0.0 and nb._solver.n == 1, PR.status())
 
+class Uncertain(FakeCutoff):
+    def __call__(self, site_key, page_url):
+        self.n += 1
+        self.state.data['captcha_pending'] = {'stage': 'polling', 'task_id': 7}
+        raise CutoffStopped('Polling deadline reached; pending charge retained')
+fresh()
+un = PR.CutoffGuard(Uncertain(), 'run_documents tokens')
+try:
+    un('k', 'u')
+except CutoffStopped:
+    pass
+check('CutoffGuard: a task left pending (charge unknown) keeps its reservation on the month',
+      abs(PR.status()['spent'] - 0.0033) < 1e-9, PR.status())
+
 # cap_budget: the per-call reservation for Claude reads
 import document_interpreter as DI
 from document_backfill import PersistentBudget
