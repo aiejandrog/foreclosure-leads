@@ -268,10 +268,24 @@ eq("too few leads fails", RR.verdict_of(100, 'OK', 'x', [])[0], 'FAILED')
 eq("healthcheck FAIL fails", RR.verdict_of(2437, 'FAIL', 'x', [])[0], 'FAILED')
 eq("a county that did not sweep degrades the night", RR.verdict_of(2437, 'OK', 'x', ['BROWARD'])[0], 'DEGRADED')
 eq("no LP outcome at all degrades the night", RR.verdict_of(2437, 'OK', None, [])[0], 'DEGRADED')
+eq("healthcheck's own HEALTHY is a clean night", RR.verdict_of(2437, 'HEALTHY', 'x', [])[0], 'HEALTHY')
+eq("DOWN on a publish-blocking FAIL fails the night",
+   RR.verdict_of(2437, 'DOWN', 'x', [], ['upstream sources'])[0], 'FAILED')
+eq("DOWN on an advisory FAIL only degrades it", RR.verdict_of(2437, 'DOWN', 'x', [], [])[0], 'DEGRADED')
+eq("healthcheck DEGRADED degrades", RR.verdict_of(2437, 'DEGRADED', 'x', [])[0], 'DEGRADED')
 rec("HEALTHY is the only state that is OK",
     sum(1 for a in (('OK', 'x', []), ('DOWN', 'x', []), ('', None, []), ('OK', 'x', ['BROWARD']))
         if RR.verdict_of(2437, *a)[0] == 'HEALTHY') == 1)
 
+# 2026-09-30: the 09:30 Phones rebuild on a missed scrape day sees leads ~27.8h old. The bar must be
+# under that, and it must be a FAIL on the runner (the alarm), never a publish block.
+_hc = open(os.path.join(HERE, 'healthcheck.py'), encoding='utf-8').read()
+import re as _re
+_m = _re.search(r"HEALTH_LEADS_MAX_AGE_H', '([0-9.]+)'", _hc)
+rec("healthcheck judges lead age, and the default bar is under the 27.8h a missed 05:30 leaves at 09:30",
+    bool(_m) and 24 < float(_m.group(1)) < 27.8)
+rec("stale leads are FAIL on the runner", "add('FAIL' if IS_RUNNER else 'WARN', 'lead data freshness'" in _hc)
+rec("...and never a publish block", "'lead data freshness'" not in _hc[_hc.index('_CRITICAL_FAIL = {'):_hc.index('_crit = [')])
 _tmp = tempfile.mkdtemp()
 json.dump([{'Case #': 'M%d' % i, 'county': 'MIAMI-DADE'} for i in range(350)] +
           [{'case': 'L%d' % i, 'county': 'BROWARD'} for i in range(500)] +
