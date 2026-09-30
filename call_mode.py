@@ -4202,23 +4202,27 @@ function advance(workedC, nextC){
    or _WORKED, and nothing syncs: Back never undoes or re-logs anything. */
 var _NAVB=[], _NAVF=[];
 function _navPush(c){ if(c){ _NAVB.push({c:c, l:lane}); if(_NAVB.length>300) _NAVB.shift(); } }
-function _navSeek(stack){
-  var P=pool(), e, k;
-  while(stack.length){ e=stack.pop(); if(e.l!==lane) continue;
+/* Walks this lane's entries newest first and removes each one it passes, found or not. Other
+   lanes' entries stay put, so switching lanes and back keeps that lane's trail. The lead already on
+   screen (e.g. opened from the lookup) is passed over, so a move always changes the lead. */
+function _navSeek(stack, here){
+  var P=pool(), e, j, k;
+  for(j=stack.length-1;j>=0;j--){ e=stack[j]; if(e.l!==lane) continue;
+    stack.splice(j,1); if(e.c===here) continue;
     for(k=0;k<P.length;k++) if(P[k].c===e.c) return k; }
   return -1;
 }
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
 function navBack(){
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
-  var k=_navSeek(_NAVB);
+  var k=_navSeek(_NAVB, cur && cur.c);
   if(k<0){ toast('No earlier lead in this lane'); return; }
   if(from) _NAVF.push({c:from, l:lane});
   if(cur) delete cur._rcStay;
   SCREEN='lead'; i=k; render();
 }
 function navNext(){
-  var from = cur && cur.c, k=_navSeek(_NAVF);
+  var from = cur && cur.c, k=_navSeek(_NAVF, from);
   if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
   _navPush(from);
   if(cur) delete cur._rcStay;

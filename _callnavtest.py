@@ -76,6 +76,11 @@ navNext(); ALL = [{c:'B'}, {c:'C'}, {c:'D'}, {c:'A'}]; render();
 navBack(); out.resort = cur.c + '@' + i;                                 // A, now at slot 3
 // another lane's trail is ignored
 _NAVB = [{c:'C', l:'lp'}]; _NAVF = []; toasts = []; navBack(); out.lane = cur.c + '|' + toasts.length;
+// another lane's trail survives a Back in this lane
+_NAVB = [{c:'B', l:'lp'}, {c:'C', l:'soon'}]; navBack(); out.keep_lane = _NAVB.length + ':' + _NAVB[0].l + '|' + cur.c;
+// the lead already on screen (lookup jump) is passed over
+ALL = [{c:'A'}, {c:'B'}, {c:'C'}, {c:'D'}]; i = 3; render(); cur = {c:'B'};
+_NAVB = [{c:'A', l:'soon'}, {c:'B', l:'soon'}]; navBack(); out.pass_here = cur.c;
 // an outcome-driven advance() clears the redo trail
 _NAVF = [{c:'D', l:'soon'}]; advance(cur.c, 'B'); out.adv_clears = _NAVF.length + '|' + cur.c;
 // queue clear: i past end, Back returns to the last lead left
@@ -95,6 +100,8 @@ rec('Next past the redo trail is the old Skip', res.get('fresh') == 'D', res)
 rec('Back steps over a lead suppressed since', res.get('skip_supp') == 'A', res)
 rec('Back finds a re-sorted lead by identity', res.get('resort') == 'A@3', res)
 rec('Back ignores another lane\'s trail', res.get('lane', '').endswith('|1'), res)
+rec('a Back in one lane keeps the other lane\'s trail', res.get('keep_lane') == '1:lp|C', res)
+rec('Back passes over the lead already on screen', res.get('pass_here') == 'A', res)
 rec('an outcome advance clears the redo trail', res.get('adv_clears') == '0|B', res)
 rec('Next off the last lead reaches queue clear', res.get('qclear_i') == 2, res)
 rec('Back from queue clear returns to the last lead', res.get('qclear_back') == 'B|0', res)
