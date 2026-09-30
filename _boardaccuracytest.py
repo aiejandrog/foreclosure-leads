@@ -247,6 +247,22 @@ check('case E: until it is re-pulled the board flags the stale chain LOW (overst
       and ES.state_of(dict(e_cached, conf='low')) != 'clear')
 
 
+# ---------------------------------------------------------------- 7. a lender named like an association
+# classify() typed Fannie Mae, Ginnie Mae and "COMMUNITY" lenders HOA/Condo on the association words
+# in their names, which switched off the lender rule: a missed loan could read VERIFIED CLEAR.
+import foreclosure_leads as FL
+for _pl in ('FEDERAL NATIONAL MORTGAGE ASSOCIATION', 'GOVERNMENT NATIONAL MORTGAGE ASSOCIATION',
+            'COMMUNITY LOAN SERVICING LLC', 'FIRST COMMUNITY BANK', 'SYNTHETIC CREDIT UNION'):
+    check('classify: %s is a lender' % _pl, FL.classify('', _pl) == 'Bank/Mortgage', FL.classify('', _pl))
+for _pl in ('PALM TEST CONDOMINIUM ASSOCIATION INC', 'TEST LAKES MASTER ASSOCIATION INC',
+            'SUNRISE TEST COMMUNITY ASSOCIATION INC', 'THE TEST VILLAGES HOMEOWNERS ASSOCIATION',
+            'BANKERS TEST CONDOMINIUM ASSN', 'FEDERAL TEST HOMEOWNERS ASSN'):
+    check('classify: %s is still an association' % _pl, FL.classify('', _pl) == 'HOA/Condo', FL.classify('', _pl))
+_empty = {'conf': 'ok', 'nrec': 12, 'second_fc': None, 'liens': []}
+check("a Fannie Mae foreclosure with no mortgage found is not VERIFIED CLEAR",
+      ES.state_of(_empty, {'case_type': FL.classify('', 'FEDERAL NATIONAL MORTGAGE ASSOCIATION')}) == 'none')
+
+
 # ---------------------------------------------------------------- 1. sale day
 TPL = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
 clock = CM._region(TPL, CM._CLOCK_START, CM._CLOCK_END, 'clock')
