@@ -4065,7 +4065,9 @@ function start(){
     var _lk = $('lkbtn');
     if(_lk){ _lk.style.display = 'block'; _lk.onclick = function(){ screenLookup(); }; }
   }catch(e){}
-  i=0; render(); freshCheck();
+  i=0;
+  try{ _posRestore(); }catch(e){ i=0; }   // back to the lead he was on, same lane, same day
+  render(); freshCheck();
   paintSync();
   try{ pollTextHold(); }catch(e){}
 }
@@ -4212,6 +4214,47 @@ function _navSeek(stack, here){
     for(k=0;k<P.length;k++) if(P[k].c===e.c) return k; }
   return -1;
 }
+/* WHERE HE WAS (2026-09-30). `i`, the lane and the Back/Next trail lived only in memory, so any
+   reload -- pull-to-refresh, freshCheck() reloading silently for a new build when he comes back
+   from another app, iOS evicting the tab while the dialer is open -- dropped him on slot 0 of the
+   default lane. Every lead he had stepped past with Next is still in pool() (Next writes nothing),
+   so slot 0 was the start of the leads he had already been through. Alejandro, 09-30: "refresh it
+   takes me to the beginning of the leads I've called already".
+   So each lead paint records the lane, the lead on screen, the next few leads after it and the
+   trail, per page (each seat has its own URL), and start() puts him back. Restored BY IDENTITY in a
+   fresh pool(): the lead on screen if it is still due, else the first of the ones that followed it,
+   else the first lead he has not stepped past. Same calendar day only, so tomorrow's list starts at
+   the top. Order and position only: pool() still decides who is shown, and nothing here writes a
+   note, a dial or an outcome. */
+var _POSK = 'fcCallPos:' + (typeof location !== 'undefined' ? location.pathname.replace(/index\.html?$/i, '') : '');
+function _posSave(P, k){
+  try{
+    var a = [];
+    for(var j = k + 1; j < P.length && a.length < 40; j++) a.push(P[j].c);
+    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane,
+      c:(k < P.length && P[k]) ? P[k].c : null, a:a, b:_NAVB.slice(-150), f:_NAVF.slice(-150)}));
+  }catch(e){}
+}
+function _posRestore(){
+  var s = null;
+  try{ s = JSON.parse(localStorage.getItem(_POSK) || 'null'); }catch(e){ s = null; }
+  if(!s || typeof s !== 'object' || s.d !== new Date().toDateString()) return false;
+  if(!LANES.some(function(L){ return L.k === s.l; })) return false;
+  var ok = function(x){ return !!x && typeof x.c === 'string' && typeof x.l === 'string'; };
+  _NAVB = (Array.isArray(s.b) ? s.b : []).filter(ok);
+  _NAVF = (Array.isArray(s.f) ? s.f : []).filter(ok);
+  var was = lane; lane = s.l;
+  var P = pool(), at = {}, k;
+  if(!P.length){ lane = was; pool(); return false; }   // that lane emptied since: open as usual
+  for(k = 0; k < P.length; k++) at[P[k].c] = k;
+  var want = [s.c].concat(Array.isArray(s.a) ? s.a : []);
+  for(k = 0; k < want.length; k++) if(want[k] && at[want[k]] !== undefined){ i = at[want[k]]; return true; }
+  var past = {};
+  _NAVB.forEach(function(e){ if(e.l === lane) past[e.c] = 1; });
+  for(k = 0; k < P.length; k++) if(!past[P[k].c]){ i = k; return true; }
+  i = 0;   // every lead left was stepped past today: show them, never a false "Queue clear"
+  return true;
+}
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
 function navBack(){
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
@@ -4264,7 +4307,7 @@ function render(){
      but the two diverge the moment an outcome removes a lead: log 5 do-not-contacts and the pool is
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
-  if(i>=P.length){ $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
+  if(i>=P.length){ _posSave(P, i); $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
       +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div>'
       +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
       +'<div class="sheetpad"></div>'; if($('navback')) $('navback').onclick=navBack; wire(); return; }
@@ -4272,6 +4315,7 @@ function render(){
      landing while he reads the card on number 2) must not snap him back to number 1. */
   var pc=cur&&cur.c, pp=phIdx;
   cur=P[i]; phIdx=(cur&&cur.c===pc&&pp<cur.p.length)?pp:0;
+  _posSave(P, i);
   /* NEVER LAND ON A DEAD NUMBER. A lead can carry a number marked bad here or on the laptop's
      worker card; without this the card offers it as the one to dial. pool() has already dropped
      leads whose numbers are ALL bad, so this normally finds one — the second call is belt and
@@ -6492,7 +6536,7 @@ $('peek').onclick=sheetToggle;
 $('pill').onclick=function(){
   /* The pill sits above the sheet grip and used to reload INSTANTLY — mid-call, unconfirmed.
      Off the lead screen (call in progress), reloading needs a deliberate yes. */
-  if(SCREEN!=='lead' && !confirm('Load the newer list now? Your logs are saved, but the screen resets to the top of the queue.')) return;
+  if(SCREEN!=='lead' && !confirm('Load the newer list now? Log this call first. Your logs are saved, and you come back to your place in the list.')) return;
   location.reload();
 };
 /* Returning to the page means he just finished a call. Pull then (teammate opt-outs matter before
