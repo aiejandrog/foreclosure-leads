@@ -675,7 +675,7 @@ try:
             os.rmdir(SIDE)
         rec('a sidecar that cannot be opened (another program has it open, or it is not a file) is refused too, and the advice is to close what has it open, '
             'not to put an old copy over what may be a good file%s' % (' (also on a dry run)' if extra else ''),
-            rc == 2 and 'REFUSED: dnc_scrub.json exists but cannot be opened' in out and 'Close whatever has it open and run again' in out and
+            rc == 2 and 'REFUSED: dnc_scrub.json exists but cannot be opened' in out and 'Nothing was written. Close whatever has it open and run again' in out and
             'Do not put an old copy over it' in out and 'Restore it from a copy' not in out and 'Do not just move it aside' not in out and
             still_there and untouched and 'TOTAL' not in out and 'WARNING' not in out, out[-400:])
     ls_obj, ls_list, ls_bad, ls_dir = (os.path.join(TMP, 'ls_%s.json' % n) for n in ('obj', 'list', 'bad', 'dir'))
