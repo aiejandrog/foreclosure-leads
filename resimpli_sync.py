@@ -243,16 +243,18 @@ KNOWN LIMITS (reported here, not fixed)
     <file>.resimpli.<random>.tmp behind. They are gitignored and no later run removes them: delete them
     by hand. A kept copy that was being written when the run was killed leaves the same kind of file in the
     imports folder (nothing reads it).
-  * Only .csv files in the imports folder whose names do not start with a dot are kept copies. Any other
-    file there, put there by hand or kept under its own name by an earlier version of this tool, is read
-    only when it is named; a run that names no file passes over it without a word.
+  * Only files in the imports folder that a *.csv glob finds are kept copies: a name ending in .csv (in
+    any capitals on Windows) that does not start with a dot. Any other file there, put there by hand or
+    kept under its own name by an earlier version of this tool, is read only by a run that names it; every
+    other run passes over it without a word.
   * Unlike the cache and the sidecar, a kept copy is renamed into place without being flushed to disk
     first, so a power cut just after a run can leave it empty or short: one that no longer reads as an
     export is refused on the next run (download it again and put it over the copy), but one cut exactly at
     the end of a line would read as a whole, shorter export. The numbers the run added from it, and their
     flags, are already in the cache and the sidecar; the hold on a person whose row was past the cut lasts
     only while the original is still where a run that names no file finds it (a SkipTrace_*.csv in
-    Downloads or on the Desktop) or is named again, because the kept copy no longer has that row.
+    Downloads or on the Desktop), because the kept copy no longer has that row. Naming the original holds
+    her for that run only; putting the original over the copy mends it.
   * Two runs at the same time are caught only by the changed-file check, which can miss two that finish
     together (the later replace wins and both exit 0); a lock file would close that.
   * The bake appends a lead's Whitepages numbers with phdnc False and applies dnc_scrub.json to cached
