@@ -99,7 +99,8 @@ can return, and as the cache spells it. Every record for a flagged number carrie
 marker (`resimpli`: the date), including one the registry lane already holds as listed. That marker
 is what tracerfy_mcp.py's paid 30-day DNC re-scrub leaves alone: a registry miss must not replace a
 REsimpli opt-out or litigator flag. Nothing here ever clears a flag, and an existing dnc_scrub.json
-verdict is only tightened. A dnc_scrub.json that cannot be read is left exactly as found and stops
+verdict is only tightened. A dnc_scrub.json that cannot be read (or opened: another program has it
+open, and the advice then is to close it, not to restore a copy) is left exactly as found and stops
 every run (exit 2, a dry run included), whether or not the run has a number to flag: it holds the
 registry's verdicts, which every number this run adds is checked against, and it is what keeps a flag
 when skiptrace.py replaces an entry and the only record of one on a lead with no entry or on no lead.
@@ -123,8 +124,11 @@ csv cannot parse, a quote that is never closed or has text right after it (the c
 one stray quote would otherwise swallow the rows below it, an opt-out and a DNC flag with them), and a
 row with more or fewer cells than the header has columns, an empty extra one included (a comma put in
 a cell, or taken out, moves every column after it, so a number's flags and the `opt` cell are read
-from a neighbour's place, and a file cut short has lost rows besides; a comma at the end of a row
-cannot be told from that). Found files are copied into
+from a neighbour's place, and a download cut off in the middle of a row is short too; a comma at the
+end of a row cannot be told from that, and a spreadsheet that saved the file again may leave rows
+longer or shorter: use the file as REsimpli downloaded it). The refusal says not to delete the line it
+names: the person on it would lose their opt-out and flags without a word, and a file cut short is
+missing the rows after the cut as well; download the export again. Found files are copied into
 DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written; the
 originals stay put.
 
@@ -135,7 +139,7 @@ the totals only) plus the case numbers of any unconfirmed leads (unconfirmed_cas
 person-level hold kept a row off (opt_person_cases), and how many other exports a one-file run did not
 read (unread_files). No names, no phone numbers. Exit 0 = done (or nothing to do), 1 = no
 usable export, 2 = refused (an export, the cache, whitepages_lookup.json, the board leads, or a torn
-dnc_scrub.json; nothing written; a command-line usage error also exits 2), 3 =
+or unopenable dnc_scrub.json; nothing written; a command-line usage error also exits 2), 3 =
 the cache or dnc_scrub.json changed while this ran, or a write failed, 4 = an error nothing
 anticipated (one line: its type and where, never its message; what was written before it is in the
 lines above).
@@ -185,8 +189,19 @@ KNOWN LIMITS (reported here, not fixed)
     right, is refused as missing. A downloaded export has none of this; a hand-edited one could.
   * A quote that is never closed, or that has text right after it, is refused (the csv is read strictly),
     and so is a row with more or fewer cells than the header has columns. A quote that opens on one line
-    and is closed by another on a later line is not: the rows between them read as one cell, opt-outs
-    and flags included. Only a hand-edited or damaged export does any of this.
+    and is closed by another on a later line is refused when the two are in different columns (the merged
+    row is short) but not when both are in the same column: the rows between them read as one cell,
+    opt-outs and flags included. Only a hand-edited or damaged export does any of this.
+  * A download that stopped exactly at the end of a line reads as a complete, shorter export: the rows after
+    the stop, their opt-outs and flags with them, are not there and nothing says so (a browser keeps a
+    .crdownload or .part file until the download finishes, so a file named SkipTrace_*.csv is normally
+    whole). A line of only spaces, or a Ctrl-Z end-of-file mark, is a one-cell row and is refused; only a
+    line with nothing on it is skipped.
+  * A file a spreadsheet saved again is no longer what REsimpli sent, and the cell count cannot tell: a
+    spreadsheet that pads every row to the widest one hides a shifted row (it reads as the right width), and
+    one that trims trailing empty cells turns every such row into a refusal. Neither has been tried against
+    the real export here. The refusals say to use the file as downloaded, and the `opt` refusal says to edit
+    in a text editor, not in Excel.
   * tracerfy_mcp.py reads a dnc_scrub.json it cannot parse as empty, and its DNC lane then rewrites the
     whole file, dropping every record, REsimpli's included. This tool refuses to run on a torn sidecar;
     tracerfy_mcp.py is another script's.
@@ -306,7 +321,10 @@ class SyncError(Exception):
     kind: 'io' when the file could not be opened or read at all (open in Excel, gone): the refusal
     then says to close it, not that its content is wrong. 'opt' when its `opt` column holds a word
     this tool cannot read: the refusal itself says how to fix those cells in that file, so the note
-    after it does not tell the operator to move or replace the file."""
+    after it does not tell the operator to move or replace the file. 'shape' when its rows do not
+    read as rows (a quote csv cannot parse, a row with the wrong number of cells): there is no fix
+    by hand that keeps every person, and deleting the line the refusal names drops that person's
+    opt-out and flags, so the note says to download the export again."""
     def __init__(self, msg, skippable=False, kind=''):
         super().__init__(msg)
         self.skippable = skippable
@@ -943,13 +961,17 @@ def audit(results, pairs):
 
 def load_sidecar(path):
     """(dnc_scrub.json as a dict, 'ok'); ({}, 'ok') when there is none; (None, 'unreadable') when it
-    exists and cannot be read as a JSON object. A torn sidecar is never replaced by a fresh one."""
+    exists and cannot be read as a JSON object; (None, 'unopenable') when it exists and cannot be
+    opened (another program has it open, or it is not a file). A sidecar that is not readable is never
+    replaced by a fresh one."""
     try:
         with open(path, encoding='utf-8') as f:
             cur = json.load(f)
     except FileNotFoundError:
         return {}, 'ok'
-    except (OSError, ValueError):
+    except OSError:
+        return None, 'unopenable'
+    except ValueError:
         return None, 'unreadable'
     return (cur, 'ok') if isinstance(cur, dict) else (None, 'unreadable')
 
@@ -1036,8 +1058,10 @@ def read_export(path):
                 if 'Phone_%d%s' % (i, s) not in fields]
     if missing:
         raise SyncError('%s is not a complete REsimpli skip-trace export (missing %s). If a column is there under '
-                        'another name, rename it back to REsimpli\'s spelling; do not add an empty one, which reads as '
-                        'No and would drop every opt-out the real column holds'
+                        'another name, rename it back to REsimpli\'s spelling; do not add an empty one: an empty `opt` '
+                        'reads every row as not opted out, an empty _IsLitigator reads every number as not a litigator '
+                        '(the real column\'s flags would be dropped), and an empty _DNC or _status reads every number as '
+                        'DNC, which this tool never clears'
                         % (name, ', '.join(missing[:6])))
     rows, ragged = [], []
     try:
@@ -1054,15 +1078,21 @@ def read_export(path):
     except csv.Error:
         raise SyncError('%s could not be read as CSV: a cell is longer than %d characters, a quote is never closed '
                         'or has text right after it (a stray quote would otherwise swallow the rows below it, opt-outs '
-                        'and DNC flags included), or the file has a NUL byte' % (name, csv.field_size_limit()))
+                        'and DNC flags included), or, on Python before 3.11, the file has a NUL byte. Do not delete lines '
+                        'to get past it: the people on them would lose their opt-outs and flags without a word. Download '
+                        'the export from REsimpli again and put the new file over this one'
+                        % (name, csv.field_size_limit()), kind='shape')
     if ragged:
         raise SyncError('%s has %d row%s with a different number of cells than its %d header columns (line%s %s%s). A comma '
                         'typed into a cell, one taken out, or a file cut short moves every column after it, so a number\'s '
                         'flags and the `opt` cell can be read from the wrong place, and a comma at the end of a row cannot '
-                        'be told from that. Nothing was read.'
+                        'be told from that. Do not delete the row to get past this: the person on it would lose their '
+                        'opt-out and flags without a word, and a file cut short is missing the rows after the cut too. '
+                        'Download the export from REsimpli again and put the new file over this one (a file saved again in '
+                        'a spreadsheet may not be what REsimpli sent: use the copy REsimpli downloaded). Nothing was read.'
                         % (name, len(ragged), '' if len(ragged) == 1 else 's', len(rd.fieldnames),
                            '' if len(ragged) == 1 else 's', ', '.join(str(n) for n in ragged[:3]),
-                           ', ...' if len(ragged) > 3 else ''))
+                           ', ...' if len(ragged) > 3 else ''), kind='shape')
     # `opt` decides whether a whole row (and, through opt_people_of, a person) is held. A value this
     # tool does not know how to read is not guessed at: 'None' on every row would flag every number in
     # the file as DNC across the whole cache, and a value read as "no" would let an opt-out through.
@@ -1073,8 +1103,10 @@ def read_export(path):
         raise SyncError('%s has %d kind%s of value in its `opt` column that this tool cannot read as yes or no '
                         '(%s%s). Nothing was read: a guess would either opt out the whole list or let an opt-out '
                         'through. If REsimpli really writes that word, tell Claude and it will be added. To go on '
-                        'now, change those cells to Yes (opted out) or No in that file itself (save it as CSV UTF-8) and '
-                        'run again; if you are not sure what a cell meant, put Yes, which opts that person out. If the '
+                        'now, change those cells to Yes (opted out) or No in that file itself, in Notepad or another text '
+                        'editor and saved as UTF-8, not in Excel (a spreadsheet can change the rows it saves, and a changed '
+                        'row is refused), and run again; if you are not sure what a cell meant, put Yes, which opts that '
+                        'person out. If the '
                         'cells look like a corrupt download, download the export from REsimpli again and put the new file over this '
                         'one (a copy beside it would be read too, and this one would keep refusing).'
                         % (name, len(odd), '' if len(odd) == 1 else 's', shown, ', ...' if len(odd) > 3 else ''),
@@ -1097,19 +1129,24 @@ def refusal_note(err, path, named, import_dir):
             return ('That file is in %s, where this tool keeps a copy of every export it has read. Deleting it forgets '
                     'its opt-outs: change the cells in that copy itself, as the line above says, then run again.' % folder)
         return '' if named else 'That file is in %s.' % folder
+    if err.kind == 'shape':
+        # the line above names a line that cannot be mended by hand without a person losing their opt-out: deleting it
+        # (or the cut-off last one) reads fine afterwards and drops them without a word
+        fix = ('Do not delete a line from it to get past this either: the person on that line would lose their opt-out '
+               'and flags without a word. Download the export from REsimpli again and put the new file over this one')
+    else:
+        fix = ('Fix what the line above says in that file itself, or put the original export back over it (download it '
+               'from REsimpli again if you no longer have it)')
     if kept:
         return ('That file is in %s, where this tool keeps a copy of every export it has read. This tool cannot read '
                 'it in full, so its opt-outs and DNC flags would be missing from the merge and nothing was read '
-                'further. Deleting it forgets them. Fix what the line above says in that file itself, or put the '
-                'original export back over it (download it from REsimpli again if you no longer have it), then run '
-                'again.' % folder)
+                'further. Deleting it forgets them. %s, then run again.' % (folder, fix))
     if not named:
         # a real export must not be told to get out of the way: moving it aside drops its opt-outs from the next run
         return ('That file is in %s. If it is a REsimpli export, do not move or delete it: its opt-outs and DNC flags '
-                'would be missing from the merge, and nothing was read further. Fix what the line above says in that '
-                'file itself, or put the original export back over it (download it from REsimpli again if you no '
-                'longer have it), then run again. If it is something else, such as another vendor\'s skip-trace file '
-                'or a list of ours, rename it so it no longer starts with SkipTrace_, then run again.' % folder)
+                'would be missing from the merge, and nothing was read further. %s, then run again. If it is '
+                'something else, such as another vendor\'s skip-trace file or a list of ours, rename it so it no '
+                'longer starts with SkipTrace_, then run again.' % (folder, fix))
     return ''
 
 
@@ -1279,13 +1316,22 @@ def main(argv=None):
         print('REFUSED:', e)
         return 2
     side_cur, side_state = load_sidecar(side_path)
+    if side_state == 'unopenable':
+        print('REFUSED: dnc_scrub.json exists but cannot be opened (another program may have it open, or it is not a file). '
+              'It holds the registry\'s DNC verdicts, which every number this run adds is checked against, and it is where '
+              'this run\'s own flags are recorded. Nothing was written. Close whatever has it open and run again. Do not '
+              'put an old copy over it: if it is a good file, that would drop every registry verdict and every flag '
+              'recorded since.')
+        return 2
     if side_state == 'unreadable':
         # It holds the registry's verdicts, which every number this run adds is checked against, and it is where this
         # run's flags are kept (the phone cache alone loses them when skiptrace.py replaces a lead's entry).
         print('REFUSED: dnc_scrub.json exists but cannot be read. It holds the registry\'s DNC verdicts, which every number '
               'this run adds is checked against, and it is where this run\'s own flags are recorded. Nothing was '
               'written. Restore it from a copy (DEALFLOW\\backups holds dnc_scrub.pre-resimpli-*.json only after an '
-              'earlier run of this tool, so there may be none), then run again. Do not just move it aside: a new '
+              'earlier run of this tool, so there may be none, and a copy is only as new as its date: a verdict the '
+              'Tracerfy DNC lane recorded after it is missing from it, and that number bakes as clean until the lane '
+              'checks it again), then run again. Do not just move it aside: a new '
               'sidecar would hold only REsimpli\'s flags, and every registry verdict the Tracerfy DNC lane recorded in '
               'the old one would be gone without a word. Until it is fixed the board bake cannot apply registry '
               'verdicts at all.')

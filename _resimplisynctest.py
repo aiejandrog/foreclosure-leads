@@ -663,6 +663,35 @@ try:
     rc, out = run([], files={'SkipTrace_1.csv': clean1})
     rec('an empty sidecar file is a torn one too (a killed writer leaves that), and is refused, not read as a fresh start',
         rc == 2 and open(SIDE, 'rb').read() == b'' and nothing_written(), out[-300:])
+    for extra in ([], ['--dry-run']):
+        fresh(CACHE)
+        if os.path.exists(SIDE):
+            os.remove(SIDE)
+        os.mkdir(SIDE)                    # there, and not something that can be opened as a file: the path a file another program holds open takes
+        try:
+            rc, out = run(extra, files={'SkipTrace_1.csv': clean1})
+            still_there, untouched = os.path.isdir(SIDE), nothing_written()
+        finally:
+            os.rmdir(SIDE)
+        rec('a sidecar that cannot be opened (another program has it open, or it is not a file) is refused too, and the advice is to close what has it open, '
+            'not to put an old copy over what may be a good file%s' % (' (also on a dry run)' if extra else ''),
+            rc == 2 and 'REFUSED: dnc_scrub.json exists but cannot be opened' in out and 'Close whatever has it open and run again' in out and
+            'Do not put an old copy over it' in out and 'Restore it from a copy' not in out and 'Do not just move it aside' not in out and
+            still_there and untouched and 'TOTAL' not in out and 'WARNING' not in out, out[-400:])
+    ls_obj, ls_list, ls_bad, ls_dir = (os.path.join(TMP, 'ls_%s.json' % n) for n in ('obj', 'list', 'bad', 'dir'))
+    with open(ls_obj, 'w') as fh:
+        fh.write('{"3055550101": {"national_dnc": true}}')
+    with open(ls_list, 'w') as fh:
+        fh.write('["a"]')
+    with open(ls_bad, 'wb') as fh:
+        fh.write(b'{"3055550101": {"nat')
+    os.mkdir(ls_dir)
+    got_ls = [RS.load_sidecar(q) for q in (ls_obj, ls_list, ls_bad, os.path.join(TMP, 'ls_none.json'), ls_dir)]
+    for q in (ls_obj, ls_list, ls_bad):
+        os.remove(q)
+    os.rmdir(ls_dir)
+    rec('load_sidecar: a JSON object is read; a list and torn JSON are unreadable; no file is a fresh start; a path that cannot be opened is unopenable',
+        got_ls == [({'3055550101': {'national_dnc': True}}, 'ok'), (None, 'unreadable'), (None, 'unreadable'), ({}, 'ok'), (None, 'unopenable')], got_ls)
     fresh(CACHE)
     rc, out = run([], files={'SkipTrace_1.csv': clean1})
     rec('no sidecar at all is a fresh start, not a torn one: the run goes through and the status file says the sidecar was ok',
@@ -806,15 +835,19 @@ try:
     for col in ('firstName', 'lastName', 'propertyStreetAddress', 'propertyZipCode'):
         refused('no_%s.csv' % col, [h for h in HDR if h != col], col)
     refused('no_phones.csv', [h for h in HDR if not h.startswith('Phone_')], 'Phone_1')
-    # a column that is missing may be there under another name; an empty one added by hand reads as "No" on every row and drops every opt-out the real one holds
+    # a column that is missing may be there under another name; an empty one added by hand is not the same as the real one: an empty `opt` reads every row as
+    # not opted out, an empty _IsLitigator reads every number as not a litigator (those two drop flags the real column holds), and an empty _DNC or _status
+    # reads every number as DNC (which the tool would then record and never clear). The advice says each of those and does not say the wrong one for a column.
     for col in ('opt', 'Phone_2_DNC'):
         fresh(CACHE)
         pm = os.path.join(TMP, 'named_missing_%s.csv' % col)
         write_csv(pm, [row('Ana', 'Tester', '1 A St', '33100', g1=[M(1)])], header=[h for h in HDR if h != col])
         rc, out = run([pm])
-        rec('a missing `%s` column is met with "rename it back to REsimpli\'s spelling", and with "do not add an empty one" and why' % col,
+        rec('a missing `%s` column is met with "rename it back to REsimpli\'s spelling", and with "do not add an empty one" and what each empty column would read as' % col,
             rc == 2 and 'missing %s)' % col in out and "rename it back to REsimpli's spelling" in out and
-            'do not add an empty one, which reads as No and would drop every opt-out the real column holds' in out, out[-400:])
+            'do not add an empty one: an empty `opt` reads every row as not opted out, an empty _IsLitigator reads every number as not a litigator' in out and
+            "(the real column's flags would be dropped), and an empty _DNC or _status reads every number as DNC, which this tool never clears" in out and
+            'reads as No' not in out and 'drop every opt-out' not in out, out[-500:])
     refused('slot11_no_flags.csv', HDR + ['Phone_11'], 'Phone_11_DNC')
     refused('cp1252.csv', HDR, 'not UTF-8', rows=[row('José', 'Núñez', '1 A St', '33100', g1=[M(1)])], encoding='cp1252')
     refused('utf16.csv', HDR, 'not UTF-8', rows=[row('Ana', 'Tester', '1 A St', '33100', g1=[M(1)])], encoding='utf-16')
@@ -843,6 +876,8 @@ try:
         rc, out = run([])
         rec('refused, nothing merged, nothing left behind: ' + name,
             rc == 2 and 'REFUSED' in out and expect in out and ((FOUND_NOTE in out) == found_note) and load(RES) == CACHE
+            and (not found_note or ('Fix what the line above says in that file itself, or put the original export back over it' in out and
+                                    'Do not delete a line from it' not in out))
             and (found_note or (out.rstrip().splitlines()[-1] == 'That file is in %s.' % DL and 'that file itself' in out and
                                 'download the export from REsimpli again and put the new file over this one' in out)) and not os.path.exists(SIDE) and not os.path.exists(STATUS)
             and not os.path.exists(os.path.join(DFDIR, 'imports')) and not os.path.exists(os.path.join(DFDIR, 'backups')), out[-300:])
@@ -1846,8 +1881,11 @@ try:
     write_csv(path, [dict(one[0], opt='Maybe'), dict(one[0], opt=' Maybe ')])
     rc, out2 = run([path])
     rec('the `opt` refusal counts kinds of value, and padding does not make a second kind', rc == 2 and 'has 1 kind of value' in out2, out2[-300:])
-    rec('the `opt` refusal says how to go on: tell Claude, or change the cells in that file itself (and put Yes when unsure), or download again',
-        rc == 2 and 'tell Claude' in out and 'in that file itself (save it as CSV UTF-8)' in out and 'put Yes, which opts that person out' in out and
+    rec('the `opt` refusal says how to go on: tell Claude, or change the cells in that file itself with a text editor and not Excel, which can change the rows '
+        'it saves (and put Yes when unsure), or download again',
+        rc == 2 and 'tell Claude' in out and
+        'in that file itself, in Notepad or another text editor and saved as UTF-8, not in Excel (a spreadsheet can change the rows it saves, and a changed row is refused)' in out and
+        'save it as CSV UTF-8' not in out and 'put Yes, which opts that person out' in out and
         'download the export from REsimpli again' in out, out[-500:])
 
     # ---------------------------------------------------------------- what to do about a torn sidecar or a torn Whitepages file
@@ -1857,6 +1895,9 @@ try:
     rec('a torn sidecar: the refusal does not tell anyone to move it aside (that would lose the registry verdicts), and says '
         'that there may be no backup', rc == 2 and 'Do not just move it aside' in out and 'registry verdict' in out and
         'there may be none' in out, out[-600:])
+    rec('...and that a copy is only as new as its date: a verdict the DNC lane recorded after it is missing from it, and that number bakes as clean until the '
+        'lane checks it again', 'a copy is only as new as its date' in out and 'recorded after it is missing from it' in out and
+        'that number bakes as clean until the lane checks it again' in out, out[-800:])
     fresh(CACHE)
     open(WPF, 'w').write('{"2026-000001-CA-01": {"result": [')
     rc, out = run([], files={'SkipTrace_1.csv': ROWS})
@@ -2707,9 +2748,10 @@ try:
     write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
     rc, out = run([])
     rec('...and the same file found by looking is a file that is not readable in full: it is told not to be moved (a real export) or renamed (not one), not '
-        'told to close it, and not given the advice for an `opt` word',
+        'told to close it, not given the advice for an `opt` word, and told to be replaced by a new download, not to have a line deleted',
         rc == 2 and 'SkipTrace_bigcell.csv could not be read as CSV: a cell is longer than %d characters' % csv.field_size_limit() in out and FOUND_NOTE in out and
-        'rename it so it no longer starts with SkipTrace_' in out and 'another program has it open' not in out and 'that file itself' in out and
+        'rename it so it no longer starts with SkipTrace_' in out and 'another program has it open' not in out and 'that file itself' not in out and
+        'Do not delete a line from it to get past this either' in out and 'put the new file over this one, then run again.' in out and
         load(RES) == CACHE, out[-500:])
     # a stray or unclosed quote in a hand-edited export used to swallow the rows below it, an opt-out and a DNC flag with them, and read as fine
     def csv_text(rows, header=HDR):
@@ -2731,26 +2773,32 @@ try:
                 fh.write('\r\n'.join(lines_))
         write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
         rc, out = run([])
-        rec('a found export with %s is refused, not read with the rows below it swallowed (their opt-out and DNC flag with them), and is told not to be moved' % label,
+        rec('a found export with %s is refused, not read with the rows below it swallowed (their opt-out and DNC flag with them), and is told not to be moved, '
+            'not to have a line deleted, and to be downloaded again' % label,
             rc == 2 and 'SkipTrace_quote.csv could not be read as CSV: a cell is longer than' in out and 'a quote is never closed or has text right after it' in out and
-            'would otherwise swallow the rows below it, opt-outs and DNC flags included' in out and
-            FOUND_NOTE in out and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-500:])
+            'would otherwise swallow the rows below it, opt-outs and DNC flags included' in out and 'on Python before 3.11, the file has a NUL byte' in out and
+            'Do not delete lines to get past it: the people on them would lose their opt-outs and flags without a word' in out and
+            FOUND_NOTE in out and 'Do not delete a line from it to get past this either: the person on that line would lose their opt-out and flags without a word' in out and
+            'Download the export from REsimpli again and put the new file over this one, then run again. If it is something else' in out and
+            'Fix what the line above says' not in out and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-700:])
         fresh(CACHE)
         with open(os.path.join(TMP, 'named_quote.csv'), 'w', encoding='utf-8', newline='') as fh:
             fh.write('\r\n'.join(lines_))
         before = snapshot()
         rc, out = run([os.path.join(TMP, 'named_quote.csv')])
-        rec('...and the same file named on the command line is refused by name with no advice about where it is (%s)' % label,
-            rc == 2 and 'named_quote.csv could not be read as CSV' in out and FOUND_NOTE not in out and 'That file is in' not in out and snapshot() == before, out[-400:])
+        rec('...and the same file named on the command line is refused by name with no advice about where it is, but still told not to delete lines (%s)' % label,
+            rc == 2 and 'named_quote.csv could not be read as CSV' in out and FOUND_NOTE not in out and 'That file is in' not in out and
+            'Do not delete lines to get past it' in out and 'Download the export from REsimpli again and put the new file over this one' in out and
+            snapshot() == before, out[-500:])
     quirks = [dict(r, Notes=n) for r, n in zip(quote_rows, ('said "hi", then left', 'two\nlines', '5\'10" tall'))]
     with with_leads(odd_leads):
         fresh(odd_cache)
         with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
             fh.write(csv_text(quirks, header=HDR + ['Notes']))
         rc, out = run([])
-        t = load(STATUS)['total']
+        t = (load(STATUS) or {}).get('total', {})            # a refused run writes no status file: that is a FAIL line, not a crash
     rec('...while quotes that are closed (a comma, a doubled quote, a line break inside a quoted cell) still read: every row is there, '
-        'the opt-out and the DNC flag with them', rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
+        'the opt-out and the DNC flag with them', rc == 0 and (t.get('rows'), t.get('opt_rows'), t.get('dnc_flagged_numbers')) == (3, 1, 2), (t, out[-300:]))
     bare = csv_text(quote_rows).split('\r\n')
     assert bare[1].startswith('Ann,')
     bare[1] = 'An"n,' + bare[1][len('Ann,'):]                       # a quote inside an unquoted cell does not open a quoted one: it is only a character
@@ -2759,9 +2807,9 @@ try:
         with open(os.path.join(DL, 'SkipTrace_1.csv'), 'w', encoding='utf-8', newline='') as fh:
             fh.write('\r\n'.join(bare))
         rc, out = run([])
-        t = load(STATUS)['total']
+        t = (load(STATUS) or {}).get('total', {})
     rec('...and so does a bare quote inside an unquoted cell (An"n): it is only a character, every row is there, the opt-out and the DNC flag with them',
-        rc == 0 and (t['rows'], t['opt_rows'], t['dnc_flagged_numbers']) == (3, 1, 2), (t, out[-300:]))
+        rc == 0 and (t.get('rows'), t.get('opt_rows'), t.get('dnc_flagged_numbers')) == (3, 1, 2), (t, out[-300:]))
     # a row with more or fewer cells than the header: a comma put into a cell (or taken out) moves every column after it one place, so the cell that held
     # an opt-out or a flag is read from its neighbour's place; a file cut short has lost rows besides. Refused, not read.
     shift_rows = [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)]),
@@ -2797,9 +2845,30 @@ try:
             rec('a %s export with %s is refused, not read with a row one place off: the line number is named, nothing is written%s'
                 % (kind, label, ', and it is told not to be moved' if kind == 'found' else ', with no advice about where the file is'),
                 rc == 2 and '%s has 1 row with a different number of cells than its %d header columns (line %d)' % (os.path.basename(pq), N_, where) in out and
-                'or a file cut short moves every column after it' in out and 'Nothing was read.' in out and
-                ((FOUND_NOTE in out) if kind == 'found' else (FOUND_NOTE not in out and 'That file is in' not in out)) and
-                snapshot() == before and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-500:])
+                'or a file cut short moves every column after it' in out and 'use the copy REsimpli downloaded' in out and 'Nothing was read.' in out and
+                'Do not delete the row to get past this: the person on it would lose their opt-out and flags without a word, and a file cut short is missing the rows '
+                'after the cut too' in out and 'Download the export from REsimpli again and put the new file over this one' in out and
+                ((FOUND_NOTE in out and 'Do not delete a line from it to get past this either: the person on that line would lose their opt-out and flags without a word' in out and
+                  'Download the export from REsimpli again and put the new file over this one, then run again. If it is something else' in out and
+                  'Fix what the line above says' not in out)
+                 if kind == 'found' else (FOUND_NOTE not in out and 'That file is in' not in out)) and
+                snapshot() == before and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-700:])
+    # a kept copy (where this tool keeps every export it has read) with a row of the wrong length: told not to have a line deleted, and to be replaced
+    # by a new download, not "fixed in place" (there is nothing in the file to fix that keeps every person)
+    fresh(CACHE)
+    os.makedirs(kept)
+    with open(os.path.join(kept, 'abcd1234_SkipTrace_short.csv'), 'w', encoding='utf-8', newline='') as fh:
+        fh.write('\r\n'.join([sgood[0], sgood[1] + ','] + sgood[2:]))
+    before = snapshot()
+    rc, out = run([pc2])
+    rec('a kept copy with a row of the wrong length is refused by name, says it is in the kept folder and that deleting it forgets its opt-outs, and is told '
+        'not to have a line deleted but to be replaced by a new download, not fixed in place',
+        rc == 2 and 'abcd1234_SkipTrace_short.csv has 1 row with a different number of cells' in out and
+        'That file is in %s, where this tool keeps a copy of every export it has read' % kept in out and 'Deleting it forgets them' in out and
+        'Do not delete a line from it to get past this either: the person on that line would lose their opt-out and flags without a word' in out and
+        'Download the export from REsimpli again and put the new file over this one, then run again.' in out and
+        'Fix what the line above says' not in out and 'that file itself' not in out and 'If it is something else' not in out and
+        snapshot() == before and load(RES) == CACHE, out[-700:])
     fresh(CACHE)
     write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 5)
     cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
