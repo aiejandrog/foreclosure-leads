@@ -94,6 +94,9 @@ GONE = {D:1, E:1, F:1}; out.window_gone = reload();
 GONE = {}; DATA.soon = ['A','B','C','D','E','F','G']; i = 3; render();       // on D
 DATA.soon = ['D','A','B','C','E','F','G']; out.resort = reload();
 DATA.soon = ['A','B','C','D','E','F','G'];
+// every lead left was stepped past earlier: the list, not a false queue-clear
+GONE = {D:1, E:1, F:1, G:1}; out.all_past = reload();
+GONE = {};
 // another lane
 lane = 'lp'; i = 0; render(); navNext(); out.lp = reload('soon');
 // yesterday's place is not restored
@@ -116,6 +119,7 @@ rec('a reload returns to the lead he was on, in his lane', res.get('basic') == '
 rec('Back still works after a reload', res.get('back_after') == 'C', res)
 rec('lead on screen now hidden: the next one, not the top', res.get('gone') == 'E@soon', res)
 rec('saved window all gone: first lead not stepped past', res.get('window_gone') == 'G@soon', res)
+rec('all remaining leads stepped past: top of the list, not queue clear', res.get('all_past') == 'A@soon', res)
 rec('found by identity after a re-sort', res.get('resort') == 'D@soon', res)
 rec('another lane is restored too', res.get('lp') == 'L2@lp', res)
 rec('a place from another day is ignored', res.get('stale') == 'A@soon', res)

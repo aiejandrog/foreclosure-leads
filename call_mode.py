@@ -4252,7 +4252,7 @@ function _posRestore(){
   var past = {};
   _NAVB.forEach(function(e){ if(e.l === lane) past[e.c] = 1; });
   for(k = 0; k < P.length; k++) if(!past[P[k].c]){ i = k; return true; }
-  i = P.length;
+  i = 0;   // every lead left was stepped past today: show them, never a false "Queue clear"
   return true;
 }
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
@@ -6536,7 +6536,7 @@ $('peek').onclick=sheetToggle;
 $('pill').onclick=function(){
   /* The pill sits above the sheet grip and used to reload INSTANTLY — mid-call, unconfirmed.
      Off the lead screen (call in progress), reloading needs a deliberate yes. */
-  if(SCREEN!=='lead' && !confirm('Load the newer list now? Your logs are saved, and you come back to this lead.')) return;
+  if(SCREEN!=='lead' && !confirm('Load the newer list now? Log this call first. Your logs are saved, and you come back to your place in the list.')) return;
   location.reload();
 };
 /* Returning to the page means he just finished a call. Pull then (teammate opt-outs matter before
