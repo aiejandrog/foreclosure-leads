@@ -1957,6 +1957,34 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     return out[:cap], total
 
 
+def stamp_ledger(rows, mail_log=None, text_log=None):
+    """Stamp each dial row with the newest CONFIRMED server-side email (`le`) and text (`lt`), epoch ms.
+
+    Alejandro, 2026-09-30: "every lead i see there ive contacted already". The page only knew what
+    was in the synced notes store. Emails cadence.py and the send bridge deliver land in
+    mail_sent.json, texts in text_sent.json, and neither writes a touch into notes, so a lead mailed
+    three times by cadence looked never-contacted on the phone and sorted to the TOP as fresh. The
+    board has read these ledgers since 08-08 (MAILLOG / TEXTLOG); the phone never got them.
+
+    ORDER AND DISPLAY ONLY. The page reads `le`/`lt` in _contactTier() and priorBar(), never in
+    supReason(), so nothing is hidden that was not hidden before. Walks r.pcs so the same human on a
+    sibling case counts. Inside the encrypted payload, like every other row field. Returns how many
+    rows got a stamp."""
+    mail_log, text_log = (mail_log or {}), (text_log or {})
+    n = 0
+    for r in rows:
+        cs = [r.get('c')] + list(r.get('pcs') or [])
+        le = max([int((mail_log.get(c) or {}).get('last') or 0) for c in cs if c] or [0])
+        lt = max([int((text_log.get(c) or {}).get('last') or 0) for c in cs if c] or [0])
+        if le:
+            r['le'] = le
+        if lt:
+            r['lt'] = lt
+        if le or lt:
+            n += 1
+    return n
+
+
 def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     """-> (rows, n_suppressed) : one SLIM row for every lead the dial queue does not carry.
 
@@ -3931,28 +3959,44 @@ function pool(){
     if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
     if(_clmOwner(r.c)){ _CLMN++; return false; }
     return true; });
-  return _freshFirst(keep, lane);
+  var _ff = _freshFirst(keep, lane);
+  _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; else break; }
+  return _ff;
 }
 /* NEVER-CALLED FIRST (2026-09-28). supReason() hides a no-answer for its 24h cooldown, and the
    next day it comes back at its old rank -- above every lead nobody has dialled yet, because the
    rank (sale date, equity) never changes. Alejandro, 09-28: "i have the same old people on my
    dealflow call mode list". Order only: nothing is added or removed here, supReason() and the seat
-   and claim filters above still decide who is in the list. Leads with no logged call go first,
-   then retries; each group keeps its rank order. On Fresh filings the never-called group is
-   newest filing first, because the first call on a new filing is the edge. */
+   and claim filters above still decide who is in the list.
+   NEVER-CONTACTED FIRST (2026-09-30). The 09-28 split only asked lastCall(), so a lead emailed three
+   times by cadence or texted by the worker still counted as "never called" and sat at the TOP with
+   the genuinely untouched ones. Alejandro, 09-30: "every lead i see there ive contacted already".
+   Three groups now: 0 = no outreach on any channel we can see (notes touches plus the baked server
+   ledgers r.le / r.lt), 1 = reached another way but never called, 2 = called. Each group keeps its
+   rank order; on Fresh filings group 0 is newest filing first, because the first call on a new
+   filing is the edge. */
 function _filedMs(r){
   var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(m) return new Date(+m[3], +m[1]-1, +m[2]).getTime();
   var t = Date.parse(String(r.x||'')); return isFinite(t) ? t : 0;
 }
+function _contactTier(r){
+  try{ if(lastCall(notes[r.c])) return 2; }catch(e){}
+  if(r.le || r.lt) return 1;
+  try{ for(var k in lastOutreach(r)) return 1; }catch(e){}
+  return 0;
+}
 function _freshFirst(rows, ln){
   var tagged = rows.map(function(r, ix){
-    var called = false; try{ called = !!lastCall(notes[r.c]); }catch(e){}
-    return {r:r, ix:ix, t:called ? 1 : 0, f:(ln==='lp' && !called) ? _filedMs(r) : 0};
+    var t = _contactTier(r);
+    return {r:r, ix:ix, t:t, f:(ln==='lp' && t === 0) ? _filedMs(r) : 0};
   });
   tagged.sort(function(a, b){ return (a.t - b.t) || (b.f - a.f) || (a.ix - b.ix); });
   return tagged.map(function(o){ return o.r; });
 }
+/* How many leads in the lane just painted nobody has reached on any channel. Shown in head() so a
+   list that is all retries says so instead of looking like fresh leads. */
+var _FRESHN = -1;
 var _SEATN = 0, _CLMN = 0;
 function quoScanFresh(q){
   /* Same window as quo_sync.INBOUND_MAX_AGE_H. A bake with no ok scan, or an old one, is not fresh. */
@@ -4136,9 +4180,9 @@ function advance(workedC, nextC){
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
   for(k=0;k<P.length;k++) if(P[k].c===workedC){
-    /* A lead just dialled drops behind the never-called ones (_freshFirst), so the next lead has
-       already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
-    var _moved = false; try{ _moved = k > i && !!lastCall(notes[workedC]); }catch(e){}
+    /* A lead just dialled or texted drops behind the never-contacted ones (_freshFirst), so the next
+       lead has already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
+    var _moved = false; try{ _moved = k > i && _contactTier(P[k]) > 0; }catch(e){}
     if(!_moved) i=k+1;
     return render(); }
   render();
@@ -4225,6 +4269,12 @@ function head(){
     /* TIER 3, on its own line and never folded into the number above it. "Opted out" and "we
        emailed them Tuesday" are different facts; a caller who cannot tell them apart cannot tell
        whether the list is short because it is clean or short because it is stale. */
+    /* ALL RETRIES, SAID OUT LOUD (2026-09-30). When every lead left in the lane has been reached
+       before, the list is a follow-up list, and it must read like one. */
+    +((_FRESHN >= 0)?('<div class="supn">'+(_FRESHN
+          ? ('<b>'+_FRESHN+'</b> never contacted at the top &middot; everything after is a retry')
+          : '<b>No fresh leads left in this lane</b> &mdash; every lead here was already called, emailed or texted. '
+            +'New ones arrive with the next board rebuild.')+'</div>'):'')
     +(_SUPT?('<div class="supn">'+_SUPT+' more hidden &mdash; <b>we already reached them another way</b> '
           +'(email, text, letter or door) within '+COOL_DEFAULT_H+'h</div>'):'')
     /* SEAT CHIP. Always rendered, even solo, because "am I splitting the list right now" is a
@@ -4433,6 +4483,10 @@ function band(lbl,inner){ return '<div class="band"><div class="blab">'+lbl+'</d
    after its cooldown expired and now looks brand new. */
 function priorBar(r){
   var lo = lastOutreach(r), best = null;
+  /* The server send ledgers (stamp_ledger): cadence and bridge deliveries that never wrote a touch
+     into notes. Display copy only -- `lo` here is local to this function. */
+  if(r.le && (!lo.email || r.le > lo.email.ts)) lo.email = {ts:r.le, by:'auto'};
+  if(r.lt && (!lo.text || r.lt > lo.text.ts)) lo.text = {ts:r.lt, by:'auto'};
   for(var k in lo){ if(!best || lo[k].ts > best.ts) best = {ch:k, ts:lo[k].ts, by:lo[k].by}; }
   if(!best) return '';
   var chips = Object.keys(lo).sort(function(a,b){ return lo[b].ts - lo[a].ts; })
