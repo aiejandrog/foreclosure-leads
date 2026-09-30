@@ -44,7 +44,8 @@ def node(js):
         os.remove(path)
 
 
-FNS = ''.join(grab_fn(n) for n in ('lastCall', '_filedMs', '_freshFirst', 'advance'))
+FNS = ''.join(grab_fn(n) for n in ('lastCall', '_filedMs', '_freshFirst', '_navPush', 'advance'))
+FNS = 'var _NAVB=[], _NAVF=[], lane=\'soon\';\n' + FNS
 rec('pool() returns through _freshFirst', 'return _freshFirst(keep, lane);' in SRC)
 
 HARNESS = FNS + r"""

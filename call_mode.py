@@ -4110,6 +4110,7 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
+  _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
@@ -4121,6 +4122,44 @@ function advance(workedC, nextC){
     if(!_moved) i=k+1;
     return render(); }
   render();
+}
+/* BACK / NEXT (2026-09-30). View-only moves through the lane, like Skip.
+
+   Both are BY IDENTITY, for the same reason advance() is: pool() re-sorts on every render
+   (_freshFirst drops a dialled lead behind the never-called ones), so "slot i-1" is not the lead he
+   just saw. _NAVB is the trail of leads left behind, _NAVF the ones Back stepped away from, each
+   tagged with its lane. A move re-seeks the code in a FRESH pool(), so a lead that has since been
+   suppressed (do-not-contact, opted out, claimed by the teammate, other seat) is not in the pool
+   and is stepped over, never reopened. Nothing here writes a note, a dial, an outcome, a cooldown
+   or _WORKED, and nothing syncs: Back never undoes or re-logs anything. */
+var _NAVB=[], _NAVF=[];
+function _navPush(c){ if(c){ _NAVB.push({c:c, l:lane}); if(_NAVB.length>300) _NAVB.shift(); } }
+function _navSeek(stack){
+  var P=pool(), e, k;
+  while(stack.length){ e=stack.pop(); if(e.l!==lane) continue;
+    for(k=0;k<P.length;k++) if(P[k].c===e.c) return k; }
+  return -1;
+}
+function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
+function navBack(){
+  var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
+  var k=_navSeek(_NAVB);
+  if(k<0){ toast('No earlier lead in this lane'); return; }
+  if(from) _NAVF.push({c:from, l:lane});
+  if(cur) delete cur._rcStay;
+  SCREEN='lead'; i=k; render();
+}
+function navNext(){
+  var from = cur && cur.c, k=_navSeek(_NAVF);
+  if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
+  _navPush(from);
+  if(cur) delete cur._rcStay;
+  SCREEN='lead'; i=k; render();
+}
+function _navRow(){
+  return '<div style="display:flex;gap:10px">'
+    + '<button class="big" id="navback" style="flex:1;background:#2a3f6b'+(_navHasBack()?'':';opacity:.45')+'">&lsaquo; Back</button>'
+    + '<button class="big" id="skip" style="flex:1;background:#2a3f6b">Next &rsaquo;</button></div>';
 }
 /* WHICH SCREEN IS UP. The board's extracted mergeNotes ends with `render()` — harmless on the
    board, where render repaints a static list, and CATASTROPHIC here, where the page is a wizard.
@@ -4154,8 +4193,9 @@ function render(){
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
   if(i>=P.length){ $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
-      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div></div>'
-      +'<div class="sheetpad"></div>'; wire(); return; }
+      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div>'
+      +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
+      +'<div class="sheetpad"></div>'; if($('navback')) $('navback').onclick=navBack; wire(); return; }
   /* Keep the NUMBER position when the lead is unchanged. A legitimate lead-screen render (sync merge
      landing while he reads the card on number 2) must not snap him back to number 1. */
   var pc=cur&&cur.c, pp=phIdx;
@@ -5081,7 +5121,7 @@ function screenLead(){
        on these two it is "is <owner> home?" instead. */
     +     (_phSrcNote(r, phIdx) ? '<br><b>'+_phSrcNote(r, phIdx)+'</b>' : '')
     +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
-    +   '<button class="big" id="skip" style="background:#2a3f6b">Skip</button>'
+    +   _navRow()
     + '</div>'
     + '<div class="sub">'+(i+1)+' of '+pool().length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
     + '<div class="sheetpad"></div>';
@@ -5135,7 +5175,8 @@ function screenLead(){
      reachable without any teammate involvement: in the worker lane retireFromWorkerQ() shrinks the
      pool on the first logged number, so i++ from there lands one past the next person. Skipping is
      also the one action that must NOT count as work, so it does not touch _WORKED. */
-  $('skip').onclick=function(){ advance(cur.c, null); };
+  $('skip').onclick=function(){ navNext(); };
+  $('navback').onclick=function(){ navBack(); };
   wireBrief(document, cur);
   wire();
   // Refresh the sheet for THIS lead. It is not re-created — it lives outside #app — so its
