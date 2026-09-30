@@ -1381,7 +1381,7 @@ def federal_hold(case, here=None, index=None):
     """(held, why) for Call Mode and the knock planner.
 
     Miami-Dade leads that are not docket-clear (stay_unverified lis pendens included) stay
-    callable unless this cache flags them. A Broward or Palm Beach lead is dropped once the
+    callable unless this cache flags them or PACER data shows an open bankruptcy on the number. A Broward or Palm Beach lead is dropped once the
     cache file exists and the lead has no fresh clear. With DEALFLOW_CLERK_BK=1, a lead
     recorded as Broward or Palm Beach is also dropped unless it is a Broward civil number
     with a fresh full clerk read of no active stay, and an unreadable lead list drops every
@@ -1446,7 +1446,8 @@ def send_hold(case, here=None):
 
     Stricter than federal_hold: a keyable non-stem lead is held even before the cache file
     exists, because email and letters are sends. Miami is held only when CourtListener
-    blocks. A missing docket clear is not, by itself, a federal hold."""
+    blocks or PACER data shows an open bankruptcy on the number (_pacer_stem_hold). A missing
+    docket clear is not, by itself, a federal hold."""
     nc = _never_contact_hold(case)
     if nc:
         return nc
@@ -1510,8 +1511,9 @@ def flags_for_cases(cases, now=None):
                         'hard': op.get('code') == 'stay_active'}
         ps = _pacer_stem_hold(key)
         if ps:
-            out[key] = {'hold': True, 'why': str(ps[1])[:180],
-                        'hard': not str(ps[1]).startswith('PACER stay check failed')}
+            hard = not str(ps[1]).startswith('PACER stay check failed')
+            if hard or key not in out:                # never soften a hard hold already on the case
+                out[key] = {'hold': True, 'why': str(ps[1])[:180], 'hard': hard}
         try:
             import clerk_bk
             cop = clerk_bk.gate_opinion(key, now)

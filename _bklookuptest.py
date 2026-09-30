@@ -1348,7 +1348,6 @@ _clean = {'a': False, 'bd': '', 'sl': ''}
 (d / SG.HITS_NAME).write_text(json.dumps({
     '2099-000302-CA-01': {'env': 'prod', 't': now, 'seen_t': now,
                           'cases': [{'no': '26-57302', 'filed': '2026-09-25'}]}}), encoding='utf-8')
-_old_send = BL.send_hold
 v1 = SG.check('2099-000301-CA-01', sh)
 v2 = SG.check('2099-000302-CA-01', sh)
 check('fixture: the send bridge already refuses a PACER active and a new-filer hit on a Miami number',
@@ -1371,10 +1370,50 @@ for k, label in (('2099-000303-CA-01', 'a QA-environment PACER active'),
     check(label + ' adds no hold to a docket-clear Miami number',
           BL.send_hold(k, here=str(d)) == (False, '') and BL.federal_hold(k) == (False, '')
           and k not in flg, (BL.send_hold(k, here=str(d)), BL.federal_hold(k), flg.get(k)))
+# a PACER clear queried after the hit was pulled supersedes it (stay_gate.hit_blocks), on a stem too
+(d / SG.PACER_NAME).write_text(json.dumps({'2099-000302-CA-01': {
+    'env': 'prod', 'verdict': 'clear', 't': now + 60, 'q': '2026-09-30', 'region': 'national',
+    'lookback_from': '2018-09-30'}}), encoding='utf-8')
+(d / SG.HITS_NAME).write_text(json.dumps({'2099-000302-CA-01': {
+    'env': 'prod', 't': now, 'seen_t': now, 'cases': [{'no': '26-57302', 'filed': '2026-09-25'}]}}),
+    encoding='utf-8')
+check('a newer PACER clear supersedes a new-filer hit on a Miami number, as at the send bridge',
+      BL.federal_hold('2099-000302-CA-01') == (False, '') and SG.check('2099-000302-CA-01', sh)['ok'] is True,
+      (BL.federal_hold('2099-000302-CA-01'), SG.check('2099-000302-CA-01', sh)))
+# send_hold's `here` is the folder it reads, even when PACER_ROOT points elsewhere
+other = d / 'elsewhere'
+other.mkdir()
+(other / SG.PACER_NAME).write_text(json.dumps({'2099-000305-CA-01': {
+    'env': 'prod', 'verdict': 'active', 't': now, 'cases': [{'no': '26-57305', 'open': True}]}}),
+    encoding='utf-8')
+check('send_hold reads the PACER files in the folder it is given',
+      BL.send_hold('2099-000305-CA-01', here=str(other))[0] is True
+      and BL.send_hold('2099-000305-CA-01', here=str(d)) == (False, ''))
 (d / SG.PACER_NAME).write_text('{not json', encoding='utf-8')
 (d / SG.HITS_NAME).unlink()
-check('an unreadable PACER file adds no hold on a Miami number (stay_gate\'s additive rule)',
-      BL.federal_hold('2099-000305-CA-01') == (False, ''))
+_t0 = time.time()
+_fl = BL.flags_for_cases(['2099-000305-CA-01'] * 40)
+_dt = time.time() - _t0
+check('an unreadable PACER file adds no hold on a Miami number on any channel (stay_gate\'s additive rule)',
+      BL.federal_hold('2099-000305-CA-01') == (False, '')
+      and BL.send_hold('2099-000305-CA-01', here=str(d)) == (False, '') and _fl == {}, _fl)
+check('an unreadable PACER file is parsed once, not once per case (no 0.25 s retry per row)',
+      _dt < 1.0, '%.2fs for 40 cases' % _dt)
+(d / 'sale_history_cache.json').write_text(json.dumps({'2099-000306-CA-01': {'a': True, 'bd': '2026-09-01', 'sl': ''}}),
+                                           encoding='utf-8')
+_real_active = SG._pacer_active_on_stem
+SG._pacer_active_on_stem = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError('boom'))
+_real_cl = BL.entry_opinion
+try:
+    BL.entry_opinion = lambda *_a, **_k: {'blocks': True, 'code': 'stay_active', 'why': 'cl exact'}
+    (d / 'bk_lead_cache.json').write_text(json.dumps({'2099-000306-CA-01': {'verdict': 'active'}}), encoding='utf-8')
+    fl = BL.flags_for_cases(['2099-000306-CA-01']).get('2099-000306-CA-01', {})
+    check('a PACER check that throws never softens a hard CourtListener hold on the board',
+          fl.get('hold') is True and fl.get('hard') is True, fl)
+finally:
+    SG._pacer_active_on_stem = _real_active
+    BL.entry_opinion = _real_cl
+    (d / 'bk_lead_cache.json').unlink()
 _real_active = SG._pacer_active_on_stem
 SG._pacer_active_on_stem = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError('boom'))
 try:
