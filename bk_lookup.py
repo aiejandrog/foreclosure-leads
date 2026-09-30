@@ -1381,7 +1381,7 @@ def federal_hold(case, here=None, index=None):
     """(held, why) for Call Mode and the knock planner.
 
     Miami-Dade leads that are not docket-clear (stay_unverified lis pendens included) stay
-    callable unless this cache flags them. A Broward or Palm Beach lead is dropped once the
+    callable unless this cache flags them or PACER data shows an open bankruptcy on the number. A Broward or Palm Beach lead is dropped once the
     cache file exists and the lead has no fresh clear. With DEALFLOW_CLERK_BK=1, a lead
     recorded as Broward or Palm Beach is also dropped unless it is a Broward civil number
     with a fresh full clerk read of no active stay, and an unreadable lead list drops every
@@ -1391,9 +1391,41 @@ def federal_hold(case, here=None, index=None):
     nc = _never_contact_hold(case)
     if nc:
         return nc
+    ps = _pacer_stem_hold(case, here)
+    if ps:
+        return ps
     if index is None:
         index = federal_hold_index()
     return index.hold(case)
+
+
+def _pacer_stem_hold(case, here=None):
+    """(True, why) when PACER data shows an open bankruptcy on a Miami-Dade case number, else None.
+
+    stay_gate.check already refuses these at the send bridge (src pacer_pcl / pacer_newfilers),
+    but send_hold, federal_hold and flags_for_cases hold a Miami-stem case only on a CourtListener
+    verdict, so letters, Call Mode, the knock planner and the board flags did not see a PACER
+    active entry or a production new-filer hit on a Miami number. This only adds holds: a missing
+    or unreadable PACER file adds none (the same additive rule stay_gate uses on a stem), and a
+    check that throws holds."""
+    try:
+        import stay_gate
+        stem = stay_gate.case_stem(case)
+        if not stem:
+            return None
+        root = here or PACER_ROOT or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        cache = os.path.join(root, 'sale_history_cache.json')
+        ppath, hpath = stay_gate._pacer_path(cache), stay_gate._hits_path(cache)
+        fed = stay_gate._pacer_active_on_stem(stem, ppath)
+        if fed:
+            return True, (stay_gate.pacer_verdict(fed[1])[1]
+                          + ' (the state docket does not show it yet)')[:300]
+        nf = stay_gate._hit_on_stem(stem, hpath, ppath)
+        if nf:
+            return True, (stay_gate._hit_why(nf[1]) + ' (the state docket does not show it yet)')[:300]
+    except Exception as e:
+        return True, 'PACER stay check failed (%s) -- lead stays held' % str(e)[:80]
+    return None
 
 
 def _never_contact_hold(case):
@@ -1414,10 +1446,14 @@ def send_hold(case, here=None):
 
     Stricter than federal_hold: a keyable non-stem lead is held even before the cache file
     exists, because email and letters are sends. Miami is held only when CourtListener
-    blocks. A missing docket clear is not, by itself, a federal hold."""
+    blocks or PACER data shows an open bankruptcy on the number (_pacer_stem_hold). A missing
+    docket clear is not, by itself, a federal hold."""
     nc = _never_contact_hold(case)
     if nc:
         return nc
+    ps = _pacer_stem_hold(case, here)
+    if ps:
+        return ps
     try:
         import stay_gate
     except Exception:
@@ -1473,6 +1509,11 @@ def flags_for_cases(cases, now=None):
         if op and op.get('blocks'):
             out[key] = {'hold': True, 'why': str(op.get('why') or '')[:180],
                         'hard': op.get('code') == 'stay_active'}
+        ps = _pacer_stem_hold(key)
+        if ps:
+            hard = not str(ps[1]).startswith('PACER stay check failed')
+            if hard or key not in out:                # never soften a hard hold already on the case
+                out[key] = {'hold': True, 'why': str(ps[1])[:180], 'hard': hard}
         try:
             import clerk_bk
             cop = clerk_bk.gate_opinion(key, now)
