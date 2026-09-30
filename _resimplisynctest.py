@@ -1567,22 +1567,23 @@ try:
         made_t and rc == 0 and open(kept_t, 'rb').read() == edited_t and os.listdir(keep_d) == [os.path.basename(kept_t)] and
         load(STATUS)['total']['opt_rows'] == 1, (made_t, rc, os.listdir(keep_d), out[-200:]))
     os.remove(named_t)
-    # A file already in the kept folder under a name that does not end in .csv (put there by hand, or kept under its own name by an earlier version of this
-    # tool) is read only when it is named, and it is not "already the copy": it gets a .csv copy beside it like any other export, so the next run still holds
-    # the person it opted out once the file is gone.
-    for nm in ('SkipTrace_ana.txt', 'SkipTrace_ana.CSV', 'SkipTrace_anacsv'):
+    # A file already in the kept folder under a name that a later run's *.csv glob does not find (one that does not end in .csv, or one that starts with a
+    # dot, which the glob skips), put there by hand or kept under its own name by an earlier version of this tool, is read only when it is named, and it is not
+    # "already the copy": it gets a copy beside it under a name the glob finds, like any other export, so the next run still holds the person it opted out
+    # once the file is gone.
+    for nm in ('SkipTrace_ana.txt', 'SkipTrace_ana.CSV', 'SkipTrace_anacsv', '.SkipTrace_ana.csv'):
         fresh(CACHE)
         os.makedirs(keep_d)
         legacy = os.path.join(keep_d, nm)
         write_csv(legacy, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)], opt='Yes')])
         rc, out = run([legacy])
-        want_l = '%s_%s.csv' % (RS.sha256(legacy)[:8], nm)
+        want_l = '%s_%s%s' % (RS.sha256(legacy)[:8], nm, '' if nm.endswith('.csv') else '.csv')
         both_l = (rc, sorted(os.listdir(keep_d)))
         os.remove(legacy)
         write_csv(os.path.join(DL, 'SkipTrace_new.csv'), [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(202)])])
         rc2, out2 = run([])
-        rec('a file named %s that is already in the kept folder gets a .csv copy beside it, so with the file gone the next run still holds the person it '
-            'opted out and flags her new number instead of adding it' % nm,
+        rec('a file named %s that is already in the kept folder gets a copy beside it under a name a later run reads, so with the file gone the next run still '
+            'holds the person it opted out and flags her new number instead of adding it' % nm,
             both_l == (0, sorted([nm, want_l])) and rc2 == 0 and 'opt-out hold: 1 people, from 2 exports' in out2 and '3055550202' in (load(SIDE) or {}) and
             nums(load(RES), 1) == [], (both_l, want_l, out2[-300:]))
 

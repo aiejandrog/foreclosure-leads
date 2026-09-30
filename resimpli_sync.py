@@ -242,15 +242,19 @@ KNOWN LIMITS (reported here, not fixed)
   * A run that is killed between writing its temp files and replacing the cache or the sidecar leaves
     <file>.resimpli.<random>.tmp behind. They are gitignored and no later run removes them: delete them
     by hand. A kept copy that was being written when the run was killed leaves the same kind of file in the
-    imports folder (nothing reads it: only .csv files there are kept copies). Unlike the cache and the
-    sidecar, a kept copy is renamed into place without being flushed to disk first, so a power cut just
-    after a run can leave it empty or short: one that no longer reads as an export is refused on the next
-    run (download it again and put it over the copy), but one cut exactly at the end of a line would read as
-    a whole, shorter export. The numbers the run added from it, and their flags, are already in the cache
-    and the sidecar; the hold on a person whose row was past the cut lasts only while the original export
-    is still in the folder it was downloaded to, because later runs read the kept copies. Two runs
-    at the same time are caught only by the changed-file check, which can miss two
-    that finish together (the later replace wins and both exit 0); a lock file would close that.
+    imports folder (nothing reads it).
+  * Only .csv files in the imports folder whose names do not start with a dot are kept copies. Any other
+    file there, put there by hand or kept under its own name by an earlier version of this tool, is read
+    only when it is named; a run that names no file passes over it without a word.
+  * Unlike the cache and the sidecar, a kept copy is renamed into place without being flushed to disk
+    first, so a power cut just after a run can leave it empty or short: one that no longer reads as an
+    export is refused on the next run (download it again and put it over the copy), but one cut exactly at
+    the end of a line would read as a whole, shorter export. The numbers the run added from it, and their
+    flags, are already in the cache and the sidecar; the hold on a person whose row was past the cut lasts
+    only while the original is still where a run that names no file finds it (a SkipTrace_*.csv in
+    Downloads or on the Desktop) or is named again, because the kept copy no longer has that row.
+  * Two runs at the same time are caught only by the changed-file check, which can miss two that finish
+    together (the later replace wins and both exit 0); a lock file would close that.
   * The bake appends a lead's Whitepages numbers with phdnc False and applies dnc_scrub.json to cached
     skip-trace phones only, so a number REsimpli flags that Whitepages also lists on a lead whose entry
     lacks it reaches the baked row as clean. flagged_also_whitepages counts those numbers; the seam is
@@ -1564,8 +1568,9 @@ def main(argv=None):
     try:
         os.makedirs(import_dir, exist_ok=True)
         for f, h, _ in exports:
-            if in_kept_folder(f, import_dir) and os.path.basename(f).endswith('.csv'):
-                continue                    # already the imports copy, under a name every later run reads
+            base = os.path.basename(f)
+            if in_kept_folder(f, import_dir) and base.endswith('.csv') and not base.startswith('.'):
+                continue                    # already the imports copy, under a name every later run's *.csv glob finds
             dst = os.path.join(import_dir, kept_name(h, f))
             if not os.path.exists(dst):
                 keep_copy(f, dst)
