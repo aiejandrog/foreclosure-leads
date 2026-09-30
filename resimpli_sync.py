@@ -112,7 +112,10 @@ paths: those files plus the copies in DEALFLOW_DIR/imports/resimpli/, because th
 person and the DNC flags of every earlier export live in those copies, and naming one file must not
 narrow them. All of them are processed, not the newest: the merge is add-only and dedupes by number,
 so re-reading a file adds nothing and no file has to be picked.
-A stray text file that has none of REsimpli's column names is skipped by name. An export that
+A stray text file that has none of REsimpli's column names is skipped by name, unless it is in the
+folder of kept copies: a file there that has lost the column names (edited by hand, emptied, or
+another file put over it) is a kept export that took its opt-outs with it, so it is refused like any
+export that cannot be read. An export that
 cannot be read in full is REFUSED by name and stops the run, even when the other exports are fine:
 the numbers it lists as DNC would be missing from the merge while an older export lists them clean.
 That covers a file that is not UTF-8 (do not open and re-save it in Excel), one with a flag column
@@ -129,12 +132,14 @@ inside that row's last cell; a comma at the end of a row cannot be told from tha
 that saved the file again may leave rows longer or shorter: use the file as REsimpli downloaded it). The
 refusal says not to delete the line it names: the person on it would lose their opt-out and flags
 without a word, and a file cut short is missing the rows after the cut as well; download the export
-again, and if the new file is refused the same way, change nothing and send Claude the REFUSED line. The
-refusals for a file that is not UTF-8 text and for a header that does not read as columns say the same,
-and so do the ones a hand edit cannot mend: the missing-column one, a file that cannot be opened, and a
-dnc_scrub.json that cannot be read or opened. Found files are copied into
-DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written; the
-originals stay put.
+again, and if the new file is refused the same way, change nothing and send Claude the REFUSED line. Every
+other refusal that forbids the obvious fix ends the same way: a file that is not UTF-8 text, a header that
+does not read as columns, a kept copy that lost its column names, the missing-column one (when a new
+download lacks the column), a file that cannot be opened, and a dnc_scrub.json that cannot be read or
+opened. Found files are copied into
+DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written, each
+under a temp name and renamed into place, so a copy that fails part-way leaves no half file under the
+kept name; the originals stay put.
 
 OUTPUT
 Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts (per file: what that file
@@ -228,7 +233,9 @@ KNOWN LIMITS (reported here, not fixed)
     unconfirmed numbers fires only when the cache holds numbers those earlier exports attached.
   * A run that is killed between writing its temp files and replacing the cache or the sidecar leaves
     <file>.resimpli.<random>.tmp behind. They are gitignored and no later run removes them: delete them
-    by hand. Two runs at the same time are caught only by the changed-file check, which can miss two
+    by hand. A kept copy that was being written when the run was killed leaves the same kind of file in the
+    imports folder (nothing reads it: only .csv files there are kept copies). Two runs at the same time are
+    caught only by the changed-file check, which can miss two
     that finish together (the later replace wins and both exit 0); a lock file would close that.
   * The bake appends a lead's Whitepages numbers with phdnc False and applies dnc_scrub.json to cached
     skip-trace phones only, so a number REsimpli flags that Whitepages also lists on a lead whose entry
@@ -287,10 +294,11 @@ OWNER_FULL = ('fullName', 'fullName2')       # the same owners' whole names: nev
 OWNER_FIELDS = ('owners', 'owner', 'Owner')
 DEAD_FLAGS = ('ownerMismatch', 'lpDismissed', 'lpClosed')
 # What a refusal says when the fault is in the file's shape, which no edit by hand can mend without a person losing their
-# opt-out. Both halves go together: the first stops a new download saved beside the old file (both are read, and the old one
-# keeps refusing), the second is the way out when the new download is refused the same way, so the advice never ends in a loop.
-REDOWNLOAD = ('Download the export from REsimpli again and put the new file over this one (a copy beside it would be read '
-              'too, and this one would keep refusing)')
+# opt-out. Both halves go together: the first stops a new download saved beside the old file (a run that names no file reads
+# both, and the old one keeps refusing), the second is the way out when the new download is refused the same way, so the
+# advice never ends in a loop.
+REDOWNLOAD = ('Download the export from REsimpli again and put the new file over this one (a run that names no file reads '
+              'a copy saved beside it too, and this one would keep refusing)')
 STUCK = 'If the new file is refused the same way, change nothing and send Claude this line (it has no homeowner names or numbers)'
 
 SUF = {'STREET': 'ST', 'AVENUE': 'AVE', 'AV': 'AVE', 'COURT': 'CT', 'ROAD': 'RD', 'DRIVE': 'DR',
@@ -337,7 +345,8 @@ class SyncError(Exception):
     this tool cannot read: the refusal itself says how to fix those cells in that file, so the note
     after it does not tell the operator to move or replace the file. 'shape' when the file does not
     read as a whole REsimpli export (not UTF-8 text, a header that is not comma-separated columns, a
-    quote csv cannot parse, a row with the wrong number of cells): there is no fix by hand that keeps
+    quote csv cannot parse, a row with the wrong number of cells, a file in the folder of kept copies
+    that no longer has REsimpli's column names): there is no fix by hand that keeps
     every person, and deleting the line the refusal names drops that person's opt-out and flags, so
     the refusal says to download the export again (and what to do if that is refused too) and the
     note says to replace the file."""
@@ -1077,8 +1086,8 @@ def read_export(path):
     if missing:
         raise SyncError('%s is not a complete REsimpli skip-trace export (missing %s). If a column is there under '
                         'another name, rename it back to REsimpli\'s spelling in that file itself, in Notepad or another '
-                        'text editor and saved as UTF-8, not in Excel (a spreadsheet can change the rows it saves, and a '
-                        'changed row is refused); do not add an empty one: an empty `opt` '
+                        'text editor and saved as UTF-8, not in Excel (a spreadsheet can change other cells when it saves, '
+                        'and this tool cannot always tell); do not add an empty one: an empty `opt` '
                         'reads every row as not opted out, an empty _IsLitigator reads every number as not a litigator '
                         '(the real column\'s flags would be dropped), and an empty _DNC or _status reads every number as '
                         'DNC, which this tool never clears. If a new download from REsimpli is missing these columns, '
@@ -1124,14 +1133,19 @@ def read_export(path):
                         '(%s%s). Nothing was read: a guess would either opt out the whole list or let an opt-out '
                         'through. If REsimpli really writes that word, tell Claude and it will be added. To go on '
                         'now, change those cells to Yes (opted out) or No in that file itself, in Notepad or another text '
-                        'editor and saved as UTF-8, not in Excel (a spreadsheet can change the rows it saves, and a changed '
-                        'row is refused), and run again; if you are not sure what a cell meant, put Yes, which opts that '
-                        'person out. If the '
+                        'editor and saved as UTF-8, not in Excel (a spreadsheet can change other cells when it saves, and '
+                        'this tool cannot always tell), and run again; if you are not sure what a cell meant, put Yes, which '
+                        'opts that person out. If the '
                         'cells look like a corrupt download, download the export from REsimpli again and put the new file over this '
-                        'one (a copy beside it would be read too, and this one would keep refusing).'
+                        'one (a run that names no file reads a copy saved beside it too, and this one would keep refusing).'
                         % (name, len(odd), '' if len(odd) == 1 else 's', shown, ', ...' if len(odd) > 3 else ''),
                         kind='opt')
     return rows
+
+
+def in_kept_folder(path, import_dir):
+    """Is `path` in the folder where this tool keeps a copy of every export it has read?"""
+    return os.path.dirname(os.path.abspath(path)) == os.path.abspath(import_dir)
 
 
 def refusal_note(err, path, named, import_dir):
@@ -1142,7 +1156,7 @@ def refusal_note(err, path, named, import_dir):
                 'it and run again; otherwise check that it is still there and can be read. If neither helps, leave the '
                 'file as it is and send Claude the REFUSED line above (it has no homeowner names or numbers). Nothing was '
                 'read further: its opt-outs and DNC flags would be missing from the merge.' % folder)
-    kept = folder == os.path.abspath(import_dir)
+    kept = in_kept_folder(path, import_dir)
     if err.kind == 'opt':
         # the line above already says how to fix the cells in that file itself; a replacement download would have the
         # same words, and moving or deleting the file would drop its opt-outs
@@ -1270,6 +1284,20 @@ def write_tmp(path, obj):
     return tmp
 
 
+def keep_copy(src, dst):
+    """Copy an export into the kept folder under a temp name and rename it into place, so a copy that fails
+    part-way (the disk fills, the run is interrupted) leaves nothing under the kept name: every later run reads
+    every .csv there, and one cut short would either refuse or, cut at the end of a line, read as a whole
+    export with the rows after the cut missing. The temp name does not end in .csv, so nothing reads it."""
+    tmp = '%s.resimpli.%s.tmp' % (dst, os.urandom(4).hex())
+    try:
+        shutil.copy2(src, tmp)
+        os.replace(tmp, dst)
+    except BaseException:
+        drop([tmp])
+        raise
+
+
 def main(argv=None):
     try:
         sys.stdout.reconfigure(errors='replace')
@@ -1297,22 +1325,31 @@ def main(argv=None):
         print('no REsimpli export found (SkipTrace_*.csv in Downloads / Desktop, or %s)' % import_dir)
         return 1
 
-    # one copy of each distinct file, by content: the same export downloaded twice is one file
-    seen, exports, skipped = set(), [], []
+    # one copy of each distinct file, by content: the same export downloaded twice is one file. Only a file that was
+    # read stands in for its twin: a stray that was skipped must not hide an identical file in the kept folder.
+    seen, read_ok, exports, skipped = set(), set(), [], []
     for f in files:
         try:
             h = sha256(f)
         except OSError as e:
             err = SyncError('%s could not be read (%s)' % (os.path.basename(f), type(e).__name__), kind='io')
         else:
-            if h in seen:
+            if h in read_ok:
                 continue
             seen.add(h)
             err = None
             try:
                 exports.append((f, h, read_export(f)))
+                read_ok.add(h)
             except SyncError as e:
                 err = e
+        if err and err.skippable and in_kept_folder(f, import_dir):
+            # A stray file in Downloads is skipped, but this folder holds a copy of every export already read: a file
+            # here that no longer has REsimpli's column names (edited by hand, emptied, or another file put over it)
+            # took that export's opt-outs and DNC flags with it, and skipping it would drop them without a word.
+            err = SyncError('%s is in the folder of export copies this tool keeps, and its header line does not have '
+                            'REsimpli\'s column names (was it edited by hand, or was another file put over it?). %s. %s'
+                            % (os.path.basename(f), REDOWNLOAD, STUCK), kind='shape')
         if err:
             if os.path.abspath(f) in named or not err.skippable:    # a file named on the command line, or one that
                 print('REFUSED:', err)                              # is an export we cannot read in full
@@ -1502,11 +1539,11 @@ def main(argv=None):
     try:
         os.makedirs(import_dir, exist_ok=True)
         for f, h, _ in exports:
-            if os.path.dirname(os.path.abspath(f)) == os.path.abspath(import_dir):
+            if in_kept_folder(f, import_dir):
                 continue                    # already the imports copy
             dst = os.path.join(import_dir, '%s_%s' % (h[:8], os.path.basename(f)))
             if not os.path.exists(dst):
-                shutil.copy2(f, dst)
+                keep_copy(f, dst)
         with open(os.path.join(P.DEALFLOW_DIR, 'resimpli_sync_status.json'), 'w', encoding='utf-8') as fh:
             json.dump(status, fh, indent=1)
     except OSError as e:

@@ -27,6 +27,12 @@ Pins the rules that matter for Call Mode:
     column missing, another delimiter, an `opt` value that is neither yes nor no, a quote that is
     never closed, a row with more or fewer cells than the header has columns) is refused, because its
     DNC flags would be missing from the merge or would sit one column off
+  * a file in the folder of kept copies that no longer has REsimpli's column names (header deleted,
+    emptied, another file put over it) is refused, not skipped like a stray in Downloads: it is a kept
+    export that took its opt-outs with it; and a stray skipped in Downloads does not stand in for an
+    identical file in that folder
+  * the copy of each export is written under a temp name and renamed into place: a copy that fails
+    part-way leaves nothing under the kept name, and a kept copy that is already there is not written over
   * opting out is about the person: a row that names someone another row (in any export) has opted out
     is held like that row; an opted-out row with an owner the tool cannot read as a person (either
     owner) is counted and said
@@ -741,7 +747,7 @@ try:
                 % ('open() refuses (a lock)' if how == 'open' else 'fails to read part-way through (a disk error)', ' (also on a dry run)' if extra else ''),
                 rc == 2 and 'REFUSED: dnc_scrub.json exists but cannot be opened' in out and 'Nothing was written. Close whatever has it open and run again' in out and
                 'If nothing has it open, do not move or delete it either: send Claude this line' in out and 'Restore it from a copy' not in out and
-                'unexpected error' not in out and load(SIDE) == sidecar_doc and nothing_written() and 'TOTAL' not in out, out[-500:])
+                load(SIDE) == sidecar_doc and nothing_written() and 'TOTAL' not in out, out[-500:])
     fresh(CACHE)
     rc, out = run([], files={'SkipTrace_1.csv': clean1})
     rec('no sidecar at all is a fresh start, not a torn one: the run goes through and the status file says the sidecar was ok',
@@ -872,7 +878,7 @@ try:
     FOUND_NOTE = 'do not move or delete it'
     # what a refusal for a file's shape says to do about it: download again over this file, and the way out when that is refused too (a loop that
     # forbids editing, moving and deleting has to name one): the same words on every shape refusal, and said once
-    REDL = 'Download the export from REsimpli again and put the new file over this one (a copy beside it would be read too, and this one would keep refusing)'
+    REDL = 'Download the export from REsimpli again and put the new file over this one (a run that names no file reads a copy saved beside it too, and this one would keep refusing)'
     STUCK_ = 'If the new file is refused the same way, change nothing and send Claude this line (it has no homeowner names or numbers)'
     def refused(name, header, expect, rows=None, encoding='utf-8'):
         fresh(CACHE)
@@ -903,7 +909,7 @@ try:
             "(the real column's flags would be dropped), and an empty _DNC or _status reads every number as DNC, which this tool never clears" in out and
             # a header renamed by hand is a hand edit like the `opt` cells: in a text editor, not Excel; and a new download that lacks the column is not mended by an edit at all
             "rename it back to REsimpli's spelling in that file itself, in Notepad or another text editor and saved as UTF-8, not in Excel "
-            '(a spreadsheet can change the rows it saves, and a changed row is refused)' in out and
+            '(a spreadsheet can change other cells when it saves, and this tool cannot always tell)' in out and
             'If a new download from REsimpli is missing these columns, change nothing and send Claude this line (it has no homeowner names or numbers)' in out and
             'reads as No' not in out and 'drop every opt-out' not in out, out[-700:])
     refused('slot11_no_flags.csv', HDR + ['Phone_11'], 'Phone_11_DNC')
@@ -1464,6 +1470,53 @@ try:
         rc == 0 and 'WARNING: the phone data was written' in out and nums(load(RES), 1) == ['3055550101', '3055550102']
         and load(SIDE) is not None, out[-300:])
 
+    # A copy that fails part-way leaves nothing under the kept name. Every later run reads every .csv in that folder, so a half file there would
+    # refuse the run, or, cut at the end of a line, read as a whole export with the rows after the cut (and their opt-outs) missing. The copy is
+    # written under a temp name (not .csv, so nothing reads it) and renamed into place, and the temp file is removed on any failure.
+    keep_d = os.path.join(DFDIR, 'imports', 'resimpli')
+    real_copy2 = shutil.copy2
+    def copy_dies(how):
+        def copy2(src, dst, *a, **k):
+            if os.sep + 'imports' + os.sep not in str(dst):
+                return real_copy2(src, dst, *a, **k)                # the backups of the cache and the sidecar are copied the same way
+            with open(src, 'rb') as fi, open(dst, 'wb') as fo:
+                fo.write(fi.read()[:200])                           # half a file is on the disk when it fails
+            if how == 'interrupt':
+                raise KeyboardInterrupt
+            raise OSError(28, 'No space left on device')
+        return copy2
+    src_1 = os.path.join(DL, 'SkipTrace_1.csv')
+    for how, why in (('disk', 'the disk fills: a warning and exit 0'), ('interrupt', 'the run is interrupted: the interrupt is not swallowed')):
+        fresh(CACHE)
+        write_csv(src_1, ROWS)
+        shutil.copy2 = copy_dies(how)
+        interrupted = False
+        try:
+            rc, out = run([])
+        except KeyboardInterrupt:
+            interrupted, rc, out = True, None, ''
+        finally:
+            shutil.copy2 = real_copy2
+        rec('an export copy that fails part-way (%s) leaves nothing in the imports folder, not a half file and not its temp file; the phone data is already written' % why,
+            os.path.isdir(keep_d) and os.listdir(keep_d) == [] and nums(load(RES), 1) == ['3055550101', '3055550102'] and not left() and
+            ((rc == 0 and 'WARNING: the phone data was written' in out and not interrupted) if how == 'disk' else interrupted),
+            (rc, out[-200:], os.listdir(keep_d) if os.path.isdir(keep_d) else None))
+        rc, out = run([])
+        want_copy = '%s_SkipTrace_1.csv' % RS.sha256(src_1)[:8]
+        rec('...and the next run keeps a whole copy under the kept name (%s)' % how,
+            rc == 0 and os.listdir(keep_d) == [want_copy] and open(os.path.join(keep_d, want_copy), 'rb').read() == open(src_1, 'rb').read(), (rc, os.listdir(keep_d)))
+    # a kept copy that was changed by hand (the `opt` refusal says to change the cells in that copy itself) is not written over by the export it came from,
+    # which is still in Downloads: the copy step only makes a copy that is not there yet
+    fresh(CACHE)
+    write_csv(src_1, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])])
+    rc, out = run([])
+    kept_f = os.path.join(keep_d, os.listdir(keep_d)[0])
+    write_csv(kept_f, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)], opt='Yes')])          # the operator's edit: Ana is opted out
+    edited = open(kept_f, 'rb').read()
+    rc, out = run([])
+    rec('a kept copy that was changed by hand is not written over by the export it was made from, which is still in Downloads',
+        rc == 0 and open(kept_f, 'rb').read() == edited and os.listdir(keep_d) == [os.path.basename(kept_f)] and load(STATUS)['total']['opt_rows'] == 1, (rc, out[-200:]))
+
     # ---------------------------------------------------------------- flushed before replaced
     fresh(CACHE)
     write_csv(os.path.join(DL, 'SkipTrace_1.csv'), ROWS)
@@ -1477,10 +1530,11 @@ try:
         os.fsync, os.replace = real_fsync, real_replace
     import re as _re
     rec('both temp files (each under a temp name of this tool\'s own that no other run shares) are flushed to disk before '
-        'either replaces its target, the sidecar first, the cache last',
-        rc == 0 and len(events) == 4 and events[:2] == ['fsync', 'fsync'] and
+        'either replaces its target, the sidecar first, the cache last; the export is kept last, under a temp name renamed into place',
+        rc == 0 and len(events) == 5 and events[:2] == ['fsync', 'fsync'] and
         _re.fullmatch(r'replace dnc_scrub\.json\.resimpli\.[0-9a-f]{8}\.tmp -> dnc_scrub\.json', events[2]) and
-        _re.fullmatch(r'replace skiptrace_results\.json\.resimpli\.[0-9a-f]{8}\.tmp -> skiptrace_results\.json', events[3]), events)
+        _re.fullmatch(r'replace skiptrace_results\.json\.resimpli\.[0-9a-f]{8}\.tmp -> skiptrace_results\.json', events[3]) and
+        _re.fullmatch(r'replace [0-9a-f]{8}_SkipTrace_1\.csv\.resimpli\.[0-9a-f]{8}\.tmp -> [0-9a-f]{8}_SkipTrace_1\.csv', events[4]), events)
 
     # ---------------------------------------------------------------- line endings, a header csv cannot parse, glob characters
     fresh(CACHE)
@@ -1943,12 +1997,13 @@ try:
     write_csv(path, [dict(one[0], opt='Maybe'), dict(one[0], opt=' Maybe ')])
     rc, out2 = run([path])
     rec('the `opt` refusal counts kinds of value, and padding does not make a second kind', rc == 2 and 'has 1 kind of value' in out2, out2[-300:])
-    rec('the `opt` refusal says how to go on: tell Claude, or change the cells in that file itself with a text editor and not Excel, which can change the rows '
-        'it saves (and put Yes when unsure), or download again',
+    rec('the `opt` refusal says how to go on: tell Claude, or change the cells in that file itself with a text editor and not Excel, which can change other '
+        'cells when it saves (and put Yes when unsure), or download again over the file (a run that names no file reads a copy saved beside it too)',
         rc == 2 and 'tell Claude' in out and
-        'in that file itself, in Notepad or another text editor and saved as UTF-8, not in Excel (a spreadsheet can change the rows it saves, and a changed row is refused)' in out and
+        'in that file itself, in Notepad or another text editor and saved as UTF-8, not in Excel (a spreadsheet can change other cells when it saves, and this tool cannot always tell)' in out and
         'save it as CSV UTF-8' not in out and 'put Yes, which opts that person out' in out and
-        'download the export from REsimpli again' in out, out[-500:])
+        'download the export from REsimpli again and put the new file over this one (a run that names no file reads a copy saved beside it too, and this one would keep refusing)' in out and
+        'changed row is refused' not in out, out[-500:])
 
     # ---------------------------------------------------------------- what to do about a torn sidecar or a torn Whitepages file
     fresh(CACHE)
@@ -2990,6 +3045,72 @@ try:
             'Replace it as the line above says (a new download, or the original export if this copy was changed after it was kept), then run again.' in out and
             'Fix what the line above says' not in out and 'If it is something else' not in out and
             snapshot() == before and load(RES) == CACHE, out[-900:])
+
+    # A stray SkipTrace_*.csv in Downloads is skipped, but a file in the folder of kept copies that has lost REsimpli's column names is not "some other CSV": it
+    # is a kept export that took its opt-outs and DNC flags with it (once the original is gone the copy is where they live), and skipping it would drop them
+    # without a word and exit 0. It is refused like any export that cannot be read: nothing is written, deleting it is said to forget its opt-outs, and it is
+    # replaced by a new download, with the way out of a repeat.
+    KEPT_LOST = ("abcd1234_SkipTrace_lost.csv is in the folder of export copies this tool keeps, and its header line does not have REsimpli's column names "
+                 "(was it edited by hand, or was another file put over it?)")
+    lost_file = os.path.join(kept, 'abcd1234_SkipTrace_lost.csv')
+    pc3 = os.path.join(TMP, 'named_l.csv')
+    lost_cases = (('its header line deleted', lambda p: write_raw(p, ''.join(ln + '\r\n' for ln in sgood[1:4]))),
+                  ('another file put over it', lambda p: write_csv(p, [{'a': '1'}], header=['a'])),
+                  ('emptied', lambda p: write_raw(p, '')))
+    for label, writer in lost_cases:
+        for how in ('a run that names another file', 'a run that names no file', 'a run that names the copy itself'):
+            fresh(CACHE)
+            os.makedirs(kept)
+            writer(lost_file)
+            write_csv(pc3, [row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[M(201)])])
+            if how == 'a run that names no file':
+                write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+            before = snapshot()
+            rc, out = run([pc3] if how == 'a run that names another file' else [lost_file] if how == 'a run that names the copy itself' else [])
+            rec('a kept copy with %s is refused, not skipped, in %s: it names the file, says why, that deleting it forgets its opt-outs, and to replace it; nothing is written'
+                % (label, how),
+                rc == 2 and 'REFUSED: ' + KEPT_LOST in out and 'SKIPPED' not in out and REDL in out and STUCK_ in out and out.count(STUCK_) == 1 and
+                'That file is in %s, where this tool keeps a copy of every export it has read' % kept in out and 'Deleting it forgets them' in out and
+                'Replace it as the line above says (a new download, or the original export if this copy was changed after it was kept), then run again.' in out and
+                'Fix what the line above says' not in out and 'is not a REsimpli skip-trace export' not in out and
+                'TOTAL' not in out and snapshot() == before and load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-900:])
+    fresh({})
+    os.makedirs(kept)
+    write_csv(lost_file, one)                                       # the way out the refusal names: a whole export put over it
+    write_csv(pc3, [row('Bo', 'Sample', '200 Nw 20th Ave', '33100', g1=[M(201)])])
+    rc, out = run([pc3])
+    rec('...and putting a whole export over it lets the next run through, with that copy read', rc == 0 and 'from 2 exports (2 files found)' in out and
+        nums(load(RES), 1) == ['3055550101'] and nums(load(RES), 2) == ['3055550201'], out[-300:])
+    fresh(CACHE)
+    write_csv(os.path.join(DL, 'SkipTrace_junk.csv'), [{'a': '1'}], header=['a'])
+    write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+    os.makedirs(kept)
+    write_csv(os.path.join(kept, 'abcd1234_SkipTrace_ok.csv'), one)
+    rc, out = run([])
+    rec('...while a stray in Downloads is still skipped by name when the kept folder holds a good copy', rc == 0 and 'SKIPPED: SkipTrace_junk.csv is not a REsimpli skip-trace export' in out and
+        'REFUSED' not in out and load(STATUS)['skipped_files'] == ['SkipTrace_junk.csv'], out[-300:])
+    # a skipped stray is not a read export: when a stray in Downloads is looked at first, an identical file in the kept folder is still refused, not dropped as its twin
+    late_df = os.path.join(TMP, 'zz', 'DEALFLOW')                    # sorts after the home folder, so Downloads comes first in the order files are looked at
+    late_kept = os.path.join(late_df, 'imports', 'resimpli')
+    real_dfdir3, _P.DEALFLOW_DIR = _P.DEALFLOW_DIR, late_df
+    try:
+        fresh(CACHE)
+        os.makedirs(late_kept)
+        write_csv(os.path.join(DL, 'SkipTrace_junk.csv'), [{'a': '1'}], header=['a'])
+        write_csv(os.path.join(late_kept, 'abcd1234_SkipTrace_junk.csv'), [{'a': '1'}], header=['a'])
+        write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+        order = [os.path.basename(f) for f in RS.discover(late_kept)]
+        rc, out = run([])
+    finally:
+        _P.DEALFLOW_DIR = real_dfdir3
+        shutil.rmtree(os.path.join(TMP, 'zz'), ignore_errors=True)
+    rec('...and a stray skipped in Downloads does not stand in for an identical file in the kept folder: that one is refused (Downloads came first)',
+        order.index('SkipTrace_junk.csv') < order.index('abcd1234_SkipTrace_junk.csv') and rc == 2 and 'SKIPPED: SkipTrace_junk.csv is not a REsimpli' in out and
+        'REFUSED: abcd1234_SkipTrace_junk.csv is in the folder of export copies this tool keeps' in out and load(RES) == CACHE, (order, out[-400:]))
+    rec('in_kept_folder: a file directly in the kept folder and nothing else (not a folder beside it, below it, or the folder itself)',
+        RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept) and not RS.in_kept_folder(os.path.join(DL, 'x.csv'), kept) and
+        not RS.in_kept_folder(os.path.join(kept, 'sub', 'x.csv'), kept) and not RS.in_kept_folder(os.path.join(os.path.dirname(kept), 'x.csv'), kept) and
+        not RS.in_kept_folder(kept, kept))
     fresh(CACHE)
     write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 5)
     cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
