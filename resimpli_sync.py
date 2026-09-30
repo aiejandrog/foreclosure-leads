@@ -139,7 +139,8 @@ download lacks the column), a file that cannot be opened, and a dnc_scrub.json t
 opened. Found files are copied into
 DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written, each
 under a temp name and renamed into place, so a copy that fails part-way leaves no half file under the
-kept name; the originals stay put.
+kept name; the originals stay put. The kept name always ends in .csv (a file named on the command line
+as .txt is kept as .txt.csv), because only .csv files in that folder are read again.
 
 OUTPUT
 Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts (per file: what that file
@@ -231,11 +232,21 @@ KNOWN LIMITS (reported here, not fixed)
     not the people, so a machine set up from a transfer holds only the exports it has until the earlier
     ones are copied there. opt_people_held says how many people the hold was built from. The NOTE about
     unconfirmed numbers fires only when the cache holds numbers those earlier exports attached.
+  * A kept copy is read as it is now, not compared with what was kept. One that still has REsimpli's
+    header line but has lost rows or `opt` values (a line deleted in a text editor, a newer download put
+    over it as a refusal advises, a copy cut down to its header) reads without a word, and the hold it
+    carried is gone from then on: the person can come back clean under another property. The first eight
+    characters of a kept copy's name are those of its sha256 when it was kept, so a person can tell that it
+    has changed (they no longer match); this tool does not.
   * A run that is killed between writing its temp files and replacing the cache or the sidecar leaves
     <file>.resimpli.<random>.tmp behind. They are gitignored and no later run removes them: delete them
     by hand. A kept copy that was being written when the run was killed leaves the same kind of file in the
-    imports folder (nothing reads it: only .csv files there are kept copies). Two runs at the same time are
-    caught only by the changed-file check, which can miss two
+    imports folder (nothing reads it: only .csv files there are kept copies). Unlike the cache and the
+    sidecar, a kept copy is renamed into place without being flushed to disk first, so a power cut just
+    after a run can leave it empty or short: one that no longer reads as an export is refused on the next
+    run (download it again and put it over the copy), but one cut exactly at the end of a line would read as
+    a whole, shorter export. What the run added from it is already in the cache and the sidecar. Two runs
+    at the same time are caught only by the changed-file check, which can miss two
     that finish together (the later replace wins and both exit 0); a lock file would close that.
   * The bake appends a lead's Whitepages numbers with phdnc False and applies dnc_scrub.json to cached
     skip-trace phones only, so a number REsimpli flags that Whitepages also lists on a lead whose entry
@@ -293,8 +304,8 @@ OWNER_FULL = ('fullName', 'fullName2')       # the same owners' whole names: nev
 # the Jr / Sr, trust and company words taken out, everything after an '&' dropped, or two people welded into one
 OWNER_FIELDS = ('owners', 'owner', 'Owner')
 DEAD_FLAGS = ('ownerMismatch', 'lpDismissed', 'lpClosed')
-# What a refusal says when the fault is in the file's shape, which no edit by hand can mend without a person losing their
-# opt-out. Both halves go together: the first stops a new download saved beside the old file (a run that names no file reads
+# What a refusal says when the fault is in the file's shape, which no edit by hand can be trusted to mend without a person
+# losing their opt-out. Both halves go together: the first stops a new download saved beside the old file (a run that names no file reads
 # both, and the old one keeps refusing), the second is the way out when the new download is refused the same way, so the
 # advice never ends in a loop.
 REDOWNLOAD = ('Download the export from REsimpli again and put the new file over this one (a run that names no file reads '
@@ -346,10 +357,10 @@ class SyncError(Exception):
     after it does not tell the operator to move or replace the file. 'shape' when the file does not
     read as a whole REsimpli export (not UTF-8 text, a header that is not comma-separated columns, a
     quote csv cannot parse, a row with the wrong number of cells, a file in the folder of kept copies
-    that no longer has REsimpli's column names): there is no fix by hand that keeps
-    every person, and deleting the line the refusal names drops that person's opt-out and flags, so
-    the refusal says to download the export again (and what to do if that is refused too) and the
-    note says to replace the file."""
+    that no longer has REsimpli's column names): a fix by hand is not one this tool can check (deleting
+    the line the refusal names drops that person's opt-out and flags, and a header line put back by hand
+    is a guess), so the refusal says to download the export again (and what to do if that is refused
+    too) and the note says to replace the file."""
     def __init__(self, msg, skippable=False, kind=''):
         super().__init__(msg)
         self.skippable = skippable
@@ -1144,8 +1155,18 @@ def read_export(path):
 
 
 def in_kept_folder(path, import_dir):
-    """Is `path` in the folder where this tool keeps a copy of every export it has read?"""
-    return os.path.dirname(os.path.abspath(path)) == os.path.abspath(import_dir)
+    """Is `path` in the folder where this tool keeps a copy of every export it has read? Case is folded where the
+    disk folds it (Windows): a path typed by hand in other capitals is the same folder."""
+    return os.path.normcase(os.path.dirname(os.path.abspath(path))) == os.path.normcase(os.path.abspath(import_dir))
+
+
+def kept_name(h, path):
+    """The name a copy of the export at `path` is kept under: the first eight characters of its hash, then its own
+    name. Every later run reads the .csv files in the kept folder and nothing else, so a name that does not end in
+    exactly .csv (a file named on the command line as .txt, or .CSV where the disk tells capitals apart) gets one:
+    a copy under any other name would hold an opt-out that no later run reads."""
+    name = os.path.basename(path)
+    return '%s_%s%s' % (h[:8], name, '' if name.endswith('.csv') else '.csv')
 
 
 def refusal_note(err, path, named, import_dir):
@@ -1286,9 +1307,10 @@ def write_tmp(path, obj):
 
 def keep_copy(src, dst):
     """Copy an export into the kept folder under a temp name and rename it into place, so a copy that fails
-    part-way (the disk fills, the run is interrupted) leaves nothing under the kept name: every later run reads
-    every .csv there, and one cut short would either refuse or, cut at the end of a line, read as a whole
-    export with the rows after the cut missing. The temp name does not end in .csv, so nothing reads it."""
+    part-way (the disk fills, the run is interrupted or killed) leaves nothing under the kept name: every later
+    run reads every .csv there, and one cut short would either refuse or, cut at the end of a line, read as a
+    whole export with the rows after the cut missing. The temp name does not end in .csv, so nothing reads it.
+    It is not flushed to disk first, so a power cut is not covered; see KNOWN LIMITS."""
     tmp = '%s.resimpli.%s.tmp' % (dst, os.urandom(4).hex())
     try:
         shutil.copy2(src, tmp)
@@ -1541,7 +1563,7 @@ def main(argv=None):
         for f, h, _ in exports:
             if in_kept_folder(f, import_dir):
                 continue                    # already the imports copy
-            dst = os.path.join(import_dir, '%s_%s' % (h[:8], os.path.basename(f)))
+            dst = os.path.join(import_dir, kept_name(h, f))
             if not os.path.exists(dst):
                 keep_copy(f, dst)
         with open(os.path.join(P.DEALFLOW_DIR, 'resimpli_sync_status.json'), 'w', encoding='utf-8') as fh:

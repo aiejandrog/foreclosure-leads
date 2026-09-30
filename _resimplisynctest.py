@@ -1505,6 +1505,26 @@ try:
         want_copy = '%s_SkipTrace_1.csv' % RS.sha256(src_1)[:8]
         rec('...and the next run keeps a whole copy under the kept name (%s)' % how,
             rc == 0 and os.listdir(keep_d) == [want_copy] and open(os.path.join(keep_d, want_copy), 'rb').read() == open(src_1, 'rb').read(), (rc, os.listdir(keep_d)))
+    # an interrupt right after the rename: the copy is whole, there is no temp file left to remove, and the interrupt is not swallowed
+    fresh(CACHE)
+    write_csv(src_1, ROWS)
+    real_replace_k = os.replace
+    def replace_then_interrupt(a, b, *x, **k):
+        real_replace_k(a, b, *x, **k)
+        if os.sep + 'imports' + os.sep in str(b):
+            raise KeyboardInterrupt
+    os.replace = replace_then_interrupt
+    interrupted = False
+    try:
+        run([])
+    except KeyboardInterrupt:
+        interrupted = True
+    finally:
+        os.replace = real_replace_k
+    want_copy = '%s_SkipTrace_1.csv' % RS.sha256(src_1)[:8]
+    rec('an interrupt right after the export copy is renamed into place leaves the whole copy and no temp file, and is not swallowed',
+        interrupted and os.listdir(keep_d) == [want_copy] and open(os.path.join(keep_d, want_copy), 'rb').read() == open(src_1, 'rb').read() and not left(),
+        (interrupted, os.listdir(keep_d)))
     # a kept copy that was changed by hand (the `opt` refusal says to change the cells in that copy itself) is not written over by the export it came from,
     # which is still in Downloads: the copy step only makes a copy that is not there yet
     fresh(CACHE)
@@ -1516,6 +1536,23 @@ try:
     rc, out = run([])
     rec('a kept copy that was changed by hand is not written over by the export it was made from, which is still in Downloads',
         rc == 0 and open(kept_f, 'rb').read() == edited and os.listdir(keep_d) == [os.path.basename(kept_f)] and load(STATUS)['total']['opt_rows'] == 1, (rc, out[-200:]))
+    # Every later run reads the .csv files in the kept folder and nothing else. An export named on the command line without that ending (a .txt, a .CSV
+    # where the disk tells capitals apart, no ending at all) must not be kept under its own name: nothing would ever read the copy, the person it opted out
+    # would come back clean under another export once the original is gone, and the run would say nothing.
+    for nm in ('SkipTrace_ana.txt', 'SkipTrace_ana.CSV', 'SkipTrace_ana'):
+        fresh(CACHE)
+        named_x = os.path.join(TMP, nm)
+        write_csv(named_x, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)], opt='Yes')])
+        rc, out = run([named_x])
+        want_x = '%s_%s.csv' % (RS.sha256(named_x)[:8], nm)
+        os.remove(named_x)
+        kept_x = (rc, sorted(os.listdir(keep_d)) if os.path.isdir(keep_d) else None)
+        write_csv(os.path.join(DL, 'SkipTrace_new.csv'), [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(202)])])
+        rc2, out2 = run([])
+        rec('an export named as %s is kept under a name that ends in .csv, so with the original gone the next run still holds the person it opted out '
+            'and flags her new number instead of adding it' % nm,
+            kept_x == (0, [want_x]) and rc2 == 0 and 'opt-out hold: 1 people, from 2 exports' in out2 and '3055550202' in (load(SIDE) or {}) and
+            nums(load(RES), 1) == [], (kept_x, want_x, out2[-300:]))
 
     # ---------------------------------------------------------------- flushed before replaced
     fresh(CACHE)
@@ -3087,8 +3124,9 @@ try:
     os.makedirs(kept)
     write_csv(os.path.join(kept, 'abcd1234_SkipTrace_ok.csv'), one)
     rc, out = run([])
-    rec('...while a stray in Downloads is still skipped by name when the kept folder holds a good copy', rc == 0 and 'SKIPPED: SkipTrace_junk.csv is not a REsimpli skip-trace export' in out and
-        'REFUSED' not in out and load(STATUS)['skipped_files'] == ['SkipTrace_junk.csv'], out[-300:])
+    rec('...while a stray in Downloads is still skipped by name when the kept folder holds a good copy, and a stray that was looked at is not also reported as an export that was not read',
+        rc == 0 and 'SKIPPED: SkipTrace_junk.csv is not a REsimpli skip-trace export' in out and
+        'REFUSED' not in out and load(STATUS)['skipped_files'] == ['SkipTrace_junk.csv'] and load(STATUS)['unread_files'] == 0 and 'other SkipTrace_' not in out, out[-300:])
     # a skipped stray is not a read export: when a stray in Downloads is looked at first, an identical file in the kept folder is still refused, not dropped as its twin
     late_df = os.path.join(TMP, 'zz', 'DEALFLOW')                    # sorts after the home folder, so Downloads comes first in the order files are looked at
     late_kept = os.path.join(late_df, 'imports', 'resimpli')
@@ -3111,6 +3149,40 @@ try:
         RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept) and not RS.in_kept_folder(os.path.join(DL, 'x.csv'), kept) and
         not RS.in_kept_folder(os.path.join(kept, 'sub', 'x.csv'), kept) and not RS.in_kept_folder(os.path.join(os.path.dirname(kept), 'x.csv'), kept) and
         not RS.in_kept_folder(kept, kept))
+    # a path typed by hand in other capitals is the same folder where the disk folds case (Windows), whichever side is spelled that way; where it does not
+    # (this test may run on a disk that does not), it stays a different folder
+    real_nc = os.path.normcase
+    os.path.normcase = lambda p: str(p).lower()                     # a disk that folds case
+    try:
+        folded = (RS.in_kept_folder(os.path.join(kept.upper(), 'x.csv'), kept) and RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept.upper()) and
+                  not RS.in_kept_folder(os.path.join(DL, 'x.csv'), kept) and not RS.in_kept_folder(os.path.join(kept.upper(), 'sub', 'x.csv'), kept))
+    finally:
+        os.path.normcase = real_nc
+    rec('in_kept_folder folds case where the disk does, whichever side is typed in other capitals, and no further than that',
+        folded and RS.in_kept_folder(os.path.join(kept.upper(), 'x.csv'), kept) == (real_nc(kept.upper()) == real_nc(kept)) and
+        RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept.upper()) == (real_nc(kept.upper()) == real_nc(kept)))
+    rec('in_kept_folder: a path typed relative to the folder the tool is run from is judged by where it points, and a separator at the end of either side does not matter',
+        RS.in_kept_folder(os.path.relpath(os.path.join(kept, 'x.csv')), kept) and not RS.in_kept_folder(os.path.relpath(os.path.join(DL, 'x.csv')), kept) and
+        not RS.in_kept_folder(os.path.relpath(os.path.join(kept, 'sub', 'x.csv')), kept) and
+        RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept + os.sep) and RS.in_kept_folder(os.path.join(kept + os.sep, 'x.csv'), kept))
+    import fnmatch as _fn
+    h64 = 'abcd1234' + 'f' * 56
+    names = {'SkipTrace_1.csv': 'abcd1234_SkipTrace_1.csv', 'a.txt': 'abcd1234_a.txt.csv', 'A.CSV': 'abcd1234_A.CSV.csv', 'noext': 'abcd1234_noext.csv',
+             'x.csv.tmp': 'abcd1234_x.csv.tmp.csv', 'y.csv.csv': 'abcd1234_y.csv.csv', '.csv': 'abcd1234_.csv', 'xcsv': 'abcd1234_xcsv.csv'}
+    rec('kept_name: the first eight characters of the hash, then the export\'s own name, and .csv only when the name does not end in exactly .csv; '
+        'the folder it came from does not matter; every result is a name the .csv glob finds',
+        all(RS.kept_name(h64, os.path.join(DL, n)) == want and RS.kept_name(h64, n) == want and _fn.fnmatchcase(want, '*.csv') for n, want in names.items()) and
+        RS.kept_name(h64, os.path.join(TMP, 'sub', 'SkipTrace_1.csv')) == 'abcd1234_SkipTrace_1.csv' and RS.kept_name('0' * 64, 'q.csv') == '00000000_q.csv',
+        {n: RS.kept_name(h64, n) for n in names})
+    # the limit KNOWN LIMITS states, pinned so the words are checked against what the tool does: a kept copy is read as it is now, not compared with what was
+    # kept. One cut down to its header line still reads, with no refusal and no note, and the hold it carried is gone from then on
+    fresh(CACHE)
+    os.makedirs(kept)
+    write_csv(os.path.join(kept, 'abcd1234_SkipTrace_cut.csv'), [])
+    write_csv(os.path.join(DL, 'SkipTrace_new.csv'), [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(202)])])
+    rc, out = run([])
+    rec('(a stated limit) a kept copy cut down to its header line still reads: no refusal, no skip, and the hold it carried is gone',
+        rc == 0 and 'REFUSED' not in out and 'SKIPPED' not in out and 'opt-out hold: 0 people, from 2 exports' in out and nums(load(RES), 1) == ['3055550202'], out[-300:])
     fresh(CACHE)
     write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 5)
     cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
