@@ -925,16 +925,20 @@ try:
 
     # an export that is one but cannot be read in full is NOT skipped: its DNC flags would be missing while
     # the other exports merge their numbers as clean
-    def refused_dir(name, files, expect, found_note=True):
+    def refused_dir(name, files, expect, found_note=True, shape=False):
         """found_note: the refusal carries the note for a file found by looking (it is a REsimpli export: do not move it, fix it or put
-        the original back; something else: rename it). Not for an `opt` refusal, whose own text says to fix the cells in that file."""
+        the original back; something else: rename it). Not for an `opt` refusal, whose own text says to fix the cells in that file.
+        shape: the fault is in the file's text or header (not UTF-8), which no edit by hand mends: the note says to replace it as the refusal says,
+        and the refusal carries the download and the way out of a repeat."""
         fresh(CACHE)
         for fname, (rows, hdr, enc) in files.items():
             write_csv(os.path.join(DL, fname), rows, header=hdr, encoding=enc)
         rc, out = run([])
         rec('refused, nothing merged, nothing left behind: ' + name,
             rc == 2 and 'REFUSED' in out and expect in out and ((FOUND_NOTE in out) == found_note) and load(RES) == CACHE
-            and (not found_note or ('Fix what the line above says in that file itself, or put the original export back over it' in out and
+            and (not found_note or ((('Replace it as the line above says, then run again. If it is something else' in out and 'Fix what the line above says' not in out and
+                                      REDL in out and STUCK_ in out and out.count(STUCK_) == 1) if shape else
+                                     'Fix what the line above says in that file itself, or put the original export back over it' in out) and
                                     'Do not delete a line from it' not in out))
             and (found_note or (out.rstrip().splitlines()[-1] == 'That file is in %s.' % DL and 'that file itself' in out and
                                 'download the export from REsimpli again and put the new file over this one' in out)) and not os.path.exists(SIDE) and not os.path.exists(STATUS)
@@ -942,14 +946,14 @@ try:
     clean = row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])
     flags_it = row('José', 'Núñez', '1500 Sw 15th St', '33100', g1=[M(101, 'Mobile', True)])      # the same number, DNC
     refused_dir('a newer export re-saved in Excel (cp1252) lists as DNC the number the older one lists clean',
-                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([flags_it], HDR, 'cp1252')}, 'SkipTrace_b.csv')
+                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([flags_it], HDR, 'cp1252')}, 'SkipTrace_b.csv', shape=True)
     refused_dir('a UTF-16 export next to a good one',
-                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([flags_it], HDR, 'utf-16')}, 'SkipTrace_b.csv')
+                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([flags_it], HDR, 'utf-16')}, 'SkipTrace_b.csv', shape=True)
     refused_dir('an export missing one flag column next to a good one',
                 {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'),
                  'SkipTrace_b.csv': ([flags_it], [h for h in HDR if h != 'Phone_3_IsLitigator'], 'utf-8')}, 'Phone_3_IsLitigator')
     refused_dir('UTF-16 with no byte-order mark next to a good one',
-                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([flags_it], HDR, 'utf-16-le')}, 'SkipTrace_b.csv')
+                {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'), 'SkipTrace_b.csv': ([flags_it], HDR, 'utf-16-le')}, 'SkipTrace_b.csv', shape=True)
     refused_dir('an export with phone columns but no address column next to a good one',
                 {'SkipTrace_a.csv': ([clean], HDR, 'utf-8'),
                  'SkipTrace_b.csv': ([flags_it], [h for h in HDR if h != 'propertyStreetAddress'], 'utf-8')}, 'propertyStreetAddress')
@@ -1705,14 +1709,14 @@ try:
     # a kept copy that cannot be read stops a one-file run too, and the message says where it is
     fresh({})
     os.makedirs(imp_dir)
-    write_csv(os.path.join(imp_dir, 'abcd1234_SkipTrace_bad.csv'), [flags_it], encoding='cp1252')       # 'José Núñez': not UTF-8
+    write_csv(os.path.join(imp_dir, 'abcd1234_SkipTrace_bad.csv'), [flags_it], header=[h for h in HDR if h != 'Phone_3_IsLitigator'])   # a flag column missing: only a hand edit mends it
     rc, out = run([pc])
-    rec('an unreadable kept copy refuses a one-file run and names the folder it is in',
+    rec('an unreadable kept copy (a flag column missing) refuses a one-file run and names the folder it is in',
         rc == 2 and 'abcd1234_SkipTrace_bad.csv' in out and imp_dir in out and 'Deleting it forgets them' in out and
         'put the original export back over it' in out and 'that file itself' in out and 'was changed after it was kept' not in out and
         FOUND_NOTE not in out and load(RES) == {}, out[-500:])
     fresh({})
-    write_csv(os.path.join(DL, 'SkipTrace_bad.csv'), [flags_it], encoding='cp1252')
+    write_csv(os.path.join(DL, 'SkipTrace_bad.csv'), [flags_it], header=[h for h in HDR if h != 'Phone_3_IsLitigator'])
     write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
     rc, out = run([])
     rec('...and a refused file found by discovery says which folder it is in, that a real export must not be moved or deleted (its opt-outs would be '
@@ -2939,6 +2943,53 @@ try:
         'Do not delete a line from it' not in out and
         'Fix what the line above says' not in out and 'that file itself' not in out and 'If it is something else' not in out and
         snapshot() == before and load(RES) == CACHE, out[-900:])
+    # the refusals for a file that is not text this tool can read as a REsimpli export at all (not UTF-8, a header that is not comma-separated columns, a header
+    # line csv cannot parse) forbid the same edits, moves and deletes as the row refusals, so they carry the same way out: download it again over this file, and
+    # when that is refused too change nothing and send Claude the line; and the note points back at that instead of saying the download a second time
+    def write_raw(path, text):
+        with open(path, 'wb') as fh:
+            fh.write(text.encode('utf-8'))
+    header_cases = (
+        ('not UTF-8', 'is not UTF-8 text (was it re-saved in Excel?)',
+         lambda p: write_csv(p, [row('José', 'Núñez', '1 A St', '33100', g1=[M(1)])], encoding='cp1252')),
+        ('a header that is not comma-separated columns', "has REsimpli's column names but its header does not read as comma-separated columns",
+         lambda p: write_raw(p, ';'.join(HDR) + '\r\n' + ';'.join('' for _ in HDR) + '\r\n')),
+        ('a header line csv cannot parse', 'has a header line that cannot be read as CSV',
+         lambda p: write_raw(p, 'x' * 200000 + '\r\n' + 'a\r\n')),
+    )
+    for label, msg, writer in header_cases:
+        fresh(CACHE)
+        writer(os.path.join(DL, 'SkipTrace_hdr.csv'))
+        write_csv(os.path.join(DL, 'SkipTrace_ok.csv'), one)
+        rc, out = run([])
+        rec('a found file that is %s is refused by name, told to be downloaded again and what to do when that is refused too, and told not to be moved; the note '
+            'points back at the refusal and does not say the download a second time' % label,
+            rc == 2 and 'SkipTrace_hdr.csv ' + msg in out and REDL in out and STUCK_ in out and FOUND_NOTE in out and
+            out.count('Download the export from REsimpli again') == 1 and out.count(STUCK_) == 1 and
+            'Replace it as the line above says, then run again. If it is something else' in out and
+            'Fix what the line above says' not in out and 'put the original export back over it' not in out and
+            load(RES) == CACHE and not os.path.exists(SIDE) and not os.path.exists(STATUS), out[-900:])
+        fresh(CACHE)
+        pn = os.path.join(TMP, 'named_hdr.csv')
+        writer(pn)
+        before = snapshot()
+        rc, out = run([pn])
+        rec('...named on the command line it is refused by name with no advice about where it is, and with the same way out (%s)' % label,
+            rc == 2 and 'named_hdr.csv ' + msg in out and REDL in out and STUCK_ in out and out.count(STUCK_) == 1 and
+            FOUND_NOTE not in out and 'That file is in' not in out and snapshot() == before, out[-500:])
+        fresh(CACHE)
+        os.makedirs(kept)
+        writer(os.path.join(kept, 'abcd1234_SkipTrace_hdr.csv'))
+        write_csv(pc2, one)
+        before = snapshot()
+        rc, out = run([pc2])
+        rec('...and a kept copy of that kind is told it is in the kept folder, that deleting it forgets its opt-outs, and to be replaced (a new download, or the '
+            'original export if this copy was changed after it was kept) (%s)' % label,
+            rc == 2 and 'abcd1234_SkipTrace_hdr.csv ' + msg in out and REDL in out and STUCK_ in out and out.count(STUCK_) == 1 and
+            'That file is in %s, where this tool keeps a copy of every export it has read' % kept in out and 'Deleting it forgets them' in out and
+            'Replace it as the line above says (a new download, or the original export if this copy was changed after it was kept), then run again.' in out and
+            'Fix what the line above says' not in out and 'If it is something else' not in out and
+            snapshot() == before and load(RES) == CACHE, out[-900:])
     fresh(CACHE)
     write_csv(os.path.join(DL, 'SkipTrace_extra.csv'), [row('Ann', 'Odd', '6100 Nw 61st St', '33100', g1=[M(6101)])] * 5)
     cut = open(os.path.join(DL, 'SkipTrace_extra.csv'), newline='').read().split('\r\n')
@@ -3040,9 +3091,9 @@ try:
     write_csv(pc_bad, [flags_it], encoding='cp1252')
     fresh({})
     rc, out = run([pc_bad])
-    rec('a named file that is not UTF-8 is refused by name with no advice about where it is or about the kept copies',
+    rec('a named file that is not UTF-8 is refused by name with no advice about where it is or about the kept copies, but with the download and the way out of a repeat',
         rc == 2 and 'named_bad.csv is not UTF-8' in out and FOUND_NOTE not in out and 'keeps a copy' not in out and
-        'another program has it open' not in out, out[-400:])
+        'another program has it open' not in out and REDL in out and STUCK_ in out and out.count(STUCK_) == 1, out[-400:])
     try:
         rel_bad = os.path.relpath(pc_bad)                       # as an operator types it, from the folder they are in
     except ValueError:

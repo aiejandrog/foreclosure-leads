@@ -129,9 +129,10 @@ inside that row's last cell; a comma at the end of a row cannot be told from tha
 that saved the file again may leave rows longer or shorter: use the file as REsimpli downloaded it). The
 refusal says not to delete the line it names: the person on it would lose their opt-out and flags
 without a word, and a file cut short is missing the rows after the cut as well; download the export
-again, and if the new file is refused the same way, change nothing and send Claude the REFUSED line (the
-refusals that a hand edit cannot mend name that way out too: the missing-column one, a file that cannot
-be opened, and a dnc_scrub.json that cannot be read or opened). Found files are copied into
+again, and if the new file is refused the same way, change nothing and send Claude the REFUSED line. The
+refusals for a file that is not UTF-8 text and for a header that does not read as columns say the same,
+and so do the ones a hand edit cannot mend: the missing-column one, a file that cannot be opened, and a
+dnc_scrub.json that cannot be read or opened. Found files are copied into
 DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written; the
 originals stay put.
 
@@ -334,10 +335,12 @@ class SyncError(Exception):
     kind: 'io' when the file could not be opened or read at all (open in Excel, gone): the refusal
     then says to close it, not that its content is wrong. 'opt' when its `opt` column holds a word
     this tool cannot read: the refusal itself says how to fix those cells in that file, so the note
-    after it does not tell the operator to move or replace the file. 'shape' when its rows do not
-    read as rows (a quote csv cannot parse, a row with the wrong number of cells): there is no fix
-    by hand that keeps every person, and deleting the line the refusal names drops that person's
-    opt-out and flags, so the note says to download the export again."""
+    after it does not tell the operator to move or replace the file. 'shape' when the file does not
+    read as a whole REsimpli export (not UTF-8 text, a header that is not comma-separated columns, a
+    quote csv cannot parse, a row with the wrong number of cells): there is no fix by hand that keeps
+    every person, and deleting the line the refusal names drops that person's opt-out and flags, so
+    the refusal says to download the export again (and what to do if that is refused too) and the
+    note says to replace the file."""
     def __init__(self, msg, skippable=False, kind=''):
         super().__init__(msg)
         self.skippable = skippable
@@ -1037,7 +1040,8 @@ def read_export(path):
             sniff = (raw + fb.read(1 << 16)).lower()
     except OSError as e:
         raise SyncError('%s could not be read (%s)' % (name, type(e).__name__), kind='io')
-    not_utf8 = SyncError('%s is not UTF-8 text (was it re-saved in Excel? download it from REsimpli again)' % name)
+    not_utf8 = SyncError('%s is not UTF-8 text (was it re-saved in Excel?). %s. %s' % (name, REDOWNLOAD, STUCK),
+                         kind='shape')
     head = re.split(rb'[\r\n]', raw, maxsplit=1)[0]        # the header line, whatever the line endings
     try:
         first = head.decode('utf-8-sig')
@@ -1048,7 +1052,8 @@ def read_export(path):
     try:
         fields = next(csv.reader(io.StringIO(first)), [])
     except csv.Error as e:
-        raise SyncError('%s has a header line that cannot be read as CSV (%s)' % (name, e))
+        raise SyncError('%s has a header line that cannot be read as CSV (%s). %s. %s' % (name, e, REDOWNLOAD, STUCK),
+                        kind='shape')
     slots = [int(m.group(1)) for c in fields for m in [re.fullmatch(r'Phone_(\d+)', c)] if m]
     if not slots and 'propertyStreetAddress' not in fields:
         if b'propertystreetaddress' in sniff or b'phone_1' in sniff:
@@ -1056,8 +1061,8 @@ def read_export(path):
             # ';' or tab as the delimiter, or with a 'sep=,' line above the header. Its DNC flags would
             # be missing from the merge, so it is not "some other CSV".
             raise SyncError('%s has REsimpli\'s column names but its header does not read as comma-separated '
-                            'columns (re-saved in Excel with another delimiter, or a line above the header? '
-                            'download it from REsimpli again)' % name)
+                            'columns (re-saved in Excel with another delimiter, or a line above the header?). %s. %s'
+                            % (name, REDOWNLOAD, STUCK), kind='shape')
         low = [c.strip().lower() for c in fields]
         if not any(c in OURS or re.match(r'phone[ _-]?[0-9]', c) for c in low):
             raise SyncError('%s is not a REsimpli skip-trace export' % name, skippable=True)
