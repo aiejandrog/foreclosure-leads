@@ -1553,6 +1553,38 @@ try:
             'and flags her new number instead of adding it' % nm,
             kept_x == (0, [want_x]) and rc2 == 0 and 'opt-out hold: 1 people, from 2 exports' in out2 and '3055550202' in (load(SIDE) or {}) and
             nums(load(RES), 1) == [], (kept_x, want_x, out2[-300:]))
+    # ...and a copy kept under the longer name is still a copy that is not written over: the copy step looks for that name, not for the export's own
+    fresh(CACHE)
+    named_t = os.path.join(TMP, 'SkipTrace_ana.txt')
+    write_csv(named_t, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)])])
+    rc, out = run([named_t])
+    kept_t = os.path.join(keep_d, '%s_SkipTrace_ana.txt.csv' % RS.sha256(named_t)[:8])
+    made_t = os.path.exists(kept_t)
+    write_csv(kept_t, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)], opt='Yes')])          # the operator's edit: Ana is opted out
+    edited_t = open(kept_t, 'rb').read()
+    rc, out = run([named_t])
+    rec('a kept copy of an export named as .txt that was changed by hand is not written over by the .txt it was made from, which is still where it was named',
+        made_t and rc == 0 and open(kept_t, 'rb').read() == edited_t and os.listdir(keep_d) == [os.path.basename(kept_t)] and
+        load(STATUS)['total']['opt_rows'] == 1, (made_t, rc, os.listdir(keep_d), out[-200:]))
+    os.remove(named_t)
+    # A file already in the kept folder under a name that does not end in .csv (put there by hand, or kept under its own name by an earlier version of this
+    # tool) is read only when it is named, and it is not "already the copy": it gets a .csv copy beside it like any other export, so the next run still holds
+    # the person it opted out once the file is gone.
+    for nm in ('SkipTrace_ana.txt', 'SkipTrace_ana.CSV', 'SkipTrace_anacsv'):
+        fresh(CACHE)
+        os.makedirs(keep_d)
+        legacy = os.path.join(keep_d, nm)
+        write_csv(legacy, [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(101)], opt='Yes')])
+        rc, out = run([legacy])
+        want_l = '%s_%s.csv' % (RS.sha256(legacy)[:8], nm)
+        both_l = (rc, sorted(os.listdir(keep_d)))
+        os.remove(legacy)
+        write_csv(os.path.join(DL, 'SkipTrace_new.csv'), [row('Ana', 'Tester', '100 Sw 10th Ct', '33100', g1=[M(202)])])
+        rc2, out2 = run([])
+        rec('a file named %s that is already in the kept folder gets a .csv copy beside it, so with the file gone the next run still holds the person it '
+            'opted out and flags her new number instead of adding it' % nm,
+            both_l == (0, sorted([nm, want_l])) and rc2 == 0 and 'opt-out hold: 1 people, from 2 exports' in out2 and '3055550202' in (load(SIDE) or {}) and
+            nums(load(RES), 1) == [], (both_l, want_l, out2[-300:]))
 
     # ---------------------------------------------------------------- flushed before replaced
     fresh(CACHE)
@@ -3161,10 +3193,16 @@ try:
     rec('in_kept_folder folds case where the disk does, whichever side is typed in other capitals, and no further than that',
         folded and RS.in_kept_folder(os.path.join(kept.upper(), 'x.csv'), kept) == (real_nc(kept.upper()) == real_nc(kept)) and
         RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept.upper()) == (real_nc(kept.upper()) == real_nc(kept)))
+    cwd_k = os.getcwd()
+    os.chdir(TMP)                                                   # every path here is under TMP, so a path relative to it never crosses a drive
+    try:
+        rel_k = lambda p: os.path.relpath(p, TMP)
+        rel_ok = (RS.in_kept_folder(rel_k(os.path.join(kept, 'x.csv')), kept) and not RS.in_kept_folder(rel_k(os.path.join(DL, 'x.csv')), kept) and
+                  not RS.in_kept_folder(rel_k(os.path.join(kept, 'sub', 'x.csv')), kept) and RS.in_kept_folder(os.path.join(kept, 'x.csv'), rel_k(kept)))
+    finally:
+        os.chdir(cwd_k)
     rec('in_kept_folder: a path typed relative to the folder the tool is run from is judged by where it points, and a separator at the end of either side does not matter',
-        RS.in_kept_folder(os.path.relpath(os.path.join(kept, 'x.csv')), kept) and not RS.in_kept_folder(os.path.relpath(os.path.join(DL, 'x.csv')), kept) and
-        not RS.in_kept_folder(os.path.relpath(os.path.join(kept, 'sub', 'x.csv')), kept) and
-        RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept + os.sep) and RS.in_kept_folder(os.path.join(kept + os.sep, 'x.csv'), kept))
+        rel_ok and RS.in_kept_folder(os.path.join(kept, 'x.csv'), kept + os.sep) and RS.in_kept_folder(os.path.join(kept + os.sep, 'x.csv'), kept))
     import fnmatch as _fn
     h64 = 'abcd1234' + 'f' * 56
     names = {'SkipTrace_1.csv': 'abcd1234_SkipTrace_1.csv', 'a.txt': 'abcd1234_a.txt.csv', 'A.CSV': 'abcd1234_A.CSV.csv', 'noext': 'abcd1234_noext.csv',

@@ -140,7 +140,8 @@ opened. Found files are copied into
 DEALFLOW_DIR/imports/resimpli/ (outside the repo and outside OneDrive) after the data is written, each
 under a temp name and renamed into place, so a copy that fails part-way leaves no half file under the
 kept name; the originals stay put. The kept name always ends in .csv (a file named on the command line
-as .txt is kept as .txt.csv), because only .csv files in that folder are read again.
+as .txt is kept as .txt.csv, one already in that folder too), because only .csv files in that folder are
+read again.
 
 OUTPUT
 Counts on stdout. DEALFLOW_DIR/resimpli_sync_status.json holds the same counts (per file: what that file
@@ -245,7 +246,9 @@ KNOWN LIMITS (reported here, not fixed)
     sidecar, a kept copy is renamed into place without being flushed to disk first, so a power cut just
     after a run can leave it empty or short: one that no longer reads as an export is refused on the next
     run (download it again and put it over the copy), but one cut exactly at the end of a line would read as
-    a whole, shorter export. What the run added from it is already in the cache and the sidecar. Two runs
+    a whole, shorter export. The numbers the run added from it, and their flags, are already in the cache
+    and the sidecar; the hold on a person whose row was past the cut lasts only while the original export
+    is still in the folder it was downloaded to, because later runs read the kept copies. Two runs
     at the same time are caught only by the changed-file check, which can miss two
     that finish together (the later replace wins and both exit 0); a lock file would close that.
   * The bake appends a lead's Whitepages numbers with phdnc False and applies dnc_scrub.json to cached
@@ -1561,8 +1564,8 @@ def main(argv=None):
     try:
         os.makedirs(import_dir, exist_ok=True)
         for f, h, _ in exports:
-            if in_kept_folder(f, import_dir):
-                continue                    # already the imports copy
+            if in_kept_folder(f, import_dir) and os.path.basename(f).endswith('.csv'):
+                continue                    # already the imports copy, under a name every later run reads
             dst = os.path.join(import_dir, kept_name(h, f))
             if not os.path.exists(dst):
                 keep_copy(f, dst)
