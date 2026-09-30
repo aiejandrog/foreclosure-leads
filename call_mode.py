@@ -735,6 +735,17 @@ REALTOR_EN = ("Honestly, selling it is a smart move, and you know that market, s
 REALTOR_ES = ("La verdad, venderla es una buena jugada, y usted conoce ese mercado, así que no le voy a tirar un "
               "número. Una pregunta, eso sí... cuando dice venderla pronto, ¿quiere decir bajo contrato, o ya "
               "cerrada?")
+# "WE ALREADY GOT IT REINSTATED" (2026-09-30 field call: the owner said the loan was reinstated, the
+# script had no button for it, and the call went down a rabbit hole into "not interested"). Be glad
+# with them, never probe the deal or doubt it, and ask the ONE question that is ours to ask: a
+# reinstated loan can leave the court case open until the plaintiff dismisses it, which is why the
+# case is still on our list. No sale number, no offer, no "we can stop it". Then let them go.
+REINSTATED_EN = ("Oh good, honestly that's the best way this can end, and a lot of people never get there. "
+                 "I won't keep you. Just so I don't bother you again for nothing... has the court case "
+                 "actually been closed out, or is it still showing open?")
+REINSTATED_ES = ("Ah, qué bueno. La verdad es la mejor forma en que esto puede terminar, y mucha gente nunca "
+                 "lo logra. No le quito tiempo. Nada más para no molestarlo otra vez sin razón... ¿el caso en "
+                 "la corte ya se cerró, o todavía aparece abierto?")
 
 
 def _beat(i):
@@ -767,7 +778,7 @@ def _flow():
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
                 ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
-                ['Don\'t call me again', 'end:dnc']],
+                ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'frame'},
         {'id': 'intro30', 'k': 'WHAT DO YOU DO? — one humble line',
          'en': INTRO_30_EN, 'es': INTRO_30_ES,
@@ -800,13 +811,22 @@ def _flow():
          'br': [['"Closed" in a month (tight)', 'obj:13'], ['"Under contract", plenty of time', 'q2'],
                 ["It's handled, don't worry", 'obj:13'], ['Not interested', 'obj:15']],
          'ret': 'q2'},
+        {'id': 'reinstated', 'k': '"WE ALREADY REINSTATED" — be glad, one question',
+         'en': REINSTATED_EN, 'es': REINSTATED_ES,
+         'tone': "Genuinely glad for them. Don't ask how, what it cost, or who did it, and don't doubt it. "
+                 "No pitch, no number. One question, then you're leaving.",
+         'listen': "A reinstated loan can leave the case open on the docket until the bank dismisses it. That's "
+                   "why they're on your list. If it's closed, thank them and log it. Do not go back into the script.",
+         'br': [['Closed / dismissed, all done', 'end:notint'], ['Still open / not sure', 'frame'],
+                ['Not interested', 'end:notint'], ["Don't call me again", 'end:dnc']],
+         'ret': 'frame'},
         {'id': 'frame', 'k': 'THE FRAME — set it before any question',
          'en': STATUS_FRAME_EN, 'es': STATUS_FRAME_ES,
          'tone': 'Neutral, expert, unhurried. You are setting the table, not pitching.',
          'listen': 'Their "yeah, that\'d help" is the first micro-yes.',
          'br': [['Sure / that\'d help', 'q1'], ['What kind of options? (do NOT present — ask)', 'q1'],
-                ['I\'ve got it handled', 'obj:1'], ['Are you an investor?', 'investor'], ["I'm a realtor / selling it myself", 'realtor'],
-                ['Not interested', 'obj:15']],
+                ['I\'ve got it handled', 'obj:1'], ['We already reinstated', 'reinstated'], ['Are you an investor?', 'investor'],
+                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15']],
          'ret': 'q1'},
         {'id': 'q1', 'k': '1 · ' + q1[0], 'en': q1[2], 'es': q1[3],
          'tone': 'Curious. Open question. ' + q1[1],
@@ -836,7 +856,8 @@ def _flow():
          'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
          'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
          'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
-                ['Bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
+                ['Bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
+                ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
          'ret': 'q5'},
         {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],
          'tone': 'Concerned, low, slow. Assumed statement + ONE tie-down, voice DOWN. Then SILENCE — do not rescue it.',
@@ -6162,6 +6183,13 @@ function _gGo(to){
   else if(to==='ret'){ _g.stack.push(_g.step); _g.step=_g.ret||'greet'; _g.ret=null; }
   else if(to.indexOf('log:')===0){
     var k=to.slice(4), btn=document.querySelector('.oc button[data-oc="'+k+'"]');
+    /* "We already reinstated" is not an outcome of its own (CALL_OUTCOMES is the board's vocabulary
+       and drives cooldown and the no policy). It rides the outcome he logs as a line in n.note, the
+       free-text field, exactly like setCallback's trace. No status, touch, or suppression field. */
+    if(btn && cur && cur.c && _g.stack.indexOf('reinstated')>=0){
+      var rn=notes[cur.c]=notes[cur.c]||{status:'',note:''}, rl=today()+' owner says loan reinstated';
+      rn.note = rn.note ? (rn.note.indexOf(rl)>=0 ? rn.note : (rn.note+'\n'+rl)) : rl;
+    }
     if(btn){ btn.click(); } else { toast('Tap the phone number to start the call first — outcomes log from the call screen.'); }
     return;
   } else {
