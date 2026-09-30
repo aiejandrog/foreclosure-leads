@@ -1424,6 +1424,50 @@ def _quo_latest():
     return out
 
 
+def _call_equity_parts(d):
+    """-> (equity %, recorded-lien dollars subtracted). (None, 0) when the equity is not known.
+
+    `eq` on the board twin is equity_pct from qualify(): (value - judgment AS ENTERED) / value,
+    frozen at scrape time. The card beside it prints the payoff with interest, and the diligence
+    gate holds a lead on known_debt_of() (payoff, else judgment, plus the recorded chain). So the
+    sort, the -25 floor and the "Equity Y%" line use that same debt against the same basis:
+      - judgment not posted (`ju`): qualify() writes 0 there, which read as a KNOWN 0% and sorted
+        above genuinely unknown leads. The debt is unknown, so the equity is unknown: None.
+      - otherwise (basis_of - debt) / basis_of, and never higher than the scraped figure.
+    One difference from the gate: a chain read at orconf 'low' (a common-name match the lien
+    engines themselves say to verify) is left out here. The gate may still hold on it, which is the
+    safe side; ranking a lead down on a mortgage that may be someone else's is not.
+    known_debt_of takes the smallest defensible chain read (max, not sum), so this can still sit
+    above the board's _netEqOf when a lead carries several liens; it is never above `eq`."""
+    if d.get('ju') or d.get('judgment_unknown'):
+        return None, 0
+    eq = d.get('eq')
+    try:
+        eq = float(eq)
+    except (TypeError, ValueError):
+        return None, 0
+    try:
+        import diligence_flags as _DF
+        basis = _DF.basis_of(d)
+        parts = _DF.known_debt_of(d)['parts']
+    except Exception:
+        return eq, 0
+    low = str(d.get('orconf') or '').strip().lower() == 'low'
+    owed = sum(p['usd'] for p in parts if p.get('kind') == 'judgment')
+    chain = 0 if low else sum(p['usd'] for p in parts if p.get('kind') != 'judgment')
+    debt = owed + chain
+    if basis > 0 and debt > 0:
+        net = round((basis - debt) / basis * 100.0, 1)
+        if net < eq:
+            return net, (chain if chain and round((basis - owed) / basis * 100.0, 1) > net else 0)
+    return eq, 0
+
+
+def _call_equity(d):
+    """Equity % for the dial queue, or None when it is not known. See _call_equity_parts."""
+    return _call_equity_parts(d)[0]
+
+
 def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
@@ -1543,11 +1587,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # ($698k judgment / $409k value, sale next day) — a lead no outcome could have salvaged.
         # KNOWN is the load-bearing word: eq=None means NOT CHECKED and always ships (the not-
         # checked-is-not-zero rule). -25 keeps thin-but-arguable deals; override via env.
-        _eqf = d.get('eq')
-        try:
-            _eqf = float(_eqf)
-        except (TypeError, ValueError):
-            _eqf = None
+        _eqf = _call_equity(d)
         if _eqf is not None and _eqf <= float(os.environ.get('CALLMODE_EQ_FLOOR', '-25')):
             continue
         phones, phdnc = (d.get('phones') or []), (d.get('phdnc') or [])
@@ -1620,11 +1660,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
             order = [bk] + [k for k in order if k != bk]
-        eq = d.get('eq')
-        try:
-            eq = float(eq)
-        except (TypeError, ValueError):
-            eq = None
+        eq, _eq_lien = _call_equity_parts(d)
 
         def _n(key):
             """Numeric or None. None means NOT CHECKED and must render as such — never as 0.
@@ -1692,6 +1728,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'v': _n('value'), 'py': _n('payoff'), 'ja': _n('jaccr'), 'jg': _n('judg'),
             'jd': _s('jdate', 10), 'jf': _s('jfloordate', 10), 'arv': _n('arv'), 'an': _n('arvn'),
             'e': eq if (eq is not None and (d.get('value') or 0)) else None,
+            # recorded-lien dollars already taken off `e`, so the card can say so (2026-09-30)
+            'el': (round(_eq_lien) if (_eq_lien and eq is not None and (d.get('value') or 0)) else None),
             # EQUITY VERIFIED (2026-08-27). `e` alone cannot tell a caller whether the number is a
             # FACT or a GUESS, and the sort below ranked a guessed 90% above a traced-and-proven
             # 45% — so sessions opened on the least certain leads on the board. 1 = the recorded
@@ -1835,7 +1873,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # tomorrow leaves no time to reinstate, list, or petition anything. Convertibility is equity
     # to protect TIMES runway to act:
     #   band 0: sale 7-45 days out — a real clock AND real time to work it (the prime window)
-    #   band 1: 46-120 days out, or a fresh LP with no date — pure runway, first-mover ground
+    #   band 1: 46 days out up to max_days (60 by default; later foreclosure sales never reach this
+    #           queue), or an LP row with no date or any later date — pure runway, first-mover ground
     #   band 2: 5-6 days — very tight; worth a dial only when the equity is real
     #   band 3: 0-4 days (or already passed) — too late to convert; surplus-only talk, parked LAST
     # Within a band: KNOWN equity high-to-low first, then sooner sale. .get() not [] — null/empty
@@ -2076,7 +2115,7 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
             'kd': kd or None,
             'ne': _ne or None,
             'st': d.get('st') or '',
-            'e': (lambda v: v if isinstance(v, (int, float)) else None)(d.get('eq')),
+            'e': _call_equity(d),   # the same figure the dial queue ranks on (2026-09-30)
             'ct': (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2] or None),
             'fo': re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
         }
@@ -5137,6 +5176,9 @@ function screenLead(){
     + kv('Equity', r.e==null ? '<span class="nc">not known</span>' : (Math.round(r.e)+'%'+(has(r,'E')?' <span class="nc">gross</span>':'')
          // Say which kind of number this is, on the surface where it gets spoken out loud. A
          // traced chain is the difference between "you have equity" and "you might".
+         // `el`: the equity above already has a recorded lien off it, which "They owe" does not
+         // include. Without this, owe + value on the card do not add up to the percent.
+         + (r.el ? ' <span class="nc">after a $'+Math.round(r.el).toLocaleString()+' recorded lien, indicative</span>' : '')
          + (r.eqv ? ' <span class="ok">VERIFIED</span>' : ' <span class="nc">unverified — chain not traced</span>')))
     + kv('Surviving 1st', r.ss==null ? '<span class="nc">not checked</span>' : (r.ss===0?'none':money(r.ss)), 1)
     + '</div>';
