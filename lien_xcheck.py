@@ -11,6 +11,9 @@ Rows live in DEALFLOW_DIR/xsource_liens.json  {case: {"ts": iso, "rows": [{cat, 
 (never in the repo; no names). `stamp()` adds `xs_conflict` (a list of book/page) to a copy of
 the chain. No cache entry for a case leaves the chain exactly as it was.
 
+Free source (the paid daily records file, laptop only):
+    python lien_xcheck.py --from-daily
+
 Fetch (laptop only, needs CLERK_CDS_AUTHKEY and the registered IP, $0.20 a lookup, paid_reads
 ledger charged first and refunded on a rejection):
     python lien_xcheck.py --fetch --max 10
@@ -135,6 +138,81 @@ def stamp(chain, case, cache):
     return out
 
 
+def rows_from_daily(conn, folio):
+    """Rows for one folio out of the paid daily records file (or_daily.sqlite): free, no API units.
+    Same row shape as parse_cds_xml. Covers recent recordings only (the file keeps ~30 days), which
+    are exactly the mortgages the name search tends to miss."""
+    import or_daily_file as O
+    nf = O.norm_folio(folio)
+    if not nf:
+        return []
+    out, seen = [], set()
+    for r in conn.execute('SELECT * FROM rows WHERE folio_norm = ? AND deleted = 0', (nf,)):
+        cat = O.category_of(r['doc_type'], r['doc_desc'])
+        if cat not in ('mortgage', 'lien', 'judgment', 'release'):
+            continue
+        bp = O.norm_bp(r['book'], r['page'])
+        if not bp or (cat, bp) in seen:
+            continue
+        seen.add((cat, bp))
+        d = r['rec_date'] or ''
+        m = re.match(r'(\d{4})-(\d\d)-(\d\d)', d)
+        d = '%d/%d/%s' % (int(m.group(2)), int(m.group(3)), m.group(1)) if m else d
+        amt = 0
+        try:
+            if O.money_amount(r['intangible']):
+                amt = round(O.money_amount(r['intangible']) / 0.002)
+            elif O.money_amount(r['consideration_1']):
+                amt = round(O.money_amount(r['consideration_1']))
+        except (TypeError, ValueError):
+            pass
+        row = {'cat': cat, 'd': d, 'bp': '/'.join(bp), 'amt': amt, 'src': 'daily'}
+        ob = O.norm_bp(r['orig_book'], r['orig_page'])
+        if ob:
+            row['orig'] = '/'.join(ob)
+        out.append(row)
+    return out
+
+
+def from_daily(data_dir=None):
+    """Merge daily-file rows into the cache for every Miami lead folio. Free. Existing cached rows stay."""
+    import or_daily_file as O
+    data_dir = O.resolve_data_dir(data_dir)
+    dbp = os.path.join(data_dir, 'or_daily.sqlite')
+    if not os.path.exists(dbp):
+        raise SystemExit('no or_daily.sqlite at ' + dbp)
+    if os.path.exists(_cache_path()) and not load_cache() and os.path.getsize(_cache_path()) > 2:
+        raise SystemExit('%s exists but is unreadable; fix or move it first' % CACHE_NAME)
+    cache = load_cache()
+    with open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8') as fh:
+        L = json.load(fh)
+    conn = O.open_db(dbp)
+    n = 0
+    try:
+        for r in L:
+            f, c = str(r.get('Folio') or ''), r.get('Case #')
+            if not re.fullmatch(r'\d{13}', f) or r.get('sale_type') == 'TD' or not c:
+                continue
+            new = rows_from_daily(conn, f)
+            if not new:
+                continue
+            ent = cache.get(c) if isinstance(cache.get(c), dict) else {'rows': []}
+            have = {(x.get('cat'), x.get('bp')) for x in ent.get('rows') or [] if isinstance(x, dict)}
+            add = [x for x in new if (x['cat'], x['bp']) not in have]
+            if add:
+                ent['rows'] = list(ent.get('rows') or []) + add
+                ent.setdefault('ts', datetime.datetime.now().isoformat(timespec='seconds'))
+                cache[c] = ent
+                n += 1
+    finally:
+        conn.close()
+    tmp = _cache_path() + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(cache, fh)
+    os.replace(tmp, _cache_path())
+    print('daily file: %d leads gained second-source rows' % n)
+
+
 def fetch(max_leads, per_call=0.20):
     import urllib.request, urllib.parse, time
     import paid_reads as PR
@@ -193,7 +271,9 @@ def fetch(max_leads, per_call=0.20):
 
 
 if __name__ == '__main__':
-    if '--fetch' in sys.argv:
+    if '--from-daily' in sys.argv:
+        from_daily()
+    elif '--fetch' in sys.argv:
         m = int(sys.argv[sys.argv.index('--max') + 1]) if '--max' in sys.argv else 10
         fetch(m)
     else:

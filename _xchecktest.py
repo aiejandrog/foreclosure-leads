@@ -35,4 +35,16 @@ check('garbage chain/cache never raises', X.stamp({'liens': 3}, 'c', {'c': {'row
 d = {}
 ES.apply(d, X.stamp({'conf': 'ok', 'liens': [], 'coverage': 'x', 'nrec': 5}, 'c', {'c': {'rows': rows}}))
 check('demoted lead shows eqxs and a nonzero ceiling', d.get('eqstate') in ('unpriced', 'none') and (d.get('eqstate') == 'none' or (d.get('eqxs') == 1 and d.get('eqopen') == 1)))
+import tempfile, or_daily_file as O
+tdb = os.path.join(tempfile.mkdtemp(), 'or_daily.sqlite')
+cn = O.open_db(tdb)
+for key, code, bk, pg, fol, inta in (('k1', 'MOR', '34000', '0123', '0102090060030', '600'), ('k2', 'MOR', '34000', '0123', '0102090060030', '600'),
+                                   ('k3', 'DEE', '1', '2', '0102090060030', ''), ('k4', 'MOR', '9', '9', '0999999999999', '10')):
+    O.write_row(cn, {'key': key, 'doc_type': code, 'book': bk, 'page': pg, 'folio': fol, 'folio_norm': O.norm_folio(fol),
+                     'intangible': inta, 'rec_date': '2025-12-01', 'txn': 'I', 'deleted': 0}, 'now')
+cn.commit()
+dr = X.rows_from_daily(cn, '0102090060030')
+check('daily file: folio rows, mortgages only, deduped', len(dr) == 1 and dr[0]['bp'] == '34000/123' and dr[0]['amt'] == 300000)
+check('daily file: unknown folio gives nothing', X.rows_from_daily(cn, '0000000000001') == [])
+check('daily-file mortgage demotes a clean chain', ES.state_of(X.stamp({'conf': 'ok', 'liens': [{'bp': '1/1', 'amt': 5}]}, 'c', {'c': {'rows': dr}})) == 'unpriced')
 sys.exit(1 if F else 0)
