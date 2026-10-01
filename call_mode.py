@@ -1424,6 +1424,27 @@ def _quo_latest():
     return out
 
 
+def federal_hold_fn():
+    """case -> held? for one dial-queue build, reading the CourtListener cache once.
+
+    Fails CLOSED (2026-09-29). If bk_lookup will not import or its index will not load, every
+    case is held; if federal_hold raises for one case, that case is held. It used to fall back
+    to "hold only what has no Miami-Dade stem", which released every Miami lead the cache had
+    flagged with an active stay the moment the index failed to load."""
+    try:
+        import bk_lookup as bk
+        idx = bk.federal_hold_index()
+    except Exception:
+        return lambda case: True
+
+    def held(case):
+        try:
+            return bool(bk.federal_hold(case, index=idx)[0])
+        except Exception:
+            return True
+    return held
+
+
 def _call_equity_parts(d):
     """-> (equity %, recorded-lien dollars subtracted). (None, 0) when the equity is not known.
 
@@ -1530,31 +1551,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     import diligence_gate as _DG
     _dg = _DG.Tally()
     _quo = _quo_latest()
-    # CourtListener cache once for this build. A missing module holds anything that is not a
-    # Miami-Dade case number; a Miami lead with no docket clear stays callable unless the cache
-    # flags it.
-    _bk_mod = None
-    _bk_idx = None
-    try:
-        import bk_lookup as _bk_mod
-        _bk_idx = _bk_mod.federal_hold_index()
-    except Exception:
-        _bk_idx = None
-    _sg_mod = None
-    try:
-        import stay_gate as _sg_mod
-    except Exception:
-        _sg_mod = None
-
-    def _federal_held(case):
-        if _bk_idx is not None:
-            try:
-                return bool(_bk_mod.federal_hold(case, index=_bk_idx)[0])
-            except Exception:
-                pass
-        if _sg_mod is not None:
-            return not bool(_sg_mod.case_stem(case))
-        return True
+    # CourtListener cache once for this build. A Miami lead with no docket clear stays callable
+    # unless the cache flags it (federal_hold's own rule). Fails closed: see federal_hold_fn.
+    _federal_held = federal_hold_fn()
 
     for d in slim:
         case = d.get('case') or ''

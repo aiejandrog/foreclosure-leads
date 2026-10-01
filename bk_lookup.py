@@ -1284,8 +1284,9 @@ class HoldIndex:
         self._memo = {}
 
     def hold(self, case):
-        """(held, why). Miami is held only when CourtListener flagged it. A keyable
-        non-stem lead is held once a cache file exists and it has no fresh clear.
+        """(held, why). Miami is held only when CourtListener flagged it, or when the cache
+        file exists but cannot be read (it may be the one flagging it). A keyable non-stem
+        lead is held once a cache file exists and it has no fresh clear.
         No cache file yet: not a hold (the board bake still stamps saleBkAct)."""
         key = str(case or '')
         if key in self._memo:
@@ -1299,7 +1300,7 @@ class HoldIndex:
         pk = stay_gate.pacer_key(case)
         if not pk:
             out = (False, '')
-        elif self.unreadable and not stay_gate.case_stem(pk):
+        elif self.unreadable:
             out = (True, 'federal bankruptcy cache is unreadable — lead stays held')
         elif not self.exists and not self.unreadable:
             out = (False, '')
@@ -1474,46 +1475,97 @@ def send_hold(case, here=None):
     return False, ''
 
 
+FLAGS_DEGRADED = ''   # why the last flags_for_cases() fell back to holding; '' when it ran clean
+HOLD_UNAVAILABLE = 'federal bankruptcy check unavailable on this build. Lead stays held.'
+HOLD_ERRORED = 'federal bankruptcy check failed for this lead. Lead stays held.'
+
+
+def hold_every_case(cases, why=HOLD_UNAVAILABLE):
+    """Every case held, keyed strip+upper: the key the board bake tries first, so the holds
+    land even when stay_gate cannot be imported to build a pacer_key."""
+    out = {}
+    for raw in cases or []:
+        key = str(raw or '').strip().upper()
+        if key:
+            out[key] = {'hold': True, 'why': why[:180], 'hard': False}
+    return out
+
+
 def flags_for_cases(cases, now=None):
     """{pacer_key: {hold, why, hard}} for the board bake. Counts and case numbers only.
 
     With DEALFLOW_CLERK_BK=1, a lead recorded as Broward or Palm Beach is a hold unless it
     is a Broward civil number with a fresh full clerk read of no active stay. An unreadable
-    lead list holds every case that has no Miami-Dade stem."""
+    lead list holds every case that has no Miami-Dade stem.
+
+    Fails CLOSED (2026-09-29). It used to return {} when stay_gate would not import, and any
+    one case that raised took the whole call down to the bake's `except`, which also held
+    nothing: every Broward and Palm Beach lead reached texting and the Morning Worker with no
+    saleBkAct. Now: stay_gate missing or the cache unloadable -> every case held. One case
+    raising -> that case held, the rest still judged, and the clerk check still runs for it.
+    An unreadable cache holds every keyed case, Miami included, with no PACER release: the
+    file that would say a Miami lead has an open federal case cannot be read, and the send
+    gate (gate_opinion) and HoldIndex.hold hold on the same state. FLAGS_DEGRADED says which
+    of these happened, for the bake log and the census."""
+    global FLAGS_DEGRADED
+    FLAGS_DEGRADED = ''
+    cases = list(cases or [])
     try:
         import stay_gate
-    except Exception:
-        return {}
+    except Exception as e:
+        FLAGS_DEGRADED = 'stay_gate unavailable (%s)' % type(e).__name__
+        return hold_every_case(cases)
     now = time.time() if now is None else now
-    data, exists = _load(cache_path())
-    if exists and not isinstance(data, dict):
-        data, exists = {}, True
-    overrides = load_overrides() if exists else {}
+    try:
+        data, exists = _load(cache_path())
+        unreadable = bool(exists and not isinstance(data, dict))
+        if unreadable:
+            data = {}
+        overrides = load_overrides() if exists else {}
+    except Exception as e:
+        FLAGS_DEGRADED = 'cache load failed (%s)' % type(e).__name__
+        return hold_every_case(cases)
     out = {}
-    for raw in cases or []:
-        key = stay_gate.pacer_key(raw)
+    errored = 0
+    for raw in cases:
+        try:
+            key = stay_gate.pacer_key(raw)
+        except Exception:
+            errored += 1
+            k = str(raw or '').strip().upper()
+            if k:
+                out[k] = {'hold': True, 'why': HOLD_ERRORED, 'hard': False}
+            continue
         if not key:
             continue
-        ent = data.get(key) if isinstance(data, dict) else None
-        if isinstance(ent, dict):
-            op = entry_opinion(key, ent, overrides, now)
-            # A stale clear is not a pass. Broward and Palm Beach stay held until a fresh
-            # search says no open match. Miami-Dade is not held for a stale or missing check.
-            if op and not stay_gate.case_stem(key) and not op.get('ok'):
-                op = _non_stem_opinion(key, op, now)
-        elif not stay_gate.case_stem(key) and not pacer_confirmed(key, now):
-            op = {'blocks': True, 'code': 'stay_unverified',
-                  'why': 'federal bankruptcy check has not run for this lead'}
-        else:
-            op = None
-        if op and op.get('blocks'):
-            out[key] = {'hold': True, 'why': str(op.get('why') or '')[:180],
-                        'hard': op.get('code') == 'stay_active'}
-        ps = _pacer_stem_hold(key)
-        if ps:
-            hard = not str(ps[1]).startswith('PACER stay check failed')
-            if hard or key not in out:                # never soften a hard hold already on the case
-                out[key] = {'hold': True, 'why': str(ps[1])[:180], 'hard': hard}
+        try:
+            ent = data.get(key) if isinstance(data, dict) else None
+            if unreadable:
+                op = {'blocks': True, 'code': 'stay_unverified',
+                      'why': 'federal bankruptcy cache is unreadable. Lead stays held.'}
+            elif isinstance(ent, dict):
+                op = entry_opinion(key, ent, overrides, now)
+                # A stale clear is not a pass. Broward and Palm Beach stay held until a fresh
+                # search says no open match. Miami-Dade is not held for a stale or missing check.
+                if op and not stay_gate.case_stem(key) and not op.get('ok'):
+                    op = _non_stem_opinion(key, op, now)
+            elif not stay_gate.case_stem(key) and not pacer_confirmed(key, now):
+                op = {'blocks': True, 'code': 'stay_unverified',
+                      'why': 'federal bankruptcy check has not run for this lead'}
+            else:
+                op = None
+            if op and op.get('blocks'):
+                out[key] = {'hold': True, 'why': str(op.get('why') or '')[:180],
+                            'hard': op.get('code') == 'stay_active'}
+            ps = _pacer_stem_hold(key)
+            if ps:
+                hard = not str(ps[1]).startswith('PACER stay check failed')
+                if hard or key not in out:                # never soften a hard hold already on the case
+                    out[key] = {'hold': True, 'why': str(ps[1])[:180], 'hard': hard}
+        except Exception:
+            errored += 1
+            if key not in out:
+                out[key] = {'hold': True, 'why': HOLD_ERRORED, 'hard': False}
         try:
             import clerk_bk
             cop = clerk_bk.gate_opinion(key, now)
@@ -1525,6 +1577,12 @@ def flags_for_cases(cases, now=None):
             if cop.get('code') == 'stay_active' or key not in out:
                 out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
                             'hard': cop.get('code') == 'stay_active'}
+    why = []
+    if unreadable:
+        why.append('cache unreadable')
+    if errored:
+        why.append('%d case(s) errored' % errored)
+    FLAGS_DEGRADED = '; '.join(why)
     return out
 
 
