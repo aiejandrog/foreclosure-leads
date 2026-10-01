@@ -7,7 +7,8 @@ name: tests watch
 #   - this one watches every finished run of tests on main and opens (or comments on) an issue when
 #     it failed, and closes that issue when main goes green again.
 # It reads the run's conclusion only. It never re-runs anything and never touches the board.
-# A cancelled run (a newer push superseded it) is not a failure and is ignored.
+# A cancelled run (a newer push superseded it) is not a failure and is ignored, and so is anything
+# that is not a run of this repo's own main (a fork PR from a fork's `main` carries head_branch main).
 
 on:
   workflow_run:
@@ -31,8 +32,16 @@ jobs:
             const { owner, repo } = context.repo;
             const LABEL = 'ci-red';
             const TITLE = 'DEALFLOW ALERT: tests are failing on main';
-            if (run.head_branch !== 'main') return;
-            if (run.conclusion === 'cancelled' || run.conclusion === 'skipped') {
+            // Only main's own runs. A fork PR opened from the fork's own `main` also reports
+            // head_branch 'main', so the event and the head repository are checked too.
+            const OWN = ['push', 'schedule', 'workflow_dispatch'];
+            if (run.head_branch !== 'main' || !OWN.includes(run.event) ||
+                (run.head_repository && run.head_repository.full_name !== `${owner}/${repo}`)) {
+              core.info(`run ${run.id} (${run.event} on ${run.head_branch}) is not a run of this repo's main`);
+              return;
+            }
+            const RED = ['failure', 'timed_out', 'startup_failure'];
+            if (run.conclusion !== 'success' && !RED.includes(run.conclusion)) {
               core.info(`run ${run.id} was ${run.conclusion}; not a verdict`);
               return;
             }
@@ -42,8 +51,15 @@ jobs:
               await github.rest.issues.createLabel({ owner, repo, name: LABEL, color: 'b60205',
                 description: 'tests workflow is red on main' });
             }
-            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: LABEL });
+            const listed = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: LABEL });
+            const open = { data: listed.data.filter(i => !i.pull_request) };
             if (run.conclusion === 'success') {
+              // workflow_run events can arrive out of order: only the run on main's current tip may close.
+              const tip = (await github.rest.repos.getBranch({ owner, repo, branch: 'main' })).data.commit.sha;
+              if (tip !== run.head_sha) {
+                core.info(`green run is for ${run.head_sha.slice(0, 7)}, main is at ${tip.slice(0, 7)}; leaving the issue alone`);
+                return;
+              }
               for (const i of open.data) {
                 await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
                   body: `Green again: [run ${run.run_number}](${run.html_url}) on \`${run.head_sha.slice(0, 7)}\` passed. Closing.` });

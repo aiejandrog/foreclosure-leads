@@ -1,7 +1,7 @@
 name: tests
 
 # Runs the regression suites that can run on a clean checkout (see ci_suite.py and CI-TESTS.md) on
-# every pull request and every push to main. Needs no secrets: the suites that need the gitignored
+# every pull request, every push to main, and once a day on main. Needs no secrets: the suites that need the gitignored
 # board inputs, a real opt-out ledger or a browser are skipped by name, each with its reason.
 # Read-only token; it never writes to the repo, never opens issues and never touches the live board.
 
