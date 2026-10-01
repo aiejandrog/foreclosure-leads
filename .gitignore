@@ -712,3 +712,4 @@ pacer.pass
 exports/
 logs/
 .env
+!_xchecktest.py

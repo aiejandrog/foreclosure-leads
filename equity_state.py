@@ -110,6 +110,10 @@ def state_of(chain, lead=None):
     # FACT, exactly like an unpriced mortgage.
     if st in FACT and (chain.get('other_open_unpriced') or 0) > 0:
         return 'unpriced'
+    # A SECOND SOURCE DISAGREES (lien_xcheck): it shows an open instrument this chain does not
+    # carry, so the chain is incomplete and cannot be a FACT. Only ever demotes.
+    if st in FACT and chain.get('xs_conflict'):
+        return 'unpriced'
     # A PRICED one stays 'clear' on purpose: the state is the MORTGAGE verdict (demote_for_bank_fc and
     # the lender rule key on it), and the lien's figure reaches the deal math as orcode/orhoa/orirs.
     return st
@@ -189,6 +193,12 @@ def apply(lead, chain):
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure
+        if chain.get('xs_conflict'):
+            lead['eqxs'] = len(chain['xs_conflict'])   # a second source shows instruments this chain lacks
+            if st == 'unpriced' and not lead.get('eqopen'):
+                lead['eqopen'] = lead['eqxs']          # a ceiling of 0 would read like a clear one
+                lead['eqstate_why'] = ('CEILING ONLY — a second record source shows %d instrument(s) '
+                                       'this chain does not carry' % lead['eqxs'])
         if str(chain.get('conf') or '').lower() == 'low':
             lead['eqlow'] = True     # common-name search: the trace is less certain
     return st

@@ -16,6 +16,7 @@ import requests
 from playwright.sync_api import sync_playwright
 import paths as P
 import equity_state as _es
+import lien_xcheck as _xc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESKTOP = P.DESKTOP
@@ -1835,6 +1836,7 @@ def make_tracker(leads):
     if os.path.exists(_rlf):
         try: rl = json.load(open(_rlf, encoding='utf-8'))
         except Exception: rl = {}
+    _XC_CACHE = _xc.load_cache()          # second-source lien rows (DEALFLOW_DIR); empty when never fetched
     # A chain traced before records_liens.dedupe_records (2026-09-23) can list one mortgage twice,
     # and its junior/surviving totals then count that debt twice. records_liens re-pulls those
     # first; until it has, the chain is not allowed to read as verified — LOW confidence is the
@@ -2063,6 +2065,7 @@ def make_tracker(leads):
         # checked' are opposite facts that both used to render as a blank cell — which is how a
         # verified-clear lead sat invisible next to a guess. Stamped before the liens gate below
         # so it is set even when that gate skips.
+        rlh = _xc.stamp(rlh, r.get('Case #', ''), _XC_CACHE)
         _es.apply(d, rlh)
         if rlh and rlh.get('liens'):
             d['orliens'] = rlh.get('liens', [])          # the recorded mortgage chain (open/satisfied + amounts)
