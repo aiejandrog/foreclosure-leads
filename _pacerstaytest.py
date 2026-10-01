@@ -338,7 +338,7 @@ check('... and the lead is unverifiable (common name), never clear',
 reset_ledgers()
 d = work({'broward_leads.json': BR})
 h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
-rc, out = run(d, h, args=['--max-pages', '3'])
+rc, out = run(d, h, args=['--max-pages', '3', '--max-spend', '1'])  # explicit: 'auto' is quarter-left / days-left, $0.20 early in a quarter
 ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
 check('--max-pages 3 walks page=0,1,2', [c[1].rsplit('=', 1)[1] for c in h.finds()] == ['0', '1', '2'])
 check('... all pages read and every row closed -> clear, 3 pages billed',
@@ -1006,7 +1006,12 @@ by17 = {('PRESENDP', 'QUINCY'): [row('PRESENDP', 'QUINCY', termed='2021-02-02', 
         ('PRESTAYED', 'ROSA'): [row('PRESTAYED', 'ROSA', no='1:99-bk-71002', filed=iso(-12))],
         ('COMMONP', 'JOHN'): page([row('COMMONP', 'JOHNNY', termed='2020-01-01')] * 54, total_pages=3),
         ('ERRP', 'PAULO'): Resp(500, {})}
-e17 = env(PACER_NEWFILER_EST_PAGES_PER_DAY='0.5')     # a roomy allowance on any calendar day
+# A roomy allowance on any calendar day. The pre-send pool accrues evenly over the quarter, so at the
+# default $25 cap day 1 of a quarter allows ~$0.22 and this section needs more; the cap is raised here
+# so the allowance never decides these cases. The budget refusals below set their own env, and the
+# daily-cap ones raise the cap too, or on a quarter's first days the small accrual refuses the lead
+# whether or not PACER_PRESEND_DAILY_MAX is set.
+e17 = env(PACER_NEWFILER_EST_PAGES_PER_DAY='0.5', PACER_QUARTER_CAP='2500')
 
 
 def ps17(case, h, e=None, now=NOW, **kw):
@@ -1060,7 +1065,7 @@ check('a clear older than 14 days: refused AND flagged for a new pre-send search
 reset_ledgers()
 (TMP / 'pacer_q.json').write_text(json.dumps({Q: {'total': 25.0}}))
 h = FakeHTTP(by_name=by17)
-r = ps17('CACE-99-001701', h)
+r = ps17('CACE-99-001701', h, env(PACER_NEWFILER_EST_PAGES_PER_DAY='0.5'))     # default $25 cap
 check('pre-send, quarter cap reached: refused, no login', r['status'] == 'refused' and 'quarter cap' in r['why'] and h.calls == [], r)
 reset_ledgers()
 json.dump({PR.month(NOW): {'total': 50.0, 'by': {'x': 50.0}}}, open(os.environ['DEALFLOW_PAID_LEDGER'], 'w'))
@@ -1069,14 +1074,14 @@ r = ps17('CACE-99-001701', h)
 check('pre-send, #74 monthly cap reached: refused, no login', r['status'] == 'refused' and h.calls == [], r)
 reset_ledgers()
 h = FakeHTTP(by_name=by17)
-r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.10'))
+r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.10', PACER_QUARTER_CAP='2500'))
 check('pre-send, daily cap: a two-name lead ($0.20) against $0.10 left today -> refused, no login',
       r['status'] == 'refused' and 'allowance' in r['why'] and h.calls == [], r)
 reset_ledgers()
 ql = PS.QuarterLedger(env=e17, today=TODAY)
 ql.debit(0.30, 1, kind='presend')
 h = FakeHTTP(by_name=by17)
-r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.40', PACER_NEWFILER_EST_PAGES_PER_DAY='0.5'))
+r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.40', PACER_NEWFILER_EST_PAGES_PER_DAY='0.5', PACER_QUARTER_CAP='2500'))
 check('pre-send, daily cap counts what today already spent ($0.30 of $0.40 -> a $0.20 lead is refused)',
       r['status'] == 'refused' and h.calls == [], r)
 reset_ledgers()
