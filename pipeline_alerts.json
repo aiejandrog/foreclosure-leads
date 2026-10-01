@@ -1,19 +1,25 @@
 {
  "alerts": [
   {
-   "at": "2026-10-01T07:45:56-04:00",
+   "at": "2026-10-01T09:31:21-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 35h ago."
+   "text": "Evening readiness check last ran 36h ago."
   },
   {
-   "at": "2026-10-01T07:45:56-04:00",
+   "at": "2026-10-01T09:31:21-04:00",
+   "key": "morning-sends",
+   "severity": "fail",
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 67 leads were eligible, but 0 first-touch emails were sent."
+  },
+  {
+   "at": "2026-10-01T09:31:21-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 316 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-01T07:45:56-04:00",
+ "published_at": "2026-10-01T09:31:21-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -24,7 +30,7 @@
    "holds": 185,
    "leads_checked": 1,
    "provider": "courtlistener",
-   "pull_age_h": 0.39,
+   "pull_age_h": 2.14,
    "pull_ok": true,
    "readable": true,
    "reason": "budget",
@@ -85,7 +91,7 @@
    ],
    "date": "2026-10-01",
    "eligible": 67,
-   "judged": false,
+   "judged": true,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -97,7 +103,7 @@
   "optout_sync": {
    "date": "2026-10-01",
    "failed_steps": [],
-   "past_cutoff": false,
+   "past_cutoff": true,
    "readable": true,
    "run_ok": true,
    "started_at": 1790853302,
