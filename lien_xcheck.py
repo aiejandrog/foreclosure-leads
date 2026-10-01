@@ -78,19 +78,22 @@ def conflicts(chain, rows):
     """Book/pages of open mortgage/lien/judgment rows the second source shows that the chain does
     not carry (as a surviving lien, a satisfied one, or a release target). [] = no disagreement."""
     known = set()
-    for l in (chain or {}).get('liens') or []:
+    for l in [x for x in ((chain or {}).get('liens') or []) if isinstance(x, dict)]:
         if isinstance(l, dict):
             known.add(_norm_bp(l.get('bp')))
-    for k in ('satisfied', 'released', 'sat'):
-        for l in (chain or {}).get(k) or []:
-            if isinstance(l, dict):
-                known.add(_norm_bp(l.get('bp')))
+    # liens and judgments (association, code, IRS, the case's own judgment) live in chain['other'],
+    # open or released; the chain already accounts for every one of them.
+    for l in [x for x in ((chain or {}).get('other') or []) if isinstance(x, dict)]:
+        if isinstance(l, dict):
+            known.add(_norm_bp(l.get('bp')))
     released = {_norm_bp(r.get('orig')) for r in rows if r.get('cat') == 'release' and r.get('orig')}
     out = []
     for r in rows:
         if r.get('cat') == 'release':
             continue
         bp = _norm_bp(r.get('bp'))
+        if r.get('cat') == 'mortgage' and not r.get('amt'):
+            continue        # records_liens drops $0 mortgage-coded rows (modifications, assignments)
         if bp and bp not in known and bp not in released:
             out.append(bp)
     return sorted(set(out))
@@ -102,11 +105,15 @@ def _cache_path():
 
 
 def load_cache(path=None):
+    p = path or _cache_path()
     try:
-        with open(path or _cache_path(), encoding='utf-8') as f:
+        with open(p, encoding='utf-8') as f:
             d = json.load(f)
         return d if isinstance(d, dict) else {}
+    except FileNotFoundError:
+        return {}
     except (OSError, ValueError):
+        print('lien_xcheck: %s is unreadable; second-source demotions are OFF this build' % CACHE_NAME)
         return {}
 
 
@@ -114,9 +121,13 @@ def stamp(chain, case, cache):
     """Copy of `chain` carrying `xs_conflict` when the second source disagrees. Unchanged when
     there is no cache entry for the case."""
     ent = (cache or {}).get(case)
-    if not chain or not isinstance(ent, dict):
+    if not chain or not isinstance(chain, dict) or not isinstance(ent, dict):
         return chain
-    c = conflicts(chain, ent.get('rows') or [])
+    try:
+        rows = [r for r in (ent.get('rows') or []) if isinstance(r, dict)]
+        c = conflicts(chain, rows)
+    except Exception:
+        return chain
     if not c:
         return chain
     out = dict(chain)
@@ -130,14 +141,16 @@ def fetch(max_leads, per_call=0.20):
     key = os.environ.get('CLERK_CDS_AUTHKEY')
     if not key:
         raise SystemExit('CLERK_CDS_AUTHKEY not set in this shell')
-    L = json.load(open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8'))
-    R = json.load(open(os.path.join(HERE, 'records_liens.json'), encoding='utf-8'))
+    with open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8') as fh:
+        L = json.load(fh)
+    with open(os.path.join(HERE, 'records_liens.json'), encoding='utf-8') as fh:
+        R = json.load(fh)
     cache = load_cache()
     todo = []
     for r in L:
         f = str(r.get('Folio') or '')
         c = r.get('Case #')
-        if re.fullmatch(r'\d{13}', f) and r.get('sale_type') != 'TD' and c in R and c not in cache:
+        if re.fullmatch(r'\d{13}', f) and r.get('sale_type') != 'TD' and isinstance(R.get(c), dict) and c not in cache:
             todo.append((c, f, bool(R[c].get('liens'))))
     todo.sort(key=lambda t: not t[2])     # leads that look priced first: the ones a false 'priced' hurts
     n = 0
@@ -150,19 +163,28 @@ def fetch(max_leads, per_call=0.20):
         try:
             raw = urllib.request.urlopen(urllib.request.Request(
                 URL + '?' + q, headers={'Accept': 'application/xml'}), timeout=60).read()
+        except Exception as e:
+            # no response body arrived (HTTP error, refused): the clerk did not bill it
+            PR.adjust(-per_call, 'clerk-cds-xcheck')
+            print('no response, refunded:', str(e)[:80])
+            continue
+        try:
             root = ET.fromstring(raw)
             st = {t.tag.split('}')[-1]: (t.text or '').strip() for t in root if len(list(t)) == 0}
-            if st.get('Status', '').lower() == 'failed':
-                raise ValueError(st.get('StatusDesc', 'rejected'))
-            rows = parse_cds_xml(raw)
         except Exception as e:
-            PR.adjust(-per_call, 'clerk-cds-xcheck')
-            print('rejected, refunded:', str(e)[:80])
+            print('unparseable response, NOT refunded (it may have been billed):', str(e)[:60])
             continue
+        if st.get('Status', '').lower() == 'failed':
+            PR.adjust(-per_call, 'clerk-cds-xcheck')
+            print('rejected, refunded:', st.get('StatusDesc', '')[:80])
+            continue
+        rows = parse_cds_xml(raw)
         cache[c] = {'ts': datetime.datetime.now().isoformat(timespec='seconds'), 'rows': rows}
         n += 1
-        with open(_cache_path(), 'w', encoding='utf-8') as fh:
+        tmp = _cache_path() + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
             json.dump(cache, fh)
+        os.replace(tmp, _cache_path())
         time.sleep(1)
     print('cross-checked %d leads' % n)
 

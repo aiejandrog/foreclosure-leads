@@ -27,4 +27,12 @@ check('priced chain demoted when second source disagrees', ES.state_of(st) == 'u
 check('stamp does not mutate the chain', 'xs_conflict' not in priced)
 check('conflict never promotes an unverified chain', ES.state_of(X.stamp({'conf': 'low', 'liens': []}, 'c', {'c': {'rows': rows}})) == 'none')
 check('no chain stays unchecked', ES.state_of(X.stamp(None, 'c', {'c': {'rows': rows}})) == 'unchecked')
+other = {'conf': 'ok', 'liens': [], 'other': [{'bp': '34000/123', 'st': 'RELEASED'}], 'coverage': 'x'}
+check('lien/judgment already in chain[other] is no conflict', X.conflicts(other, rows) == [])
+check('$0 mortgage row (modification) is no conflict', X.conflicts(clean, [{'cat': 'mortgage', 'bp': '5/5', 'amt': 0}]) == [])
+check('lien row with no amount still conflicts', X.conflicts(clean, [{'cat': 'lien', 'bp': '5/5', 'amt': 0}]) == ['5/5'])
+check('garbage chain/cache never raises', X.stamp({'liens': 3}, 'c', {'c': {'rows': ['x', None]}}) == {'liens': 3} and X.stamp('abc', 'c', {'c': {'rows': []}}) == 'abc')
+d = {}
+ES.apply(d, X.stamp({'conf': 'ok', 'liens': [], 'coverage': 'x', 'nrec': 5}, 'c', {'c': {'rows': rows}}))
+check('demoted lead shows eqxs and a nonzero ceiling', d.get('eqstate') in ('unpriced', 'none') and (d.get('eqstate') == 'none' or (d.get('eqxs') == 1 and d.get('eqopen') == 1)))
 sys.exit(1 if F else 0)

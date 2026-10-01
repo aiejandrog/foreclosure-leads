@@ -193,6 +193,12 @@ def apply(lead, chain):
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure
+        if chain.get('xs_conflict'):
+            lead['eqxs'] = len(chain['xs_conflict'])   # a second source shows instruments this chain lacks
+            if st == 'unpriced' and not lead.get('eqopen'):
+                lead['eqopen'] = lead['eqxs']          # a ceiling of 0 would read like a clear one
+                lead['eqstate_why'] = ('CEILING ONLY — a second record source shows %d instrument(s) '
+                                       'this chain does not carry' % lead['eqxs'])
         if str(chain.get('conf') or '').lower() == 'low':
             lead['eqlow'] = True     # common-name search: the trace is less certain
     return st
