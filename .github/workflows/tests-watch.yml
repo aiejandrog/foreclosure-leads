@@ -1,0 +1,82 @@
+name: tests watch
+
+# The tests workflow only tells anyone when a push or a PR runs it. On 2026-10-01 it went red at the
+# Q4 rollover with no commit behind it (a fixture that depended on the calendar), and the first
+# person to learn was whoever opened the next PR. This workflow closes both gaps:
+#   - tests.yml now also runs once a day on main, so a break with no push still produces a run;
+#   - this one watches every finished run of tests on main and opens (or comments on) an issue when
+#     it failed, and closes that issue when main goes green again.
+# It reads the run's conclusion only. It never re-runs anything and never touches the board.
+# A cancelled run (a newer push superseded it) is not a failure and is ignored, and so is anything
+# that is not a run of this repo's own main (a fork PR from a fork's `main` carries head_branch main).
+
+on:
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or close the tests-red issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+            const LABEL = 'ci-red';
+            const TITLE = 'DEALFLOW ALERT: tests are failing on main';
+            // Only main's own runs. A fork PR opened from the fork's own `main` also reports
+            // head_branch 'main', so the event and the head repository are checked too.
+            const OWN = ['push', 'schedule', 'workflow_dispatch'];
+            if (run.head_branch !== 'main' || !OWN.includes(run.event) ||
+                (run.head_repository && run.head_repository.full_name !== `${owner}/${repo}`)) {
+              core.info(`run ${run.id} (${run.event} on ${run.head_branch}) is not a run of this repo's main`);
+              return;
+            }
+            const RED = ['failure', 'timed_out', 'startup_failure'];
+            if (run.conclusion !== 'success' && !RED.includes(run.conclusion)) {
+              core.info(`run ${run.id} was ${run.conclusion}; not a verdict`);
+              return;
+            }
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: LABEL });
+            } catch (e) {
+              await github.rest.issues.createLabel({ owner, repo, name: LABEL, color: 'b60205',
+                description: 'tests workflow is red on main' });
+            }
+            const listed = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: LABEL });
+            const open = { data: listed.data.filter(i => !i.pull_request) };
+            if (run.conclusion === 'success') {
+              // workflow_run events can arrive out of order: only the run on main's current tip may close.
+              const tip = (await github.rest.repos.getBranch({ owner, repo, branch: 'main' })).data.commit.sha;
+              if (tip !== run.head_sha) {
+                core.info(`green run is for ${run.head_sha.slice(0, 7)}, main is at ${tip.slice(0, 7)}; leaving the issue alone`);
+                return;
+              }
+              for (const i of open.data) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
+                  body: `Green again: [run ${run.run_number}](${run.html_url}) on \`${run.head_sha.slice(0, 7)}\` passed. Closing.` });
+                await github.rest.issues.update({ owner, repo, issue_number: i.number, state: 'closed' });
+              }
+              return;
+            }
+            const body = `The tests workflow **${run.conclusion}** on main.\n\n` +
+              `- Run ${run.run_number}: ${run.html_url}\n` +
+              `- Commit: \`${run.head_sha.slice(0, 7)}\` ${String(run.head_commit && run.head_commit.message || '').split('\n')[0]}\n` +
+              `- Trigger: ${run.event}\n\n` +
+              `Open the run and read the **Run the suites** step; the last lines name the failing suite. ` +
+              `If it failed with no code change behind it (a scheduled run), suspect a fixture that depends on the date.\n\n` +
+              `_This issue closes itself when main's tests pass again._`;
+            if (open.data.length) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: TITLE, body, labels: [LABEL] });
+            }
+            core.setFailed(`tests ${run.conclusion} on main (run ${run.run_number})`);
