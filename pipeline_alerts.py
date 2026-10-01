@@ -551,15 +551,16 @@ def read_bk_lookup():
 def bake_bk_alert(sig, at):
     """Fail when the last board build could not run the federal bankruptcy check.
 
-    foreclosure_leads.stamp_federal_bk then held every lead it could not judge, so Call Mode,
-    texting and the Morning Worker are empty on purpose. The pull status above can read clean
+    foreclosure_leads.stamp_federal_bk then held every lead it could not judge: all of them when
+    the check could not run at all, only the errored cases when one case raised. The pull status above can read clean
     on the same night (the break is in the bake), and without this the only trace is a
     DEGRADED line in leads-run.log. Census flag only: no count, case or name."""
     if not isinstance(sig, dict) or not sig.get('degraded'):
         return None
     return _alert('bk-bake', 'fail',
-                  'Board build could not run the federal bankruptcy check, so it held every lead '
-                  'it could not judge (no calls, texts or emails). See DEGRADED in leads-run.log.', at)
+                  'Board build could not fully run the federal bankruptcy check. Every lead it could '
+                  'not judge is held from calls, texts and emails (all of them if the check never '
+                  'ran). See DEGRADED in leads-run.log.', at)
 
 
 def read_bake_bk(here=None):
