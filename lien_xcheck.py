@@ -93,7 +93,7 @@ def conflicts(chain, rows):
             continue
         bp = _norm_bp(r.get('bp'))
         if r.get('cat') == 'mortgage' and not r.get('amt'):
-            continue        # records_liens drops $0 mortgage-coded rows (modifications, assignments)
+            continue        # records_liens skips modification/assignment rows and a bare $0 mortgage is counted unpriced
         if bp and bp not in known and bp not in released:
             out.append(bp)
     return sorted(set(out))
@@ -145,6 +145,9 @@ def fetch(max_leads, per_call=0.20):
         L = json.load(fh)
     with open(os.path.join(HERE, 'records_liens.json'), encoding='utf-8') as fh:
         R = json.load(fh)
+    if os.path.exists(_cache_path()) and not load_cache():
+        if os.path.getsize(_cache_path()) > 2:
+            raise SystemExit('%s exists but is unreadable; fix or move it before fetching (it would be overwritten)' % CACHE_NAME)
     cache = load_cache()
     todo = []
     for r in L:
