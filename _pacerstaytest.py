@@ -338,7 +338,9 @@ check('... and the lead is unverifiable (common name), never clear',
 reset_ledgers()
 d = work({'broward_leads.json': BR})
 h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
-rc, out = run(d, h, args=['--max-pages', '3'])
+# An explicit run cap: 'auto' is the quarter's left / nights left, which on the first days of a
+# quarter is under the $0.30 three pages cost, so the test turned red every 1st of a quarter.
+rc, out = run(d, h, args=['--max-pages', '3', '--max-spend', '1'])
 ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
 check('--max-pages 3 walks page=0,1,2', [c[1].rsplit('=', 1)[1] for c in h.finds()] == ['0', '1', '2'])
 check('... all pages read and every row closed -> clear, 3 pages billed',
@@ -1006,7 +1008,10 @@ by17 = {('PRESENDP', 'QUINCY'): [row('PRESENDP', 'QUINCY', termed='2021-02-02', 
         ('PRESTAYED', 'ROSA'): [row('PRESTAYED', 'ROSA', no='1:99-bk-71002', filed=iso(-12))],
         ('COMMONP', 'JOHN'): page([row('COMMONP', 'JOHNNY', termed='2020-01-01')] * 54, total_pages=3),
         ('ERRP', 'PAULO'): Resp(500, {})}
-e17 = env(PACER_NEWFILER_EST_PAGES_PER_DAY='0.5')     # a roomy allowance on any calendar day
+# A roomy allowance on any calendar day. The pre-send pool accrues day by day, so on the 1st of a
+# quarter the $25 default left ~$0.22 and this section went red every quarter start: a test-only cap.
+CAP17 = 200.0
+e17 = env(PACER_NEWFILER_EST_PAGES_PER_DAY='0.5', PACER_QUARTER_CAP=str(CAP17))
 
 
 def ps17(case, h, e=None, now=NOW, **kw):
@@ -1058,7 +1063,7 @@ v = SG.check('CACE-99-001701', sh17)
 check('a clear older than 14 days: refused AND flagged for a new pre-send search', v['code'] == SG.UNVERIFIED and v['pacer_need'] is True, v)
 # budget refusals
 reset_ledgers()
-(TMP / 'pacer_q.json').write_text(json.dumps({Q: {'total': 25.0}}))
+(TMP / 'pacer_q.json').write_text(json.dumps({Q: {'total': CAP17}}))
 h = FakeHTTP(by_name=by17)
 r = ps17('CACE-99-001701', h)
 check('pre-send, quarter cap reached: refused, no login', r['status'] == 'refused' and 'quarter cap' in r['why'] and h.calls == [], r)
