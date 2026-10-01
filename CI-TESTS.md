@@ -4,6 +4,11 @@
 `main` (board-only pushes under `docs/` are ignored: the runners' publishes change no code). It needs
 **no secrets** and has a read-only token.
 
+It also runs once a day on `main` (13:20 UTC) with no push behind it, so a suite that goes red on the
+calendar alone (2026-10-01: a fixture that depended on the quarter's day count) shows up that morning.
+`tests-watch.yml` watches every finished run on `main`: red opens (or comments on) the `ci-red` issue and
+fails its own run, which emails the repository owner; green closes the issue. Cancelled runs are ignored.
+
 `ci_suite.py` runs **every tracked suite** (`_*test.py`, `test_*.py`, `_workerui.py`, `_*test.js`)
 **except** the ones named in its `SKIP` table. It is an exclusion list on purpose: a new suite is
 picked up automatically and has to pass in CI unless someone adds it to `SKIP` with a reason.

@@ -12,6 +12,11 @@ on:
     # The runners' nightly/morning publishes change only the built board under docs/ - no code, so
     # nothing for the suites to say. Any push that touches anything else still runs.
     paths-ignore: ['docs/**']
+  # Once a day on main, with no push behind it. On 2026-10-01 a fixture that depended on the calendar
+  # went red at the quarter rollover and nothing ran the suites until the next PR. 13:20 UTC = 09:20 ET.
+  # tests-watch.yml turns a red run on main into an issue and an email.
+  schedule:
+    - cron: '20 13 * * *'
   workflow_dispatch: {}
 
 permissions:
