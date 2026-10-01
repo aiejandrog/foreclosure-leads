@@ -110,6 +110,10 @@ def state_of(chain, lead=None):
     # FACT, exactly like an unpriced mortgage.
     if st in FACT and (chain.get('other_open_unpriced') or 0) > 0:
         return 'unpriced'
+    # A SECOND SOURCE DISAGREES (lien_xcheck): it shows an open instrument this chain does not
+    # carry, so the chain is incomplete and cannot be a FACT. Only ever demotes.
+    if st in FACT and chain.get('xs_conflict'):
+        return 'unpriced'
     # A PRICED one stays 'clear' on purpose: the state is the MORTGAGE verdict (demote_for_bank_fc and
     # the lender rule key on it), and the lien's figure reaches the deal math as orcode/orhoa/orirs.
     return st
