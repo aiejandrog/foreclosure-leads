@@ -18,7 +18,7 @@ Fetch (laptop only, needs CLERK_CDS_AUTHKEY and the registered IP, $0.20 a looku
 ledger charged first and refunded on a rejection):
     python lien_xcheck.py --fetch --max 10
 """
-import json, os, re, sys, datetime
+import json, os, re, sys, datetime, sqlite3
 import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -160,12 +160,13 @@ def rows_from_daily(conn, folio):
         d = '%d/%d/%s' % (int(m.group(2)), int(m.group(3)), m.group(1)) if m else d
         amt = 0
         try:
-            if O.money_amount(r['intangible']):
-                amt = round(O.money_amount(r['intangible']) / 0.002)
-            elif O.money_amount(r['consideration_1']):
-                amt = round(O.money_amount(r['consideration_1']))
-        except (TypeError, ValueError):
-            pass
+            i1, c1 = O.money_amount(r['intangible']), O.money_amount(r['consideration_1'])
+            if i1 and i1 > 0:
+                amt = round(i1 / 0.002)
+            elif c1 and c1 > 0:
+                amt = round(c1)
+        except (TypeError, ValueError, OverflowError):
+            amt = 0
         row = {'cat': cat, 'd': d, 'bp': '/'.join(bp), 'amt': amt, 'src': 'daily'}
         ob = O.norm_bp(r['orig_book'], r['orig_page'])
         if ob:
@@ -186,7 +187,8 @@ def from_daily(data_dir=None):
     cache = load_cache()
     with open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8') as fh:
         L = json.load(fh)
-    conn = O.open_db(dbp)
+    conn = sqlite3.connect('file:%s?mode=ro' % dbp.replace('\\', '/'), uri=True)   # read-only: never touch the paid DB
+    conn.row_factory = sqlite3.Row
     n = 0
     try:
         for r in L:
@@ -213,6 +215,11 @@ def from_daily(data_dir=None):
     print('daily file: %d leads gained second-source rows' % n)
 
 
+def _has_cds(ent):
+    """True when this cache entry already holds a paid CDS read (daily-only entries do not count)."""
+    return isinstance(ent, dict) and bool(ent.get('cds'))
+
+
 def fetch(max_leads, per_call=0.20):
     import urllib.request, urllib.parse, time
     import paid_reads as PR
@@ -231,7 +238,7 @@ def fetch(max_leads, per_call=0.20):
     for r in L:
         f = str(r.get('Folio') or '')
         c = r.get('Case #')
-        if re.fullmatch(r'\d{13}', f) and r.get('sale_type') != 'TD' and isinstance(R.get(c), dict) and c not in cache:
+        if re.fullmatch(r'\d{13}', f) and r.get('sale_type') != 'TD' and isinstance(R.get(c), dict) and not _has_cds(cache.get(c)):
             todo.append((c, f, bool(R[c].get('liens'))))
     todo.sort(key=lambda t: not t[2])     # leads that look priced first: the ones a false 'priced' hurts
     n = 0
@@ -260,7 +267,10 @@ def fetch(max_leads, per_call=0.20):
             print('rejected, refunded:', st.get('StatusDesc', '')[:80])
             continue
         rows = parse_cds_xml(raw)
-        cache[c] = {'ts': datetime.datetime.now().isoformat(timespec='seconds'), 'rows': rows}
+        old = cache.get(c) if isinstance(cache.get(c), dict) else {}
+        have = {(x.get('cat'), x.get('bp')) for x in rows}
+        keep = [x for x in old.get('rows') or [] if isinstance(x, dict) and (x.get('cat'), x.get('bp')) not in have]
+        cache[c] = {'ts': datetime.datetime.now().isoformat(timespec='seconds'), 'cds': True, 'rows': rows + keep}
         n += 1
         tmp = _cache_path() + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as fh:
