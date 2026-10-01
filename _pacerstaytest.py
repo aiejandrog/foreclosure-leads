@@ -1074,14 +1074,15 @@ r = ps17('CACE-99-001701', h)
 check('pre-send, #74 monthly cap reached: refused, no login', r['status'] == 'refused' and h.calls == [], r)
 reset_ledgers()
 h = FakeHTTP(by_name=by17)
-r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.10'))
+r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.10', PACER_QUARTER_CAP=str(CAP17)))
 check('pre-send, daily cap: a two-name lead ($0.20) against $0.10 left today -> refused, no login',
       r['status'] == 'refused' and 'allowance' in r['why'] and h.calls == [], r)
 reset_ledgers()
 ql = PS.QuarterLedger(env=e17, today=TODAY)
 ql.debit(0.30, 1, kind='presend')
 h = FakeHTTP(by_name=by17)
-r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.40', PACER_NEWFILER_EST_PAGES_PER_DAY='0.5'))
+r = ps17('CACE-99-001704', h, env(PACER_PRESEND_DAILY_MAX='0.40', PACER_NEWFILER_EST_PAGES_PER_DAY='0.5',
+                                  PACER_QUARTER_CAP=str(CAP17)))
 check('pre-send, daily cap counts what today already spent ($0.30 of $0.40 -> a $0.20 lead is refused)',
       r['status'] == 'refused' and h.calls == [], r)
 reset_ledgers()
