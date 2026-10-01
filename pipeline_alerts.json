@@ -1,54 +1,45 @@
 {
  "alerts": [
   {
-   "at": "2026-09-29T21:13:05-04:00",
-   "key": "captcha-balance",
-   "severity": "warn",
-   "text": "2Captcha balance $0.42, warn under $1.00."
-  },
-  {
-   "at": "2026-09-29T21:13:05-04:00",
+   "at": "2026-10-01T07:45:56-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Evening readiness check last ran 35h ago."
   },
   {
-   "at": "2026-09-29T21:13:05-04:00",
-   "key": "morning-sends",
-   "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 70 leads were eligible, but 0 first-touch emails were sent."
-  },
-  {
-   "at": "2026-09-29T21:13:05-04:00",
+   "at": "2026-10-01T07:45:56-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
-   "text": "Tracerfy balance 456 credits, warn under 1500."
+   "text": "Tracerfy balance 316 credits, warn under 1500."
   }
  ],
- "published_at": "2026-09-29T21:13:05-04:00",
+ "published_at": "2026-10-01T07:45:56-04:00",
  "signals": {
+  "bake_bk": {
+   "degraded": false
+  },
   "bk_lookup": {
-   "errors": 4,
-   "filings": 831,
-   "holds": 124,
-   "leads_checked": 42,
+   "errors": 0,
+   "filings": 1068,
+   "holds": 185,
+   "leads_checked": 1,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.39,
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 96,
+   "reason": "budget",
+   "requests_used": 116,
    "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
    "day_blocked": false,
    "day_ceiling": 0.05,
-   "day_date": "2026-09-28",
+   "day_date": "2026-09-30",
    "day_dead": 0,
    "day_min": 20,
    "day_rate": 0.0,
-   "day_sent": 6,
+   "day_sent": 2,
    "dead": 0,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
@@ -57,15 +48,15 @@
    "ft_rate": 0.0,
    "ft_restart_cap": 10,
    "ft_rule": "slow_restart",
-   "ft_sent": 6,
+   "ft_sent": 8,
    "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 1.2149183920775522e-17,
-   "mailed": 27,
+   "lb": 0.0,
+   "mailed": 29,
    "post_dead": 0,
-   "post_lb": 1.2149183920775522e-17,
-   "post_mailed": 27,
+   "post_lb": 0.0,
+   "post_mailed": 29,
    "post_rate": 0.0,
    "post_trailing_blocked": false,
    "pre_dead": 0,
@@ -76,7 +67,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 0.41588
+   "usd": -0.00017
   },
   "clerk_bk": {
    "readable": false
@@ -92,9 +83,9 @@
     10,
     10
    ],
-   "date": "2026-09-29",
-   "eligible": 70,
-   "judged": true,
+   "date": "2026-10-01",
+   "eligible": 67,
+   "judged": false,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -104,19 +95,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-09-29",
+   "date": "2026-10-01",
    "failed_steps": [],
-   "past_cutoff": true,
+   "past_cutoff": false,
    "readable": true,
    "run_ok": true,
-   "started_at": 1790680502,
+   "started_at": 1790853302,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
-   "month": "2026-09",
+   "month": "2026-10",
    "readable": true,
-   "spent": 4.1709
+   "spent": 4.1558
   },
   "readiness": {
    "at": "2026-09-29T21:13:05-04:00",
@@ -149,7 +140,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 456
+   "credits": 316
   }
  },
  "version": 1
