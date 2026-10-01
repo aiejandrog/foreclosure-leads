@@ -127,7 +127,7 @@ def _toast(title, msg):
 MIN_LEADS = 400
 
 
-def verdict_of(total, hstatus, lp_ran, lp_failed):
+def verdict_of(total, hstatus, lp_ran, lp_failed, critical=None):
     """-> ('HEALTHY'|'DEGRADED'|'FAILED'|'UNKNOWN', why).
 
     FOUR STATES, NOT TWO (audit 2026-09-21, defect 11). The old verdict was one expression,
@@ -138,11 +138,16 @@ def verdict_of(total, hstatus, lp_ran, lp_failed):
     """
     if not hstatus:
         return 'UNKNOWN', 'no health.json — the healthcheck did not run, so nothing here is graded'
-    if hstatus.upper() == 'FAIL':
-        return 'FAILED', f'healthcheck says {hstatus}'
+    # (2026-09-30) healthcheck.py writes HEALTHY / DEGRADED / DOWN, never OK / PASS / FAIL, so
+    # every real night graded DEGRADED here, the good ones included, and a publish-blocking DOWN
+    # never graded FAILED. OK / PASS / FAIL stay accepted for older health.json files.
+    # `critical` is health.json's list of FAILs that block the publish (exit 2).
+    if hstatus.upper() == 'FAIL' or (hstatus.upper() == 'DOWN' and critical):
+        return 'FAILED', f'healthcheck says {hstatus}' + (
+            f" ({', '.join(str(c) for c in critical)[:120]})" if critical else '')
     if total < MIN_LEADS:
         return 'FAILED', f'only {total} leads on file'
-    if hstatus.upper() not in ('OK', 'PASS'):
+    if hstatus.upper() not in ('OK', 'PASS', 'HEALTHY'):
         return 'DEGRADED', f'healthcheck says {hstatus}'
     if lp_failed:
         return 'DEGRADED', 'LP sweep did not run for ' + ', '.join(lp_failed)
@@ -155,7 +160,7 @@ def main():
     by = _counts()
     total = sum(v['leads'] for v in by.values())
     total_ph = sum(v['phones'] for v in by.values())
-    hstatus, _ = _health()
+    hstatus, hdoc = _health()
     gitlast = _git_last()
     today = datetime.now().strftime('%Y-%m-%d')
     # A LOCAL commit dated today. This is NOT evidence of a push, and never was: `git log -1`
@@ -164,7 +169,7 @@ def main():
     commit_today = today in gitlast
     lp_ran, lp_failed = _lp_sweep()
 
-    state, why = verdict_of(total, hstatus, lp_ran, lp_failed)
+    state, why = verdict_of(total, hstatus, lp_ran, lp_failed, (hdoc or {}).get('critical'))
     ok = state == 'HEALTHY'
     verdict = {'HEALTHY': 'OK', 'DEGRADED': 'DEGRADED', 'FAILED': 'CHECK', 'UNKNOWN': 'UNKNOWN'}[state]
 

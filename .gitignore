@@ -14,6 +14,7 @@ _*.py
 !_wpcontactstest.py
 !_textbatchtest.py
 !_calldetailtest.py
+!_callrankingtest.py
 !_batsyntaxtest.py
 !_refreshexittest.py
 # 2026-09-23: BSG Warmup failed silently on 09-17 and 09-19..21 (pythonw, no console). This suite pins
@@ -157,9 +158,12 @@ batchdata.key
 site.pass
 skiptrace_results.json
 # the write-then-replace temp of the same file (resimpli_sync.py, tracerfy_mcp.py): a crash between
-# the two steps must not leave homeowner phone numbers one `git add` from a public repo
+# the two steps must not leave homeowner phone numbers one `git add` from a public repo.
+# resimpli_sync.py names its temp per run, <file>.resimpli.<random>.tmp, so two runs never share one
+# (the fixed .resimpli.tmp name is what an earlier version of it wrote)
 skiptrace_results.json.tmp
 skiptrace_results.json.resimpli.tmp
+skiptrace_results.json.resimpli.*.tmp
 # lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
 code_liens.json
@@ -188,6 +192,7 @@ tracerfy_mcp.url
 dnc_scrub.json
 dnc_scrub.json.tmp
 dnc_scrub.json.resimpli.tmp
+dnc_scrub.json.resimpli.*.tmp
 cases_qs.json
 records_qs.json
 # book/page -> recording keys, accumulated from every recordingModels list the pipeline pulls.

@@ -41,7 +41,7 @@ SKIP = {
     '_nearmetest.py': BROWSER, '_optouttest.py': BROWSER, '_plantest.py': BROWSER,
     '_portfoliotest.py': BROWSER, '_redfintest.py': BROWSER, '_senderdefaulttest.py': BROWSER,
     '_stalefixtest.py': BROWSER, '_taxtest.py': BROWSER, '_workeremailtest.py': BROWSER,
-    '_workerui.py': BROWSER,
+    '_workerui.py': BROWSER, '_equityboardtest.py': BROWSER,
     # --- live data ---
     '_cstest.py': CODES, '_eq30test.py': CODES, '_filtertest.py': CODES, '_gatetest.py': CODES,
     '_hangertest.py': CODES, '_phonepagetest.py': CODES,

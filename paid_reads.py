@@ -363,9 +363,17 @@ class CutoffGuard:
             return self._solver(*args, **kwargs)
         finally:
             after = self._actual()
-            # an unknown receipt still cost something: keep the measured price, never nothing
-            if before is not None and after is not None:
+            # an unknown receipt still cost something: keep the measured price, never nothing.
+            # A task left pending (submitted, outcome unknown) has no receipt yet, so settling to
+            # the receipt would book $0 for what may be a real charge; the reservation stays.
+            if before is not None and after is not None and not self._pending():
                 adjust((after - before) - self._unit, self._source)
+
+    def _pending(self):
+        try:
+            return bool(self._solver.state.data.get('captcha_pending'))
+        except Exception:
+            return True
 
     def __getattr__(self, name):
         return getattr(self._solver, name)

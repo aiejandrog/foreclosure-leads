@@ -461,6 +461,15 @@ def classify(case_type, plaintiff):
     # A bank named "... National Association" would falsely match the HOA regex on "ASSOCIATION".
     # Strip that lender suffix before the HOA test; real HOAs are never "National Association".
     pl_h = re.sub(r'\bNATIONAL\s+ASSOCIATION\b', ' ', pl)
+    # A LENDER IS NOT AN ASSOCIATION BECAUSE ITS NAME SAYS ONE. "Federal National MORTGAGE
+    # Association" (Fannie Mae), Ginnie Mae, "COMMUNITY Loan Servicing" and "First COMMUNITY Bank"
+    # all hit the association words below and were typed HOA/Condo, which withdrew their equity score,
+    # marked the equity approximate and switched off the board's "a lender suing proves a mortgage"
+    # rule (equity_state.lender_foreclosure). A lender word wins unless the name says homeowners or
+    # a condominium outright. (Same change as draft #67.)
+    if (re.search(r'\b(MORTGAGE|BANK|LOANS?|SERVICING|FEDERAL|FANNIE|FREDDIE|FNMA|GNMA|FHLMC|CREDIT UNION|SAVINGS)\b', pl)
+            and not re.search(r'\b(CONDOMINIUM|CONDO|HOMEOWNERS?|TOWNHOM\w*|PROPERTY OWNERS?)\b', pl)):
+        return 'Bank/Mortgage'
     if re.search(r'\b(ASSOCIATION|ASSN|CONDO|HOMEOWNER|MASTER ASSOC|HOA|TOWNHOM|VILLAS?|COMMUNITY)\b', pl_h):
         return 'HOA/Condo'
     if 'RPMF' in ct or re.search(r'\b(BANK|MORTGAGE|LOAN|FINANCIAL|CAPITAL|FUNDING|LENDING|N\.?A\.?|TRUST|SERVICING|WELLS FARGO|CHASE|CITI|ROCKET|CROSSCOUNTRY|FREEDOM|LAKEVIEW|PENNYMAC|NEWREZ|CARRINGTON)\b', pl):
@@ -1942,7 +1951,11 @@ def make_tracker(leads):
             'value': r.get('market_value',0) or 0,
             'assessed_value': _money(r.get('assessed_value') or r.get('Assessed Value')),
             'judg': r.get('judgment',0) or 0,
-            'eq': r.get('equity_pct',0), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
+            # A judgment that is not posted makes the debt UNKNOWN, not zero: equity_pct is 0 there
+            # only because qualify() refuses to credit it, and shipping that 0 made Call Mode print
+            # "0% equity" on a lead nobody could price. None is "not computable", the same honest
+            # value the lis pendens rows carry (lp_leads.py).
+            'eq': (None if r.get('judgment_unknown') else r.get('equity_pct',0)), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
             # --- FS 825.103 elder guardrail (Playbook §0.5) -------------------------------------
             # ownerAge is the ONLY authoritative field and is empty today: skip trace returns no
             # age/DOB (BatchData confirmed; see notes at L99/L502). When a provider that DOES carry
@@ -2543,13 +2556,14 @@ def make_tracker(leads):
     try:
         import judgment_interest as _JI
         _jdates = _JI.load_cache()
-        _jn = _jskip = 0
+        _jn = _jskip = _jfl = 0
         _jsum = 0.0
         for _r in slim:
             _c = str(_r.get('case') or '').strip()
             _amt = float(_r.get('judg') or 0)
-            _ent = (_jdates.get(_c) or {}).get('d') or ''
-            _jd = _JI._parse_date(_ent) if _ent else None
+            # a verified entry date, else the notice-of-sale FLOOR (a proven lower bound: the
+            # interest from it is a minimum and the row says so with jfloor), else nothing
+            _jd, _is_floor = _JI.accrual_start(_jdates.get(_c))
             if _amt <= 0 or not _jd:
                 _r['jaccrued'] = False
                 if _amt > 0:
@@ -2565,18 +2579,28 @@ def make_tracker(leads):
                 except Exception:
                     _asof = None
             _asof = _asof or _today_rc
-            _acc = _JI.accrue(_amt, _jd, _asof, stated_rate=(_jdates.get(_c) or {}).get('rate'))
+            # the recited rate belongs to the ENTRY year; a floor year gets the Jan-1 schedule
+            _acc = _JI.accrue(_amt, _jd, _asof,
+                              stated_rate=None if _is_floor else (_jdates.get(_c) or {}).get('rate'))
             if _acc['interest'] <= 0:
                 _r['jaccrued'] = False
                 continue
             _r['payoff'] = _acc['payoff']         # what it costs to satisfy on `asof`
             _r['jaccr'] = _acc['interest']        # the interest alone (shown as a delta)
-            _r['jdate'] = _jd.isoformat()         # entry date, so the board can cite it
+            # `jdate` means ENTRY DATE everywhere it is read (the reinstatement warning, the timeline,
+            # Call Mode's "since"), so a floor never goes there: it rides as jfloordate + jfloor.
+            if _is_floor:
+                _r['jfloor'] = True               # accrued from a notice of sale: a MINIMUM
+                _r['jfloordate'] = _jd.isoformat()
+                _jfl += 1
+            else:
+                _r['jdate'] = _jd.isoformat()     # entry date, so the board can cite it
             _r['jasof'] = _asof.isoformat()
             _r['jaccrued'] = True
             _jn += 1
             _jsum += _acc['interest']
-        print(f"post-judgment interest: {_jn} row(s) accrued (+${_jsum:,.0f} total unseen debt), "
+        print(f"post-judgment interest: {_jn} row(s) accrued (+${_jsum:,.0f} total unseen debt, "
+              f"{_jfl} of them a notice-of-sale minimum), "
               f"{_jskip} judgment(s) left as-entered (no verified entry date)")
     except Exception as _e:
         print(f"post-judgment interest: SKIPPED ({_e}) — judgments shown as entered")
@@ -3551,6 +3575,12 @@ def make_tracker(leads):
         # leads were on no phone at all. Each seat gets the full per-phone budget now.
         _cm_seats = len([s for s in call_mode.CALL_SEATS if s]) or 1
         _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads, cap=400 * _cm_seats)
+        # Server-confirmed emails and texts (mail_sent.json / text_sent.json) onto the dial rows, so a
+        # lead cadence already mailed stops sorting as never-contacted on the phone. Order and the
+        # "already contacted" bar only; Call Mode's hiding rules do not read these fields.
+        _cm_led = call_mode.stamp_ledger(_cm_all[0], _mlog, _tlog)
+        if _cm_led:
+            print('call mode: %d dial row(s) carry a server email/text send date' % _cm_led)
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,

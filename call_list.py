@@ -188,7 +188,9 @@ def collect(days_window, cap, lp=False):
                 _v = float(str(r.get(vk) or 0).replace('$', '').replace(',', ''))
             except Exception:
                 _v = 0.0
-            eq_known = _v > 0
+            # No posted judgment = the debt is unknown, so equity is too. Miami carries
+            # judgment_unknown with equity_pct 0; Broward/Palm Beach carry eq None. Neither is 0%.
+            eq_known = _v > 0 and r.get(ek) is not None and not r.get('judgment_unknown')
             rows.append({
                 'case': case, 'owner': owner[:30],
                 'addr': str(r.get(ak) or '')[:40],
@@ -197,7 +199,7 @@ def collect(days_window, cap, lp=False):
                 'ptype': 'mobile' if str(best.get('type') or '').lower().startswith('mob') else 'landline',
                 'alt': _fmt(ok_ph[1].get('number')) if len(ok_ph) > 1 else '',
                 'blocked': len(blocked),
-                'judg': _money(r.get(jk)), 'val': _money(r.get(vk)) if eq_known else '',
+                'judg': _money(r.get(jk)), 'val': _money(r.get(vk)) if _v > 0 else '',
                 'eq': (r.get(ek) or 0) if eq_known else None,
                 'title': (own.get(case) or {}).get('title_status', ''),
             })

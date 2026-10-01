@@ -145,7 +145,8 @@ def _value_metrics(st, judg, val, hs, days, addr, plaintiff, ftype):
         tier = 'C'; score = min(score, 40)
     warn = (('no street address - verify parcel first' if no_street else '') if val
             else 'no cadastral match - verify parcel + value')
-    return {'eq': eqp, 'eqfake': eqfake, 'mr': mr, 'ju': judg_unknown,
+    # eq is None, not the 100% eqp computes, when the debt is unknown: nobody can price it yet.
+    return {'eq': (None if judg_unknown else eqp), 'eqfake': eqfake, 'mr': mr, 'ju': judg_unknown,
             'score': score, 'tier': tier, 'warn': warn}
 
 

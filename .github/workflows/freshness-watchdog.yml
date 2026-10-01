@@ -346,8 +346,20 @@ jobs:
             const TZ = 'America/New_York';
             const dayET = (d) => d.toLocaleDateString('en-CA', { timeZone: TZ });
             const hourET = (d) => Number(d.toLocaleString('en-US', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }));
-            if (context.eventName === 'schedule' && hourET(NOW) !== 7) {
-              core.info(`It is ${hourET(NOW)}:xx in New York, not 07:xx - this is the other DST cron. Skipping.`);
+            // Which cron this is decides the skip, not the clock at start (2026-09-30): GitHub can
+            // start a scheduled run 45+ minutes late, and a 07:15 run that starts at 08:02 used to
+            // read "8:xx, not 07:xx", skip, and exit green on exactly the busy morning it was for.
+            // The cron's own UTC time, placed on today, says whether it is the 07:xx-ET one. With
+            // no schedule on the payload (older runner, the test harness) it falls back to the clock.
+            let cronHourET = hourET(NOW);
+            const cronM = /^(\d+) (\d+) /.exec((context.payload && context.payload.schedule) || '');
+            if (cronM) {
+              const at = new Date(NOW.getTime());
+              at.setUTCHours(Number(cronM[2]), Number(cronM[1]), 0, 0);
+              cronHourET = hourET(at);
+            }
+            if (context.eventName === 'schedule' && cronHourET !== 7) {
+              core.info(`This cron is ${cronHourET}:xx in New York, not 07:xx - this is the other DST cron. Skipping.`);
               return;
             }
             const today = dayET(NOW);
@@ -521,13 +533,20 @@ jobs:
               active.push({ key: a.key, severity, text: publicText(a.key, a.text) });
             }
             const published = Date.parse(doc.published_at || '');
-            if (doc.published_at && Number.isFinite(published) && (NOW_MS - published) > STALE_HOURS * 3600000) {
+            if (!doc.published_at) {
+              // No stamp used to skip the age check entirely, so a file that never says when it was
+              // written could never go stale (2026-09-30 audit).
+              active.push({
+                key: 'alerts-unpublished', severity: 'fail',
+                text: 'pipeline_alerts.json on main has no published_at, so its age cannot be checked.',
+              });
+            } else if (Number.isFinite(published) && (NOW_MS - published) > STALE_HOURS * 3600000) {
               const hours = Math.floor((NOW_MS - published) / 3600000);
               active.push({
                 key: 'alerts-unpublished', severity: 'fail',
                 text: 'pipeline_alerts.json on main was last published ' + hours + 'h ago (over ' + STALE_HOURS + 'h). The laptop has stopped publishing its checks.',
               });
-            } else if (doc.published_at && !Number.isFinite(published)) {
+            } else if (!Number.isFinite(published)) {
               core.setFailed('pipeline_alerts.json published_at is not a timestamp. Refusing to close alerts.');
               return;
             }

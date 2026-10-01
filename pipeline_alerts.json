@@ -1,49 +1,44 @@
 {
  "alerts": [
   {
-   "at": "2026-09-29T09:30:58-04:00",
-   "key": "bk-lookup",
-   "severity": "fail",
-   "text": "Federal bankruptcy pull failed. Non-Miami leads stay held."
-  },
-  {
-   "at": "2026-09-29T09:30:58-04:00",
+   "at": "2026-09-29T21:13:05-04:00",
    "key": "captcha-balance",
    "severity": "warn",
-   "text": "2Captcha balance $0.71, warn under $1.00."
+   "text": "2Captcha balance $0.42, warn under $1.00."
   },
   {
-   "at": "2026-09-29T09:30:58-04:00",
+   "at": "2026-09-29T21:13:05-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-09-29T09:30:58-04:00",
+   "at": "2026-09-29T21:13:05-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 70 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-09-29T09:30:58-04:00",
+   "at": "2026-09-29T21:13:05-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 456 credits, warn under 1500."
   }
  ],
- "published_at": "2026-09-29T09:30:58-04:00",
+ "published_at": "2026-09-29T21:13:05-04:00",
  "signals": {
   "bk_lookup": {
-   "errors": 0,
-   "filings": 762,
-   "holds": 83,
-   "leads_checked": 31,
+   "errors": 4,
+   "filings": 831,
+   "holds": 124,
+   "leads_checked": 42,
    "provider": "courtlistener",
-   "pull_age_h": 0.68,
-   "pull_ok": false,
+   "pull_age_h": 0.0,
+   "pull_ok": true,
    "readable": true,
-   "requests_used": 84,
-   "truncated": 1
+   "reason": "time_budget",
+   "requests_used": 96,
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
@@ -81,7 +76,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 0.70588
+   "usd": 0.41588
   },
   "clerk_bk": {
    "readable": false
@@ -98,7 +93,7 @@
     10
    ],
    "date": "2026-09-29",
-   "eligible": 69,
+   "eligible": 70,
    "judged": true,
    "readable": true,
    "scheduled": true,
@@ -121,10 +116,10 @@
    "cap": 50.0,
    "month": "2026-09",
    "readable": true,
-   "spent": 4.1175
+   "spent": 4.1709
   },
   "readiness": {
-   "at": "2026-09-28T21:05:24-04:00",
+   "at": "2026-09-29T21:13:05-04:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
