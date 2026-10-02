@@ -1687,6 +1687,52 @@ def restore_stays_from_cache(leads):
     return _restored
 
 
+def stamp_first_touch_hint(slim):
+    """Morning Worker hint (2026-10-02): fth=1 on a lead nobody has emailed yet whose every
+    worker-mailable address the bridge's first-touch gate would hold (send_server._pick_recipient:
+    no delivery, reply or ZeroBounce-valid evidence). The worker keeps such a lead out of its email
+    queue instead of offering a send /send refuses, skipping it, and serving it again tomorrow.
+
+    A HINT, not a gate. It only narrows what the worker shows; /send still decides every send. It
+    reads the same verdict the bridge uses and changes nothing about it. If send_server will not
+    import, no row is stamped and the worker behaves exactly as before. Returns rows stamped."""
+    for d in slim:
+        d.pop('fth', None)
+    try:
+        import send_server as _SS
+        ev = _SS._deliverability_evidence()
+        wdom = _SS._worker_mailable_domains()
+        mailed = {str(e.get('case') or '').strip().lower() for e in _SS._load_ledger()
+                  if e.get('ch') == 'email' and e.get('message_id')}
+    except Exception as e:
+        print('first-touch hint: unavailable (%s) - worker email queue left unfiltered' % str(e)[:80])
+        return 0
+    if not (ev.get('ver') or ev.get('replied') or ev.get('last_mailed') or ev.get('proven')):
+        # No verification list, no replies, no send ledger: this is not the sending machine (or its
+        # files are unreadable). Stamping here would hide nearly every lead on evidence that is
+        # simply absent, so leave the worker unfiltered and let /send judge on the laptop.
+        print('first-touch hint: no deliverability evidence on this machine - worker email queue left unfiltered')
+        return 0
+    held = 0
+    for d in slim:
+        em = [str(a).strip().lower() for a in (d.get('emails') or []) if a]
+        if not em:
+            continue
+        if str(d.get('case') or '').strip().lower() in mailed or any(a in ev['last_mailed'] for a in em):
+            continue                      # not a first touch: the gate's first-touch rule does not apply
+        if wdom is not None:
+            em = [a for a in em if _SS._worker_mailable(a, wdom)]
+        if not em:
+            continue                      # the worker composes nothing here anyway
+        pick, _v = _SS._pick_recipient(em, ev)
+        if not pick:
+            d['fth'] = 1
+            held += 1
+    print('first-touch hint: %d never-emailed lead(s) have no address the bridge would accept yet'
+          % held)
+    return held
+
+
 def stamp_federal_bk(slim):
     """Federal bankruptcy (CourtListener) holds onto baked rows: saleBkAct + bkWhy. Holds only: a
     case number and a reason, never a name. Miami-Dade rows are not held just because the lookup
@@ -3349,6 +3395,10 @@ def make_tracker(leads):
         if _late:
             print(f"bounce guard (final sweep): {_late} dead address(es) removed from finished cards "
                   f"— they had been re-merged after the queue strip")
+
+    # Morning Worker hint: which never-emailed leads the first-touch gate would hold. After the
+    # final bounce sweep so it judges the addresses the card actually carries.
+    stamp_first_touch_hint(slim)
 
     # Federal bankruptcy (CourtListener). Fails closed: see stamp_federal_bk.
     _bk_held, _bk_degraded = stamp_federal_bk(slim)
