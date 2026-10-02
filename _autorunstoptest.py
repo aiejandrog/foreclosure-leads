@@ -656,8 +656,11 @@ rec('genMorningWorker bakes every lane from one list, not four names',
     'anchor: LANE_KEYS -- queues, laneStats, laneCounts and the tab row all read it')
 rec('the balloon lane gets a baked queue',
     'LANE_KEYS.forEach(function(k){ queues[k] = _workerQueue(k).map(_workerCard); });' in GMW)
+# 2026-10-02: the tab row filters LANE_KEYS to lanes with someone workable (plus the open one), so
+# balloon still gets a tab from the same list whenever it has a lead to work.
 rec('the balloon lane gets a tab the operator can click',
-    '+     LANE_KEYS.map(function(k){' in GMW,
+    ('+     LANE_KEYS.map(function(k){' in GMW)
+    or ('+     LANE_KEYS.filter(function(k){' in GMW and 'return laneStats[k].w > 0 || k === lane;' in GMW),
     'the tab row was a hardcoded four, so there was no way to open the lane')
 rec('the lane stats cover it too', 'laneStats[k] = _laneStats(k)' in GMW)
 rec('the blob LANE_ALL still lists balloon last',

@@ -12583,7 +12583,8 @@ function _workerQueue(lane){
   var cap = _capState();
   var pool = DATA.filter(function(r){
     if(!_workerEligible(r)) return false;
-    return L.test(_saleDays(r), r);
+    if(!L.test(_saleDays(r), r)) return false;
+    return !!_workerReach(r);            // nothing workable today: off the worker, see _workerReach
   });
 
   var TR = {A:0, B:1, C:2};
@@ -12654,12 +12655,9 @@ function _workerQueue(lane){
   // send either (its baked mail is empty by design) — it belongs in the call bucket too.
   var _em = [], _ph = [];
   deduped.forEach(function(r){
-    var MS = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
-    // mirror the card's ACTUAL composability: allowlist-filtered mailboxes, not raw r.emails —
-    // a lead whose only addresses are junk domains composes nothing and must not hold a send slot
-    var boxes = (typeof _mailableList === 'function') ? _mailableList(r).length : (r.emails || []).length;
-    var sendable = boxes && MS !== 'replied' && MS !== 'done';
-    (sendable ? _em : _ph).push(r);
+    // _workerReach mirrors the card's ACTUAL composability (allowlist-filtered mailboxes, mail
+    // stage) and adds the first-touch hint: an address /send would hold must not take a send slot.
+    (_workerReach(r) === 'email' ? _em : _ph).push(r);
   });
   /* Rotate the call-bucket window daily: callq parking writes no touch (by design), so a fixed
      head meant leads 61+ NEVER surfaced. A day-keyed rotation walks the whole bucket over time.
@@ -12714,6 +12712,10 @@ function _cardMail(r){
     var MS = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
     if(MS === 'replied'){ var E1={gurl:'',to:'',subj:'',body:'',mailWhy:'replied'}; return E1; }
     if(MS === 'done'){    var E2={gurl:'',to:'',subj:'',body:'',mailWhy:'done'};    return E2; }
+    /* FIRST-TOUCH HOLD (fth, stamp_first_touch_hint): /send would refuse every address here, so the
+       card carries no payload and the worker goes straight to the phone path instead of making a
+       refused send, logging a skip and moving on without ever parking the lead for a call. */
+    if(r.fth){            var E3={gurl:'',to:'',subj:'',body:'',mailWhy:'fth'};     return E3; }
     /* A BALLOON ROW NEVER TAKES THE PORTFOLIO COMPOSER. genEmail() branches BAL rows to
        genBalloonEmail (the Refi Lane investor pitch, signed by the advisor via
        sender.balloon_signer) -- but genPortfolioEmail has NO such branch, and _workerQueue groups
@@ -12791,6 +12793,31 @@ function _workerPhones(r){
   if(b!=null && keep.some(function(x){ return x.i===b; }))
     keep.sort(function(x,y){ return (y.i===b?1:0) - (x.i===b?1:0); });
   return keep.map(function(x){ return x.p; }).slice(0,3);
+}
+/* WHAT CAN THIS LEAD ACTUALLY GET TODAY (2026-10-02). 'reply' | 'email' | 'phone' | ''.
+   Runs on leads _workerEligible already passed, and only narrows. A lead used to stay in the worker
+   when nothing on it could be worked: every address junk-domain or retired, or a first touch whose
+   addresses the bridge's first-touch gate holds (fth, baked by stamp_first_touch_hint), and no
+   phone the worker would dial. It was shown, skipped or refused, given a 24h cooldown, and served
+   again the next morning: the same unworkable faces on a loop. Those now leave the worker.
+   A waiting reply always stays, phone or not. */
+function _workerReach(r){
+  if(typeof _replyWaiting === 'function' && _replyWaiting(r)) return 'reply';
+  var MS = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
+  var boxes = (typeof _mailableList === 'function') ? _mailableList(r).length : (r.emails || []).length;
+  if(boxes && MS !== 'replied' && MS !== 'done' && !r.fth) return 'email';
+  if(_workerPhones(r).length) return 'phone';
+  return '';
+}
+/* Workable leads in a lane, uncapped: what the lane tab counts and what decides whether it shows. */
+function _laneWorkable(lane){
+  var L = WORKER_LANES[lane];
+  if(!L) return 0;
+  var n = 0;
+  DATA.forEach(function(r){
+    if(r && L.test(_saleDays(r), r) && _workerEligible(r) && _workerReach(r)) n++;
+  });
+  return n;
 }
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
@@ -12871,7 +12898,15 @@ function _workerCard(r){
 }
 function genMorningWorker(lane, autostart){
   // Default to the REPLIED lane whenever anyone is waiting — replies open the day, period.
-  lane = lane || (_laneCount('replied') ? 'replied' : 'urgent');
+  // No lane asked for: the first lane that has someone workable in it, so the worker never opens
+  // on an empty tab while leads wait in the next one. An explicit lane (the 8am auto-start passes
+  // 'urgent') is honoured as given.
+  if(!lane){
+    lane = 'urgent';
+    ['replied','urgent','active','early','balloon'].some(function(k){
+      if(_laneWorkable(k)){ lane = k; return true; } return false;
+    });
+  }
   var cap = _capState();
   var laneMeta = WORKER_LANES[lane] || WORKER_LANES.urgent;
   // BALLOON JOINED THE BAKE 2026-09-20, on Alejandro's go-ahead. It had a WORKER_LANES entry, a
@@ -12880,7 +12915,9 @@ function genMorningWorker(lane, autostart){
   // so there was no way to open it and "Auto-run ALL lanes" walked a name that resolved to nothing.
   var LANE_KEYS = ['replied','urgent','active','early','balloon'];
   var laneStats = {}, laneCounts = {};
-  LANE_KEYS.forEach(function(k){ laneStats[k] = _laneStats(k); laneCounts[k] = laneStats[k].n; });
+  // The tab number is WORKABLE leads (eligible AND something to send or dial today, _workerReach),
+  // not merely eligible ones, so a lane of unreachable leads reads 0 and its tab is hidden below.
+  LANE_KEYS.forEach(function(k){ laneStats[k] = _laneStats(k); laneStats[k].w = _laneWorkable(k); laneCounts[k] = laneStats[k].w; });
   // ALL THREE lanes are baked in, so switching lanes is instant and offline. Reopening the doc to
   // change lane would lose the in-tab activity log and the operator's place in the run — the two
   // things the worker exists to keep.
@@ -13089,14 +13126,17 @@ function genMorningWorker(lane, autostart){
     // LANE TABS — counts are the WHOLE lane, not the truncated queue, so he can see what is waiting
     // behind today's send budget instead of thinking the lane is empty.
     +   '<div class="mwlanes">'
-    +     LANE_KEYS.map(function(k){
+    +     LANE_KEYS.filter(function(k){
+          // ONLY LANES WITH SOMEONE TO WORK (2026-10-02). An empty lane is not shown; the lane
+          // already open stays, so the page never has no selected tab.
+          return laneStats[k].w > 0 || k === lane;
+        }).map(function(k){
           var L = WORKER_LANES[k], st = laneStats[k];
-          // A bare "0" on a lane that holds 125 leads reads as broken. Show the workable count,
-          // and when it is zero say what the pool is so the number is explainable at a glance.
-          var sub = st.n ? esc(L.d)
-                         : (st.pool ? st.pool + ' in this lane · none reachable yet' : esc(L.d));
+          // When the open lane is empty, say what the pool is so the 0 is explainable at a glance.
+          var sub = st.w ? esc(L.d)
+                         : (st.pool ? st.pool + ' in this lane · none workable today' : esc(L.d));
           return '<button type="button" class="mwlane'+(k===lane?' on':'')+'" data-lane="'+k+'">'
-            + '<div class="lt"><span>'+L.ic+' '+esc(L.t)+'</span><span class="ln">'+st.n+'</span></div>'
+            + '<div class="lt"><span>'+L.ic+' '+esc(L.t)+'</span><span class="ln">'+st.w+'</span></div>'
             + '<div class="ld">'+sub+'</div></button>';
         }).join('')
     +   '</div>'
@@ -13428,7 +13468,7 @@ function genMorningWorker(lane, autostart){
     // conversation — never template it; "done" = 3 sends out, the final note promised no more
     // emails and the code keeps the promise. step.why makes attempt() log it and fall through
     // to the phone path using machinery that already exists.
-    +     'out.push({k:"email", why: r.mailWhy==="replied" ? "owner REPLIED — live conversation, no templates. Call them." : r.mailWhy==="done" ? "3 emails sent, final note promised no more — phone/text only now" : (r.emails&&r.emails.length)?null:"no email address on file"});'
+    +     'out.push({k:"email", why: r.mailWhy==="replied" ? "owner REPLIED — live conversation, no templates. Call them." : r.mailWhy==="done" ? "3 emails sent, final note promised no more — phone/text only now" : r.mailWhy==="fth" ? "no address the send bridge will accept yet — phone/text only" : (r.emails&&r.emails.length)?null:"no email address on file"});'
     +     'out.push({k:"callq", why:(r.phones&&r.phones.length)?null:"no phone on file"});'
     +     'out.push({k:"wp",    why:r.wpUrl?null:"no people-search URL available"});'
     +     'return out;'
@@ -13659,7 +13699,8 @@ function genMorningWorker(lane, autostart){
     // every reply/done/no-mailable-address lead. r.mailWhy carries the real reason when one is set.
     +     'if(!subj || !body || !to){'
     +       'var whyMap={replied:"owner already replied — this is a live conversation, not a template",'
-    +                   'done:"3 emails already sent — the last one promised no more, honoring that"};'
+    +                   'done:"3 emails already sent — the last one promised no more, honoring that",'
+    +                   'fth:"no address the send bridge will accept yet (no verification or reply on record)"};'
     +       'addLog("skip", r.first||r.owner, "no email to send ("+(whyMap[r.mailWhy]||"no reachable mailbox for this lead")+")", "warn");'
     +       'advance();'
     +       'return;'
@@ -14207,7 +14248,7 @@ function genMorningWorker(lane, autostart){
     // "nothing here" is a mystery that costs an hour of reading code to disprove.
     +       'if(!s.pool) why="No leads match this lane on the current board at all.";'
     +       'else if(s.noContact && s.noContact>=s.pool-s.suppressed) why="<b>"+s.pool+" leads sit in this lane, and not one has a traced phone or email.</b> That is a data gap, not an empty pipeline &mdash; the outreach tools have nothing to send to. Run <code>skiptrace.py</code> against these, then rebuild the board.";'
-    +       'else why="Every lead here was worked in the last 3 days, has no traced phone or email ("+(s.noContact||0)+"), or is opted-out / claimed / in an active bankruptcy stay ("+(s.suppressed||0)+").";'
+    +       'else why="Every lead here was worked in the last 3 days, has no traced phone or email ("+(s.noContact||0)+"), is opted-out / claimed / in an active bankruptcy stay ("+(s.suppressed||0)+"), or has nothing workable today ("+Math.max(0,(s.n||0)-(s.w||0))+": no address the send bridge would accept yet and no dialable phone).";'
     +       'var others=LANE_ORDER.filter(function(k){return k!==lane && (LANES[k]||[]).length;});'
     +       'main.innerHTML="<div class=\'mwnone\'><b>Nothing to work in "+esc(LMETA[lane].t)+".</b><br><br>"+why'
     +         '+(others.length?"<br><br>Still open: <b>"+others.map(function(k){return LMETA[k].ic+" "+LMETA[k].t+" ("+LANES[k].length+")";}).join(" &middot; ")+"</b> &mdash; tap a lane above.":"<br><br>Come back after the next refresh.")'
