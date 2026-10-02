@@ -1688,10 +1688,14 @@ def restore_stays_from_cache(leads):
 
 
 def stamp_first_touch_hint(slim):
-    """Morning Worker hint (2026-10-02): fth=1 on a lead nobody has emailed yet whose every
-    worker-mailable address the bridge's first-touch gate would hold (send_server._pick_recipient:
-    no delivery, reply or ZeroBounce-valid evidence). The worker keeps such a lead out of its email
-    queue instead of offering a send /send refuses, skipping it, and serving it again tomorrow.
+    """Morning Worker hint (2026-10-02): fth=1 on a lead whose every worker-mailable address the
+    bridge's deliverability gate would hold (send_server._pick_recipient: no delivery, reply or
+    ZeroBounce-valid evidence). The worker keeps such a lead out of its email queue instead of
+    offering a send /send refuses, skipping it, and serving it again tomorrow.
+
+    Judged on the addresses the lead carries now, never on case history: /send checks only the
+    addresses it is offered, so a case mailed once at an address since replaced is held like any
+    other lead whose current addresses fail.
 
     A HINT, not a gate. It only narrows what the worker shows; /send still decides every send. It
     reads the same verdict the bridge uses and changes nothing about it. If send_server will not
@@ -1702,8 +1706,6 @@ def stamp_first_touch_hint(slim):
         import send_server as _SS
         ev = _SS._deliverability_evidence()
         wdom = _SS._worker_mailable_domains()
-        mailed = {str(e.get('case') or '').strip().lower() for e in _SS._load_ledger()
-                  if e.get('ch') == 'email' and e.get('message_id')}
     except Exception as e:
         print('first-touch hint: unavailable (%s) - worker email queue left unfiltered' % str(e)[:80])
         return 0
@@ -1718,8 +1720,6 @@ def stamp_first_touch_hint(slim):
         em = [str(a).strip().lower() for a in (d.get('emails') or []) if a]
         if not em:
             continue
-        if str(d.get('case') or '').strip().lower() in mailed or any(a in ev['last_mailed'] for a in em):
-            continue                      # not a first touch: the gate's first-touch rule does not apply
         if wdom is not None:
             em = [a for a in em if _SS._worker_mailable(a, wdom)]
         if not em:
@@ -1728,7 +1728,7 @@ def stamp_first_touch_hint(slim):
         if not pick:
             d['fth'] = 1
             held += 1
-    print('first-touch hint: %d never-emailed lead(s) have no address the bridge would accept yet'
+    print('first-touch hint: %d lead(s) have no address the bridge would accept yet'
           % held)
     return held
 

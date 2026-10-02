@@ -22,7 +22,7 @@ def rows():
             {'case': 'C', 'emails': ['x@weird.example']}, {'case': 'D', 'emails': ['d@gmail.com'], 'fth': 1}]
 
 s = rows(); F.stamp_first_touch_hint(s)
-rec('unverified never-emailed mailable leads are held', [d.get('fth') for d in s] == [1, None, None, 1], [d.get('fth') for d in s])
+rec('unverified mailable leads are held', [d.get('fth') for d in s] == [1, None, None, 1], [d.get('fth') for d in s])
 rec('a lead with no worker-mailable address is not stamped', 'fth' not in s[2])
 
 orig = S._recipient_verdict
@@ -31,11 +31,14 @@ s = rows(); F.stamp_first_touch_hint(s)
 rec('an address the gate passes clears the hint', 'fth' not in s[0])
 S._recipient_verdict = orig
 
-ol = S._load_ledger
-S._load_ledger = lambda: [{'ch': 'email', 'message_id': 'm', 'case': 'D', 'to': 'd@gmail.com', 'd': '2026-09-30'}]
+# a case mailed before, at an address since replaced: /send judges only the current addresses
+S._recipient_verdict = lambda a, ev: ('awaiting_delivery', '') if a == 'd@gmail.com' else orig(a, ev)
 s = rows(); F.stamp_first_touch_hint(s)
-rec('an already-emailed lead is not a first touch: never stamped, stale stamp removed', 'fth' not in s[3])
-S._load_ledger = ol
+rec('a previously mailed case is judged on its current addresses (held when none pass)', s[3].get('fth') == 1)
+S._recipient_verdict = lambda a, ev: ('delivered', '') if a == 'd@gmail.com' else orig(a, ev)
+s = rows(); F.stamp_first_touch_hint(s)
+rec('a current address with delivery evidence clears the hint, stale stamp removed', 'fth' not in s[3])
+S._recipient_verdict = orig
 
 od = S._deliverability_evidence
 S._deliverability_evidence = lambda: (_ for _ in ()).throw(RuntimeError('boom'))
