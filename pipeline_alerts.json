@@ -1,40 +1,40 @@
 {
  "alerts": [
   {
-   "at": "2026-10-01T09:31:21-04:00",
+   "at": "2026-10-01T21:15:05-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 36h ago."
+   "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-01T09:31:21-04:00",
+   "at": "2026-10-01T21:15:05-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 67 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-01T09:31:21-04:00",
+   "at": "2026-10-01T21:15:05-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 316 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-01T09:31:21-04:00",
+ "published_at": "2026-10-01T21:15:05-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 0,
+   "errors": 1,
    "filings": 1068,
-   "holds": 185,
-   "leads_checked": 1,
+   "holds": 211,
+   "leads_checked": 26,
    "provider": "courtlistener",
-   "pull_age_h": 2.14,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 116,
+   "reason": "time_budget",
+   "requests_used": 52,
    "truncated": 0
   },
   "bounce": {
@@ -73,7 +73,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": -0.00017
+   "usd": 9.99983
   },
   "clerk_bk": {
    "readable": false
@@ -116,7 +116,7 @@
    "spent": 4.1558
   },
   "readiness": {
-   "at": "2026-09-29T21:13:05-04:00",
+   "at": "2026-10-01T21:15:05-04:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
