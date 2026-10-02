@@ -1,40 +1,40 @@
 {
  "alerts": [
   {
-   "at": "2026-10-01T21:15:05-04:00",
+   "at": "2026-10-02T09:34:21-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-01T21:15:05-04:00",
+   "at": "2026-10-02T09:34:21-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 67 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-01T21:15:05-04:00",
+   "at": "2026-10-02T09:34:21-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
-   "text": "Tracerfy balance 316 credits, warn under 1500."
+   "text": "Tracerfy balance 11 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-01T21:15:05-04:00",
+ "published_at": "2026-10-02T09:34:21-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
-   "filings": 1068,
-   "holds": 211,
-   "leads_checked": 26,
+   "errors": 0,
+   "filings": 1113,
+   "holds": 222,
+   "leads_checked": 22,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.57,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 52,
+   "requests_used": 86,
    "truncated": 0
   },
   "bounce": {
@@ -73,7 +73,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 9.99983
+   "usd": 9.48056
   },
   "clerk_bk": {
    "readable": false
@@ -89,8 +89,8 @@
     10,
     10
    ],
-   "date": "2026-10-01",
-   "eligible": 67,
+   "date": "2026-10-02",
+   "eligible": 69,
    "judged": true,
    "readable": true,
    "scheduled": true,
@@ -101,19 +101,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-01",
+   "date": "2026-10-02",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1790853302,
+   "started_at": 1790939702,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 4.1558
+   "spent": 7.2721
   },
   "readiness": {
    "at": "2026-10-01T21:15:05-04:00",
@@ -146,7 +146,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 316
+   "credits": 11
   }
  },
  "version": 1
