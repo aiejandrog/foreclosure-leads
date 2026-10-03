@@ -1445,6 +1445,31 @@ def federal_hold_fn():
     return held
 
 
+def lookup_hold_fn(slim, optouts=None, deads=None):
+    """lead -> reason the lookup screen must NOT offer Call back / Text ('' = may).
+
+    The same stay and suppression drops call_rows makes, read from the same sources, so the
+    "Who texted me?" screen cannot hand out a tel:/sms: link that the dial queue withheld.
+    Deliberately NOT the queue's other drops (60-day window, cap, other seat, equity floor):
+    those are "not due today", and calling back someone who texted in is fine for them."""
+    optouts, deads = (optouts or {}), (deads or {})
+    _id_opted = _identity_opted_fn(slim, optouts)
+    _fed = federal_hold_fn()
+
+    def _hold(d):
+        case = (d.get('case') or '').strip()
+        if case in optouts or _id_opted(d):
+            return 'opted out'
+        if case in deads:
+            return 'dead lead'
+        if d.get('saleBkAct'):
+            return 'bankruptcy stay on the docket'
+        if _fed(case):
+            return 'bankruptcy hold'
+        return ''
+    return _hold
+
+
 def _call_equity_parts(d):
     """-> (equity %, recorded-lien dollars subtracted). (None, 0) when the equity is not known.
 
@@ -2293,7 +2318,7 @@ def _tp_slim(tp):
     return out
 
 
-def phone_index(slim):
+def phone_index(slim, hold=None):
     """EVERY lead that has a phone -> the minimum needed to answer "who just texted me?".
 
     WHY THIS IS NOT JUST THE DIALABLE 400 (2026-08-19): a lead texted 305-801-1800 and there was no
@@ -2303,11 +2328,18 @@ def phone_index(slim):
     reply. She turned out to be a lead we had emailed three times.
 
     Shape is deliberately two tables, not a fat map: several numbers share one lead, so
-      t: [[owner, street, case, days, equity, folio, countyCode], ...]   (each lead once)
+      t: [[owner, street, case, days, equity, folio, countyCode, holdReason], ...]   (each lead once)
       d: {"3058011800": <index into t>, ...}
     Naive one-record-per-number was 253KB; this is materially smaller and the page has to open on a
     phone at a door. Rides INSIDE the encrypted payload — these are phone numbers and the repo is
     public.
+
+    HOLD VERDICT RIDES WITH THE ROW (2026-10-03). The index is FULL on purpose (identification),
+    but it used to carry no hold verdict, so a case call_rows dropped for a bankruptcy stay, a
+    federal hold, never-contact or a ledger opt-out still got Call back / Text links on the lookup
+    screen: the lead is not in ROWS, so hardSuppressed() saw only the notes store. `hold(d)` ->
+    reason string ('' = none); a hold that raises is treated as held (fail closed). The lookup
+    still IDENTIFIES the caller; it just renders DO NOT CONTACT instead of tel:/sms: links.
     """
     def _num(v):                       # _n() is a closure inside call_rows, not module scope
         try:
@@ -2339,6 +2371,10 @@ def phone_index(slim):
         if not case or not phones:
             continue
         if case not in seen:
+            try:
+                _hold = (hold(d) or '') if hold else ''
+            except Exception:
+                _hold = 'hold could not be checked'
             val = _num(d.get('value'))
             judg = _num(d.get('judg'))
             seen[case] = len(table)
@@ -2350,6 +2386,7 @@ def phone_index(slim):
                 int(val - judg) if (val and judg) else None,
                 re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
                 (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2]),
+                (str(_hold)[:60] or None),
             ])
         for p in phones:
             digits.setdefault(p, seen[case])       # first lead wins; a number is one person
@@ -2590,7 +2627,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
             'lanes on the phone would under-count the book: %s%s\n'
             '  A new gate in call_rows drops leads; coverage_rows has to pick them up.'
             % (len(_lost), ', '.join(_lost[:8]), ' ...' if len(_lost) > 8 else ''))
-    _plain = json.dumps({'r': rows, 'b': _cov, 'x': phone_index(slim)})
+    _plain = json.dumps({'r': rows, 'b': _cov, 'x': phone_index(slim, lookup_hold_fn(slim, optouts, deads))})
     # SAY THE PAYLOAD SIZE OUT LOUD, every build. This page exists to open on cell data at a door
     # (~100 KB was the founding budget) and coverage roughly doubles it. A number in the log is what
     # makes the next person's addition to these rows a decision rather than an accident.
@@ -4743,7 +4780,7 @@ function phLookup(q){
     seenIdx[idx + '|' + num] = 1;
     var row = t[idx] || [];
     hits.push({num:num, owner:row[0]||'', street:row[1]||'', c:row[2]||'',
-               d:row[3], eq:row[4], fo:row[5], ct:row[6]});
+               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||''});
   };
   var ten = d.slice(-10);
   if(d.length >= 10 && map[ten] != null){ push(ten, map[ten]); return hits; }
@@ -4817,7 +4854,7 @@ function screenLookup(prefill){
         /* DIAL-TIME GATE ON THE LOOKUP SCREEN (2026-09-25). These two links used to render for ANY
            indexed number: a person who said "stop" after the build could be called and texted from
            here with no check at all. Same predicate the queue uses, on the row when we have it. */
-        +   ((function(){ var _hs = hardSuppressed(r || {c:h.c, p:[h.num]});
+        +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num]});
               if(_hs) return '<span class="nc" style="color:#ff8a80;font-weight:800">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '</span>';
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
                    + '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'; })())
