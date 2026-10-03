@@ -10,6 +10,7 @@ _*.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
+!_lookupstaytest.py
 !_wplinktest.py
 !_wpcontactstest.py
 !_textbatchtest.py
