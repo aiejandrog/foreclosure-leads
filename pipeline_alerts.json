@@ -1,25 +1,25 @@
 {
  "alerts": [
   {
-   "at": "2026-10-02T09:34:21-04:00",
+   "at": "2026-10-02T21:12:02-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness: 1 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-02T09:34:21-04:00",
+   "at": "2026-10-02T21:12:02-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-02T09:34:21-04:00",
+   "at": "2026-10-02T21:12:02-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 11 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-02T09:34:21-04:00",
+ "published_at": "2026-10-02T21:12:02-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -27,15 +27,15 @@
   "bk_lookup": {
    "errors": 0,
    "filings": 1113,
-   "holds": 222,
-   "leads_checked": 22,
+   "holds": 245,
+   "leads_checked": 33,
    "provider": "courtlistener",
-   "pull_age_h": 0.57,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 86,
-   "truncated": 0
+   "requests_used": 112,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -116,19 +116,17 @@
    "spent": 7.2721
   },
   "readiness": {
-   "at": "2026-10-01T21:15:05-04:00",
+   "at": "2026-10-02T21:12:02-04:00",
    "battery_present": true,
-   "degraded": 1,
-   "degraded_codes": [
-    7
-   ],
-   "degraded_names": [
-    "DEALFLOW Refresh"
-   ],
+   "degraded": 0,
+   "degraded_codes": [],
+   "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 0,
-   "failed_names": [],
+   "failed": 1,
+   "failed_names": [
+    "DEALFLOW Morning Worker"
+   ],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
