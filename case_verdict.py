@@ -1710,15 +1710,19 @@ def assess(timeline, dossier=None):
     # sole read document on the entry is accepted: nothing else could be the judgment.
     _read_here = {str(r.get('document') or '') for r in mine if r.get('state') == 'read'}
     _read_here.discard('')
-    if len(_read_here) > 1:
+    # "Sole" means the ONLY document on the entry: every coverage row read, exactly one document. An
+    # unread, partly read or unrecorded judgment beside a read sibling is not a sole document, and
+    # an entry with no coverage rows cannot show that it is one.
+    _sole = bool(mine) and all(r.get('state') == 'read' for r in mine) and len(_read_here) == 1
+    if not _sole:
         _sibling = [c for c in verified if c.get('source') == 'document_text'
                     and c.get('document_kind') != 'final_judgment']
         if _sibling:
             verified = [c for c in verified if c not in _sibling]
             missing.append('a total verifies to the cent on %s, but that document does not read as '
                            'the final judgment (it reads as %s) and the judgment\'s docket entry '
-                           'carries %d read documents, so the figure is not established as the '
-                           "judgment's amount"
+                           'carries %d read document(s) and is not shown to be a single one, so the figure is '
+                           "not established as the judgment's amount"
                            % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
                               ', '.join(sorted({str(c.get('document_kind') or 'unknown')
                                                 for c in _sibling})), len(_read_here)))

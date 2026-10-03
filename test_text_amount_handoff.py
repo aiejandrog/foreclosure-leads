@@ -43,7 +43,9 @@ def row_for(tmp, entry=ENTRY, ref=None, reading=None, content=b'%PDF-1.4 synthet
 
 def through_save_and_reload(tmp, rows, controlling=ENTRY):
     """Text -> verification -> timeline -> saved JSON -> reloaded JSON."""
-    timeline = VT.timeline(CASE, controlling=controlling)
+    # The controlling entry's one document is recorded as read, as document_coverage writes it.
+    timeline = VT.timeline(CASE, controlling=controlling,
+                           attachments=[VT.read_attachment(controlling)])
     RCT.attach_text_checks(timeline, CASE, rows)
     target = Path(tmp) / 'case-timeline.json'
     DS.pipeline_write(target, timeline)
@@ -240,6 +242,24 @@ class SiblingDocumentTests(unittest.TestCase):
                            ['court:%s:1' % ENTRY])
         result = CV.assess(saved)
         self.assertFalse([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+
+
+    def _unread_judgment_beside_read_sibling(self, attachments):
+        timeline = VT.timeline(CASE, controlling=ENTRY, attachments=attachments)
+        RCT.attach_text_checks(timeline, CASE, [row_for(
+            self.tmp, ref='court:%s:2' % ENTRY, reading=MT.text_reading(p1=AFFIDAVIT_PAGE1))])
+        return CV.assess(timeline)
+
+    def test_an_unread_judgment_beside_a_read_sibling_is_not_a_sole_document(self):
+        unread = dict(VT.read_attachment(ENTRY, document='court:%s:1' % ENTRY), state='fetched_unread')
+        result = self._unread_judgment_beside_read_sibling(
+            [unread, VT.read_attachment(ENTRY, document='court:%s:2' % ENTRY)])
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+        self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
+
+    def test_an_entry_with_no_coverage_rows_cannot_show_a_sole_document(self):
+        result = self._unread_judgment_beside_read_sibling([])
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
 
 
 class MalformedRowTests(unittest.TestCase):

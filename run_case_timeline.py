@@ -298,6 +298,8 @@ def text_amount_checks(case, rows):
     for row in rows:
         try:
             out.extend(_text_checks_for_row(case, row))
+        except ImportError:
+            raise                                                 # a broken install is not one bad row
         except Exception as exc:                                  # noqa: BLE001 - named, never swallowed
             ref = str((row or {}).get('source_ref') if isinstance(row, dict) else '')
             parts = ref.split(':')
