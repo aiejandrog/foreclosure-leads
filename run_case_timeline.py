@@ -266,6 +266,9 @@ _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk
                         r'shall\s+sell\s+the\s+(?:subject\s+)?property', re.I)
 
 
+_CONNECTOR_END_RE = re.compile(r'\b(FOR|OF|ON|TO|AND|IN|BY|WITH|RE|UPON|REGARDING)\s*[,:]?\s*$', re.I)
+
+
 def judgment_titled(reading):
     """True when the first readable page leads with a final-judgment TITLE (the whole line, an
     allowed line after it), carries no affidavit or payoff-schedule wording anywhere on that page,
@@ -283,6 +286,13 @@ def judgment_titled(reading):
     lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
     for i, ln in enumerate(lines):
         if len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
+            # A heading wrapped over two lines ("ORDER GRANTING MOTION FOR" / "FINAL JUDGMENT"): the
+            # title block includes the lines above, so they must not name another instrument or end
+            # on a connector that hands the sentence to this line.
+            before = lines[max(0, i - 2):i]
+            if any(_NOT_A_JUDGMENT_RE.search(b) for b in before) or (
+                    before and _CONNECTOR_END_RE.search(before[-1])):
+                continue
             rest = lines[i + 1:i + 3]
             if not rest or (_NEXT_LINE_OK_RE.match(rest[0])
                             and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest)):

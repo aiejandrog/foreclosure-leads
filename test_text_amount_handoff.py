@@ -305,6 +305,33 @@ class SiblingDocumentTests(unittest.TestCase):
                       ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',)):
             self.assertFalse(titled(*lines), lines)
 
+    def test_a_heading_wrapped_over_two_lines_keeps_its_qualifier(self):
+        # Review (static trace, reproduced): "ORDER GRANTING MOTION FOR" / "FINAL JUDGMENT".
+        decree = MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'
+        for lines in (('ORDER GRANTING MOTION FOR', 'FINAL JUDGMENT'),
+                      ("PLAINTIFF'S MOTION FOR", 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('ORDER ON', 'FINAL JUDGMENT'), ('REQUEST FOR', 'FINAL JUDGMENT'),
+                      ('NOTICE OF HEARING ON', 'FINAL JUDGMENT')):
+            with self.subTest(lines=lines):
+                self.assertFalse(RCT.judgment_titled(MT.text_reading(
+                    p1=MT.PAGE1 + '\n' + '\n'.join(lines), p2=decree)))
+                # ...and end to end: the real judgment has no extractable total.
+                page1 = MT.PAGE1 + '\n' + '\n'.join(lines) + "\nTHIS ACTION was heard on the plaintiff's motion."
+                no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
+                sibling = MT.text_reading(p1=page1, p2=decree)
+                saved = self.saved(self.rows(no_total, sibling), ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+                self.assertTrue([c for c in saved['amount_checks'] if c['ok'] and c['source_ref'].endswith(':2')])
+                result = CV.assess(saved)
+                self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+                self.assertEqual(result['verdict'], 'incomplete')
+
+    def test_a_real_caption_above_the_title_still_passes(self):
+        page1 = (MT.PAGE1 + '\nIN THE CIRCUIT COURT OF THE 11TH JUDICIAL CIRCUIT IN AND FOR MIAMI-DADE COUNTY, FLORIDA'
+                 '\nCASE NO. 2099-000001-CA-01\nWELLS FARGO BANK, N.A.,\nPlaintiff,\nv.\nJOHN DOE,\nDefendant.'
+                 '\nFINAL JUDGMENT OF FORECLOSURE\nTHIS ACTION was heard on the plaintiff\'s motion.')
+        decree = MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'
+        self.assertTrue(RCT.judgment_titled(MT.text_reading(p1=page1, p2=decree)))
+
     def test_a_title_without_decree_wording_is_not_a_judgment(self):
         self.assertFalse(RCT.judgment_titled(MT.text_reading(p1=MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE')))
 
