@@ -239,22 +239,37 @@ def _stored_bytes_match(manifest):
 # The document's OWN title line, not a phrase somewhere in a line: "AFFIDAVIT IN SUPPORT OF MOTION FOR
 # FINAL JUDGMENT" and "NOTICE OF FILING FINAL JUDGMENT" contain the words and are not the judgment.
 _JUDGMENT_TITLE_RE = re.compile(
-    r'^[\W_]*(?:(?:FIRST|SECOND|THIRD)\s+)?(?:AMENDED\s+)?(?:(?:SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
-    r'FINAL\s+(?:(?:SUMMARY|IN\s+REM)\s+)*JUDGMENT\b', re.I)
+    r'^[\W_]*(?:\d+[.)]\s*)?(?:(?:FIRST|SECOND|THIRD)\s+)?'
+    r'(?:(?:AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
+    r'FINAL\s+(?:(?:SUMMARY|IN\s+REM)\s+)*JUDGMENT'
+    r'(?:\s+OF\s+(?:MORTGAGE\s+)?FORECLOSURE)?'
+    r'(?:\s+(?:IN\s+REM|AND\s+(?:ORDER|DECREE)[A-Z ,]{0,50}))?\s*[.:]*\s*$', re.I)
 _NOT_A_JUDGMENT_RE = re.compile(
     r'\b(AFFIDAVIT|MOTION|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|IN\s+SUPPORT|'
-    r'DENYING|GRANTING|SATISFACTION|VACAT\w+|SET\s+ASIDE)\b', re.I)
+    r'DENYING|GRANTING|SATISFACTION|VACAT\w+|SET\s+ASIDE|EXHIBIT|STATEMENT|SCHEDULE|COST\s+BILL)\b', re.I)
+
+
+# A line right under the title that begins like another instrument ("AFFIDAVIT OF ...", "[PROPOSED]").
+# Not "THIS ACTION was heard on the plaintiff's motion": that is a real judgment's opening sentence.
+_NEXT_LINE_NOT_RE = re.compile(
+    r'^[\W_]*(AFFIDAVIT|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|EXHIBIT|IN\s+SUPPORT|'
+    r'SATISFACTION|MOTION)\b', re.I)
 
 
 def judgment_titled(reading):
-    """True when one of the first lines of the first readable page IS a final-judgment title."""
+    """True when one of the first lines of the first readable page IS a final-judgment title: the
+    WHOLE line is the title (a body sentence or "FINAL JUDGMENT PAYOFF STATEMENT" is not), and the
+    two lines after it do not turn it into an affidavit, motion, notice or proposed order."""
     pages = [p for p in (reading or {}).get('pages') or []
              if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')]
     if not pages:
         return False
     lines = [ln.strip() for ln in str(pages[0].get('text') or '').splitlines() if ln.strip()][:25]
-    return any(len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln)
-               for ln in lines)
+    for i, ln in enumerate(lines):
+        if len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
+            if not any(_NEXT_LINE_NOT_RE.match(nxt) for nxt in lines[i + 1:i + 3]):
+                return True
+    return False
 
 
 def _text_checks_for_row(case, row):

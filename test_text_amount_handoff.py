@@ -265,6 +265,31 @@ class SiblingDocumentTests(unittest.TestCase):
                 self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
                 self.assertEqual(result['verdict'], 'incomplete')
 
+    def test_title_identification_needs_the_whole_line_and_a_clean_next_two(self):
+        def titled(*lines):
+            return RCT.judgment_titled(MT.text_reading(p1=MT.PAGE1 + '\n' + '\n'.join(lines)))
+        for lines in (('FINAL JUDGMENT OF FORECLOSURE',), ('AMENDED FINAL JUDGMENT OF FORECLOSURE',),
+                      ('FINAL SUMMARY JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT AND ORDER SETTING SALE',),
+                      ('DEFAULT FINAL JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT', 'OF FORECLOSURE')):
+            self.assertTrue(titled(*lines), lines)
+        for lines in (('FINAL JUDGMENT', 'AFFIDAVIT OF AMOUNTS DUE AND OWING'),
+                      ('FINAL JUDGMENT PAYOFF STATEMENT',), ('FINAL JUDGMENT OF FORECLOSURE COST BILL',),
+                      ('FINAL JUDGMENT AMOUNTS SCHEDULE',), ('FINAL JUDGMENT EXHIBIT A',),
+                      ('FINAL JUDGMENT OF FORECLOSURE', '[PROPOSED]'),
+                      ('Final Judgment of Foreclosure was entered on 1/1',),
+                      ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',)):
+            self.assertFalse(titled(*lines), lines)
+
+    def test_a_two_line_affidavit_title_does_not_supply_the_award(self):
+        page1 = (MT.PAGE1 + '\nFINAL JUDGMENT\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
+                 'there is due the total sum of $100,000.00; clerk shall sell; ORDERED AND ADJUDGED')
+        no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
+        saved = self.saved(self.rows(no_total, MT.text_reading(p1=page1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        result = CV.assess(saved)
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+        self.assertEqual(result['verdict'], 'incomplete')
+
     def test_a_sole_read_document_is_accepted_whatever_it_reads_as(self):
         saved = self.saved([row_for(self.tmp, reading=MT.text_reading(p1=AFFIDAVIT_PAGE1))],
                            ['court:%s:1' % ENTRY])
