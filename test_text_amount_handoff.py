@@ -299,6 +299,9 @@ class SiblingDocumentTests(unittest.TestCase):
                       ('FINAL JUDGMENT', 'Plaintiff,', 'v.', 'DECLARATION OF AMOUNTS DUE'),
                       ('FINAL JUDGMENT', 'CASE NO. 1', 'PAYOFF STATEMENT'),
                       ('FINAL JUDGMENT', 'THIS ACTION: AMOUNTS DUE PER AFFIANT'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'THIS CAUSE came before the Court',
+                       'Submitted by: Counsel for Plaintiff', 'PROPOSED ORDER'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'THIS CAUSE came', 'Prepared by: counsel'),
                       ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',)):
             self.assertFalse(titled(*lines), lines)
 

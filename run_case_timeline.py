@@ -260,7 +260,7 @@ _NEXT_LINE_OK_RE = re.compile(
 # Words that mark a sworn statement or a payoff schedule anywhere on the title's page.
 _SWORN_OR_SCHEDULE_RE = re.compile(
     r'\b(AFFIDAVIT|AFFIANT|SWORN|NOTARY|BEFORE\s+ME|DECLARATION|PAYOFF|INDEBTEDNESS|AMOUNTS?\s+DUE|'
-    r'UNDER\s+PENALT\w+)\b', re.I)
+    r'UNDER\s+PENALT\w+|PROPOSED|SUBMITTED\s+BY|PREPARED\s+BY)\b', re.I)
 # What only a decree says. An affidavit or motion does not order the clerk to sell.
 _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk\s+shall\s+sell|'
                         r'shall\s+sell\s+the\s+(?:subject\s+)?property', re.I)
