@@ -2330,6 +2330,7 @@ def phone_index(slim, hold=None):
     Shape is deliberately two tables, not a fat map: several numbers share one lead, so
       t: [[owner, street, case, days, equity, folio, countyCode, holdReason], ...]   (each lead once)
       d: {"3058011800": <index into t>, ...}
+      h: {"3058011800": <reason>, ...}   (only numbers held while their `t` row is not; see below)
     Naive one-record-per-number was 253KB; this is materially smaller and the page has to open on a
     phone at a door. Rides INSIDE the encrypted payload — these are phone numbers and the repo is
     public.
@@ -2340,13 +2341,17 @@ def phone_index(slim, hold=None):
     screen: the lead is not in ROWS, so hardSuppressed() saw only the notes store. `hold(d)` ->
     reason string ('' = none); a hold that raises is treated as held (fail closed). The lookup
     still IDENTIFIES the caller; it just renders DO NOT CONTACT instead of tel:/sms: links.
+    A NUMBER IS HELD IF ANY LEAD CARRYING IT IS HELD. `d` is first-lead-wins, so a number shared by
+    a callable case and a stayed one, or a case listed twice with different flags, could resolve to
+    the callable row. Every record is checked; a held case's row takes the hold, and a held number
+    whose row is not held is listed in `h` (normally a handful, so the payload stays small).
     """
     def _num(v):                       # _n() is a closure inside call_rows, not module scope
         try:
             return float(str(v).replace(',', '').replace('$', ''))
         except Exception:
             return 0.0
-    seen, table, digits = {}, [], {}
+    seen, table, digits, num_hold = {}, [], {}, {}
     for d in slim:
         case = (d.get('case') or '').strip()
         # 🔴 DNC NUMBERS MUST NOT BE SERIALIZED. This module's own docstring states the invariant:
@@ -2370,11 +2375,17 @@ def phone_index(slim, hold=None):
                 phones.append(_pd)
         if not case or not phones:
             continue
+        try:
+            _hold = (hold(d) or '') if hold else ''
+        except Exception:
+            _hold = 'hold could not be checked'
+        _hold = str(_hold)[:60]
+        if _hold:
+            for p in phones:
+                num_hold.setdefault(p, _hold)
+        if case in seen and _hold and not table[seen[case]][7]:
+            table[seen[case]][7] = _hold                 # same case listed twice: held copy wins
         if case not in seen:
-            try:
-                _hold = (hold(d) or '') if hold else ''
-            except Exception:
-                _hold = 'hold could not be checked'
             val = _num(d.get('value'))
             judg = _num(d.get('judg'))
             seen[case] = len(table)
@@ -2386,11 +2397,16 @@ def phone_index(slim, hold=None):
                 int(val - judg) if (val and judg) else None,
                 re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
                 (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2]),
-                (str(_hold)[:60] or None),
+                (_hold or None),
             ])
         for p in phones:
             digits.setdefault(p, seen[case])       # first lead wins; a number is one person
-    return {'t': table, 'd': digits}
+    held_nums = {p: why for p, why in num_hold.items()
+                 if p in digits and not table[digits[p]][7]}
+    out = {'t': table, 'd': digits}
+    if held_nums:
+        out['h'] = held_nums
+    return out
 
 
 # ---- BALLOON / REFI LANE SCRIPT ------------------------------------------------------------------
@@ -4780,7 +4796,7 @@ function phLookup(q){
     seenIdx[idx + '|' + num] = 1;
     var row = t[idx] || [];
     hits.push({num:num, owner:row[0]||'', street:row[1]||'', c:row[2]||'',
-               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||''});
+               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||(PHIDX.h&&PHIDX.h[num])||''});
   };
   var ten = d.slice(-10);
   if(d.length >= 10 && map[ten] != null){ push(ten, map[ten]); return hits; }
