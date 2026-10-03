@@ -1,25 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-10-02T21:12:02-04:00",
+   "at": "2026-10-03T14:04:35-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 1 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-02T21:12:02-04:00",
+   "at": "2026-10-03T14:04:35-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-02T21:12:02-04:00",
+   "at": "2026-10-03T14:04:35-04:00",
+   "key": "stale-refresh-flag",
+   "severity": "warn",
+   "text": "refresh-running.flag is 7.6h old, past the 6h refresh limit, so it was ignored and this file was published."
+  },
+  {
+   "at": "2026-10-03T14:04:35-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 11 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-02T21:12:02-04:00",
+ "published_at": "2026-10-03T14:04:35-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -30,7 +36,7 @@
    "holds": 245,
    "leads_checked": 33,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 16.88,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
@@ -79,7 +85,7 @@
    "readable": false
   },
   "health_fails": {
-   "fresh": true,
+   "fresh": false,
    "names": []
   },
   "morning_sends": {
@@ -89,7 +95,7 @@
     10,
     10
    ],
-   "date": "2026-10-02",
+   "date": "2026-10-03",
    "eligible": 69,
    "judged": true,
    "readable": true,
@@ -101,12 +107,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-02",
+   "date": "2026-10-03",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1790939702,
+   "started_at": 1791050615,
    "state": "finished"
   },
   "paid_reads": {
@@ -141,7 +147,8 @@
    "tasks_ok": true
   },
   "refresh_flag": {
-   "stale": false
+   "age_h": 7.6,
+   "stale": true
   },
   "tracerfy": {
    "credits": 11
