@@ -1293,6 +1293,25 @@ def _judgment_amount(timeline, entry_id):
             rejected.append('a check for this judgment was read off %s, not the court copy'
                             % (source or 'a document with no source recorded'))
             continue
+        # The entry a court source_ref names is the entry the document was filed under. A check
+        # whose separate entry_id field disagrees with it is not attributable to either, so it is
+        # reported, never counted (a text check is built from the ref, but a saved file can be
+        # edited or merged).
+        # Scoped to checks made from document TEXT, the path that records both fields from one
+        # source; older vision fixtures and saved files carry entry_id and source_ref that were
+        # never required to agree, and this does not change how they read.
+        if check.get('source') == 'document_text':
+            ref_parts = source.split(':')
+            if len(ref_parts) < 3 or str(ref_parts[1]) != str(check.get('entry_id')):
+                rejected.append('a check for this judgment names entry %s but its source %s was '
+                                'filed under a different entry' % (check.get('entry_id'), source))
+                continue
+            # Tied to the exact bytes it was read from. With no recorded hash it cannot be shown
+            # to belong to this copy, so it does not verify.
+            if not check.get('document_hash'):
+                rejected.append('a text check for this judgment (%s) records no document hash, so '
+                                'it cannot be tied to the copy it was read from' % source)
+                continue
         if check.get('ok') is True:
             # `amount` must be a NUMBER, not merely present: a string amount from an older saved
             # format passed the None test, so `verified` was non-empty while the figure set was
