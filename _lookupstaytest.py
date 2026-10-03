@@ -22,11 +22,16 @@ def lead(case, n, **kw):
          'addr': '%d Fake St, Miami' % n, 'days': 10}
     d.update(kw); return d
 SHARED_OK, SHARED_HELD, DUP = 'FAKE-2099-000005', 'FAKE-2099-000006', 'FAKE-2099-000007'
+DNCDUP, SH2_OK, SH2_HELD = 'FAKE-2099-000009', 'FAKE-2099-000011', 'FAKE-2099-000012'
 slim = [lead(HELD, 1), lead(DOCKET, 2, saleBkAct=1), lead(OK, 3), lead(OPTED, 4),
         # one number on a callable case AND a stayed case; the callable one comes first
         lead(SHARED_OK, 5), dict(lead(SHARED_HELD, 6, saleBkAct=1), phones=['(305) 555-0105']),
         # the same case twice, the second copy stayed and carrying an extra number
-        lead(DUP, 7), dict(lead(DUP, 7, saleBkAct=1), phones=['(305) 555-0108'])]
+        lead(DUP, 7), dict(lead(DUP, 7, saleBkAct=1), phones=['(305) 555-0108']),
+        # held copy of a case whose only number is DNC: still holds the case's row
+        lead(DNCDUP, 9), dict(lead(DNCDUP, 9, saleBkAct=1), phones=['(305) 555-0110'], phdnc=[1]),
+        # callable lead first; a stayed lead carries the same number DNC-flagged
+        lead(SH2_OK, 11), dict(lead(SH2_HELD, 12, saleBkAct=1), phones=['(305) 555-0111'], phdnc=[1])]
 optouts = {OPTED: {'ts': '2099-01-01'}}
 
 idx = cm.phone_index(slim, cm.lookup_hold_fn(slim, optouts, {}))
@@ -38,7 +43,7 @@ assert gate, 'lookup gate expression not found: patch not applied'
 js = ('var notes={}, _OPTPH=null, PHIDX=%s;\nfunction digitsOf(q){return String(q||"").replace(/\\D/g,"");}\n'
       % json.dumps(idx)) + js_fn('optPhones') + js_fn('hardSuppressed') + js_fn('phLookup') + '''
 var out = {};
-["3055550101","3055550102","3055550103","3055550104","3055550105","3055550107","3055550108"].forEach(function(q){
+["3055550101","3055550102","3055550103","3055550104","3055550105","3055550107","3055550108","3055550109","3055550111"].forEach(function(q){
   phLookup(q).forEach(function(h){ var r=null; var _hs = %s; out[h.c + (q.slice(-2)==="08"?"#2":"")] = {who:h.owner, links:!_hs, why:_hs}; });
 });
 console.log(JSON.stringify(out));''' % gate.group(1)
@@ -52,4 +57,7 @@ assert v[OK]['links'], 'control case must keep its links'
 assert not v[SHARED_OK]['links'], 'a number a stayed case also carries must not get links'
 assert not v[DUP]['links'] and not v[DUP + '#2']['links'], 'a case listed twice takes the held copy'
 assert 'h' in idx and '3055550103' not in idx['h'], 'h lists only held numbers on unheld rows'
+assert not v[DNCDUP]['links'], 'a held copy with only DNC numbers still holds the case'
+assert not v[SH2_OK]['links'], 'a stayed lead holds a shared number even when its copy is DNC'
+assert '3055550110' not in idx['d'], 'DNC-only numbers are still never serialized'
 print('PASS')

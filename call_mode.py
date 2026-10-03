@@ -2351,7 +2351,7 @@ def phone_index(slim, hold=None):
             return float(str(v).replace(',', '').replace('$', ''))
         except Exception:
             return 0.0
-    seen, table, digits, num_hold = {}, [], {}, {}
+    seen, table, digits, num_hold, case_hold = {}, [], {}, {}, {}
     for d in slim:
         case = (d.get('case') or '').strip()
         # 🔴 DNC NUMBERS MUST NOT BE SERIALIZED. This module's own docstring states the invariant:
@@ -2366,25 +2366,31 @@ def phone_index(slim, hold=None):
         # `t` via any non-DNC number; only the DNC digits are absent from `d`.
         _ph_raw = list(d.get('phones') or [])
         _dnc_raw = list(d.get('phdnc') or [])
-        phones = []
+        phones, _all = [], []
         for _i, _p in enumerate(_ph_raw):
-            if _i < len(_dnc_raw) and _dnc_raw[_i]:
-                continue
             _pd = re.sub(r'\D', '', str(_p))[-10:]
-            if len(_pd) == 10:
+            if len(_pd) != 10:
+                continue
+            _all.append(_pd)
+            if not (_i < len(_dnc_raw) and _dnc_raw[_i]):
                 phones.append(_pd)
-        if not case or not phones:
+        if not case:
             continue
+        # The hold is read BEFORE the no-usable-phone skip, and from every number the record
+        # carries (DNC ones included): a held copy of a case whose own numbers are all DNC, or a
+        # held lead whose copy of a shared number is DNC-flagged, still holds that case and that
+        # number. Only numbers already in `d` can reach `h`, so no DNC number is serialized here.
         try:
             _hold = (hold(d) or '') if hold else ''
         except Exception:
             _hold = 'hold could not be checked'
         _hold = str(_hold)[:60]
         if _hold:
-            for p in phones:
+            case_hold.setdefault(case, _hold)
+            for p in _all:
                 num_hold.setdefault(p, _hold)
-        if case in seen and _hold and not table[seen[case]][7]:
-            table[seen[case]][7] = _hold                 # same case listed twice: held copy wins
+        if not phones:
+            continue
         if case not in seen:
             val = _num(d.get('value'))
             judg = _num(d.get('judg'))
@@ -2397,10 +2403,13 @@ def phone_index(slim, hold=None):
                 int(val - judg) if (val and judg) else None,
                 re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
                 (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2]),
-                (_hold or None),
+                None,                                    # hold reason: set after the loop
             ])
         for p in phones:
             digits.setdefault(p, seen[case])       # first lead wins; a number is one person
+    for _c, _row in seen.items():                  # any held copy of a case holds its row
+        if _c in case_hold:
+            table[_row][7] = case_hold[_c]
     held_nums = {p: why for p, why in num_hold.items()
                  if p in digits and not table[digits[p]][7]}
     out = {'t': table, 'd': digits}
