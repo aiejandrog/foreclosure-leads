@@ -223,7 +223,7 @@ class SiblingDocumentTests(unittest.TestCase):
                          if c['ok'] and c['source_ref'].endswith(':2')])     # the sibling verifies
         result = CV.assess(saved)
         self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
-        self.assertTrue([m for m in result['missing'] if 'does not read as the final judgment' in m],
+        self.assertTrue([m for m in result['missing'] if 'not identified as the final judgment' in m],
                         result['missing'])
         self.assertNotEqual(result['verdict'], 'supported')
         self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
@@ -236,6 +236,34 @@ class SiblingDocumentTests(unittest.TestCase):
         self.assertFalse([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
         self.assertTrue([s for s in result['supported_by'] if 'court:%s:1' % ENTRY in s],
                         result['supported_by'])
+
+    def test_the_judgment_verifying_beside_a_sibling_keeps_the_verdict_unheld_by_the_sibling(self):
+        saved = self.saved(self.rows(MT.text_reading(p1=JUDGMENT_PAGE1),
+                                     MT.text_reading(p1=AFFIDAVIT_PAGE1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        result = CV.assess(saved)
+        self.assertFalse([m for m in result['missing'] if 'not identified as the final judgment' in m],
+                         result['missing'])
+        self.assertTrue([n for n in result['notes'] if 'not identified as the final judgment' in n],
+                        result['notes'])
+
+    def test_a_motion_support_affidavit_titled_with_final_judgment_is_not_the_judgment(self):
+        # Review finding: the classifier reads "...MOTION FOR FINAL JUDGMENT" as a final judgment.
+        for title in ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',
+                      "PLAINTIFF'S MOTION FOR FINAL JUDGMENT OF FORECLOSURE",
+                      'NOTICE OF FILING PROPOSED FINAL JUDGMENT',
+                      'ORDER GRANTING MOTION FOR FINAL JUDGMENT'):
+            with self.subTest(title=title):
+                page1 = MT.PAGE1 + '\n' + title + "\nTHIS ACTION was heard on the plaintiff's motion."
+                no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
+                saved = self.saved(self.rows(no_total, MT.text_reading(p1=page1)),
+                                   ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+                self.assertTrue([c for c in saved['amount_checks']
+                                 if c['ok'] and c['source_ref'].endswith(':2')])     # it verifies
+                result = CV.assess(saved)
+                self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+                self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
+                self.assertEqual(result['verdict'], 'incomplete')
 
     def test_a_sole_read_document_is_accepted_whatever_it_reads_as(self):
         saved = self.saved([row_for(self.tmp, reading=MT.text_reading(p1=AFFIDAVIT_PAGE1))],

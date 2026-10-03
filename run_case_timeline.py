@@ -236,6 +236,27 @@ def _stored_bytes_match(manifest):
         return None
 
 
+# The document's OWN title line, not a phrase somewhere in a line: "AFFIDAVIT IN SUPPORT OF MOTION FOR
+# FINAL JUDGMENT" and "NOTICE OF FILING FINAL JUDGMENT" contain the words and are not the judgment.
+_JUDGMENT_TITLE_RE = re.compile(
+    r'^[\W_]*(?:(?:FIRST|SECOND|THIRD)\s+)?(?:AMENDED\s+)?(?:(?:SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
+    r'FINAL\s+(?:(?:SUMMARY|IN\s+REM)\s+)*JUDGMENT\b', re.I)
+_NOT_A_JUDGMENT_RE = re.compile(
+    r'\b(AFFIDAVIT|MOTION|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|IN\s+SUPPORT|'
+    r'DENYING|GRANTING|SATISFACTION|VACAT\w+|SET\s+ASIDE)\b', re.I)
+
+
+def judgment_titled(reading):
+    """True when one of the first lines of the first readable page IS a final-judgment title."""
+    pages = [p for p in (reading or {}).get('pages') or []
+             if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')]
+    if not pages:
+        return False
+    lines = [ln.strip() for ln in str(pages[0].get('text') or '').splitlines() if ln.strip()][:25]
+    return any(len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln)
+               for ln in lines)
+
+
 def _text_checks_for_row(case, row):
     import document_classify
     import miami_judgment as MJ
@@ -257,7 +278,8 @@ def _text_checks_for_row(case, row):
     intact = _stored_bytes_match(manifest) if any(c.get('sum_check') for c in candidates) else None
     base = {'case': case, 'entry_id': parts[1], 'source_ref': ref,
             'document_key': manifest.get('document_key'), 'document_hash': doc_hash,
-            'document_kind': kind, 'source': 'document_text', 'hash_rechecked': intact is not None}
+            'document_kind': kind, 'judgment_title': judgment_titled(reading),
+            'source': 'document_text', 'hash_rechecked': intact is not None}
     out = []
     for c in candidates:
         ok = bool(c.get('sum_check'))

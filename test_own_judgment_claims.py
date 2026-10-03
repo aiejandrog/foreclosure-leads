@@ -72,6 +72,27 @@ class OwnJudgmentComposition(unittest.TestCase):
         self.assertEqual(self.claims_of(enriched), ['30000/1'])
         self.assertEqual(self.shown(enriched), ['30000/1'])
 
+    def test_a_generic_dcp_record_at_the_dockets_book_page_stays_out(self):
+        # Review finding: DCP is not an encumbrance type, so it was dropped before own-case matching
+        # and enrichment later added its judgment body as a claim.
+        tc = W.this_case_of({'raw': {}, 'entries': [{'metadata': {'bookAndPage': '34932 / 1256'}}]})
+        own = dict(judgment(OWN, 'SOMEONE ELSE'), doC_TYPE='DADE COURT PAPER - DCP')
+        control = dict(judgment(OTHER, 'CITY'), doC_TYPE='DADE COURT PAPER - DCP')
+        searched, enriched, again = self.run_pipeline(tc, [own, control])
+        self.assertEqual([(o['book'], o['this_case']) for o in enriched['own_case_instruments']],
+                         [('34932', 'docket_book_page')])          # provenance kept
+        self.assertEqual(self.claims_of(enriched), ['30000/1'])    # the unrelated DCP judgment stays
+        self.assertEqual(self.claims_of(again), ['30000/1'])
+        self.assertEqual(self.shown(enriched), ['30000/1'])
+
+    def test_a_generic_dcp_record_is_not_own_by_date_or_plaintiff_alone(self):
+        tc = {'plaintiffs': ['WILMINGTON SAVINGS FUND SOCIETY FSB'], 'book_pages': set(),
+              'judgment_dates': [date(2025, 1, 1)], 'filed': date(2024, 3, 1)}
+        near = dict(judgment(OWN, 'WILMINGTON SAVINGS FUND SOCIETY'), doC_TYPE='DADE COURT PAPER - DCP')
+        _, enriched, _ = self.run_pipeline(tc, [near])
+        self.assertEqual(enriched['own_case_instruments'], [])
+        self.assertEqual(self.claims_of(enriched), ['34932/1256'])
+
     def test_without_a_this_case_marker_both_are_claims(self):
         _, enriched, _ = self.run_pipeline(None, [judgment(OWN, 'WILMINGTON'), judgment(OTHER, 'CITY')])
         self.assertEqual(self.claims_of(enriched), ['30000/1', '34932/1256'])

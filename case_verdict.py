@@ -1717,17 +1717,18 @@ def assess(timeline, dossier=None):
              and len(_read_here) == 1)
     # ...and the check must come from that one document, not from a file that has no coverage row.
     _sibling = [c for c in verified if c.get('source') == 'document_text'
-                and c.get('document_kind') != 'final_judgment'
+                and not (c.get('document_kind') == 'final_judgment' and c.get('judgment_title') is True)
                 and not (_sole and str(c.get('source_ref') or '') in _read_here)]
     if _sibling:
         verified = [c for c in verified if c not in _sibling]
-        missing.append('a total verifies to the cent on %s, but that document does not read as the '
-                       'final judgment (it reads as %s) and it is not shown to be the only document '
-                       "on the judgment's docket entry, so the figure is not established as the "
-                       "judgment's amount"
-                       % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
-                          ', '.join(sorted({str(c.get('document_kind') or 'unknown')
-                                            for c in _sibling}))))
+        why = ('a total verifies to the cent on %s, but that document is not identified as the final '
+               'judgment (it reads as %s) and is not shown to be the only document on the judgment\'s '
+               "docket entry, so the figure is not established as the judgment's amount"
+               % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
+                  ', '.join(sorted({str(c.get('document_kind') or 'unknown') for c in _sibling}))))
+        # A sibling's rejected total is a gap only when it leaves the judgment with no verified
+        # amount; beside a judgment that does verify it is a note, not a reason to hold the case.
+        (notes if verified else missing).append(why)
     for check in failed:
         why = str(check.get('reason') or '')
         # A printed subtotal its own rows do not reproduce is the document disagreeing with itself.
