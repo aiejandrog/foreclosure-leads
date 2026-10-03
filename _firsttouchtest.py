@@ -314,7 +314,8 @@ rec('the alias ramp still binds when it is lower', S3._first_touch_cap(tiny, WU1
 rec('no first_touch block -> no first-touch senders (old lane map)', S3._first_touch_senders({'lanes': {}}) == [])
 
 
-def start_bridge(d, login):
+def start_bridge(d, login, gate=None):
+    """`gate` moves the #83 cutoff instant for this bridge only (test rewrite of the source)."""
     (d / 'gmail.key').write_text('%s:abcdabcdabcdabcd\n' % login, encoding='utf-8')
     port_ = free_port()
     (d / '_run_bridge.py').write_text(
@@ -329,7 +330,12 @@ def start_bridge(d, login):
         '        return {}\n'
         'smtplib.SMTP_SSL = _FakeSMTP\n'
         'sys.argv = ["send_server.py", "--port", "%d", "--limit", "50"]\n'
-        'exec(open("send_server.py", encoding="utf-8").read())\n' % port_, encoding='utf-8')
+        '_src = open("send_server.py", encoding="utf-8").read()\n'
+        '_gate = %r\n'
+        'if _gate:\n'
+        '    _src = _src.replace("FIRST_TOUCH_GATE_CUTOFF = \'2026-09-26T18:21:42+00:00\'", "FIRST_TOUCH_GATE_CUTOFF = %%r" %% _gate, 1)\n'
+        '    _src = _src.replace("FIRST_TOUCH_GATE_CUTOFF_DATE = \'2026-09-26\'", "FIRST_TOUCH_GATE_CUTOFF_DATE = %%r" %% _gate[:10], 1)\n'
+        'exec(_src)\n' % (port_, gate), encoding='utf-8')
     pr = subprocess.Popen([sys.executable, str(d / '_run_bridge.py')], cwd=str(d),
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(60):
@@ -429,14 +435,25 @@ LOGIN = 'sender@bsgflorida.com'
 WU_A, WU_C = 'a@one.example', 'c@two.example'
 
 
+# The real #83 cutoff (2026-09-26) left the 7-day window on 2026-10-03, so a "pre-cutoff rows
+# still inside the window" ledger stopped existing in real time and these checks went red on main
+# with no code change. The bridges below run with the cutoff moved to yesterday 18:21:42Z, so the
+# same shape (pre-gate rows inside the window) stays reachable whatever day the suite runs.
+MOVED_GATE = '%sT18:21:42+00:00' % day(1)
+_SRC = (HERE / 'send_server.py').read_text(encoding='utf-8')
+rec('the gate constants the moved-gate bridges rewrite are still spelled as the test expects',
+    "FIRST_TOUCH_GATE_CUTOFF = '2026-09-26T18:21:42+00:00'" in _SRC
+    and "FIRST_TOUCH_GATE_CUTOFF_DATE = '2026-09-26'" in _SRC)
+
+
 def pre_cutoff_block():
-    """8 of 21 mailed before the #83 gate, inside the trailing window. Wilson blocks; the
+    """8 of 21 mailed before the (moved) gate, inside the trailing window. Wilson blocks; the
     post-cutoff first-touch cohort is empty, so the rule is slow_restart."""
     rows = [dict(LEDGER[0], **{'from': LOGIN})]
     bounced = dict(BOUNCED)
     for i in range(21):
         addr = 'pre%d@example.com' % i
-        rows.append({'d': '2026-09-25', 'ts_utc': '2026-09-25T15:00:00+00:00', 'ch': 'email',
+        rows.append({'d': day(2), 'ts_utc': '%sT15:00:00+00:00' % day(2), 'ch': 'email',
                      'from': LOGIN, 'to': addr, 'message_id': '<pre%d@example.com>' % i})
         if i < 8:
             bounced[addr] = {'reason': '550'}
@@ -450,7 +467,8 @@ def ft_rows_from(frm, n, tag):
              'touch': 'first'} for i in range(n)]
 
 
-def boot(name, login, ledger, bounced=None, senders=None, bad_senders=False, drop_bounce=False):
+def boot(name, login, ledger, bounced=None, senders=None, bad_senders=False, drop_bounce=False,
+         gate=None):
     d = T / name
     d.mkdir()
     seed(d)
@@ -467,7 +485,7 @@ def boot(name, login, ledger, bounced=None, senders=None, bad_senders=False, dro
         (d / 'senders.json').write_text('{', encoding='utf-8')
     elif senders is not None:
         (d / 'senders.json').write_text(json.dumps(senders), encoding='utf-8')
-    return d, start_bridge(d, login)
+    return d, start_bridge(d, login, gate)
 
 
 def stop(pr):
@@ -486,7 +504,7 @@ for label, slug, kw in (
         ('senders.json absent', 'absent', {}),
         ('senders.json unreadable', 'badjson', {'bad_senders': True}),
         ('no first_touch block', 'nofirst', {'senders': LANE_ONLY})):
-    folder, (pr, port_) = boot('hold-' + slug, LOGIN, rows, bounced, **kw)
+    folder, (pr, port_) = boot('hold-' + slug, LOGIN, rows, bounced, gate=MOVED_GATE, **kw)
     try:
         st, hj = call(port_, '/health')
         rec('%s: rule is slow_restart under the pre-cutoff block' % label,
