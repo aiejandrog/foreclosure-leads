@@ -1,46 +1,40 @@
 {
  "alerts": [
   {
-   "at": "2026-10-03T14:04:35-04:00",
+   "at": "2026-10-03T18:06:37-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: 1 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 21h ago."
   },
   {
-   "at": "2026-10-03T14:04:35-04:00",
+   "at": "2026-10-03T18:06:37-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-03T14:04:35-04:00",
-   "key": "stale-refresh-flag",
-   "severity": "warn",
-   "text": "refresh-running.flag is 7.6h old, past the 6h refresh limit, so it was ignored and this file was published."
-  },
-  {
-   "at": "2026-10-03T14:04:35-04:00",
+   "at": "2026-10-03T18:06:37-04:00",
    "key": "tracerfy-credits",
-   "severity": "warn",
-   "text": "Tracerfy balance 11 credits, warn under 1500."
+   "severity": "fail",
+   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-03T14:04:35-04:00",
+ "published_at": "2026-10-03T18:06:37-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
    "errors": 0,
-   "filings": 1113,
-   "holds": 245,
-   "leads_checked": 33,
+   "filings": 1169,
+   "holds": 274,
+   "leads_checked": 28,
    "provider": "courtlistener",
-   "pull_age_h": 16.88,
+   "pull_age_h": 0.5,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 112,
+   "requests_used": 91,
    "truncated": 1
   },
   "bounce": {
@@ -79,13 +73,13 @@
    "window": 7
   },
   "captcha": {
-   "usd": 9.48056
+   "usd": 9.03207
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
-   "fresh": false,
+   "fresh": true,
    "names": []
   },
   "morning_sends": {
@@ -119,7 +113,7 @@
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 7.2721
+   "spent": 10.2249
   },
   "readiness": {
    "at": "2026-10-02T21:12:02-04:00",
@@ -147,11 +141,10 @@
    "tasks_ok": true
   },
   "refresh_flag": {
-   "age_h": 7.6,
-   "stale": true
+   "stale": false
   },
   "tracerfy": {
-   "credits": 11
+   "credits": 1
   }
  },
  "version": 1
