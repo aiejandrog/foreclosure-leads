@@ -174,5 +174,104 @@ class TextHandoffTests(unittest.TestCase):
         self.assertFalse([c for c in result['conflicts'] if 'two different totals' in c])
 
 
+JUDGMENT_PAGE1 = (MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE\n'
+                  "THIS ACTION was heard on the plaintiff's motion.")
+AFFIDAVIT_PAGE1 = (MT.PAGE1 + '\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
+                   "THIS ACTION was heard on the plaintiff's motion.")
+
+
+class SiblingDocumentTests(unittest.TestCase):
+    """A self-consistent table in a sibling document is not the judgment's amount."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def saved(self, rows, refs):
+        timeline = VT.timeline(CASE, controlling=ENTRY, attachments=[
+            VT.read_attachment(ENTRY, document=r) for r in refs])
+        RCT.attach_text_checks(timeline, CASE, rows)
+        target = Path(self.tmp) / 'case-timeline.json'
+        DS.pipeline_write(target, timeline)
+        return DS.pipeline_load(target)
+
+    def rows(self, judgment_reading, sibling_reading):
+        return [row_for(self.tmp, ref='court:%s:1' % ENTRY, reading=judgment_reading,
+                        content=b'judgment bytes', name='j.pdf'),
+                row_for(self.tmp, ref='court:%s:2' % ENTRY, reading=sibling_reading,
+                        content=b'sibling bytes', name='s.pdf')]
+
+    def test_a_check_records_what_the_document_reads_as(self):
+        saved = self.saved(self.rows(MT.text_reading(p1=JUDGMENT_PAGE1),
+                                     MT.text_reading(p1=AFFIDAVIT_PAGE1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        kinds = {c['source_ref']: c['document_kind'] for c in saved['amount_checks'] if c['ok']}
+        self.assertEqual(kinds, {'court:%s:1' % ENTRY: 'final_judgment',
+                                 'court:%s:2' % ENTRY: 'unknown'})
+
+    def test_a_total_that_verifies_only_in_a_sibling_is_a_gap(self):
+        bad = MT.PAGE2.replace('$150,000.00', '$150,000.01')           # the judgment does not add up
+        saved = self.saved(self.rows(MT.text_reading(p1=JUDGMENT_PAGE1, p2=bad),
+                                     MT.text_reading(p1=AFFIDAVIT_PAGE1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        self.assertTrue([c for c in saved['amount_checks']
+                         if c['ok'] and c['source_ref'].endswith(':2')])     # the sibling verifies
+        result = CV.assess(saved)
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+        self.assertTrue([m for m in result['missing'] if 'does not read as the final judgment' in m],
+                        result['missing'])
+        self.assertNotEqual(result['verdict'], 'supported')
+        self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
+
+    def test_the_judgment_verifying_beside_a_sibling_still_counts(self):
+        saved = self.saved(self.rows(MT.text_reading(p1=JUDGMENT_PAGE1),
+                                     MT.text_reading(p1=AFFIDAVIT_PAGE1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        result = CV.assess(saved)
+        self.assertFalse([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+        self.assertTrue([s for s in result['supported_by'] if 'court:%s:1' % ENTRY in s],
+                        result['supported_by'])
+
+    def test_a_sole_read_document_is_accepted_whatever_it_reads_as(self):
+        saved = self.saved([row_for(self.tmp, reading=MT.text_reading(p1=AFFIDAVIT_PAGE1))],
+                           ['court:%s:1' % ENTRY])
+        result = CV.assess(saved)
+        self.assertFalse([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+
+
+class MalformedRowTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_one_malformed_row_does_not_abort_the_case(self):
+        bad = row_for(self.tmp, entry='222222222', name='bad.pdf')
+        bad['reading'] = {'pages': [{'page': 1, 'text': object(), 'outcome': 'text'}, 'not a page']}
+        good = row_for(self.tmp)
+        checks = RCT.text_amount_checks(CASE, [bad, good])
+        self.assertTrue([c for c in checks if c['ok'] and c['entry_id'] == ENTRY])
+        failed = [c for c in checks if c['entry_id'] == '222222222']
+        self.assertTrue(failed and not any(c['ok'] for c in failed))
+        self.assertIn('could not be checked', failed[0]['reason'])
+
+    def test_a_non_court_malformed_row_is_skipped_without_a_check(self):
+        bad = {'source_ref': 'official_records/1-2/1', 'manifest': None, 'reading': 'garbage'}
+        self.assertEqual(RCT.text_amount_checks(CASE, [bad]), [])
+
+    def test_bytes_are_not_rehashed_when_nothing_would_verify(self):
+        no_total = MT.PAGE2.replace('$150,000.00', '$150,000.01')
+        row = row_for(self.tmp, reading=MT.text_reading(p2=no_total))
+        os.remove(row['manifest']['path'])
+        checks = RCT.text_amount_checks(CASE, [row])
+        self.assertTrue(checks and not any(c['ok'] for c in checks))
+        self.assertFalse(any(c['hash_rechecked'] for c in checks))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

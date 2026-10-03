@@ -1703,6 +1703,25 @@ def assess(timeline, dossier=None):
     # --- the amount ----------------------------------------------------------------------------
     verified, failed, rejected = _judgment_amount(timeline, entry_id)
     missing.extend(rejected)
+    # A total read from a document's TEXT is the judgment's amount only if that document is the
+    # judgment. On an entry with several read documents (an affidavit of indebtedness prints its
+    # own "Total Amount Due"), a self-consistent table in a sibling says nothing about the award,
+    # so a text check whose document does not read as a final judgment is held as a gap there. A
+    # sole read document on the entry is accepted: nothing else could be the judgment.
+    _read_here = {str(r.get('document') or '') for r in mine if r.get('state') == 'read'}
+    _read_here.discard('')
+    if len(_read_here) > 1:
+        _sibling = [c for c in verified if c.get('source') == 'document_text'
+                    and c.get('document_kind') != 'final_judgment']
+        if _sibling:
+            verified = [c for c in verified if c not in _sibling]
+            missing.append('a total verifies to the cent on %s, but that document does not read as '
+                           'the final judgment (it reads as %s) and the judgment\'s docket entry '
+                           'carries %d read documents, so the figure is not established as the '
+                           "judgment's amount"
+                           % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
+                              ', '.join(sorted({str(c.get('document_kind') or 'unknown')
+                                                for c in _sibling})), len(_read_here)))
     for check in failed:
         why = str(check.get('reason') or '')
         # A printed subtotal its own rows do not reproduce is the document disagreeing with itself.
