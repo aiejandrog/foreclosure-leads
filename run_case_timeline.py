@@ -243,17 +243,21 @@ _JUDGMENT_TITLE_RE = re.compile(
     r'(?:(?:AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
     r'FINAL\s+(?:(?:SUMMARY|IN\s+REM)\s+)*JUDGMENT'
     r'(?:\s+OF\s+(?:MORTGAGE\s+)?FORECLOSURE)?'
-    r'(?:\s+(?:IN\s+REM|AND\s+(?:ORDER|DECREE)[A-Z ,]{0,50}))?\s*[.:]*\s*$', re.I)
+    r'(?:\s+(?:IN\s+REM|AND\s+ORDER\s+(?:SETTING(?:\s+FORECLOSURE)?|CANCEL\w*|RESETTING)\s+SALE))?\s*[.:]*\s*$', re.I)
 _NOT_A_JUDGMENT_RE = re.compile(
     r'\b(AFFIDAVIT|MOTION|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|IN\s+SUPPORT|'
     r'DENYING|GRANTING|SATISFACTION|VACAT\w+|SET\s+ASIDE|EXHIBIT|STATEMENT|SCHEDULE|COST\s+BILL)\b', re.I)
 
 
-# A line right under the title that begins like another instrument ("AFFIDAVIT OF ...", "[PROPOSED]").
-# Not "THIS ACTION was heard on the plaintiff's motion": that is a real judgment's opening sentence.
-_NEXT_LINE_NOT_RE = re.compile(
-    r'^[\W_]*(AFFIDAVIT|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|EXHIBIT|IN\s+SUPPORT|'
-    r'SATISFACTION|MOTION)\b', re.I)
+# The line right under a judgment's title is a caption fragment or the opening sentence. Anything
+# else ("PLAINTIFF'S AFFIDAVIT ...", "AMOUNTS DUE AND OWING", "STATE OF FLORIDA", "DECLARATION OF ...")
+# means the title is the head of another instrument. An allow-list, because a block-list of
+# instrument words was beaten one new word at a time.
+_NEXT_LINE_OK_RE = re.compile(
+    r"^[\W_]*(?:THIS\s+(?:CAUSE|ACTION|MATTER)\b|PLAINTIFFS?[,.]?\s*$|DEFENDANTS?[,.]?\s*$|V[S]?\.?\s*$|"
+    r"CASE\s+(?:NO|NUMBER)\b|IN\s+THE\s+CIRCUIT\b|CIRCUIT\s+COURT\b|OF\s+(?:MORTGAGE\s+)?FORECLOSURE\b|"
+    r"AND\s+ORDER\s+(?:SETTING|CANCEL|RESETTING)|[A-Z][A-Z0-9 .,&'/-]{2,},\s*(?:FSB|N\.A\.|INC\.?|LLC)?[,.]?\s*$)",
+    re.I)
 
 
 def judgment_titled(reading):
@@ -267,7 +271,9 @@ def judgment_titled(reading):
     lines = [ln.strip() for ln in str(pages[0].get('text') or '').splitlines() if ln.strip()][:25]
     for i, ln in enumerate(lines):
         if len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
-            if not any(_NEXT_LINE_NOT_RE.match(nxt) for nxt in lines[i + 1:i + 3]):
+            rest = lines[i + 1:i + 3]
+            if (not rest or _NEXT_LINE_OK_RE.match(rest[0])) and not any(
+                    _NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest):
                 return True
     return False
 
