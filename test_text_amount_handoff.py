@@ -262,6 +262,18 @@ class SiblingDocumentTests(unittest.TestCase):
         self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
 
 
+    def test_a_read_row_with_no_document_is_a_second_document(self):
+        nameless = dict(VT.read_attachment(ENTRY), document=None)
+        result = self._unread_judgment_beside_read_sibling(
+            [VT.read_attachment(ENTRY, document='court:%s:2' % ENTRY), nameless])
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+
+    def test_a_check_from_a_file_with_no_coverage_row_is_not_the_sole_document(self):
+        result = self._unread_judgment_beside_read_sibling(
+            [VT.read_attachment(ENTRY, document='court:%s:1' % ENTRY)])    # the check is on :2
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+
+
 class MalformedRowTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

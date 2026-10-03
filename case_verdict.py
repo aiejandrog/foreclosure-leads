@@ -1713,19 +1713,21 @@ def assess(timeline, dossier=None):
     # "Sole" means the ONLY document on the entry: every coverage row read, exactly one document. An
     # unread, partly read or unrecorded judgment beside a read sibling is not a sole document, and
     # an entry with no coverage rows cannot show that it is one.
-    _sole = bool(mine) and all(r.get('state') == 'read' for r in mine) and len(_read_here) == 1
-    if not _sole:
-        _sibling = [c for c in verified if c.get('source') == 'document_text'
-                    and c.get('document_kind') != 'final_judgment']
-        if _sibling:
-            verified = [c for c in verified if c not in _sibling]
-            missing.append('a total verifies to the cent on %s, but that document does not read as '
-                           'the final judgment (it reads as %s) and the judgment\'s docket entry '
-                           'carries %d read document(s) and is not shown to be a single one, so the figure is '
-                           "not established as the judgment's amount"
-                           % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
-                              ', '.join(sorted({str(c.get('document_kind') or 'unknown')
-                                                for c in _sibling})), len(_read_here)))
+    _sole = (bool(mine) and all(r.get('state') == 'read' and r.get('document') for r in mine)
+             and len(_read_here) == 1)
+    # ...and the check must come from that one document, not from a file that has no coverage row.
+    _sibling = [c for c in verified if c.get('source') == 'document_text'
+                and c.get('document_kind') != 'final_judgment'
+                and not (_sole and str(c.get('source_ref') or '') in _read_here)]
+    if _sibling:
+        verified = [c for c in verified if c not in _sibling]
+        missing.append('a total verifies to the cent on %s, but that document does not read as the '
+                       'final judgment (it reads as %s) and it is not shown to be the only document '
+                       "on the judgment's docket entry, so the figure is not established as the "
+                       "judgment's amount"
+                       % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
+                          ', '.join(sorted({str(c.get('document_kind') or 'unknown')
+                                            for c in _sibling}))))
     for check in failed:
         why = str(check.get('reason') or '')
         # A printed subtotal its own rows do not reproduce is the document disagreeing with itself.
