@@ -321,6 +321,11 @@ class SiblingDocumentTests(unittest.TestCase):
                       ('ORDER APPROVING,', 'FINAL JUDGMENT'), ('CLERK OF COURT,', 'FINAL JUDGMENT'),
                       ('ORDER ADOPTING, MIAMI-DADE COUNTY, FLORIDA', 'FINAL JUDGMENT'),
                       ('ORDER REINSTATING,', 'CONSENT', 'FINAL JUDGMENT'),
+                      ('AMENDED ORDER APPROVING SALE BY TRUSTEE', 'FINAL JUDGMENT'),
+                      ('CONSENT ORDER APPROVING,', 'FINAL JUDGMENT'), ('DEFAULT ORDER ADOPTING,', 'FINAL JUDGMENT'),
+                      ('AMENDED SUGGESTION OF BANKRUPTCY,', 'FINAL JUDGMENT'),
+                      ('SALE ORDER ADOPTING TERMS WITH DEFENDANT.', 'FINAL JUDGMENT'),
+                      ("GENERAL MAGISTRATE'S REPORT,", 'FINAL JUDGMENT'), ('LIS PENDENS, ET AL.', 'FINAL JUDGMENT'),
                       ('ORDER GRANTING', 'A', 'B', 'C', 'D', 'E', 'F', 'FINAL JUDGMENT')):
             with self.subTest(lines=lines):
                 self.assertFalse(RCT.judgment_titled(MT.text_reading(
@@ -349,6 +354,11 @@ class SiblingDocumentTests(unittest.TestCase):
                        'FINAL JUDGMENT OF FORECLOSURE'),
                       ('IN AND FOR MIAMI-DADE COUNTY, FLORIDA', 'FINAL JUDGMENT OF FORECLOSURE'),
                       ('JOHN DOE, ET AL.', 'Defendant(s).', '_____/', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('CIVIL DIVISION', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('UNKNOWN TENANT #1,', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('JOHN DOE; JANE DOE,', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('JOHN DOE, ET AL.,', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('AS TRUSTEE FOR SERIES 2006-1,', 'FINAL JUDGMENT OF FORECLOSURE'),
                       ('JOHN DOE,', 'Defendants.', '/', 'FINAL JUDGMENT OF FORECLOSURE')):
             self.assertTrue(RCT.judgment_titled(MT.text_reading(
                 p1=HEAD + '\n' + '\n'.join(lines), p2=decree)), lines)

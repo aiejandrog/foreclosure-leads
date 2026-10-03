@@ -273,17 +273,18 @@ _BARE_MODIFIER_RE = re.compile(
     r'^[\W_]*(?:(?:FIRST|SECOND|THIRD|AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|'
     r'UNCONTESTED)\s*)+$', re.I)
 _CAPTION_LINE_RE = re.compile(
-    r"^[\W_]*(?:CASE\s+(?:NO|NUMBER)\b|DIVISION\b|SECTION\b|COMPLEX\b|IN\s+THE\s+CIRCUIT\b|"
+    r"^[\W_]*(?:CASE\s+(?:NO|NUMBER)\b|DIVISION\b|(?:CIVIL|GENERAL\s+JURISDICTION)\s+DIVISION\b|SECTION\b|COMPLEX\b|IN\s+THE\s+CIRCUIT\b|"
     r"IN\s+AND\s+FOR\b|THE\s+\w+\s+JUDICIAL\b|.*\bCOUNTY,?\s+FLORIDA\b|"
     r"V[S]?\.?\s*$|PLAINTIFFS?[,.]?\s*$|.*\bDEFENDANTS?[,.]?\s*$|\d+\s*$|"
-    r".*\b(?:FSB|N\.A\.|INC|LLC|TRUSTEE|ASSOCIATION|COMPANY|CORPORATION|ET\s+AL)\b[,.]?\s*$|"
-    r"[A-Z][A-Z .&'/-]+,\s*$)", re.I)
+    r".*\b(?:FSB|N\.A\.|INC|LLC|TRUSTEE|ASSOCIATION|COMPANY|CORPORATION|ET\s+AL)\b\.?,?\s*$|"
+    r"[A-Z][A-Z0-9 .&'/#;()-]+,\s*$)", re.I)
 
 
 _INSTRUMENT_START_RE = re.compile(
-    r'^[\W_]*(ORDER|STIPULATION|STIPULATED\s+(?:MOTION|ORDER)|REPORT|CLERK|JOINT|NOTICE|MOTION|REQUEST|'
+    r'\b(ORDER|STIPULATION|STIPULATED\s+(?:MOTION|ORDER)|REPORT|CLERK|JOINT|NOTICE|MOTION|REQUEST|'
     r'RESPONSE|REPLY|AFFIDAVIT|DECLARATION|CERTIFICATE|SUGGESTION|PETITION|CLAIM|JUDGMENT\s+LIEN|'
-    r'AGREED|SETTLEMENT|MEMORANDUM|OBJECTION|SATISFACTION|RELEASE|WRIT|SUMMONS|SUBPOENA)\b', re.I)
+    r'AGREED|SETTLEMENT|MEMORANDUM|OBJECTION|SATISFACTION|RELEASE|WRIT|SUMMONS|SUBPOENA|MAGISTRATE|LIS\s+PENDENS|'
+    r'APPROV\w*|ADOPT\w*|REINSTAT\w*|CANCEL\w*|GRANT\w*|DENY\w*|VACAT\w*)\b', re.I)
 _RULE_LINE_RE = re.compile(r'^[\s_/\\.-]*$')
 
 
@@ -296,7 +297,7 @@ def _title_block_above_ok(above):
         if _RULE_LINE_RE.match(ln) or re.match(r'^[\W_]*DEFENDANT\(S\)[,.]?\s*$', ln, re.I):
             continue                                     # a caption's closing rule or "Defendant(s)."
         return (bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
-                and not _INSTRUMENT_START_RE.match(ln))
+                and not _INSTRUMENT_START_RE.search(ln))
     return len(above) < 12
 
 
