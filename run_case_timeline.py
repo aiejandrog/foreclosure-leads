@@ -280,14 +280,24 @@ _CAPTION_LINE_RE = re.compile(
     r"[A-Z][A-Z .&'/-]+,\s*$)", re.I)
 
 
+_INSTRUMENT_START_RE = re.compile(
+    r'^[\W_]*(ORDER|STIPULATION|STIPULATED\s+(?:MOTION|ORDER)|REPORT|CLERK|JOINT|NOTICE|MOTION|REQUEST|'
+    r'RESPONSE|REPLY|AFFIDAVIT|DECLARATION|CERTIFICATE|SUGGESTION|PETITION|CLAIM|JUDGMENT\s+LIEN|'
+    r'AGREED|SETTLEMENT|MEMORANDUM|OBJECTION|SATISFACTION|RELEASE|WRIT|SUMMONS|SUBPOENA)\b', re.I)
+_RULE_LINE_RE = re.compile(r'^[\s_/\\.-]*$')
+
+
 def _title_block_above_ok(above):
     """`above` = the lines (oldest first) directly above the title. Walk up past bare modifiers; the
     first other line must be caption. No lines above is fine (the title opens the page)."""
     for ln in reversed(above):
         if _BARE_MODIFIER_RE.match(ln):
             continue
-        return bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
-    return True
+        if _RULE_LINE_RE.match(ln) or re.match(r'^[\W_]*DEFENDANT\(S\)[,.]?\s*$', ln, re.I):
+            continue                                     # a caption's closing rule or "Defendant(s)."
+        return (bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
+                and not _INSTRUMENT_START_RE.match(ln))
+    return len(above) < 12
 
 
 def judgment_titled(reading):
@@ -310,7 +320,7 @@ def judgment_titled(reading):
             # A heading wrapped over two lines ("ORDER GRANTING MOTION FOR" / "FINAL JUDGMENT"): the
             # title block includes the lines above, so they must not name another instrument or end
             # on a connector that hands the sentence to this line.
-            if not _title_block_above_ok(lines[max(0, i - 6):i]):
+            if not _title_block_above_ok(lines[max(0, i - 12):i]):
                 continue
             rest = lines[i + 1:i + 3]
             if not rest or (_NEXT_LINE_OK_RE.match(rest[0])

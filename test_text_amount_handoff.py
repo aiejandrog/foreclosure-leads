@@ -317,7 +317,11 @@ class SiblingDocumentTests(unittest.TestCase):
                       ('ORDER APPROVING', 'FINAL JUDGMENT'), ('ORDER ADOPTING', 'FINAL JUDGMENT'),
                       ('ORDER REINSTATING', 'FINAL JUDGMENT'), ("CLERK'S", 'FINAL JUDGMENT'),
                       ('ORDER GRANTING', "PLAINTIFF'S UNOPPOSED", 'AMENDED', 'FINAL JUDGMENT'),
-                      ('MOTION FOR ENTRY OF', "PLAINTIFF'S", 'UNCONTESTED', 'FINAL JUDGMENT')):
+                      ('MOTION FOR ENTRY OF', "PLAINTIFF'S", 'UNCONTESTED', 'FINAL JUDGMENT'),
+                      ('ORDER APPROVING,', 'FINAL JUDGMENT'), ('CLERK OF COURT,', 'FINAL JUDGMENT'),
+                      ('ORDER ADOPTING, MIAMI-DADE COUNTY, FLORIDA', 'FINAL JUDGMENT'),
+                      ('ORDER REINSTATING,', 'CONSENT', 'FINAL JUDGMENT'),
+                      ('ORDER GRANTING', 'A', 'B', 'C', 'D', 'E', 'F', 'FINAL JUDGMENT')):
             with self.subTest(lines=lines):
                 self.assertFalse(RCT.judgment_titled(MT.text_reading(
                     p1=HEAD + '\n' + '\n'.join(lines), p2=decree)))
@@ -343,7 +347,9 @@ class SiblingDocumentTests(unittest.TestCase):
         for lines in (('AMENDED', 'FINAL JUDGMENT OF FORECLOSURE'),
                       ('WELLS FARGO BANK, N.A.,', 'Plaintiff,', 'v.', 'JOHN DOE,', 'Defendant.',
                        'FINAL JUDGMENT OF FORECLOSURE'),
-                      ('IN AND FOR MIAMI-DADE COUNTY, FLORIDA', 'FINAL JUDGMENT OF FORECLOSURE')):
+                      ('IN AND FOR MIAMI-DADE COUNTY, FLORIDA', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('JOHN DOE, ET AL.', 'Defendant(s).', '_____/', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('JOHN DOE,', 'Defendants.', '/', 'FINAL JUDGMENT OF FORECLOSURE')):
             self.assertTrue(RCT.judgment_titled(MT.text_reading(
                 p1=HEAD + '\n' + '\n'.join(lines), p2=decree)), lines)
 
