@@ -660,6 +660,19 @@ def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models
                                  'record': dict(model)})
                 continue
             money_claim = bool(re.search(r'JUDGMENT|(?:FEDERAL|STATE).*TAX.*LIEN|TAX.*LIEN', doc_type, re.I))
+            if (this_case and not _OPEN_KILLER_RE.search(doc_type)
+                    and key_of(model.get('reC_BOOK'), model.get('reC_PAGE')) in (this_case.get('book_pages') or ())
+                    and not (_ENCUMBRANCE_RE.match(doc_type) or money_claim)):
+                # The docket's own recorded book/page, under a generic type ("DADE COURT PAPER - DCP")
+                # the encumbrance filter below would drop before own-case matching ran. Without a
+                # marker here, claim enrichment reads the body, finds a judgment and adds it back.
+                # Explicit book/page identity only: never date proximity.
+                own.append({'doc_type': doc_type, 'rec_date': model.get('reC_DATE'),
+                            'book': model.get('reC_BOOK'), 'page_no': model.get('reC_PAGE'),
+                            'other_party': str(model.get('seconD_PARTY') or '')[:60],
+                            'under_name': name, 'why': candidate.get('why', ''),
+                            'own_case': True, 'this_case': 'docket_book_page'})
+                continue
             if (not _ENCUMBRANCE_RE.match(doc_type) and not money_claim) or _OPEN_KILLER_RE.search(doc_type):
                 continue
             rf = R.norm_folio(model.get('foliO_NUMBER'))

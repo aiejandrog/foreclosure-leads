@@ -236,6 +236,60 @@ def _stored_bytes_match(manifest):
         return None
 
 
+# The document's OWN title line, not a phrase somewhere in a line: "AFFIDAVIT IN SUPPORT OF MOTION FOR
+# FINAL JUDGMENT" and "NOTICE OF FILING FINAL JUDGMENT" contain the words and are not the judgment.
+_JUDGMENT_TITLE_RE = re.compile(
+    r'^[\W_]*(?:\d+[.)]\s*)?(?:(?:FIRST|SECOND|THIRD)\s+)?'
+    r'(?:(?:AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
+    r'FINAL\s+(?:(?:SUMMARY|IN\s+REM)\s+)*JUDGMENT'
+    r'(?:\s+OF\s+(?:MORTGAGE\s+)?FORECLOSURE)?'
+    r'(?:\s+(?:IN\s+REM|AND\s+ORDER\s+(?:SETTING(?:\s+FORECLOSURE)?|CANCEL\w*|RESETTING)\s+SALE))?\s*[.:]*\s*$', re.I)
+_NOT_A_JUDGMENT_RE = re.compile(
+    r'\b(AFFIDAVIT|MOTION|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|IN\s+SUPPORT|'
+    r'DENYING|GRANTING|SATISFACTION|VACAT\w+|SET\s+ASIDE|EXHIBIT|STATEMENT|SCHEDULE|COST\s+BILL)\b', re.I)
+
+
+# The line right under a judgment's title is a caption fragment or the opening sentence. An
+# allow-list, because a block-list of instrument words was beaten one new word at a time.
+_NEXT_LINE_OK_RE = re.compile(
+    r"^[\W_]*(?:THIS\s+(?:CAUSE|ACTION|MATTER)\b|PLAINTIFFS?[,.]?\s*$|DEFENDANTS?[,.]?\s*$|V[S]?\.?\s*$|"
+    r"CASE\s+(?:NO|NUMBER)\b|IN\s+THE\s+CIRCUIT\b|CIRCUIT\s+COURT\b|OF\s+(?:MORTGAGE\s+)?FORECLOSURE\b|"
+    r"AND\s+ORDER\s+(?:SETTING|CANCEL|RESETTING)|"
+    r"[A-Z][A-Z0-9 .&'/-]{2,},?\s*(?:FSB|N\.A\.|INC\.?|LLC|TRUSTEE|ASSOCIATION|COMPANY|CORPORATION)[,.]?\s*$)",
+    re.I)
+# Words that mark a sworn statement or a payoff schedule anywhere on the title's page.
+_SWORN_OR_SCHEDULE_RE = re.compile(
+    r'\b(AFFIDAVIT|AFFIANT|SWORN|NOTARY|BEFORE\s+ME|DECLARATION|PAYOFF|INDEBTEDNESS|AMOUNTS?\s+DUE|'
+    r'UNDER\s+PENALT\w+|PROPOSED|SUBMITTED\s+BY|PREPARED\s+BY)\b', re.I)
+# What only a decree says. An affidavit or motion does not order the clerk to sell.
+_DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk\s+shall\s+sell|'
+                        r'shall\s+sell\s+the\s+(?:subject\s+)?property', re.I)
+
+
+def judgment_titled(reading):
+    """True when the first readable page leads with a final-judgment TITLE (the whole line, an
+    allowed line after it), carries no affidavit or payoff-schedule wording anywhere on that page,
+    and the document contains decree wording. A heuristic that only ever fails toward a gap: a
+    real judgment with an unusual caption is held, never accepted wrongly on purpose."""
+    pages = [p for p in (reading or {}).get('pages') or []
+             if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')]
+    if not pages:
+        return False
+    if not any(_DECREE_RE.search(str(p.get('text') or '')) for p in pages):
+        return False
+    first = str(pages[0].get('text') or '')
+    if _SWORN_OR_SCHEDULE_RE.search(first):
+        return False
+    lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
+    for i, ln in enumerate(lines):
+        if len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
+            rest = lines[i + 1:i + 3]
+            if not rest or (_NEXT_LINE_OK_RE.match(rest[0])
+                            and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest)):
+                return True
+    return False
+
+
 def _text_checks_for_row(case, row):
     import document_classify
     import miami_judgment as MJ
@@ -257,7 +311,8 @@ def _text_checks_for_row(case, row):
     intact = _stored_bytes_match(manifest) if any(c.get('sum_check') for c in candidates) else None
     base = {'case': case, 'entry_id': parts[1], 'source_ref': ref,
             'document_key': manifest.get('document_key'), 'document_hash': doc_hash,
-            'document_kind': kind, 'source': 'document_text', 'hash_rechecked': intact is not None}
+            'document_kind': kind, 'judgment_title': judgment_titled(reading),
+            'source': 'document_text', 'hash_rechecked': intact is not None}
     out = []
     for c in candidates:
         ok = bool(c.get('sum_check'))

@@ -177,7 +177,8 @@ class TextHandoffTests(unittest.TestCase):
 
 
 JUDGMENT_PAGE1 = (MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE\n'
-                  "THIS ACTION was heard on the plaintiff's motion.")
+                  "THIS ACTION was heard on the plaintiff's motion.\n"
+                  'It is ORDERED AND ADJUDGED that the clerk shall sell the property.')
 AFFIDAVIT_PAGE1 = (MT.PAGE1 + '\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
                    "THIS ACTION was heard on the plaintiff's motion.")
 
@@ -223,7 +224,7 @@ class SiblingDocumentTests(unittest.TestCase):
                          if c['ok'] and c['source_ref'].endswith(':2')])     # the sibling verifies
         result = CV.assess(saved)
         self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
-        self.assertTrue([m for m in result['missing'] if 'does not read as the final judgment' in m],
+        self.assertTrue([m for m in result['missing'] if 'not identified as the final judgment' in m],
                         result['missing'])
         self.assertNotEqual(result['verdict'], 'supported')
         self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
@@ -236,6 +237,86 @@ class SiblingDocumentTests(unittest.TestCase):
         self.assertFalse([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
         self.assertTrue([s for s in result['supported_by'] if 'court:%s:1' % ENTRY in s],
                         result['supported_by'])
+
+    def test_the_judgment_verifying_beside_a_sibling_keeps_the_verdict_unheld_by_the_sibling(self):
+        saved = self.saved(self.rows(MT.text_reading(p1=JUDGMENT_PAGE1),
+                                     MT.text_reading(p1=AFFIDAVIT_PAGE1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        result = CV.assess(saved)
+        self.assertFalse([m for m in result['missing'] if 'not identified as the final judgment' in m],
+                         result['missing'])
+        self.assertTrue([n for n in result['notes'] if 'not identified as the final judgment' in n],
+                        result['notes'])
+
+    def test_a_motion_support_affidavit_titled_with_final_judgment_is_not_the_judgment(self):
+        # Review finding: the classifier reads "...MOTION FOR FINAL JUDGMENT" as a final judgment.
+        for title in ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',
+                      "PLAINTIFF'S MOTION FOR FINAL JUDGMENT OF FORECLOSURE",
+                      'NOTICE OF FILING PROPOSED FINAL JUDGMENT',
+                      'ORDER GRANTING MOTION FOR FINAL JUDGMENT'):
+            with self.subTest(title=title):
+                page1 = MT.PAGE1 + '\n' + title + "\nTHIS ACTION was heard on the plaintiff's motion."
+                no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
+                saved = self.saved(self.rows(no_total, MT.text_reading(p1=page1)),
+                                   ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+                self.assertTrue([c for c in saved['amount_checks']
+                                 if c['ok'] and c['source_ref'].endswith(':2')])     # it verifies
+                result = CV.assess(saved)
+                self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+                self.assertFalse([s for s in result['supported_by'] if 'verified to the cent' in s])
+                self.assertEqual(result['verdict'], 'incomplete')
+
+    def test_title_identification_needs_the_whole_line_and_a_clean_next_two(self):
+        def titled(*lines):
+            # Decree wording is present in every case here, so it cannot be what rescues a fake.
+            return RCT.judgment_titled(MT.text_reading(
+                p1=MT.PAGE1 + '\n' + '\n'.join(lines),
+                p2=MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'))
+        for lines in (('FINAL JUDGMENT OF FORECLOSURE',), ('AMENDED FINAL JUDGMENT OF FORECLOSURE',),
+                      ('FINAL SUMMARY JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT AND ORDER SETTING SALE',),
+                      ('DEFAULT FINAL JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT', 'OF FORECLOSURE'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the Plaintiff's motion"),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'Plaintiff,', 'v.'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'WILMINGTON SAVINGS FUND SOCIETY, FSB,')):
+            self.assertTrue(titled(*lines), lines)
+        for lines in (('FINAL JUDGMENT', 'AFFIDAVIT OF AMOUNTS DUE AND OWING'),
+                      ('FINAL JUDGMENT PAYOFF STATEMENT',), ('FINAL JUDGMENT OF FORECLOSURE COST BILL',),
+                      ('FINAL JUDGMENT AMOUNTS SCHEDULE',), ('FINAL JUDGMENT EXHIBIT A',),
+                      ('FINAL JUDGMENT OF FORECLOSURE', '[PROPOSED]'),
+                      ('Final Judgment of Foreclosure was entered on 1/1',),
+                      ('FINAL JUDGMENT', "PLAINTIFF'S AFFIDAVIT OF AMOUNTS DUE"),
+                      ('FINAL JUDGMENT', 'DECLARATION OF INDEBTEDNESS'),
+                      ('FINAL JUDGMENT', 'AMOUNTS DUE AND OWING'),
+                      ('FINAL JUDGMENT', 'STATE OF FLORIDA', 'COUNTY OF MIAMI-DADE'),
+                      ('FINAL JUDGMENT', 'Affiant, being sworn'),
+                      ('FINAL JUDGMENT', 'Re: Amounts due'),
+                      ('FINAL JUDGMENT AND ORDER PAYOFF AMOUNTS DUE',),
+                      ('FINAL JUDGMENT AND DECREE OF AMOUNTS CLAIMED BY PLAINTIFF',),
+                      ('FINAL JUDGMENT', 'x', 'AFFIDAVIT OF AMOUNTS'),
+                      ('FINAL JUDGMENT', 'COUNTY OF MIAMI-DADE,'), ('FINAL JUDGMENT', 'STATE OF FLORIDA,'),
+                      ('FINAL JUDGMENT', 'AMOUNTS DUE AND OWING,'), ('FINAL JUDGMENT', 'JOHN DOE, AFFIANT,'),
+                      ('FINAL JUDGMENT', 'the plaintiff states under oath,'),
+                      ('FINAL JUDGMENT', 'Plaintiff,', 'v.', 'DECLARATION OF AMOUNTS DUE'),
+                      ('FINAL JUDGMENT', 'CASE NO. 1', 'PAYOFF STATEMENT'),
+                      ('FINAL JUDGMENT', 'THIS ACTION: AMOUNTS DUE PER AFFIANT'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'THIS CAUSE came before the Court',
+                       'Submitted by: Counsel for Plaintiff', 'PROPOSED ORDER'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'THIS CAUSE came', 'Prepared by: counsel'),
+                      ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',)):
+            self.assertFalse(titled(*lines), lines)
+
+    def test_a_title_without_decree_wording_is_not_a_judgment(self):
+        self.assertFalse(RCT.judgment_titled(MT.text_reading(p1=MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE')))
+
+    def test_a_two_line_affidavit_title_does_not_supply_the_award(self):
+        page1 = (MT.PAGE1 + '\nFINAL JUDGMENT\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
+                 'there is due the total sum of $100,000.00; clerk shall sell; ORDERED AND ADJUDGED')
+        no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
+        saved = self.saved(self.rows(no_total, MT.text_reading(p1=page1)),
+                           ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        result = CV.assess(saved)
+        self.assertTrue([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+        self.assertEqual(result['verdict'], 'incomplete')
 
     def test_a_sole_read_document_is_accepted_whatever_it_reads_as(self):
         saved = self.saved([row_for(self.tmp, reading=MT.text_reading(p1=AFFIDAVIT_PAGE1))],
