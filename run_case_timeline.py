@@ -266,6 +266,41 @@ _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk
                         r'shall\s+sell\s+the\s+(?:subject\s+)?property', re.I)
 
 
+# What may sit directly above a judgment's title: caption (court heading, case number, division, party
+# lines) or a bare modifier line ("AMENDED"). Anything else ("ORDER APPROVING", "CLERK'S") means the
+# title is the tail of another heading. An allow-list, walked upward until the caption starts.
+_BARE_MODIFIER_RE = re.compile(
+    r'^[\W_]*(?:(?:FIRST|SECOND|THIRD|AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|'
+    r'UNCONTESTED)\s*)+$', re.I)
+_CAPTION_LINE_RE = re.compile(
+    r"^[\W_]*(?:CASE\s+(?:NO|NUMBER)\b|DIVISION\b|(?:CIVIL|GENERAL\s+JURISDICTION)\s+DIVISION\b|SECTION\b|COMPLEX\b|IN\s+THE\s+CIRCUIT\b|"
+    r"IN\s+AND\s+FOR\b|THE\s+\w+\s+JUDICIAL\b|.*\bCOUNTY,?\s+FLORIDA\b|"
+    r"V[S]?\.?\s*$|PLAINTIFFS?[,.]?\s*$|.*\bDEFENDANTS?[,.]?\s*$|\d+\s*$|"
+    r".*\b(?:FSB|N\.A\.|INC|LLC|TRUSTEE|ASSOCIATION|COMPANY|CORPORATION|ET\s+AL)\b\.?,?\s*$|"
+    r"[A-Z][A-Z0-9 .&'/#;()-]+,\s*$)", re.I)
+
+
+_INSTRUMENT_START_RE = re.compile(
+    r'\b(ORDER|STIPULATION|STIPULATED\s+(?:MOTION|ORDER)|REPORT|CLERK|JOINT|NOTICE|MOTION|REQUEST|'
+    r'RESPONSE|REPLY|AFFIDAVIT|DECLARATION|CERTIFICATE|SUGGESTION|PETITION|CLAIM|JUDGMENT\s+LIEN|'
+    r'AGREED|SETTLEMENT|MEMORANDUM|OBJECTION|SATISFACTION|RELEASE|WRIT|SUMMONS|SUBPOENA|MAGISTRATE|LIS\s+PENDENS|'
+    r'APPROV\w*|ADOPT\w*|REINSTAT\w*|CANCEL\w*|GRANT\w*|DENY\w*|VACAT\w*)\b', re.I)
+_RULE_LINE_RE = re.compile(r'^[\s_/\\.-]*$')
+
+
+def _title_block_above_ok(above):
+    """`above` = the lines (oldest first) directly above the title. Walk up past bare modifiers; the
+    first other line must be caption. No lines above is fine (the title opens the page)."""
+    for ln in reversed(above):
+        if _BARE_MODIFIER_RE.match(ln):
+            continue
+        if _RULE_LINE_RE.match(ln) or re.match(r'^[\W_]*DEFENDANT\(S\)[,.]?\s*$', ln, re.I):
+            continue                                     # a caption's closing rule or "Defendant(s)."
+        return (bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
+                and not _INSTRUMENT_START_RE.search(ln))
+    return len(above) < 12
+
+
 def judgment_titled(reading):
     """True when the first readable page leads with a final-judgment TITLE (the whole line, an
     allowed line after it), carries no affidavit or payoff-schedule wording anywhere on that page,
@@ -283,6 +318,11 @@ def judgment_titled(reading):
     lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
     for i, ln in enumerate(lines):
         if len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
+            # A heading wrapped over two lines ("ORDER GRANTING MOTION FOR" / "FINAL JUDGMENT"): the
+            # title block includes the lines above, so they must not name another instrument or end
+            # on a connector that hands the sentence to this line.
+            if not _title_block_above_ok(lines[max(0, i - 12):i]):
+                continue
             rest = lines[i + 1:i + 3]
             if not rest or (_NEXT_LINE_OK_RE.match(rest[0])
                             and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest)):
