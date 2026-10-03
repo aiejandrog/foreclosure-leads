@@ -1293,6 +1293,25 @@ def _judgment_amount(timeline, entry_id):
             rejected.append('a check for this judgment was read off %s, not the court copy'
                             % (source or 'a document with no source recorded'))
             continue
+        # The entry a court source_ref names is the entry the document was filed under. A check
+        # whose separate entry_id field disagrees with it is not attributable to either, so it is
+        # reported, never counted (a text check is built from the ref, but a saved file can be
+        # edited or merged).
+        # Scoped to checks made from document TEXT, the path that records both fields from one
+        # source; older vision fixtures and saved files carry entry_id and source_ref that were
+        # never required to agree, and this does not change how they read.
+        if check.get('source') == 'document_text':
+            ref_parts = source.split(':')
+            if len(ref_parts) < 3 or str(ref_parts[1]) != str(check.get('entry_id')):
+                rejected.append('a check for this judgment names entry %s but its source %s was '
+                                'filed under a different entry' % (check.get('entry_id'), source))
+                continue
+            # Tied to the exact bytes it was read from. With no recorded hash it cannot be shown
+            # to belong to this copy, so it does not verify.
+            if not check.get('document_hash'):
+                rejected.append('a text check for this judgment (%s) records no document hash, so '
+                                'it cannot be tied to the copy it was read from' % source)
+                continue
         if check.get('ok') is True:
             # `amount` must be a NUMBER, not merely present: a string amount from an older saved
             # format passed the None test, so `verified` was non-empty while the figure set was
@@ -1684,6 +1703,31 @@ def assess(timeline, dossier=None):
     # --- the amount ----------------------------------------------------------------------------
     verified, failed, rejected = _judgment_amount(timeline, entry_id)
     missing.extend(rejected)
+    # A total read from a document's TEXT is the judgment's amount only if that document is the
+    # judgment. On an entry with several read documents (an affidavit of indebtedness prints its
+    # own "Total Amount Due"), a self-consistent table in a sibling says nothing about the award,
+    # so a text check whose document does not read as a final judgment is held as a gap there. A
+    # sole read document on the entry is accepted: nothing else could be the judgment.
+    _read_here = {str(r.get('document') or '') for r in mine if r.get('state') == 'read'}
+    _read_here.discard('')
+    # "Sole" means the ONLY document on the entry: every coverage row read, exactly one document. An
+    # unread, partly read or unrecorded judgment beside a read sibling is not a sole document, and
+    # an entry with no coverage rows cannot show that it is one.
+    _sole = (bool(mine) and all(r.get('state') == 'read' and r.get('document') for r in mine)
+             and len(_read_here) == 1)
+    # ...and the check must come from that one document, not from a file that has no coverage row.
+    _sibling = [c for c in verified if c.get('source') == 'document_text'
+                and c.get('document_kind') != 'final_judgment'
+                and not (_sole and str(c.get('source_ref') or '') in _read_here)]
+    if _sibling:
+        verified = [c for c in verified if c not in _sibling]
+        missing.append('a total verifies to the cent on %s, but that document does not read as the '
+                       'final judgment (it reads as %s) and it is not shown to be the only document '
+                       "on the judgment's docket entry, so the figure is not established as the "
+                       "judgment's amount"
+                       % (', '.join(sorted({str(c.get('source_ref') or '?') for c in _sibling})),
+                          ', '.join(sorted({str(c.get('document_kind') or 'unknown')
+                                            for c in _sibling}))))
     for check in failed:
         why = str(check.get('reason') or '')
         # A printed subtotal its own rows do not reproduce is the document disagreeing with itself.

@@ -220,6 +220,105 @@ def read_amounts(rows, base, budget=None, plan=None):
     return result
 
 
+def _stored_bytes_match(manifest):
+    """-> True / False / None: do the stored document's bytes still hash to the manifest's digest?
+
+    None means the file is not on this machine (a copied evidence folder, a container), so the hash
+    could not be rechecked; the check then carries `hash_rechecked: False` instead of pretending.
+    """
+    path = manifest.get('path')
+    want = manifest.get('source_sha256') or manifest.get('sha256')
+    if not path or not want or not os.path.isfile(path):
+        return None
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest() == want
+    except OSError:
+        return None
+
+
+def _text_checks_for_row(case, row):
+    import document_classify
+    import miami_judgment as MJ
+    ref = str(row.get('source_ref') or '')
+    parts = ref.split(':')
+    if len(parts) < 3 or parts[0] != 'court' or not parts[1]:
+        return []
+    manifest = row.get('manifest') or {}
+    reading = row.get('reading') or {}
+    if not reading.get('pages'):
+        return []
+    doc_hash = manifest.get('source_sha256') or manifest.get('sha256')
+    candidates = [c for c in MJ.judgment_amount_candidates(reading) if not c.get('composed')]
+    if not candidates:
+        return []
+    # What the document's own text says it is, never the clerk's label. The bytes are re-hashed
+    # only when a candidate would otherwise verify (a large PDF is not read for nothing).
+    kind = document_classify.classify(reading, manifest.get('document_name') or '').get('kind')
+    intact = _stored_bytes_match(manifest) if any(c.get('sum_check') for c in candidates) else None
+    base = {'case': case, 'entry_id': parts[1], 'source_ref': ref,
+            'document_key': manifest.get('document_key'), 'document_hash': doc_hash,
+            'document_kind': kind, 'source': 'document_text', 'hash_rechecked': intact is not None}
+    out = []
+    for c in candidates:
+        ok = bool(c.get('sum_check'))
+        reason = c.get('sum_check_reason')
+        if ok and not doc_hash:
+            ok, reason = False, 'the document has no recorded hash, so this reading cannot be tied to it'
+        elif ok and intact is False:
+            ok, reason = False, ('the stored document no longer hashes to the digest this reading '
+                                 'was made from')
+        out.append(dict(base, amount=c['amount'], page=c['page'], ok=ok, reason=reason,
+                        pages=c.get('sum_check_pages') or [], run=c.get('sum_check_run'),
+                        components=c.get('sum_check_components') or [],
+                        credits=c.get('sum_check_credits') or [],
+                        rates=c.get('sum_check_rates') or [],
+                        subtotals=c.get('sum_check_subtotals') or [],
+                        disagreeing_subtotals=c.get('sum_check_disagreeing_subtotals') or [],
+                        text_source=c.get('text_source'), match=c.get('match')))
+    return out
+
+
+def text_amount_checks(case, rows):
+    """Exact-cents checks of printed judgment totals read from a court document's own TEXT.
+
+    The vision path saves `amount_vision.amount_checks`; the text path used to stop at
+    `replay_money_check`'s report, so a total the arithmetic verified from embedded or OCR text never
+    reached `case_verdict` (acceptance run 2026-10-03: 5 of 7 cases). This is the same
+    `judgment_money` contract on the same rows, saved with the timeline.
+
+    Attribution is per check: case, entry (taken from the court source_ref, never from a field a
+    caller can set separately), source_ref, document_key, document_hash, page(s), the text layer and
+    what the document's own text reads as (`document_kind`). Only `court:` documents are checked,
+    so a recorded instrument's principal can never be mistaken for a judgment total (verify-12
+    defect D5). A document whose stored bytes no longer hash to its manifest digest is saved as a
+    FAILED check, not dropped. A row that cannot be read is saved as a failed check naming the error:
+    one malformed row must not take the whole case build down.
+    """
+    out = []
+    for row in rows:
+        try:
+            out.extend(_text_checks_for_row(case, row))
+        except ImportError:
+            raise                                                 # a broken install is not one bad row
+        except Exception as exc:                                  # noqa: BLE001 - named, never swallowed
+            ref = str((row or {}).get('source_ref') if isinstance(row, dict) else '')
+            parts = ref.split(':')
+            if len(parts) >= 3 and parts[0] == 'court' and parts[1]:
+                out.append({'case': case, 'entry_id': parts[1], 'source_ref': ref,
+                            'source': 'document_text', 'ok': False, 'amount': None, 'page': None,
+                            'reason': 'the text of this document could not be checked: %s: %s'
+                                      % (type(exc).__name__, str(exc)[:120]),
+                            'pages': [], 'run': None, 'components': [], 'credits': [],
+                            'rates': [], 'subtotals': [], 'disagreeing_subtotals': []})
+    return out
+
+
+def attach_text_checks(timeline, case, rows):
+    """Save the text-path checks with the timeline, where `case_verdict` reads `amount_checks`."""
+    timeline['amount_checks'] = text_amount_checks(case, rows)
+    return timeline
+
+
 _AMOUNT_KINDS = ('final_judgment', 'judgment')
 
 
@@ -344,6 +443,7 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
     timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
     timeline['source_comparison'] = inventory.get('source_comparison')
     timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+    attach_text_checks(timeline, case, rows)
     # E1: auto-fetch the public OR copies the docket cites for unread attachments. Free (index CFN +
     # anonymous image endpoint). On by default when this run may use the network (--collect).
     if (collect if fetch_alternates is None else fetch_alternates):
@@ -370,6 +470,7 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
         timeline['source_comparison'] = inventory.get('source_comparison')
         _alt = (timeline.get('coverage') or {}).get('alternate_fetch')
         timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
+        attach_text_checks(timeline, case, rows)
         if _alt is not None:
             timeline['coverage']['alternate_fetch'] = _alt
         try:
