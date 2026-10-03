@@ -86,6 +86,20 @@ class OwnJudgmentComposition(unittest.TestCase):
         out = E.enrich_claims([searched], {'OWNER': models}, [doc(OWN), doc(OTHER)])[0]
         self.assertEqual(self.claims_of(out), ['30000/1'])
 
+    def test_an_own_row_without_book_and_page_hides_nothing(self):
+        report = {'searched': [{'name': 'OWNER'}], 'gaps': [],
+                  'own_case_instruments': [{'own_case': True, 'book': None, 'page_no': None}],
+                  'potential_title_party_claims': [{'book': '', 'page_no': '', 'under_name': 'OWNER'}]}
+        out = E.enrich_claims([report], {}, [])[0]
+        self.assertEqual(len(out['potential_title_party_claims']), 1)
+
+    def test_a_row_not_marked_own_case_is_ignored(self):
+        report = {'searched': [], 'gaps': [], 'potential_title_party_claims': [
+            {'book': OWN[0], 'page_no': OWN[1], 'under_name': 'OWNER'}],
+            'own_case_instruments': [{'book': OWN[0], 'page_no': OWN[1]}]}
+        out = E.enrich_claims([report], {}, [])[0]
+        self.assertEqual(len(out['potential_title_party_claims']), 1)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
