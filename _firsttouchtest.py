@@ -510,6 +510,11 @@ for label, slug, kw in (
         rec('%s: rule is slow_restart under the pre-cutoff block' % label,
             st == 200 and (hj.get('bounce') or {}).get('ft_rule') == 'slow_restart'
             and (hj.get('bounce') or {}).get('blocked') is True, hj.get('bounce_rule'))
+        _b = hj.get('bounce') or {}
+        rec('%s: the bridge runs on the moved gate and every row counts as pre-gate' % label,
+            _b.get('ft_cutoff') == MOVED_GATE and _b.get('pre_mailed') == len(rows)
+            and _b.get('post_mailed') == 0,
+            {k: _b.get(k) for k in ('ft_cutoff', 'pre_mailed', 'post_mailed')})
         before = len(smtp_of(folder))
         st, j = send_to(port_, 'zb@example.com')
         rec('%s: verified first touch is held' % label,
