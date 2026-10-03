@@ -177,7 +177,8 @@ class TextHandoffTests(unittest.TestCase):
 
 
 JUDGMENT_PAGE1 = (MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE\n'
-                  "THIS ACTION was heard on the plaintiff's motion.")
+                  "THIS ACTION was heard on the plaintiff's motion.\n"
+                  'It is ORDERED AND ADJUDGED that the clerk shall sell the property.')
 AFFIDAVIT_PAGE1 = (MT.PAGE1 + '\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
                    "THIS ACTION was heard on the plaintiff's motion.")
 
@@ -267,7 +268,10 @@ class SiblingDocumentTests(unittest.TestCase):
 
     def test_title_identification_needs_the_whole_line_and_a_clean_next_two(self):
         def titled(*lines):
-            return RCT.judgment_titled(MT.text_reading(p1=MT.PAGE1 + '\n' + '\n'.join(lines)))
+            # Decree wording is present in every case here, so it cannot be what rescues a fake.
+            return RCT.judgment_titled(MT.text_reading(
+                p1=MT.PAGE1 + '\n' + '\n'.join(lines),
+                p2=MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'))
         for lines in (('FINAL JUDGMENT OF FORECLOSURE',), ('AMENDED FINAL JUDGMENT OF FORECLOSURE',),
                       ('FINAL SUMMARY JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT AND ORDER SETTING SALE',),
                       ('DEFAULT FINAL JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT', 'OF FORECLOSURE'),
@@ -289,8 +293,17 @@ class SiblingDocumentTests(unittest.TestCase):
                       ('FINAL JUDGMENT AND ORDER PAYOFF AMOUNTS DUE',),
                       ('FINAL JUDGMENT AND DECREE OF AMOUNTS CLAIMED BY PLAINTIFF',),
                       ('FINAL JUDGMENT', 'x', 'AFFIDAVIT OF AMOUNTS'),
+                      ('FINAL JUDGMENT', 'COUNTY OF MIAMI-DADE,'), ('FINAL JUDGMENT', 'STATE OF FLORIDA,'),
+                      ('FINAL JUDGMENT', 'AMOUNTS DUE AND OWING,'), ('FINAL JUDGMENT', 'JOHN DOE, AFFIANT,'),
+                      ('FINAL JUDGMENT', 'the plaintiff states under oath,'),
+                      ('FINAL JUDGMENT', 'Plaintiff,', 'v.', 'DECLARATION OF AMOUNTS DUE'),
+                      ('FINAL JUDGMENT', 'CASE NO. 1', 'PAYOFF STATEMENT'),
+                      ('FINAL JUDGMENT', 'THIS ACTION: AMOUNTS DUE PER AFFIANT'),
                       ('AFFIDAVIT IN SUPPORT OF MOTION FOR FINAL JUDGMENT',)):
             self.assertFalse(titled(*lines), lines)
+
+    def test_a_title_without_decree_wording_is_not_a_judgment(self):
+        self.assertFalse(RCT.judgment_titled(MT.text_reading(p1=MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE')))
 
     def test_a_two_line_affidavit_title_does_not_supply_the_award(self):
         page1 = (MT.PAGE1 + '\nFINAL JUDGMENT\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
