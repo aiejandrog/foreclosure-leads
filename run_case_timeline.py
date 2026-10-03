@@ -266,7 +266,28 @@ _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk
                         r'shall\s+sell\s+the\s+(?:subject\s+)?property', re.I)
 
 
-_CONNECTOR_END_RE = re.compile(r'\b(FOR|OF|ON|TO|AND|IN|BY|WITH|RE|UPON|REGARDING)\s*[,:]?\s*$', re.I)
+# What may sit directly above a judgment's title: caption (court heading, case number, division, party
+# lines) or a bare modifier line ("AMENDED"). Anything else ("ORDER APPROVING", "CLERK'S") means the
+# title is the tail of another heading. An allow-list, walked upward until the caption starts.
+_BARE_MODIFIER_RE = re.compile(
+    r'^[\W_]*(?:(?:FIRST|SECOND|THIRD|AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|'
+    r'UNCONTESTED)\s*)+$', re.I)
+_CAPTION_LINE_RE = re.compile(
+    r"^[\W_]*(?:CASE\s+(?:NO|NUMBER)\b|DIVISION\b|SECTION\b|COMPLEX\b|IN\s+THE\s+CIRCUIT\b|"
+    r"IN\s+AND\s+FOR\b|THE\s+\w+\s+JUDICIAL\b|.*\bCOUNTY,?\s+FLORIDA\b|"
+    r"V[S]?\.?\s*$|PLAINTIFFS?[,.]?\s*$|.*\bDEFENDANTS?[,.]?\s*$|\d+\s*$|"
+    r".*\b(?:FSB|N\.A\.|INC|LLC|TRUSTEE|ASSOCIATION|COMPANY|CORPORATION|ET\s+AL)\b[,.]?\s*$|"
+    r"[A-Z][A-Z .&'/-]+,\s*$)", re.I)
+
+
+def _title_block_above_ok(above):
+    """`above` = the lines (oldest first) directly above the title. Walk up past bare modifiers; the
+    first other line must be caption. No lines above is fine (the title opens the page)."""
+    for ln in reversed(above):
+        if _BARE_MODIFIER_RE.match(ln):
+            continue
+        return bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
+    return True
 
 
 def judgment_titled(reading):
@@ -289,9 +310,7 @@ def judgment_titled(reading):
             # A heading wrapped over two lines ("ORDER GRANTING MOTION FOR" / "FINAL JUDGMENT"): the
             # title block includes the lines above, so they must not name another instrument or end
             # on a connector that hands the sentence to this line.
-            before = lines[max(0, i - 2):i]
-            if any(_NOT_A_JUDGMENT_RE.search(b) for b in before) or (
-                    before and _CONNECTOR_END_RE.search(before[-1])):
+            if not _title_block_above_ok(lines[max(0, i - 6):i]):
                 continue
             rest = lines[i + 1:i + 3]
             if not rest or (_NEXT_LINE_OK_RE.match(rest[0])

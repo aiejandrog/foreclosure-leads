@@ -176,10 +176,12 @@ class TextHandoffTests(unittest.TestCase):
         self.assertFalse([c for c in result['conflicts'] if 'two different totals' in c])
 
 
-JUDGMENT_PAGE1 = (MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE\n'
+# Court heading and case number only: the lines above a real title are caption, not body text.
+HEAD = '\n'.join(MT.PAGE1.splitlines()[:2])
+JUDGMENT_PAGE1 = (HEAD + '\nFINAL JUDGMENT OF FORECLOSURE\n'
                   "THIS ACTION was heard on the plaintiff's motion.\n"
                   'It is ORDERED AND ADJUDGED that the clerk shall sell the property.')
-AFFIDAVIT_PAGE1 = (MT.PAGE1 + '\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
+AFFIDAVIT_PAGE1 = (HEAD + '\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
                    "THIS ACTION was heard on the plaintiff's motion.")
 
 
@@ -255,7 +257,7 @@ class SiblingDocumentTests(unittest.TestCase):
                       'NOTICE OF FILING PROPOSED FINAL JUDGMENT',
                       'ORDER GRANTING MOTION FOR FINAL JUDGMENT'):
             with self.subTest(title=title):
-                page1 = MT.PAGE1 + '\n' + title + "\nTHIS ACTION was heard on the plaintiff's motion."
+                page1 = HEAD + '\n' + title + "\nTHIS ACTION was heard on the plaintiff's motion."
                 no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
                 saved = self.saved(self.rows(no_total, MT.text_reading(p1=page1)),
                                    ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
@@ -270,7 +272,7 @@ class SiblingDocumentTests(unittest.TestCase):
         def titled(*lines):
             # Decree wording is present in every case here, so it cannot be what rescues a fake.
             return RCT.judgment_titled(MT.text_reading(
-                p1=MT.PAGE1 + '\n' + '\n'.join(lines),
+                p1=HEAD + '\n' + '\n'.join(lines),
                 p2=MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'))
         for lines in (('FINAL JUDGMENT OF FORECLOSURE',), ('AMENDED FINAL JUDGMENT OF FORECLOSURE',),
                       ('FINAL SUMMARY JUDGMENT OF FORECLOSURE',), ('FINAL JUDGMENT AND ORDER SETTING SALE',),
@@ -311,12 +313,16 @@ class SiblingDocumentTests(unittest.TestCase):
         for lines in (('ORDER GRANTING MOTION FOR', 'FINAL JUDGMENT'),
                       ("PLAINTIFF'S MOTION FOR", 'FINAL JUDGMENT OF FORECLOSURE'),
                       ('ORDER ON', 'FINAL JUDGMENT'), ('REQUEST FOR', 'FINAL JUDGMENT'),
-                      ('NOTICE OF HEARING ON', 'FINAL JUDGMENT')):
+                      ('NOTICE OF HEARING ON', 'FINAL JUDGMENT'),
+                      ('ORDER APPROVING', 'FINAL JUDGMENT'), ('ORDER ADOPTING', 'FINAL JUDGMENT'),
+                      ('ORDER REINSTATING', 'FINAL JUDGMENT'), ("CLERK'S", 'FINAL JUDGMENT'),
+                      ('ORDER GRANTING', "PLAINTIFF'S UNOPPOSED", 'AMENDED', 'FINAL JUDGMENT'),
+                      ('MOTION FOR ENTRY OF', "PLAINTIFF'S", 'UNCONTESTED', 'FINAL JUDGMENT')):
             with self.subTest(lines=lines):
                 self.assertFalse(RCT.judgment_titled(MT.text_reading(
-                    p1=MT.PAGE1 + '\n' + '\n'.join(lines), p2=decree)))
+                    p1=HEAD + '\n' + '\n'.join(lines), p2=decree)))
                 # ...and end to end: the real judgment has no extractable total.
-                page1 = MT.PAGE1 + '\n' + '\n'.join(lines) + "\nTHIS ACTION was heard on the plaintiff's motion."
+                page1 = HEAD + '\n' + '\n'.join(lines) + "\nTHIS ACTION was heard on the plaintiff's motion."
                 no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
                 sibling = MT.text_reading(p1=page1, p2=decree)
                 saved = self.saved(self.rows(no_total, sibling), ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
@@ -326,17 +332,26 @@ class SiblingDocumentTests(unittest.TestCase):
                 self.assertEqual(result['verdict'], 'incomplete')
 
     def test_a_real_caption_above_the_title_still_passes(self):
-        page1 = (MT.PAGE1 + '\nIN THE CIRCUIT COURT OF THE 11TH JUDICIAL CIRCUIT IN AND FOR MIAMI-DADE COUNTY, FLORIDA'
+        page1 = (HEAD + '\nIN THE CIRCUIT COURT OF THE 11TH JUDICIAL CIRCUIT IN AND FOR MIAMI-DADE COUNTY, FLORIDA'
                  '\nCASE NO. 2099-000001-CA-01\nWELLS FARGO BANK, N.A.,\nPlaintiff,\nv.\nJOHN DOE,\nDefendant.'
                  '\nFINAL JUDGMENT OF FORECLOSURE\nTHIS ACTION was heard on the plaintiff\'s motion.')
         decree = MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'
         self.assertTrue(RCT.judgment_titled(MT.text_reading(p1=page1, p2=decree)))
 
+    def test_caption_and_bare_modifiers_above_the_title_are_fine(self):
+        decree = MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'
+        for lines in (('AMENDED', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('WELLS FARGO BANK, N.A.,', 'Plaintiff,', 'v.', 'JOHN DOE,', 'Defendant.',
+                       'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('IN AND FOR MIAMI-DADE COUNTY, FLORIDA', 'FINAL JUDGMENT OF FORECLOSURE')):
+            self.assertTrue(RCT.judgment_titled(MT.text_reading(
+                p1=HEAD + '\n' + '\n'.join(lines), p2=decree)), lines)
+
     def test_a_title_without_decree_wording_is_not_a_judgment(self):
-        self.assertFalse(RCT.judgment_titled(MT.text_reading(p1=MT.PAGE1 + '\nFINAL JUDGMENT OF FORECLOSURE')))
+        self.assertFalse(RCT.judgment_titled(MT.text_reading(p1=HEAD + '\nFINAL JUDGMENT OF FORECLOSURE')))
 
     def test_a_two_line_affidavit_title_does_not_supply_the_award(self):
-        page1 = (MT.PAGE1 + '\nFINAL JUDGMENT\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
+        page1 = (HEAD + '\nFINAL JUDGMENT\nAFFIDAVIT OF AMOUNTS DUE AND OWING\n'
                  'there is due the total sum of $100,000.00; clerk shall sell; ORDERED AND ADJUDGED')
         no_total = MT.text_reading(p1=JUDGMENT_PAGE1, p2='Principal: $10.00', p3='nothing else')
         saved = self.saved(self.rows(no_total, MT.text_reading(p1=page1)),
