@@ -53,6 +53,14 @@ def enrich_claims(search_reports, raw_results, documents):
     for report in reports:
         claims = report.setdefault('potential_title_party_claims', [])
         gaps = report.setdefault('gaps', [])
+        # This foreclosure's own recorded filings were moved out of the claims by the name search
+        # (document_walk.own_case_basis). Rebuilding claims from the raw results must not put them
+        # back: 2024-014878's own judgment OR 34932-1256 read as a claim in 6 of 7 replayed cases.
+        # A row with no book/page keys to '0/0' and would hide every other keyless claim: skip it.
+        own = {key_of(o.get('book'), o.get('page_no')) for o in report.get('own_case_instruments') or []
+               if o.get('own_case') and o.get('book') and o.get('page_no')}
+        if own:
+            claims[:] = [c for c in claims if key_of(c.get('book'), c.get('page_no')) not in own]
         seen = {(key_of(c.get('book'), c.get('page_no')), c.get('under_name')) for c in claims}
         for search in report.get('searched', []):
             name = search['name']
@@ -61,6 +69,8 @@ def enrich_claims(search_reports, raw_results, documents):
                 if not book or not page:
                     continue
                 key = key_of(book, page)
+                if key in own:
+                    continue
                 doc = indexed.get(key)
                 classification = (doc or {}).get('classification') or {}
                 kind = classification.get('text_kind') or classification.get('kind') or ''
