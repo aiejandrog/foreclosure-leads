@@ -1,25 +1,25 @@
 {
  "alerts": [
   {
-   "at": "2026-10-04T09:00:54-04:00",
+   "at": "2026-10-04T09:31:10-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 2 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-04T09:00:54-04:00",
+   "at": "2026-10-04T09:31:10-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-04T09:00:54-04:00",
+   "at": "2026-10-04T09:31:10-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-04T09:00:54-04:00",
+ "published_at": "2026-10-04T09:31:10-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -30,7 +30,7 @@
    "holds": 315,
    "leads_checked": 15,
    "provider": "courtlistener",
-   "pull_age_h": 0.4,
+   "pull_age_h": 0.9,
    "pull_ok": true,
    "readable": true,
    "reason": "budget",
