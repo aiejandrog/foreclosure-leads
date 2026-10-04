@@ -1,40 +1,40 @@
 {
  "alerts": [
   {
-   "at": "2026-10-03T21:12:04-04:00",
+   "at": "2026-10-04T09:00:54-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: 2 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-03T21:12:04-04:00",
+   "at": "2026-10-04T09:00:54-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 10, 10) and 69 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 69 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-03T21:12:04-04:00",
+   "at": "2026-10-04T09:00:54-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-03T21:12:04-04:00",
+ "published_at": "2026-10-04T09:00:54-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
    "errors": 0,
-   "filings": 1169,
-   "holds": 305,
-   "leads_checked": 32,
+   "filings": 1170,
+   "holds": 315,
+   "leads_checked": 15,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.4,
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 91,
+   "reason": "budget",
+   "requests_used": 116,
    "truncated": 1
   },
   "bounce": {
@@ -73,7 +73,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 9.03207
+   "usd": 8.57424
   },
   "clerk_bk": {
    "readable": false
@@ -84,12 +84,12 @@
   },
   "morning_sends": {
    "addresses": 2,
-   "cap": 10,
+   "cap": 15,
    "caps": [
-    10,
-    10
+    15,
+    15
    ],
-   "date": "2026-10-03",
+   "date": "2026-10-04",
    "eligible": 69,
    "judged": true,
    "readable": true,
@@ -101,19 +101,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-03",
+   "date": "2026-10-04",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1791050615,
+   "started_at": 1791112502,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 10.2249
+   "spent": 13.2245
   },
   "readiness": {
    "at": "2026-10-03T21:12:04-04:00",
