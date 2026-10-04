@@ -268,6 +268,20 @@ _SWORN_OR_SCHEDULE_RE = re.compile(
 # block runs to the end of what is read, so a heading is never excused by distance.
 _SCHEDULE_REF_RE = re.compile(r'\b(AFFIDAVIT|DECLARATION|PAYOFF|INDEBTEDNESS|AMOUNTS?\s+DUE)\b', re.I)
 # A title that opens a quotation ("FINAL JUDGMENT, quoted from a motion or an exhibit) is not the paper's own.
+_SCHEDULE_WORD_RE = re.compile(r'\b(AFFIDAVIT|DECLARATION|PAYOFF|INDEBTEDNESS)\b', re.I)
+
+
+def _schedule_heading(ln):
+    """A short line that is itself the heading of an affidavit or payoff schedule: it opens with one of
+    the words, or is printed in capitals around one, and is not a sentence (no closing punctuation, a few
+    words). A judgment's recital ("Affidavit of Indebtedness filed in support of the Motion.") is not."""
+    words = ln.split()
+    if not words or len(words) > 10 or not _SCHEDULE_WORD_RE.search(ln) or ln[-1] in '.;,:':
+        return False
+    first = re.sub(r'^[\W_\d]+', '', words[0])
+    return bool(_SCHEDULE_WORD_RE.match(first)) or ln == ln.upper()
+
+
 _QUOTE_OPEN_RE = re.compile(r'^\s*[>"\'“‘«]')
 _OPENING_SENTENCE_RE = re.compile(r'^[\W_]*(?:THIS\s+(?:CAUSE|ACTION|MATTER)\b|ORDERED\b|IT\s+IS\b)', re.I)
 # What only a decree says. An affidavit or motion does not order the clerk to sell.
@@ -334,6 +348,8 @@ def judgment_titled(reading):
              if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')]
     if not pages:
         return False
+    if pages[0].get('page') not in (None, 1):
+        return False                                     # page 1 unread: its heading and oath are unknown
     if not any(_DECREE_RE.search(str(p.get('text') or '')) for p in pages):
         return False
     first = str(pages[0].get('text') or '')
@@ -342,7 +358,8 @@ def judgment_titled(reading):
     if len(pages) > 1:
         # A title can sit alone on a cover page with the paper's own heading and oath on the next one.
         second_head = '\n'.join([ln for ln in str(pages[1].get('text') or '').splitlines() if ln.strip()][:25])
-        if _SWORN_OR_SCHEDULE_RE.search(second_head):
+        if _SWORN_OR_SCHEDULE_RE.search(second_head) or any(
+                _schedule_heading(ln.strip()) for ln in second_head.splitlines()[:5]):
             return False
     lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
 
@@ -351,6 +368,8 @@ def judgment_titled(reading):
         return bool(_OPENING_SENTENCE_RE.match(lines[k])
                     or (k + 1 < len(lines) and _OPENING_SENTENCE_RE.match(lines[k] + ' ' + lines[k + 1])))
 
+    if any(_schedule_heading(ln) for ln in lines):
+        return False                                     # an affidavit's or schedule's own heading, wherever it sits
     for i, ln in enumerate(lines):
         if _QUOTE_OPEN_RE.match(ln):
             continue
@@ -359,6 +378,12 @@ def judgment_titled(reading):
             # title block includes the lines above, so they must not name another instrument or end
             # on a connector that hands the sentence to this line.
             if not _title_block_above_ok(lines[max(0, i - 12):i]):
+                continue
+            # Nothing above the title, back to the top of the page, may open as another instrument
+            # ("NOTICE OF FILING", "MOTION FOR"), and the title is not introduced by a lead-in colon.
+            if any((_NOT_A_JUDGMENT_RE.match(a) or _INSTRUMENT_START_RE.match(a))
+                   and not _BARE_MODIFIER_RE.match(a) and not _JUDGMENT_TITLE_RE.match(a) for a in lines[:i]) \
+                    or (i and lines[i - 1].endswith(':')):
                 continue
             # The title block runs from the top of the page to where the opening sentence of the decree
             # begins ("THIS ACTION was heard..."), or to the end of what is read when none is in view.

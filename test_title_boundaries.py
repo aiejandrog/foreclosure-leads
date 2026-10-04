@@ -126,5 +126,41 @@ class WrappedAndSplitTests(unittest.TestCase):
         self.assertFalse(titled(p1, p2))
 
 
+class DesktopProbeTests(unittest.TestCase):
+    """Holes found by an independent probe of the first #162 head (85d6e3b)."""
+
+    def test_a_heading_after_the_opening_sentence_is_still_a_heading(self):
+        for head in ('AFFIDAVIT OF AMOUNTS DUE', 'PAYOFF STATEMENT', 'Affidavit of Indebtedness',
+                     'DECLARATION OF AMOUNTS DUE AND OWING'):
+            for gap in (0, 1, 2, 3, 6, 9):
+                with self.subTest(heading=head, gap=gap):
+                    below = [OPENING] + FILLER[:gap] + [head, 'Principal $1.00']
+                    self.assertFalse(titled(page(below=below)))
+
+    def test_a_notice_that_quotes_the_judgment_after_a_neutral_lead_in_is_not_a_judgment(self):
+        for lead in ('Plaintiff files the following:', 'The Court entered the following order:', 'Attached hereto:'):
+            with self.subTest(lead=lead):
+                p1 = (CAPTION + 'ALPHA LENDING TRUST\nPlaintiff(s)\nvs.\nGAMMA OWNER\nDefendant(s)\n'
+                      'NOTICE OF FILING\n' + lead + '\n' + TITLE + '\n' + OPENING)
+                self.assertFalse(titled(p1))
+
+    def test_a_title_ending_page_one_with_an_affidavit_heading_opening_page_two_is_not_a_judgment(self):
+        for head in ('AFFIDAVIT OF AMOUNTS DUE', 'PAYOFF STATEMENT', 'Affidavit of Indebtedness'):
+            with self.subTest(heading=head):
+                self.assertFalse(titled(CAPTION + PARTIES + TITLE, head + '\n' + DECREE))
+
+    def test_a_first_readable_page_that_is_not_page_one_is_held(self):
+        reading = MT.text_reading(p1=page(below=[OPENING]), p2=DECREE)
+        self.assertTrue(RCT.judgment_titled(reading))
+        reading['pages'][0]['outcome'] = 'image_only'
+        self.assertFalse(RCT.judgment_titled(reading))
+
+    def test_a_judgments_own_recital_lines_still_pass(self):
+        recital = [OPENING, "the affidavits filed in support of the Motion, finding no genuine issue,",
+                   'Affidavit of Indebtedness filed in support of the Motion.',
+                   'Amounts Due and Owing.  Plaintiff is due:']
+        self.assertTrue(titled(page(below=recital)))
+
+
 if __name__ == '__main__':
     unittest.main()
