@@ -363,6 +363,67 @@ class SiblingDocumentTests(unittest.TestCase):
             self.assertTrue(RCT.judgment_titled(MT.text_reading(
                 p1=HEAD + '\n' + '\n'.join(lines), p2=decree)), lines)
 
+    # Layouts found on the saved real judgments (synthetic wording, 2026-10-03 offline diagnosis).
+    DECREE = MT.PAGE2 + '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.'
+
+    def titled_page(self, *lines, body=''):
+        return RCT.judgment_titled(MT.text_reading(p1=HEAD + '\n' + '\n'.join(lines) + body, p2=self.DECREE))
+
+    def test_the_forms_numbered_award_heading_is_not_a_sworn_statement(self):
+        award = "\n1. Amounts Due and Owing. Plaintiff is due:\nPrincipal $10.00"
+        self.assertTrue(self.titled_page('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the plaintiff's motion.",
+                                         body=award))
+        # ...only that heading: any real sworn or payoff wording on the page still rejects it.
+        for extra in ('\nAFFIANT states under penalty of perjury', '\nSworn to before me', '\nPAYOFF as of today',
+                      '\nThe amounts due and owing are as follows:', '\n2. Amounts Due and Owing, Plaintiff is owed:',
+                      '\nPlaintiff is due: per the affidavit'):
+            with self.subTest(extra=extra):
+                self.assertFalse(self.titled_page('FINAL JUDGMENT OF FORECLOSURE',
+                                                  "THIS ACTION was heard on the plaintiff's motion.",
+                                                  body=award + extra))
+
+    def test_a_reference_back_to_the_affidavits_still_holds_the_judgment(self):
+        # Not covered on purpose (needs a separate decision): the guard stays strict here.
+        self.assertFalse(self.titled_page('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the plaintiff's motion.",
+                                          body='\namounts due as set forth in the affidavits filed'))
+
+    def test_for_other_relief_and_agreed_titles(self):
+        ok = ("THIS ACTION was heard on the plaintiff's motion.",)
+        self.assertTrue(self.titled_page('FINAL JUDGMENT OF FORECLOSURE AND FOR OTHER RELIEF', *ok))
+        self.assertTrue(self.titled_page('AGREED FINAL JUDGMENT', 'CONSENT FINAL JUDGMENT OF FORECLOSURE', *ok))
+        self.assertTrue(self.titled_page('AGREED', 'FINAL JUDGMENT', *ok))
+        for lines in (('MOTION FOR FINAL JUDGMENT AND FOR OTHER RELIEF',),
+                      ('AFFIDAVIT IN SUPPORT OF FINAL JUDGMENT AND FOR OTHER RELIEF',),
+                      ('AGREED ORDER GRANTING', 'FINAL JUDGMENT'),
+                      ('AGREED MOTION FOR', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('AGREED FINAL JUDGMENT', 'AFFIDAVIT OF AMOUNTS DUE')):
+            with self.subTest(lines=lines):
+                self.assertFalse(self.titled_page(*lines, *ok))
+
+    def test_county_court_caption_and_order_header_fields(self):
+        ok = "THIS ACTION was heard on the plaintiff's motion."
+        self.assertTrue(self.titled_page('Plaintiff(s) / Petitioner(s),', 'v.', 'Defendant(s) / Respondent(s).',
+                                         'FINAL JUDGMENT OF FORECLOSURE', 'Motion Number: 12', 'Hear Date: 9/1/2099', ok))
+        # a header field does not hide a following instrument heading, nor a heading above the caption
+        self.assertFalse(self.titled_page('FINAL JUDGMENT', 'Motion Number: 12', 'MOTION FOR SUMMARY RELIEF', ok))
+        self.assertFalse(self.titled_page('ORDER GRANTING MOTION FOR', 'Defendant(s) / Respondent(s).', 'FINAL JUDGMENT', ok))
+
+    def test_a_real_layout_judgment_beside_a_sibling_keeps_its_amount_and_the_sibling_is_a_note(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        page1 = (HEAD + '\nAGREED FINAL JUDGMENT\nCONSENT FINAL JUDGMENT OF FORECLOSURE AND FOR OTHER RELIEF'
+                 "\nTHIS ACTION was heard on the plaintiff's motion.\n1. Amounts Due and Owing. Plaintiff is due:"
+                 '\nIt is ORDERED AND ADJUDGED that the clerk shall sell the property.')
+        helper = SiblingDocumentTests('test_a_check_records_what_the_document_reads_as')
+        helper.setUp()
+        self.addCleanup(helper.tearDown)
+        saved = helper.saved(helper.rows(MT.text_reading(p1=page1), MT.text_reading(p1=AFFIDAVIT_PAGE1)),
+                             ['court:%s:1' % ENTRY, 'court:%s:2' % ENTRY])
+        result = CV.assess(saved)
+        self.assertFalse([m for m in result['missing'] if NO_AMOUNT_GAP in m], result['missing'])
+        self.assertTrue([s for s in result['supported_by'] if 'court:%s:1' % ENTRY in s], result['supported_by'])
+        self.assertTrue([n for n in result['notes'] if 'not identified as the final judgment' in n], result['notes'])
+
     def test_a_title_without_decree_wording_is_not_a_judgment(self):
         self.assertFalse(RCT.judgment_titled(MT.text_reading(p1=HEAD + '\nFINAL JUDGMENT OF FORECLOSURE')))
 

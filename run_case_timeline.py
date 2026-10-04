@@ -240,10 +240,11 @@ def _stored_bytes_match(manifest):
 # FINAL JUDGMENT" and "NOTICE OF FILING FINAL JUDGMENT" contain the words and are not the judgment.
 _JUDGMENT_TITLE_RE = re.compile(
     r'^[\W_]*(?:\d+[.)]\s*)?(?:(?:FIRST|SECOND|THIRD)\s+)?'
-    r'(?:(?:AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
+    r'(?:(?:AMENDED|CORRECTED|DEFAULT|CONSENT|AGREED|STIPULATED|SUMMARY|IN\s+REM|UNCONTESTED)\s+)*'
     r'FINAL\s+(?:(?:SUMMARY|IN\s+REM)\s+)*JUDGMENT'
     r'(?:\s+OF\s+(?:MORTGAGE\s+)?FORECLOSURE)?'
-    r'(?:\s+(?:IN\s+REM|AND\s+ORDER\s+(?:SETTING(?:\s+FORECLOSURE)?|CANCEL\w*|RESETTING)\s+SALE))?\s*[.:]*\s*$', re.I)
+    r'(?:\s+(?:IN\s+REM|AND\s+ORDER\s+(?:SETTING(?:\s+FORECLOSURE)?|CANCEL\w*|RESETTING)\s+SALE))?'
+    r'(?:\s+AND\s+FOR\s+OTHER\s+RELIEF)?\s*[.:]*\s*$', re.I)
 _NOT_A_JUDGMENT_RE = re.compile(
     r'\b(AFFIDAVIT|MOTION|NOTICE|CERTIFICATE|PROPOSED|REQUEST|RESPONSE|OBJECTION|IN\s+SUPPORT|'
     r'DENYING|GRANTING|SATISFACTION|VACAT\w+|SET\s+ASIDE|EXHIBIT|STATEMENT|SCHEDULE|COST\s+BILL)\b', re.I)
@@ -270,7 +271,7 @@ _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk
 # lines) or a bare modifier line ("AMENDED"). Anything else ("ORDER APPROVING", "CLERK'S") means the
 # title is the tail of another heading. An allow-list, walked upward until the caption starts.
 _BARE_MODIFIER_RE = re.compile(
-    r'^[\W_]*(?:(?:FIRST|SECOND|THIRD|AMENDED|CORRECTED|DEFAULT|CONSENT|STIPULATED|SUMMARY|IN\s+REM|'
+    r'^[\W_]*(?:(?:FIRST|SECOND|THIRD|AMENDED|CORRECTED|DEFAULT|CONSENT|AGREED|STIPULATED|SUMMARY|IN\s+REM|'
     r'UNCONTESTED)\s*)+$', re.I)
 _CAPTION_LINE_RE = re.compile(
     r"^[\W_]*(?:CASE\s+(?:NO|NUMBER)\b|DIVISION\b|(?:CIVIL|GENERAL\s+JURISDICTION)\s+DIVISION\b|SECTION\b|COMPLEX\b|IN\s+THE\s+CIRCUIT\b|"
@@ -286,6 +287,16 @@ _INSTRUMENT_START_RE = re.compile(
     r'AGREED|SETTLEMENT|MEMORANDUM|OBJECTION|SATISFACTION|RELEASE|WRIT|SUMMONS|SUBPOENA|MAGISTRATE|LIS\s+PENDENS|'
     r'APPROV\w*|ADOPT\w*|REINSTAT\w*|CANCEL\w*|GRANT\w*|DENY\w*|VACAT\w*)\b', re.I)
 _RULE_LINE_RE = re.compile(r'^[\s_/\\.-]*$')
+# "Plaintiff(s) / Petitioner(s)," "Defendant(s) / Respondent(s)." county-court caption role lines.
+_ROLE_LINE_RE = re.compile(
+    r'^[\W_]*(?:PLAINTIFF|DEFENDANT|PETITIONER|RESPONDENT)(?:\(S\)|S)?'
+    r'(?:\s*/\s*(?:PLAINTIFF|DEFENDANT|PETITIONER|RESPONDENT)(?:\(S\)|S)?)?[,.]?\s*$', re.I)
+# County-court order header fields printed under the title.
+_ORDER_HEADER_FIELD_RE = re.compile(r'^[\W_]*(?:MOTION\s+(?:NUMBER|NO\.?)|HEAR(?:ING)?\s+DATE)\s*:', re.I)
+# The award paragraph of the Miami-Dade judgment form, not a sworn statement: "1. Amounts Due and
+# Owing. Plaintiff is due:" (only the numbered heading plus the "Plaintiff is due" opening).
+_AWARD_HEADING_RE = re.compile(r'^[ \t]*\d+[.)]\s*Amounts?\s+Due\s+and\s+Owing\.?\s*Plaintiff\s+is\s+due\b',
+                               re.I | re.M)
 
 
 def _title_block_above_ok(above):
@@ -294,8 +305,10 @@ def _title_block_above_ok(above):
     for ln in reversed(above):
         if _BARE_MODIFIER_RE.match(ln):
             continue
-        if _RULE_LINE_RE.match(ln) or re.match(r'^[\W_]*DEFENDANT\(S\)[,.]?\s*$', ln, re.I):
+        if _RULE_LINE_RE.match(ln) or _ROLE_LINE_RE.match(ln):
             continue                                     # a caption's closing rule or "Defendant(s)."
+        if _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
+            continue                                     # the title printed twice, or wrapped in two titles
         return (bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
                 and not _INSTRUMENT_START_RE.search(ln))
     return len(above) < 12
@@ -313,7 +326,7 @@ def judgment_titled(reading):
     if not any(_DECREE_RE.search(str(p.get('text') or '')) for p in pages):
         return False
     first = str(pages[0].get('text') or '')
-    if _SWORN_OR_SCHEDULE_RE.search(first):
+    if _SWORN_OR_SCHEDULE_RE.search(_AWARD_HEADING_RE.sub('', first)):
         return False
     lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
     for i, ln in enumerate(lines):
@@ -324,8 +337,9 @@ def judgment_titled(reading):
             if not _title_block_above_ok(lines[max(0, i - 12):i]):
                 continue
             rest = lines[i + 1:i + 3]
-            if not rest or (_NEXT_LINE_OK_RE.match(rest[0])
-                            and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest)):
+            if not rest or ((_NEXT_LINE_OK_RE.match(rest[0]) or _ORDER_HEADER_FIELD_RE.match(rest[0]))
+                            and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest
+                                        if not _ORDER_HEADER_FIELD_RE.match(nxt))):
                 return True
     return False
 
