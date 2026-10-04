@@ -260,7 +260,7 @@ _NEXT_LINE_OK_RE = re.compile(
     re.I)
 # Wording that marks a sworn statement or a draft, anywhere on the title's page.
 _SWORN_OR_SCHEDULE_RE = re.compile(
-    r'\b(AFFIANT|SWORN|NOTARY|BEFORE\s+ME|UNDER\s+PENALT\w+|PROPOSED|SUBMITTED\s+BY|PREPARED\s+BY)\b', re.I)
+    r'\b(AFFIANT|SWORN|NOTARY|BEFORE\s+ME|UNDER\s+PENALT\w+|PROPOSED|DRAFT|SUBMITTED\s+BY|PREPARED\s+BY|FOR\s+(?:THE\s+)?(?:COURT[\'\u2019]?S?\s+)?SIGNATURE)\b', re.I)
 # Wording that names an affidavit or a payoff schedule. A real judgment's body refers to these ("the
 # affidavits filed in support", "amounts due as set forth in...", "Affidavit of Indebtedness", "cost
 # declaration"), so they count only in the title block: every line above the title through the decree's
@@ -271,15 +271,25 @@ _SCHEDULE_REF_RE = re.compile(r'\b(AFFIDAVIT|DECLARATION|PAYOFF|INDEBTEDNESS|AMO
 _SCHEDULE_WORD_RE = re.compile(r'\b(AFFIDAVIT|DECLARATION|PAYOFF|INDEBTEDNESS)\b', re.I)
 
 
+_HEADING_CONNECTORS = {'of', 'and', 'the', 'in', 'to', 'for', 'by', 'on', 'a'}
+
+
 def _schedule_heading(ln):
-    """A short line that is itself the heading of an affidavit or payoff schedule: it opens with one of
-    the words, or is printed in capitals around one, and is not a sentence (no closing punctuation, a few
-    words). A judgment's recital ("Affidavit of Indebtedness filed in support of the Motion.") is not."""
+    """A line that is itself the heading of an affidavit, declaration or payoff schedule. Decided by
+    wording and structure, never by punctuation: a few words, every one capitalised (or a small
+    connector), at least one of them AFFIDAVIT / DECLARATION / PAYOFF / INDEBTEDNESS. A judgment's
+    recital ("Affidavit of Indebtedness filed in support of the Motion.") carries lowercase running
+    text, figures or a name of a different shape, and is not a heading."""
     words = ln.split()
-    if not words or len(words) > 10 or not _SCHEDULE_WORD_RE.search(ln) or ln[-1] in '.;,:':
+    if not words or len(words) > 10 or not _SCHEDULE_WORD_RE.search(ln):
         return False
-    first = re.sub(r'^[\W_\d]+', '', words[0])
-    return bool(_SCHEDULE_WORD_RE.match(first)) or ln == ln.upper()
+    for w in words:
+        core = w.strip('.:;,()"\'\u201c\u201d')
+        if not core or not re.fullmatch(r"[A-Za-z&/'\u2019-]+", core):
+            return False
+        if not (core[0].isupper() or core.lower() in _HEADING_CONNECTORS):
+            return False
+    return True
 
 
 _QUOTE_OPEN_RE = re.compile(r'^\s*[>"\'“‘«]')
@@ -357,18 +367,18 @@ def judgment_titled(reading):
         return False
     if len(pages) > 1:
         # A title can sit alone on a cover page with the paper's own heading and oath on the next one.
-        second_head = '\n'.join([ln for ln in str(pages[1].get('text') or '').splitlines() if ln.strip()][:25])
-        if _SWORN_OR_SCHEDULE_RE.search(second_head) or any(
-                _schedule_heading(ln.strip()) for ln in second_head.splitlines()[:5]):
+        second = [ln.strip() for ln in str(pages[1].get('text') or '').splitlines() if ln.strip()]
+        if _SWORN_OR_SCHEDULE_RE.search('\n'.join(second[:25])) or any(_schedule_heading(ln) for ln in second):
             return False
-    lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
+    every_line = [ln.strip() for ln in first.splitlines() if ln.strip()]
+    lines = every_line[:25]                              # the title is searched for here; headings everywhere
 
     def opens(k):
         # The decree's opening sentence, even when wrapped ("THIS" / "ACTION was heard").
         return bool(_OPENING_SENTENCE_RE.match(lines[k])
                     or (k + 1 < len(lines) and _OPENING_SENTENCE_RE.match(lines[k] + ' ' + lines[k + 1])))
 
-    if any(_schedule_heading(ln) for ln in lines):
+    if any(_schedule_heading(ln) for ln in every_line):
         return False                                     # an affidavit's or schedule's own heading, wherever it sits
     for i, ln in enumerate(lines):
         if _QUOTE_OPEN_RE.match(ln):
