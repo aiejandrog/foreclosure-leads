@@ -263,10 +263,12 @@ _SWORN_OR_SCHEDULE_RE = re.compile(
     r'\b(AFFIANT|SWORN|NOTARY|BEFORE\s+ME|UNDER\s+PENALT\w+|PROPOSED|SUBMITTED\s+BY|PREPARED\s+BY)\b', re.I)
 # Wording that names an affidavit or a payoff schedule. A real judgment's body refers to these ("the
 # affidavits filed in support", "amounts due as set forth in...", "Affidavit of Indebtedness", "cost
-# declaration"), so they count only in the title block: the lines above the title through a few lines
-# under it, where a sworn paper or schedule announces itself.
+# declaration"), so they count only in the title block: every line above the title through the decree's
+# opening sentence, where a sworn paper or schedule announces itself. With no opening sentence in view the
+# block runs to the end of what is read, so a heading is never excused by distance.
 _SCHEDULE_REF_RE = re.compile(r'\b(AFFIDAVIT|DECLARATION|PAYOFF|INDEBTEDNESS|AMOUNTS?\s+DUE)\b', re.I)
-_TITLE_ZONE_AFTER = 5
+# A title that opens a quotation ("FINAL JUDGMENT, quoted from a motion or an exhibit) is not the paper's own.
+_QUOTE_OPEN_RE = re.compile(r'^\s*[>"\'“‘«]')
 _OPENING_SENTENCE_RE = re.compile(r'^[\W_]*(?:THIS\s+(?:CAUSE|ACTION|MATTER)\b|ORDERED\b|IT\s+IS\b)', re.I)
 # What only a decree says. An affidavit or motion does not order the clerk to sell.
 _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk\s+shall\s+sell|'
@@ -337,26 +339,40 @@ def judgment_titled(reading):
     first = str(pages[0].get('text') or '')
     if _SWORN_OR_SCHEDULE_RE.search(first):
         return False
+    if len(pages) > 1:
+        # A title can sit alone on a cover page with the paper's own heading and oath on the next one.
+        second_head = '\n'.join([ln for ln in str(pages[1].get('text') or '').splitlines() if ln.strip()][:25])
+        if _SWORN_OR_SCHEDULE_RE.search(second_head):
+            return False
     lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
+
+    def opens(k):
+        # The decree's opening sentence, even when wrapped ("THIS" / "ACTION was heard").
+        return bool(_OPENING_SENTENCE_RE.match(lines[k])
+                    or (k + 1 < len(lines) and _OPENING_SENTENCE_RE.match(lines[k] + ' ' + lines[k + 1])))
+
     for i, ln in enumerate(lines):
+        if _QUOTE_OPEN_RE.match(ln):
+            continue
         if len(ln) <= 100 and _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
             # A heading wrapped over two lines ("ORDER GRANTING MOTION FOR" / "FINAL JUDGMENT"): the
             # title block includes the lines above, so they must not name another instrument or end
             # on a connector that hands the sentence to this line.
             if not _title_block_above_ok(lines[max(0, i - 12):i]):
                 continue
-            # The title block ends where the opening sentence of the decree begins ("THIS ACTION was
-            # heard...") or five lines under the title, whichever comes first.
+            # The title block runs from the top of the page to where the opening sentence of the decree
+            # begins ("THIS ACTION was heard..."), or to the end of what is read when none is in view.
             end = i + 1
-            while end < min(len(lines), i + 1 + _TITLE_ZONE_AFTER) and not _OPENING_SENTENCE_RE.match(lines[end]):
+            while end < len(lines) and not opens(end):
                 end += 1
-            if _SCHEDULE_REF_RE.search(' '.join(lines[max(0, i - 12):end])):
+            if _SCHEDULE_REF_RE.search(' '.join(lines[:end])):
                 continue
             j = i + 1
             while j < len(lines) and j < i + 7 and _ORDER_HEADER_FIELD_RE.match(lines[j]):
                 j += 1                                   # court-form header fields printed under the title
             rest = lines[j:j + 2]
             if not rest or ((_NEXT_LINE_OK_RE.match(rest[0]) or _PAREN_LINE_RE.match(rest[0])
+                             or (len(rest) > 1 and _NEXT_LINE_OK_RE.match(rest[0] + ' ' + rest[1]))
                              or (_JUDGMENT_TITLE_RE.match(rest[0]) and len(rest[0]) <= 100))
                             and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest)):
                 return True
