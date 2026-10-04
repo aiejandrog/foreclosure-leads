@@ -258,10 +258,16 @@ _NEXT_LINE_OK_RE = re.compile(
     r"AND\s+ORDER\s+(?:SETTING|CANCEL|RESETTING)|"
     r"[A-Z][A-Z0-9 .&'/-]{2,},?\s*(?:FSB|N\.A\.|INC\.?|LLC|TRUSTEE|ASSOCIATION|COMPANY|CORPORATION)[,.]?\s*$)",
     re.I)
-# Words that mark a sworn statement or a payoff schedule anywhere on the title's page.
+# Wording that marks a sworn statement or a draft, anywhere on the title's page.
 _SWORN_OR_SCHEDULE_RE = re.compile(
-    r'\b(AFFIDAVIT|AFFIANT|SWORN|NOTARY|BEFORE\s+ME|DECLARATION|PAYOFF|INDEBTEDNESS|AMOUNTS?\s+DUE|'
-    r'UNDER\s+PENALT\w+|PROPOSED|SUBMITTED\s+BY|PREPARED\s+BY)\b', re.I)
+    r'\b(AFFIANT|SWORN|NOTARY|BEFORE\s+ME|UNDER\s+PENALT\w+|PROPOSED|SUBMITTED\s+BY|PREPARED\s+BY)\b', re.I)
+# Wording that names an affidavit or a payoff schedule. A real judgment's body refers to these ("the
+# affidavits filed in support", "amounts due as set forth in...", "Affidavit of Indebtedness", "cost
+# declaration"), so they count only in the title block: the lines above the title through a few lines
+# under it, where a sworn paper or schedule announces itself.
+_SCHEDULE_REF_RE = re.compile(r'\b(AFFIDAVIT|DECLARATION|PAYOFF|INDEBTEDNESS|AMOUNTS?\s+DUE)\b', re.I)
+_TITLE_ZONE_AFTER = 5
+_OPENING_SENTENCE_RE = re.compile(r'^[\W_]*(?:THIS\s+(?:CAUSE|ACTION|MATTER)\b|ORDERED\b|IT\s+IS\b)', re.I)
 # What only a decree says. An affidavit or motion does not order the clerk to sell.
 _DECREE_RE = re.compile(r'ORDERED\s+AND\s+ADJUDGED|let\s+execution\s+issue|clerk\s+shall\s+sell|'
                         r'shall\s+sell\s+the\s+(?:subject\s+)?property', re.I)
@@ -292,24 +298,27 @@ _ROLE_LINE_RE = re.compile(
     r'^[\W_]*(?:PLAINTIFF|DEFENDANT|PETITIONER|RESPONDENT)(?:\(S\)|S)?'
     r'(?:\s*/\s*(?:PLAINTIFF|DEFENDANT|PETITIONER|RESPONDENT)(?:\(S\)|S)?)?[,.]?\s*$', re.I)
 # County-court order header fields printed under the title.
-_ORDER_HEADER_FIELD_RE = re.compile(r'^[\W_]*(?:MOTION\s+(?:NUMBER|NO\.?)|HEAR(?:ING)?\s+DATE)\s*:', re.I)
-# The award paragraph of the Miami-Dade judgment form, not a sworn statement: "1. Amounts Due and
-# Owing. Plaintiff is due:" (only the numbered heading plus the "Plaintiff is due" opening).
-_AWARD_HEADING_RE = re.compile(r'^[ \t]*\d+[.)]\s*Amounts?\s+Due\s+and\s+Owing\.?\s*Plaintiff\s+is\s+due\b',
-                               re.I | re.M)
-
+_ORDER_HEADER_FIELD_RE = re.compile(
+    r'^[\W_]*(?:MOTION\s+(?:NUMBER|NO\.?)|HEAR(?:ING)?\s+DATE|DOCKET\s+INDEX\s+(?:NUMBER|NO\.?)|DATE\s+FILED|'
+    r'FULL\s+NAME\s+OF\s+MOTION)\s*:', re.I)
+_VS_LINE_RE = re.compile(r'^[\W_]*V[S]?\.?\s*$', re.I)
+_PAREN_LINE_RE = re.compile(r'^\([^()]{1,40}\)$')
 
 def _title_block_above_ok(above):
     """`above` = the lines (oldest first) directly above the title. Walk up past bare modifiers; the
     first other line must be caption. No lines above is fine (the title opens the page)."""
-    for ln in reversed(above):
+    vs_at = max([k for k, ln in enumerate(above) if _VS_LINE_RE.match(ln)] or [-1])
+    for pos in range(len(above) - 1, -1, -1):
+        ln = above[pos]
         if _BARE_MODIFIER_RE.match(ln):
             continue
         if _RULE_LINE_RE.match(ln) or _ROLE_LINE_RE.match(ln):
             continue                                     # a caption's closing rule or "Defendant(s)."
         if _JUDGMENT_TITLE_RE.match(ln) and not _NOT_A_JUDGMENT_RE.search(ln):
             continue                                     # the title printed twice, or wrapped in two titles
-        return (bool(_CAPTION_LINE_RE.match(ln)) and not _NOT_A_JUDGMENT_RE.search(ln)
+        # A defendant's name line under "vs." is caption whatever it looks like, unless it names an instrument.
+        in_party_zone = pos > vs_at >= 0
+        return ((bool(_CAPTION_LINE_RE.match(ln)) or in_party_zone) and not _NOT_A_JUDGMENT_RE.search(ln)
                 and not _INSTRUMENT_START_RE.search(ln))
     return len(above) < 12
 
@@ -326,7 +335,7 @@ def judgment_titled(reading):
     if not any(_DECREE_RE.search(str(p.get('text') or '')) for p in pages):
         return False
     first = str(pages[0].get('text') or '')
-    if _SWORN_OR_SCHEDULE_RE.search(_AWARD_HEADING_RE.sub('', first)):
+    if _SWORN_OR_SCHEDULE_RE.search(first):
         return False
     lines = [ln.strip() for ln in first.splitlines() if ln.strip()][:25]
     for i, ln in enumerate(lines):
@@ -336,10 +345,20 @@ def judgment_titled(reading):
             # on a connector that hands the sentence to this line.
             if not _title_block_above_ok(lines[max(0, i - 12):i]):
                 continue
-            rest = lines[i + 1:i + 3]
-            if not rest or ((_NEXT_LINE_OK_RE.match(rest[0]) or _ORDER_HEADER_FIELD_RE.match(rest[0]))
-                            and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest
-                                        if not _ORDER_HEADER_FIELD_RE.match(nxt))):
+            # The title block ends where the opening sentence of the decree begins ("THIS ACTION was
+            # heard...") or five lines under the title, whichever comes first.
+            end = i + 1
+            while end < min(len(lines), i + 1 + _TITLE_ZONE_AFTER) and not _OPENING_SENTENCE_RE.match(lines[end]):
+                end += 1
+            if _SCHEDULE_REF_RE.search(' '.join(lines[max(0, i - 12):end])):
+                continue
+            j = i + 1
+            while j < len(lines) and j < i + 7 and _ORDER_HEADER_FIELD_RE.match(lines[j]):
+                j += 1                                   # court-form header fields printed under the title
+            rest = lines[j:j + 2]
+            if not rest or ((_NEXT_LINE_OK_RE.match(rest[0]) or _PAREN_LINE_RE.match(rest[0])
+                             or (_JUDGMENT_TITLE_RE.match(rest[0]) and len(rest[0]) <= 100))
+                            and not any(_NOT_A_JUDGMENT_RE.match(nxt) for nxt in rest)):
                 return True
     return False
 
