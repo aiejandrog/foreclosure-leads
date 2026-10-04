@@ -161,6 +161,12 @@ class DesktopProbeTests(unittest.TestCase):
                    'Amounts Due and Owing.  Plaintiff is due:']
         self.assertTrue(titled(page(below=recital)))
 
+    def test_party_names_that_open_with_an_instrument_word_do_not_hold_a_real_judgment(self):
+        for plaintiff in ('GRANT PROPERTIES LLC,', 'SETTLEMENT SERVICES, INC.,', 'JOINT VENTURE LLC,'):
+            with self.subTest(plaintiff=plaintiff):
+                p1 = CAPTION + plaintiff + '\nPlaintiff(s)\nvs.\nGAMMA OWNER,\nDefendant(s)\n_____/\n' + TITLE + '\n' + OPENING
+                self.assertTrue(titled(p1))
+
 
 if __name__ == '__main__':
     unittest.main()

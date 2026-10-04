@@ -381,8 +381,12 @@ def judgment_titled(reading):
                 continue
             # Nothing above the title, back to the top of the page, may open as another instrument
             # ("NOTICE OF FILING", "MOTION FOR"), and the title is not introduced by a lead-in colon.
+            # Party names are not read here (a plaintiff called "GRANT PROPERTIES"): only what follows the
+            # caption's closing line (rule or "Defendant(s).").
+            closed = max([k for k, a in enumerate(lines[:i])
+                          if _RULE_LINE_RE.match(a) or _ROLE_LINE_RE.match(a) or re.match(r'^[\W_]*DEFENDANTS?\b', a, re.I)] or [-1])
             if any((_NOT_A_JUDGMENT_RE.match(a) or _INSTRUMENT_START_RE.match(a))
-                   and not _BARE_MODIFIER_RE.match(a) and not _JUDGMENT_TITLE_RE.match(a) for a in lines[:i]) \
+                   and not _BARE_MODIFIER_RE.match(a) and not _JUDGMENT_TITLE_RE.match(a) for a in lines[closed + 1:i]) \
                     or (i and lines[i - 1].endswith(':')):
                 continue
             # The title block runs from the top of the page to where the opening sentence of the decree
