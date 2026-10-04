@@ -293,7 +293,8 @@ class AmountAttributionTests(SiblingDocumentTests):
         for first in (False, True):
             with self.subTest(sibling_first=first):
                 saved, result, jref, sref = self.build(judgment, twin, first)
-                self.assertNotEqual(result['verdict'], 'supported', result)
+                self.assertEqual(result['verdict'], 'conflicted', result)
+                self.assertEqual(result['judgment_amount'], [TOTAL_B, TOTAL_A])
                 self.assertNotEqual(result['judgment_amount'], TOTAL_A)
                 self.assertNotEqual(result['judgment_amount'], TOTAL_B)
 
