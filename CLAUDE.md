@@ -119,6 +119,20 @@ State as of the claim: cadence calls `replies.is_stop_text()` (no local detector
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
 
+## Send bridge reload
+
+Since 2026-10-07 (#175, Alejandro chose "Self-restart") `send_server.py` restarts itself on new
+code: only when git `HEAD` moved to a commit that equals `origin/main`, stayed put one poll, changed
+a `.py` file, no tracked `.py` has uncommitted changes, the new code compiles and imports in a
+separate python, no request is open, no POST came in the last `DEALFLOW_BRIDGE_RELOAD_IDLE_S`
+(300 s), and no first-touch slot is held in memory. Once a send loses its outcome or ledger row, that
+process never restarts itself (its in-memory claim is that address's only dedupe): restart it by
+hand after checking `mail_sent.json`. It drains open requests with no time limit, closes the port,
+starts the new bridge, and exits once the new one answers `/pid`; otherwise the old code takes the
+port back. Needs `git` on PATH for the user the bridge runs as; without it `send_server.log` says
+`[reload] off`. `DEALFLOW_BRIDGE_RELOAD_POLL_S=0` turns it off. A branch checked out on the laptop
+is never loaded.
+
 ## Full case research
 
 For requests to review dockets, judgments, parties, attorneys, probate or recorded instruments,

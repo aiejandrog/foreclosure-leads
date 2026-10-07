@@ -15,6 +15,7 @@ _*.py
 !_wpcontactstest.py
 !_textbatchtest.py
 !_textbatchtpltest.py
+!_bridgereloadtest.py
 !_calldetailtest.py
 !_callrankingtest.py
 !_batsyntaxtest.py
