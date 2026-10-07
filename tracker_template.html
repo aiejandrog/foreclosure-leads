@@ -13255,7 +13255,7 @@ function genMorningWorker(lane, autostart){
     +     'if(auto) return renderRunBar();'
     +     'if(!_wftsa().safe){ addLog("fail","auto-run","⏰ outside sending hours — stopped waiting for the opt-out sync. Press Start tomorrow or by hand.","warn"); return renderRunBar(); }'
     +     'if(i>=Q.length || sentToday()>=CAP.max) return render();'
-    +     'if(tbOn || awaitingReturn || ASTIMER || sendInFlight()){ schedSync("the worker screen is busy"); return; }'
+    +     'if(tbOn || awaitingReturn || ASTIMER || sendInFlight() || document.getElementById("mwsentyes")){ schedSync("the worker screen is busy"); return; }'
     +     'if(BRIDGE_OK!==true || BRIDGE_HOLD){ probeBridge(); schedSync("bridge not clear yet"); return; }'
     +     'autoAll=SYNCALL; auto=true;'
     +     'addLog("open","auto-run","▶ resuming after the opt-out sync wait (try "+SYNCTRY+")");'
@@ -14607,7 +14607,7 @@ function genMorningWorker(lane, autostart){
     +           '}'
     // A run already going (Start pressed during the countdown) owns the queue: a second runOne()
     // here would be two loops on the same lead, the 2026-08-13 duplicate-send shape.
-    +           'if(auto){ renderRunBar(); return; }'
+    +           'if(auto || SYNCWAIT){ renderRunBar(); return; }'
     +           'auto=true; addLog("open","auto-start","▶ auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
     +           'renderRunBar(); runOne(); }'
     +       '},1000);'

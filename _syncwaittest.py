@@ -62,7 +62,7 @@ function setTimeout(fn, ms){ timers.push({fn:fn, ms:ms, live:true}); return time
 function clearTimeout(h){ if(h && timers[h-1]) timers[h-1].live=false; }
 function clearInterval(){}
 function fire(){ var t=timers.filter(function(t){return t.live && t.fn.name==="syncRetry";}); if(!t.length) return false; t[0].live=false; t[0].fn(); return true; }
-var document={ querySelectorAll:function(){ return []; }, querySelector:function(){ return null; } };
+var CONFIRM=false; var document={ querySelectorAll:function(){ return []; }, querySelector:function(){ return null; }, getElementById:function(id){ return (id==="mwsentyes" && CONFIRM) ? {} : null; } };
 var auto=false, autoAll=false, awaitingReturn=false, tbOn=false, tick=null, healing=null, nextStep=null,
     ASTIMER=null, ASBOX=null, TBSENT=0, TBSKIP=0, TEXTQ=[], TBI=0, sending=false, sendingAt=0,
     BRIDGE_OK=true, BRIDGE_HOLD="", CAP={max:50}, i=0, lane="urgent",
@@ -114,6 +114,7 @@ reset(); auto=false; onResp(HOLD); out.manual_old_stop = BRIDGE_HOLD!=="" && tim
 reset(); auto=true; onResp(HOLD); tbOn=true; fire();
 out.busy_waits_again = runs===0 && auto===false && timers.filter(function(t){return t.live;}).length===1;
 tbOn=false; awaitingReturn=true; fire(); out.confirm_waits_again = runs===0 && auto===false; awaitingReturn=false;
+CONFIRM=true; fire(); out.text_confirm_card_waits_again = runs===0 && auto===false; CONFIRM=false;
 // 13. starting the text batch cancels the wait
 reset(); auto=true; onResp(HOLD); TEXTQ=[{}]; textBatchStart(); TEXTQ=[]; tbOn=false;
 out.batch_cancels = !fire() && runs===0 && logs.some(function(l){return /text batch started/.test(l);});
@@ -137,7 +138,7 @@ res = json.loads(r.stdout.strip().splitlines()[-1])
 BAR = A.extract(JS, 'renderRunBar')
 res['run bar shows the wait with a Stop'] = 'if(SYNCWAIT)' in BAR and "data-run='stop'>&#9632; Stop waiting" in BAR
 res['Start resets the try count'] = 'cancelSyncWait(); SYNCTRY=0;' in A.extract(JS, 'startRun')
-res['8am countdown will not start a second loop'] = "if(auto){ renderRunBar(); return; }auto=true; addLog(\"open\",\"auto-start\"" in JS
+res['8am countdown will not start a second loop'] = "if(auto || SYNCWAIT){ renderRunBar(); return; }auto=true; addLog(\"open\",\"auto-start\"" in JS
 for k, v in res.items():
     rec(k, v is True)
 
