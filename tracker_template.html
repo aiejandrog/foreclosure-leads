@@ -13233,6 +13233,28 @@ function genMorningWorker(lane, autostart){
     // timer and the run carried on into the next lead. runOne() re-checks `auto` as well -- belt
     // and braces, because a missed handle here means an unstoppable sender.
     +   'var nextStep=null, ASTIMER=null, ASBOX=null;'
+    // SYNC WAIT (2026-10-07). /send holds every send until TODAY's 07:15 opt-out sync has finished
+    // (send_server.py, `hold: 'sync'`). On 10-07 the sync ran late and the 8am run stopped on the
+    // first lead and stayed stopped. A sync hold is the one refusal that clears on its own, so the
+    // run waits and retries the SAME lead every SYNC_EVERY ms, at most SYNC_MAX times. The bridge
+    // still decides every send; this only asks again. Stop, Start and a lane switch cancel the wait.
+    +   'var SYNCWAIT=null, SYNCTRY=0, SYNCALL=false, SYNC_EVERY=600000, SYNC_MAX=18;'
+    +   'function cancelSyncWait(){ if(SYNCWAIT){ clearTimeout(SYNCWAIT); SYNCWAIT=null; } }'
+    +   'function syncRetry(){'
+    +     'SYNCWAIT=null;'
+    +     'if(auto || sendInFlight()) return;'
+    +     'if(!_wftsa().safe){ addLog("fail","auto-run","⏰ outside sending hours — stopped waiting for the opt-out sync. Press Start tomorrow or by hand.","warn"); return; }'
+    +     'if(i>=Q.length || sentToday()>=CAP.max) return render();'
+    +     'if(BRIDGE_OK!==true || BRIDGE_HOLD){'
+    +       'probeBridge();'
+    +       'if(SYNCTRY<SYNC_MAX){ SYNCTRY++; SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY); addLog("info","auto-run","bridge not clear yet — waiting again (try "+SYNCTRY+" of "+SYNC_MAX+")"); }'
+    +       'else { addLog("fail","auto-run","gave up waiting for the opt-out sync after "+SYNC_MAX+" tries — the queue is unchanged, press Start when the sync has run.","warn"); }'
+    +       'return;'
+    +     '}'
+    +     'autoAll=SYNCALL; auto=true;'
+    +     'addLog("open","auto-run","▶ resuming after the opt-out sync wait (try "+SYNCTRY+")");'
+    +     'renderRunBar(); runOne();'
+    +   '}'
     // balloon appended 2026-09-08 (investor refi lane). LAST on purpose: it shares an alias ramp
     // with `active`, so active's homeowner cold sends take the daily cap first and balloon gets
     // the remainder (409 alias_cap = skip, not stop). auto-run's next-lane walk skips empty lanes.
@@ -13364,7 +13386,7 @@ function genMorningWorker(lane, autostart){
     +   'function setLane(k){'
     +     'if(!LANES[k] || k===lane) return;'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
-    +     'auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
+    +     'cancelSyncWait(); auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
     +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){'
     +       'el.classList.toggle("on", el.dataset.lane===k);'
     +     '});'
@@ -13718,7 +13740,13 @@ function genMorningWorker(lane, autostart){
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
     +         'sending=false;'
-    +         'if(x.j.blocked==="optout_stale"){'
+    +         'if(x.j.blocked==="optout_stale" && x.j.hold==="sync" && auto && !SYNCWAIT && SYNCTRY<SYNC_MAX){'
+    // Today's sync has not finished yet. Not a ledger fault, so BRIDGE_HOLD stays clear (it would
+    // tell the operator to run ledger_sync.py, which is not the fix) and the run waits instead.
+    +           'bridgeUp(true); SYNCALL=autoAll; pause(); SYNCTRY++;'
+    +           'SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY);'
+    +           'addLog("info", "auto-run", "today\u2019s 7:15 opt-out sync has not finished — waiting "+Math.round(SYNC_EVERY/60000)+" min, then retrying this lead (try "+SYNCTRY+" of "+SYNC_MAX+"). Nothing was sent.");'
+    +         '} else if(x.j.blocked==="optout_stale"){'
     +           'BRIDGE_HOLD="Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer, then press Start after the warning clears.";'
     +           'bridgeUp(true); renderBridge();'
     +           'addLog("fail", "auto-run", String(x.j.err||BRIDGE_HOLD)+" — run paused; this lead and the remaining queue are unchanged.", "warn");'
@@ -14148,6 +14176,7 @@ function genMorningWorker(lane, autostart){
        is not confirmed up, refuse to start and say how to fix it. */
     +   'function startRun(all, src){'
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
+    +     'cancelSyncWait();'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
     +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight from the last run — it will finish and be recorded on its own. Press Start again in a moment.","warn"); return; }'
     +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
@@ -14182,6 +14211,7 @@ function genMorningWorker(lane, autostart){
     +   'function stopRun(src){'
     +     'var wasAuto=!!(auto||autoAll), wasBatch=!!tbOn, wasStarting=!!ASTIMER;'
     +     'auto=false; autoAll=false; awaitingReturn=false; tbOn=false;'
+    +     'var wasWaiting=!!SYNCWAIT; cancelSyncWait();'
     +     'clearInterval(tick); tick=null;'
     +     'if(healing){ clearTimeout(healing); healing=null; }'
     +     'if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
@@ -14191,6 +14221,7 @@ function genMorningWorker(lane, autostart){
     +     'if(wasStarting){ addLog("skip","auto-start","auto-run cancelled before it started ("+(src||"stop")+") — the queue is untouched, press Start when you are ready"); }'
     +     'else if(wasBatch){ addLog("skip","batch","■ text batch STOPPED ("+(src||"stop")+") — "+TBSENT+" sent, "+TBSKIP+" skipped, "+Math.max(0,TEXTQ.length-TBI)+" still queued. Nothing was marked sent that was not."); }'
     +     'else if(wasAuto){ addLog("skip","auto-run","■ auto-run STOPPED ("+(src||"stop")+") at lead "+Math.min(i+1,Q.length)+" of "+Q.length+" in "+LMETA[lane].t+" — "+Math.max(0,Q.length-i)+" left, still queued. Nothing was marked sent that was not. Press Start to resume from here."+(sendInFlight()?" One email was already handed to the bridge and will finish sending — it is logged when it lands.":"")); }'
+    +     'else if(wasWaiting){ addLog("skip","auto-run","■ stopped waiting for the opt-out sync ("+(src||"stop")+") — the queue is untouched, press Start when you are ready"); }'
     +     'else { addLog("info","auto-run","stop pressed with nothing running"); }'
     +     'render();'
     +   '}'

@@ -252,7 +252,8 @@ rec('the gates are not duplicated in the delegate any more',
 # be asserted from source shapes: what the queue does when Stop lands mid-flight.
 LOOP_FNS = ('startRun', 'stopRun', 'runOne', 'advance', 'pause', 'hopNextLane', 'channels',
             'renderRunBar', 'laneCount', 'allTotal')
-LOOP_JS = '\n'.join(extract(WORKER_JS, n) for n in LOOP_FNS)
+LOOP_FNS += ('cancelSyncWait',)   # Start and Stop both cancel a pending opt-out-sync wait
+LOOP_JS = 'var SYNCWAIT=null;\n' + '\n'.join(extract(WORKER_JS, n) for n in LOOP_FNS)
 
 HARNESS_HEAD = r"""
 // ---- fake worker-tab world -----------------------------------------------------------------
