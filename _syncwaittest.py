@@ -54,7 +54,7 @@ start = JS.index('if(x.j.blocked==="optout_stale" && x.j.hold==="sync"')
 end = JS.index('} else if(x.status===200', start)
 BRANCH = 'function onResp(x){ sending=false; ' + JS[start:end] + '} }'
 DECL = JS[JS.index('var SYNCWAIT='):JS.index(';', JS.index('var SYNCWAIT=')) + 1]
-FNS = '\n'.join(A.extract(JS, n) for n in ('cancelSyncWait', 'schedSync', 'syncRetry', 'stopRun', 'pause', 'setLane', 'textBatchStart'))
+FNS = '\n'.join(A.extract(JS, n) for n in ('cancelSyncWait', 'handTakeover', 'schedSync', 'syncRetry', 'stopRun', 'pause', 'setLane', 'textBatchStart'))
 
 HARNESS = r"""
 var timers=[], logs=[], runs=0, probes=0, sent=0, hourSafe=true;
@@ -118,6 +118,9 @@ CONFIRM=true; fire(); out.text_confirm_card_waits_again = runs===0 && auto===fal
 // 13. starting the text batch cancels the wait
 reset(); auto=true; onResp(HOLD); TEXTQ=[{}]; textBatchStart(); TEXTQ=[]; tbOn=false;
 out.batch_cancels = !fire() && runs===0 && logs.some(function(l){return /text batch started/.test(l);});
+// 14. a hand action on a lead cancels the wait, so the run cannot restart under the operator
+reset(); auto=true; onResp(HOLD); handTakeover(); onResp(HOLD);
+out.hand_action_cancels = !fire() && runs===0 && logs.some(function(l){return /worked by hand/.test(l);});
 // 11. a run already going when the retry fires is left alone (no second run)
 reset(); auto=true; onResp(HOLD); auto=true; fire(); out.no_double_run = runs===0;
 console.log(JSON.stringify(out));
@@ -137,6 +140,9 @@ if r.returncode != 0:
 res = json.loads(r.stdout.strip().splitlines()[-1])
 BAR = A.extract(JS, 'renderRunBar')
 res['run bar shows the wait with a Stop'] = 'if(SYNCWAIT)' in BAR and "data-run='stop'>&#9632; Stop waiting" in BAR
+DELEG = JS[JS.index('closest(".mwbtn")'):JS.index('closest(".mwbtn")') + 2000]
+res['card actions call handTakeover after the run controls'] = DELEG.index('var r=Q[i]; if(!r)return;handTakeover();') > DELEG.index('fn==="stop"')
+res['queue-row Text and Call call handTakeover'] = 'e.preventDefault(); handTakeover();' in JS and 'if(qc){ handTakeover();' in JS
 res['Start resets the try count'] = 'cancelSyncWait(); SYNCTRY=0;' in A.extract(JS, 'startRun')
 res['8am countdown will not start a second loop'] = "if(auto || SYNCWAIT){ renderRunBar(); return; }auto=true; addLog(\"open\",\"auto-start\"" in JS
 for k, v in res.items():

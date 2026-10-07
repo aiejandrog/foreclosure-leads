@@ -13243,6 +13243,9 @@ function genMorningWorker(lane, autostart){
     // card, the 8am countdown, a send in flight) waits again rather than repainting over it.
     +   'var SYNCWAIT=null, SYNCTRY=0, SYNCALL=false, SYNCAT="", SYNC_EVERY=600000, SYNC_MAX=18;'
     +   'function cancelSyncWait(){ if(SYNCWAIT){ clearTimeout(SYNCWAIT); SYNCWAIT=null; } }'
+    // A hand action on a lead (Email, Text, Call, Skip, Done, or a queue-row Text/Call) means the
+    // operator is driving now. A pending wait must not later flip auto back on under them (Codex P1).
+    +   'function handTakeover(){ if(SYNCWAIT && !auto){ cancelSyncWait(); addLog("skip","auto-run","stopped waiting for the opt-out sync because a lead is being worked by hand — press Start to resume the run."); renderRunBar(); } }'
     +   'function schedSync(why){'
     +     'if(SYNCTRY>=SYNC_MAX){ addLog("fail","auto-run","gave up waiting for the opt-out sync after "+SYNC_MAX+" tries — the queue is unchanged, press Start when the sync has run.","warn"); renderRunBar(); return false; }'
     +     'SYNCTRY++; SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY);'
@@ -14466,7 +14469,7 @@ function genMorningWorker(lane, autostart){
     +     'if(go){ e.preventDefault(); return textBatchStart(); }'
     +     'var tb=e.target.closest&&e.target.closest("[data-qtext]");'
     +     'if(tb){'
-    +       'e.preventDefault();'
+    +       'e.preventDefault(); handTakeover();'
     +       'var xc=tb.getAttribute("data-qtext"), x=null;'
     +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
     +       'if(!x) return;'
@@ -14485,7 +14488,7 @@ function genMorningWorker(lane, autostart){
     // renderers rebuild the row FROM THE QUEUE DATA with the strip appended; the details are
     // re-rendered from CALLQ/TEXTQ rather than preserved by luck, so there is nothing to lose.
     +     'var qc=e.target.closest&&e.target.closest("[data-qcall]");'
-    +     'if(qc){ var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel — details stay on screen, log the outcome under the row");'
+    +     'if(qc){ handTakeover(); var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel — details stay on screen, log the outcome under the row");'
     +     'QCALLOPEN[cc]=1;'
     // the delay is the old one and it is still worth keeping: the outcome buttons must not appear
     // under a thumb that is still travelling from the Call button.
@@ -14522,6 +14525,7 @@ function genMorningWorker(lane, autostart){
     +     'if(fn==="stop"){ return stopRun("card button"); }'
     +     'if(fn==="auto"||fn==="autoall"){ return startRun(fn==="autoall", "card button"); }'
     +     'var r=Q[i]; if(!r)return;'
+    +     'handTakeover();'
     // The bridge gate and the re-entrancy gate that used to sit inline here now live in startRun(),
     // because the run bar starts runs too and two copies of a gate is how two paths drift. Their
     // reasoning is kept with the code, above.
