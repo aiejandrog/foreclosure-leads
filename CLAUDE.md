@@ -114,14 +114,22 @@ bridge also holds texting until today's 07:15 opt-out sync is confirmed, like `/
 still holds it on the board and on the worker's per-row Text button. `POST /text` refuses with `blocked: text_hold`. The §362
 check on a confirmed text, the 8 AM-8 PM window, the cap and the EN/ES let-me-know line are
 unchanged. `is_sms_stop()` stays as the rule for what a text reply means.
-The bridge restarts itself when its `.py` files change on disk (a pull), once the change has settled
-and compiles, after closing its port and finishing in-flight requests (`_code_watch`,
-`DEALFLOW_BRIDGE_RELOAD_POLL_S=0` turns it off). Before that, merged fixes stayed off until a
-person restarted it.
 
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
+
+## Send bridge reload
+
+Since 2026-10-07 (#175, Alejandro chose "Self-restart") `send_server.py` restarts itself on new
+code: only when git `HEAD` moved to a commit that equals `origin/main` and stayed put one poll, the
+new code compiles and imports in a separate python, no request is open, no POST came in the last
+`DEALFLOW_BRIDGE_RELOAD_IDLE_S` (300 s), no first-touch slot is held in memory, and no send that day
+lost its outcome or ledger row (those days it waits for tomorrow). It drains open requests with no
+time limit, closes the port, starts the new bridge, and exits only once the new one answers
+`/health` with its own pid; otherwise the old code takes the port back. Log: `[reload]` lines in
+`send_server.log`. `DEALFLOW_BRIDGE_RELOAD_POLL_S=0` turns it off. A branch checked out on the laptop
+is never loaded; it stays on the code it started with until main moves.
 
 ## Full case research
 

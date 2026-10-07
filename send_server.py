@@ -1662,17 +1662,6 @@ class Handler(BaseHTTPRequestHandler):
     # toward 500 to chase the message number; cut BCCs instead if more volume is needed.
     recipient_cap = 450      # addresses/day — safety margin under Gmail's ~500
 
-    def handle(self):
-        # Counted so a code reload (_code_watch, below) never cuts off a send mid-request.
-        global _REQS_ACTIVE
-        with _REQS_LOCK:
-            _REQS_ACTIVE += 1
-        try:
-            super().handle()
-        finally:
-            with _REQS_LOCK:
-                _REQS_ACTIVE -= 1
-
     def log_message(self, fmt, *args):
         """Terse one-line per request in the terminal, no HTTP boilerplate.
 
@@ -1724,6 +1713,7 @@ class Handler(BaseHTTPRequestHandler):
                 _ft = {'ok': False, 'err': str(e)[:120], 'held_unverified': None}
             self._json(200, {
                 'ok': True,
+                'pid': os.getpid(),               # a reloading bridge checks its successor by this
                 'user': user or '(not configured)',
                 'has_password': bool(pw),
                 'sent_today': _sent_today_count(),
@@ -2035,6 +2025,8 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, out)
 
     def do_POST(self):
+        global _LAST_POST
+        _LAST_POST = time.time()          # a code reload waits until POSTs have been quiet a while
         if self.path.startswith('/notes'):
             return self._handle_notes()
         if self.path.startswith('/marks/consumed'):   # BEFORE /mark — startswith('/mark') shadows it
@@ -2467,6 +2459,7 @@ class Handler(BaseHTTPRequestHandler):
             # exception can arrive after Gmail already accepted the message, and re-sending on a
             # maybe-delivered address is exactly the duplicate this guard exists to prevent. The
             # 24h ledger entry written just below keeps it blocked; a real retry is tomorrow.
+            _mark_memory_only()                       # outcome unknown: no code reload today
             _append_ledger({
                 'd': dt.date.today().isoformat(),
                 'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -2523,6 +2516,7 @@ class Handler(BaseHTTPRequestHandler):
             # more than once in a row (would mean the retries above are landing on a persistent
             # lock, not a transient one).
             ledger_err = str(e)[:200]
+            _mark_memory_only()                       # dedupe is memory-only now: no reload today
             print(f'WARNING: {to} was emailed successfully (mid={mid}) but the ledger write '
                   f'failed — this send is UNRECORDED: {ledger_err}', file=sys.stderr)
 
@@ -2542,39 +2536,81 @@ class Handler(BaseHTTPRequestHandler):
 # automatically"). The bridge is started once at logon and then runs for days, so a git pull (the
 # 05:30 refresh pulls main) changed the files on disk and left the OLD code answering /health and
 # /text. That is how #172 and #173 merged and texting still showed the Quo hold that no longer
-# exists. Now the bridge notices its own .py files changed and restarts itself on the new code:
-#   - only once the files have stopped changing for one poll (a pull can be mid-write),
-#   - only when the new send_server.py, text_hold.py and sync_gate.py compile (a broken pull keeps
-#     the running bridge instead of leaving none),
-#   - only after the listening socket is closed and no request is in flight, so a send is never cut
-#     off and two bridges never own the port at once (see _already_running).
-# Every hold (opt-out ledger, 07:15 sync, §362, hours, caps) is evaluated per request from files on
-# disk, so a restart changes no verdict. DEALFLOW_BRIDGE_RELOAD_POLL_S=0 turns this off.
-# Requests being handled right now. Not _INFLIGHT: that name is the per-address send dedupe set.
+# exists. Now the bridge restarts itself on new code, and only when that is safe:
+#   - the trigger is a new git commit that IS origin/main (a pull), never a scratch .py, an edit in
+#     progress, or a branch someone checked out, and it must stay put for one poll;
+#   - the new code must compile AND import in a separate python first;
+#   - not while a send could be lost: no request being handled, no /send or /text POST in the last
+#     RELOAD_IDLE_S, no first-touch sender slot held in memory, and never on a day a send's outcome
+#     or ledger row was lost (_MEMORY_ONLY_DAY) -- on such a day the in-memory claims are the only
+#     dedupe for that address, and a restart would forget them;
+#   - shutdown stops new requests, then waits with NO time limit for the ones running to finish,
+#     and only then closes the port and starts the new bridge, so os._exit never lands mid-send;
+#   - the new bridge must answer /health with its own pid within RELOAD_UP_S, or the old code takes
+#     the port back and that commit is not tried again.
+# Every hold (opt-out ledger, 07:15 sync, §362, hours, caps) is still read per request from disk.
+# DEALFLOW_BRIDGE_RELOAD_POLL_S=0 turns this off.
+def _env_float(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except ValueError:
+        return float(default)
+
+
+RELOAD_POLL_S = _env_float('DEALFLOW_BRIDGE_RELOAD_POLL_S', '60')
+RELOAD_IDLE_S = _env_float('DEALFLOW_BRIDGE_RELOAD_IDLE_S', '300')
+RELOAD_UP_S = _env_float('DEALFLOW_BRIDGE_RELOAD_UP_S', '30')
+_RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
+# Requests being handled right now, counted on the server thread before the request thread starts
+# (see _BridgeServer). Not _INFLIGHT: that name is the per-address send dedupe set.
 _REQS_ACTIVE = 0
 _REQS_LOCK = threading.Lock()
-try:
-    RELOAD_POLL_S = float(os.environ.get('DEALFLOW_BRIDGE_RELOAD_POLL_S', '60'))
-except ValueError:
-    RELOAD_POLL_S = 60.0
-_RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
-_RELOAD_DRAIN_S = 60
+_LAST_POST = 0.0              # time.time() of the last POST (sends, texts, notes, marks)
+_MEMORY_ONLY_DAY = ''         # ISO day on which a send's outcome or ledger row was lost
 
 
-def _code_fingerprint(folder=HERE):
-    """{name: (mtime_ns, size)} for the .py files next to this one."""
-    out = {}
-    try:
-        names = sorted(n for n in os.listdir(folder) if n.endswith('.py'))
-    except OSError:
-        return out
-    for n in names:
+def _mark_memory_only():
+    """A send's dedupe now lives only in this process's memory for the rest of today."""
+    global _MEMORY_ONLY_DAY
+    _MEMORY_ONLY_DAY = dt.date.today().isoformat()
+
+
+class _BridgeServer(ThreadingHTTPServer):
+    def process_request(self, request, client_address):
+        global _REQS_ACTIVE
+        with _REQS_LOCK:
+            _REQS_ACTIVE += 1
         try:
-            st = os.stat(os.path.join(folder, n))
-            out[n] = (st.st_mtime_ns, st.st_size)
-        except OSError:
-            pass
-    return out
+            super().process_request(request, client_address)
+        except Exception:
+            with _REQS_LOCK:
+                _REQS_ACTIVE -= 1
+            raise
+
+    def process_request_thread(self, request, client_address):
+        global _REQS_ACTIVE
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with _REQS_LOCK:
+                _REQS_ACTIVE -= 1
+
+
+def _git(folder, *args):
+    import subprocess
+    kw = {'cwd': folder, 'capture_output': True, 'text': True, 'timeout': 20}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x08000000                 # CREATE_NO_WINDOW
+    try:
+        p = subprocess.run(['git'] + list(args), **kw)
+    except Exception:
+        return None
+    return p.stdout.strip() if p.returncode == 0 else None
+
+
+def _git_heads(folder=HERE):
+    """(HEAD, origin/main) commit ids, or (None, None) when git cannot say."""
+    return _git(folder, 'rev-parse', 'HEAD'), _git(folder, 'rev-parse', 'origin/main')
 
 
 def _code_compiles(folder=HERE):
@@ -2591,10 +2627,20 @@ def _code_compiles(folder=HERE):
     return True, ''
 
 
-def _reload_due(boot, prev, cur):
-    """True when the code differs from what this process started with AND did not change since
-    the previous poll (a pull still writing files waits one more poll)."""
-    return cur != boot and cur == prev
+def _code_imports(folder=HERE):
+    """(ok, err). Imports the new modules in a separate python, so a module-level error is caught
+    while the running bridge is still up."""
+    import subprocess
+    kw = {'cwd': folder, 'capture_output': True, 'text': True, 'timeout': 120}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x08000000
+    try:
+        p = subprocess.run([sys.executable, '-c',
+                            'import sys; sys.path.insert(0, "."); import send_server, text_hold, sync_gate'],
+                           **kw)
+    except Exception as e:
+        return False, str(e)[:160]
+    return p.returncode == 0, ((p.stderr or '').strip().splitlines() or [''])[-1][:160]
 
 
 def _reload_log(msg, folder=HERE):
@@ -2606,38 +2652,87 @@ def _reload_log(msg, folder=HERE):
         pass
 
 
-def _code_watch(srv, state, poll_s=None, folder=HERE, sleep=time.sleep):
-    """Poll the code; when a settled, compiling change is seen, stop serve_forever() so main()
-    can hand over to a fresh process."""
+def _reload_blocker(now=None):
+    """Why a restart must wait right now, or '' when nothing in memory would be lost."""
+    now = time.time() if now is None else now
+    today = dt.date.today().isoformat()
+    if _MEMORY_ONLY_DAY == today:
+        return 'a send today has its dedupe only in memory'
+    with _FT_SLOT_LOCK:
+        if any(k[0] == today for k in _FT_SLOTS):
+            return 'a first-touch sender slot is held in memory'
+    if _REQS_ACTIVE > 0:
+        return 'a request is being handled'
+    if now - _LAST_POST < RELOAD_IDLE_S:
+        return 'sends were made in the last %d seconds' % int(RELOAD_IDLE_S)
+    return ''
+
+
+def _code_watch(srv, state, boot_head, bad=(), poll_s=None, folder=HERE, sleep=time.sleep,
+                heads=None, imports=None, blocker=None):
+    """Poll git; when a settled pull of origin/main is safe to load, stop serve_forever() and put
+    the new commit in state['reload'] so main() can hand over."""
     poll_s = RELOAD_POLL_S if poll_s is None else poll_s
-    boot = _code_fingerprint(folder)
-    prev = boot
-    warned = None
+    heads = heads or _git_heads
+    imports = imports or _code_imports
+    blocker = blocker or _reload_blocker
+    prev = boot_head
+    said = {}
     while True:
         sleep(poll_s)
-        cur = _code_fingerprint(folder)
-        if _reload_due(boot, prev, cur):
-            ok, err = _code_compiles(folder)
-            if ok:
-                _reload_log('code changed on disk; restarting the bridge on the new code', folder)
-                state['reload'] = True
-                srv.shutdown()
-                return
-            if warned != cur:
-                _reload_log('code changed but does not compile (%s); keeping the running bridge' % err, folder)
-                warned = cur
-        prev = cur
+        head, origin = heads(folder)
+        settled = head == prev
+        prev = head
+        if not head or head == boot_head or head != origin or head in bad or not settled:
+            continue
+        why = ''
+        ok, err = _code_compiles(folder)
+        if not ok:
+            why = 'does not compile (%s)' % err
+        else:
+            why = blocker()
+            if not why:
+                ok, err = imports(folder)
+                if not ok:
+                    why = 'does not import (%s)' % err
+                    bad = set(bad) | {head}
+        if why:
+            if said.get(head) != why:
+                _reload_log('new code %s is waiting: %s' % (head[:8], why), folder)
+                said[head] = why
+            continue
+        _reload_log('new code %s; restarting the bridge on it' % head[:8], folder)
+        state['reload'] = head
+        srv.shutdown()
+        return
 
 
 def _respawn():
     """Start a fresh bridge on the same interpreter and arguments, detached from this one."""
     import subprocess
-    kw = {'cwd': HERE, 'close_fds': True}
+    kw = {'cwd': HERE, 'close_fds': True,
+          'env': dict(os.environ, DEALFLOW_BRIDGE_RESPAWNED='1')}
     if os.name == 'nt':
         kw['creationflags'] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     else:
         kw['start_new_session'] = True
-    subprocess.Popen([sys.executable, os.path.abspath(__file__)] + sys.argv[1:], **kw)
+    return subprocess.Popen([sys.executable, os.path.abspath(__file__)] + sys.argv[1:], **kw)
+
+
+def _child_up(child, host, port, wait_s=None):
+    """True once the new bridge answers /health with its own pid."""
+    end = time.time() + (RELOAD_UP_S if wait_s is None else wait_s)
+    while time.time() < end:
+        if child.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen('http://%s:%d/health' % (host, port), timeout=2) as r:
+                if json.loads(r.read().decode()).get('pid') == child.pid:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
 
 
 # ---------------------------------------------------------------- main
@@ -2696,22 +2791,40 @@ def main():
     print('  stop:    Ctrl+C')
     print()
 
-    srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    state = {'reload': False}
-    if RELOAD_POLL_S > 0:
-        threading.Thread(target=_code_watch, args=(srv, state), daemon=True).start()
-    try:
-        srv.serve_forever()
-    except KeyboardInterrupt:
-        print('\nstopping...')
-        srv.shutdown()
-    if state.get('reload'):
-        srv.server_close()                       # free the port before the new bridge probes it
-        t0 = time.time()
-        while _REQS_ACTIVE > 0 and time.time() - t0 < _RELOAD_DRAIN_S:
+    if os.environ.get('DEALFLOW_BRIDGE_RESPAWNED') == '1':
+        _reload_log('new bridge serving, pid %d' % os.getpid())
+    boot_head = _git_heads()[0] if RELOAD_POLL_S > 0 else None
+    bad = set()
+    while True:
+        srv = _BridgeServer((args.host, args.port), Handler)
+        state = {'reload': None}
+        if boot_head:
+            threading.Thread(target=_code_watch, args=(srv, state, boot_head, frozenset(bad)),
+                             daemon=True).start()
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            print('\nstopping...')
+            srv.shutdown()
+        new = state.get('reload')
+        if not new:
+            break
+        while _REQS_ACTIVE > 0:                  # no time limit: never exit in the middle of a send
             time.sleep(0.2)
-        _respawn()
-        os._exit(0)
+        srv.server_close()                       # free the port for the new bridge
+        child = _respawn()
+        if _child_up(child, args.host, args.port):
+            os._exit(0)
+        try:
+            child.kill()
+        except Exception:
+            pass
+        if _already_running(args.host, args.port):
+            # another launcher (logon, the 07:45 task) took the port meanwhile: never run two.
+            _reload_log('new code %s did not come up; another bridge owns the port, exiting' % new[:8])
+            os._exit(0)
+        bad.add(new)
+        _reload_log('new code %s did not come up; the old bridge is serving again' % new[:8])
 
 
 if __name__ == '__main__':
