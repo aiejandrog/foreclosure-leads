@@ -78,7 +78,9 @@ def _queue_states(base):
     if not path.is_file():
         return set(), set()
     try:
-        db = sqlite3.connect('file:%s?mode=ro' % path.as_posix(), uri=True, timeout=30)
+        # as_uri() percent-encodes the path (a space, '#' or '?' in a Windows folder name) and
+        # writes the file:///C:/... form sqlite expects on Windows.
+        db = sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=30)
         try:
             rows = db.execute("SELECT source_ref, status FROM jobs WHERE kind = 'acquire'").fetchall()
         finally:
