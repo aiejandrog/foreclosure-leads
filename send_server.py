@@ -488,11 +488,19 @@ def _text_hold():
     2026-10-07: Quo is gone, so there is no vendor inbox to scan. Texts go out as plain SMS from
     the phone, replies come back to the phone, and a stop there is ledgered through /notes. What
     texting is held on now is that ledger: missing, unreadable, or stale holds. An import failure
-    holds too."""
+    holds too. Today's 07:15 opt-out sync must also be confirmed, the same gate /send holds email
+    on: a list kept fresh by local writes alone can still be missing the other machine's stops."""
     try:
         import text_hold as _TH
         held, why = _TH.text_hold(OPTOUT_FILE)
-        return bool(held), (why or '')
+        if held:
+            return True, (why or '')
+        sv = _sync_verdict()
+        if not sv.get('ok'):
+            return True, ('HOLD texting: today\'s 07:15 opt-out sync is not confirmed (%s). '
+                          'Run python ledger_sync.py on this computer.'
+                          % str(sv.get('reason') or 'no verdict')[:160])
+        return False, ''
     except Exception as e:
         return True, ('HOLD texting — the do-not-contact check could not be evaluated (%s). '
                       'Email is not held by this.' % str(e)[:80])

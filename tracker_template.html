@@ -14496,6 +14496,7 @@ function genMorningWorker(lane, autostart){
     +       'var xc=tb.getAttribute("data-qtext"), x=null;'
     +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
     +       'if(!x) return;'
+    +       'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
     +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
     +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
     +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'

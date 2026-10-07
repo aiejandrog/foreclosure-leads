@@ -16,6 +16,7 @@ phone trusts while it cannot reach the bridge), export_to_resimpli (REsimpli tex
 """
 import datetime
 import json
+import math
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -32,7 +33,7 @@ def status(path=None, now=None, max_age_days=None):
     re-check the age itself once it can no longer ask the bridge."""
     path = path or OPTOUT_FILE
     max_age_days = MAX_AGE_DAYS if max_age_days is None else float(max_age_days)
-    out = {'held': True, 'why': '', 'ok': False, 'ts': '', 'maxAgeH': int(round(max_age_days * 24))}
+    out = {'held': True, 'why': '', 'ok': False, 'ts': '', 'maxAgeH': max(1, int(math.ceil(max_age_days * 24)))}
     try:
         mtime = os.path.getmtime(path)
     except OSError:

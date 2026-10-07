@@ -414,6 +414,17 @@ def bridge():
         rec('a refused text writes no text_sent.json row',
             json.loads((work / 'text_sent.json').read_text(encoding='utf-8')) == rows_before)
         fresh_ledger(oo)
+        sync_ok = (work / 'sync_status.json').read_text(encoding='utf-8')
+        (work / 'sync_status.json').write_text(json.dumps({
+            'date': '2000-01-01', 'state': 'finished', 'ok': True, 'steps': []}), encoding='utf-8')
+        st, h = call(port, '/health')
+        st, j = call(port, '/text', {'case': '2099-000310-CA-01', 'to': '5550100101', 'confirmed': True})
+        rec("a fresh list without today's 07:15 sync still holds texting",
+            h.get('text_hold') is True and '07:15' in str(h.get('text_hold_why') or '')
+            and j.get('blocked') == 'text_hold', {'h': h.get('text_hold_why'), 'j': j})
+        (work / 'sync_status.json').write_text(sync_ok, encoding='utf-8')
+        st, h = call(port, '/health')
+        rec('a confirmed sync and a fresh list release texting', h.get('text_hold') is False, h.get('text_hold_why'))
 
         st, j = call(port, '/send', {
             'to': 'owner1@example.com', 'subj': 'About 1 Main St',

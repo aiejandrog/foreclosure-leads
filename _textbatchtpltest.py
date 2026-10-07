@@ -195,8 +195,7 @@ rec('Start text batch shows the template, not the first composer',
 rec('the template has English and Spanish', 'English' in P['html'] and 'Espa&ntilde;ol' in P['html'])
 rec('one card per group, with its count',
     'First text &middot; 2 people' in P['html'] and 'Second text (follow-up) &middot; 1 person' in P['html'], P['html'][:600])
-rec('the card bodies are the baked templates, escaped',
-    S['cold']['es'].replace('&', '&amp;') in P['html'] and S['followup']['en'].replace("'", "'") in P['html'])
+rec('the card bodies are the baked templates', S['cold']['es'] in P['html'] and S['followup']['en'] in P['html'])
 rec('a lead with no group is counted, not dropped', '1 more already have their message filled in' in P['html'])
 rec('the screen tells him to mark stops from his phone in Call Mode', 'Do Not Contact in Call Mode' in P['html'])
 rec('Start sending and Not now are both on the screen', P['go'] and P['cancel'])
@@ -210,6 +209,21 @@ rec('the step shows the English block and the Spanish block separately',
     re.search(r'English</div><div[^>]*>[^<]*Ana', ST['html']) is not None
     and re.search(r'Espa&ntilde;ol</div><div[^>]*>Hola Ana', ST['html']) is not None, ST['html'][:900])
 rec('the step still waits for his tap before opening Messages', ST['opened'] == 0)
+
+QT = WJS[WJS.index('closest("[data-qtext]")'):]
+QT = QT[:QT.index('openHere(x.sms)')]
+rec('the per-row Text button also refuses while texting is held', 'if(TEXT_HOLD)' in QT, QT[:300])
+esc = node(r"""
+var main = {innerHTML:''}; var document = {getElementById:function(){return null;}};
+function addLog(){} function renderRunBar(){} function renderTextQ(){} function render(){}
+function sentToday(){return 0;} var CAP={max:5}; function _wftsa(){return {safe:true};}
+var TEXT_HOLD='', tbOn=false, TEXTTPL={cold:{label:'First text', en:'Hi <b>x</b> & y', es:'Hola'}},
+    TEXTQ=[{c:'1', name:'A', tpl:'cold'}];
+""" + extract(WJS, '_esc2') + extract(WJS, 'textBatchPreview') + r"""
+textBatchPreview(); console.log(JSON.stringify({h: main.innerHTML}));
+""")
+rec('template text is HTML-escaped on the screen',
+    'Hi &lt;b&gt;x&lt;/b&gt; &amp; y' in esc['h'] and '<b>x</b>' not in esc['h'], esc['h'][:300])
 
 # ---------------------------------------------------------------- 6. Quo is out of operations
 LIVE = [f for f in os.listdir(HERE) if f.endswith(('.py', '.bat', '.ps1', '.js', '.html'))

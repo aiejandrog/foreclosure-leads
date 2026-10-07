@@ -109,8 +109,9 @@ exists. Texts go out as plain SMS from the phone (an `sms:` link with the body p
 replies come back to the phone. A stop there is marked Do Not Contact in Call Mode or the board,
 which ledgers it through `/notes` -> `ledger_from_notes`; nothing reads a text inbox
 automatically any more. The text hold is now `text_hold.py`: a missing, unreadable or stale
-`optouts.json` (`DEALFLOW_OPTOUT_MAX_AGE_DAYS`, the same age `/send` uses) holds texting, and
-bridge-down still holds it on the board. `POST /text` refuses with `blocked: text_hold`. The §362
+`optouts.json` (`DEALFLOW_OPTOUT_MAX_AGE_DAYS`, the same age `/send` uses) holds texting; the
+bridge also holds texting until today's 07:15 opt-out sync is confirmed, like `/send`; bridge-down
+still holds it on the board and on the worker's per-row Text button. `POST /text` refuses with `blocked: text_hold`. The §362
 check on a confirmed text, the 8 AM-8 PM window, the cap and the EN/ES let-me-know line are
 unchanged. `is_sms_stop()` stays as the rule for what a text reply means.
 
