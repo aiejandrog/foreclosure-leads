@@ -1655,23 +1655,29 @@ def write_result(cpath, key, fields, status, ld, env_name, region, date_from, no
     return ''
 
 
-def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, manual=False, max_usd=None):
+def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, manual=False, max_usd=None,
+                  owner=None):
     """ONE on-demand per-lead PACER search for a lead the send gate cannot clear yet. Never raises.
 
     -> {'status', 'verdict', 'why', 'cost', 'pages'}. status:
        searched | cached | index_hit | unsearchable   (the cache / hits file now says why)
        no_lead | not_needed | off | refused | error   (nothing new: the gate's refusal stands)
     manual=True is `pacer_stay.py --case`: searches even with a fresh verdict, is not held to the
-    daily pre-send allowance (only the quarter + month caps and max_usd / PACER_RUN_MAX)."""
-    out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0}
+    daily pre-send allowance (only the quarter + month caps and max_usd / PACER_RUN_MAX).
+    owner (manual only; `--owner`) is a person-typed owner string, 'LAST, FIRST' or 'LAST, FIRST; LAST, FIRST'.
+    It is for a case that is no longer in the lead files (a reply that outlived its lead). It makes the
+    search LOOKUP ONLY: the verdict is returned and printed, never written to the PACER cache, so it cannot
+    release anything at the send gate. A typed name cannot prove every owner on the case was searched."""
+    out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0, 'recorded': True}
     try:
-        return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out)
+        return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out,
+                        owner if manual else None)
     except Exception as e:                            # a check that throws is a refusal, never a pass
         out.update(status='error', why='pre-send PACER check failed (%s)' % type(e).__name__)
         return out
 
 
-def _presend(case, here, env, session, now, paid, manual, max_usd, out):
+def _presend(case, here, env, session, now, paid, manual, max_usd, out, owner=None):
     import stay_gate
     now_ts = time.time() if now is None else now
     key = stay_gate.pacer_key(case)
@@ -1697,12 +1703,13 @@ def _presend(case, here, env, session, now, paid, manual, max_usd, out):
                 out.update(status='refused', why='another process holds the pre-send PACER lock')
                 return out
             return _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual,
-                                   max_usd, cpath, out)
+                                   max_usd, cpath, out, owner)
     finally:
         _PRESEND_LOCK.release()
 
 
-def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual, max_usd, cpath, out):
+def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual, max_usd, cpath, out,
+                    owner=None):
     import stay_gate
     today = dt.date.fromtimestamp(now_ts)
     cache, prob = load_cache_strict(cpath)
@@ -1715,8 +1722,20 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
                    why='the PACER verdict from %s is still inside the max age' % str(ent.get('q') or '?')[:10])
         return out
     ld = _leads_cached(here).get(key)
+    lookup_only = False
+    if owner is not None:
+        if not str(owner).strip():
+            out.update(status='refused', why='--owner is empty')
+            return out
+        lookup_only = True                    # a typed name never reaches the cache the gate reads
+        out['recorded'] = False
+        base = ld or {}
+        ld = {'key': key, 'case': base.get('case') or key, 'county': base.get('county') or '',
+              'owners': [(str(owner), 'last_first')], 'auction': base.get('auction'),
+              'filed': base.get('filed'), 'src': {'manual-owner'}}
     if ld is None:
-        out.update(status='no_lead', why='case %s is not in the lead files, so there is no owner name to search' % key)
+        out.update(status='no_lead', why='case %s is not in the lead files, so there is no owner name to search '
+                                         '(pass --owner "LAST, FIRST" for a lookup-only search)' % key)
         return out
     idx_path, hits_path = nf_paths(here, env_name)
     idx = load_index(idx_path, env_name)[0] if os.path.exists(idx_path) else None
@@ -1724,7 +1743,7 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         h = match_index({key: ld}, idx, today, now_ts, env_name)
         if h:
             hits = _load_json(hits_path) if os.path.exists(hits_path) else {}
-            if isinstance(hits, dict):
+            if isinstance(hits, dict) and not lookup_only:
                 hits.update(h)
                 save_cache(hits_path, hits)
             out.update(status='index_hit', verdict='active',
@@ -1735,8 +1754,8 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
     subjects, problem, nsearch = lead_subjects(ld['owners'])
     kind = 'manual' if manual else 'presend'
     if problem:
-        werr = write_result(cpath, key, {'verdict': 'unverifiable', 'why': problem}, 'done', ld, env_name, region,
-                            date_from, now_ts, kind)
+        werr = '' if lookup_only else write_result(cpath, key, {'verdict': 'unverifiable', 'why': problem}, 'done',
+                                                   ld, env_name, region, date_from, now_ts, kind)
         out.update(status='unsearchable' if not werr else 'error', verdict='unverifiable', why=werr or problem)
         return out
     billable = env_name == 'prod'
@@ -1790,7 +1809,8 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         fields = {'verdict': 'unverifiable', 'why': 'PCL error: ' + why, 'pages': budget.pages,
                   'cost': round(budget.spent, 4), 'searches': 0}
         status = 'error'
-    werr = write_result(cpath, key, fields, status, ld, env_name, region, date_from, now_ts, kind)
+    werr = '' if lookup_only else write_result(cpath, key, fields, status, ld, env_name, region, date_from, now_ts,
+                                               kind)
     if werr:
         out.update(status='error', verdict='unverifiable', why=werr)
         return out
@@ -1843,6 +1863,10 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
                     help="per-run dollar cap for --bulk all; 'auto' = quarter remaining / nights left (<= PACER_RUN_MAX)")
     ap.add_argument('--limit', type=int, default=0, help='max leads searched this run (0 = budget decides)')
     ap.add_argument('--case', default='', help='search only this lead now (quarter + month caps apply)')
+    ap.add_argument('--owner', default='',
+                    help="with --case: owner name(s) typed from the docket, 'LAST, FIRST' (';' between owners), for a "
+                         "case no longer in the lead files. LOOKUP ONLY: prints the verdict, records nothing, "
+                         "releases nothing at the send gate")
     ap.add_argument('--plan', action='store_true', help='no network: print what would be searched and its cost')
     ap.add_argument('--status', action='store_true', help='print quarter / month spend and the pre-send allowance')
     ap.add_argument('--max-pages', type=int, default=1,
@@ -1850,6 +1874,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     ap.add_argument('--lookback-years', type=int, default=LOOKBACK_YEARS)
     ap.add_argument('--region', choices=('national', 'fl'), default='national')
     a = ap.parse_args(argv)
+    if a.owner and not a.case:
+        log('PACER: --owner only works with --case -- nothing searched')
+        return 3
     now_ts = time.time() if now is None else now
     today = dt.date.fromtimestamp(now_ts)
 
@@ -1931,10 +1958,12 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             except ValueError:
                 log('PACER: --max-spend %r is not a number -- nothing searched' % a.max_spend)
                 return 3
-        r = presend_check(a.case, here=here, env=env, session=session, now=now_ts, paid=paid, manual=True, max_usd=mx)
-        log('PACER --case %s: %s%s -- %s (%d page(s), $%.2f)' % (
+        r = presend_check(a.case, here=here, env=env, session=session, now=now_ts, paid=paid, manual=True, max_usd=mx,
+                          owner=a.owner if a.owner else None)
+        log('PACER --case %s: %s%s -- %s (%d page(s), $%.2f)%s' % (
             stay_gate.pacer_key(a.case) or a.case[:40], r['status'], (' -> ' + r['verdict']) if r['verdict'] else '',
-            r['why'][:200], r['pages'], r['cost']))
+            r['why'][:200], r['pages'], r['cost'],
+            '' if r.get('recorded', True) else ' [LOOKUP ONLY: not recorded, the send gate is unchanged]'))
         return 0 if r['status'] in ('searched', 'cached', 'index_hit', 'unsearchable') else 3
 
     billable = env_name == 'prod'

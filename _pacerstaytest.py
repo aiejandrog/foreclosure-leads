@@ -1129,6 +1129,29 @@ r = PS.presend_check('CACE-99-001702', here=str(g17c), env=e17, session=h, now=N
 check('unreadable PACER cache: pre-send refused, no search, the file is not overwritten',
       r['status'] == 'refused' and h.calls == [] and pcb.read_text() == '{half', r)
 
+# --owner: a typed name for a case that left the lead files. LOOKUP ONLY.
+print('-- 17b --case --owner is lookup-only')
+reset_ledgers()
+g17o = work({'broward_leads.json': leads17})
+h = FakeHTTP(by_name={('TYPEDOWN', 'MARIA'): [row('TYPEDOWN', 'MARIA', termed='2021-02-02', filed='2020-01-01')]})
+r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=True)
+check('--case with no lead and no --owner: no_lead (message names --owner), nothing searched',
+      r['status'] == 'no_lead' and '--owner' in r['why'] and h.calls == [], r)
+r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=True, owner='TYPEDOWN, MARIA')
+check('--owner: searched, a verdict comes back, marked not recorded',
+      r['status'] == 'searched' and r['verdict'] == 'clear' and r['recorded'] is False and r['pages'] >= 1, r)
+check('--owner: the PACER cache the gate reads was NOT written',
+      not (g17o / 'pacer_stay_cache.json').exists(), list(g17o.iterdir()))
+check('--owner: the send gate still refuses the case', SG.check('CACE-99-007001', str(g17o / 'sale_history_cache.json'))['ok'] is False)
+r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=True, owner='   ')
+check('--owner blank: refused before any search', r['status'] == 'refused', r)
+r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=False, owner='TYPEDOWN, MARIA')
+check('--owner is ignored unless manual (the send bridge can never use a typed name)',
+      r['status'] == 'no_lead' and r['recorded'] is True, r)
+r = PS.presend_check('CACE-99-007002', here=str(g17o), env=e17, session=h, now=NOW, manual=True, owner='SMITH TRUST')
+check('--owner that cannot be searched (a trust): unsearchable, still nothing written',
+      r['status'] == 'unsearchable' and not (g17o / 'pacer_stay_cache.json').exists(), r)
+
 # ------------------------------------------------------------------------------------ 18 bulk modes
 print('-- 18 nightly per-lead bulk: off by default, md-near only with surplus')
 reset_ledgers()
