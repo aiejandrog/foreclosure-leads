@@ -21,7 +21,10 @@ import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPTOUT_FILE = os.path.join(HERE, 'optouts.json')
-MAX_AGE_DAYS = float(os.environ.get('DEALFLOW_OPTOUT_MAX_AGE_DAYS', '2'))
+try:
+    MAX_AGE_DAYS = float(os.environ.get('DEALFLOW_OPTOUT_MAX_AGE_DAYS', '2'))
+except ValueError:
+    MAX_AGE_DAYS = float('nan')   # status() holds on it rather than failing to import
 
 _FIX = 'Run python ledger_sync.py on this computer. Email is held by the same list.'
 
@@ -32,8 +35,18 @@ def status(path=None, now=None, max_age_days=None):
     ts is the ledger's modified time (UTC ISO) when it is readable, so a page that baked this can
     re-check the age itself once it can no longer ask the bridge."""
     path = path or OPTOUT_FILE
-    max_age_days = MAX_AGE_DAYS if max_age_days is None else float(max_age_days)
-    out = {'held': True, 'why': '', 'ok': False, 'ts': '', 'maxAgeH': max(1, int(math.ceil(max_age_days * 24)))}
+    try:
+        max_age_days = MAX_AGE_DAYS if max_age_days is None else float(max_age_days)
+    except (TypeError, ValueError):
+        max_age_days = float('nan')
+    out = {'held': True, 'why': '', 'ok': False, 'ts': '', 'maxAgeH': 0.0}
+    # Fail closed on a nonsense limit: nan compares False against every age, inf never expires,
+    # and 0 or less can never be met, so none of them is a usable window.
+    if not math.isfinite(max_age_days) or max_age_days <= 0:
+        out['why'] = ('HOLD texting: DEALFLOW_OPTOUT_MAX_AGE_DAYS is not a positive number (%r). '
+                      'Fix or remove that setting.' % max_age_days)
+        return out
+    out['maxAgeH'] = max_age_days * 24
     try:
         mtime = os.path.getmtime(path)
     except OSError:

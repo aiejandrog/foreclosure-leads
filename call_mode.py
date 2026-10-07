@@ -2160,19 +2160,42 @@ def _text_hold_json():
 
     held/why is the verdict at build. ok/ts/maxAgeH let the phone re-check it: ts is the
     do-not-contact list's modified time, so a fresh bake goes stale on the phone once maxAgeH
-    passes, the same age the bridge would refuse at. A missing or unreadable list bakes held."""
+    passes, the same age the bridge would refuse at. A missing or unreadable list bakes held.
+
+    Today's 07:15 opt-out sync is baked too, the same gate the bridge holds /text on: a fresh local
+    list can still miss stops recorded on the other machine. syncDay is the day that sync ran, and
+    the phone treats a bake from any other day as held, so yesterday's page cannot text today
+    before today's sync has been seen."""
     try:
         import text_hold as _TH
         st = _TH.status()
     except Exception as e:
         st = {'held': True, 'why': 'HOLD texting — the do-not-contact check could not be read (%s)'
               % str(e)[:80], 'ok': False, 'ts': '', 'maxAgeH': 48}
+    sync_day = ''
+    if not st.get('held'):
+        try:
+            import sync_gate as _SGT
+            sv = _SGT.verdict(path=os.path.join(HERE, 'sync_status.json'))
+        except Exception as e:
+            sv = {'ok': False, 'reason': 'the opt-out sync gate could not be evaluated (%s)' % str(e)[:80]}
+        if sv.get('ok'):
+            sync_day = str((sv.get('status') or {}).get('date') or '')
+        if not sync_day:
+            st = dict(st, held=True, ok=False,
+                      why="HOLD texting: today's 07:15 opt-out sync is not confirmed (%s). Run "
+                          "run-optout-sync.bat (or python morning_sync.py), then rebuild Call Mode." % str(sv.get('reason') or 'no verdict')[:160])
+    try:
+        max_h = float(st.get('maxAgeH'))
+    except (TypeError, ValueError):
+        max_h = 0.0
     return json.dumps({
         'held': bool(st.get('held')),
         'why': (st.get('why') or '') if st.get('held') else '',
         'ok': (not st.get('held')) and bool(st.get('ok')),
         'ts': str(st.get('ts') or ''),
-        'maxAgeH': int(st.get('maxAgeH') or 48),
+        'maxAgeH': max_h,
+        'syncDay': sync_day,
     })
 
 
@@ -4072,11 +4095,14 @@ var _FRESHN = -1;
 var _SEATN = 0, _CLMN = 0;
 function holdBakeFresh(q){
   /* Same window as text_hold.MAX_AGE_DAYS. A bake with no ok list, or an old one, is not fresh. */
-  if(!q || q.ok !== true || !q.ts) return false;
+  if(!q || q.ok !== true || !q.ts || !q.syncDay) return false;
+  /* The 07:15 sync the bake saw must be TODAY's, by this phone's own calendar. */
+  var n = new Date(), pad = function(v){ return (v < 10 ? '0' : '') + v; };
+  if(q.syncDay !== n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate())) return false;
   var t = Date.parse(q.ts);
   if(!isFinite(t)) return false;
-  var maxH = (typeof q.maxAgeH === 'number' && q.maxAgeH > 0) ? q.maxAgeH : 48;
-  return (Date.now() - t) <= maxH * 3600000;
+  if(typeof q.maxAgeH !== 'number' || !(q.maxAgeH > 0)) return false;
+  return (Date.now() - t) <= q.maxAgeH * 3600000;
 }
 function textingHeld(){
   /* A successful /health answer wins. If this page cannot poll the bridge, the bake is trusted
@@ -4091,7 +4117,7 @@ function textHoldWhy(){
   if(typeof TEXTHOLDLIVE !== 'undefined' && TEXTHOLDLIVE && q && q.why) return q.why;
   var b = (typeof TEXTHOLDBAKE === 'object' && TEXTHOLDBAKE) ? TEXTHOLDBAKE : null;
   if(b && b.held && b.why) return b.why;
-  return 'Texting is held: this page was built from a do-not-contact list that is now too old. Rebuild Call Mode after python ledger_sync.py.';
+  return 'Texting is held: this page was built before today\'s 07:15 opt-out sync, or from a do-not-contact list that is now too old. Run run-optout-sync.bat on the laptop, then rebuild Call Mode.';
 }
 function pollTextHold(){
   var was = textingHeld();

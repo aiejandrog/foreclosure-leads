@@ -225,6 +225,33 @@ textBatchPreview(); console.log(JSON.stringify({h: main.innerHTML}));
 rec('template text is HTML-escaped on the screen',
     'Hi &lt;b&gt;x&lt;/b&gt; &amp; y' in esc['h'] and '<b>x</b>' not in esc['h'], esc['h'][:300])
 
+# ---------------------------------------------------------------- 5b. Call Mode bake carries the 07:15 sync
+import datetime as _dt
+import shutil as _sh
+import text_hold as _TH
+import call_mode as _CM
+_tmp = tempfile.mkdtemp(prefix='dfbake_')
+_old = (_TH.OPTOUT_FILE, _CM.HERE)
+try:
+    _TH.OPTOUT_FILE = os.path.join(_tmp, 'optouts.json')
+    open(_TH.OPTOUT_FILE, 'w').write('{}')
+    _CM.HERE = _tmp
+    b0 = json.loads(_CM._text_hold_json())
+    rec('a fresh list with no 07:15 sync bakes held', b0['held'] is True and b0['ok'] is False
+        and '07:15' in b0['why'] and 'run-optout-sync.bat' in b0['why'] and 'ledger_sync' not in b0['why']
+        and b0['syncDay'] == '', b0)
+    today = _dt.date.today().isoformat()
+    import time as _t
+    open(os.path.join(_tmp, 'sync_status.json'), 'w').write(json.dumps({
+        'date': today, 'state': 'finished', 'ok': True,
+        'started_at': _t.time() - 120, 'finished_at': _t.time() - 60, 'steps': []}))
+    b1 = json.loads(_CM._text_hold_json())
+    rec("today's sync and a fresh list bake ok with syncDay", b1['held'] is False and b1['ok'] is True
+        and b1['syncDay'] == today, b1)
+finally:
+    _TH.OPTOUT_FILE, _CM.HERE = _old
+    _sh.rmtree(_tmp, ignore_errors=True)
+
 # ---------------------------------------------------------------- 6. Quo is out of operations
 LIVE = [f for f in os.listdir(HERE) if f.endswith(('.py', '.bat', '.ps1', '.js', '.html'))
         and not f.startswith(('_', 'test_')) and f not in ('design-preview.html',)]

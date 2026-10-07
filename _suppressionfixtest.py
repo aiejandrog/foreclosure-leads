@@ -146,6 +146,13 @@ def text_hold_unit():
         st = TH.status(path=str(fresh), max_age_days=2)
         rec('status carries ts and maxAgeH for the Call Mode bake',
             st['ok'] is True and st['ts'].endswith('Z') and st['maxAgeH'] == 48, st)
+        rec('a fractional max age is kept exact (0.1 day = 2.4 hours)',
+            abs(TH.status(path=str(fresh), max_age_days=0.1)['maxAgeH'] - 2.4) < 1e-9)
+        for bad in ('nan', 'inf', '-inf', 0, -1, 'x'):
+            s_bad = TH.status(path=str(fresh), max_age_days=bad)
+            rec('a max age of %r holds texting (fail closed)' % (bad,),
+                s_bad['held'] is True and s_bad['ok'] is False and s_bad['maxAgeH'] == 0.0
+                and 'DEALFLOW_OPTOUT_MAX_AGE_DAYS' in s_bad['why'], s_bad)
         rec('quo_sync.py is gone', not (HERE / 'quo_sync.py').exists())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -421,6 +428,8 @@ def bridge():
         st, j = call(port, '/text', {'case': '2099-000310-CA-01', 'to': '5550100101', 'confirmed': True})
         rec("a fresh list without today's 07:15 sync still holds texting",
             h.get('text_hold') is True and '07:15' in str(h.get('text_hold_why') or '')
+            and 'run-optout-sync.bat' in str(h.get('text_hold_why') or '')
+            and 'ledger_sync' not in str(h.get('text_hold_why') or '')
             and j.get('blocked') == 'text_hold', {'h': h.get('text_hold_why'), 'j': j})
         (work / 'sync_status.json').write_text(sync_ok, encoding='utf-8')
         st, h = call(port, '/health')
