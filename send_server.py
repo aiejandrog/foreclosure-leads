@@ -483,16 +483,18 @@ def _optout_readable():
 
 
 def _text_hold():
-    """(held, why) from quo_sync.text_hold(). Texting only — never consulted by /send.
+    """(held, why) from text_hold.text_hold(). Texting only — never consulted by /send.
 
-    Import failure, a missing status file, a failed scan, or a stale scan all hold. Email stays
-    on the 07:15 opt-out sync gate and the ledger-age gate, not on this one."""
+    2026-10-07: Quo is gone, so there is no vendor inbox to scan. Texts go out as plain SMS from
+    the phone, replies come back to the phone, and a stop there is ledgered through /notes. What
+    texting is held on now is that ledger: missing, unreadable, or stale holds. An import failure
+    holds too."""
     try:
-        import quo_sync
-        held, why = quo_sync.text_hold()
+        import text_hold as _TH
+        held, why = _TH.text_hold(OPTOUT_FILE)
         return bool(held), (why or '')
     except Exception as e:
-        return True, ('HOLD texting — the inbound STOP scan could not be evaluated (%s). '
+        return True, ('HOLD texting — the do-not-contact check could not be evaluated (%s). '
                       'Email is not held by this.' % str(e)[:80])
 
 
@@ -1731,8 +1733,8 @@ class Handler(BaseHTTPRequestHandler):
                 'optout_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
                 'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS or not _optout_readable()),
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
-                # Quo inbound STOP scan. text_hold true holds TEXTING only. It does not pause
-                # email; that stays on sync_ok / optout_stale above.
+                # Texting hold (text_hold.py): the do-not-contact list is missing, unreadable or
+                # stale. It holds TEXTING; email is held on the same list by optout_stale above.
                 'text_hold': _th,
                 'text_hold_why': _tw if _th else '',
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
@@ -1876,13 +1878,14 @@ class Handler(BaseHTTPRequestHandler):
         case = str(d.get('case') or '').strip()
         if not case:
             return self._json(400, {'ok': False, 'err': 'no case'})
-        # INBOUND STOP SCAN (2026-09-26). A failed or stale Quo message read means a STOP text
-        # may be sitting unread. Refuse the ledger write — and the worker treats a refusal as
-        # "do not text" — without touching the email path.
+        # TEXT HOLD (text_hold.py). A missing, unreadable or stale do-not-contact list means a
+        # stop may not be on it. Refuse the ledger write — and the worker treats a refusal as
+        # "do not text" — without touching the email path. (Was the Quo inbound scan until
+        # 2026-10-07; Quo is gone.)
         _th, _tw = _text_hold()
         if _th:
-            return self._json(200, {'ok': False, 'blocked': 'quo_inbound',
-                                    'err': _tw or 'texting held — inbound STOP scan not fresh'})
+            return self._json(200, {'ok': False, 'blocked': 'text_hold',
+                                    'err': _tw or 'texting held — do-not-contact list not fresh'})
         # Confirmed texts are contact. The same §362 gate as /send: a lead with no fresh
         # federal clear (Broward / Palm Beach) or an open match stays untexted. Opening a
         # composer (confirmed false) is not a send and is not held here.

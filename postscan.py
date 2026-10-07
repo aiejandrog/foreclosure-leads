@@ -7,7 +7,7 @@ undeliverable pieces come back HERE. Email already has bounces.py closing that l
 physical-mail half of it. A returned letter is the strongest possible "this address is wrong"
 signal -- stronger than any bounce heuristic -- and today it would just sit in a mailbox unseen.
 
-SECURITY (non-negotiable, same rule as lob.key / quo.key)
+SECURITY (non-negotiable, same rule as lob.key)
 The key is read from a gitignored `postscan.key` file and NEVER hardcoded. This repo is PUBLIC.
 `*.key` is covered by .gitignore line 242. Do not add the key to sender.json, a .bat, or a comment.
 Rotate it in the PostScan dashboard if it is ever pasted anywhere shared -- keys are shown once at

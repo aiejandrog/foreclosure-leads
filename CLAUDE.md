@@ -101,6 +101,19 @@ undecided. Quoting the line and answering `no` is a stop; the line alone is not.
 `sync_messages(phones=...)` run (`--phone` / `--case`) records counts and does not write `ok: true`
 or refresh `ts`. Only a full scan may release the text hold or move the next window.
 
+**2026-10-07, at Alejandro's direction ("remove Quo from operations completely"):** Quo is gone.
+`quo_sync.py`, its inbound scan, `quo_inbound_status.json`, `quo_calls.json`, the refresh step
+`[3f/5]` and Call Mode's last-call card are deleted, so every sentence above about `quo_sync`,
+`/messages`, `/conversations`, pages, windows and `sync_messages` describes code that no longer
+exists. Texts go out as plain SMS from the phone (an `sms:` link with the body pre-filled) and
+replies come back to the phone. A stop there is marked Do Not Contact in Call Mode or the board,
+which ledgers it through `/notes` -> `ledger_from_notes`; nothing reads a text inbox
+automatically any more. The text hold is now `text_hold.py`: a missing, unreadable or stale
+`optouts.json` (`DEALFLOW_OPTOUT_MAX_AGE_DAYS`, the same age `/send` uses) holds texting, and
+bridge-down still holds it on the board. `POST /text` refuses with `blocked: text_hold`. The §362
+check on a confirmed text, the 8 AM-8 PM window, the cap and the EN/ES let-me-know line are
+unchanged. `is_sms_stop()` stays as the rule for what a text reply means.
+
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.

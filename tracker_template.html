@@ -6369,6 +6369,32 @@ function _smsHref(ph, msg){
   // Phone Link (Windows) + iOS/Android Messages: sms:+1…?body=
   return 'sms:'+_smsNum(ph)+'?body='+encodeURIComponent(msg);
 }
+/* TEXT BATCH TEMPLATE (2026-10-07, Alejandro: "template it spanish and english like the morning
+   worker, whenever it's about to send a text batch"). _smsTplKey names the _textBodies branch a
+   lead's batch text takes, in _textBodies' own order (urgent, t3, followup, then tax deed, just
+   filed, cold). _textTplSamples renders each branch once with placeholders, from the same
+   _textBodies bytes the texts are built from, so the template on screen IS the copy that sends.
+   The Morning Worker shows the groups in its batch before the first text opens. */
+function _smsTplKey(r){
+  var t = '';
+  try{ t = _defaultTextTone(r); }catch(e){}
+  if(t==='urgent' || t==='t3' || t==='followup') return t;
+  if(r && r.st==='TD') return 'td';
+  if(r && r.st==='LP') return 'lp';
+  return 'cold';
+}
+const TEXT_TPL_LABELS = {cold:'First text', urgent:'First text, sale is close', lp:'First text, case just filed',
+                         td:'First text, tax deed sale', followup:'Second text (follow-up)', t3:'Last text (third)'};
+function _textTplSamples(){
+  const sN = ((typeof sender!=='undefined' && sender && sender.name)||'').trim() || SENDER_DEFAULTS.name;
+  const out = {};
+  Object.keys(TEXT_TPL_LABELS).forEach(function(k){
+    const B = _textBodies({first:'[first name]', sender:sN, stEN:'[street]', stES:'[street]',
+                           td:k==='td', lp:k==='lp', tone:(k==='td'||k==='lp')?'cold':k});
+    out[k] = {label:TEXT_TPL_LABELS[k], en:B.en, es:B.es};
+  });
+  return out;
+}
 let textQ=[], textIdx=0, textLang='both', textTone='cold';
 function _copyTextMsg(t, btn){
   const done=()=>{ if(btn){ const o=btn.textContent; btn.textContent='Copied!'; btn.classList.add('ok'); setTimeout(()=>{btn.textContent=o; btn.classList.remove('ok');},1600);}
@@ -6391,9 +6417,9 @@ function textCardHtml(r){
   const PH=_textPersonHist(r);
   const TS=_textStage(r);
   const retired=(TS==='retired');
-  const quoHold = (typeof TEXT_HOLD === 'string' && !!TEXT_HOLD);
-  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired && !quoHold;
-  const canCopy=!hardBlock && !retired && !quoHold; // never for BK / opt-out / wrong-owner / retired / a failed STOP scan
+  const textHeld = (typeof TEXT_HOLD === 'string' && !!TEXT_HOLD);
+  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired && !textHeld;
+  const canCopy=!hardBlock && !retired && !textHeld; // never for BK / opt-out / wrong-owner / retired / a held text gate
   const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
   /* The tone buttons ARE the ladder now. A later touch stays disabled until the earlier ones have
      actually been sent — otherwise touch 3's "this is my last message" body can be fired first,
@@ -6415,7 +6441,7 @@ function textCardHtml(r){
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
-  else if(quoHold) gate='<div class="txblock">⛔ '+esc(TEXT_HOLD)+'</div>';
+  else if(textHeld) gate='<div class="txblock">⛔ '+esc(TEXT_HOLD)+'</div>';
   else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
   let phBtns;
   if(hardBlock){
@@ -12235,13 +12261,14 @@ function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||
 // what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
 // /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
 var _liveCap = null, _liveCapAt = 0;
-// Quo inbound STOP scan. HELD until a successful /health says text_hold is false. A failed fetch,
-// a missing field, or the bridge being down is not proof the scan is fresh. Email does not read this.
-var TEXT_HOLD_DOWN = 'Texting is held — the send bridge has not confirmed a fresh inbound STOP scan. Email is not held by this.';
+// Texting hold (text_hold.py, 2026-10-07 — was the Quo inbound scan; Quo is gone). HELD until a
+// successful /health says text_hold is false: the bridge confirms the do-not-contact list is fresh
+// and runs the §362 check on every confirmed text. Bridge down is a hold.
+var TEXT_HOLD_DOWN = 'Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.';
 var TEXT_HOLD = TEXT_HOLD_DOWN;
 function _textHoldApply(j){
   if(j && j.text_hold === false) return '';
-  if(j && j.text_hold) return (j.text_hold_why || 'Inbound STOP scan failed or is stale. Texting is held. Email is not held by this.');
+  if(j && j.text_hold) return (j.text_hold_why || 'Texting is held: the do-not-contact list is stale. Run python ledger_sync.py on the laptop.');
   return TEXT_HOLD_DOWN;
 }
 function _pollLiveCap(){
@@ -12862,6 +12889,7 @@ function _workerCard(r){
         return _smsHref(tp[0], smsMsg(r, 'both', _defaultTextTone(r)));
       } catch(e){ return ''; }
     })(),
+    smsTpl: (function(){ try{ return _smsTplKey(r); }catch(e){ return ''; } })(),
     // The Gmail compose URL is BAKED PER CARD so the WORKER tab can open it on the user's own
     // click. The old design posted to the board tab and had the BOARD call window.open — but the
     // click happened in the worker tab, so the board tab had no user activation and the browser
@@ -12945,7 +12973,8 @@ function genMorningWorker(lane, autostart){
       // queue row already renders as "no number, use Lookup".
       var _wph = _workerPhones(r), _xd = String(x.ph||'').replace(/\D/g,'');
       var _qph = (_xd && _wph.some(function(n){ return String(n).replace(/\D/g,'')===_xd; })) ? x.ph : (_wph[0]||'');
-      persistq.push({c:x.c, name:x.nm||x.c, phone:_qph, addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
+      var _ptpl=''; try{ _ptpl=_smsTplKey(r); }catch(e){}
+      persistq.push({c:x.c, name:x.nm||x.c, phone:_qph, addr:(r.addr||''), sms:_psms, stpl:_ptpl, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
     });
   } catch(e){}
   /* LEAST-RECENTLY-CONTACTED FIRST — the other half of the carousel. ---------------------------
@@ -13196,6 +13225,7 @@ function genMorningWorker(lane, autostart){
     + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
+    +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
     +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null)};'
@@ -13309,7 +13339,7 @@ function genMorningWorker(lane, autostart){
     /* ---- bridge health -----------------------------------------------------------------------
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
-    +   'var TEXT_HOLD_DOWN="Texting is held — the send bridge has not confirmed a fresh inbound STOP scan. Email is not held by this.";'
+    +   'var TEXT_HOLD_DOWN="Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.";'
     +   'var BRIDGE_OK=null, BRIDGE_HOLD="", TEXT_HOLD=TEXT_HOLD_DOWN;'
     +   'function paintTextHold(){ var h=document.getElementById("mwtexthold"); if(!h) return; if(TEXT_HOLD){ h.style.display="block"; h.textContent=TEXT_HOLD; } else { h.style.display="none"; h.textContent=""; } }'
     +   'function renderBridge(){'
@@ -13502,12 +13532,12 @@ function genMorningWorker(lane, autostart){
     // durable fcCallQueue ledger — before this, 192 queued calls evaporated with the tab and the
     // week produced exactly one dial. Seeded on open so the list is never empty-by-amnesia.
     +   'PERSISTQ.forEach(function(x){'
-    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, first:x.name, owner:x.name, judg:x.judg||0, wp:x.wp||""}); }'
+    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, tpl:x.stpl||"", first:x.name, owner:x.name, judg:x.judg||0, wp:x.wp||""}); }'
     +     'else if(!CALLQ.some(function(y){return y.c===x.c;})) CALLQ.push(x);'
     +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
-    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
     +     'renderTextQ();'
     +   '}'
     /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
@@ -13612,6 +13642,39 @@ function genMorningWorker(lane, autostart){
     +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
     +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'textBatchPreview();'
+    +   '}'
+    /* THE TEMPLATE SCREEN (2026-10-07). Before the first composer opens, the batch shows what is about
+       to go out: one card per message group in this batch (first text, follow-up, last text...), each
+       with its English and its Spanish body, rendered by the board from _textBodies with [first name]
+       and [street] where the person's own details go. Every text carries both, English first. Nothing
+       opens and nothing is counted until Start sending. */
+    +   'function textBatchPreview(){'
+    +     'var T=(typeof TEXTTPL==="object"&&TEXTTPL)||{}, order=["cold","urgent","lp","td","followup","t3"], n={}, other=0;'
+    +     'TEXTQ.forEach(function(x){ if(x.tpl&&T[x.tpl]) n[x.tpl]=(n[x.tpl]||0)+1; else other++; });'
+    +     'var box=function(lbl,txt){ return "<div style=\'font:700 10.5px/1 Segoe UI,Arial;letter-spacing:.12em;text-transform:uppercase;color:#5b6472;margin:10px 0 4px\'>"+lbl+"</div><div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:13px/1.5 Segoe UI,Arial;color:#334155;white-space:pre-wrap\'>"+_esc2(txt)+"</div>"; };'
+    +     'var cards=order.filter(function(k){ return n[k]; }).map(function(k){'
+    +       'return "<div style=\'border:1px solid #e2e6ee;border-radius:10px;padding:10px 12px;margin-top:12px;text-align:left\'>"'
+    +         '+"<div style=\'font:700 14px Segoe UI,Arial;color:#1f2937\'>"+_esc2(T[k].label)+" &middot; "+n[k]+(n[k]===1?" person":" people")+"</div>"'
+    +         '+box("English",T[k].en)+box("Espa&ntilde;ol",T[k].es)+"</div>";'
+    +     '}).join("");'
+    +     'if(other) cards+="<div style=\'font:12.5px Segoe UI,Arial;color:#5b6472;margin-top:10px\'>"+other+" more already have their message filled in. You will see each one before it opens.</div>";'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div style=\'font:700 11px/1 Segoe UI,Arial;letter-spacing:.14em;text-transform:uppercase;color:#8a6d1f\'>Text batch &middot; "+TEXTQ.length+(TEXTQ.length===1?" person":" people")+" &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</div>"'
+    +       '+"<h2 style=\'margin:8px 0 2px\'>This is what goes out</h2>"'
+    +       '+"<div style=\'font:13px/1.45 Segoe UI,Arial;color:#5b6472\'>Each text is one plain message from your phone, English first and Spanish below it. Their first name and street fill in where the brackets are.</div>"'
+    +       '+cards'
+    +       '+"<div style=\'font:12.5px/1.45 Segoe UI,Arial;color:#8a6d1f;margin-top:12px;text-align:left\'>Replies come back to your phone. Anyone who says stop, no, or wrong number: mark them Do Not Contact in Call Mode before the next batch.</div>"'
+    +       '+"<button id=\'tb-go\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#9654; Start sending ("+TEXTQ.length+")<span class=\'sub\'>one at a time, you press send in Messages</span></button>"'
+    +       '+"<button id=\'tb-cancel\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>Not now<span class=\'sub\'>nothing was sent</span></button>"'
+    +     '+"</div>";'
+    +     'var gb=document.getElementById("tb-go"), cb=document.getElementById("tb-cancel");'
+    +     'if(gb) gb.onclick=function(){ textBatchGo(); };'
+    +     'if(cb) cb.onclick=function(){ addLog("skip","batch","text batch not started — nothing sent"); renderTextQ(); renderRunBar(); try{ render(); }catch(e){} };'
+    +   '}'
+    +   'function textBatchGo(){'
+    +     'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
     +   'function textBatchStep(){'
@@ -13630,7 +13693,10 @@ function genMorningWorker(lane, autostart){
     +       '+"<div style=\'font:700 11px/1 Segoe UI,Arial;letter-spacing:.14em;text-transform:uppercase;color:#8a6d1f\'>Text batch &middot; "+(TBI+1)+" of "+TEXTQ.length+" &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</div>"'
     +       '+"<h2 style=\'margin:8px 0 2px\'>"+_esc2(x.name)+"</h2>"'
     +       '+"<div style=\'font:13px monospace;color:#5b6472;margin-bottom:10px\'>"+_esc2(x.phone)+"</div>"'
-    +       '+"<div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:160px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(body||"(message pre-filled in Messages)")+"</div>"'
+    +       '+(function(){ var k=body.indexOf("\\n\\n"), en=k>0?body.slice(0,k):body, es=k>0?body.slice(k+2):"";'
+    +         'var bx=function(lbl,t){ return "<div style=\'font:700 10.5px/1 Segoe UI,Arial;letter-spacing:.12em;text-transform:uppercase;color:#5b6472;margin:8px 0 4px;text-align:left\'>"+lbl+"</div><div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:130px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(t)+"</div>"; };'
+    +         'if(!body) return bx("Message","(message pre-filled in Messages)");'
+    +         'return bx("English",en)+(es?bx("Espa&ntilde;ol",es):""); })()'
     +       '+"<button id=\'tb-open\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#128241; Open Messages &mdash; pre-filled<span class=\'sub\'>press send there, then confirm</span></button>"'
     +       '+"<button id=\'tb-skip\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>&#9197; Skip this one<span class=\'sub\'>stays for tomorrow</span></button>"'
     +     '+"</div>";'
