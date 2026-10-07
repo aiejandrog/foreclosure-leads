@@ -362,7 +362,7 @@ var _copyCallList=rec("_copyCallList"), _copyDay=rec("_copyDay"), stopRun=rec("s
     startRun=rec("startRun"), textBatchStart=rec("textBatchStart"), openHere=rec("openHere"),
     confirmSend=rec("confirmSend"), post=rec("post"), addLog=rec("addLog"),
     renderCallQ=rec("renderCallQ"), renderTextQ=rec("renderTextQ"),
-    _qrowIntoView=rec("_qrowIntoView");
+    _qrowIntoView=rec("_qrowIntoView"), handTakeover=function(){};
 function _wftsa(){ return {safe:true, label:""}; }
 function sentToday(){ return 0; }
 function alert(){ calls.push("alert"); }
