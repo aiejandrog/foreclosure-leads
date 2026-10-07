@@ -438,6 +438,29 @@ class ReviewRoundTwoTests(unittest.TestCase):
         t = build([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment; right of redemption')])
         self.assertNotEqual(t['status']['kind'], 'satisfied_redeemed')
 
+    def test_a_later_unnamed_satisfaction_does_not_undo_an_earlier_discharge(self):
+        t = build([entry(1, 'Final Judgment'),
+                   entry(2, 'Satisfaction of Final Judgment dated 09/01/2026'),
+                   entry(3, 'Satisfaction of Judgment')])
+        self.assertEqual(t['status']['kind'], 'satisfied_redeemed')
+
+    def test_the_pipeline_report_leaves_out_reopened_rows(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            for ref in ('court:5:1', 'court:5:2'):
+                (base / (hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(json.dumps(
+                    {'source_ref': ref, 'manifest': {'pages': 1, 'document_key': ref, 'path': ''},
+                     'reading': {'pages': []}}))
+            with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as q:
+                for ref in ('court:5:1', 'court:5:2'):
+                    q.add(COUNTY, CASE, ref, 'acquire', {'documentID': ref})
+                job = q.claim_ref('w', COUNTY, CASE, 'court:5:2', 'acquire')
+                q.complete(job['id'], 'w')
+            with patch.object(DS, 'pipeline_folder', return_value=base):
+                report = DS.pipeline_report(COUNTY, CASE)
+            self.assertEqual(report['documents_obtained'], 1)
+
     def test_reopened_rows_are_blanked_for_every_reader(self):
         import hashlib
         with tempfile.TemporaryDirectory() as d:

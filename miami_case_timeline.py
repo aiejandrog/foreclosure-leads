@@ -587,6 +587,13 @@ def _unsettled_satisfaction(status, entries, judgments):
                for j in judgments.get('judgments') or [])
     if paid:
         return status
+    # An earlier satisfaction that already discharged the judgment is not undone by a later filing
+    # that names nothing (Codex on #174): the case stays satisfied when every judgment of record is
+    # settled and at least one was satisfied in full by a satisfaction that named it.
+    of_record = [j for j in judgments.get('judgments') or [] if j.get('role') not in _NOT_A_JUDGMENT_OF_RECORD]
+    if (any(j.get('status') == 'satisfied' for j in of_record)
+            and not any(j.get('status') in ('operative', 'unclear', 'partially_vacated') for j in of_record)):
+        return status
     return {'kind': 'unclear', 'evidence': status['evidence'],
             'reason': ('Satisfaction %s does not name a judgment it pays in full (see the judgment '
                        'reconciliation), so the case is not shown satisfied.' % last['entry_id'])}

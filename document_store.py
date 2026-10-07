@@ -1040,6 +1040,10 @@ def pipeline_report(county, case):
     retired = {j['source_ref'] for j in jobs if j['status'] == 'superseded' and j['kind'] == 'acquire'}
     jobs = [j for j in jobs if j['status'] != 'superseded']
     rows = [r for r in rows if r.get('source_ref') not in retired]
+    # A reopened acquisition (the county lists a different document now, or the re-fetch is pending
+    # or failed): its saved row describes the old copy, which is not evidence (Codex on #174).
+    reopened = {j['source_ref'] for j in jobs if j['kind'] == 'acquire' and j['status'] != 'done'}
+    rows = [r for r in rows if r.get('source_ref') not in reopened]
     outstanding = [j for j in jobs if j['status'] != 'done']
     acquisition_outstanding = [j for j in outstanding if j['kind'] == 'acquire']
     available_refs = {r.get('source_ref') for r in rows
