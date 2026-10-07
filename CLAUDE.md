@@ -114,6 +114,10 @@ bridge also holds texting until today's 07:15 opt-out sync is confirmed, like `/
 still holds it on the board and on the worker's per-row Text button. `POST /text` refuses with `blocked: text_hold`. The §362
 check on a confirmed text, the 8 AM-8 PM window, the cap and the EN/ES let-me-know line are
 unchanged. `is_sms_stop()` stays as the rule for what a text reply means.
+The bridge restarts itself when its `.py` files change on disk (a pull), once the change has settled
+and compiles, after closing its port and finishing in-flight requests (`_code_watch`,
+`DEALFLOW_BRIDGE_RELOAD_POLL_S=0` turns it off). Before that, merged fixes stayed off until a
+person restarted it.
 
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the

@@ -1662,6 +1662,17 @@ class Handler(BaseHTTPRequestHandler):
     # toward 500 to chase the message number; cut BCCs instead if more volume is needed.
     recipient_cap = 450      # addresses/day — safety margin under Gmail's ~500
 
+    def handle(self):
+        # Counted so a code reload (_code_watch, below) never cuts off a send mid-request.
+        global _REQS_ACTIVE
+        with _REQS_LOCK:
+            _REQS_ACTIVE += 1
+        try:
+            super().handle()
+        finally:
+            with _REQS_LOCK:
+                _REQS_ACTIVE -= 1
+
     def log_message(self, fmt, *args):
         """Terse one-line per request in the terminal, no HTTP boilerplate.
 
@@ -2526,6 +2537,109 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, resp)
 
 
+# ---------------------------------------------------------------- code reload
+# 2026-10-07, Alejandro chose "Self-restart" on the decision card ("i need it to be done
+# automatically"). The bridge is started once at logon and then runs for days, so a git pull (the
+# 05:30 refresh pulls main) changed the files on disk and left the OLD code answering /health and
+# /text. That is how #172 and #173 merged and texting still showed the Quo hold that no longer
+# exists. Now the bridge notices its own .py files changed and restarts itself on the new code:
+#   - only once the files have stopped changing for one poll (a pull can be mid-write),
+#   - only when the new send_server.py, text_hold.py and sync_gate.py compile (a broken pull keeps
+#     the running bridge instead of leaving none),
+#   - only after the listening socket is closed and no request is in flight, so a send is never cut
+#     off and two bridges never own the port at once (see _already_running).
+# Every hold (opt-out ledger, 07:15 sync, §362, hours, caps) is evaluated per request from files on
+# disk, so a restart changes no verdict. DEALFLOW_BRIDGE_RELOAD_POLL_S=0 turns this off.
+# Requests being handled right now. Not _INFLIGHT: that name is the per-address send dedupe set.
+_REQS_ACTIVE = 0
+_REQS_LOCK = threading.Lock()
+try:
+    RELOAD_POLL_S = float(os.environ.get('DEALFLOW_BRIDGE_RELOAD_POLL_S', '60'))
+except ValueError:
+    RELOAD_POLL_S = 60.0
+_RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
+_RELOAD_DRAIN_S = 60
+
+
+def _code_fingerprint(folder=HERE):
+    """{name: (mtime_ns, size)} for the .py files next to this one."""
+    out = {}
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.endswith('.py'))
+    except OSError:
+        return out
+    for n in names:
+        try:
+            st = os.stat(os.path.join(folder, n))
+            out[n] = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            pass
+    return out
+
+
+def _code_compiles(folder=HERE):
+    """(ok, err). Compiles in memory only; writes no .pyc."""
+    for n in _RELOAD_COMPILE:
+        f = os.path.join(folder, n)
+        if not os.path.exists(f):
+            continue
+        try:
+            with open(f, 'rb') as fh:
+                compile(fh.read(), f, 'exec')
+        except Exception as e:
+            return False, '%s: %s' % (n, str(e)[:160])
+    return True, ''
+
+
+def _reload_due(boot, prev, cur):
+    """True when the code differs from what this process started with AND did not change since
+    the previous poll (a pull still writing files waits one more poll)."""
+    return cur != boot and cur == prev
+
+
+def _reload_log(msg, folder=HERE):
+    line = '%s  [reload] %s\n' % (dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg)
+    try:
+        with open(os.path.join(folder, 'send_server.log'), 'a', encoding='utf-8') as fh:
+            fh.write(line)
+    except Exception:
+        pass
+
+
+def _code_watch(srv, state, poll_s=None, folder=HERE, sleep=time.sleep):
+    """Poll the code; when a settled, compiling change is seen, stop serve_forever() so main()
+    can hand over to a fresh process."""
+    poll_s = RELOAD_POLL_S if poll_s is None else poll_s
+    boot = _code_fingerprint(folder)
+    prev = boot
+    warned = None
+    while True:
+        sleep(poll_s)
+        cur = _code_fingerprint(folder)
+        if _reload_due(boot, prev, cur):
+            ok, err = _code_compiles(folder)
+            if ok:
+                _reload_log('code changed on disk; restarting the bridge on the new code', folder)
+                state['reload'] = True
+                srv.shutdown()
+                return
+            if warned != cur:
+                _reload_log('code changed but does not compile (%s); keeping the running bridge' % err, folder)
+                warned = cur
+        prev = cur
+
+
+def _respawn():
+    """Start a fresh bridge on the same interpreter and arguments, detached from this one."""
+    import subprocess
+    kw = {'cwd': HERE, 'close_fds': True}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw['start_new_session'] = True
+    subprocess.Popen([sys.executable, os.path.abspath(__file__)] + sys.argv[1:], **kw)
+
+
 # ---------------------------------------------------------------- main
 def _already_running(host, port, timeout=2.5):
     """True when a HEALTHY DealFlow bridge already owns this port.
@@ -2583,11 +2697,21 @@ def main():
     print()
 
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
+    state = {'reload': False}
+    if RELOAD_POLL_S > 0:
+        threading.Thread(target=_code_watch, args=(srv, state), daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         print('\nstopping...')
         srv.shutdown()
+    if state.get('reload'):
+        srv.server_close()                       # free the port before the new bridge probes it
+        t0 = time.time()
+        while _REQS_ACTIVE > 0 and time.time() - t0 < _RELOAD_DRAIN_S:
+            time.sleep(0.2)
+        _respawn()
+        os._exit(0)
 
 
 if __name__ == '__main__':
