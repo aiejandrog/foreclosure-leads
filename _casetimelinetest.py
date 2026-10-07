@@ -27,7 +27,9 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(r['status']['sale_date'], '2026-10-15')
 
     def test_satisfaction_after_judgment(self):
-        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment')])['status']['kind'], 'satisfied_redeemed')
+        # Named by its date: a satisfaction naming no judgment leaves the case unclear
+        # (test_miami_verdict_gaps.ReviewRoundTwoTests).
+        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Final Judgment dated 09/01/2026')])['status']['kind'], 'satisfied_redeemed')
 
     def test_same_day_conflict_no_invented_order(self):
         r = run([entry(1, 'Order of dismissal', '09/01/2026'), entry(2, 'Final Judgment', '09/01/2026')])

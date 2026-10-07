@@ -413,6 +413,45 @@ class ReviewRoundOneSatisfactionTests(unittest.TestCase):
             self.assertEqual(CD._recited_amounts(bad), [])
 
 
+class ReviewRoundTwoTests(unittest.TestCase):
+    def test_an_unnamed_satisfaction_does_not_close_the_case(self):
+        t = build([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment')])
+        self.assertEqual(t['status']['kind'], 'unclear')
+
+    def test_a_named_satisfaction_still_closes_the_case(self):
+        t = build([entry(1, 'Final Judgment'),
+                   entry(2, 'Satisfaction of Final Judgment dated 09/01/2026')])
+        self.assertEqual(t['status']['kind'], 'satisfied_redeemed')
+
+    def test_a_partially_satisfied_judgment_does_not_close_the_case(self):
+        t = build([entry(1, 'Final Judgment'),
+                   entry(2, 'Satisfaction of Final Judgment dated 09/01/2026, partially satisfied')])
+        self.assertEqual(t['status']['kind'], 'judgment_entered')
+
+    def test_reopened_rows_are_blanked_for_every_reader(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            ref = 'court:5:1'
+            (base / (hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(json.dumps(
+                {'source_ref': ref, 'manifest': {'source_sha256': 'old'}, 'reading': {'pages': [{'page': 1}]}}))
+            with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as q:
+                q.add(COUNTY, CASE, ref, 'acquire', {'documentID': '1'})     # pending
+            [row] = RCT.load_rows(base)
+            self.assertEqual((row['manifest'], row['reading']), ({}, {'pages': []}))
+
+    def test_an_unreadable_queue_holds_every_row(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            ref = 'court:5:1'
+            (base / (hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(json.dumps(
+                {'source_ref': ref, 'manifest': {'source_sha256': 'h'}, 'reading': {'pages': [{'page': 1}]}}))
+            (base / 'queue.sqlite3').write_bytes(b'not a database at all' * 100)
+            [row] = RCT.load_rows(base)
+            self.assertEqual(row['manifest'], {})
+
+
 class DossierSatisfactionTests(unittest.TestCase):
     def test_reciting_the_judgment_amount_names_it(self):
         j = CD._operative_judgment([JUDGMENT, sat(recites_amounts=['250123.45'])])

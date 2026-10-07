@@ -370,7 +370,7 @@ def _stamp_retired(base, refs):
                 meta = json.load(fh)
         except (OSError, ValueError):
             continue
-        if isinstance(meta, dict) and meta.get('source_ref') == ref:
+        if isinstance(meta, dict) and meta.get('source_ref') == ref and not meta.get('superseded'):
             meta.update(superseded=True, superseded_reason='the county no longer lists this document')
             _atomic_write_text(meta_path, json.dumps(meta, indent=2) + '\n')
 
@@ -419,8 +419,12 @@ def collect_case_documents(county, case, records=None):
     with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         queue.add_many(county, case, jobs)
         retired = queue.retire_missing(county, case, 'acquire', [ref for ref, _, _ in jobs], listed)
+        # Every superseded acquisition, not only this run's: a crash between the retirement and
+        # the stamp must not leave a retired copy live in stored_documents() for good.
+        all_retired = [j['source_ref'] for j in queue.jobs(county, case)
+                       if j['kind'] == 'acquire' and j['status'] == 'superseded']
     if retired:
         inventory['retired_documents'] = retired
         write(base / 'inventory.json', inventory)
-        _stamp_retired(base, retired)
+    _stamp_retired(base, all_retired)
     return report(county, case)

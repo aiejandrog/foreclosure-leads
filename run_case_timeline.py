@@ -44,7 +44,7 @@ def budget_snapshot(path, cap):
 def load_rows(base):
     """Every saved document row in a case folder, except documents the county no longer lists."""
     rows = []
-    retired = _retired_refs(base)
+    retired, reopened = _queue_states(base)
     for path in sorted(Path(base).glob('*.json')):
         if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
             continue
@@ -54,20 +54,40 @@ def load_rows(base):
         ref = row.get('source_ref', '')
         if ref in retired:
             continue
+        if reopened is True or ref in reopened:
+            # The saved file describes a copy the queue no longer counts as current (the county
+            # lists a different document now, or the re-fetch is pending or failed), or the queue
+            # cannot be read to say. Its words and hashes are not this document's evidence.
+            row['manifest'], row['reading'] = {}, {'pages': []}
+            row['acquisition_reopened'] = True
         if ref.startswith('court:'):
             row['entry_ref'] = ref.split(':', 2)[1]
         rows.append(row)
     return rows
 
 
-def _retired_refs(base):
-    """Refs whose acquisition the queue retired (superseded). No queue file means none."""
+def _queue_states(base):
+    """-> (retired refs, reopened refs) from the case's queue, read-only.
+
+    Retired = superseded acquisitions. Reopened = acquisitions that exist and are not done. No
+    queue file means neither. A queue that cannot be read gives reopened=True: nothing saved can
+    be shown current, so every row is held rather than trusted.
+    """
+    import sqlite3
     path = Path(base) / 'queue.sqlite3'
     if not path.is_file():
-        return set()
-    with DQ.DocumentQueue(str(path)) as queue:
-        return {job['source_ref'] for job in queue.jobs()
-                if job['kind'] == 'acquire' and job['status'] == DQ.SUPERSEDED}
+        return set(), set()
+    try:
+        db = sqlite3.connect('file:%s?mode=ro' % path.as_posix(), uri=True, timeout=30)
+        try:
+            rows = db.execute("SELECT source_ref, status FROM jobs WHERE kind = 'acquire'").fetchall()
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return set(), True
+    retired = {ref for ref, status in rows if status == DQ.SUPERSEDED}
+    reopened = {ref for ref, status in rows if status not in ('done', DQ.SUPERSEDED)}
+    return retired, reopened
 
 
 def source_comparison(case, inventory, cache_path):

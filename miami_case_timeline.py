@@ -247,6 +247,9 @@ def _transition(e):
     kind = e['kind']
     if kind in ('notice_of_voluntary_dismissal', 'order_of_dismissal', 'satisfaction') and e.get('limited_scope'):
         return None
+    if kind == 'satisfaction' and _PARTIAL_PAYMENT.search(
+            ' '.join(str(e.get(k) or '') for k in ('operative_text', 'description', 'comments'))):
+        return None                                   # a partial payment does not end the case
     statuses = {'complaint': 'active_pre_judgment', 'amended_complaint': 'active_pre_judgment',
                 'final_judgment': 'judgment_entered', 'notice_of_sale': 'sale_scheduled',
                 'order_resetting_sale': 'sale_scheduled', 'order_cancelling_sale': 'sale_cancelled',
@@ -538,6 +541,7 @@ def build_timeline(case, inventory, document_rows, as_of):
         if last == 'limited_relief' or (last == 'relief_not_bankruptcy' and stay_now):
             stay_now = None
     judgments = reconcile_judgments(entries, today)
+    status = _unsettled_satisfaction(status, entries, judgments)
     defendants_all = docket_defendants(inventory)
     for e in entries:
         e.pop('_body', None)
@@ -555,6 +559,31 @@ def build_timeline(case, inventory, document_rows, as_of):
             'stay_history': stay_history, 'stay_in_effect': stay_now, 'sale_held': held,
             'pending': pending, 'amounts': amounts, 'gaps': gaps, 'coverage_complete': not gaps,
             'qualification': 'Status is derived from available docket evidence, not confirmation of a complete court record. Amount extractions are not verified balances or equity inputs.'}
+
+
+def _unsettled_satisfaction(status, entries, judgments):
+    """A case is satisfied only by a satisfaction that paid a judgment it names.
+
+    _transition reads the docket's kinds in order and knows nothing of which judgment a
+    satisfaction cites; reconcile_judgments does. When the satisfaction the status rests on paid
+    no judgment (it named none, named a date a fee judgment shares, or was partial), the case is
+    not shown closed: miami_ranking reads `satisfied_redeemed` as closed. A certificate of
+    redemption is left as it was; it redeems the property, not a judgment by date.
+    """
+    if status.get('kind') != 'satisfied_redeemed' or not status.get('evidence'):
+        return status
+    by_id = {e['entry_id']: e for e in entries}
+    last = by_id.get(status['evidence'][-1])
+    if not last or last['kind'] != 'satisfaction' or re.search(
+            r'redemption', ' '.join(str(last.get(k) or '') for k in ('operative_text', 'description')), re.I):
+        return status
+    paid = any(last['entry_id'] in j.get('by', []) and j.get('satisfaction') == 'satisfied'
+               for j in judgments.get('judgments') or [])
+    if paid:
+        return status
+    return {'kind': 'unclear', 'evidence': status['evidence'],
+            'reason': ('Satisfaction %s does not name a judgment it pays in full (see the judgment '
+                       'reconciliation), so the case is not shown satisfied.' % last['entry_id'])}
 
 
 def sale_held(entries, today):
