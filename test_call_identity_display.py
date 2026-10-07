@@ -3,7 +3,6 @@ import json
 import re
 import subprocess
 import unittest
-from unittest.mock import patch
 
 import call_mode as cm
 
@@ -17,8 +16,7 @@ class CallIdentityDisplayTests(unittest.TestCase):
         return row
 
     def rows(self, lead):
-        with patch.object(cm, '_quo_latest', return_value={}):
-            return cm.call_rows([lead])[0]
+        return cm.call_rows([lead])[0]
 
     def test_owner_name_survives_when_only_oname_exists(self):
         row = self.rows(self.lead())[0]

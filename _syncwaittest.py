@@ -57,6 +57,7 @@ DECL = JS[JS.index('var SYNCWAIT='):JS.index(';', JS.index('var SYNCWAIT=')) + 1
 FNS = '\n'.join(A.extract(JS, n) for n in ('cancelSyncWait', 'handTakeover', 'schedSync', 'syncRetry', 'stopRun', 'pause', 'setLane', 'textBatchStart'))
 
 HARNESS = r"""
+function textBatchPreview(){}  // the template screen (#172); not what this suite tests
 var timers=[], logs=[], runs=0, probes=0, sent=0, hourSafe=true;
 function setTimeout(fn, ms){ timers.push({fn:fn, ms:ms, live:true}); return timers.length; }
 function clearTimeout(h){ if(h && timers[h-1]) timers[h-1].live=false; }

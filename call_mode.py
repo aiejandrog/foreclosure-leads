@@ -433,10 +433,13 @@ _QREC_LINE = ('RECORDING IS ON. Before anything else: "Quick thing before we sta
               'RECORDING, not hang up.')
 
 
-def _quo_recording():
+def _call_recording():
+    """sender.json `record_calls` true -> the consent line renders. `quo_record` is the pre-2026-10-07
+    name of the same flag (Quo is gone); it is still honored so a laptop that set it keeps the line."""
     try:
         import entity
-        return bool(entity.sender().get('quo_record'))
+        snd = entity.sender()
+        return bool(snd.get('record_calls') or snd.get('quo_record'))
     except Exception:
         return False
 
@@ -1404,26 +1407,6 @@ def _greet_name(d):
     return on[:40]
 
 
-def _quo_latest():
-    """case -> the most recent analyzed Quo call, from quo_sync.py's local ledger.
-
-    Local and gitignored (homeowner conversations; the repo is PUBLIC) -- it ships only inside the
-    encrypted payload, exactly like every other lead field. Missing file = empty dict, zero cost:
-    CI has no ledger and must not care."""
-    try:
-        led = json.load(open(os.path.join(HERE, 'quo_calls.json'), encoding='utf-8'))
-    except Exception:
-        return {}
-    out = {}
-    for rec in (led.get('calls') or {}).values():
-        c = str(rec.get('case') or '').strip()
-        if not c:
-            continue
-        if c not in out or str(rec.get('at') or '') > str(out[c].get('at') or ''):
-            out[c] = rec
-    return out
-
-
 def federal_hold_fn():
     """case -> held? for one dial-queue build, reading the CourtListener cache once.
 
@@ -1575,7 +1558,6 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     _notowner_dropped = 0        # numbers kept off the dial queue as not-the-owner (see below)
     import diligence_gate as _DG
     _dg = _DG.Tally()
-    _quo = _quo_latest()
     # CourtListener cache once for this build. A Miami lead with no docket clear stays callable
     # unless the cache flags it (federal_hold's own rule). Fails closed: see federal_hold_fn.
     _federal_held = federal_hold_fn()
@@ -1774,10 +1756,6 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # amended judgment. None on almost every row; the null-strip drops it.
             'sr': (lambda v: ({k: v[k] for k in ('st', 'd', 'nd', 'was', 'why', 'amj', 'ama', 'bkb', 'obj', 'ev', 'stale', 'sale')
                                if v.get(k) not in (None, '')} if isinstance(v, dict) and v.get('st') else None))(d.get('sr')),
-            # ---- last Quo call (transcript-backed). None on most rows; the null-strip removes it.
-            'qc': (lambda q: ({'w': str(q.get('at') or '')[:16], 'du': q.get('dur') or 0,
-                               's': ' '.join(q.get('summary') or [])[:180],
-                               'fl': (q.get('flags') or [])[:4]} if q else None))(_quo.get(case)),
             # ---- who is foreclosing ----
             'pl': _s('plaintiff', 46), 'ft': _s('ftype', 10),
             # ---- live docket (gen_dockets.py -> slim row.dk). TRIMMED HARD for the handset: the
@@ -2177,32 +2155,24 @@ def _identity_opted_fn(slim, optouts):
     return _test
 
 
-def _quo_hold_json():
-    """What Call Mode shows before it can ask the bridge.
+def _text_hold_json():
+    """What Call Mode shows before it can ask the bridge (text_hold.status() at build time).
 
-    held/why is the verdict at build time. ok/ts/maxAgeH let the phone re-check that verdict
-    against the same 36h window when it cannot reach 127.0.0.1. A missing or failed scan bakes
-    held. A fresh ok scan bakes not-held, and goes stale on the phone once maxAgeH passes."""
-    max_h, rec = 36, {}
+    held/why is the verdict at build. ok/ts/maxAgeH let the phone re-check it: ts is the
+    do-not-contact list's modified time, so a fresh bake goes stale on the phone once maxAgeH
+    passes, the same age the bridge would refuse at. A missing or unreadable list bakes held."""
     try:
-        import quo_sync as _qs
-        max_h = int(_qs.INBOUND_MAX_AGE_H)
-        held, why = _qs.text_hold()
-        try:
-            rec = json.load(open(_qs.INBOUND_STATUS, encoding='utf-8'))
-        except Exception:
-            rec = {}
-        if not isinstance(rec, dict):
-            rec = {}
+        import text_hold as _TH
+        st = _TH.status()
     except Exception as e:
-        held, why = True, ('HOLD texting — inbound STOP scan could not be read (%s)' % str(e)[:80])
-        rec = {}
+        st = {'held': True, 'why': 'HOLD texting — the do-not-contact check could not be read (%s)'
+              % str(e)[:80], 'ok': False, 'ts': '', 'maxAgeH': 48}
     return json.dumps({
-        'held': bool(held),
-        'why': (why or '') if held else '',
-        'ok': (not held) and bool(rec.get('ok')),
-        'ts': str(rec.get('ts') or ''),
-        'maxAgeH': max_h,
+        'held': bool(st.get('held')),
+        'why': (st.get('why') or '') if st.get('held') else '',
+        'ok': (not st.get('held')) and bool(st.get('ok')),
+        'ts': str(st.get('ts') or ''),
+        'maxAgeH': int(st.get('maxAgeH') or 48),
     })
 
 
@@ -2221,7 +2191,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
-                       ('__QUOHOLD__', 1),
+                       ('__TEXTHOLD__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
@@ -2255,12 +2225,11 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         # BALLOON / REFI LANE — the investor script (vault: Refi Lane note, 2026-08-30). Read by
         # renderSheet for st:'BAL' rows only; same keys as the homeowner script so the page has ONE
         # renderer. `rec` copied from the main script: all-party consent applies to an investor too.
-        'bal': dict(BALLOON_SCRIPT, rec=(_QREC_LINE if _quo_recording() else None)),
-        # Rendered in red under the opener ONLY when sender.json carries "quo_record": true.
-        # Florida is ALL-PARTY consent (FS 934.03, a felony statute) -- if Quo auto-records, the
+        'bal': dict(BALLOON_SCRIPT, rec=(_QREC_LINE if _call_recording() else None)),
+        # Rendered in red under the opener ONLY when sender.json carries "record_calls": true.
+        # Florida is ALL-PARTY consent (FS 934.03, a felony statute) -- if calls are recorded, the
         # consent ask is not optional and it has to be ON the screen he reads from, not in a doc.
-        # quo_sync's coach pass then verifies the word "record" actually occurs in the transcript.
-        'rec': (_QREC_LINE if _quo_recording() else None),
+        'rec': (_QREC_LINE if _call_recording() else None),
     }
     return _PAGE.replace('__SYNCJS__', sync_js) \
                 .replace('__FUNNELJS__', funnel_js) \
@@ -2279,7 +2248,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__SEAT__', json.dumps({'n': seat[0], 'i': seat[1], 'w': str(seat[2] or '')[:18]}
                                                 if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
-                .replace('__QUOHOLD__', _quo_hold_json())
+                .replace('__TEXTHOLD__', _text_hold_json())
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -2941,11 +2910,11 @@ var BOOKURL="__BOOKURL__";
    that never shipped to this phone — without it a fresh phone reads every owner as never-texted and
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
 var TEXTPERSON=__TEXTPERSON__;
-/* Baked at build from quo_sync.text_hold(). A live /health poll below can freshen it. A failed
-   poll keeps the bake: the phone often cannot see the laptop, and bridge-down is not a scan failure. */
-var QUOHOLD=__QUOHOLD__;
-var QUOBAKE=QUOHOLD;
-var QUOLIVE=false;
+/* Baked at build from text_hold.status() (the do-not-contact list's age). A live /health poll below
+   can freshen it. A failed poll keeps the bake: the phone often cannot see the laptop. */
+var TEXTHOLD=__TEXTHOLD__;
+var TEXTHOLDBAKE=TEXTHOLD;
+var TEXTHOLDLIVE=false;
 /* BAKED SEAT (2026-09-09). null on a whole-list build; {n,i,w} on a seat page whose payload
    already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
@@ -4101,40 +4070,40 @@ function _freshFirst(rows, ln){
    list that is all retries says so instead of looking like fresh leads. */
 var _FRESHN = -1;
 var _SEATN = 0, _CLMN = 0;
-function quoScanFresh(q){
-  /* Same window as quo_sync.INBOUND_MAX_AGE_H. A bake with no ok scan, or an old one, is not fresh. */
+function holdBakeFresh(q){
+  /* Same window as text_hold.MAX_AGE_DAYS. A bake with no ok list, or an old one, is not fresh. */
   if(!q || q.ok !== true || !q.ts) return false;
   var t = Date.parse(q.ts);
   if(!isFinite(t)) return false;
-  var maxH = (typeof q.maxAgeH === 'number' && q.maxAgeH > 0) ? q.maxAgeH : 36;
+  var maxH = (typeof q.maxAgeH === 'number' && q.maxAgeH > 0) ? q.maxAgeH : 48;
   return (Date.now() - t) <= maxH * 3600000;
 }
 function textingHeld(){
   /* A successful /health answer wins. If this page cannot poll the bridge, the bake is trusted
-     only while that scan is still inside the staleness window. Otherwise texting is held. */
-  var q = (typeof QUOHOLD === 'object' && QUOHOLD) ? QUOHOLD : null;
-  if(typeof QUOLIVE !== 'undefined' && QUOLIVE && q) return !!q.held;
-  return !quoScanFresh(typeof QUOBAKE === 'object' ? QUOBAKE : null);
+     only while the do-not-contact list it saw is still inside the age window. Otherwise held. */
+  var q = (typeof TEXTHOLD === 'object' && TEXTHOLD) ? TEXTHOLD : null;
+  if(typeof TEXTHOLDLIVE !== 'undefined' && TEXTHOLDLIVE && q) return !!q.held;
+  return !holdBakeFresh(typeof TEXTHOLDBAKE === 'object' ? TEXTHOLDBAKE : null);
 }
 function textHoldWhy(){
   if(!textingHeld()) return '';
-  var q = (typeof QUOHOLD === 'object' && QUOHOLD) ? QUOHOLD : null;
-  if(typeof QUOLIVE !== 'undefined' && QUOLIVE && q && q.why) return q.why;
-  var b = (typeof QUOBAKE === 'object' && QUOBAKE) ? QUOBAKE : null;
+  var q = (typeof TEXTHOLD === 'object' && TEXTHOLD) ? TEXTHOLD : null;
+  if(typeof TEXTHOLDLIVE !== 'undefined' && TEXTHOLDLIVE && q && q.why) return q.why;
+  var b = (typeof TEXTHOLDBAKE === 'object' && TEXTHOLDBAKE) ? TEXTHOLDBAKE : null;
   if(b && b.held && b.why) return b.why;
-  return 'Texting is held — this page cannot confirm a fresh inbound STOP scan.';
+  return 'Texting is held: this page was built from a do-not-contact list that is now too old. Rebuild Call Mode after python ledger_sync.py.';
 }
 function pollTextHold(){
   var was = textingHeld();
   fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
-    if(!j || typeof j.text_hold !== 'boolean'){ QUOLIVE = false; }
+    if(!j || typeof j.text_hold !== 'boolean'){ TEXTHOLDLIVE = false; }
     else {
-      QUOLIVE = true;
-      QUOHOLD = {held: !!j.text_hold, why: j.text_hold_why || '', live: true, ok: j.text_hold === false};
+      TEXTHOLDLIVE = true;
+      TEXTHOLD = {held: !!j.text_hold, why: j.text_hold_why || '', live: true, ok: j.text_hold === false};
     }
     if(textingHeld() !== was){ try{ render(); }catch(e){} }
   }).catch(function(){
-    QUOLIVE = false;
+    TEXTHOLDLIVE = false;
     if(textingHeld() !== was){ try{ render(); }catch(e){} }
   });
 }
@@ -4451,7 +4420,7 @@ function head(){
      head() always renders downstream of a pool() call. */
   var sup = _SUPN;
   var _qh = (typeof textingHeld === 'function' && textingHeld())
-    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>')
+    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the do-not-contact list is stale.')+'</div>')
     : '';
   return _qh + '<div class="top"><div class="lane">'+laneBtns+'</div>'
     + boardBar()
@@ -5173,18 +5142,6 @@ function screenLead(){
           + '<div class="own">'+esc(ownerLabel(r))+'</div>';
   if(!r.a && r.ag) who += '<div class="warnbar">Verify this candidate against the case record before quoting it.'
     + (r.aw ? ' ' + esc(r.aw) : '') + '</div>';
-  /* LAST QUO CALL -- what happened last time, in front of him BEFORE he redials. Summary from
-     Quo's AI, flags from quo_sync's coach pass. Flags render red because every one of them is a
-     sentence that must not be said again on the call he is about to make. */
-  if(r.qc){
-    who += '<div style="margin-top:8px;padding:8px 10px;border:1px solid #2a3f6b;border-radius:10px;background:#0f1d3a">'
-        +  '<div class="ltag">LAST CALL &middot; '+esc(r.qc.w||'')+' &middot; '+(r.qc.du||0)+'s</div>'
-        +  (r.qc.s ? '<div class="mut" style="font-size:13px;margin-top:3px">'+esc(r.qc.s)+'</div>' : '')
-        +  ((r.qc.fl||[]).map(function(f){
-             return '<div style="color:#e07b6a;font-size:12.5px;margin-top:3px">&#9873; '+esc(f)+'</div>';
-           }).join(''))
-        +  '</div>';
-  }
   var wc='';
   if(r.ab) wc += '<span class="chip">absentee &middot; call, do not knock</span>';
   if(r.hs) wc += '<span class="chip ok">homestead &middot; they live there</span>';
@@ -5900,7 +5857,7 @@ function afterCall(r, o, nextC){
   var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
-  else if(textingHeld())    txt = '<div class="nc">'+esc(textHoldWhy() || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>';
+  else if(textingHeld())    txt = '<div class="nc">'+esc(textHoldWhy() || 'Texting is held — the do-not-contact list is stale.')+'</div>';
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
