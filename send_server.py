@@ -498,7 +498,7 @@ def _text_hold():
         sv = _sync_verdict()
         if not sv.get('ok'):
             return True, ('HOLD texting: today\'s 07:15 opt-out sync is not confirmed (%s). '
-                          'Run python ledger_sync.py on this computer.'
+                          'Run run-optout-sync.bat (or python morning_sync.py) on this computer.'
                           % str(sv.get('reason') or 'no verdict')[:160])
         return False, ''
     except Exception as e:

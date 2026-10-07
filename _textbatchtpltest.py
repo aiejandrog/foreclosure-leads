@@ -238,7 +238,8 @@ try:
     _CM.HERE = _tmp
     b0 = json.loads(_CM._text_hold_json())
     rec('a fresh list with no 07:15 sync bakes held', b0['held'] is True and b0['ok'] is False
-        and '07:15' in b0['why'] and b0['syncDay'] == '', b0)
+        and '07:15' in b0['why'] and 'run-optout-sync.bat' in b0['why'] and 'ledger_sync' not in b0['why']
+        and b0['syncDay'] == '', b0)
     today = _dt.date.today().isoformat()
     import time as _t
     open(os.path.join(_tmp, 'sync_status.json'), 'w').write(json.dumps({

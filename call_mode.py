@@ -2183,8 +2183,8 @@ def _text_hold_json():
             sync_day = str((sv.get('status') or {}).get('date') or '')
         if not sync_day:
             st = dict(st, held=True, ok=False,
-                      why="HOLD texting: today's 07:15 opt-out sync is not confirmed (%s). Run python "
-                          "ledger_sync.py, then rebuild Call Mode." % str(sv.get('reason') or 'no verdict')[:160])
+                      why="HOLD texting: today's 07:15 opt-out sync is not confirmed (%s). Run "
+                          "run-optout-sync.bat (or python morning_sync.py), then rebuild Call Mode." % str(sv.get('reason') or 'no verdict')[:160])
     try:
         max_h = float(st.get('maxAgeH'))
     except (TypeError, ValueError):
@@ -4117,7 +4117,7 @@ function textHoldWhy(){
   if(typeof TEXTHOLDLIVE !== 'undefined' && TEXTHOLDLIVE && q && q.why) return q.why;
   var b = (typeof TEXTHOLDBAKE === 'object' && TEXTHOLDBAKE) ? TEXTHOLDBAKE : null;
   if(b && b.held && b.why) return b.why;
-  return 'Texting is held: this page was built from a do-not-contact list that is now too old. Rebuild Call Mode after python ledger_sync.py.';
+  return 'Texting is held: this page was built before today\'s 07:15 opt-out sync, or from a do-not-contact list that is now too old. Run run-optout-sync.bat on the laptop, then rebuild Call Mode.';
 }
 function pollTextHold(){
   var was = textingHeld();
