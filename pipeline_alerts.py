@@ -442,7 +442,10 @@ def readiness_alert(sig, now, th, at):
     degraded = [] if sig.get('tasks_ok') is False else _degraded_bits(sig)
     if not problems and not degraded:
         return None
-    text = 'Laptop readiness: ' + '; '.join(problems + degraded) + '.'
+    # Morning publishes copy this block forward from the 21:00 evening check without re-measuring,
+    # so say when it was measured. On 10-07 the 05:45 report's "send server not listening" was
+    # read as that morning's state; it was the night before's.
+    text = 'Laptop readiness (checked %s): ' % when.strftime('%m-%d %H:%M') + '; '.join(problems + degraded) + '.'
     # A finished night with one bad lane is a warning. A kill, a miss, or any other
     # readiness problem stays a failure, and the degraded code is still named in it.
     if problems:

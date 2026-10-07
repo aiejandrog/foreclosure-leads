@@ -23,9 +23,10 @@ class WorkerLedgerPause(unittest.TestCase):
 
     def run_js(self, actions):
         functions = '\n'.join(self.helpers['extract'](self.js, n)
-                              for n in ('doSend', 'probeBridge', 'pause', 'startRun'))
+                              for n in ('doSend', 'probeBridge', 'pause', 'startRun', 'cancelSyncWait'))
         harness = r'''
 var BRIDGE_HOLD='', BRIDGE_OK=true, auto=true, autoAll=true, nextStep=null;
+var SYNCWAIT=null, SYNCTRY=0, SYNC_MAX=18;
 var TEXT_HOLD_DOWN='Texting is held — inbound STOP scan unconfirmed.';
 var TEXT_HOLD=TEXT_HOLD_DOWN;
 var sending=false, sendingAt=0, i=4, Q=Array(12).fill({mailTo:'fixture@example.invalid'});
