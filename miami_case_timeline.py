@@ -247,6 +247,9 @@ def _transition(e):
     kind = e['kind']
     if kind in ('notice_of_voluntary_dismissal', 'order_of_dismissal', 'satisfaction') and e.get('limited_scope'):
         return None
+    if kind == 'satisfaction' and _PARTIAL_PAYMENT.search(
+            ' '.join(str(e.get(k) or '') for k in ('operative_text', 'description', 'comments'))):
+        return None                                   # a partial payment does not end the case
     statuses = {'complaint': 'active_pre_judgment', 'amended_complaint': 'active_pre_judgment',
                 'final_judgment': 'judgment_entered', 'notice_of_sale': 'sale_scheduled',
                 'order_resetting_sale': 'sale_scheduled', 'order_cancelling_sale': 'sale_cancelled',
@@ -538,6 +541,7 @@ def build_timeline(case, inventory, document_rows, as_of):
         if last == 'limited_relief' or (last == 'relief_not_bankruptcy' and stay_now):
             stay_now = None
     judgments = reconcile_judgments(entries, today)
+    status = _unsettled_satisfaction(status, entries, judgments)
     defendants_all = docket_defendants(inventory)
     for e in entries:
         e.pop('_body', None)
@@ -555,6 +559,44 @@ def build_timeline(case, inventory, document_rows, as_of):
             'stay_history': stay_history, 'stay_in_effect': stay_now, 'sale_held': held,
             'pending': pending, 'amounts': amounts, 'gaps': gaps, 'coverage_complete': not gaps,
             'qualification': 'Status is derived from available docket evidence, not confirmation of a complete court record. Amount extractions are not verified balances or equity inputs.'}
+
+
+def _unsettled_satisfaction(status, entries, judgments):
+    """A case is satisfied only by a satisfaction that paid a judgment it names.
+
+    _transition reads the docket's kinds in order and knows nothing of which judgment a
+    satisfaction cites; reconcile_judgments does. When the satisfaction the status rests on paid
+    no judgment (it named none, named a date a fee judgment shares, or was partial), the case is
+    not shown closed: miami_ranking reads `satisfied_redeemed` as closed. A certificate of
+    redemption is left as it was; it redeems the property, not a judgment by date.
+    """
+    if status.get('kind') != 'satisfied_redeemed' or not status.get('evidence'):
+        return status
+    by_id = {e['entry_id']: e for e in entries}
+    # The satisfaction the status rests on is the LAST satisfaction in its evidence, not the last
+    # entry: a stay relief that restores the pre-stay status appends itself after it.
+    sats = [by_id[i] for i in status['evidence'] if i in by_id and by_id[i]['kind'] == 'satisfaction']
+    last = sats[-1] if sats else None
+    if not last or re.search(r'certificate\s+of\s+redemption', ' '.join(
+            str(last.get(k) or '') for k in ('operative_text', 'description')), re.I):
+        return status
+    # Paid in full, and a judgment of record: satisfying only a fee or cost judgment leaves the
+    # foreclosure judgment owed.
+    paid = any(last['entry_id'] in j.get('by', []) and j.get('satisfaction') == 'satisfied'
+               and j.get('role') not in _NOT_A_JUDGMENT_OF_RECORD
+               for j in judgments.get('judgments') or [])
+    if paid:
+        return status
+    # An earlier satisfaction that already discharged the judgment is not undone by a later filing
+    # that names nothing (Codex on #174): the case stays satisfied when every judgment of record is
+    # settled and at least one was satisfied in full by a satisfaction that named it.
+    of_record = [j for j in judgments.get('judgments') or [] if j.get('role') not in _NOT_A_JUDGMENT_OF_RECORD]
+    if (any(j.get('status') == 'satisfied' for j in of_record)
+            and not any(j.get('status') in ('operative', 'unclear', 'partially_vacated') for j in of_record)):
+        return status
+    return {'kind': 'unclear', 'evidence': status['evidence'],
+            'reason': ('Satisfaction %s does not name a judgment it pays in full (see the judgment '
+                       'reconciliation), so the case is not shown satisfied.' % last['entry_id'])}
 
 
 def sale_held(entries, today):
@@ -802,11 +844,17 @@ def reconcile_judgments(entries, today):
         action = {'vacatur': 'vacated', 'satisfaction': 'satisfied'}.get(e['kind'])
         if not action or (action == 'vacated' and not re.search(r'judgment', text, re.I)):
             continue
-        targets, basis = _target(judgments, text)
+        # A satisfaction pays only the judgment it NAMES (by the date it cites). "The only
+        # operative judgment" is how a vacatur may be read, never a satisfaction: a docket whose
+        # amended judgment has not been read, or a satisfaction of a fee or other judgment, would
+        # mark the one judgment in view paid. An unnamed satisfaction goes to `unmatched`, which
+        # case_verdict holds as a gap.
+        named_only = action == 'satisfied'
+        targets, basis = _target(judgments, text, named_only=named_only)
         if not targets and e.get('_body'):
             # The docket title often says only "Order vacating final judgment"; the order itself
             # usually names the judgment by its date (6828, desktop replay 2026-09-24).
-            body_targets, body_basis = _target(judgments, e['_body'])
+            body_targets, body_basis = _target(judgments, e['_body'], named_only=named_only)
             if body_targets:
                 targets, basis = body_targets, body_basis + ' in the document body'
         if action == 'vacated' and not targets:
@@ -818,7 +866,10 @@ def reconcile_judgments(entries, today):
         if not targets:
             events.append({'entry_id': e['entry_id'], 'kind': e['kind'], 'reason': basis})
             continue
-        partial = 'partially_' if e.get('limited_scope') else ''
+        # A partial satisfaction is a payment, not a discharge, however scope_of read the parties.
+        partial = 'partially_' if (e.get('limited_scope') or (
+            action == 'satisfied' and (_PARTIAL_PAYMENT.search(text)
+                                       or _PARTIAL_PAYMENT.search(str(e.get('_body') or ''))))) else ''
         for target in targets:
             if action == 'satisfied':
                 target['satisfaction'] = partial + 'satisfied'
@@ -852,7 +903,10 @@ def _same_listing(a, b):
     return norm(a) == norm(b)
 
 
-def _target(judgments, text):
+_PARTIAL_PAYMENT = re.compile(r'\bpartial(?:ly)?\s+(?:satisf\w*|releas\w*|payment)', re.I)
+
+
+def _target(judgments, text, named_only=False):
     """-> ([judgment], basis) or ([], why).
 
     Several only when they are the entries of ONE day: 6828 has two "Final Judgment" entries on
@@ -861,8 +915,16 @@ def _target(judgments, text):
     order names the day, so it acts on that day's entries together."""
     cited = _dates_in(text)
     by_date = [j for j in judgments if j['date'] in cited and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
+    if named_only and any(j['date'] in cited and j['role'] == 'supplemental' for j in judgments):
+        # A fee or cost judgment entered on the cited day: the date alone does not say whether
+        # this satisfaction pays it or the foreclosure judgment, so it pays neither.
+        return [], ('cites a date that a supplemental (fee or cost) judgment shares, so which '
+                    'judgment it satisfies is not settled')
     if by_date and len({j['date'] for j in by_date}) == 1:
         return by_date, 'cites its date %s%s' % (by_date[0]['date'], _same_day(by_date))
+    if named_only:
+        return [], ('cites no date that matches exactly one earlier judgment, and a satisfaction '
+                    'is applied only to the judgment it names')
     live = [j for j in judgments if j['status'] in ('operative', 'unclear', 'partially_vacated')
             and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
     if live and len({j['date'] for j in live}) == 1 and not cited:

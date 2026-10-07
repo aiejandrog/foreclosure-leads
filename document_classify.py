@@ -123,7 +123,10 @@ INDEX_HINTS = [
 ]
 
 
-_PARTIAL_RE = re.compile(r'\bPARTIAL\s+(RELEASE|SATISFACTION)\b', re.I)
+# "Partial Release", "Partial Satisfaction", and the forms a body uses: "partially satisfied",
+# "partial satisfaction and release", "receipt of a partial payment". A partial is a payment,
+# never a discharge.
+_PARTIAL_RE = re.compile(r'\bPARTIAL(?:LY)?\s+(?:RELEASE[DS]?|SATISF\w*|PAYMENT)\b', re.I)
 
 
 def index_kind(label):

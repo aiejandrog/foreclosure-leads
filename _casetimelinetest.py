@@ -27,7 +27,9 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(r['status']['sale_date'], '2026-10-15')
 
     def test_satisfaction_after_judgment(self):
-        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment')])['status']['kind'], 'satisfied_redeemed')
+        # Named by its date: a satisfaction naming no judgment leaves the case unclear
+        # (test_miami_verdict_gaps.ReviewRoundTwoTests).
+        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Final Judgment dated 09/01/2026')])['status']['kind'], 'satisfied_redeemed')
 
     def test_same_day_conflict_no_invented_order(self):
         r = run([entry(1, 'Order of dismissal', '09/01/2026'), entry(2, 'Final Judgment', '09/01/2026')])
@@ -280,10 +282,19 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(j['satisfaction'], 'no_satisfaction_found')
         self.assertIn('not proof of an open balance', r['judgments']['qualification'])
 
-    def test_a_satisfaction_marks_the_judgment(self):
-        r = run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment')])
+    def test_a_satisfaction_marks_the_judgment_it_names(self):
+        r = run([entry(1, 'Final Judgment'),
+                 entry(2, 'Satisfaction of Final Judgment entered September 1, 2026')])
         [j] = r['judgments']['judgments']
         self.assertEqual((j['status'], j['satisfaction']), ('satisfied', 'satisfied'))
+
+    def test_a_satisfaction_that_names_no_judgment_marks_nothing(self):
+        # The one judgment in view is not paid by a satisfaction that does not name it: the
+        # satisfaction goes to `unmatched`, which case_verdict holds as a gap.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment')])
+        [j] = r['judgments']['judgments']
+        self.assertEqual((j['status'], j['satisfaction']), ('operative', 'no_satisfaction_found'))
+        self.assertEqual([u['entry_id'] for u in r['judgments']['unmatched']], ['2'])
 
     def test_a_reinstated_stay_is_a_stay_again(self):
         # 2023-020247's shape: stayed, relief granted, then the stay reinstated. Reading the

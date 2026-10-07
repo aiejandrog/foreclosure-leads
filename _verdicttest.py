@@ -85,18 +85,28 @@ def timeline(case, kind='judgment_entered', reason=None, controlling='232820355'
             'gaps': list(gaps), 'coverage_complete': not gaps}
 
 
+# The shape run_case_timeline.read_amounts writes for a page-IMAGE check since the image path was
+# held to the text path's tests: source, document_hash and what the document reads as. A check
+# without them is the OLD saved shape, which now reads as a gap (see ImageReadParityTests).
+IMAGE_IDENTITY = {'source': 'vision', 'document_key': 'k' * 64, 'document_hash': 'h' * 64,
+                  'document_kind': 'final_judgment', 'judgment_title': True}
+
+
 def ok_check(entry_id='232820355', source_ref='court:232820355:1', amount=1746032.70):
-    return {'entry_id': entry_id, 'source_ref': source_ref, 'amount': amount, 'ok': True,
+    return {**IMAGE_IDENTITY, 'entry_id': entry_id, 'source_ref': source_ref, 'amount': amount, 'ok': True,
             'reason': 'one run of printed rows ending at the total adds up to it exactly; '
                       'subtotals agree',
             'pages': [2, 3], 'run': 'continued_from_page_2', 'disagreeing_subtotals': []}
 
 
-def failed_check(entry_id='232632335', source_ref='court:232632335:1', amount=785670.31,
+def failed_check(entry_id='232632335', source_ref=None, amount=785670.31,
                  subtotals=(), reason=None):
+    # The court source_ref names the entry the document was filed under; the producer builds both
+    # from one row, so a fixture that passes only entry_id gets the matching ref.
+    source_ref = source_ref or 'court:%s:1' % entry_id
     # run_case_timeline.py:195 writes exactly these keys, and 'disagreeing_subtotals' is always []
     # because verify_document cannot populate it (see the 2018-026274 test).
-    return {'entry_id': entry_id, 'source_ref': source_ref, 'amount': amount, 'ok': False,
+    return {**IMAGE_IDENTITY, 'entry_id': entry_id, 'source_ref': source_ref, 'amount': amount, 'ok': False,
             'reason': reason or ('no contiguous run of rows ending at the total adds up to it to '
                                  'the cent (tried up to 2 page(s) back)'),
             'pages': [1, 2], 'run': None, 'disagreeing_subtotals': list(subtotals)}
@@ -3867,7 +3877,7 @@ class ThirtyFirstReviewTests(unittest.TestCase):
                  'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found',
                  'reason': ''}]
         t['amount_vision'] = {'amount_checks': [
-            {'entry_id': '2', 'source_ref': 'court:2:1', 'amount': 105000.00, 'ok': True,
+            {**IMAGE_IDENTITY, 'entry_id': '2', 'source_ref': 'court:2:1', 'amount': 105000.00, 'ok': True,
              'reason': 'ok', 'pages': [1], 'run': 'r', 'disagreeing_subtotals': []}]}
         return t
 

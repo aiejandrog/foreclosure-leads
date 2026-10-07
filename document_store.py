@@ -175,6 +175,44 @@ def merge_pages(page_blobs):
         combined.close()
 
 
+def page_fingerprint(content):
+    """-> a hash of what each page SHOWS, or None when it cannot be taken.
+
+    Each page is rendered (annotations included) and its pixels hashed, together with the text
+    PyMuPDF extracts from it. What a page shows survives every rewrite of the container - the
+    file ID, metadata, object numbering, stream compression - that the county and PyMuPDF make on
+    each serialisation, and it covers what a raw content-stream hash misses: text drawn inside a
+    Form XObject, annotation appearances, and images whose compression changes but pixels do not.
+    72 DPI is enough to separate one changed digit and keeps a large judgment cheap.
+    """
+    try:
+        fitz = _fitz()
+        digest = hashlib.sha256()
+        with fitz.open(stream=content, filetype='pdf') as doc:
+            for page in doc:
+                digest.update(b'page')
+                digest.update(hashlib.sha256((page.get_text() or '').encode('utf-8')).digest())
+                pix = page.get_pixmap(dpi=72, annots=True, alpha=False)
+                digest.update(('%dx%d' % (pix.width, pix.height)).encode())
+                digest.update(hashlib.sha256(pix.samples).digest())
+        return digest.hexdigest()
+    except Exception:                                         # noqa: BLE001 - None means "unknown"
+        return None
+
+
+def _retire_page_text(folder, stem):
+    text_dir = Path(folder) / (stem + '-text')
+    if text_dir.is_dir():
+        target = Path(folder) / ('%s-text.replaced-%s' % (stem, datetime.now(timezone.utc)
+                                                          .strftime('%Y%m%dT%H%M%S%fZ')))
+        os.replace(text_dir, target)
+
+
+def _same_page_content(old, new):
+    a, b = page_fingerprint(old), page_fingerprint(new)
+    return a is not None and a == b
+
+
 def page_count(content):
     fitz = _fitz()
     with fitz.open(stream=content, filetype='pdf') as doc:
@@ -281,10 +319,23 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
         # only what we meant to write; a crash mid-write, or anything that touched the folder
         # since, leaves a file that no longer matches, and dedupe would hand that file to the
         # reader forever without ever looking at it.
-        on_disk = sha256(pdf_path.read_bytes())
+        prior_bytes = pdf_path.read_bytes()
+        on_disk = sha256(prior_bytes)
         intact = prior.get('rebuilt_sha256') in (None, on_disk)
-        if intact and prior.get('pages') == record['pages_received']:
+        # Same key and page count is not the same document. The county re-serialises a PDF on
+        # every request, so the BYTES differ between fetches of one instrument - but a corrected
+        # filing with the same page count differs in what its pages SHOW, and keeping the old copy
+        # discarded the correction. So the pages' own content is compared, never the file bytes.
+        # A fingerprint that cannot be taken counts as a change: re-storing costs a re-read, while
+        # keeping a corrected document's old copy costs a wrong figure.
+        same_content = (intact and prior.get('pages') == record['pages_received']
+                        and _same_page_content(prior_bytes, record['content']))
+        if same_content:
             prior['stored'] = False
+            # Fetched again because the county lists it again: no longer retired.
+            if prior.get('superseded_reason') == 'the county no longer lists this document':
+                prior.pop('superseded', None)
+                prior.pop('superseded_reason', None)
             prior['last_seen_at'] = fetch['at']
             prior['integrity_rechecked'] = True
             prior['fetches'] = (prior.get('fetches') or [])[-9:] + [fetch]
@@ -299,10 +350,21 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
                                'page_count_source')})
             _atomic_write_text(meta_path, json.dumps(prior, indent=2) + '\n')
             return prior
+        # Whatever replaces the stored copy, the text read off the OLD copy must not be served
+        # beside the new bytes: stored_documents() reads it back by key alone. It is moved aside
+        # (kept as a record, never deleted) and the new copy reads as unread until it is read.
+        _retire_page_text(folder, stem)
         if not intact:
             # Same document, different file on disk: the stored copy is damaged. Replace it and
             # say so, rather than trusting either side silently.
             manifest['replaced_damaged_copy'] = True
+        elif prior.get('pages') == record['pages_received']:
+            # Same page count, different page content: the county now serves a different (most
+            # likely corrected) document under this identity. The new copy replaces the old one,
+            # the reading starts over (read_status 'unread' above), and the change is recorded.
+            manifest['replaced_on_content_change'] = True
+            manifest['prior_rebuilt_sha256'] = prior.get('rebuilt_sha256')
+            manifest['prior_retrieved_at'] = prior.get('retrieved_at')
         else:
             # Same key, different length. The key includes the page count, so this can only happen
             # when an older sidecar was written under a different scheme. Record the change.
@@ -974,6 +1036,14 @@ def pipeline_report(county, case):
         gaps.append('Official records search may be truncated at 500')
     with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         jobs = queue.jobs(county, case)
+    # Retired (superseded) documents are a record, not coverage and not evidence.
+    retired = {j['source_ref'] for j in jobs if j['status'] == 'superseded' and j['kind'] == 'acquire'}
+    jobs = [j for j in jobs if j['status'] != 'superseded']
+    rows = [r for r in rows if r.get('source_ref') not in retired]
+    # A reopened acquisition (the county lists a different document now, or the re-fetch is pending
+    # or failed): its saved row describes the old copy, which is not evidence (Codex on #174).
+    reopened = {j['source_ref'] for j in jobs if j['kind'] == 'acquire' and j['status'] != 'done'}
+    rows = [r for r in rows if r.get('source_ref') not in reopened]
     outstanding = [j for j in jobs if j['status'] != 'done']
     acquisition_outstanding = [j for j in outstanding if j['kind'] == 'acquire']
     available_refs = {r.get('source_ref') for r in rows
