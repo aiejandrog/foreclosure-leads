@@ -802,11 +802,17 @@ def reconcile_judgments(entries, today):
         action = {'vacatur': 'vacated', 'satisfaction': 'satisfied'}.get(e['kind'])
         if not action or (action == 'vacated' and not re.search(r'judgment', text, re.I)):
             continue
-        targets, basis = _target(judgments, text)
+        # A satisfaction pays only the judgment it NAMES (by the date it cites). "The only
+        # operative judgment" is how a vacatur may be read, never a satisfaction: a docket whose
+        # amended judgment has not been read, or a satisfaction of a fee or other judgment, would
+        # mark the one judgment in view paid. An unnamed satisfaction goes to `unmatched`, which
+        # case_verdict holds as a gap.
+        named_only = action == 'satisfied'
+        targets, basis = _target(judgments, text, named_only=named_only)
         if not targets and e.get('_body'):
             # The docket title often says only "Order vacating final judgment"; the order itself
             # usually names the judgment by its date (6828, desktop replay 2026-09-24).
-            body_targets, body_basis = _target(judgments, e['_body'])
+            body_targets, body_basis = _target(judgments, e['_body'], named_only=named_only)
             if body_targets:
                 targets, basis = body_targets, body_basis + ' in the document body'
         if action == 'vacated' and not targets:
@@ -818,7 +824,9 @@ def reconcile_judgments(entries, today):
         if not targets:
             events.append({'entry_id': e['entry_id'], 'kind': e['kind'], 'reason': basis})
             continue
-        partial = 'partially_' if e.get('limited_scope') else ''
+        # A partial satisfaction is a payment, not a discharge, however scope_of read the parties.
+        partial = 'partially_' if (e.get('limited_scope') or (
+            action == 'satisfied' and _PARTIAL_PAYMENT.search(text))) else ''
         for target in targets:
             if action == 'satisfied':
                 target['satisfaction'] = partial + 'satisfied'
@@ -852,7 +860,10 @@ def _same_listing(a, b):
     return norm(a) == norm(b)
 
 
-def _target(judgments, text):
+_PARTIAL_PAYMENT = re.compile(r'\bpartial(?:ly)?\s+(?:satisf\w*|releas\w*|payment)', re.I)
+
+
+def _target(judgments, text, named_only=False):
     """-> ([judgment], basis) or ([], why).
 
     Several only when they are the entries of ONE day: 6828 has two "Final Judgment" entries on
@@ -863,6 +874,9 @@ def _target(judgments, text):
     by_date = [j for j in judgments if j['date'] in cited and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
     if by_date and len({j['date'] for j in by_date}) == 1:
         return by_date, 'cites its date %s%s' % (by_date[0]['date'], _same_day(by_date))
+    if named_only:
+        return [], ('cites no date that matches exactly one earlier judgment, and a satisfaction '
+                    'is applied only to the judgment it names')
     live = [j for j in judgments if j['status'] in ('operative', 'unclear', 'partially_vacated')
             and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
     if live and len({j['date'] for j in live}) == 1 and not cited:

@@ -196,6 +196,13 @@ def _c(documents):
             # Whether the paid second reader was pointed at this document, and why or why not.
             # document_prioritizer.recorded_read_order decides this before any money is spent.
             'paid_read': d.get('paid_read'),
+            # What names THIS document as a recorded instrument, and - for a satisfaction - which
+            # judgment it names. _operative_judgment links a satisfaction to the judgment only on
+            # these, never on the fact that both were read on the same case.
+            'record_key': _record_key_of(d),
+            'recites_amounts': (_recited_amounts(d.get('reading'))
+                                if str(verdict.get('kind') or '').endswith('satisfaction_of_judgment')
+                                else None),
         })
     status = 'present' if read else ('fetched_unread' if documents else 'empty')
     return _section(
@@ -226,6 +233,63 @@ def _c(documents):
                 'came from, and an OCR-sourced figure is marked as such.'))
 
 
+_RECITED_MONEY = re.compile(r'\$\s*(\d{1,3}(?:,\d{3})+|\d+)\.(\d{2})\b')
+# A satisfaction whose title says partial is a payment, not a discharge, whatever the classifier
+# called it. Read from the clerk's label too: the label never clears a judgment, but it may hold one.
+_PARTIAL_LABEL = re.compile(r'\bPARTIAL(?:LY)?\b', re.I)
+
+
+def _record_key_of(d):
+    """(book, page) this document is recorded at, digits only, or None."""
+    key = d.get('record_key') if isinstance(d.get('record_key'), dict) else {}
+    book, page = key.get('book'), key.get('page')
+    if not (book and page):
+        stamp = d.get('recording_stamp') if isinstance(d.get('recording_stamp'), dict) else {}
+        book, page = stamp.get('index_book'), stamp.get('index_page')
+    book, page = str(book or '').strip().lstrip('0'), str(page or '').strip().lstrip('0')
+    return [book, page] if book.isdigit() and page.isdigit() else None
+
+
+def _recited_amounts(reading):
+    """Every dollar-and-cents figure a document's READ pages print, as '1234.56' strings."""
+    out = set()
+    for page in (reading or {}).get('pages') or []:
+        if not isinstance(page, dict) or page.get('outcome') not in ('text', 'ocr_text'):
+            continue
+        for whole, cents in _RECITED_MONEY.findall(page.get('text') or ''):
+            out.add('%s.%s' % (whole.replace(',', ''), cents))
+    return sorted(out)
+
+
+def _cents(amount):
+    try:
+        return '%.2f' % round(float(amount), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _names_judgment(satisfaction, judgment, printed):
+    """-> the reason this satisfaction names this judgment, or None.
+
+    A satisfaction pays the judgment it NAMES. Being read on the same case is not naming: a
+    docket can carry an original and an amended judgment, a fee judgment, or a satisfaction of a
+    different action's judgment, and treating any satisfaction as paying the one judgment read
+    reported an open debt as paid. It names this judgment when it cites the book/page the
+    judgment is recorded at, or recites the judgment's own printed amount to the cent.
+    """
+    where = judgment.get('record_key')
+    if where:
+        for c in satisfaction.get('cites_instruments') or []:
+            if not isinstance(c, dict):
+                continue
+            if [str(c.get('book') or '').lstrip('0'), str(c.get('page_no') or '').lstrip('0')] == where:
+                return 'cites the judgment\'s recording, book %s page %s' % tuple(where)
+    want = _cents(printed)
+    if want and want != '0.00' and want in (satisfaction.get('recites_amounts') or []):
+        return 'recites the judgment amount $%s' % want
+    return None
+
+
 def _operative_judgment(rows):
     """Which read document IS this case's judgment, or an honest refusal to say.
 
@@ -239,17 +303,28 @@ def _operative_judgment(rows):
     settle it. `amount` is carried only when exactly one candidate has one, for the same reason.
     """
     found = [r for r in rows if r.get('is') == 'final_judgment']
-    satisfied_by = [r.get('source_ref') for r in rows if r.get('is') == 'satisfaction_of_judgment']
+    sats = [r for r in rows if r.get('is') == 'satisfaction_of_judgment']
+    # A full satisfaction whose clerk label says partial is held as partial: it acknowledges a
+    # payment, and nothing here can show it discharged the judgment.
+    partial_rows = [r for r in rows if r.get('is') == 'partial_satisfaction_of_judgment'] + [
+        r for r in sats if _PARTIAL_LABEL.search(str(r.get('index_label') or ''))]
+    sats = [r for r in sats if r not in partial_rows]
+    read_refs = [r.get('source_ref') for r in sats]
     if not found:
+        # Nothing to pay. `satisfied_by` stays empty: a satisfaction is reported as read, never as
+        # having paid a judgment nobody read.
         return {'operative': None, 'candidates': [], 'certain': False,
-                'satisfied_by': satisfied_by,
+                'satisfied_by': [], 'satisfactions_read': read_refs,
                 'why': 'no read document on this case classifies as a final judgment'
                        + (' (a satisfaction of judgment WAS read: %s)' % ', '.join(
-                           str(r) for r in satisfied_by) if satisfied_by else '')}
+                           str(r) for r in read_refs) if read_refs else '')}
     refs = [r.get('source_ref') for r in found]
     if len(found) == 1:
         amounts = found[0].get('amounts') or []
         printed = amounts[0]['amount'] if len({a['amount'] for a in amounts}) == 1 else None
+        linked = [(r, _names_judgment(r, found[0], printed)) for r in sats]
+        satisfied_by = [r.get('source_ref') for r, why in linked if why]
+        unlinked = [r.get('source_ref') for r, why in linked if not why]
         if satisfied_by:
             # A satisfaction discharges the judgment. The judgment's figure is history, not a debt:
             # `amount` goes to None so nothing downstream can read a paid judgment as owed, and
@@ -257,11 +332,27 @@ def _operative_judgment(rows):
             return {'operative': refs[0], 'candidates': refs, 'certain': True,
                     'amount': None, 'printed_amount': printed, 'satisfied': True,
                     'satisfied_by': satisfied_by,
-                    'why': ('the judgment was read AND a satisfaction of it was read (%s): the '
-                            'judgment amount is not an outstanding debt'
-                            % ', '.join(str(r) for r in satisfied_by))}
-        partial = [r.get('source_ref') for r in rows
-                   if r.get('is') == 'partial_satisfaction_of_judgment']
+                    'satisfaction_links': {str(r.get('source_ref')): why for r, why in linked if why},
+                    'satisfaction_unlinked': unlinked,
+                    'why': ('the judgment was read AND a satisfaction naming it was read (%s: %s): '
+                            'the judgment amount is not an outstanding debt'
+                            % (', '.join(str(r) for r in satisfied_by),
+                               '; '.join(why for _, why in linked if why)))}
+        partial = [r.get('source_ref') for r in partial_rows]
+        if unlinked:
+            # A satisfaction of SOME judgment was read and it names neither this one's recording
+            # nor its amount. It is not taken as paying this judgment - and this judgment's figure
+            # is not stated as owed either, because the same paper may be its discharge. The
+            # figure survives as printed_amount; the reader is told what would settle it.
+            return {'operative': refs[0], 'candidates': refs, 'certain': True,
+                    'amount': None, 'printed_amount': printed, 'satisfied': False,
+                    'satisfied_by': [], 'satisfaction_unlinked': unlinked,
+                    'partially_satisfied_by': partial,
+                    'why': ('a satisfaction of judgment was read (%s) but it names neither this '
+                            "judgment's recording nor its amount, so it is not taken as paying "
+                            'this judgment, and the judgment amount is not stated as owed until '
+                            'someone reads the satisfaction and says which judgment it discharges'
+                            % ', '.join(str(r) for r in unlinked))}
         out = {'operative': refs[0], 'candidates': refs, 'certain': True,
                'amount': printed, 'satisfied': False, 'satisfied_by': []}
         if partial:
@@ -273,7 +364,7 @@ def _operative_judgment(rows):
                                 % ', '.join(str(r) for r in partial))})
         return out
     return {'operative': None, 'candidates': refs, 'certain': False,
-            'satisfied_by': satisfied_by,
+            'satisfied_by': [], 'satisfactions_read': read_refs,
             'why': ('%d read documents on this case classify as a final judgment (%s). Which one '
                     'controls is a legal question the text does not answer: they may be an '
                     'original and an amended judgment, judgments on separate counts, or one of '
@@ -370,6 +461,8 @@ def build(case, county, inventory=None, chain=None, documents=None, walk=None, l
                     'not been read' % (row['source_ref'], ', '.join(row['belongs_to']) or '?'))
     judgment = c.get('judgment') or {}
     if judgment.get('candidates') and not judgment.get('certain'):
+        gaps.append(judgment['why'])
+    elif judgment.get('satisfaction_unlinked') and not judgment.get('satisfied'):
         gaps.append(judgment['why'])
     unfetched = len(c.get('cited_but_not_fetched') or [])
     if unfetched:

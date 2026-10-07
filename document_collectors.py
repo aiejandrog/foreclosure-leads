@@ -385,6 +385,16 @@ def collect_case_documents(county, case, records=None):
     inventory.update(county=county, case=case, official_records_supplied=records is not None,
                      recorded_search_may_be_capped=bool(records and len(records) >= 500))
     write(base / 'inventory.json', inventory)
+    # Docket entries whose attachment list came back in full this run (or that the county now
+    # says carry no document). Under those, and only those, a job the county no longer lists is a
+    # replaced or withdrawn attachment: it is retired so its old bytes stop counting as current.
+    # An entry that errored proves nothing about what it holds, so its jobs are left alone.
+    listed = ['court:%s:' % e['source_id'] for e in inventory['entries']
+              if e.get('inventory_status') in ('enumerated', 'county_reports_no_document')]
     with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         queue.add_many(county, case, jobs)
+        retired = queue.retire_missing(county, case, 'acquire', [ref for ref, _, _ in jobs], listed)
+    if retired:
+        inventory['retired_documents'] = retired
+        write(base / 'inventory.json', inventory)
     return report(county, case)

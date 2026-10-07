@@ -20,6 +20,10 @@ STATUSES
   done     bytes stored       gap     an AccessGap — we could not get it, and that is RECORDED
   failed   an unexpected error; retried until MAX_ATTEMPTS, then left for a human to look at
 
+  superseded  the county no longer lists this document (a replaced or withdrawn attachment). It
+              is kept as a record, never counted, never claimed, and its saved evidence is not
+              read as current. Re-listing it revives it to pending.
+
 `gap` is deliberately terminal and deliberately not `failed`. A restricted or login-walled document
 is a known, reportable hole in coverage (CASE-REVIEW-PROCEDURE.md), not a bug to retry forever.
 
@@ -42,6 +46,22 @@ from datetime import datetime, timezone
 import case_review
 
 MAX_ATTEMPTS = 3
+SUPERSEDED = 'superseded'
+# Jobs that read the bytes another job acquired. When the acquisition is redone or retired, these
+# stop describing the current document.
+DEPENDENTS = {'acquire': ('read',)}
+# Payload keys that carry a per-request token rather than the document's identity (the clerk's
+# encrypted image path is 'encDocInfo'). Inferred from the key names, not measured: a volatile key
+# not listed here costs a re-download and a re-read, never a stale `done`.
+_TOKEN_PREFIXES = ('enc',)
+
+
+def _identity(payload):
+    """What names the document in a job payload: every key except per-request tokens."""
+    if not isinstance(payload, dict):
+        return payload
+    return {k: v for k, v in payload.items()
+            if not str(k).lower().startswith(_TOKEN_PREFIXES)}
 DEFAULT_LEASE = 900          # 15 minutes: longer than any single document fetch, short enough that
                              # a killed worker's rows come back the same session.
 
@@ -109,16 +129,119 @@ class DocumentQueue:
 
     # ---- enqueue -------------------------------------------------------------------------------
     def add(self, county, case, source_ref, kind, payload=None):
-        """Idempotent. Returns True when a NEW job was created, False when it was already known."""
+        """Idempotent. Returns True when a NEW job was created or a known one must be redone.
+
+        Re-adding a known job used to be a no-op, which dropped what the county now says about
+        it: an attachment the clerk replaced under the same reference kept its old payload and
+        its old `done`, and the old document went on being counted as current. Now:
+
+          * the payload is always refreshed, so a retrieval uses what the county lists today;
+          * when what IDENTIFIES the document changed (`_identity`), the job and the jobs that
+            read its bytes go back to pending - a different document is not done;
+          * a `superseded` job the county lists again is revived to pending.
+        """
         now = _now()
+        body = json.dumps(payload or {})
         try:
             self.db.execute(
                 'INSERT INTO jobs (county, case_no, source_ref, kind, payload, created_at, updated_at)'
                 ' VALUES (?,?,?,?,?,?,?)',
-                (county, case, source_ref, kind, json.dumps(payload or {}), now, now))
+                (county, case, source_ref, kind, body, now, now))
             return True
         except sqlite3.IntegrityError:
+            pass
+        row = self.db.execute(
+            'SELECT id, status, payload FROM jobs WHERE county = ? AND case_no = ? AND source_ref = ?'
+            ' AND kind = ?', (county, case, source_ref, kind)).fetchone()
+        if row is None:
             return False
+        try:
+            before = json.loads(row['payload'] or '{}')
+        except ValueError:
+            before = None
+        # An empty old payload named nothing, so a fuller one contradicts nothing: it is filled in.
+        changed = bool(_identity(before)) and _identity(before) != _identity(payload or {})
+        if not changed and row['status'] != SUPERSEDED:
+            if row['payload'] != body:
+                self.db.execute('UPDATE jobs SET payload = ?, updated_at = ? WHERE id = ?',
+                                (body, now, row['id']))
+            return False
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            self.db.execute(
+                "UPDATE jobs SET payload = ?, status = 'pending', attempts = 0, sha256 = NULL,"
+                ' reader_version = NULL, read_status = NULL, lease_owner = NULL, lease_until = NULL,'
+                ' error = ?, updated_at = ? WHERE id = ?',
+                (body, ('the county now lists a different document under this reference'
+                        if changed else 'the county lists this document again'), now, row['id']))
+            self._reset_dependents(county, case, source_ref, kind, now)
+            self.db.execute('COMMIT')
+        except Exception:
+            self.db.execute('ROLLBACK')
+            raise
+        return True
+
+    def _reset_dependents(self, county, case, source_ref, kind, now):
+        # Inside the caller's transaction. A read of bytes that are being replaced is not current.
+        dependents = DEPENDENTS.get(kind) or ()
+        if dependents:
+            self.db.execute(
+                "UPDATE jobs SET status = 'pending', attempts = 0, sha256 = NULL, reader_version = NULL,"
+                ' read_status = NULL, lease_owner = NULL, lease_until = NULL, updated_at = ?'
+                ' WHERE county = ? AND case_no = ? AND source_ref = ? AND kind IN (%s)'
+                % ','.join('?' * len(dependents)),
+                (now, county, case, source_ref) + tuple(dependents))
+
+    def reset_dependents(self, county, case, source_ref, kind='acquire'):
+        """Put the jobs that read this document's bytes back to pending, BEFORE the bytes change.
+
+        Called when an acquisition is taken again. If the worker dies after the new bytes land and
+        before they are read, the read job is pending, not a `done` that describes the old copy.
+        """
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            self._reset_dependents(county, case, source_ref, kind, _now())
+            self.db.execute('COMMIT')
+        except Exception:
+            self.db.execute('ROLLBACK')
+            raise
+
+    def retire_missing(self, county, case, kind, current_refs, prefixes):
+        """Mark `superseded` every `kind` job under one of `prefixes` that the county no longer lists.
+
+        `prefixes` must name only the parts of the case whose listing was read IN FULL this run (a
+        docket entry whose attachment list came back). A part that errored proves nothing about
+        what it holds, so its jobs are left alone. Returns the refs retired.
+        """
+        prefixes = tuple(p for p in prefixes if p)
+        if not prefixes:
+            return []
+        current = set(current_refs)
+        now = _now()
+        retired = []
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            for row in self.db.execute(
+                    "SELECT id, source_ref FROM jobs WHERE county = ? AND case_no = ? AND kind = ?"
+                    " AND status != ?", (county, case, kind, SUPERSEDED)).fetchall():
+                ref = row['source_ref']
+                if ref in current or not ref.startswith(prefixes):
+                    continue
+                self.db.execute(
+                    'UPDATE jobs SET status = ?, lease_owner = NULL, lease_until = NULL, error = ?,'
+                    ' updated_at = ? WHERE id = ?',
+                    (SUPERSEDED, 'the county no longer lists this document', now, row['id']))
+                for dep in DEPENDENTS.get(kind) or ():
+                    self.db.execute(
+                        'UPDATE jobs SET status = ?, lease_owner = NULL, lease_until = NULL,'
+                        ' updated_at = ? WHERE county = ? AND case_no = ? AND source_ref = ?'
+                        ' AND kind = ?', (SUPERSEDED, now, county, case, ref, dep))
+                retired.append(ref)
+            self.db.execute('COMMIT')
+        except Exception:
+            self.db.execute('ROLLBACK')
+            raise
+        return retired
 
     def add_many(self, county, case, jobs):
         return sum(self.add(county, case, ref, kind, payload) for ref, kind, payload in jobs)
@@ -275,7 +398,8 @@ class DocumentQueue:
 
     # ---- report --------------------------------------------------------------------------------
     def counts(self, county=None, case=None):
-        where, args = [], []
+        """Status counts. `superseded` jobs are not work and not coverage, so they are left out."""
+        where, args = ["status != '%s'" % SUPERSEDED], []
         if county:
             where.append('county = ?'); args.append(county)
         if case:
@@ -332,7 +456,7 @@ def resume_case_documents(county, case, limit=10, interpret=False):
     owner = uuid.uuid4().hex
     with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         for job in queue.jobs(county, case):
-            if job['kind'] != 'acquire':
+            if job['kind'] != 'acquire' or job['status'] == SUPERSEDED:
                 continue
             if limit <= 0:
                 break
@@ -347,6 +471,8 @@ def resume_case_documents(county, case, limit=10, interpret=False):
                 claimed = queue.claim_ref(owner, county, case, ref, 'acquire', force=not has_bytes)
                 if claimed is None:
                     continue
+                # Before the bytes can change: a read recorded against the old copy is not current.
+                queue.reset_dependents(county, case, ref)
                 try:
                     retrieved = client.retrieve_document(job['payload'])
                     with queue.fenced_write(claimed['id'], owner):

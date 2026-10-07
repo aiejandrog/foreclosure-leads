@@ -163,7 +163,10 @@ class SatisfactionOfJudgmentTests(unittest.TestCase):
         rows = [{'source_ref': 'court:30', 'is': 'final_judgment',
                  'amounts': [{'amount': 993885.33}]}]
         if with_satisfaction:
-            rows.append({'source_ref': 'court:40', 'is': 'satisfaction_of_judgment', 'amounts': []})
+            # It names THIS judgment by reciting its amount; a satisfaction that names nothing is
+            # not linked (see test_miami_verdict_gaps.py).
+            rows.append({'source_ref': 'court:40', 'is': 'satisfaction_of_judgment', 'amounts': [],
+                         'recites_amounts': ['993885.33']})
         return rows
 
     def test_a_partial_satisfaction_is_its_own_kind(self):
@@ -196,7 +199,9 @@ class SatisfactionOfJudgmentTests(unittest.TestCase):
     def test_a_satisfaction_without_its_judgment_is_still_reported(self):
         j = CD._operative_judgment(self._rows(True)[1:])
         self.assertIsNone(j['operative'])
-        self.assertEqual(j['satisfied_by'], ['court:40'])
+        # Reported as read, never as having paid a judgment nobody read.
+        self.assertEqual(j['satisfied_by'], [])
+        self.assertEqual(j['satisfactions_read'], ['court:40'])
         self.assertIn('satisfaction of judgment WAS read', j['why'])
 
 

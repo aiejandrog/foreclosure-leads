@@ -100,9 +100,14 @@ def acquire(case, base=None, collect=False, docket_cache=None):
     rows = load_rows(base)
     with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         jobs = queue.jobs(COUNTY, case)
+    # A document the county no longer lists keeps its saved file as a record, but it is not this
+    # case's evidence any more: a replaced attachment's old copy must not be read as current.
+    retired = {job['source_ref'] for job in jobs
+               if job['kind'] == 'acquire' and job['status'] == DQ.SUPERSEDED}
+    rows = [row for row in rows if row.get('source_ref') not in retired]
     by_ref = {row.get('source_ref'): row for row in rows}
     for job in jobs:
-        if job['kind'] != 'acquire' or job['status'] == 'done':
+        if job['kind'] != 'acquire' or job['status'] in ('done', DQ.SUPERSEDED):
             continue
         row = by_ref.get(job['source_ref'])
         if row is None:
@@ -193,8 +198,18 @@ def read_amounts(rows, base, budget=None, plan=None):
             checks = [dict(c, ok=False, reason='amount pages have unresolved reading gaps')
                       for c in checks]
         in_table = {r['gid'] for c in checks if c['ok'] for r in c['component_rows']}
+        # What the document is, judged the same way the text path judges it (_text_checks_for_row):
+        # its own text, never the clerk's label, and never the vision reader's say-so. case_verdict
+        # holds a verified image total as a gap unless the document reads as a final judgment by
+        # these two tests or is the only read document on its entry. Recomputed from the current
+        # reading on every pass, so a cached evidence file cannot carry a stale verdict forward.
+        identity = _document_identity(row) if checks else {}
         result.setdefault('amount_checks', []).extend(
             {'source_ref': row.get('source_ref'), 'entry_id': detail['entry_id'],
+             'source': 'vision', 'document_key': detail['document_key'],
+             'document_hash': detail['document_hash'],
+             'document_kind': identity.get('document_kind'),
+             'judgment_title': identity.get('judgment_title'),
              'amount': c['amount'], 'page': c['page'], 'ok': c['ok'], 'reason': c['reason'],
              'pages': c['pages'], 'run': c['run'], 'components': c['components'],
              'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals'],
@@ -218,6 +233,23 @@ def read_amounts(rows, base, budget=None, plan=None):
             interpretation='Vision-extracted amount; not an accepted judgment or equity input')
             for figure in detail.get('figures', []))
     return result
+
+
+def _document_identity(row):
+    """-> {'document_kind', 'judgment_title'} from the document's own reading.
+
+    Shared by the text and image paths so both are held to one test of "is this the judgment".
+    A reading with no text gives kind 'unknown' and title False, which case_verdict holds.
+    """
+    import document_classify
+    manifest = row.get('manifest') or {}
+    reading = row.get('reading') or {}
+    try:
+        kind = document_classify.classify(reading, manifest.get('document_name') or '').get('kind')
+        titled = judgment_titled(reading)
+    except Exception:                                         # noqa: BLE001 - fails toward a gap
+        kind, titled = 'unknown', False
+    return {'document_kind': kind, 'judgment_title': titled}
 
 
 def _stored_bytes_match(manifest):
