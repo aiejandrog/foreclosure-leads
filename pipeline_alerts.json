@@ -1,25 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-10-07T09:54:06-04:00",
+   "at": "2026-10-07T19:02:56-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: send server port 8823 is not listening; 4 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Opt-out Sync, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 22h ago."
   },
   {
-   "at": "2026-10-07T09:54:06-04:00",
+   "at": "2026-10-07T19:02:56-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 52 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-07T09:54:06-04:00",
+   "at": "2026-10-07T19:02:56-04:00",
+   "key": "optout-sync",
+   "severity": "fail",
+   "text": "07:15 opt-out sync failed on 2026-10-07 (steps: replies)."
+  },
+  {
+   "at": "2026-10-07T19:02:56-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-07T09:54:06-04:00",
+ "published_at": "2026-10-07T19:02:56-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -30,7 +36,7 @@
    "holds": 402,
    "leads_checked": 13,
    "provider": "courtlistener",
-   "pull_age_h": 4.87,
+   "pull_age_h": 14.02,
    "pull_ok": true,
    "readable": true,
    "reason": "budget",
@@ -58,16 +64,16 @@
    "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.005369272089651719,
-   "mailed": 33,
+   "lb": 0.005210771925596642,
+   "mailed": 34,
    "post_dead": 1,
-   "post_lb": 0.005369272089651719,
-   "post_mailed": 33,
-   "post_rate": 0.030303030303030304,
+   "post_lb": 0.005210771925596642,
+   "post_mailed": 34,
+   "post_rate": 0.029411764705882353,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.030303030303030304,
+   "rate": 0.029411764705882353,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
@@ -102,11 +108,13 @@
   },
   "optout_sync": {
    "date": "2026-10-07",
-   "failed_steps": [],
+   "failed_steps": [
+    "replies"
+   ],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": true,
-   "started_at": 1791375911,
+   "run_ok": false,
+   "started_at": 1791412643,
    "state": "finished"
   },
   "paid_reads": {
