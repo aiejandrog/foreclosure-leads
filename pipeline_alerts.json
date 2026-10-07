@@ -1,53 +1,35 @@
 {
  "alerts": [
   {
-   "at": "2026-10-06T21:12:35-04:00",
-   "key": "healthcheck-fail",
-   "severity": "fail",
-   "text": "healthcheck FAIL stages: lead data freshness."
-  },
-  {
-   "at": "2026-10-06T21:12:35-04:00",
+   "at": "2026-10-07T05:45:08-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: send server port 8823 is not listening; 4 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Opt-out Sync, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-06T21:12:35-04:00",
-   "key": "morning-sends",
-   "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 62 leads were eligible, but 0 first-touch emails were sent."
-  },
-  {
-   "at": "2026-10-06T21:12:35-04:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync failed on 2026-10-06 (steps: replies)."
-  },
-  {
-   "at": "2026-10-06T21:12:35-04:00",
+   "at": "2026-10-07T05:45:08-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-06T21:12:35-04:00",
+ "published_at": "2026-10-07T05:45:08-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
    "errors": 1,
-   "filings": 1263,
-   "holds": 387,
-   "leads_checked": 36,
+   "filings": 1279,
+   "holds": 402,
+   "leads_checked": 13,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.72,
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 86,
-   "truncated": 1
+   "reason": "budget",
+   "requests_used": 116,
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
@@ -85,16 +67,14 @@
    "window": 7
   },
   "captcha": {
-   "usd": 8.18102
+   "usd": 7.64118
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
    "fresh": true,
-   "names": [
-    "lead data freshness"
-   ]
+   "names": []
   },
   "morning_sends": {
    "addresses": 2,
@@ -103,9 +83,9 @@
     15,
     15
    ],
-   "date": "2026-10-06",
-   "eligible": 62,
-   "judged": true,
+   "date": "2026-10-07",
+   "eligible": 52,
+   "judged": false,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -119,7 +99,7 @@
    "failed_steps": [
     "replies"
    ],
-   "past_cutoff": true,
+   "past_cutoff": false,
    "readable": true,
    "run_ok": false,
    "started_at": 1791318059,
@@ -129,7 +109,7 @@
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 14.108
+   "spent": 17.2567
   },
   "readiness": {
    "at": "2026-10-06T21:12:35-04:00",
