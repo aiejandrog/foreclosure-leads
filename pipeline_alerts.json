@@ -1,59 +1,53 @@
 {
  "alerts": [
   {
-   "at": "2026-10-06T16:35:52-04:00",
-   "key": "bk-lookup",
-   "severity": "fail",
-   "text": "Federal bankruptcy pull failed (time_budget). Non-Miami leads stay held."
-  },
-  {
-   "at": "2026-10-06T16:35:52-04:00",
+   "at": "2026-10-06T21:12:35-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: lead data freshness."
   },
   {
-   "at": "2026-10-06T16:35:52-04:00",
+   "at": "2026-10-06T21:12:35-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: battery 25% (under 50%); send server port 8823 is not listening; 5 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Opt-out Sync, DEALFLOW Refresh, DealFlow Sheets CRM, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness: send server port 8823 is not listening; 4 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Opt-out Sync, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-06T16:35:52-04:00",
+   "at": "2026-10-06T21:12:35-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 62 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-06T16:35:52-04:00",
+   "at": "2026-10-06T21:12:35-04:00",
    "key": "optout-sync",
    "severity": "fail",
    "text": "07:15 opt-out sync failed on 2026-10-06 (steps: replies)."
   },
   {
-   "at": "2026-10-06T16:35:52-04:00",
+   "at": "2026-10-06T21:12:35-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-06T16:35:52-04:00",
+ "published_at": "2026-10-06T21:12:35-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 2,
-   "filings": 1190,
-   "holds": 350,
-   "leads_checked": 17,
+   "errors": 1,
+   "filings": 1263,
+   "holds": 387,
+   "leads_checked": 36,
    "provider": "courtlistener",
    "pull_age_h": 0.0,
-   "pull_ok": false,
+   "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 36,
-   "truncated": 3
+   "requests_used": 86,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -138,19 +132,18 @@
    "spent": 14.108
   },
   "readiness": {
-   "at": "2026-10-06T16:35:52-04:00",
+   "at": "2026-10-06T21:12:35-04:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
    "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 5,
+   "failed": 4,
    "failed_names": [
     "DEALFLOW Morning Worker",
     "DealFlow Opt-out Sync",
     "DEALFLOW Refresh",
-    "DealFlow Sheets CRM",
     "DealflowSendServerDaily"
    ],
    "interactive": 3,
@@ -160,7 +153,7 @@
     "DealFlow Replies"
    ],
    "on_ac": true,
-   "pct": 25,
+   "pct": 79,
    "port_open": false,
    "power_ok": true,
    "present_check": true,
