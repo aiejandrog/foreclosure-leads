@@ -1,19 +1,19 @@
 {
  "alerts": [
   {
-   "at": "2026-10-07T05:45:08-04:00",
+   "at": "2026-10-07T08:25:50-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness: send server port 8823 is not listening; 4 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Opt-out Sync, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-07T05:45:08-04:00",
+   "at": "2026-10-07T08:25:50-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-07T05:45:08-04:00",
+ "published_at": "2026-10-07T08:25:50-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -24,7 +24,7 @@
    "holds": 402,
    "leads_checked": 13,
    "provider": "courtlistener",
-   "pull_age_h": 0.72,
+   "pull_age_h": 3.4,
    "pull_ok": true,
    "readable": true,
    "reason": "budget",
@@ -95,14 +95,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-06",
-   "failed_steps": [
-    "replies"
-   ],
-   "past_cutoff": false,
+   "date": "2026-10-07",
+   "failed_steps": [],
+   "past_cutoff": true,
    "readable": true,
-   "run_ok": false,
-   "started_at": 1791318059,
+   "run_ok": true,
+   "started_at": 1791375911,
    "state": "finished"
   },
   "paid_reads": {
