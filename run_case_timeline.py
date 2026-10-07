@@ -42,7 +42,9 @@ def budget_snapshot(path, cap):
 
 
 def load_rows(base):
+    """Every saved document row in a case folder, except documents the county no longer lists."""
     rows = []
+    retired = _retired_refs(base)
     for path in sorted(Path(base).glob('*.json')):
         if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
             continue
@@ -50,10 +52,22 @@ def load_rows(base):
         if not isinstance(row, dict) or 'manifest' not in row:
             continue
         ref = row.get('source_ref', '')
+        if ref in retired:
+            continue
         if ref.startswith('court:'):
             row['entry_ref'] = ref.split(':', 2)[1]
         rows.append(row)
     return rows
+
+
+def _retired_refs(base):
+    """Refs whose acquisition the queue retired (superseded). No queue file means none."""
+    path = Path(base) / 'queue.sqlite3'
+    if not path.is_file():
+        return set()
+    with DQ.DocumentQueue(str(path)) as queue:
+        return {job['source_ref'] for job in queue.jobs()
+                if job['kind'] == 'acquire' and job['status'] == DQ.SUPERSEDED}
 
 
 def source_comparison(case, inventory, cache_path):
@@ -110,11 +124,16 @@ def acquire(case, base=None, collect=False, docket_cache=None):
         if job['kind'] != 'acquire' or job['status'] in ('done', DQ.SUPERSEDED):
             continue
         row = by_ref.get(job['source_ref'])
+        ref = job['source_ref']
         if row is None:
-            ref = job['source_ref']
             row = {'source_ref': ref, 'entry_ref': ref.split(':', 2)[1] if ref.startswith('court:') else '',
                    'manifest': {}, 'reading': {'pages': []}}
             rows.append(row)
+        else:
+            # The saved file describes the copy held BEFORE this job was reopened (the county
+            # now lists a different document, or the re-fetch failed). It is not this document's
+            # evidence: no text check, no cached image read and no coverage may come from it.
+            row['manifest'], row['reading'] = {}, {'pages': []}
         row['acquisition_status'] = job['status']
         row['acquisition_gap'] = job.get('error') or 'Document acquisition ' + job['status']
     return inventory, rows

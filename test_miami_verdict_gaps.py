@@ -155,6 +155,42 @@ class CorrectedDocumentTests(unittest.TestCase):
             self.assertFalse(again['stored'])
             self.assertTrue(again.get('bytes_differ_between_fetches'))
 
+    def test_a_change_inside_a_form_xobject_is_a_change(self):
+        # A raw content-stream hash saw only '/Fm0 Do' and kept the old copy.
+        fitz = DS._fitz()
+        def wrapped(text):
+            with fitz.open() as inner, fitz.open() as outer:
+                inner.new_page().insert_text((72, 72), text)
+                outer.new_page().show_pdf_page(outer[0].rect, inner, 0)
+                return outer.tobytes()
+        self.assertFalse(DS._same_page_content(wrapped('TOTAL $100,000.00'),
+                                               wrapped('TOTAL $900,000.00')))
+        self.assertTrue(DS._same_page_content(wrapped('TOTAL $100,000.00'),
+                                              wrapped('TOTAL $100,000.00')))
+
+    def test_recompressing_the_same_pages_is_not_a_change(self):
+        fitz = DS._fitz()
+        with fitz.open() as doc:
+            page = doc.new_page()
+            page.insert_text((72, 72), 'FINAL JUDGMENT TOTAL $100.00')
+            pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 40, 40), False)
+            pix.clear_with(200)
+            page.insert_image(fitz.Rect(100, 100, 140, 140), pixmap=pix)
+            plain = doc.tobytes()
+            packed = doc.tobytes(garbage=4, deflate=True, deflate_images=True, use_objstms=True)
+        self.assertNotEqual(plain, packed)
+        self.assertTrue(DS._same_page_content(plain, packed))
+
+    def test_the_old_copy_s_page_text_is_moved_aside_on_replacement(self):
+        with tempfile.TemporaryDirectory() as root:
+            first = self.store(root, pdf('FINAL JUDGMENT TOTAL $100.00'))
+            text_dir = Path(root) / (first['document_key'][:16] + '-text')
+            text_dir.mkdir()
+            (text_dir / 'pages.json').write_text('{"pages": []}')
+            self.store(root, pdf('FINAL JUDGMENT TOTAL $900.00'))
+            self.assertFalse(text_dir.exists())
+            self.assertTrue(list(Path(root).glob('*-text.replaced-*')))
+
     def test_a_fingerprint_that_cannot_be_taken_counts_as_a_change(self):
         with patch.object(DS, 'page_fingerprint', return_value=None):
             self.assertFalse(DS._same_page_content(b'a', b'a'))
@@ -228,7 +264,8 @@ class StaleQueueJobTests(unittest.TestCase):
         class Fake:
             def enumerate_documents(self, case):
                 return {'entries': [{'source_id': '5', 'expected_documents': 1,
-                                     'metadata': {'encID': 'e'}}], 'pagination_verified': True}
+                                     'metadata': {'encID': 'e', 'eventID': 5}}],
+                        'pagination_verified': True}
 
             def attachments(self, case, meta):
                 return [{'documentID': '2', 'documentName': 'Amended Final Judgment'}]
@@ -246,6 +283,42 @@ class StaleQueueJobTests(unittest.TestCase):
         self.assertEqual(states, {'court:5:1': DQ.SUPERSEDED, 'court:5:2': 'pending'})
         inventory = json.loads((base / 'inventory.json').read_text())
         self.assertEqual(inventory['retired_documents'], ['court:5:1'])
+
+    def test_an_entry_identified_only_by_list_position_retires_nothing(self):
+        import document_collectors as COL
+
+        class Fake:
+            def enumerate_documents(self, case):
+                return {'entries': [{'source_id': '0', 'expected_documents': 1,
+                                     'metadata': {'encID': 'e'}}], 'pagination_verified': True}
+
+            def attachments(self, case, meta):
+                return [{'documentID': '2'}]
+
+        base = Path(self.dir.name) / 'case0'
+        base.mkdir()
+        with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as q:
+            q.add(COUNTY, CASE, 'court:0:1', 'acquire', {'documentID': '1'})
+        with patch.object(COL, 'collector_for', return_value=Fake()), \
+                patch.object(DS, 'pipeline_folder', return_value=base), \
+                patch.object(DS, 'pipeline_report', return_value={}):
+            COL.collect_case_documents(COUNTY, CASE)
+        with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as q:
+            states = {j['source_ref']: j['status'] for j in q.jobs(COUNTY, CASE)}
+        self.assertEqual(states['court:0:1'], 'pending')
+
+    def test_saved_rows_of_retired_documents_are_not_loaded(self):
+        import hashlib
+        base = Path(self.dir.name) / 'rows'
+        base.mkdir()
+        for ref in ('court:5:1', 'court:5:2'):
+            (base / (hashlib.sha256(ref.encode()).hexdigest() + '.json')).write_text(
+                json.dumps({'source_ref': ref, 'manifest': {}, 'reading': {'pages': []}}))
+        with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as q:
+            q.add(COUNTY, CASE, 'court:5:1', 'acquire', {'documentID': '1'})
+            q.add(COUNTY, CASE, 'court:5:2', 'acquire', {'documentID': '2'})
+            q.retire_missing(COUNTY, CASE, 'acquire', ['court:5:2'], ['court:5:'])
+        self.assertEqual([r['source_ref'] for r in RCT.load_rows(base)], ['court:5:2'])
 
 
 # --- 3. a satisfaction pays only the judgment it names ----------------------------------------
@@ -299,6 +372,45 @@ def sat(**over):
            'cites_instruments': [], 'recites_amounts': [], 'index_label': 'SATISFACTION OF JUDGMENT'}
     row.update(over)
     return row
+
+
+class ReviewRoundOneSatisfactionTests(unittest.TestCase):
+    def test_partial_wording_in_the_body_is_partial(self):
+        # The body is what names the judgment here, and it also says partial.
+        body = ('acknowledges partial satisfaction of the Final Judgment entered September 1, 2026 '
+                'in the amount of $5,000.00')
+        rows = [{'entry_id': '1', 'kind': 'final_judgment', 'date': '2026-09-01',
+                 'operative_text': 'Final Judgment', 'description': 'Final Judgment', 'comments': ''},
+                {'entry_id': '2', 'kind': 'satisfaction', 'date': '2026-09-02',
+                 'operative_text': 'Satisfaction of Judgment', 'description': 'Satisfaction of Judgment',
+                 'comments': '', '_body': body}]
+        recon = T.reconcile_judgments(rows, '2026-09-23')
+        [j] = recon['judgments']
+        self.assertEqual((j['status'], j['satisfaction']), ('operative', 'partially_satisfied'))
+
+    def test_a_date_shared_with_a_fee_judgment_pays_neither(self):
+        rows = [{'entry_id': '1', 'kind': 'final_judgment', 'date': '2026-09-01',
+                 'operative_text': 'Final Judgment of Foreclosure', 'description': '', 'comments': ''},
+                {'entry_id': '2', 'kind': 'final_judgment', 'date': '2026-09-01',
+                 'operative_text': 'Supplemental Final Judgment for attorney fees and costs',
+                 'description': '', 'comments': ''},
+                {'entry_id': '3', 'kind': 'satisfaction', 'date': '2026-09-05',
+                 'operative_text': 'Satisfaction of fee judgment dated 09/01/2026',
+                 'description': '', 'comments': ''}]
+        recon = T.reconcile_judgments(rows, '2026-09-23')
+        roles = {j['entry_id']: j for j in recon['judgments']}
+        self.assertEqual(roles['2']['role'], 'supplemental')
+        self.assertEqual(roles['1']['satisfaction'], 'no_satisfaction_found')
+        self.assertEqual([u['entry_id'] for u in recon['unmatched']], ['3'])
+
+    def test_a_partial_payment_satisfaction_is_partial(self):
+        lines = ['SATISFACTION OF JUDGMENT', 'Final Judgment in the amount of $250,123.45',
+                 'Plaintiff acknowledges receipt of a partial payment of $10,000.00']
+        self.assertEqual(DC.classify(reading_of(lines))['kind'], 'partial_satisfaction_of_judgment')
+
+    def test_malformed_saved_readings_do_not_crash(self):
+        for bad in ('text', 5, {'pages': 'x'}, {'pages': [{'outcome': 'text', 'text': 7}]}):
+            self.assertEqual(CD._recited_amounts(bad), [])
 
 
 class DossierSatisfactionTests(unittest.TestCase):

@@ -253,10 +253,11 @@ def _record_key_of(d):
 def _recited_amounts(reading):
     """Every dollar-and-cents figure a document's READ pages print, as '1234.56' strings."""
     out = set()
-    for page in (reading or {}).get('pages') or []:
+    pages = reading.get('pages') if isinstance(reading, dict) else None
+    for page in pages if isinstance(pages, list) else []:
         if not isinstance(page, dict) or page.get('outcome') not in ('text', 'ocr_text'):
             continue
-        for whole, cents in _RECITED_MONEY.findall(page.get('text') or ''):
+        for whole, cents in _RECITED_MONEY.findall(str(page.get('text') or '')):
             out.add('%s.%s' % (whole.replace(',', ''), cents))
     return sorted(out)
 

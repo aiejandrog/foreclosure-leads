@@ -826,7 +826,8 @@ def reconcile_judgments(entries, today):
             continue
         # A partial satisfaction is a payment, not a discharge, however scope_of read the parties.
         partial = 'partially_' if (e.get('limited_scope') or (
-            action == 'satisfied' and _PARTIAL_PAYMENT.search(text))) else ''
+            action == 'satisfied' and (_PARTIAL_PAYMENT.search(text)
+                                       or _PARTIAL_PAYMENT.search(str(e.get('_body') or ''))))) else ''
         for target in targets:
             if action == 'satisfied':
                 target['satisfaction'] = partial + 'satisfied'
@@ -872,6 +873,11 @@ def _target(judgments, text, named_only=False):
     order names the day, so it acts on that day's entries together."""
     cited = _dates_in(text)
     by_date = [j for j in judgments if j['date'] in cited and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
+    if named_only and any(j['date'] in cited and j['role'] == 'supplemental' for j in judgments):
+        # A fee or cost judgment entered on the cited day: the date alone does not say whether
+        # this satisfaction pays it or the foreclosure judgment, so it pays neither.
+        return [], ('cites a date that a supplemental (fee or cost) judgment shares, so which '
+                    'judgment it satisfies is not settled')
     if by_date and len({j['date'] for j in by_date}) == 1:
         return by_date, 'cites its date %s%s' % (by_date[0]['date'], _same_day(by_date))
     if named_only:

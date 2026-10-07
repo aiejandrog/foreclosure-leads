@@ -471,10 +471,13 @@ def resume_case_documents(county, case, limit=10, interpret=False):
                 claimed = queue.claim_ref(owner, county, case, ref, 'acquire', force=not has_bytes)
                 if claimed is None:
                     continue
-                # Before the bytes can change: a read recorded against the old copy is not current.
-                queue.reset_dependents(county, case, ref)
                 try:
                     retrieved = client.retrieve_document(job['payload'])
+                    # Before the bytes can change: a read recorded against the old copy is not
+                    # current. After the fetch, so a fetch that ends in a gap leaves the read as it
+                    # was; before the store, outside the fenced transaction, so a crash between
+                    # store and complete cannot roll the reset back.
+                    queue.reset_dependents(county, case, ref)
                     with queue.fenced_write(claimed['id'], owner):
                         manifest = store.store(county, case, retrieved, source_ref=ref,
                             doc_name=job['payload'].get('documentName') or job['payload'].get('doC_TYPE', ''))

@@ -178,9 +178,12 @@ def merge_pages(page_blobs):
 def page_fingerprint(content):
     """-> a hash of what each page SHOWS, or None when it cannot be taken.
 
-    Built from every page's drawing instructions and the raw streams of the images it places, in
-    page order. Not the file's ID, metadata, object numbering or compression of the container,
-    which the county and PyMuPDF both rewrite on every serialisation.
+    Each page is rendered (annotations included) and its pixels hashed, together with the text
+    PyMuPDF extracts from it. What a page shows survives every rewrite of the container - the
+    file ID, metadata, object numbering, stream compression - that the county and PyMuPDF make on
+    each serialisation, and it covers what a raw content-stream hash misses: text drawn inside a
+    Form XObject, annotation appearances, and images whose compression changes but pixels do not.
+    72 DPI is enough to separate one changed digit and keeps a large judgment cheap.
     """
     try:
         fitz = _fitz()
@@ -188,12 +191,21 @@ def page_fingerprint(content):
         with fitz.open(stream=content, filetype='pdf') as doc:
             for page in doc:
                 digest.update(b'page')
-                digest.update(hashlib.sha256(page.read_contents() or b'').digest())
-                for image in page.get_images(full=True):
-                    digest.update(hashlib.sha256(doc.xref_stream_raw(image[0]) or b'').digest())
+                digest.update(hashlib.sha256((page.get_text() or '').encode('utf-8')).digest())
+                pix = page.get_pixmap(dpi=72, annots=True, alpha=False)
+                digest.update(('%dx%d' % (pix.width, pix.height)).encode())
+                digest.update(hashlib.sha256(pix.samples).digest())
         return digest.hexdigest()
     except Exception:                                         # noqa: BLE001 - None means "unknown"
         return None
+
+
+def _retire_page_text(folder, stem):
+    text_dir = Path(folder) / (stem + '-text')
+    if text_dir.is_dir():
+        target = Path(folder) / ('%s-text.replaced-%s' % (stem, datetime.now(timezone.utc)
+                                                          .strftime('%Y%m%dT%H%M%S%fZ')))
+        os.replace(text_dir, target)
 
 
 def _same_page_content(old, new):
@@ -320,6 +332,10 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
                         and _same_page_content(prior_bytes, record['content']))
         if same_content:
             prior['stored'] = False
+            # Fetched again because the county lists it again: no longer retired.
+            if prior.get('superseded_reason') == 'the county no longer lists this document':
+                prior.pop('superseded', None)
+                prior.pop('superseded_reason', None)
             prior['last_seen_at'] = fetch['at']
             prior['integrity_rechecked'] = True
             prior['fetches'] = (prior.get('fetches') or [])[-9:] + [fetch]
@@ -334,6 +350,10 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
                                'page_count_source')})
             _atomic_write_text(meta_path, json.dumps(prior, indent=2) + '\n')
             return prior
+        # Whatever replaces the stored copy, the text read off the OLD copy must not be served
+        # beside the new bytes: stored_documents() reads it back by key alone. It is moved aside
+        # (kept as a record, never deleted) and the new copy reads as unread until it is read.
+        _retire_page_text(folder, stem)
         if not intact:
             # Same document, different file on disk: the stored copy is damaged. Replace it and
             # say so, rather than trusting either side silently.
