@@ -54,7 +54,7 @@ start = JS.index('if(x.j.blocked==="optout_stale" && x.j.hold==="sync"')
 end = JS.index('} else if(x.status===200', start)
 BRANCH = 'function onResp(x){ sending=false; ' + JS[start:end] + '} }'
 DECL = JS[JS.index('var SYNCWAIT='):JS.index(';', JS.index('var SYNCWAIT=')) + 1]
-FNS = '\n'.join(A.extract(JS, n) for n in ('cancelSyncWait', 'syncRetry', 'stopRun', 'pause', 'setLane'))
+FNS = '\n'.join(A.extract(JS, n) for n in ('cancelSyncWait', 'schedSync', 'syncRetry', 'stopRun', 'pause', 'setLane', 'textBatchStart'))
 
 HARNESS = r"""
 var timers=[], logs=[], runs=0, probes=0, sent=0, hourSafe=true;
@@ -72,7 +72,7 @@ function render(){} function renderRunBar(){} function renderBridge(){} function
 function probeBridge(){ probes++; } function runOne(){ runs++; }
 function sentToday(){ return sent; } function sendInFlight(){ return false; }
 function _wftsa(){ return {safe:hourSafe, label:"x"}; }
-function renderLaneTabs(){} function renderCallQ(){} function renderTextQ(){} function laneStats(){}
+function renderLaneTabs(){} function textBatchStep(){} var TEXT_HOLD=""; function renderCallQ(){} function renderTextQ(){} function laneStats(){}
 var HOLD={status:200, j:{ok:false, blocked:"optout_stale", hold:"sync", err:"HOLD - today's sync has not run"}};
 var STALE={status:200, j:{ok:false, blocked:"optout_stale", err:"ledger stale"}};
 function reset(){ timers=[]; logs=[]; runs=0; probes=0; auto=false; autoAll=false; BRIDGE_OK=true; BRIDGE_HOLD="";
@@ -110,6 +110,13 @@ reset(); auto=true; onResp(HOLD); sent=50; fire(); out.cap_gate = runs===0 && au
 reset(); auto=true; onResp(STALE); out.stale_old_stop = BRIDGE_HOLD!=="" && auto===false && timers.length===0;
 // 10. a hand-pressed Email (auto off) keeps the old stop
 reset(); auto=false; onResp(HOLD); out.manual_old_stop = BRIDGE_HOLD!=="" && timers.length===0;
+// 12. a busy screen (text batch / confirm card) waits again instead of repainting over it
+reset(); auto=true; onResp(HOLD); tbOn=true; fire();
+out.busy_waits_again = runs===0 && auto===false && timers.filter(function(t){return t.live;}).length===1;
+tbOn=false; awaitingReturn=true; fire(); out.confirm_waits_again = runs===0 && auto===false; awaitingReturn=false;
+// 13. starting the text batch cancels the wait
+reset(); auto=true; onResp(HOLD); TEXTQ=[{}]; textBatchStart(); TEXTQ=[]; tbOn=false;
+out.batch_cancels = !fire() && runs===0 && logs.some(function(l){return /text batch started/.test(l);});
 // 11. a run already going when the retry fires is left alone (no second run)
 reset(); auto=true; onResp(HOLD); auto=true; fire(); out.no_double_run = runs===0;
 console.log(JSON.stringify(out));
@@ -127,6 +134,10 @@ if r.returncode != 0:
     print('node failed:\n' + r.stderr[:3000])
     sys.exit(1)
 res = json.loads(r.stdout.strip().splitlines()[-1])
+BAR = A.extract(JS, 'renderRunBar')
+res['run bar shows the wait with a Stop'] = 'if(SYNCWAIT)' in BAR and "data-run='stop'>&#9632; Stop waiting" in BAR
+res['Start resets the try count'] = 'cancelSyncWait(); SYNCTRY=0;' in A.extract(JS, 'startRun')
+res['8am countdown will not start a second loop'] = "if(auto){ renderRunBar(); return; }auto=true; addLog(\"open\",\"auto-start\"" in JS
 for k, v in res.items():
     rec(k, v is True)
 

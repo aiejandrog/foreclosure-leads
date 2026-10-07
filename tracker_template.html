@@ -13238,19 +13238,25 @@ function genMorningWorker(lane, autostart){
     // first lead and stayed stopped. A sync hold is the one refusal that clears on its own, so the
     // run waits and retries the SAME lead every SYNC_EVERY ms, at most SYNC_MAX times. The bridge
     // still decides every send; this only asks again. Stop, Start and a lane switch cancel the wait.
-    +   'var SYNCWAIT=null, SYNCTRY=0, SYNCALL=false, SYNC_EVERY=600000, SYNC_MAX=18;'
+    // While waiting, the run bar shows the wait and a Stop (renderRunBar's SYNCWAIT branch), so the
+    // operator can keep the run paused. A retry that finds the screen busy (text batch, a confirm
+    // card, the 8am countdown, a send in flight) waits again rather than repainting over it.
+    +   'var SYNCWAIT=null, SYNCTRY=0, SYNCALL=false, SYNCAT="", SYNC_EVERY=600000, SYNC_MAX=18;'
     +   'function cancelSyncWait(){ if(SYNCWAIT){ clearTimeout(SYNCWAIT); SYNCWAIT=null; } }'
+    +   'function schedSync(why){'
+    +     'if(SYNCTRY>=SYNC_MAX){ addLog("fail","auto-run","gave up waiting for the opt-out sync after "+SYNC_MAX+" tries — the queue is unchanged, press Start when the sync has run.","warn"); renderRunBar(); return false; }'
+    +     'SYNCTRY++; SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY);'
+    +     'var d=new Date(Date.now()+SYNC_EVERY); SYNCAT=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);'
+    +     'addLog("info","auto-run",why+" — retrying this lead at "+SYNCAT+" (try "+SYNCTRY+" of "+SYNC_MAX+"). Nothing was sent.");'
+    +     'renderRunBar(); return true;'
+    +   '}'
     +   'function syncRetry(){'
     +     'SYNCWAIT=null;'
-    +     'if(auto || sendInFlight()) return;'
-    +     'if(!_wftsa().safe){ addLog("fail","auto-run","⏰ outside sending hours — stopped waiting for the opt-out sync. Press Start tomorrow or by hand.","warn"); return; }'
+    +     'if(auto) return renderRunBar();'
+    +     'if(!_wftsa().safe){ addLog("fail","auto-run","⏰ outside sending hours — stopped waiting for the opt-out sync. Press Start tomorrow or by hand.","warn"); return renderRunBar(); }'
     +     'if(i>=Q.length || sentToday()>=CAP.max) return render();'
-    +     'if(BRIDGE_OK!==true || BRIDGE_HOLD){'
-    +       'probeBridge();'
-    +       'if(SYNCTRY<SYNC_MAX){ SYNCTRY++; SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY); addLog("info","auto-run","bridge not clear yet — waiting again (try "+SYNCTRY+" of "+SYNC_MAX+")"); }'
-    +       'else { addLog("fail","auto-run","gave up waiting for the opt-out sync after "+SYNC_MAX+" tries — the queue is unchanged, press Start when the sync has run.","warn"); }'
-    +       'return;'
-    +     '}'
+    +     'if(tbOn || awaitingReturn || ASTIMER || sendInFlight()){ schedSync("the worker screen is busy"); return; }'
+    +     'if(BRIDGE_OK!==true || BRIDGE_HOLD){ probeBridge(); schedSync("bridge not clear yet"); return; }'
     +     'autoAll=SYNCALL; auto=true;'
     +     'addLog("open","auto-run","▶ resuming after the opt-out sync wait (try "+SYNCTRY+")");'
     +     'renderRunBar(); runOne();'
@@ -13634,6 +13640,7 @@ function genMorningWorker(lane, autostart){
     +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
     +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'if(SYNCWAIT){ cancelSyncWait(); addLog("skip","auto-run","stopped waiting for the opt-out sync because the text batch started — the email queue is untouched, press Start after the batch."); }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
     +   'function textBatchStep(){'
@@ -13743,9 +13750,8 @@ function genMorningWorker(lane, autostart){
     +         'if(x.j.blocked==="optout_stale" && x.j.hold==="sync" && auto && !SYNCWAIT && SYNCTRY<SYNC_MAX){'
     // Today's sync has not finished yet. Not a ledger fault, so BRIDGE_HOLD stays clear (it would
     // tell the operator to run ledger_sync.py, which is not the fix) and the run waits instead.
-    +           'bridgeUp(true); SYNCALL=autoAll; pause(); SYNCTRY++;'
-    +           'SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY);'
-    +           'addLog("info", "auto-run", "today\u2019s 7:15 opt-out sync has not finished — waiting "+Math.round(SYNC_EVERY/60000)+" min, then retrying this lead (try "+SYNCTRY+" of "+SYNC_MAX+"). Nothing was sent.");'
+    +           'bridgeUp(true); SYNCALL=autoAll; pause();'
+    +           'schedSync("today\u2019s 7:15 opt-out sync has not finished");'
     +         '} else if(x.j.blocked==="optout_stale"){'
     +           'BRIDGE_HOLD="Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer, then press Start after the warning clears.";'
     +           'bridgeUp(true); renderBridge();'
@@ -14135,6 +14141,9 @@ function genMorningWorker(lane, autostart){
     +     'if(ASTIMER){'
     +       'txt="<b>Auto-run is about to start by itself</b> &middot; "+Q.length+" queued in "+esc(LMETA[lane].t)+".";'
     +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; Cancel</button>";'
+    +     '} else if(SYNCWAIT){'
+    +       'txt="<b>Waiting for today’s opt-out sync</b> &middot; next try at "+SYNCAT+" ("+SYNCTRY+" of "+SYNC_MAX+") &middot; "+left+" left in "+esc(LMETA[lane].t)+". Nothing has been sent from this lead.";'
+    +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; Stop waiting</button>";'
     +     '} else if(tbOn){'
     +       'txt="<b>Text batch running</b> &middot; "+Math.min(TBI+1,TEXTQ.length)+" of "+TEXTQ.length'
     +         '+" &middot; "+TBSENT+" sent, "+TBSKIP+" skipped &middot; "+capLeft+" of today’s cap left.";'
@@ -14176,7 +14185,7 @@ function genMorningWorker(lane, autostart){
        is not confirmed up, refuse to start and say how to fix it. */
     +   'function startRun(all, src){'
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
-    +     'cancelSyncWait();'
+    +     'cancelSyncWait(); SYNCTRY=0;'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
     +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight from the last run — it will finish and be recorded on its own. Press Start again in a moment.","warn"); return; }'
     +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
@@ -14596,6 +14605,9 @@ function genMorningWorker(lane, autostart){
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
+    // A run already going (Start pressed during the countdown) owns the queue: a second runOne()
+    // here would be two loops on the same lead, the 2026-08-13 duplicate-send shape.
+    +           'if(auto){ renderRunBar(); return; }'
     +           'auto=true; addLog("open","auto-start","▶ auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
     +           'renderRunBar(); runOne(); }'
     +       '},1000);'
