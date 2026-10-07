@@ -428,6 +428,16 @@ class ReviewRoundTwoTests(unittest.TestCase):
                    entry(2, 'Satisfaction of Final Judgment dated 09/01/2026, partially satisfied')])
         self.assertEqual(t['status']['kind'], 'judgment_entered')
 
+    def test_a_stay_relief_after_an_unnamed_satisfaction_does_not_close_the_case(self):
+        t = build([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment'),
+                   entry(3, 'Suggestion of Bankruptcy'),
+                   entry(4, 'Order granting relief from bankruptcy stay')])
+        self.assertNotEqual(t['status']['kind'], 'satisfied_redeemed')
+
+    def test_the_word_redemption_alone_does_not_exempt_a_satisfaction(self):
+        t = build([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment; right of redemption')])
+        self.assertNotEqual(t['status']['kind'], 'satisfied_redeemed')
+
     def test_reopened_rows_are_blanked_for_every_reader(self):
         import hashlib
         with tempfile.TemporaryDirectory() as d:

@@ -573,11 +573,17 @@ def _unsettled_satisfaction(status, entries, judgments):
     if status.get('kind') != 'satisfied_redeemed' or not status.get('evidence'):
         return status
     by_id = {e['entry_id']: e for e in entries}
-    last = by_id.get(status['evidence'][-1])
-    if not last or last['kind'] != 'satisfaction' or re.search(
-            r'redemption', ' '.join(str(last.get(k) or '') for k in ('operative_text', 'description')), re.I):
+    # The satisfaction the status rests on is the LAST satisfaction in its evidence, not the last
+    # entry: a stay relief that restores the pre-stay status appends itself after it.
+    sats = [by_id[i] for i in status['evidence'] if i in by_id and by_id[i]['kind'] == 'satisfaction']
+    last = sats[-1] if sats else None
+    if not last or re.search(r'certificate\s+of\s+redemption', ' '.join(
+            str(last.get(k) or '') for k in ('operative_text', 'description')), re.I):
         return status
+    # Paid in full, and a judgment of record: satisfying only a fee or cost judgment leaves the
+    # foreclosure judgment owed.
     paid = any(last['entry_id'] in j.get('by', []) and j.get('satisfaction') == 'satisfied'
+               and j.get('role') not in _NOT_A_JUDGMENT_OF_RECORD
                for j in judgments.get('judgments') or [])
     if paid:
         return status
