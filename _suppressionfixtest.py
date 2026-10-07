@@ -146,6 +146,8 @@ def text_hold_unit():
         st = TH.status(path=str(fresh), max_age_days=2)
         rec('status carries ts and maxAgeH for the Call Mode bake',
             st['ok'] is True and st['ts'].endswith('Z') and st['maxAgeH'] == 48, st)
+        rec('a fractional max age is kept exact (0.1 day = 2.4 hours)',
+            abs(TH.status(path=str(fresh), max_age_days=0.1)['maxAgeH'] - 2.4) < 1e-9)
         rec('quo_sync.py is gone', not (HERE / 'quo_sync.py').exists())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
