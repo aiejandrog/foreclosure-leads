@@ -2566,6 +2566,11 @@ RELOAD_POLL_S = _env_float('DEALFLOW_BRIDGE_RELOAD_POLL_S', '60')
 RELOAD_IDLE_S = _env_float('DEALFLOW_BRIDGE_RELOAD_IDLE_S', '300')
 RELOAD_UP_S = _env_float('DEALFLOW_BRIDGE_RELOAD_UP_S', '30')
 _RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
+# Everything the bridge imports from this repo, most of it lazily inside a request. The preflight
+# imports all of them, so a broken dependency is caught while the old bridge (which may still hold
+# the old module in memory) is serving, not on the first send after the handover.
+_RELOAD_IMPORT = ('send_server', 'text_hold', 'sync_gate', 'stay_gate', 'optout_sync', 'pacer_stay',
+                  'outreach_copy', 'mail_guard', 'bk_lookup')
 # Requests being handled right now, counted on the server thread before the request thread starts
 # (see _BridgeServer). Not _INFLIGHT: that name is the per-address send dedupe set.
 _REQS_ACTIVE = 0
@@ -2630,16 +2635,17 @@ def _git_heads(folder=HERE):
 
 
 def _py_change(folder, boot, head):
-    """(changed, dirty): did boot..head touch a .py file; does any .py have uncommitted changes.
+    """(changed .py files boot..head, dirty): dirty = a tracked .py has uncommitted changes.
     None for either when git cannot say (treated as no restart)."""
     diff = _git(folder, 'diff', '--name-only', boot, head, '--', '*.py')
     st = _git(folder, 'status', '--porcelain', '--untracked-files=no', '--', '*.py')
-    return (None if diff is None else bool(diff)), (None if st is None else bool(st))
+    return (None if diff is None else [n for n in diff.splitlines() if n.strip()]), \
+        (None if st is None else bool(st))
 
 
-def _code_compiles(folder=HERE):
-    """(ok, err). Compiles in memory only; writes no .pyc."""
-    for n in _RELOAD_COMPILE:
+def _code_compiles(folder=HERE, also=()):
+    """(ok, err) for the bridge files plus every changed .py (`also`). In memory; writes no .pyc."""
+    for n in list(_RELOAD_COMPILE) + [a for a in also if a not in _RELOAD_COMPILE]:
         f = os.path.join(folder, n)
         if not os.path.exists(f):
             continue
@@ -2659,9 +2665,9 @@ def _code_imports(folder=HERE):
     if os.name == 'nt':
         kw['creationflags'] = 0x08000000
     try:
+        mods = [m for m in _RELOAD_IMPORT if os.path.exists(os.path.join(folder, m + '.py'))]
         p = subprocess.run([sys.executable, '-c',
-                            'import sys; sys.path.insert(0, "."); import send_server, text_hold, sync_gate'],
-                           **kw)
+                            'import sys; sys.path.insert(0, "."); import ' + ', '.join(mods)], **kw)
     except Exception as e:
         return False, str(e)[:160]
     return p.returncode == 0, ((p.stderr or '').strip().splitlines() or [''])[-1][:160]
@@ -2718,7 +2724,7 @@ def _code_watch(srv, state, boot, bad=(), poll_s=None, folder=HERE, sleep=time.s
         changed, dirty = pychange(folder, boot_head, head)
         if not changed:
             continue                              # docs/ publishes and the like: nothing to load
-        ok, err = _code_compiles(folder)
+        ok, err = _code_compiles(folder, changed)
         if dirty or dirty is None:
             why = 'a .py file has uncommitted changes'
         elif not ok:
@@ -2739,6 +2745,25 @@ def _code_watch(srv, state, boot, bad=(), poll_s=None, folder=HERE, sleep=time.s
         state['reload'] = head
         srv.shutdown()
         return
+
+
+def _handover_why(new, folder=HERE, heads=None, pychange=None, blocker=None):
+    """Re-checked after the drain, right before the port closes: the tree must still be the commit
+    that was validated, and nothing may have become unsafe while the preflight or drain ran (a POST
+    that arrived meanwhile restarts the quiet period). '' when the handover may go ahead."""
+    heads = heads or _git_heads
+    pychange = pychange or _py_change
+    blocker = blocker or _reload_blocker
+    why = blocker()
+    if why:
+        return why
+    head, origin = heads(folder)
+    if head != new or origin != new:
+        return 'the checkout moved after it was checked'
+    _changed, dirty = pychange(folder, new, new)
+    if dirty or dirty is None:
+        return 'a .py file has uncommitted changes'
+    return ''
 
 
 def _respawn():
@@ -2852,8 +2877,8 @@ def main():
             break
         while _REQS_ACTIVE > 0:                  # no time limit: never exit in the middle of a send
             time.sleep(0.2)
-        held = _memory_held()                    # a request in the last loop may have set it
-        if held:
+        held = _handover_why(new)                # a request in the last loop, or a later pull, may
+        if held:                                 # have changed things since the watcher said go
             srv.server_close()
             _reload_log('new code %s not loaded: %s; the old bridge keeps serving' % (new[:8], held))
             continue

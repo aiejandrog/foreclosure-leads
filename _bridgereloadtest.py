@@ -47,7 +47,7 @@ class _Srv:
         self.down += 1
 
 
-def run_watch(seq, blocks=(), imports_ok=lambda: True, boot='A', pychange=lambda f, b, h: (True, False)):
+def run_watch(seq, blocks=(), imports_ok=lambda: True, boot='A', pychange=lambda f, b, h: (['x.py'], False)):
     """Drive _code_watch over a list of (HEAD, origin/main) polls.
     Returns (reloaded head, polls used, shutdown calls, log text)."""
     it = iter(seq)
@@ -100,9 +100,9 @@ def _imp():
 
 r = run_watch([('B', 'B')] * 3 + [('D', 'D')] * 2, imports_ok=_imp)
 rec('a broken commit is skipped; the next good pull restarts', r[0] == 'D' and calls['n'] == 2, r)
-r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (False, False))
+r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: ([], False))
 rec('a pull that changed no .py file (a docs/ publish) does not restart', r[0] is None and r[2] == 0, r)
-r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (True, True))
+r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (['x.py'], True))
 rec('uncommitted .py changes hold the restart', r[0] is None and 'uncommitted' in r[3], r)
 r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (None, None))
 rec('git unable to diff: no restart', r[0] is None)
@@ -126,8 +126,29 @@ S._LAST_POST = 0.0
 src = open(os.path.join(HERE, 'send_server.py'), encoding='utf-8').read()
 rec('both lost-outcome send paths mark the process memory-only',
     src.count('            _mark_memory_only()') == 2)
-rec('after the drain, memory-held state is checked again before handing over',
-    'held = _memory_held()                    # a request in the last loop' in src)
+rec('after the drain, the whole handover is checked again before the port closes',
+    'held = _handover_why(new)' in src)
+H = lambda h, o: (lambda f: (h, o))
+P = lambda d: (lambda f, b, hh: ([], d))
+rec('handover goes ahead when nothing changed', S._handover_why('N', heads=H('N', 'N'), pychange=P(False),
+                                                                blocker=lambda: '') == '')
+rec('handover stops if a POST came in during the preflight or drain',
+    'last' in S._handover_why('N', heads=H('N', 'N'), pychange=P(False),
+                              blocker=lambda: 'sends were made in the last 300 seconds'))
+rec('handover stops if the checkout moved after it was validated',
+    'moved' in S._handover_why('N', heads=H('M', 'M'), pychange=P(False), blocker=lambda: '')
+    and 'moved' in S._handover_why('N', heads=H('N', 'M'), pychange=P(False), blocker=lambda: ''))
+rec('handover stops on uncommitted .py edits made after validation',
+    'uncommitted' in S._handover_why('N', heads=H('N', 'N'), pychange=P(True), blocker=lambda: ''))
+_t = tempfile.mkdtemp(prefix='bridgereload_c_')
+try:
+    open(os.path.join(_t, 'mail_guard.py'), 'w').write('def broken(:\n')
+    ok, err = S._code_compiles(_t, ['mail_guard.py'])
+    rec('a changed dependency that does not compile is caught', ok is False and 'mail_guard' in err, err)
+finally:
+    shutil.rmtree(_t, ignore_errors=True)
+rec('the import preflight covers the lazily imported bridge dependencies',
+    {'stay_gate', 'optout_sync', 'mail_guard', 'outreach_copy', 'pacer_stay', 'bk_lookup'} <= set(S._RELOAD_IMPORT))
 rec('a half-sent request times out instead of stalling the drain', S.Handler.timeout == 60)
 rec('the drain before exit has no time limit',
     'while _REQS_ACTIVE > 0:                  # no time limit' in src)
