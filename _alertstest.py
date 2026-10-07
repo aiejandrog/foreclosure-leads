@@ -242,6 +242,10 @@ rec('on battery alerts even at a high charge',
 rec('under 50% alerts on AC', 'battery 42%' in one(ready(pct=42), 'laptop-readiness')['text'])
 rec('50% is not under 50', one(ready(pct=50), 'laptop-readiness') is None)
 rec('a closed send-server port alerts', '8823' in one(ready(port_open=False), 'laptop-readiness')['text'])
+# Morning publishes carry the evening block forward unmeasured (2026-10-07: last night's closed port
+# was read as that morning's). The text must say when it was measured.
+rec('readiness text names when it was checked',
+    '(checked ' in one(ready(port_open=False), 'laptop-readiness')['text'])
 rec('a disabled task alerts by name',
     'DEALFLOW Refresh' in one(ready(disabled=1, disabled_names=['DEALFLOW Refresh']), 'laptop-readiness')['text'])
 rec('a failed last result alerts',

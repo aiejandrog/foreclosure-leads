@@ -160,7 +160,7 @@ function sentToday(){ return 3; } var CAP = {max: 50};
 var SAFE = true; function _wftsa(){ return {safe: SAFE, label: 'closed'}; }
 function openHere(u){ opened.push(u); return true; } function post(k, x){ posts.push(k); }
 function confirmSend(){} function textBatchDone(){ tbOn = false; }
-var TEXT_HOLD = '', TBI = 0, TBSENT = 0, TBSKIP = 0, tbOn = false;
+var TEXT_HOLD = '', TBI = 0, TBSENT = 0, TBSKIP = 0, tbOn = false, SYNCWAIT = null; function cancelSyncWait(){}
 var TEXTTPL = """ + json.dumps(S) + r""";
 var TEXTQ = [
   {c:'2099-000001-CA-01', name:'Ana', phone:'5550100101', sms:""" + json.dumps(sms) + r""", tpl:'cold'},
