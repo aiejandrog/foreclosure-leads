@@ -47,7 +47,7 @@ class _Srv:
         self.down += 1
 
 
-def run_watch(seq, blocks=(), imports_ok=lambda: True, boot='A'):
+def run_watch(seq, blocks=(), imports_ok=lambda: True, boot='A', pychange=lambda f, b, h: (True, False)):
     """Drive _code_watch over a list of (HEAD, origin/main) polls.
     Returns (reloaded head, polls used, shutdown calls, log text)."""
     it = iter(seq)
@@ -65,9 +65,9 @@ def run_watch(seq, blocks=(), imports_ok=lambda: True, boot='A'):
     tmp = tempfile.mkdtemp(prefix='bridgereload_u_')
     try:
         try:
-            S._code_watch(srv, state, boot, poll_s=0, folder=tmp, sleep=lambda s: None, heads=heads,
-                          imports=lambda f: (imports_ok(), 'boom'),
-                          blocker=lambda: blk.pop(0) if blk else '')
+            S._code_watch(srv, state, {'head': boot}, poll_s=0, folder=tmp, sleep=lambda s: None,
+                          heads=heads, imports=lambda f: (imports_ok(), 'boom'),
+                          blocker=lambda: blk.pop(0) if blk else '', pychange=pychange)
         except KeyboardInterrupt:
             pass
         lp = os.path.join(tmp, 'send_server.log')
@@ -100,6 +100,12 @@ def _imp():
 
 r = run_watch([('B', 'B')] * 3 + [('D', 'D')] * 2, imports_ok=_imp)
 rec('a broken commit is skipped; the next good pull restarts', r[0] == 'D' and calls['n'] == 2, r)
+r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (False, False))
+rec('a pull that changed no .py file (a docs/ publish) does not restart', r[0] is None and r[2] == 0, r)
+r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (True, True))
+rec('uncommitted .py changes hold the restart', r[0] is None and 'uncommitted' in r[3], r)
+r = run_watch([('B', 'B')] * 4, pychange=lambda f, b, h: (None, None))
+rec('git unable to diff: no restart', r[0] is None)
 
 # ---------------------------------------------------------------- unit: what blocks it
 rec('the per-address send dedupe set is not shadowed by the request counter',
@@ -107,10 +113,10 @@ rec('the per-address send dedupe set is not shadowed by the request counter',
 today = datetime.date.today().isoformat()
 S._LAST_POST = 0.0
 rec('nothing in memory: free to restart', S._reload_blocker() == '')
-S._MEMORY_ONLY_DAY = today
-rec('a send whose dedupe is memory-only blocks it all day', 'memory' in S._reload_blocker())
-S._MEMORY_ONLY_DAY = '2000-01-01'
-rec("yesterday's memory-only send does not block today", S._reload_blocker() == '')
+S._mark_memory_only()
+rec('a send whose dedupe is memory-only blocks it for the life of the process',
+    'memory' in S._reload_blocker() and 'memory' in S._memory_held())
+S._MEMORY_ONLY = False
 S._FT_SLOTS[(today, 'warm@wu.example')] = 1
 rec('a first-touch slot held in memory blocks it', 'slot' in S._reload_blocker())
 S._FT_SLOTS.clear()
@@ -118,7 +124,11 @@ S._LAST_POST = time.time()
 rec('a recent POST blocks it', 'last' in S._reload_blocker())
 S._LAST_POST = 0.0
 src = open(os.path.join(HERE, 'send_server.py'), encoding='utf-8').read()
-rec('both lost-outcome send paths mark the day memory-only', src.count('_mark_memory_only()') == 3)
+rec('both lost-outcome send paths mark the process memory-only',
+    src.count('            _mark_memory_only()') == 2)
+rec('after the drain, memory-held state is checked again before handing over',
+    'held = _memory_held()                    # a request in the last loop' in src)
+rec('a half-sent request times out instead of stalling the drain', S.Handler.timeout == 60)
 rec('the drain before exit has no time limit',
     'while _REQS_ACTIVE > 0:                  # no time limit' in src)
 
@@ -201,9 +211,11 @@ def logtxt(work):
 work = tempfile.mkdtemp(prefix='bridgereload_live_')
 proc, port, seen = None, None, set()
 try:
-    for n in os.listdir(HERE):
-        if n.endswith('.py'):
+    tracked = subprocess.run(['git', 'ls-files', '*.py'], cwd=HERE, capture_output=True, text=True).stdout.split()
+    for n in tracked or [n for n in os.listdir(HERE) if n.endswith('.py') and not n.startswith('_')]:
+        if '/' not in n:                                  # tracked code only, never scratch scripts
             shutil.copy(os.path.join(HERE, n), os.path.join(work, n))
+    shutil.copy(os.path.join(HERE, 'send_server.py'), os.path.join(work, 'send_server.py'))
     good_text_hold = open(os.path.join(HERE, 'text_hold.py'), encoding='utf-8').read()
     git(work, 'init', '-q')
     git(work, 'add', '-A')

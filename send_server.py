@@ -42,6 +42,7 @@ import mimetypes
 import os
 import re
 import smtplib
+import socket
 import ssl
 import sys
 import threading
@@ -1653,6 +1654,7 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
 # ---------------------------------------------------------------- HTTP handler
 class Handler(BaseHTTPRequestHandler):
     server_version = 'DealFlowSend/1.0'
+    timeout = 60             # client-socket read timeout: a half-sent request cannot stall a reload drain
     daily_cap = 300          # messages/day (operator-set 2026-08-12, was 150 — the 08-12 run hit it)
     # RECIPIENTS, NOT MESSAGES, ARE THE REAL CEILING. Gmail's free-tier SMTP limit is ~500
     # RECIPIENTS/day, and this board averages 1.92 recipients per message (each send BCCs the
@@ -1701,6 +1703,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/marks'):
             return self._handle_marks_get()
+        if self.path.startswith('/pid'):          # cheap liveness for a reloading predecessor
+            return self._json(200, {'ok': True, 'pid': os.getpid()})
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
             _bh = _bounce_health()
@@ -2540,10 +2544,11 @@ class Handler(BaseHTTPRequestHandler):
 #   - the trigger is a new git commit that IS origin/main (a pull), never a scratch .py, an edit in
 #     progress, or a branch someone checked out, and it must stay put for one poll;
 #   - the new code must compile AND import in a separate python first;
-#   - not while a send could be lost: no request being handled, no /send or /text POST in the last
-#     RELOAD_IDLE_S, no first-touch sender slot held in memory, and never on a day a send's outcome
-#     or ledger row was lost (_MEMORY_ONLY_DAY) -- on such a day the in-memory claims are the only
-#     dedupe for that address, and a restart would forget them;
+#   - only when the pull changed a .py file and no .py file has uncommitted changes;
+#   - not while a send could be lost: no request being handled, no POST in the last RELOAD_IDLE_S,
+#     no first-touch sender slot held in memory, and never again in this process's life once a
+#     send's outcome or ledger row was lost (_MEMORY_ONLY): its in-memory claim is then the only
+#     dedupe for that address, so only a person restarts that bridge;
 #   - shutdown stops new requests, then waits with NO time limit for the ones running to finish,
 #     and only then closes the port and starts the new bridge, so os._exit never lands mid-send;
 #   - the new bridge must answer /health with its own pid within RELOAD_UP_S, or the old code takes
@@ -2566,13 +2571,24 @@ _RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
 _REQS_ACTIVE = 0
 _REQS_LOCK = threading.Lock()
 _LAST_POST = 0.0              # time.time() of the last POST (sends, texts, notes, marks)
-_MEMORY_ONLY_DAY = ''         # ISO day on which a send's outcome or ledger row was lost
+_MEMORY_ONLY = False          # a send's outcome or ledger row was lost in this process
 
 
 def _mark_memory_only():
-    """A send's dedupe now lives only in this process's memory for the rest of today."""
-    global _MEMORY_ONLY_DAY
-    _MEMORY_ONLY_DAY = dt.date.today().isoformat()
+    """A send's dedupe now lives only in this process's memory: it must never self-restart."""
+    global _MEMORY_ONLY
+    _MEMORY_ONLY = True
+
+
+def _memory_held():
+    """Why restarting now would forget dedupe state, or ''. Checked before and after the drain."""
+    if _MEMORY_ONLY:
+        return 'a send lost its outcome or ledger row; its dedupe is only in memory (restart by hand)'
+    today = dt.date.today().isoformat()
+    with _FT_SLOT_LOCK:
+        if any(k[0] == today for k in _FT_SLOTS):
+            return 'a first-touch sender slot is held in memory'
+    return ''
 
 
 class _BridgeServer(ThreadingHTTPServer):
@@ -2611,6 +2627,14 @@ def _git(folder, *args):
 def _git_heads(folder=HERE):
     """(HEAD, origin/main) commit ids, or (None, None) when git cannot say."""
     return _git(folder, 'rev-parse', 'HEAD'), _git(folder, 'rev-parse', 'origin/main')
+
+
+def _py_change(folder, boot, head):
+    """(changed, dirty): did boot..head touch a .py file; does any .py have uncommitted changes.
+    None for either when git cannot say (treated as no restart)."""
+    diff = _git(folder, 'diff', '--name-only', boot, head, '--', '*.py')
+    st = _git(folder, 'status', '--porcelain', '--untracked-files=no', '--', '*.py')
+    return (None if diff is None else bool(diff)), (None if st is None else bool(st))
 
 
 def _code_compiles(folder=HERE):
@@ -2655,12 +2679,9 @@ def _reload_log(msg, folder=HERE):
 def _reload_blocker(now=None):
     """Why a restart must wait right now, or '' when nothing in memory would be lost."""
     now = time.time() if now is None else now
-    today = dt.date.today().isoformat()
-    if _MEMORY_ONLY_DAY == today:
-        return 'a send today has its dedupe only in memory'
-    with _FT_SLOT_LOCK:
-        if any(k[0] == today for k in _FT_SLOTS):
-            return 'a first-touch sender slot is held in memory'
+    held = _memory_held()
+    if held:
+        return held
     if _REQS_ACTIVE > 0:
         return 'a request is being handled'
     if now - _LAST_POST < RELOAD_IDLE_S:
@@ -2668,14 +2689,22 @@ def _reload_blocker(now=None):
     return ''
 
 
-def _code_watch(srv, state, boot_head, bad=(), poll_s=None, folder=HERE, sleep=time.sleep,
-                heads=None, imports=None, blocker=None):
+def _code_watch(srv, state, boot, bad=(), poll_s=None, folder=HERE, sleep=time.sleep,
+                heads=None, imports=None, blocker=None, pychange=None):
     """Poll git; when a settled pull of origin/main is safe to load, stop serve_forever() and put
-    the new commit in state['reload'] so main() can hand over."""
+    the new commit in state['reload'] so main() can hand over. `boot` is {'head': ...} shared across
+    main()'s rebinds; the first watcher fills it (after the port is bound, so git never delays it)."""
     poll_s = RELOAD_POLL_S if poll_s is None else poll_s
     heads = heads or _git_heads
     imports = imports or _code_imports
     blocker = blocker or _reload_blocker
+    pychange = pychange or _py_change
+    if not boot.get('head'):
+        boot['head'] = heads(folder)[0]
+        if not boot['head']:
+            _reload_log('off: git cannot read this folder, so new code needs a manual restart', folder)
+            return
+    boot_head = boot['head']
     prev = boot_head
     said = {}
     while True:
@@ -2686,8 +2715,13 @@ def _code_watch(srv, state, boot_head, bad=(), poll_s=None, folder=HERE, sleep=t
         if not head or head == boot_head or head != origin or head in bad or not settled:
             continue
         why = ''
+        changed, dirty = pychange(folder, boot_head, head)
+        if not changed:
+            continue                              # docs/ publishes and the like: nothing to load
         ok, err = _code_compiles(folder)
-        if not ok:
+        if dirty or dirty is None:
+            why = 'a .py file has uncommitted changes'
+        elif not ok:
             why = 'does not compile (%s)' % err
         else:
             why = blocker()
@@ -2720,18 +2754,25 @@ def _respawn():
 
 
 def _child_up(child, host, port, wait_s=None):
-    """True once the new bridge answers /health with its own pid."""
+    """True once the new bridge answers /pid with its own pid, or is alive and holding the port
+    when the wait runs out (a slow bridge that is serving is never killed)."""
     end = time.time() + (RELOAD_UP_S if wait_s is None else wait_s)
     while time.time() < end:
         if child.poll() is not None:
             return False
         try:
-            with urllib.request.urlopen('http://%s:%d/health' % (host, port), timeout=2) as r:
+            with urllib.request.urlopen('http://%s:%d/pid' % (host, port), timeout=5) as r:
                 if json.loads(r.read().decode()).get('pid') == child.pid:
                     return True
         except Exception:
             pass
         time.sleep(0.5)
+    if child.poll() is None:
+        try:
+            socket.create_connection((host, port), timeout=3).close()
+            return True
+        except OSError:
+            pass
     return False
 
 
@@ -2793,13 +2834,13 @@ def main():
 
     if os.environ.get('DEALFLOW_BRIDGE_RESPAWNED') == '1':
         _reload_log('new bridge serving, pid %d' % os.getpid())
-    boot_head = _git_heads()[0] if RELOAD_POLL_S > 0 else None
+    boot = {'head': None}
     bad = set()
     while True:
         srv = _BridgeServer((args.host, args.port), Handler)
         state = {'reload': None}
-        if boot_head:
-            threading.Thread(target=_code_watch, args=(srv, state, boot_head, frozenset(bad)),
+        if RELOAD_POLL_S > 0:
+            threading.Thread(target=_code_watch, args=(srv, state, boot, frozenset(bad)),
                              daemon=True).start()
         try:
             srv.serve_forever()
@@ -2811,6 +2852,11 @@ def main():
             break
         while _REQS_ACTIVE > 0:                  # no time limit: never exit in the middle of a send
             time.sleep(0.2)
+        held = _memory_held()                    # a request in the last loop may have set it
+        if held:
+            srv.server_close()
+            _reload_log('new code %s not loaded: %s; the old bridge keeps serving' % (new[:8], held))
+            continue
         srv.server_close()                       # free the port for the new bridge
         child = _respawn()
         if _child_up(child, args.host, args.port):
