@@ -369,23 +369,32 @@ class SiblingDocumentTests(unittest.TestCase):
     def titled_page(self, *lines, body=''):
         return RCT.judgment_titled(MT.text_reading(p1=HEAD + '\n' + '\n'.join(lines) + body, p2=self.DECREE))
 
-    def test_the_forms_numbered_award_heading_is_not_a_sworn_statement(self):
-        award = "\n1. Amounts Due and Owing. Plaintiff is due:\nPrincipal $10.00"
-        self.assertTrue(self.titled_page('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the plaintiff's motion.",
-                                         body=award))
-        # ...only that heading: any real sworn or payoff wording on the page still rejects it.
-        for extra in ('\nAFFIANT states under penalty of perjury', '\nSworn to before me', '\nPAYOFF as of today',
-                      '\nThe amounts due and owing are as follows:', '\n2. Amounts Due and Owing, Plaintiff is owed:',
-                      '\nPlaintiff is due: per the affidavit'):
-            with self.subTest(extra=extra):
-                self.assertFalse(self.titled_page('FINAL JUDGMENT OF FORECLOSURE',
-                                                  "THIS ACTION was heard on the plaintiff's motion.",
-                                                  body=award + extra))
+    def test_a_judgments_body_may_refer_to_affidavits_and_amounts_due(self):
+        # Real judgments say "the affidavits filed in support", "Affidavit of Indebtedness", "amounts due as
+        # set forth in...", "cost declaration" and print a "1. Amounts Due and Owing" award heading.
+        ok = ('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the plaintiff's motion.")
+        for body in ("\n1. Amounts Due and Owing. Plaintiff is due:\nPrincipal $10.00",
+                     "\nAmounts Due and Owing.  Plaintiff is due:\n1.\nCosts per cost declaration $5.00",
+                     "\nl. Amounts Due and Owing. Plaintiff is due:",
+                     "\nand its Affidavit of Indebtedness filed in support of the Motion.",
+                     "\namounts due as set forth in the affidavits, including fees"):
+            with self.subTest(body=body):
+                self.assertTrue(self.titled_page(*ok, body=body))
 
-    def test_a_reference_back_to_the_affidavits_still_holds_the_judgment(self):
-        # Not covered on purpose (needs a separate decision): the guard stays strict here.
-        self.assertFalse(self.titled_page('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the plaintiff's motion.",
-                                          body='\namounts due as set forth in the affidavits filed'))
+    def test_sworn_draft_or_schedule_wording_still_rejects_wherever_it_sits(self):
+        ok = ('FINAL JUDGMENT OF FORECLOSURE', "THIS ACTION was heard on the plaintiff's motion.")
+        for body in ('\nAFFIANT states under penalty of perjury', '\nSworn to before me', '\nPlaintiff, being duly sworn',
+                     '\nNOTARY PUBLIC', '\nPROPOSED order', '\nSubmitted by: counsel', '\nPrepared by: counsel'):
+            with self.subTest(body=body):
+                self.assertFalse(self.titled_page(*ok, body=body))
+        # a schedule or affidavit heading in the title block (above, or just under the title) rejects
+        for lines in (('AFFIDAVIT OF AMOUNTS DUE', 'FINAL JUDGMENT OF FORECLOSURE'),
+                      ('PAYOFF STATEMENT', 'FINAL JUDGMENT'),
+                      ('FINAL JUDGMENT', 'Plaintiff,', 'v.', 'DECLARATION OF AMOUNTS DUE'),
+                      ('FINAL JUDGMENT', 'PAYOFF SCHEDULE'),
+                      ('FINAL JUDGMENT OF FORECLOSURE', 'AFFIDAVIT OF INDEBTEDNESS')):
+            with self.subTest(lines=lines):
+                self.assertFalse(self.titled_page(*lines))
 
     def test_for_other_relief_and_agreed_titles(self):
         ok = ("THIS ACTION was heard on the plaintiff's motion.",)
