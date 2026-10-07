@@ -1143,6 +1143,9 @@ check('--owner: searched, a verdict comes back, marked not recorded',
 check('--owner: the PACER cache the gate reads was NOT written',
       not (g17o / 'pacer_stay_cache.json').exists(), list(g17o.iterdir()))
 check('--owner: the send gate still refuses the case', SG.check('CACE-99-007001', str(g17o / 'sale_history_cache.json'))['ok'] is False)
+h2 = FakeHTTP(by_name={('TYPEDOWN', 'MARIA'): [row('TYPEDOWN', 'MARIA', termed='2021-02-02', filed='2020-01-01')]})
+r = PS.presend_check('CACE-99-007003', here=str(g17o), env=e17, session=h2, now=NOW, manual=True, owner='Maria Typedown')
+check('--owner with no comma reads as First Last (the mail ledger spelling)', r['status'] == 'searched' and r['recorded'] is False, r)
 r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=True, owner='   ')
 check('--owner blank: refused before any search', r['status'] == 'refused', r)
 r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=False, owner='TYPEDOWN, MARIA')

@@ -1664,7 +1664,7 @@ def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, 
        no_lead | not_needed | off | refused | error   (nothing new: the gate's refusal stands)
     manual=True is `pacer_stay.py --case`: searches even with a fresh verdict, is not held to the
     daily pre-send allowance (only the quarter + month caps and max_usd / PACER_RUN_MAX).
-    owner (manual only; `--owner`) is a person-typed owner string, 'LAST, FIRST' or 'LAST, FIRST; LAST, FIRST'.
+    owner (manual only; `--owner`) is a person-typed owner string, 'LAST, FIRST' (';' between owners) or, with no comma, 'First Last'.
     It is for a case that is no longer in the lead files (a reply that outlived its lead). It makes the
     search LOOKUP ONLY: the verdict is returned and printed, never written to the PACER cache, so it cannot
     release anything at the send gate. A typed name cannot prove every owner on the case was searched."""
@@ -1731,7 +1731,7 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         out['recorded'] = False
         base = ld or {}
         ld = {'key': key, 'case': base.get('case') or key, 'county': base.get('county') or '',
-              'owners': [(str(owner), 'last_first')], 'auction': base.get('auction'),
+              'owners': [(str(owner), 'last_first' if ',' in str(owner) else 'first_last')], 'auction': base.get('auction'),
               'filed': base.get('filed'), 'src': {'manual-owner'}}
     if ld is None:
         out.update(status='no_lead', why='case %s is not in the lead files, so there is no owner name to search '
