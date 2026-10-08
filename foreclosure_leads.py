@@ -3634,6 +3634,10 @@ def make_tracker(leads):
         _cm_led = call_mode.stamp_ledger(_cm_all[0], _mlog, _tlog)
         if _cm_led:
             print('call mode: %d dial row(s) carry a server email/text send date' % _cm_led)
+        # Confirmed sends the dated stamps cannot express (unparseable ts_utc): lu:1 = contacted.
+        _cm_lu = call_mode.stamp_unknown(_cm_all[0], call_mode.ledger_audit())
+        if _cm_lu:
+            print('call mode: %d dial row(s) have a confirmed send with no usable date (marked contacted)' % _cm_lu)
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,

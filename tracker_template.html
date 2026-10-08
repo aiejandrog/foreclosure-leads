@@ -16722,7 +16722,7 @@ const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.tou
 function _mergeLead(local, remote){
   local = local || {}; remote = remote || {};
   const out = Object.assign({}, local);
-  const ch = { optout:false, touches:0, status:false, deal:false, note:false };
+  const ch = { optout:false, touches:0, status:false, deal:false, note:false, dials:false };
   // audit ledger: union every opt-out event from both devices (dedup by ts|act), so the ORIGINAL
   // "set" timestamp on the teammate's device is preserved as evidence, not just the local one.
   const _lseen = new Set(), _ol = [];
@@ -16766,6 +16766,9 @@ function _mergeLead(local, remote){
   const _dseen = new Set(), _dl = [];
   (local.dials||[]).concat(remote.dials||[]).forEach(v => { const k=(v.ts||'')+'|'+(v.ph4||''); if(!_dseen.has(k)){ _dseen.add(k); _dl.push(v); } });
   if(_dl.length){ _dl.sort((a,b)=>(a.ts||'').localeCompare(b.ts||'')); out.dials = _dl; }
+  /* A dials-only union is a real change and must persist (it used to be dropped by mergeNotes'
+     `changed`, so a dial pulled from a teammate lived in memory until some other edit saved). */
+  if(_dl.length > (local.dials||[]).length) ch.dials = true;
   /* DO-NOT-TEXT numbers: UNION, never intersect. This is a suppression list — the only safe merge
      direction is "more suppressed". The device Set (fcDNT) still cannot sync on its own; this is
      what carries a DNT from the laptop to the phone, where the texts are actually sent. */
@@ -16821,12 +16824,13 @@ function _mergeLead(local, remote){
   return [out, ch];
 }
 function mergeNotes(remoteNotes){
-  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, violations:0 };
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, dials:0, violations:0 };
   Object.keys(remoteNotes||{}).forEach(caseId => {
     const before = _dialedAfter(notes[caseId]).length;
     const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
     notes[caseId] = merged;
-    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note) sum.leads++;
+    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note||ch.dials) sum.leads++;
+    if(ch.dials) sum.dials++;
     if(ch.optout) sum.optouts++;
     sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
     // a merged-in opt-out can retroactively turn a call you already logged into an after-opt-out contact
@@ -16835,7 +16839,7 @@ function mergeNotes(remoteNotes){
   try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
   // only persist/re-render when the merge actually changed something — otherwise the 45s auto-sync poll
   // triggers a needless save()->syncPushSoon()->push + full render on every empty pull (jank + churn).
-  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes;
+  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes || sum.dials;
   if(changed){ save(); try{ recompute(); }catch(e){} render(); }
   syncFreshness();
   return sum;
@@ -16881,6 +16885,10 @@ async function syncPush(){
 // Actually GUARD with _syncBusy — previously set true/false but never read, so a syncPull's
 // mergeNotes -> save -> syncPushSoon could stack a push while another was in flight.
 function syncPushSoon(){ if(!_teamKey()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(() => { if(_syncBusy){ syncPushSoon(); return; } syncPush(); }, 1500); }
+function _keyFp(k){ let h = 5381; k = String(k||''); for(let n = 0; n < k.length; n++) h = ((h * 33) ^ k.charCodeAt(n)) >>> 0; return h.toString(36); }
+function _pullStat(ok, devices, failed){
+  try{ localStorage.setItem('fcPullStat', JSON.stringify({ok:!!ok, kf:_keyFp(_teamKey()), devices:devices|0, failed:failed|0, ts:_nowTS()})); }catch(e){}
+}
 async function syncPull(){
   const key = _teamKey(); if(!key) return 0;
   if(_syncBusy) return 0;   // don't pull-then-merge-then-push into a push that's already flying
@@ -16888,11 +16896,16 @@ async function syncPull(){
     const tid = await _teamId(key), me = _deviceId();
     const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     if(!r.ok) throw new Error('pull '+r.status);
-    const rows = await r.json(); let merged = 0, optouts = 0, violations = 0;
+    const rows = await r.json(); let merged = 0, optouts = 0, violations = 0, devs = 0, failed = 0;
     for(const row of rows){ if(row.device_id === me) continue;
-      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); merged += s.leads; optouts += s.optouts; violations += s.violations; }catch(e){}
+      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); devs++; merged += s.leads; optouts += s.optouts; violations += s.violations; }catch(e){ failed++; }
     }
-    localStorage.setItem('fcLastPull', _nowTS()); syncStatus('');
+    /* Pull coverage, counts only. A teammate blob that would not decrypt or merge is a FAILED
+       device, not a clean pull: fcLastPull is stamped only when every other device's blob merged,
+       so "synced" can never mean "some teammate's calls were skipped". */
+    _pullStat(failed === 0, devs, failed);
+    if(failed === 0) localStorage.setItem('fcLastPull', _nowTS());
+    syncStatus('');
     // A merged-in opt-out can retroactively turn a call already logged into an after-opt-out
     // contact (mergeNotes' own comment). This ran silently: the auto-pull (every 45s, no modal
     // open) discarded `violations` and only the manual "import a teammate's file" path ever showed
@@ -16913,7 +16926,7 @@ async function syncPull(){
           {bad:true, ms:8000});
     }
     return {merged, optouts, violations};
-  }catch(e){ syncStatus('offline — will retry', true); return 0; }
+  }catch(e){ _pullStat(false, 0, 0); syncStatus('offline — will retry', true); return 0; }
 }
 function syncStatus(msg, warn){ const el = document.getElementById('syncstat'); if(!el) return; const on = !!_teamKey();
   el.className = 'syncstat' + (warn?' warn':'') + (on?' on':'');
