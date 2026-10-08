@@ -12846,6 +12846,24 @@ function _laneWorkable(lane){
   });
   return n;
 }
+// The lane the 8am unattended run opens (2026-10-08, Alejandro: "auto-run all lanes ... when it pops
+// up"). It used to be URGENT only, and on most mornings URGENT had nobody the bridge would email, so
+// the run never started (morning-sends alert: 50 eligible, 0 sent). Now it opens the first of
+// URGENT / ACTIVE / EARLY / BALLOON holding a lead the worker would EMAIL, and the run walks the
+// later lanes from there (autoAll, same walk as the "Auto-run ALL lanes" button). REPLIED is never
+// the auto-run's opening lane: those owners wrote to us and get a person, not a template.
+function _autoRunLane(){
+  var pick = 'urgent';
+  ['urgent','active','early','balloon'].some(function(k){
+    var L = WORKER_LANES[k]; if(!L) return false;
+    var hit = DATA.some(function(r){
+      return r && L.test(_saleDays(r), r) && _workerEligible(r) && _workerReach(r) === 'email';
+    });
+    if(hit) pick = k;
+    return hit;
+  });
+  return pick;
+}
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
 function _workerCard(r){
@@ -14688,7 +14706,7 @@ function genMorningWorker(lane, autostart){
     +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
     +       'var left=20, box=document.createElement("div");'
     +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
-    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — "+Q.length+" leads queued. Emails will send automatically.</div>"'
+    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — all lanes, "+allTotal()+" leads queued. Emails will send automatically.</div>"'
     +         '+"<button id=\'mwcancel\' style=\'padding:9px 18px;border:0;border-radius:7px;background:#b3372f;color:#fff;font-weight:700;cursor:pointer;font-size:14px\'>Cancel</button>";'
     +       'document.body.appendChild(box);'
     // COUNTDOWN STATE GOES IN THE SHARED HANDLES. The interval used to be a local `t` reachable only
@@ -14713,7 +14731,7 @@ function genMorningWorker(lane, autostart){
     // A run already going (Start pressed during the countdown) owns the queue: a second runOne()
     // here would be two loops on the same lead, the 2026-08-13 duplicate-send shape.
     +           'if(auto || SYNCWAIT){ renderRunBar(); return; }'
-    +           'auto=true; addLog("open","auto-start","▶ auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
+    +           'auto=true; autoAll=true; addLog("open","auto-start","▶ auto-run ALL lanes started automatically (8am scheduler) — "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).map(function(k){return k.toUpperCase()+" ("+laneCount(k)+")";}).join(" → "));'
     +           'renderRunBar(); runOne(); }'
     +       '},1000);'
     // Cancel goes through stopRun so the unattended start and a hand-pressed Stop leave exactly the
@@ -19302,7 +19320,7 @@ async function boot(){
         try{
           var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
           var _stale = (_age != null && _age >= 1);
-          openMorningWorker('urgent', !_stale);
+          openMorningWorker(_autoRunLane(), !_stale);
           if(_stale && typeof _shareToast === 'function')
             _shareToast('AUTO-RUN BLOCKED: board data is ' + _age + ' day(s) old. Reload the board (or run the refresh), then start the worker by hand.');
         }catch(e){}

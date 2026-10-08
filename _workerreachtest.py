@@ -10,6 +10,7 @@ Pins:
   - a waiting reply stays even with nothing to send or dial
   - lane tabs count workable leads and an empty lane's tab is hidden (the open lane stays)
   - an explicit lane is honoured; no lane opens the first lane with someone workable in it
+  - the 8am auto-run opens the first lane with someone to email (_autoRunLane)
 """
 import asyncio, os, pathlib, subprocess, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -78,6 +79,14 @@ async def main():
             q.index('T-EMAIL-OK') < q.index('T-FTH-PHONE') if len(q) == 2 else False, q)
         wk = await pg.evaluate("() => ({u:_laneWorkable('urgent'), a:_laneWorkable('active'), e:_laneWorkable('early')})")
         rec('workable counts: urgent 0, active 2', wk['u'] == 0 and wk['a'] == 2, wk)
+
+        # the 8am auto-run's opening lane: first lane with someone to EMAIL (urgent here has only a held lead)
+        al = await pg.evaluate("() => _autoRunLane()")
+        rec('auto-run opens the first lane with an emailable lead (ACTIVE, not empty URGENT)', al == 'active', al)
+        al2 = await pg.evaluate("""() => { const keep = DATA.slice(); DATA.length = 0;
+            DATA.push(keep.find(x => x.case === 'T-FTH-PHONE')); const v = _autoRunLane();
+            DATA.length = 0; keep.forEach(x => DATA.push(x)); return v; }""")
+        rec('a phone-only lane is not an auto-run opening lane (falls back to urgent)', al2 == 'urgent', al2)
 
         # a waiting reply survives with nothing to send or dial
         rr = await pg.evaluate("""() => { const r = DATA.find(x => x.case === 'T-FTH-NONE');
