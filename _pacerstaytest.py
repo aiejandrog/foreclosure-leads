@@ -435,6 +435,32 @@ for raw, why in (('ESTATE OF QUINCY TESTPERSON', 'estate'), ('TESTPERSON QUINCY 
                  ('A B C D E F', 'more than four'), ('', 'no owner')):
     sj, problem = PS.parse_owner(raw, 'last_first')
     check('not searched (no cost): %r -> %s' % (raw, why), not sj and why in problem, problem)
+# oname / paOwner fallback (ce154cc): its order is unknown, so it is read both ways ('either')
+check("fallback 'MARY FAKEROE' (oname, First Last) -> searched as MARY FAKEROE and as FAKEROE MARY",
+      qs('MARY FAKEROE', 'either')[0] == [[{'last': 'FAKEROE', 'first': 'MARY'}, {'last': 'MARY', 'first': 'FAKEROE'}]],
+      qs('MARY FAKEROE', 'either'))
+check("fallback 'ROBERT A JOHNSON' -> ROBERT JOHNSON searched (the initial is never a first or last name)",
+      {'last': 'JOHNSON', 'first': 'ROBERT'} in qs('ROBERT A JOHNSON', 'either')[0][0]
+      and all(q['first'] != 'A' and q['last'] != 'A' for q in qs('ROBERT A JOHNSON', 'either')[0][0]),
+      qs('ROBERT A JOHNSON', 'either'))
+check("the bug, pinned: 'ROBERT A JOHNSON' read last_first never searches first ROBERT last JOHNSON",
+      {'last': 'JOHNSON', 'first': 'ROBERT'} not in (qs('ROBERT A JOHNSON', 'last_first')[0] or [[]])[0])
+check("fallback 'FAKEROE, MARY' (comma) -> one search, LAST, FIRST", qs('FAKEROE, MARY', 'either')
+      == ([[{'last': 'FAKEROE', 'first': 'MARY'}]], ''))
+check("fallback with too many readings is unverifiable, not guessed",
+      PS.parse_owner('MARY ANN FAKEROE', 'either')[1] != '')
+check("fallback one word + initial is unverifiable", PS.parse_owner('FAKEROE M', 'either')[1] != '')
+check("fallback co-owner 'FAKEROE M' after '&' is unverifiable, not read one way (review of #183)",
+      PS.lead_subjects([('FAKESMITH JOHN & FAKEROE M', 'either')])[1] != '')
+check("non-fallback co-owner 'FAKEROE M' keeps its old reading", PS.lead_subjects([('JOHN FAKESMITH & FAKEROE M', 'first_last')])[1] == '')
+for _row, _want in (({'owners': 'FAKEROE MARY', 'oname': 'MARY FAKEROE'}, ('FAKEROE MARY', 'last_first')),
+                    ({'owners': '', 'oname': 'MARY FAKEROE', 'paOwner': 'X Y'}, ('MARY FAKEROE', 'either')),
+                    ({'owners': '  ', 'oname': '', 'paOwner': 'FAKEROE MARY'}, ('FAKEROE MARY', 'either')),
+                    ({'owners': '(owner via title search)', 'oname': 'MARY FAKEROE'}, ('(owner via title search)', 'last_first')),
+                    ({'owners': 'MARY FAKEROE', 'owners_repaired_from': 'oname'}, ('MARY FAKEROE', 'either')),
+                    ({}, ('', 'last_first'))):
+    check('owner field pick %r -> %r' % (sorted(_row), _want), PS._owner_field(_row, ('owners',), 'last_first') == _want,
+          PS._owner_field(_row, ('owners',), 'last_first'))
 check('five owners on a lead is unverifiable', PS.lead_subjects([('A1 BB; C1 DD; E1 FF; G1 HH; I1 JJ', 'last_first')])[1] != '')
 check('"UNKNOWN SPOUSE OF ..." placeholder dropped, the real owner still searched',
       qs('UNKNOWN SPOUSE OF QUINCY TESTPERSON; TESTPERSON,QUINCY', 'last_first')[0] == [[{'last': 'TESTPERSON', 'first': 'QUINCY'}]])
@@ -568,6 +594,7 @@ check('entry carries verdict, a/bd/sl, src, env, query time, county, cost and ma
       and e.get('src') == 'pacer_pcl' and e.get('env') == 'prod'
       and abs(dt.datetime.fromisoformat(e.get('q')).timestamp() - NOW) < 2 and e.get('q')[-6] in '+-'
       and e.get('county') == 'BROWARD' and e['cases'][0]['no'] == '1:99-bk-77777', e)
+check('every new entry carries the fixed name-reading stamp', e.get('names') == PS.NAME_READING, e)
 check('no owner names, no captions anywhere in the cache file', 'QUINCY' not in raw.upper() and 'ROSALIND' not in raw.upper()
       and 'caseTitle' not in raw)
 check('co-owners on the Miami-Dade lead were both searched (same case, same verdict)',
@@ -586,6 +613,69 @@ run(d, h)
 ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000102']
 check('an unsearchable owner is written unverifiable at no cost (the gate says why)', ent['verdict'] == 'unverifiable'
       and 'trust' in ent['why'] and not h.finds() and month_spent() == 0)
+
+# --------------------------------------------------------- 10b owner-name fallback read both ways
+print('-- 10b owner-name fallback (oname / paOwner) is read both ways')
+for _f, _rows in (('broward_leads.json', [{'county': 'BROWARD', 'case': 'CACE-99-000611', 'owners': '',
+                                            'oname': 'ROBERT A JOHNSON', 'auction': mdy(20)}]),
+                  ('lp_leads.json', [{'county': 'PALM BEACH', 'case': '502099CA000612XXXXMB', 'owners': '',
+                                       'paOwner': 'ROBERT A JOHNSON', 'filed': iso(-5)}])):
+    reset_ledgers()
+    _d = work({_f: _rows})
+    _h = FakeHTTP(by_name={('JOHNSON', 'ROBERT'): [row('JOHNSON', 'ROBERT', 'A', no='1:99-bk-61100', filed=iso(-9))]})
+    run(_d, _h, args=['--max-spend', '1'])
+    _ent = json.loads((_d / 'pacer_stay_cache.json').read_text()).get(_rows[0]['case'], {})
+    check('%s: owners empty, %s "ROBERT A JOHNSON" with an open flsb case -> active, not a clear'
+          % (_f, sorted(k for k in _rows[0] if k in ('oname', 'paOwner'))[0]),
+          _ent.get('verdict') == 'active', _ent)
+    _ld = PS.load_leads(str(_d))[0][_rows[0]['case'] if _f != 'lp_leads.json' else SG.pacer_key(_rows[0]['case'])]
+    check('%s: the fallback owner is tagged either-order' % _f, _ld['owners'] == [('ROBERT A JOHNSON', 'either')], _ld)
+reset_ledgers()
+_d = work({'broward_leads.json': [{'county': 'BROWARD', 'case': 'CACE-99-000613', 'owners': '', 'oname': 'MARY FAKEROE',
+                                   'auction': mdy(20)}]})
+_h = FakeHTTP()
+run(_d, _h, args=['--max-spend', '1'])
+_ent = json.loads((_d / 'pacer_stay_cache.json').read_text()).get('CACE-99-000613', {})
+check('fallback "MARY FAKEROE", nothing on either reading -> clear only after BOTH readings were searched',
+      _ent.get('verdict') == 'clear' and _ent.get('searches') == 2, _ent)
+
+# pacer_fallback_audit: holds clears that only a fallback name could have produced, spends nothing
+import pacer_fallback_audit as PFA
+_d = work({'broward_leads.json': [
+    {'county': 'BROWARD', 'case': 'CACE-99-000621', 'owners': '', 'oname': 'MARY FAKEROE', 'auction': mdy(20)},
+    {'county': 'BROWARD', 'case': 'CACE-99-000622', 'owners': 'FAKEROE MARY', 'auction': mdy(20)},
+    {'county': 'BROWARD', 'case': 'CACE-99-000623', 'owners': '', 'oname': 'FAKEROE, MARY', 'auction': mdy(20)},
+    {'county': 'BROWARD', 'case': 'CACE-99-000624', 'owners': '', 'oname': 'MARY FAKEROE', 'auction': mdy(20)},
+    {'county': 'BROWARD', 'case': 'CACE-99-000625', 'owners': '', 'oname': 'FAKEROE, MARY & JOHN FAKESMITH', 'auction': mdy(20)}]})
+_clear = {'verdict': 'clear', 'a': False, 'env': 'prod', 'q': dt.datetime.fromtimestamp(NOW).astimezone().isoformat(timespec='seconds'),
+          't': NOW, 'cases': [], 'region': 'national', 'lookback_from': PS.lookback_from(TODAY, PS.LOOKBACK_YEARS),
+          'names': PS.NAME_READING}
+_cache = {'CACE-99-000621': dict(_clear), 'CACE-99-000622': dict(_clear), 'CACE-99-000623': dict(_clear),
+          'CACE-99-000624': dict(_clear, verdict='active', a=True), 'CACE-99-000625': dict(_clear)}
+(_d / 'pacer_stay_cache.json').write_text(json.dumps(_cache), encoding='utf-8')
+PFA.main(['--here=' + str(_d)])
+check('audit without --apply changes nothing', json.loads((_d / 'pacer_stay_cache.json').read_text()) == _cache)
+check('audit flags clears with any comma-less fallback person (incl. a co-owner after a comma name)',
+      [k for k, _, _ in PFA.suspects(_cache, PS.load_leads(str(_d))[0])] == ['CACE-99-000621', 'CACE-99-000625'])
+check('audit flags a mixed lead: own owners in one file, comma-less fallback co-owner in another',
+      [k for k, _, _ in PFA.suspects({'K': dict(_clear)}, {'K': {'case': 'K', 'owners': [('MARY FAKEROE', 'first_last'),
+                                                                                     ('JOHN FAKESMITH', 'either')]}})] == ['K'])
+_old = dict(_clear); _old.pop('names')
+check('audit flags a clear recorded since ce154cc without the fixed-reading stamp, whatever the lead looks like now',
+      [k for k, _, _ in PFA.suspects({'CACE-99-000622': _old}, PS.load_leads(str(_d))[0])] == ['CACE-99-000622'])
+check('audit leaves an unstamped clear from before ce154cc to the lead-file check',
+      PFA.suspects({'CACE-99-000622': dict(_old, t=PFA.CUTOFF - 3600)}, PS.load_leads(str(_d))[0]) == [])
+PFA.main(['--here=' + str(_d), '--apply'])
+_after = json.loads((_d / 'pacer_stay_cache.json').read_text())
+check('audit --apply: the suspect clear is now unverifiable and the stay gate holds it',
+      _after['CACE-99-000621']['verdict'] == 'unverifiable' and _after['CACE-99-000621']['quarantined_from'] == 'clear'
+      and SG.pacer_verdict(_cache['CACE-99-000621'], NOW)[0] == SG.CLEAR
+      and SG.pacer_verdict(_after['CACE-99-000621'], NOW)[0] == SG.UNVERIFIED,
+      _after['CACE-99-000621'])
+check('audit --apply: own-owner clear, comma fallback clear and the active verdict are untouched',
+      all(_after[k] == _cache[k] for k in ('CACE-99-000622', 'CACE-99-000623', 'CACE-99-000624')))
+check('audit --apply: a backup was written',
+      any(p.name.startswith('pacer_stay_cache.json.bak-') for p in _d.iterdir()))
 
 # ------------------------------------------------------------------------------------ 11 prioritisation
 print('-- 11 prioritisation')

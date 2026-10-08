@@ -191,7 +191,7 @@ that carries a name or number inline, gitignore it in the same commit.
 publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
 
-**Five paths publish, and all five are gated (the last three only since 2026-09-17):**
+**Six paths publish, and all six are gated (the last three only since 2026-09-17, `access_codes.py` since 2026-10-08):**
 
 | path | when | gates |
 |---|---|---|
@@ -200,6 +200,7 @@ behaviour, not a bug to route around.
 | `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
 | `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
 | `run-phones.bat` | manual one-click | healthcheck + publish_guard (since 2026-09-19) |
+| `access_codes.py` create / revoke | manual | healthcheck + publish_guard (since 2026-10-08) |
 
 `run-phones.bat` was missing from this table entirely, which is how it stayed an ungated publish
 path for a month after the other four were gated. It is the manual twin of `run-phones-nightly.bat`
@@ -214,8 +215,10 @@ part is the part to remember: **that publish became `origin/main`, so it moved t
 later gate compared against**, and subsequent poorer builds then passed legitimately. One ungated
 publish does not cost one board, it costs the reference.
 
-If you add a fourth publish path, gate it in the same commit. `grep -l publish_guard *.bat` is the
+If you add another publish path, gate it in the same commit. `grep -l publish_guard *.bat *.py` is the
 check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
+`access_codes.py` was that hole from 876a831 (2026-10-08): it ran `publish_site.py` straight after
+`make_tracker()` with neither gate, until `publish_gates_pass()` landed the same day.
 
 ## Whitepages Pro (owner phones + relatives)
 

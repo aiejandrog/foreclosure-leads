@@ -41,6 +41,28 @@ def parse(lines):
     return out
 
 
+def publish_gates_pass():
+    """healthcheck.py + publish_guard.py on the freshly built board, before ANY push -- the same two
+    gates, in the same order and with the same exit-code rules, as refresh-dealflow.bat's [gate] step
+    (CLAUDE.md "Publish gates -- never bypass"). healthcheck exit 2 = compliance hard block (lost
+    s.362 stay flags, sources down); exit 1 = coverage advisory, publish_guard decides; publish_guard
+    non-zero = a board materially poorer than live. A blocked rebuild leaves the live site on its last
+    good build, so a revoked code keeps opening it until a publish passes -- say so, loudly."""
+    h = subprocess.run([sys.executable, 'healthcheck.py'], cwd=HERE)
+    if h.returncode >= 2:
+        print('  !! GATE: healthcheck COMPLIANCE fail - publish SKIPPED (nothing pushed).')
+    elif subprocess.run([sys.executable, 'publish_guard.py'], cwd=HERE).returncode != 0:
+        print('  !! GATE: publish_guard BLOCKED the build - publish SKIPPED (nothing pushed).')
+    else:
+        if h.returncode == 1:
+            print('  note: healthcheck coverage below floor - advisory, publish_guard passed.')
+        return True
+    print('  !! The code change is saved in site.codes but is NOT live: the old code set still opens')
+    print('  !! the board until a publish passes both gates (fix the gate, then re-run, or wait for')
+    print('  !! the next refresh-dealflow.bat).')
+    return False
+
+
 def rebuild_and_push(msg):
     """Rebuild docs/index.html (re-encrypts with the current code set) and make it LIVE.
 
@@ -54,6 +76,8 @@ def rebuild_and_push(msg):
     print('  rebuilding the encrypted site...')
     import foreclosure_leads as F
     F.make_tracker(json.load(open(LEADS, encoding='utf-8')))
+    if not publish_gates_pass():
+        return False
     subprocess.run(['git', 'add', 'docs/index.html'], cwd=HERE)
     subprocess.run(['git', 'commit', '-q', '-m', msg], cwd=HERE)   # may be a no-op; the live mirror below is what counts
     # Engine-repo push: best effort only, for the publish_guard baseline. It can 408 on the large
@@ -79,7 +103,7 @@ def card(name, code, ok):
         print('  Live in ~1-2 min. Text them the link + code.')
         print('  They enter the code once; their device stays unlocked.')
     else:
-        print('  ! Saved locally but NOT published (no internet?).')
+        print('  ! Saved locally but NOT published (a publish gate blocked it, or no internet; see above).')
         print('    Re-run this when online, or run refresh-dealflow.bat.')
     print('  Revoke anytime:  python access_codes.py revoke "%s"' % name)
     print(BAR + '\n')
@@ -138,8 +162,11 @@ def revoke(name):
     open(CODES, 'w', encoding='utf-8').write('\n'.join(keep) + ('\n' if keep else ''))
     print('Removed: ' + '  |  '.join(removed))
     ok = rebuild_and_push(f'access: revoke {name}')
-    print(f'\nAccess for "{name}" REVOKED' + ('' if ok else ' locally (publish pending — run when online)') +
-          '. Their old code no longer opens the site.\n')
+    if ok:
+        print(f'\nAccess for "{name}" REVOKED. Their old code no longer opens the site.\n')
+    else:
+        print(f'\nAccess for "{name}" removed from site.codes ONLY. NOT LIVE: their old code still opens the')
+        print('live board until a publish goes through (see the gate / publish messages above).\n')
 
 
 if __name__ == '__main__':

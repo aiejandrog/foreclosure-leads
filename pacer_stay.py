@@ -161,6 +161,10 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE_NAME = 'pacer_stay_cache.json'
+# written into every cache entry: the owner-name reading that produced it. 'either-1' = fallback
+# owner names (oname / paOwner / owner_repair) are searched both ways (2026-10-08, after ce154cc).
+# pacer_fallback_audit.py holds a clear recorded since ce154cc that does not carry it.
+NAME_READING = 'either-1'
 QA_CACHE_NAME = 'pacer_stay_cache_qa.json'
 QUARTER_LEDGER_NAME = 'pacer_quarter_ledger.json'
 ENV_QUARTER_LEDGER = 'PACER_QUARTER_LEDGER'
@@ -796,6 +800,15 @@ def _interps(toks, order):
     is only ever a middle initial. [] when the name cannot be read."""
     n = len(toks)
     out = []
+    if order == 'either':
+        # a name whose order is not known (oname / paOwner fallback, see load_leads): every reading
+        # of both orders, so a clear needs the name to come back clean whichever way it was written
+        both = []
+        for o in ('first_last', 'last_first'):
+            for it in _interps(toks, o):
+                if it not in both:
+                    both.append(it)
+        return both
     if order == 'first_last':
         if n == 2:
             out = [(toks[0], [toks[1]], [])]
@@ -821,7 +834,7 @@ def _strip_person(part):
 
 def parse_owner(raw, order):
     """(subjects, problem). subjects: Person / Entity objects to search. problem: why this owner
-    cannot be searched at all ('' when it can). order: 'first_last' | 'last_first'."""
+    cannot be searched at all ('' when it can). order: 'first_last' | 'last_first' | 'either' (both readings; see _owner_field)."""
     s = _ascii_upper(raw).strip()
     s = re.sub(r'&\s*[WH]\b\.?', '& ', s)             # MD appraiser "&W" / "&H" = wife / husband
     # "UNKNOWN SPOUSE OF X" / "UNKNOWN TENANT" are pleading placeholders, not owners: drop the chunk
@@ -851,7 +864,7 @@ def parse_owner(raw, order):
         for i, part in enumerate(re.split(r'\s*&\s*|\s+AND\s+', chunk)):
             if not part.strip():
                 continue
-            if ',' in part and order in ('last_first', 'first_last'):
+            if ',' in part and order in ('last_first', 'first_last', 'either'):
                 last, _, rest = part.partition(',')
                 lt, rt = _strip_person(last), _strip_person(rest)
                 if not lt or not rt or len(rt[0]) < 2 or len(lt[0]) < 2:
@@ -861,6 +874,10 @@ def parse_owner(raw, order):
                 toks = _strip_person(part)
                 if not toks:
                     continue
+                if order == 'either' and len(toks) == 2 and len(toks[1]) == 1:
+                    # 'ROE M': first ROE + initial one way, surname ROE + bare initial the other, which
+                    # cannot be searched. A clear would rest on one reading only, so hold the lead.
+                    return [], 'an owner name that cannot be searched in both orders'
                 if len(toks) == 1 or (len(toks) == 2 and len(toks[1]) == 1 and order == 'first_last'):
                     # a bare first name after '&' shares the surname before it
                     if i > 0 and prev_surnames and len(toks[0]) > 1:
@@ -1090,6 +1107,35 @@ def _day(v):
     return None
 
 
+FALLBACK_OWNER_FIELDS = ('oname', 'paOwner')
+
+
+def _owner_field(d, primary, order):
+    """(owner string, order) for one lead row. The row's own owner field(s) keep the order its source
+    writes them in. When they are empty, fall back to oname, then paOwner, like call_mode / bk_lookup
+    / routes do -- but read that fallback as 'either' order. oname is county_leads._clean_owner()
+    output: 'ROE, MARY' becomes 'MARY ROE' while a comma-less FDOR 'ROE MARY' stays as it is, so the
+    same field holds both orders; paOwner is whatever the appraiser wrote (Miami-Dade first-last,
+    FDOR last-first). Read one fixed way, 'Mary Roe' was searched as first ROE last MARY, found
+    nothing, and recorded a clear that released the lead (ce154cc, 2026-10-08). 'either' searches
+    both readings, so a clear needs both to come back clean; a comma still means 'LAST, FIRST'.
+    owner_repair.py --write copies one of those fallback fields INTO owners and marks the row with
+    owners_repaired_from; such an owners value is still a fallback name and is read 'either' too."""
+    if str(d.get('owners_repaired_from') or '').strip():
+        v = str(d.get('owners') or '').strip()
+        if v:
+            return v, 'either'
+    for k in primary:
+        v = str(d.get(k) or '').strip()
+        if v:
+            return v, order
+    for k in FALLBACK_OWNER_FIELDS:
+        v = str(d.get(k) or '').strip()
+        if v:
+            return v, 'either'
+    return '', order
+
+
 def load_leads(here=HERE):
     """{key: lead} from the files the board is built from, plus skip counts.
     lead = {'key','case','county','owners': [(str, order)], 'auction': date|None, 'filed': date|None,
@@ -1121,8 +1167,8 @@ def load_leads(here=HERE):
     for r in rows if isinstance(rows, list) else []:
         if not isinstance(r, dict):
             continue
-        owners = r.get('owners') or r.get('owner_clean') or r.get('oname') or ''   # fall back like the rest of the codebase (call_mode/bk_lookup/routes): owners empty but a clean oname present should still be searchable
-        add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', owners, 'first_last', _day(r.get('AuctionDate')),
+        owners, order = _owner_field(r, ('owners', 'owner_clean'), 'first_last')
+        add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', owners, order, _day(r.get('AuctionDate')),
             None, 'auction')
     for f in sorted(glob.glob(os.path.join(here, '*_leads.json'))):
         bn = os.path.basename(f)
@@ -1132,14 +1178,16 @@ def load_leads(here=HERE):
         for d in rows if isinstance(rows, list) else []:
             if not isinstance(d, dict) or d.get('st') == 'BAL':
                 continue
-            add(d.get('case'), str(d.get('county') or '').upper(), d.get('owners') or d.get('oname') or d.get('paOwner'), 'last_first',
+            owners, order = _owner_field(d, ('owners',), 'last_first')
+            add(d.get('case'), str(d.get('county') or '').upper(), owners, order,
                 _day(d.get('auction')), None, 'auction')
     lp = _load_json(os.path.join(here, 'lp_leads.json'))
     if isinstance(lp, list):
         for d in lp:
             if not isinstance(d, dict) or d.get('lpDismissed') or d.get('lpClosed'):
                 continue
-            add(d.get('case'), str(d.get('county') or 'MIAMI-DADE').upper(), d.get('owners') or d.get('oname') or d.get('paOwner'), 'last_first',
+            owners, order = _owner_field(d, ('owners',), 'last_first')
+            add(d.get('case'), str(d.get('county') or 'MIAMI-DADE').upper(), owners, order,
                 None, _day(d.get('filedDate') or d.get('filed')), 'lp')
     else:
         feed = _load_json(os.path.join(here, 'lis_pendens.json'))
@@ -1300,6 +1348,7 @@ def _entry(fields, ld, env_name, region, date_from, now_ts):
         't': round(now_ts, 1), 'county': ld.get('county') or '', 'searches': fields.get('searches', 0),
         'pages': fields.get('pages', 0), 'cost': fields.get('cost', 0.0), 'why': fields.get('why', ''),
         'cases': fields.get('cases') or [], 'lookback_from': date_from, 'region': region, 'v': 1,
+        'names': NAME_READING,
     }
 
 
