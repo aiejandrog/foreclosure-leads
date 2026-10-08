@@ -1121,7 +1121,7 @@ def load_leads(here=HERE):
     for r in rows if isinstance(rows, list) else []:
         if not isinstance(r, dict):
             continue
-        owners = r.get('owners') or r.get('owner_clean') or ''
+        owners = r.get('owners') or r.get('owner_clean') or r.get('oname') or ''   # fall back like the rest of the codebase (call_mode/bk_lookup/routes): owners empty but a clean oname present should still be searchable
         add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', owners, 'first_last', _day(r.get('AuctionDate')),
             None, 'auction')
     for f in sorted(glob.glob(os.path.join(here, '*_leads.json'))):
@@ -1132,14 +1132,14 @@ def load_leads(here=HERE):
         for d in rows if isinstance(rows, list) else []:
             if not isinstance(d, dict) or d.get('st') == 'BAL':
                 continue
-            add(d.get('case'), str(d.get('county') or '').upper(), d.get('owners'), 'last_first',
+            add(d.get('case'), str(d.get('county') or '').upper(), d.get('owners') or d.get('oname') or d.get('paOwner'), 'last_first',
                 _day(d.get('auction')), None, 'auction')
     lp = _load_json(os.path.join(here, 'lp_leads.json'))
     if isinstance(lp, list):
         for d in lp:
             if not isinstance(d, dict) or d.get('lpDismissed') or d.get('lpClosed'):
                 continue
-            add(d.get('case'), str(d.get('county') or 'MIAMI-DADE').upper(), d.get('owners'), 'last_first',
+            add(d.get('case'), str(d.get('county') or 'MIAMI-DADE').upper(), d.get('owners') or d.get('oname') or d.get('paOwner'), 'last_first',
                 None, _day(d.get('filedDate') or d.get('filed')), 'lp')
     else:
         feed = _load_json(os.path.join(here, 'lis_pendens.json'))
