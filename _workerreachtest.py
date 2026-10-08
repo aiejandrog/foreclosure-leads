@@ -10,6 +10,7 @@ Pins:
   - a waiting reply stays even with nothing to send or dial
   - lane tabs count workable leads and an empty lane's tab is hidden (the open lane stays)
   - an explicit lane is honoured; no lane opens the first lane with someone workable in it
+  - the 8am auto-run opens the first non-empty lane, so no earlier lane is skipped (_autoRunLane)
 """
 import asyncio, os, pathlib, subprocess, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -78,6 +79,15 @@ async def main():
             q.index('T-EMAIL-OK') < q.index('T-FTH-PHONE') if len(q) == 2 else False, q)
         wk = await pg.evaluate("() => ({u:_laneWorkable('urgent'), a:_laneWorkable('active'), e:_laneWorkable('early')})")
         rec('workable counts: urgent 0, active 2', wk['u'] == 0 and wk['a'] == 2, wk)
+
+        # the 8am auto-run's opening lane: first lane whose queue is non-empty (urgent here holds nobody workable)
+        al = await pg.evaluate("() => _autoRunLane()")
+        rec('auto-run opens the first non-empty lane (ACTIVE, not empty URGENT)', al == 'active', al)
+        al2 = await pg.evaluate("""() => { const keep = DATA.slice(); DATA.length = 0;
+            const u = Object.assign({}, keep.find(x => x.case === 'T-FTH-PHONE'), {case:'T-URG-PHONE', auction: keep.find(x => x.case === 'T-URG-NONE').auction, days: 3});
+            DATA.push(u, keep.find(x => x.case === 'T-EMAIL-OK')); const v = _autoRunLane() + ':' + _workerQueue('urgent').length;
+            DATA.length = 0; keep.forEach(x => DATA.push(x)); return v; }""")
+        rec('a phone-only URGENT lane is not skipped for a later email lane', al2 == 'urgent:1', al2)
 
         # a waiting reply survives with nothing to send or dial
         rr = await pg.evaluate("""() => { const r = DATA.find(x => x.case === 'T-FTH-NONE');

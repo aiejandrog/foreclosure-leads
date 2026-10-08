@@ -145,7 +145,7 @@ DELEG = JS[JS.index('closest(".mwbtn")'):JS.index('closest(".mwbtn")') + 2000]
 res['card actions call handTakeover after the run controls'] = DELEG.index('var r=Q[i]; if(!r)return;handTakeover();') > DELEG.index('fn==="stop"')
 res['queue-row Text and Call call handTakeover'] = 'e.preventDefault(); handTakeover();' in JS and 'if(qc){ handTakeover();' in JS
 res['Start resets the try count'] = 'cancelSyncWait(); SYNCTRY=0;' in A.extract(JS, 'startRun')
-res['8am countdown will not start a second loop'] = "if(auto || SYNCWAIT){ renderRunBar(); return; }auto=true; addLog(\"open\",\"auto-start\"" in JS
+res['8am countdown will not start a second loop'] = "if(auto || SYNCWAIT){ renderRunBar(); return; }auto=true; autoAll=true; addLog(\"open\",\"auto-start\"" in JS
 for k, v in res.items():
     rec(k, v is True)
 
