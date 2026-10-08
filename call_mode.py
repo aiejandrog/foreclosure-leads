@@ -2029,6 +2029,63 @@ def stamp_ledger(rows, mail_log=None, text_log=None):
     return n
 
 
+def ledger_audit(mail_path=None, text_path=None):
+    """Confirmed server sends the case-keyed stamps (`le`/`lt`) CANNOT express.
+
+    stamp_ledger() reads a case's newest timestamp. A confirmed send whose `ts_utc` does not parse
+    (the readers silently drop or zero it) or that names no case at all leaves the owner looking
+    untouched. This scan finds those rows: `cases`/`pkeys` are the owners we KNOW were sent to but
+    cannot date (stamp_unknown marks them `lu:1`, which the page counts as contacted), and
+    `unattributed` counts confirmed sends tied to no case and no person key (history_coverage turns
+    ledgers_ok off for those). Counts and keys only; reads the same files history_coverage does.
+    A file that cannot be read adds nothing here: history_coverage already fails on it."""
+    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0}
+    for name, path, is_text in (('mail_sent.json', mail_path, False), ('text_sent.json', text_path, True)):
+        pth = path or os.path.join(HERE, name)
+        try:
+            with open(pth, encoding='utf-8') as fh:
+                rows = json.load(fh) or []
+        except Exception:
+            continue
+        if not isinstance(rows, list):
+            continue
+        for e in rows:
+            if not isinstance(e, dict):
+                continue
+            if is_text:
+                if e.get('ch') != 'text' or not e.get('confirmed'):
+                    continue
+            elif e.get('ch') != 'email' or not e.get('message_id'):
+                continue
+            case = str(e.get('case') or '').strip()
+            pkey = str(e.get('pkey') or '').strip() if is_text else ''
+            try:
+                _dt.datetime.fromisoformat(e['ts_utc'])
+                dated = True
+            except Exception:
+                dated = False
+            if not case and not pkey:
+                out['unattributed'] += 1
+            elif not dated:
+                if case:
+                    out['cases'].add(case)
+                if pkey:
+                    out['pkeys'].add(pkey)
+    return out
+
+
+def stamp_unknown(rows, audit):
+    """Mark rows whose owner has a confirmed send we could not date: `lu:1`. Returns the count."""
+    cases, pkeys = (audit or {}).get('cases') or set(), (audit or {}).get('pkeys') or set()
+    n = 0
+    for r in rows:
+        cs = [r.get('c')] + list(r.get('pcs') or [])
+        if any(c in cases for c in cs if c) or (r.get('pk') and r.get('pk') in pkeys):
+            r['lu'] = 1
+            n += 1
+    return n
+
+
 def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     """-> (rows, n_suppressed) : one SLIM row for every lead the dial queue does not carry.
 
@@ -2155,7 +2212,7 @@ def _identity_opted_fn(slim, optouts):
     return _test
 
 
-def history_coverage(total, shipped):
+def history_coverage(total, shipped, audit=None):
     """What the phone may claim about "no recorded contact" (call workflow spec section 3).
 
     ledgers_ok is true only when BOTH server send ledgers were read at build time: mail_sent.json
@@ -2175,6 +2232,9 @@ def history_coverage(total, shipped):
             ok, why = False, why or ('%s not found on the build machine' % name)
         except Exception as e:
             ok, why = False, why or ('%s unreadable (%s)' % (name, str(e)[:40]))
+    un = int((audit or {}).get('unattributed') or 0)
+    if un:
+        ok, why = False, why or ('%d confirmed send(s) in the ledgers name no case or person' % un)
     return json.dumps({'ledgers_ok': ok, 'why': why, 'capped': int(total) > int(shipped),
                        'total': int(total), 'shipped': int(shipped)})
 
@@ -2696,7 +2756,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, text_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
                       seat=seat, funnel_js=funnel_js, text_js=text_js,
-                      histcov=history_coverage(total, _shipped_all))
+                      histcov=history_coverage(total, _shipped_all, ledger_audit()))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -4054,14 +4114,39 @@ var _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
    ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
    retry never turns the session into a retry session. */
 var _QVBACK = null;
-function _qvRestore(){ if(_QVBACK){ QVIEW = _QVBACK; _QVBACK = null; } }
+/* Restores view, lane AND the card he was on, by identity in a fresh pool, so the first move off a
+   one-off never lands past the end of a different list (a false "Queue clear"). */
+function _qvRestore(){
+  var b = _QVBACK; if(!b) return false; _QVBACK = null;
+  QVIEW = b.v; lane = b.l;
+  var P = pool(), k;
+  for(k = 0; k < P.length; k++) if(P[k].c === b.c){ i = k; return true; }
+  i = 0;
+  return true;
+}
 function _histWhy(){
   if(typeof HISTCOV !== 'object' || !HISTCOV || HISTCOV.ledgers_ok !== true)
     return (HISTCOV && HISTCOV.why) || 'the server send history was not read when this page was built';
   if(_NOTESBAD) return 'the notes saved on this phone could not be read';
   try{
-    if(localStorage.getItem('fcTeamKey') && !localStorage.getItem('fcLastPull'))
-      return 'team sync is on but has not completed a pull on this phone yet';
+    var key = localStorage.getItem('fcTeamKey');
+    if(key){
+      /* Team sync is on: "a pull happened" is not enough. The last pull must have been clean (no
+         teammate blob skipped), for THIS key, recent, and must have seen as many other devices as
+         there are seats minus this one. */
+      var ps = null;
+      try{ ps = JSON.parse(localStorage.getItem('fcPullStat') || 'null'); }catch(e){ ps = null; }
+      if(!ps || typeof ps !== 'object' || !localStorage.getItem('fcLastPull'))
+        return 'team sync is on but has not completed a pull on this phone yet';
+      if(ps.ok !== true) return 'the last team-sync pull did not complete';
+      if(ps.failed > 0) return ps.failed + ' teammate device(s) could not be read in the last pull';
+      if(ps.kf !== _keyFp(key)) return 'the last pull was for a different team key';
+      var ts = Date.parse(String(ps.ts || '').replace(' ', 'T'));
+      if(!(ts > 0) || Date.now() - ts > 6*3600*1000) return 'the last team-sync pull is more than 6 hours old';
+      var sn = 0; try{ var sd = _seat(); sn = (sd && sd.n) || 0; }catch(e){ sn = 0; }
+      if(sn > 1 && (ps.devices|0) < sn - 1)
+        return 'only ' + (ps.devices|0) + ' of ' + (sn - 1) + ' other crew device(s) have synced';
+    }
   }catch(e){ return 'phone storage is blocked'; }
   return '';
 }
@@ -4183,7 +4268,7 @@ function _filedMs(r){
 }
 function _contactTier(r){
   try{ if(lastCall(notes[r.c])) return 2; }catch(e){}
-  if(r.le || r.lt) return 1;
+  if(r.le || r.lt || r.lu) return 1;
   try{ for(var k in lastOutreach(r)) return 1; }catch(e){}
   return 0;
 }
@@ -4380,12 +4465,15 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
-  _qvRestore();
-  _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
+  var _wl = lane, _rest = _qvRestore();   // _rest: he was on a one-off; view, lane and card are back
+  if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
+  /* One-off: the lead just worked was opened on purpose from elsewhere, so the card he was on is
+     still due. Do not walk past it just because the one-off also sits in the restored pool. */
+  if(_rest) return render();
   for(k=0;k<P.length;k++) if(P[k].c===workedC){
     /* A lead just dialled or texted drops behind the never-contacted ones (_freshFirst), so the next
        lead has already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
@@ -6342,10 +6430,10 @@ function wire(){
      laneDef() silently resolves to 'soon'. Tapping "TRACE" would have quietly switched the DIAL
      queue to Sale-soon and looked like nothing happened. Select on the attribute that means it. */
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-v]'), function(b){
-    b.onclick=function(){ QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
+    b.onclick=function(){ _QVBACK=null; QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
-    b.onclick=function(){ lane=b.dataset.l; BLANE=null; i=0; render();
+    b.onclick=function(){ _QVBACK=null; lane=b.dataset.l; BLANE=null; i=0; render();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
          leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
          done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
@@ -6364,19 +6452,19 @@ function wire(){
      Rows with no phone carry no data-open at all, so there is nothing here to tap. */
   Array.prototype.forEach.call(document.querySelectorAll('[data-open]'), function(el){
     el.onclick=function(){
-      var c = el.getAttribute('data-open');
+      var c = el.getAttribute('data-open'), lane0 = lane;
       for(var q=0;q<LANES.length;q++){
         var L=LANES[q]; var hit=-1;
         if(!ROWS.some(function(r){ return r.c===c && L.pred(r); })) continue;
         lane=L.k; BLANE=null;
         /* Opening a specific lead lands in whichever view holds it, so a retry opened ON PURPOSE
            from a board list or the lookup is not refused by the Untouched default. */
-        var _qvWas = QVIEW;
+        var _qvWas = QVIEW, _laneWas = lane0, _cardWas = (cur && cur.c) || null;
         try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
         var P=pool();
         for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
-        if(hit>=0){ if(QVIEW !== _qvWas) _QVBACK = _qvWas; i=hit; render(); return; }
-        QVIEW = _qvWas;
+        if(hit>=0){ if(!_QVBACK && (QVIEW !== _qvWas || lane !== _laneWas)) _QVBACK = {v:_qvWas, l:_laneWas, c:_cardWas}; i=hit; render(); return; }
+        QVIEW = _qvWas; lane = _laneWas;
       }
       /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
          seat. Say which rather than doing nothing when tapped. */

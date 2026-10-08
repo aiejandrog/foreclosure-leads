@@ -66,7 +66,10 @@ out.noledger = views(); out.noledgerWhy = _histWhy();
 HISTCOV.ledgers_ok = true; HISTCOV.why = '';
 _NOTESBAD = true; out.badnotes = _viewOf(rows.fresh); _NOTESBAD = false;
 store.fcTeamKey = 'abcdefgh'; out.syncNoPull = _viewOf(rows.fresh);
-store.fcLastPull = '2026-10-08 09:00'; out.syncPulled = _viewOf(rows.fresh);
+var _stamp = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,19).replace('T',' ');
+function _keyFp(k){ let h = 5381; k = String(k||''); for(let n = 0; n < k.length; n++) h = ((h * 33) ^ k.charCodeAt(n)) >>> 0; return h.toString(36); }
+store.fcLastPull = _stamp; store.fcPullStat = JSON.stringify({ok:true, kf:_keyFp('abcdefgh'), devices:1, failed:0, ts:_stamp});
+out.syncPulled = _viewOf(rows.fresh);
 delete store.fcTeamKey;
 HISTCOV = null; out.noHistcov = _viewOf(rows.fresh); HISTCOV = {ledgers_ok:true, why:'', capped:true, total:783, shipped:400};
 _VIEWN = {untouched:0, replies:1, retries:8, history_unknown:2};
@@ -111,8 +114,8 @@ rec('Q10 a position saved without a view (the old mixed queue) is never restored
 allk = SRC[SRC.find("{k:'all',"):SRC.find("hide0:false}\n];", SRC.find("{k:'all',"))]
 rec('the all-lanes entry has no channel, so no email-lane exemption', "ch:'" not in allk, allk)
 rec('a lead opened on purpose is a one-off: the first move off it restores the view',
-    all(('function %s(){\n  _qvRestore();' % f) in SRC or ('function %s(workedC, nextC){\n  _qvRestore();' % f) in SRC
-        for f in ('advance', 'navBack', 'navNext')) and '_QVBACK = _qvWas' in SRC)
+    all(('function %s(){\n  _qvRestore();' % f) in SRC or ('function %s(workedC, nextC){\n  var _wl = lane, _rest = _qvRestore();' % f) in SRC
+        for f in ('advance', 'navBack', 'navNext')) and '_QVBACK = {v:_qvWas' in SRC)
 rec('supReason/suppressed/hardSuppressed do not read the view',
     not any(t in SRC[SRC.find('function supReason('):SRC.find('function suppressed(')] for t in ('QVIEW', '_viewOf', 'HISTCOV')))
 
