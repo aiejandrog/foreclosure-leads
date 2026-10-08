@@ -5,9 +5,9 @@ field was empty, and read that fallback last-first. oname is often 'First Last',
 searched as first ROE last MARY, found nothing, and could record a clear that releases a Broward or
 Palm Beach lead. pacer_stay now reads that fallback both ways ('either').
 
-This lists every production 'clear' in pacer_stay_cache.json whose lead has no owner name of its own
-(only an oname / paOwner fallback without a comma), i.e. every clear that could have been recorded
-through the backwards reading. With --apply it turns each one into 'unverifiable' (held), keeps the
+This lists every production 'clear' in pacer_stay_cache.json whose lead carries any oname / paOwner
+fallback owner (or an owners value owner_repair.py copied from one) with a person written without a
+comma, i.e. every clear that could have been recorded through the backwards reading. With --apply it turns each one into 'unverifiable' (held), keeps the
 old verdict under 'quarantined_from', and writes a backup first. A fresh 'unverifiable' is not
 re-searched automatically inside the max age, so this spends nothing. Re-search one by hand with:
 
@@ -21,6 +21,7 @@ Output is case numbers, counties and dates only. No owner name is printed or wri
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -30,7 +31,14 @@ REASON = ('held 2026-10-08: this clear may have searched the owner name backward
           'fallback, ce154cc); re-search with pacer_stay.py --case')
 
 
+def _people(raw):
+    """The single-person parts of one owner string ('A; B', 'A & B', 'A AND B')."""
+    return [p for p in re.split(r'\s*[;&]\s*|\s+AND\s+', str(raw).upper()) if p.strip()]
+
+
 def suspects(cache, leads):
+    """Clear entries for leads with ANY fallback-sourced owner part written without a comma: that
+    part was searched one way only before this fix, and every owner must clear."""
     out = []
     for key, ent in sorted(cache.items()):
         if not isinstance(ent, dict) or ent.get('verdict') != 'clear':
@@ -38,8 +46,8 @@ def suspects(cache, leads):
         ld = leads.get(key)
         if not ld or not ld.get('owners'):
             continue
-        specs = ld['owners']
-        if all(order == 'either' for _, order in specs) and any(',' not in raw for raw, _ in specs):
+        if any(order == 'either' and any(',' not in part for part in _people(raw))
+               for raw, order in ld['owners']):
             out.append((key, ld, ent))
     return out
 

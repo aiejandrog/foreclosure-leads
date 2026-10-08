@@ -870,7 +870,11 @@ def parse_owner(raw, order):
                 toks = _strip_person(part)
                 if not toks:
                     continue
-                if len(toks) == 1 or (len(toks) == 2 and len(toks[1]) == 1 and order in ('first_last', 'either')):
+                if order == 'either' and len(toks) == 2 and len(toks[1]) == 1:
+                    # 'ROE M': first ROE + initial one way, surname ROE + bare initial the other, which
+                    # cannot be searched. A clear would rest on one reading only, so hold the lead.
+                    return [], 'an owner name that cannot be searched in both orders'
+                if len(toks) == 1 or (len(toks) == 2 and len(toks[1]) == 1 and order == 'first_last'):
                     # a bare first name after '&' shares the surname before it
                     if i > 0 and prev_surnames and len(toks[0]) > 1:
                         interps = [(toks[0], [sn], toks[1:]) for sn in prev_surnames]
