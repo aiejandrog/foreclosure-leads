@@ -1,9 +1,10 @@
 """PACER owner-name finder (labels-only output) v2.
 
 Given case numbers, search local lead/lis-pendens/cache/archive files for the owner-of-record,
-prefer a REAL owner field over the foreclosure `defendant` list, skip entity/estate strings, and
-validate the name is PACER-usable (splittable into first/last). With --run, feed the best usable
-name into the lookup-only search:  pacer_stay.py --case <case> --owner "<name>".
+prefer a REAL owner field over the foreclosure `defendant` list, and label whether the name is
+PACER-usable (splittable into first/last). With --run, feed the best found name into the lookup-only
+search:  pacer_stay.py --case <case> --owner "<name>"  (pacer_stay is the real judge and refuses an
+unsplittable name for $0.00, so --run attempts every found name; `usable` is an advisory label).
 
 PRIVACY CONTRACT: the owner name is NEVER printed/logged/written. It lives in memory and, with --run,
 is passed to the pacer_stay subprocess argv. Output is LABELS ONLY (case, where it was found, field,
@@ -127,15 +128,17 @@ def main(argv):
                 if (fb, ff) not in seen:
                     seen.append((fb, ff))
             print('        appears in: ' + ', '.join('%s:%s' % (fb, ff) for fb, ff in seen))
-        if run and usable:
+        if run:
+            # Attempt EVERY found name. pacer_stay is the real judge of splittability and refuses an
+            # unusable name for $0.00 (0 pages) -- so pre-filtering on our own `usable` heuristic only
+            # loses coverage (it wrongly rejected real names pacer_stay cleared) and saves nothing.
+            # The usable=YES/no label above stays as advisory for the human.
             usable_run += 1
             r = subprocess.run([sys.executable, 'pacer_stay.py', '--case', case, '--owner', owner])
             print('        -> pacer_stay --case %s exited %d (lookup-only; name not shown)' % (case, r.returncode))
-        elif run and not usable:
-            print('        -> SKIPPED --run: name is not PACER-usable, would only burn a refused search')
     print('-' * 100)
     if run:
-        print('ran lookup-only on %d of %d (skipped the non-usable names)' % (usable_run, len(cases)))
+        print('ran lookup-only on %d of %d found (pacer_stay refuses an unusable name for $0.00)' % (usable_run, len(cases)))
     print('done. owner names were never printed.')
 
 
