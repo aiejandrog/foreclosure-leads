@@ -29,13 +29,14 @@ var BRIDGE_HOLD='', BRIDGE_OK=true, auto=true, autoAll=true, nextStep=null;
 var SYNCWAIT=null, SYNCTRY=0, SYNC_MAX=18;
 var TEXT_HOLD_DOWN='Texting is held — inbound STOP scan unconfirmed.';
 var TEXT_HOLD=TEXT_HOLD_DOWN;
+var SENDSEQ=0, SEND_WAIT_MS=150000;
 var sending=false, sendingAt=0, i=4, Q=Array(12).fill({mailTo:'fixture@example.invalid'});
 var lane='urgent', marks=[], logs=[], requests=0, timers=[], runs=0, tbOn=false;
 var LMETA={urgent:{t:'URGENT'}}, CAP={max:50}, AbortController=undefined;
 var reply={status:200,j:{ok:false,blocked:'optout_stale',err:'ledger stale'}};
 function fetch(){requests++; return Promise.resolve({status:reply.status,json:()=>Promise.resolve(reply.j)});}
 function setTimeout(fn){timers.push(fn); return timers.length;}
-function clearTimeout(){} function render(){} function renderBridge(){} function renderRunBar(){}
+function clearTimeout(id){ if(id) timers[id-1]=null; } function render(){} function renderBridge(){} function renderRunBar(){}
 function paintTextHold(){}
 function addLog(k,n,s){logs.push(k);} function post(k){marks.push(k);}
 function advance(){i++;} function bridgeUp(ok){BRIDGE_OK=ok;} function _cacheLive(){}
@@ -45,7 +46,7 @@ var lead={mailSubj:'Fixture',mailBody:'Fixture',mailTo:'fixture@example.invalid'
 '''
         return self.helpers['node'](harness + functions + '\n(async()=>{' + actions + r'''
 await new Promise(resolve=>setImmediate(resolve));
-console.log(JSON.stringify({auto,autoAll,i,marks,logs,requests,timers:timers.length,runs,hold:BRIDGE_HOLD}));
+console.log(JSON.stringify({auto,autoAll,i,marks,logs,requests,timers:timers.filter(Boolean).length,runs,hold:BRIDGE_HOLD}));
 })().catch(e=>{console.error(e);process.exit(1);});''')
 
     def test_stale_rejection_keeps_current_lead_and_posts_no_skip(self):
