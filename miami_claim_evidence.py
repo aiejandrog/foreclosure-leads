@@ -102,3 +102,67 @@ def enrich_claims(search_reports, raw_results, documents):
                     'identity_status':'search_result_only','attachment_status':'unknown',
                     'satisfaction_status':'unknown','parcel_status':'unknown'})
     return reports
+
+
+def _case_number_pattern(case):
+    """The case's year and sequence as printed on a caption: 2024-014878-CA-01, '2024 014878 CA 01'."""
+    parts = str(case or '').split('-')
+    if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return re.compile(r'(?<!\d)%s[\s\-/]+0*%s(?!\d)' % (re.escape(parts[0]), re.escape(parts[1].lstrip('0') or '0')))
+
+
+def _captioned_with(doc, pattern):
+    """True when this document's own first-page caption prints the case number. A "CASE NO" line in the first twelve lines only: a
+    later paper that cites this foreclosure in its body is not this foreclosure's filing."""
+    pages = (doc.get('reading') or {}).get('pages') or []
+    first = next((p for p in pages if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')), None)
+    if not first:
+        return False
+    head = [ln for ln in str(first.get('text') or '').splitlines() if ln.strip()][:12]
+    return any(re.search(r'\bCASE\s*(?:NO|NUMBER|#)', ln, re.I) and pattern.search(ln) for ln in head)
+
+
+def mark_own_case(search_reports, this_case, case, documents):
+    """Re-mark this foreclosure's own judgment or lis pendens in a SAVED report, with no search.
+
+    Own-case is otherwise set only while a live name search runs (document_walk.run_name_searches),
+    so reports saved before that existed still list the case's own filing as a claim (6 of 7 in the
+    2026-10-03 replay, unchanged at 2026-10-08). Only an EXPLICIT link counts here:
+      - the record's book/page is one the docket itself says its own filing was recorded at, or
+      - the record is a judgment or lis pendens whose first-page caption prints this case's number.
+    Date proximity and plaintiff identity are never enough. A marked claim moves to
+    `own_case_instruments`, whole, with the basis named; every other claim and gap is untouched.
+    """
+    reports = copy.deepcopy(search_reports)
+    pattern = _case_number_pattern(case)
+    docket_keys = set((this_case or {}).get('book_pages') or ())
+    indexed = {}
+    for doc in documents or []:
+        record = (doc.get('stored') or {}).get('record_key') or {}
+        if record.get('book') and record.get('page'):
+            indexed[key_of(record['book'], record['page'])] = doc
+    for report in reports:
+        own = report.setdefault('own_case_instruments', [])
+        have = {key_of(o.get('book'), o.get('page_no')) for o in own}
+        kept = []
+        for claim in report.get('potential_title_party_claims') or []:
+            book, page = claim.get('book'), claim.get('page_no')
+            key = key_of(book, page) if book and page else None
+            basis = None
+            if key and key in docket_keys:
+                basis = 'docket_book_page'
+            elif key and pattern is not None:
+                doc = indexed.get(key)
+                kind = str(((doc or {}).get('classification') or {}).get('text_kind')
+                           or ((doc or {}).get('classification') or {}).get('kind') or '')
+                if doc and re.search(r'judgment|lis[_ ]?pendens', kind, re.I) and _captioned_with(doc, pattern):
+                    basis = 'case_number_in_caption'
+            if not basis:
+                kept.append(claim)
+                continue
+            if key not in have:
+                have.add(key)
+                own.append(dict(claim, own_case=True, this_case=basis, moved_from='potential_title_party_claims'))
+        report['potential_title_party_claims'] = kept
+    return reports
