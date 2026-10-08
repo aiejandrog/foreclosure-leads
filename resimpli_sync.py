@@ -1004,6 +1004,30 @@ def audit(results, pairs):
             sorted({c for c, _ in bad if real_case(c)}))
 
 
+def prune_unconfirmed(results, pairs, flagged=()):
+    """Remove the cached src=resimpli numbers audit() calls unconfirmed (only those; nothing else is touched).
+    A number marked dnc, or in `flagged` (the numbers REsimpli's exports flag), is never removed: a removal
+    must not drop a suppression mark. An entry this tool created (source resimpli) that ends with no phone and
+    no email is deleted, so skiptrace.py can trace that lead. -> (numbers removed, entries deleted)"""
+    gone = dead = 0
+    for case in list(results):
+        ent = results[case]
+        ph = ent.get('phones') if isinstance(ent, dict) else None
+        if not isinstance(ph, list):
+            continue
+        keep = [p for p in ph if not (isinstance(p, dict) and p.get('src') == 'resimpli' and not p.get('dnc')
+                                      and norm_number(p.get('number')) not in flagged
+                                      and (case, norm_number(p.get('number'))) not in pairs)]
+        if len(keep) == len(ph):
+            continue
+        gone += len(ph) - len(keep)
+        ent['phones'] = keep
+        if not keep and not ent.get('emails') and ent.get('source') == 'resimpli':
+            del results[case]
+            dead += 1
+    return gone, dead
+
+
 def load_sidecar(path):
     """(dnc_scrub.json as a dict, 'ok'); ({}, 'ok') when there is none; (None, 'unreadable') when it
     exists and cannot be read as a JSON object; (None, 'unopenable') when it exists and cannot be
@@ -1337,6 +1361,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('files', nargs='*')
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--prune-unconfirmed', action='store_true',
+                    help='also remove the cached REsimpli numbers no export read this run attaches (the NOTE count)')
     ap.add_argument('--create', action='store_true',
                     help='start an empty phone cache when there is none (otherwise that stops the run)')
     a = ap.parse_args(argv)
@@ -1493,6 +1519,16 @@ def main(argv=None):
         total[k] += settled[k]                 # the flagged numbers, placed after every callable one
     tightened = tighten(results, flagged)
     aud, bad_cases = audit(results, pairs)
+    if a.prune_unconfirmed and (skipped or unread):
+        print('REFUSED: --prune-unconfirmed needs every export read, and %d file%s %s skipped or not read, so the '
+              'list of attached numbers is incomplete. Nothing was written. Run with no file named once the skipped '
+              'file is fixed.' % (len(skipped) + unread, '' if len(skipped) + unread == 1 else 's',
+                                  'was' if len(skipped) + unread == 1 else 'were'))
+        return 2
+    pruned = prune_unconfirmed(results, pairs, flagged) if a.prune_unconfirmed else (0, 0)
+    if a.prune_unconfirmed:
+        print('prune-unconfirmed: %d numbers%s removed, %d lead entries deleted'
+              % (pruned[0], ' would be' if a.dry_run else '', pruned[1]))
     side_doc, side_added, side_tight, side_marked = sidecar_plan(side_cur, flagged, results, today)
     total.update(dnc_flagged_numbers=len(flagged), dnc_tightened=tightened, dnc_sidecar_added=side_added,
                  dnc_sidecar_tightened=side_tight, dnc_sidecar_marked=side_marked, opt_people_held=len(opt_people),
@@ -1501,6 +1537,7 @@ def main(argv=None):
     status['total'] = total
     status['dnc_scrub_json'] = side_state
     status['resimpli_unconfirmed_cases'] = bad_cases
+    status['pruned_numbers'], status['pruned_entries'] = pruned
     status['opt_person_cases'] = sorted(c for c in state.get('opt_person_cases', ()) if real_case(c))
     print('TOTAL')
     for k in COUNT_KEYS + GLOBAL_KEYS:
@@ -1519,7 +1556,7 @@ def main(argv=None):
         print('DRY RUN - nothing written')
         return 0
 
-    cache_changed = bool(total['new_numbers'] or tightened)
+    cache_changed = bool(total['new_numbers'] or tightened or pruned[0])
     wrote, tmps = [], []
     try:
         # 1. prepare: both files are written beside the originals; nothing is replaced yet. Each temp
