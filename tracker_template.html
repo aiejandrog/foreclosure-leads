@@ -3438,7 +3438,15 @@ function _optedOutIdentities(){
     const n = notes[k] || {};
     if(!(n.optout || n.status === 'DO NOT CONTACT')) return;
     if(c === '@') em.add(String(k).slice(1).trim().toLowerCase());
-    else ph.add(String(k).slice(1).replace(/\D/g,''));
+    else {
+      const dg = String(k).slice(1).replace(/\D/g,'');
+      ph.add(dg);
+      // The server ledger ships '#'+_addrKey(digits). Stripping non-digits from that hash turned it
+      // into junk, so no server-ledger phone opt-out ever matched on the board (2026-10-08).
+      ph.add(String(k).slice(1).trim());
+      // a number saved with its country code also matches the lead's 10-digit copy (2026-10-08)
+      if(dg.length === 11 && dg.charAt(0) === '1') ph.add(dg.slice(1));
+    }
   });
   _OOP = {em: em, ph: ph}; _OOPsrc = notes;
   return _OOP;
@@ -3459,7 +3467,11 @@ function _isOptedOutPerson(r){
     try { return set.has(_addrKey(val)); } catch(e){ return false; }
   };
   if((r.emails||[]).some(function(e){ return hit(S.em, String(e||'').trim().toLowerCase()); })) return true;
-  return (r.phones||[]).some(function(p){ return hit(S.ph, String(p||'').replace(/\D/g,'')); });
+  return (r.phones||[]).some(function(p){
+    const dg = String(p||'').replace(/\D/g,'');
+    if(hit(S.ph, dg)) return true;
+    return dg.length === 11 && dg.charAt(0) === '1' && hit(S.ph, dg.slice(1));
+  });
 }
 
 function _textContactBlocked(r){
@@ -3468,6 +3480,10 @@ function _textContactBlocked(r){
   // one edit, every channel: per the 2026-08-11 sweep this single function gates text, WhatsApp,
   // email, letter, hanger and door, so the person-level check belongs here and nowhere else
   if(_isOptedOutPerson(r)) return 'optout';
+  // SAME PERSON, OTHER CASE (2026-10-08). A stop, DNC or hard no logged on one of this owner's
+  // cases closes the others too: the worker already reads it that way (_boardNoState walks
+  // _personCases), and the manual Text / Email / letter buttons did not.
+  if(typeof _boardNoState === 'function' && _boardNoState(r).hard) return 'optout';
   if(_isWrongOwner(n)) return 'wrong';
   if(r.saleBkAct) return 'bk';
   return '';

@@ -130,3 +130,52 @@ def tag_listing_agents(leads):
             r['phsrc'] = src[:MAX_PHONES]
             hits += 1
     return hits
+
+
+def propagate_dnc(leads, extra=()):
+    """A number DNC-flagged on ANY lead is flagged on EVERY lead that carries it. -> (leads, numbers)
+
+    `phdnc` is per record: the registry flag comes with whichever trace returned the number, and a
+    Whitepages copy of the same number is appended as False ("not flagged", never "scrubbed"). So
+    one number could be do-not-call on one lead and clean on another, and every surface that reads
+    phdnc row by row (board, Morning Worker, Call Mode's queue and its lookup) offered it through
+    the clean copy. Flags are only ever ADDED here.
+
+    A lead whose flags changed loses its phone ranking (phrank / phbest) so the ranking pass that
+    runs after this rebuilds it: phbest could point at the number that just became DNC.
+
+    `extra`: numbers known to be DNC from outside the rows (every flagged skip-trace number,
+    including ones the MAX_PHONES cut dropped, and registry-listed numbers from dnc_scrub.json).
+    The merges sort DNC numbers last before cutting, so the flag is the first thing a long list
+    loses; without this, another lead's clean copy of a cut number stayed dialable."""
+    flagged = {n for n in (_last10(x) for x in (extra or ())) if n}
+    for r in leads:
+        dnc = r.get('phdnc') or []
+        for i, p in enumerate(r.get('phones') or []):
+            if i < len(dnc) and dnc[i]:
+                n10 = _last10(p)
+                if n10:
+                    flagged.add(n10)
+    if not flagged:
+        return 0, 0
+    hits, nums = 0, set()
+    for r in leads:
+        ph = list(r.get('phones') or [])
+        if not ph:
+            continue
+        dnc = list(r.get('phdnc') or [])
+        while len(dnc) < len(ph):
+            dnc.append(False)
+        touched = False
+        for i, p in enumerate(ph):
+            n10 = _last10(p)
+            if n10 in flagged and not dnc[i]:
+                dnc[i] = True
+                nums.add(n10)
+                touched = True
+        if touched:
+            r['phdnc'] = dnc
+            r['phrank'] = []
+            r['phbest'] = None
+            hits += 1
+    return hits, len(nums)

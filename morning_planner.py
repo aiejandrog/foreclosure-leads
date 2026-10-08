@@ -240,7 +240,7 @@ def _notes_blocked(r):
     if not isinstance(n, dict):
         # person-level keys the phone writes
         for p in (r.get('phones') or []):
-            k = '#' + re.sub(r'\D', '', str(p))
+            k = '#' + re.sub(r'\D', '', str(p.get('number') if isinstance(p, dict) else p))
             m = _NOTES.get(k)
             if isinstance(m, dict) and (m.get('optout') or str(m.get('status') or '').upper() == 'DO NOT CONTACT'):
                 return True
@@ -300,8 +300,14 @@ def _opted_out(r, optouts):
     for e in (r.get('emails') or []):
         if ('@' + str(e).strip().lower()) in led:
             return True
+    # A '#1XXXXXXXXXX' ledger key (saved with the country code) matches the lead's 10-digit copy.
+    _ph = {re.sub(r'\D', '', str(k)) for k in led if str(k)[:1] == '#'}
+    _ph |= {d[1:] for d in _ph if len(d) == 11 and d[0] == '1'}
     for p in (r.get('phones') or []):
-        if ('#' + re.sub(r'\D', '', str(p))) in led:
+        # skip-trace phones come in as dicts here ({'number': ...}); str(dict) would mix in digits
+        # from every other field
+        d = re.sub(r'\D', '', str(p.get('number') if isinstance(p, dict) else p))
+        if d and (d in _ph or (len(d) == 11 and d[0] == '1' and d[1:] in _ph)):
             return True
     return False
 
