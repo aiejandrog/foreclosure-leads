@@ -961,6 +961,47 @@ def _digits(v):
     return re.sub(r'\D', '', str(v or ''))
 
 
+def _ph10(v):
+    """Digits of a US number in the 10-digit form leads carry. '+1 305 555 0100' and '13055550100'
+    both become '3055550100'; anything else is returned as its plain digits. Used on BOTH sides of
+    every opt-out and DNC comparison, so an 11-digit ledger key still matches a 10-digit lead."""
+    d = _digits(v)
+    return d[1:] if (len(d) == 11 and d[0] == '1') else d
+
+
+def dnc_numbers(slim):
+    """Every number DNC-flagged on ANY lead (10-digit form). `phdnc` is per record, so the same
+    number could be flagged on one lead and clean on another and still reach a tel:/sms: link
+    through the clean copy. A number flagged anywhere is treated as flagged everywhere."""
+    out = set()
+    for d in slim or ():
+        dnc = d.get('phdnc') or []
+        for i, p in enumerate(d.get('phones') or []):
+            if i < len(dnc) and dnc[i]:
+                k = _ph10(p)
+                if k:
+                    out.add(k)
+    return out
+
+
+def _opted_person_fn(slim, optouts):
+    """lead -> True when ANOTHER case of the same person (real 'P' pkey) is in the ledger by case.
+
+    A case-keyed opt-out used to suppress only that case: the same owner's second property stayed
+    on the dial queue and on the lookup screen. The board's worker already treats a stop as
+    person-wide (_boardNoState over _personCases); this applies the same grouping at build time.
+    Singleton pkeys ('C'+case) group nothing, so they are skipped."""
+    optouts = optouts or {}
+    hit = set()
+    for d in slim or ():
+        k, c = d.get('pkey'), (d.get('case') or '').strip()
+        if c and c in optouts and k and _PKEY_HASH_RE.match(str(k)):
+            hit.add(k)
+    if not hit:
+        return lambda lead: False
+    return lambda lead: bool(lead.get('pkey')) and lead.get('pkey') in hit
+
+
 # Anchors for the sync/merge block lifted out of tracker_template.html. START is the first of the
 # three merge helpers; END is the last line of the team-sync section. Everything between —
 # _DNC/_DEAD/_lastTouchD, _mergeLead, mergeNotes, the Supabase push/pull — is contiguous.
@@ -1437,12 +1478,15 @@ def lookup_hold_fn(slim, optouts=None, deads=None):
     those are "not due today", and calling back someone who texted in is fine for them."""
     optouts, deads = (optouts or {}), (deads or {})
     _id_opted = _identity_opted_fn(slim, optouts)
+    _person_opted = _opted_person_fn(slim, optouts)
     _fed = federal_hold_fn()
 
     def _hold(d):
         case = (d.get('case') or '').strip()
         if case in optouts or _id_opted(d):
             return 'opted out'
+        if _person_opted(d):
+            return 'opted out on another case'
         if case in deads:
             return 'dead lead'
         if d.get('saleBkAct'):
@@ -1521,37 +1565,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # `case in optouts` can never match those keys, so a person who said stop by email stayed
     # dialable HERE — on the one surface whose entire purpose is dialing them. The board has had
     # this via _isOptedOutPerson() for months; Call Mode never got it, and neither did the Morning
-    # Worker until today. Same fix, third surface.
-    _oo_ident = {str(k) for k in optouts if str(k)[:1] in ('@', '#')}
-    _ak = None
-    if _oo_ident:
-        # function-level import on purpose: foreclosure_leads imports THIS module, so a top-level
-        # one would be circular. Hash must be the same one the ledger was keyed with, never a copy.
-        try:
-            from foreclosure_leads import _addr_key as _ak
-        except Exception:
-            _ak = None
-
-    def _identity_opted(lead):
-        if not _oo_ident or not _ak:
-            return False
-        for _e in (lead.get('emails') or []):
-            _e = str(_e or '').strip().lower()
-            # raw key OR hashed key — optouts.json stores the address verbatim; only the
-            # board bake hashes it. Hashed-only matched nothing against the real ledger.
-            if _e and (('@' + _e) in _oo_ident or ('@' + _ak(_e)) in _oo_ident):
-                return True
-        for _p in (lead.get('phones') or []):
-            # Digits only, NO country-code normalisation — deliberately matching what the ledger key
-            # was hashed from and what the board's _isOptedOutPerson does. So a '+1' 11-digit number
-            # would NOT match a 10-digit opt-out. Checked 2026-08-26: all 9,885 phones in the
-            # skiptrace cache are 10 digits, so this is theoretical today. If 11-digit numbers ever
-            # arrive, strip a leading '1' HERE, in the board, and in the bake — all three or none,
-            # or the hashes stop agreeing and the suppression silently stops matching.
-            _p = re.sub(r'\D', '', str(_p or ''))
-            if _p and (('#' + _p) in _oo_ident or ('#' + _ak(_p)) in _oo_ident):
-                return True
-        return False
+    # Worker until today. Same fix, third surface. One reader (_identity_opted_fn), shared with
+    # coverage_rows and the lookup, so the three cannot disagree about who opted out.
+    _identity_opted = _identity_opted_fn(slim, optouts)
+    # SAME PERSON, OTHER CASE (2026-10-08): a case-keyed opt-out closes every case on that pkey.
+    _person_opted = _opted_person_fn(slim, optouts)
+    # A number DNC-flagged on ANY lead is DNC here too (phdnc is per record).
+    _dnc_any = dnc_numbers(slim)
 
     out = []
     _ident_dropped = 0
@@ -1571,7 +1591,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # the diligence gate (asks about a foreclosure that does not exist), the auction-window
         # gate (no auction — the clock is the note's est. maturity) and the sale-passed gate.
         is_bal = (d.get('st') == 'BAL')
-        if _identity_opted(d):
+        if _identity_opted(d) or _person_opted(d):
             _ident_dropped += 1
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
@@ -1616,7 +1636,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         pairs = []
         n_dnc = 0
         for oi, p in enumerate(phones):
-            if phdnc[oi] if oi < len(phdnc) else False:
+            if (phdnc[oi] if oi < len(phdnc) else False) or _ph10(p) in _dnc_any:
                 n_dnc += 1
                 continue                                   # DNC numbers are dropped, never flagged
             if (phsrc[oi] if oi < len(phsrc) else '') in ('ag', 'xl'):
@@ -1929,7 +1949,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # Say it out loud. A suppression that removes people silently is indistinguishable from a
         # queue that was always this size, and this one drops leads that LOOK perfectly callable.
         print('call mode: %d lead(s) dropped — the person opted out by email/phone with no case '
-              'attached (identity ledger)' % _ident_dropped)
+              'attached (identity ledger), or on another case of theirs' % _ident_dropped)
     # Same rule, same reason — and the diligence holds are the ones that look MOST callable of all,
     # because a held lead's card still shows equity, a phone and an auction date.
     _dg.report('call mode', indent='')
@@ -2114,12 +2134,13 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     # The identity-ledger check is call_rows' own, reused rather than re-derived: CLAUDE.md reserves
     # everything that PRODUCES a suppression verdict for the desktop session. This reads one.
     _id_opted = _identity_opted_fn(slim, optouts)
+    _person_opted = _opted_person_fn(slim, optouts)
     for d in slim:
         case = (d.get('case') or '').strip()
         if not case or case in dial or case in seen:
             continue
         seen.add(case)
-        oo = 1 if (case in optouts or case in deads or _id_opted(d)) else 0
+        oo = 1 if (case in optouts or case in deads or _id_opted(d) or _person_opted(d)) else 0
         if oo:
             suppressed += 1
         # `np` COUNTS DNC-FLAGGED NUMBERS, deliberately, and this is the one place these rows do
@@ -2192,22 +2213,29 @@ def _identity_opted_fn(slim, optouts):
     the SAME reader instead of growing a second one. Returns a predicate; a no-op when the ledger
     carries no identity keys."""
     _oo_ident = {str(k) for k in (optouts or {}) if str(k)[:1] in ('@', '#')}
+    # A raw '#1XXXXXXXXXX' key (a number saved with its country code) also matches the lead's
+    # 10-digit copy. Hashed keys are normalized where they are made (the bake), not here.
+    _oo_ident |= {'#' + _ph10(k[1:]) for k in _oo_ident if k[:1] == '#' and _ph10(k[1:])}
     if not _oo_ident:
         return lambda lead: False
     try:
         from foreclosure_leads import _addr_key as _ak    # circular at module scope; see call_rows
     except Exception:
-        return lambda lead: False
+        # Without the hash only the hashed keys go unread; RAW keys still match (this used to
+        # return a no-op here, which read no identity opt-out at all).
+        _ak = None
+
+    def _in(prefix, v):
+        return bool(v) and ((prefix + v) in _oo_ident or (_ak is not None and (prefix + _ak(v)) in _oo_ident))
 
     def _test(lead):
         for _e in (lead.get('emails') or []):
-            _e = str(_e or '').strip().lower()
-            if _e and (('@' + _e) in _oo_ident or ('@' + _ak(_e)) in _oo_ident):
+            if _in('@', str(_e or '').strip().lower()):
                 return True
         for _p in (lead.get('phones') or []):
-            _p = re.sub(r'\D', '', str(_p or ''))
-            if _p and (('#' + _p) in _oo_ident or ('#' + _ak(_p)) in _oo_ident):
-                return True
+            for _q in {re.sub(r'\D', '', str(_p or '')), _ph10(_p)}:
+                if _in('#', _q):
+                    return True
         return False
     return _test
 
@@ -2405,7 +2433,8 @@ def phone_index(slim, hold=None):
     reply. She turned out to be a lead we had emailed three times.
 
     Shape is deliberately two tables, not a fat map: several numbers share one lead, so
-      t: [[owner, street, case, days, equity, folio, countyCode, holdReason], ...]   (each lead once)
+      t: [[owner, street, case, days, equity, folio, countyCode, holdReason, otherCases], ...]
+         (each lead once; otherCases = the same person's other cases, or None)
       d: {"3058011800": <index into t>, ...}
       h: {"3058011800": <reason>, ...}   (only numbers held while their `t` row is not; see below)
     Naive one-record-per-number was 253KB; this is materially smaller and the page has to open on a
@@ -2429,6 +2458,17 @@ def phone_index(slim, hold=None):
         except Exception:
             return 0.0
     seen, table, digits, num_hold, case_hold = {}, [], {}, {}, {}
+    # A number DNC-flagged on ANY lead never enters `d` (2026-10-08): phdnc is per record, so the
+    # clean copy of a number another lead flags used to be indexed and linked.
+    _dnc_any = dnc_numbers(slim)
+    # The same person's OTHER cases ride with the row, so the lookup's hardSuppressed() walks them
+    # the way it does for a queue row (r.pcs): a hard no or opt-out logged on the phone against a
+    # sibling case after the build closes this one too. Real 'P' person keys only.
+    _groups = {}
+    for d in slim:
+        k, c = d.get('pkey'), (d.get('case') or '').strip()
+        if c and k and _PKEY_HASH_RE.match(str(k)) and c not in _groups.setdefault(k, []):
+            _groups[k].append(c)
     for d in slim:
         case = (d.get('case') or '').strip()
         # 🔴 DNC NUMBERS MUST NOT BE SERIALIZED. This module's own docstring states the invariant:
@@ -2449,7 +2489,7 @@ def phone_index(slim, hold=None):
             if len(_pd) != 10:
                 continue
             _all.append(_pd)
-            if not (_i < len(_dnc_raw) and _dnc_raw[_i]):
+            if not (_i < len(_dnc_raw) and _dnc_raw[_i]) and _pd not in _dnc_any:
                 phones.append(_pd)
         if not case:
             continue
@@ -2481,6 +2521,7 @@ def phone_index(slim, hold=None):
                 re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
                 (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2]),
                 None,                                    # hold reason: set after the loop
+                ([x for x in _groups.get(d.get('pkey'), []) if x != case] or None),
             ])
         for p in phones:
             digits.setdefault(p, seen[case])       # first lead wins; a number is one person
@@ -3445,7 +3486,12 @@ function optPhones(force){
   for(var k in notes){
     if(k.charAt(0) !== '#') continue;
     var nn = notes[k] || {};
-    if(nn.optout || nn.status === 'DO NOT CONTACT') s[k.slice(1).replace(/\D/g,'')] = 1;
+    if(nn.optout || nn.status === 'DO NOT CONTACT'){
+      var dg = k.slice(1).replace(/\D/g,'');
+      s[dg] = 1;
+      /* a number saved with its country code also matches the lead's 10-digit copy */
+      if(dg.length === 11 && dg.charAt(0) === '1') s[dg.slice(1)] = 1;
+    }
   }
   _OPTPH = s;
   return s;
@@ -5000,7 +5046,8 @@ function phLookup(q){
     seenIdx[idx + '|' + num] = 1;
     var row = t[idx] || [];
     hits.push({num:num, owner:row[0]||'', street:row[1]||'', c:row[2]||'',
-               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||(PHIDX.h&&PHIDX.h[num])||''});
+               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||(PHIDX.h&&PHIDX.h[num])||'',
+               pcs:row[8]||null});
   };
   var ten = d.slice(-10);
   if(d.length >= 10 && map[ten] != null){ push(ten, map[ten]); return hits; }
@@ -5074,10 +5121,15 @@ function screenLookup(prefill){
         /* DIAL-TIME GATE ON THE LOOKUP SCREEN (2026-09-25). These two links used to render for ANY
            indexed number: a person who said "stop" after the build could be called and texted from
            here with no check at all. Same predicate the queue uses, on the row when we have it. */
-        +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num]});
+        /* pcs: the same person's other cases, so a hard no logged on a sibling closes this one
+           too (2026-10-08). The Text link also obeys the text hold, as the queue's composer does:
+           a lookup is not a way around a stale do-not-contact list. */
+        +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num], pcs:h.pcs || []});
               if(_hs) return '<span class="nc" style="color:#ff8a80;font-weight:800">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '</span>';
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
-                   + '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'; })())
+                   + (textingHeld()
+                      ? '<span class="nc lkth">' + esc(textHoldWhy() || 'Texting is held.') + '</span>'
+                      : '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'); })())
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
         + '</div>'
