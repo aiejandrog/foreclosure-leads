@@ -7,7 +7,8 @@ Palm Beach lead. pacer_stay now reads that fallback both ways ('either').
 
 This lists every production 'clear' in pacer_stay_cache.json whose lead carries any oname / paOwner
 fallback owner (or an owners value owner_repair.py copied from one) with a person written without a
-comma, i.e. every clear that could have been recorded through the backwards reading. With --apply it turns each one into 'unverifiable' (held), keeps the
+comma, plus every clear recorded since ce154cc by code without the fix (the lead files may have
+changed since), i.e. every clear that could have been recorded through the backwards reading. With --apply it turns each one into 'unverifiable' (held), keeps the
 old verdict under 'quarantined_from', and writes a backup first. A fresh 'unverifiable' is not
 re-searched automatically inside the max age, so this spends nothing. Re-search one by hand with:
 
@@ -36,14 +37,39 @@ def _people(raw):
     return [p for p in re.split(r'\s*[;&]\s*|\s+AND\s+', str(raw).upper()) if p.strip()]
 
 
+# ce154cc (the one-way fallback) was committed 2026-10-08 18:20:58 -04:00. No lead could get a clear
+# from a fallback name before it: an empty owners field was 'no owner name' (unverifiable).
+CUTOFF = dt.datetime(2026, 10, 8, 22, 20, 58, tzinfo=dt.timezone.utc).timestamp()
+
+
+def _since_bad_loader(ent):
+    """Recorded on or after ce154cc by code that does not read fallback names both ways. The lead
+    files may have changed since (owners filled in by pa_values / stub_resolve / a re-scrape), so
+    today's files cannot clear such an entry; only its own name-reading stamp can."""
+    try:
+        t = float(ent.get('t') or 0)
+    except (TypeError, ValueError):
+        t = 0.0
+    if not t:
+        try:
+            t = dt.datetime.fromisoformat(str(ent.get('q') or '')).timestamp()
+        except ValueError:
+            return True                       # no readable time: cannot rule it out
+    return t >= CUTOFF and ent.get('names') != PS.NAME_READING
+
+
 def suspects(cache, leads):
-    """Clear entries for leads with ANY fallback-sourced owner part written without a comma: that
-    part was searched one way only before this fix, and every owner must clear."""
+    """Clear entries that may rest on a one-way fallback name: recorded since ce154cc without the
+    fixed reading's stamp, or for a lead with ANY fallback-sourced owner part written without a
+    comma (that part was searched one way only before the fix, and every owner must clear)."""
     out = []
     for key, ent in sorted(cache.items()):
         if not isinstance(ent, dict) or ent.get('verdict') != 'clear':
             continue
         ld = leads.get(key)
+        if _since_bad_loader(ent):
+            out.append((key, ld or {'case': key, 'county': ent.get('county') or ''}, ent))
+            continue
         if not ld or not ld.get('owners'):
             continue
         if any(order == 'either' and any(',' not in part for part in _people(raw))

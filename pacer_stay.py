@@ -161,6 +161,10 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE_NAME = 'pacer_stay_cache.json'
+# written into every cache entry: the owner-name reading that produced it. 'either-1' = fallback
+# owner names (oname / paOwner / owner_repair) are searched both ways (2026-10-08, after ce154cc).
+# pacer_fallback_audit.py holds a clear recorded since ce154cc that does not carry it.
+NAME_READING = 'either-1'
 QA_CACHE_NAME = 'pacer_stay_cache_qa.json'
 QUARTER_LEDGER_NAME = 'pacer_quarter_ledger.json'
 ENV_QUARTER_LEDGER = 'PACER_QUARTER_LEDGER'
@@ -1344,6 +1348,7 @@ def _entry(fields, ld, env_name, region, date_from, now_ts):
         't': round(now_ts, 1), 'county': ld.get('county') or '', 'searches': fields.get('searches', 0),
         'pages': fields.get('pages', 0), 'cost': fields.get('cost', 0.0), 'why': fields.get('why', ''),
         'cases': fields.get('cases') or [], 'lookback_from': date_from, 'region': region, 'v': 1,
+        'names': NAME_READING,
     }
 
 

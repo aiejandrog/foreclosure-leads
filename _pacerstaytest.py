@@ -594,6 +594,7 @@ check('entry carries verdict, a/bd/sl, src, env, query time, county, cost and ma
       and e.get('src') == 'pacer_pcl' and e.get('env') == 'prod'
       and abs(dt.datetime.fromisoformat(e.get('q')).timestamp() - NOW) < 2 and e.get('q')[-6] in '+-'
       and e.get('county') == 'BROWARD' and e['cases'][0]['no'] == '1:99-bk-77777', e)
+check('every new entry carries the fixed name-reading stamp', e.get('names') == PS.NAME_READING, e)
 check('no owner names, no captions anywhere in the cache file', 'QUINCY' not in raw.upper() and 'ROSALIND' not in raw.upper()
       and 'caseTitle' not in raw)
 check('co-owners on the Miami-Dade lead were both searched (same case, same verdict)',
@@ -647,7 +648,8 @@ _d = work({'broward_leads.json': [
     {'county': 'BROWARD', 'case': 'CACE-99-000624', 'owners': '', 'oname': 'MARY FAKEROE', 'auction': mdy(20)},
     {'county': 'BROWARD', 'case': 'CACE-99-000625', 'owners': '', 'oname': 'FAKEROE, MARY & JOHN FAKESMITH', 'auction': mdy(20)}]})
 _clear = {'verdict': 'clear', 'a': False, 'env': 'prod', 'q': dt.datetime.fromtimestamp(NOW).astimezone().isoformat(timespec='seconds'),
-          't': NOW, 'cases': [], 'region': 'national', 'lookback_from': PS.lookback_from(TODAY, PS.LOOKBACK_YEARS)}
+          't': NOW, 'cases': [], 'region': 'national', 'lookback_from': PS.lookback_from(TODAY, PS.LOOKBACK_YEARS),
+          'names': PS.NAME_READING}
 _cache = {'CACE-99-000621': dict(_clear), 'CACE-99-000622': dict(_clear), 'CACE-99-000623': dict(_clear),
           'CACE-99-000624': dict(_clear, verdict='active', a=True), 'CACE-99-000625': dict(_clear)}
 (_d / 'pacer_stay_cache.json').write_text(json.dumps(_cache), encoding='utf-8')
@@ -658,6 +660,11 @@ check('audit flags clears with any comma-less fallback person (incl. a co-owner 
 check('audit flags a mixed lead: own owners in one file, comma-less fallback co-owner in another',
       [k for k, _, _ in PFA.suspects({'K': dict(_clear)}, {'K': {'case': 'K', 'owners': [('MARY FAKEROE', 'first_last'),
                                                                                      ('JOHN FAKESMITH', 'either')]}})] == ['K'])
+_old = dict(_clear); _old.pop('names')
+check('audit flags a clear recorded since ce154cc without the fixed-reading stamp, whatever the lead looks like now',
+      [k for k, _, _ in PFA.suspects({'CACE-99-000622': _old}, PS.load_leads(str(_d))[0])] == ['CACE-99-000622'])
+check('audit leaves an unstamped clear from before ce154cc to the lead-file check',
+      PFA.suspects({'CACE-99-000622': dict(_old, t=PFA.CUTOFF - 3600)}, PS.load_leads(str(_d))[0]) == [])
 PFA.main(['--here=' + str(_d), '--apply'])
 _after = json.loads((_d / 'pacer_stay_cache.json').read_text())
 check('audit --apply: the suspect clear is now unverifiable and the stay gate holds it',
