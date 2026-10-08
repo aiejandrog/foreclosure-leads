@@ -2512,6 +2512,12 @@ class Handler(BaseHTTPRequestHandler):
                 'touch': meta.get('touch') or '',
             })
             _release_first_touch_slot(_ft_slot)      # the ledger row counts it from here on
+            # The ledger row (to + bcc, ts_utc) is now the 24h dedupe for every claimed address, so
+            # the in-flight claim has done its job. Holding it longer turned every later follow-up
+            # to these addresses into a 409 "already in flight" skip for the life of the bridge
+            # process (2026-10-03 review). Not released when the write fails: then the claim is
+            # the only record, and keeping it is the duplicate-safe side.
+            _release_recipients(_claimed)
         except Exception as e:
             # Loud on the server side (operator can grep the log) — this is the one real gap the
             # skipped write leaves: this send won't count toward today's cap and its 24h dedupe

@@ -13253,10 +13253,18 @@ function genMorningWorker(lane, autostart){
        by a different door, and this file's whole posture is that a duplicate to a homeowner in
        foreclosure reads as a bot. The bridge's own 24h dedupe would probably catch it with a 409,
        but "probably, on the server" is not where this belongs.
-       Time-boxed rather than timer-cleared: a fetch that never settles must not wedge Start for the
-       rest of the morning, and 30s is well past any real bridge response. */
-    +   'var sending=false, sendingAt=0;'
-    +   'function sendInFlight(){ return sending && (Date.now()-sendingAt) < 30000; }'
+       NOT TIME-BOXED (2026-10-03 review). It used to expire after 30s, and a /send can take longer
+       (the bridge runs several 60s SMTP steps in sequence), so Stop then Start inside that gap
+       re-worked the same lead: the second /send got the bridge's 409 "already in flight", which
+       posted "skip" on a lead that WAS being sent and advanced the queue, and the first request's
+       late 200 then posted "sent" on whichever lead `i` had reached. A browser-side abort does not
+       help: it does not cancel the bridge's delivery, it only throws the answer away. So the
+       request is never abandoned: while its outcome is unknown no other /send starts, its answer is
+       recorded once, on its own case (SENDSEQ / qc in doSend), whenever it lands. If the bridge
+       never answers, doSend pauses the run at SEND_WAIT_MS and says so; reloading the tab is the
+       operator's explicit way out. */
+    +   'var sending=false, SENDSEQ=0, SEND_WAIT_MS=150000;'
+    +   'function sendInFlight(){ return sending; }'
     // EVERY TIMER THAT CAN RESTART THE LOOP HAS A HANDLE, because Stop has to be able to cancel it.
     // advance() schedules the next lead 700ms out and hopNextLane() 900ms out; before this they
     // were fire-and-forget, so a Stop pressed inside that window was overtaken by its own pending
@@ -13811,11 +13819,35 @@ function genMorningWorker(lane, autostart){
     // before the fetch, and because addLog increments STATS[kind], a single successful send
     // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still
     // charged 1. Log only what actually resolved.
-    +     'sending=true; sendingAt=Date.now();'
+    // A /send THAT NEVER ANSWERS (2026-10-03 review). The fetch had no deadline, so a wedged
+    // bridge (process suspended by standby, a stuck socket) left sending=true and the auto-run
+    // parked on this lead forever with no log line and no terminal reason. 150s is past the
+    // bridge's own worst case (SMTP ops time out at 60s each). On timeout the OUTCOME IS UNKNOWN —
+    // the bridge may still deliver — so it is never "offline" (no Gmail composer, which would be a
+    // second copy) and never a skip; the run pauses and says so. The bridge's in-flight claim and
+    // 24h ledger refuse a duplicate if Start is pressed again.
+    // EVERY ANSWER IS RECORDED ON ITS OWN CASE, and only the CURRENT request moves the run. post()
+    // otherwise stamps Q[i] at the moment the answer lands, and advance()/pause() act on whatever
+    // run exists then. `qc` is the case this request is for; `_live()` is true only while no newer
+    // /send has started and the queue still sits on that case.
+    // ONE /send AT A TIME, FOR EVERY CALLER. startRun checks sendInFlight(), but the card's Email
+    // button calls doSend directly, so the guard lives here too: a second request while one's
+    // outcome is unknown would draw a 409 "skip" on a lead that was really sent.
+    +     'if(sendInFlight()){ addLog("fail", r.first||r.owner, "a send is still waiting for the bridge — its outcome is not known yet, so this one was not sent. Nothing was marked.", "warn"); return; }'
+    +     'var qc=r.c, _seq=++SENDSEQ;'
+    +     'var _live=function(){ return _seq===SENDSEQ && !!Q[i] && Q[i].c===qc; };'
+    +     'sending=true;'
+    +     'var _settled=false, _sto=setTimeout(function(){'
+    +       'if(_settled) return;'
+    +       'addLog("fail", r.first||r.owner, "send bridge has not answered in "+Math.round(SEND_WAIT_MS/1000)+"s — outcome UNKNOWN. Run paused. The request is still open: its result will be recorded on THIS lead when it lands, and nothing else sends until then. If the bridge is gone, restart send_server.py and reload this tab, then check mail_sent.json for this lead before pressing Start.", "warn");'
+    +       'if(_live()) pause();'
+    +     '}, SEND_WAIT_MS);'
     +     'fetch("http://127.0.0.1:8823/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
-    +         'sending=false;'
+    +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'if(_seq===SENDSEQ) sending=false;'
+    +         'var _mv=_live();'
     +         'if(x.j.blocked==="optout_stale" && x.j.hold==="sync" && auto && !SYNCWAIT && SYNCTRY<SYNC_MAX){'
     // Today's sync has not finished yet. Not a ledger fault, so BRIDGE_HOLD stays clear (it would
     // tell the operator to run ledger_sync.py, which is not the fix) and the run waits instead.
@@ -13830,15 +13862,15 @@ function genMorningWorker(lane, autostart){
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
     // #83 follow-up: the gate may mail a later address than the To we offered (one address per
     // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
-    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;}), qc:qc});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
-    +           'setTimeout(function(){ advance(); }, 900);'
+    +           'if(_mv) setTimeout(function(){ advance(); }, 900);'
     +         '} else if(x.status===409 && x.j.skip){'
     +           'bridgeUp(true);'
     // The bridge says WHY it deferred (24h dedupe, or the per-alias warm-up cap in senders.json);
     // show its sentence rather than guessing, so a capped lane never reads as a duplicate.
     +           'addLog("skip", r.first||r.owner, String(x.j.err||"already emailed inside 24h — deferred"), "warn");'
-    +           'post("skip"); setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
     // This is the single most authoritative moment the true count exists — the server just used it
@@ -13856,7 +13888,7 @@ function genMorningWorker(lane, autostart){
     +     'bridgeUp(true);'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null))};'
     +     'addLog("skip", r.first||r.owner, "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears.", "warn");'
-    +     'post("skip"); setTimeout(function(){ advance(); }, 700);'
+    +     'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
@@ -13872,12 +13904,13 @@ function genMorningWorker(lane, autostart){
     // send_server's own words for the rule are "the attempt stops being invisible without becoming
     // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
-    +           'post("skip", {why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
-    +           'setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc, why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
+    +           'if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '}'
     +       '})'
     +       '.catch(function(err){'
-    +         'sending=false;'
+    +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'if(_seq===SENDSEQ) sending=false;'
     +         'bridgeUp(false);'
     // AUTO-RUN: never open a Gmail composer or wait on a confirm click — that is precisely the
     // "composer emails" experience the operator told us to stop producing. The bridge going down
@@ -13891,7 +13924,8 @@ function genMorningWorker(lane, autostart){
     +         '}'
     // MANUAL (operator clicked Email on this one lead): a human is right here, so the Gmail-compose
     // fallback + confirm click is legitimate — this is an ATTEMPT, never a send.
-    +         'if(openHere(r.gurl)){ post("email"); confirmSend(r, "bridge offline — Gmail compose opened"); }'
+    +         'if(!_live()) return;'
+    +         'if(openHere(r.gurl)){ post("email", {qc:qc}); confirmSend(r, "bridge offline — Gmail compose opened"); }'
     +         'else { addLog("fail", r.first||r.owner, "bridge offline AND Gmail popup blocked", "warn"); advance(); }'
     +       '});'
     +   '}'
@@ -14256,7 +14290,7 @@ function genMorningWorker(lane, autostart){
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
     +     'cancelSyncWait(); SYNCTRY=0;'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
-    +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight from the last run — it will finish and be recorded on its own. Press Start again in a moment.","warn"); return; }'
+    +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight — its outcome is not known yet, so nothing else sends until it answers and is recorded on its own lead. If the bridge is gone, restart send_server.py and reload this tab.","warn"); return; }'
     +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
     +     'if(BRIDGE_OK!==true){'
     +       'addLog("fail","auto-run","⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.","warn");'

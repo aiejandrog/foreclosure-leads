@@ -11,6 +11,8 @@ _*.py
 !_gatetest.py
 !_suppressiontest.py
 !_lookupstaytest.py
+!_workersendracetest.py
+!_inflightretrytest.py
 !_wplinktest.py
 !_wpcontactstest.py
 !_textbatchtest.py
