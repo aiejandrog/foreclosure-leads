@@ -304,8 +304,28 @@ def case_search_gaps(report, gaps):
     return [gap for gap in gaps if gap.get('name') in names]
 
 
-def refresh_saved_report(report, rows, seeds):
-    """Reconcile saved evidence without repeating county requests or paid reading."""
+def saved_this_case(case):
+    """The docket's own-filing markers from the SAVED inventory (no county request); None if unsaved."""
+    import document_store as DS
+    import document_walk as W
+    try:
+        inventory = DS.pipeline_load(DS.pipeline_folder('MIAMI-DADE', case) / 'inventory.json')
+    except (OSError, ValueError):
+        return None
+    if not isinstance(inventory, dict):
+        return None
+    try:
+        return W.this_case_of(inventory)
+    except (AttributeError, TypeError, ValueError):
+        return None      # an oddly shaped saved inventory marks nothing; it must not stop the refresh
+
+
+def refresh_saved_report(report, rows, seeds, this_case=None):
+    """Reconcile saved evidence without repeating county requests or paid reading.
+
+    `this_case` (document_walk.this_case_of over the SAVED docket inventory) lets the case's own
+    recorded filing be re-marked from explicit links only (docket book/page, or its caption's case
+    number); without it nothing is re-marked."""
     import miami_title_parties as TP
     import document_walk as W
     import case_dossier as CD
@@ -336,7 +356,10 @@ def refresh_saved_report(report, rows, seeds):
          'recorded_date':m.get('reC_DATE'), 'basis':'Already-stored evidence absent from owner query; not necessarily new debt'}
         for m in missed_records(seeds, baseline)]
     CD.classify_documents(rows, result['case'])
-    from miami_claim_evidence import enrich_claims
+    from miami_claim_evidence import enrich_claims, mark_own_case
+    if this_case:
+        result['other_name_searches'] = mark_own_case(result.get('other_name_searches', []),
+                                                      this_case, result.get('case'), rows)
     result['other_name_searches'] = enrich_claims(result.get('other_name_searches', []), raw, rows)
     for search in result.get('other_name_searches', []):
         search['potential_title_party_claims'] = reconcile_claims(search.get('potential_title_party_claims', []), rows)
@@ -421,7 +444,7 @@ def main(argv=None):
                 parser.error('No saved investigation for ' + entry['case'])
             report.update(owner=entry['owner'], folio=entry['folio'])
             rows, seeds = stored_evidence(entry['case'])
-            report = refresh_saved_report(report, rows, seeds)
+            report = refresh_saved_report(report, rows, seeds, this_case=saved_this_case(entry['case']))
             report['present_title'] = present_title_for(report, args.sunbiz, network=False)
             report['vision_actual_usd'] = vision_state['actual_usd']
             report['vision_reserved_usd'] = sum(vision_state['reserved'].values())
