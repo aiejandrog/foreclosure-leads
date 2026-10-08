@@ -104,23 +104,28 @@ def enrich_claims(search_reports, raw_results, documents):
     return reports
 
 
-def _case_number_pattern(case):
-    """The case's year and sequence as printed on a caption: 2024-014878-CA-01, '2024 014878 CA 01'."""
-    parts = str(case or '').split('-')
-    if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
-        return None
-    return re.compile(r'(?<!\d)%s[\s\-/]+0*%s(?!\d)' % (re.escape(parts[0]), re.escape(parts[1].lstrip('0') or '0')))
+_CROSS_REF_RE = re.compile(r'RELATED|PRIOR|COMPANION|CONSOLIDAT|TRANSFER|RELATING|\bSEE\b|\bCF\.|\bV\.?S\.?\b|ORIGINAL|FORMER|\bAND\b', re.I)
 
 
-def _captioned_with(doc, pattern):
-    """True when this document's own first-page caption prints the case number. A "CASE NO" line in the first twelve lines only: a
-    later paper that cites this foreclosure in its body is not this foreclosure's filing."""
-    pages = (doc.get('reading') or {}).get('pages') or []
-    first = next((p for p in pages if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')), None)
+def _captioned_with(doc, want):
+    """True when this document's own page-1 caption prints exactly this case number (full year,
+    sequence, type and division: 2099-000001-CC-05 is not 2099-000001-CA-01). One "CASE NO" line in
+    the first twelve lines, carrying one number, with no cross-reference word on it: a later paper
+    that cites this foreclosure is not this foreclosure's filing."""
+    import document_classify as DC
+    pages = [p for p in ((doc.get('reading') or {}).get('pages') or [])
+             if isinstance(p, dict) and p.get('outcome') in ('text', 'ocr_text')]
+    first = next((p for p in pages if p.get('page') in (1, '1')), None)
     if not first:
         return False
     head = [ln for ln in str(first.get('text') or '').splitlines() if ln.strip()][:12]
-    return any(re.search(r'\bCASE\s*(?:NO|NUMBER|#)', ln, re.I) and pattern.search(ln) for ln in head)
+    for ln in head:
+        if not re.search(r'\bCASE\s*(?:NO|NUMBER|#)', ln, re.I) or _CROSS_REF_RE.search(ln):
+            continue
+        numbers = {DC.normalize_case(m.group(0)) for pat in (DC._CASE_FL_RE, DC._CASE_BROWARD_RE)
+                   for m in pat.finditer(ln)}
+        return numbers == {want}
+    return False
 
 
 def mark_own_case(search_reports, this_case, case, documents):
@@ -135,15 +140,23 @@ def mark_own_case(search_reports, this_case, case, documents):
     `own_case_instruments`, whole, with the basis named; every other claim and gap is untouched.
     """
     reports = copy.deepcopy(search_reports)
-    pattern = _case_number_pattern(case)
-    docket_keys = set((this_case or {}).get('book_pages') or ())
+    import document_classify as DC
+    want = DC.normalize_case(case)
+    try:
+        docket_keys = set((this_case or {}).get('book_pages') or ())
+    except TypeError:
+        docket_keys = set()
     indexed = {}
     for doc in documents or []:
+        if not isinstance(doc, dict):
+            continue
         record = (doc.get('stored') or {}).get('record_key') or {}
         if record.get('book') and record.get('page'):
             indexed[key_of(record['book'], record['page'])] = doc
     for report in reports:
-        own = report.setdefault('own_case_instruments', [])
+        if not isinstance(report.get('own_case_instruments'), list):
+            report['own_case_instruments'] = []
+        own = report['own_case_instruments']
         have = {key_of(o.get('book'), o.get('page_no')) for o in own}
         kept = []
         for claim in report.get('potential_title_party_claims') or []:
@@ -152,11 +165,11 @@ def mark_own_case(search_reports, this_case, case, documents):
             basis = None
             if key and key in docket_keys:
                 basis = 'docket_book_page'
-            elif key and pattern is not None:
+            elif key and want:
                 doc = indexed.get(key)
                 kind = str(((doc or {}).get('classification') or {}).get('text_kind')
                            or ((doc or {}).get('classification') or {}).get('kind') or '')
-                if doc and re.search(r'judgment|lis[_ ]?pendens', kind, re.I) and _captioned_with(doc, pattern):
+                if doc and re.fullmatch(r'final_judgment|lis_pendens', kind) and _captioned_with(doc, want):
                     basis = 'case_number_in_caption'
             if not basis:
                 kept.append(claim)

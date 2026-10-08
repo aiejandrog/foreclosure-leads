@@ -67,8 +67,8 @@ class SavedOwnCase(unittest.TestCase):
         self.assertEqual(self.books(out), ['30000/1'])
 
     def test_case_number_spacing_variants_in_the_caption(self):
-        for head in ('CASE NO: 2099 000001 CA 01\nFINAL JUDGMENT', 'Case No. 2099-0000001-CA-01\nFINAL JUDGMENT',
-                     'CASE NO.: 2099/000001\nFINAL JUDGMENT'):
+        for head in ('CASE NO: 2099 - 000001 - CA - 01\nFINAL JUDGMENT', 'Case No. 2099-000001-ca-01\nFINAL JUDGMENT',
+                     'CASE NO.: 2099\u2013000001\u2013CA\u201301\nFINAL JUDGMENT'):
             with self.subTest(head=head):
                 _, out = self.run_mark(tc(), [doc(OWN, 'final_judgment', head)], claim(OWN))
                 self.assertEqual(self.books(out, 'own_case_instruments'), ['34932/1256'])
@@ -129,6 +129,48 @@ class SavedOwnCase(unittest.TestCase):
         self.assertEqual([c['book'] for c in marked['other_name_searches'][0]['potential_title_party_claims']], ['30000'])
         self.assertEqual(saved, keep)                                                  # input not mutated
 
+
+    def test_review_boundaries_fail_toward_keeping_the_claim(self):
+        # PR #181 review: each of these must stay a claim, not be hidden as the case's own filing.
+        cases = [
+            ('other division, same year and sequence', 'final_judgment', 'CASE NO. 2099-000001-CC-05'),
+            ('related-case cross reference', 'final_judgment', 'RELATED CASE NO: 2099-000001-CA-01'),
+            ('two numbers on the caption line', 'final_judgment', 'CASE NO. 2098-000555-CA-01 / 2099-000001-CA-01'),
+            ('number cited in parentheses', 'final_judgment', 'CASE NO: 2098-000001-CA-01 (see 2099-000001-CA-01)'),
+            ('a satisfaction of judgment', 'satisfaction_of_judgment', 'CASE NO. 2099-000001-CA-01'),
+            ('relabelled other_action', 'other_action', 'CASE NO. 2099-000001-CA-01'),
+        ]
+        for label, kind, head in cases:
+            with self.subTest(label):
+                _, out = self.run_mark(tc(), [doc(OWN, kind, head + '\nFINAL JUDGMENT')], claim(OWN))
+                self.assertEqual(out['own_case_instruments'], [])
+                self.assertEqual(self.books(out), ['34932/1256'])
+
+    def test_first_readable_page_must_be_page_one(self):
+        d = doc(OWN, 'final_judgment', CAPTION)
+        d['reading']['pages'][0]['page'] = 3
+        _, out = self.run_mark(tc(), [d], claim(OWN))
+        self.assertEqual(out['own_case_instruments'], [])
+
+    def test_odd_saved_shapes_do_not_crash(self):
+        rep = report(claim(OWN))
+        rep['own_case_instruments'] = None
+        out = E.mark_own_case([rep], {'book_pages': 5}, CASE, [None, doc(OWN, 'final_judgment', CAPTION)])[0]
+        self.assertEqual([o['this_case'] for o in out['own_case_instruments']], ['case_number_in_caption'])
+
+    def test_a_malformed_saved_inventory_marks_nothing_and_does_not_raise(self):
+        import tempfile, pathlib, json
+        import document_store as DS
+        for bad in ({'entries': [None]}, {'entries': [{'metadata': 'x'}]}, {'entries': 5}, {'raw': 'x', 'entries': []}):
+            with self.subTest(bad=bad):
+                folder = pathlib.Path(tempfile.mkdtemp())
+                orig = DS.pipeline_folder
+                DS.pipeline_folder = lambda county, case, f=folder: f
+                try:
+                    (folder / 'inventory.json').write_text(json.dumps(bad))
+                    self.assertIsNone(T.saved_this_case(CASE))
+                finally:
+                    DS.pipeline_folder = orig
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

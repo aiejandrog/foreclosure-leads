@@ -312,7 +312,12 @@ def saved_this_case(case):
         inventory = DS.pipeline_load(DS.pipeline_folder('MIAMI-DADE', case) / 'inventory.json')
     except (OSError, ValueError):
         return None
-    return W.this_case_of(inventory) if isinstance(inventory, dict) else None
+    if not isinstance(inventory, dict):
+        return None
+    try:
+        return W.this_case_of(inventory)
+    except (AttributeError, TypeError, ValueError):
+        return None      # an oddly shaped saved inventory marks nothing; it must not stop the refresh
 
 
 def refresh_saved_report(report, rows, seeds, this_case=None):
