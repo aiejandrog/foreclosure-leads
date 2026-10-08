@@ -25,14 +25,14 @@ m = re.search(r"function _autoRunLane\(\)\{(.*?)\n\}", T, re.S)
 rec('_autoRunLane exists', bool(m))
 body = m.group(1) if m else ''
 rec('_autoRunLane never opens REPLIED', "'replied'" not in body, body[:80])
-rec('_autoRunLane needs an EMAIL-reachable eligible lead',
-    "_workerEligible(r)" in body and "_workerReach(r) === 'email'" in body)
+rec('_autoRunLane reads the real lane queue for an EMAIL-reachable lead',
+    "_workerQueue(k)" in body and "_workerReach(r) === 'email'" in body)
 rec('_autoRunLane falls back to urgent', "var pick = 'urgent';" in body)
 a = T.find("'if(AUTOSTART && Q.length){'")
 blk = T[a:a + 6000]
 rec('auto-start block found', a > 0)
 rec('auto-start sets autoAll=true before runOne', re.search(r"auto=true; autoAll=true;.*?runOne\(\)", blk, re.S) is not None)
-rec('countdown says all lanes', 'all lanes, "+allTotal()+" leads queued' in blk)
+rec('countdown says all lanes', 'all lanes from "+lane.toUpperCase()+"' in blk)
 rec('unarmed device stays manual', T.count("openMorningWorker('urgent', false);") >= 2)
 rec('stale board still blocks the unattended start', "var _stale = (_age != null && _age >= 1);" in T)
 

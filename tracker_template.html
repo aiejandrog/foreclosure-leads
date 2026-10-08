@@ -12855,10 +12855,10 @@ function _laneWorkable(lane){
 function _autoRunLane(){
   var pick = 'urgent';
   ['urgent','active','early','balloon'].some(function(k){
-    var L = WORKER_LANES[k]; if(!L) return false;
-    var hit = DATA.some(function(r){
-      return r && L.test(_saleDays(r), r) && _workerEligible(r) && _workerReach(r) === 'email';
-    });
+    if(!WORKER_LANES[k]) return false;
+    // The lane's real queue (24h cooldown and cap applied), not the raw lead list: a lane whose only
+    // email leads were mailed yesterday bakes an empty queue, and an empty queue never auto-starts.
+    var hit = _workerQueue(k).some(function(r){ return _workerReach(r) === 'email'; });
     if(hit) pick = k;
     return hit;
   });
@@ -14706,7 +14706,7 @@ function genMorningWorker(lane, autostart){
     +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
     +       'var left=20, box=document.createElement("div");'
     +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
-    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — all lanes, "+allTotal()+" leads queued. Emails will send automatically.</div>"'
+    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — all lanes from "+lane.toUpperCase()+", "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).reduce(function(n,k){return n+laneCount(k);},0)+" leads queued. Emails will send automatically.</div>"'
     +         '+"<button id=\'mwcancel\' style=\'padding:9px 18px;border:0;border-radius:7px;background:#b3372f;color:#fff;font-weight:700;cursor:pointer;font-size:14px\'>Cancel</button>";'
     +       'document.body.appendChild(box);'
     // COUNTDOWN STATE GOES IN THE SHARED HANDLES. The interval used to be a local `t` reachable only
