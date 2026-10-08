@@ -2933,14 +2933,22 @@ def make_tracker(leads):
             for _p in (_e.get('phones') or []):
                 if _p.get('dnc') and _p.get('number'):
                     _dnc_known.add(str(_p.get('number')))
+    except Exception as _dke:
+        print('dnc carry-over: could not read the skip-trace flags (%s)' % str(_dke)[:80])
+    try:
         for _n, _v in (_dncreg or {}).items():
             if isinstance(_v, dict) and (_v.get('national_dnc') or _v.get('state_dnc')):
                 _dnc_known.add(str(_n))
     except Exception as _dke:
-        print('dnc carry-over: could not read the skip-trace/registry flags (%s); rows only' % str(_dke)[:80])
-    _dnl, _dnn = propagate_dnc(slim, _dnc_known)
-    print('dnc carry-over: %d number(s) flagged on one lead were clean on another; now flagged on '
-          '%d more lead(s)' % (_dnn, _dnl))
+        print('dnc carry-over: could not read dnc_scrub.json (%s)' % str(_dke)[:80])
+    try:
+        _dnl, _dnn = propagate_dnc(slim, _dnc_known)
+        print('dnc carry-over: %d number(s) flagged on one lead were clean on another; now flagged on '
+              '%d more lead(s)' % (_dnn, _dnl))
+    except Exception as _dpe:
+        # Loud, never silent: Call Mode still applies the same rule on its own (dnc_numbers).
+        print('  !! dnc carry-over FAILED (%s): the board may offer a number another lead flags DNC'
+              % str(_dpe)[:100])
     _shn, _shared_n = tag_shared_numbers(slim)
     print('shared-number check: %d number(s) sit on %d+ different owners, tagged on %d lead(s)'
           % (_shared_n, SHARED_PHONE_MIN_OWNERS, _shn))
