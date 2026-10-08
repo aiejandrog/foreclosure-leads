@@ -1,47 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-07T19:02:56-04:00",
+   "at": "2026-10-07T21:12:47-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 22h ago."
+   "text": "Laptop readiness (checked 10-07 21:12): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-07T19:02:56-04:00",
+   "at": "2026-10-07T21:12:47-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 52 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-07T19:02:56-04:00",
+   "at": "2026-10-07T21:12:47-04:00",
    "key": "optout-sync",
    "severity": "fail",
    "text": "07:15 opt-out sync failed on 2026-10-07 (steps: replies)."
   },
   {
-   "at": "2026-10-07T19:02:56-04:00",
+   "at": "2026-10-07T21:12:47-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-07T19:02:56-04:00",
+ "published_at": "2026-10-07T21:12:47-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
+   "errors": 3,
    "filings": 1279,
-   "holds": 402,
-   "leads_checked": 13,
+   "holds": 429,
+   "leads_checked": 30,
    "provider": "courtlistener",
-   "pull_age_h": 14.02,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 116,
-   "truncated": 0
+   "reason": "time_budget",
+   "requests_used": 80,
+   "truncated": 3
   },
   "bounce": {
    "ceiling": 0.1,
@@ -124,20 +124,19 @@
    "spent": 17.2567
   },
   "readiness": {
-   "at": "2026-10-06T21:12:35-04:00",
+   "at": "2026-10-07T21:12:47-04:00",
    "battery_present": true,
-   "degraded": 0,
-   "degraded_codes": [],
-   "degraded_names": [],
+   "degraded": 1,
+   "degraded_codes": [
+    7
+   ],
+   "degraded_names": [
+    "DEALFLOW Refresh"
+   ],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 4,
-   "failed_names": [
-    "DEALFLOW Morning Worker",
-    "DealFlow Opt-out Sync",
-    "DEALFLOW Refresh",
-    "DealflowSendServerDaily"
-   ],
+   "failed": 0,
+   "failed_names": [],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
@@ -146,7 +145,7 @@
    ],
    "on_ac": true,
    "pct": 79,
-   "port_open": false,
+   "port_open": true,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
