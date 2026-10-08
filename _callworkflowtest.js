@@ -248,5 +248,31 @@ const build = list => list.reduce((s, e) => CW.add(s, e), CW.newStore());
   rec('CB9 superseded older request stays open and is flagged', q.due.find(x => x.request_id === 'R7').superseded_by_later_request === true && q.due.length === 2);
 }
 
+
+// ---- callbacks review regressions ----
+{ const A = (id, owner, t) => [launch('L' + id, 'A' + id, { t, owner }), attempt('L' + id, 'A' + id, owner, t), conv('V' + id, 'A' + id, t)];
+  const reqEv = (id, owner, due, t, cases) => ev('callback_requested', { request_id: id, evidence_ref: 'r', tz: 'America/New_York', local_time: '2026-10-09T09:00:00', due_utc: iso(due), requested_by_owner: true }, { owner, t, cases });
+  const now = T0 + 9 * H;
+  let s = build([reqEv('R1', 'O1', T0, T0 - H, ['K1'])].concat(A('1', 'O1', T0 + 1 * H)));
+  s = CW.add(s, ev('callback_completed', { request_id: 'R1', conversation_id: 'V1' }, { t: T0 + 2 * H }));
+  s = CW.add(s, ev('callback_cancelled', { request_id: 'R1' }, { t: T0 + 3 * H }));
+  let q = CW.callbackQueue(s, { asof: now });
+  rec('CB10 a cancel dated after a real completion does not undo it or double-count', q.closed.completed === 1 && q.closed.cancelled === 0 && q.due.length === 0, q.closed);
+  s = build([reqEv('R2', 'O2', T0, T0 - 2 * H, ['K2']), reqEv('R3', 'O2', T0, T0 - H, ['K2'])].concat(A('2', 'O2', T0 + 1 * H)));
+  s = CW.add(s, ev('callback_completed', { request_id: 'R2', conversation_id: 'V2' }, { t: T0 + 2 * H }));
+  s = CW.add(s, ev('callback_completed', { request_id: 'R3', conversation_id: 'V2' }, { t: T0 + 2 * H + 1 }));
+  q = CW.callbackQueue(s, { asof: now });
+  rec('CB11 one conversation closes one request; the other stays open and is flagged', q.closed.completed === 1 && q.due.length === 1 && q.review.some(r => r.kind === 'conversation_closes_one_request'), q);
+  s = build([reqEv('R4', 'O4', T0 + 5 * H, T0, ['K4']), ev('callback_rescheduled', { request_id: 'R4', due_utc: iso(T0 - 5 * H) }, { t: T0 - H })]);
+  q = CW.callbackQueue(s, { asof: T0 + H });
+  rec('CB12 a reschedule dated before its request is ignored and flagged', q.future.length === 1 && q.future[0].revision === 0 && q.review.some(r => r.kind === 'reschedule_before_request'), q);
+  q = CW.callbackQueue(build([reqEv('constructor', 'O5', T0, T0 - H, ['toString'])]), { asof: now, held: {} });
+  rec('CB13 odd ids are data: not held by a prototype lookup', q.due.length === 1 && q.due[0].held_reason === '' && q.due[0].dial_enabled === true, q.due);
+  q = CW.callbackQueue(build([reqEv('R6', 'O6', T0, T0 - H, [])]), { asof: now });
+  rec('CB14 a request with no case cannot be checked for holds, so dial stays disabled', q.due[0].dial_enabled === false);
+  s = build([reqEv('R7', 'O7', T0, T0 - H, ['K7']), reqEv('R7', 'O8', T0 + H, T0 - H, ['K7'])]);
+  rec('CB15 same request id with a different owner or due is flagged, not silently dropped', CW.callbackQueue(s, { asof: now }).review.some(r => r.kind === 'duplicate_request_id_differs') || Object.keys(s.conflicts).length > 0);
+}
+
 console.log(fails ? ('\nFAILED (' + fails + ')') : '\nALL PASS');
 process.exit(fails ? 1 : 0);
