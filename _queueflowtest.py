@@ -106,7 +106,7 @@ HW = STUBS + SYNC + r"""
 function _nowTS(){ return '2026-10-08 10:00:00'; }
 var HISTCOV = {ledgers_ok:true, why:''}, _NOTESBAD = false, SEAT = {n:2, i:0};
 """ + grab('_seat') + grab('_histWhy') + r"""
-var realNow = Date.now; var stamp = new Date().toISOString().slice(0,19).replace('T',' ');
+var realNow = Date.now; var stamp = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,19).replace('T',' ');
 function stat(o){ var b = {ok:true, kf:_keyFp('k-one'), devices:1, failed:0, ts:stamp}; for(var k in o) b[k]=o[k]; store.fcPullStat = JSON.stringify(b); }
 check(_histWhy() === '', 'no team key: ok');
 store.fcTeamKey = 'k-one';
@@ -145,6 +145,14 @@ advance('R3', null);   // Next / worked: first move off the one-off
 check(QVIEW === 'untouched', 'view restored: ' + QVIEW);
 check(shown[shown.length-1] === 'U2', 'lands back on the card he was on, not QUEUE_CLEAR: ' + shown.join(','));
 check(shown.indexOf('QUEUE_CLEAR') < 0, 'never a false Queue clear: ' + shown.join(','));
+// same-view one-off: opened from another lane, same view; first Next must not skip U2
+ALL.push({c:'X', v:'untouched'}); shown.length = 0; QVIEW = 'untouched'; i = 1; render();
+check(cur.c === 'U2', 'again on U2');
+_QVBACK = {v:'untouched', l:'all', c:'U2'}; lane = 'other'; var Q = pool();
+for(var j2 = 0; j2 < Q.length; j2++) if(Q[j2].c === 'X') i = j2; render();
+check(cur.c === 'X', 'opened X');
+advance('X', null);
+check(shown[shown.length-1] === 'U2' && lane === 'all', 'lands back on U2, not past X: ' + shown.join(',') + ' lane=' + lane);
 // explicit view choice cancels the one-off restore
 _QVBACK = {v:'untouched', l:'all', c:'U1'}; QVIEW = 'retries';
 _QVBACK = null;  // what the data-v click handler does first

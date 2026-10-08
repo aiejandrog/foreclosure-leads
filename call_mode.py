@@ -4117,11 +4117,12 @@ var _QVBACK = null;
 /* Restores view, lane AND the card he was on, by identity in a fresh pool, so the first move off a
    one-off never lands past the end of a different list (a false "Queue clear"). */
 function _qvRestore(){
-  var b = _QVBACK; if(!b) return; _QVBACK = null;
+  var b = _QVBACK; if(!b) return false; _QVBACK = null;
   QVIEW = b.v; lane = b.l;
   var P = pool(), k;
-  for(k = 0; k < P.length; k++) if(P[k].c === b.c){ i = k; return; }
+  for(k = 0; k < P.length; k++) if(P[k].c === b.c){ i = k; return true; }
   i = 0;
+  return true;
 }
 function _histWhy(){
   if(typeof HISTCOV !== 'object' || !HISTCOV || HISTCOV.ledgers_ok !== true)
@@ -4464,12 +4465,15 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
-  _qvRestore();
-  _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
+  var _wl = lane, _rest = _qvRestore();   // _rest: he was on a one-off; view, lane and card are back
+  if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
+  /* One-off: the lead just worked was opened on purpose from elsewhere, so the card he was on is
+     still due. Do not walk past it just because the one-off also sits in the restored pool. */
+  if(_rest) return render();
   for(k=0;k<P.length;k++) if(P[k].c===workedC){
     /* A lead just dialled or texted drops behind the never-contacted ones (_freshFirst), so the next
        lead has already slid up into slot i. Stepping to k+1 would skip to the end of the list. */

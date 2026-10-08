@@ -16854,7 +16854,7 @@ function mergeNotes(remoteNotes){
 const SB_URL = 'https://dddcfwbydgtxxwdsvsvt.supabase.co';
 const SB_KEY = 'sb_publishable_BbzeDgUG0HJK2OBekCh8uw_267aVBhQ';
 const SB_TBL = SB_URL + '/rest/v1/dealflow_sync';
-let _syncTimer = null, _syncBusy = false, _pullTimer = null;
+let _syncTimer = null, _syncBusy = false, _pullTimer = null, _pulling = false;
 function _teamKey(){ return localStorage.getItem('fcTeamKey') || ''; }
 function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){
   // crypto.randomUUID gives 122 bits of entropy — collision-safe even for two devices sharing a UA and
@@ -16891,7 +16891,8 @@ function _pullStat(ok, devices, failed){
 }
 async function syncPull(){
   const key = _teamKey(); if(!key) return 0;
-  if(_syncBusy) return 0;   // don't pull-then-merge-then-push into a push that's already flying
+  if(_syncBusy || _pulling) return 0;   // no push in flight, and no second pull overwriting a newer pull's record
+  _pulling = true;
   try{
     const tid = await _teamId(key), me = _deviceId();
     const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
@@ -16927,6 +16928,7 @@ async function syncPull(){
     }
     return {merged, optouts, violations};
   }catch(e){ _pullStat(false, 0, 0); syncStatus('offline — will retry', true); return 0; }
+  finally{ _pulling = false; }
 }
 function syncStatus(msg, warn){ const el = document.getElementById('syncstat'); if(!el) return; const on = !!_teamKey();
   el.className = 'syncstat' + (warn?' warn':'') + (on?' on':'');
