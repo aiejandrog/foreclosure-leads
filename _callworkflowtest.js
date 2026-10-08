@@ -216,5 +216,37 @@ const build = list => list.reduce((s, e) => CW.add(s, e), CW.newStore());
   rec('union(a,a) does not duplicate quarantined versions', CW.union(build([x, y]), build([x, y])).conflicts.same.length === 2);
   rec('union is symmetric with conflicts and several unsupported versions', CW.digest(CW.union(p, q)) === CW.digest(CW.union(q, p)) && CW.union(p, q).unsupported.fut.length === 2); }
 
+
+// ---- callbacks view (spec Q05/Q06, matrix callbacks) ----
+{ const A = (id, owner, t) => [launch('L' + id, 'A' + id, { t, owner }), attempt('L' + id, 'A' + id, owner, t), conv('V' + id, 'A' + id, t)];
+  const reqEv = (id, owner, due, t, cases) => ev('callback_requested', { request_id: id, evidence_ref: 'r', tz: 'America/New_York', local_time: '2026-10-09T09:00:00', due_utc: iso(due), requested_by_owner: true }, { owner, t, cases });
+  const now = T0 + 5 * H;
+  let s = build([reqEv('R1', 'O1', T0 + 6 * H, T0, ['K1']), reqEv('R2', 'O2', T0 + 1 * H, T0, ['K2']), reqEv('R3', 'O3', T0 - 2 * H, T0 - 3 * H, ['K3']),
+                 reqEv('R4', 'O4', T0 + 2 * H, T0, ['K4']), ev('callback_cancelled', { request_id: 'R4' }, { t: T0 + 3 * H })]);
+  let q = CW.callbackQueue(s, { asof: now, held: { K2: 'cooling down until 18:00' } });
+  rec('CB1 overdue first, sorted by due instant', q.due.map(x => x.request_id).join() === 'R3,R2', q.due.map(x => x.request_id));
+  rec('CB2 future listed separately', q.future.map(x => x.request_id).join() === 'R1');
+  rec('CB3 held request stays visible and pending, dial disabled, reason kept', q.due[1].held_reason !== '' && q.due[1].dial_enabled === false && q.due[0].dial_enabled === true);
+  rec('CB4 cancelled request leaves the queue and is counted', q.closed.cancelled === 1 && !q.due.concat(q.future).some(x => x.request_id === 'R4'));
+  s = CW.add(s, ev('callback_rescheduled', { request_id: 'R1', due_utc: iso(T0 + 4 * H) }, { t: T0 + 1 * H }));
+  q = CW.callbackQueue(s, { asof: now });
+  rec('CB5 reschedule keeps the request id, appends a revision, moves it to due', q.due.some(x => x.request_id === 'R1' && x.revision === 1) && q.future.length === 0);
+  // completion needs a right-owner conversation
+  let s2 = build([reqEv('R5', 'O5', T0, T0 - H, ['K5'])].concat(A('5', 'O9', T0 + 1 * H)));
+  s2 = CW.add(s2, ev('callback_completed', { request_id: 'R5', conversation_id: 'V5' }, { t: T0 + 2 * H }));
+  q = CW.callbackQueue(s2, { asof: now });
+  rec('CB6 completion by a different owner leaves the request open and flagged', q.due.length === 1 && q.review.some(r => r.kind === 'completion_unverified'), q);
+  let s3 = build([reqEv('R6', 'O6', T0, T0 - H, ['K6'])].concat(A('6', 'O6', T0 + 1 * H)));
+  s3 = CW.add(s3, ev('callback_completed', { request_id: 'R6', conversation_id: 'V6' }, { t: T0 + 2 * H }));
+  q = CW.callbackQueue(s3, { asof: now });
+  rec('CB7 right-owner completion closes it', q.due.length === 0 && q.closed.completed === 1, q);
+  // a no-answer reminder is not a callback; an event list with no request is an empty queue
+  rec('CB8 no requests: empty queue, nothing fabricated', CW.callbackQueue(build([launch('Lx', 'Ax', {}), attempt('Lx', 'Ax', 'O1', T0)]), { asof: now }).due.length === 0);
+  // a later request for the same owner flags the older one as superseded, never silently closes it
+  let s4 = build([reqEv('R7', 'O7', T0 - H, T0 - 3 * H, ['K7']), reqEv('R8', 'O7', T0 + H, T0 - 2 * H, ['K7'])]);
+  q = CW.callbackQueue(s4, { asof: now });
+  rec('CB9 superseded older request stays open and is flagged', q.due.find(x => x.request_id === 'R7').superseded_by_later_request === true && q.due.length === 2);
+}
+
 console.log(fails ? ('\nFAILED (' + fails + ')') : '\nALL PASS');
 process.exit(fails ? 1 : 0);

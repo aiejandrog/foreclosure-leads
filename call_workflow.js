@@ -366,5 +366,57 @@
     };
   };
 
+  /* ---------------------------------------------------------------- callbacks view
+     Requested callbacks only (an owner-asked call with a concrete due instant). Reminders from a
+     no-answer, next/nextTs and inbound replies are NOT here. Sorted by due instant, overdue first.
+     A request is closed only by a cancel, or by a completion whose conversation exists and whose
+     verified owner is the owner who asked. A completion that fails that stays OPEN and is flagged.
+     `held` maps a case id to the existing hold reason: a held request stays visible and pending with
+     dial_enabled=false. Nothing here enables contact or lifts a hold.
+     -> {due:[], future:[], closed:{completed,cancelled}, review:[]} */
+  CW.callbackQueue = function (store, opts) {
+    opts = opts || {};
+    var asof = opts.asof != null ? opts.asof : Date.now(), held = opts.held || {};
+    var E = live(store), req = dict(), due = dict(), cancelled = dict(), done = dict(), convs = dict(), att = dict(), review = [];
+    E.forEach(function (e) {
+      var p = e.payload;
+      if (e.event_type === 'callback_requested' && !req[p.request_id]) { req[p.request_id] = e; due[p.request_id] = { at: p.due_utc, rev: 0 }; }
+      if (e.event_type === 'attempt_confirmed') att[p.attempt_id] = e;
+      if (e.event_type === 'conversation_confirmed') convs[p.conversation_id] = e;
+    });
+    E.forEach(function (e) {                                  // E is time-ordered, so the last reschedule wins
+      var p = e.payload;
+      if (e.event_type === 'callback_rescheduled' && req[p.request_id] && isFinite(ms(p.due_utc))) { due[p.request_id] = { at: p.due_utc, rev: due[p.request_id].rev + 1 }; }
+      if (e.event_type === 'callback_cancelled' && req[p.request_id] && !cancelled[p.request_id]) cancelled[p.request_id] = e;
+    });
+    E.forEach(function (e) {
+      if (e.event_type !== 'callback_completed') return;
+      var p = e.payload, r = req[p.request_id];
+      if (!r || done[p.request_id]) return;
+      if (cancelled[p.request_id] && ms(cancelled[p.request_id].occurred_at_utc) <= ms(e.occurred_at_utc)) return;
+      var cv = convs[p.conversation_id], a = cv && att[cv.payload.attempt_id];
+      if (!cv || !a || !r.owner_id || a.owner_id !== r.owner_id) { review.push({ kind: 'completion_unverified', request_id: p.request_id }); return; }
+      done[p.request_id] = e;
+    });
+    var byOwner = dict();
+    Object.keys(req).forEach(function (id) { var o = req[id].owner_id; if (o) (byOwner[o] = byOwner[o] || []).push(req[id]); });
+    var out = { due: [], future: [], closed: { completed: Object.keys(done).length, cancelled: 0 }, review: review };
+    Object.keys(req).forEach(function (id) {
+      if (cancelled[id]) { out.closed.cancelled++; return; }
+      if (done[id]) return;
+      var r = req[id], d = due[id], t = ms(d.at);
+      if (!isFinite(t)) { review.push({ kind: 'bad_due', request_id: id }); return; }
+      var later = (r.owner_id && byOwner[r.owner_id] || []).filter(function (x) { return x.event_id !== r.event_id && ms(x.occurred_at_utc) > ms(r.occurred_at_utc) && !cancelled[x.payload.request_id] && !done[x.payload.request_id]; });
+      var hold = '';
+      (r.case_refs || []).forEach(function (c) { if (!hold && held[c]) hold = held[c]; });
+      var item = { request_id: id, owner_id: r.owner_id || null, case_refs: r.case_refs || [], due_utc: d.at, tz: r.payload.tz, revision: d.rev,
+                   overdue: t <= asof, held_reason: hold, dial_enabled: !hold, superseded_by_later_request: later.length > 0 };
+      (t <= asof ? out.due : out.future).push(item);
+    });
+    function byDue(a, b) { return (ms(a.due_utc) - ms(b.due_utc)) || (a.request_id < b.request_id ? -1 : 1); }
+    out.due.sort(byDue); out.future.sort(byDue);
+    return out;
+  };
+
   if (typeof module !== 'undefined' && module.exports) module.exports = CW; else root.CW = CW;
 })(typeof window !== 'undefined' ? window : this);
