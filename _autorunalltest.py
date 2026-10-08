@@ -25,8 +25,8 @@ m = re.search(r"function _autoRunLane\(\)\{(.*?)\n\}", T, re.S)
 rec('_autoRunLane exists', bool(m))
 body = m.group(1) if m else ''
 rec('_autoRunLane never opens REPLIED', "'replied'" not in body, body[:80])
-rec('_autoRunLane reads the real lane queue for an EMAIL-reachable lead',
-    "_workerQueue(k)" in body and "_workerReach(r) === 'email'" in body)
+rec('_autoRunLane opens the first lane whose real queue is non-empty (no earlier lane skipped)',
+    "_workerQueue(k).length > 0" in body)
 rec('_autoRunLane falls back to urgent', "var pick = 'urgent';" in body)
 a = T.find("'if(AUTOSTART && Q.length){'")
 blk = T[a:a + 6000]

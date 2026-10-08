@@ -12847,18 +12847,19 @@ function _laneWorkable(lane){
   return n;
 }
 // The lane the 8am unattended run opens (2026-10-08, Alejandro: "auto-run all lanes ... when it pops
-// up"). It used to be URGENT only, and on most mornings URGENT had nobody the bridge would email, so
-// the run never started (morning-sends alert: 50 eligible, 0 sent). Now it opens the first of
-// URGENT / ACTIVE / EARLY / BALLOON holding a lead the worker would EMAIL, and the run walks the
-// later lanes from there (autoAll, same walk as the "Auto-run ALL lanes" button). REPLIED is never
-// the auto-run's opening lane: those owners wrote to us and get a person, not a template.
+// up"). It used to be URGENT only, and on most mornings URGENT's queue was empty, so the run never
+// started (morning-sends alert: 50 eligible, 0 sent). Now it opens the first of URGENT / ACTIVE /
+// EARLY / BALLOON whose queue has anyone in it (email or phone: phone leads are parked for the
+// call/text lists), and the run walks every later lane from there (autoAll, same walk as the
+// "Auto-run ALL lanes" button), so no non-empty lane is skipped. REPLIED is never the auto-run's
+// opening lane: those owners wrote to us and get a person, not a template.
 function _autoRunLane(){
   var pick = 'urgent';
   ['urgent','active','early','balloon'].some(function(k){
     if(!WORKER_LANES[k]) return false;
     // The lane's real queue (24h cooldown and cap applied), not the raw lead list: a lane whose only
-    // email leads were mailed yesterday bakes an empty queue, and an empty queue never auto-starts.
-    var hit = _workerQueue(k).some(function(r){ return _workerReach(r) === 'email'; });
+    // leads were worked yesterday bakes an empty queue, and an empty queue never auto-starts.
+    var hit = _workerQueue(k).length > 0;
     if(hit) pick = k;
     return hit;
   });
