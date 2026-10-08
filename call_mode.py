@@ -4050,6 +4050,11 @@ var QVIEW = 'untouched';
 var _QV = ['untouched', 'replies', 'retries', 'history_unknown'];
 var _QVL = {untouched:'Untouched', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
 var _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
+/* A lead opened on purpose from a board list or the lookup may sit in another view. That is a
+   ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
+   retry never turns the session into a retry session. */
+var _QVBACK = null;
+function _qvRestore(){ if(_QVBACK){ QVIEW = _QVBACK; _QVBACK = null; } }
 function _histWhy(){
   if(typeof HISTCOV !== 'object' || !HISTCOV || HISTCOV.ledgers_ok !== true)
     return (HISTCOV && HISTCOV.why) || 'the server send history was not read when this page was built';
@@ -4375,6 +4380,7 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
+  _qvRestore();
   _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
@@ -4455,6 +4461,7 @@ function _posRestore(){
 }
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
 function navBack(){
+  _qvRestore();
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
   var k=_navSeek(_NAVB, cur && cur.c);
   if(k<0){ toast('No earlier lead in this lane'); return; }
@@ -4463,6 +4470,7 @@ function navBack(){
   SCREEN='lead'; i=k; render();
 }
 function navNext(){
+  _qvRestore();
   var from = cur && cur.c, k=_navSeek(_NAVF, from);
   if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
   _navPush(from);
@@ -6363,10 +6371,12 @@ function wire(){
         lane=L.k; BLANE=null;
         /* Opening a specific lead lands in whichever view holds it, so a retry opened ON PURPOSE
            from a board list or the lookup is not refused by the Untouched default. */
+        var _qvWas = QVIEW;
         try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
         var P=pool();
         for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
-        if(hit>=0){ i=hit; render(); return; }
+        if(hit>=0){ if(QVIEW !== _qvWas) _QVBACK = _qvWas; i=hit; render(); return; }
+        QVIEW = _qvWas;
       }
       /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
          seat. Say which rather than doing nothing when tapped. */

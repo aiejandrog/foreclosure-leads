@@ -110,6 +110,9 @@ rec('Q10 start() opens on Untouched across all lanes', "QVIEW = 'untouched'; lan
 rec('Q10 a position saved without a view (the old mixed queue) is never restored', 'if(s.v !== QVIEW) return false;' in SRC)
 allk = SRC[SRC.find("{k:'all',"):SRC.find("hide0:false}\n];", SRC.find("{k:'all',"))]
 rec('the all-lanes entry has no channel, so no email-lane exemption', "ch:'" not in allk, allk)
+rec('a lead opened on purpose is a one-off: the first move off it restores the view',
+    all(('function %s(){\n  _qvRestore();' % f) in SRC or ('function %s(workedC, nextC){\n  _qvRestore();' % f) in SRC
+        for f in ('advance', 'navBack', 'navNext')) and '_QVBACK = _qvWas' in SRC)
 rec('supReason/suppressed/hardSuppressed do not read the view',
     not any(t in SRC[SRC.find('function supReason('):SRC.find('function suppressed(')] for t in ('QVIEW', '_viewOf', 'HISTCOV')))
 
