@@ -3342,9 +3342,11 @@ try:
           'C2': {'source': 'tracerfy', 'phones': [{'number': '3055550002', 'src': 'resimpli'}, {'number': '3055550003'},
                                                   {'number': '3055550004', 'src': 'resimpli'}]},
           'C3': {'source': 'tracerfy', 'phones': [{'number': '3055550005'}]}}
-    got = RS.prune_unconfirmed(pr, {('C2', '3055550004')})
+    pr['C4'] = {'source': 'tracerfy', 'phones': [{'number': '3055550006', 'src': 'resimpli', 'dnc': True},
+                                                 {'number': '3055550007', 'src': 'resimpli'}, 'junk']}
+    got = RS.prune_unconfirmed(pr, {('C2', '3055550004')}, {'3055550007'})
     rec('prune_unconfirmed removes only unattached resimpli numbers and deletes an emptied resimpli-made entry',
-        got == (2, 1) and 'C1' not in pr and [p['number'] for p in pr['C2']['phones']] == ['3055550003', '3055550004'] and
+        got == (2, 1) and len(pr['C4']['phones']) == 3 and 'C1' not in pr and [p['number'] for p in pr['C2']['phones']] == ['3055550003', '3055550004'] and
         [p['number'] for p in pr['C3']['phones']] == ['3055550005'], (got, pr))
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

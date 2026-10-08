@@ -1004,20 +1004,25 @@ def audit(results, pairs):
             sorted({c for c, _ in bad if real_case(c)}))
 
 
-def prune_unconfirmed(results, pairs):
+def prune_unconfirmed(results, pairs, flagged=()):
     """Remove the cached src=resimpli numbers audit() calls unconfirmed (only those; nothing else is touched).
-    An entry this tool created (source resimpli) that ends with no phone is deleted, so skiptrace.py can
-    trace that lead. -> (numbers removed, entries deleted)"""
+    A number marked dnc, or in `flagged` (the numbers REsimpli's exports flag), is never removed: a removal
+    must not drop a suppression mark. An entry this tool created (source resimpli) that ends with no phone and
+    no email is deleted, so skiptrace.py can trace that lead. -> (numbers removed, entries deleted)"""
     gone = dead = 0
     for case in list(results):
         ent = results[case]
-        ph = phones_of(ent)
-        keep = [p for p in ph if not (p.get('src') == 'resimpli' and (case, norm_number(p.get('number'))) not in pairs)]
+        ph = ent.get('phones') if isinstance(ent, dict) else None
+        if not isinstance(ph, list):
+            continue
+        keep = [p for p in ph if not (isinstance(p, dict) and p.get('src') == 'resimpli' and not p.get('dnc')
+                                      and norm_number(p.get('number')) not in flagged
+                                      and (case, norm_number(p.get('number'))) not in pairs)]
         if len(keep) == len(ph):
             continue
         gone += len(ph) - len(keep)
         ent['phones'] = keep
-        if not keep and ent.get('source') == 'resimpli':
+        if not keep and not ent.get('emails') and ent.get('source') == 'resimpli':
             del results[case]
             dead += 1
     return gone, dead
@@ -1514,7 +1519,13 @@ def main(argv=None):
         total[k] += settled[k]                 # the flagged numbers, placed after every callable one
     tightened = tighten(results, flagged)
     aud, bad_cases = audit(results, pairs)
-    pruned = prune_unconfirmed(results, pairs) if a.prune_unconfirmed else (0, 0)
+    if a.prune_unconfirmed and (skipped or unread):
+        print('REFUSED: --prune-unconfirmed needs every export read, and %d file%s %s skipped or not read, so the '
+              'list of attached numbers is incomplete. Nothing was written. Run with no file named once the skipped '
+              'file is fixed.' % (len(skipped) + unread, '' if len(skipped) + unread == 1 else 's',
+                                  'was' if len(skipped) + unread == 1 else 'were'))
+        return 2
+    pruned = prune_unconfirmed(results, pairs, flagged) if a.prune_unconfirmed else (0, 0)
     if a.prune_unconfirmed:
         print('prune-unconfirmed: %d numbers%s removed, %d lead entries deleted'
               % (pruned[0], ' would be' if a.dry_run else '', pruned[1]))
