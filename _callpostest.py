@@ -68,7 +68,8 @@ var STORE = {}, localStorage = {getItem:function(k){ return k in STORE ? STORE[k
   setItem:function(k, v){ STORE[k] = String(v); }, removeItem:function(k){ delete STORE[k]; }};
 var location = {pathname:'/dealflow-board/call/index.html'};
 """ + POSK + r"""
-var _NAVB = [], _NAVF = [], notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null;
+var _NAVB = [], _NAVF = [], notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null, QVIEW = 'untouched';
+function _qvRestore(){}
 var LANES = [{k:'soon'}, {k:'lp'}, {k:'worker'}];
 var DATA = {soon:['A','B','C','D','E','F'], lp:['L1','L2','L3'], worker:['W1']}, GONE = {};
 function pool(){ return (DATA[lane] || []).filter(function(c){ return !GONE[c]; }).map(function(c){ return {c:c}; }); }

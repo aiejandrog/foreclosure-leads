@@ -70,7 +70,7 @@ rec('the per-outcome table is untouched (a no-answer still returns tomorrow)',
 rec('tier 3 has its own counter, never folded into _SUPN', 'var _SUPT = 0;' in src)
 rec('buttons read the shared per-lane pass', 'var _LANEN = {};' in src
     and '_LANEN[L.k] || {raw:0, net:0}' in src)
-rec('the page never opens on the email lane', "lane = _net('worker') ? 'worker' : 'soon';" in src)
+rec('the page never opens on the email lane', "QVIEW = 'untouched'; lane = 'all';" in src and "lane = _net('worker')" not in src)
 rec('the prior-contact banner exists and is not gated on the cooldown', 'function priorBar(' in src)
 
 # ---- 2. the JS half ------------------------------------------------------------------------------

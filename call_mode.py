@@ -2155,6 +2155,30 @@ def _identity_opted_fn(slim, optouts):
     return _test
 
 
+def history_coverage(total, shipped):
+    """What the phone may claim about "no recorded contact" (call workflow spec section 3).
+
+    ledgers_ok is true only when BOTH server send ledgers were read at build time: mail_sent.json
+    and text_sent.json, present and parseable. A missing or torn ledger means a row with no stamp
+    proves nothing, so the page files every uncontacted row under History unknown instead of
+    Untouched. capped is true when the qualifying pool is larger than what shipped, so the page
+    says its counts are partial and never claims the whole backlog is exhausted. Counts only."""
+    ok, why = True, ''
+    for name in ('mail_sent.json', 'text_sent.json'):
+        pth = os.path.join(HERE, name)
+        try:
+            with open(pth, encoding='utf-8') as fh:
+                data = json.load(fh)
+            if not isinstance(data, (list, dict)):
+                raise ValueError('not a list')
+        except FileNotFoundError:
+            ok, why = False, why or ('%s not found on the build machine' % name)
+        except Exception as e:
+            ok, why = False, why or ('%s unreadable (%s)' % (name, str(e)[:40]))
+    return json.dumps({'ledgers_ok': ok, 'why': why, 'capped': int(total) > int(shipped),
+                       'total': int(total), 'shipped': int(shipped)})
+
+
 def _text_hold_json():
     """What Call Mode shows before it can ask the bridge (text_hold.status() at build time).
 
@@ -2200,7 +2224,7 @@ def _text_hold_json():
 
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js='', text_js=''):
+               seat=None, funnel_js='', text_js='', histcov='null'):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -2214,7 +2238,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
-                       ('__TEXTHOLD__', 1),
+                       ('__TEXTHOLD__', 1), ('__HISTCOV__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
@@ -2271,7 +2295,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__SEAT__', json.dumps({'n': seat[0], 'i': seat[1], 'w': str(seat[2] or '')[:18]}
                                                 if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
-                .replace('__TEXTHOLD__', _text_hold_json())
+                .replace('__TEXTHOLD__', _text_hold_json()) \
+                .replace('__HISTCOV__', histcov)
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -2596,6 +2621,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         rows, total = call_rows(slim, optouts, deads)
     else:
         rows, total = rows
+    _shipped_all = len(rows)         # crew-wide shipped count, BEFORE the seat split
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
@@ -2669,7 +2695,8 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, funnel_js)
     _assert_no_dead_overrides(_PAGE, text_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
-                      seat=seat, funnel_js=funnel_js, text_js=text_js)
+                      seat=seat, funnel_js=funnel_js, text_js=text_js,
+                      histcov=history_coverage(total, _shipped_all))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -2938,6 +2965,8 @@ var TEXTPERSON=__TEXTPERSON__;
 var TEXTHOLD=__TEXTHOLD__;
 var TEXTHOLDBAKE=TEXTHOLD;
 var TEXTHOLDLIVE=false;
+/* Baked history coverage (call_mode.history_coverage): ledgers_ok, capped, counts only. */
+var HISTCOV=__HISTCOV__;
 /* BAKED SEAT (2026-09-09). null on a whole-list build; {n,i,w} on a seat page whose payload
    already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
@@ -3072,7 +3101,8 @@ function fillScript(t, r){
     .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
 
-function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}');}catch(e){notes={};}
+var _NOTESBAD=false;   // true when this phone's saved notes could not be parsed (history is then unknown)
+function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}'); _NOTESBAD=false;}catch(e){notes={}; _NOTESBAD=true;}
   /* A teammate's merge lands here, not through save() — see _FCGEN. Without this bump the lane
      counts would keep reporting the state from before the pull. */
   if(typeof _FCGEN === 'number') _FCGEN++;}
@@ -3793,7 +3823,14 @@ var LANES = [
   {k:'late',   lbl:'46-60',             pred:function(r){ return _dayLane(r,46,60); }, hide0:true},
   {k:'lp',     lbl:'Fresh filings',     pred:function(r){ return !!r.lp && !isBalloon(r); }, hide0:false},
   {k:'bal',    lbl:'Balloon',           pred:isBalloon,  hide0:true},
-  {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true}
+  {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true},
+  /* ALL LANES (call workflow spec section 3): the union of the lanes above, once per case. Appended
+     LAST so the "open this lead from a board list" search finds a specific lane first. It carries
+     no `ch`, so supReason() applies the ordinary neutral channel context: matching the email lane
+     does NOT earn the email-lane exemption here. */
+  {k:'all',    lbl:'All lanes',         pred:function(r){
+      for(var q=0;q<LANES.length;q++){ if(LANES[q].k !== 'all' && LANES[q].pred(r)) return true; }
+      return false; }, hide0:false}
 ];
 function laneDef(k){ for(var q=0;q<LANES.length;q++) if(LANES[q].k===k) return LANES[q]; return laneDef('soon'); }
 /* ══════════════════ TEAM SEATS — two phones, one list, nobody dialled twice ══════════════════
@@ -3999,6 +4036,70 @@ function teamRecheck(){
        re-takeover on the next repaint of the same screen. Cleared on advance. */
     cur._rcStay=1; screenLead(); };
 }
+/* ═════════ QUEUE VIEW (call workflow spec section 3, 2026-10-08) ═════════
+   WHAT THIS ADDS: the dial list opens on UNTOUCHED leads across every lane, and the other kinds of
+   work are explicit choices. It NEVER falls through: when Untouched empties, the page says so and
+   shows what is waiting elsewhere; a retry opens only on a tap.
+   WHAT IT DOES NOT TOUCH: it runs AFTER supReason(), the seat filter and the claim filter, so a view
+   only ever narrows a list those gates already produced. Nothing here clears a hold.
+   FRESHNESS IS THREE-STATE. "Untouched" means no recorded contact in CHECKED history -- and history
+   counts as checked only when the server send ledgers were read at build, this phone's notes parsed,
+   and (when team sync is on) at least one pull completed. Otherwise an uncontacted row is HISTORY
+   UNKNOWN, never untouched. Missing history is not zero. */
+var QVIEW = 'untouched';
+var _QV = ['untouched', 'replies', 'retries', 'history_unknown'];
+var _QVL = {untouched:'Untouched', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
+var _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
+/* A lead opened on purpose from a board list or the lookup may sit in another view. That is a
+   ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
+   retry never turns the session into a retry session. */
+var _QVBACK = null;
+function _qvRestore(){ if(_QVBACK){ QVIEW = _QVBACK; _QVBACK = null; } }
+function _histWhy(){
+  if(typeof HISTCOV !== 'object' || !HISTCOV || HISTCOV.ledgers_ok !== true)
+    return (HISTCOV && HISTCOV.why) || 'the server send history was not read when this page was built';
+  if(_NOTESBAD) return 'the notes saved on this phone could not be read';
+  try{
+    if(localStorage.getItem('fcTeamKey') && !localStorage.getItem('fcLastPull'))
+      return 'team sync is on but has not completed a pull on this phone yet';
+  }catch(e){ return 'phone storage is blocked'; }
+  return '';
+}
+/* Which view a row that already passed every gate belongs to. Replies first: an inbound reply is
+   unresolved work, not a fresh lead. Then any call, dial or outbound touch on this case or a
+   sibling case of the same person (r.pcs) or a baked server-ledger stamp -> Retries. */
+function _viewOf(r){
+  if(_replyOpen(r)) return 'replies';
+  if(_contactTier(r) > 0) return 'retries';
+  var sib = r.pcs || [];
+  for(var k = 0; k < sib.length; k++){ if(sib[k] !== r.c && lastCall(notes[sib[k]])) return 'retries'; }
+  return _histWhy() ? 'history_unknown' : 'untouched';
+}
+function viewBar(){
+  var b = _QV.map(function(k){
+    return '<button data-v="'+k+'" class="'+(QVIEW===k?'on':'')+'">'+_QVL[k]+' &middot; '+_VIEWN[k]+'</button>'; }).join('');
+  var o = '<div class="lane">'+b+'</div>'
+    + '<div class="supn">Counts: this seat, '+(lane==='all'?'all lanes':esc(laneDef(lane).lbl))+'. Retries are a deliberate choice, never the next card.'
+    + ((typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
+        ? ' <b>Partial:</b> '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded on the crew pages.' : '')
+    + '</div>';
+  var hw = _histWhy();
+  if(hw) o += '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
+    + '. Nothing shows as untouched until that clears.</div>';
+  return o;
+}
+function viewEmptyHtml(){
+  var n = _VIEWN, hw = _histWhy(), part = (typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
+    ? '<div class="sub">Partial inventory: only '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded, so this does not mean the crew is out of fresh leads.</div>' : '';
+  if(QVIEW === 'untouched')
+    return '<b>No untouched leads in the checked inventory for this seat.</b>'
+      + '<div class="sub">Waiting elsewhere: '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' retr'+(n.retries===1?'y':'ies')
+      + ', '+n.history_unknown+' with history unknown. Open one from the buttons above when you choose to.</div>'
+      + (hw ? '<div class="sub">History is incomplete ('+esc(hw)+'), so uncontacted leads are listed as History unknown.</div>' : '') + part;
+  if(QVIEW === 'replies') return '<b>No open replies.</b><div class="sub">Switch view above.</div>' + part;
+  if(QVIEW === 'retries') return '<b>No retries due for this seat.</b><div class="sub">Switch view above.</div>' + part;
+  return '<b>Nothing with unknown history.</b><div class="sub">Switch view above.</div>' + part;
+}
 function pool(){
   /* Rebuilt here rather than in render() so EVERY caller gets a fresh index — advance() and
      screenOutcome() both call pool() outside a render, and a teammate's opt-out landing between
@@ -4054,6 +4155,11 @@ function pool(){
     if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
     if(_clmOwner(r.c)){ _CLMN++; return false; }
     return true; });
+  /* QUEUE VIEW, after every gate. Counts first (so the empty state can say what is waiting), then
+     the narrowing. A view can only REMOVE rows the gates already allowed. */
+  _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
+  var _vw = keep.map(function(r){ var v = _viewOf(r); _VIEWN[v]++; return v; });
+  if(QVIEW) keep = keep.filter(function(r, ix){ return _vw[ix] === QVIEW; });
   var _ff = _freshFirst(keep, lane);
   _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; else break; }
   return _ff;
@@ -4142,10 +4248,9 @@ function start(){
      straight onto leads he had already contacted, which is the complaint that produced this whole
      change. The lane stays, one tap away. Chosen on the NET count so we also never open on a lane
      whose every row is suppressed and land on "Nothing in this lane". */
-  lane = lane || 'soon';
-  pool();                                              // fills _LANEN for the choice below
-  var _net = function(k){ return (_LANEN[k] || {}).net || 0; };
-  lane = _net('worker') ? 'worker' : 'soon';
+  /* A new session opens on UNTOUCHED across ALL lanes (call workflow spec section 3). The worker
+     lane and every other lane stay one tap away as a filter. */
+  QVIEW = 'untouched'; lane = 'all';
   if(SEAT){
     try{ localStorage.removeItem('fcSeat'); }catch(e){}          // legacy per-phone seat is dead here
     try{ var _cw = caller();
@@ -4275,6 +4380,7 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
+  _qvRestore();
   _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
@@ -4326,7 +4432,7 @@ function _posSave(P, k){
   try{
     var a = [];
     for(var j = k + 1; j < P.length && a.length < 40; j++) a.push(P[j].c);
-    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane,
+    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane, v:QVIEW,
       c:(k < P.length && P[k]) ? P[k].c : null, a:a, b:_NAVB.slice(-150), f:_NAVF.slice(-150)}));
   }catch(e){}
 }
@@ -4335,6 +4441,9 @@ function _posRestore(){
   try{ s = JSON.parse(localStorage.getItem(_POSK) || 'null'); }catch(e){ s = null; }
   if(!s || typeof s !== 'object' || s.d !== new Date().toDateString()) return false;
   if(!LANES.some(function(L){ return L.k === s.l; })) return false;
+  /* A position saved by an older build has no view and was taken in the old mixed queue. Never
+     restore that as the new default: it could reopen a retry. */
+  if(s.v !== QVIEW) return false;
   var ok = function(x){ return !!x && typeof x.c === 'string' && typeof x.l === 'string'; };
   _NAVB = (Array.isArray(s.b) ? s.b : []).filter(ok);
   _NAVF = (Array.isArray(s.f) ? s.f : []).filter(ok);
@@ -4352,6 +4461,7 @@ function _posRestore(){
 }
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
 function navBack(){
+  _qvRestore();
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
   var k=_navSeek(_NAVB, cur && cur.c);
   if(k<0){ toast('No earlier lead in this lane'); return; }
@@ -4360,6 +4470,7 @@ function navBack(){
   SCREEN='lead'; i=k; render();
 }
 function navNext(){
+  _qvRestore();
   var from = cur && cur.c, k=_navSeek(_NAVF, from);
   if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
   _navPush(from);
@@ -4393,9 +4504,8 @@ function render(){
      "Nothing in this lane" — indistinguishable from a broken build or the wrong lane. Same rule as
      the fail-silent one on the auction horizon: an empty result must never look like missing data. */
   if(!P.length){
-    var done = _WORKED.length
-      ? '<b>Lane cleared.</b><div class="sub">'+_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked. Switch lanes above, or reopen tomorrow.</div>'
-      : '<b>Nothing in this lane.</b><div class="sub">Switch lanes above.</div>';
+    var done = (_WORKED.length ? '<div class="sub">'+_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div>' : '')
+      + viewEmptyHtml();
     $('app').innerHTML=head()+'<div class="card">'+done+'</div><div class="sheetpad"></div>'; wire(); return;
   }
   /* Count what was ACTUALLY worked, not what is left in the pool. `P.length` was standing in for it,
@@ -4403,7 +4513,8 @@ function render(){
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
   if(i>=P.length){ _posSave(P, i); $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
-      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div>'
+      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div><div class="sub">'
+      +viewEmptyHtml().replace(/^<b>[^<]*<\/b>/,'')+'</div>'
       +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
       +'<div class="sheetpad"></div>'; if($('navback')) $('navback').onclick=navBack; wire(); return; }
   /* Keep the NUMBER position when the lead is unchanged. A legitimate lead-screen render (sync merge
@@ -4433,7 +4544,7 @@ function head(){
      Hidden only at raw 0 (an empty build must never read as a broken build); a lane whose rows are
      all suppressed shows a dimmed 0, because hiding it would be exactly the silent cap the line
      below forbids. */
-  var laneBtns = LANES.map(function(L){
+  var laneBtns = [laneDef('all')].concat(LANES.filter(function(L){ return L.k !== 'all'; })).map(function(L){
     var C = _LANEN[L.k] || {raw:0, net:0};
     if(!C.raw && L.hide0) return '';
     return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+(C.raw && !C.net?' dim':'')+'">'
@@ -4449,6 +4560,7 @@ function head(){
     ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the do-not-contact list is stale.')+'</div>')
     : '';
   return _qh + '<div class="top"><div class="lane">'+laneBtns+'</div>'
+    + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
@@ -4457,7 +4569,7 @@ function head(){
        whether the list is short because it is clean or short because it is stale. */
     /* ALL RETRIES, SAID OUT LOUD (2026-09-30). When every lead left in the lane has been reached
        before, the list is a follow-up list, and it must read like one. */
-    +((_FRESHN >= 0)?('<div class="supn">'+(_FRESHN
+    +((!QVIEW && _FRESHN >= 0)?('<div class="supn">'+(_FRESHN
           ? ('<b>'+_FRESHN+'</b> never contacted at the top &middot; everything after is a retry')
           : '<b>No fresh leads left in this lane</b> &mdash; every lead here was already called, emailed or texted. '
             +'New ones arrive with the next board rebuild.')+'</div>'):'')
@@ -6229,6 +6341,9 @@ function wire(){
      buttons carry data-b, so the bare selector matched them too and set `lane=undefined` — which
      laneDef() silently resolves to 'soon'. Tapping "TRACE" would have quietly switched the DIAL
      queue to Sale-soon and looked like nothing happened. Select on the attribute that means it. */
+  Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-v]'), function(b){
+    b.onclick=function(){ QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
+  });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
     b.onclick=function(){ lane=b.dataset.l; BLANE=null; i=0; render();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
@@ -6254,9 +6369,14 @@ function wire(){
         var L=LANES[q]; var hit=-1;
         if(!ROWS.some(function(r){ return r.c===c && L.pred(r); })) continue;
         lane=L.k; BLANE=null;
+        /* Opening a specific lead lands in whichever view holds it, so a retry opened ON PURPOSE
+           from a board list or the lookup is not refused by the Untouched default. */
+        var _qvWas = QVIEW;
+        try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
         var P=pool();
         for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
-        if(hit>=0){ i=hit; render(); return; }
+        if(hit>=0){ if(QVIEW !== _qvWas) _QVBACK = _qvWas; i=hit; render(); return; }
+        QVIEW = _qvWas;
       }
       /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
          seat. Say which rather than doing nothing when tapped. */
