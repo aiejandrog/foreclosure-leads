@@ -454,6 +454,7 @@ for _row, _want in (({'owners': 'FAKEROE MARY', 'oname': 'MARY FAKEROE'}, ('FAKE
                     ({'owners': '', 'oname': 'MARY FAKEROE', 'paOwner': 'X Y'}, ('MARY FAKEROE', 'either')),
                     ({'owners': '  ', 'oname': '', 'paOwner': 'FAKEROE MARY'}, ('FAKEROE MARY', 'either')),
                     ({'owners': '(owner via title search)', 'oname': 'MARY FAKEROE'}, ('(owner via title search)', 'last_first')),
+                    ({'owners': 'MARY FAKEROE', 'owners_repaired_from': 'oname'}, ('MARY FAKEROE', 'either')),
                     ({}, ('', 'last_first'))):
     check('owner field pick %r -> %r' % (sorted(_row), _want), PS._owner_field(_row, ('owners',), 'last_first') == _want,
           PS._owner_field(_row, ('owners',), 'last_first'))

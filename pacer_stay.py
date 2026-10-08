@@ -1110,7 +1110,13 @@ def _owner_field(d, primary, order):
     same field holds both orders; paOwner is whatever the appraiser wrote (Miami-Dade first-last,
     FDOR last-first). Read one fixed way, 'Mary Roe' was searched as first ROE last MARY, found
     nothing, and recorded a clear that released the lead (ce154cc, 2026-10-08). 'either' searches
-    both readings, so a clear needs both to come back clean; a comma still means 'LAST, FIRST'."""
+    both readings, so a clear needs both to come back clean; a comma still means 'LAST, FIRST'.
+    owner_repair.py --write copies one of those fallback fields INTO owners and marks the row with
+    owners_repaired_from; such an owners value is still a fallback name and is read 'either' too."""
+    if str(d.get('owners_repaired_from') or '').strip():
+        v = str(d.get('owners') or '').strip()
+        if v:
+            return v, 'either'
     for k in primary:
         v = str(d.get(k) or '').strip()
         if v:
