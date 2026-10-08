@@ -1,31 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-10-08T10:00:10-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness."
   },
   {
-   "at": "2026-10-08T10:00:10-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-07 21:12): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-08T10:00:10-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 50 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-08T10:00:10-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-08T10:00:10-04:00",
+ "published_at": "2026-10-08T16:45:54-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -36,7 +36,7 @@
    "holds": 443,
    "leads_checked": 20,
    "provider": "courtlistener",
-   "pull_age_h": 0.48,
+   "pull_age_h": 7.25,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
@@ -114,7 +114,7 @@
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1791458103,
+   "started_at": 1791492332,
    "state": "finished"
   },
   "paid_reads": {
