@@ -1,47 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-07T21:12:47-04:00",
+   "at": "2026-10-08T10:00:10-04:00",
+   "key": "healthcheck-fail",
+   "severity": "fail",
+   "text": "healthcheck FAIL stages: skiptrace freshness."
+  },
+  {
+   "at": "2026-10-08T10:00:10-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-07 21:12): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-07T21:12:47-04:00",
+   "at": "2026-10-08T10:00:10-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 52 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 50 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-07T21:12:47-04:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync failed on 2026-10-07 (steps: replies)."
-  },
-  {
-   "at": "2026-10-07T21:12:47-04:00",
+   "at": "2026-10-08T10:00:10-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-07T21:12:47-04:00",
+ "published_at": "2026-10-08T10:00:10-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 3,
-   "filings": 1279,
-   "holds": 429,
-   "leads_checked": 30,
+   "errors": 2,
+   "filings": 1351,
+   "holds": 443,
+   "leads_checked": 20,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.48,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 80,
-   "truncated": 3
+   "requests_used": 100,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -57,36 +57,38 @@
    "ft_dead": 1,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.07692307692307693,
+   "ft_rate": 0.09090909090909091,
    "ft_restart_cap": 10,
    "ft_rule": "slow_restart",
-   "ft_sent": 13,
+   "ft_sent": 11,
    "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.005210771925596642,
-   "mailed": 34,
+   "lb": 0.005537717362550956,
+   "mailed": 32,
    "post_dead": 1,
-   "post_lb": 0.005210771925596642,
-   "post_mailed": 34,
-   "post_rate": 0.029411764705882353,
+   "post_lb": 0.005537717362550956,
+   "post_mailed": 32,
+   "post_rate": 0.03125,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.029411764705882353,
+   "rate": 0.03125,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 7.64118
+   "usd": 7.17429
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
    "fresh": true,
-   "names": []
+   "names": [
+    "skiptrace freshness"
+   ]
   },
   "morning_sends": {
    "addresses": 2,
@@ -95,8 +97,8 @@
     15,
     15
    ],
-   "date": "2026-10-07",
-   "eligible": 52,
+   "date": "2026-10-08",
+   "eligible": 50,
    "judged": true,
    "readable": true,
    "scheduled": true,
@@ -107,21 +109,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-07",
-   "failed_steps": [
-    "replies"
-   ],
+   "date": "2026-10-08",
+   "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": false,
-   "started_at": 1791412643,
+   "run_ok": true,
+   "started_at": 1791458103,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 17.2567
+   "spent": 20.2647
   },
   "readiness": {
    "at": "2026-10-07T21:12:47-04:00",
