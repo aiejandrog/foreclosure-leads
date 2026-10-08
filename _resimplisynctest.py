@@ -3337,6 +3337,15 @@ try:
             rc == 2 and 'named_bad.csv is not UTF-8' in out and FOUND_NOTE not in out and 'keeps a copy' not in out, out[-400:])
     else:
         skip('a named file typed as a relative path (no relative path from here)')
+    # --prune-unconfirmed: only src=resimpli numbers the run did not attach go; a resimpli-made entry left empty is deleted
+    pr = {'C1': {'source': 'resimpli', 'phones': [{'number': '3055550001', 'src': 'resimpli'}]},
+          'C2': {'source': 'tracerfy', 'phones': [{'number': '3055550002', 'src': 'resimpli'}, {'number': '3055550003'},
+                                                  {'number': '3055550004', 'src': 'resimpli'}]},
+          'C3': {'source': 'tracerfy', 'phones': [{'number': '3055550005'}]}}
+    got = RS.prune_unconfirmed(pr, {('C2', '3055550004')})
+    rec('prune_unconfirmed removes only unattached resimpli numbers and deletes an emptied resimpli-made entry',
+        got == (2, 1) and 'C1' not in pr and [p['number'] for p in pr['C2']['phones']] == ['3055550003', '3055550004'] and
+        [p['number'] for p in pr['C3']['phones']] == ['3055550005'], (got, pr))
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 
