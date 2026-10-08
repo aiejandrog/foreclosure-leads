@@ -1151,6 +1151,18 @@ check('--owner blank: refused before any search', r['status'] == 'refused', r)
 r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=False, owner='TYPEDOWN, MARIA')
 check('--owner is ignored unless manual (the send bridge can never use a typed name)',
       r['status'] == 'no_lead' and r['recorded'] is True, r)
+r = PS.presend_check('CACE-99-007001', here=str(g17o), env=e17, session=h, now=NOW, manual=True,
+                     owner='Maria Typedown; Smith, John')
+check('--owner mixing "First Last" and "LAST, FIRST" is refused (one of them would be searched backwards)',
+      r['status'] == 'refused' and 'mixes' in r['why'], r)
+# index_hit branch with a typed owner must not write the hits file either
+g17h = work({'broward_leads.json': [{'county': 'BROWARD', 'case': 'CACE-99-001801', 'owners': 'NEWFILERP QUINCY', 'auction': mdy(20)}]})
+run(g17h, PullHTTP(pull=filer_pages(rows16)), raw=True)
+(g17h / 'pacer_newfiler_hits.json').unlink()
+h3 = FakeHTTP(by_name={('NEWFILERP', 'QUINCY'): []})
+r = PS.presend_check('CACE-99-001801', here=str(g17h), env=e17, session=h3, now=NOW, manual=True, owner='Quincy Newfilerp')
+check('--owner on an owner already in the new-filer index: index_hit reported, hits file NOT written',
+      r['status'] == 'index_hit' and r['recorded'] is False and not (g17h / 'pacer_newfiler_hits.json').exists(), r)
 r = PS.presend_check('CACE-99-007002', here=str(g17o), env=e17, session=h, now=NOW, manual=True, owner='SMITH TRUST')
 check('--owner that cannot be searched (a trust): unsearchable, still nothing written',
       r['status'] == 'unsearchable' and not (g17o / 'pacer_stay_cache.json').exists(), r)

@@ -1727,6 +1727,11 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         if not str(owner).strip():
             out.update(status='refused', why='--owner is empty')
             return out
+        chunks = [c for c in str(owner).split(';') if c.strip()]
+        if len({',' in c for c in chunks}) > 1:
+            out.update(status='refused', why='--owner mixes "LAST, FIRST" and "First Last" owners; use one style '
+                                             'for every owner so none is searched backwards')
+            return out
         lookup_only = True                    # a typed name never reaches the cache the gate reads
         out['recorded'] = False
         base = ld or {}
