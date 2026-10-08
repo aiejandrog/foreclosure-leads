@@ -12951,6 +12951,9 @@ function _workerCard(r){
               days:_saleDays(x), saleDate:x.auction||'',
               tier:x.tier||'', judg:x.judg||0, value:x.value||0};
     }),
+    // The owner's OTHER cases (real person key), so the bridge can refuse this send when a stop
+    // was ledgered on any of them after this page was built (2026-10-08). Only ever adds a refusal.
+    pcs: (function(){ try{ return (typeof _personCases === 'function' ? _personCases(r) : []).filter(function(c){ return c && c !== r.case; }); }catch(e){ return []; } })(),
     hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
     mismatch: !!r.ownerMismatch, paOwner: String(r.paOwner||'').split(';')[0].trim(),
     prior: _wlogContacted(r.case),  // "have I reached this person before?" — shown on the card
@@ -13849,7 +13852,7 @@ function genMorningWorker(lane, autostart){
     // wl = WORKER LANE. The bridge picks the From address by lane (senders.json): replied/urgent
     // leave from the brand domain, active from biscaynesolutionsgroup.com, early (fresh filings)
     // from bsgfl.com. Distinct from meta.lane, which the SERVER sets for probe/proven verification.
-    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", wl:lane, portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
+    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", wl:lane, portfolio:(r.portfolio||[]).map(function(p){return p.c;}), pcs:(r.pcs||[])}};'
     // NOTE: no pre-flight log line here. There used to be an addLog("email","trying bridge...")
     // before the fetch, and because addLog increments STATS[kind], a single successful send
     // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still

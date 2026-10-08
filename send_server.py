@@ -2135,11 +2135,25 @@ class Handler(BaseHTTPRequestHandler):
         _every = [to] + [a.strip().lower() for a in bcc.split(',') if a.strip()]
         _hit_email = next((a for a in _every if a in _oo_emails), None)
         _case = str((meta or {}).get('c') or '').strip().lower()
-        if _hit_email or (_case and _case in _oo_cases and not _is_test):
+        # SAME OWNER, OTHER CASE (2026-10-08). The ledger is keyed by case, so a stop on one of an
+        # owner's cases did not refuse a send for another unless they shared the exact address.
+        # The board hands over the owner's other cases (meta.pcs) and any portfolio cases riding in
+        # this one message (meta.portfolio); a stop on ANY of them refuses the send. It can only
+        # add a refusal: a missing or forged list leaves today's checks exactly as they were.
+        _sibs = []
+        if not _is_test:
+            for _k in ('pcs', 'portfolio'):
+                _v = (meta or {}).get(_k)
+                if isinstance(_v, list):
+                    _sibs += [str(x).strip().lower() for x in _v[:60] if isinstance(x, str) and x.strip()]
+        _hit_sib = next((c for c in _sibs if c in _oo_cases), None)
+        if _hit_email or (_case and _case in _oo_cases and not _is_test) or _hit_sib:
             return self._json(200, {
                 'ok': False, 'blocked': 'optout',
                 'err': ('recipient is on the DO-NOT-CONTACT ledger (%s) — send refused'
-                        % ('email ' + _hit_email if _hit_email else 'case ' + _case))})
+                        % ('email ' + _hit_email if _hit_email
+                           else ('case ' + _case if (_case and _case in _oo_cases)
+                                 else 'same owner, case ' + _hit_sib)))})
 
         # ---- §362 BANKRUPTCY-STAY GATE (2026-09-26) — fail closed --------------------------------
         # The case's stay status is decided HERE, from sale_history_cache.json, never from what the
