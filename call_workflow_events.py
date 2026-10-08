@@ -4,6 +4,10 @@ The Python twin of the event rules in call_workflow.js (Call Workflow spec secti
 for one job: the localhost notes backup carries a separate `workflow_v1` envelope, and that field must
 be validated and unioned on its own, independent of the legacy note merge.
 
+It is deliberately a LOSSLESS PRESERVER, not the judge: it checks shape and schema only, and keeps an
+event JS would call invalid (missing time, payload field, failed role check) so a backup never destroys
+evidence a newer reader might accept. call_workflow.js is the only thing that decides what counts in a metric.
+
 It only ever touches the new event envelope. It never reads, writes or rewrites a touch, a dial, an
 opt-out ledger or any suppression file, and it holds no homeowner data of its own.
 
@@ -25,17 +29,41 @@ TYPES = ('launch_recorded', 'attempt_confirmed', 'launch_cancelled', 'conversati
          'event_corrected')
 
 
+def _norm(v):
+    """Make Python values canonicalize exactly like JS: integral floats are integers, and object keys
+    sort by UTF-16 code unit (JS) rather than code point (Python's default)."""
+    if isinstance(v, bool) or v is None or isinstance(v, (int, str)):
+        return v
+    if isinstance(v, float):
+        return int(v) if v == int(v) else v
+    if isinstance(v, list):
+        return [_norm(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _norm(v[k]) for k in v}
+    return v
+
+
+def _enc(v):
+    if isinstance(v, dict):
+        return '{' + ','.join(json.dumps(k, ensure_ascii=False) + ':' + _enc(v[k])
+                              for k in sorted(v, key=lambda k: k.encode('utf-16-be'))) + '}'
+    if isinstance(v, list):
+        return '[' + ','.join(_enc(x) for x in v) + ']'
+    return json.dumps(v, ensure_ascii=False)
+
+
 def canon(v):
-    return json.dumps(v, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    return _enc(_norm(v))
 
 
 def shape_ok(ev):
     """(ok, unsupported). An unknown future schema is kept (unsupported), not dropped."""
     if not isinstance(ev, dict) or not isinstance(ev.get('event_id'), str) or not ev.get('event_id'):
         return False, False
-    if ev.get('schema_version') != SCHEMA:
-        sv = ev.get('schema_version')
-        return False, isinstance(sv, int) and not isinstance(sv, bool)
+    sv = ev.get('schema_version')
+    if isinstance(sv, bool) or not isinstance(sv, (int, float)) or sv != SCHEMA:
+        # a future numeric schema is kept losslessly (as JS does); a missing or non-number one is malformed
+        return False, isinstance(sv, (int, float)) and not isinstance(sv, bool)
     if ev.get('event_type') not in TYPES or not isinstance(ev.get('payload'), dict):
         return False, False
     return True, False
@@ -49,7 +77,9 @@ def add(u, ev):
     ok, unsupported = shape_ok(ev)
     if not ok:
         if unsupported:
-            u['unsupported'][ev['event_id']] = ev
+            lst = u['unsupported'].setdefault(ev['event_id'], [])
+            if all(canon(x) != canon(ev) for x in lst):
+                lst.append(ev)
         else:
             u['invalid'] += 1
         return u
@@ -84,7 +114,9 @@ def union(a, b):
         for evs in src['conflicts'].values():
             for ev in evs:
                 add(out, ev)
-        out['unsupported'].update(src['unsupported'])
+        for k, lst in src['unsupported'].items():
+            for ev in lst:
+                add(out, ev)
         out['invalid'] = max(out['invalid'], src['invalid'])
     return out
 
@@ -99,5 +131,5 @@ def from_list(events):
 def to_envelope(u):
     evs = [u['events'][k] for k in sorted(u['events'])]
     evs += [e for k in sorted(u['conflicts']) for e in sorted(u['conflicts'][k], key=canon)]
-    evs += [u['unsupported'][k] for k in sorted(u['unsupported'])]
+    evs += [e for k in sorted(u['unsupported']) for e in sorted(u['unsupported'][k], key=canon)]
     return evs

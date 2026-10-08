@@ -46,7 +46,7 @@ const build = list => list.reduce((s, e) => CW.add(s, e), CW.newStore());
   rec('M04 one right-owner conversation per attempt; duplicate confirmation counts once', m.conversations === 1, m); }
 
 // M05 callback request, miss, completion, duplicate completion
-{ const req = ev('callback_requested', { request_id: 'R1', requested_by_owner: true, evidence_ref: 'note-1', tz: 'America/New_York', local_time: '2026-10-09T10:00', due_utc: iso(T0 + 24 * H) }, { t: T0 });
+{ const req = ev('callback_requested', { request_id: 'R1', requested_by_owner: true, evidence_ref: 'note-1', tz: 'America/New_York', local_time: '2026-10-09T10:00', due_utc: iso(T0 + 24 * H) }, { t: T0, owner: 'ownA' });
   const done = (id) => ev('callback_completed', { request_id: 'R1', conversation_id: 'V1' }, { t: T0 + 3, id });
   let s = build([req, launch('L1', 'A1'), attempt('L1', 'A1', 'ownA', T0 + 1), launch('L2', 'A2'), attempt('L2', 'A2', 'ownA', T0 + 2), conv('V1', 'A2', T0 + 3)]);
   rec('M05 request still open after a miss (no completion yet)', CW.metrics(s, W).callbacks_completed === 0);
@@ -128,8 +128,8 @@ const build = list => list.reduce((s, e) => CW.add(s, e), CW.newStore());
   for (let k = 1; k <= 10; k++) { L.push(launch('L' + k, 'A' + k, { t: t(k) })); L.push(attempt('L' + k, 'A' + k, 'own' + k, t(k) + 1000)); }
   L.push(conv('V1', 'A1', t(1) + 2000), conv('V2', 'A2', t(2) + 2000), conv('V3', 'A3', t(3) + 2000), conv('V4', 'A3b', t(3) + 3000));
   L.push(launch('L3b', 'A3b', { t: t(3) + 2500 }), attempt('L3b', 'A3b', 'own3', t(3) + 2600));
-  const rq = (r) => ev('callback_requested', { request_id: r, requested_by_owner: true, evidence_ref: 'n', tz: 'America/New_York', local_time: '2026-10-09T10:00', due_utc: iso(T0) }, { t: S - H });
-  L.push(rq('R1'), rq('R2'));
+  const rq = (r, o) => ev('callback_requested', { request_id: r, requested_by_owner: true, evidence_ref: 'n', tz: 'America/New_York', local_time: '2026-10-09T10:00', due_utc: iso(T0) }, { t: S - H, owner: o });
+  L.push(rq('R1', 'own1'), rq('R2', 'own2'));
   L.push(ev('callback_completed', { request_id: 'R1', conversation_id: 'V1' }, { t: t(1) + 3000 }), ev('callback_completed', { request_id: 'R2', conversation_id: 'V2' }, { t: t(2) + 3000 }));
   L.push(ev('appointment_booked', { appointment_id: 'P1', conversation_id: 'V3', attempt_id: 'A3', booking_state: 'confirmed', agreed_utc: iso(T0 + 48 * H), purpose: 'advisor_call' }, { t: t(3) + 4000 }),
          ev('appointment_qualified', { appointment_id: 'P1', policy_id: 'pol1', checklist: { a: true } }, { t: t(3) + 5000 }));
@@ -160,6 +160,61 @@ const build = list => list.reduce((s, e) => CW.add(s, e), CW.newStore());
   const m8 = CW.metrics(build([]), { caller_id: 'C1', from: S, to: S + H, coverage: 'complete' });
   rec('zero states differ: complete=zero, partial=zero_partial, unknown=unknown',
       m8.states.callbacks === 'zero' && m6.states.callbacks === 'zero_partial' && m7.states.callbacks === 'unknown', [m8.states, m6.states, m7.states]); }
+
+
+// ---- review fixes (independent review of d394256) ----
+{ // zones where local midnight does not exist must not hang, and must still sum to the duration
+  const a = Date.parse('2010-10-16T12:00:00Z'), b = Date.parse('2010-10-18T12:00:00Z');
+  ['America/Sao_Paulo', 'America/Santiago', 'America/Havana', 'Asia/Kolkata', 'Europe/London'].forEach(z => {
+    const sp = CW.splitByLocalDay(a, b, z), tot = sp.reduce((n, x) => n + x[1] - x[0], 0);
+    rec('splitByLocalDay terminates and preserves duration in ' + z, sp.length >= 2 && tot === b - a, sp.length);
+  });
+  const ap = CW.splitByLocalDay(Date.parse('2011-12-29T12:00:00Z'), Date.parse('2011-12-31T12:00:00Z'), 'Pacific/Apia');
+  rec('Pacific/Apia (skipped a whole day) terminates', ap.length >= 2 && ap[ap.length - 1][1] === Date.parse('2011-12-31T12:00:00Z'));
+  const ko = CW.splitByLocalDay(Date.parse('2026-10-08T00:00:00Z'), Date.parse('2026-10-08T20:00:00Z'), 'Asia/Kolkata');
+  rec('half-hour zone splits at local midnight (18:30Z)', ko.length === 2 && ko[0][1] === Date.parse('2026-10-08T18:30:00Z'), ko);
+  rec('resolveLocal rejects Feb 31 and hour 24', CW.resolveLocal('2026-02-31T10:00', 'America/New_York').error === 'range' && CW.resolveLocal('2026-03-01T24:10', 'America/New_York').error === 'range'); }
+{ // attempt on a cancelled launch, mismatched attempt id, other caller's launch
+  let s = build([launch('L1', 'A1'), ev('launch_cancelled', { launch_id: 'L1' }), attempt('L1', 'A1', 'ownA')]);
+  let m = CW.metrics(s, W);
+  rec('an attempt on a cancelled launch does not count', m.attempts === 0 && m.review.some(r => r.kind === 'attempt_on_cancelled_launch'), m);
+  s = build([launch('L1', 'A1'), attempt('L1', 'A9', 'ownA')]); m = CW.metrics(s, W);
+  rec('an attempt whose id differs from its launch does not count', m.attempts === 0, m);
+  s = build([launch('L1', 'A1', { caller: 'C2' }), attempt('L1', 'A1', 'ownA')]); m = CW.metrics(s, W);
+  rec('an attempt on another caller\'s launch does not count', m.attempts === 0, m); }
+{ // zero needs clean books: a quarantined id blocks a verified zero
+  const x = ev('launch_recorded', { launch_id: 'L1', attempt_id: 'A1' }, { id: 'same' }), y = ev('launch_recorded', { launch_id: 'L9', attempt_id: 'A9' }, { id: 'same' });
+  const m = CW.metrics(build([x, y]), W);
+  rec('conflicts make a zero partial, not a verified zero', m.states.owners === 'zero_partial' && m.per_hour.owners === null && m.coverage === 'partial', m); }
+{ // callbacks: cancel after a real completion cannot undo it; wrong owner is refused
+  const req = (o) => ev('callback_requested', { request_id: 'R1', requested_by_owner: true, evidence_ref: 'n', tz: 'America/New_York', local_time: '2026-10-09T10:00', due_utc: iso(T0) }, { t: T0, owner: o });
+  const base = o => [req(o), launch('L1', 'A1'), attempt('L1', 'A1', 'ownA'), conv('V1', 'A1', T0 + 5), ev('callback_completed', { request_id: 'R1', conversation_id: 'V1' }, { t: T0 + 10 })];
+  let s = build(base('ownA').concat([ev('callback_cancelled', { request_id: 'R1' }, { t: T0 + 20 })]));
+  rec('a cancel dated after a completion does not undo it', CW.metrics(s, W).callbacks_completed === 1);
+  s = build(base('ownB'));
+  const m = CW.metrics(s, W);
+  rec('a conversation with a different owner cannot complete the request', m.callbacks_completed === 0 && m.review.some(r => r.kind === 'callback_owner_not_verified'), m);
+  s = build(base(null)); rec('an unresolved request owner cannot be completed', CW.metrics(s, W).callbacks_completed === 0); }
+{ // booking must point at the conversation's own attempt
+  const bk = ev('appointment_booked', { appointment_id: 'P1', conversation_id: 'V1', attempt_id: 'A2', booking_state: 'confirmed', agreed_utc: iso(T0 + 48 * H), purpose: 'x' });
+  const q = ev('appointment_qualified', { appointment_id: 'P1', policy_id: 'pol1', checklist: { a: true } });
+  const m = CW.metrics(build([launch('L1', 'A1'), attempt('L1', 'A1', 'ownA'), conv('V1', 'A1'), bk, q]), Object.assign({ approved_policy_ids: ['pol1'] }, W));
+  rec('a booking naming a different attempt than its conversation does not qualify', m.appointments_qualified === 0 && m.review.some(r => r.kind === 'booking_attempt_mismatch'), m); }
+{ // unresolved attempts never feed per-100-owner numerators
+  const m = CW.metrics(build([launch('L1', 'A1'), attempt('L1', 'A1', null), conv('V1', 'A1'), launch('L2', 'A2'), attempt('L2', 'A2', 'ownB')]), W);
+  rec('unresolved attempts stay out of the per-100 numerator', m.per_100_owners.conversations === 0 && m.conversations === 1, m); }
+{ // prototype-looking ids are data
+  const e = ev('launch_recorded', { launch_id: 'constructor', attempt_id: 'A1' }, { id: 'toString' });
+  let s = build([e]);
+  rec('event_id "toString" is stored once, not a self-conflict', !!s.byId.toString && Object.keys(s.conflicts).length === 0);
+  const m = CW.metrics(build([attempt('constructor', 'A1', 'ownA')]), W);
+  rec('launch_id "constructor" does not satisfy a missing launch', m.attempts === 0 && m.pending_parents === 1, m); }
+{ // idempotence and symmetry of union with conflicts and unsupported versions
+  const x = ev('launch_recorded', { launch_id: 'L1', attempt_id: 'A1' }, { id: 'same' }), y = ev('launch_recorded', { launch_id: 'L9', attempt_id: 'A9' }, { id: 'same' });
+  const u1 = Object.assign(ev('launch_recorded', { launch_id: 'f', attempt_id: 'f' }, { id: 'fut' }), { schema_version: 2 }), u2 = Object.assign({}, u1, { payload: { launch_id: 'g', attempt_id: 'g' } });
+  const p = build([x, y, u1]), q = build([u2]);
+  rec('union(a,a) does not duplicate quarantined versions', CW.union(build([x, y]), build([x, y])).conflicts.same.length === 2);
+  rec('union is symmetric with conflicts and several unsupported versions', CW.digest(CW.union(p, q)) === CW.digest(CW.union(q, p)) && CW.union(p, q).unsupported.fut.length === 2); }
 
 console.log(fails ? ('\nFAILED (' + fails + ')') : '\nALL PASS');
 process.exit(fails ? 1 : 0);

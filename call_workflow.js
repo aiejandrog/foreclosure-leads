@@ -4,7 +4,9 @@
  * PURE: no DOM, no storage, no network, no clock (every time is passed in), no ledger writer, no
  * safety verdict. It cannot send, text or email, and it cannot clear a hold. It is NOT yet wired into
  * the page; call_mode.py embeds it in a later change. Works under node (module.exports) and as an
- * inline <script> (window.CW).
+ * inline <script> (window.CW). When call_mode.py embeds it, READ THE FILE AS TEXT and substitute it into
+ * the page; never paste it into a non-raw Python string literal, which would turn the \n and \d
+ * escapes below into real characters and break the script.
  *
  * THE RULES THIS ENFORCES
  *  - Events are immutable and keyed by event_id. Union is commutative, associative and idempotent.
@@ -26,6 +28,8 @@
     'appointment_booked', 'appointment_qualified', 'appointment_cancelled', 'session_started',
     'active_interval_confirmed', 'session_paused', 'session_stopped', 'event_retracted', 'event_corrected'];
 
+  /* Prototype-free maps: an event_id or launch_id of "constructor" must be data, not a hit on Object. */
+  function dict() { return Object.create(null); }
   function isStr(v) { return typeof v === 'string' && v.length > 0; }
   function ms(iso) { var t = Date.parse(iso); return isFinite(t) ? t : NaN; }
 
@@ -98,17 +102,25 @@
   };
 
   /* ---------------------------------------------------------------- store + union */
-  CW.newStore = function () { return { byId: {}, conflicts: {}, unsupported: {}, invalid: {} }; };
+  CW.newStore = function () { return { byId: dict(), conflicts: dict(), unsupported: dict(), invalid: dict() }; };
   /* add(): idempotent. Same id + same payload = no-op. Same id + different payload = conflict. */
+  function addUnique(map, id, ev) {
+    var l = map[id] || (map[id] = []), c = canon(ev);
+    for (var i = 0; i < l.length; i++) if (canon(l[i]) === c) return;
+    l.push(ev);
+  }
   CW.add = function (store, ev) {
     var v = CW.validate(ev);
     if (!v.ok) {
-      if (v.unsupported) store.unsupported[ev.event_id] = ev;       // lossless
+      if (v.unsupported) addUnique(store.unsupported, ev.event_id, ev);       // lossless, every version
       else store.invalid[(ev && ev.event_id) || ('anon:' + canon(ev))] = { ev: ev, errors: v.errors };
       return store;
     }
     var have = store.byId[ev.event_id], c = canon(ev);
-    if (!have) { if (store.conflicts[ev.event_id]) store.conflicts[ev.event_id].push(ev); else store.byId[ev.event_id] = ev; return store; }
+    if (!have) {
+      if (store.conflicts[ev.event_id]) addUnique(store.conflicts, ev.event_id, ev); else store.byId[ev.event_id] = ev;
+      return store;
+    }
     if (canon(have) === c) return store;
     delete store.byId[ev.event_id];
     store.conflicts[ev.event_id] = [have, ev];
@@ -119,7 +131,7 @@
     [a, b].forEach(function (s) {
       Object.keys(s.byId).forEach(function (k) { CW.add(out, s.byId[k]); });
       Object.keys(s.conflicts).forEach(function (k) { s.conflicts[k].forEach(function (e) { CW.add(out, e); }); });
-      Object.keys(s.unsupported).forEach(function (k) { out.unsupported[k] = s.unsupported[k]; });
+      Object.keys(s.unsupported).forEach(function (k) { s.unsupported[k].forEach(function (e) { addUnique(out.unsupported, k, e); }); });
       Object.keys(s.invalid).forEach(function (k) { out.invalid[k] = s.invalid[k]; });
     });
     return out;
@@ -128,12 +140,14 @@
   CW.digest = function (store) {
     var ids = Object.keys(store.byId).sort();
     var parts = ids.map(function (k) { return canon(store.byId[k]); });
-    return ids.length + ':' + Object.keys(store.conflicts).sort().join('|') + ':' + Object.keys(store.unsupported).sort().join('|') + ':' + parts.join('\n');
+    var cf = Object.keys(store.conflicts).sort().map(function (k) { return k + '=' + store.conflicts[k].map(canon).sort().join('~'); });
+    var us = Object.keys(store.unsupported).sort().map(function (k) { return k + '=' + store.unsupported[k].map(canon).sort().join('~'); });
+    return ids.length + ':' + cf.join('|') + ':' + us.join('|') + ':' + parts.join('\n');
   };
 
   /* ---------------------------------------------------------------- live view */
   function live(store) {
-    var retracted = {}, ev = [];
+    var retracted = dict(), ev = [];
     Object.keys(store.byId).forEach(function (k) { var e = store.byId[k]; if (e.event_type === 'event_retracted') retracted[e.payload.target_event_id] = 1; });
     Object.keys(store.byId).forEach(function (k) { var e = store.byId[k]; if (!retracted[e.event_id] && e.event_type !== 'event_retracted') ev.push(e); });
     ev.sort(function (a, b) { return (ms(a.occurred_at_utc) - ms(b.occurred_at_utc)) || (a.event_id < b.event_id ? -1 : 1); });
@@ -167,12 +181,14 @@
   }
   function offsetMs(t, tz) { var p = parts(t, tz); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(t / 1000) * 1000; }
   CW.offsetMs = offsetMs;
-  /* Next local midnight strictly after t in tz. Handles 23/25-hour days. */
+  /* First instant after t at which the LOCAL calendar day changes. Found by search on the day key, so
+     it is correct in every zone: 23/25-hour days, half-hour offsets, and zones where local midnight
+     does not exist on a DST day (the day then starts at 01:00). Always > t, so callers cannot loop. */
+  function dayKey(t, tz) { var p = parts(t, tz); return p.year * 10000 + p.month * 100 + p.day; }
   function nextMidnight(t, tz) {
-    var p = parts(t, tz), guess = Date.UTC(p.year, p.month - 1, p.day + 1, 0, 0, 0);
-    var cand = guess - offsetMs(guess, tz);
-    cand = guess - offsetMs(cand, tz);
-    return cand;
+    var k = dayKey(t, tz), lo = Math.floor(t / 1000), hi = lo + 49 * 3600;
+    while (hi - lo > 1) { var mid = Math.floor((lo + hi) / 2); if (dayKey(mid * 1000, tz) === k) lo = mid; else hi = mid; }
+    return hi * 1000;
   }
   CW.splitByLocalDay = function (startMs, endMs, tz) {
     var out = [], t = startMs;
@@ -184,7 +200,9 @@
   CW.resolveLocal = function (local, tz, offsetMinutes) {
     var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local || '');
     if (!m) return { ok: false, error: 'format' };
-    var asUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]), seen = {}, ok = [];
+    var asUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]), seen = {}, ok = [], chk = new Date(asUtc);
+    if (chk.getUTCFullYear() !== +m[1] || chk.getUTCMonth() !== +m[2] - 1 || chk.getUTCDate() !== +m[3] ||
+        chk.getUTCHours() !== +m[4] || chk.getUTCMinutes() !== +m[5]) return { ok: false, error: 'range' };
     [-1, 0, 1].forEach(function (d) {
       var off = offsetMs(asUtc + d * 6 * 3600000, tz), u = asUtc - off;
       if (offsetMs(u, tz) === off && !seen[u]) { seen[u] = 1; ok.push({ utc: u, offMin: off / 60000 }); }
@@ -219,56 +237,73 @@
   CW.metrics = function (store, opts) {
     var w = { from: opts.from, to: opts.to }, cid = opts.caller_id, E = live(store);
     var asof = opts.asof || opts.to;
-    var approved = {}; (opts.approved_policy_ids || []).forEach(function (k) { approved[k] = 1; });
-    var launches = {}, cancelledLaunch = {}, pending = 0, review = [];
+    /* a quarantined id or an orphan child means the books are not complete, whatever the caller declared */
+    var cov = opts.coverage || 'unknown';
+    var approved = dict(); (opts.approved_policy_ids || []).forEach(function (k) { approved[k] = 1; });
+    var launches = dict(), cancelledLaunch = dict(), pending = 0, review = [];
     E.forEach(function (e) {
       if (e.event_type === 'launch_recorded') launches[e.payload.launch_id] = e;
       if (e.event_type === 'launch_cancelled') cancelledLaunch[e.payload.launch_id] = 1;
     });
     /* attempts: confirmed, linked to a recorded launch, by this caller */
-    var attemptsAll = {}, attempts = [];
+    var attemptsAll = dict(), attempts = [];
     E.forEach(function (e) {
       if (e.event_type !== 'attempt_confirmed' || e.caller_id !== cid) return;
-      if (!launches[e.payload.launch_id]) { pending++; return; }          // parent not here yet
+      var ln = launches[e.payload.launch_id];
+      if (!ln) { pending++; return; }                                      // parent not here yet
+      if (ln.payload.attempt_id !== e.payload.attempt_id || ln.caller_id !== cid) { review.push({ kind: 'launch_mismatch', attempt_id: e.payload.attempt_id }); return; }
+      if (cancelledLaunch[e.payload.launch_id]) { review.push({ kind: 'attempt_on_cancelled_launch', attempt_id: e.payload.attempt_id }); return; }
       if (attemptsAll[e.payload.attempt_id]) return;                       // retransmission
       attemptsAll[e.payload.attempt_id] = e;
       if (inWin(e, w)) attempts.push(e);
     });
-    var owners = {}, unresolved = {};
+    var owners = dict(), unresolved = dict();
     attempts.forEach(function (e) {
       if (e.owner_id) owners[e.owner_id] = 1;
       else unresolved[(e.case_refs && e.case_refs[0]) || e.event_id] = 1;
     });
-    var cohortAttempt = {}; attempts.forEach(function (e) { cohortAttempt[e.payload.attempt_id] = e; });
+    /* the cohort is VERIFIED owners only; unresolved attempts never feed a per-100-owner numerator */
+    var cohortAttempt = dict(); attempts.forEach(function (e) { if (e.owner_id) cohortAttempt[e.payload.attempt_id] = e; });
     /* conversations: one per attempt_id and per conversation_id */
-    var convByAttempt = {}, convs = {};
+    var convByAttempt = dict(), convs = dict();
     E.forEach(function (e) {
       if (e.event_type !== 'conversation_confirmed' || e.caller_id !== cid) return;
       var at = attemptsAll[e.payload.attempt_id];
       if (!at) { pending++; return; }
-      if (convByAttempt[e.payload.attempt_id] || convs[e.payload.conversation_id]) return;
+      if (convByAttempt[e.payload.attempt_id] || convs[e.payload.conversation_id]) {
+        if (convByAttempt[e.payload.attempt_id] && convByAttempt[e.payload.attempt_id].event_id !== e.event_id &&
+            convByAttempt[e.payload.attempt_id].payload.conversation_id !== e.payload.conversation_id) review.push({ kind: 'second_conversation_same_attempt', attempt_id: e.payload.attempt_id });
+        return;
+      }
       convByAttempt[e.payload.attempt_id] = e; convs[e.payload.conversation_id] = e;
     });
     /* callbacks */
-    var req = {}, cancelledReq = {}, completed = {}, convUsed = {};
+    var req = dict(), cancelledReq = dict(), completed = dict(), convUsed = dict();
     E.forEach(function (e) {
-      if (e.event_type === 'callback_requested') req[e.payload.request_id] = e;
-      if (e.event_type === 'callback_cancelled') cancelledReq[e.payload.request_id] = e;
+      if (e.event_type === 'callback_requested' && !req[e.payload.request_id]) req[e.payload.request_id] = e;
+      if (e.event_type === 'callback_cancelled' && !cancelledReq[e.payload.request_id]) cancelledReq[e.payload.request_id] = e;
     });
     E.forEach(function (e) {
       if (e.event_type !== 'callback_completed' || e.caller_id !== cid) return;
       var r = req[e.payload.request_id];
       if (!r) { pending++; return; }
-      if (cancelledReq[e.payload.request_id]) { review.push({ kind: 'completion_after_cancel', request_id: e.payload.request_id }); return; }
-      if (!convs[e.payload.conversation_id]) { pending++; return; }
+      /* a cancel voids only a completion that is NOT earlier than it; a cancel dated after a real
+         completion cannot retroactively undo it */
+      if (cancelledReq[e.payload.request_id] && ms(cancelledReq[e.payload.request_id].occurred_at_utc) <= ms(e.occurred_at_utc)) {
+        review.push({ kind: 'completion_after_cancel', request_id: e.payload.request_id }); return; }
+      var cv = convs[e.payload.conversation_id];
+      if (!cv) { pending++; return; }
+      /* right owner: the conversation's verified owner must be the owner who asked */
+      var cvOwner = attemptsAll[cv.payload.attempt_id] && attemptsAll[cv.payload.attempt_id].owner_id;
+      if (!r.owner_id || !cvOwner || r.owner_id !== cvOwner) { review.push({ kind: 'callback_owner_not_verified', request_id: e.payload.request_id }); return; }
       if (completed[e.payload.request_id]) return;                          // duplicate completion
       if (convUsed[e.payload.conversation_id]) { review.push({ kind: 'conversation_closes_one_request', conversation_id: e.payload.conversation_id }); return; }
       completed[e.payload.request_id] = e; convUsed[e.payload.conversation_id] = 1;
     });
     /* appointments */
-    var booked = {}, cancelledAppt = {}, qualified = {};
+    var booked = dict(), cancelledAppt = dict(), qualified = dict();
     E.forEach(function (e) {
-      if (e.event_type === 'appointment_booked') booked[e.payload.appointment_id] = e;
+      if (e.event_type === 'appointment_booked' && !booked[e.payload.appointment_id]) booked[e.payload.appointment_id] = e;
       if (e.event_type === 'appointment_cancelled') cancelledAppt[e.payload.appointment_id] = e;
     });
     var notAssessed = 0;
@@ -276,7 +311,9 @@
       if (e.event_type !== 'appointment_qualified' || e.caller_id !== cid) return;
       var b = booked[e.payload.appointment_id];
       if (!b) { pending++; return; }
-      if (!convs[b.payload.conversation_id]) { pending++; return; }
+      var bc = convs[b.payload.conversation_id];
+      if (!bc) { pending++; return; }
+      if (bc.payload.attempt_id !== b.payload.attempt_id) { review.push({ kind: 'booking_attempt_mismatch', appointment_id: b.payload.appointment_id }); return; }
       if (!approved[e.payload.policy_id]) { notAssessed++; return; }        // no approved rubric: booked, not qualified
       var c = e.payload.checklist, pass = Object.keys(c).length > 0 && Object.keys(c).every(function (k) { return c[k] === true; });
       if (!pass) return;
@@ -286,7 +323,7 @@
     var nConv = count(convByAttempt, function (e) { return inWin(e, w); });
     var nCb = count(completed, function (e) { return inWin(e, w); });
     var nAp = count(qualified, function (e) { return inWin(e, w); });
-    var convOwners = {}; Object.keys(convByAttempt).forEach(function (k) {
+    var convOwners = dict(); Object.keys(convByAttempt).forEach(function (k) {
       var a = attemptsAll[k]; if (a && a.owner_id && cohortAttempt[k] && inWin(convByAttempt[k], { from: w.from, to: asof })) convOwners[a.owner_id] = 1;
     });
     /* tracked vs untracked: an outcome is "tracked" when it falls inside a confirmed active interval */
@@ -294,24 +331,25 @@
     function tracked(e) { var t = ms(e.occurred_at_utc); return iv.some(function (x) { return t >= x[0] && t < x[1]; }); }
     function split(map, pred) { var tr = 0, un = 0; Object.keys(map).forEach(function (k) { var e = map[k]; if (!pred(e)) return; if (tracked(e)) tr++; else un++; }); return { tracked: tr, untracked: un }; }
     /* per-hour "owners attempted" counts DISTINCT verified owners attempted inside confirmed time. */
-    var tAtt = { tracked: 0, untracked: 0 }, trOwn = {};
+    var tAtt = { tracked: 0, untracked: 0 }, trOwn = dict();
     attempts.forEach(function (e) { if (tracked(e)) { if (e.owner_id) trOwn[e.owner_id] = 1; } else tAtt.untracked++; });
     tAtt.tracked = Object.keys(trOwn).length;
     var tConv = split(convByAttempt, function (e) { return inWin(e, w); });
     var tCb = split(completed, function (e) { return inWin(e, w); });
     var tAp = split(qualified, function (e) { return inWin(e, w); });
     var hours = secs / 3600;
-    function perHour(n) { return hours > 0 && opts.coverage === 'complete' ? n / hours : null; }
+    function perHour(n) { return hours > 0 && cov === 'complete' ? n / hours : null; }
     /* cohort rate: only events whose ATTEMPT is in the cohort, observed up to asof */
-    function cohortN(map, attemptOf) { var n = 0; Object.keys(map).forEach(function (k) { var e = map[k]; if (ms(e.occurred_at_utc) < asof && attemptOf(e)) n++; }); return n; }
+    function cohortN(map, attemptOf) { var n = 0; Object.keys(map).forEach(function (k) { var e = map[k], t = ms(e.occurred_at_utc); if (t >= w.from && t < asof && attemptOf(e)) n++; }); return n; }
     var cConv = cohortN(convByAttempt, function (e) { return !!cohortAttempt[e.payload.attempt_id]; });
     var cCb = cohortN(completed, function (e) { var c = convs[e.payload.conversation_id]; return c && cohortAttempt[c.payload.attempt_id]; });
     var cAp = cohortN(qualified, function (e) { var b = booked[e.payload.appointment_id]; return b && cohortAttempt[b.payload.attempt_id]; });
+    if (cov === 'complete' && (Object.keys(store.conflicts).length > 0 || pending > 0)) cov = 'partial';
     var nOwners = Object.keys(owners).length;
     function per100(n) { return nOwners ? (n / nOwners) * 100 : null; }
-    function state(n) { return n > 0 ? 'confirmed' : (opts.coverage === 'complete' ? 'zero' : (opts.coverage === 'partial' ? 'zero_partial' : 'unknown')); }
+    function state(n) { return n > 0 ? 'confirmed' : (cov === 'complete' ? 'zero' : (cov === 'partial' ? 'zero_partial' : 'unknown')); }
     return {
-      coverage: opts.coverage || 'unknown',
+      coverage: cov,
       owners_attempted: nOwners, unresolved_owner_attempts: Object.keys(unresolved).length,
       attempts: attempts.length, conversations: nConv, callbacks_completed: nCb, appointments_qualified: nAp,
       states: { owners: state(nOwners), conversations: state(nConv), callbacks: state(nCb), appointments: state(nAp) },
@@ -324,7 +362,7 @@
       per_100_owners: { conversations: per100(cConv), callbacks: per100(cCb), appointments: per100(cAp) },
       cohort_asof: asof,
       conflicts: Object.keys(store.conflicts).length, pending_parents: pending, review: review,
-      partial: Object.keys(store.conflicts).length > 0 || pending > 0 || opts.coverage !== 'complete'
+      partial: cov !== 'complete'
     };
   };
 

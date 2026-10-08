@@ -76,5 +76,18 @@ code = src.split('"' * 3, 2)[2]          # everything after the module docstring
 for banned in ('optouts', 'bounced_emails', 'touches', 'dials', 'worker_notes', 'open('):
     rec('events module never references ' + banned, banned not in code)
 
+# ---- review fixes: canonical bytes and schema handling agree with JS on awkward values ----
+tricky = [{'a': 1.0, 'b': 2.5, 'c': [1.0, {'k': True}]}, {'\U0001F600': 1, '\uffff': 2, 'z': 3}, E('t1', schema_version=True), E('t2', schema_version=2.0), E('t3', schema_version=2)]
+JS2 = "const CW=require('./call_workflow.js');const i=JSON.parse(require('fs').readFileSync(0,'utf8'));" \
+      "console.log(JSON.stringify({c:i.map(CW.canon),v:i.slice(2).map(e=>{const r=CW.validate(e);return [r.ok,r.unsupported]})}));"
+r2 = subprocess.run(['node', '-e', JS2], input=json.dumps(tricky), capture_output=True, text=True, cwd=HERE)
+j2 = json.loads(r2.stdout) if r2.returncode == 0 else {}
+rec('canonical bytes match JS for integral floats, astral keys and booleans', j2.get('c') == [P.canon(x) for x in tricky], (j2.get('c'), [P.canon(x) for x in tricky]))
+rec('schema_version true is malformed in both', P.shape_ok(tricky[2]) == (False, False) and j2['v'][0] == [False, False], j2.get('v'))
+rec('schema_version 2.0 and 2 are unsupported (kept) in both', P.shape_ok(tricky[3]) == (False, True) and P.shape_ok(tricky[4]) == (False, True) and j2['v'][1] == [False, True] and j2['v'][2] == [False, True], j2.get('v'))
+va, vb = E('uv', schema_version=2, payload={'x': 1}), E('uv', schema_version=2, payload={'x': 2})
+rec('several unsupported versions of one id are all kept, in either union order',
+    P.to_envelope(P.union(P.from_list([va]), P.from_list([vb]))) == P.to_envelope(P.union(P.from_list([vb]), P.from_list([va]))) and len(P.to_envelope(P.from_list([va, vb]))) == 2)
+
 print('\n%s (%d failed)' % ('ALL PASS' if not fails else 'FAILED', len(fails)))
 sys.exit(1 if fails else 0)
