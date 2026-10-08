@@ -42,23 +42,29 @@ def parse(lines):
 
 
 def rebuild_and_push(msg):
-    """Rebuild docs/index.html (re-encrypts with the current code set) and push it live."""
+    """Rebuild docs/index.html (re-encrypts with the current code set) and make it LIVE.
+
+    The live gate is the SEPARATE public repo dealflow-board (2026-09-17 split); this (engine) repo
+    is private and does NOT serve the board. So an engine-repo push alone never changes what a
+    homeowner/teammate loads -- publish_site.py is the step that mirrors docs/ to the live site, and
+    its exit code is the real "is the code change live?" signal. Before 2026-10-08 this function
+    pushed only to the engine repo and reported success, so every revoke/create was silently live
+    only after the next refresh-dealflow.bat. Always mirror here; never report success on the engine
+    push alone."""
     print('  rebuilding the encrypted site...')
     import foreclosure_leads as F
     F.make_tracker(json.load(open(LEADS, encoding='utf-8')))
     subprocess.run(['git', 'add', 'docs/index.html'], cwd=HERE)
-    c = subprocess.run(['git', 'commit', '-q', '-m', msg], cwd=HERE)
-    if c.returncode != 0:
-        print('  (nothing changed to publish)')
-        return True
-    print('  publishing...')
-    for attempt in (1, 2):
-        p = subprocess.run(['git', 'push', 'origin', 'main'], cwd=HERE)
-        if p.returncode == 0:
-            return True
-        if attempt == 1:
-            time.sleep(6)
-    return False
+    subprocess.run(['git', 'commit', '-q', '-m', msg], cwd=HERE)   # may be a no-op; the live mirror below is what counts
+    # Engine-repo push: best effort only, for the publish_guard baseline. It can 408 on the large
+    # board or be rejected non-fast-forward by an auto-committer; the nightly refresh reconciles it.
+    # It is NOT the live gate, so its result never decides this function's return value.
+    subprocess.run(['git', 'push', 'origin', 'main'], cwd=HERE)
+    # LIVE publish -- THIS is what makes the new code set open (and the revoked one stop opening) the
+    # board people actually load. publish_site.py runs its own encrypted-payload + no-PII guards.
+    print('  publishing to the LIVE site (publish_site.py -> dealflow-board)...')
+    p = subprocess.run([sys.executable, 'publish_site.py'], cwd=HERE)
+    return p.returncode == 0
 
 
 def card(name, code, ok):
