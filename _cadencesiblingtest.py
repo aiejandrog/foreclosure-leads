@@ -41,6 +41,12 @@ rec('1e an address on more than 8 leads is an institution, not a person',
 dup = [dict(x) for x in leads] + [dict(x) for x in leads] * 4          # same 4 cases repeated across files
 rec('1g the same lead repeated across files does not trip the institution guard',
     B.lower() in SO.sibling_cases(dup, {A.lower()}, cf))
+pk = SO.ledger_phone_keys(os.devnull, ['#1 (305) 555-0301', '#bad', 'a@x.com'])
+rec('1h phone keys are normalised to 10 digits, junk ignored', pk == {'3055550301'}, pk)
+rp = SO.sibling_cases(leads, set(), cf, phone_keys={'3055550301'})
+rec('1i a phone-only stop reaches the email sibling of the lead that holds the number', B.lower() in rp, rp)
+rec('1j ...and the lead holding the number itself is suppressed', A.lower() in rp and C_.lower() in rp, rp)
+rec('1k ...and an unrelated lead is not', D.lower() not in rp, rp)
 rec('1f ledger match by email key alone opts the lead out too',
     B.lower() in SO.sibling_cases([{'case': 'Z', 'emails': ['k@example.com', 'x@example.com']},
                                    {'case': B, 'emails': ['x@example.com']}], {'k@example.com'}, cf))
@@ -96,6 +102,15 @@ rec('2a the sibling case is NOT mailed', 'shared@example.com' not in sent, (sent
 rec('2b it is marked suppressed with the reason', st[B]['status'] == 'suppressed'
     and 'same owner' in st[B]['log'][-1]['ev'], st[B])
 rec('2c an unrelated sequence still sends', 'unrelated@example.com' in sent, (sent, out[-500:]))
+# phone-only stop: the ledger holds only '#3055550301' (lead A's number); cadence's email gate drops '#' keys
+json.dump({'_dealflow_notes': 1, 'notes': {'#3055550301': {'optout': '2099-01-01'}}}, open(CD.OPTOUTS, 'w'))
+import optout_sync as _OS
+_OS.NOTES = os.path.join(ctmp, 'worker_notes.json')
+rc4, sent4, out4, st4 = run(leads, set())
+rec('2f a PHONE-ONLY stop reaches the owner\'s other case in cadence', 'shared@example.com' not in sent4
+    and st4[B]['status'] == 'suppressed', (sent4, out4[-400:]))
+rec('2g ...and an unrelated sequence still sends', 'unrelated@example.com' in sent4, sent4)
+json.dump({'_dealflow_notes': 1, 'notes': {}}, open(CD.OPTOUTS, 'w'))
 rc2, sent2, out2, st2 = run(leads, set())
 rec('2d control: with no ledger entry the same case sends', 'shared@example.com' in sent2, (sent2, out2[-500:]))
 
