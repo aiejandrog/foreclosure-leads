@@ -175,6 +175,21 @@ for label, fn, call_expr, kind in (
         if name == 'hang':
             rec('%s helper gives up on a silent bridge within ~4 s' % label, 3000 <= v['ms'] <= 5500, v)
 
+
+# Call Mode on a PHONE (Alex: "Allow if fresh"): only an UNREACHABLE bridge falls back to the bake
+CMF = jsfn(CM, 'textPreflight')
+PH = lambda ua, held: ('Object.defineProperty(globalThis,"navigator",{value:{userAgent:"%s"},configurable:true}); function textingHeld(){return %s;} ' % (ua, 'true' if held else 'false'))
+for nm, ua, held, scen, want in (
+        ('phone, bridge unreachable, bake fresh', 'Mozilla/5.0 (iPhone)', False, 'reject', True),
+        ('phone, bridge unreachable, bake stale', 'Mozilla/5.0 (iPhone)', True, 'reject', False),
+        ('phone, bridge silent, bake fresh', 'Mozilla/5.0 (Android)', False, 'hang', True),
+        ('phone, bridge ANSWERS no', 'Mozilla/5.0 (iPhone)', False, 'refused', False),
+        ('phone, bridge answers garbage', 'Mozilla/5.0 (iPhone)', False, 'nojson', False),
+        ('laptop, bridge unreachable, bake fresh', 'Mozilla/5.0 (Windows NT 10.0)', False, 'reject', False),
+        ('laptop, bridge silent, bake fresh', 'Mozilla/5.0 (Windows NT 10.0)', False, 'hang', False)):
+    js = (SCEN[scen] + PH(ua, held) + CMF + 'textPreflight("2099-000002-CA-01","3055550102",[]).then(function(v){console.log(JSON.stringify({ok:v.ok}));});')
+    rec('Call Mode: ' + nm + ' -> ' + ('go' if want else 'opens nothing'), run_node(js)['ok'] is want)
+
 g = worker_gate()
 rec('worker textGate extracted', 'function textGate' in g and 'text/check' in g, g[:200])
 for name, scen in SCEN.items():

@@ -4366,14 +4366,29 @@ function textPreflight(c, num, pcs){
   return new Promise(function(resolve){
     var done = false, t = null;
     var fin = function(ok, why){ if(done) return; done = true; if(t) clearTimeout(t); resolve({ok: ok, why: why || ''}); };
-    t = setTimeout(function(){ fin(false, 'the bridge did not answer the do-not-contact check'); }, 3500);
+    /* A PHONE cannot reach the laptop bridge (127.0.0.1 there is the phone itself). Alex chose
+       "Allow if fresh" (2026-10-09): on a phone, an UNREACHABLE bridge falls back to the baked
+       do-not-contact list, exactly as textingHeld() already does, so it opens only while that bake
+       is fresh. A bridge that ANSWERS no still blocks everywhere. A laptop with the bridge down
+       is not a phone and stays blocked. */
+    var unreachable = function(why){
+      var phone = false;
+      try{ phone = /Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || '')); }catch(e){}
+      var held = true;
+      try{ held = textingHeld(); }catch(e){}
+      if(phone && !held) fin(true, '');
+      else fin(false, why);
+    };
+    t = setTimeout(function(){ unreachable('the bridge did not answer the do-not-contact check'); }, 3500);
     try{
       fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({case: c || '', to: String(num || ''), pcs: pcs || []})})
-        .then(function(rs){ return rs.json(); })
-        .then(function(j){ fin(!!(j && j.ok === true), (j && j.err) || 'blocked by the do-not-contact check'); })
-        .catch(function(){ fin(false, 'the bridge is not reachable'); });
-    }catch(e){ fin(false, 'the bridge is not reachable'); }
+        .then(function(rs){
+          /* the bridge ANSWERED: a body we cannot read is a refusal, never the phone fallback */
+          return rs.json().then(function(j){ fin(!!(j && j.ok === true), (j && j.err) || 'blocked by the do-not-contact check'); },
+                                function(){ fin(false, 'the bridge answered something unreadable'); });
+        }, function(){ unreachable('the bridge is not reachable'); });
+    }catch(e){ unreachable('the bridge is not reachable'); }
   });
 }
 function pollTextHold(){
