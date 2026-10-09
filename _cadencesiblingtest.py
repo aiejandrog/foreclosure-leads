@@ -50,6 +50,10 @@ CD.HERE = ctmp
 CD.QUEUE = os.path.join(ctmp, 'cadence_queue.json')
 CD.STATE = os.path.join(ctmp, 'cadence_state.json')
 CD.OPTOUTS = os.path.join(ctmp, 'optouts.json')
+CD._ss.HERE = ctmp
+CD._ss.SENT_LEDGER = os.path.join(ctmp, 'mail_sent.json')   # never the real ledger
+CD._ss.REFUSAL_LOG = os.path.join(ctmp, 'send_refusals.jsonl')
+json.dump([], open(CD._ss.SENT_LEDGER, 'w'))
 json.dump({'_dealflow_notes': 1, 'notes': {}}, open(CD.OPTOUTS, 'w'))
 json.dump({'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
            'started_at': 0, 'finished_at': 1, 'steps': []}, open(os.path.join(ctmp, 'sync_status.json'), 'w'))
