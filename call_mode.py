@@ -4383,6 +4383,41 @@ function textHoldWhy(){
   if(b && b.held && b.why) return b.why;
   return 'Texting is held: this page was built before today\'s 07:15 opt-out sync, or from a do-not-contact list that is now too old. Run run-optout-sync.bat on the laptop, then rebuild Call Mode.';
 }
+/* PRE-FLIGHT for every Text button here (2026-10-09, Alex chose "Check first"). The bridge's /text
+   only records a text after the composer opened, so it cannot stop one. This asks POST /text/check
+   first and resolves {ok:true} only on an explicit ok:true: texting not held, the case, the owner's
+   other cases and the number all off the do-not-contact ledger, the case clear of a 362 stay.
+   A refusal, an error, a 3.5 s timeout, or a bridge that is down or too old to have the route all
+   resolve {ok:false, why}, and the caller opens nothing. */
+function textPreflight(c, num, pcs){
+  return new Promise(function(resolve){
+    var done = false, t = null;
+    var fin = function(ok, why){ if(done) return; done = true; if(t) clearTimeout(t); resolve({ok: ok, why: why || ''}); };
+    /* A PHONE cannot reach the laptop bridge (127.0.0.1 there is the phone itself). Alex chose
+       "Allow if fresh" (2026-10-09): on a phone, an UNREACHABLE bridge falls back to the baked
+       do-not-contact list, exactly as textingHeld() already does, so it opens only while that bake
+       is fresh. A bridge that ANSWERS no still blocks everywhere. A laptop with the bridge down
+       is not a phone and stays blocked. */
+    var unreachable = function(why){
+      var phone = false;
+      try{ phone = /Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || '')); }catch(e){}
+      var held = true;
+      try{ held = textingHeld(); }catch(e){}
+      if(phone && !held) fin(true, '');
+      else fin(false, why);
+    };
+    t = setTimeout(function(){ unreachable('the bridge did not answer the do-not-contact check'); }, 3500);
+    try{
+      fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({case: c || '', to: String(num || ''), pcs: pcs || []})})
+        .then(function(rs){
+          /* the bridge ANSWERED: a body we cannot read is a refusal, never the phone fallback */
+          return rs.json().then(function(j){ fin(!!(j && j.ok === true), (j && j.err) || 'blocked by the do-not-contact check'); },
+                                function(){ fin(false, 'the bridge answered something unreadable'); });
+        }, function(){ unreachable('the bridge is not reachable'); });
+    }catch(e){ unreachable('the bridge is not reachable'); }
+  });
+}
 function pollTextHold(){
   var was = textingHeld();
   fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
@@ -5157,7 +5192,8 @@ function screenLookup(prefill){
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
                    + (textingHeld()
                       ? '<span class="nc lkth">' + esc(textHoldWhy() || 'Texting is held.') + '</span>'
-                      : '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'); })())
+                      : '<a href="sms:' + esc(h.num) + '" class="lktx" data-c="' + esc(h.c) + '" data-n="' + esc(h.num)
+                        + '" data-pcs="' + esc(JSON.stringify(h.pcs || [])) + '">&#128172; Text</a>'); })())
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
         + '</div>'
@@ -5182,6 +5218,21 @@ function screenLookup(prefill){
     });
     /* DELIBERATE TAP, never automatic on lookup: a reply retires the cold ladder and changes the
        cadence, so merely looking someone up must not do it. */
+    /* The lookup Text link asks the bridge before it navigates (textPreflight). */
+    Array.prototype.forEach.call(box.querySelectorAll('.lktx'), function(a){
+      a.onclick = function(ev){
+        ev.preventDefault();
+        if(a.dataset.chk) return;
+        var pcs = []; try{ pcs = JSON.parse(a.dataset.pcs || '[]'); }catch(e){}
+        var lbl = a.innerHTML, href = a.getAttribute('href');
+        a.dataset.chk = '1'; a.textContent = 'Checking\u2026';
+        textPreflight(a.dataset.c, a.dataset.n, pcs).then(function(v){
+          delete a.dataset.chk; a.innerHTML = lbl;
+          if(!v.ok){ toast('NOT texted \u2014 ' + v.why, {bad:true, ms:9000}); return; }
+          location.href = href;
+        });
+      };
+    });
     Array.prototype.forEach.call(box.querySelectorAll('.lkrep'), function(b){
       b.onclick = function(){
         var c = b.dataset.c, n = notes[c] = notes[c] || {status:'',note:''};
@@ -6270,6 +6321,16 @@ function afterCall(r, o, nextC){
   });
   wireLang($('app'));
   if($('tx')) $('tx').onclick = function(){
+    var _b = $('tx');
+    if(_b.dataset.chk) return;
+    _b.dataset.chk = '1'; var _l = _b.innerHTML; _b.textContent = 'Checking\u2026';
+    textPreflight(r.c, r.p[phIdx], r.pcs).then(function(v){
+      delete _b.dataset.chk; _b.innerHTML = _l;
+      if(!v.ok){ toast('NOT texted \u2014 ' + v.why, {bad:true, ms:9000}); return; }
+      if(!$('tx') || $('tx') !== _b) return;   /* left the lead during the check: open nothing */
+      _openText();
+    });
+    function _openText(){
     var body = (_txk==='ladder') ? textBody(r, st)
              : (_txk==='batch')  ? boardTextBody(r)
              : sitBody(r, _txk);
@@ -6321,9 +6382,17 @@ function afterCall(r, o, nextC){
     /* RESEND. Same body, same number — re-fires the composer. Does NOT log anything: a second open
        is still not a delivery, and the Yes button remains the only thing that writes the touch. */
     $('txr').onclick = function(){
-      openComposer();
-      toast('Re-opened — text is on the clipboard');
-      var c = $('txconf0'); if(c) c.textContent = 'Re-opened. Did it send this time?';
+      /* a re-open is a second text: it asks the bridge again, same as the first */
+      var _rb = $('txr'); if(!_rb || _rb.dataset.chk) return;
+      _rb.dataset.chk = '1';
+      textPreflight(r.c, r.p[phIdx], r.pcs).then(function(v){
+        delete _rb.dataset.chk;
+        if(!v.ok){ toast('NOT texted \u2014 ' + v.why, {bad:true, ms:9000}); return; }
+        if(!$('txr')) return;
+        openComposer();
+        toast('Re-opened — text is on the clipboard');
+        var c = $('txconf0'); if(c) c.textContent = 'Re-opened. Did it send this time?';
+      });
     };
     $('txn').onclick = function(){
       toast('Not logged as sent');
@@ -6331,6 +6400,7 @@ function afterCall(r, o, nextC){
       if(c) c.innerHTML = 'Not logged. Tap <b>Re-open composer</b> to try again, or move on '
         + '&mdash; this lead stays in the queue.';
     };
+    }
   };
 }
 /* FTSA caps telephonic (call/text) contact at 3 per lead per 24h. Before this, the only place that
