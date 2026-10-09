@@ -6208,6 +6208,29 @@ function _textStage(r){
    `confirmed` distinguishes a SEND from an OPEN. Opening the composer is not a delivery (the board
    learned this the hard way with email — see the textopen/text split in the worker), so an open
    posts confirmed:false: visible as an attempt, never counted against the 3-touch ladder. */
+/* PRE-FLIGHT for the board's Text link (2026-10-09, Alex chose "Check first"). /text above only
+   RECORDS a text after the composer already opened, so it can never stop one. This asks the bridge
+   (POST /text/check) first and resolves {ok:true} only on an explicit ok:true: texting not held,
+   the case, the owner's other cases and the number all off the do-not-contact ledger, and the case
+   clear of a 362 stay. Anything else, including a refusal, an error, a 3.5 s timeout and a bridge
+   that is down or too old to have the route, resolves {ok:false, why}. Callers open nothing then. */
+function textPreflight(r, digits){
+  return new Promise(function(resolve){
+    var done = false, t = null;
+    var fin = function(ok, why){ if(done) return; done = true; if(t) clearTimeout(t); resolve({ok: ok, why: why || ''}); };
+    t = setTimeout(function(){ fin(false, 'the bridge did not answer the do-not-contact check'); }, 3500);
+    try{
+      var pcs = [];
+      try{ pcs = (typeof _personCases === 'function' ? _personCases(r) : []).filter(function(c){ return c && c !== r.case; }); }catch(e){}
+      fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({case: (r && r.case) || '', to: String(digits || ''), pcs: pcs})})
+        .then(function(rs){ return rs.json(); })
+        .then(function(j){ fin(!!(j && j.ok === true), (j && j.err) || 'blocked by the do-not-contact check'); })
+        .catch(function(){ fin(false, 'the bridge is not reachable'); });
+    }catch(e){ fin(false, 'the bridge is not reachable'); }
+  });
+}
+
 function _textLedgerPost(r, digits, confirmed){
   try{
     var body = {case:(r&&r.case)||'', pkey:_personKey(r), to:String(digits||''),
@@ -7069,6 +7092,8 @@ document.addEventListener('visibilitychange', function(){ if(document.hidden) _s
 document.addEventListener('click', function(e){
   const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
   if(!a) return;
+  // the modal's Text link stamps AFTER its pre-flight passes (textPreflight), not on the tap
+  if(a.classList.contains('txsend')) return;
   const h = a.getAttribute('href') || '';
   const contact = /^(tel:|sms:)/i.test(h)
     || /truepeoplesearch\.com|whitepages\.com|cyberbackgroundchecks\.com|fastpeoplesearch\.com/i.test(h)
@@ -13781,10 +13806,12 @@ function genMorningWorker(lane, autostart){
     +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
     +     'if(ob) ob.onclick=function(){'
     +   'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
-    +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
-    +       'post("textopen",{qc:x.c});'
-    +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
-    +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       'textGate(x.c, x.sms, null, x.name, function(){'
+    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +         'post("textopen",{qc:x.c});'
+    +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       '});'
     +     '};'
     +     'if(sb) sb.onclick=function(){ TBSKIP++; addLog("skip", x.name, "text skipped — stays for tomorrow"); TBI++; textBatchStep(); };'
     +   '}'
@@ -13801,6 +13828,23 @@ function genMorningWorker(lane, autostart){
     // opened — press Send" over a click that did nothing and the Proof Sheet archived a phantom
     // send. Now: this tab opens the URL itself; a null return renders a TAP-TO-OPEN button (the
     // tap carries real user activation, which always succeeds) and the log tells the truth.
+    // PRE-FLIGHT (2026-10-09, Alex chose "Check first"). /text only records a text after the composer
+    // already opened, so it can never stop one. Every worker Text button asks the bridge first:
+    // POST /text/check answers ok:true only when texting is not held, the case / the owner's other
+    // cases / the number are not on the do-not-contact ledger, and the case clears the 362 stay gate.
+    // Anything else (a refusal, an error, a timeout, a bridge that is down or too old to know this
+    // route) opens nothing. It runs inside the click's activation window (3.5 s cap) so openHere's
+    // anchor fallback still counts as a user tap.
+    +   'function textGate(c, href, pcs, label, go){'
+    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null;'
+    +     'var fin=function(ok, why){ if(done) return; done=true; if(t) clearTimeout(t); if(ok) go(); else addLog("fail", label, "Not texted — "+why, "warn"); };'
+    +     't=setTimeout(function(){ fin(false, "the bridge did not answer the do-not-contact check"); }, 3500);'
+    +     'try{ fetch("http://127.0.0.1:8823/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
+    +       '.then(function(rs){ return rs.json(); })'
+    +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check"); })'
+    +       '.catch(function(){ fin(false, "the bridge is not reachable"); }); }'
+    +     'catch(e){ fin(false, "the bridge is not reachable"); }'
+    +   '}'
     +   'function openHere(url){'
     +     'if(!url) return false;'
     // window.open from a Blob-URL tab is the popup blocker's least-favorite caller — on the
@@ -14614,10 +14658,12 @@ function genMorningWorker(lane, autostart){
     +       'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
     +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
     +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
-    +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
-    +   'post("textopen",{qc:x.c});'
-    +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
-    +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       'textGate(x.c, x.sms, null, x.name, function(){'
+    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +         'post("textopen",{qc:x.c});'
+    +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       '});'
     +       'return;'
     +     '}'
     // the panel Call links stay plain tel: anchors (calls are never capped) — just log the breadcrumb.
@@ -14695,10 +14741,12 @@ function genMorningWorker(lane, autostart){
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
     +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
-    +   'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
-    +         'post("textopen",{qc:r.c});'
-    +         'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
-    +         'confirmSend(r, "text");'
+    +         'textGate(r.c, r.smsHref, r.pcs, r.first||r.owner, function(){'
+    +           'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +           'post("textopen",{qc:r.c});'
+    +           'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
+    +           'confirmSend(r, "text");'
+    +         '});'
     +         'return;'
     +       '}'
     +       'return;'
@@ -18524,9 +18572,23 @@ document.addEventListener('click', e => {
         +(grp>1?(' — across all '+grp+' properties for this owner'):'')+', on every device.\n\nIt cannot be undone from here.')) return;
     _stopEverywhere(r); renderTextModal(); return; }
   const sd = e.target.closest && e.target.closest('.txsend');
-  if(sd && sd.tagName==='A'){ const r=cur(); if(r){ autoLog(r, 'text', 'texted', {nextDays:3});
+  if(sd && sd.tagName==='A'){ const r=cur(); if(!r) return;
+    // PRE-FLIGHT: the link does not navigate until the bridge says ok (textPreflight). The touch is
+    // logged only once the composer is actually opened.
+    e.preventDefault();
+    if(sd.dataset.chk) return;
+    const href = sd.getAttribute('href')||'', lbl = sd.textContent;
     // the anchor's href is sms:+1<digits>?body=... — recover the number for the ledger row
-    _textLedgerPost(r, String(sd.getAttribute('href')||'').replace(/^sms:\+?1?/,'').split('?')[0], true); }
+    const dg = String(href).replace(/^sms:\+?1?/,'').split('?')[0];
+    sd.dataset.chk = '1'; sd.textContent = 'Checking…';
+    textPreflight(r, dg).then(function(v){
+      delete sd.dataset.chk; sd.textContent = lbl;
+      if(!v.ok){ alert('NOT texted — ' + v.why); return; }
+      _markViewed(r.case); _afterCall = {c: r.case, ch: 'text', t: Date.now()};
+      autoLog(r, 'text', 'texted', {nextDays:3});
+      _textLedgerPost(r, dg, true);
+      location.href = href;
+    });
     return; }
   const mk = e.target.closest && e.target.closest('.txmark');
   if(mk){ e.preventDefault(); const r=cur(); if(r){ autoLog(r, 'text', 'texted', {nextDays:3});
