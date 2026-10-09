@@ -426,6 +426,139 @@ hsrc = (HERE / 'healthcheck.py').read_text(encoding='utf-8')
 check('healthcheck: a bad stay cache is a WARN (not skipped, not a crash on a JSON list)',
       "'RULE: §362 stay data readable'" in hsrc and '_shc = _shraw if isinstance(_shraw, dict) else {}' in hsrc)
 
+# ============================================================ 5. round 2 (review findings)
+def bad_stay_cache(*_a, **_k):
+    return 'stay data unavailable: test'
+
+
+def healthy_stay_cache(*_a, **_k):
+    return ''
+
+
+# -- sale_history: a missing / empty cache is a lost file, not a first run
+d = sh_world('sh_lost')
+put(d, 'leads_final.json', [auction(MIA)])
+good = {MIA: ent(a=True, bd='2099-01-02', t=OLD)}
+put(d, 'sale_history_cache.json.bak', good)
+rc, out = quiet(SH.main, ['--limit', '5'])
+check('sale_history, cache MISSING but a good .bak exists: refuses, reads and writes nothing',
+      rc == 2 and CALLS == [] and raw(d, 'sale_history_cache.json') is None
+      and json.loads(raw(d, 'sale_history_cache.json.bak')) == good, (rc, CALLS, out[-200:]))
+put(d, 'sale_history_cache.json', {})
+rc, out = quiet(SH.main, ['--limit', '5'])
+check('sale_history, cache EMPTY ({}): refuses and leaves the file alone',
+      rc == 2 and CALLS == [] and json.loads(raw(d, 'sale_history_cache.json')) == {}, (rc, CALLS, out[-200:]))
+check('sale_history, empty cache: the .bak is not replaced by an empty copy',
+      json.loads(raw(d, 'sale_history_cache.json.bak')) == good)
+rc, out = quiet(SH.main, ['--limit', '5', '--init'])
+check('sale_history --init: starts a new cache on purpose', rc in (None, 0) and CALLS == [MIA], (rc, CALLS, out[-200:]))
+d = sh_world('sh_first')
+put(d, 'leads_final.json', [auction(MIA)])
+rc, out = quiet(SH.main, ['--limit', '5'])
+check('sale_history, no cache and no .bak: a true first run still works', rc in (None, 0) and CALLS == [MIA], (rc, CALLS))
+
+# -- Windows: a briefly locked target must not kill the run
+d = fresh_dir('dump_retry')
+real_replace, tries = os.replace, []
+
+
+def flaky_replace(a, b):
+    tries.append(1)
+    if len(tries) < 3:
+        raise PermissionError('locked')
+    return real_replace(a, b)
+
+
+with patched(SH.os, 'replace', flaky_replace), patched(SH.time, 'sleep', lambda s: None):
+    SH._dump({'x': 1}, str(d / 'f.json'))
+check('sale_history._dump retries a locked target and then writes', len(tries) == 3
+      and json.loads(raw(d, 'f.json')) == {'x': 1} and raw(d, 'f.json.tmp') is None, tries)
+
+# -- bk_lookup helpers
+with patched(BL, 'stay_cache_error', bad_stay_cache):
+    check('miami_stay_data_hold: a Miami case is held on a bad stay cache', BL.miami_stay_data_hold(MIA)[0] is True)
+    check('miami_stay_data_hold: Broward / blank are not this check\'s business',
+          BL.miami_stay_data_hold(BRO) == (False, '') and BL.miami_stay_data_hold('') == (False, ''))
+with patched(BL, 'stay_cache_error', healthy_stay_cache):
+    check('miami_stay_data_hold: healthy cache holds nothing', BL.miami_stay_data_hold(MIA) == (False, ''))
+with patched(BL, 'stay_cache_error', raises):
+    check('miami_stay_data_hold: an error holds', BL.miami_stay_data_hold(MIA)[0] is True)
+with patched(BL, 'federal_hold', lambda c, **k: (True, 'open federal case')), patched(BL, 'stay_cache_error', healthy_stay_cache):
+    check('raw_row_hold: a federal hold wins', BL.raw_row_hold(MIA) == (True, 'open federal case'))
+with patched(BL, 'federal_hold', raises):
+    check('raw_row_hold: federal_hold raising holds', BL.raw_row_hold(MIA)[0] is True)
+
+# -- door routes, knock planner, dial sheet
+import _carlos_route as CR      # noqa: E402
+import morning_planner as MP    # noqa: E402
+import call_list as CL          # noqa: E402
+import outreach_email as OE     # noqa: E402
+
+row = {'case': MIA, 'owners': 'TEST OWNER', 'addr': '1 TEST ST'}
+with patched(BL, 'stay_cache_error', bad_stay_cache), patched(BL, 'federal_hold', lambda c, **k: (False, '')):
+    check('door routes: a Miami lead with no row flag is dropped while the stay cache is bad',
+          CR.stay_held(MIA) is True and CR._live_lead(dict(row), {}) is False)
+    check('knock planner: held while the stay cache is bad', MP._knock_eligible(dict(row)) is False)
+    check('dial sheet: held while the stay cache is bad', CL._stay_held(dict(row), MIA) is True)
+with patched(BL, 'stay_cache_error', healthy_stay_cache), patched(BL, 'federal_hold', lambda c, **k: (False, '')):
+    check('door routes + dial sheet: a clean Miami lead on a healthy cache is not held (no mass hold)',
+          CR.stay_held(MIA) is False and CL._stay_held(dict(row), MIA) is False)
+    check('dial sheet: a row flag still holds, a lifted one does not',
+          CL._stay_held(dict(row, sale_bk_active=True), MIA) is True
+          and CL._stay_held(dict(row, sale_bk_active=True, sale_stay_lifted='2099-01-01'), MIA) is False)
+with patched(BL, 'federal_hold', lambda c, **k: (True, 'open federal case')):
+    check('door routes + dial sheet: a federal hold drops the lead',
+          CR.stay_held(MIA) is True and CL._stay_held(dict(row), MIA) is True)
+with blocked('bk_lookup'):
+    check('door routes + dial sheet: bk_lookup will not import -> held',
+          CR.stay_held(MIA) is True and CL._stay_held(dict(row), MIA) is True)
+check('daily routes: both LP pools and the specials go through stay_held',
+      (HERE / 'bsg_daily_routes.py').read_text(encoding='utf-8').count('CR.stay_held(') >= 2)
+check('dial sheet: both loops are gated', (HERE / 'call_list.py').read_text(encoding='utf-8').count('            if _stay_held(r, case):') == 2)
+
+# -- email load: Miami + bad stay cache
+leads = [{'case': MIA}, {'case': BRO}]
+with patched(BL, 'stay_cache_error', bad_stay_cache), patched(BL, 'send_hold', lambda c, here=None: (False, '')):
+    OE._stamp_federal_holds(leads)
+check('email load: a Miami lead is held while the stay cache is bad (send_hold alone released it)',
+      leads[0].get('saleBkAct') is True and not leads[1].get('saleBkAct'), leads)
+
+# -- the board: cached ACTIVE stays reach LP rows
+sc_dir = fresh_dir('stampcache')
+put(sc_dir, 'sale_history_cache.json', {MIA: ent(a=True, bd='2099-01-02'), MIA2: ent(a=True, bd='2099-01-03', sl='2099-02-01'),
+                                        '2099-000803-CA-01': ent()})
+saved_here = FL.HERE
+try:
+    FL.HERE = str(sc_dir)
+    rows = [{'case': MIA, 'saleLift': '2099-01-09'}, {'case': MIA2}, {'case': '2099-000803-CA-01'}, {'case': BRO},
+            {'case': MIA.replace('801', '899')}, {'case': ''}]
+    n, out = quiet(FL.stamp_cached_stays, rows)
+    check('board: an ACTIVE cached stay holds its row, with the filing date, and drops saleLift',
+          rows[0].get('saleBkAct') is True and rows[0].get('saleBkD') == '2099-01-02' and 'saleLift' not in rows[0], rows[0])
+    check('board: a LIFTED entry, a clear entry, no entry, Broward and blank rows are untouched',
+          not any(r.get('saleBkAct') for r in rows[1:]) and n == 1, rows)
+    put(sc_dir, 'sale_history_cache.json', '[1]')
+    rows = [{'case': MIA}]
+    n, out = quiet(FL.stamp_cached_stays, rows)
+    check('board: a bad cache stamps nothing here (hold_miami_on_bad_stay_cache owns that)',
+          n == 0 and not rows[0].get('saleBkAct'))
+finally:
+    FL.HERE = saved_here
+fsrc = (HERE / 'foreclosure_leads.py').read_text(encoding='utf-8')
+check('make_tracker: cached stays are stamped before the bad-cache hold',
+      0 < fsrc.find('\n    stamp_cached_stays(slim)') < fsrc.find('\n    _stay_degraded = hold_miami_on_bad_stay_cache(slim)'))
+
+# -- letters
+dd = fresh_dir('mail_load')
+put(dd, 'balloon_leads.json', [{'case': 'BAL-1'}])
+put(dd, 'lp_leads.json', [{'case': MIA}])
+with patched(OM, 'HERE', str(dd)):
+    loaded = OM._load_leads()
+check('letters: balloon_leads.json (the investor lane) is not loaded', [r['case'] for r in loaded] == [MIA], loaded)
+msrc = (HERE / 'bsg_mail_campaign.py').read_text(encoding='utf-8')
+check('LP letter campaign: the stay verdict is a drop bucket',
+      "drops['bankruptcy stay check'] += 1" in msrc and 'contact_blocked_reason' in msrc)
+
 print()
 print('==== %s ====' % ('FAILED: %d check(s)' % len(FAILS) if FAILS
                           else 'all stay-gate fail-closed checks passed'))

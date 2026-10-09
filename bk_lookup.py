@@ -1829,6 +1829,42 @@ def stay_cache_error(here=None):
     return ''
 
 
+def miami_stay_data_hold(case, here=None):
+    """(held, why): a Miami-Dade case is held while sale_history_cache.json is not readable stay
+    data (stay_cache_error). Anything that is not a Miami-Dade stem is not this check's business.
+
+    For the paths that act on a RAW lead row (door routes, dial sheet, knock planner, the email
+    load). The board bake holds the same rows with hold_miami_on_bad_stay_cache, but these read
+    leads_final.json / lp_leads.json directly, and a bad cache leaves those files with no stay
+    flags (restore_stays_from_cache restores nothing on purpose). Any error here holds."""
+    try:
+        import stay_gate
+        if not stay_gate.case_stem(case):
+            return False, ''
+    except Exception:
+        return True, 'stay check unavailable. Lead stays held.'
+    try:
+        err = stay_cache_error(here)
+    except Exception:
+        return True, 'stay check unavailable. Lead stays held.'
+    if err:
+        return True, err[:140]
+    return False, ''
+
+
+def raw_row_hold(case, here=None):
+    """(held, why) for a path that acts on a raw lead row and has no board bake behind it:
+    federal_hold (CourtListener, never-contact, Broward/Palm Beach with a cache) plus
+    miami_stay_data_hold. The row's own sale_bk_active flag is the caller's. Any error holds."""
+    try:
+        held, why = federal_hold(case)
+        if held:
+            return True, why
+        return miami_stay_data_hold(case, here=here)
+    except Exception:
+        return True, 'federal bankruptcy check unavailable — lead stays held'
+
+
 def put_entry(cache, key, cases, searched, ok_check, err_why, now):
     prev = cache.get(key) if isinstance(cache.get(key), dict) else {}
     merged = merge_cases(prev.get('cases') or [], cases)

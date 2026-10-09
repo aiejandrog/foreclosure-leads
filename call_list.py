@@ -36,6 +36,19 @@ import paths as P
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+def _stay_held(r, case):
+    """True when this row may not be dialled: its own stay flag (a lifted stay clears it), the
+    federal / never-contact hold, or a Miami case while the stay cache is unreadable. The sheet
+    reads raw lead files and had no bankruptcy check at all (2026-09-29). Fails closed."""
+    if (r.get('sale_bk_active') or r.get('saleBkAct')) and not (r.get('sale_stay_lifted') or r.get('saleLift')):
+        return True
+    try:
+        import bk_lookup as BL
+        return bool(BL.raw_row_hold(case, here=HERE)[0])
+    except Exception:
+        return True
+
+
 def _load(fn, d):
     try:
         x = json.load(open(os.path.join(HERE, fn), encoding='utf-8'))
@@ -103,6 +116,8 @@ def collect(days_window, cap, lp=False):
             # drops every field the rules read (no defendants, no sale year, no judgment).
             if _dg.check(r)['hold']:
                 continue
+            if _stay_held(r, case):
+                continue
             owner = str(r.get('oname') or r.get('owners') or '').strip()
             if owner.upper() in opt:
                 continue
@@ -168,6 +183,8 @@ def collect(days_window, cap, lp=False):
             # display dict. These are RAW county rows with no title_status of their own; the gate
             # merges ownership.json itself so an already-cleared lead is not held twice.
             if _dg.check(r)['hold']:
+                continue
+            if _stay_held(r, case):
                 continue
             owner = str(r.get(ok) or '').strip()
             if owner.upper() in opt:

@@ -114,7 +114,8 @@ def _hold_unbaked(rows):
             r.pop('saleLift', None)
             held += 1
     if held:
-        print('fallback rows: %d of %d held by the bankruptcy stay check' % (held, len(rows)))
+        print('%sfallback rows (no Desktop twin): %d of %d held by the bankruptcy stay check'
+              % ('!! DEGRADED: ' if rows and held == len(rows) else '', held, len(rows)))
     return rows
 
 

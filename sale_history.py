@@ -620,11 +620,30 @@ def _inv(iso):
     return ''.join(chr(ord('9') - int(ch) + ord('0')) if ch.isdigit() else ch for ch in iso)
 
 
+def _bak_has_entries():
+    """True when sale_history_cache.json.bak parses to a non-empty dict (a good copy to restore)."""
+    try:
+        with open(CACHE + '.bak', encoding='utf-8') as f:
+            d = json.load(f)
+        return isinstance(d, dict) and bool(d)
+    except Exception:
+        return False
+
+
 def _dump(obj, path, indent=None):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(obj, f, indent=indent)
-    os.replace(tmp, path)
+    # Windows: os.replace raises PermissionError while another process (send_server mid-read) has
+    # the target open. The old truncating open() tolerated that, so retry before giving up.
+    for attempt in range(6):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 5:
+                raise
+            time.sleep(0.5)
 
 
 def main(argv=None):
@@ -644,6 +663,10 @@ def main(argv=None):
                          'common one, and a 7-day-old read cannot see it')
     ap.add_argument('--refresh-bk', action='store_true',
                     help='force-refetch every BK-relevant entry (active stay or any BK count) ignoring TTL')
+    ap.add_argument('--init', action='store_true',
+                    help='start a NEW stay cache even though the file is missing or empty and a '
+                         'sale_history_cache.json.bak exists. Without it the run refuses: a partial '
+                         'rebuild would drop every stay it does not re-read.')
     ap.add_argument('--no-lp', action='store_true',
                     help='auction list only, the pre-2026-09-26 scope: skip the Miami-Dade lis pendens lane')
     a = ap.parse_args(argv)
@@ -667,6 +690,14 @@ def main(argv=None):
         print('!! sale_history: sale_history_cache.json is unreadable (%s). Nothing read, nothing '
               'written. Restore sale_history_cache.json.bak or `git checkout -- '
               'sale_history_cache.json`, then re-run.' % str(e)[:120])
+        return 2
+    if not cache and not a.init and (os.path.exists(CACHE) or _bak_has_entries()):
+        # A MISSING cache with a good .bak, or an EMPTY one, is a lost file, not a first run.
+        # stay_gate and the board bake already treat it as unavailable and hold every Miami lead;
+        # rebuilding it from a 200-read budget would end that hold while most stays are unread.
+        print('!! sale_history: sale_history_cache.json is %s. Nothing read, nothing written. Restore '
+              'sale_history_cache.json.bak (or `git checkout -- sale_history_cache.json`), or pass '
+              '--init to start a new cache on purpose.' % ('empty' if os.path.exists(CACHE) else 'missing'))
         return 2
     if cache and os.path.exists(CACHE):
         # The last copy that parsed, for the recovery above. Taken before this run writes anything.
@@ -814,11 +845,14 @@ def main(argv=None):
         if fetched % 25 == 0:
             # Atomic (tmp + os.replace): a run killed mid-write used to leave a truncated cache,
             # which _load_cache then read as empty.
-            _dump(cache, CACHE)
-            if leads:
-                _dump(leads, path)
-            if lp_dirty and lp_writable:
-                _dump(lp_all, os.path.join(HERE, LP_LEADS), indent=1)
+            try:
+                _dump(cache, CACHE)
+                if leads:
+                    _dump(leads, path)
+                if lp_dirty and lp_writable:
+                    _dump(lp_all, os.path.join(HERE, LP_LEADS), indent=1)
+            except OSError as e:          # a locked file skips one checkpoint, the end of the run retries
+                print(f'  checkpoint write skipped ({type(e).__name__})')
             print(f'  ... {fetched} fetched, {changed} updated')
 
     _dump(cache, CACHE)

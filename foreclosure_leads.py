@@ -1740,6 +1740,44 @@ def stamp_first_touch_hint(slim):
           % held)
     return held
 
+def stamp_cached_stays(slim):
+    """Stamp every Miami-Dade BOARD row whose case has an ACTIVE, unlifted entry in
+    sale_history_cache.json: saleBkAct + saleBkD, and drop saleLift. Returns rows newly held.
+
+    lis pendens rows are rebuilt flagless by lp_leads.py every night and get their stay back only
+    from sale_history stamping lp_leads.json; restore_stays_from_cache covers only the auction
+    rows. If sale_history died or was killed that night, a healthy cache still marked those owners
+    ACTIVE and the board offered them (2026-09-29). Only adds holds, only on these slim rows,
+    nothing is written back (see restore_stays_from_cache). Reads the cache through stay_gate, the
+    index /send judges by. A cache that cannot be read is hold_miami_on_bad_stay_cache's job."""
+    try:
+        import stay_gate as _SG
+        idx, err = _SG._load(os.path.join(HERE, 'sale_history_cache.json'))
+    except Exception:
+        return 0
+    if err or not idx:
+        return 0
+    newly = 0
+    for d in slim:
+        try:
+            stem = _SG.case_stem(d.get('case'))
+            act = [(k, v) for k, v in (idx.get(stem) or []) if stem and isinstance(v, dict)
+                   and _SG.entry_stay_active(v)]
+        except Exception:
+            continue
+        if not act:
+            continue
+        if not d.get('saleBkAct'):
+            d['saleBkAct'] = True
+            d['saleBkD'] = str(act[0][1].get('bd') or '')
+            newly += 1
+        d.pop('saleLift', None)
+        d.pop('sale_bk_lifted', None)
+    if newly:
+        print('sale-history cache: %d board row(s) held for an ACTIVE stay the lead files had lost' % newly)
+    return newly
+
+
 MIAMI_STAY_DATA_WHY = 'Miami-Dade docket stay data unavailable on this build. Lead stays held.'
 
 
@@ -3452,6 +3490,7 @@ def make_tracker(leads):
     stamp_first_touch_hint(slim)
 
     # Miami-Dade docket stays: a bad sale_history_cache.json holds every Miami row on this build.
+    stamp_cached_stays(slim)
     _stay_degraded = hold_miami_on_bad_stay_cache(slim)
     # Federal bankruptcy (CourtListener). Fails closed: see stamp_federal_bk.
     _bk_held, _bk_degraded = stamp_federal_bk(slim)

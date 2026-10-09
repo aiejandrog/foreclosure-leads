@@ -101,7 +101,10 @@ def _load_leads():
             pass
     for xf in sorted(glob.glob(os.path.join(HERE, '*_leads.json'))):
         base = os.path.basename(xf)
-        if base.startswith('_') or base in ('leads_raw.json',):
+        # balloon_leads.json is the investor refi lane: it must never get the homeowner letter
+        # (outreach_email excludes it the same way). It used to be stopped only by accident, as
+        # an unkeyable BAL- id at the stay check.
+        if base.startswith('_') or base in ('leads_raw.json', 'balloon_leads.json'):
             continue
         try:
             leads += json.load(open(xf, encoding='utf-8'))
