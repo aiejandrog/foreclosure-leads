@@ -1895,6 +1895,9 @@ class Handler(BaseHTTPRequestHandler):
                                     'err': _tw or 'texting held — do-not-contact list not fresh'})
         _tc, _te = _optout_set()
         _td = re.sub(r'\D', '', str(d.get('to') or ''))
+        if len(_td) < 10:
+            # no number to check = no pre-flight; the page always sends one, so this is a bad caller
+            return self._json(200, {'ok': False, 'blocked': 'bad_request', 'err': 'no usable phone number to check'})
         _keys = [case.lower()]
         for _k in ('pcs', 'portfolio'):
             _v = d.get(_k)
@@ -1903,6 +1906,19 @@ class Handler(BaseHTTPRequestHandler):
         if _td:
             _keys += ['#' + _td, '#' + _td[1:]] if (len(_td) == 11 and _td[0] == '1') else ['#' + _td, '#1' + _td]
         _hit = next((k for k in _keys if k in _tc), None)
+        if not _hit:
+            # rep-logged hard no / DNC in worker_notes that the nightly sweep has not ledgered yet:
+            # _optout_set() leaves '#digits' out (the email path has no use for them), so read them here.
+            try:
+                from optout_sync import notes_dnc_keys
+                _nk = set(notes_dnc_keys())
+                _hit = next((k for k in _keys if k in _nk), None)
+                if not _hit:
+                    _t10 = _td[-10:]
+                    _hit = next((k for k in _nk if k.startswith('#') and re.sub(r'\D', '', k)[-10:] == _t10
+                                 and len(re.sub(r'\D', '', k)) >= 10), None)
+            except Exception:
+                _hit = None
         if _hit:
             _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
                           'd': dt.date.today().isoformat(), 'gate': 'optout', 'ch': 'text',

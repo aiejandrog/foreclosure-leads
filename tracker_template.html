@@ -6491,11 +6491,11 @@ function textCardHtml(r){
     phBtns=phones.map(d=>{
       const href=_smsHref(d, msg);
       const send=canSend
-        ? '<a class="txsend" href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
+        ? '<a class="txsend" href="#" data-href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
         : '<span class="txsend off" title="Sending disabled — see the notice above (hours / cap). Use Copy instead.">💬 '+esc(fmtPhone(d))+'</span>';
       // WA rides the same FTSA send gate as sms: — do not leave an ungated side door.
       const wa = canSend
-        ? '<a class="txwa" href="'+esc(_waLink(r,d))+'" target="_blank" rel="noopener" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>'
+        ? '<a class="txwa" href="#" data-href="'+esc(_waLink(r,d))+'" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>'
         : '<span class="txsend off" title="WhatsApp send disabled with FTSA hours / cap — same rules as SMS.">'+_waSvg()+' WA</span>';
       return '<span class="txrow">'+send+wa+'<button class="txdnt" type="button" data-d="'+esc(d)+'" title="Add to Do-Not-Text on this device">🚫 DNT</button></span>';
     }).join('');
@@ -7093,7 +7093,7 @@ document.addEventListener('click', function(e){
   const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
   if(!a) return;
   // the modal's Text link stamps AFTER its pre-flight passes (textPreflight), not on the tap
-  if(a.classList.contains('txsend')) return;
+  if(a.classList.contains('txsend') || a.classList.contains('txwa')) return;
   const h = a.getAttribute('href') || '';
   const contact = /^(tel:|sms:)/i.test(h)
     || /truepeoplesearch\.com|whitepages\.com|cyberbackgroundchecks\.com|fastpeoplesearch\.com/i.test(h)
@@ -13780,6 +13780,7 @@ function genMorningWorker(lane, autostart){
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
+    +   'var TGBUSY=false;'
     +   'function textBatchStep(){'
     // A Stop clears tbOn and has already repainted the screen and written the log line, so a step
     // queued behind it (the confirm-screen handlers call back into here) must not resurrect the
@@ -13836,8 +13837,9 @@ function genMorningWorker(lane, autostart){
     // route) opens nothing. It runs inside the click's activation window (3.5 s cap) so openHere's
     // anchor fallback still counts as a user tap.
     +   'function textGate(c, href, pcs, label, go){'
-    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null;'
-    +     'var fin=function(ok, why){ if(done) return; done=true; if(t) clearTimeout(t); if(ok) go(); else addLog("fail", label, "Not texted — "+why, "warn"); };'
+    +     'if(TGBUSY) return;'
+    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null, g0=(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:""); TGBUSY=true;'
+    +     'var fin=function(ok, why){ if(done) return; done=true; TGBUSY=false; if(t) clearTimeout(t); if(!ok) addLog("fail", label, "Not texted — "+why, "warn"); else if(g0!==(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:"")) addLog("fail", label, "Not texted — you moved to another lead while the check ran; tap again", "warn"); else go(); };'
     +     't=setTimeout(function(){ fin(false, "the bridge did not answer the do-not-contact check"); }, 3500);'
     +     'try{ fetch("http://127.0.0.1:8823/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
     +       '.then(function(rs){ return rs.json(); })'
@@ -18571,23 +18573,31 @@ document.addEventListener('click', e => {
     if(!confirm('Record that '+who+' told us to STOP?\n\nThis permanently suppresses EVERY channel — text, call, email, letter, door'
         +(grp>1?(' — across all '+grp+' properties for this owner'):'')+', on every device.\n\nIt cannot be undone from here.')) return;
     _stopEverywhere(r); renderTextModal(); return; }
-  const sd = e.target.closest && e.target.closest('.txsend');
-  if(sd && sd.tagName==='A'){ const r=cur(); if(!r) return;
-    // PRE-FLIGHT: the link does not navigate until the bridge says ok (textPreflight). The touch is
-    // logged only once the composer is actually opened.
+  const sd = e.target.closest && (e.target.closest('.txsend') || e.target.closest('.txwa'));
+  if(sd && sd.tagName==='A'){
+    // PRE-FLIGHT: the link does not navigate until the bridge says ok (textPreflight). preventDefault
+    // comes FIRST so a missing cur() can never let the anchor navigate unchecked. The href is held in
+    // data-href (the anchor itself points at '#') so middle-click / open-in-new-tab / long-press
+    // cannot open a composer without this handler.
     e.preventDefault();
+    const r=cur(); if(!r) return;
     if(sd.dataset.chk) return;
-    const href = sd.getAttribute('href')||'', lbl = sd.textContent;
-    // the anchor's href is sms:+1<digits>?body=... — recover the number for the ledger row
-    const dg = String(href).replace(/^sms:\+?1?/,'').split('?')[0];
+    const isWa = sd.classList.contains('txwa');
+    const href = sd.dataset.href || sd.getAttribute('href') || '', lbl = sd.innerHTML;
+    // the href is sms:+1<digits>?body=... (or wa.me/<digits>?text=...) — recover the number
+    const dg = isWa ? String(href).replace(/^https?:\/\/wa\.me\//,'').split('?')[0].replace(/\D/g,'')
+                    : String(href).replace(/^sms:\+?1?/,'').split('?')[0];
+    const caseAtTap = r.case;
     sd.dataset.chk = '1'; sd.textContent = 'Checking…';
     textPreflight(r, dg).then(function(v){
-      delete sd.dataset.chk; sd.textContent = lbl;
+      delete sd.dataset.chk; sd.innerHTML = lbl;
       if(!v.ok){ alert('NOT texted — ' + v.why); return; }
+      const r2 = cur();
+      if(!r2 || r2.case !== caseAtTap || !document.getElementById('textmodal') || !document.getElementById('textmodal').classList.contains('show')) return;
       _markViewed(r.case); _afterCall = {c: r.case, ch: 'text', t: Date.now()};
       autoLog(r, 'text', 'texted', {nextDays:3});
       _textLedgerPost(r, dg, true);
-      location.href = href;
+      if(isWa) window.open(href, '_blank', 'noopener'); else location.href = href;
     });
     return; }
   const mk = e.target.closest && e.target.closest('.txmark');

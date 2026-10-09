@@ -56,7 +56,7 @@ sk = socket.socket(); sk.bind(('127.0.0.1', 0)); port = sk.getsockname()[1]; sk.
 work = pathlib.Path(tempfile.mkdtemp(prefix='dfchk_'))
 proc = None
 try:
-    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py', 'text_hold.py'):
+    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py', 'text_hold.py', 'optout_sync.py'):
         shutil.copy(HERE / f, work / f)
     (work / 'sync_status.json').write_text(json.dumps({
         'date': dt.date.today().isoformat(), 'state': 'finished', 'ok': True,
@@ -95,6 +95,16 @@ try:
     rec('it records nothing (no text_sent.json)', not (work / 'text_sent.json').exists())
     rec('/text still works and is not shadowed by the new route',
         call(port, '/text', {'case': '2099-000002-CA-01', 'to': '3055550102', 'confirmed': False})[1].get('ok') is True)
+    j = chk(case='2099-000002-CA-01', to='')
+    rec('no number: refused', j.get('ok') is False, j)
+    j = chk(case='2099-000002-CA-01', to='555')
+    rec('garbled short number: refused', j.get('ok') is False, j)
+    (work / 'worker_notes.json').write_text(json.dumps({'notes': {
+        '2099-000006-CA-01': {'status': 'Do Not Contact', 'dntph': ['3055550177']}}}), encoding='utf-8')
+    j = chk(case='2099-000002-CA-01', to='3055550177')
+    rec('rep-logged DNC number (not yet ledgered) refused', j.get('ok') is False and j.get('blocked') == 'optout', j)
+    j = chk(case='2099-000006-CA-01', to='3055550106')
+    rec('rep-logged DNC case (not yet ledgered) refused', j.get('ok') is False and j.get('blocked') == 'optout', j)
     # stale ledger -> text hold -> refused
     old = time.time() - 40 * 86400
     import os
@@ -168,7 +178,7 @@ for label, fn, call_expr, kind in (
 g = worker_gate()
 rec('worker textGate extracted', 'function textGate' in g and 'text/check' in g, g[:200])
 for name, scen in SCEN.items():
-    js = ('var logs=[]; function addLog(a,b,c,d){logs.push(c);} ' + scen + g
+    js = ('var TGBUSY=false; var logs=[]; function addLog(a,b,c,d){logs.push(c);} ' + scen + g
           + 'var went=0; var t0=Date.now(); textGate("2099-000002-CA-01","sms:+13055550102?body=hi",[],"Jane",function(){went++;});'
             'setTimeout(function(){console.log(JSON.stringify({went:went, logs:logs, ms:Date.now()-t0}));}, 4200);')
     v = run_node(js)
@@ -180,12 +190,21 @@ for name, scen in SCEN.items():
 # ---------------------------------------------------------------- 3. every composer sits behind it
 print('-- call sites')
 # board: the modal link
-m = re.search(r"const sd = e\.target\.closest && e\.target\.closest\('\.txsend'\);(.*?)const mk = ", BOARD, re.S)
+m = re.search(r"const sd = e\.target\.closest && \(e\.target\.closest\('\.txsend'\) \|\| e\.target\.closest\('\.txwa'\)\);(.*?)const mk = ", BOARD, re.S)
 blk = m.group(1) if m else ''
 rec('board Text link: preventDefault, then textPreflight, then navigate',
     'e.preventDefault()' in blk and blk.index('textPreflight(') < blk.index('location.href = href'), blk[:200])
+rec('board Text link: preventDefault runs BEFORE any early return', blk.index('e.preventDefault()') < blk.index('if(!r) return;'))
+rec('board WhatsApp link goes through the same pre-flight', "class=\"txwa\" href=\"#\"" in BOARD and "isWa" in blk and "window.open(href" in blk)
+rec('board: no composer href left on a navigable anchor (sms: / wa.me are in data-href)',
+    'class="txsend" href="#" data-href=' in BOARD and not re.search(r'class="txwa" href="\'\+esc', BOARD))
+rec('board: the generic stamp skips the WhatsApp link too', "classList.contains('txwa')" in BOARD)
+rec('board: a stale callback (modal closed / other lead) opens nothing', "caseAtTap" in blk and "classList.contains('show')" in blk)
+WG = BOARD[BOARD.index('function textGate'):BOARD.index('function openHere')]
+rec('worker: only one pre-flight in flight; moving to another lead drops the stale one',
+    'if(TGBUSY) return;' in WG and 'g0!==(typeof i' in WG)
 rec('board Text link: touch + ledger post only after the check', blk.index('textPreflight(') < blk.index('autoLog(') < blk.index('_textLedgerPost('))
-rec('board: the generic sms: click stamp skips the modal link', "classList.contains('txsend')) return;" in BOARD)
+rec('board: the generic sms: click stamp skips the modal link', "classList.contains('txsend') || a.classList.contains('txwa')) return;" in BOARD)
 # worker: both openHere(sms) uses are inside textGate callbacks
 sites = [m.start() for m in re.finditer(r'openHere\((?:r\.smsHref|x\.sms)\)', BOARD)]
 rec('worker: three places open an sms: href (row, batch, queue tap)', len(sites) == 3, len(sites))

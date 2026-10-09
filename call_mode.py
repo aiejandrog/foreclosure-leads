@@ -6282,6 +6282,7 @@ function afterCall(r, o, nextC){
     textPreflight(r.c, r.p[phIdx], r.pcs).then(function(v){
       delete _b.dataset.chk; _b.innerHTML = _l;
       if(!v.ok){ toast('NOT texted \u2014 ' + v.why, {bad:true, ms:9000}); return; }
+      if(!$('tx') || $('tx') !== _b) return;   /* left the lead during the check: open nothing */
       _openText();
     });
     function _openText(){
@@ -6337,8 +6338,12 @@ function afterCall(r, o, nextC){
        is still not a delivery, and the Yes button remains the only thing that writes the touch. */
     $('txr').onclick = function(){
       /* a re-open is a second text: it asks the bridge again, same as the first */
+      var _rb = $('txr'); if(!_rb || _rb.dataset.chk) return;
+      _rb.dataset.chk = '1';
       textPreflight(r.c, r.p[phIdx], r.pcs).then(function(v){
+        delete _rb.dataset.chk;
         if(!v.ok){ toast('NOT texted \u2014 ' + v.why, {bad:true, ms:9000}); return; }
+        if(!$('txr')) return;
         openComposer();
         toast('Re-opened — text is on the clipboard');
         var c = $('txconf0'); if(c) c.textContent = 'Re-opened. Did it send this time?';
