@@ -38,7 +38,7 @@ idx = cm.phone_index(slim, cm.lookup_hold_fn(slim, optouts, {}))
 src = open(os.path.join(repo, 'call_mode.py'), encoding='utf-8').read()
 def js_fn(name):
     m = re.search(r'\nfunction ' + name + r'\(.*?\n}\n', src, re.S); assert m, name; return m.group(0)
-gate = re.search(r"var _hs = (h\.h \|\| hardSuppressed\(r \|\| \{c:h\.c, p:\[h\.num\]\}\));", src)
+gate = re.search(r"var _hs = (h\.h \|\| hardSuppressed\(r \|\| \{c:h\.c, p:\[h\.num\](?:, pcs:h\.pcs \|\| \[\])?\}\));", src)
 assert gate, 'lookup gate expression not found: patch not applied'
 js = ('var notes={}, _OPTPH=null, PHIDX=%s;\nfunction digitsOf(q){return String(q||"").replace(/\\D/g,"");}\n'
       % json.dumps(idx)) + js_fn('optPhones') + js_fn('hardSuppressed') + js_fn('phLookup') + '''
@@ -58,6 +58,9 @@ assert not v[SHARED_OK]['links'], 'a number a stayed case also carries must not 
 assert not v[DUP]['links'] and not v[DUP + '#2']['links'], 'a case listed twice takes the held copy'
 assert 'h' in idx and '3055550103' not in idx['h'], 'h lists only held numbers on unheld rows'
 assert not v[DNCDUP]['links'], 'a held copy with only DNC numbers still holds the case'
-assert not v[SH2_OK]['links'], 'a stayed lead holds a shared number even when its copy is DNC'
+# Since 2026-10-08 a number DNC-flagged on any lead is not serialized at all, so the clean copy is
+# absent from the index rather than present without links. Either way: no Call back / Text.
+assert SH2_OK not in v or not v[SH2_OK]['links'], 'a stayed lead holds a shared number even when its copy is DNC'
+assert '3055550111' not in idx['d'], 'a number DNC on one lead is not indexed through another'
 assert '3055550110' not in idx['d'], 'DNC-only numbers are still never serialized'
 print('PASS')

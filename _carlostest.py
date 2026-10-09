@@ -266,8 +266,8 @@ else:
         rec('chip names the caller and offers no escape',
             'Carlos' in (o.get('chip') or '') and 'show all' not in (o.get('chip') or '')
             and 'change' not in (o.get('chip') or ''), o.get('chip'))
-        rec('all nine lanes present, 3-DAY first',
-            o.get('lanes') == 'd3,email,worker,urgent,soon,late,lp,bal,bb', o.get('lanes'))
+        rec('all nine lanes present, 3-DAY first, then the All-lanes union',
+            o.get('lanes') == 'd3,email,worker,urgent,soon,late,lp,bal,bb,all', o.get('lanes'))
         # The 3-DAY lane (c15c69e, 2026-09-16) shipped with no suite and broke this list, which
         # had pinned eight. It demands face equity: v > the payoff or judgment, both present and
         # positive. None of these rows carries v/py/jg, so every one of them is correctly refused

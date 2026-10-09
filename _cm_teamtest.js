@@ -147,4 +147,4 @@ T('KNOWN GAP (expected FAIL until pcs-aware): sibling-case teammate call trigger
 
 console.log('\n================================');
 console.log(pass + ' passed, ' + fail + ' failed');
-process.exit(0);   // exit code reserved; the report reads the lines
+process.exit(fail ? 1 : 0);   // 0 failed today; a failing assertion must fail the suite

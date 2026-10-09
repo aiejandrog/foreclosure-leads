@@ -240,7 +240,7 @@ def _notes_blocked(r):
     if not isinstance(n, dict):
         # person-level keys the phone writes
         for p in (r.get('phones') or []):
-            k = '#' + re.sub(r'\D', '', str(p))
+            k = '#' + re.sub(r'\D', '', str(p.get('number') if isinstance(p, dict) else p))
             m = _NOTES.get(k)
             if isinstance(m, dict) and (m.get('optout') or str(m.get('status') or '').upper() == 'DO NOT CONTACT'):
                 return True
@@ -285,10 +285,15 @@ def _agenda_safe(r):
     return True
 
 
-def _opted_out(r, optouts):
+def _opted_out(r, optouts, _siblings=True):
     """optouts.json was LOADED and never used to suppress anything — its only consumer computed
     a count that was never rendered. So a person on the ledger appeared as a Workable row with an
     'Assigned to' cell. Note the envelope: the real payload is under 'notes'."""
+    if _siblings and (_SIB['em'] or _SIB['ph']):
+        if any(str(e or '').strip().lower() in _SIB['em'] for e in (r.get('emails') or [])):
+            return True
+        if _lead_phones(r) & _SIB['ph']:
+            return True
     if not optouts:
         return False
     led = optouts.get('notes') if isinstance(optouts, dict) and 'notes' in optouts else optouts
@@ -300,10 +305,58 @@ def _opted_out(r, optouts):
     for e in (r.get('emails') or []):
         if ('@' + str(e).strip().lower()) in led:
             return True
+    # A '#1XXXXXXXXXX' ledger key (saved with the country code) matches the lead's 10-digit copy.
+    _ph = {re.sub(r'\D', '', str(k)) for k in led if str(k)[:1] == '#'}
+    _ph |= {d[1:] for d in _ph if len(d) == 11 and d[0] == '1'}
     for p in (r.get('phones') or []):
-        if ('#' + re.sub(r'\D', '', str(p))) in led:
+        # skip-trace phones come in as dicts here ({'number': ...}); str(dict) would mix in digits
+        # from every other field
+        d = re.sub(r'\D', '', str(p.get('number') if isinstance(p, dict) else p))
+        if d and (d in _ph or (len(d) == 11 and d[0] == '1' and d[1:] in _ph)):
             return True
     return False
+
+
+_SIB = {'em': set(), 'ph': set()}   # identities of every lead whose own case/identity is in the ledger
+
+
+def _lead_phones(r):
+    out = set()
+    for p in (r.get('phones') or []):
+        d = re.sub(r'\D', '', str(p.get('number') if isinstance(p, dict) else p))
+        if len(d) == 11 and d[0] == '1':
+            d = d[1:]
+        if len(d) == 10:
+            out.add(d)
+    return out
+
+
+def _set_siblings(leads, optouts, max_shared=8):
+    """Same person, other case (2026-10-08). The ledger is keyed by case, so a stop on one of an
+    owner's cases left the others on the agenda. The raw lead files carry no person key, so this
+    derives the link from what they do carry: a lead whose own case or identity is in the ledger
+    puts its emails and phones in a set, and any other lead that shares one is the same person.
+    Over-suppressing is the correct direction here. An email or number on more than `max_shared`
+    leads is an institution (a lender, a law firm), not a person, and is skipped, the same guard
+    foreclosure_leads._person_keys uses. Replaces the module set; returns (emails, phones)."""
+    global _SIB
+    em_n, ph_n = {}, {}
+    for r in leads:
+        for e in (r.get('emails') or []):
+            e = str(e or '').strip().lower()
+            if e:
+                em_n[e] = em_n.get(e, 0) + 1
+        for d in _lead_phones(r):
+            ph_n[d] = ph_n.get(d, 0) + 1
+    em, ph = set(), set()
+    for r in leads:
+        if not _opted_out(r, optouts, _siblings=False):
+            continue
+        em |= {str(e).strip().lower() for e in (r.get('emails') or []) if str(e or '').strip()
+               and em_n.get(str(e).strip().lower(), 0) <= max_shared}
+        ph |= {d for d in _lead_phones(r) if ph_n.get(d, 0) <= max_shared}
+    _SIB = {'em': em, 'ph': ph}
+    return len(em), len(ph)
 
 
 def _eq_pct(r):
@@ -1003,6 +1056,8 @@ def main():
     replies = _load_json('replies.json', {})
     optouts = _load_json('optouts.json', {})
     globals()['_OPTOUTS'] = optouts   # the tables suppress from the SAME ledger
+    _se, _sp = _set_siblings(leads, optouts)
+    print('planner: %d email(s) and %d number(s) of opted-out owners also close their other cases' % (_se, _sp))
     mail_ledger = _load_json('mail_sent.json', [])
 
     excl = tuple(z.strip() for z in args.exclude_zips.split(',') if z.strip())

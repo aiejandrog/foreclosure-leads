@@ -37,6 +37,7 @@ document that LOOKS read and is not. So:
 An AccessGap is a recorded, honest "we could not get this". It is NOT an error to swallow, and it
 is NOT the same as "no such document" — CASE-REVIEW-PROCEDURE.md turns on that distinction.
 """
+import os
 import re
 from urllib.parse import urlparse, unquote
 
@@ -352,6 +353,28 @@ def links_uncounted_document(meta):
             and str(meta.get('eventType') or '').strip().lower() == 'judgment')
 
 
+def _stamp_retired(base, refs):
+    """Mark each retired document's stored sidecar superseded, so stored_documents() and every
+    reader built on it stop treating it as this case's evidence. Kept on disk, never deleted;
+    document_store.store clears the mark if the county lists the document again."""
+    import hashlib
+    import json
+    from document_store import pipeline_load as load, _atomic_write_text
+    for ref in refs:
+        saved = load(base / (hashlib.sha256(ref.encode()).hexdigest() + '.json'))
+        meta_path = ((saved or {}).get('manifest') or {}).get('meta_path') if isinstance(saved, dict) else None
+        if not meta_path or not os.path.isfile(meta_path):
+            continue
+        try:
+            with open(meta_path, encoding='utf-8') as fh:
+                meta = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(meta, dict) and meta.get('source_ref') == ref and not meta.get('superseded'):
+            meta.update(superseded=True, superseded_reason='the county no longer lists this document')
+            _atomic_write_text(meta_path, json.dumps(meta, indent=2) + '\n')
+
+
 def collect_case_documents(county, case, records=None):
     from document_store import pipeline_folder as folder, pipeline_write as write, pipeline_report as report
     from document_queue import DocumentQueue
@@ -385,6 +408,23 @@ def collect_case_documents(county, case, records=None):
     inventory.update(county=county, case=case, official_records_supplied=records is not None,
                      recorded_search_may_be_capped=bool(records and len(records) >= 500))
     write(base / 'inventory.json', inventory)
+    # Docket entries whose attachment list came back in full this run (or that the county now
+    # says carry no document). Under those, and only those, a job the county no longer lists is a
+    # replaced or withdrawn attachment: it is retired so its old bytes stop counting as current.
+    # An entry that errored proves nothing about what it holds, so its jobs are left alone.
+    # Only entries with the county's own eventID: a list-index id shifts when the docket grows.
+    listed = ['court:%s:' % e['source_id'] for e in inventory['entries']
+              if e.get('inventory_status') in ('enumerated', 'county_reports_no_document')
+              and str((e.get('metadata') or {}).get('eventID') or '') == e['source_id']]
     with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         queue.add_many(county, case, jobs)
+        retired = queue.retire_missing(county, case, 'acquire', [ref for ref, _, _ in jobs], listed)
+        # Every superseded acquisition, not only this run's: a crash between the retirement and
+        # the stamp must not leave a retired copy live in stored_documents() for good.
+        all_retired = [j['source_ref'] for j in queue.jobs(county, case)
+                       if j['kind'] == 'acquire' and j['status'] == 'superseded']
+    if retired:
+        inventory['retired_documents'] = retired
+        write(base / 'inventory.json', inventory)
+    _stamp_retired(base, all_retired)
     return report(county, case)

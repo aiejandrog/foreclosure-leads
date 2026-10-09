@@ -50,7 +50,7 @@ def node(js):
 
 FNS = 'var OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n' + ''.join(grab_fn(n) for n in (
     'lastCall', '_inbound', 'lastOutreach', '_filedMs', '_contactTier', '_freshFirst', '_navPush', 'advance'))
-FNS = 'var _NAVB=[], _NAVF=[], lane=\'soon\';\n' + FNS
+FNS = 'var _NAVB=[], _NAVF=[], lane=\'soon\';\nfunction _qvRestore(){}\n' + FNS
 rec('pool() orders through _freshFirst', 'var _ff = _freshFirst(keep, lane);' in SRC and 'return _ff;' in SRC)
 
 HARNESS = FNS + r"""

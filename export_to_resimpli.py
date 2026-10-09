@@ -16,7 +16,7 @@ row leaves only if it passes the same checks as a dial, and a held row is COUNTE
     * opt-out ledger missing, unreadable or stale       cadence._ledger_send_block()
     * today's 07:15 opt-out sync not confirmed          cadence._sync_send_block()
     * bounced_emails.json unreadable                     cadence._bounce_send_block()
-    * Quo inbound STOP scan failed or stale              quo_sync.text_hold()  (REsimpli texts)
+    * do-not-contact list stale for texting               text_hold.text_hold()  (REsimpli texts)
   per row:
     * Call Mode's selection                              call_mode.call_rows(): case and person-level
       opt-outs, dead ledger, active stay flags, federal bankruptcy hold, title transferred,
@@ -108,10 +108,10 @@ def preflight():
     except Exception as e:
         holds.append('the opt-out gates could not be imported (%s)' % str(e)[:80])
     try:
-        import quo_sync
-        held, why = quo_sync.text_hold()
+        import text_hold
+        held, why = text_hold.text_hold()
         if held:
-            holds.append(why or 'HOLD texting — inbound STOP scan not confirmed')
+            holds.append(why or 'HOLD texting — do-not-contact list not confirmed fresh')
     except Exception as e:
         holds.append('the texting hold could not be evaluated (%s)' % str(e)[:80])
     return holds

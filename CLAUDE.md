@@ -101,9 +101,37 @@ undecided. Quoting the line and answering `no` is a stop; the line alone is not.
 `sync_messages(phones=...)` run (`--phone` / `--case`) records counts and does not write `ok: true`
 or refresh `ts`. Only a full scan may release the text hold or move the next window.
 
+**2026-10-07, at Alejandro's direction ("remove Quo from operations completely"):** Quo is gone.
+`quo_sync.py`, its inbound scan, `quo_inbound_status.json`, `quo_calls.json`, the refresh step
+`[3f/5]` and Call Mode's last-call card are deleted, so every sentence above about `quo_sync`,
+`/messages`, `/conversations`, pages, windows and `sync_messages` describes code that no longer
+exists. Texts go out as plain SMS from the phone (an `sms:` link with the body pre-filled) and
+replies come back to the phone. A stop there is marked Do Not Contact in Call Mode or the board,
+which ledgers it through `/notes` -> `ledger_from_notes`; nothing reads a text inbox
+automatically any more. The text hold is now `text_hold.py`: a missing, unreadable or stale
+`optouts.json` (`DEALFLOW_OPTOUT_MAX_AGE_DAYS`, the same age `/send` uses) holds texting; the
+bridge also holds texting until today's 07:15 opt-out sync is confirmed, like `/send`; bridge-down
+still holds it on the board and on the worker's per-row Text button. `POST /text` refuses with `blocked: text_hold`. The §362
+check on a confirmed text, the 8 AM-8 PM window, the cap and the EN/ES let-me-know line are
+unchanged. `is_sms_stop()` stays as the rule for what a text reply means.
+
 State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
+
+## Send bridge reload
+
+Since 2026-10-07 (#175, Alejandro chose "Self-restart") `send_server.py` restarts itself on new
+code: only when git `HEAD` moved to a commit that equals `origin/main`, stayed put one poll, changed
+a `.py` file, no tracked `.py` has uncommitted changes, the new code compiles and imports in a
+separate python, no request is open, no POST came in the last `DEALFLOW_BRIDGE_RELOAD_IDLE_S`
+(300 s), and no first-touch slot is held in memory. Once a send loses its outcome or ledger row, that
+process never restarts itself (its in-memory claim is that address's only dedupe): restart it by
+hand after checking `mail_sent.json`. It drains open requests with no time limit, closes the port,
+starts the new bridge, and exits once the new one answers `/pid`; otherwise the old code takes the
+port back. Needs `git` on PATH for the user the bridge runs as; without it `send_server.log` says
+`[reload] off`. `DEALFLOW_BRIDGE_RELOAD_POLL_S=0` turns it off. A branch checked out on the laptop
+is never loaded.
 
 ## Full case research
 
@@ -163,7 +191,7 @@ that carries a name or number inline, gitignore it in the same commit.
 publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
 
-**Five paths publish, and all five are gated (the last three only since 2026-09-17):**
+**Six paths publish, and all six are gated (the last three only since 2026-09-17, `access_codes.py` since 2026-10-08):**
 
 | path | when | gates |
 |---|---|---|
@@ -172,6 +200,7 @@ behaviour, not a bug to route around.
 | `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
 | `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
 | `run-phones.bat` | manual one-click | healthcheck + publish_guard (since 2026-09-19) |
+| `access_codes.py` create / revoke | manual | healthcheck + publish_guard (since 2026-10-08) |
 
 `run-phones.bat` was missing from this table entirely, which is how it stayed an ungated publish
 path for a month after the other four were gated. It is the manual twin of `run-phones-nightly.bat`
@@ -186,8 +215,10 @@ part is the part to remember: **that publish became `origin/main`, so it moved t
 later gate compared against**, and subsequent poorer builds then passed legitimately. One ungated
 publish does not cost one board, it costs the reference.
 
-If you add a fourth publish path, gate it in the same commit. `grep -l publish_guard *.bat` is the
+If you add another publish path, gate it in the same commit. `grep -l publish_guard *.bat *.py` is the
 check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
+`access_codes.py` was that hole from 876a831 (2026-10-08): it ran `publish_site.py` straight after
+`make_tracker()` with neither gate, until `publish_gates_pass()` landed the same day.
 
 ## Whitepages Pro (owner phones + relatives)
 

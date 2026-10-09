@@ -42,6 +42,7 @@ import mimetypes
 import os
 import re
 import smtplib
+import socket
 import ssl
 import sys
 import threading
@@ -483,16 +484,26 @@ def _optout_readable():
 
 
 def _text_hold():
-    """(held, why) from quo_sync.text_hold(). Texting only — never consulted by /send.
+    """(held, why) from text_hold.text_hold(). Texting only — never consulted by /send.
 
-    Import failure, a missing status file, a failed scan, or a stale scan all hold. Email stays
-    on the 07:15 opt-out sync gate and the ledger-age gate, not on this one."""
+    2026-10-07: Quo is gone, so there is no vendor inbox to scan. Texts go out as plain SMS from
+    the phone, replies come back to the phone, and a stop there is ledgered through /notes. What
+    texting is held on now is that ledger: missing, unreadable, or stale holds. An import failure
+    holds too. Today's 07:15 opt-out sync must also be confirmed, the same gate /send holds email
+    on: a list kept fresh by local writes alone can still be missing the other machine's stops."""
     try:
-        import quo_sync
-        held, why = quo_sync.text_hold()
-        return bool(held), (why or '')
+        import text_hold as _TH
+        held, why = _TH.text_hold(OPTOUT_FILE)
+        if held:
+            return True, (why or '')
+        sv = _sync_verdict()
+        if not sv.get('ok'):
+            return True, ('HOLD texting: today\'s 07:15 opt-out sync is not confirmed (%s). '
+                          'Run run-optout-sync.bat (or python morning_sync.py) on this computer.'
+                          % str(sv.get('reason') or 'no verdict')[:160])
+        return False, ''
     except Exception as e:
-        return True, ('HOLD texting — the inbound STOP scan could not be evaluated (%s). '
+        return True, ('HOLD texting — the do-not-contact check could not be evaluated (%s). '
                       'Email is not held by this.' % str(e)[:80])
 
 
@@ -1643,6 +1654,7 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
 # ---------------------------------------------------------------- HTTP handler
 class Handler(BaseHTTPRequestHandler):
     server_version = 'DealFlowSend/1.0'
+    timeout = 60             # client-socket read timeout: a half-sent request cannot stall a reload drain
     daily_cap = 300          # messages/day (operator-set 2026-08-12, was 150 — the 08-12 run hit it)
     # RECIPIENTS, NOT MESSAGES, ARE THE REAL CEILING. Gmail's free-tier SMTP limit is ~500
     # RECIPIENTS/day, and this board averages 1.92 recipients per message (each send BCCs the
@@ -1691,6 +1703,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/marks'):
             return self._handle_marks_get()
+        if self.path.startswith('/pid'):          # cheap liveness for a reloading predecessor
+            return self._json(200, {'ok': True, 'pid': os.getpid()})
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
             _bh = _bounce_health()
@@ -1703,6 +1717,7 @@ class Handler(BaseHTTPRequestHandler):
                 _ft = {'ok': False, 'err': str(e)[:120], 'held_unverified': None}
             self._json(200, {
                 'ok': True,
+                'pid': os.getpid(),               # a reloading bridge checks its successor by this
                 'user': user or '(not configured)',
                 'has_password': bool(pw),
                 'sent_today': _sent_today_count(),
@@ -1731,8 +1746,8 @@ class Handler(BaseHTTPRequestHandler):
                 'optout_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
                 'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS or not _optout_readable()),
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
-                # Quo inbound STOP scan. text_hold true holds TEXTING only. It does not pause
-                # email; that stays on sync_ok / optout_stale above.
+                # Texting hold (text_hold.py): the do-not-contact list is missing, unreadable or
+                # stale. It holds TEXTING; email is held on the same list by optout_stale above.
                 'text_hold': _th,
                 'text_hold_why': _tw if _th else '',
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
@@ -1876,13 +1891,14 @@ class Handler(BaseHTTPRequestHandler):
         case = str(d.get('case') or '').strip()
         if not case:
             return self._json(400, {'ok': False, 'err': 'no case'})
-        # INBOUND STOP SCAN (2026-09-26). A failed or stale Quo message read means a STOP text
-        # may be sitting unread. Refuse the ledger write — and the worker treats a refusal as
-        # "do not text" — without touching the email path.
+        # TEXT HOLD (text_hold.py). A missing, unreadable or stale do-not-contact list means a
+        # stop may not be on it. Refuse the ledger write — and the worker treats a refusal as
+        # "do not text" — without touching the email path. (Was the Quo inbound scan until
+        # 2026-10-07; Quo is gone.)
         _th, _tw = _text_hold()
         if _th:
-            return self._json(200, {'ok': False, 'blocked': 'quo_inbound',
-                                    'err': _tw or 'texting held — inbound STOP scan not fresh'})
+            return self._json(200, {'ok': False, 'blocked': 'text_hold',
+                                    'err': _tw or 'texting held — do-not-contact list not fresh'})
         # Confirmed texts are contact. The same §362 gate as /send: a lead with no fresh
         # federal clear (Broward / Palm Beach) or an open match stays untexted. Opening a
         # composer (confirmed false) is not a send and is not held here.
@@ -1895,6 +1911,25 @@ class Handler(BaseHTTPRequestHandler):
                               'case': case[:40], 'why': _sv.get('why', '')})
                 return self._json(451, {'ok': False, 'blocked': _sv.get('code') or 'stay_unverified',
                                         'err': 'text refused — %s' % (_sv.get('why') or 'bankruptcy-stay status unknown')})
+        # TRIPWIRE, not a gate (2026-10-09). This endpoint is called AFTER the owner's phone opened
+        # the sms: composer, and the board ignores the reply, so a refusal here cannot stop a text
+        # and would only drop the row the 3-touch cap counts. What it can do is leave a durable
+        # record that a text went to someone on the do-not-contact ledger (by case, or by number as
+        # '#digits' / '#1digits'). The gate that prevents it is _textContactBlocked on the board.
+        if bool(d.get('confirmed')):
+            try:
+                _tc, _te = _optout_set()
+                _td = re.sub(r'\D', '', str(d.get('to') or ''))
+                _tk = [case.lower()] + (['#' + _td, '#' + _td[1:]] if len(_td) == 11 and _td[0] == '1'
+                                         else (['#' + _td, '#1' + _td] if _td else []))
+                if any(k in _tc for k in _tk):
+                    _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                                  'd': dt.date.today().isoformat(), 'gate': 'optout', 'ch': 'text',
+                                  'code': 'text_sent_to_optout', 'case': case[:40],
+                                  'why': 'a confirmed text was logged for a case or number on the '
+                                         'do-not-contact ledger'})
+            except Exception:
+                pass
         rec = {'d': dt.date.today().isoformat(),
                'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
                'ch': 'text', 'case': case,
@@ -2013,6 +2048,8 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, out)
 
     def do_POST(self):
+        global _LAST_POST
+        _LAST_POST = time.time()          # a code reload waits until POSTs have been quiet a while
         if self.path.startswith('/notes'):
             return self._handle_notes()
         if self.path.startswith('/marks/consumed'):   # BEFORE /mark — startswith('/mark') shadows it
@@ -2117,11 +2154,25 @@ class Handler(BaseHTTPRequestHandler):
         _every = [to] + [a.strip().lower() for a in bcc.split(',') if a.strip()]
         _hit_email = next((a for a in _every if a in _oo_emails), None)
         _case = str((meta or {}).get('c') or '').strip().lower()
-        if _hit_email or (_case and _case in _oo_cases and not _is_test):
+        # SAME OWNER, OTHER CASE (2026-10-08). The ledger is keyed by case, so a stop on one of an
+        # owner's cases did not refuse a send for another unless they shared the exact address.
+        # The board hands over the owner's other cases (meta.pcs) and any portfolio cases riding in
+        # this one message (meta.portfolio); a stop on ANY of them refuses the send. It can only
+        # add a refusal: a missing or forged list leaves today's checks exactly as they were.
+        _sibs = []
+        if not _is_test:
+            for _k in ('pcs', 'portfolio'):
+                _v = (meta or {}).get(_k)
+                if isinstance(_v, list):
+                    _sibs += [str(x).strip().lower() for x in _v[:60] if isinstance(x, str) and x.strip()]
+        _hit_sib = next((c for c in _sibs if c in _oo_cases), None)
+        if _hit_email or (_case and _case in _oo_cases and not _is_test) or _hit_sib:
             return self._json(200, {
                 'ok': False, 'blocked': 'optout',
                 'err': ('recipient is on the DO-NOT-CONTACT ledger (%s) — send refused'
-                        % ('email ' + _hit_email if _hit_email else 'case ' + _case))})
+                        % ('email ' + _hit_email if _hit_email
+                           else ('case ' + _case if (_case and _case in _oo_cases)
+                                 else 'same owner, case ' + _hit_sib)))})
 
         # ---- §362 BANKRUPTCY-STAY GATE (2026-09-26) — fail closed --------------------------------
         # The case's stay status is decided HERE, from sale_history_cache.json, never from what the
@@ -2445,6 +2496,7 @@ class Handler(BaseHTTPRequestHandler):
             # exception can arrive after Gmail already accepted the message, and re-sending on a
             # maybe-delivered address is exactly the duplicate this guard exists to prevent. The
             # 24h ledger entry written just below keeps it blocked; a real retry is tomorrow.
+            _mark_memory_only()                       # outcome unknown: no code reload today
             _append_ledger({
                 'd': dt.date.today().isoformat(),
                 'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -2493,6 +2545,12 @@ class Handler(BaseHTTPRequestHandler):
                 'touch': meta.get('touch') or '',
             })
             _release_first_touch_slot(_ft_slot)      # the ledger row counts it from here on
+            # The ledger row (to + bcc, ts_utc) is now the 24h dedupe for every claimed address, so
+            # the in-flight claim has done its job. Holding it longer turned every later follow-up
+            # to these addresses into a 409 "already in flight" skip for the life of the bridge
+            # process (2026-10-03 review). Not released when the write fails: then the claim is
+            # the only record, and keeping it is the duplicate-safe side.
+            _release_recipients(_claimed)
         except Exception as e:
             # Loud on the server side (operator can grep the log) — this is the one real gap the
             # skipped write leaves: this send won't count toward today's cap and its 24h dedupe
@@ -2501,6 +2559,7 @@ class Handler(BaseHTTPRequestHandler):
             # more than once in a row (would mean the retries above are landing on a persistent
             # lock, not a transient one).
             ledger_err = str(e)[:200]
+            _mark_memory_only()                       # dedupe is memory-only now: no reload today
             print(f'WARNING: {to} was emailed successfully (mid={mid}) but the ledger write '
                   f'failed — this send is UNRECORDED: {ledger_err}', file=sys.stderr)
 
@@ -2513,6 +2572,272 @@ class Handler(BaseHTTPRequestHandler):
         if ledger_err:
             resp['ledger_warn'] = ledger_err
         return self._json(200, resp)
+
+
+# ---------------------------------------------------------------- code reload
+# 2026-10-07, Alejandro chose "Self-restart" on the decision card ("i need it to be done
+# automatically"). The bridge is started once at logon and then runs for days, so a git pull (the
+# 05:30 refresh pulls main) changed the files on disk and left the OLD code answering /health and
+# /text. That is how #172 and #173 merged and texting still showed the Quo hold that no longer
+# exists. Now the bridge restarts itself on new code, and only when that is safe:
+#   - the trigger is a new git commit that IS origin/main (a pull), never a scratch .py, an edit in
+#     progress, or a branch someone checked out, and it must stay put for one poll;
+#   - the new code must compile AND import in a separate python first;
+#   - only when the pull changed a .py file and no .py file has uncommitted changes;
+#   - not while a send could be lost: no request being handled, no POST in the last RELOAD_IDLE_S,
+#     no first-touch sender slot held in memory, and never again in this process's life once a
+#     send's outcome or ledger row was lost (_MEMORY_ONLY): its in-memory claim is then the only
+#     dedupe for that address, so only a person restarts that bridge;
+#   - shutdown stops new requests, then waits with NO time limit for the ones running to finish,
+#     and only then closes the port and starts the new bridge, so os._exit never lands mid-send;
+#   - the new bridge must answer /health with its own pid within RELOAD_UP_S, or the old code takes
+#     the port back and that commit is not tried again.
+# Every hold (opt-out ledger, 07:15 sync, §362, hours, caps) is still read per request from disk.
+# DEALFLOW_BRIDGE_RELOAD_POLL_S=0 turns this off.
+def _env_float(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except ValueError:
+        return float(default)
+
+
+RELOAD_POLL_S = _env_float('DEALFLOW_BRIDGE_RELOAD_POLL_S', '60')
+RELOAD_IDLE_S = _env_float('DEALFLOW_BRIDGE_RELOAD_IDLE_S', '300')
+RELOAD_UP_S = _env_float('DEALFLOW_BRIDGE_RELOAD_UP_S', '30')
+_RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
+# Everything the bridge imports from this repo, most of it lazily inside a request. The preflight
+# imports all of them, so a broken dependency is caught while the old bridge (which may still hold
+# the old module in memory) is serving, not on the first send after the handover.
+_RELOAD_IMPORT = ('send_server', 'text_hold', 'sync_gate', 'stay_gate', 'optout_sync', 'pacer_stay',
+                  'outreach_copy', 'mail_guard', 'bk_lookup')
+# Requests being handled right now, counted on the server thread before the request thread starts
+# (see _BridgeServer). Not _INFLIGHT: that name is the per-address send dedupe set.
+_REQS_ACTIVE = 0
+_REQS_LOCK = threading.Lock()
+_LAST_POST = 0.0              # time.time() of the last POST (sends, texts, notes, marks)
+_MEMORY_ONLY = False          # a send's outcome or ledger row was lost in this process
+
+
+def _mark_memory_only():
+    """A send's dedupe now lives only in this process's memory: it must never self-restart."""
+    global _MEMORY_ONLY
+    _MEMORY_ONLY = True
+
+
+def _memory_held():
+    """Why restarting now would forget dedupe state, or ''. Checked before and after the drain."""
+    if _MEMORY_ONLY:
+        return 'a send lost its outcome or ledger row; its dedupe is only in memory (restart by hand)'
+    today = dt.date.today().isoformat()
+    with _FT_SLOT_LOCK:
+        if any(k[0] == today for k in _FT_SLOTS):
+            return 'a first-touch sender slot is held in memory'
+    return ''
+
+
+class _BridgeServer(ThreadingHTTPServer):
+    def process_request(self, request, client_address):
+        global _REQS_ACTIVE
+        with _REQS_LOCK:
+            _REQS_ACTIVE += 1
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            with _REQS_LOCK:
+                _REQS_ACTIVE -= 1
+            raise
+
+    def process_request_thread(self, request, client_address):
+        global _REQS_ACTIVE
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with _REQS_LOCK:
+                _REQS_ACTIVE -= 1
+
+
+def _git(folder, *args):
+    import subprocess
+    kw = {'cwd': folder, 'capture_output': True, 'text': True, 'timeout': 20}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x08000000                 # CREATE_NO_WINDOW
+    try:
+        p = subprocess.run(['git'] + list(args), **kw)
+    except Exception:
+        return None
+    return p.stdout.strip() if p.returncode == 0 else None
+
+
+def _git_heads(folder=HERE):
+    """(HEAD, origin/main) commit ids, or (None, None) when git cannot say."""
+    return _git(folder, 'rev-parse', 'HEAD'), _git(folder, 'rev-parse', 'origin/main')
+
+
+def _py_change(folder, boot, head):
+    """(changed .py files boot..head, dirty): dirty = a tracked .py has uncommitted changes.
+    None for either when git cannot say (treated as no restart)."""
+    diff = _git(folder, 'diff', '--name-only', boot, head, '--', '*.py')
+    st = _git(folder, 'status', '--porcelain', '--untracked-files=no', '--', '*.py')
+    return (None if diff is None else [n for n in diff.splitlines() if n.strip()]), \
+        (None if st is None else bool(st))
+
+
+def _code_compiles(folder=HERE, also=()):
+    """(ok, err) for the bridge files plus every changed .py (`also`). In memory; writes no .pyc."""
+    for n in list(_RELOAD_COMPILE) + [a for a in also if a not in _RELOAD_COMPILE]:
+        f = os.path.join(folder, n)
+        if not os.path.exists(f):
+            continue
+        try:
+            with open(f, 'rb') as fh:
+                compile(fh.read(), f, 'exec')
+        except Exception as e:
+            return False, '%s: %s' % (n, str(e)[:160])
+    return True, ''
+
+
+def _code_imports(folder=HERE):
+    """(ok, err). Imports the new modules in a separate python, so a module-level error is caught
+    while the running bridge is still up."""
+    import subprocess
+    kw = {'cwd': folder, 'capture_output': True, 'text': True, 'timeout': 120}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x08000000
+    try:
+        mods = [m for m in _RELOAD_IMPORT if os.path.exists(os.path.join(folder, m + '.py'))]
+        p = subprocess.run([sys.executable, '-c',
+                            'import sys; sys.path.insert(0, "."); import ' + ', '.join(mods)], **kw)
+    except Exception as e:
+        return False, str(e)[:160]
+    return p.returncode == 0, ((p.stderr or '').strip().splitlines() or [''])[-1][:160]
+
+
+def _reload_log(msg, folder=HERE):
+    line = '%s  [reload] %s\n' % (dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg)
+    try:
+        with open(os.path.join(folder, 'send_server.log'), 'a', encoding='utf-8') as fh:
+            fh.write(line)
+    except Exception:
+        pass
+
+
+def _reload_blocker(now=None):
+    """Why a restart must wait right now, or '' when nothing in memory would be lost."""
+    now = time.time() if now is None else now
+    held = _memory_held()
+    if held:
+        return held
+    if _REQS_ACTIVE > 0:
+        return 'a request is being handled'
+    if now - _LAST_POST < RELOAD_IDLE_S:
+        return 'sends were made in the last %d seconds' % int(RELOAD_IDLE_S)
+    return ''
+
+
+def _code_watch(srv, state, boot, bad=(), poll_s=None, folder=HERE, sleep=time.sleep,
+                heads=None, imports=None, blocker=None, pychange=None):
+    """Poll git; when a settled pull of origin/main is safe to load, stop serve_forever() and put
+    the new commit in state['reload'] so main() can hand over. `boot` is {'head': ...} shared across
+    main()'s rebinds; the first watcher fills it (after the port is bound, so git never delays it)."""
+    poll_s = RELOAD_POLL_S if poll_s is None else poll_s
+    heads = heads or _git_heads
+    imports = imports or _code_imports
+    blocker = blocker or _reload_blocker
+    pychange = pychange or _py_change
+    if not boot.get('head'):
+        boot['head'] = heads(folder)[0]
+        if not boot['head']:
+            _reload_log('off: git cannot read this folder, so new code needs a manual restart', folder)
+            return
+    boot_head = boot['head']
+    prev = boot_head
+    said = {}
+    while True:
+        sleep(poll_s)
+        head, origin = heads(folder)
+        settled = head == prev
+        prev = head
+        if not head or head == boot_head or head != origin or head in bad or not settled:
+            continue
+        why = ''
+        changed, dirty = pychange(folder, boot_head, head)
+        if not changed:
+            continue                              # docs/ publishes and the like: nothing to load
+        ok, err = _code_compiles(folder, changed)
+        if dirty or dirty is None:
+            why = 'a .py file has uncommitted changes'
+        elif not ok:
+            why = 'does not compile (%s)' % err
+        else:
+            why = blocker()
+            if not why:
+                ok, err = imports(folder)
+                if not ok:
+                    why = 'does not import (%s)' % err
+                    bad = set(bad) | {head}
+        if why:
+            if said.get(head) != why:
+                _reload_log('new code %s is waiting: %s' % (head[:8], why), folder)
+                said[head] = why
+            continue
+        _reload_log('new code %s; restarting the bridge on it' % head[:8], folder)
+        state['reload'] = head
+        srv.shutdown()
+        return
+
+
+def _handover_why(new, folder=HERE, heads=None, pychange=None, blocker=None):
+    """Re-checked after the drain, right before the port closes: the tree must still be the commit
+    that was validated, and nothing may have become unsafe while the preflight or drain ran (a POST
+    that arrived meanwhile restarts the quiet period). '' when the handover may go ahead."""
+    heads = heads or _git_heads
+    pychange = pychange or _py_change
+    blocker = blocker or _reload_blocker
+    why = blocker()
+    if why:
+        return why
+    head, origin = heads(folder)
+    if head != new or origin != new:
+        return 'the checkout moved after it was checked'
+    _changed, dirty = pychange(folder, new, new)
+    if dirty or dirty is None:
+        return 'a .py file has uncommitted changes'
+    return ''
+
+
+def _respawn():
+    """Start a fresh bridge on the same interpreter and arguments, detached from this one."""
+    import subprocess
+    kw = {'cwd': HERE, 'close_fds': True,
+          'env': dict(os.environ, DEALFLOW_BRIDGE_RESPAWNED='1')}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw['start_new_session'] = True
+    return subprocess.Popen([sys.executable, os.path.abspath(__file__)] + sys.argv[1:], **kw)
+
+
+def _child_up(child, host, port, wait_s=None):
+    """True once the new bridge answers /pid with its own pid, or is alive and holding the port
+    when the wait runs out (a slow bridge that is serving is never killed)."""
+    end = time.time() + (RELOAD_UP_S if wait_s is None else wait_s)
+    while time.time() < end:
+        if child.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen('http://%s:%d/pid' % (host, port), timeout=5) as r:
+                if json.loads(r.read().decode()).get('pid') == child.pid:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    if child.poll() is None:
+        try:
+            socket.create_connection((host, port), timeout=3).close()
+            return True
+        except OSError:
+            pass
+    return False
 
 
 # ---------------------------------------------------------------- main
@@ -2571,12 +2896,45 @@ def main():
     print('  stop:    Ctrl+C')
     print()
 
-    srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    try:
-        srv.serve_forever()
-    except KeyboardInterrupt:
-        print('\nstopping...')
-        srv.shutdown()
+    if os.environ.get('DEALFLOW_BRIDGE_RESPAWNED') == '1':
+        _reload_log('new bridge serving, pid %d' % os.getpid())
+    boot = {'head': None}
+    bad = set()
+    while True:
+        srv = _BridgeServer((args.host, args.port), Handler)
+        state = {'reload': None}
+        if RELOAD_POLL_S > 0:
+            threading.Thread(target=_code_watch, args=(srv, state, boot, frozenset(bad)),
+                             daemon=True).start()
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            print('\nstopping...')
+            srv.shutdown()
+        new = state.get('reload')
+        if not new:
+            break
+        while _REQS_ACTIVE > 0:                  # no time limit: never exit in the middle of a send
+            time.sleep(0.2)
+        held = _handover_why(new)                # a request in the last loop, or a later pull, may
+        if held:                                 # have changed things since the watcher said go
+            srv.server_close()
+            _reload_log('new code %s not loaded: %s; the old bridge keeps serving' % (new[:8], held))
+            continue
+        srv.server_close()                       # free the port for the new bridge
+        child = _respawn()
+        if _child_up(child, args.host, args.port):
+            os._exit(0)
+        try:
+            child.kill()
+        except Exception:
+            pass
+        if _already_running(args.host, args.port):
+            # another launcher (logon, the 07:45 task) took the port meanwhile: never run two.
+            _reload_log('new code %s did not come up; another bridge owns the port, exiting' % new[:8])
+            os._exit(0)
+        bad.add(new)
+        _reload_log('new code %s did not come up; the old bridge is serving again' % new[:8])
 
 
 if __name__ == '__main__':

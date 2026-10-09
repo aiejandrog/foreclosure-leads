@@ -53,7 +53,7 @@ nav = SRC[SRC.find('function _navPush('):SRC.find('function _navRow(')]
 for bad in ('saveNotes', 'queueSync', 'logOutcome', '_WORKED', 'notes[', 'dials', 'cooldown'):
     rec('nav code never touches ' + bad, bad not in nav)
 
-HARNESS = 'var _NAVB=[], _NAVF=[], OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n' + FNS + r"""
+HARNESS = 'var _NAVB=[], _NAVF=[], _qvRestore = function(){}, OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n' + FNS + r"""
 var notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null, toasts = [], writes = 0;
 var ALL = [{c:'A'}, {c:'B'}, {c:'C'}, {c:'D'}], GONE = {};
 function pool(){ return ALL.filter(function(r){ return !GONE[r.c]; }); }

@@ -122,28 +122,39 @@ function extractCm(name) {
   }
   return null;
 }
-const cmNames = ['quoScanFresh', 'textingHeld', 'textHoldWhy'];
+const cmNames = ['holdBakeFresh', 'textingHeld', 'textHoldWhy'];
 const cmMissing = cmNames.filter(n => !extractCm(n));
-const cmBox = { QUOLIVE: false, QUOHOLD: null, QUOBAKE: null, Date, isFinite };
+const cmBox = { TEXTHOLDLIVE: false, TEXTHOLD: null, TEXTHOLDBAKE: null, Date, isFinite };
 let cm = {};
 try {
   cm = new Function('ctx', 'with (ctx) {\n' + cmNames.map(extractCm).filter(Boolean).join('\n') +
-    '\n; return { quoScanFresh, textingHeld, textHoldWhy }; }')(cmBox);
+    '\n; return { holdBakeFresh, textingHeld, textHoldWhy }; }')(cmBox);
 } catch (e) { console.log('  (call mode source did not evaluate: ' + e.message + ')'); }
 const freshTs = new Date().toISOString();
-const staleTs = new Date(Date.now() - 40 * 3600000).toISOString();
-cmBox.QUOLIVE = false;
-cmBox.QUOBAKE = { ok: false, held: true, ts: '', maxAgeH: 36, why: 'scan missing' };
-cmBox.QUOHOLD = cmBox.QUOBAKE;
+const staleTs = new Date(Date.now() - 50 * 3600000).toISOString();
+cmBox.TEXTHOLDLIVE = false;
+cmBox.TEXTHOLDBAKE = { ok: false, held: true, ts: '', maxAgeH: 48, why: 'list missing' };
+cmBox.TEXTHOLD = cmBox.TEXTHOLDBAKE;
 T('bridge down and no fresh bake holds', cm.textingHeld && cm.textingHeld() === true, cm.textingHeld && cm.textingHeld());
-cmBox.QUOBAKE = { ok: true, held: false, ts: freshTs, maxAgeH: 36 };
-cmBox.QUOHOLD = cmBox.QUOBAKE;
+const _d = new Date(), _p = v => (v < 10 ? '0' : '') + v;
+const todayDay = _d.getFullYear() + '-' + _p(_d.getMonth() + 1) + '-' + _p(_d.getDate());
+cmBox.TEXTHOLDBAKE = { ok: true, held: false, ts: freshTs, maxAgeH: 48, syncDay: todayDay };
+cmBox.TEXTHOLD = cmBox.TEXTHOLDBAKE;
 T('bridge down with a fresh bake does not hold', cm.textingHeld && cm.textingHeld() === false, cm.textingHeld && cm.textingHeld());
-cmBox.QUOBAKE = { ok: true, held: false, ts: staleTs, maxAgeH: 36 };
-cmBox.QUOHOLD = cmBox.QUOBAKE;
+cmBox.TEXTHOLDBAKE = { ok: true, held: false, ts: freshTs, maxAgeH: 48, syncDay: '2000-01-01' };
+cmBox.TEXTHOLD = cmBox.TEXTHOLDBAKE;
+T("a fresh list baked from another day's 07:15 sync holds", cm.textingHeld && cm.textingHeld() === true);
+cmBox.TEXTHOLDBAKE = { ok: true, held: false, ts: freshTs, maxAgeH: 48 };
+cmBox.TEXTHOLD = cmBox.TEXTHOLDBAKE;
+T('a bake with no sync day holds', cm.textingHeld && cm.textingHeld() === true);
+cmBox.TEXTHOLDBAKE = { ok: true, held: false, ts: new Date(Date.now() - 2.6 * 3600000).toISOString(), maxAgeH: 2.4, syncDay: todayDay };
+cmBox.TEXTHOLD = cmBox.TEXTHOLDBAKE;
+T('a fractional max age is honored exactly (2.6h > 2.4h holds)', cm.textingHeld && cm.textingHeld() === true);
+cmBox.TEXTHOLDBAKE = { ok: true, held: false, ts: staleTs, maxAgeH: 48, syncDay: todayDay };
+cmBox.TEXTHOLD = cmBox.TEXTHOLDBAKE;
 T('bridge down with a stale bake holds', cm.textingHeld && cm.textingHeld() === true);
-cmBox.QUOLIVE = true;
-cmBox.QUOHOLD = { held: true, why: 'HOLD texting from health', live: true };
+cmBox.TEXTHOLDLIVE = true;
+cmBox.TEXTHOLD = { held: true, why: 'HOLD texting from health', live: true };
 T('a live health hold wins over a fresh bake', cm.textingHeld && cm.textingHeld() === true && cm.textHoldWhy() === 'HOLD texting from health');
 T('call mode functions are in the page', cmMissing.length === 0, cmMissing.join(','));
 

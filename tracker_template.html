@@ -3438,7 +3438,15 @@ function _optedOutIdentities(){
     const n = notes[k] || {};
     if(!(n.optout || n.status === 'DO NOT CONTACT')) return;
     if(c === '@') em.add(String(k).slice(1).trim().toLowerCase());
-    else ph.add(String(k).slice(1).replace(/\D/g,''));
+    else {
+      const dg = String(k).slice(1).replace(/\D/g,'');
+      ph.add(dg);
+      // The server ledger ships '#'+_addrKey(digits). Stripping non-digits from that hash turned it
+      // into junk, so no server-ledger phone opt-out ever matched on the board (2026-10-08).
+      ph.add(String(k).slice(1).trim());
+      // a number saved with its country code also matches the lead's 10-digit copy (2026-10-08)
+      if(dg.length === 11 && dg.charAt(0) === '1') ph.add(dg.slice(1));
+    }
   });
   _OOP = {em: em, ph: ph}; _OOPsrc = notes;
   return _OOP;
@@ -3459,7 +3467,11 @@ function _isOptedOutPerson(r){
     try { return set.has(_addrKey(val)); } catch(e){ return false; }
   };
   if((r.emails||[]).some(function(e){ return hit(S.em, String(e||'').trim().toLowerCase()); })) return true;
-  return (r.phones||[]).some(function(p){ return hit(S.ph, String(p||'').replace(/\D/g,'')); });
+  return (r.phones||[]).some(function(p){
+    const dg = String(p||'').replace(/\D/g,'');
+    if(hit(S.ph, dg)) return true;
+    return dg.length === 11 && dg.charAt(0) === '1' && hit(S.ph, dg.slice(1));
+  });
 }
 
 function _textContactBlocked(r){
@@ -3468,6 +3480,10 @@ function _textContactBlocked(r){
   // one edit, every channel: per the 2026-08-11 sweep this single function gates text, WhatsApp,
   // email, letter, hanger and door, so the person-level check belongs here and nowhere else
   if(_isOptedOutPerson(r)) return 'optout';
+  // SAME PERSON, OTHER CASE (2026-10-08). A stop, DNC or hard no logged on one of this owner's
+  // cases closes the others too: the worker already reads it that way (_boardNoState walks
+  // _personCases), and the manual Text / Email / letter buttons did not.
+  if(typeof _boardNoState === 'function' && _boardNoState(r).hard) return 'optout';
   if(_isWrongOwner(n)) return 'wrong';
   if(r.saleBkAct) return 'bk';
   return '';
@@ -6369,6 +6385,32 @@ function _smsHref(ph, msg){
   // Phone Link (Windows) + iOS/Android Messages: sms:+1…?body=
   return 'sms:'+_smsNum(ph)+'?body='+encodeURIComponent(msg);
 }
+/* TEXT BATCH TEMPLATE (2026-10-07, Alejandro: "template it spanish and english like the morning
+   worker, whenever it's about to send a text batch"). _smsTplKey names the _textBodies branch a
+   lead's batch text takes, in _textBodies' own order (urgent, t3, followup, then tax deed, just
+   filed, cold). _textTplSamples renders each branch once with placeholders, from the same
+   _textBodies bytes the texts are built from, so the template on screen IS the copy that sends.
+   The Morning Worker shows the groups in its batch before the first text opens. */
+function _smsTplKey(r){
+  var t = '';
+  try{ t = _defaultTextTone(r); }catch(e){}
+  if(t==='urgent' || t==='t3' || t==='followup') return t;
+  if(r && r.st==='TD') return 'td';
+  if(r && r.st==='LP') return 'lp';
+  return 'cold';
+}
+const TEXT_TPL_LABELS = {cold:'First text', urgent:'First text, sale is close', lp:'First text, case just filed',
+                         td:'First text, tax deed sale', followup:'Second text (follow-up)', t3:'Last text (third)'};
+function _textTplSamples(){
+  const sN = ((typeof sender!=='undefined' && sender && sender.name)||'').trim() || SENDER_DEFAULTS.name;
+  const out = {};
+  Object.keys(TEXT_TPL_LABELS).forEach(function(k){
+    const B = _textBodies({first:'[first name]', sender:sN, stEN:'[street]', stES:'[street]',
+                           td:k==='td', lp:k==='lp', tone:(k==='td'||k==='lp')?'cold':k});
+    out[k] = {label:TEXT_TPL_LABELS[k], en:B.en, es:B.es};
+  });
+  return out;
+}
 let textQ=[], textIdx=0, textLang='both', textTone='cold';
 function _copyTextMsg(t, btn){
   const done=()=>{ if(btn){ const o=btn.textContent; btn.textContent='Copied!'; btn.classList.add('ok'); setTimeout(()=>{btn.textContent=o; btn.classList.remove('ok');},1600);}
@@ -6391,9 +6433,9 @@ function textCardHtml(r){
   const PH=_textPersonHist(r);
   const TS=_textStage(r);
   const retired=(TS==='retired');
-  const quoHold = (typeof TEXT_HOLD === 'string' && !!TEXT_HOLD);
-  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired && !quoHold;
-  const canCopy=!hardBlock && !retired && !quoHold; // never for BK / opt-out / wrong-owner / retired / a failed STOP scan
+  const textHeld = (typeof TEXT_HOLD === 'string' && !!TEXT_HOLD);
+  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired && !textHeld;
+  const canCopy=!hardBlock && !retired && !textHeld; // never for BK / opt-out / wrong-owner / retired / a held text gate
   const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
   /* The tone buttons ARE the ladder now. A later touch stays disabled until the earlier ones have
      actually been sent — otherwise touch 3's "this is my last message" body can be fired first,
@@ -6415,7 +6457,7 @@ function textCardHtml(r){
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
-  else if(quoHold) gate='<div class="txblock">⛔ '+esc(TEXT_HOLD)+'</div>';
+  else if(textHeld) gate='<div class="txblock">⛔ '+esc(TEXT_HOLD)+'</div>';
   else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
   let phBtns;
   if(hardBlock){
@@ -12235,13 +12277,14 @@ function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||
 // what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
 // /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
 var _liveCap = null, _liveCapAt = 0;
-// Quo inbound STOP scan. HELD until a successful /health says text_hold is false. A failed fetch,
-// a missing field, or the bridge being down is not proof the scan is fresh. Email does not read this.
-var TEXT_HOLD_DOWN = 'Texting is held — the send bridge has not confirmed a fresh inbound STOP scan. Email is not held by this.';
+// Texting hold (text_hold.py, 2026-10-07 — was the Quo inbound scan; Quo is gone). HELD until a
+// successful /health says text_hold is false: the bridge confirms the do-not-contact list is fresh
+// and runs the §362 check on every confirmed text. Bridge down is a hold.
+var TEXT_HOLD_DOWN = 'Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.';
 var TEXT_HOLD = TEXT_HOLD_DOWN;
 function _textHoldApply(j){
   if(j && j.text_hold === false) return '';
-  if(j && j.text_hold) return (j.text_hold_why || 'Inbound STOP scan failed or is stale. Texting is held. Email is not held by this.');
+  if(j && j.text_hold) return (j.text_hold_why || 'Texting is held: the do-not-contact list is stale. Run python ledger_sync.py on the laptop.');
   return TEXT_HOLD_DOWN;
 }
 function _pollLiveCap(){
@@ -12819,6 +12862,25 @@ function _laneWorkable(lane){
   });
   return n;
 }
+// The lane the 8am unattended run opens (2026-10-08, Alejandro: "auto-run all lanes ... when it pops
+// up"). It used to be URGENT only, and on most mornings URGENT's queue was empty, so the run never
+// started (morning-sends alert: 50 eligible, 0 sent). Now it opens the first of URGENT / ACTIVE /
+// EARLY / BALLOON whose queue has anyone in it (email or phone: phone leads are parked for the
+// call/text lists), and the run walks every later lane from there (autoAll, same walk as the
+// "Auto-run ALL lanes" button), so no non-empty lane is skipped. REPLIED is never the auto-run's
+// opening lane: those owners wrote to us and get a person, not a template.
+function _autoRunLane(){
+  var pick = 'urgent';
+  ['urgent','active','early','balloon'].some(function(k){
+    if(!WORKER_LANES[k]) return false;
+    // The lane's real queue (24h cooldown and cap applied), not the raw lead list: a lane whose only
+    // leads were worked yesterday bakes an empty queue, and an empty queue never auto-starts.
+    var hit = _workerQueue(k).length > 0;
+    if(hit) pick = k;
+    return hit;
+  });
+  return pick;
+}
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
 function _workerCard(r){
@@ -12862,6 +12924,7 @@ function _workerCard(r){
         return _smsHref(tp[0], smsMsg(r, 'both', _defaultTextTone(r)));
       } catch(e){ return ''; }
     })(),
+    smsTpl: (function(){ try{ return _smsTplKey(r); }catch(e){ return ''; } })(),
     // The Gmail compose URL is BAKED PER CARD so the WORKER tab can open it on the user's own
     // click. The old design posted to the board tab and had the BOARD call window.open — but the
     // click happened in the worker tab, so the board tab had no user activation and the browser
@@ -12888,6 +12951,9 @@ function _workerCard(r){
               days:_saleDays(x), saleDate:x.auction||'',
               tier:x.tier||'', judg:x.judg||0, value:x.value||0};
     }),
+    // The owner's OTHER cases (real person key), so the bridge can refuse this send when a stop
+    // was ledgered on any of them after this page was built (2026-10-08). Only ever adds a refusal.
+    pcs: (function(){ try{ return (typeof _personCases === 'function' ? _personCases(r) : []).filter(function(c){ return c && c !== r.case; }); }catch(e){ return []; } })(),
     hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
     mismatch: !!r.ownerMismatch, paOwner: String(r.paOwner||'').split(';')[0].trim(),
     prior: _wlogContacted(r.case),  // "have I reached this person before?" — shown on the card
@@ -12945,7 +13011,8 @@ function genMorningWorker(lane, autostart){
       // queue row already renders as "no number, use Lookup".
       var _wph = _workerPhones(r), _xd = String(x.ph||'').replace(/\D/g,'');
       var _qph = (_xd && _wph.some(function(n){ return String(n).replace(/\D/g,'')===_xd; })) ? x.ph : (_wph[0]||'');
-      persistq.push({c:x.c, name:x.nm||x.c, phone:_qph, addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
+      var _ptpl=''; try{ _ptpl=_smsTplKey(r); }catch(e){}
+      persistq.push({c:x.c, name:x.nm||x.c, phone:_qph, addr:(r.addr||''), sms:_psms, stpl:_ptpl, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
     });
   } catch(e){}
   /* LEAST-RECENTLY-CONTACTED FIRST — the other half of the carousel. ---------------------------
@@ -13196,6 +13263,7 @@ function genMorningWorker(lane, autostart){
     + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
+    +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
     +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null)};'
@@ -13223,16 +13291,55 @@ function genMorningWorker(lane, autostart){
        by a different door, and this file's whole posture is that a duplicate to a homeowner in
        foreclosure reads as a bot. The bridge's own 24h dedupe would probably catch it with a 409,
        but "probably, on the server" is not where this belongs.
-       Time-boxed rather than timer-cleared: a fetch that never settles must not wedge Start for the
-       rest of the morning, and 30s is well past any real bridge response. */
-    +   'var sending=false, sendingAt=0;'
-    +   'function sendInFlight(){ return sending && (Date.now()-sendingAt) < 30000; }'
+       NOT TIME-BOXED (2026-10-03 review). It used to expire after 30s, and a /send can take longer
+       (the bridge runs several 60s SMTP steps in sequence), so Stop then Start inside that gap
+       re-worked the same lead: the second /send got the bridge's 409 "already in flight", which
+       posted "skip" on a lead that WAS being sent and advanced the queue, and the first request's
+       late 200 then posted "sent" on whichever lead `i` had reached. A browser-side abort does not
+       help: it does not cancel the bridge's delivery, it only throws the answer away. So the
+       request is never abandoned: while its outcome is unknown no other /send starts, its answer is
+       recorded once, on its own case (SENDSEQ / qc in doSend), whenever it lands. If the bridge
+       never answers, doSend pauses the run at SEND_WAIT_MS and says so; reloading the tab is the
+       operator's explicit way out. */
+    +   'var sending=false, SENDSEQ=0, SEND_WAIT_MS=150000;'
+    +   'function sendInFlight(){ return sending; }'
     // EVERY TIMER THAT CAN RESTART THE LOOP HAS A HANDLE, because Stop has to be able to cancel it.
     // advance() schedules the next lead 700ms out and hopNextLane() 900ms out; before this they
     // were fire-and-forget, so a Stop pressed inside that window was overtaken by its own pending
     // timer and the run carried on into the next lead. runOne() re-checks `auto` as well -- belt
     // and braces, because a missed handle here means an unstoppable sender.
     +   'var nextStep=null, ASTIMER=null, ASBOX=null;'
+    // SYNC WAIT (2026-10-07). /send holds every send until TODAY's 07:15 opt-out sync has finished
+    // (send_server.py, `hold: 'sync'`). On 10-07 the sync ran late and the 8am run stopped on the
+    // first lead and stayed stopped. A sync hold is the one refusal that clears on its own, so the
+    // run waits and retries the SAME lead every SYNC_EVERY ms, at most SYNC_MAX times. The bridge
+    // still decides every send; this only asks again. Stop, Start and a lane switch cancel the wait.
+    // While waiting, the run bar shows the wait and a Stop (renderRunBar's SYNCWAIT branch), so the
+    // operator can keep the run paused. A retry that finds the screen busy (text batch, a confirm
+    // card, the 8am countdown, a send in flight) waits again rather than repainting over it.
+    +   'var SYNCWAIT=null, SYNCTRY=0, SYNCALL=false, SYNCAT="", SYNC_EVERY=600000, SYNC_MAX=18;'
+    +   'function cancelSyncWait(){ if(SYNCWAIT){ clearTimeout(SYNCWAIT); SYNCWAIT=null; } }'
+    // A hand action on a lead (Email, Text, Call, Skip, Done, or a queue-row Text/Call) means the
+    // operator is driving now. A pending wait must not later flip auto back on under them (Codex P1).
+    +   'function handTakeover(){ if(SYNCWAIT && !auto){ cancelSyncWait(); addLog("skip","auto-run","stopped waiting for the opt-out sync because a lead is being worked by hand — press Start to resume the run."); renderRunBar(); } }'
+    +   'function schedSync(why){'
+    +     'if(SYNCTRY>=SYNC_MAX){ addLog("fail","auto-run","gave up waiting for the opt-out sync after "+SYNC_MAX+" tries — the queue is unchanged, press Start when the sync has run.","warn"); renderRunBar(); return false; }'
+    +     'SYNCTRY++; SYNCWAIT=setTimeout(syncRetry, SYNC_EVERY);'
+    +     'var d=new Date(Date.now()+SYNC_EVERY); SYNCAT=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);'
+    +     'addLog("info","auto-run",why+" — retrying this lead at "+SYNCAT+" (try "+SYNCTRY+" of "+SYNC_MAX+"). Nothing was sent.");'
+    +     'renderRunBar(); return true;'
+    +   '}'
+    +   'function syncRetry(){'
+    +     'SYNCWAIT=null;'
+    +     'if(auto) return renderRunBar();'
+    +     'if(!_wftsa().safe){ addLog("fail","auto-run","⏰ outside sending hours — stopped waiting for the opt-out sync. Press Start tomorrow or by hand.","warn"); return renderRunBar(); }'
+    +     'if(i>=Q.length || sentToday()>=CAP.max) return render();'
+    +     'if(tbOn || awaitingReturn || ASTIMER || sendInFlight() || document.getElementById("mwsentyes")){ schedSync("the worker screen is busy"); return; }'
+    +     'if(BRIDGE_OK!==true || BRIDGE_HOLD){ probeBridge(); schedSync("bridge not clear yet"); return; }'
+    +     'autoAll=SYNCALL; auto=true;'
+    +     'addLog("open","auto-run","▶ resuming after the opt-out sync wait (try "+SYNCTRY+")");'
+    +     'renderRunBar(); runOne();'
+    +   '}'
     // balloon appended 2026-09-08 (investor refi lane). LAST on purpose: it shares an alias ramp
     // with `active`, so active's homeowner cold sends take the daily cap first and balloon gets
     // the remainder (409 alias_cap = skip, not stop). auto-run's next-lane walk skips empty lanes.
@@ -13309,7 +13416,7 @@ function genMorningWorker(lane, autostart){
     /* ---- bridge health -----------------------------------------------------------------------
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
-    +   'var TEXT_HOLD_DOWN="Texting is held — the send bridge has not confirmed a fresh inbound STOP scan. Email is not held by this.";'
+    +   'var TEXT_HOLD_DOWN="Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.";'
     +   'var BRIDGE_OK=null, BRIDGE_HOLD="", TEXT_HOLD=TEXT_HOLD_DOWN;'
     +   'function paintTextHold(){ var h=document.getElementById("mwtexthold"); if(!h) return; if(TEXT_HOLD){ h.style.display="block"; h.textContent=TEXT_HOLD; } else { h.style.display="none"; h.textContent=""; } }'
     +   'function renderBridge(){'
@@ -13364,7 +13471,7 @@ function genMorningWorker(lane, autostart){
     +   'function setLane(k){'
     +     'if(!LANES[k] || k===lane) return;'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
-    +     'auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
+    +     'cancelSyncWait(); auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
     +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){'
     +       'el.classList.toggle("on", el.dataset.lane===k);'
     +     '});'
@@ -13502,12 +13609,12 @@ function genMorningWorker(lane, autostart){
     // durable fcCallQueue ledger — before this, 192 queued calls evaporated with the tab and the
     // week produced exactly one dial. Seeded on open so the list is never empty-by-amnesia.
     +   'PERSISTQ.forEach(function(x){'
-    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, first:x.name, owner:x.name, judg:x.judg||0, wp:x.wp||""}); }'
+    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, tpl:x.stpl||"", first:x.name, owner:x.name, judg:x.judg||0, wp:x.wp||""}); }'
     +     'else if(!CALLQ.some(function(y){return y.c===x.c;})) CALLQ.push(x);'
     +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
-    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
     +     'renderTextQ();'
     +   '}'
     /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
@@ -13612,6 +13719,40 @@ function genMorningWorker(lane, autostart){
     +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
     +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'if(SYNCWAIT){ cancelSyncWait(); addLog("skip","auto-run","stopped waiting for the opt-out sync because the text batch started — the email queue is untouched, press Start after the batch."); }'
+    +     'textBatchPreview();'
+    +   '}'
+    /* THE TEMPLATE SCREEN (2026-10-07). Before the first composer opens, the batch shows what is about
+       to go out: one card per message group in this batch (first text, follow-up, last text...), each
+       with its English and its Spanish body, rendered by the board from _textBodies with [first name]
+       and [street] where the person's own details go. Every text carries both, English first. Nothing
+       opens and nothing is counted until Start sending. */
+    +   'function textBatchPreview(){'
+    +     'var T=(typeof TEXTTPL==="object"&&TEXTTPL)||{}, order=["cold","urgent","lp","td","followup","t3"], n={}, other=0;'
+    +     'TEXTQ.forEach(function(x){ if(x.tpl&&T[x.tpl]) n[x.tpl]=(n[x.tpl]||0)+1; else other++; });'
+    +     'var box=function(lbl,txt){ return "<div style=\'font:700 10.5px/1 Segoe UI,Arial;letter-spacing:.12em;text-transform:uppercase;color:#5b6472;margin:10px 0 4px\'>"+lbl+"</div><div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:13px/1.5 Segoe UI,Arial;color:#334155;white-space:pre-wrap\'>"+_esc2(txt)+"</div>"; };'
+    +     'var cards=order.filter(function(k){ return n[k]; }).map(function(k){'
+    +       'return "<div style=\'border:1px solid #e2e6ee;border-radius:10px;padding:10px 12px;margin-top:12px;text-align:left\'>"'
+    +         '+"<div style=\'font:700 14px Segoe UI,Arial;color:#1f2937\'>"+_esc2(T[k].label)+" &middot; "+n[k]+(n[k]===1?" person":" people")+"</div>"'
+    +         '+box("English",T[k].en)+box("Espa&ntilde;ol",T[k].es)+"</div>";'
+    +     '}).join("");'
+    +     'if(other) cards+="<div style=\'font:12.5px Segoe UI,Arial;color:#5b6472;margin-top:10px\'>"+other+" more already have their message filled in. You will see each one before it opens.</div>";'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div style=\'font:700 11px/1 Segoe UI,Arial;letter-spacing:.14em;text-transform:uppercase;color:#8a6d1f\'>Text batch &middot; "+TEXTQ.length+(TEXTQ.length===1?" person":" people")+" &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</div>"'
+    +       '+"<h2 style=\'margin:8px 0 2px\'>This is what goes out</h2>"'
+    +       '+"<div style=\'font:13px/1.45 Segoe UI,Arial;color:#5b6472\'>Each text is one plain message from your phone, English first and Spanish below it. Their first name and street fill in where the brackets are.</div>"'
+    +       '+cards'
+    +       '+"<div style=\'font:12.5px/1.45 Segoe UI,Arial;color:#8a6d1f;margin-top:12px;text-align:left\'>Replies come back to your phone. Anyone who says stop, no, or wrong number: mark them Do Not Contact in Call Mode before the next batch.</div>"'
+    +       '+"<button id=\'tb-go\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#9654; Start sending ("+TEXTQ.length+")<span class=\'sub\'>one at a time, you press send in Messages</span></button>"'
+    +       '+"<button id=\'tb-cancel\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>Not now<span class=\'sub\'>nothing was sent</span></button>"'
+    +     '+"</div>";'
+    +     'var gb=document.getElementById("tb-go"), cb=document.getElementById("tb-cancel");'
+    +     'if(gb) gb.onclick=function(){ textBatchGo(); };'
+    +     'if(cb) cb.onclick=function(){ addLog("skip","batch","text batch not started — nothing sent"); renderTextQ(); renderRunBar(); try{ render(); }catch(e){} };'
+    +   '}'
+    +   'function textBatchGo(){'
+    +     'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
     +   'function textBatchStep(){'
@@ -13630,7 +13771,10 @@ function genMorningWorker(lane, autostart){
     +       '+"<div style=\'font:700 11px/1 Segoe UI,Arial;letter-spacing:.14em;text-transform:uppercase;color:#8a6d1f\'>Text batch &middot; "+(TBI+1)+" of "+TEXTQ.length+" &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</div>"'
     +       '+"<h2 style=\'margin:8px 0 2px\'>"+_esc2(x.name)+"</h2>"'
     +       '+"<div style=\'font:13px monospace;color:#5b6472;margin-bottom:10px\'>"+_esc2(x.phone)+"</div>"'
-    +       '+"<div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:160px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(body||"(message pre-filled in Messages)")+"</div>"'
+    +       '+(function(){ var k=body.indexOf("\\n\\n"), en=k>0?body.slice(0,k):body, es=k>0?body.slice(k+2):"";'
+    +         'var bx=function(lbl,t){ return "<div style=\'font:700 10.5px/1 Segoe UI,Arial;letter-spacing:.12em;text-transform:uppercase;color:#5b6472;margin:8px 0 4px;text-align:left\'>"+lbl+"</div><div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:130px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(t)+"</div>"; };'
+    +         'if(!body) return bx("Message","(message pre-filled in Messages)");'
+    +         'return bx("English",en)+(es?bx("Espa&ntilde;ol",es):""); })()'
     +       '+"<button id=\'tb-open\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#128241; Open Messages &mdash; pre-filled<span class=\'sub\'>press send there, then confirm</span></button>"'
     +       '+"<button id=\'tb-skip\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>&#9197; Skip this one<span class=\'sub\'>stays for tomorrow</span></button>"'
     +     '+"</div>";'
@@ -13708,17 +13852,46 @@ function genMorningWorker(lane, autostart){
     // wl = WORKER LANE. The bridge picks the From address by lane (senders.json): replied/urgent
     // leave from the brand domain, active from biscaynesolutionsgroup.com, early (fresh filings)
     // from bsgfl.com. Distinct from meta.lane, which the SERVER sets for probe/proven verification.
-    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", wl:lane, portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
+    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", wl:lane, portfolio:(r.portfolio||[]).map(function(p){return p.c;}), pcs:(r.pcs||[])}};'
     // NOTE: no pre-flight log line here. There used to be an addLog("email","trying bridge...")
     // before the fetch, and because addLog increments STATS[kind], a single successful send
     // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still
     // charged 1. Log only what actually resolved.
-    +     'sending=true; sendingAt=Date.now();'
+    // A /send THAT NEVER ANSWERS (2026-10-03 review). The fetch had no deadline, so a wedged
+    // bridge (process suspended by standby, a stuck socket) left sending=true and the auto-run
+    // parked on this lead forever with no log line and no terminal reason. 150s is past the
+    // bridge's own worst case (SMTP ops time out at 60s each). On timeout the OUTCOME IS UNKNOWN —
+    // the bridge may still deliver — so it is never "offline" (no Gmail composer, which would be a
+    // second copy) and never a skip; the run pauses and says so. The bridge's in-flight claim and
+    // 24h ledger refuse a duplicate if Start is pressed again.
+    // EVERY ANSWER IS RECORDED ON ITS OWN CASE, and only the CURRENT request moves the run. post()
+    // otherwise stamps Q[i] at the moment the answer lands, and advance()/pause() act on whatever
+    // run exists then. `qc` is the case this request is for; `_live()` is true only while no newer
+    // /send has started and the queue still sits on that case.
+    // ONE /send AT A TIME, FOR EVERY CALLER. startRun checks sendInFlight(), but the card's Email
+    // button calls doSend directly, so the guard lives here too: a second request while one's
+    // outcome is unknown would draw a 409 "skip" on a lead that was really sent.
+    +     'if(sendInFlight()){ addLog("fail", r.first||r.owner, "a send is still waiting for the bridge — its outcome is not known yet, so this one was not sent. Nothing was marked.", "warn"); return; }'
+    +     'var qc=r.c, _seq=++SENDSEQ;'
+    +     'var _live=function(){ return _seq===SENDSEQ && !!Q[i] && Q[i].c===qc; };'
+    +     'sending=true;'
+    +     'var _settled=false, _sto=setTimeout(function(){'
+    +       'if(_settled) return;'
+    +       'addLog("fail", r.first||r.owner, "send bridge has not answered in "+Math.round(SEND_WAIT_MS/1000)+"s — outcome UNKNOWN. Run paused. The request is still open: its result will be recorded on THIS lead when it lands, and nothing else sends until then. If the bridge is gone, restart send_server.py and reload this tab, then check mail_sent.json for this lead before pressing Start.", "warn");'
+    +       'if(_live()) pause();'
+    +     '}, SEND_WAIT_MS);'
     +     'fetch("http://127.0.0.1:8823/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
-    +         'sending=false;'
-    +         'if(x.j.blocked==="optout_stale"){'
+    +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'if(_seq===SENDSEQ) sending=false;'
+    +         'var _mv=_live();'
+    +         'if(x.j.blocked==="optout_stale" && x.j.hold==="sync" && auto && !SYNCWAIT && SYNCTRY<SYNC_MAX){'
+    // Today's sync has not finished yet. Not a ledger fault, so BRIDGE_HOLD stays clear (it would
+    // tell the operator to run ledger_sync.py, which is not the fix) and the run waits instead.
+    +           'bridgeUp(true); SYNCALL=autoAll; pause();'
+    +           'schedSync("today\u2019s 7:15 opt-out sync has not finished");'
+    +         '} else if(x.j.blocked==="optout_stale"){'
     +           'BRIDGE_HOLD="Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer, then press Start after the warning clears.";'
     +           'bridgeUp(true); renderBridge();'
     +           'addLog("fail", "auto-run", String(x.j.err||BRIDGE_HOLD)+" — run paused; this lead and the remaining queue are unchanged.", "warn");'
@@ -13727,15 +13900,15 @@ function genMorningWorker(lane, autostart){
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
     // #83 follow-up: the gate may mail a later address than the To we offered (one address per
     // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
-    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;}), qc:qc});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
-    +           'setTimeout(function(){ advance(); }, 900);'
+    +           'if(_mv) setTimeout(function(){ advance(); }, 900);'
     +         '} else if(x.status===409 && x.j.skip){'
     +           'bridgeUp(true);'
     // The bridge says WHY it deferred (24h dedupe, or the per-alias warm-up cap in senders.json);
     // show its sentence rather than guessing, so a capped lane never reads as a duplicate.
     +           'addLog("skip", r.first||r.owner, String(x.j.err||"already emailed inside 24h — deferred"), "warn");'
-    +           'post("skip"); setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
     // This is the single most authoritative moment the true count exists — the server just used it
@@ -13753,7 +13926,7 @@ function genMorningWorker(lane, autostart){
     +     'bridgeUp(true);'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null))};'
     +     'addLog("skip", r.first||r.owner, "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears.", "warn");'
-    +     'post("skip"); setTimeout(function(){ advance(); }, 700);'
+    +     'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
@@ -13769,12 +13942,13 @@ function genMorningWorker(lane, autostart){
     // send_server's own words for the rule are "the attempt stops being invisible without becoming
     // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
-    +           'post("skip", {why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
-    +           'setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc, why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
+    +           'if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '}'
     +       '})'
     +       '.catch(function(err){'
-    +         'sending=false;'
+    +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'if(_seq===SENDSEQ) sending=false;'
     +         'bridgeUp(false);'
     // AUTO-RUN: never open a Gmail composer or wait on a confirm click — that is precisely the
     // "composer emails" experience the operator told us to stop producing. The bridge going down
@@ -13788,7 +13962,8 @@ function genMorningWorker(lane, autostart){
     +         '}'
     // MANUAL (operator clicked Email on this one lead): a human is right here, so the Gmail-compose
     // fallback + confirm click is legitimate — this is an ATTEMPT, never a send.
-    +         'if(openHere(r.gurl)){ post("email"); confirmSend(r, "bridge offline — Gmail compose opened"); }'
+    +         'if(!_live()) return;'
+    +         'if(openHere(r.gurl)){ post("email", {qc:qc}); confirmSend(r, "bridge offline — Gmail compose opened"); }'
     +         'else { addLog("fail", r.first||r.owner, "bridge offline AND Gmail popup blocked", "warn"); advance(); }'
     +       '});'
     +   '}'
@@ -14107,6 +14282,9 @@ function genMorningWorker(lane, autostart){
     +     'if(ASTIMER){'
     +       'txt="<b>Auto-run is about to start by itself</b> &middot; "+Q.length+" queued in "+esc(LMETA[lane].t)+".";'
     +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; Cancel</button>";'
+    +     '} else if(SYNCWAIT){'
+    +       'txt="<b>Waiting for today’s opt-out sync</b> &middot; next try at "+SYNCAT+" ("+SYNCTRY+" of "+SYNC_MAX+") &middot; "+left+" left in "+esc(LMETA[lane].t)+". Nothing has been sent from this lead.";'
+    +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; Stop waiting</button>";'
     +     '} else if(tbOn){'
     +       'txt="<b>Text batch running</b> &middot; "+Math.min(TBI+1,TEXTQ.length)+" of "+TEXTQ.length'
     +         '+" &middot; "+TBSENT+" sent, "+TBSKIP+" skipped &middot; "+capLeft+" of today’s cap left.";'
@@ -14148,8 +14326,9 @@ function genMorningWorker(lane, autostart){
        is not confirmed up, refuse to start and say how to fix it. */
     +   'function startRun(all, src){'
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
+    +     'cancelSyncWait(); SYNCTRY=0;'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
-    +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight from the last run — it will finish and be recorded on its own. Press Start again in a moment.","warn"); return; }'
+    +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight — its outcome is not known yet, so nothing else sends until it answers and is recorded on its own lead. If the bridge is gone, restart send_server.py and reload this tab.","warn"); return; }'
     +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
     +     'if(BRIDGE_OK!==true){'
     +       'addLog("fail","auto-run","⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.","warn");'
@@ -14182,6 +14361,7 @@ function genMorningWorker(lane, autostart){
     +   'function stopRun(src){'
     +     'var wasAuto=!!(auto||autoAll), wasBatch=!!tbOn, wasStarting=!!ASTIMER;'
     +     'auto=false; autoAll=false; awaitingReturn=false; tbOn=false;'
+    +     'var wasWaiting=!!SYNCWAIT; cancelSyncWait();'
     +     'clearInterval(tick); tick=null;'
     +     'if(healing){ clearTimeout(healing); healing=null; }'
     +     'if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
@@ -14191,6 +14371,7 @@ function genMorningWorker(lane, autostart){
     +     'if(wasStarting){ addLog("skip","auto-start","auto-run cancelled before it started ("+(src||"stop")+") — the queue is untouched, press Start when you are ready"); }'
     +     'else if(wasBatch){ addLog("skip","batch","■ text batch STOPPED ("+(src||"stop")+") — "+TBSENT+" sent, "+TBSKIP+" skipped, "+Math.max(0,TEXTQ.length-TBI)+" still queued. Nothing was marked sent that was not."); }'
     +     'else if(wasAuto){ addLog("skip","auto-run","■ auto-run STOPPED ("+(src||"stop")+") at lead "+Math.min(i+1,Q.length)+" of "+Q.length+" in "+LMETA[lane].t+" — "+Math.max(0,Q.length-i)+" left, still queued. Nothing was marked sent that was not. Press Start to resume from here."+(sendInFlight()?" One email was already handed to the bridge and will finish sending — it is logged when it lands.":"")); }'
+    +     'else if(wasWaiting){ addLog("skip","auto-run","■ stopped waiting for the opt-out sync ("+(src||"stop")+") — the queue is untouched, press Start when you are ready"); }'
     +     'else { addLog("info","auto-run","stop pressed with nothing running"); }'
     +     'render();'
     +   '}'
@@ -14426,10 +14607,11 @@ function genMorningWorker(lane, autostart){
     +     'if(go){ e.preventDefault(); return textBatchStart(); }'
     +     'var tb=e.target.closest&&e.target.closest("[data-qtext]");'
     +     'if(tb){'
-    +       'e.preventDefault();'
+    +       'e.preventDefault(); handTakeover();'
     +       'var xc=tb.getAttribute("data-qtext"), x=null;'
     +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
     +       'if(!x) return;'
+    +       'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
     +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
     +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
     +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
@@ -14445,7 +14627,7 @@ function genMorningWorker(lane, autostart){
     // renderers rebuild the row FROM THE QUEUE DATA with the strip appended; the details are
     // re-rendered from CALLQ/TEXTQ rather than preserved by luck, so there is nothing to lose.
     +     'var qc=e.target.closest&&e.target.closest("[data-qcall]");'
-    +     'if(qc){ var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel — details stay on screen, log the outcome under the row");'
+    +     'if(qc){ handTakeover(); var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel — details stay on screen, log the outcome under the row");'
     +     'QCALLOPEN[cc]=1;'
     // the delay is the old one and it is still worth keeping: the outcome buttons must not appear
     // under a thumb that is still travelling from the Call button.
@@ -14482,6 +14664,7 @@ function genMorningWorker(lane, autostart){
     +     'if(fn==="stop"){ return stopRun("card button"); }'
     +     'if(fn==="auto"||fn==="autoall"){ return startRun(fn==="autoall", "card button"); }'
     +     'var r=Q[i]; if(!r)return;'
+    +     'handTakeover();'
     // The bridge gate and the re-entrancy gate that used to sit inline here now live in startRun(),
     // because the run bar starts runs too and two copies of a gate is how two paths drift. Their
     // reasoning is kept with the code, above.
@@ -14543,7 +14726,7 @@ function genMorningWorker(lane, autostart){
     +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
     +       'var left=20, box=document.createElement("div");'
     +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
-    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — "+Q.length+" leads queued. Emails will send automatically.</div>"'
+    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — all lanes from "+lane.toUpperCase()+", "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).reduce(function(n,k){return n+laneCount(k);},0)+" leads queued. Emails will send automatically.</div>"'
     +         '+"<button id=\'mwcancel\' style=\'padding:9px 18px;border:0;border-radius:7px;background:#b3372f;color:#fff;font-weight:700;cursor:pointer;font-size:14px\'>Cancel</button>";'
     +       'document.body.appendChild(box);'
     // COUNTDOWN STATE GOES IN THE SHARED HANDLES. The interval used to be a local `t` reachable only
@@ -14565,7 +14748,10 @@ function genMorningWorker(lane, autostart){
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
-    +           'auto=true; addLog("open","auto-start","▶ auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
+    // A run already going (Start pressed during the countdown) owns the queue: a second runOne()
+    // here would be two loops on the same lead, the 2026-08-13 duplicate-send shape.
+    +           'if(auto || SYNCWAIT){ renderRunBar(); return; }'
+    +           'auto=true; autoAll=true; addLog("open","auto-start","▶ auto-run ALL lanes started automatically (8am scheduler) — "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).map(function(k){return k.toUpperCase()+" ("+laneCount(k)+")";}).join(" → "));'
     +           'renderRunBar(); runOne(); }'
     +       '},1000);'
     // Cancel goes through stopRun so the unattended start and a hand-pressed Stop leave exactly the
@@ -16555,7 +16741,7 @@ const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.tou
 function _mergeLead(local, remote){
   local = local || {}; remote = remote || {};
   const out = Object.assign({}, local);
-  const ch = { optout:false, touches:0, status:false, deal:false, note:false };
+  const ch = { optout:false, touches:0, status:false, deal:false, note:false, dials:false };
   // audit ledger: union every opt-out event from both devices (dedup by ts|act), so the ORIGINAL
   // "set" timestamp on the teammate's device is preserved as evidence, not just the local one.
   const _lseen = new Set(), _ol = [];
@@ -16599,6 +16785,9 @@ function _mergeLead(local, remote){
   const _dseen = new Set(), _dl = [];
   (local.dials||[]).concat(remote.dials||[]).forEach(v => { const k=(v.ts||'')+'|'+(v.ph4||''); if(!_dseen.has(k)){ _dseen.add(k); _dl.push(v); } });
   if(_dl.length){ _dl.sort((a,b)=>(a.ts||'').localeCompare(b.ts||'')); out.dials = _dl; }
+  /* A dials-only union is a real change and must persist (it used to be dropped by mergeNotes'
+     `changed`, so a dial pulled from a teammate lived in memory until some other edit saved). */
+  if(_dl.length > (local.dials||[]).length) ch.dials = true;
   /* DO-NOT-TEXT numbers: UNION, never intersect. This is a suppression list — the only safe merge
      direction is "more suppressed". The device Set (fcDNT) still cannot sync on its own; this is
      what carries a DNT from the laptop to the phone, where the texts are actually sent. */
@@ -16654,12 +16843,13 @@ function _mergeLead(local, remote){
   return [out, ch];
 }
 function mergeNotes(remoteNotes){
-  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, violations:0 };
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, dials:0, violations:0 };
   Object.keys(remoteNotes||{}).forEach(caseId => {
     const before = _dialedAfter(notes[caseId]).length;
     const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
     notes[caseId] = merged;
-    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note) sum.leads++;
+    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note||ch.dials) sum.leads++;
+    if(ch.dials) sum.dials++;
     if(ch.optout) sum.optouts++;
     sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
     // a merged-in opt-out can retroactively turn a call you already logged into an after-opt-out contact
@@ -16668,7 +16858,7 @@ function mergeNotes(remoteNotes){
   try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
   // only persist/re-render when the merge actually changed something — otherwise the 45s auto-sync poll
   // triggers a needless save()->syncPushSoon()->push + full render on every empty pull (jank + churn).
-  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes;
+  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes || sum.dials;
   if(changed){ save(); try{ recompute(); }catch(e){} render(); }
   syncFreshness();
   return sum;
@@ -16683,7 +16873,7 @@ function mergeNotes(remoteNotes){
 const SB_URL = 'https://dddcfwbydgtxxwdsvsvt.supabase.co';
 const SB_KEY = 'sb_publishable_BbzeDgUG0HJK2OBekCh8uw_267aVBhQ';
 const SB_TBL = SB_URL + '/rest/v1/dealflow_sync';
-let _syncTimer = null, _syncBusy = false, _pullTimer = null;
+let _syncTimer = null, _syncBusy = false, _pullTimer = null, _pulling = false;
 function _teamKey(){ return localStorage.getItem('fcTeamKey') || ''; }
 function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){
   // crypto.randomUUID gives 122 bits of entropy — collision-safe even for two devices sharing a UA and
@@ -16714,18 +16904,28 @@ async function syncPush(){
 // Actually GUARD with _syncBusy — previously set true/false but never read, so a syncPull's
 // mergeNotes -> save -> syncPushSoon could stack a push while another was in flight.
 function syncPushSoon(){ if(!_teamKey()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(() => { if(_syncBusy){ syncPushSoon(); return; } syncPush(); }, 1500); }
+function _keyFp(k){ let h = 5381; k = String(k||''); for(let n = 0; n < k.length; n++) h = ((h * 33) ^ k.charCodeAt(n)) >>> 0; return h.toString(36); }
+function _pullStat(ok, devices, failed){
+  try{ localStorage.setItem('fcPullStat', JSON.stringify({ok:!!ok, kf:_keyFp(_teamKey()), devices:devices|0, failed:failed|0, ts:_nowTS()})); }catch(e){}
+}
 async function syncPull(){
   const key = _teamKey(); if(!key) return 0;
-  if(_syncBusy) return 0;   // don't pull-then-merge-then-push into a push that's already flying
+  if(_syncBusy || _pulling) return 0;   // no push in flight, and no second pull overwriting a newer pull's record
+  _pulling = true;
   try{
     const tid = await _teamId(key), me = _deviceId();
     const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     if(!r.ok) throw new Error('pull '+r.status);
-    const rows = await r.json(); let merged = 0, optouts = 0, violations = 0;
+    const rows = await r.json(); let merged = 0, optouts = 0, violations = 0, devs = 0, failed = 0;
     for(const row of rows){ if(row.device_id === me) continue;
-      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); merged += s.leads; optouts += s.optouts; violations += s.violations; }catch(e){}
+      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); devs++; merged += s.leads; optouts += s.optouts; violations += s.violations; }catch(e){ failed++; }
     }
-    localStorage.setItem('fcLastPull', _nowTS()); syncStatus('');
+    /* Pull coverage, counts only. A teammate blob that would not decrypt or merge is a FAILED
+       device, not a clean pull: fcLastPull is stamped only when every other device's blob merged,
+       so "synced" can never mean "some teammate's calls were skipped". */
+    _pullStat(failed === 0, devs, failed);
+    if(failed === 0) localStorage.setItem('fcLastPull', _nowTS());
+    syncStatus('');
     // A merged-in opt-out can retroactively turn a call already logged into an after-opt-out
     // contact (mergeNotes' own comment). This ran silently: the auto-pull (every 45s, no modal
     // open) discarded `violations` and only the manual "import a teammate's file" path ever showed
@@ -16746,7 +16946,8 @@ async function syncPull(){
           {bad:true, ms:8000});
     }
     return {merged, optouts, violations};
-  }catch(e){ syncStatus('offline — will retry', true); return 0; }
+  }catch(e){ _pullStat(false, 0, 0); syncStatus('offline — will retry', true); return 0; }
+  finally{ _pulling = false; }
 }
 function syncStatus(msg, warn){ const el = document.getElementById('syncstat'); if(!el) return; const on = !!_teamKey();
   el.className = 'syncstat' + (warn?' warn':'') + (on?' on':'');
@@ -19154,7 +19355,7 @@ async function boot(){
         try{
           var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
           var _stale = (_age != null && _age >= 1);
-          openMorningWorker('urgent', !_stale);
+          openMorningWorker(_autoRunLane(), !_stale);
           if(_stale && typeof _shareToast === 'function')
             _shareToast('AUTO-RUN BLOCKED: board data is ' + _age + ' day(s) old. Reload the board (or run the refresh), then start the worker by hand.');
         }catch(e){}

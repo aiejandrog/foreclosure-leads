@@ -161,6 +161,10 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE_NAME = 'pacer_stay_cache.json'
+# written into every cache entry: the owner-name reading that produced it. 'either-1' = fallback
+# owner names (oname / paOwner / owner_repair) are searched both ways (2026-10-08, after ce154cc).
+# pacer_fallback_audit.py holds a clear recorded since ce154cc that does not carry it.
+NAME_READING = 'either-1'
 QA_CACHE_NAME = 'pacer_stay_cache_qa.json'
 QUARTER_LEDGER_NAME = 'pacer_quarter_ledger.json'
 ENV_QUARTER_LEDGER = 'PACER_QUARTER_LEDGER'
@@ -796,6 +800,15 @@ def _interps(toks, order):
     is only ever a middle initial. [] when the name cannot be read."""
     n = len(toks)
     out = []
+    if order == 'either':
+        # a name whose order is not known (oname / paOwner fallback, see load_leads): every reading
+        # of both orders, so a clear needs the name to come back clean whichever way it was written
+        both = []
+        for o in ('first_last', 'last_first'):
+            for it in _interps(toks, o):
+                if it not in both:
+                    both.append(it)
+        return both
     if order == 'first_last':
         if n == 2:
             out = [(toks[0], [toks[1]], [])]
@@ -821,7 +834,7 @@ def _strip_person(part):
 
 def parse_owner(raw, order):
     """(subjects, problem). subjects: Person / Entity objects to search. problem: why this owner
-    cannot be searched at all ('' when it can). order: 'first_last' | 'last_first'."""
+    cannot be searched at all ('' when it can). order: 'first_last' | 'last_first' | 'either' (both readings; see _owner_field)."""
     s = _ascii_upper(raw).strip()
     s = re.sub(r'&\s*[WH]\b\.?', '& ', s)             # MD appraiser "&W" / "&H" = wife / husband
     # "UNKNOWN SPOUSE OF X" / "UNKNOWN TENANT" are pleading placeholders, not owners: drop the chunk
@@ -851,7 +864,7 @@ def parse_owner(raw, order):
         for i, part in enumerate(re.split(r'\s*&\s*|\s+AND\s+', chunk)):
             if not part.strip():
                 continue
-            if ',' in part and order in ('last_first', 'first_last'):
+            if ',' in part and order in ('last_first', 'first_last', 'either'):
                 last, _, rest = part.partition(',')
                 lt, rt = _strip_person(last), _strip_person(rest)
                 if not lt or not rt or len(rt[0]) < 2 or len(lt[0]) < 2:
@@ -861,6 +874,10 @@ def parse_owner(raw, order):
                 toks = _strip_person(part)
                 if not toks:
                     continue
+                if order == 'either' and len(toks) == 2 and len(toks[1]) == 1:
+                    # 'ROE M': first ROE + initial one way, surname ROE + bare initial the other, which
+                    # cannot be searched. A clear would rest on one reading only, so hold the lead.
+                    return [], 'an owner name that cannot be searched in both orders'
                 if len(toks) == 1 or (len(toks) == 2 and len(toks[1]) == 1 and order == 'first_last'):
                     # a bare first name after '&' shares the surname before it
                     if i > 0 and prev_surnames and len(toks[0]) > 1:
@@ -1090,6 +1107,35 @@ def _day(v):
     return None
 
 
+FALLBACK_OWNER_FIELDS = ('oname', 'paOwner')
+
+
+def _owner_field(d, primary, order):
+    """(owner string, order) for one lead row. The row's own owner field(s) keep the order its source
+    writes them in. When they are empty, fall back to oname, then paOwner, like call_mode / bk_lookup
+    / routes do -- but read that fallback as 'either' order. oname is county_leads._clean_owner()
+    output: 'ROE, MARY' becomes 'MARY ROE' while a comma-less FDOR 'ROE MARY' stays as it is, so the
+    same field holds both orders; paOwner is whatever the appraiser wrote (Miami-Dade first-last,
+    FDOR last-first). Read one fixed way, 'Mary Roe' was searched as first ROE last MARY, found
+    nothing, and recorded a clear that released the lead (ce154cc, 2026-10-08). 'either' searches
+    both readings, so a clear needs both to come back clean; a comma still means 'LAST, FIRST'.
+    owner_repair.py --write copies one of those fallback fields INTO owners and marks the row with
+    owners_repaired_from; such an owners value is still a fallback name and is read 'either' too."""
+    if str(d.get('owners_repaired_from') or '').strip():
+        v = str(d.get('owners') or '').strip()
+        if v:
+            return v, 'either'
+    for k in primary:
+        v = str(d.get(k) or '').strip()
+        if v:
+            return v, order
+    for k in FALLBACK_OWNER_FIELDS:
+        v = str(d.get(k) or '').strip()
+        if v:
+            return v, 'either'
+    return '', order
+
+
 def load_leads(here=HERE):
     """{key: lead} from the files the board is built from, plus skip counts.
     lead = {'key','case','county','owners': [(str, order)], 'auction': date|None, 'filed': date|None,
@@ -1121,8 +1167,8 @@ def load_leads(here=HERE):
     for r in rows if isinstance(rows, list) else []:
         if not isinstance(r, dict):
             continue
-        owners = r.get('owners') or r.get('owner_clean') or ''
-        add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', owners, 'first_last', _day(r.get('AuctionDate')),
+        owners, order = _owner_field(r, ('owners', 'owner_clean'), 'first_last')
+        add(r.get('Case #') or r.get('case'), 'MIAMI-DADE', owners, order, _day(r.get('AuctionDate')),
             None, 'auction')
     for f in sorted(glob.glob(os.path.join(here, '*_leads.json'))):
         bn = os.path.basename(f)
@@ -1132,14 +1178,16 @@ def load_leads(here=HERE):
         for d in rows if isinstance(rows, list) else []:
             if not isinstance(d, dict) or d.get('st') == 'BAL':
                 continue
-            add(d.get('case'), str(d.get('county') or '').upper(), d.get('owners'), 'last_first',
+            owners, order = _owner_field(d, ('owners',), 'last_first')
+            add(d.get('case'), str(d.get('county') or '').upper(), owners, order,
                 _day(d.get('auction')), None, 'auction')
     lp = _load_json(os.path.join(here, 'lp_leads.json'))
     if isinstance(lp, list):
         for d in lp:
             if not isinstance(d, dict) or d.get('lpDismissed') or d.get('lpClosed'):
                 continue
-            add(d.get('case'), str(d.get('county') or 'MIAMI-DADE').upper(), d.get('owners'), 'last_first',
+            owners, order = _owner_field(d, ('owners',), 'last_first')
+            add(d.get('case'), str(d.get('county') or 'MIAMI-DADE').upper(), owners, order,
                 None, _day(d.get('filedDate') or d.get('filed')), 'lp')
     else:
         feed = _load_json(os.path.join(here, 'lis_pendens.json'))
@@ -1300,6 +1348,7 @@ def _entry(fields, ld, env_name, region, date_from, now_ts):
         't': round(now_ts, 1), 'county': ld.get('county') or '', 'searches': fields.get('searches', 0),
         'pages': fields.get('pages', 0), 'cost': fields.get('cost', 0.0), 'why': fields.get('why', ''),
         'cases': fields.get('cases') or [], 'lookback_from': date_from, 'region': region, 'v': 1,
+        'names': NAME_READING,
     }
 
 
@@ -1655,23 +1704,29 @@ def write_result(cpath, key, fields, status, ld, env_name, region, date_from, no
     return ''
 
 
-def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, manual=False, max_usd=None):
+def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, manual=False, max_usd=None,
+                  owner=None):
     """ONE on-demand per-lead PACER search for a lead the send gate cannot clear yet. Never raises.
 
     -> {'status', 'verdict', 'why', 'cost', 'pages'}. status:
        searched | cached | index_hit | unsearchable   (the cache / hits file now says why)
        no_lead | not_needed | off | refused | error   (nothing new: the gate's refusal stands)
     manual=True is `pacer_stay.py --case`: searches even with a fresh verdict, is not held to the
-    daily pre-send allowance (only the quarter + month caps and max_usd / PACER_RUN_MAX)."""
-    out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0}
+    daily pre-send allowance (only the quarter + month caps and max_usd / PACER_RUN_MAX).
+    owner (manual only; `--owner`) is a person-typed owner string, 'LAST, FIRST' (';' between owners) or, with no comma, 'First Last'.
+    It is for a case that is no longer in the lead files (a reply that outlived its lead). It makes the
+    search LOOKUP ONLY: the verdict is returned and printed, never written to the PACER cache, so it cannot
+    release anything at the send gate. A typed name cannot prove every owner on the case was searched."""
+    out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0, 'recorded': True}
     try:
-        return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out)
+        return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out,
+                        owner if manual else None)
     except Exception as e:                            # a check that throws is a refusal, never a pass
         out.update(status='error', why='pre-send PACER check failed (%s)' % type(e).__name__)
         return out
 
 
-def _presend(case, here, env, session, now, paid, manual, max_usd, out):
+def _presend(case, here, env, session, now, paid, manual, max_usd, out, owner=None):
     import stay_gate
     now_ts = time.time() if now is None else now
     key = stay_gate.pacer_key(case)
@@ -1697,12 +1752,13 @@ def _presend(case, here, env, session, now, paid, manual, max_usd, out):
                 out.update(status='refused', why='another process holds the pre-send PACER lock')
                 return out
             return _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual,
-                                   max_usd, cpath, out)
+                                   max_usd, cpath, out, owner)
     finally:
         _PRESEND_LOCK.release()
 
 
-def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual, max_usd, cpath, out):
+def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid, manual, max_usd, cpath, out,
+                    owner=None):
     import stay_gate
     today = dt.date.fromtimestamp(now_ts)
     cache, prob = load_cache_strict(cpath)
@@ -1715,8 +1771,25 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
                    why='the PACER verdict from %s is still inside the max age' % str(ent.get('q') or '?')[:10])
         return out
     ld = _leads_cached(here).get(key)
+    lookup_only = False
+    if owner is not None:
+        if not str(owner).strip():
+            out.update(status='refused', why='--owner is empty')
+            return out
+        chunks = [c for c in str(owner).split(';') if c.strip()]
+        if len({',' in c for c in chunks}) > 1:
+            out.update(status='refused', why='--owner mixes "LAST, FIRST" and "First Last" owners; use one style '
+                                             'for every owner so none is searched backwards')
+            return out
+        lookup_only = True                    # a typed name never reaches the cache the gate reads
+        out['recorded'] = False
+        base = ld or {}
+        ld = {'key': key, 'case': base.get('case') or key, 'county': base.get('county') or '',
+              'owners': [(str(owner), 'last_first' if ',' in str(owner) else 'first_last')], 'auction': base.get('auction'),
+              'filed': base.get('filed'), 'src': {'manual-owner'}}
     if ld is None:
-        out.update(status='no_lead', why='case %s is not in the lead files, so there is no owner name to search' % key)
+        out.update(status='no_lead', why='case %s is not in the lead files, so there is no owner name to search '
+                                         '(pass --owner "LAST, FIRST" for a lookup-only search)' % key)
         return out
     idx_path, hits_path = nf_paths(here, env_name)
     idx = load_index(idx_path, env_name)[0] if os.path.exists(idx_path) else None
@@ -1724,7 +1797,7 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         h = match_index({key: ld}, idx, today, now_ts, env_name)
         if h:
             hits = _load_json(hits_path) if os.path.exists(hits_path) else {}
-            if isinstance(hits, dict):
+            if isinstance(hits, dict) and not lookup_only:
                 hits.update(h)
                 save_cache(hits_path, hits)
             out.update(status='index_hit', verdict='active',
@@ -1735,8 +1808,8 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
     subjects, problem, nsearch = lead_subjects(ld['owners'])
     kind = 'manual' if manual else 'presend'
     if problem:
-        werr = write_result(cpath, key, {'verdict': 'unverifiable', 'why': problem}, 'done', ld, env_name, region,
-                            date_from, now_ts, kind)
+        werr = '' if lookup_only else write_result(cpath, key, {'verdict': 'unverifiable', 'why': problem}, 'done',
+                                                   ld, env_name, region, date_from, now_ts, kind)
         out.update(status='unsearchable' if not werr else 'error', verdict='unverifiable', why=werr or problem)
         return out
     billable = env_name == 'prod'
@@ -1790,7 +1863,8 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         fields = {'verdict': 'unverifiable', 'why': 'PCL error: ' + why, 'pages': budget.pages,
                   'cost': round(budget.spent, 4), 'searches': 0}
         status = 'error'
-    werr = write_result(cpath, key, fields, status, ld, env_name, region, date_from, now_ts, kind)
+    werr = '' if lookup_only else write_result(cpath, key, fields, status, ld, env_name, region, date_from, now_ts,
+                                               kind)
     if werr:
         out.update(status='error', verdict='unverifiable', why=werr)
         return out
@@ -1843,6 +1917,10 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
                     help="per-run dollar cap for --bulk all; 'auto' = quarter remaining / nights left (<= PACER_RUN_MAX)")
     ap.add_argument('--limit', type=int, default=0, help='max leads searched this run (0 = budget decides)')
     ap.add_argument('--case', default='', help='search only this lead now (quarter + month caps apply)')
+    ap.add_argument('--owner', default='',
+                    help="with --case: owner name(s) typed from the docket, 'LAST, FIRST' (';' between owners), for a "
+                         "case no longer in the lead files. LOOKUP ONLY: prints the verdict, records nothing, "
+                         "releases nothing at the send gate")
     ap.add_argument('--plan', action='store_true', help='no network: print what would be searched and its cost')
     ap.add_argument('--status', action='store_true', help='print quarter / month spend and the pre-send allowance')
     ap.add_argument('--max-pages', type=int, default=1,
@@ -1850,6 +1928,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     ap.add_argument('--lookback-years', type=int, default=LOOKBACK_YEARS)
     ap.add_argument('--region', choices=('national', 'fl'), default='national')
     a = ap.parse_args(argv)
+    if a.owner and not a.case:
+        log('PACER: --owner only works with --case -- nothing searched')
+        return 3
     now_ts = time.time() if now is None else now
     today = dt.date.fromtimestamp(now_ts)
 
@@ -1931,10 +2012,12 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             except ValueError:
                 log('PACER: --max-spend %r is not a number -- nothing searched' % a.max_spend)
                 return 3
-        r = presend_check(a.case, here=here, env=env, session=session, now=now_ts, paid=paid, manual=True, max_usd=mx)
-        log('PACER --case %s: %s%s -- %s (%d page(s), $%.2f)' % (
+        r = presend_check(a.case, here=here, env=env, session=session, now=now_ts, paid=paid, manual=True, max_usd=mx,
+                          owner=a.owner if a.owner else None)
+        log('PACER --case %s: %s%s -- %s (%d page(s), $%.2f)%s' % (
             stay_gate.pacer_key(a.case) or a.case[:40], r['status'], (' -> ' + r['verdict']) if r['verdict'] else '',
-            r['why'][:200], r['pages'], r['cost']))
+            r['why'][:200], r['pages'], r['cost'],
+            '' if r.get('recorded', True) else ' [LOOKUP ONLY: not recorded, the send gate is unchanged]'))
         return 0 if r['status'] in ('searched', 'cached', 'index_hit', 'unsearchable') else 3
 
     billable = env_name == 'prod'

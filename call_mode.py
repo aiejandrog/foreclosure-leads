@@ -433,10 +433,13 @@ _QREC_LINE = ('RECORDING IS ON. Before anything else: "Quick thing before we sta
               'RECORDING, not hang up.')
 
 
-def _quo_recording():
+def _call_recording():
+    """sender.json `record_calls` true -> the consent line renders. `quo_record` is the pre-2026-10-07
+    name of the same flag (Quo is gone); it is still honored so a laptop that set it keeps the line."""
     try:
         import entity
-        return bool(entity.sender().get('quo_record'))
+        snd = entity.sender()
+        return bool(snd.get('record_calls') or snd.get('quo_record'))
     except Exception:
         return False
 
@@ -958,6 +961,47 @@ def _digits(v):
     return re.sub(r'\D', '', str(v or ''))
 
 
+def _ph10(v):
+    """Digits of a US number in the 10-digit form leads carry. '+1 305 555 0100' and '13055550100'
+    both become '3055550100'; anything else is returned as its plain digits. Used on BOTH sides of
+    every opt-out and DNC comparison, so an 11-digit ledger key still matches a 10-digit lead."""
+    d = _digits(v)
+    return d[1:] if (len(d) == 11 and d[0] == '1') else d
+
+
+def dnc_numbers(slim):
+    """Every number DNC-flagged on ANY lead (10-digit form). `phdnc` is per record, so the same
+    number could be flagged on one lead and clean on another and still reach a tel:/sms: link
+    through the clean copy. A number flagged anywhere is treated as flagged everywhere."""
+    out = set()
+    for d in slim or ():
+        dnc = d.get('phdnc') or []
+        for i, p in enumerate(d.get('phones') or []):
+            if i < len(dnc) and dnc[i]:
+                k = _ph10(p)
+                if k:
+                    out.add(k)
+    return out
+
+
+def _opted_person_fn(slim, optouts):
+    """lead -> True when ANOTHER case of the same person (real 'P' pkey) is in the ledger by case.
+
+    A case-keyed opt-out used to suppress only that case: the same owner's second property stayed
+    on the dial queue and on the lookup screen. The board's worker already treats a stop as
+    person-wide (_boardNoState over _personCases); this applies the same grouping at build time.
+    Singleton pkeys ('C'+case) group nothing, so they are skipped."""
+    optouts = optouts or {}
+    hit = set()
+    for d in slim or ():
+        k, c = d.get('pkey'), (d.get('case') or '').strip()
+        if c and c in optouts and k and _PKEY_HASH_RE.match(str(k)):
+            hit.add(k)
+    if not hit:
+        return lambda lead: False
+    return lambda lead: bool(lead.get('pkey')) and lead.get('pkey') in hit
+
+
 # Anchors for the sync/merge block lifted out of tracker_template.html. START is the first of the
 # three merge helpers; END is the last line of the team-sync section. Everything between —
 # _DNC/_DEAD/_lastTouchD, _mergeLead, mergeNotes, the Supabase push/pull — is contiguous.
@@ -1404,26 +1448,6 @@ def _greet_name(d):
     return on[:40]
 
 
-def _quo_latest():
-    """case -> the most recent analyzed Quo call, from quo_sync.py's local ledger.
-
-    Local and gitignored (homeowner conversations; the repo is PUBLIC) -- it ships only inside the
-    encrypted payload, exactly like every other lead field. Missing file = empty dict, zero cost:
-    CI has no ledger and must not care."""
-    try:
-        led = json.load(open(os.path.join(HERE, 'quo_calls.json'), encoding='utf-8'))
-    except Exception:
-        return {}
-    out = {}
-    for rec in (led.get('calls') or {}).values():
-        c = str(rec.get('case') or '').strip()
-        if not c:
-            continue
-        if c not in out or str(rec.get('at') or '') > str(out[c].get('at') or ''):
-            out[c] = rec
-    return out
-
-
 def federal_hold_fn():
     """case -> held? for one dial-queue build, reading the CourtListener cache once.
 
@@ -1454,12 +1478,15 @@ def lookup_hold_fn(slim, optouts=None, deads=None):
     those are "not due today", and calling back someone who texted in is fine for them."""
     optouts, deads = (optouts or {}), (deads or {})
     _id_opted = _identity_opted_fn(slim, optouts)
+    _person_opted = _opted_person_fn(slim, optouts)
     _fed = federal_hold_fn()
 
     def _hold(d):
         case = (d.get('case') or '').strip()
         if case in optouts or _id_opted(d):
             return 'opted out'
+        if _person_opted(d):
+            return 'opted out on another case'
         if case in deads:
             return 'dead lead'
         if d.get('saleBkAct'):
@@ -1538,44 +1565,19 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # `case in optouts` can never match those keys, so a person who said stop by email stayed
     # dialable HERE — on the one surface whose entire purpose is dialing them. The board has had
     # this via _isOptedOutPerson() for months; Call Mode never got it, and neither did the Morning
-    # Worker until today. Same fix, third surface.
-    _oo_ident = {str(k) for k in optouts if str(k)[:1] in ('@', '#')}
-    _ak = None
-    if _oo_ident:
-        # function-level import on purpose: foreclosure_leads imports THIS module, so a top-level
-        # one would be circular. Hash must be the same one the ledger was keyed with, never a copy.
-        try:
-            from foreclosure_leads import _addr_key as _ak
-        except Exception:
-            _ak = None
-
-    def _identity_opted(lead):
-        if not _oo_ident or not _ak:
-            return False
-        for _e in (lead.get('emails') or []):
-            _e = str(_e or '').strip().lower()
-            # raw key OR hashed key — optouts.json stores the address verbatim; only the
-            # board bake hashes it. Hashed-only matched nothing against the real ledger.
-            if _e and (('@' + _e) in _oo_ident or ('@' + _ak(_e)) in _oo_ident):
-                return True
-        for _p in (lead.get('phones') or []):
-            # Digits only, NO country-code normalisation — deliberately matching what the ledger key
-            # was hashed from and what the board's _isOptedOutPerson does. So a '+1' 11-digit number
-            # would NOT match a 10-digit opt-out. Checked 2026-08-26: all 9,885 phones in the
-            # skiptrace cache are 10 digits, so this is theoretical today. If 11-digit numbers ever
-            # arrive, strip a leading '1' HERE, in the board, and in the bake — all three or none,
-            # or the hashes stop agreeing and the suppression silently stops matching.
-            _p = re.sub(r'\D', '', str(_p or ''))
-            if _p and (('#' + _p) in _oo_ident or ('#' + _ak(_p)) in _oo_ident):
-                return True
-        return False
+    # Worker until today. Same fix, third surface. One reader (_identity_opted_fn), shared with
+    # coverage_rows and the lookup, so the three cannot disagree about who opted out.
+    _identity_opted = _identity_opted_fn(slim, optouts)
+    # SAME PERSON, OTHER CASE (2026-10-08): a case-keyed opt-out closes every case on that pkey.
+    _person_opted = _opted_person_fn(slim, optouts)
+    # A number DNC-flagged on ANY lead is DNC here too (phdnc is per record).
+    _dnc_any = dnc_numbers(slim)
 
     out = []
     _ident_dropped = 0
     _notowner_dropped = 0        # numbers kept off the dial queue as not-the-owner (see below)
     import diligence_gate as _DG
     _dg = _DG.Tally()
-    _quo = _quo_latest()
     # CourtListener cache once for this build. A Miami lead with no docket clear stays callable
     # unless the cache flags it (federal_hold's own rule). Fails closed: see federal_hold_fn.
     _federal_held = federal_hold_fn()
@@ -1589,7 +1591,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # the diligence gate (asks about a foreclosure that does not exist), the auction-window
         # gate (no auction — the clock is the note's est. maturity) and the sale-passed gate.
         is_bal = (d.get('st') == 'BAL')
-        if _identity_opted(d):
+        if _identity_opted(d) or _person_opted(d):
             _ident_dropped += 1
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
@@ -1634,7 +1636,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         pairs = []
         n_dnc = 0
         for oi, p in enumerate(phones):
-            if phdnc[oi] if oi < len(phdnc) else False:
+            if (phdnc[oi] if oi < len(phdnc) else False) or _ph10(p) in _dnc_any:
                 n_dnc += 1
                 continue                                   # DNC numbers are dropped, never flagged
             if (phsrc[oi] if oi < len(phsrc) else '') in ('ag', 'xl'):
@@ -1774,10 +1776,6 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # amended judgment. None on almost every row; the null-strip drops it.
             'sr': (lambda v: ({k: v[k] for k in ('st', 'd', 'nd', 'was', 'why', 'amj', 'ama', 'bkb', 'obj', 'ev', 'stale', 'sale')
                                if v.get(k) not in (None, '')} if isinstance(v, dict) and v.get('st') else None))(d.get('sr')),
-            # ---- last Quo call (transcript-backed). None on most rows; the null-strip removes it.
-            'qc': (lambda q: ({'w': str(q.get('at') or '')[:16], 'du': q.get('dur') or 0,
-                               's': ' '.join(q.get('summary') or [])[:180],
-                               'fl': (q.get('flags') or [])[:4]} if q else None))(_quo.get(case)),
             # ---- who is foreclosing ----
             'pl': _s('plaintiff', 46), 'ft': _s('ftype', 10),
             # ---- live docket (gen_dockets.py -> slim row.dk). TRIMMED HARD for the handset: the
@@ -1951,7 +1949,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # Say it out loud. A suppression that removes people silently is indistinguishable from a
         # queue that was always this size, and this one drops leads that LOOK perfectly callable.
         print('call mode: %d lead(s) dropped — the person opted out by email/phone with no case '
-              'attached (identity ledger)' % _ident_dropped)
+              'attached (identity ledger), or on another case of theirs' % _ident_dropped)
     # Same rule, same reason — and the diligence holds are the ones that look MOST callable of all,
     # because a held lead's card still shows equity, a phone and an auction date.
     _dg.report('call mode', indent='')
@@ -2051,6 +2049,63 @@ def stamp_ledger(rows, mail_log=None, text_log=None):
     return n
 
 
+def ledger_audit(mail_path=None, text_path=None):
+    """Confirmed server sends the case-keyed stamps (`le`/`lt`) CANNOT express.
+
+    stamp_ledger() reads a case's newest timestamp. A confirmed send whose `ts_utc` does not parse
+    (the readers silently drop or zero it) or that names no case at all leaves the owner looking
+    untouched. This scan finds those rows: `cases`/`pkeys` are the owners we KNOW were sent to but
+    cannot date (stamp_unknown marks them `lu:1`, which the page counts as contacted), and
+    `unattributed` counts confirmed sends tied to no case and no person key (history_coverage turns
+    ledgers_ok off for those). Counts and keys only; reads the same files history_coverage does.
+    A file that cannot be read adds nothing here: history_coverage already fails on it."""
+    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0}
+    for name, path, is_text in (('mail_sent.json', mail_path, False), ('text_sent.json', text_path, True)):
+        pth = path or os.path.join(HERE, name)
+        try:
+            with open(pth, encoding='utf-8') as fh:
+                rows = json.load(fh) or []
+        except Exception:
+            continue
+        if not isinstance(rows, list):
+            continue
+        for e in rows:
+            if not isinstance(e, dict):
+                continue
+            if is_text:
+                if e.get('ch') != 'text' or not e.get('confirmed'):
+                    continue
+            elif e.get('ch') != 'email' or not e.get('message_id'):
+                continue
+            case = str(e.get('case') or '').strip()
+            pkey = str(e.get('pkey') or '').strip() if is_text else ''
+            try:
+                _dt.datetime.fromisoformat(e['ts_utc'])
+                dated = True
+            except Exception:
+                dated = False
+            if not case and not pkey:
+                out['unattributed'] += 1
+            elif not dated:
+                if case:
+                    out['cases'].add(case)
+                if pkey:
+                    out['pkeys'].add(pkey)
+    return out
+
+
+def stamp_unknown(rows, audit):
+    """Mark rows whose owner has a confirmed send we could not date: `lu:1`. Returns the count."""
+    cases, pkeys = (audit or {}).get('cases') or set(), (audit or {}).get('pkeys') or set()
+    n = 0
+    for r in rows:
+        cs = [r.get('c')] + list(r.get('pcs') or [])
+        if any(c in cases for c in cs if c) or (r.get('pk') and r.get('pk') in pkeys):
+            r['lu'] = 1
+            n += 1
+    return n
+
+
 def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     """-> (rows, n_suppressed) : one SLIM row for every lead the dial queue does not carry.
 
@@ -2079,12 +2134,13 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     # The identity-ledger check is call_rows' own, reused rather than re-derived: CLAUDE.md reserves
     # everything that PRODUCES a suppression verdict for the desktop session. This reads one.
     _id_opted = _identity_opted_fn(slim, optouts)
+    _person_opted = _opted_person_fn(slim, optouts)
     for d in slim:
         case = (d.get('case') or '').strip()
         if not case or case in dial or case in seen:
             continue
         seen.add(case)
-        oo = 1 if (case in optouts or case in deads or _id_opted(d)) else 0
+        oo = 1 if (case in optouts or case in deads or _id_opted(d) or _person_opted(d)) else 0
         if oo:
             suppressed += 1
         # `np` COUNTS DNC-FLAGGED NUMBERS, deliberately, and this is the one place these rows do
@@ -2157,57 +2213,118 @@ def _identity_opted_fn(slim, optouts):
     the SAME reader instead of growing a second one. Returns a predicate; a no-op when the ledger
     carries no identity keys."""
     _oo_ident = {str(k) for k in (optouts or {}) if str(k)[:1] in ('@', '#')}
+    # A raw '#1XXXXXXXXXX' key (a number saved with its country code) also matches the lead's
+    # 10-digit copy. Hashed keys are normalized where they are made (the bake), not here.
+    _oo_ident |= {'#' + _ph10(k[1:]) for k in _oo_ident if k[:1] == '#' and _ph10(k[1:])}
     if not _oo_ident:
         return lambda lead: False
     try:
         from foreclosure_leads import _addr_key as _ak    # circular at module scope; see call_rows
     except Exception:
-        return lambda lead: False
+        # Without the hash only the hashed keys go unread; RAW keys still match (this used to
+        # return a no-op here, which read no identity opt-out at all).
+        _ak = None
+
+    def _in(prefix, v):
+        return bool(v) and ((prefix + v) in _oo_ident or (_ak is not None and (prefix + _ak(v)) in _oo_ident))
 
     def _test(lead):
         for _e in (lead.get('emails') or []):
-            _e = str(_e or '').strip().lower()
-            if _e and (('@' + _e) in _oo_ident or ('@' + _ak(_e)) in _oo_ident):
+            if _in('@', str(_e or '').strip().lower()):
                 return True
         for _p in (lead.get('phones') or []):
-            _p = re.sub(r'\D', '', str(_p or ''))
-            if _p and (('#' + _p) in _oo_ident or ('#' + _ak(_p)) in _oo_ident):
-                return True
+            for _q in {re.sub(r'\D', '', str(_p or '')), _ph10(_p)}:
+                if _in('#', _q):
+                    return True
         return False
     return _test
 
 
-def _quo_hold_json():
-    """What Call Mode shows before it can ask the bridge.
+def history_coverage(total, shipped, audit=None):
+    """What the phone may claim about "no recorded contact" (call workflow spec section 3).
 
-    held/why is the verdict at build time. ok/ts/maxAgeH let the phone re-check that verdict
-    against the same 36h window when it cannot reach 127.0.0.1. A missing or failed scan bakes
-    held. A fresh ok scan bakes not-held, and goes stale on the phone once maxAgeH passes."""
-    max_h, rec = 36, {}
-    try:
-        import quo_sync as _qs
-        max_h = int(_qs.INBOUND_MAX_AGE_H)
-        held, why = _qs.text_hold()
+    ledgers_ok is true only when BOTH server send ledgers were read at build time: mail_sent.json
+    and text_sent.json, present and parseable. A missing or torn ledger means a row with no stamp
+    proves nothing, so the page files every uncontacted row under History unknown instead of
+    Untouched. capped is true when the qualifying pool is larger than what shipped, so the page
+    says its counts are partial and never claims the whole backlog is exhausted. Counts only."""
+    ok, why = True, ''
+    for name in ('mail_sent.json', 'text_sent.json'):
+        pth = os.path.join(HERE, name)
         try:
-            rec = json.load(open(_qs.INBOUND_STATUS, encoding='utf-8'))
-        except Exception:
-            rec = {}
-        if not isinstance(rec, dict):
-            rec = {}
+            with open(pth, encoding='utf-8') as fh:
+                data = json.load(fh)
+            if not isinstance(data, (list, dict)):
+                raise ValueError('not a list')
+        except FileNotFoundError:
+            ok, why = False, why or ('%s not found on the build machine' % name)
+        except Exception as e:
+            ok, why = False, why or ('%s unreadable (%s)' % (name, str(e)[:40]))
+    un = int((audit or {}).get('unattributed') or 0)
+    if un:
+        ok, why = False, why or ('%d confirmed send(s) in the ledgers name no case or person' % un)
+    return json.dumps({'ledgers_ok': ok, 'why': why, 'capped': int(total) > int(shipped),
+                       'total': int(total), 'shipped': int(shipped)})
+
+
+def _text_hold_json():
+    """What Call Mode shows before it can ask the bridge (text_hold.status() at build time).
+
+    held/why is the verdict at build. ok/ts/maxAgeH let the phone re-check it: ts is the
+    do-not-contact list's modified time, so a fresh bake goes stale on the phone once maxAgeH
+    passes, the same age the bridge would refuse at. A missing or unreadable list bakes held.
+
+    Today's 07:15 opt-out sync is baked too, the same gate the bridge holds /text on: a fresh local
+    list can still miss stops recorded on the other machine. syncDay is the day that sync ran, and
+    the phone treats a bake from any other day as held, so yesterday's page cannot text today
+    before today's sync has been seen."""
+    try:
+        import text_hold as _TH
+        st = _TH.status()
     except Exception as e:
-        held, why = True, ('HOLD texting — inbound STOP scan could not be read (%s)' % str(e)[:80])
-        rec = {}
+        st = {'held': True, 'why': 'HOLD texting — the do-not-contact check could not be read (%s)'
+              % str(e)[:80], 'ok': False, 'ts': '', 'maxAgeH': 48}
+    sync_day = ''
+    if not st.get('held'):
+        try:
+            import sync_gate as _SGT
+            sv = _SGT.verdict(path=os.path.join(HERE, 'sync_status.json'))
+        except Exception as e:
+            sv = {'ok': False, 'reason': 'the opt-out sync gate could not be evaluated (%s)' % str(e)[:80]}
+        if sv.get('ok'):
+            sync_day = str((sv.get('status') or {}).get('date') or '')
+        if not sync_day:
+            st = dict(st, held=True, ok=False,
+                      why="HOLD texting: today's 07:15 opt-out sync is not confirmed (%s). Run "
+                          "run-optout-sync.bat (or python morning_sync.py), then rebuild Call Mode." % str(sv.get('reason') or 'no verdict')[:160])
+    try:
+        max_h = float(st.get('maxAgeH'))
+    except (TypeError, ValueError):
+        max_h = 0.0
     return json.dumps({
-        'held': bool(held),
-        'why': (why or '') if held else '',
-        'ok': (not held) and bool(rec.get('ok')),
-        'ts': str(rec.get('ts') or ''),
+        'held': bool(st.get('held')),
+        'why': (st.get('why') or '') if st.get('held') else '',
+        'ok': (not st.get('held')) and bool(st.get('ok')),
+        'ts': str(st.get('ts') or ''),
         'maxAgeH': max_h,
+        'syncDay': sync_day,
     })
 
 
+_MODDIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _read_module(name):
+    # beside this file, not HERE: tests re-point HERE at a scratch dir
+    with open(os.path.join(_MODDIR, name), encoding='utf-8') as fh:
+        src = fh.read()
+    if '</script' in src.lower():
+        raise CallModeError('call_mode: %s contains a closing script tag and cannot be inlined' % name)
+    return src
+
+
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js='', text_js=''):
+               seat=None, funnel_js='', text_js='', histcov='null'):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -2221,7 +2338,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
-                       ('__QUOHOLD__', 1),
+                       ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
@@ -2255,12 +2372,11 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         # BALLOON / REFI LANE — the investor script (vault: Refi Lane note, 2026-08-30). Read by
         # renderSheet for st:'BAL' rows only; same keys as the homeowner script so the page has ONE
         # renderer. `rec` copied from the main script: all-party consent applies to an investor too.
-        'bal': dict(BALLOON_SCRIPT, rec=(_QREC_LINE if _quo_recording() else None)),
-        # Rendered in red under the opener ONLY when sender.json carries "quo_record": true.
-        # Florida is ALL-PARTY consent (FS 934.03, a felony statute) -- if Quo auto-records, the
+        'bal': dict(BALLOON_SCRIPT, rec=(_QREC_LINE if _call_recording() else None)),
+        # Rendered in red under the opener ONLY when sender.json carries "record_calls": true.
+        # Florida is ALL-PARTY consent (FS 934.03, a felony statute) -- if calls are recorded, the
         # consent ask is not optional and it has to be ON the screen he reads from, not in a doc.
-        # quo_sync's coach pass then verifies the word "record" actually occurs in the transcript.
-        'rec': (_QREC_LINE if _quo_recording() else None),
+        'rec': (_QREC_LINE if _call_recording() else None),
     }
     return _PAGE.replace('__SYNCJS__', sync_js) \
                 .replace('__FUNNELJS__', funnel_js) \
@@ -2279,7 +2395,10 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__SEAT__', json.dumps({'n': seat[0], 'i': seat[1], 'w': str(seat[2] or '')[:18]}
                                                 if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
-                .replace('__QUOHOLD__', _quo_hold_json())
+                .replace('__TEXTHOLD__', _text_hold_json()) \
+                .replace('__HISTCOV__', histcov) \
+                .replace('__CWJS__', _read_module('call_workflow.js')) \
+                .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js'))
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -2328,7 +2447,8 @@ def phone_index(slim, hold=None):
     reply. She turned out to be a lead we had emailed three times.
 
     Shape is deliberately two tables, not a fat map: several numbers share one lead, so
-      t: [[owner, street, case, days, equity, folio, countyCode, holdReason], ...]   (each lead once)
+      t: [[owner, street, case, days, equity, folio, countyCode, holdReason, otherCases], ...]
+         (each lead once; otherCases = the same person's other cases, or None)
       d: {"3058011800": <index into t>, ...}
       h: {"3058011800": <reason>, ...}   (only numbers held while their `t` row is not; see below)
     Naive one-record-per-number was 253KB; this is materially smaller and the page has to open on a
@@ -2352,6 +2472,17 @@ def phone_index(slim, hold=None):
         except Exception:
             return 0.0
     seen, table, digits, num_hold, case_hold = {}, [], {}, {}, {}
+    # A number DNC-flagged on ANY lead never enters `d` (2026-10-08): phdnc is per record, so the
+    # clean copy of a number another lead flags used to be indexed and linked.
+    _dnc_any = dnc_numbers(slim)
+    # The same person's OTHER cases ride with the row, so the lookup's hardSuppressed() walks them
+    # the way it does for a queue row (r.pcs): a hard no or opt-out logged on the phone against a
+    # sibling case after the build closes this one too. Real 'P' person keys only.
+    _groups = {}
+    for d in slim:
+        k, c = d.get('pkey'), (d.get('case') or '').strip()
+        if c and k and _PKEY_HASH_RE.match(str(k)) and c not in _groups.setdefault(k, []):
+            _groups[k].append(c)
     for d in slim:
         case = (d.get('case') or '').strip()
         # 🔴 DNC NUMBERS MUST NOT BE SERIALIZED. This module's own docstring states the invariant:
@@ -2372,7 +2503,7 @@ def phone_index(slim, hold=None):
             if len(_pd) != 10:
                 continue
             _all.append(_pd)
-            if not (_i < len(_dnc_raw) and _dnc_raw[_i]):
+            if not (_i < len(_dnc_raw) and _dnc_raw[_i]) and _pd not in _dnc_any:
                 phones.append(_pd)
         if not case:
             continue
@@ -2404,6 +2535,7 @@ def phone_index(slim, hold=None):
                 re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
                 (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2]),
                 None,                                    # hold reason: set after the loop
+                ([x for x in _groups.get(d.get('pkey'), []) if x != case] or None),
             ])
         for p in phones:
             digits.setdefault(p, seen[case])       # first lead wins; a number is one person
@@ -2604,6 +2736,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         rows, total = call_rows(slim, optouts, deads)
     else:
         rows, total = rows
+    _shipped_all = len(rows)         # crew-wide shipped count, BEFORE the seat split
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
@@ -2677,7 +2810,8 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, funnel_js)
     _assert_no_dead_overrides(_PAGE, text_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
-                      seat=seat, funnel_js=funnel_js, text_js=text_js)
+                      seat=seat, funnel_js=funnel_js, text_js=text_js,
+                      histcov=history_coverage(total, _shipped_all, ledger_audit()))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -2829,6 +2963,9 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 .errchip{color:#ff8a80;font-weight:700;cursor:pointer;text-decoration:underline}
 .errold{color:var(--mut,#9aa);cursor:pointer;text-decoration:underline}
 .sub{font-size:12px;color:var(--mut);margin-top:6px;text-align:center}
+.wfbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0;font-size:12px;color:var(--mut)}
+.wfb{min-height:36px;padding:4px 12px;border-radius:8px;border:1px solid #2a3f6b;background:#0f1d3a;color:var(--fg,#fff);font-weight:800;touch-action:manipulation}
+.wfb.go{border-color:var(--gold);color:var(--gold)}
 .vm{background:#0f1d3a;border:1px solid #2a3f6b;border-radius:10px;padding:12px;margin-top:10px;font-size:17px;line-height:1.5}
 .vmlang{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:12px 0 3px}
 /* z-60 — above the sheet (40), the #sync chip (45) and the pill (50). With no z-index the sheet
@@ -2941,11 +3078,13 @@ var BOOKURL="__BOOKURL__";
    that never shipped to this phone — without it a fresh phone reads every owner as never-texted and
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
 var TEXTPERSON=__TEXTPERSON__;
-/* Baked at build from quo_sync.text_hold(). A live /health poll below can freshen it. A failed
-   poll keeps the bake: the phone often cannot see the laptop, and bridge-down is not a scan failure. */
-var QUOHOLD=__QUOHOLD__;
-var QUOBAKE=QUOHOLD;
-var QUOLIVE=false;
+/* Baked at build from text_hold.status() (the do-not-contact list's age). A live /health poll below
+   can freshen it. A failed poll keeps the bake: the phone often cannot see the laptop. */
+var TEXTHOLD=__TEXTHOLD__;
+var TEXTHOLDBAKE=TEXTHOLD;
+var TEXTHOLDLIVE=false;
+/* Baked history coverage (call_mode.history_coverage): ledgers_ok, capped, counts only. */
+var HISTCOV=__HISTCOV__;
 /* BAKED SEAT (2026-09-09). null on a whole-list build; {n,i,w} on a seat page whose payload
    already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
@@ -3080,7 +3219,8 @@ function fillScript(t, r){
     .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
 
-function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}');}catch(e){notes={};}
+var _NOTESBAD=false;   // true when this phone's saved notes could not be parsed (history is then unknown)
+function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}'); _NOTESBAD=false;}catch(e){notes={}; _NOTESBAD=true;}
   /* A teammate's merge lands here, not through save() — see _FCGEN. Without this bump the lane
      counts would keep reporting the state from before the pull. */
   if(typeof _FCGEN === 'number') _FCGEN++;}
@@ -3363,7 +3503,12 @@ function optPhones(force){
   for(var k in notes){
     if(k.charAt(0) !== '#') continue;
     var nn = notes[k] || {};
-    if(nn.optout || nn.status === 'DO NOT CONTACT') s[k.slice(1).replace(/\D/g,'')] = 1;
+    if(nn.optout || nn.status === 'DO NOT CONTACT'){
+      var dg = k.slice(1).replace(/\D/g,'');
+      s[dg] = 1;
+      /* a number saved with its country code also matches the lead's 10-digit copy */
+      if(dg.length === 11 && dg.charAt(0) === '1') s[dg.slice(1)] = 1;
+    }
   }
   _OPTPH = s;
   return s;
@@ -3801,7 +3946,14 @@ var LANES = [
   {k:'late',   lbl:'46-60',             pred:function(r){ return _dayLane(r,46,60); }, hide0:true},
   {k:'lp',     lbl:'Fresh filings',     pred:function(r){ return !!r.lp && !isBalloon(r); }, hide0:false},
   {k:'bal',    lbl:'Balloon',           pred:isBalloon,  hide0:true},
-  {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true}
+  {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true},
+  /* ALL LANES (call workflow spec section 3): the union of the lanes above, once per case. Appended
+     LAST so the "open this lead from a board list" search finds a specific lane first. It carries
+     no `ch`, so supReason() applies the ordinary neutral channel context: matching the email lane
+     does NOT earn the email-lane exemption here. */
+  {k:'all',    lbl:'All lanes',         pred:function(r){
+      for(var q=0;q<LANES.length;q++){ if(LANES[q].k !== 'all' && LANES[q].pred(r)) return true; }
+      return false; }, hide0:false}
 ];
 function laneDef(k){ for(var q=0;q<LANES.length;q++) if(LANES[q].k===k) return LANES[q]; return laneDef('soon'); }
 /* ══════════════════ TEAM SEATS — two phones, one list, nobody dialled twice ══════════════════
@@ -4007,12 +4159,106 @@ function teamRecheck(){
        re-takeover on the next repaint of the same screen. Cleared on advance. */
     cur._rcStay=1; screenLead(); };
 }
+/* ═════════ QUEUE VIEW (call workflow spec section 3, 2026-10-08) ═════════
+   WHAT THIS ADDS: the dial list opens on UNTOUCHED leads across every lane, and the other kinds of
+   work are explicit choices. It NEVER falls through: when Untouched empties, the page says so and
+   shows what is waiting elsewhere; a retry opens only on a tap.
+   WHAT IT DOES NOT TOUCH: it runs AFTER supReason(), the seat filter and the claim filter, so a view
+   only ever narrows a list those gates already produced. Nothing here clears a hold.
+   FRESHNESS IS THREE-STATE. "Untouched" means no recorded contact in CHECKED history -- and history
+   counts as checked only when the server send ledgers were read at build, this phone's notes parsed,
+   and (when team sync is on) at least one pull completed. Otherwise an uncontacted row is HISTORY
+   UNKNOWN, never untouched. Missing history is not zero. */
+var QVIEW = 'untouched';
+var _QV = ['untouched', 'callbacks', 'replies', 'retries', 'history_unknown'];
+var _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
+var _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
+/* A lead opened on purpose from a board list or the lookup may sit in another view. That is a
+   ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
+   retry never turns the session into a retry session. */
+var _QVBACK = null;
+/* Restores view, lane AND the card he was on, by identity in a fresh pool, so the first move off a
+   one-off never lands past the end of a different list (a false "Queue clear"). */
+function _qvRestore(){
+  var b = _QVBACK; if(!b) return false; _QVBACK = null;
+  QVIEW = b.v; lane = b.l;
+  var P = pool(), k;
+  for(k = 0; k < P.length; k++) if(P[k].c === b.c){ i = k; return true; }
+  i = 0;
+  return true;
+}
+function _histWhy(){
+  if(typeof HISTCOV !== 'object' || !HISTCOV || HISTCOV.ledgers_ok !== true)
+    return (HISTCOV && HISTCOV.why) || 'the server send history was not read when this page was built';
+  if(_NOTESBAD) return 'the notes saved on this phone could not be read';
+  try{
+    var key = localStorage.getItem('fcTeamKey');
+    if(key){
+      /* Team sync is on: "a pull happened" is not enough. The last pull must have been clean (no
+         teammate blob skipped), for THIS key, recent, and must have seen as many other devices as
+         there are seats minus this one. */
+      var ps = null;
+      try{ ps = JSON.parse(localStorage.getItem('fcPullStat') || 'null'); }catch(e){ ps = null; }
+      if(!ps || typeof ps !== 'object' || !localStorage.getItem('fcLastPull'))
+        return 'team sync is on but has not completed a pull on this phone yet';
+      if(ps.ok !== true) return 'the last team-sync pull did not complete';
+      if(ps.failed > 0) return ps.failed + ' teammate device(s) could not be read in the last pull';
+      if(ps.kf !== _keyFp(key)) return 'the last pull was for a different team key';
+      var ts = Date.parse(String(ps.ts || '').replace(' ', 'T'));
+      if(!(ts > 0) || Date.now() - ts > 6*3600*1000) return 'the last team-sync pull is more than 6 hours old';
+      var sn = 0; try{ var sd = _seat(); sn = (sd && sd.n) || 0; }catch(e){ sn = 0; }
+      if(sn > 1 && (ps.devices|0) < sn - 1)
+        return 'only ' + (ps.devices|0) + ' of ' + (sn - 1) + ' other crew device(s) have synced';
+    }
+  }catch(e){ return 'phone storage is blocked'; }
+  return '';
+}
+/* Which view a row that already passed every gate belongs to. Replies first: an inbound reply is
+   unresolved work, not a fresh lead. Then any call, dial or outbound touch on this case or a
+   sibling case of the same person (r.pcs) or a baked server-ledger stamp -> Retries. */
+function _viewOf(r){
+  if(_CBDUE[r.c]) return 'callbacks';
+  if(_replyOpen(r)) return 'replies';
+  if(_contactTier(r) > 0) return 'retries';
+  var sib = r.pcs || [];
+  for(var k = 0; k < sib.length; k++){ if(sib[k] !== r.c && lastCall(notes[sib[k]])) return 'retries'; }
+  return _histWhy() ? 'history_unknown' : 'untouched';
+}
+function viewBar(){
+  var b = _QV.map(function(k){
+    return '<button data-v="'+k+'" class="'+(QVIEW===k?'on':'')+'">'+_QVL[k]+' &middot; '+_VIEWN[k]+'</button>'; }).join('');
+  var o = '<div class="lane">'+b+'</div>'
+    + '<div class="supn">Counts: this seat, '+(lane==='all'?'all lanes':esc(laneDef(lane).lbl))+'. Retries are a deliberate choice, never the next card.'
+    + ((typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
+        ? ' <b>Partial:</b> '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded on the crew pages.' : '')
+    + '</div>';
+  var hw = _histWhy();
+  if(hw) o += '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
+    + '. Nothing shows as untouched until that clears.</div>';
+  o += wfBar();
+  if(QVIEW === 'callbacks') o += cbNote();
+  return o;
+}
+function viewEmptyHtml(){
+  var n = _VIEWN, hw = _histWhy(), part = (typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
+    ? '<div class="sub">Partial inventory: only '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded, so this does not mean the crew is out of fresh leads.</div>' : '';
+  if(QVIEW === 'untouched')
+    return '<b>No untouched leads in the checked inventory for this seat.</b>'
+      + '<div class="sub">Waiting elsewhere: '+n.callbacks+' callback'+(n.callbacks===1?'':'s')+', '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' retr'+(n.retries===1?'y':'ies')
+      + ', '+n.history_unknown+' with history unknown. Open one from the buttons above when you choose to.</div>'
+      + (hw ? '<div class="sub">History is incomplete ('+esc(hw)+'), so uncontacted leads are listed as History unknown.</div>' : '') + part;
+  if(QVIEW === 'callbacks') return '<b>No requested callbacks due now.</b><div class="sub">Reminders after a no-answer and inbound replies are not callbacks.</div>' + cbNote() + part;
+  if(QVIEW === 'replies') return '<b>No open replies.</b><div class="sub">Switch view above.</div>' + part;
+  if(QVIEW === 'retries') return '<b>No retries due for this seat.</b><div class="sub">Switch view above.</div>' + part;
+  return '<b>Nothing with unknown history.</b><div class="sub">Switch view above.</div>' + part;
+}
 function pool(){
   /* Rebuilt here rather than in render() so EVERY caller gets a fresh index — advance() and
      screenOutcome() both call pool() outside a render, and a teammate's opt-out landing between
      paints would otherwise be missed. 0.05ms for 900 note keys; the O(rows x notes) version this
      replaced measured 36.8ms per pass at 400 rows, twice per paint. */
   optPhones(true);
+  cbRefresh(); _CBHELD = [];
   _WQSET = null;                                       // fresh queue read once per pass, not per row
   /* ONE predicate per lane, shared with head()'s button counts so the number on the button and the
      list behind it can never disagree. Notes on the individual lanes:
@@ -4028,6 +4274,7 @@ function pool(){
   var n = 0, s = 0;
   var keep = base.filter(function(r){
     var sr = supReason(r, lane);
+    if(sr.k && _CBDUE[r.c]) _CBHELD.push({c: r.c, why: sr.t, due: _CBDUE[r.c].due_utc});   // due request, held: shown, never dialled
     if(sr.k === 'soft'){ s++; return false; }          // reached on another channel — its own count
     if(sr.k){ n++; return false; }                     // compliance, or already called
     return true; });
@@ -4062,6 +4309,15 @@ function pool(){
     if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
     if(_clmOwner(r.c)){ _CLMN++; return false; }
     return true; });
+  /* QUEUE VIEW, after every gate. Counts first (so the empty state can say what is waiting), then
+     the narrowing. A view can only REMOVE rows the gates already allowed. */
+  _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
+  var _vw = keep.map(function(r){ var v = _viewOf(r); _VIEWN[v]++; return v; });
+  if(QVIEW) keep = keep.filter(function(r, ix){ return _vw[ix] === QVIEW; });
+  if(QVIEW === 'callbacks'){                           // due instant, overdue first; no fresh-first reorder
+    keep.sort(function(a, b){ return (Date.parse(_CBDUE[a.c].due_utc) - Date.parse(_CBDUE[b.c].due_utc)) || (a.c < b.c ? -1 : 1); });
+    _FRESHN = 0; return keep;
+  }
   var _ff = _freshFirst(keep, lane);
   _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; else break; }
   return _ff;
@@ -4085,7 +4341,7 @@ function _filedMs(r){
 }
 function _contactTier(r){
   try{ if(lastCall(notes[r.c])) return 2; }catch(e){}
-  if(r.le || r.lt) return 1;
+  if(r.le || r.lt || r.lu) return 1;
   try{ for(var k in lastOutreach(r)) return 1; }catch(e){}
   return 0;
 }
@@ -4101,40 +4357,43 @@ function _freshFirst(rows, ln){
    list that is all retries says so instead of looking like fresh leads. */
 var _FRESHN = -1;
 var _SEATN = 0, _CLMN = 0;
-function quoScanFresh(q){
-  /* Same window as quo_sync.INBOUND_MAX_AGE_H. A bake with no ok scan, or an old one, is not fresh. */
-  if(!q || q.ok !== true || !q.ts) return false;
+function holdBakeFresh(q){
+  /* Same window as text_hold.MAX_AGE_DAYS. A bake with no ok list, or an old one, is not fresh. */
+  if(!q || q.ok !== true || !q.ts || !q.syncDay) return false;
+  /* The 07:15 sync the bake saw must be TODAY's, by this phone's own calendar. */
+  var n = new Date(), pad = function(v){ return (v < 10 ? '0' : '') + v; };
+  if(q.syncDay !== n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate())) return false;
   var t = Date.parse(q.ts);
   if(!isFinite(t)) return false;
-  var maxH = (typeof q.maxAgeH === 'number' && q.maxAgeH > 0) ? q.maxAgeH : 36;
-  return (Date.now() - t) <= maxH * 3600000;
+  if(typeof q.maxAgeH !== 'number' || !(q.maxAgeH > 0)) return false;
+  return (Date.now() - t) <= q.maxAgeH * 3600000;
 }
 function textingHeld(){
   /* A successful /health answer wins. If this page cannot poll the bridge, the bake is trusted
-     only while that scan is still inside the staleness window. Otherwise texting is held. */
-  var q = (typeof QUOHOLD === 'object' && QUOHOLD) ? QUOHOLD : null;
-  if(typeof QUOLIVE !== 'undefined' && QUOLIVE && q) return !!q.held;
-  return !quoScanFresh(typeof QUOBAKE === 'object' ? QUOBAKE : null);
+     only while the do-not-contact list it saw is still inside the age window. Otherwise held. */
+  var q = (typeof TEXTHOLD === 'object' && TEXTHOLD) ? TEXTHOLD : null;
+  if(typeof TEXTHOLDLIVE !== 'undefined' && TEXTHOLDLIVE && q) return !!q.held;
+  return !holdBakeFresh(typeof TEXTHOLDBAKE === 'object' ? TEXTHOLDBAKE : null);
 }
 function textHoldWhy(){
   if(!textingHeld()) return '';
-  var q = (typeof QUOHOLD === 'object' && QUOHOLD) ? QUOHOLD : null;
-  if(typeof QUOLIVE !== 'undefined' && QUOLIVE && q && q.why) return q.why;
-  var b = (typeof QUOBAKE === 'object' && QUOBAKE) ? QUOBAKE : null;
+  var q = (typeof TEXTHOLD === 'object' && TEXTHOLD) ? TEXTHOLD : null;
+  if(typeof TEXTHOLDLIVE !== 'undefined' && TEXTHOLDLIVE && q && q.why) return q.why;
+  var b = (typeof TEXTHOLDBAKE === 'object' && TEXTHOLDBAKE) ? TEXTHOLDBAKE : null;
   if(b && b.held && b.why) return b.why;
-  return 'Texting is held — this page cannot confirm a fresh inbound STOP scan.';
+  return 'Texting is held: this page was built before today\'s 07:15 opt-out sync, or from a do-not-contact list that is now too old. Run run-optout-sync.bat on the laptop, then rebuild Call Mode.';
 }
 function pollTextHold(){
   var was = textingHeld();
   fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
-    if(!j || typeof j.text_hold !== 'boolean'){ QUOLIVE = false; }
+    if(!j || typeof j.text_hold !== 'boolean'){ TEXTHOLDLIVE = false; }
     else {
-      QUOLIVE = true;
-      QUOHOLD = {held: !!j.text_hold, why: j.text_hold_why || '', live: true, ok: j.text_hold === false};
+      TEXTHOLDLIVE = true;
+      TEXTHOLD = {held: !!j.text_hold, why: j.text_hold_why || '', live: true, ok: j.text_hold === false};
     }
     if(textingHeld() !== was){ try{ render(); }catch(e){} }
   }).catch(function(){
-    QUOLIVE = false;
+    TEXTHOLDLIVE = false;
     if(textingHeld() !== was){ try{ render(); }catch(e){} }
   });
 }
@@ -4147,10 +4406,9 @@ function start(){
      straight onto leads he had already contacted, which is the complaint that produced this whole
      change. The lane stays, one tap away. Chosen on the NET count so we also never open on a lane
      whose every row is suppressed and land on "Nothing in this lane". */
-  lane = lane || 'soon';
-  pool();                                              // fills _LANEN for the choice below
-  var _net = function(k){ return (_LANEN[k] || {}).net || 0; };
-  lane = _net('worker') ? 'worker' : 'soon';
+  /* A new session opens on UNTOUCHED across ALL lanes (call workflow spec section 3). The worker
+     lane and every other lane stay one tap away as a filter. */
+  QVIEW = 'untouched'; lane = 'all';
   if(SEAT){
     try{ localStorage.removeItem('fcSeat'); }catch(e){}          // legacy per-phone seat is dead here
     try{ var _cw = caller();
@@ -4280,11 +4538,15 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
-  _navPush(workedC); _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
+  var _wl = lane, _rest = _qvRestore();   // _rest: he was on a one-off; view, lane and card are back
+  if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
+  /* One-off: the lead just worked was opened on purpose from elsewhere, so the card he was on is
+     still due. Do not walk past it just because the one-off also sits in the restored pool. */
+  if(_rest) return render();
   for(k=0;k<P.length;k++) if(P[k].c===workedC){
     /* A lead just dialled or texted drops behind the never-contacted ones (_freshFirst), so the next
        lead has already slid up into slot i. Stepping to k+1 would skip to the end of the list. */
@@ -4331,7 +4593,7 @@ function _posSave(P, k){
   try{
     var a = [];
     for(var j = k + 1; j < P.length && a.length < 40; j++) a.push(P[j].c);
-    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane,
+    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane, v:QVIEW,
       c:(k < P.length && P[k]) ? P[k].c : null, a:a, b:_NAVB.slice(-150), f:_NAVF.slice(-150)}));
   }catch(e){}
 }
@@ -4340,6 +4602,9 @@ function _posRestore(){
   try{ s = JSON.parse(localStorage.getItem(_POSK) || 'null'); }catch(e){ s = null; }
   if(!s || typeof s !== 'object' || s.d !== new Date().toDateString()) return false;
   if(!LANES.some(function(L){ return L.k === s.l; })) return false;
+  /* A position saved by an older build has no view and was taken in the old mixed queue. Never
+     restore that as the new default: it could reopen a retry. */
+  if(s.v !== QVIEW) return false;
   var ok = function(x){ return !!x && typeof x.c === 'string' && typeof x.l === 'string'; };
   _NAVB = (Array.isArray(s.b) ? s.b : []).filter(ok);
   _NAVF = (Array.isArray(s.f) ? s.f : []).filter(ok);
@@ -4357,6 +4622,7 @@ function _posRestore(){
 }
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
 function navBack(){
+  _qvRestore();
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
   var k=_navSeek(_NAVB, cur && cur.c);
   if(k<0){ toast('No earlier lead in this lane'); return; }
@@ -4365,6 +4631,7 @@ function navBack(){
   SCREEN='lead'; i=k; render();
 }
 function navNext(){
+  _qvRestore();
   var from = cur && cur.c, k=_navSeek(_NAVF, from);
   if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
   _navPush(from);
@@ -4398,17 +4665,18 @@ function render(){
      "Nothing in this lane" — indistinguishable from a broken build or the wrong lane. Same rule as
      the fail-silent one on the auction horizon: an empty result must never look like missing data. */
   if(!P.length){
-    var done = _WORKED.length
-      ? '<b>Lane cleared.</b><div class="sub">'+_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked. Switch lanes above, or reopen tomorrow.</div>'
-      : '<b>Nothing in this lane.</b><div class="sub">Switch lanes above.</div>';
+    var done = (_WORKED.length ? '<div class="sub">'+_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div>' : '')
+      + viewEmptyHtml();
     $('app').innerHTML=head()+'<div class="card">'+done+'</div><div class="sheetpad"></div>'; wire(); return;
   }
   /* Count what was ACTUALLY worked, not what is left in the pool. `P.length` was standing in for it,
      but the two diverge the moment an outcome removes a lead: log 5 do-not-contacts and the pool is
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
-  if(i>=P.length){ _posSave(P, i); $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
-      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div>'
+  if(i>=P.length){ _posSave(P, i); try{ WFT.pause('empty_queue'); }catch(e){}
+    $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
+      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div><div class="sub">'
+      +viewEmptyHtml().replace(/^<b>[^<]*<\/b>/,'')+'</div>'
       +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
       +'<div class="sheetpad"></div>'; if($('navback')) $('navback').onclick=navBack; wire(); return; }
   /* Keep the NUMBER position when the lead is unchanged. A legitimate lead-screen render (sync merge
@@ -4438,7 +4706,7 @@ function head(){
      Hidden only at raw 0 (an empty build must never read as a broken build); a lane whose rows are
      all suppressed shows a dimmed 0, because hiding it would be exactly the silent cap the line
      below forbids. */
-  var laneBtns = LANES.map(function(L){
+  var laneBtns = [laneDef('all')].concat(LANES.filter(function(L){ return L.k !== 'all'; })).map(function(L){
     var C = _LANEN[L.k] || {raw:0, net:0};
     if(!C.raw && L.hide0) return '';
     return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+(C.raw && !C.net?' dim':'')+'">'
@@ -4451,9 +4719,10 @@ function head(){
      head() always renders downstream of a pool() call. */
   var sup = _SUPN;
   var _qh = (typeof textingHeld === 'function' && textingHeld())
-    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>')
+    ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the do-not-contact list is stale.')+'</div>')
     : '';
   return _qh + '<div class="top"><div class="lane">'+laneBtns+'</div>'
+    + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
@@ -4462,7 +4731,7 @@ function head(){
        whether the list is short because it is clean or short because it is stale. */
     /* ALL RETRIES, SAID OUT LOUD (2026-09-30). When every lead left in the lane has been reached
        before, the list is a follow-up list, and it must read like one. */
-    +((_FRESHN >= 0)?('<div class="supn">'+(_FRESHN
+    +((!QVIEW && _FRESHN >= 0)?('<div class="supn">'+(_FRESHN
           ? ('<b>'+_FRESHN+'</b> never contacted at the top &middot; everything after is a retry')
           : '<b>No fresh leads left in this lane</b> &mdash; every lead here was already called, emailed or texted. '
             +'New ones arrive with the next board rebuild.')+'</div>'):'')
@@ -4805,7 +5074,8 @@ function phLookup(q){
     seenIdx[idx + '|' + num] = 1;
     var row = t[idx] || [];
     hits.push({num:num, owner:row[0]||'', street:row[1]||'', c:row[2]||'',
-               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||(PHIDX.h&&PHIDX.h[num])||''});
+               d:row[3], eq:row[4], fo:row[5], ct:row[6], h:row[7]||(PHIDX.h&&PHIDX.h[num])||'',
+               pcs:row[8]||null});
   };
   var ten = d.slice(-10);
   if(d.length >= 10 && map[ten] != null){ push(ten, map[ten]); return hits; }
@@ -4879,10 +5149,15 @@ function screenLookup(prefill){
         /* DIAL-TIME GATE ON THE LOOKUP SCREEN (2026-09-25). These two links used to render for ANY
            indexed number: a person who said "stop" after the build could be called and texted from
            here with no check at all. Same predicate the queue uses, on the row when we have it. */
-        +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num]});
+        /* pcs: the same person's other cases, so a hard no logged on a sibling closes this one
+           too (2026-10-08). The Text link also obeys the text hold, as the queue's composer does:
+           a lookup is not a way around a stale do-not-contact list. */
+        +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num], pcs:h.pcs || []});
               if(_hs) return '<span class="nc" style="color:#ff8a80;font-weight:800">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '</span>';
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
-                   + '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'; })())
+                   + (textingHeld()
+                      ? '<span class="nc lkth">' + esc(textHoldWhy() || 'Texting is held.') + '</span>'
+                      : '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'); })())
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
         + '</div>'
@@ -5173,18 +5448,6 @@ function screenLead(){
           + '<div class="own">'+esc(ownerLabel(r))+'</div>';
   if(!r.a && r.ag) who += '<div class="warnbar">Verify this candidate against the case record before quoting it.'
     + (r.aw ? ' ' + esc(r.aw) : '') + '</div>';
-  /* LAST QUO CALL -- what happened last time, in front of him BEFORE he redials. Summary from
-     Quo's AI, flags from quo_sync's coach pass. Flags render red because every one of them is a
-     sentence that must not be said again on the call he is about to make. */
-  if(r.qc){
-    who += '<div style="margin-top:8px;padding:8px 10px;border:1px solid #2a3f6b;border-radius:10px;background:#0f1d3a">'
-        +  '<div class="ltag">LAST CALL &middot; '+esc(r.qc.w||'')+' &middot; '+(r.qc.du||0)+'s</div>'
-        +  (r.qc.s ? '<div class="mut" style="font-size:13px;margin-top:3px">'+esc(r.qc.s)+'</div>' : '')
-        +  ((r.qc.fl||[]).map(function(f){
-             return '<div style="color:#e07b6a;font-size:12.5px;margin-top:3px">&#9873; '+esc(f)+'</div>';
-           }).join(''))
-        +  '</div>';
-  }
   var wc='';
   if(r.ab) wc += '<span class="chip">absentee &middot; call, do not knock</span>';
   if(r.hs) wc += '<span class="chip ok">homestead &middot; they live there</span>';
@@ -5341,6 +5604,7 @@ function screenLead(){
     +   band('THE MONEY', mny)
     +   band(_isBal ? 'THE NOTE' : 'WHO IS FORECLOSING', whoFc + prop + histLine(r))
     +   fileBand(r)
+    +   cbCard(r)
     +   '<a class="dial" href="'+dialHref(d)+'"'+dialTarget()+' id="dial">'+fmt(d)+'</a>'
     +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
     /* 'N' (not the owner) is new; an unmapped letter used to fall through to "last resort", which
@@ -5362,6 +5626,7 @@ function screenLead(){
     // deploy landing during the first call of a session made freshCheck location.reload() the page
     // he was mid-call on. Three deploys shipped today while he was dialing.
     touched = true;
+    try{ if(WFT.state().status === 'running'){ WFDIAL = true; WFHID = false; WFT.launchDialer(); wfPaint(); } }catch(e){}
     /* RECORD THE ATTEMPT AT DIAL TIME, not just on the tapped outcome (2026-09-08 field report:
        "me and my cousin keep getting people we already called"). A call he never tags an outcome
        for -- distracted, or iOS backgrounds the tab the instant the dialer opens on a 100-dial
@@ -5900,7 +6165,7 @@ function afterCall(r, o, nextC){
   var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
-  else if(textingHeld())    txt = '<div class="nc">'+esc(textHoldWhy() || 'Texting is held — the inbound STOP scan failed or is stale.')+'</div>';
+  else if(textingHeld())    txt = '<div class="nc">'+esc(textHoldWhy() || 'Texting is held — the do-not-contact list is stale.')+'</div>';
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
@@ -6246,8 +6511,11 @@ function wire(){
      buttons carry data-b, so the bare selector matched them too and set `lane=undefined` — which
      laneDef() silently resolves to 'soon'. Tapping "TRACE" would have quietly switched the DIAL
      queue to Sale-soon and looked like nothing happened. Select on the attribute that means it. */
+  Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-v]'), function(b){
+    b.onclick=function(){ _QVBACK=null; QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
+  });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
-    b.onclick=function(){ lane=b.dataset.l; BLANE=null; i=0; render();
+    b.onclick=function(){ _QVBACK=null; lane=b.dataset.l; BLANE=null; i=0; render();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
          leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
          done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
@@ -6266,14 +6534,19 @@ function wire(){
      Rows with no phone carry no data-open at all, so there is nothing here to tap. */
   Array.prototype.forEach.call(document.querySelectorAll('[data-open]'), function(el){
     el.onclick=function(){
-      var c = el.getAttribute('data-open');
+      var c = el.getAttribute('data-open'), lane0 = lane;
       for(var q=0;q<LANES.length;q++){
         var L=LANES[q]; var hit=-1;
         if(!ROWS.some(function(r){ return r.c===c && L.pred(r); })) continue;
         lane=L.k; BLANE=null;
+        /* Opening a specific lead lands in whichever view holds it, so a retry opened ON PURPOSE
+           from a board list or the lookup is not refused by the Untouched default. */
+        var _qvWas = QVIEW, _laneWas = lane0, _cardWas = (cur && cur.c) || null;
+        try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
         var P=pool();
         for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
-        if(hit>=0){ i=hit; render(); return; }
+        if(hit>=0){ if(!_QVBACK && (QVIEW !== _qvWas || lane !== _laneWas)) _QVBACK = {v:_qvWas, l:_laneWas, c:_cardWas}; i=hit; render(); return; }
+        QVIEW = _qvWas; lane = _laneWas;
       }
       /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
          seat. Say which rather than doing nothing when tapped. */
@@ -6309,6 +6582,194 @@ async function freshCheck(){
     if(m && m[1]!==SIG){ if(!touched) location.reload(); else $('pill').style.display='block'; }
   }catch(e){}
 }
+/* ══════ CALL WORKFLOW — work timer + requested callbacks (spec sections 5 and 7) ══════
+   Two inert modules (call_workflow.js: events, reducers, callback queue; call_workflow_timer.js: the
+   Start/Pause/End controller) are inlined here. Events live ONLY on this phone (localStorage
+   fcWfEvents); nothing is synced, uploaded or written into the notes store, the opt-out ledger or any
+   suppression path. Reporting zone: America/New_York (proposed default, spec section 7).
+   OWNER KEY: events carry owner_id 'pk:'+row.pk, the existing person key, and say so
+   (owner_link 'pkey_unverified'). That is NOT a verified identity link; it is only used to make one
+   request and its completion refer to the same row. */
+__CWJS__
+__CWTIMERJS__
+var WF_TZ = 'America/New_York', WF_KEY = 'fcWfEvents', WF_TKEY = 'fcWfTimer';
+var WF = {store: CW.newStore(), list: [], err: ''};
+var WFDIAL = false, WFHID = false, WFREC = null, _CBQ = null, _CBDUE = Object.create(null), _CBFUT = 0, _CBHELD = [];
+function wfDevice(){ try{ return _deviceId(); }catch(e){ return 'dev-unknown'; } }
+function wfCaller(){ return String(caller() || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
+function wfLoad(){
+  try{
+    var raw = localStorage.getItem(WF_KEY), a = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(a)) throw new Error('not a list');
+    var keep = Date.now() - 90 * 86400000;
+    a = a.filter(function(e){ var t = Date.parse(e && e.occurred_at_utc); return !(t < keep); }).slice(-5000);
+    a.forEach(function(e){ if(CW.validate(e).ok){ CW.add(WF.store, e); WF.list.push(e); } });
+  }catch(e){ WF.err = 'Workflow records on this phone could not be read'; }
+}
+function wfEmit(ev){
+  var v = CW.validate(ev);
+  if(!v.ok){ WF.err = 'Metrics not saved (' + v.errors.join(', ') + ')'; return false; }
+  CW.add(WF.store, ev); WF.list.push(ev);
+  try{ localStorage.setItem(WF_KEY, JSON.stringify(WF.list)); WF.err = ''; return true; }
+  catch(e){ WF.err = 'Metrics not saved on this phone'; return false; }
+}
+function wfId(p){ return p + '-' + wfDevice() + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+function wfEv(type, payload, r, at){
+  var t = new Date(at || Date.now()).toISOString();
+  return {schema_version: CW.SCHEMA, event_id: wfId(type), event_type: type, occurred_at_utc: t, recorded_at_utc: t,
+          device_id: wfDevice(), caller_id: wfCaller() || null, owner_id: r && r.pk ? 'pk:' + r.pk : null,
+          case_refs: r ? [r.c].concat(r.pcs || []) : [], payload: payload};
+}
+var WFT = CWTimer.create({deviceId: wfDevice(), tz: WF_TZ, now: function(){ return Date.now(); },
+  mono: function(){ return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); },
+  emit: wfEmit, persist: function(s){ try{ localStorage.setItem(WF_TKEY, JSON.stringify(s)); }catch(e){} }});
+function wfBoot(){
+  wfLoad();
+  try{
+    var saved = JSON.parse(localStorage.getItem(WF_TKEY) || 'null');
+    WFREC = WFT.recover(saved);
+    localStorage.removeItem(WF_TKEY);
+  }catch(e){ WFREC = null; }
+}
+function wfMin(sec){ return Math.round(sec / 60); }
+function wfBarHtml(){
+  wfSyncCaller();
+  var s = WFT.state(), run = s.status === 'running', c = wfCaller();
+  var sec = 0; try{ sec = CW.activeSeconds(WF.store, c, {from: Date.now() - 86400000, to: Date.now() + 1}); }catch(e){}
+  var h = '<div class="wfbar"><b>' + (run ? 'Working' : (s.status === 'paused' ? 'Paused' : 'Not timing')) + '</b>'
+    + (run ? '<button class="wfb" data-wf="pause">Pause</button><button class="wfb" data-wf="end">End work</button>'
+           : '<button class="wfb go" data-wf="start">Start work</button>' + (s.status === 'paused' ? '<button class="wfb" data-wf="end">End work</button>' : ''))
+    + '<span>counted in the last 24 h: ' + wfMin(sec) + ' min (confirmed work only)</span></div>';
+  if(WFREC && WFREC.unknownSeconds > 0) h += '<div class="supn">About ' + wfMin(WFREC.unknownSeconds) + ' min from the last session was not saved and is NOT counted.</div>';
+  if(WF.err) h += '<div class="supn" style="background:#3d2c08;color:#F6E9C8">' + esc(WF.err) + '</div>';
+  return h;
+}
+function wfBar(){ return '<div id="wfbar">' + wfBarHtml() + '</div>'; }
+function wfPaint(){ var el = document.getElementById('wfbar'); if(el) el.innerHTML = wfBarHtml(); }
+function wfSyncCaller(){
+  try{ var s = WFT.state(); if(s.status !== 'stopped' && s.callerId !== wfCaller()) WFT.stop('caller_switch'); }catch(e){}
+}
+function wfAct(a){
+  wfSyncCaller();
+  if(a === 'start'){
+    var r = WFT.start({callerId: wfCaller(), caseId: cur && cur.c});
+    if(!r.ok) toast(r.error === 'select a caller first' ? 'Pick who is calling first (access code), then Start work.' : r.error);
+  } else if(a === 'pause') WFT.pause('manual');
+  else if(a === 'end') WFT.stop('manual');
+  wfPaint();
+}
+function wfDialReturn(){
+  if(!WFDIAL || !WFHID) return; WFDIAL = false; WFHID = false;
+  var a = prompt('You came back from a call. How many minutes were you on it or working it? Leave blank to count NOTHING for that stretch (this is your own estimate and is labelled self-reported).', '');
+  var m = a == null ? NaN : parseFloat(a);
+  var r = (isFinite(m) && m > 0) ? WFT.returnFromDialer({kind: 'confirm', seconds: m * 60}) : WFT.returnFromDialer({kind: 'unknown'});
+  wfPaint();
+  if(r && r.credited) toast('Counted ' + wfMin(r.credited) + ' min (self-reported)');
+}
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-wf]') : null;
+  if(b){ wfAct(b.getAttribute('data-wf')); ev.preventDefault(); }
+}, false);
+['click', 'touchstart', 'keydown', 'input'].forEach(function(n){ document.addEventListener(n, function(){ WFT.interaction(); }, true); });
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden){ WFHID = true; WFT.hidden(); } else { wfDialReturn(); }
+  wfPaint();
+});
+setInterval(function(){ var r = WFT.tick(); if(r && r.idle) toast('Work timer paused: no activity for 5 minutes'); wfPaint(); }, 5000);
+wfBoot();
+
+/* REQUESTED CALLBACKS. Only an owner-asked call with a concrete due time. A reminder after a
+   no-answer, next/nextTs and an inbound reply are NOT callbacks and never appear here. The view only
+   narrows what the existing gates allow: a due request whose lead is held (cooldown, stay, opt-out,
+   other seat) is listed as HELD with the existing reason and cannot be dialled from here. */
+function cbRefresh(){
+  _CBDUE = Object.create(null); _CBFUT = 0;
+  try{
+    _CBQ = CW.callbackQueue(WF.store, {asof: Date.now()});
+    _CBQ.due.forEach(function(it){ it.case_refs.forEach(function(c){ if(!_CBDUE[c]) _CBDUE[c] = it; }); });
+    _CBFUT = _CBQ.future.length;
+  }catch(e){ _CBQ = null; }
+}
+function cbWhen(iso){
+  try{ return new Date(iso).toLocaleString('en-US', {timeZone: WF_TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) + ' ET'; }
+  catch(e){ return iso; }
+}
+function cbNote(){
+  var o = '';
+  if(_CBFUT) o += '<div class="sub">' + _CBFUT + ' more requested callback' + (_CBFUT === 1 ? '' : 's') + ' due later (not shown until due).</div>';
+  _CBHELD.forEach(function(h){
+    var row = ROWS.filter(function(r){ return r.c === h.c; })[0];
+    o += '<div class="supn">HELD &mdash; asked for ' + esc(cbWhen(h.due)) + (row ? ' &middot; ' + esc(ownerLabel(row)) : '')
+      + ': ' + esc(h.why || 'on hold') + '. Stays open; no dialling from here.</div>';
+  });
+  return o;
+}
+function cbCard(r){
+  var it = _CBDUE[r.c], later = null;
+  if(!it && _CBQ) _CBQ.future.forEach(function(f){ if(!later && f.case_refs.indexOf(r.c) >= 0) later = f; });
+  var h = '<div class="band"><div class="blab">CALLBACK THE OWNER ASKED FOR</div>';
+  if(it || later){
+    var x = it || later;
+    h += '<div class="sub" style="text-align:left">Asked for ' + esc(cbWhen(x.due_utc)) + (x.overdue ? ' &mdash; <b>overdue</b>' : ' &mdash; not due yet')
+      + (x.superseded_by_later_request ? ' &middot; a newer request exists for this owner' : '') + '</div>'
+      + '<div class="wfbar">' + (it ? '<button class="wfb go" data-cb="done">Callback done: right owner talked</button>' : '')
+      + '<button class="wfb" data-cb="resched">Move to the time below</button><button class="wfb" data-cb="cancel">Cancel request</button></div>';
+  }
+  h += '<div class="sub" style="text-align:left">Only if the owner asked for a call back at a time (Eastern):</div>'
+    + '<div class="wfbar"><input type="date" id="cb-date"><input type="time" id="cb-time">'
+    + '<label><input type="checkbox" id="cb-ask"> the owner asked for this call</label>'
+    + '<button class="wfb" data-cb="save">Save request</button></div></div>';
+  return h;
+}
+function cbSave(r, resched){
+  if(!r.pk){ toast('Cannot track a callback on this lead: no owner key. Not saved.'); return; }
+  var d = $('cb-date') && $('cb-date').value, t = $('cb-time') && $('cb-time').value;
+  if(!d || !t){ toast('Pick the date and time they asked for'); return; }
+  if(!resched && !($('cb-ask') && $('cb-ask').checked)){ toast('Tick the box: the owner asked for this call'); return; }
+  var res = CW.resolveLocal(d + 'T' + t, WF_TZ);
+  if(!res.ok && res.error === 'ambiguous'){
+    var off = parseInt(prompt('That hour happens twice (clocks go back). Enter -240 for the first one (EDT) or -300 for the second (EST).', String(res.options[0])), 10);
+    res = CW.resolveLocal(d + 'T' + t, WF_TZ, off);
+  }
+  if(!res.ok){ toast(res.error === 'nonexistent' ? 'That time does not exist (clocks jump forward). Pick another.' : 'Could not read that date and time'); return; }
+  var due = new Date(res.utc).toISOString(), open = _CBDUE[r.c] || null;
+  if(!open && _CBQ) _CBQ.future.forEach(function(f){ if(!open && f.case_refs.indexOf(r.c) >= 0) open = f; });
+  if(resched){
+    if(!open){ toast('No open request to move'); return; }
+    wfEmit(wfEv('callback_rescheduled', {request_id: open.request_id, due_utc: due}, r));
+  } else {
+    wfEmit(wfEv('callback_requested', {request_id: wfId('req'), evidence_ref: 'caller_attested_in_call_mode', tz: WF_TZ,
+      local_time: d + 'T' + t, due_utc: due, requested_by_owner: true, owner_link: 'pkey_unverified'}, r));
+  }
+  cbRefresh(); wfPaint(); toast(WF.err || 'Saved'); render();
+}
+function cbDone(r){
+  var it = _CBDUE[r.c]; if(!it) return;
+  if(!r.pk){ toast('Cannot confirm: this lead has no owner key. Not recorded.'); return; }
+  if(!confirm('Confirm: you spoke with the OWNER (not someone else) and this is the callback they asked for.')) return;
+  var lid = wfId('launch'), aid = wfId('att'), cid = wfId('conv');
+  wfEmit(wfEv('launch_recorded', {launch_id: lid, attempt_id: aid}, r));
+  wfEmit(wfEv('attempt_confirmed', {launch_id: lid, attempt_id: aid, attempted: 'yes', eligibility: 'pass', owner_link: 'pkey_unverified'}, r));
+  wfEmit(wfEv('conversation_confirmed', {conversation_id: cid, attempt_id: aid, role: 'owner', role_verification: 'caller_attested', two_way: true}, r));
+  wfEmit(wfEv('callback_completed', {request_id: it.request_id, conversation_id: cid}, r));
+  cbRefresh(); wfPaint(); toast(WF.err || 'Callback recorded'); render();
+}
+function cbCancel(r){
+  var it = _CBDUE[r.c]; if(!it && _CBQ) _CBQ.future.forEach(function(f){ if(!it && f.case_refs.indexOf(r.c) >= 0) it = f; });
+  if(!it) return;
+  if(!confirm('Cancel this requested callback? It will not count as completed.')) return;
+  wfEmit(wfEv('callback_cancelled', {request_id: it.request_id}, r));
+  cbRefresh(); wfPaint(); render();
+}
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-cb]') : null;
+  if(!b || !cur) return;
+  var a = b.getAttribute('data-cb');
+  if(a === 'save') cbSave(cur, false); else if(a === 'resched') cbSave(cur, true);
+  else if(a === 'done') cbDone(cur); else if(a === 'cancel') cbCancel(cur);
+  ev.preventDefault();
+}, false);
+
 /* ══════════════════════ SCRIPT SHEET ══════════════════════
    Collapsed by default: one line of peek. Tap the grip (or the peek) to expand, tap again to close.
    The lead's numbers stay visible behind it — that is the whole point of a sheet rather than an

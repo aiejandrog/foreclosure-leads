@@ -28,6 +28,7 @@ from email.utils import formataddr, parseaddr
 import entity
 import outreach_email as _oe
 import mail_guard as _MG
+import sibling_optout as _sibling_optout
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
@@ -498,6 +499,29 @@ def _run(args):
             s['log'].append({'d': str(today), 'ev': f'suppressed before send ({why})'})
             active.pop(c)
             print(f'  SUPPRESSED (not sent) -> {em or c}  ({s.get("owner")}) — {why}')
+
+    # 0a) SAME OWNER, OTHER CASE (2026-10-09). The sweep above matches this case's own key and this
+    # sequence's own address, so a stop on another of the owner's cases (or on an address the owner
+    # also uses) left this one enrolled. The raw lead rows carry no person key; sibling_optout links
+    # them through a shared email or phone. It only adds suppressions, and a failure to read the
+    # lead files leaves the checks above exactly as they were.
+    try:
+        try:
+            from optout_sync import notes_dnc_keys as _ndk
+            _nk = _ndk()
+        except Exception:
+            _nk = ()
+        _pk = _sibling_optout.ledger_phone_keys(OPTOUTS, _nk)
+        _sibs = _sibling_optout.sibling_cases(_oe._load_leads() or [], _oo, _oe._case, phone_keys=_pk)
+    except Exception as _e:
+        _sibs = set()
+        print('  sibling opt-out check skipped (%s)' % _e)
+    for c, s in list(active.items()):
+        if c.strip().lower() in _sibs:
+            s['status'] = 'suppressed'
+            s['log'].append({'d': str(today), 'ev': 'suppressed before send (same owner, other case on the opt-out ledger)'})
+            active.pop(c)
+            print(f'  SUPPRESSED (not sent) -> {(s.get("email") or c)}  ({s.get("owner")}) — same owner, other case')
 
     # 0b) DILIGENCE SWEEP, also at send time, and for the same reason as the sweep above.
     #

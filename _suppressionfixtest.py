@@ -8,7 +8,7 @@ No network, no paid API, no real people. Synthetic cases 2099-..., 555-01 number
   3. quoting our opt-out sentence is not a stop and is not ledgered; a real stop above the quote is
   4. "not a good time, try next month" is a permanent DO NOT CONTACT
   5. cadence's send-time re-check holds a stayed case and still sends a clean eligible lead
-  6. a failed Quo inbound read holds POST /text and does not hold POST /send
+  6. a stale do-not-contact list holds POST /text (text_hold.py; Quo is gone since 2026-10-07)
   7. an unreadable ledger blocks /send; a fresh readable ledger lets the next eligible send through
 """
 import datetime
@@ -51,16 +51,14 @@ def notes_of(path):
 def unit_ledger():
     print('-- ledger_from_notes, quotes, permanent no, inbound SMS')
     import optout_sync as O
-    import quo_sync as Q
     import replies as R
     import outreach_copy as OC
 
     tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfsup_'))
-    oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
-    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get,
-           Q.dialed_numbers, Q._inbound_text_rows)
+    oo, sup = tmp / 'optouts.json', tmp / 'bounced_emails.json'
+    old = (O.OPTOUTS, O.SUPPRESS)
     try:
-        O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
+        O.OPTOUTS, O.SUPPRESS = str(oo), str(sup)
         fresh_ledger(oo)
 
         added, _already = O.ledger_from_notes({'notes': {
@@ -106,113 +104,56 @@ def unit_ledger():
         rec('"try next month" alone is a stop', R.is_stop_text('try next month') is True)
         rec('"the sale is next month" is not', R.is_stop_text('the sale is next month') is False)
 
-        # inbound SMS. _get is local; no HTTP.
-        bodies = {
-            '5550100101': 'STOP',
-            '5550100102': 'NO MAS',
-            '5550100103': 'BASTA',
-            '5550100104': 'can you stop the sale',
-        }
-
-        def _get(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            if path == Q.MESSAGES_PATH:
-                n10 = str((params or {}).get('participants') or '')[-10:]
-                return {'data': [{'direction': 'incoming', 'content': bodies.get(n10, ''),
-                                  'createdAt': '2026-09-26T12:00:00Z'}]}
-            raise AssertionError(path)
-
-        Q._key = lambda: 'fixture-key'
-        Q._get = _get
-        rc = Q.sync_messages(days=2, phones=['5550100' + s for s in ('101', '102', '103', '104')])
-        notes = notes_of(oo)
-        rec('inbound scan returns 0 on a clean read', rc == 0, rc)
-        rec('EN STOP is ledgered as #digits',
-            (notes.get('#5550100101') or {}).get('status') == 'DO NOT CONTACT', sorted(notes))
-        rec('ES NO MAS is ledgered', '#5550100102' in notes)
-        rec('ES BASTA is ledgered', '#5550100103' in notes)
-        rec('"can you stop the sale" is not ledgered', '#5550100104' not in notes, sorted(notes))
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('a phone-scoped scan does not write ok:true or release the hold',
-            rc == 0 and st.get('ok') is not True and held is True, (st.get('ok'), why))
-
-        short = {'5550100106': 'No.', '5550100107': 'Wrong number'}
-
-        def _get_short(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            if path == Q.MESSAGES_PATH:
-                n10 = str((params or {}).get('participants') or '')[-10:]
-                return {'data': [{'direction': 'incoming', 'text': short.get(n10, ''),
-                                  'createdAt': '2026-09-26T12:00:00Z'}]}
-            raise AssertionError(path)
-
-        Q._get = _get_short
-        rc = Q.sync_messages(days=2, phones=['5550100106', '5550100107'])
-        notes = notes_of(oo)
-        rec('incoming "No." is ledgered as #digits',
-            rc == 0 and (notes.get('#5550100106') or {}).get('status') == 'DO NOT CONTACT', sorted(notes))
-        rec('incoming "Wrong number" is ledgered as #digits',
-            (notes.get('#5550100107') or {}).get('status') == 'DO NOT CONTACT', sorted(notes))
-
-        Q.dialed_numbers = lambda days: []
-        Q._inbound_text_rows = lambda: []
-        Q._get = _get
-        rc = Q.sync_messages(days=2)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('a full scan writes ok:true and does not hold texting',
-            rc == 0 and st.get('ok') is True and held is False, (rc, st.get('ok'), why))
-
-        def _get_fail(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            raise RuntimeError('fixture read failed')
-
-        Q._get = _get_fail
-        rc = Q.sync_messages(days=2, phones=['5550100105'])
-        held, why = Q.text_hold()
-        rec('a failed inbound read returns non-zero and holds texting', rc != 0 and held is True, (rc, why))
-        rec('the text hold says email is not held', 'mail is not held' in why.lower(), why)
+        # Inbound SMS replies land on the phone now (no vendor inbox). The detector is still the
+        # one rule for what a text reply means; marking it in Call Mode ledgers it as #digits
+        # through ledger_from_notes (dntph), checked above.
+        rec('EN STOP is a text stop', R.is_sms_stop('STOP') is True)
+        rec('ES NO MAS is a text stop', R.is_sms_stop('NO MAS') is True)
+        rec('ES BASTA is a text stop', R.is_sms_stop('BASTA') is True)
+        rec('"can you stop the sale" is not a text stop', R.is_sms_stop('can you stop the sale') is False)
+        rec('"No." is a text stop', R.is_sms_stop('No.') is True)
+        rec('"Wrong number" is a text stop', R.is_sms_stop('Wrong number') is True)
     finally:
-        (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get,
-         Q.dialed_numbers, Q._inbound_text_rows) = old
+        (O.OPTOUTS, O.SUPPRESS) = old
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 def text_hold_unit():
-    print('-- text_hold fail closed')
-    import quo_sync as Q
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfqhold_'))
+    print('-- text_hold fail closed (the do-not-contact list)')
+    import text_hold as TH
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfthold_'))
     try:
-        missing = tmp / 'nope.json'
-        held, why = Q.text_hold(path=str(missing))
-        rec('missing status holds texting', held is True and 'mail is not held' in why.lower(), why)
+        held, why = TH.text_hold(path=str(tmp / 'nope.json'))
+        rec('a missing list holds texting', held is True and 'missing' in why.lower(), why)
         badf = tmp / 'bad.json'
         badf.write_text('{', encoding='utf-8')
-        held, why = Q.text_hold(path=str(badf))
-        rec('unreadable status holds texting', held is True, why)
-        fail = tmp / 'fail.json'
-        fail.write_text(json.dumps({'ok': False, 'ts': '2026-09-26T12:00:00+00:00', 'why': 'fixture'}),
-                        encoding='utf-8')
-        held, why = Q.text_hold(path=str(fail))
-        rec('ok:false holds texting', held is True and 'failed' in why.lower(), why)
+        held, why = TH.text_hold(path=str(badf))
+        rec('an unreadable list holds texting', held is True and 'cannot be read' in why, why)
+        scalar = tmp / 'scalar.json'
+        scalar.write_text('3', encoding='utf-8')
+        held, why = TH.text_hold(path=str(scalar))
+        rec('a list that is not an object or array holds texting', held is True, why)
         stale = tmp / 'stale.json'
-        old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=40)).isoformat()
-        stale.write_text(json.dumps({'ok': True, 'ts': old}), encoding='utf-8')
-        held, why = Q.text_hold(path=str(stale))
-        rec('a scan older than 36h holds texting', held is True and 'old' in why.lower(), why)
+        fresh_ledger(stale)
+        old_ts = time.time() - 3 * 86400
+        os.utime(stale, (old_ts, old_ts))
+        held, why = TH.text_hold(path=str(stale), max_age_days=2)
+        rec('a list older than the max age holds texting', held is True and 'days old' in why, why)
         fresh = tmp / 'fresh.json'
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        fresh.write_text(json.dumps({'ok': True, 'ts': now, 'checked': 1, 'stops': 0}), encoding='utf-8')
-        held, why = Q.text_hold(path=str(fresh))
-        rec('a fresh ok scan does not hold texting', held is False and why == '', why)
+        fresh_ledger(fresh)
+        held, why = TH.text_hold(path=str(fresh), max_age_days=2)
+        rec('a fresh readable list does not hold texting', held is False and why == '', why)
+        st = TH.status(path=str(fresh), max_age_days=2)
+        rec('status carries ts and maxAgeH for the Call Mode bake',
+            st['ok'] is True and st['ts'].endswith('Z') and st['maxAgeH'] == 48, st)
+        rec('a fractional max age is kept exact (0.1 day = 2.4 hours)',
+            abs(TH.status(path=str(fresh), max_age_days=0.1)['maxAgeH'] - 2.4) < 1e-9)
+        for bad in ('nan', 'inf', '-inf', 0, -1, 'x'):
+            s_bad = TH.status(path=str(fresh), max_age_days=bad)
+            rec('a max age of %r holds texting (fail closed)' % (bad,),
+                s_bad['held'] is True and s_bad['ok'] is False and s_bad['maxAgeH'] == 0.0
+                and 'DEALFLOW_OPTOUT_MAX_AGE_DAYS' in s_bad['why'], s_bad)
+        rec('quo_sync.py is gone', not (HERE / 'quo_sync.py').exists())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -411,12 +352,12 @@ def call(port, path, payload=None, timeout=8):
 
 
 def bridge():
-    print('-- Quo read failure holds texting, not email; unreadable ledger blocks sends')
+    print('-- a stale do-not-contact list holds texting; unreadable ledger blocks sends')
     port = free_port()
     work = pathlib.Path(tempfile.mkdtemp(prefix='dfsupsrv_'))
     proc = None
     try:
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py', 'quo_sync.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py', 'text_hold.py'):
             shutil.copy(HERE / f, work / f)
         today = datetime.date.today().isoformat()
         (work / 'sync_status.json').write_text(json.dumps({
@@ -440,9 +381,6 @@ def bridge():
         (work / 'verified_emails.json').write_text(json.dumps({
             'owner%d@example.com' % i: {'v': 'ok', 'why': 'zerobounce:valid', 'd': today}
             for i in range(1, 8)}), encoding='utf-8')
-        (work / 'quo_inbound_status.json').write_text(json.dumps({
-            'ok': False, 'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            'why': 'fixture read failed', 'checked': 0, 'stops': 0, 'errors': 1}), encoding='utf-8')
         shim = work / '_run_bridge.py'
         shim.write_text(
             'import sys, smtplib\n'
@@ -475,22 +413,45 @@ def bridge():
             return p.read_text(encoding='utf-8').split() if p.exists() else []
 
         st, h = call(port, '/health')
-        rec('/health reports the text hold and a fresh opt-out sync',
-            h.get('text_hold') is True and h.get('sync_ok') is True and h.get('optout_stale') is False,
+        rec('/health: a fresh list does not hold texting',
+            h.get('text_hold') is False and h.get('sync_ok') is True and h.get('optout_stale') is False,
             {k: h.get(k) for k in ('text_hold', 'sync_ok', 'optout_stale', 'text_hold_why')})
-        rec('the text-hold reason says email is not held',
-            'mail is not held' in str(h.get('text_hold_why') or '').lower(), h.get('text_hold_why'))
+        st, j = call(port, '/text', {'case': '2099-000310-CA-01', 'to': '5550100101', 'confirmed': False})
+        rec('POST /text records a composer open while the list is fresh',
+            st == 200 and j.get('ok') is True and (work / 'text_sent.json').exists(), {'st': st, 'j': j})
+        rows_before = json.loads((work / 'text_sent.json').read_text(encoding='utf-8'))
 
+        old_ts = time.time() - 5 * 86400
+        os.utime(oo, (old_ts, old_ts))
+        st, h = call(port, '/health')
+        rec('/health: a stale list holds texting and says how to fix it',
+            h.get('text_hold') is True and 'ledger_sync' in str(h.get('text_hold_why') or ''),
+            {k: h.get(k) for k in ('text_hold', 'text_hold_why')})
         st, j = call(port, '/text', {'case': '2099-000310-CA-01', 'to': '5550100101', 'confirmed': True})
-        rec('POST /text is refused while the inbound scan failed',
-            st == 200 and j.get('ok') is False and j.get('blocked') == 'quo_inbound', {'st': st, 'j': j})
-        rec('a refused text writes no text_sent.json row', not (work / 'text_sent.json').exists())
+        rec('POST /text is refused while the list is stale',
+            st == 200 and j.get('ok') is False and j.get('blocked') == 'text_hold', {'st': st, 'j': j})
+        rec('a refused text writes no text_sent.json row',
+            json.loads((work / 'text_sent.json').read_text(encoding='utf-8')) == rows_before)
+        fresh_ledger(oo)
+        sync_ok = (work / 'sync_status.json').read_text(encoding='utf-8')
+        (work / 'sync_status.json').write_text(json.dumps({
+            'date': '2000-01-01', 'state': 'finished', 'ok': True, 'steps': []}), encoding='utf-8')
+        st, h = call(port, '/health')
+        st, j = call(port, '/text', {'case': '2099-000310-CA-01', 'to': '5550100101', 'confirmed': True})
+        rec("a fresh list without today's 07:15 sync still holds texting",
+            h.get('text_hold') is True and '07:15' in str(h.get('text_hold_why') or '')
+            and 'run-optout-sync.bat' in str(h.get('text_hold_why') or '')
+            and 'ledger_sync' not in str(h.get('text_hold_why') or '')
+            and j.get('blocked') == 'text_hold', {'h': h.get('text_hold_why'), 'j': j})
+        (work / 'sync_status.json').write_text(sync_ok, encoding='utf-8')
+        st, h = call(port, '/health')
+        rec('a confirmed sync and a fresh list release texting', h.get('text_hold') is False, h.get('text_hold_why'))
 
         st, j = call(port, '/send', {
             'to': 'owner1@example.com', 'subj': 'About 1 Main St',
             'body': 'Hello Jane, a short note about 1 Main St.',
             'meta': {'owner': 'Test Owner', 'addr': '1 Main St', 'wl': 'active', 'c': '2099-000310-CA-01'}})
-        rec('a clean eligible lead still sends while texting is held',
+        rec('a clean eligible lead sends once the list is fresh again',
             st == 200 and j.get('ok') is True, {'st': st, 'j': j})
         rec('that send reached SMTP once', smtp_n() == ['owner1@example.com'], smtp_n())
 
@@ -540,24 +501,20 @@ def bridge():
 
 
 def review_blockers():
-    """The pre-merge review: dial tuples, denied Quo reads, a torn bounce list, the 60-day
-    number set, pagination, ledger mtime, and the committed-secrets scan."""
+    """The pre-merge review: a torn bounce list, ledger mtime, and the committed-secrets scan."""
     print('-- review blockers')
     import ast
     import optout_sync as O
-    import quo_sync as Q
     import send_server as S
     import cadence as C
     import bounces as B
 
     tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfrev_'))
-    oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
-    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
-           Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, C.HERE, S.HERE)
+    oo, sup = tmp / 'optouts.json', tmp / 'bounced_emails.json'
+    old = (O.OPTOUTS, O.SUPPRESS, C.HERE, S.HERE)
     try:
-        O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
+        O.OPTOUTS, O.SUPPRESS = str(oo), str(sup)
         fresh_ledger(oo)
-        Q._key = lambda: 'fixture-key'
 
         # B6. empty add does not refresh; a real add does.
         old_ts = time.time() - 100000
@@ -627,140 +584,6 @@ def review_blockers():
         rec('bounces.py refuses to load a torn list', blew and sup.read_bytes() == raw)
         sup.write_text('{}', encoding='utf-8')
 
-        # B1 + B4. tuples, 60-day number set. With no prior ok scan the message window is 60 days.
-        seen = {'days': None, 'who': [], 'since': []}
-        today = datetime.date.today().isoformat()
-        old_day = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
-
-        def dialed(days):
-            seen['days'] = days
-            return [('5550100191', '2099-000901-CA-01', 1.0)]
-
-        def rows():
-            return [
-                {'ch': 'text', 'to': '5550100192', 'd': today},
-                {'ch': 'text', 'to': '5550100193', 'd': old_day},
-            ]
-
-        def _get(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            if path == Q.MESSAGES_PATH:
-                seen['who'].append((params or {}).get('participants'))
-                seen['since'].append((params or {}).get('createdAfter'))
-                n = str((params or {}).get('participants') or '')
-                body = 'STOP' if n.endswith('191') else 'hello'
-                return {'data': [{'direction': 'incoming', 'content': body,
-                                  'createdAt': '2026-09-26T12:00:00Z'}]}
-            raise AssertionError(path)
-
-        Q.dialed_numbers = dialed
-        Q._inbound_text_rows = rows
-        Q._get = _get
-        rc = Q.sync_messages(days=2)
-        who = set(seen['who'])
-        rec('sync_messages() with no phones= walks dial tuples',
-            rc == 0 and seen['days'] == Q.INBOUND_NUMBER_LOOKBACK_DAYS and '+15550100191' in who,
-            (rc, seen['days'], who))
-        rec('the number set is 60 days of dials and texts, not the message window',
-            '+15550100192' in who and '+15550100193' not in who and seen['days'] == 60, who)
-        ages = []
-        for stamp in seen['since']:
-            when = datetime.datetime.fromisoformat(stamp)
-            ages.append((datetime.datetime.now(datetime.timezone.utc) - when).total_seconds() / 86400)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        rec('with no prior ok scan, createdAfter is the 60-day lookback',
-            ages and min(ages) > 59 and max(ages) < 61 and st.get('window') == 60,
-            (ages, st.get('window')))
-        rec('the dialled number STOP was ledgered', '#5550100191' in notes_of(oo))
-
-        # B5. follow the next page, and hold if the cap is hit with a token left.
-        seen['who'] = []
-
-        def _get_pages(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if (params or {}).get('pageToken') == 'p2':
-                return {'data': [{'direction': 'incoming', 'content': 'STOP',
-                                  'createdAt': '2026-09-26T12:00:00Z'}]}
-            return {'data': [{'direction': 'incoming', 'content': 'hello',
-                              'createdAt': '2026-09-26T12:00:00Z'}], 'nextPageToken': 'p2'}
-
-        Q._get = _get_pages
-        rc = Q.sync_messages(days=2, phones=['5550100194'])
-        rec('messages are read across the next page', rc == 0 and '#5550100194' in notes_of(oo), rc)
-
-        def _get_forever(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            return {'data': [{'direction': 'incoming', 'content': 'hello'}], 'nextPageToken': 'more'}
-
-        Q._get = _get_forever
-        Q.MESSAGE_PAGE_CAP = 2
-        rc = Q.sync_messages(days=2, phones=['5550100195'])
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('hitting the page cap records truncated and holds texting',
-            rc != 0 and st.get('ok') is False and st.get('truncated') is True and held is True, st)
-        Q.MESSAGE_PAGE_CAP = old[7]
-
-        # B2. 403, 404, malformed, and a denied phone-number list.
-        def check_hold(name, getter, kind):
-            Q._get = getter
-            rc = Q.sync_messages(days=2, phones=['5550100196'])
-            st = json.loads(status.read_text(encoding='utf-8'))
-            blob = json.dumps(st)
-            held, why = Q.text_hold()
-            rec(name, rc != 0 and st.get('ok') is False and held is True and kind in str(st.get('why'))
-                and '5550100196' not in blob and 'fixture-key' not in blob, st.get('why'))
-
-        def pn_ok_then(messages):
-            def _get(key, path, params=None):
-                if path == '/phone-numbers':
-                    return {'data': [{'id': 'PN1'}]}
-                return messages()
-            return _get
-
-        check_hold('a 403 from /messages holds texting',
-                   pn_ok_then(lambda: {'_denied': 403}), 'denied 403')
-        check_hold('a 404 from /messages holds texting',
-                   pn_ok_then(lambda: None), '404')
-        check_hold('malformed /messages JSON holds texting',
-                   pn_ok_then(lambda: {'data': 'not-a-list'}), 'malformed')
-
-        def pn_denied(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'_denied': 403}
-            raise AssertionError('messages must not be read after a denied phone list')
-
-        check_hold('a 403 from /phone-numbers holds texting', pn_denied, 'denied 403')
-
-        # B1. --messages writes the status file when the scan raises.
-        def boom(days):
-            raise RuntimeError('5550100199 fixture-key')
-
-        def _get_pn(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            return {'data': []}
-
-        Q._get = _get_pn
-        Q.dialed_numbers = boom
-        argv = sys.argv
-        sys.argv = ['quo_sync.py', '--messages']
-        try:
-            rc = Q.main()
-        finally:
-            sys.argv = argv
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        blob = json.dumps(st)
-        rec('--messages writes ok:false when the scan raises',
-            rc != 0 and st.get('ok') is False and held is True and 'RuntimeError' in str(st.get('why'))
-            and '5550100199' not in blob and 'fixture-key' not in blob, st.get('why'))
-
         # B7. committed-secrets scan reads the index, not the working tree.
         tree = ast.parse((HERE / 'healthcheck.py').read_text(encoding='utf-8'))
         fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_index_file_texts')
@@ -783,304 +606,17 @@ def review_blockers():
         staged = ns['_index_file_texts'](str(repo), ['doors.json'])[0]
         rec('a staged phone row is what the secrets scan reads', '5550100191' in staged, staged[:80])
     finally:
-        (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
-         Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, C.HERE, S.HERE) = old
+        (O.OPTOUTS, O.SUPPRESS, C.HERE, S.HERE) = old
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def coverage_gap():
-    """Live Quo check: conversation participants are part of the number set, bodies are in `text`,
-    a failed or truncated conversations read holds, 429 is retried, a torn text_sent.json holds."""
-    print('-- conversations coverage')
-    import optout_sync as O
-    import quo_sync as Q
+def ledger_alerts():
+    """pipeline_alerts: an unreadable optouts.json and an unreadable bounce list each alert fail."""
+    print('-- ledger alerts')
     import pipeline_alerts as PA
 
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfconv_'))
-    oo, sup, status = tmp / 'optouts.json', tmp / 'bounced_emails.json', tmp / 'quo_inbound_status.json'
-    old = (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
-           Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q.MAIL_SENT, Q._pause)
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix='dfalert_'))
     try:
-        O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS = str(oo), str(sup), str(status)
-        Q.TEXT_SENT = str(tmp / 'text_sent.json')
-        fresh_ledger(oo)
-        sup.write_text('{}', encoding='utf-8')
-        Q._key = lambda: 'fixture-key'
-        Q._pause = lambda _s: None
-        now = datetime.datetime.now(datetime.timezone.utc)
-        fresh = now.isoformat()
-        old_at = (now - datetime.timedelta(days=90)).isoformat()
-        seen = []
-
-        def dialed(days):
-            return [('5550100191', '2099-000901-CA-01', 1.0)]
-
-        def message(who, direction, body):
-            return {
-                'conversationId': 'CV1', 'createdAt': fresh, 'direction': direction,
-                'from': who, 'id': 'MSG1', 'phoneNumberId': 'PN1', 'status': 'received',
-                'text': body, 'to': ['+15550100000'], 'updatedAt': fresh,
-            }
-
-        def _get(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {
-                    'data': [
-                        {'participants': ['+15550100197'], 'phoneNumberId': 'PN1', 'lastActivityAt': fresh},
-                        {'participants': ['+15550100198'], 'phoneNumberId': 'PN1', 'lastActivityAt': old_at},
-                        {'participants': ['+15550100199'], 'phoneNumberId': 'PN1'},
-                        {'participants': [{'phoneNumber': '+15550100196'}], 'phoneNumberId': 'PN1',
-                          'lastActivityAt': fresh},
-                    ],
-                    'nextPageToken': None,
-                    'totalItems': 4,
-                }
-            if path == Q.MESSAGES_PATH:
-                who = str((params or {}).get('participants') or '')
-                seen.append(who)
-                if who.endswith('196'):
-                    return {'data': [message(who, 'outgoing', 'STOP')]}
-                body = 'STOP' if who.endswith('197') else 'hello'
-                return {'data': [message(who, 'incoming', body)]}
-            raise AssertionError(path)
-
-        Q.dialed_numbers = dialed
-        Q._inbound_text_rows = lambda: []
-        Q._get = _get
-        rc = Q.sync_messages(days=2)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        blob = json.dumps(st)
-        who = set(seen)
-        rec('a conversation participant outside the dial set is scanned',
-            rc == 0 and '+15550100197' in who and '#5550100197' in notes_of(oo), (rc, sorted(who)))
-        rec('the STOP body is read from text and incoming is the inbound direction',
-            (notes_of(oo).get('#5550100197') or {}).get('status') == 'DO NOT CONTACT')
-        rec('an outgoing text STOP is not ledgered', '#5550100196' not in notes_of(oo))
-        rec('a thread quiet for 90 days is not queried', '+15550100198' not in who)
-        rec('a conversation with no lastActivityAt is still scanned', '+15550100199' in who)
-        rec('the dial list is still unioned in', '+15550100191' in who)
-        rec('status records pages and conversations, counts only',
-            st.get('ok') is True and st.get('pages', 0) >= 2 and st.get('conversations') == 4
-            and '5550100' not in blob and 'fixture-key' not in blob, st)
-
-        def _get_denied(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'_denied': 403}
-            if path == Q.MESSAGES_PATH:
-                return {'data': []}
-            raise AssertionError(path)
-
-        Q._get = _get_denied
-        rc = Q.sync_messages(days=2)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('a failed conversations read holds texting',
-            rc != 0 and st.get('ok') is False and held is True and 'conversations denied 403' in str(st.get('why')),
-            st.get('why'))
-
-        def _get_short(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [{'participants': ['+15550100197'], 'lastActivityAt': fresh}],
-                        'nextPageToken': 'more', 'totalItems': 50}
-            return {'data': []}
-
-        Q._get = _get_short
-        Q.MESSAGE_PAGE_CAP = 2
-        rc = Q.sync_messages(days=2, phones=['5550100120'])
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        blob = json.dumps(st)
-        rec('a truncated conversations read holds texting',
-            rc != 0 and st.get('ok') is False and st.get('truncated') is True and held is True
-            and st.get('conversations') == 2 and st.get('pages', 0) >= 2
-            and '5550100' not in blob, st)
-        Q.MESSAGE_PAGE_CAP = old[7]
-
-        calls = {'n': 0}
-        pauses = []
-
-        def _get_429(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            calls['n'] += 1
-            if calls['n'] == 1:
-                return {'_retry': 429}
-            return {'data': [message('+15550100121', 'incoming', 'STOP')]}
-
-        Q._get = _get_429
-        Q._pause = lambda s: pauses.append(s)
-        rc = Q.sync_messages(days=2, phones=['5550100121'])
-        rec('a 429 is retried and then the text STOP is ledgered',
-            rc == 0 and calls['n'] >= 2 and pauses and '#5550100121' in notes_of(oo), (rc, calls['n'], pauses))
-
-        def _get_429_forever(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            return {'_retry': 429}
-
-        Q._get = _get_429_forever
-        Q._pause = lambda _s: None
-        rc = Q.sync_messages(days=2, phones=['5550100122'])
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        blob = json.dumps(st)
-        rec('an exhausted 429 holds texting',
-            rc != 0 and st.get('ok') is False and held is True and '429' in str(st.get('why'))
-            and '5550100122' not in blob, st.get('why'))
-
-        sent = tmp / 'text_sent.json'
-        today = datetime.date.today().isoformat()
-        sent.write_text(json.dumps([{'ch': 'text', 'to': '5550100123', 'd': today}]), encoding='utf-8')
-        asked = []
-
-        def _get_text(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            who = str((params or {}).get('participants') or '')
-            asked.append(who)
-            body = 'STOP' if who.endswith(('123', '124')) else 'hello'
-            return {'data': [message(who, 'incoming', body)]}
-
-        Q.dialed_numbers = lambda days: []
-        Q._inbound_text_rows = old[6]
-        Q._get = _get_text
-        rc = Q.sync_messages(days=2)
-        rec('a readable text_sent.json number is scanned',
-            rc == 0 and '+15550100123' in asked and '#5550100123' in notes_of(oo), asked)
-        raw = b'{'
-        sent.write_bytes(raw)
-        asked.clear()
-        rc = Q.sync_messages(days=2)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('an unreadable text_sent.json is an error and holds texting',
-            rc != 0 and st.get('ok') is False and held is True and 'text_sent unreadable' in str(st.get('why'))
-            and '+15550100123' not in asked and sent.read_bytes() == raw
-            and Q._text_sent_problem() == 'text_sent unreadable',
-            st.get('why'))
-
-        sent.write_text('[]', encoding='utf-8')
-        mail = tmp / 'mail_sent.json'
-        Q.MAIL_SENT = str(mail)
-        today = datetime.date.today().isoformat()
-        mail.write_text(json.dumps([{'ch': 'text', 'to': '5550100124', 'd': today}]), encoding='utf-8')
-        asked.clear()
-        rc = Q.sync_messages(days=2)
-        rec('a readable mail_sent.json text row is scanned',
-            rc == 0 and '+15550100124' in asked and '#5550100124' in notes_of(oo), asked)
-        mail.write_bytes(b'{')
-        asked.clear()
-        rc = Q.sync_messages(days=2)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('an unreadable mail_sent.json is an error and holds texting',
-            rc != 0 and st.get('ok') is False and held is True and 'mail_sent unreadable' in str(st.get('why'))
-            and '+15550100124' not in asked and mail.read_bytes() == b'{'
-            and Q._mail_sent_problem() == 'mail_sent unreadable',
-            st.get('why'))
-        mail.write_text('[]', encoding='utf-8')
-
-        last = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
-        stop_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
-        status.write_text(json.dumps({'ok': True, 'ts': last.isoformat()}), encoding='utf-8')
-        window_since = []
-
-        def _get_window(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                return {'data': [], 'totalItems': 0}
-            req = datetime.datetime.fromisoformat(str((params or {}).get('createdAfter')))
-            window_since.append(req)
-            if req <= stop_at:
-                return {'data': [message('+15550100130', 'incoming', 'STOP')]}
-            return {'data': [message('+15550100130', 'incoming', 'hello')]}
-
-        Q.dialed_numbers = lambda days: []
-        Q._inbound_text_rows = lambda: []
-        Q._get = _get_window
-        rc = Q.sync_messages(days=3, phones=['5550100130'])
-        st = json.loads(status.read_text(encoding='utf-8'))
-        age = (datetime.datetime.now(datetime.timezone.utc) - window_since[0]).total_seconds() / 86400
-        planted = last.isoformat()
-        held, why = Q.text_hold()
-        rec('a scan 5 days ago with --days 3 still reaches a STOP from 4 days ago',
-            rc == 0 and age >= 5 and '#5550100130' in notes_of(oo)
-            and isinstance(st.get('window'), int) and st.get('window') >= 5
-            and '5550100130' not in json.dumps(st),
-            (age, st.get('window'), rc))
-        rec('a phone-scoped scan keeps that ok scan\'s ts and the hold',
-            st.get('ok') is True and st.get('ts') == planted and held is True, (st.get('ts'), planted, why))
-        nxt, nxt_window = Q._message_window(3)
-        nxt_age = (datetime.datetime.now(datetime.timezone.utc)
-                   - datetime.datetime.fromisoformat(nxt)).total_seconds() / 86400
-        rec('the next full window still starts from that scan',
-            nxt_age >= 5 and nxt_window >= 5, (nxt_age, nxt_window))
-        rc = Q.sync_messages(days=3)
-        st = json.loads(status.read_text(encoding='utf-8'))
-        held, why = Q.text_hold()
-        rec('only a full scan writes a fresh ok ts and releases the hold',
-            rc == 0 and st.get('ok') is True and st.get('ts') != planted and held is False,
-            (st.get('ts'), planted, why))
-
-        status.write_text('{', encoding='utf-8')
-        window_since.clear()
-        rc = Q.sync_messages(days=3, phones=['5550100131'])
-        age = (datetime.datetime.now(datetime.timezone.utc) - window_since[0]).total_seconds() / 86400
-        st = json.loads(status.read_text(encoding='utf-8'))
-        rec('an unreadable status uses the 60-day lookback',
-            age > 59 and age < 61 and st.get('window') == 60, (age, st.get('window')))
-
-        old90 = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)).isoformat()
-        conv_calls = []
-        extra_page = []
-
-        def _get_conv(key, path, params=None):
-            if path == '/phone-numbers':
-                return {'data': [{'id': 'PN1'}]}
-            if path == Q.CONVERSATIONS_PATH:
-                conv_calls.append(dict(params or {}))
-                token = (params or {}).get('pageToken')
-                if token == 'old':
-                    return {'data': [
-                        {'participants': ['+15550100141'], 'lastActivityAt': old90},
-                        {'participants': ['+15550100142'], 'lastActivityAt': old90},
-                    ], 'nextPageToken': 'past-the-lookback'}
-                if token == 'past-the-lookback':
-                    extra_page.append(token)
-                    return {'data': []}
-                return {'data': [
-                    {'participants': ['+15550100140'], 'lastActivityAt': fresh},
-                ], 'nextPageToken': 'old'}
-            who = str((params or {}).get('participants') or '')
-            asked.append(who)
-            return {'data': []}
-
-        asked.clear()
-        Q._get = _get_conv
-        rc = Q.sync_messages(days=2, phones=['5550100120'])
-        st = json.loads(status.read_text(encoding='utf-8'))
-        rec('conversations are requested with maxResults 100',
-            rc == 0 and conv_calls and all(c.get('maxResults') == 100 for c in conv_calls),
-            conv_calls)
-        rec('paging stops once a whole page is older than the lookback',
-            rc == 0 and st.get('truncated') is not True
-            and not extra_page and '+15550100140' in asked
-            and '+15550100141' not in asked and '+15550100142' not in asked,
-            (len(conv_calls), asked, st.get('truncated'), st.get('ok')))
-
         torn = tmp / 'torn-optouts.json'
         torn.write_text('{', encoding='utf-8')
         sig = PA.read_optout_ledger(str(torn))
@@ -1097,8 +633,6 @@ def coverage_gap():
             bounced.get('list_unreadable') is True and 'lb' not in bounced
             and b_alert and b_alert['severity'] == 'fail' and 'unreadable' in b_alert['text'].lower())
     finally:
-        (O.OPTOUTS, O.SUPPRESS, Q.INBOUND_STATUS, Q._key, Q._get, Q.dialed_numbers,
-         Q._inbound_text_rows, Q.MESSAGE_PAGE_CAP, Q.TEXT_SENT, Q.MAIL_SENT, Q._pause) = old
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -1108,6 +642,6 @@ if __name__ == '__main__':
     cadence_recheck()
     bridge()
     review_blockers()
-    coverage_gap()
+    ledger_alerts()
     print('\n%d passed, %d failed' % (len(ok), len(bad)))
     sys.exit(1 if bad else 0)

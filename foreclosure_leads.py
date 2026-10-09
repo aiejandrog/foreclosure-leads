@@ -174,7 +174,7 @@ AUCTION_HORIZON_DAYS = int(os.environ.get('DEALFLOW_AUCTION_HORIZON_DAYS', '120'
 # exactly the code that never gets a test. See phone_src.py for the reasoning behind each tag.
 from phone_src import (MAX_PHONES, SHARED_PHONE_MIN_OWNERS, PHSRC_TRACE, PHSRC_WP,
                        PHSRC_HOUSEHOLD, PHSRC_NAME, PHSRC_AGENT, PHSRC_SHARED, PHSRC_NOT_OWNER,
-                       tag_shared_numbers, tag_listing_agents)   # noqa: F401
+                       tag_shared_numbers, tag_listing_agents, propagate_dnc)   # noqa: F401
 from sale_pick import newest_sale
 
 
@@ -3014,6 +3014,30 @@ def make_tracker(leads):
     # Both passes are module-level functions (defined above) so `_phonesrctest.py` can exercise
     # them on fixtures — they were inline here and therefore only reachable by running a full
     # build against real homeowner data, which is exactly the code that never gets a test.
+    # A number DNC-flagged on one lead is DNC on every lead carrying it (2026-10-08). After every
+    # phone merge above, before the ranking pass below (which rebuilds the rank of a changed lead).
+    _dnc_known = set()
+    try:
+        for _e in (st or {}).values():
+            for _p in (_e.get('phones') or []):
+                if _p.get('dnc') and _p.get('number'):
+                    _dnc_known.add(str(_p.get('number')))
+    except Exception as _dke:
+        print('dnc carry-over: could not read the skip-trace flags (%s)' % str(_dke)[:80])
+    try:
+        for _n, _v in (_dncreg or {}).items():
+            if isinstance(_v, dict) and (_v.get('national_dnc') or _v.get('state_dnc')):
+                _dnc_known.add(str(_n))
+    except Exception as _dke:
+        print('dnc carry-over: could not read dnc_scrub.json (%s)' % str(_dke)[:80])
+    try:
+        _dnl, _dnn = propagate_dnc(slim, _dnc_known)
+        print('dnc carry-over: %d number(s) flagged on one lead were clean on another; now flagged on '
+              '%d more lead(s)' % (_dnn, _dnl))
+    except Exception as _dpe:
+        # Loud, never silent: Call Mode still applies the same rule on its own (dnc_numbers).
+        print('  !! dnc carry-over FAILED (%s): the board may offer a number another lead flags DNC'
+              % str(_dpe)[:100])
     _shn, _shared_n = tag_shared_numbers(slim)
     print('shared-number check: %d number(s) sit on %d+ different owners, tagged on %d lead(s)'
           % (_shared_n, SHARED_PHONE_MIN_OWNERS, _shn))
@@ -3398,6 +3422,11 @@ def make_tracker(leads):
                     _raw = str(_c)[1:].strip().lower()
                     if str(_c).startswith('#'):
                         _raw = re.sub(r'\D', '', _raw)
+                        # '#1XXXXXXXXXX' (saved with the country code) is hashed in the lead's
+                        # 10-digit form too, or the board and Call Mode, which hash 10-digit
+                        # lead numbers, never match it (2026-10-08). Both keys ship: union only.
+                        if len(_raw) == 11 and _raw[0] == '1':
+                            _optouts['#' + _addr_key(_raw[1:])] = dict(_entry)
                     _optouts[str(_c)[0] + _addr_key(_raw)] = dict(_entry)
                     for _hc in (_by_email.get(_raw) or []):
                         if _hc:
@@ -3727,6 +3756,10 @@ def make_tracker(leads):
         _cm_led = call_mode.stamp_ledger(_cm_all[0], _mlog, _tlog)
         if _cm_led:
             print('call mode: %d dial row(s) carry a server email/text send date' % _cm_led)
+        # Confirmed sends the dated stamps cannot express (unparseable ts_utc): lu:1 = contacted.
+        _cm_lu = call_mode.stamp_unknown(_cm_all[0], call_mode.ledger_audit())
+        if _cm_lu:
+            print('call mode: %d dial row(s) have a confirmed send with no usable date (marked contacted)' % _cm_lu)
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,

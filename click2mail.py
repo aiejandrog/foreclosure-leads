@@ -13,7 +13,7 @@ returns a letter id, Click2Mail is FOUR sequential POSTs (document -> address li
 submit) whose errors happen at different steps. Keep the transaction here; outreach_mail routes to
 one file or the other via a --vendor flag.
 
-SECURITY (same rule as lob.key/postscan.key/quo.key)
+SECURITY (same rule as lob.key/postscan.key)
 The credential is read from a gitignored `click2mail.key` file and NEVER hardcoded. Click2Mail auth
 is HTTP Basic with the account username and password -- that is a login credential, not just an
 API key, so rotating it means changing your dashboard login. The file's format is JSON:

@@ -1,41 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-07T09:54:06-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
+   "key": "healthcheck-fail",
+   "severity": "fail",
+   "text": "healthcheck FAIL stages: skiptrace freshness."
+  },
+  {
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness: send server port 8823 is not listening; 4 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Opt-out Sync, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 10-07 21:12): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-07T09:54:06-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 52 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 50 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-07T09:54:06-04:00",
+   "at": "2026-10-08T16:45:54-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-07T09:54:06-04:00",
+ "published_at": "2026-10-08T16:45:54-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
-   "filings": 1279,
-   "holds": 402,
-   "leads_checked": 13,
+   "errors": 2,
+   "filings": 1351,
+   "holds": 443,
+   "leads_checked": 20,
    "provider": "courtlistener",
-   "pull_age_h": 4.87,
+   "pull_age_h": 7.25,
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 116,
-   "truncated": 0
+   "reason": "time_budget",
+   "requests_used": 100,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -51,36 +57,38 @@
    "ft_dead": 1,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.07692307692307693,
+   "ft_rate": 0.09090909090909091,
    "ft_restart_cap": 10,
    "ft_rule": "slow_restart",
-   "ft_sent": 13,
+   "ft_sent": 11,
    "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.005369272089651719,
-   "mailed": 33,
+   "lb": 0.005537717362550956,
+   "mailed": 32,
    "post_dead": 1,
-   "post_lb": 0.005369272089651719,
-   "post_mailed": 33,
-   "post_rate": 0.030303030303030304,
+   "post_lb": 0.005537717362550956,
+   "post_mailed": 32,
+   "post_rate": 0.03125,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.030303030303030304,
+   "rate": 0.03125,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 7.64118
+   "usd": 7.17429
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
    "fresh": true,
-   "names": []
+   "names": [
+    "skiptrace freshness"
+   ]
   },
   "morning_sends": {
    "addresses": 2,
@@ -89,8 +97,8 @@
     15,
     15
    ],
-   "date": "2026-10-07",
-   "eligible": 52,
+   "date": "2026-10-08",
+   "eligible": 50,
    "judged": true,
    "readable": true,
    "scheduled": true,
@@ -101,35 +109,34 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-07",
+   "date": "2026-10-08",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1791375911,
+   "started_at": 1791492332,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 17.2567
+   "spent": 20.2647
   },
   "readiness": {
-   "at": "2026-10-06T21:12:35-04:00",
+   "at": "2026-10-07T21:12:47-04:00",
    "battery_present": true,
-   "degraded": 0,
-   "degraded_codes": [],
-   "degraded_names": [],
+   "degraded": 1,
+   "degraded_codes": [
+    7
+   ],
+   "degraded_names": [
+    "DEALFLOW Refresh"
+   ],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 4,
-   "failed_names": [
-    "DEALFLOW Morning Worker",
-    "DealFlow Opt-out Sync",
-    "DEALFLOW Refresh",
-    "DealflowSendServerDaily"
-   ],
+   "failed": 0,
+   "failed_names": [],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
@@ -138,7 +145,7 @@
    ],
    "on_ac": true,
    "pct": 79,
-   "port_open": false,
+   "port_open": true,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true

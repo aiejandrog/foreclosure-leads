@@ -1297,21 +1297,22 @@ def _judgment_amount(timeline, entry_id):
         # whose separate entry_id field disagrees with it is not attributable to either, so it is
         # reported, never counted (a text check is built from the ref, but a saved file can be
         # edited or merged).
-        # Scoped to checks made from document TEXT, the path that records both fields from one
-        # source; older vision fixtures and saved files carry entry_id and source_ref that were
-        # never required to agree, and this does not change how they read.
-        if check.get('source') == 'document_text':
-            ref_parts = source.split(':')
-            if len(ref_parts) < 3 or str(ref_parts[1]) != str(check.get('entry_id')):
-                rejected.append('a check for this judgment names entry %s but its source %s was '
-                                'filed under a different entry' % (check.get('entry_id'), source))
-                continue
-            # Tied to the exact bytes it was read from. With no recorded hash it cannot be shown
-            # to belong to this copy, so it does not verify.
-            if not check.get('document_hash'):
-                rejected.append('a text check for this judgment (%s) records no document hash, so '
-                                'it cannot be tied to the copy it was read from' % source)
-                continue
+        # Applied to EVERY check, whichever reader produced it. These two used to be scoped to
+        # document TEXT, so a total read off the page IMAGE (the vision path) skipped them and
+        # an older saved vision check verified with no hash and a mismatched entry. A figure off
+        # an image is weaker evidence than one off text, never stronger, so it meets the same bar.
+        ref_parts = source.split(':')
+        if len(ref_parts) < 3 or str(ref_parts[1]) != str(check.get('entry_id')):
+            rejected.append('a check for this judgment names entry %s but its source %s was '
+                            'filed under a different entry' % (check.get('entry_id'), source))
+            continue
+        # Tied to the exact bytes it was read from. With no recorded hash it cannot be shown
+        # to belong to this copy, so it does not verify.
+        if not check.get('document_hash'):
+            rejected.append('a %s check for this judgment (%s) records no document hash, so '
+                            'it cannot be tied to the copy it was read from'
+                            % (_reader_word(check), source))
+            continue
         if check.get('ok') is True:
             # `amount` must be a NUMBER, not merely present: a string amount from an older saved
             # format passed the None test, so `verified` was non-empty while the figure set was
@@ -1328,6 +1329,11 @@ def _judgment_amount(timeline, entry_id):
             rejected.append('a check for this judgment records ok=%r, which is neither true nor '
                             'false' % (check.get('ok'),))
     return verified, failed, rejected
+
+
+def _reader_word(check):
+    """'text' or 'image' - which reader a saved check says it came from, for the gap sentence."""
+    return 'text' if check.get('source') == 'document_text' else 'image'
 
 
 def _coverage_of(timeline, entry_id):
@@ -1716,8 +1722,12 @@ def assess(timeline, dossier=None):
     _sole = (bool(mine) and all(r.get('state') == 'read' and r.get('document') for r in mine)
              and len(_read_here) == 1)
     # ...and the check must come from that one document, not from a file that has no coverage row.
-    _sibling = [c for c in verified if c.get('source') == 'document_text'
-                and not (c.get('document_kind') == 'final_judgment' and c.get('judgment_title') is True)
+    # Every reader, not only text: a total read off the page IMAGE of an affidavit is no more the
+    # judgment's than the same total read off its text. A saved image check from before the image
+    # path recorded `document_kind` carries none, so it is held unless the entry's sole read
+    # document is the one it came from - the side that cannot overstate what is known.
+    _sibling = [c for c in verified
+                if not (c.get('document_kind') == 'final_judgment' and c.get('judgment_title') is True)
                 and not (_sole and str(c.get('source_ref') or '') in _read_here)]
     if _sibling:
         verified = [c for c in verified if c not in _sibling]
