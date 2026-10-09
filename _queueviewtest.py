@@ -44,7 +44,7 @@ HARNESS = r"""
 var store = {};
 var localStorage = {getItem:function(k){return k in store ? store[k] : null;}, setItem:function(k,v){store[k]=String(v);}};
 var _NOTESBAD = false, QVIEW = 'untouched', _CBDUE = Object.create(null);
-var _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
+var _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
 var HISTCOV = {ledgers_ok:true, why:'', capped:false, total:10, shipped:10};
 """ + FNS + r"""
 var notes = {
@@ -72,7 +72,7 @@ store.fcLastPull = _stamp; store.fcPullStat = JSON.stringify({ok:true, kf:_keyFp
 out.syncPulled = _viewOf(rows.fresh);
 delete store.fcTeamKey;
 HISTCOV = null; out.noHistcov = _viewOf(rows.fresh); HISTCOV = {ledgers_ok:true, why:'', capped:true, total:783, shipped:400};
-_VIEWN = {untouched:0, replies:1, retries:8, history_unknown:2};
+_VIEWN = {untouched:0, callbacks:0, replies:1, retries:8, history_unknown:2};
 out.emptyUntouched = viewEmptyHtml();
 QVIEW = 'retries'; out.emptyRetries = viewEmptyHtml(); QVIEW = 'untouched';
 console.log(JSON.stringify(out));

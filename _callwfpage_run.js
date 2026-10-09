@@ -131,6 +131,22 @@ T('completion events validate and are caller-attested', JSON.parse(store.fcWfEve
 ctx.cur = B; ctx.cbCancel(B);
 T('cancel closes without completing', !inView('callbacks', 'CASE-B') && ctx._CBQ.closed.cancelled === 1 && ctx._CBQ.closed.completed === 1);
 
+console.log('\n== review fixes ==');
+ctx.QVIEW = 'callbacks';
+const D2 = ctx.ROWS.find(r => r.c === 'CASE-U') || U;
+ctx.logOutcome(C, { k: 'dnc', t: 'DNC — do not contact', h: 0, s: true }, C.p && C.p[0]);
+T('a DNC lead with a due request is never dialled from Callbacks', !ctx.pool().some(r => r.c === 'CASE-C'));
+const nopk = Object.assign({}, A, { c: 'CASE-NOPK', pk: '' });
+const before = ctx.WF.list.length; ctx.cbSave(nopk, false);
+T('no owner key: callback not saved', ctx.WF.list.length === before);
+store.fcCaller = 'Alejandro'; ctx.WFT.start({ callerId: ctx.wfCaller(), caseId: 'CASE-A' });
+store.fcCaller = 'Carlos'; ctx.wfBarHtml();
+T('caller switch stops the old session', ctx.WFT.state().status === 'stopped');
+store.fcCaller = 'Alejandro';
+ctx.WF.list = [{ event_id: 'old', event_type: 'x', occurred_at_utc: new Date(Date.now() - 120 * 86400000).toISOString() }].concat(ctx.WF.list);
+store.fcWfEvents = JSON.stringify(ctx.WF.list); ctx.WF.store = ctx.CW.newStore(); ctx.WF.list = []; ctx.wfLoad();
+T('events older than 90 days are dropped on load', !ctx.WF.list.some(e => e.event_id === 'old'));
+
 console.log('\n== persistence ==');
 const n = ctx.WF.list.length; ctx.WF.store = ctx.CW.newStore(); ctx.WF.list = []; ctx.wfLoad(); ctx.cbRefresh();
 T('events reload from this phone after a restart', ctx.WF.list.length === n && n > 0);

@@ -4240,7 +4240,6 @@ function viewBar(){
   return o;
 }
 function viewEmptyHtml(){
-  try{ WFT.pause('empty_queue'); wfPaint(); }catch(e){}
   var n = _VIEWN, hw = _histWhy(), part = (typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
     ? '<div class="sub">Partial inventory: only '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded, so this does not mean the crew is out of fresh leads.</div>' : '';
   if(QVIEW === 'untouched')
@@ -4674,7 +4673,8 @@ function render(){
      but the two diverge the moment an outcome removes a lead: log 5 do-not-contacts and the pool is
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
-  if(i>=P.length){ _posSave(P, i); $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
+  if(i>=P.length){ _posSave(P, i); try{ WFT.pause('empty_queue'); }catch(e){}
+    $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
       +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div><div class="sub">'
       +viewEmptyHtml().replace(/^<b>[^<]*<\/b>/,'')+'</div>'
       +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
@@ -5626,7 +5626,7 @@ function screenLead(){
     // deploy landing during the first call of a session made freshCheck location.reload() the page
     // he was mid-call on. Three deploys shipped today while he was dialing.
     touched = true;
-    try{ if(WFT.state().status === 'running'){ WFDIAL = true; WFT.launchDialer(); wfPaint(); } }catch(e){}
+    try{ if(WFT.state().status === 'running'){ WFDIAL = true; WFHID = false; WFT.launchDialer(); wfPaint(); } }catch(e){}
     /* RECORD THE ATTEMPT AT DIAL TIME, not just on the tapped outcome (2026-09-08 field report:
        "me and my cousin keep getting people we already called"). A call he never tags an outcome
        for -- distracted, or iOS backgrounds the tab the instant the dialer opens on a 100-dial
@@ -6594,13 +6594,15 @@ __CWJS__
 __CWTIMERJS__
 var WF_TZ = 'America/New_York', WF_KEY = 'fcWfEvents', WF_TKEY = 'fcWfTimer';
 var WF = {store: CW.newStore(), list: [], err: ''};
-var WFDIAL = false, WFREC = null, _CBQ = null, _CBDUE = Object.create(null), _CBFUT = 0, _CBHELD = [];
+var WFDIAL = false, WFHID = false, WFREC = null, _CBQ = null, _CBDUE = Object.create(null), _CBFUT = 0, _CBHELD = [];
 function wfDevice(){ try{ return _deviceId(); }catch(e){ return 'dev-unknown'; } }
 function wfCaller(){ return String(caller() || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 function wfLoad(){
   try{
     var raw = localStorage.getItem(WF_KEY), a = raw ? JSON.parse(raw) : [];
     if(!Array.isArray(a)) throw new Error('not a list');
+    var keep = Date.now() - 90 * 86400000;
+    a = a.filter(function(e){ var t = Date.parse(e && e.occurred_at_utc); return !(t < keep); }).slice(-5000);
     a.forEach(function(e){ if(CW.validate(e).ok){ CW.add(WF.store, e); WF.list.push(e); } });
   }catch(e){ WF.err = 'Workflow records on this phone could not be read'; }
 }
@@ -6631,6 +6633,7 @@ function wfBoot(){
 }
 function wfMin(sec){ return Math.round(sec / 60); }
 function wfBarHtml(){
+  wfSyncCaller();
   var s = WFT.state(), run = s.status === 'running', c = wfCaller();
   var sec = 0; try{ sec = CW.activeSeconds(WF.store, c, {from: Date.now() - 86400000, to: Date.now() + 1}); }catch(e){}
   var h = '<div class="wfbar"><b>' + (run ? 'Working' : (s.status === 'paused' ? 'Paused' : 'Not timing')) + '</b>'
@@ -6643,7 +6646,11 @@ function wfBarHtml(){
 }
 function wfBar(){ return '<div id="wfbar">' + wfBarHtml() + '</div>'; }
 function wfPaint(){ var el = document.getElementById('wfbar'); if(el) el.innerHTML = wfBarHtml(); }
+function wfSyncCaller(){
+  try{ var s = WFT.state(); if(s.status !== 'stopped' && s.callerId !== wfCaller()) WFT.stop('caller_switch'); }catch(e){}
+}
 function wfAct(a){
+  wfSyncCaller();
   if(a === 'start'){
     var r = WFT.start({callerId: wfCaller(), caseId: cur && cur.c});
     if(!r.ok) toast(r.error === 'select a caller first' ? 'Pick who is calling first (access code), then Start work.' : r.error);
@@ -6652,7 +6659,7 @@ function wfAct(a){
   wfPaint();
 }
 function wfDialReturn(){
-  if(!WFDIAL) return; WFDIAL = false;
+  if(!WFDIAL || !WFHID) return; WFDIAL = false; WFHID = false;
   var a = prompt('You came back from a call. How many minutes were you on it or working it? Leave blank to count NOTHING for that stretch (this is your own estimate and is labelled self-reported).', '');
   var m = a == null ? NaN : parseFloat(a);
   var r = (isFinite(m) && m > 0) ? WFT.returnFromDialer({kind: 'confirm', seconds: m * 60}) : WFT.returnFromDialer({kind: 'unknown'});
@@ -6665,7 +6672,7 @@ document.addEventListener('click', function(ev){
 }, false);
 ['click', 'touchstart', 'keydown', 'input'].forEach(function(n){ document.addEventListener(n, function(){ WFT.interaction(); }, true); });
 document.addEventListener('visibilitychange', function(){
-  if(document.hidden){ WFT.hidden(); } else { wfDialReturn(); }
+  if(document.hidden){ WFHID = true; WFT.hidden(); } else { wfDialReturn(); }
   wfPaint();
 });
 setInterval(function(){ var r = WFT.tick(); if(r && r.idle) toast('Work timer paused: no activity for 5 minutes'); wfPaint(); }, 5000);
@@ -6715,6 +6722,7 @@ function cbCard(r){
   return h;
 }
 function cbSave(r, resched){
+  if(!r.pk){ toast('Cannot track a callback on this lead: no owner key. Not saved.'); return; }
   var d = $('cb-date') && $('cb-date').value, t = $('cb-time') && $('cb-time').value;
   if(!d || !t){ toast('Pick the date and time they asked for'); return; }
   if(!resched && !($('cb-ask') && $('cb-ask').checked)){ toast('Tick the box: the owner asked for this call'); return; }
@@ -6737,6 +6745,7 @@ function cbSave(r, resched){
 }
 function cbDone(r){
   var it = _CBDUE[r.c]; if(!it) return;
+  if(!r.pk){ toast('Cannot confirm: this lead has no owner key. Not recorded.'); return; }
   if(!confirm('Confirm: you spoke with the OWNER (not someone else) and this is the callback they asked for.')) return;
   var lid = wfId('launch'), aid = wfId('att'), cid = wfId('conv');
   wfEmit(wfEv('launch_recorded', {launch_id: lid, attempt_id: aid}, r));
