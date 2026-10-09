@@ -721,3 +721,5 @@ exports/
 logs/
 .env
 !_xchecktest.py
+!_cadencesiblingtest.py
+!_texttripwiretest.py

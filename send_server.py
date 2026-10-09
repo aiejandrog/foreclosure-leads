@@ -1911,6 +1911,25 @@ class Handler(BaseHTTPRequestHandler):
                               'case': case[:40], 'why': _sv.get('why', '')})
                 return self._json(451, {'ok': False, 'blocked': _sv.get('code') or 'stay_unverified',
                                         'err': 'text refused — %s' % (_sv.get('why') or 'bankruptcy-stay status unknown')})
+        # TRIPWIRE, not a gate (2026-10-09). This endpoint is called AFTER the owner's phone opened
+        # the sms: composer, and the board ignores the reply, so a refusal here cannot stop a text
+        # and would only drop the row the 3-touch cap counts. What it can do is leave a durable
+        # record that a text went to someone on the do-not-contact ledger (by case, or by number as
+        # '#digits' / '#1digits'). The gate that prevents it is _textContactBlocked on the board.
+        if bool(d.get('confirmed')):
+            try:
+                _tc, _te = _optout_set()
+                _td = re.sub(r'\D', '', str(d.get('to') or ''))
+                _tk = [case.lower()] + (['#' + _td, '#' + _td[1:]] if len(_td) == 11 and _td[0] == '1'
+                                         else (['#' + _td, '#1' + _td] if _td else []))
+                if any(k in _tc for k in _tk):
+                    _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                                  'd': dt.date.today().isoformat(), 'gate': 'optout', 'ch': 'text',
+                                  'code': 'text_sent_to_optout', 'case': case[:40],
+                                  'why': 'a confirmed text was logged for a case or number on the '
+                                         'do-not-contact ledger'})
+            except Exception:
+                pass
         rec = {'d': dt.date.today().isoformat(),
                'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
                'ch': 'text', 'case': case,
