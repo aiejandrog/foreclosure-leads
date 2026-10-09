@@ -38,6 +38,9 @@ rec('1d empty ledger changes nothing', SO.sibling_cases(leads, set(), cf) == set
 inst = [{'case': 'X%d' % i, 'emails': ['law@example.com']} for i in range(9)] + [{'case': A, 'emails': ['law@example.com']}, {'case': 'Y', 'emails': ['law@example.com']}]
 rec('1e an address on more than 8 leads is an institution, not a person',
     SO.sibling_cases(inst, {A.lower()}, cf) == set())
+dup = [dict(x) for x in leads] + [dict(x) for x in leads] * 4          # same 4 cases repeated across files
+rec('1g the same lead repeated across files does not trip the institution guard',
+    B.lower() in SO.sibling_cases(dup, {A.lower()}, cf))
 rec('1f ledger match by email key alone opts the lead out too',
     B.lower() in SO.sibling_cases([{'case': 'Z', 'emails': ['k@example.com', 'x@example.com']},
                                    {'case': B, 'emails': ['x@example.com']}], {'k@example.com'}, cf))

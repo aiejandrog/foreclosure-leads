@@ -35,12 +35,15 @@ def sibling_cases(leads, ledger_keys, case_fn, max_shared=8):
     keys = {str(k).strip().lower().lstrip('@') for k in (ledger_keys or ())}
     if not keys:
         return set()
-    em_n, ph_n = {}, {}
+    em_c, ph_c = {}, {}      # distinct CASES per identity: the same lead repeated across files counts once
     for r in leads:
+        cs = str(case_fn(r) or '').strip().lower()
         for e in _emails(r):
-            em_n[e] = em_n.get(e, 0) + 1
+            em_c.setdefault(e, set()).add(cs)
         for d in _phones(r):
-            ph_n[d] = ph_n.get(d, 0) + 1
+            ph_c.setdefault(d, set()).add(cs)
+    em_n = {k: len(v) for k, v in em_c.items()}
+    ph_n = {k: len(v) for k, v in ph_c.items()}
     out_em, out_ph = set(), set()
     for r in leads:
         case = str(case_fn(r) or '').strip().lower()
