@@ -559,6 +559,74 @@ msrc = (HERE / 'bsg_mail_campaign.py').read_text(encoding='utf-8')
 check('LP letter campaign: the stay verdict is a drop bucket',
       "drops['bankruptcy stay check'] += 1" in msrc and 'contact_blocked_reason' in msrc)
 
+# ============================================================ 6. round 3 (independent review)
+# -- a HEALTHY cache that says ACTIVE must hold the raw-row paths too
+hd = fresh_dir('healthy_active')
+put(hd, 'sale_history_cache.json', {MIA: ent(a=True, bd='2099-01-02'),
+                                    MIA2: ent(a=True, bd='2099-01-03', sl='2099-02-01'),
+                                    '2099-000803-CA-01': ent()})
+with patched(BL, 'federal_hold', lambda c, **k: (False, '')):
+    check('raw_row_hold, healthy cache: an ACTIVE unlifted stay is held',
+          BL.raw_row_hold(MIA, here=str(hd))[0] is True and 'ACTIVE' in BL.raw_row_hold(MIA, here=str(hd))[1])
+    check('raw_row_hold, healthy cache: a lifted stay, a clear entry, an unread case and Broward are not held (no mass hold)',
+          all(BL.raw_row_hold(c, here=str(hd)) == (False, '') for c in (MIA2, '2099-000803-CA-01', '2099-000899-CA-01', BRO)))
+    ldir = fresh_dir('lp_pool')
+    pool_src = (HERE / 'bsg_daily_routes.py').read_text(encoding='utf-8')
+    check('daily routes: the LP pool check is the same stay_held that now sees cached ACTIVE stays',
+          'CR.stay_held(base[' in pool_src)
+saved_here_cr = CR.HERE
+try:
+    CR.HERE = str(hd)
+    with patched(BL, 'federal_hold', lambda c, **k: (False, '')):
+        check('door routes: stay_held reads the cache in ITS folder - active held, clean not',
+              CR.stay_held(MIA) is True and CR.stay_held('2099-000803-CA-01') is False)
+finally:
+    CR.HERE = saved_here_cr
+
+# -- sale_history never leaves an empty cache that blocks the next run
+d = sh_world('sh_allfail')
+put(d, 'leads_final.json', [auction(MIA)])
+DOCKETS[MIA] = None
+rc, out = quiet(SH.main, ['--limit', '5'])
+check('sale_history first run where every read fails: no empty cache is written',
+      raw(d, 'sale_history_cache.json') is None and 'not created' in out, (rc, out[-200:]))
+rc, out = quiet(SH.main, ['--limit', '5'])
+check('sale_history: and the next run is still a first run, not "empty cache" exit 2', rc in (None, 0) and CALLS.count(MIA) == 2, (rc, CALLS))
+d = sh_world('sh_init_fail')
+put(d, 'leads_final.json', [auction(MIA)])
+put(d, 'sale_history_cache.json', {})
+DOCKETS[MIA] = None
+rc, out = quiet(SH.main, ['--limit', '5', '--init'])
+check('sale_history --init where every read fails: the file stays {} and nothing else changes',
+      json.loads(raw(d, 'sale_history_cache.json')) == {}, (rc, out[-200:]))
+
+# -- the .bak: a small rebuilt cache does not replace a fuller one
+d = sh_world('sh_bak')
+full = {('2099-0009%02d-CA-01' % i): ent(t=NOW) for i in range(10)}
+put(d, 'sale_history_cache.json.bak', full)
+put(d, 'sale_history_cache.json', {MIA: ent(t=NOW)})
+put(d, 'leads_final.json', [auction(MIA)])
+rc, out = quiet(SH.main, ['--limit', '0'])
+check('.bak: a cache under half its size does not overwrite the fuller .bak',
+      len(json.loads(raw(d, 'sale_history_cache.json.bak'))) == 10 and 'kept the fuller' in out, out[-300:])
+put(d, 'sale_history_cache.json', dict(full, **{MIA: ent(t=NOW)}))
+rc, out = quiet(SH.main, ['--limit', '0'])
+check('.bak: a comparable cache does refresh the .bak',
+      len(json.loads(raw(d, 'sale_history_cache.json.bak'))) == 11, len(json.loads(raw(d, 'sale_history_cache.json.bak'))))
+
+# -- a target that stays locked: write in place instead of losing the night
+d = fresh_dir('dump_locked')
+
+
+def always_locked(a, b):
+    raise PermissionError('locked')
+
+
+with patched(SH.os, 'replace', always_locked), patched(SH.time, 'sleep', lambda s: None):
+    SH._dump({'x': 2}, str(d / 'g.json'))
+check('sale_history._dump: still locked after the retries -> written in place, no .tmp left',
+      json.loads(raw(d, 'g.json')) == {'x': 2} and raw(d, 'g.json.tmp') is None)
+
 print()
 print('==== %s ====' % ('FAILED: %d check(s)' % len(FAILS) if FAILS
                           else 'all stay-gate fail-closed checks passed'))

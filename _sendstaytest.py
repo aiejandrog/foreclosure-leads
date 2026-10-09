@@ -267,16 +267,17 @@ def parity():
                 oe_stayed.add(OE._case(r))
         # Same PREDICATE, entry for entry ...
         pred = {k for k in cases if SG.entry_stay_active(CACHE[k])}
-        rec('same predicate: outreach_email refuses exactly the entries entry_stay_active() flags',
-            oe_stayed == pred, {'outreach_email': sorted(oe_stayed), 'stay_gate': sorted(pred)})
-        # ... and the bridge is only ever STRICTER: stem matching adds sibling-suffix blocks
-        # (2099-000006-CA-01 is clean on its own key and blocked by its active -CC-01 sibling).
+        rec('same predicate: outreach_email refuses at least every entry entry_stay_active() flags',
+            pred <= oe_stayed, {'outreach_email': sorted(oe_stayed), 'stay_gate': sorted(pred)})
+        # ... and the bridge's stem matching adds sibling-suffix blocks (2099-000006-CA-01 is clean on
+        # its own key and blocked by its active -CC-01 sibling). Since 2026-09-29 the email load applies
+        # the same stem rule (bk_lookup.miami_stay_data_hold), so the two now agree.
         sg_stayed = {k for k in cases if SG.check(k, str(tmp / 'sale_history_cache.json'))['code']
                      == SG.STAY_ACTIVE}
         rec('the bridge never clears a case outreach_email would refuse (superset)',
             oe_stayed <= sg_stayed, {'outreach_email': sorted(oe_stayed), 'bridge': sorted(sg_stayed)})
-        rec('the only extra bridge refusal here is the stem sibling',
-            sg_stayed - oe_stayed == {'2099-000006-CA-01'}, sorted(sg_stayed - oe_stayed))
+        rec('the email load refuses the stem sibling too, so it no longer trails the bridge',
+            sg_stayed == oe_stayed and '2099-000006-CA-01' in oe_stayed, sorted(sg_stayed ^ oe_stayed))
         rec('the parity check is not vacuous (both see the stayed rows)',
             {'2099-000001-CA-01', '2099-000006-CC-01'} <= oe_stayed, sorted(oe_stayed))
     finally:

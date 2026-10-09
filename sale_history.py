@@ -620,14 +620,19 @@ def _inv(iso):
     return ''.join(chr(ord('9') - int(ch) + ord('0')) if ch.isdigit() else ch for ch in iso)
 
 
-def _bak_has_entries():
-    """True when sale_history_cache.json.bak parses to a non-empty dict (a good copy to restore)."""
+def _bak_entry_count():
+    """Entries in sale_history_cache.json.bak when it parses to a dict, else 0."""
     try:
         with open(CACHE + '.bak', encoding='utf-8') as f:
             d = json.load(f)
-        return isinstance(d, dict) and bool(d)
+        return len(d) if isinstance(d, dict) else 0
     except Exception:
-        return False
+        return 0
+
+
+def _bak_has_entries():
+    """True when sale_history_cache.json.bak parses to a non-empty dict (a good copy to restore)."""
+    return _bak_entry_count() > 0
 
 
 def _dump(obj, path, indent=None):
@@ -642,8 +647,16 @@ def _dump(obj, path, indent=None):
             return
         except PermissionError:
             if attempt == 5:
-                raise
+                break
             time.sleep(0.5)
+    # Still locked: write in place, which is what this file did before atomic writes and which
+    # tolerates a reader that has the target open. Losing the night's reads costs more.
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, indent=indent)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
 
 
 def main(argv=None):
@@ -701,8 +714,14 @@ def main(argv=None):
         return 2
     if cache and os.path.exists(CACHE):
         # The last copy that parsed, for the recovery above. Taken before this run writes anything.
+        # Not over a fuller one: after a --init rebuild the small new cache must not replace the
+        # good copy the very next night.
         try:
-            shutil.copyfile(CACHE, CACHE + '.bak')
+            if len(cache) * 2 >= _bak_entry_count():
+                shutil.copyfile(CACHE, CACHE + '.bak')
+            else:
+                print('sale_history: kept the fuller sale_history_cache.json.bak (%d entries) over this '
+                      'cache (%d)' % (_bak_entry_count(), len(cache)))
         except OSError as e:
             print('sale_history: could not keep sale_history_cache.json.bak (%s)' % type(e).__name__)
     now = time.time()
@@ -846,7 +865,8 @@ def main(argv=None):
             # Atomic (tmp + os.replace): a run killed mid-write used to leave a truncated cache,
             # which _load_cache then read as empty.
             try:
-                _dump(cache, CACHE)
+                if cache:
+                    _dump(cache, CACHE)
                 if leads:
                     _dump(leads, path)
                 if lp_dirty and lp_writable:
@@ -855,7 +875,12 @@ def main(argv=None):
                 print(f'  checkpoint write skipped ({type(e).__name__})')
             print(f'  ... {fetched} fetched, {changed} updated')
 
-    _dump(cache, CACHE)
+    if cache:
+        _dump(cache, CACHE)
+    else:
+        # Nothing was read (every fetch failed, or nothing was due) and there was no cache. An
+        # empty {} on disk would block every later run until someone passes --init.
+        print('sale_history: nothing read and no cache - sale_history_cache.json not created')
     # WRITE WHENEVER ANY VALUE WAS APPLIED, not only when something was fetched live. Guarding this
     # on `changed` alone silently discarded the whole in-memory merge on any day the cache was fully
     # warm (2026-08-09: 0 fetched -> file never written -> sale_survived and sale_bk_active vanished

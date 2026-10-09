@@ -1831,7 +1831,9 @@ def stay_cache_error(here=None):
 
 def miami_stay_data_hold(case, here=None):
     """(held, why): a Miami-Dade case is held while sale_history_cache.json is not readable stay
-    data (stay_cache_error). Anything that is not a Miami-Dade stem is not this check's business.
+    data (stay_cache_error), AND when that cache holds an ACTIVE, unlifted docket stay for it (the
+    rule stay_gate.check and foreclosure_leads.stamp_cached_stays use). Anything that is not a
+    Miami-Dade stem is not this check's business.
 
     For the paths that act on a RAW lead row (door routes, dial sheet, knock planner, the email
     load). The board bake holds the same rows with hold_miami_on_bad_stay_cache, but these read
@@ -1849,6 +1851,18 @@ def miami_stay_data_hold(case, here=None):
         return True, 'stay check unavailable. Lead stays held.'
     if err:
         return True, err[:140]
+    # A healthy cache can still say ACTIVE. These raw-row paths see that only if sale_history
+    # stamped the row that night; lp_addresses.json rows are never stamped at all.
+    try:
+        root = here or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, ierr = stay_gate._load(os.path.join(root, 'sale_history_cache.json'))
+        if ierr or idx is None:
+            return True, 'stay data unavailable: %s' % str(ierr or 'no index')[:100]
+        for _k, v in (idx.get(stay_gate.case_stem(case)) or []):
+            if isinstance(v, dict) and stay_gate.entry_stay_active(v):
+                return True, 'ACTIVE bankruptcy stay on the state docket. Lead stays held.'
+    except Exception:
+        return True, 'stay check unavailable. Lead stays held.'
     return False, ''
 
 
