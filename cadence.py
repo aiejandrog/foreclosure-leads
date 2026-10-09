@@ -506,7 +506,13 @@ def _run(args):
     # them through a shared email or phone. It only adds suppressions, and a failure to read the
     # lead files leaves the checks above exactly as they were.
     try:
-        _sibs = _sibling_optout.sibling_cases(_oe._load_leads() or [], _oo, _oe._case)
+        try:
+            from optout_sync import notes_dnc_keys as _ndk
+            _nk = _ndk()
+        except Exception:
+            _nk = ()
+        _pk = _sibling_optout.ledger_phone_keys(OPTOUTS, _nk)
+        _sibs = _sibling_optout.sibling_cases(_oe._load_leads() or [], _oo, _oe._case, phone_keys=_pk)
     except Exception as _e:
         _sibs = set()
         print('  sibling opt-out check skipped (%s)' % _e)

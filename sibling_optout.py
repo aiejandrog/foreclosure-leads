@@ -28,12 +28,40 @@ def _emails(r):
     return {str(e or '').strip().lower() for e in (r.get('emails') or []) if str(e or '').strip()}
 
 
-def sibling_cases(leads, ledger_keys, case_fn, max_shared=8):
+def ledger_phone_keys(optouts_path, notes_keys=()):
+    """10-digit numbers the ledger holds as '#digits' keys (a text STOP, a wrong number, a number
+    marked Do Not Contact), plus any '#digits' in `notes_keys` (rep-logged DNC). outreach_email.
+    _load_optouts drops these on purpose, so the email gates never saw a phone-only stop. Read-only;
+    an unreadable file gives an empty set (the callers' own ledger gate already holds the send)."""
+    import json
+    out = set()
+    keys = list(notes_keys or ())
+    try:
+        d = json.load(open(optouts_path, encoding='utf-8'))
+        n = d.get('notes') if isinstance(d, dict) else None
+        if isinstance(n, dict):
+            keys += [k for k, v in n.items() if v]
+    except Exception:
+        pass
+    for k in keys:
+        k = str(k).strip()
+        if k[:1] != '#':
+            continue
+        d = re.sub(r'\D', '', k)
+        if len(d) == 11 and d[0] == '1':
+            d = d[1:]
+        if len(d) == 10:
+            out.add(d)
+    return out
+
+
+def sibling_cases(leads, ledger_keys, case_fn, max_shared=8, phone_keys=()):
     """Lowercased case numbers of leads that are NOT themselves on the ledger but share an email or
     phone with a lead that is. `ledger_keys` is the lowercased key set with '@' stripped (what
     outreach_email._load_optouts returns)."""
     keys = {str(k).strip().lower().lstrip('@') for k in (ledger_keys or ())}
-    if not keys:
+    pkeys = set(phone_keys or ())
+    if not keys and not pkeys:
         return set()
     em_c, ph_c = {}, {}      # distinct CASES per identity: the same lead repeated across files counts once
     for r in leads:
@@ -47,12 +75,12 @@ def sibling_cases(leads, ledger_keys, case_fn, max_shared=8):
     out_em, out_ph = set(), set()
     for r in leads:
         case = str(case_fn(r) or '').strip().lower()
-        if (case and case in keys) or (_emails(r) & keys):
+        if (case and case in keys) or (_emails(r) & keys) or (_phones(r) & pkeys):
             out_em |= {e for e in _emails(r) if em_n.get(e, 0) <= max_shared}
             out_ph |= {d for d in _phones(r) if ph_n.get(d, 0) <= max_shared}
     hits = set()
     for r in leads:
         case = str(case_fn(r) or '').strip().lower()
-        if case and case not in keys and ((_emails(r) & out_em) or (_phones(r) & out_ph)):
+        if case and case not in keys and ((_phones(r) & pkeys) or (_emails(r) & out_em) or (_phones(r) & out_ph)):
             hits.add(case)
     return hits
