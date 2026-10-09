@@ -213,6 +213,9 @@ rec('board Text link: preventDefault runs BEFORE any early return', blk.index('e
 rec('board WhatsApp link goes through the same pre-flight', "class=\"txwa\" href=\"#\"" in BOARD and "isWa" in blk and "window.open(href" in blk)
 rec('board: no composer href left on a navigable anchor (sms: / wa.me are in data-href)',
     'class="txsend" href="#" data-href=' in BOARD and not re.search(r'class="txwa" href="\'\+esc', BOARD))
+rec('board lead-card WhatsApp link is gated too (no raw wa.me href left)',
+    'ctact ctact-wa txwa" href="#" data-c=' in BOARD and not re.search(r'ctact-wa" href="\'\+esc', BOARD) and 'fromCard' in blk)
+rec('no anchor in the board renders a raw wa.me/sms: href', not re.search(r"[^-]href=\"'\+esc\(_waLink", BOARD))
 rec('board: the generic stamp skips the WhatsApp link too', "classList.contains('txwa')" in BOARD)
 rec('board: a stale callback (modal closed / other lead) opens nothing', "caseAtTap" in blk and "classList.contains('show')" in blk)
 WG = BOARD[BOARD.index('function textGate'):BOARD.index('function openHere')]

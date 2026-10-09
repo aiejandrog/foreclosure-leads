@@ -3551,7 +3551,7 @@ function _contactLineHtml(r, ph, opts){
   const _waOK = (typeof _withinTextHours!=='function') || _withinTextHours();
   const wa = (canTxt && isMob)
     ? (_waOK
-        ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
+        ? '<a class="ctact ctact-wa txwa" href="#" data-c="'+esc(r.case)+'" data-href="'+esc(_waLink(r, digits))+'" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
         : '<span class="ctact ctact-wa" style="opacity:.45;cursor:not-allowed" title="Outside the FL FTSA texting window (8am-8pm ET'+((typeof _flClock==='function')?', now '+esc(_flClock()):'')+'). WhatsApp is a text — $500-$1,500 statutory damages per message sent outside the window. Call instead, or queue it for the morning.">'+_waSvg()+' WA &middot; after 8am</span>')
     : '';
   return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+stag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
@@ -18580,7 +18580,8 @@ document.addEventListener('click', e => {
     // data-href (the anchor itself points at '#') so middle-click / open-in-new-tab / long-press
     // cannot open a composer without this handler.
     e.preventDefault();
-    const r=cur(); if(!r) return;
+    const fromCard = !!sd.dataset.c;   // the lead-card WhatsApp link names its own lead; the modal links use cur()
+    const r = fromCard ? DATA.find(x => x.case === sd.dataset.c) : cur(); if(!r) return;
     if(sd.dataset.chk) return;
     const isWa = sd.classList.contains('txwa');
     const href = sd.dataset.href || sd.getAttribute('href') || '', lbl = sd.innerHTML;
@@ -18592,12 +18593,17 @@ document.addEventListener('click', e => {
     textPreflight(r, dg).then(function(v){
       delete sd.dataset.chk; sd.innerHTML = lbl;
       if(!v.ok){ alert('NOT texted — ' + v.why); return; }
-      const r2 = cur();
-      if(!r2 || r2.case !== caseAtTap || !document.getElementById('textmodal') || !document.getElementById('textmodal').classList.contains('show')) return;
+      if(!fromCard){
+        const r2 = cur();
+        if(!r2 || r2.case !== caseAtTap || !document.getElementById('textmodal') || !document.getElementById('textmodal').classList.contains('show')) return;
+      }
       _markViewed(r.case); _afterCall = {c: r.case, ch: 'text', t: Date.now()};
       autoLog(r, 'text', 'texted', {nextDays:3});
       _textLedgerPost(r, dg, true);
-      if(isWa) window.open(href, '_blank', 'noopener'); else location.href = href;
+      // wa.me: a blocked popup cannot be detected with noopener, so open without it and fall back to
+      // this tab if the browser refuses (the touch is already logged; a silent no-op would lie)
+      if(isWa){ let w = null; try{ w = window.open(href, '_blank'); }catch(_e){} if(!w) location.href = href; else { try{ w.opener = null; }catch(_e){} } }
+      else location.href = href;
     });
     return; }
   const mk = e.target.closest && e.target.closest('.txmark');
