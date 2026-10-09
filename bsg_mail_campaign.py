@@ -192,7 +192,7 @@ def pool(days, opt):
     rows = _load('lp_addresses.json', [])
     rows = rows if isinstance(rows, list) else list(rows.values())
     drops = {'low-confidence': 0, 'no address': 0, 'entity-owned': 0, 'estate/life-estate': 0,
-             'opted out': 0, 'stale filing': 0, 'no first name': 0}
+             'opted out': 0, 'stale filing': 0, 'no first name': 0, 'bankruptcy stay check': 0}
     out = []
     for r in rows:
         if not isinstance(r, dict):
@@ -209,6 +209,16 @@ def pool(days, opt):
         case = str(r.get('case') or '')
         if case in opt:
             drops['opted out'] += 1
+            continue
+        # The same bar outreach_mail applies to a letter (2026-09-29): the send bridge's stay
+        # verdict. A hand-written solicitation to a debtor under a stay leaves a paper exhibit.
+        try:
+            import bk_lookup as _BKL
+            _held, _why = _BKL.contact_blocked_reason(case, here=HERE)
+        except Exception:
+            _held = True
+        if _held:
+            drops['bankruptcy stay check'] += 1
             continue
         owner = str(r.get('paOwner') or '')
         if not owner.strip() or _ENTITY.search(owner):

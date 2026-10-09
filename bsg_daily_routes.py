@@ -268,6 +268,16 @@ def build_pool(drop):
     if _nopa and not up['knockable']:
         print(f'!! COUNTY-VERIFIED POOL EMPTY: all {_nopa} medium row(s) lack PA data — '
               f'run  python lp_values.py --all  (the routes bat does this before every build).')
+    # STAY GATE on the LP pools (2026-09-29). Neither LP pool went through _live_lead, so a lis
+    # pendens owner the stay cache marks ACTIVE, or any Miami owner while the cache is unreadable,
+    # was routed. stay_held fails closed.
+    _kept = []
+    for base, kind in lp_rows:
+        if CR.stay_held(base['case']):
+            drop[f'{kind}: bankruptcy stay / stay data unavailable'] += 1
+            continue
+        _kept.append((base, kind))
+    lp_rows = _kept
     flat = [b for b, _ in lp_rows]
     _lp_coords(flat)
     for base, kind in lp_rows:
@@ -281,7 +291,8 @@ def build_pool(drop):
         srow = {'case': r['case'], 'addr': r.get('addr') or '', 'city': r.get('city') or '',
                 'zip': str(r.get('zip') or '')[:5], 'owner': r.get('paOwners') or '',
                 'value': r.get('value') or 0, 'flag': r['upgrade'], 'why': r['upgrade_why']}
-        if not _notes_block(r['case'], RL.norm(srow['addr'])) and r['case'] not in optouts:
+        if (not _notes_block(r['case'], RL.norm(srow['addr'])) and r['case'] not in optouts
+                and not CR.stay_held(r['case'])):
             specials.append(srow)
     _dg.report('door routes', indent='')
     # HONEST HOLE, stated where the log will show it. The auction pool above is gated; the LP

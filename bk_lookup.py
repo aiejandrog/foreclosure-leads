@@ -1525,6 +1525,10 @@ def flags_for_cases(cases, now=None):
     except Exception as e:
         FLAGS_DEGRADED = 'cache load failed (%s)' % type(e).__name__
         return hold_every_case(cases)
+    try:
+        nc_stems = stay_gate.never_contact_stems()     # read once, not once per case
+    except Exception:
+        nc_stems = None
     out = {}
     errored = 0
     for raw in cases:
@@ -1577,9 +1581,21 @@ def flags_for_cases(cases, now=None):
             if cop.get('code') == 'stay_active' or key not in out:
                 out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
                             'hard': cop.get('code') == 'stay_active'}
+        # NEVER-CONTACT on the board itself (2026-09-29), Miami included. The board used to learn
+        # these only from sale_history, which holds just the 3 built-ins when never_contact.json
+        # is unreadable. An unreadable list holds every case, as federal_hold and stay_gate do.
+        if nc_stems is None:
+            if key not in out:
+                out[key] = {'hold': True, 'why': 'never-contact list unreadable. Lead stays held.',
+                            'hard': False}
+        elif ({stay_gate.case_stem(raw), key} - {''}) & nc_stems:
+            out[key] = {'hold': True, 'why': 'contacted during its bankruptcy -- never contacted again',
+                        'hard': True}
     why = []
     if unreadable:
         why.append('cache unreadable')
+    if nc_stems is None:
+        why.append('never-contact list unreadable')
     if errored:
         why.append('%d case(s) errored' % errored)
     FLAGS_DEGRADED = '; '.join(why)
@@ -1777,10 +1793,90 @@ def load_cache():
     return data
 
 
+class CacheUnreadable(Exception):
+    """bk_lead_cache.json exists but is not a readable dict; it is never written over."""
+
+
+def cache_unreadable():
+    """True when the CourtListener cache file exists but will not read as a dict."""
+    data, exists = _load(cache_path())
+    return bool(exists and not isinstance(data, dict))
+
+
 def save_cache(data):
+    """Refuses to write over an unreadable cache (2026-09-29). load_cache reads one as {}, so a
+    save would replace every stored party-search match with only what this run searched. Left
+    in place, the file keeps every reader holding (flags_for_cases, HoldIndex, gate_opinion)."""
     global _HOLD_MEMO
+    if cache_unreadable():
+        raise CacheUnreadable('bk_lead_cache.json is unreadable; not overwritten')
     _dump(cache_path(), data)
     _HOLD_MEMO = None
+
+
+def stay_cache_error(here=None):
+    """'' when sale_history_cache.json (the Miami-Dade docket stays) holds readable stay data,
+    else a short reason. The test is stay_gate._load's, the one stay_gate.check refuses every
+    send on: missing, unreadable, not a dict, or empty. Any error here is a reason too."""
+    try:
+        import stay_gate
+        root = here or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, err = stay_gate._load(os.path.join(root, 'sale_history_cache.json'))
+    except Exception as e:
+        return 'stay check unavailable (%s)' % type(e).__name__
+    if err or idx is None:
+        return 'stay data unavailable: %s' % str(err or 'no index')[:100]
+    return ''
+
+
+def miami_stay_data_hold(case, here=None):
+    """(held, why): a Miami-Dade case is held while sale_history_cache.json is not readable stay
+    data (stay_cache_error), AND when that cache holds an ACTIVE, unlifted docket stay for it (the
+    rule stay_gate.check and foreclosure_leads.stamp_cached_stays use). Anything that is not a
+    Miami-Dade stem is not this check's business.
+
+    For the paths that act on a RAW lead row (door routes, dial sheet, knock planner, the email
+    load). The board bake holds the same rows with hold_miami_on_bad_stay_cache, but these read
+    leads_final.json / lp_leads.json directly, and a bad cache leaves those files with no stay
+    flags (restore_stays_from_cache restores nothing on purpose). Any error here holds."""
+    try:
+        import stay_gate
+        if not stay_gate.case_stem(case):
+            return False, ''
+    except Exception:
+        return True, 'stay check unavailable. Lead stays held.'
+    try:
+        err = stay_cache_error(here)
+    except Exception:
+        return True, 'stay check unavailable. Lead stays held.'
+    if err:
+        return True, err[:140]
+    # A healthy cache can still say ACTIVE. These raw-row paths see that only if sale_history
+    # stamped the row that night; lp_addresses.json rows are never stamped at all.
+    try:
+        root = here or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, ierr = stay_gate._load(os.path.join(root, 'sale_history_cache.json'))
+        if ierr or idx is None:
+            return True, 'stay data unavailable: %s' % str(ierr or 'no index')[:100]
+        for _k, v in (idx.get(stay_gate.case_stem(case)) or []):
+            if isinstance(v, dict) and stay_gate.entry_stay_active(v):
+                return True, 'ACTIVE bankruptcy stay on the state docket. Lead stays held.'
+    except Exception:
+        return True, 'stay check unavailable. Lead stays held.'
+    return False, ''
+
+
+def raw_row_hold(case, here=None):
+    """(held, why) for a path that acts on a raw lead row and has no board bake behind it:
+    federal_hold (CourtListener, never-contact, Broward/Palm Beach with a cache) plus
+    miami_stay_data_hold. The row's own sale_bk_active flag is the caller's. Any error holds."""
+    try:
+        held, why = federal_hold(case)
+        if held:
+            return True, why
+        return miami_stay_data_hold(case, here=here)
+    except Exception:
+        return True, 'federal bankruptcy check unavailable — lead stays held'
 
 
 def put_entry(cache, key, cases, searched, ok_check, err_why, now):
@@ -2262,6 +2358,16 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None, 
     ok_av, why = provider.available(env)
     leads = load_leads(here)
     cache = load_cache()
+    if cache_unreadable():
+        # load_cache read a corrupt file as {}; searching on would spend budget on a cache
+        # save_cache then refuses to write. Stop here: the file stays as it is, every reader keeps
+        # holding on it, and the status tells pipeline_alerts why.
+        log('CourtListener: bk_lead_cache.json is unreadable. Nothing searched, nothing saved; '
+            'every lead that needs the check stays held until it is restored or removed.')
+        write_status(pull_ok=False, pull_t=clock.time(), pull_ts=_stamp(), reason='cache_unreadable',
+                     provider='courtlistener' if provider.name == PROVIDER_COURTLISTENER else 'other')
+        return {'pull_ok': False, 'checked': 0, 'holds': 0, 'errors': 0, 'truncated': 0,
+                'reason': 'cache_unreadable'}
     errors = 0
     pull_ok = False
     n_rows = 0
@@ -2403,6 +2509,10 @@ def presend_check(case, here=HERE, env=None, transport=None, clock=None, provide
         return {'status': 'error', 'why': 'stay gate could not key this case', 'verdict': ''}
     if not key:
         return {'status': 'unsearchable', 'why': 'case number cannot be keyed', 'verdict': ''}
+    if cache_unreadable():
+        # Not searched and not saved: save_cache would refuse, and the send gate already holds
+        # every lead on an unreadable cache (gate_opinion).
+        return {'status': 'error', 'why': 'federal bankruptcy cache is unreadable', 'verdict': ''}
     cache = load_cache()
     ent = cache.get(key)
     if isinstance(ent, dict) and not _needs_party_search(ent, clock.time()):

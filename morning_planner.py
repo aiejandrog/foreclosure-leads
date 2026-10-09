@@ -460,7 +460,9 @@ def _knock_eligible(r):
     _case = r.get('case') or r.get('Case #')
     try:
         import bk_lookup as _BKL
-        if _BKL.federal_hold(_case)[0]:
+        # raw_row_hold = federal_hold + a Miami case while the stay cache is unreadable. This path
+        # reads raw lead rows, which carry no stay flag when that cache is bad (2026-09-29).
+        if _BKL.raw_row_hold(_case)[0]:
             return False
     except Exception:
         # Fails closed, like Call Mode's federal_hold_fn (2026-09-29): a broken check holds every

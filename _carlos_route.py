@@ -145,10 +145,22 @@ def _identity_opted(skip, optouts):
     return False
 
 
+def stay_held(case):
+    """True when this case may not be knocked on: federal_hold (CourtListener, never-contact) or a
+    Miami-Dade case while sale_history_cache.json is unreadable. These routes read the RAW lead
+    files, which carry stay flags only if sale_history put them there (2026-09-29). Fails closed."""
+    try:
+        import bk_lookup as BL
+        return bool(BL.raw_row_hold(case, here=HERE)[0])
+    except Exception:
+        return True
+
+
 def _live_lead(r, skip, siblings=None, optouts=None):
     """DROP-OR-KEEP filter -- the compliance + gas gate before ranking."""
     case = r.get('case') or r.get('Case #')
     if r.get('sale_bk_active') and not r.get('sale_stay_lifted'): return False   # BK stay
+    if stay_held(case): return False      # federal / never-contact / unreadable Miami stay data
     # CLAIMED (sibling_cases.py): a sibling case already sold + title transferred.
     # The Martin lesson -- Carlos knocked on a unit R&V Investors already owned. Never again.
     if siblings and (siblings.get(case) or {}).get('claimed'): return False

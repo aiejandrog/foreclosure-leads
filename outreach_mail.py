@@ -101,7 +101,10 @@ def _load_leads():
             pass
     for xf in sorted(glob.glob(os.path.join(HERE, '*_leads.json'))):
         base = os.path.basename(xf)
-        if base.startswith('_') or base in ('leads_raw.json',):
+        # balloon_leads.json is the investor refi lane: it must never get the homeowner letter
+        # (outreach_email excludes it the same way). It used to be stopped only by accident, as
+        # an unkeyable BAL- id at the stay check.
+        if base.startswith('_') or base in ('leads_raw.json', 'balloon_leads.json'):
             continue
         try:
             leads += json.load(open(xf, encoding='utf-8'))
@@ -626,21 +629,19 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
         if (_g(r, 'saleBkAct') or _g(r, 'sale_bk_active')) and not _g(r, 'saleLift'):
             skips['active-bankruptcy-stay'] += 1
             continue
+        # THE SEND BRIDGE'S FULL STAY VERDICT (2026-09-29), not send_hold. send_hold releases a
+        # Miami-Dade case unless CourtListener blocks, so a docket stay_active or an unreadable
+        # sale_history_cache.json (stay_data_unavailable) mailed the letter whenever the row flag
+        # above had been lost. contact_blocked_reason is stay_gate.check, the bar email already
+        # meets: a letter now needs the same stay clear an email does. Any failure holds.
         try:
             import bk_lookup as _BKL
-            _held, _why = _BKL.send_hold(_case(r))
-            if _held:
-                skips['federal-bankruptcy-check'] += 1
-                continue
+            _held, _why = _BKL.contact_blocked_reason(_case(r), here=HERE)
         except Exception:
-            try:
-                import stay_gate as _SG
-                if not _SG.case_stem(_case(r)):
-                    skips['federal-bankruptcy-check'] += 1
-                    continue
-            except Exception:
-                skips['federal-bankruptcy-check'] += 1
-                continue
+            _held = True
+        if _held:
+            skips['bankruptcy-stay-check'] += 1
+            continue
         # DILIGENCE GATE — a HARD backstop, OUTSIDE `if not trust_selection`, on the same reasoning
         # the §362 comment above spells out. A human picking the lead in the tracker proves he wants
         # to mail it; it does not prove anybody answered the title question. And mail is the channel
