@@ -43,7 +43,7 @@ FNS = ('var OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n'
 HARNESS = r"""
 var store = {};
 var localStorage = {getItem:function(k){return k in store ? store[k] : null;}, setItem:function(k,v){store[k]=String(v);}};
-var _NOTESBAD = false, QVIEW = 'untouched';
+var _NOTESBAD = false, QVIEW = 'untouched', _CBDUE = Object.create(null);
 var _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
 var HISTCOV = {ledgers_ok:true, why:'', capped:false, total:10, shipped:10};
 """ + FNS + r"""

@@ -2311,6 +2311,18 @@ def _text_hold_json():
     })
 
 
+_MODDIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _read_module(name):
+    # beside this file, not HERE: tests re-point HERE at a scratch dir
+    with open(os.path.join(_MODDIR, name), encoding='utf-8') as fh:
+        src = fh.read()
+    if '</script' in src.lower():
+        raise CallModeError('call_mode: %s contains a closing script tag and cannot be inlined' % name)
+    return src
+
+
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
                seat=None, funnel_js='', text_js='', histcov='null'):
     """The page. Deliberately one file, no framework, no external fetch."""
@@ -2326,7 +2338,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
-                       ('__TEXTHOLD__', 1), ('__HISTCOV__', 1),
+                       ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
@@ -2384,7 +2396,9 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                                                 if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
                 .replace('__TEXTHOLD__', _text_hold_json()) \
-                .replace('__HISTCOV__', histcov)
+                .replace('__HISTCOV__', histcov) \
+                .replace('__CWJS__', _read_module('call_workflow.js')) \
+                .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js'))
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -2949,6 +2963,9 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 .errchip{color:#ff8a80;font-weight:700;cursor:pointer;text-decoration:underline}
 .errold{color:var(--mut,#9aa);cursor:pointer;text-decoration:underline}
 .sub{font-size:12px;color:var(--mut);margin-top:6px;text-align:center}
+.wfbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0;font-size:12px;color:var(--mut)}
+.wfb{min-height:36px;padding:4px 12px;border-radius:8px;border:1px solid #2a3f6b;background:#0f1d3a;color:var(--fg,#fff);font-weight:800;touch-action:manipulation}
+.wfb.go{border-color:var(--gold);color:var(--gold)}
 .vm{background:#0f1d3a;border:1px solid #2a3f6b;border-radius:10px;padding:12px;margin-top:10px;font-size:17px;line-height:1.5}
 .vmlang{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:12px 0 3px}
 /* z-60 — above the sheet (40), the #sync chip (45) and the pill (50). With no z-index the sheet
@@ -4153,9 +4170,9 @@ function teamRecheck(){
    and (when team sync is on) at least one pull completed. Otherwise an uncontacted row is HISTORY
    UNKNOWN, never untouched. Missing history is not zero. */
 var QVIEW = 'untouched';
-var _QV = ['untouched', 'replies', 'retries', 'history_unknown'];
-var _QVL = {untouched:'Untouched', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
-var _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
+var _QV = ['untouched', 'callbacks', 'replies', 'retries', 'history_unknown'];
+var _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
+var _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
 /* A lead opened on purpose from a board list or the lookup may sit in another view. That is a
    ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
    retry never turns the session into a retry session. */
@@ -4200,6 +4217,7 @@ function _histWhy(){
    unresolved work, not a fresh lead. Then any call, dial or outbound touch on this case or a
    sibling case of the same person (r.pcs) or a baked server-ledger stamp -> Retries. */
 function _viewOf(r){
+  if(_CBDUE[r.c]) return 'callbacks';
   if(_replyOpen(r)) return 'replies';
   if(_contactTier(r) > 0) return 'retries';
   var sib = r.pcs || [];
@@ -4217,16 +4235,20 @@ function viewBar(){
   var hw = _histWhy();
   if(hw) o += '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
     + '. Nothing shows as untouched until that clears.</div>';
+  o += wfBar();
+  if(QVIEW === 'callbacks') o += cbNote();
   return o;
 }
 function viewEmptyHtml(){
+  try{ WFT.pause('empty_queue'); wfPaint(); }catch(e){}
   var n = _VIEWN, hw = _histWhy(), part = (typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
     ? '<div class="sub">Partial inventory: only '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded, so this does not mean the crew is out of fresh leads.</div>' : '';
   if(QVIEW === 'untouched')
     return '<b>No untouched leads in the checked inventory for this seat.</b>'
-      + '<div class="sub">Waiting elsewhere: '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' retr'+(n.retries===1?'y':'ies')
+      + '<div class="sub">Waiting elsewhere: '+n.callbacks+' callback'+(n.callbacks===1?'':'s')+', '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' retr'+(n.retries===1?'y':'ies')
       + ', '+n.history_unknown+' with history unknown. Open one from the buttons above when you choose to.</div>'
       + (hw ? '<div class="sub">History is incomplete ('+esc(hw)+'), so uncontacted leads are listed as History unknown.</div>' : '') + part;
+  if(QVIEW === 'callbacks') return '<b>No requested callbacks due now.</b><div class="sub">Reminders after a no-answer and inbound replies are not callbacks.</div>' + cbNote() + part;
   if(QVIEW === 'replies') return '<b>No open replies.</b><div class="sub">Switch view above.</div>' + part;
   if(QVIEW === 'retries') return '<b>No retries due for this seat.</b><div class="sub">Switch view above.</div>' + part;
   return '<b>Nothing with unknown history.</b><div class="sub">Switch view above.</div>' + part;
@@ -4237,6 +4259,7 @@ function pool(){
      paints would otherwise be missed. 0.05ms for 900 note keys; the O(rows x notes) version this
      replaced measured 36.8ms per pass at 400 rows, twice per paint. */
   optPhones(true);
+  cbRefresh(); _CBHELD = [];
   _WQSET = null;                                       // fresh queue read once per pass, not per row
   /* ONE predicate per lane, shared with head()'s button counts so the number on the button and the
      list behind it can never disagree. Notes on the individual lanes:
@@ -4252,6 +4275,7 @@ function pool(){
   var n = 0, s = 0;
   var keep = base.filter(function(r){
     var sr = supReason(r, lane);
+    if(sr.k && _CBDUE[r.c]) _CBHELD.push({c: r.c, why: sr.t, due: _CBDUE[r.c].due_utc});   // due request, held: shown, never dialled
     if(sr.k === 'soft'){ s++; return false; }          // reached on another channel — its own count
     if(sr.k){ n++; return false; }                     // compliance, or already called
     return true; });
@@ -4288,9 +4312,13 @@ function pool(){
     return true; });
   /* QUEUE VIEW, after every gate. Counts first (so the empty state can say what is waiting), then
      the narrowing. A view can only REMOVE rows the gates already allowed. */
-  _VIEWN = {untouched:0, replies:0, retries:0, history_unknown:0};
+  _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
   var _vw = keep.map(function(r){ var v = _viewOf(r); _VIEWN[v]++; return v; });
   if(QVIEW) keep = keep.filter(function(r, ix){ return _vw[ix] === QVIEW; });
+  if(QVIEW === 'callbacks'){                           // due instant, overdue first; no fresh-first reorder
+    keep.sort(function(a, b){ return (Date.parse(_CBDUE[a.c].due_utc) - Date.parse(_CBDUE[b.c].due_utc)) || (a.c < b.c ? -1 : 1); });
+    _FRESHN = 0; return keep;
+  }
   var _ff = _freshFirst(keep, lane);
   _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; else break; }
   return _ff;
@@ -5576,6 +5604,7 @@ function screenLead(){
     +   band('THE MONEY', mny)
     +   band(_isBal ? 'THE NOTE' : 'WHO IS FORECLOSING', whoFc + prop + histLine(r))
     +   fileBand(r)
+    +   cbCard(r)
     +   '<a class="dial" href="'+dialHref(d)+'"'+dialTarget()+' id="dial">'+fmt(d)+'</a>'
     +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
     /* 'N' (not the owner) is new; an unmapped letter used to fall through to "last resort", which
@@ -5597,6 +5626,7 @@ function screenLead(){
     // deploy landing during the first call of a session made freshCheck location.reload() the page
     // he was mid-call on. Three deploys shipped today while he was dialing.
     touched = true;
+    try{ if(WFT.state().status === 'running'){ WFDIAL = true; WFT.launchDialer(); wfPaint(); } }catch(e){}
     /* RECORD THE ATTEMPT AT DIAL TIME, not just on the tapped outcome (2026-09-08 field report:
        "me and my cousin keep getting people we already called"). A call he never tags an outcome
        for -- distracted, or iOS backgrounds the tab the instant the dialer opens on a 100-dial
@@ -6552,6 +6582,185 @@ async function freshCheck(){
     if(m && m[1]!==SIG){ if(!touched) location.reload(); else $('pill').style.display='block'; }
   }catch(e){}
 }
+/* ══════ CALL WORKFLOW — work timer + requested callbacks (spec sections 5 and 7) ══════
+   Two inert modules (call_workflow.js: events, reducers, callback queue; call_workflow_timer.js: the
+   Start/Pause/End controller) are inlined here. Events live ONLY on this phone (localStorage
+   fcWfEvents); nothing is synced, uploaded or written into the notes store, the opt-out ledger or any
+   suppression path. Reporting zone: America/New_York (proposed default, spec section 7).
+   OWNER KEY: events carry owner_id 'pk:'+row.pk, the existing person key, and say so
+   (owner_link 'pkey_unverified'). That is NOT a verified identity link; it is only used to make one
+   request and its completion refer to the same row. */
+__CWJS__
+__CWTIMERJS__
+var WF_TZ = 'America/New_York', WF_KEY = 'fcWfEvents', WF_TKEY = 'fcWfTimer';
+var WF = {store: CW.newStore(), list: [], err: ''};
+var WFDIAL = false, WFREC = null, _CBQ = null, _CBDUE = Object.create(null), _CBFUT = 0, _CBHELD = [];
+function wfDevice(){ try{ return _deviceId(); }catch(e){ return 'dev-unknown'; } }
+function wfCaller(){ return String(caller() || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
+function wfLoad(){
+  try{
+    var raw = localStorage.getItem(WF_KEY), a = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(a)) throw new Error('not a list');
+    a.forEach(function(e){ if(CW.validate(e).ok){ CW.add(WF.store, e); WF.list.push(e); } });
+  }catch(e){ WF.err = 'Workflow records on this phone could not be read'; }
+}
+function wfEmit(ev){
+  var v = CW.validate(ev);
+  if(!v.ok){ WF.err = 'Metrics not saved (' + v.errors.join(', ') + ')'; return false; }
+  CW.add(WF.store, ev); WF.list.push(ev);
+  try{ localStorage.setItem(WF_KEY, JSON.stringify(WF.list)); WF.err = ''; return true; }
+  catch(e){ WF.err = 'Metrics not saved on this phone'; return false; }
+}
+function wfId(p){ return p + '-' + wfDevice() + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+function wfEv(type, payload, r, at){
+  var t = new Date(at || Date.now()).toISOString();
+  return {schema_version: CW.SCHEMA, event_id: wfId(type), event_type: type, occurred_at_utc: t, recorded_at_utc: t,
+          device_id: wfDevice(), caller_id: wfCaller() || null, owner_id: r && r.pk ? 'pk:' + r.pk : null,
+          case_refs: r ? [r.c].concat(r.pcs || []) : [], payload: payload};
+}
+var WFT = CWTimer.create({deviceId: wfDevice(), tz: WF_TZ, now: function(){ return Date.now(); },
+  mono: function(){ return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); },
+  emit: wfEmit, persist: function(s){ try{ localStorage.setItem(WF_TKEY, JSON.stringify(s)); }catch(e){} }});
+function wfBoot(){
+  wfLoad();
+  try{
+    var saved = JSON.parse(localStorage.getItem(WF_TKEY) || 'null');
+    WFREC = WFT.recover(saved);
+    localStorage.removeItem(WF_TKEY);
+  }catch(e){ WFREC = null; }
+}
+function wfMin(sec){ return Math.round(sec / 60); }
+function wfBarHtml(){
+  var s = WFT.state(), run = s.status === 'running', c = wfCaller();
+  var sec = 0; try{ sec = CW.activeSeconds(WF.store, c, {from: Date.now() - 86400000, to: Date.now() + 1}); }catch(e){}
+  var h = '<div class="wfbar"><b>' + (run ? 'Working' : (s.status === 'paused' ? 'Paused' : 'Not timing')) + '</b>'
+    + (run ? '<button class="wfb" data-wf="pause">Pause</button><button class="wfb" data-wf="end">End work</button>'
+           : '<button class="wfb go" data-wf="start">Start work</button>' + (s.status === 'paused' ? '<button class="wfb" data-wf="end">End work</button>' : ''))
+    + '<span>counted in the last 24 h: ' + wfMin(sec) + ' min (confirmed work only)</span></div>';
+  if(WFREC && WFREC.unknownSeconds > 0) h += '<div class="supn">About ' + wfMin(WFREC.unknownSeconds) + ' min from the last session was not saved and is NOT counted.</div>';
+  if(WF.err) h += '<div class="supn" style="background:#3d2c08;color:#F6E9C8">' + esc(WF.err) + '</div>';
+  return h;
+}
+function wfBar(){ return '<div id="wfbar">' + wfBarHtml() + '</div>'; }
+function wfPaint(){ var el = document.getElementById('wfbar'); if(el) el.innerHTML = wfBarHtml(); }
+function wfAct(a){
+  if(a === 'start'){
+    var r = WFT.start({callerId: wfCaller(), caseId: cur && cur.c});
+    if(!r.ok) toast(r.error === 'select a caller first' ? 'Pick who is calling first (access code), then Start work.' : r.error);
+  } else if(a === 'pause') WFT.pause('manual');
+  else if(a === 'end') WFT.stop('manual');
+  wfPaint();
+}
+function wfDialReturn(){
+  if(!WFDIAL) return; WFDIAL = false;
+  var a = prompt('You came back from a call. How many minutes were you on it or working it? Leave blank to count NOTHING for that stretch (this is your own estimate and is labelled self-reported).', '');
+  var m = a == null ? NaN : parseFloat(a);
+  var r = (isFinite(m) && m > 0) ? WFT.returnFromDialer({kind: 'confirm', seconds: m * 60}) : WFT.returnFromDialer({kind: 'unknown'});
+  wfPaint();
+  if(r && r.credited) toast('Counted ' + wfMin(r.credited) + ' min (self-reported)');
+}
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-wf]') : null;
+  if(b){ wfAct(b.getAttribute('data-wf')); ev.preventDefault(); }
+}, false);
+['click', 'touchstart', 'keydown', 'input'].forEach(function(n){ document.addEventListener(n, function(){ WFT.interaction(); }, true); });
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden){ WFT.hidden(); } else { wfDialReturn(); }
+  wfPaint();
+});
+setInterval(function(){ var r = WFT.tick(); if(r && r.idle) toast('Work timer paused: no activity for 5 minutes'); wfPaint(); }, 5000);
+wfBoot();
+
+/* REQUESTED CALLBACKS. Only an owner-asked call with a concrete due time. A reminder after a
+   no-answer, next/nextTs and an inbound reply are NOT callbacks and never appear here. The view only
+   narrows what the existing gates allow: a due request whose lead is held (cooldown, stay, opt-out,
+   other seat) is listed as HELD with the existing reason and cannot be dialled from here. */
+function cbRefresh(){
+  _CBDUE = Object.create(null); _CBFUT = 0;
+  try{
+    _CBQ = CW.callbackQueue(WF.store, {asof: Date.now()});
+    _CBQ.due.forEach(function(it){ it.case_refs.forEach(function(c){ if(!_CBDUE[c]) _CBDUE[c] = it; }); });
+    _CBFUT = _CBQ.future.length;
+  }catch(e){ _CBQ = null; }
+}
+function cbWhen(iso){
+  try{ return new Date(iso).toLocaleString('en-US', {timeZone: WF_TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) + ' ET'; }
+  catch(e){ return iso; }
+}
+function cbNote(){
+  var o = '';
+  if(_CBFUT) o += '<div class="sub">' + _CBFUT + ' more requested callback' + (_CBFUT === 1 ? '' : 's') + ' due later (not shown until due).</div>';
+  _CBHELD.forEach(function(h){
+    var row = ROWS.filter(function(r){ return r.c === h.c; })[0];
+    o += '<div class="supn">HELD &mdash; asked for ' + esc(cbWhen(h.due)) + (row ? ' &middot; ' + esc(ownerLabel(row)) : '')
+      + ': ' + esc(h.why || 'on hold') + '. Stays open; no dialling from here.</div>';
+  });
+  return o;
+}
+function cbCard(r){
+  var it = _CBDUE[r.c], later = null;
+  if(!it && _CBQ) _CBQ.future.forEach(function(f){ if(!later && f.case_refs.indexOf(r.c) >= 0) later = f; });
+  var h = '<div class="band"><div class="blab">CALLBACK THE OWNER ASKED FOR</div>';
+  if(it || later){
+    var x = it || later;
+    h += '<div class="sub" style="text-align:left">Asked for ' + esc(cbWhen(x.due_utc)) + (x.overdue ? ' &mdash; <b>overdue</b>' : ' &mdash; not due yet')
+      + (x.superseded_by_later_request ? ' &middot; a newer request exists for this owner' : '') + '</div>'
+      + '<div class="wfbar">' + (it ? '<button class="wfb go" data-cb="done">Callback done: right owner talked</button>' : '')
+      + '<button class="wfb" data-cb="resched">Move to the time below</button><button class="wfb" data-cb="cancel">Cancel request</button></div>';
+  }
+  h += '<div class="sub" style="text-align:left">Only if the owner asked for a call back at a time (Eastern):</div>'
+    + '<div class="wfbar"><input type="date" id="cb-date"><input type="time" id="cb-time">'
+    + '<label><input type="checkbox" id="cb-ask"> the owner asked for this call</label>'
+    + '<button class="wfb" data-cb="save">Save request</button></div></div>';
+  return h;
+}
+function cbSave(r, resched){
+  var d = $('cb-date') && $('cb-date').value, t = $('cb-time') && $('cb-time').value;
+  if(!d || !t){ toast('Pick the date and time they asked for'); return; }
+  if(!resched && !($('cb-ask') && $('cb-ask').checked)){ toast('Tick the box: the owner asked for this call'); return; }
+  var res = CW.resolveLocal(d + 'T' + t, WF_TZ);
+  if(!res.ok && res.error === 'ambiguous'){
+    var off = parseInt(prompt('That hour happens twice (clocks go back). Enter -240 for the first one (EDT) or -300 for the second (EST).', String(res.options[0])), 10);
+    res = CW.resolveLocal(d + 'T' + t, WF_TZ, off);
+  }
+  if(!res.ok){ toast(res.error === 'nonexistent' ? 'That time does not exist (clocks jump forward). Pick another.' : 'Could not read that date and time'); return; }
+  var due = new Date(res.utc).toISOString(), open = _CBDUE[r.c] || null;
+  if(!open && _CBQ) _CBQ.future.forEach(function(f){ if(!open && f.case_refs.indexOf(r.c) >= 0) open = f; });
+  if(resched){
+    if(!open){ toast('No open request to move'); return; }
+    wfEmit(wfEv('callback_rescheduled', {request_id: open.request_id, due_utc: due}, r));
+  } else {
+    wfEmit(wfEv('callback_requested', {request_id: wfId('req'), evidence_ref: 'caller_attested_in_call_mode', tz: WF_TZ,
+      local_time: d + 'T' + t, due_utc: due, requested_by_owner: true, owner_link: 'pkey_unverified'}, r));
+  }
+  cbRefresh(); wfPaint(); toast(WF.err || 'Saved'); render();
+}
+function cbDone(r){
+  var it = _CBDUE[r.c]; if(!it) return;
+  if(!confirm('Confirm: you spoke with the OWNER (not someone else) and this is the callback they asked for.')) return;
+  var lid = wfId('launch'), aid = wfId('att'), cid = wfId('conv');
+  wfEmit(wfEv('launch_recorded', {launch_id: lid, attempt_id: aid}, r));
+  wfEmit(wfEv('attempt_confirmed', {launch_id: lid, attempt_id: aid, attempted: 'yes', eligibility: 'pass', owner_link: 'pkey_unverified'}, r));
+  wfEmit(wfEv('conversation_confirmed', {conversation_id: cid, attempt_id: aid, role: 'owner', role_verification: 'caller_attested', two_way: true}, r));
+  wfEmit(wfEv('callback_completed', {request_id: it.request_id, conversation_id: cid}, r));
+  cbRefresh(); wfPaint(); toast(WF.err || 'Callback recorded'); render();
+}
+function cbCancel(r){
+  var it = _CBDUE[r.c]; if(!it && _CBQ) _CBQ.future.forEach(function(f){ if(!it && f.case_refs.indexOf(r.c) >= 0) it = f; });
+  if(!it) return;
+  if(!confirm('Cancel this requested callback? It will not count as completed.')) return;
+  wfEmit(wfEv('callback_cancelled', {request_id: it.request_id}, r));
+  cbRefresh(); wfPaint(); render();
+}
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-cb]') : null;
+  if(!b || !cur) return;
+  var a = b.getAttribute('data-cb');
+  if(a === 'save') cbSave(cur, false); else if(a === 'resched') cbSave(cur, true);
+  else if(a === 'done') cbDone(cur); else if(a === 'cancel') cbCancel(cur);
+  ev.preventDefault();
+}, false);
+
 /* ══════════════════════ SCRIPT SHEET ══════════════════════
    Collapsed by default: one line of peek. Tap the grip (or the peek) to expand, tap again to close.
    The lead's numbers stay visible behind it — that is the whole point of a sheet rather than an
