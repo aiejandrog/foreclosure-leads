@@ -1,42 +1,48 @@
 {
  "alerts": [
   {
-   "at": "2026-10-08T16:45:54-04:00",
+   "at": "2026-10-09T21:13:59-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness."
   },
   {
-   "at": "2026-10-08T16:45:54-04:00",
+   "at": "2026-10-09T21:13:59-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-07 21:12): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness (checked 10-09 21:13): 1 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-08T16:45:54-04:00",
+   "at": "2026-10-09T21:13:59-04:00",
    "key": "morning-sends",
    "severity": "fail",
    "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 50 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-08T16:45:54-04:00",
+   "at": "2026-10-09T21:13:59-04:00",
+   "key": "optout-sync",
+   "severity": "fail",
+   "text": "07:15 opt-out sync failed on 2026-10-09 (steps: replies)."
+  },
+  {
+   "at": "2026-10-09T21:13:59-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-08T16:45:54-04:00",
+ "published_at": "2026-10-09T21:13:59-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 2,
-   "filings": 1351,
-   "holds": 443,
-   "leads_checked": 20,
+   "errors": 1,
+   "filings": 1407,
+   "holds": 483,
+   "leads_checked": 24,
    "provider": "courtlistener",
-   "pull_age_h": 7.25,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
@@ -79,7 +85,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 7.17429
+   "usd": 6.85666
   },
   "clerk_bk": {
    "readable": false
@@ -97,7 +103,7 @@
     15,
     15
    ],
-   "date": "2026-10-08",
+   "date": "2026-10-09",
    "eligible": 50,
    "judged": true,
    "readable": true,
@@ -109,22 +115,24 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-08",
-   "failed_steps": [],
+   "date": "2026-10-09",
+   "failed_steps": [
+    "replies"
+   ],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": true,
-   "started_at": 1791492332,
+   "run_ok": false,
+   "started_at": 1791544502,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 20.2647
+   "spent": 23.7358
   },
   "readiness": {
-   "at": "2026-10-07T21:12:47-04:00",
+   "at": "2026-10-09T21:13:59-04:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
@@ -135,8 +143,10 @@
    ],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 0,
-   "failed_names": [],
+   "failed": 1,
+   "failed_names": [
+    "DealFlow Opt-out Sync"
+   ],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
