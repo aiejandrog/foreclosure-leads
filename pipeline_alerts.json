@@ -1,52 +1,46 @@
 {
  "alerts": [
   {
-   "at": "2026-10-09T21:13:59-04:00",
+   "at": "2026-10-10T09:57:48-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness."
   },
   {
-   "at": "2026-10-09T21:13:59-04:00",
+   "at": "2026-10-10T09:57:48-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-09 21:13): 1 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-09T21:13:59-04:00",
+   "at": "2026-10-10T09:57:48-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 50 leads were eligible, but 0 first-touch emails were sent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 48 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-09T21:13:59-04:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync failed on 2026-10-09 (steps: replies)."
-  },
-  {
-   "at": "2026-10-09T21:13:59-04:00",
+   "at": "2026-10-10T09:57:48-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-09T21:13:59-04:00",
+ "published_at": "2026-10-10T09:57:48-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
-   "filings": 1407,
-   "holds": 483,
-   "leads_checked": 24,
+   "errors": 0,
+   "filings": 1468,
+   "holds": 450,
+   "leads_checked": 3,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.68,
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 100,
+   "reason": "budget",
+   "requests_used": 122,
    "truncated": 1
   },
   "bounce": {
@@ -85,7 +79,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 6.85666
+   "usd": 16.37953
   },
   "clerk_bk": {
    "readable": false
@@ -103,8 +97,8 @@
     15,
     15
    ],
-   "date": "2026-10-09",
-   "eligible": 50,
+   "date": "2026-10-10",
+   "eligible": 48,
    "judged": true,
    "readable": true,
    "scheduled": true,
@@ -115,21 +109,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-09",
-   "failed_steps": [
-    "replies"
-   ],
+   "date": "2026-10-10",
+   "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": false,
-   "started_at": 1791544502,
+   "run_ok": true,
+   "started_at": 1791630903,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 23.7358
+   "spent": 31.8636
   },
   "readiness": {
    "at": "2026-10-09T21:13:59-04:00",
