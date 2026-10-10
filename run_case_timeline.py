@@ -161,6 +161,34 @@ def acquire(case, base=None, collect=False, docket_cache=None):
     return inventory, rows
 
 
+_STALE_GAP = 'section c is older than the documents read since'
+
+
+def mark_stale_documents(dossier, timeline):
+    """Say so when the dossier's section c (built by run_documents) holds fewer documents than this
+    timeline has read. The timeline writes only its own block, so c, d and the conclusion kept the
+    older build's picture: 2018-026274's dossier of 2026-09-23 listed 24 documents beside a
+    timeline holding 103 (acceptance replay 2026-10-08). Flagged, never rewritten here: c is
+    rebuilt by `run_documents --case`, which is the one place it is assembled."""
+    c = dossier.get('c_documents')
+    if not isinstance(c, dict):
+        return
+    have = int(c.get('fetched') or 0)
+    now = int((timeline.get('counts') or {}).get('documents') or 0)
+    gaps = [g for g in dossier.get('open_gaps') or [] if not str(g).startswith(_STALE_GAP)]
+    if now > have:
+        dossier['c_documents_stale'] = {'c_built_at': dossier.get('built_at'), 'c_documents': have,
+                                        'timeline_documents': now,
+                                        'rebuild': 'python run_documents.py --case %s' % dossier.get('case')}
+        gaps.append('%s: it lists %d document(s), the whole-case timeline %d; its conclusion and '
+                    'judgment are the older picture until it is rebuilt' % (_STALE_GAP, have, now))
+        dossier['complete'] = False
+    else:
+        dossier.pop('c_documents_stale', None)
+    if 'open_gaps' in dossier or now > have:
+        dossier['open_gaps'] = gaps
+
+
 def write_timeline(dossier_path, timeline, markdown):
     path = Path(dossier_path)
     json_path = path.with_name(path.stem + '-timeline.json')
@@ -172,6 +200,7 @@ def write_timeline(dossier_path, timeline, markdown):
                                     'status': timeline.get('status'),
                                     'entries': len(timeline.get('entries', [])),
                                     'gaps': len(timeline.get('gaps', []))}
+    mark_stale_documents(dossier, timeline)
     DS.pipeline_write(path, dossier)
     return {'json': str(json_path), 'markdown': str(md_path)}
 
@@ -365,6 +394,40 @@ def _schedule_heading(ln):
     return True
 
 
+# A figure standing alone on its line ("$120.00", "6,935.74"): what a money-table row's label
+# is followed by in a judgment's own award table.
+_LONE_FIGURE_RE = re.compile(r'^\(?\$?\s*[\d,]+\.\d{2}\)?$')
+
+
+def _page_lines(page, JM):
+    """A page's non-blank lines, stripped, after judgment_money.table_lines puts a split
+    label / "$" / figure row back on one line (a folded row carries its figure, so it is no
+    longer heading-shaped)."""
+    return [ln.replace('\xa0', ' ').strip() for ln in JM.table_lines(str(page.get('text') or ''))
+            if ln.replace('\xa0', ' ').strip()]
+
+
+def _has_schedule_heading(lines):
+    """A schedule or affidavit heading on the page. A heading-shaped line whose very next line is a
+    figure on its own is a ROW LABEL in the judgment's money table, not a heading: the 2018-026274
+    judgment's cost row "Affidavit of Additional Advances" / "$<figure>" and the 2025-023462 award
+    row "Payoff Stmt. Fee" / "$" / "120.00" held two real judgments (acceptance replay 2026-10-08).
+    Only a row inside a run of rows is excused, all three of: the next line holds nothing but a
+    figure, the line before it is a figure too (or ends in one: the previous row), and the line is
+    not set in capitals the way a paper's own title is ("AFFIDAVIT OF INDEBTEDNESS")."""
+    for k, ln in enumerate(lines):
+        if not _schedule_heading(ln):
+            continue
+        nxt = lines[k + 1] if k + 1 < len(lines) else ''
+        prev = lines[k - 1] if k else ''
+        in_table = (_LONE_FIGURE_RE.match(nxt) and re.search(r'[\d,]+\.\d{2}\)?$', prev)
+                    and not ln.isupper())
+        if in_table:
+            continue
+        return True
+    return False
+
+
 _QUOTE_OPEN_RE = re.compile(r'^\s*[>"\'“‘«]')
 _OPENING_SENTENCE_RE = re.compile(r'^[\W_]*(?:THIS\s+(?:CAUSE|ACTION|MATTER)\b|ORDERED\b|IT\s+IS\b)', re.I)
 # What only a decree says. An affidavit or motion does not order the clerk to sell.
@@ -435,15 +498,16 @@ def judgment_titled(reading):
         return False                                     # page 1 unread: its heading and oath are unknown
     if not any(_DECREE_RE.search(str(p.get('text') or '')) for p in pages):
         return False
+    import judgment_money as JM
     first = str(pages[0].get('text') or '')
     if _SWORN_OR_SCHEDULE_RE.search(first):
         return False
     if len(pages) > 1:
         # A title can sit alone on a cover page with the paper's own heading and oath on the next one.
-        second = [ln.strip() for ln in str(pages[1].get('text') or '').splitlines() if ln.strip()]
-        if _SWORN_OR_SCHEDULE_RE.search('\n'.join(second[:25])) or any(_schedule_heading(ln) for ln in second):
+        second = _page_lines(pages[1], JM)
+        if _SWORN_OR_SCHEDULE_RE.search('\n'.join(second[:25])) or _has_schedule_heading(second):
             return False
-    every_line = [ln.strip() for ln in first.splitlines() if ln.strip()]
+    every_line = _page_lines(pages[0], JM)
     lines = every_line[:25]                              # the title is searched for here; headings everywhere
 
     def opens(k):
@@ -451,7 +515,7 @@ def judgment_titled(reading):
         return bool(_OPENING_SENTENCE_RE.match(lines[k])
                     or (k + 1 < len(lines) and _OPENING_SENTENCE_RE.match(lines[k] + ' ' + lines[k + 1])))
 
-    if any(_schedule_heading(ln) for ln in every_line):
+    if _has_schedule_heading(every_line):
         return False                                     # an affidavit's or schedule's own heading, wherever it sits
     for i, ln in enumerate(lines):
         if _QUOTE_OPEN_RE.match(ln):
