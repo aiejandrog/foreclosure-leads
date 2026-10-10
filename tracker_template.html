@@ -3551,7 +3551,7 @@ function _contactLineHtml(r, ph, opts){
   const _waOK = (typeof _withinTextHours!=='function') || _withinTextHours();
   const wa = (canTxt && isMob)
     ? (_waOK
-        ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
+        ? '<a class="ctact ctact-wa txwa" href="#" data-c="'+esc(r.case)+'" data-href="'+esc(_waLink(r, digits))+'" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
         : '<span class="ctact ctact-wa" style="opacity:.45;cursor:not-allowed" title="Outside the FL FTSA texting window (8am-8pm ET'+((typeof _flClock==='function')?', now '+esc(_flClock()):'')+'). WhatsApp is a text — $500-$1,500 statutory damages per message sent outside the window. Call instead, or queue it for the morning.">'+_waSvg()+' WA &middot; after 8am</span>')
     : '';
   return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+stag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
@@ -6208,6 +6208,29 @@ function _textStage(r){
    `confirmed` distinguishes a SEND from an OPEN. Opening the composer is not a delivery (the board
    learned this the hard way with email — see the textopen/text split in the worker), so an open
    posts confirmed:false: visible as an attempt, never counted against the 3-touch ladder. */
+/* PRE-FLIGHT for the board's Text link (2026-10-09, Alex chose "Check first"). /text above only
+   RECORDS a text after the composer already opened, so it can never stop one. This asks the bridge
+   (POST /text/check) first and resolves {ok:true} only on an explicit ok:true: texting not held,
+   the case, the owner's other cases and the number all off the do-not-contact ledger, and the case
+   clear of a 362 stay. Anything else, including a refusal, an error, a 3.5 s timeout and a bridge
+   that is down or too old to have the route, resolves {ok:false, why}. Callers open nothing then. */
+function textPreflight(r, digits){
+  return new Promise(function(resolve){
+    var done = false, t = null;
+    var fin = function(ok, why){ if(done) return; done = true; if(t) clearTimeout(t); resolve({ok: ok, why: why || ''}); };
+    t = setTimeout(function(){ fin(false, 'the bridge did not answer the do-not-contact check'); }, 3500);
+    try{
+      var pcs = [];
+      try{ pcs = (typeof _personCases === 'function' ? _personCases(r) : []).filter(function(c){ return c && c !== r.case; }); }catch(e){}
+      fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({case: (r && r.case) || '', to: String(digits || ''), pcs: pcs})})
+        .then(function(rs){ return rs.json(); })
+        .then(function(j){ fin(!!(j && j.ok === true), (j && j.err) || 'blocked by the do-not-contact check'); })
+        .catch(function(){ fin(false, 'the bridge is not reachable'); });
+    }catch(e){ fin(false, 'the bridge is not reachable'); }
+  });
+}
+
 function _textLedgerPost(r, digits, confirmed){
   try{
     var body = {case:(r&&r.case)||'', pkey:_personKey(r), to:String(digits||''),
@@ -6468,11 +6491,11 @@ function textCardHtml(r){
     phBtns=phones.map(d=>{
       const href=_smsHref(d, msg);
       const send=canSend
-        ? '<a class="txsend" href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
+        ? '<a class="txsend" href="#" data-href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
         : '<span class="txsend off" title="Sending disabled — see the notice above (hours / cap). Use Copy instead.">💬 '+esc(fmtPhone(d))+'</span>';
       // WA rides the same FTSA send gate as sms: — do not leave an ungated side door.
       const wa = canSend
-        ? '<a class="txwa" href="'+esc(_waLink(r,d))+'" target="_blank" rel="noopener" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>'
+        ? '<a class="txwa" href="#" data-href="'+esc(_waLink(r,d))+'" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>'
         : '<span class="txsend off" title="WhatsApp send disabled with FTSA hours / cap — same rules as SMS.">'+_waSvg()+' WA</span>';
       return '<span class="txrow">'+send+wa+'<button class="txdnt" type="button" data-d="'+esc(d)+'" title="Add to Do-Not-Text on this device">🚫 DNT</button></span>';
     }).join('');
@@ -7069,6 +7092,8 @@ document.addEventListener('visibilitychange', function(){ if(document.hidden) _s
 document.addEventListener('click', function(e){
   const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
   if(!a) return;
+  // the modal's Text link stamps AFTER its pre-flight passes (textPreflight), not on the tap
+  if(a.classList.contains('txsend') || a.classList.contains('txwa')) return;
   const h = a.getAttribute('href') || '';
   const contact = /^(tel:|sms:)/i.test(h)
     || /truepeoplesearch\.com|whitepages\.com|cyberbackgroundchecks\.com|fastpeoplesearch\.com/i.test(h)
@@ -13755,6 +13780,7 @@ function genMorningWorker(lane, autostart){
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
+    +   'var TGBUSY=false;'
     +   'function textBatchStep(){'
     // A Stop clears tbOn and has already repainted the screen and written the log line, so a step
     // queued behind it (the confirm-screen handlers call back into here) must not resurrect the
@@ -13781,10 +13807,12 @@ function genMorningWorker(lane, autostart){
     +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
     +     'if(ob) ob.onclick=function(){'
     +   'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
-    +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
-    +       'post("textopen",{qc:x.c});'
-    +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
-    +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       'textGate(x.c, x.sms, null, x.name, function(){'
+    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +         'post("textopen",{qc:x.c});'
+    +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       '});'
     +     '};'
     +     'if(sb) sb.onclick=function(){ TBSKIP++; addLog("skip", x.name, "text skipped — stays for tomorrow"); TBI++; textBatchStep(); };'
     +   '}'
@@ -13801,6 +13829,24 @@ function genMorningWorker(lane, autostart){
     // opened — press Send" over a click that did nothing and the Proof Sheet archived a phantom
     // send. Now: this tab opens the URL itself; a null return renders a TAP-TO-OPEN button (the
     // tap carries real user activation, which always succeeds) and the log tells the truth.
+    // PRE-FLIGHT (2026-10-09, Alex chose "Check first"). /text only records a text after the composer
+    // already opened, so it can never stop one. Every worker Text button asks the bridge first:
+    // POST /text/check answers ok:true only when texting is not held, the case / the owner's other
+    // cases / the number are not on the do-not-contact ledger, and the case clears the 362 stay gate.
+    // Anything else (a refusal, an error, a timeout, a bridge that is down or too old to know this
+    // route) opens nothing. It runs inside the click's activation window (3.5 s cap) so openHere's
+    // anchor fallback still counts as a user tap.
+    +   'function textGate(c, href, pcs, label, go){'
+    +     'if(TGBUSY) return;'
+    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null, g0=(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:""); TGBUSY=true;'
+    +     'var fin=function(ok, why){ if(done) return; done=true; TGBUSY=false; if(t) clearTimeout(t); if(!ok) addLog("fail", label, "Not texted — "+why, "warn"); else if(g0!==(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:"")) addLog("fail", label, "Not texted — you moved to another lead while the check ran; tap again", "warn"); else go(); };'
+    +     't=setTimeout(function(){ fin(false, "the bridge did not answer the do-not-contact check"); }, 3500);'
+    +     'try{ fetch("http://127.0.0.1:8823/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
+    +       '.then(function(rs){ return rs.json(); })'
+    +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check"); })'
+    +       '.catch(function(){ fin(false, "the bridge is not reachable"); }); }'
+    +     'catch(e){ fin(false, "the bridge is not reachable"); }'
+    +   '}'
     +   'function openHere(url){'
     +     'if(!url) return false;'
     // window.open from a Blob-URL tab is the popup blocker's least-favorite caller — on the
@@ -14614,10 +14660,12 @@ function genMorningWorker(lane, autostart){
     +       'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
     +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
     +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
-    +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
-    +   'post("textopen",{qc:x.c});'
-    +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
-    +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       'textGate(x.c, x.sms, null, x.name, function(){'
+    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +         'post("textopen",{qc:x.c});'
+    +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       '});'
     +       'return;'
     +     '}'
     // the panel Call links stay plain tel: anchors (calls are never capped) — just log the breadcrumb.
@@ -14695,10 +14743,12 @@ function genMorningWorker(lane, autostart){
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
     +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
-    +   'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
-    +         'post("textopen",{qc:r.c});'
-    +         'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
-    +         'confirmSend(r, "text");'
+    +         'textGate(r.c, r.smsHref, r.pcs, r.first||r.owner, function(){'
+    +           'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +           'post("textopen",{qc:r.c});'
+    +           'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
+    +           'confirmSend(r, "text");'
+    +         '});'
     +         'return;'
     +       '}'
     +       'return;'
@@ -18523,10 +18573,38 @@ document.addEventListener('click', e => {
     if(!confirm('Record that '+who+' told us to STOP?\n\nThis permanently suppresses EVERY channel — text, call, email, letter, door'
         +(grp>1?(' — across all '+grp+' properties for this owner'):'')+', on every device.\n\nIt cannot be undone from here.')) return;
     _stopEverywhere(r); renderTextModal(); return; }
-  const sd = e.target.closest && e.target.closest('.txsend');
-  if(sd && sd.tagName==='A'){ const r=cur(); if(r){ autoLog(r, 'text', 'texted', {nextDays:3});
-    // the anchor's href is sms:+1<digits>?body=... — recover the number for the ledger row
-    _textLedgerPost(r, String(sd.getAttribute('href')||'').replace(/^sms:\+?1?/,'').split('?')[0], true); }
+  const sd = e.target.closest && (e.target.closest('.txsend') || e.target.closest('.txwa'));
+  if(sd && sd.tagName==='A'){
+    // PRE-FLIGHT: the link does not navigate until the bridge says ok (textPreflight). preventDefault
+    // comes FIRST so a missing cur() can never let the anchor navigate unchecked. The href is held in
+    // data-href (the anchor itself points at '#') so middle-click / open-in-new-tab / long-press
+    // cannot open a composer without this handler.
+    e.preventDefault();
+    const fromCard = !!sd.dataset.c;   // the lead-card WhatsApp link names its own lead; the modal links use cur()
+    const r = fromCard ? DATA.find(x => x.case === sd.dataset.c) : cur(); if(!r) return;
+    if(sd.dataset.chk) return;
+    const isWa = sd.classList.contains('txwa');
+    const href = sd.dataset.href || sd.getAttribute('href') || '', lbl = sd.innerHTML;
+    // the href is sms:+1<digits>?body=... (or wa.me/<digits>?text=...) — recover the number
+    const dg = isWa ? String(href).replace(/^https?:\/\/wa\.me\//,'').split('?')[0].replace(/\D/g,'')
+                    : String(href).replace(/^sms:\+?1?/,'').split('?')[0];
+    const caseAtTap = r.case;
+    sd.dataset.chk = '1'; sd.textContent = 'Checking…';
+    textPreflight(r, dg).then(function(v){
+      delete sd.dataset.chk; sd.innerHTML = lbl;
+      if(!v.ok){ alert('NOT texted — ' + v.why); return; }
+      if(!fromCard){
+        const r2 = cur();
+        if(!r2 || r2.case !== caseAtTap || !document.getElementById('textmodal') || !document.getElementById('textmodal').classList.contains('show')) return;
+      }
+      _markViewed(r.case); _afterCall = {c: r.case, ch: 'text', t: Date.now()};
+      autoLog(r, 'text', 'texted', {nextDays:3});
+      _textLedgerPost(r, dg, true);
+      // wa.me: a blocked popup cannot be detected with noopener, so open without it and fall back to
+      // this tab if the browser refuses (the touch is already logged; a silent no-op would lie)
+      if(isWa){ let w = null; try{ w = window.open(href, '_blank'); }catch(_e){} if(!w) location.href = href; else { try{ w.opener = null; }catch(_e){} } }
+      else location.href = href;
+    });
     return; }
   const mk = e.target.closest && e.target.closest('.txmark');
   if(mk){ e.preventDefault(); const r=cur(); if(r){ autoLog(r, 'text', 'texted', {nextDays:3});

@@ -1865,6 +1865,77 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {'ok': False, 'err': str(e)[:120]})
         return self._json(200, {'ok': True})
 
+    def _handle_text_check(self):
+        """POST /text/check {case, to, pcs?, portfolio?} — the pre-flight every Text button asks BEFORE
+        it opens an sms: composer (2026-10-09, Alex chose "Check first").
+
+        /text only records a text after the phone already opened the composer, so it can never stop
+        one. This is the call that can. It answers {ok:true} only when ALL of these hold; any other
+        answer, an error, a timeout or a bridge that is down means the page opens nothing:
+          1. texting is not held (text_hold.py: ledger present, fresh, today's 07:15 sync confirmed)
+          2. the case, any of the owner's other cases the page names (pcs / portfolio), and the
+             number ('#digits' / '#1digits') are not on the do-not-contact ledger
+          3. the case passes the §362 stay gate (same verdict /send and /text use)
+        It writes nothing and sends nothing. It only ever refuses."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        if ln <= 0 or ln > 20_000:
+            return self._json(400, {'ok': False, 'blocked': 'bad_request', 'err': 'missing or oversized body'})
+        try:
+            d = json.loads(self.rfile.read(ln).decode('utf-8'))
+        except Exception:
+            return self._json(400, {'ok': False, 'blocked': 'bad_request', 'err': 'bad json'})
+        if not isinstance(d, dict):
+            return self._json(400, {'ok': False, 'blocked': 'bad_request', 'err': 'bad json'})
+        case = str(d.get('case') or '').strip()
+        if not case:
+            return self._json(200, {'ok': False, 'blocked': 'bad_request', 'err': 'no case'})
+        _th, _tw = _text_hold()
+        if _th:
+            return self._json(200, {'ok': False, 'blocked': 'text_hold',
+                                    'err': _tw or 'texting held — do-not-contact list not fresh'})
+        _tc, _te = _optout_set()
+        _td = re.sub(r'\D', '', str(d.get('to') or ''))
+        if len(_td) < 10:
+            # no number to check = no pre-flight; the page always sends one, so this is a bad caller
+            return self._json(200, {'ok': False, 'blocked': 'bad_request', 'err': 'no usable phone number to check'})
+        _keys = [case.lower()]
+        for _k in ('pcs', 'portfolio'):
+            _v = d.get(_k)
+            if isinstance(_v, list):
+                _keys += [str(x).strip().lower() for x in _v[:60] if isinstance(x, str) and x.strip()]
+        if _td:
+            _keys += ['#' + _td, '#' + _td[1:]] if (len(_td) == 11 and _td[0] == '1') else ['#' + _td, '#1' + _td]
+        _hit = next((k for k in _keys if k in _tc), None)
+        if not _hit:
+            # rep-logged hard no / DNC in worker_notes that the nightly sweep has not ledgered yet:
+            # _optout_set() leaves '#digits' out (the email path has no use for them), so read them here.
+            try:
+                from optout_sync import notes_dnc_keys
+                _nk = set(notes_dnc_keys())
+                _hit = next((k for k in _keys if k in _nk), None)
+                if not _hit:
+                    _t10 = _td[-10:]
+                    _hit = next((k for k in _nk if k.startswith('#') and re.sub(r'\D', '', k)[-10:] == _t10
+                                 and len(re.sub(r'\D', '', k)) >= 10), None)
+            except Exception:
+                _hit = None
+        if _hit:
+            _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                          'd': dt.date.today().isoformat(), 'gate': 'optout', 'ch': 'text',
+                          'code': 'text_precheck_optout', 'case': case[:40],
+                          'why': 'pre-send check refused: case, owner case or number on the do-not-contact ledger'})
+            return self._json(200, {'ok': False, 'blocked': 'optout',
+                                    'err': 'on the do-not-contact ledger — do not text'})
+        _sv = _stay_gate(case)
+        if not _sv.get('ok'):
+            _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                          'd': dt.date.today().isoformat(), 'gate': 'stay', 'ch': 'text',
+                          'code': _sv.get('code') or 'stay_unverified', 'case': case[:40],
+                          'why': _sv.get('why', '')})
+            return self._json(200, {'ok': False, 'blocked': _sv.get('code') or 'stay_unverified',
+                                    'err': 'text refused — %s' % (_sv.get('why') or 'bankruptcy-stay status unknown')})
+        return self._json(200, {'ok': True})
+
     def _handle_text(self):
         """POST /text — the SMS counterpart of mail_sent.json.
 
@@ -2058,6 +2129,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_mark()
         if self.path.startswith('/retrace'):
             return self._handle_retrace()
+        if self.path.startswith('/text/check'):       # BEFORE /text — startswith('/text') shadows it
+            return self._handle_text_check()
         if self.path.startswith('/text'):
             return self._handle_text()
         if not self.path.startswith('/send'):

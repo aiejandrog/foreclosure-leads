@@ -723,3 +723,4 @@ logs/
 !_xchecktest.py
 !_cadencesiblingtest.py
 !_texttripwiretest.py
+!_textprecheckstest.py
