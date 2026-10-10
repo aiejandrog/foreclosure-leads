@@ -93,6 +93,16 @@ const E = row('CASE-E', '3055550005', null);                    // unrelated con
 ctx.ROWS = [A, B, C, D, E];
 ctx.notes = {};
 ctx.lane = 'lp';           // all fixtures are LP rows
+/* Pin the build's send-history coverage. Since b494a03 (10-08) pool() opens on the Untouched view,
+   and an uncontacted row is Untouched only when HISTCOV.ledgers_ok is true; otherwise it moves to
+   History unknown and leaves the default queue. The harness was inheriting HISTCOV from whatever
+   real build sat in docs/call/, so the first rebuild with ledgers_ok:false (10-09 05:42) emptied
+   the queue and failed every "dialable" check, the before-half and the CASE-E control alike.
+   Fixtures must not depend on live ledger state. The view itself is left at its default on
+   purpose: the queue under test is the one a caller opens on. _queueviewtest.py owns the
+   history-unknown behaviour. */
+ctx.HISTCOV = { ledgers_ok: true, capped: false, total: 5, shipped: 5 };
+if (ctx.QVIEW !== 'untouched') { console.error('default queue view is ' + ctx.QVIEW + ', not untouched: update this harness'); process.exit(2); }
 store.fcCaller = 'Alejandro';   // caller() identity source, if the page reads it
 
 let pass = 0, fail = 0;
@@ -100,7 +110,15 @@ function T(name, cond, detail) {
   if (cond) { pass++; console.log('  PASS  ' + name); }
   else { fail++; console.log('  FAIL  ' + name + (detail ? '  [' + detail + ']' : '')); }
 }
-const inPool = c => ctx.pool().some(r => r.c === c);
+const inPool = c => ctx.pool().some(r => r.c === c);   // the default (Untouched) queue a caller opens on
+/* "Gone" must mean gone from EVERY view. A logged call makes a row a Retry, and the Untouched view
+   alone would hide it even with suppression switched off, so an absence check against the default
+   view passes vacuously. Clearing QVIEW runs pool() with no view narrowing: only supReason, the
+   seat filter and the claim filter remain, which is what these checks are about. */
+function inAnyView(c) {
+  const was = ctx.QVIEW;
+  try { ctx.QVIEW = ''; return ctx.pool().some(r => r.c === c); } finally { ctx.QVIEW = was; }
+}
 
 console.log('\n== BEFORE any outcome: everyone must be dialable (the can-fail half) ==');
 T('A in queue before', inPool('CASE-A'));
@@ -115,14 +133,14 @@ catch (e) { console.log('  logOutcome threw: ' + String(e).slice(0, 120)); }
 T('logOutcome executed', logged);
 T('the NO landed in the note store', !!(ctx.notes['CASE-A'] && ctx.notes['CASE-A'].status === 'Not interested'),
   JSON.stringify(ctx.notes['CASE-A'] || null).slice(0, 80));
-T('CASE-A gone from next queue build', !inPool('CASE-A'), ctx.suppressed(A));
-T('CASE-B (same person, sibling case) ALSO gone', !inPool('CASE-B'), 'suppressed says: ' + ctx.suppressed(B));
+T('CASE-A gone from next queue build', !inAnyView('CASE-A'), ctx.suppressed(A));
+T('CASE-B (same person, sibling case) ALSO gone', !inAnyView('CASE-B'), 'suppressed says: ' + ctx.suppressed(B));
 T('unrelated CASE-E still dialable', inPool('CASE-E'));
 
 console.log('\n== CHAIN 2b: retroactive floor — an OLD note with the stale 72h cooldown ==');
 ctx.notes['CASE-C'] = { status: 'Not interested', cooldownH: 72,
   touches: [{ d: '2026-08-28', ts: 'x', tsu: NOW - 5 * 86400000, ch: 'call', out: 'Not interested', by: 'Alejandro' }] };
-T('5-day-old NO with stale 72h note still suppresses (720 floor)', !inPool('CASE-C'), ctx.suppressed(C));
+T('5-day-old NO with stale 72h note still suppresses (720 floor)', !inAnyView('CASE-C'), ctx.suppressed(C));
 
 console.log('\n== CHAIN 3: dial-time — the already-painted screen (takeover trigger) ==');
 ctx.notes['CASE-D'] = { touches: [{ d: '2026-09-02', ts: 'x', tsu: NOW - 5 * 60000, ch: 'call', out: 'No answer', by: 'Carlos' }],
@@ -134,7 +152,7 @@ T('my OWN call does NOT trigger it (multi-number sequences survive)', !ctx._team
 
 console.log('\n== CHAIN 4: DNC at queue build AND at dial gate ==');
 try { ctx.logOutcome(E, { k: 'dnc', t: 'DNC — do not contact', h: 0, s: true }, '3055550005'); } catch (e) {}
-T('DNC gone from queue', !inPool('CASE-E'), ctx.suppressed(E));
+T('DNC gone from queue', !inAnyView('CASE-E'), ctx.suppressed(E));
 T('DNC blocks at the HARD gate too (texts, dial screen)', !!ctx.hardSuppressed(E), ctx.hardSuppressed(E));
 
 console.log('\n== SIBLING TAKEOVER (the hole I flagged to the DEALFLOW session) ==');
