@@ -1297,11 +1297,21 @@ def load_cache_strict(path):
     return d, ''
 
 
-def save_cache(path, cache):
+def save_cache(path, cache, tries=6):
+    """Atomic write. On Windows os.replace is refused (WinError 5) while another process -- a scanner, an
+    editor, a reader -- holds the target open for a moment, which killed a paid run after its pages were
+    already charged (2026-10-10). Retry briefly, as the quarter ledger does; the last error still raises."""
     tmp = path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(cache, f, indent=1, sort_keys=True)
-    os.replace(tmp, path)
+    for i in range(max(1, tries)):
+        try:
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(cache, f, indent=1, sort_keys=True)
+            os.replace(tmp, path)
+            return
+        except OSError:
+            if i >= tries - 1:
+                raise
+            time.sleep(0.2 * (i + 1))
 
 
 def lookback_from(today, years):
