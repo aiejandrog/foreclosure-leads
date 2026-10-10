@@ -1257,6 +1257,36 @@ r = PS.presend_check('CACE-99-007002', here=str(g17o), env=e17, session=h, now=N
 check('--owner that cannot be searched (a trust): unsearchable, still nothing written',
       r['status'] == 'unsearchable' and not (g17o / 'pacer_stay_cache.json').exists(), r)
 
+# ---- save_cache survives a target that is briefly locked (WinError 5 on os.replace, 2026-10-10)
+print('-- 17c save_cache retries a transient replace failure')
+_c17 = TMP / 'save17c.json'
+_real_replace, _calls17 = os.replace, []
+def _flaky(a, b):
+    _calls17.append(1)
+    if len(_calls17) < 3:
+        raise PermissionError(5, 'Access is denied')
+    return _real_replace(a, b)
+os.replace = _flaky
+try:
+    PS.save_cache(str(_c17), {'k': 1})
+finally:
+    os.replace = _real_replace
+check('save_cache: two refused replaces, then the write lands intact',
+      len(_calls17) == 3 and json.loads(_c17.read_text()) == {'k': 1}, _calls17)
+def _always(a, b):
+    raise PermissionError(5, 'Access is denied')
+os.replace = _always
+try:
+    try:
+        PS.save_cache(str(_c17), {'k': 2}, tries=2)
+        _raised = False
+    except PermissionError:
+        _raised = True
+finally:
+    os.replace = _real_replace
+check('save_cache: a lock that never lifts still raises, and the old file is untouched',
+      _raised and json.loads(_c17.read_text()) == {'k': 1}, _raised)
+
 # ------------------------------------------------------------------------------------ 18 bulk modes
 print('-- 18 nightly per-lead bulk: off by default, md-near only with surplus')
 reset_ledgers()
