@@ -3664,13 +3664,15 @@ def make_tracker(leads):
         if _cm_led:
             print('call mode: %d dial row(s) carry a server email/text send date' % _cm_led)
         # Confirmed sends the dated stamps cannot express (unparseable ts_utc): lu:1 = contacted.
-        _cm_lu = call_mode.stamp_unknown(_cm_all[0], call_mode.ledger_audit())
+        _cm_audit = call_mode.ledger_audit(slim=slim)
+        call_mode._print_ledger_audit(_cm_audit)
+        _cm_lu = call_mode.stamp_unknown(_cm_all[0], _cm_audit)
         if _cm_lu:
             print('call mode: %d dial row(s) have a confirmed send with no usable date (marked contacted)' % _cm_lu)
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
-            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all)
+            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all, audit=_cm_audit)
         if _cm_rows:
             print('call mode: %d dialable lead(s) of %d qualifying -> docs/call/  (%s)'
                   % (_cm_rows, _cm_total, 'encrypted' if codes else 'STUB — no site.codes'))
@@ -3684,7 +3686,7 @@ def make_tracker(leads):
                 _sr, _st = call_mode.make_callmode(
                     slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
                     optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
-                    seat=_seat, subdir=_seat[2], rows=_cm_all)
+                    seat=_seat, subdir=_seat[2], rows=_cm_all, audit=_cm_audit)
                 if _sr:
                     print('call mode/%s: %d dialable lead(s) of %d qualifying -> docs/call/%s/'
                           % (_seat[2].lower(), _sr, _st, _seat[2].lower()))

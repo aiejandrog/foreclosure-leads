@@ -197,5 +197,69 @@ rec('a send that is only undated does not turn ledgers_ok off by itself (it is s
     hc2['ledgers_ok'] is True, hc2)
 rec('_contactTier counts lu as contacted', 'if(r.le || r.lt || r.lu) return 1;' in SRC)
 
+# ---- 2026-10-10: case-less sends are tied by recipient before they blank Untouched ------------
+td3 = tempfile.mkdtemp()
+mp3, tp3 = os.path.join(td3, 'mail.json'), os.path.join(td3, 'text.json')
+json.dump([
+    {'ch': 'email', 'message_id': 'a', 'to': 'Owner@Example.com', 'ts_utc': '2026-10-01T10:00:00'},   # lead A
+    {'ch': 'email', 'message_id': 'b', 'to': 'x@nowhere.com', 'bcc': 'b2@example.com',
+     'ts_utc': '2026-10-01T10:00:00'},                                                               # lead B via bcc
+    {'ch': 'email', 'message_id': 'c', 'to': 'ops@example.org', 'login': 'ops@example.org', 'test_mode': True,
+     'ts_utc': '2026-10-01T10:00:00'},                                                               # to ourselves
+    {'ch': 'email', 'message_id': 'g', 'to': 'stranger2@family-name.net', 'login': 'ops@example.org',
+     'test_mode': True, 'ts_utc': '2026-10-01T10:00:00'},                     # flagged test, but not to us
+    {'ch': 'email', 'message_id': 'd', 'to': 'stranger@gmail.com', 'owner': 'Somebody', 'lane': 'urgent',
+     'ts_utc': '2026-10-02T10:00:00', 'd': '2026-10-02', 'subj': '123 Main St'},                     # unknown
+    {'ch': 'email', 'message_id': 'e', 'to': 'owner@example.com', 'test_mode': True,
+     'ts_utc': '2026-10-01T10:00:00'},                                         # a test that reached an owner
+    {'ch': 'email', 'message_id': 'f', 'to': 'other@gmail.com', 'test_mode': 'yes',
+     'ts_utc': '2026-10-01T10:00:00'},                                         # not a real True: stays strict
+], io.open(mp3, 'w'))
+json.dump([
+    {'ch': 'text', 'confirmed': True, 'to': '13055550100', 'ts_utc': '2026-10-01T10:00:00'},          # lead C, 11 digits
+    {'ch': 'text', 'confirmed': True, 'to': '555', 'ts_utc': '2026-10-01T10:00:00'},                 # short: unattributed
+], io.open(tp3, 'w'))
+slim3 = [{'case': 'A', 'emails': ['owner@example.com']}, {'case': 'B', 'emails': ['B2@example.com']},
+         {'case': 'C', 'phones': ['(305) 555-0100']}, {'case': 'S', 'phones': ['555']},
+         {'case': 'AG', 'phones': ['3055550100'], 'phsrc': ['ag']}, {'case': 'D'}]
+a3 = call_mode.ledger_audit(mp3, tp3, slim=slim3)
+rec('case-less sends tie to leads by to, bcc and 11-digit number', a3['cases'] == {'A', 'B', 'C'} and a3['matched'] == 4, a3)
+rec('an advisor/test send that reaches no lead is not unattributed', a3['test'] == 1, a3)
+rec('unknown send, short number, non-True flag and a test not addressed to us stay unattributed',
+    a3['unattributed'] == 4, a3)
+rec('a listing-agent number on another lead is not tied', 'AG' not in a3['cases'], a3)
+rec('a non-webmail recipient domain prints as other', 'family-name' not in json.dumps(a3['rows'])
+    and any(r['dom'] == 'other' for r in a3['rows']), a3['rows'])
+_leak = json.dumps(a3['rows'])
+rec('leftover rows carry no address, name or subject',
+    'stranger' not in _leak and 'Somebody' not in _leak and 'Main' not in _leak and 'gmail.com' in _leak, a3['rows'])
+rows3 = [{'c': 'A'}, {'c': 'B'}, {'c': 'C'}, {'c': 'D'}]
+call_mode.stamp_unknown(rows3, a3)
+rec('tied leads are stamped contacted, others are not', [r.get('lu') for r in rows3] == [1, 1, 1, None], rows3)
+a3n = call_mode.ledger_audit(mp3, tp3)
+rec('without the lead list nothing is tied (old behaviour)', a3n['matched'] == 0 and a3n['unattributed'] == 8 and a3n['test'] == 1, a3n)
+# the only-test case: coverage goes back to ok
+mp4 = os.path.join(td3, 'mail4.json')
+json.dump([{'ch': 'email', 'message_id': 'c', 'to': sorted(call_mode.ADVISOR_EMAILS)[0], 'test_mode': True,
+            'ts_utc': '2026-10-01T10:00:00'},
+           {'ch': 'email', 'message_id': 'a', 'to': 'owner@example.com', 'ts_utc': '2026-10-01T10:00:00'}],
+          io.open(mp4, 'w'))
+a4 = call_mode.ledger_audit(mp4, os.path.join(td3, 'missing.json'), slim=slim3)
+td4 = tempfile.mkdtemp()
+shutil.copy(mp4, os.path.join(td4, 'mail_sent.json')); shutil.copy(tp3, os.path.join(td4, 'text_sent.json'))
+_here = call_mode.HERE; call_mode.HERE = td4
+hc4 = json.loads(call_mode.history_coverage(10, 10, a4))
+hc5 = json.loads(call_mode.history_coverage(10, 10, a3))
+call_mode.HERE = _here
+rec('tied and advisor-only case-less sends leave ledgers_ok on', hc4['ledgers_ok'] is True, hc4)
+rec('a leftover unattributed send still turns ledgers_ok off', hc5['ledgers_ok'] is False and '4 confirmed' in hc5['why'], hc5)
+rec('both seat pages bake HISTCOV from the same audit that stamped the rows',
+    "histcov=history_coverage(total, _shipped_all, audit))" in SRC
+    and io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'),
+                encoding='utf-8').read().count('rows=_cm_all, audit=_cm_audit)') == 2)
+rec('both build sites pass the lead list',
+    'audit = ledger_audit(slim=slim)' in SRC and 'ledger_audit(slim=slim)' in io.open(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read())
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

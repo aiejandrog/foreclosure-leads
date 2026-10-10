@@ -2049,7 +2049,51 @@ def stamp_ledger(rows, mail_log=None, text_log=None):
     return n
 
 
-def ledger_audit(mail_path=None, text_path=None):
+def _recipient_index(slim):
+    """lead email (lowercased) -> cases, and 10-digit phone -> cases, from the leads being built.
+
+    Used only to TIE a confirmed send that carries no case to the lead it reached. A match can only
+    mark a lead contacted; it never hides one and never makes one callable."""
+    by_email, by_phone = {}, {}
+    for d in (slim or []):
+        case = str(d.get('case') or '').strip()
+        if not case:
+            continue
+        for e in (d.get('emails') or []):
+            e = str(e or '').strip().lower()
+            if e:
+                by_email.setdefault(e, set()).add(case)
+        _src = d.get('phsrc') or []
+        for oi, ph in enumerate(d.get('phones') or []):
+            if (_src[oi] if oi < len(_src) else '') in ('ag', 'xl'):
+                continue                    # listing agent / shared office: not the owner's number
+            p10 = _ph10(ph)
+            if len(p10) == 10:
+                by_phone.setdefault(p10, set()).add(case)
+    return by_email, by_phone
+
+
+# Our own recipients for meta.test sends (Brief Jesse: tracker_template.html _JESSE).
+ADVISOR_EMAILS = {'celusa13@gmail.com'}
+
+
+def _is_operator(e):
+    """True when an email row went only to the advisor or to the sending account itself."""
+    own = set(ADVISOR_EMAILS)
+    for k in ('login', 'from'):
+        v = str(e.get(k) or '').strip().lower()
+        if v:
+            own.add(v)
+    rcpts = [str(a).strip().lower() for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(',')]
+    rcpts = [a for a in rcpts if a]
+    return bool(rcpts) and all(a in own for a in rcpts)
+
+
+_WEBMAIL = {'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com',
+            'live.com', 'msn.com', 'comcast.net', 'att.net', 'bellsouth.net', 'me.com'}
+
+
+def ledger_audit(mail_path=None, text_path=None, slim=None):
     """Confirmed server sends the case-keyed stamps (`le`/`lt`) CANNOT express.
 
     stamp_ledger() reads a case's newest timestamp. A confirmed send whose `ts_utc` does not parse
@@ -2058,8 +2102,25 @@ def ledger_audit(mail_path=None, text_path=None):
     cannot date (stamp_unknown marks them `lu:1`, which the page counts as contacted), and
     `unattributed` counts confirmed sends tied to no case and no person key (history_coverage turns
     ledgers_ok off for those). Counts and keys only; reads the same files history_coverage does.
-    A file that cannot be read adds nothing here: history_coverage already fails on it."""
-    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0}
+    A file that cannot be read adds nothing here: history_coverage already fails on it.
+
+    A CASE-LESS SEND IS TIED BY ITS RECIPIENT FIRST (2026-10-10). From the 10-09 build, 11 such
+    rows turned ledgers_ok off, so every row on both phones filed under History unknown and the
+    default Untouched list opened empty. Before counting a row unattributed:
+      * `to`/`bcc` (email) or `to` (text) matching an address or number on a lead being built puts
+        that lead in `cases`: it WAS contacted, so it is stamped lu:1 and leaves Untouched.
+        Counted in `matched`.
+      * an email row with `test_mode` true whose recipient is one of OUR OWN addresses (the
+        advisor, ADVISOR_EMAILS, or the sending account itself, `login`/`from`) reached no lead.
+        Counted in `test`. The flag alone is not trusted: send_server takes meta.test from the
+        request body and never checks who it went to, so a test row to any other address stays
+        unattributed.
+    Anything left (a delivered, non-test send to an address or number on no lead) still counts as
+    unattributed and still turns ledgers_ok off: that recipient may be a lead whose address this
+    build no longer carries. `rows` describes those leftovers with no address, name or subject:
+    date, channel, recipient domain (webmail names only, else 'other'), lane. `python call_mode.py --ledger-audit` prints them."""
+    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'matched': 0, 'test': 0, 'rows': []}
+    by_email, by_phone = _recipient_index(slim) if slim is not None else ({}, {})
     for name, path, is_text in (('mail_sent.json', mail_path, False), ('text_sent.json', text_path, True)):
         pth = path or os.path.join(HERE, name)
         try:
@@ -2085,7 +2146,33 @@ def ledger_audit(mail_path=None, text_path=None):
             except Exception:
                 dated = False
             if not case and not pkey:
-                out['unattributed'] += 1
+                hit = set()
+                if is_text:
+                    p10 = _ph10(e.get('to'))
+                    if len(p10) == 10:
+                        hit |= by_phone.get(p10, set())
+                else:
+                    for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+                        a = str(a).strip().lower()
+                        if a:
+                            hit |= by_email.get(a, set())
+                if hit:
+                    out['cases'] |= hit
+                    out['matched'] += 1
+                elif not is_text and e.get('test_mode') is True and _is_operator(e):
+                    out['test'] += 1
+                else:
+                    out['unattributed'] += 1
+                    _to = str(e.get('to') or '')
+                    out['rows'].append({
+                        'd': str(e.get('d') or e.get('ts_utc') or '')[:10],
+                        'ch': 'text' if is_text else 'email',
+                        'dom': ((lambda dm: dm if dm in _WEBMAIL else 'other')(_to.rsplit('@', 1)[-1].lower())
+                                if '@' in _to else ('number' if _to else 'none')),
+                        'lane': str(e.get('lane') or e.get('wl') or '')[:20],
+                        'test': e.get('test_mode') is True,
+                        'owner': bool(str(e.get('owner') or '').strip()),
+                    })
             elif not dated:
                 if case:
                     out['cases'].add(case)
@@ -2698,7 +2785,7 @@ def seat_rows(rows, n, i):
 
 
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
-                  textperson=None, seat=None, subdir='', rows=None):
+                  textperson=None, seat=None, subdir='', rows=None, audit=None):
     """Write docs/call/<subdir>/index.html. `encrypt` is foreclosure_leads._encrypt_multi and
     `guard` is its _js_guard — both INJECTED rather than re-implemented, so the crypto and the
     parse check can never drift from the board's.
@@ -2734,8 +2821,16 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         return 0, 0
     if rows is None:
         rows, total = call_rows(slim, optouts, deads)
+        # Rows built here were never stamped, so the audit used for HISTCOV must stamp them too.
+        if audit is None:
+            audit = ledger_audit(slim=slim)
+        stamp_unknown(rows, audit)
     else:
         rows, total = rows
+        # Rows handed in were stamped by the caller with ITS audit. Without that audit, do not
+        # credit recipient matches this page cannot see on its rows: stay strict (old behaviour).
+        if audit is None:
+            audit = ledger_audit()
     _shipped_all = len(rows)         # crew-wide shipped count, BEFORE the seat split
     if seat:
         _sn, _si, _sw = seat
@@ -2811,7 +2906,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, text_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
                       seat=seat, funnel_js=funnel_js, text_js=text_js,
-                      histcov=history_coverage(total, _shipped_all, ledger_audit()))
+                      histcov=history_coverage(total, _shipped_all, audit))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -7202,3 +7297,22 @@ setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); 
 boot();
 </script></body></html>
 """
+
+
+def _print_ledger_audit(audit):
+    """One line per category, then the leftover rows. No address, name, number or subject."""
+    print('ledger audit: %d case-less send(s) tied to a lead by recipient, %d advisor/test send(s) '
+          'reaching no lead, %d still unattributed'
+          % (audit.get('matched', 0), audit.get('test', 0), audit.get('unattributed', 0)))
+    for r in audit.get('rows') or []:
+        print('  unattributed: %s %-5s to-domain=%s lane=%s test=%s owner-named=%s'
+              % (r['d'] or '?', r['ch'], r['dom'], r['lane'] or '-', r['test'], r['owner']))
+
+
+if __name__ == '__main__' and '--ledger-audit' in __import__('sys').argv[1:]:
+    # Laptop diagnostic: reads mail_sent.json / text_sent.json beside this file. Without the build's
+    # lead list it cannot tie a case-less send by recipient, so "still unattributed" here can be
+    # higher than the nightly build's; the build prints the real figure.
+    _a = ledger_audit()
+    _print_ledger_audit(_a)
+    print(history_coverage(0, 0, _a))
