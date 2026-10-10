@@ -265,7 +265,9 @@ def judgment_amount_candidates(reading):
         # judgment total. That is the 2026-09-22 pilot regression.
         if page['outcome'] not in ('text', 'ocr_text'):
             continue
-        lines = (page.get('text') or '').splitlines()
+        # The same lines judgment_money.text_rows reads, so a candidate's line index and the rows
+        # verify_text_total checks it against are counted the same way.
+        lines = JM.table_lines(page.get('text'))
         pairs, notes = column_values(lines, text_layer=page['outcome'] == 'text')
         number = JM._page_no(page['page'])
         # A bare "TOTAL" closing a table of SUBTOTALs (judgment_money._bare_totals) is offered too.

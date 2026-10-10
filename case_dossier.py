@@ -396,6 +396,12 @@ def _d(chain, section_c, lead=None):
             lead = {'case_type': equity_state.LENDER_CASE_TYPES[0]}
     state = equity_state.state_of(chain, lead)
     verdict = equity_state.LABEL[state]
+    short = equity_state.SHORT[state]
+    if state in ('clear', 'priced') and not section_c.get('fully_read'):
+        # "VERIFIED" beside "no document read" reads as a document having been checked. The state
+        # is the recorded index's; say so in the label itself (acceptance review 2026-10-08).
+        verdict += ' (from the recorded index; no document has been read)'
+        short += ' (index only)'
     if state == 'none' and equity_state.lender_foreclosure(lead) and equity_state._state_of(chain) == 'clear':
         verdict = equity_state.LENDER_OWN_CASE_WHY
     rests_on = ['b'] if chain else []
@@ -414,7 +420,7 @@ def _d(chain, section_c, lead=None):
         'The picture', 'present' if chain else 'missing', 'equity_state',
         eqstate=state,
         verdict=verdict,
-        short=equity_state.SHORT[state],
+        short=short,
         speakable_as_fact=state in equity_state.FACT,
         rests_on=rests_on,
         documents_note=doc_note,
