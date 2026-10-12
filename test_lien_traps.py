@@ -204,8 +204,21 @@ rec('a modification naming a loan the search did not return stays its own row',
     sorted(l['amt'] for l in c['liens'] if l['st'] == 'OPEN') == [50000, 320000], mtg(c))
 unp = dict(heloc, consideratioN_1=0)
 c, cv, st = run([deed(), unp, dict(m_other, oriG_REC_BOOK='26000', oriG_REC_PAGE='3')])
-rec('a priced modification prices the unpriced loan it names', [l['amt'] for l in c['liens']] == [320000]
-    and not c['mtg_open_unpriced'], (mtg(c), c['mtg_open_unpriced']))
+rec('a modification naming an unpriced loan leaves it unpriced, never a FACT (its figure is not the balance)',
+    not c['liens'] and c['mtg_open_unpriced'] == 1 and st not in ES.FACT, (mtg(c), c['mtg_open_unpriced'], st))
+taxed = dict(modif, consideratioN_1=0, intangible=100)          # $50,000 of NEW money (s. 199.145)
+c = run([deed(), folio_loan, taxed])[0]
+rec('a modification priced from intangible tax ADDS its new money to the loan',
+    [l['amt'] for l in c['liens']] == [250000], mtg(c))
+paid_bp = r('SATISFACTION - SAT', '06/01/2014', '', b='29900', p='1', p2='ALPHA BANK NA', ob='29000', op='101')
+late = dict(modif, reC_DATE='01/02/2018', oriG_REC_BOOK='29000', oriG_REC_PAGE='101', consideratioN_1=250000)
+c = run([deed(), folio_loan, paid_bp, late])[0]
+rec('a modification dated after the release that pays its loan stays OPEN on its own',
+    [(l['st'], l['amt']) for l in c['liens']] == [('SATISFIED', 200000), ('OPEN', 250000)], mtg(c))
+early_paid = dict(paid_bp, reC_DATE='06/01/2019')
+c = run([deed(), folio_loan, early_paid, late])[0]
+rec('...and one dated before that release is paid off with its loan',
+    [(l['st'], l['amt']) for l in c['liens']] == [('SATISFIED', 250000)], mtg(c))
 c, cv, st = run([deed(), unp, dict(m_other, oriG_REC_BOOK='', oriG_REC_PAGE='')])
 rec('a modification only GUESSED to amend an unpriced loan does not price it', st not in ES.FACT
     and c['mtg_open_unpriced'] == 1, (mtg(c), st))
