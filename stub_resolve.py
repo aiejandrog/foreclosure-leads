@@ -163,10 +163,12 @@ def _md_candidates(last, first):
     except Exception:
         return []
     out = []
+    capped = len(infos) >= 200      # the request asks for at most 200: a full page may be cut
     for i in infos:
-        owner = ' '.join(str(i.get(k) or '') for k in ('Owner1', 'Owner2', 'Owner3'))
+        slots = [str(i.get(k) or '').strip() for k in ('Owner1', 'Owner2', 'Owner3')]
         out.append({'folio': re.sub(r'\D', '', str(i.get('Strap') or '')),
-                    'owner': owner, 'addr': str(i.get('SiteAddress') or '').strip(),
+                    'owner': ' '.join(slots), 'slots': [x for x in slots if x],
+                    'capped': capped, 'addr': str(i.get('SiteAddress') or '').strip(),
                     'legal': str(i.get('SubdivisionDescription') or '')})
     return out
 
@@ -261,6 +263,47 @@ def _legal_of(county, folio):
     return (info or {}).get('legal', ''), info
 
 
+def _same_person(a, b):
+    """(LAST, FIRST) pairs that can be one human listed twice ('Garcia' / 'Garcia Lopez')."""
+    return a[1] == b[1] and bool(set(a[0].split()) & set(b[0].split()))
+
+
+def _owner_pair(cands, persons, me, toks, county):
+    """CO-DEFENDANTS ON ONE DEED. A bank case names the borrowers, usually a couple; a common name
+    owns many parcels county-wide (namesakes included), so 'owner-unique' never fires for it. The ONE
+    parcel whose owner of record names this defendant in one owner slot AND another defendant of the
+    same case in a DIFFERENT slot is theirs.
+
+    Never guessed: two or more such parcels, a search that may have been cut at its page cap, a
+    second 'defendant' who may be the same person under another surname, or (in an association
+    case) a parcel whose legal does not name the association's complex all leave it unresolved.
+    Only the Miami-Dade search keeps the owner slots apart; the other counties never reach here."""
+    others = [p for p in persons if p != me and not _same_person(p, me)]
+    if len(cands) < 2 or not others or any(c.get('capped') for c in cands):
+        return None
+    if not all(c.get('slots') for c in cands):
+        return None
+    pair = []
+    for c in cands:
+        mine = [i for i, o in enumerate(c['slots']) if _name_ok(me[0], me[1], o)]
+        # a slot that also names THIS defendant (a middle name, a Jr/Sr namesake) is never the other
+        theirs = [i for i, o in enumerate(c['slots']) if i not in mine
+                  for l2, f2 in others if _name_ok(l2, f2, o)]
+        if any(i != j for i in mine for j in theirs):
+            pair.append(c)
+    if len(pair) != 1:
+        return None
+    c = pair[0]
+    if toks:
+        legal = c.get('legal')
+        if not legal:
+            legal, info = _legal_of(county, c['folio'])
+            c['_info'] = info
+        if not _assoc_ok(toks, legal):
+            return None
+    return c
+
+
 def resolve_case(county, case, plaintiff, defs, verbose=False):
     """-> {folio, how, owner, addr, info} or None. Corroborated or nothing."""
     persons = people_from(defs)
@@ -295,6 +338,10 @@ def resolve_case(county, case, plaintiff, defs, verbose=False):
                 picked, how = hits[0], 'owner+assoc-legal'
         if not picked and len(cands) == 1:
             picked, how = cands[0], 'owner-unique'
+        if not picked:
+            pair = _owner_pair(cands, persons, (last, first), toks, county)
+            if pair:
+                picked, how = pair, 'owner-pair'
         if picked:
             info = picked.get('_info')
             if info is None:
