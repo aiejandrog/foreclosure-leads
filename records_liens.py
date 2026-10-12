@@ -976,7 +976,12 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         is_open = bp not in satisfied
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
                'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
-               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY'))}
+               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY')),
+               # what tied this mortgage to the parcel, and its document type: written down so the
+               # coverage report (lien_coverage.py) can tell a folio-indexed loan from one placed
+               # only by subdivision + surname, and a modification from a new loan. Report-only.
+               'anchor': 'folio' if (rf and rf == fol) else 'subdivision',
+               'doc': (r.get('doC_TYPE', '') or '')[:40]}
         if not is_open:
             row['sat_by'] = 'book/page'       # a release that names this loan (the others below infer it)
         if nopx:
