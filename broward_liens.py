@@ -116,7 +116,28 @@ def search_docs(sess, search_name):
         j = json.loads(grid)
     except Exception:
         return None
-    return j.get('data', [])
+    data = j.get('data', [])
+    # The grid is read as ONE page of 400. A name with more records than that is cut short (the oldest or
+    # newest 400, whichever the grid sorts to), and a release or the real mortgage may be on the page not
+    # read: the chain must say so instead of reading as complete (equity_state.coverage_documented).
+    try:
+        total = int(j.get('total'))
+    except (TypeError, ValueError):
+        total = len(data)
+    search_docs.last_truncated = total > len(data) or len(data) >= 400
+    return data
+
+
+search_docs.last_truncated = False
+
+
+def mark_truncated(res, truncated):
+    """A name search cut at the page size can prove nothing: the chain stays visible but is never 'ok'."""
+    if truncated:
+        res['truncated'] = True
+        if res.get('conf') == 'ok':
+            res['conf'] = 'low'
+    return res
 
 
 # ---- parse the chain: open vs satisfied, isolate the surviving junior --------------------------
@@ -874,6 +895,8 @@ def main():
         # --case overrides.
         if not a.case:
             why = untraceable_owner(owner)
+            if not why and owner.startswith('(owner via'):
+                why = 'no owner name yet (title search pending)'
             if why:
                 skipped.setdefault(why, []).append(owner)
                 continue
@@ -954,6 +977,7 @@ def main():
                            else link_chain(docs, owner, case, link_cache, run_budget=a.link_pages,
                                            run_seconds=a.link_seconds))
         res = analyze(docs, owner, judg, ftype=ftype, lead_case=case, links=links)
+        mark_truncated(res, search_docs.last_truncated)
         res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
         res['pv'] = PAIRING_VERSION if complete else 1      # an incomplete link read stays queued for relink
         out[case] = res

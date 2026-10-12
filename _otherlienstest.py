@@ -235,6 +235,21 @@ chk('same old-shape chain on a Miami lead is untouched', ES.state_of(oldc, {'cou
 chk('old-shape chain with no lead is untouched', ES.state_of(oldc) == 'priced')
 chk('Palm Beach lead county also recognised', ES.county_chain(oldc, {'county': 'PALM BEACH'}))
 
+# 14f. a name search cut at the 400-row page can prove nothing
+tr = BL.mark_truncated({'conf': 'ok', 'liens': []}, True)
+chk('truncated search is never conf ok and says so', tr['conf'] == 'low' and tr['truncated'] is True, tr)
+chk('truncated + empty chain cannot be CLEAR (coverage_documented refuses it)',
+    not ES.coverage_documented(dict(tr, nrec=40, second_fc=None)))
+chk('complete search is left alone', BL.mark_truncated({'conf': 'ok'}, False) == {'conf': 'ok'})
+import unittest.mock as _m
+_resp = '{"data": [{"a": 1}] , "total": 900}'
+with _m.patch.object(BL, '_curl', side_effect=lambda *a, **k: '' if 'SearchTypeName' in a[0] else _resp):
+    got = BL.search_docs({'doctypes': '1', 'booktypes': '1'}, 'DOE, JANE')
+chk('search_docs flags total > rows returned', got == [{'a': 1}] and BL.search_docs.last_truncated is True)
+with _m.patch.object(BL, '_curl', side_effect=lambda *a, **k: '' if 'SearchTypeName' in a[0] else '{"data": [], "total": 0}'):
+    BL.search_docs({'doctypes': '1', 'booktypes': '1'}, 'DOE, JANE')
+chk('search_docs clears the flag for a small search', BL.search_docs.last_truncated is False)
+
 # 15. is_claim on its own
 chk('is_claim: CLAIM OF LIEN', OL.is_claim('CLAIM OF LIEN'))
 chk('is_claim: FEDERAL TAX LIEN', OL.is_claim('FEDERAL TAX LIEN'))
