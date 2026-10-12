@@ -93,11 +93,14 @@ VERDICT per lead (never "clear" on doubt):
                   property runs until the case closes, 11 U.S.C. 362(c)(1)).
     unverifiable  any of: an open case for the same name outside Florida (could be a namesake);
                   an open case for a SIMILAR name (initial only, nickname-length prefix, extra or
-                  missing surname, different middle initial); a case dismissed within the last 30
-                  days and not yet closed (reinstatement window); more matching rows than
+                  missing surname, different middle initial); a case dismissed and not yet closed
+                  (inside 30 days: reinstatement window; after: a vacated dismissal would not show in
+                  PCL, so it holds until the court closes the case); more matching rows than
                   --max-pages pages (a common name -- the unread pages could hold an open case);
                   an owner that cannot be searched; an API error before the lead finished.
-    clear         every search completed, and every matching bankruptcy is closed or long dismissed.
+    clear         every search completed, and every matching bankruptcy is closed. An OPEN case
+                  filed before the lookback still counts; only closed ones older than it are ignored.
+                  An owner string ending in '&' (the source dropped a co-owner) is unverifiable.
 Rows that are not bankruptcy petitions (adversary proceedings, civil cases) and rows whose role is
 clearly not the debtor (creditor, trustee, attorney, plaintiff/defendant in an adversary) are ignored.
 
@@ -836,6 +839,10 @@ def parse_owner(raw, order):
     """(subjects, problem). subjects: Person / Entity objects to search. problem: why this owner
     cannot be searched at all ('' when it can). order: 'first_last' | 'last_first' | 'either' (both readings; see _owner_field)."""
     s = _ascii_upper(raw).strip()
+    if re.search(r'&\s*$', s):
+        # 'HERNANDEZ NELSON &': the source dropped the co-owner line (county_leads._owner_partial).
+        # Searching only the first owner could clear a lead whose co-owner is the one in bankruptcy.
+        return [], 'an owner name that ends in "&" (a co-owner is missing from the record)'
     s = re.sub(r'&\s*[WH]\b\.?', '& ', s)             # MD appraiser "&W" / "&H" = wife / husband
     # "UNKNOWN SPOUSE OF X" / "UNKNOWN TENANT" are pleading placeholders, not owners: drop the chunk
     s = re.sub(r'UNKNOWN\s+(?:SPOUSE|TENANTS?|PARTIES|HEIRS)\b[^;&]*', ' ', s)
@@ -1045,12 +1052,12 @@ def decide(subjects, results, today, date_from):
             cv = case_view(row)
             if not cv['is_bk'] or cv['role'] in NOT_DEBTOR_ROLES:
                 continue
-            if lb and cv['filed'] and cv['filed'] < lb:
-                continue
+            st = case_status(cv, today)
+            if lb and cv['filed'] and cv['filed'] < lb and st == 'closed':
+                continue                       # older than the lookback AND closed; an old OPEN case still counts
             q = match_row(row, sj)
             if not q:
                 continue
-            st = case_status(cv, today)
             k = (cv['court'], cv['no'])
             if k not in seen:
                 seen.add(k)
@@ -1069,6 +1076,11 @@ def decide(subjects, results, today, date_from):
                 reasons.append('an open bankruptcy for a similar name in %s' % (cv['court'] or 'a court'))
             elif st == 'dismissed_recent':
                 reasons.append('a bankruptcy dismissed %s and not yet closed in %s (reinstatement window)'
+                               % (cv['dismissed'], cv['court'] or 'a court'))
+            elif st == 'dismissed':
+                # dismissed over 30 days ago but the case is still not closed: a vacated dismissal or
+                # a reinstatement would show nowhere in PCL, so it holds until the court closes it
+                reasons.append('a bankruptcy dismissed %s and not yet closed in %s (dismissed, not closed)'
                                % (cv['dismissed'], cv['court'] or 'a court'))
     cases.sort(key=lambda c: c['filed'], reverse=True)     # newest first ...
     cases.sort(key=lambda c: not c['open'])                # ... open cases ahead of closed ones
@@ -1934,7 +1946,7 @@ WHY_BUCKETS = (
     ('common name', 'page(s) of results for one owner name'),             # overflow: more pages than read
     ('same name, open case outside Florida', 'an open bankruptcy for the same name'),
     ('similar name, open case', 'an open bankruptcy for a similar name'),
-    ('dismissed < 30 days, not closed', 'a bankruptcy dismissed'),
+    ('dismissed, case not closed', 'a bankruptcy dismissed'),
     ('PCL error', 'PCL error'),
 )
 
