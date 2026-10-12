@@ -3530,12 +3530,12 @@ function _expireTick(){
     if(ROWS.length!==n && typeof render==='function') render();
   }catch(e){}
 }
-setInterval(_expireTick, 60*1000);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _expireTick(); });
 function b2u(b64){var s=atob(b64),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
 
 async function boot(){
   loadNotes();
+  setInterval(_expireTick, 60*1000);       // release expiry while the page stays open
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _expireTick(); });
   /* Say whose page this is BEFORE the code prompt. Two seat pages look identical otherwise, and the
      one thing a caller must never be unsure about is which list is in front of him. */
   if(SEAT && SEAT.w){ try{ document.title='Call Mode · '+SEAT.w;

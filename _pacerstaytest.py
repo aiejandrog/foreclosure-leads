@@ -419,6 +419,19 @@ check('a clear for an owner that now reads as not searchable (ends in "&") is wi
       'with no credentials and no HTTP', h.calls == [] and wc['CACE-99-000830']['verdict'] == 'unverifiable'
       and 'withdrawn' in wc['CACE-99-000830']['why'] and 'withdrawn' in out, (out, wc))
 check('... a clear for a searchable owner is left alone', wc['CACE-99-000831']['verdict'] == 'clear', wc)
+import unittest.mock as _um
+(d / PS.HITS_NAME).write_text(json.dumps({'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}))
+(d / 'pacer_newfilers.json').write_text(json.dumps({'v': 1, 'court': 'flsbk', 'env': 'prod', 'last_to': '',
+                                                     'covered': [], 'pulls': [], 'rows': {'x': {'lastName': 'Z'}}}))
+with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
+                                                             (None, 'locked')]):
+    rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+check('cache lock not taken for the re-check: says so and leaves the new-filer hits file as it was',
+      'could not re-check' in out and json.loads((d / PS.HITS_NAME).read_text())
+      == {'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}, out)
+rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+check('... and with the lock taken the same run does rewrite it (the check above is not vacuous)',
+      json.loads((d / PS.HITS_NAME).read_text()) == {}, out)
 rc, out = run(d, FakeHTTP(), e={}, args=['--report'], raw=True)
 check('--report never rewrites the cache', json.loads((d / 'pacer_stay_cache.json').read_text()) == wc)
 

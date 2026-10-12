@@ -2175,6 +2175,7 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         report(leads, cache or {}, today, now_ts, phoned)
         _log_status(quarter, idx, today, env)
         return 0
+    wd_prob = ''
     if cache and not cprob and not a.plan:
         import paid_reads
         with paid_reads._FileLock(cpath) as lk:
@@ -2184,7 +2185,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
                 save_cache(cpath, fresh)
                 cache = fresh
         if fprob:
-            log('PACER: could not re-check cached clears against the owner reading (%s)' % fprob)
+            wd_prob = fprob
+            log('PACER: could not re-check cached clears against the owner reading (%s) -- the new-filer '
+                'hits are not rewritten this run' % fprob)
         elif gone:
             log('PACER: %d earlier clear(s) withdrawn -- the owner now reads as not searchable (held)' % len(gone))
     queue = plan(leads, cache or {}, today, now_ts, None, a.max_pages) if not cprob else []
@@ -2404,7 +2407,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             out = pcl.logout()
             if pcl.creds and not out:
                 log('PACER: logout did not confirm (the token expires on its own)')
-    if idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
+    if wd_prob:
+        pass            # a clear we could not re-check must not lose the hit that holds it: keep the old hits file
+    elif idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
         hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name)
         log('PACER new filers: index %d rows; %d lead(s) match an owner on an open flsb case (blocked)%s'
             % (len(idx.get('rows') or {}), len(hits), (': ' + ', '.join(sorted(hits)[:20])) if hits else ''))
