@@ -1244,7 +1244,15 @@ def recheck_days(ent, near):
     return RECHECK['near'] if near else RECHECK['clear']
 
 
-def overflow_settled(ent, max_pages):
+def owners_hash(ld):
+    """A short digest of the owner names a lead was searched under (no name is stored), so a skip
+    never outlives a change of owner."""
+    import hashlib
+    raw = '|'.join(sorted('%s/%s' % (o, order) for o, order in ((ld or {}).get('owners') or [])))
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]
+
+
+def overflow_settled(ent, max_pages, ld=None):
     """True when this entry is an 'unverifiable' common name whose search already ran out of pages at
     max_pages or deeper. Searching it again at the same depth buys the same unreadable page: the
     rows only grow, so the answer cannot change. The lead stays held (unverifiable) until someone
@@ -1255,7 +1263,9 @@ def overflow_settled(ent, max_pages):
         ovf = int(ent.get('ovf') or 0)
     except (TypeError, ValueError):
         return False
-    return ovf > 0 and int(max_pages or 1) <= ovf
+    if ovf <= 0 or int(max_pages or 1) > ovf or ent.get('names') != NAME_READING:
+        return False
+    return ld is None or ent.get('oh') == owners_hash(ld)
 
 
 def plan(leads, cache, today, now_ts, only_case=None, max_pages=None):
@@ -1267,7 +1277,7 @@ def plan(leads, cache, today, now_ts, only_case=None, max_pages=None):
     for key, ld in leads.items():
         if want and key != want:
             continue
-        if max_pages and not want and overflow_settled(cache.get(key), max_pages):
+        if max_pages and not want and overflow_settled(cache.get(key), max_pages, ld):
             continue
         a = ld.get('auction')
         days = (a - today).days if a else None
@@ -1381,7 +1391,7 @@ def _entry(fields, ld, env_name, region, date_from, now_ts):
         'pages': fields.get('pages', 0), 'cost': fields.get('cost', 0.0), 'why': fields.get('why', ''),
         'cases': fields.get('cases') or [], 'lookback_from': date_from, 'region': region, 'v': 1,
         'names': NAME_READING,
-        **({'ovf': fields['ovf'], 'tp': fields.get('tp') or 0} if fields.get('ovf') else {}),
+        **({'ovf': fields['ovf'], 'tp': fields.get('tp') or 0, 'oh': owners_hash(ld)} if fields.get('ovf') else {}),
     }
 
 
@@ -1799,7 +1809,7 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         out.update(status='refused', why=prob)
         return out
     ent = cache.get(key)
-    if not manual and overflow_settled(ent, 1):
+    if not manual and overflow_settled(ent, 1, _leads_cached(here).get(key)):
         out.update(status='cached', verdict='unverifiable',
                    why='a common name: the last search ran past %s page(s), so another one-page search cannot '
                        'clear it (held)' % ent.get('ovf'))

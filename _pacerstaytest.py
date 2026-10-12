@@ -369,7 +369,12 @@ rc, out = run(d, h, args=['--max-pages', '3', '--max-spend', '1'], now=later)
 ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
 check('... a deeper --max-pages does search it, and reading every page can clear it',
       len(h.finds()) == 3 and ent['verdict'] == 'clear' and 'ovf' not in ent, (len(h.finds()), ent.get('verdict'), ent.get('why')))
-unv = {'verdict': 'unverifiable', 'ovf': 2, 'why': 'x'}
+unv = {'verdict': 'unverifiable', 'ovf': 2, 'why': 'x', 'names': PS.NAME_READING}
+ldx = {'owners': [('SOMEONE ELSE', 'last_first')]}
+check('overflow_settled: a changed owner or an older name reading is searched again',
+      not PS.overflow_settled(dict(unv, oh=PS.owners_hash({'owners': [('A B', 'last_first')]})), 1, ldx)
+      and PS.overflow_settled(dict(unv, oh=PS.owners_hash(ldx)), 1, ldx)
+      and not PS.overflow_settled(dict(unv, names='old'), 1))
 check('overflow_settled: only an unverifiable common name at or below its recorded depth',
       PS.overflow_settled(unv, 1) and PS.overflow_settled(unv, 2) and not PS.overflow_settled(unv, 3)
       and not PS.overflow_settled(dict(unv, verdict='clear'), 1) and not PS.overflow_settled(dict(unv, err='e'), 1)
