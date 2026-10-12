@@ -344,6 +344,62 @@ check('--max-pages 3 walks page=0,1,2', [c[1].rsplit('=', 1)[1] for c in h.finds
 check('... all pages read and every row closed -> clear, 3 pages billed',
       ent['verdict'] == 'clear' and ent['pages'] == 3 and abs(ent['cost'] - 0.30) < 1e-9, ent)
 
+# ---- 4b a common name is not bought again at the same depth (2026-10-12)
+print('-- 4b common name: depth recorded, not re-bought, report')
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
+rc, out = run(d, h)
+ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
+check('an overflowed search records how deep it read (ovf 1) and how deep PCL said it goes (tp 3)',
+      ent.get('ovf') == 1 and ent.get('tp') == 3 and ent['verdict'] == 'unverifiable', ent)
+cp = d / 'pacer_stay_cache.json'
+c_ = json.loads(cp.read_text())
+c_['CACE-99-000101']['t'] = NOW - 31 * 86400               # past the 30-day unverifiable re-check
+cp.write_text(json.dumps(c_), encoding='utf-8')
+later = NOW
+h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
+rc, out = run(d, h, now=later)
+check('31 days on, at the same --max-pages: not searched again (same page, same answer), still held',
+      h.finds() == [] and json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']['verdict']
+      == 'unverifiable', [c[2] for c in h.finds()])
+h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
+reset_ledgers()
+rc, out = run(d, h, args=['--max-pages', '3', '--max-spend', '1'], now=later)
+ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
+check('... a deeper --max-pages does search it, and reading every page can clear it',
+      len(h.finds()) == 3 and ent['verdict'] == 'clear' and 'ovf' not in ent, (len(h.finds()), ent.get('verdict'), ent.get('why')))
+unv = {'verdict': 'unverifiable', 'ovf': 2, 'why': 'x'}
+check('overflow_settled: only an unverifiable common name at or below its recorded depth',
+      PS.overflow_settled(unv, 1) and PS.overflow_settled(unv, 2) and not PS.overflow_settled(unv, 3)
+      and not PS.overflow_settled(dict(unv, verdict='clear'), 1) and not PS.overflow_settled(dict(unv, err='e'), 1)
+      and not PS.overflow_settled({'verdict': 'unverifiable', 'why': 'x'}, 1) and not PS.overflow_settled(None, 1))
+check('why_buckets: a parse problem that starts "more than" is not a common name',
+      PS.why_buckets('more than 4 owners on one lead')[0].startswith('owner cannot be searched')
+      and PS.why_buckets('more than 1 page(s) of results for one owner name (a common name); an open bankruptcy '
+                         'for a similar name in txsbk') == ['common name', 'similar name, open case'])
+# report: counts only, no names, no network
+rep_leads = [{'county': 'BROWARD', 'case': 'CACE-99-00080%d' % i, 'owners': 'REPORTNAME%s PERSON' % chr(65 + i),
+              'auction': mdy(30)} for i in range(4)]
+d = work({'broward_leads.json': rep_leads})
+iso_now = dt.datetime.fromtimestamp(NOW).astimezone().isoformat(timespec='seconds')
+base = {'env': 'prod', 'src': 'pacer_pcl', 'region': 'national', 'lookback_from': PS.lookback_from(TODAY, 8),
+        'q': iso_now, 't': NOW, 'pages': 1, 'cost': 0.1, 'v': 1}
+(d / 'pacer_stay_cache.json').write_text(json.dumps({
+    'CACE-99-000800': dict(base, verdict='clear', why='no open bankruptcy'),
+    'CACE-99-000801': dict(base, verdict='unverifiable', ovf=1, tp=4,
+                           why='more than 1 page(s) of results for one owner name (a common name)'),
+    'CACE-99-000802': dict(base, verdict='unverifiable',
+                           why='an open bankruptcy for the same name in nysbk (cannot tell if it is this owner)'),
+}), encoding='utf-8')
+h = FakeHTTP()
+rc, out = run(d, h, args=['--report'], raw=True)
+check('--report: no HTTP at all, exit 0', rc == 0 and h.calls == [], (rc, h.calls))
+check('--report: per-county counts and reasons', 'never searched' in out and 'clear 1 released now' in out
+      and 'unverifiable 2' in out and 'common name' in out and 'same name, open case outside Florida' in out
+      and '~$0.40' in out, out)
+check('--report: no owner name printed', 'REPORTNAME' not in out, out)
+
 # ------------------------------------------------------------------------------------ 5 cost
 print('-- 5 cost accounting')
 reset_ledgers()
@@ -1137,6 +1193,9 @@ r = ps17('509999CA001703XXXAMB', h)
 check('pre-send, common name (3 pages) -> unverifiable, refused', r['verdict'] == 'unverifiable'
       and SG.check('509999CA001703XXXAMB', sh17)['code'] == SG.UNVERIFIED and not SG.check('509999CA001703XXXAMB', sh17)['pacer_need'])
 n0 = len(h.calls)
+r = ps17('509999CA001703XXXAMB', h, now=NOW + 20 * 86400)
+check('pre-send 20 days on (past the gate max age): the common name is not bought again, still held',
+      r['status'] == 'cached' and r['verdict'] == 'unverifiable' and len(h.calls) == n0, r)
 r = ps17('CACE-99-001705', h)
 check('pre-send, unsearchable owner (trust): unverifiable at no cost', r['status'] == 'unsearchable' and len(h.calls) == n0
       and SG.check('CACE-99-001705', sh17)['code'] == SG.UNVERIFIED)
