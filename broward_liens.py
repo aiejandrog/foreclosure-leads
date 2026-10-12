@@ -656,6 +656,9 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
     if len(morts) > 5: conf = 'low'
     if len(opens) > 3: conf = 'low'                                  # one residential parcel rarely has >3 truly-open mtgs
     if sum(1 for o in opens if o['mers']) and len(opens) > 1: conf = 'low'   # MERS can't be uniquely paired
+    # A case whose type neither the plaintiff nor the number prefix names (a bare tax-deed number such
+    # as '53741', a CASE label) has no known foreclosing loan: the surviving-debt picture is a guess.
+    if not ftype and lc: conf = 'low' if conf != 'none' else conf
     # The fallback never earns confidence: when any status came from the lender-name rules (or a page
     # could not be read), conf may not exceed what the pre-link algorithm computes on the same records.
     if not _legacy and any(r.get('how') == 'heur' for r in liens):
@@ -773,7 +776,8 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
             'open_count': len(opens), 'junior': junior, 'first_est': first,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open, 'ftype': ftype,
-            'deeded': deeded, 'deed_conf': deed_conf, 'second_fc': second_fc, 'conf': conf, 'nrec': len(exact)}
+            'deeded': deeded, 'deed_conf': deed_conf, 'second_fc': second_fc, 'conf': conf, 'nrec': len(exact),
+            'case_type_unknown': (not ftype and bool(lc)) or None}
 
 
 def _search_name(lead):

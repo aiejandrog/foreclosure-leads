@@ -204,6 +204,25 @@ chk('failed search is the retry path, not relink', not BL._needs_relink({'conf':
 chk('pre-link chains still rank ahead of other_liens ones',
     BL._relink_rank({'liens': [{'party': 'X'}], 'pv': 1}) < BL._relink_rank({'conf': 'ok', 'pv': 2}))
 
+# 14e. the common-name cap: a low-confidence Broward chain is never a priced FACT
+low = {'conf': 'low', 'deed_conf': '', 'liens': [{'st': 'OPEN', 'amt': 90000}], 'second_fc': None, 'nrec': 40}
+chk('low Broward chain with priced loans is a CEILING', ES.state_of(low) == 'unpriced', ES.state_of(low))
+ok_ = dict(low, conf='ok')
+chk('same chain at conf ok is still priced', ES.state_of(ok_) == 'priced', ES.state_of(ok_))
+miami_low = {'conf': 'low', 'liens': [{'st': 'OPEN', 'amt': 90000}], 'subdiv': 'X', 'nrec': 40}
+chk('Miami low chain is unchanged (separate decision)', ES.state_of(miami_low) == 'priced', ES.state_of(miami_low))
+lead = {}
+ES.apply(lead, low)
+chk('board row says why, flags low', lead['eqstate'] == 'unpriced' and lead.get('eqlow') and 'namesake' in lead['eqstate_why'], lead)
+chk('low_capped counts it, not the conf ok one', ES.low_capped(low) and not ES.low_capped(ok_) and not ES.low_capped(miami_low))
+import lien_coverage as LCV
+sm2 = LCV.summarize({'A': low, 'B': ok_, 'C': miami_low}, None, 'broward')
+chk('coverage counts the capped chains', sm2['fact_low'] == 1, sm2)
+# a case of unknown type (a bare tax-deed number) is a guess about the foreclosing loan
+ru2 = BL.analyze(BASE, 'TESTER,OWEN', 0, ftype='', lead_case='53741')
+chk('unknown case type forces low confidence', ru2['conf'] == 'low' and ru2.get('case_type_unknown'), ru2['conf'])
+chk('known case type is not marked', not run([]).get('case_type_unknown'))
+
 # 15. is_claim on its own
 chk('is_claim: CLAIM OF LIEN', OL.is_claim('CLAIM OF LIEN'))
 chk('is_claim: FEDERAL TAX LIEN', OL.is_claim('FEDERAL TAX LIEN'))
