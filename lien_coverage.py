@@ -93,10 +93,14 @@ def _search(chain):
 
 
 # A purchase loan is recorded with its deed: same book, the next pages, the same day. When the
-# appraiser's own sale record for THIS folio names that deed's book/page, a mortgage recorded right
-# behind it is this parcel's, whatever surname or subdivision the clerk index shows. Window: up to
-# DEED_PAGE_SPAN pages after the deed, recorded within DEED_DAYS days of the sale date.
-DEED_PAGE_SPAN = 60
+# appraiser's own sale record for THIS folio names that deed's book/page, a mortgage is this
+# parcel's only when ALL of these hold (review 2026-10-12: a neighbour's or an investor's second
+# closing sits a few pages later in the same day's book):
+#   * the nearest deed recorded before it in that book, any parcel (row['deed_bp']), IS that deed
+#   * it sits at most DEED_PAGE_SPAN pages after it, within DEED_DAYS days of the sale
+#   * its borrower names the searched owner (row['by_owner'])
+# A row from before those fields were written is never anchored.
+DEED_PAGE_SPAN = 10
 DEED_DAYS = 3
 
 
@@ -115,16 +119,18 @@ def _day(x):
 
 def deed_anchored(row, sale_refs):
     """True when this mortgage row was recorded right behind one of the parcel's appraiser-listed
-    deeds (same book, page within DEED_PAGE_SPAN after it, date within DEED_DAYS). Never guesses:
-    an unreadable book/page or date is False."""
-    mbp, md = _bp(row.get('bp')), _day(row.get('d'))
-    if not mbp or md is None:
+    deeds, with nothing else's deed in between, and its borrower is the owner. Never guesses:
+    an unreadable book/page or date, or a row without the evidence fields, is False."""
+    if row.get('by_owner') is not True:
+        return False
+    mbp, md, prev = _bp(row.get('bp')), _day(row.get('d')), _bp(row.get('deed_bp'))
+    if not mbp or md is None or not prev:
         return False
     for ref in sale_refs if isinstance(sale_refs, list) else []:
         if not isinstance(ref, dict):
             continue
         dbp, dd = _bp('%s %s' % (ref.get('b'), ref.get('p'))), _day(ref.get('d'))
-        if not dbp or dd is None:
+        if not dbp or dd is None or dbp != prev:
             continue
         if mbp[0] == dbp[0] and dbp[1] < mbp[1] <= dbp[1] + DEED_PAGE_SPAN and abs((md - dd).days) <= DEED_DAYS:
             return True
