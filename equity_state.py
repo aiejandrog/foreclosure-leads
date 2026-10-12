@@ -69,6 +69,29 @@ LENDER_OWN_CASE_WHY = ('UNVERIFIED — a lender is foreclosing on this parcel, b
                        'found no open mortgage; the chain missed it')
 
 
+def county_chain(chain, lead=None, county=None):
+    """A Broward / Palm Beach chain (broward_liens.analyze shape). Chains cached before the analyzer
+    wrote `deed_conf` are told apart by the lead's county; Miami chains are never one."""
+    if isinstance(chain, dict) and 'deed_conf' in chain:
+        return True
+    c = str(county or (lead or {}).get('county') or '').upper().replace(' ', '')
+    return c.startswith(('BROW', 'PALMB', 'PB'))
+
+
+def low_capped(chain, lead=None, county=None):
+    """True when the common-name cap turned this chain from a priced FACT into a CEILING."""
+    if not isinstance(chain, dict) or not county_chain(chain, lead, county):
+        return False
+    liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
+    return bool(liens and str(chain.get('conf') or '').lower() == 'low'
+                and all(l.get('amt') for l in liens) and not (chain.get('mtg_open_unpriced') or 0)
+                and not (chain.get('other_open_unpriced') or 0) and not chain.get('xs_conflict'))
+
+
+LOW_CEILING_WHY = ('CEILING ONLY — common-name search: the recorded debt may include a namesake\'s loans '
+                   'or miss a loan a namesake\'s release paired away; confirm with the owner')
+
+
 def lender_foreclosure(lead):
     """True when the lead's own case is a lender's mortgage foreclosure (foreclosure_leads.classify).
 
@@ -131,6 +154,15 @@ def _state_of(chain, lead=None):
     # The source publishes no amounts at all -> a ceiling, whatever any single row happens to carry.
     if conf == 'unpriced':
         return 'unpriced'
+    # A COMMON-NAME CHAIN IS A CEILING, NOT A FACT (Broward / Palm Beach, 2026-10-12, Alex: "disgustingly
+    # accurately"). The county index is searched by name; conf='low' means the name matched too many
+    # records (>35), too many mortgages or open loans, MERS ambiguity, or a case of unknown type. A
+    # namesake's mortgage inflates the debt, but a namesake's RELEASE can also pair away a loan that is
+    # still owed, so a low chain's total can be wrong in EITHER direction. It may show what was found
+    # (the rows, eqlow, the CEILING) and never stands as a priced FACT. Miami chains (no deed_conf key,
+    # anchored by subdivision) keep the asymmetry described in state_of; that is a separate decision.
+    if liens and conf == 'low' and county_chain(chain, lead):
+        return 'unpriced'
     if liens:
         # priced ONLY when every surviving instrument carries a figure. Any gap and the total is
         # unknowable, so the honest answer is the ceiling, not a number the operator would quote.
@@ -163,6 +195,11 @@ def apply(lead, chain):
     lead['eqstate_why'] = LABEL[st]
     if st == 'none' and lender_foreclosure(lead) and _state_of(chain) == 'clear':
         lead['eqstate_why'] = LENDER_OWN_CASE_WHY
+    if (st == 'unpriced' and isinstance(chain, dict) and str(chain.get('conf') or '').lower() == 'low'
+            and county_chain(chain, lead) and (chain.get('liens') or [])
+            and all(l.get('amt') for l in chain['liens'] if isinstance(l, dict))
+            and not (chain.get('mtg_open_unpriced') or 0) and not (chain.get('other_open_unpriced') or 0)):
+        lead['eqstate_why'] = LOW_CEILING_WHY
     if st == 'unpriced' and _state_of(chain, lead) == 'clear':
         lead['eqmtgclear'] = True    # the MORTGAGE verdict was clear; only an amountless lien made it
                                      # a ceiling, so a lender's separate case still demotes it
@@ -193,6 +230,8 @@ def apply(lead, chain):
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure
+        if lead.get('eqstate_why') == LOW_CEILING_WHY and not lead.get('eqopen'):
+            lead['eqopen'] = len(chain['liens'])   # recorded loans: a ceiling of 0 would read like a clear one
         if chain.get('xs_conflict'):
             lead['eqxs'] = len(chain['xs_conflict'])   # a second source shows instruments this chain lacks
             if st == 'unpriced' and not lead.get('eqopen'):

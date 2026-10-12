@@ -116,7 +116,28 @@ def search_docs(sess, search_name):
         j = json.loads(grid)
     except Exception:
         return None
-    return j.get('data', [])
+    data = j.get('data') or []
+    # The grid is read as ONE page of 400. A name with more records than that is cut short (the oldest or
+    # newest 400, whichever the grid sorts to), and a release or the real mortgage may be on the page not
+    # read: the chain must say so instead of reading as complete (equity_state.coverage_documented).
+    try:
+        total = int(j.get('total'))
+    except (TypeError, ValueError):
+        total = len(data)
+    search_docs.last_truncated = total > len(data) or len(data) >= 400
+    return data
+
+
+search_docs.last_truncated = False
+
+
+def mark_truncated(res, truncated):
+    """A name search cut at the page size can prove nothing: the chain stays visible but is never 'ok'."""
+    if truncated:
+        res['truncated'] = True
+        if res.get('conf') == 'ok':
+            res['conf'] = 'low'
+    return res
 
 
 # ---- parse the chain: open vs satisfied, isolate the surviving junior --------------------------
@@ -656,6 +677,9 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
     if len(morts) > 5: conf = 'low'
     if len(opens) > 3: conf = 'low'                                  # one residential parcel rarely has >3 truly-open mtgs
     if sum(1 for o in opens if o['mers']) and len(opens) > 1: conf = 'low'   # MERS can't be uniquely paired
+    # A case whose type neither the plaintiff nor the number prefix names (a bare tax-deed number such
+    # as '53741', a CASE label) has no known foreclosing loan: the surviving-debt picture is a guess.
+    if not ftype and lc: conf = 'low' if conf != 'none' else conf
     # The fallback never earns confidence: when any status came from the lender-name rules (or a page
     # could not be read), conf may not exceed what the pre-link algorithm computes on the same records.
     if not _legacy and any(r.get('how') == 'heur' for r in liens):
@@ -773,7 +797,8 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
             'open_count': len(opens), 'junior': junior, 'first_est': first,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open, 'ftype': ftype,
-            'deeded': deeded, 'deed_conf': deed_conf, 'second_fc': second_fc, 'conf': conf, 'nrec': len(exact)}
+            'deeded': deeded, 'deed_conf': deed_conf, 'second_fc': second_fc, 'conf': conf, 'nrec': len(exact),
+            'case_type_unknown': (not ftype and bool(lc)) or None}
 
 
 def _search_name(lead):
@@ -801,7 +826,11 @@ def _needs_relink(h):
     if bool(h.get('liens')) and int(h.get('pv') or 1) < PAIRING_VERSION:
         return True
     # a successful chain from before other_liens (2026-10-12) never recorded its non-mortgage liens
-    return h.get('conf') in ('ok', 'low', 'unpriced') and 'other_v' not in h
+    if h.get('conf') in ('ok', 'low', 'unpriced') and 'other_v' not in h:
+        return True
+    # a chain read as 'ok' from a name search that hit the 400-row grid page was cut short: re-trace so
+    # mark_truncated can downgrade it (a truncated re-trace becomes low, so this cannot loop)
+    return h.get('conf') == 'ok' and int(h.get('nrec') or 0) >= 400
 
 
 def _relink_rank(h):
@@ -870,6 +899,8 @@ def main():
         # --case overrides.
         if not a.case:
             why = untraceable_owner(owner)
+            if not why and owner.startswith('(owner via'):
+                why = 'no owner name yet (title search pending)'
             if why:
                 skipped.setdefault(why, []).append(owner)
                 continue
@@ -950,6 +981,7 @@ def main():
                            else link_chain(docs, owner, case, link_cache, run_budget=a.link_pages,
                                            run_seconds=a.link_seconds))
         res = analyze(docs, owner, judg, ftype=ftype, lead_case=case, links=links)
+        mark_truncated(res, search_docs.last_truncated)
         res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
         res['pv'] = PAIRING_VERSION if complete else 1      # an incomplete link read stays queued for relink
         out[case] = res

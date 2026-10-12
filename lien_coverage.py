@@ -245,7 +245,7 @@ def summarize(chains, leads=None, county=None):
     by_search = Counter()
     gaps = Counter()
     kinds = Counter()
-    fact = supported = deed = 0
+    fact = supported = fact_low = deed = 0
     no_chain = sum(1 for c in (leads or {}) if c not in (chains or {}))
     for case, ch in (chains or {}).items():
         cv = coverage(ch, (leads or {}).get(case), county)
@@ -260,6 +260,8 @@ def summarize(chains, leads=None, county=None):
         for k in seen:
             kinds[k] += 1
         by_state[cv['state']] += 1
+        if ES.low_capped(ch, (leads or {}).get(case), county):
+            fact_low += 1
         by_search[cv['search']] += 1
         for g in cv['gaps']:
             gaps[g] += 1
@@ -268,7 +270,7 @@ def summarize(chains, leads=None, county=None):
             fact += 1
             supported += cv['fact_supported']
     return {'chains': sum(by_state.values()), 'no_chain': no_chain, 'board_fact': fact,
-            'fact_supported': supported, 'deed_anchored_mortgages': deed,
+            'fact_supported': supported, 'fact_low': fact_low, 'deed_anchored_mortgages': deed,
             'state': dict(by_state), 'search': dict(by_search), 'gaps': dict(gaps), 'kinds': dict(kinds)}
 
 
@@ -314,6 +316,7 @@ def main():
     if leads:
         print('  leads with no chain (never searched, or the search failed)  %d' % s['no_chain'])
     print('  board says VERIFIED/CLEAR  %d' % s['board_fact'])
+    print('  ...priced chains the common-name (low confidence) cap turned into a CEILING  %d' % s['fact_low'])
     print('  ...backed by a complete, anchored, gap-free search  %d' % s['fact_supported'])
     print('  open mortgages tied to the parcel by the appraiser\'s deed book/page  %d'
           % s['deed_anchored_mortgages'])

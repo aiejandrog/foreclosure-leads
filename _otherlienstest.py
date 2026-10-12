@@ -204,6 +204,52 @@ chk('failed search is the retry path, not relink', not BL._needs_relink({'conf':
 chk('pre-link chains still rank ahead of other_liens ones',
     BL._relink_rank({'liens': [{'party': 'X'}], 'pv': 1}) < BL._relink_rank({'conf': 'ok', 'pv': 2}))
 
+# 14e. the common-name cap: a low-confidence Broward chain is never a priced FACT
+low = {'conf': 'low', 'deed_conf': '', 'liens': [{'st': 'OPEN', 'amt': 90000}], 'second_fc': None, 'nrec': 40}
+chk('low Broward chain with priced loans is a CEILING', ES.state_of(low) == 'unpriced', ES.state_of(low))
+ok_ = dict(low, conf='ok')
+chk('same chain at conf ok is still priced', ES.state_of(ok_) == 'priced', ES.state_of(ok_))
+miami_low = {'conf': 'low', 'liens': [{'st': 'OPEN', 'amt': 90000}], 'subdiv': 'X', 'nrec': 40}
+chk('Miami low chain is unchanged (separate decision)', ES.state_of(miami_low) == 'priced', ES.state_of(miami_low))
+lead = {}
+ES.apply(lead, low)
+chk('board row says why, flags low', lead['eqstate'] == 'unpriced' and lead.get('eqlow') and 'namesake' in lead['eqstate_why'], lead)
+chk('low_capped counts it, not the conf ok one', ES.low_capped(low) and not ES.low_capped(ok_) and not ES.low_capped(miami_low))
+import lien_coverage as LCV
+sm2 = LCV.summarize({'A': low, 'B': ok_}, None, 'broward')
+chk('coverage counts the capped chains', sm2['fact_low'] == 1, sm2)
+# a case of unknown type (a bare tax-deed number) is a guess about the foreclosing loan
+ru2 = BL.analyze(BASE, 'TESTER,OWEN', 0, ftype='', lead_case='53741')
+chk('unknown case type forces low confidence', ru2['conf'] == 'low' and ru2.get('case_type_unknown'), ru2['conf'])
+chk('known case type is not marked', not run([]).get('case_type_unknown'))
+
+sat = {'conf': 'low', 'deed_conf': '', 'liens': [{'st': 'SATISFIED', 'amt': 90000}], 'nrec': 40}
+ls = {}
+ES.apply(ls, sat)
+chk('low chain of only satisfied loans never shows a ceiling of 0', ls['eqstate'] == 'unpriced' and ls.get('eqopen') == 1, ls)
+chk('low_capped skips a chain that was already unpriced', not ES.low_capped(dict(low, other_open_unpriced=1)))
+
+oldc = {'conf': 'low', 'liens': [{'st': 'OPEN', 'amt': 90000}], 'nrec': 40, 'first_est': 90000}   # cached pre-deed_conf
+chk('old-shape Broward chain is capped via the lead county', ES.state_of(oldc, {'county': 'BROWARD'}) == 'unpriced')
+chk('same old-shape chain on a Miami lead is untouched', ES.state_of(oldc, {'county': 'MIAMI-DADE'}) == 'priced')
+chk('old-shape chain with no lead is untouched', ES.state_of(oldc) == 'priced')
+chk('Palm Beach lead county also recognised', ES.county_chain(oldc, {'county': 'PALM BEACH'}))
+
+# 14f. a name search cut at the 400-row page can prove nothing
+tr = BL.mark_truncated({'conf': 'ok', 'liens': []}, True)
+chk('truncated search is never conf ok and says so', tr['conf'] == 'low' and tr['truncated'] is True, tr)
+chk('truncated + empty chain cannot be CLEAR (coverage_documented refuses it)',
+    not ES.coverage_documented(dict(tr, nrec=40, second_fc=None)))
+chk('complete search is left alone', BL.mark_truncated({'conf': 'ok'}, False) == {'conf': 'ok'})
+import unittest.mock as _m
+_resp = '{"data": [{"a": 1}] , "total": 900}'
+with _m.patch.object(BL, '_curl', side_effect=lambda *a, **k: '' if 'SearchTypeName' in a[0] else _resp):
+    got = BL.search_docs({'doctypes': '1', 'booktypes': '1'}, 'DOE, JANE')
+chk('search_docs flags total > rows returned', got == [{'a': 1}] and BL.search_docs.last_truncated is True)
+with _m.patch.object(BL, '_curl', side_effect=lambda *a, **k: '' if 'SearchTypeName' in a[0] else '{"data": [], "total": 0}'):
+    BL.search_docs({'doctypes': '1', 'booktypes': '1'}, 'DOE, JANE')
+chk('search_docs clears the flag for a small search', BL.search_docs.last_truncated is False)
+
 # 15. is_claim on its own
 chk('is_claim: CLAIM OF LIEN', OL.is_claim('CLAIM OF LIEN'))
 chk('is_claim: FEDERAL TAX LIEN', OL.is_claim('FEDERAL TAX LIEN'))
@@ -239,5 +285,8 @@ with tempfile.TemporaryDirectory() as td:
         'CACE' not in out and 'INTERNAL' not in out and '18500' not in out, out)
     chk('CLI counts the lead with no chain', 'never searched, or the search failed)  1' in out, out)
 
+import broward_liens as _BL
+chk('14g: cached ok chain with 400 recs is queued for re-trace', _BL._needs_relink({'conf':'ok','nrec':400,'pv':_BL.PAIRING_VERSION,'other_v':1,'liens':[]}))
+chk('14g: cached ok chain with 120 recs is not', not _BL._needs_relink({'conf':'ok','nrec':120,'pv':_BL.PAIRING_VERSION,'other_v':1,'liens':[]}))
 print('\n%d failed' % len(FAIL) if FAIL else '\nALL PASS')
 sys.exit(1 if FAIL else 0)
