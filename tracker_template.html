@@ -2385,7 +2385,25 @@ const MAILTO  = (function(){ try { return __MAILTO__;  } catch(e){ return {}; } 
    the ledger existed simply behaves as it did. */
 const TEXTLOG    = (function(){ try { return __TEXTLOG__;    } catch(e){ return {}; } })();
 const TEXTPERSON = (function(){ try { return __TEXTPERSON__; } catch(e){ return {}; } })();
-let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
+/* RELEASE EXPIRY (2026-10-12). A Broward / Palm Beach lead is released from the bankruptcy hold only
+   as long as its evidence lasts: the bake stamps bkUntil (bk_lookup.release_until: the PACER clear's
+   expiry, at most 48h after the build). A page left open, or opened after a missed rebuild, must not
+   keep offering that lead, so past bkUntil it is held here exactly like a baked saleBkAct. */
+function _expireReleases(rows){
+  try{
+    const now = Date.now()/1000;
+    (rows||[]).forEach(r => {
+      if(r && r.bkUntil && !r.saleBkAct && now > r.bkUntil){
+        r.saleBkAct = true;
+        r.bkWhy = 'Bankruptcy check expired on this page (built ' + (typeof BUILTAT==='string' ? BUILTAT : '?') +
+                  '). Held until the board is rebuilt.';
+        delete r.saleLift;
+      }
+    });
+  }catch(e){}
+  return rows;
+}
+let DATA = _expireReleases(Array.isArray(RAW) ? RAW : []);   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
 let notes = {};
@@ -19218,7 +19236,7 @@ async function decryptPayload(enc, password){
    Shape: {rows:[...], side:{rp:{case:{subject,excerpt,note}}, dw:{case:'why'}}}. A plain array is
    the pre-2026-09-17 payload (and the plaintext Desktop twin), which still has its text inline. */
 function _applyPayload(pl){
-  if(Array.isArray(pl)) return pl;                 // legacy payload: nothing sealed, nothing to merge
+  if(Array.isArray(pl)) return _expireReleases(pl);                 // legacy payload: nothing sealed, nothing to merge
   const side = (pl && pl.side) || {};
   try{
     const rp = side.rp || {};
@@ -19227,7 +19245,7 @@ function _applyPayload(pl){
     Object.keys(dw).forEach(c => { if(SERVER_DEADS && SERVER_DEADS[c]) SERVER_DEADS[c].why = dw[c]; });
     if(Object.keys(dw).length) _applyServerDeadNotes();   // the reason only exists now — seed the note
   }catch(e){ /* a merge failure must never cost the unlock — the board still opens, text-free */ }
-  return (pl && pl.rows) || [];
+  return _expireReleases((pl && pl.rows) || []);
 }
 function _greetWord(){
   try{ const h = new Date().getHours(); return h<12 ? 'Good morning' : h<18 ? 'Good afternoon' : 'Good evening'; }

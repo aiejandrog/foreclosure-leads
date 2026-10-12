@@ -1491,6 +1491,35 @@ def hold_every_case(cases, why=HOLD_UNAVAILABLE):
     return out
 
 
+RELEASE_PAGE_HOURS = 48     # a page built from a release goes stale after this: a hold that lands
+                            # after the build (new filing, never-contact, an expired clear) reaches a
+                            # page only on its next build, and the board rebuilds nightly
+
+
+def release_until(key, now=None):
+    """Epoch seconds until which a page built now may treat this Broward / Palm Beach lead as
+    released; None for a Miami-Dade stem (the docket gate, not this, decides those). The earlier
+    of: the PACER clear's own expiry (stay_gate max age), and now + RELEASE_PAGE_HOURS. Any doubt
+    gives the RELEASE_PAGE_HOURS bound. The board and Call Mode re-hold the lead once it passes,
+    so a page left open (or a copy cached on a phone) cannot keep a release past its evidence."""
+    import stay_gate
+    now = time.time() if now is None else now
+    if stay_gate.case_stem(key):
+        return None
+    until = now + RELEASE_PAGE_HOURS * 3600.0
+    try:
+        root = PACER_ROOT or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, err, exists = stay_gate._load_pacer(os.path.join(root, stay_gate.PACER_NAME))
+        ent = idx[0].get(key) if (exists and not err and idx) else None
+        if ent is not None and stay_gate.pacer_verdict(ent, now)[0] == stay_gate.CLEAR:
+            age = stay_gate._pacer_age_days(ent, now)
+            if age is not None:
+                until = min(until, now + (stay_gate.pacer_max_age_days() - age) * 86400.0)
+    except Exception:
+        pass
+    return int(until)
+
+
 def flags_for_cases(cases, now=None):
     """{pacer_key: {hold, why, hard}} for the board bake. Counts and case numbers only.
 
