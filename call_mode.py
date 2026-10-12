@@ -57,20 +57,39 @@ CALL_OUTCOMES = [
     ('dnc',       'Hard no (do not call)',     0, True),
 ]
 
-# 15-second voicemail, Copy Pack §5. He READS it — no prerecorded or ringless drop, which would
-# need prior express written consent under the TCPA and is the one part of "auto-dial everything"
-# that stays off the table.
-# 8/17 masterclass voice. {st1} not {street}: the full address read aloud sounds like a process
-# server (Evernia St lesson, 2026-08-16). {phone} is the explicit callback slot — fillScript
-# resolves it from SENDER.phone. Numbers written as words because he READS this live.
-VOICEMAIL_EN = ("Hi {first}, this is {sender} with Biscayne Solutions Group, about {st1}. "
-                "You may have a plan. Keep it. A plan can land a day late, and here a day is "
-                "everything. Our senior advisor, thirty plus years, maps your free backup in five "
-                "minutes. Call me any hour at {phone}. Thanks.")
-VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group, por {st1}. "
-                "Si tiene un plan, sígalo. Un plan puede llegar un día tarde, y aquí un día lo es "
-                "todo. Nuestro asesor principal, más de treinta años, le arma su respaldo gratis "
-                "en cinco minutos. Llámeme a cualquier hora al {phone}. Gracias.")
+# VOICEMAIL (2026-10-12, Alejandro's own dictated script, cleaned for the copy law). He READS it --
+# no prerecorded or ringless drop, which would need prior express written consent under the TCPA
+# and is the one part of "auto-dial everything" that stays off the table.
+# {sender}/{phone} resolve from the dialing phone's own identity (SENDER, fcSender), so Carlos's
+# page says Carlos's name and number once his phone has them saved. {vmsale} is the whole
+# sale-timing sentence, chosen per row by fillScript from VM_SALE below (live days to sale).
+# Copy law: never "we stop the sale", no fee, no number, discovery framing (#57). The number is
+# said twice because a voicemail is heard once, usually while driving.
+VOICEMAIL_EN = ("Hi {first}, this is {sender} with Biscayne Solutions Group. {vmsale} "
+                "We work with homeowners in this situation, and there may be more than one way to "
+                "handle it, depending on what you want to do with the house. If you'd like to talk "
+                "it through, call me at {phone}. Again, that's {phone}. If now's not a good time, "
+                "just let me know and I won't reach out again. Thank you.")
+VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group. {vmsale_es} "
+                "Trabajamos con propietarios en esta situación, y puede haber más de una manera de "
+                "manejarlo, según lo que usted quiera hacer con la casa. Si desea conversarlo, "
+                "llámeme al {phone}. Repito, {phone}. Si ahora no es buen momento, solo dígamelo y "
+                "no lo vuelvo a contactar. Gracias.")
+
+# The sale-timing sentence of the voicemail, by state. 'days' carries {n} (live days to sale, 2+);
+# 'none' is a lead with no sale date (lis pendens), a passed sale, or a date the page cannot read.
+# "court sale", not "foreclosure": a voicemail box is often shared, and the gatekeeper rule below
+# (GATE step) is never to say "foreclosure" to anyone but the owner.
+VM_SALE = {
+    'en': {'days': "Public records show a court sale scheduled on your property at {st1} in about {n} days.",
+           'tomorrow': "Public records show a court sale scheduled on your property at {st1} for tomorrow.",
+           'today': "Public records show a court sale scheduled on your property at {st1} for today.",
+           'none': "Public records show a court case filed on your property at {st1}."},
+    'es': {'days': "Según los registros públicos, hay una venta judicial programada para su propiedad en {st1} en unos {n} días.",
+           'tomorrow': "Según los registros públicos, hay una venta judicial programada para su propiedad en {st1} para mañana.",
+           'today': "Según los registros públicos, hay una venta judicial programada para su propiedad en {st1} para hoy.",
+           'none': "Según los registros públicos, hay un caso judicial presentado sobre su propiedad en {st1}."},
+}
 
 # HOW TO LEAVE IT — the tonality cue rendered right under the voicemail (2026-09-14, Alejandro). A
 # voicemail lives or dies on delivery, not words: NEPQ leaves it low-status, unhurried and a little
@@ -2518,6 +2537,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'bridge': {'en': BRIDGE_EN, 'es': BRIDGE_ES},
         'busy': {'en': BUSY_EN, 'es': BUSY_ES},
         'vmtone': {'en': VM_TONE_EN, 'es': VM_TONE_ES},   # delivery cue under the voicemail
+        'vmsale': VM_SALE,                                 # {vmsale}/{vmsale_es} in VMEN/VMES (fillScript)
         'tone': [{'k': k, 'v': v} for k, v in TONALITY],  # collapsed tonality reference at top of sheet
         'flow': FLOW,                                      # guided call flow (renderGuided) — homeowner only
         # load_objections() + the hard-coded 'Not interested' card, so a vault-less/stale-vault runner
@@ -3321,6 +3341,12 @@ try{
   ['name','phone'].forEach(function(k){ if(_sv[k]) SENDER[k] = _sv[k]; });
 }catch(e){}
 
+/* True when this is a named seat page whose caller is not the name the scripts will speak. */
+function _vmVoiceWrong(){
+  if(typeof SEAT === 'undefined' || !SEAT || !SEAT.w) return false;
+  return String(SENDER.name||'').toLowerCase().indexOf(String(SEAT.w).toLowerCase()) < 0;
+}
+
 /* Fill a script template. Global replace — String.replace with a string argument only swaps the
    FIRST match, which is how {sender} survived into a live read-aloud script. */
 /* A USABLE HUMAN FIRST NAME, or ''. Mirrors the board's _smsFirst.
@@ -3356,9 +3382,25 @@ function firstName(r){
   return tok.charAt(0) + tok.slice(1).toLowerCase();
 }
 
+/* {vmsale} / {vmsale_es} — the voicemail's sale-timing sentence (VM_SALE in call_mode.py, shipped
+   as SCRIPT_ALL.vmsale). liveDays, not r.d: r.d is frozen at build and a page left open overnight
+   would say "in about 3 days" the morning it is 2. Expanded BEFORE {st1} so the sentence's own
+   {st1} is filled by the same pass. */
+function _vmSale(r, lg){
+  var V = (typeof SCRIPT_ALL !== 'undefined' && SCRIPT_ALL && SCRIPT_ALL.vmsale) ? SCRIPT_ALL.vmsale[lg] : null;
+  if(!V) return '';
+  var d = (r && typeof liveDays === 'function') ? liveDays(r) : null;
+  if(typeof d !== 'number' || d < 0) return V.none;
+  if(d === 0) return V.today;
+  if(d === 1) return V.tomorrow;
+  return V.days.split('{n}').join(String(d));
+}
 function fillScript(t, r){
   var first = firstName(r);
-  return String(t||'')
+  t = String(t||'');
+  if(t.indexOf('{vmsale') >= 0)
+    t = t.split('{vmsale_es}').join(_vmSale(r, 'es')).split('{vmsale}').join(_vmSale(r, 'en'));
+  return t
     .split('{first}').join(first ? (' ' + first).trimEnd() : '')
     /* {sender} — balloon rows introduce the ADVISOR (sender.json balloon_signer, injected as
        SENDER.bsigner): the refi pitch's asset is his name, and the email the same row received was
@@ -7299,6 +7341,12 @@ function renderSheet(r){
                         + '</div>' : '')
      /* the investor lane carries its own voicemail (SCRIPT.vm); the homeowner rescue message is
         the page-level VMEN/VMES and stays exactly what it was for every other row */
+     /* WRONG VOICE GUARD (2026-10-12): an unset phone falls back to Alejandro's name and number, so
+        on Carlos's page the voicemail would leave Alejandro's callback. Say so above the words. */
+     + (_vmVoiceWrong() ? '<div class="mut" style="font-size:12px;margin:2px 0 7px;color:#ff8a80">'
+                          + '&#9888; This voicemail says ' + esc(SENDER.name) + ' / ' + esc(SENDER.phone)
+                          + ' but this page is ' + esc(SEAT.w) + '&rsquo;s. Set your name and callback'
+                          + ' number on the board (Sender) on this phone first.</div>' : '')
      + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
 
   // BUSY / CALL ME BACK (NEPQ Calendar Commitment) — the most common early bail. Flip status: YOUR
