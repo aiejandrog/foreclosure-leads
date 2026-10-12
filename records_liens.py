@@ -976,7 +976,12 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         is_open = bp not in satisfied
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
                'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
-               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY'))}
+               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY')),
+               # what tied this mortgage to the parcel, and its document type: written down so the
+               # coverage report (lien_coverage.py) can tell a folio-indexed loan from one placed
+               # only by subdivision + surname, and a modification from a new loan. Report-only.
+               'anchor': 'folio' if (rf and rf == fol) else 'subdivision',
+               'doc': (r.get('doC_TYPE', '') or '')[:40]}
         if not is_open:
             row['sat_by'] = 'book/page'       # a release that names this loan (the others below infer it)
         if nopx:
@@ -1056,6 +1061,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 o['st'] = 'SATISFIED'; o['sat_by'] = 'refinance'; break
     # unpriced loans leave the list here: counted, never summed, never shown as a $0 lien
     unpriced_open = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'OPEN')
+    # an unpriced loan released only by inference leaves the list too; counted so the coverage
+    # report (lien_coverage.py) can still see that release was a guess. Report-only.
+    unpriced_inferred = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'SATISFIED'
+                            and o.get('sat_by') != 'book/page')
     liens = [o for o in liens if not o.get('_nopx')]
     opens = [o for o in liens if o['st'] == 'OPEN']
     _sv = _surv_of(opens, ftype, judgment)
@@ -1357,7 +1366,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # the mortgages whose amount the index does not publish.
     return {'second_fc': second_fc, 'second_fc_unsure': second_fc_unsure, 'nrec': len(models),
             'anchor': 'folio+subdivision' if subj_subdiv else '',
-            'mtg_open_unpriced': unpriced_open,
+            'mtg_open_unpriced': unpriced_open, 'mtg_unpriced_release_inferred': unpriced_inferred,
             'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open,
