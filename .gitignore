@@ -724,3 +724,4 @@ logs/
 !_cadencesiblingtest.py
 !_texttripwiretest.py
 !_textprecheckstest.py
+!_outcomelearntest.py
