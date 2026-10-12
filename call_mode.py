@@ -1727,6 +1727,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'd': days,
             'lp': 1 if is_lp else 0,
             'p': [keep[k] for k in order],
+            # build-time only, popped after the sort: is the number dialed first explicitly a landline?
+            '_ll': 1 if (lambda _t: keep_oi[order[0]] < len(_t) and _t[keep_oi[order[0]]] == 'landline')(
+                d.get('phtype') or []) else 0,
             # rank is indexed by the ORIGINAL phones position, recovered via keep_oi.
             'r': [(rank[keep_oi[k]][:1].upper()
                    if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') for k in order],
@@ -1922,9 +1925,17 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # at 45% by the recorded chain — the caller spent the freshest hour of the day on the leads
     # most likely to evaporate (the Acosta pattern, at the top of the queue). Traced first, then
     # the number. Untraced leads still ship; they just stop cutting the line.
-    out.sort(key=lambda r: (_band(r), 0 if r.get('eqv') else 1,
+    # MOBILE BEFORE LANDLINE (2026-10-12, outcome_learn.py on 293 logged dials): numbers typed
+    # mobile reached a person 25 of 134 times, landlines 0 of 26. County, equity, homestead and tier
+    # made no difference to pickup. So within a band, a lead whose first number is a landline waits
+    # behind the mobile leads. Nobody is dropped. Untyped numbers are not penalised: only an explicit
+    # 'landline' moves. CALLMODE_MOBILE_FIRST=0 turns it off.
+    _mf = os.environ.get('CALLMODE_MOBILE_FIRST', '1') != '0'
+    out.sort(key=lambda r: (_band(r), (r.get('_ll', 0) if _mf else 0), 0 if r.get('eqv') else 1,
                             0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
+    for _r in out:
+        _r.pop('_ll', None)
     # ---- ONE ROW PER CASE (2026-09-10) --------------------------------------------------------
     # A case listed on two auction dates is two rows, which put the same HUMAN on the phone twice
     # with two different sale dates. Rationale, evidence and the sooner-date rule live on

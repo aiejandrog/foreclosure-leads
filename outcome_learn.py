@@ -86,6 +86,8 @@ def _digits(s):
 
 def sale_band(lead, dial_day):
     sale = _date(lead.get('auction'), '%m/%d/%Y')
+    if not lead.get('auction'):
+        return 'no sale date'                 # lis pendens: filed, no sale set yet
     if not sale or not dial_day:
         return 'unknown'
     n = (sale - dial_day).days
@@ -123,6 +125,7 @@ def signals(lead, d):
         eqb = 'unknown'
     return {
         'county': lead.get('county') or 'unknown',
+        'stage': 'lis pendens' if lead.get('st') == 'LP' else ('foreclosure' if lead.get('st') else 'unknown'),
         'days to sale': sale_band(lead, day),
         'equity state': lead.get('eqstate') or 'unknown',
         'equity %': eqb,
