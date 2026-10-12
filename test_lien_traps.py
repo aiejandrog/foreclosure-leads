@@ -199,6 +199,12 @@ for bad in ({'liens': 5, 'nrec': 3, 'parcel_found': True}, {'nrec': 3, 'parcel_f
         rec('coverage never raises on %r, and is not fact_supported' % (bad,), not cv['fact_supported'], cv)
     except Exception as e:  # noqa: BLE001
         rec('coverage never raises on %r' % (bad,), False, e)
+zero = r('MORTGAGE - MOR', '01/02/2016', FOL, b='29500', p='10', amt=0, p2='DELTA BANK NA')
+zrel = r('SATISFACTION - SAT', '06/01/2018', '', b='31500', p='2', p1='OWNER TESTA', p2='DELTA BANK NA')
+c3, cv, st = run([deed(), zero, zrel])
+rec('an unpriced loan released by inference still reads release_inferred (Codex review)',
+    c3.get('mtg_unpriced_release_inferred') == 1 and 'release_inferred' in cv['gaps']
+    and not cv['fact_supported'], (c3.get('mtg_unpriced_release_inferred'), cv))
 s2 = LC.summarize({'A': c}, {'A': {}, 'B': {}})
 rec('a lead with no chain is counted, never dropped', s2['no_chain'] == 1, s2)
 

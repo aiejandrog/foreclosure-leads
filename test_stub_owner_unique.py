@@ -100,5 +100,33 @@ check('...a re-link writes the new folio and keeps the other warning', out[1].ge
       and out[1]['warning'].startswith('HOA'), out[1])
 check('...and the new pick is cached under the current rule', cache['B'].get('rule') == SR.RULE, cache['B'])
 
+# Codex review: a legacy pick already patched into the row (same Folio) is re-checked, and taken
+# off the row with its value when it does not survive
+tmp2 = tempfile.mkdtemp()
+rows = [{'Case #': 'D', 'warning': '', 'judgment': 100, 'defendants': 'Garcia, Jose', 'plaintiff': 'X',
+         'Folio': '0130000000005', 'market_value': 900, 'equity': 800, 'equity_pct': 89,
+         'pa_url': 'u', 'stub_resolved': 'owner-unique'},
+        {'Case #': 'E', 'warning': '', 'judgment': 100, 'defendants': 'Garcia, Jose', 'plaintiff': 'X',
+         'Folio': '0130000000777', 'market_value': 900}]
+json.dump(rows, open(os.path.join(tmp2, 'leads_final.json'), 'w'))
+cache = {'D': {'folio': '0130000000005', 'how': 'owner-unique'},
+         'E': {'folio': '0130000000006', 'how': 'owner-unique'}}
+seen = []
+saved = (SR.HERE, SR.resolve_case, SR._legal_of, SR._save_cache)
+SR.HERE = tmp2
+SR.resolve_case = lambda county, case, pl, defs, v=False: seen.append(case) or None
+SR._legal_of = lambda county, folio: ('', {'market_value': 1})
+SR._save_cache = lambda c: None
+try:
+    SR._patch_md(cache, False)
+finally:
+    SR.HERE, SR.resolve_case, SR._legal_of, SR._save_cache = saved
+out = json.load(open(os.path.join(tmp2, 'leads_final.json')))
+check('a row still carrying the legacy pick is re-checked', seen == ['D'], seen)
+check('...and the failed pick leaves the row with its value', out[0]['Folio'] == '' and out[0]['market_value'] == 0
+      and out[0]['equity'] == 0 and 'pa_url' not in out[0]
+      and out[0]['warning'].startswith('parcel not linked'), out[0])
+check('a row whose folio came from elsewhere is never touched', out[1]['Folio'] == '0130000000777', out[1])
+
 print('\n%d failure(s)' % fails)
 sys.exit(1 if fails else 0)

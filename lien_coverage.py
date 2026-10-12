@@ -117,7 +117,8 @@ def coverage(chain, lead=None):
         gaps.append('unpriced_instrument')
     if 'second_fc' not in chain:
         gaps.append('no_bank_fc_check')
-    if any(l.get('st') == 'SATISFIED' and l.get('sat_by') != 'book/page' for l in liens):
+    if any(l.get('st') == 'SATISFIED' and l.get('sat_by') != 'book/page' for l in liens) \
+            or _int(chain.get('mtg_unpriced_release_inferred')) > 0:
         gaps.append('release_inferred')
     # a mortgage row from before rows carried 'anchor' cannot say how it was placed
     if opens and any('anchor' not in l for l in opens):

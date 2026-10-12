@@ -112,6 +112,15 @@ def _legacy(e):
     return isinstance(e, dict) and not e.get('miss') and bool(e.get('folio')) and not _trusted(e)
 
 
+def _on_legacy(e, row_folio):
+    """The row needs this run's sweep: its cached pick is untrusted and the row either lost the
+    folio or still carries that very pick (patched in by an earlier sweep, before a rebuild)."""
+    if not _legacy(e):
+        return False
+    rf = re.sub(r'\D', '', str(row_folio or ''))
+    return not rf or rf == re.sub(r'\D', '', str(e.get('folio') or ''))
+
+
 def folio_for(case):
     """Nightly-pipeline hook: the resolved folio for a case, or ''. Never fetches."""
     return _trusted(_load_cache().get(str(case) or ''))
@@ -474,11 +483,12 @@ def _patch_county(county, path, cache, clerk_budget, verbose):
             continue
         e = cache.get(case)
         if 'parcel not linked' not in (r.get('warn') or '') and not (
-                _legacy(e) and not r.get('folio')):
+                _on_legacy(e, r.get('folio'))):
             continue
         if isinstance(e, dict) and e.get('miss') and _fresh_miss(e):
             continue
         res = None
+        held = _on_legacy(e, r.get('folio')) and r.get('folio')   # the untrusted pick is on the row
         if _trusted(e):
             _, info = _legal_of(county, e['folio'])
             res = {'folio': e['folio'], 'how': e.get('how', 'cache'), 'info': info,
@@ -508,6 +518,15 @@ def _patch_county(county, path, cache, clerk_budget, verbose):
                                'when': datetime.date.today().isoformat()}
             _save_cache(cache)
         info = (res or {}).get('info')
+        if held and (not res or re.sub(r'\D', '', res['folio']) != re.sub(r'\D', '', str(r['folio']))):
+            # the old pick did not survive: take it and everything derived from it off the row
+            r['folio'], r['value'], r['assessed_value'], r['hs'] = '', 0, 0, False
+            for k in ('vsrc', 'pa', 'tax'):
+                r.pop(k, None)
+            r.update(CL._value_metrics(r.get('st', 'FC'), r.get('judg', 0), 0, False, r.get('days', -1),
+                                       r.get('addr', ''), r.get('plaintiff', ''), r.get('ftype', '')))
+            r['warn'] = r.get('warn') or 'parcel not linked - verify property & value via the docket'
+            n += 1
         if not res or not info or not info.get('market_value'):
             continue
         # apply exactly as the pa_values backfill does — one derivation, no drift
@@ -567,8 +586,9 @@ def _patch_md(cache, verbose):
             continue
         e = cache.get(case)
         if 'parcel not linked' not in (r.get('warning') or '') and not (
-                _legacy(e) and not r.get('Folio')):
+                _on_legacy(e, r.get('Folio'))):
             continue
+        held = _on_legacy(e, r.get('Folio')) and r.get('Folio')    # the untrusted pick is on the row
         if isinstance(e, dict) and e.get('miss') and _fresh_miss(e):
             continue
         if _trusted(e):
@@ -584,6 +604,14 @@ def _patch_md(cache, verbose):
                                  'when': datetime.date.today().isoformat()})
             _save_cache(cache)
         info = (res or {}).get('info')
+        if held and (not res or re.sub(r'\D', '', res['folio']) != re.sub(r'\D', '', str(r['Folio']))):
+            # the old pick did not survive: take it and everything derived from it off the row
+            r['Folio'], r['market_value'], r['homestead'] = '', 0, False
+            r['equity'], r['equity_pct'] = 0, 0
+            for k in ('pa_url', 'stub_resolved'):
+                r.pop(k, None)
+            r['warning'] = r.get('warning') or 'parcel not linked - verify property & value via the docket'
+            n += 1
         if not res or not info or not info.get('market_value'):
             continue
         fol = re.sub(r'\D', '', res['folio'])
