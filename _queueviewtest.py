@@ -39,7 +39,7 @@ def node(js):
 FNS = ('var OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n'
        'function esc(s){return String(s==null?"":s);}\n'
        + ''.join(grab_fn(n) for n in ('lastCall', '_inbound', 'lastOutreach', '_replyOpen', '_contactTier',
-                                      '_histWhy', '_viewOf', 'viewEmptyHtml')))
+                                      '_histWhy', '_viewOf', 'viewEmptyHtml', 'histBanner')))
 HARNESS = r"""
 var store = {};
 var localStorage = {getItem:function(k){return k in store ? store[k] : null;}, setItem:function(k,v){store[k]=String(v);}};
@@ -75,6 +75,13 @@ HISTCOV = null; out.noHistcov = _viewOf(rows.fresh); HISTCOV = {ledgers_ok:true,
 _VIEWN = {untouched:0, callbacks:0, replies:1, retries:8, history_unknown:2};
 out.emptyUntouched = viewEmptyHtml();
 QVIEW = 'retries'; out.emptyRetries = viewEmptyHtml(); QVIEW = 'untouched';
+out.bannerOff = histBanner('');
+_VIEWN = {untouched:0, callbacks:0, replies:0, retries:104, history_unknown:0};
+out.bannerNoneHeld = histBanner('2 confirmed send(s) in the ledgers name no case or person');
+_VIEWN = {untouched:0, callbacks:0, replies:0, retries:3, history_unknown:1};
+out.bannerOneHeld = histBanner('x');
+_VIEWN = {untouched:0, callbacks:0, replies:0, retries:3, history_unknown:5};
+out.bannerFiveHeld = histBanner('x');
 console.log(JSON.stringify(out));
 """
 rc, so, se = node(HARNESS)
@@ -101,6 +108,15 @@ e = res.get('emptyUntouched', '')
 rec('Q02 empty Untouched says so and counts what waits elsewhere, without opening it',
     'No untouched leads in the checked inventory' in e and '8 retr' in e and '1 reply' in e and '2 with history unknown' in e, e)
 rec('Q09 a capped build says the inventory is partial', 'Partial inventory' in e and '400 of 783' in e, e)
+rec('no history problem -> no banner', res.get('bannerOff') == '', res.get('bannerOff'))
+bn = res.get('bannerNoneHeld', '')
+rec('the banner keeps its reason and its "nothing shows as untouched" line', 'name no case or person' in bn and 'Nothing shows as untouched until that clears.' in bn, bn)
+rec('a lane with no History unknown rows says the banner is holding nothing back there',
+    'No lead counted above is held back by it' in bn and 'filed under History unknown' not in bn, bn)
+rec('a lane with held rows says how many (singular and plural)',
+    '1 lead counted above is filed under History unknown because of it' in res.get('bannerOneHeld', '')
+    and '5 leads counted above are filed under History unknown because of it' in res.get('bannerFiveHeld', ''),
+    [res.get('bannerOneHeld'), res.get('bannerFiveHeld')])
 rec('empty Retries does not fall through to anything', 'No retries due' in res.get('emptyRetries', ''), res.get('emptyRetries'))
 
 # ---- structure: the view narrows AFTER the gates, defaults are untouched/all, no old restore ----

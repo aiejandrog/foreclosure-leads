@@ -238,6 +238,47 @@ call_mode.stamp_unknown(rows3, a3)
 rec('tied leads are stamped contacted, others are not', [r.get('lu') for r in rows3] == [1, 1, 1, None], rows3)
 a3n = call_mode.ledger_audit(mp3, tp3)
 rec('without the lead list nothing is tied (old behaviour)', a3n['matched'] == 0 and a3n['unattributed'] == 8 and a3n['test'] == 1, a3n)
+# ---- 2026-10-12: a case-less email whose recipient is on no lead ties by PROPERTY ADDRESS ----------
+mp5 = os.path.join(td3, 'mail5.json')
+json.dump([
+    # recipient on no lead (the bounce guard stripped it), address is lead P's
+    {'ch': 'email', 'message_id': 'p', 'to': 'gone@nowhere.com', 'addr': '12 Palm Ave, Miami FL 33101',
+     'ts_utc': '2026-10-01T10:00:00'},
+    # same street name, different city/ZIP: must NOT tie to P or to Q
+    {'ch': 'email', 'message_id': 'q', 'to': 'other@nowhere.com', 'addr': '12 Palm Ave, Hialeah FL 33010',
+     'ts_utc': '2026-10-01T10:00:00', 'd': '2026-10-01', 'lane': 'urgent'},
+    # recipient matches lead R: recipient wins, address not needed
+    {'ch': 'email', 'message_id': 'r', 'to': 'r@example.com', 'addr': 'unrelated',
+     'ts_utc': '2026-10-01T10:00:00'},
+    # an address that is only punctuation keys to nothing and ties to nothing
+    {'ch': 'email', 'message_id': 's', 'to': 's@nowhere.com', 'addr': ' ,. ',
+     'ts_utc': '2026-10-01T10:00:00', 'd': '2026-10-01'},
+    # a send that names a case is not touched by this tie (it never reaches the case-less branch)
+    {'ch': 'email', 'message_id': 't', 'to': 't@nowhere.com', 'case': 'CASED', 'addr': '12 Palm Ave, Miami FL 33101',
+     'ts_utc': '2026-10-01T10:00:00'},
+], io.open(mp5, 'w'))
+json.dump([{'ch': 'text', 'confirmed': True, 'to': '3055550199', 'addr': '12 Palm Ave, Miami FL 33101',
+            'ts_utc': '2026-10-01T10:00:00'}], io.open(os.path.join(td3, 'text5.json'), 'w'))
+slim5 = [{'case': 'P', 'addr': '12 PALM AVE,  MIAMI FL 33101', 'emails': ['p@example.com']},
+         {'case': 'P2', 'addr': '12 Palm Ave Miami FL 33101'},                       # same property, second case
+         {'case': 'Z', 'addr': '99 Other St, Miami FL 33101'},
+         {'case': 'R', 'addr': '5 Reed Rd, Miami FL 33101', 'emails': ['R@example.com']},
+         {'case': 'NOADDR'}]
+a5 = call_mode.ledger_audit(mp5, os.path.join(td3, 'text5.json'), slim=slim5)
+rec('a case-less email ties to every lead at its property address, ignoring case, spacing and punctuation',
+    a5['cases'] >= {'P', 'P2'} and 'Z' not in a5['cases'], a5)
+rec('same street in another city or ZIP does not tie, and stays unattributed',
+    'NOADDR' not in a5['cases'] and a5['unattributed'] == 3 and a5['matched'] == 2, a5)
+rec('a recipient match still wins over the address', 'R' in a5['cases'], a5)
+rec('a text row has no property address, so an addr on it is ignored', a5['unattributed'] == 3
+    and any(r['ch'] == 'text' for r in a5['rows']), a5['rows'])
+rec('leftover rows say whether the send named a property, not which', all('addr' in r and isinstance(r['addr'], bool) for r in a5['rows'])
+    and 'Palm' not in json.dumps(a5['rows']), a5['rows'])
+rows5 = [{'c': 'P'}, {'c': 'P2'}, {'c': 'Z'}, {'c': 'R'}]
+call_mode.stamp_unknown(rows5, a5)
+rec('the address tie marks leads contacted and clears nothing', [r.get('lu') for r in rows5] == [1, 1, None, 1], rows5)
+a5n = call_mode.ledger_audit(mp5, os.path.join(td3, 'text5.json'))
+rec('without the lead list nothing is tied by address either', a5n['matched'] == 0 and a5n['cases'] == set(), a5n)
 # the only-test case: coverage goes back to ok
 mp4 = os.path.join(td3, 'mail4.json')
 json.dump([{'ch': 'email', 'message_id': 'c', 'to': sorted(call_mode.ADVISOR_EMAILS)[0], 'test_mode': True,
