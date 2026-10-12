@@ -2161,7 +2161,7 @@ body.compact .dg-v{font-size:14.5px}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-12T21:49","good":null,"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
+var S={"baked":"2026-10-12T22:22","good":null,"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
 function t(s){ if(!s) return null; var d=new Date(s); return isNaN(d.getTime())?null:d; }
 function hm(s){ var d=t(s); if(!d) return '?'; var h=d.getHours(), m=('0'+d.getMinutes()).slice(-2);
   var day=(d.toDateString()===new Date().toDateString())?'today':(d.getMonth()+1)+'/'+d.getDate();
@@ -2208,6 +2208,9 @@ el.innerHTML=msg;
    title="Hard-Money Balloon Book — Broward investors on 10-12% hard-money paper with a 1-2yr balloon coming due, priced against the county roll and graded for Jesse's son's DSCR program (70-80% LTV, 6-8%, 30yr fixed). Sorted fundable-first.">💰 Balloon Book</a>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
+<!-- Scraper health, baked at build time (scraper_status.py). Counts + times only. Shows a silent
+     5:30 failure / auto-recovery that is otherwise invisible on the frontend. -->
+<div class="scrapestat" style="font:12px/1.4 system-ui,sans-serif;color:#9aa;padding:4px 10px">Scraper status unavailable (no run log on this build host)</div>
 <div class="controls mcol">
 <!-- Mobile-only disclosure. On a 390px phone the control cluster is ~500px tall and pushes the first
      deal card to y=838 — a full screen of filters before a single lead is visible, on the exact

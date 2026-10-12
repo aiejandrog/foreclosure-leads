@@ -369,8 +369,23 @@ def _valid_folio(s):
 # the last good read of the same folio (_carry_enrichment) instead of shipping blank.
 ENRICH_FIELDS = ('owners', 'mailing_address', 'market_value', 'dor_desc', 'beds', 'baths',
                  'living_area', 'year_folio', 'homestead', 'widow', 'last_sale_price',
-                 'last_sale_date', 'owners_repaired_from')
+                 'last_sale_date', 'owners_repaired_from', 'sale_refs')
 ENRICH_CARRY_MAX_DAYS = 30
+
+
+def _sale_refs(sales):
+    """Appraiser SalesInfos -> [{'b': book, 'p': page, 'd': date, 'i': instrument}], strings as the
+    proxy gives them ('0623' keeps its zero). Entries without both book and page are dropped."""
+    out = []
+    for si in sales if isinstance(sales, list) else []:
+        if not isinstance(si, dict):
+            continue
+        b = str(si.get('OfficialRecordBook') or '').strip()
+        p = str(si.get('OfficialRecordPage') or '').strip()
+        if b and p:
+            out.append({'b': b, 'p': p, 'd': str(si.get('DateOfSale') or '')[:10],
+                        'i': str(si.get('SaleInstrument') or '')[:8]})
+    return out
 
 
 def _prior_enrichment(path=None):
@@ -471,6 +486,10 @@ def enrich(leads, prior=None):
                 'homestead': _has_homestead(benefits),
                 'widow': _has_widow(benefits),
                 'last_sale_price': last_sale.get('SalePrice',0), 'last_sale_date': last_sale.get('DateOfSale',''),
+                # the parcel's recorded deeds, by Official Records book/page (keys confirmed against the
+                # live proxy 2026-10-12): lien_coverage ties a purchase loan to the parcel through them.
+                # Recording references only, no names or prices. Report-only.
+                'sale_refs': _sale_refs(d.get('SalesInfos') or []),
             })
             # SITE ADDRESS. This response has always carried it (SiteAddress[0].Address — the same
             # field stub_resolve.py:230 reads off the same endpoint), and this block never took it.
@@ -1714,7 +1733,13 @@ def subst_build_facts(tpl, updated):
     import board_url as _burl
     name, _doc, _warn = _entity.display_llc()
     snd = _entity.sender()
+    try:
+        import scraper_status as _ss
+        _scrape = _ss.scrape_status_html()                 # fail-safe: never raises; '' if unavailable
+    except Exception:
+        _scrape = ''                                        # module missing -> drop the placeholder, never ship it raw
     out = (tpl.replace('__UPDATED__', updated)
+              .replace('__SCRAPER_STATUS__', _scrape)
               .replace('__ENTITY_VERIFIED__', 'true' if _entity.verified() else 'false')
               .replace('__ENTITY_LLC__', _js(name))
               .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
