@@ -190,6 +190,25 @@ class Import(unittest.TestCase):
             self.assertIn('records=1', rc.stdout)
             self.assertNotIn(CASE, rc.stdout)
 
+    def test_out_stays_out_of_the_repo_and_onedrive(self):
+        here = os.path.dirname(os.path.abspath(PBI.__file__))
+        self.assertEqual(PBI.resolve_out(os.path.join(here, 'judgment_records.json')), '')
+        self.assertEqual(PBI.resolve_out(os.path.join(os.sep, 'Users', 'x', 'OneDrive', 'Desktop', 'r.json')), '')
+        os.environ.setdefault('DEALFLOW_DIR', tempfile.mkdtemp())
+        self.assertTrue(PBI.resolve_out('r.json').startswith(os.path.realpath(os.environ['DEALFLOW_DIR']))
+                        or PBI.resolve_out('r.json').startswith(os.environ['DEALFLOW_DIR']))
+
+    def test_a_run_that_reads_nothing_keeps_the_earlier_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = os.path.join(folder, 'out.json')
+            with open(out, 'w', encoding='utf-8') as f:
+                f.write('[{"case": "kept"}]')
+            with open(os.path.join(folder, CASE + '.txt'), 'w', encoding='utf-8') as f:
+                f.write('\f')
+            PBI.import_folder(folder, out)
+            with open(out, encoding='utf-8') as fh:
+                self.assertEqual(json.load(fh), [{'case': 'kept'}])
+
 
 if __name__ == '__main__':
     unittest.main()
