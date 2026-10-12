@@ -993,6 +993,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         # surname with ANOTHER given name, and nothing that could be the owner indexed short, is theirs.
         # Same test the person-wide liens below use. A loan on the folio, an unknown owner, or a
         # borrower that might be the owner ('TESTA M', 'TESTA') still counts: too much debt, never too little.
+        # The index also abbreviates given names ('SMITH WM' for WILLIAM), so a skip is counted in
+        # mtg_namesake_skipped and equity_state never lets that chain read as a FACT.
         if not (rf and rf == fol) and _ow is not None:
             _b = r.get('firsT_PARTY') or ''
             if _other_person(_b, _ow) and not _names_owner(_b, _ow):
@@ -1097,29 +1099,6 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 if nxt not in out:
                     out.add(nxt); frontier.append(nxt)
         return out
-    # attach each amendment to the loan it amends: the one whose book/page it names, else the newest
-    # loan before it from the same lender or its assignees. The loan's figure becomes the larger of
-    # the two (a modification can capitalise arrears). One with nowhere to go stays its own row.
-    for m in amends:
-        tgt = None
-        if all(m['_ob']):
-            tgt = next((o for o in liens if _bpn(*o['_bpk']) and _bpn(*o['_bpk']) == _bpn(*m['_ob'])), None)
-        if tgt is None and m['_lend']:
-            # an OPEN loan only: one paid off by book/page may have been paid before this amendment,
-            # and folding the amendment into it would close a loan the index still shows
-            cands = [o for o in liens if o['st'] == 'OPEN' and o['_dt'] <= m['_dt']
-                     and m['_lend'] in chain_of(o['_lend'], o['_dt'])]
-            tgt = max(cands, key=lambda o: o['_dt']) if cands else None
-        if tgt is None:
-            liens.append(m)
-            continue
-        tgt.setdefault('amended_by', []).append(m['bp'])
-        if not tgt.get('_nopx') and m['amt'] > tgt['amt']:
-            tgt['amt'] = m['amt']
-    liens.sort(key=lambda o: o['_dt'])
-    for o in liens:
-        o.pop('_ob', None)
-    opens = [o for o in liens if o['st'] == 'OPEN']
     for o in liens:
         if o['st'] == 'SATISFIED':
             continue
@@ -1154,6 +1133,33 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             if (_months(o['_dt'], m2['_dt']) <= 24 and m2['amt'] >= o['amt'] * 0.9
                     and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain3):
                 o['st'] = 'SATISFIED'; o['sat_by'] = 'refinance'; break
+    # Attach each amendment to the loan it amends, AFTER the release rules: an inferred release must
+    # never take an amendment's debt down with the loan it was folded into (review 2026-10-12).
+    #   * it names a book/page: that loan when the search returned it, else it stays its own row (it is
+    #     the only evidence of the loan it names; folding it into another loan would drop one debt);
+    #   * it names none: the newest OPEN loan before it from the same lender or its assignees.
+    # A loan it attaches to must be OPEN, or proven paid by a release naming its book/page. The loan's
+    # figure becomes the larger of the two (a modification can capitalise arrears), and a priced
+    # amendment that names an unpriced loan's book/page prices it. One with nowhere to go stays its own row.
+    for m in amends:
+        tgt = None
+        if all(m['_ob']):
+            tgt = next((o for o in liens if _bpn(*o['_bpk']) and _bpn(*o['_bpk']) == _bpn(*m['_ob'])
+                        and (o['st'] == 'OPEN' or o.get('sat_by') == 'book/page')), None)
+        elif m['_lend']:
+            # a priced loan only: pricing an unpriced loan from a guessed link would make a FACT of it
+            cands = [o for o in liens if o['st'] == 'OPEN' and not o.get('_nopx') and o['_dt'] <= m['_dt']
+                     and m['_lend'] in chain_of(o['_lend'], o['_dt'])]
+            tgt = max(cands, key=lambda o: o['_dt']) if cands else None
+        if tgt is None:
+            liens.append(m)                             # OPEN unless a release names its own book/page
+            continue
+        tgt.setdefault('amended_by', []).append(m['bp'])
+        if tgt.pop('_nopx', None) or m['amt'] > tgt['amt']:
+            tgt['amt'] = max(m['amt'], tgt['amt'])
+    liens.sort(key=lambda o: o['_dt'])
+    for o in liens:
+        o.pop('_ob', None)
     # unpriced loans leave the list here: counted, never summed, never shown as a $0 lien
     unpriced_open = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'OPEN')
     # an unpriced loan released only by inference leaves the list too; counted so the coverage

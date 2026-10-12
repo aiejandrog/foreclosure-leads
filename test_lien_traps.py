@@ -128,6 +128,8 @@ for p1 in ('TESTA O', 'TESTA', 'TESTA OWNER M', 'OWNER TESTA & MARIO'):
     c = R.analyze([deed(), folio_loan, dict(namesake, firsT_PARTY=p1)], FOL, 150000, owner=OWNER)
     rec('a borrower that may be the owner (%s) still counts' % p1,
         any(l['amt'] == 90000 and l['st'] == 'OPEN' for l in c['liens']), mtg(c))
+rec('a chain with a loan set aside as a namesake is never a FACT (the index abbreviates: SMITH WM)',
+    ES.state_of(R.analyze([deed(), mario], FOL, 150000, owner=OWNER)) not in ES.FACT)
 c = R.analyze([deed(), folio_loan, dict(namesake, firsT_PARTY='TESTA MARIO', foliO_NUMBER=FOL)], FOL, 150000,
               owner=OWNER)
 rec('a namesake-looking loan indexed to the subject folio still counts',
@@ -186,6 +188,27 @@ paid = r('SATISFACTION - SAT', '06/01/2017', '', b='30450', p='1', p2='ALPHA BAN
 c = run([deed(), folio_loan, paid, modif])[0]
 rec('a later modification from the lender of a paid-off loan is not folded into it', len(c['liens']) == 2
     and [l['st'] for l in c['liens']] == ['SATISFIED', 'OPEN'], mtg(c))
+# review 2026-10-12: an inferred release must not take a folded-in modification's debt with it
+l05 = r('MORTGAGE - MOR', '01/02/2005', FOL, b='24000', p='1', amt=150000, p2='ALPHA BANK NA')
+l10 = r('MORTGAGE - MOR', '01/02/2010', FOL, b='27000', p='1', amt=200000, p2='ALPHA BANK NA')
+s10 = r('SATISFACTION - SAT', '06/01/2010', '', b='27100', p='1', p2='ALPHA BANK NA')
+m18 = r('MORTGAGE MODIFICATION - MMO', '01/02/2018', FOL, b='31000', p='1', amt=250000, p2='ALPHA BANK NA')
+c, cv, st = run([deed(), l05, l10, s10, m18])
+rec('a modification survives an inferred release of the loans before it', any(
+    l['st'] == 'OPEN' and l['amt'] >= 250000 for l in c['liens']) and c['surv'] + c['first_est'] > 0, (mtg(c), st))
+heloc = r('MORTGAGE - MOR', '01/02/2012', FOL, b='26000', p='3', amt=50000, p2='ALPHA BANK NA')
+m_other = r('MORTGAGE MODIFICATION - MMO', '01/02/2019', FOL, b='31200', p='1', amt=320000, p2='ALPHA BANK NA',
+            ob='19000', op='44')
+c = run([deed(), heloc, m_other])[0]
+rec('a modification naming a loan the search did not return stays its own row',
+    sorted(l['amt'] for l in c['liens'] if l['st'] == 'OPEN') == [50000, 320000], mtg(c))
+unp = dict(heloc, consideratioN_1=0)
+c, cv, st = run([deed(), unp, dict(m_other, oriG_REC_BOOK='26000', oriG_REC_PAGE='3')])
+rec('a priced modification prices the unpriced loan it names', [l['amt'] for l in c['liens']] == [320000]
+    and not c['mtg_open_unpriced'], (mtg(c), c['mtg_open_unpriced']))
+c, cv, st = run([deed(), unp, dict(m_other, oriG_REC_BOOK='', oriG_REC_PAGE='')])
+rec('a modification only GUESSED to amend an unpriced loan does not price it', st not in ES.FACT
+    and c['mtg_open_unpriced'] == 1, (mtg(c), st))
 lone = dict(modif, seconD_PARTY='OMEGA SERVICING')
 c, cv, st = run([deed(), folio_loan, lone])
 rec('a modification with no loan to attach to stays its own row and is flagged', len(c['liens']) == 2
