@@ -23,7 +23,13 @@ failure (every check fails CLOSED -- a gate that cannot be read is a gate that d
   6. the same recipient was not already sent this subject in the last 24 hours
   7. mail_guard (inside _smtp_send), under mail_guard.gated('reply_send')
   8. a row in mail_sent.json -- success or failure -- stamped with `source` and `machine`, so
-     ledger_sync carries it to the other machine and cadence/dedupe see it.
+     ledger_sync carries it to the other machine and cadence/dedupe see it (written through
+     send_server's locked writer).
+
+Also refused: a recipient that is not one bare address, an address we never mailed under (or heard
+from about) this case, an unreadable mail_sent.json or bounce list, and a stay or federal hold on
+ANY case this owner is mailed under, not just the one named. Known gap: no cross-process claim, so
+two simultaneous runs to the same address can both pass the 24h duplicate check.
 
 Dry run is the default. --send is required to transmit. Nothing here widens a cap or a spend.
 
@@ -91,8 +97,9 @@ def gate(case, to, subject='', also_cases=(), here=HERE, ss=None, sg=None, bk=No
 def _gate(case, to, subject, also_cases, here, ss, sg, bk, now):
     case = _norm_case(case)
     to = str(to or '').strip().lower()
-    if not _EMAIL.match(to):
-        return _refuse('bad_recipient', 'recipient %r is not a single email address' % to[:60])
+    from email.utils import parseaddr
+    if not _EMAIL.match(to) or parseaddr(to)[1] != to or any(ch in to for ch in '<>"()'):
+        return _refuse('bad_recipient', 'recipient %r is not a single bare email address' % to[:60])
     if ss is None:
         import send_server as ss
     if sg is None:
@@ -114,6 +121,9 @@ def _gate(case, to, subject, also_cases, here, ss, sg, bk, now):
     if not sv.get('ok'):
         return _refuse('optout_sync_unconfirmed', "today's 07:15 opt-out sync is not confirmed (%s)"
                        % str(sv.get('reason') or 'no verdict')[:120])
+    if ss._ledger_unreadable():
+        return _refuse('ledger_unreadable', 'mail_sent.json will not parse, so the sibling and duplicate '
+                       'checks cannot be made')
     # 3. case / address / same-owner do-not-contact -----------------------------------------
     oo_cases, oo_emails = ss._optout_set()
     if to in oo_emails:
@@ -124,6 +134,24 @@ def _gate(case, to, subject, also_cases, here, ss, sg, bk, now):
     if hit:
         return _refuse('optout_case', 'do-not-contact: %s' % (
             'this case' if hit == case.lower() else 'the same owner, case ' + hit))
+    # 3b. a reply goes to someone we already know: an address we mailed, or one that wrote in under
+    # this case. A cold address is not a reply and goes through send_server /send's first-touch gates.
+    known = set()
+    for r in ss._load_ledger():
+        if isinstance(r, dict) and not r.get('test_mode') and r.get('message_id'):
+            if str(r.get('case') or '').strip().lower() in mine:
+                known |= {a.strip().lower() for a in [str(r.get('to') or '')] + str(r.get('bcc') or '').split(',') if a.strip()}
+    try:
+        rep = json.load(open(os.path.join(here, 'replies.json'), encoding='utf-8'))
+    except Exception:
+        rep = {}
+    for rk, rec in (rep.items() if isinstance(rep, dict) else []):
+        if (isinstance(rec, dict) and not str(rk).startswith('@') and str(rk).strip().lower() in mine
+                and str(rec.get('email') or '').strip().lower()):
+            known.add(str(rec['email']).strip().lower())
+    if to not in known:
+        return _refuse('unknown_recipient', 'this address was never mailed under, and never wrote in about, '
+                       'this case. Cold email goes through send_server /send, not reply_send')
     # 4. hard bounces -----------------------------------------------------------------------
     bp = os.path.join(here, 'bounced_emails.json')
     if os.path.exists(bp):
@@ -131,11 +159,13 @@ def _gate(case, to, subject, also_cases, here, ss, sg, bk, now):
             bounced = json.load(open(bp, encoding='utf-8'))
         except Exception:
             return _refuse('bounce_list_unreadable', 'bounced_emails.json will not parse')
-        keys = ({str(k).strip().lower() for k in bounced} if isinstance(bounced, (dict, list)) else set())
+        if not isinstance(bounced, (dict, list)):
+            return _refuse('bounce_list_unreadable', 'bounced_emails.json is not a list or object')
+        keys = {str(k).strip().lower() for k in bounced}
         if to in keys:
             return _refuse('bounced', 'the recipient hard-bounced before')
     # 5. bankruptcy stay, read-only ---------------------------------------------------------
-    for c in sorted(mine):
+    for c in sorted(sibs):
         v = sg.check(c, os.path.join(here, 'sale_history_cache.json'))
         if not v.get('ok'):
             return _refuse('stay_' + (v.get('code') or 'held'),
@@ -145,7 +175,7 @@ def _gate(case, to, subject, also_cases, here, ss, sg, bk, now):
             import bk_lookup as bk
         except Exception as e:
             return _refuse('bk_unavailable', 'the federal bankruptcy check could not load (%s)' % str(e)[:80])
-    for c in sorted(mine):
+    for c in sorted(sibs):
         held, why = bk.send_hold(c, here=here)
         if held:
             return _refuse('bk_hold', 'federal bankruptcy hold on %s: %s' % (c, str(why or 'held')[:160]))
@@ -187,7 +217,8 @@ def send_reply(case, to, subject, body, also_cases=(), send=False, here=HERE, sm
            'ts_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
            'ch': 'email', 'from': user, 'to': to, 'owner': '', 'case': case, 'subj': subject,
            'kind': 'reply', 'source': SOURCE, 'machine': machine(), 'body_len': len(body or '')}
-    put = ledger or OE._append_ledger
+    import send_server as SS
+    put = ledger or SS._append_ledger
     try:
         with MG.gated(SOURCE):
             mid, resp = (smtp or OE._smtp_send)(user, pw, display, to, subject, body)

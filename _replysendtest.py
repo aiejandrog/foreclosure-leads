@@ -34,7 +34,8 @@ GOOD, CASE, OWNER_EMAIL = 'owner@example.com', '2099-000101-CA-01', 'owner@examp
 
 
 def fakes(optout_cases=(), optout_emails=(), ledger=(), stay_ok=True, stay_code='clear',
-          readable=True, age=0.1, sync_ok=True, bk_held=False, raise_in=None):
+          readable=True, age=0.1, sync_ok=True, bk_held=False, raise_in=None, known=True, ledger_bad=False,
+          stay_bad_case=None):
     def _raise(name):
         if raise_in == name:
             raise RuntimeError('boom')
@@ -44,11 +45,13 @@ def fakes(optout_cases=(), optout_emails=(), ledger=(), stay_ok=True, stay_code=
         _optout_age_days=lambda: age,
         _sync_verdict=lambda: {'ok': sync_ok, 'reason': 'not run today'},
         _optout_set=lambda: (set(optout_cases), set(optout_emails)),
-        _load_ledger=lambda: list(ledger))
+        _load_ledger=lambda: list(ledger) + ([{'to': GOOD, 'case': CASE, 'subj': 'First note', 'message_id': '<k@x>',
+                                               'ts_utc': '2020-01-01T00:00:00+00:00'}] if known else []),
+        _ledger_unreadable=lambda: ledger_bad)
     sg = types.SimpleNamespace(
         pacer_key=lambda c: str(c).strip().upper() if str(c).strip() else '',
         case_stem=lambda c: str(c).strip() if '-CA-' in str(c) else '',
-        check=lambda c, p: ({'ok': True, 'code': ''} if stay_ok else
+        check=lambda c, p: ({'ok': True, 'code': ''} if (stay_ok and str(c).upper() != str(stay_bad_case or '').upper()) else
                             {'ok': False, 'code': stay_code, 'why': 'held for the test'}))
     bk = types.SimpleNamespace(send_hold=lambda c, here=None: ((True, 'open case') if bk_held else (False, '')))
     return dict(ss=ss, sg=sg, bk=bk)
@@ -114,6 +117,26 @@ v = verdict(raise_in='readable')
 rec('a gate that raises refuses instead of passing', not v['ok'] and v['code'] == 'gate_error', v)
 v = RS.gate(CASE, GOOD, 's', here=tempfile.mkdtemp(), ss=fakes()['ss'], sg=None, bk=fakes()['bk'])
 rec('the REAL stay_gate with no stay cache refuses (fail closed)', not v['ok'], v)
+
+v = verdict(to='x<owner@example.com>')
+rec('a display-name recipient cannot smuggle an opted-out address past the checks', not v['ok'] and v['code'] == 'bad_recipient', v)
+v = verdict(to='Owner <owner@example.com>')
+rec('a "Name <addr>" recipient is refused', not v['ok'] and v['code'] == 'bad_recipient', v)
+v = verdict(ledger_bad=True)
+rec('an unreadable mail_sent.json refuses (no silent empty history)', not v['ok'] and v['code'] == 'ledger_unreadable', v)
+v = verdict(known=False)
+rec('an address we never mailed or heard from under this case is refused (not a reply)', not v['ok'] and v['code'] == 'unknown_recipient', v)
+v = verdict(known=False, here_files={'replies.json': json.dumps({CASE: {'email': GOOD}})})
+rec('...but an address that wrote in under this case is a reply', v['ok'], v)
+v = verdict(here_files={'bounced_emails.json': '["a@b.com"]'})
+rec('a bounce list given as a list is read', v['ok'], v)
+v = verdict(here_files={'bounced_emails.json': '"oops"'})
+rec('a bounce list of the wrong shape refuses', not v['ok'] and v['code'] == 'bounce_list_unreadable', v)
+led2 = [{'to': GOOD, 'case': '2099-000102-CA-01', 'message_id': '<a@x>', 'ts_utc': '2020-01-01T00:00:00+00:00'}]
+v = verdict(ledger=led2, stay_bad_case='2099-000102-ca-01')
+rec("a stay on the owner's OTHER case (mailed to this address) refuses the reply", not v['ok'] and v['code'].startswith('stay_'), v)
+v = verdict(ledger=led2, bk_held=True)
+rec("a federal hold applies to the owner's other cases too", not v['ok'] and v['code'] == 'bk_hold', v)
 
 print('\nSEND AND LEDGER')
 rows, calls = [], []
