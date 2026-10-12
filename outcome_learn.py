@@ -6,6 +6,9 @@ every dial outcome into worker_notes.json (notes[case].dials[] = {d, ph4, oc, by
 logged dial to the lead's signals as they read on the plaintext board twin and prints, per signal
 bucket: dials, leads dialed, a human answered, and a real conversation (talked / callback / appt).
 
+Signals are read from today's board (current sale date, current phone order), not as they were on
+the dial day, so a rescheduled sale or a re-ranked phone list moves past dials between buckets.
+
 Nothing here changes queue order. When a bucket has enough conversations to trust, the ordering
 change is a separate, reviewed step.
 
@@ -59,8 +62,14 @@ def load_raw_leads():
         if b.startswith('_') or 'raw' in b or b == 'balloon_leads.json':
             continue
         rows = _load(p, [])
-        if isinstance(rows, list):
-            out += [r for r in rows if isinstance(r, dict)]
+        if not isinstance(rows, list):
+            continue
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            if not r.get('case') and r.get('Case #'):      # leads_final.json: unslimmed Miami-Dade rows
+                r = {'case': r['Case #'], 'auction': r.get('AuctionDate') or '', 'county': 'MIAMI-DADE'}
+            out.append(r)
     return out
 
 
@@ -106,17 +115,17 @@ def signals(lead, d):
         return {'county': 'lead gone'}
     day = _date(d.get('d'), '%Y-%m-%d')
     src, typ, idx = phone_source(lead, str(d.get('ph4') or ''))
-    eq = lead.get('eq')
+    eq = lead.get('eq')                   # a PERCENT of value, not dollars (tracker_template r.eq)
     try:
-        eqb = 'none/0' if not eq or float(eq) <= 0 else ('<50k' if float(eq) < 50000 else
-              ('50-150k' if float(eq) < 150000 else '150k+'))
+        e = float(eq)
+        eqb = 'none/0%' if e <= 0 else ('<30%' if e < 30 else ('30-60%' if e < 60 else '60%+'))
     except (TypeError, ValueError):
         eqb = 'unknown'
     return {
         'county': lead.get('county') or 'unknown',
         'days to sale': sale_band(lead, day),
         'equity state': lead.get('eqstate') or 'unknown',
-        'equity amount': eqb,
+        'equity %': eqb,
         'homestead': 'yes' if lead.get('hs') else 'no',
         'tier': lead.get('tier') or '?',
         'phone source': src,
@@ -149,11 +158,11 @@ def compute(days=None, today=None):
             if not isinstance(d, dict):
                 continue
             oc = d.get('oc') or ''
-            if oc == 'pending':
-                tot['pending (no outcome tapped)'] += 1
-                continue
             day = _date(d.get('d'), '%Y-%m-%d')
             if cut and (not day or day < cut):
+                continue
+            if oc in ('pending', 'redial'):   # attempt markers; the real outcome is its own row
+                tot['pending (no outcome tapped)'] += 1
                 continue
             oc_all[oc or 'blank'] += 1
             leads_dialed.add(case)
