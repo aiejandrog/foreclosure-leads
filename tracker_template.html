@@ -19488,10 +19488,22 @@ async function boot(){
     }catch(e){}
   };
   setInterval(_dayTick, 15*60*1000);
+  // RELEASE EXPIRY while the page stays open: a bkUntil that passes mid-session re-holds the row now,
+  // not at the next load (the load-time pass alone left an open tab offering it until reload)
+  var _expTick = function(){
+    try{
+      var n = DATA.filter(function(r){ return r && r.saleBkAct; }).length;
+      _expireReleases(DATA);
+      if(DATA.filter(function(r){ return r && r.saleBkAct; }).length !== n){
+        try{ recompute(); }catch(e){} try{ render(); }catch(e){}
+      }
+    }catch(e){}
+  };
+  setInterval(_expTick, 60*1000);
   // the sale hour is a boundary, not just another tick (see _msToSaleHour)
   (function _armSaleHour(){ setTimeout(function(){ _dayTick(); _armSaleHour(); }, _msToSaleHour()); })();
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible') _dayTick();
+    if(document.visibilityState === 'visible'){ _expTick(); _dayTick(); }
   });
   // REPLAY bridge-buffered marks. worker_marks.jsonl was write-only — a mark that outlived its
   // worker tab was safe on disk and useless forever. Fetch it from the local bridge and re-inject

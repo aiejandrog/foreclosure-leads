@@ -3522,6 +3522,16 @@ function _dropExpired(rows){
     return (rows||[]).filter(function(r){ return !(r && r.bu && now > r.bu); });
   }catch(e){ return rows||[]; }
 }
+/* ...and again while the page stays open: a `bu` that passes mid-session takes the row out of the
+   queue now. A lead screen repaints at once; an interactive screen (outcome form) is left alone and
+   the next advance() paints from the trimmed ROWS. */
+function _expireTick(){
+  try{ var n=ROWS.length; ROWS=_dropExpired(ROWS);
+    if(ROWS.length!==n && typeof render==='function') render();
+  }catch(e){}
+}
+setInterval(_expireTick, 60*1000);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _expireTick(); });
 function b2u(b64){var s=atob(b64),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
 
 async function boot(){

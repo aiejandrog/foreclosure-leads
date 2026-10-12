@@ -120,6 +120,25 @@ check('the board applies it to both the plain and the unlocked payload',
       'let DATA = _expireReleases(' in board and 'return _expireReleases((pl && pl.rows)' in board
       and 'if(Array.isArray(pl)) return _expireReleases(pl);' in board)
 
+# ---- 3 a page left open: the row expires mid-session, not only at the next load
+js2 = ('var renders = 0; function render(){ renders++; }\n' + js_fn(cm, '_dropExpired') + '\n'
+       + js_fn(cm, '_expireTick') + '\n'
+       'var ROWS = [{c:"A", bu: Date.now()/1000 + 0.2}, {c:"B", bu: Date.now()/1000 + 3600}];\n'
+       '_expireTick(); var before = [ROWS.length, renders];\n'
+       'setTimeout(function(){ _expireTick(); console.log(JSON.stringify({before: before, after: [ROWS.map(r=>r.c), renders]})); }, 400);\n')
+try:
+    out = subprocess.run(['node', '-e', js2], capture_output=True, text=True, timeout=60)
+    r2 = __import__('json').loads(out.stdout.strip() or '{}')
+except Exception as e:
+    r2 = {'err': str(e)}
+check('Call Mode open tab: nothing expired -> no repaint; once bu passes, the row leaves ROWS and the screen repaints',
+      r2.get('before') == [2, 0] and r2.get('after') == [['B'], 1], r2)
+check('Call Mode re-checks on a timer and on return to the tab',
+      'setInterval(_expireTick, 60*1000)' in cm and "_expireTick(); });" in cm)
+check('board re-checks on a timer and on return to the tab, and repaints only on a change',
+      'setInterval(_expTick, 60*1000)' in board and '_expTick(); _dayTick();' in board
+      and 'try{ recompute(); }catch(e){} try{ render(); }catch(e){}' in board)
+
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all release-expiry checks passed ====')
 sys.exit(1 if FAILS else 0)
