@@ -1852,6 +1852,16 @@ def stamp_federal_bk(slim):
                 except Exception:
                     f = None
         if not f or not f.get('hold'):
+            # RELEASE EXPIRY (2026-10-12). A Broward / Palm Beach row that passes here is released
+            # only for as long as its evidence lasts; the board and Call Mode re-hold it after bkUntil
+            # (bk_lookup.release_until), so a page left open past a missed rebuild does not keep it.
+            if flags is not None and case and not d.get('saleBkAct'):
+                try:
+                    _u = _BKL.release_until(_pk(case) if _pk else case)
+                except Exception:
+                    _u = int(time.time())          # cannot say how long: expired already (held on the page)
+                if _u:
+                    d['bkUntil'] = _u
             continue
         if not d.get('saleBkAct') or f.get('hard'):
             d['bkWhy'] = str(f.get('why') or '')[:180]

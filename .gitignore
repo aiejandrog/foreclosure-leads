@@ -725,3 +725,5 @@ logs/
 !_texttripwiretest.py
 !_textprecheckstest.py
 !_outcomelearntest.py
+# _releaseexpirytest: a PACER release on a built page expires (board re-holds, Call Mode drops). Synthetic case numbers only.
+!_releaseexpirytest.py

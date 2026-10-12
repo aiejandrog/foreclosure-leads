@@ -405,6 +405,46 @@ check('--report: per-county counts and reasons', 'never searched' in out and 'cl
       and '~$0.40' in out, out)
 check('--report: no owner name printed', 'REPORTNAME' not in out, out)
 
+# ---- 4c an earlier clear the current owner reading refuses is withdrawn (free, no credentials)
+wr_leads = [{'county': 'BROWARD', 'case': 'CACE-99-000830', 'owners': 'TESTPERSON QUINCY &', 'auction': mdy(30)},
+            {'county': 'BROWARD', 'case': 'CACE-99-000831', 'owners': 'TESTPERSON RALPH', 'auction': mdy(30)}]
+d = work({'broward_leads.json': wr_leads})
+(d / 'pacer_stay_cache.json').write_text(json.dumps({
+    'CACE-99-000830': dict(base, verdict='clear', why='no open bankruptcy'),
+    'CACE-99-000831': dict(base, verdict='clear', why='no open bankruptcy')}), encoding='utf-8')
+h = FakeHTTP()
+rc, out = run(d, h, e={}, raw=True)
+wc = json.loads((d / 'pacer_stay_cache.json').read_text())
+check('a clear for an owner that now reads as not searchable (ends in "&") is withdrawn -> unverifiable, '
+      'with no credentials and no HTTP', h.calls == [] and wc['CACE-99-000830']['verdict'] == 'unverifiable'
+      and 'withdrawn' in wc['CACE-99-000830']['why'] and 'withdrawn' in out, (out, wc))
+check('... a clear for a searchable owner is left alone', wc['CACE-99-000831']['verdict'] == 'clear', wc)
+import unittest.mock as _um
+(d / PS.HITS_NAME).write_text(json.dumps({'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}))
+(d / 'pacer_newfilers.json').write_text(json.dumps({'v': 1, 'court': 'flsbk', 'env': 'prod', 'last_to': '',
+                                                     'covered': [], 'pulls': [], 'rows': {'x': {'lastName': 'Z'}}}))
+with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
+                                                             (None, 'locked')]):
+    rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+check('cache lock not taken for the re-check: says so and keeps every earlier new-filer hit',
+      'could not re-check' in out and json.loads((d / PS.HITS_NAME).read_text())
+      == {'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}, out)
+_old_mi = PS.match_index
+PS.match_index = lambda *a_, **k_: {'CACE-99-000830': {'src': 'pacer_newfilers', 'new': 1}}
+try:
+    with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
+                                                                 (None, 'locked')]):
+        rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+finally:
+    PS.match_index = _old_mi
+check('... and still adds tonight\'s new matches alongside them',
+      set(json.loads((d / PS.HITS_NAME).read_text())) == {'CACE-99-000830', 'CACE-99-000831'}, out)
+rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+check('... and with the lock taken the same run does rewrite it (the check above is not vacuous)',
+      json.loads((d / PS.HITS_NAME).read_text()) == {}, out)
+rc, out = run(d, FakeHTTP(), e={}, args=['--report'], raw=True)
+check('--report never rewrites the cache', json.loads((d / 'pacer_stay_cache.json').read_text()) == wc)
+
 # ------------------------------------------------------------------------------------ 5 cost
 print('-- 5 cost accounting')
 reset_ledgers()
@@ -986,6 +1026,26 @@ check('PACER_NEWFILER_WEEKENDS=1 pulls weekend days too', w[0] == dt.date(2026, 
 w = PS.pull_window({'last_to': '2026-09-01'}, dt.date(2026, 10, 8), {})
 check('more than 14 days behind: pulls the latest 14 and says what was never pulled',
       w[0] == dt.date(2026, 9, 24) and w[1] == dt.date(2026, 10, 7) and 'never pulled' in w[2], w)
+OVF = {'status': 'partial', 'from': '2026-09-16', 'to': '2026-09-29',
+       'why': '83 pages of results, 20 read (PACER_NEWFILER_MAX_PAGES) -- window not marked covered'}
+w = PS.pull_window({'last_to': '', 'pulls': [OVF]}, dt.date(2026, 10, 13), {})
+check('after an overflowed 14-day pull (83 pages, old record with no tp): the next window shrinks to fit 20 pages',
+      w[:2] == (dt.date(2026, 9, 29), dt.date(2026, 9, 30)) and '83 pages' in w[2], w)
+w = PS.pull_window({'last_to': '2026-09-30', 'pulls': [OVF, dict(OVF, status='done', ok=True, why='', tp=10, pages=10,
+                                                                  **{'from': '2026-09-29', 'to': '2026-09-30'})]},
+                   dt.date(2026, 10, 13), {})
+check('after the shrunk pull finishes: catch-up stays sized (2 days at 5 pages/day), from the day after last_to',
+      w[:2] == (dt.date(2026, 10, 1), dt.date(2026, 10, 3)), w)
+w = PS.pull_window({'last_to': '', 'pulls': [dict(OVF, why='300 pages of results, 20 read')]}, dt.date(2026, 10, 13), {})
+check('volume so high not even one day fits the page cap: no pull, says raising it is spend',
+      w[0] is None and 'raising it is spend' in w[2], w)
+w = PS.pull_window({'last_to': '', 'pulls': [dict(OVF, why='300 pages of results, 20 read')]}, dt.date(2026, 10, 13),
+                   {'PACER_NEWFILER_MAX_PAGES': '40'})
+check('... a higher PACER_NEWFILER_MAX_PAGES re-sizes to one day', w[:2] == (dt.date(2026, 9, 29),) * 2, w)
+w = PS.pull_window({'last_to': '2026-10-06', 'pulls': [{'status': 'done', 'ok': True, 'from': '2026-10-06',
+                                                        'to': '2026-10-06', 'pages': 2, 'tp': 2}]},
+                   dt.date(2026, 10, 8), {})
+check('normal volume (2 pages a day): the window is not cut', w[:2] == (dt.date(2026, 10, 7), dt.date(2026, 10, 7)), w)
 check('bad backfill / overlap settings -> no pull', PS.pull_window({}, Q4, {'PACER_NEWFILER_BACKFILL_DAYS': 'lots'})[0] is None
       and PS.pull_window({}, Q4, {'PACER_NEWFILER_OVERLAP_DAYS': '99'})[0] is None)
 
@@ -1056,6 +1116,8 @@ idx = json.loads((d / 'pacer_newfilers.json').read_text())
 check('more pages than PACER_NEWFILER_MAX_PAGES: stops at 2, rows kept, window NOT marked covered',
       len([c for c in h.calls if c[0] == 'pull']) == 2 and len(idx['rows']) == 108 and idx['last_to'] == ''
       and idx['pulls'][-1]['status'] == 'partial', idx['pulls'])
+check('... and the partial pull records the total pages it saw and the cap it read under',
+      idx['pulls'][-1].get('tp') == 3 and idx['pulls'][-1].get('maxp') == 2, idx['pulls'])
 reset_ledgers()
 d = work({'broward_leads.json': BR})
 rc, out = run(d, PullHTTP(pull=lambda b, pg: Resp(500, {})), raw=True)

@@ -1710,6 +1710,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         _a1 = (d.get('addr') or '').split(',')[0].strip().upper()
         row = {
             'c': case,
+            # release expiry (bk_lookup.release_until): the page drops this row once it passes
+            'bu': d.get('bkUntil') or None,
             'o': (d.get('owners') or d.get('oname') or '').strip(),
             # GREETING NAME, separate from the display string above.
             # `owners` comes off the county roll as "LAST,FIRST" on 32% of leads (measured across
@@ -3527,10 +3529,29 @@ async function unwrap(code){
   }
   return null;
 }
+/* RELEASE EXPIRY (2026-10-12). A Broward / Palm Beach row is in this queue only because its
+   bankruptcy check released it, and that release has an end (`bu`, epoch seconds: the PACER clear's
+   expiry, at most 48h after the build). A page left open or a decrypted copy cached on this phone
+   must not keep dialing it after that, so expired rows leave the queue until the next build. */
+function _dropExpired(rows){
+  try{ var now=Date.now()/1000;
+    return (rows||[]).filter(function(r){ return !(r && r.bu && now > r.bu); });
+  }catch(e){ return rows||[]; }
+}
+/* ...and again while the page stays open: a `bu` that passes mid-session takes the row out of the
+   queue now. A lead screen repaints at once; an interactive screen (outcome form) is left alone and
+   the next advance() paints from the trimmed ROWS. */
+function _expireTick(){
+  try{ var n=ROWS.length; ROWS=_dropExpired(ROWS);
+    if(ROWS.length!==n && typeof render==='function') render();
+  }catch(e){}
+}
 function b2u(b64){var s=atob(b64),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
 
 async function boot(){
   loadNotes();
+  setInterval(_expireTick, 60*1000);       // release expiry while the page stays open
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _expireTick(); });
   /* Say whose page this is BEFORE the code prompt. Two seat pages look identical otherwise, and the
      one thing a caller must never be unsure about is which list is in front of him. */
   if(SEAT && SEAT.w){ try{ document.title='Call Mode · '+SEAT.w;
@@ -3539,11 +3560,11 @@ async function boot(){
      can resolve numbers that are NOT among the dialable rows (67% of them). Accept BOTH shapes —
      an older decrypted copy can still be sitting in this device's cache. */
   var take=function(p){ if(!p) return null;
-    if(Array.isArray(p)){ ROWS=p; PHIDX=null; COV=[]; return p; }
+    if(Array.isArray(p)){ ROWS=_dropExpired(p); PHIDX=null; COV=[]; return ROWS; }
     /* `b` is the coverage set (2026-09-17). Absent on an older decrypted copy sitting in this
        device's cache, in which case the board lanes count only the dial queue and say so, rather
        than quietly reporting a book two thirds the size of the one on the laptop. */
-    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; return ROWS; };
+    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; ROWS=_dropExpired(ROWS); return ROWS; };
   var saved=null; try{saved=localStorage.getItem('fcPw');}catch(e){}
   if(saved){ var r=await unwrap(saved); if(take(r)){ return start(); } }
   $('go').onclick=async function(){

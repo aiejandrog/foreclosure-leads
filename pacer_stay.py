@@ -1316,6 +1316,24 @@ def plan(leads, cache, today, now_ts, only_case=None, max_pages=None):
     return [(ld, tier, near) for _, ld, tier, near in items]
 
 
+def withdraw_reparsed(leads, cache):
+    """Clears whose lead the CURRENT owner reading refuses -> unverifiable, in place. Free, no search.
+    A stricter parse_owner (an owner ending in '&', an unnamed ET AL) means the search behind an older
+    clear did not cover every owner, and a refused lead is also left out of the new-filer match, so
+    that clear must not keep releasing the lead until its recheck. -> keys withdrawn."""
+    out = []
+    for key, ld in leads.items():
+        ent = cache.get(key)
+        if not isinstance(ent, dict) or ent.get('verdict') != 'clear':
+            continue
+        _, problem, _ = lead_subjects(ld.get('owners') or [])
+        if problem:
+            ent.update(verdict='unverifiable', a=False, cases=[],
+                       why=('earlier clear withdrawn: the owner now reads as not searchable (%s)' % problem)[:200])
+            out.append(key)
+    return out
+
+
 def cache_path(here, env_name):
     return os.path.join(here, QA_CACHE_NAME if env_name == 'qa' else CACHE_NAME)
 
@@ -1547,7 +1565,49 @@ def pull_window(idx, today, env):
         note = ('filings %s..%s were never pulled (more than %d days behind) -- the index does not cover them'
                 % (start, gap_to, NF_MAX_WINDOW_DAYS))
         start = gap_to + dt.timedelta(days=1)
-    return start, yday, note
+    to = yday
+    fit = _fit_days(idx, env)
+    if fit is not None:
+        days, maxp, last = fit
+        if days < 1:
+            return None, None, ('the last pull saw %d pages for %s..%s, so even one day would not fit '
+                                'PACER_NEWFILER_MAX_PAGES=%d -- no pull (raising it is spend)'
+                                % (last['tp'], last['from'], last['to'], maxp))
+        if (to - start).days + 1 > days:
+            to = start + dt.timedelta(days=days - 1)
+            note = ('; '.join(x for x in (note, 'a pull saw %d pages for %s..%s: pulling %s..%s so the '
+                                          'window fits %d pages' % (last['tp'], last['from'], last['to'], start, to,
+                                                                    maxp)) if x))
+    return start, to, note
+
+
+def _pull_pages(rec):
+    """Total result pages a pull saw: 'tp' when recorded, else read from a partial pull's why."""
+    try:
+        if rec.get('tp'):
+            return int(rec['tp'])
+        m = re.match(r'(\d+) pages of results, \d+ read', str(rec.get('why') or ''))
+        return int(m.group(1)) if m else (int(rec.get('pages') or 0) if rec.get('ok') else 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fit_days(idx, env):
+    """(calendar days a window may span, max pages, measured pull) from the latest pull that measured the
+    volume (finished or overflowed), else None. A partial pull marks nothing covered, so re-running the same
+    window every night re-buys its first pages and never finishes; a window sized to the measured volume
+    does finish and moves last_to, and stays sized so the catch-up after it does not overflow again."""
+    pulls = [p for p in ((idx or {}).get('pulls') or []) if isinstance(p, dict)
+             and p.get('status') in ('partial', 'done') and _pull_pages(p)]
+    if not pulls:
+        return None
+    last = pulls[-1]
+    tp, f, t = _pull_pages(last), _date(last.get('from')), _date(last.get('to'))
+    maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
+    if prob or not (tp and f and t and t >= f):
+        return None
+    per_day = tp / float((t - f).days + 1)
+    return int(maxp * 0.8 / per_day), maxp, dict(last, tp=tp)
 
 
 def nf_roles(env):
@@ -1580,7 +1640,8 @@ def pull_new_filers(pcl, budget, idx, win, today, now_ts, env):
             k = _nf_key(x)
             rec['new'] += k not in idx['rows']
             idx['rows'][k] = x
-    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4))
+    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4),
+               tp=int(res.get('total_pages') or 0), maxp=maxp)
     if res['refused']:
         rec.update(status='refused', why=res['refused'])
     elif res['error']:
@@ -1933,8 +1994,17 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
     return out
 
 
-def refresh_hits(leads, idx, hits_path, today, now_ts, env_name):
+def refresh_hits(leads, idx, hits_path, today, now_ts, env_name, keep_old=False):
+    """keep_old: tonight's matches PLUS every hit already on file (used when cached clears could not be
+    re-checked, so a hit holding a now-refused lead must not be dropped). An unreadable old file is then
+    left untouched rather than replaced."""
     hits = match_index(leads, idx, today, now_ts, env_name)
+    if keep_old and os.path.exists(hits_path):
+        old = _load_json(hits_path)
+        if not isinstance(old, dict):
+            return hits
+        for k, v in old.items():
+            hits.setdefault(k, v)
     save_cache(hits_path, hits)
     return hits
 
@@ -2114,6 +2184,21 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         report(leads, cache or {}, today, now_ts, phoned)
         _log_status(quarter, idx, today, env)
         return 0
+    wd_prob = ''
+    if cache and not cprob and not a.plan:
+        import paid_reads
+        with paid_reads._FileLock(cpath) as lk:
+            fresh, fprob = load_cache_strict(cpath) if lk.held else (None, 'locked')
+            gone = withdraw_reparsed(leads, fresh) if not fprob else []
+            if gone:
+                save_cache(cpath, fresh)
+                cache = fresh
+        if fprob:
+            wd_prob = fprob
+            log('PACER: could not re-check cached clears against the owner reading (%s) -- the new-filer '
+                'hits are not rewritten this run' % fprob)
+        elif gone:
+            log('PACER: %d earlier clear(s) withdrawn -- the owner now reads as not searchable (held)' % len(gone))
     queue = plan(leads, cache or {}, today, now_ts, None, a.max_pages) if not cprob else []
     if bulk == 'off':
         queue = []
@@ -2332,7 +2417,8 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             if pcl.creds and not out:
                 log('PACER: logout did not confirm (the token expires on its own)')
     if idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
-        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name)
+        # a clear we could not re-check must not lose the hit that holds it: then keep the old hits too
+        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name, keep_old=bool(wd_prob))
         log('PACER new filers: index %d rows; %d lead(s) match an owner on an open flsb case (blocked)%s'
             % (len(idx.get('rows') or {}), len(hits), (': ' + ', '.join(sorted(hits)[:20])) if hits else ''))
     elif iprob:
