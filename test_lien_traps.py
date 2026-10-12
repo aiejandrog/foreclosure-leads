@@ -173,7 +173,36 @@ legacy = {'liens': [], 'conf': 'ok'}
 rec('a cached chain without nrec / parcel_found reads search=unknown', LC.coverage(legacy)['search'] ==
     'unknown', LC.coverage(legacy))
 
-# ---------------------------------------------------------------- 6. summary counts only
+# ---------------------------------------------------------------- 6. review 2026-10-12: more over-claims
+print('OVER-CLAIMS')
+c, cv, st = run([deed(), folio_loan] + filler(58))
+rec('a 60-record search (conf low) is never fact_supported', c['conf'] == 'low' and not cv['fact_supported']
+    and 'low_confidence' in cv['gaps'], cv)
+c = run([deed(), folio_loan])[0]
+for key in ('second_fc', 'second_fc_unsure'):
+    cv = LC.coverage(dict(c, **{key: {'case': 'X'}}))
+    rec('a separate lender foreclosure (%s) is never fact_supported' % key, not cv['fact_supported'], cv)
+cv = LC.coverage(dict(c, other=[{'st': 'OPEN', 'amt': 5000, 'kind': 'code', 'doc': 'LIEN'}]))
+rec('an open non-mortgage lien without a folio anchor is a gap', 'other_lien_unanchored' in cv['gaps']
+    and not cv['fact_supported'], cv)
+cv = LC.coverage(dict(c, other=[{'st': 'OPEN', 'own_case': True, 'kind': 'lis_pendens', 'doc': 'LIS PENDENS'}]))
+rec("this case's own lis pendens is not a gap", cv['fact_supported'], cv)
+subord = r('MORTGAGE SUBORDINATION AGREEMENT - SUB', '01/02/2019', FOL, b='30600', p='4', amt=50000,
+           p2='ALPHA BANK NA')
+c2, cv, st = run([deed(), folio_loan, subord])
+rec('a priced subordination row is flagged, never a second loan proven', 'modification_as_loan' in cv['gaps']
+    or len(c2['liens']) == 1, (mtg(c2), cv))
+for bad in ({'liens': 5, 'nrec': 3, 'parcel_found': True}, {'nrec': 3, 'parcel_found': True,
+            'mtg_open_unpriced': 'x', 'liens': []}, {'nrec': 'x', 'parcel_found': True}):
+    try:
+        cv = LC.coverage(bad)
+        rec('coverage never raises on %r, and is not fact_supported' % (bad,), not cv['fact_supported'], cv)
+    except Exception as e:  # noqa: BLE001
+        rec('coverage never raises on %r' % (bad,), False, e)
+s2 = LC.summarize({'A': c}, {'A': {}, 'B': {}})
+rec('a lead with no chain is counted, never dropped', s2['no_chain'] == 1, s2)
+
+# ---------------------------------------------------------------- 7. summary counts only
 print('SUMMARY')
 chains = {'A': run([deed(), folio_loan])[0], 'B': run([deed(), folio_loan] + filler(499))[0],
           'C': run([])[0]}

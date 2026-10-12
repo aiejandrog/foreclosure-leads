@@ -19,9 +19,16 @@ coverage(chain) -> {'search': ..., 'anchor': ..., 'gaps': [...], 'fact_supported
            unknown    the chain predates the fields that say how it searched
   anchor   folio      a record in the search carries the subject folio and names its subdivision
            none       nothing tied the search to the parcel
-  gaps     subdivision_only_mortgage  an OPEN mortgage placed by subdivision + surname, no folio
+  gaps     low_confidence             the chain's own conf is not 'ok' (>45 records, >4 open loans,
+                                      or no anchor)
+           lender_forecloses_separately  a lender's own foreclosure on this parcel (or one of the
+                                      owner's units) was found: an open mortgage the list may miss
+           subdivision_only_mortgage  an OPEN mortgage placed by subdivision + surname, no folio
+           other_lien_unanchored      an open lien, judgment or warrant (not this case's own) whose
+                                      row does not say it was tied to the parcel by folio
            modification_as_loan       an OPEN 'mortgage' row whose document is a modification,
-                                      amendment, assumption, spreader or correction: counted as a
+                                      amendment, assumption, subordination, spreader, assignment or
+                                      correction: counted as a
                                       second loan, which overstates the debt
            unpriced_instrument        an open instrument whose amount the index does not publish
            no_bank_fc_check           the chain never asked whether a lender forecloses separately
@@ -46,7 +53,10 @@ import equity_state as ES
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAP = 500
-_NOT_A_LOAN_RE = re.compile(r'MODIF|AMEND|ASSUMP|SPREAD|CORRECT|CONSOLID|EXTEN', re.I)
+# every document the chain's own $0 rule says is not a loan (records_liens._UNPRICED_SKIP_RE), plus
+# consolidations and extensions: priced, one of these is still not a second loan
+_NOT_A_LOAN_RE = re.compile(r'MODIF|AMEND|ASSUMP|SUBORD|SPREAD|ASSIGN|RELEASE|SATIS|CORRECT|CONSOLID|EXTEN',
+                            re.I)
 
 
 def _search(chain):
@@ -65,27 +75,49 @@ def _search(chain):
     return 'complete'
 
 
+def _int(x):
+    try:
+        return int(x or 0)
+    except (TypeError, ValueError):
+        return 1          # unreadable count: treat as present, never as zero
+
+
+def _rows(x):
+    return [l for l in x if isinstance(l, dict)] if isinstance(x, list) else []
+
+
 def coverage(chain, lead=None):
     """The evidence behind one chain. Never raises; a non-dict chain is all gap."""
     if not isinstance(chain, dict):
         return {'search': 'unknown', 'anchor': 'none', 'gaps': [], 'state': 'unchecked',
                 'fact_supported': False}
-    state = ES.state_of(chain, lead)
+    try:
+        state = ES.state_of(chain, lead)
+    except Exception:  # noqa: BLE001 -- a malformed cached chain is a gap, never a crash
+        state = 'unchecked'
     search = _search(chain)
     anchor = 'folio' if (chain.get('subdiv') or chain.get('anchor')) and chain.get('parcel_found') else 'none'
     gaps = []
-    opens = [l for l in (chain.get('liens') or []) if isinstance(l, dict) and l.get('st') == 'OPEN']
+    liens, others = _rows(chain.get('liens')), _rows(chain.get('other'))
+    opens = [l for l in liens if l.get('st') == 'OPEN']
+    if str(chain.get('conf') or '').lower() != 'ok':
+        gaps.append('low_confidence')              # >45 records, >4 open loans, or no anchor
+    if chain.get('second_fc') or chain.get('second_fc_unsure'):
+        gaps.append('lender_forecloses_separately')
     if any(l.get('anchor') == 'subdivision' for l in opens):
         gaps.append('subdivision_only_mortgage')
+    # a lien other than a mortgage that rides on the parcel was placed the same way (folio, else
+    # subdivision); its rows do not record which, so an open one is a gap until they do
+    if any(o.get('st') == 'OPEN' and not o.get('own_case') and o.get('anchor') != 'folio' for o in others):
+        gaps.append('other_lien_unanchored')
     if any(_NOT_A_LOAN_RE.search(str(l.get('doc') or '')) for l in opens):
         gaps.append('modification_as_loan')
-    if (chain.get('mtg_open_unpriced') or 0) > 0 or (chain.get('other_open_unpriced') or 0) > 0 \
+    if _int(chain.get('mtg_open_unpriced')) > 0 or _int(chain.get('other_open_unpriced')) > 0 \
             or any(not l.get('amt') for l in opens):
         gaps.append('unpriced_instrument')
     if 'second_fc' not in chain:
         gaps.append('no_bank_fc_check')
-    if any(isinstance(l, dict) and l.get('st') == 'SATISFIED' and l.get('sat_by') != 'book/page'
-           for l in (chain.get('liens') or [])):
+    if any(l.get('st') == 'SATISFIED' and l.get('sat_by') != 'book/page' for l in liens):
         gaps.append('release_inferred')
     # a mortgage row from before rows carried 'anchor' cannot say how it was placed
     if opens and any('anchor' not in l for l in opens):
@@ -100,6 +132,7 @@ def summarize(chains, leads=None):
     by_search = Counter()
     gaps = Counter()
     fact = supported = 0
+    no_chain = sum(1 for c in (leads or {}) if c not in (chains or {}))
     for case, ch in (chains or {}).items():
         cv = coverage(ch, (leads or {}).get(case))
         by_state[cv['state']] += 1
@@ -109,7 +142,8 @@ def summarize(chains, leads=None):
         if cv['state'] in ES.FACT:
             fact += 1
             supported += cv['fact_supported']
-    return {'chains': sum(by_state.values()), 'board_fact': fact, 'fact_supported': supported,
+    return {'chains': sum(by_state.values()), 'no_chain': no_chain, 'board_fact': fact,
+            'fact_supported': supported,
             'state': dict(by_state), 'search': dict(by_search), 'gaps': dict(gaps)}
 
 
@@ -142,9 +176,12 @@ def main():
             if 0 <= d <= a.days:
                 keep.add(c)
         chains = {c: v for c, v in chains.items() if c in keep}
+        leads = {c: v for c, v in leads.items() if c in keep}
     s = summarize(chains, leads)
     print('lien-coverage (counts only%s)' % (', sale within %d days' % a.days if a.days else ''))
     print('  chains                 %d' % s['chains'])
+    if leads:
+        print('  leads with no chain (never searched, or the search failed)  %d' % s['no_chain'])
     print('  board says VERIFIED/CLEAR  %d' % s['board_fact'])
     print('  ...backed by a complete, anchored, gap-free search  %d' % s['fact_supported'])
     print('  state   ' + json.dumps(s['state'], sort_keys=True))
