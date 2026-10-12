@@ -942,7 +942,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     liens, opens = [], []
     seen_instruments = set()
     # REPORT-ONLY evidence for lien_coverage's deed anchoring: who signed each mortgage (does it name
-    # the searched owner?) and the nearest deed recorded before it in the same book, any parcel.
+    # the searched owner?) and the nearest deed recorded before it in the same book AMONG THE RECORDS
+    # THIS SURNAME SEARCH RETURNED. Another family's deed in between is not in the search, so deed_bp
+    # alone proves nothing; lien_coverage also needs by_owner, <=10 pages and <=3 days.
     _mw = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w]
 
     def _bpn(b, p):

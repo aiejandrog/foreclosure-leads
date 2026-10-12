@@ -96,7 +96,9 @@ def _search(chain):
 # appraiser's own sale record for THIS folio names that deed's book/page, a mortgage is this
 # parcel's only when ALL of these hold (review 2026-10-12: a neighbour's or an investor's second
 # closing sits a few pages later in the same day's book):
-#   * the nearest deed recorded before it in that book, any parcel (row['deed_bp']), IS that deed
+#   * the nearest deed before it in that book among the surname search's records (row['deed_bp'])
+#     IS that deed; deeds that do not carry the owner's surname are not in the search, which is why
+#     the next two conditions are required too
 #   * it sits at most DEED_PAGE_SPAN pages after it, within DEED_DAYS days of the sale
 #   * its borrower names the searched owner (row['by_owner'])
 # A row from before those fields were written is never anchored.
