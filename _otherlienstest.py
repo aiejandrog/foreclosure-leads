@@ -223,6 +223,12 @@ ru2 = BL.analyze(BASE, 'TESTER,OWEN', 0, ftype='', lead_case='53741')
 chk('unknown case type forces low confidence', ru2['conf'] == 'low' and ru2.get('case_type_unknown'), ru2['conf'])
 chk('known case type is not marked', not run([]).get('case_type_unknown'))
 
+sat = {'conf': 'low', 'deed_conf': '', 'liens': [{'st': 'SATISFIED', 'amt': 90000}], 'nrec': 40}
+ls = {}
+ES.apply(ls, sat)
+chk('low chain of only satisfied loans never shows a ceiling of 0', ls['eqstate'] == 'unpriced' and ls.get('eqopen') == 1, ls)
+chk('low_capped skips a chain that was already unpriced', not ES.low_capped(dict(low, other_open_unpriced=1)))
+
 # 15. is_claim on its own
 chk('is_claim: CLAIM OF LIEN', OL.is_claim('CLAIM OF LIEN'))
 chk('is_claim: FEDERAL TAX LIEN', OL.is_claim('FEDERAL TAX LIEN'))

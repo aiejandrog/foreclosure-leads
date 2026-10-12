@@ -75,7 +75,8 @@ def low_capped(chain):
         return False
     liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
     return bool(liens and str(chain.get('conf') or '').lower() == 'low'
-                and all(l.get('amt') for l in liens) and not (chain.get('mtg_open_unpriced') or 0))
+                and all(l.get('amt') for l in liens) and not (chain.get('mtg_open_unpriced') or 0)
+                and not (chain.get('other_open_unpriced') or 0) and not chain.get('xs_conflict'))
 
 
 LOW_CEILING_WHY = ('CEILING ONLY — common-name search: the recorded debt may include a namesake\'s loans '
@@ -190,6 +191,8 @@ def apply(lead, chain):
             and all(l.get('amt') for l in chain['liens'] if isinstance(l, dict))
             and not (chain.get('mtg_open_unpriced') or 0) and not (chain.get('other_open_unpriced') or 0)):
         lead['eqstate_why'] = LOW_CEILING_WHY
+        if not lead.get('eqopen'):
+            lead['eqopen'] = len(chain['liens'])   # recorded loans: a ceiling of 0 would read like a clear one
     if st == 'unpriced' and _state_of(chain, lead) == 'clear':
         lead['eqmtgclear'] = True    # the MORTGAGE verdict was clear; only an amountless lien made it
                                      # a ceiling, so a lender's separate case still demotes it
