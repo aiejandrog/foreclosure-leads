@@ -452,6 +452,25 @@ def _optout_set():
     return cases, emails
 
 
+# OPERATOR RECIPIENTS FOR meta.test (2026-10-12). meta.test comes from the request body, and it
+# skips the stay gate, the case and same-owner opt-out checks, the deliverability gate, the bounce
+# breaker and the 24h dedupe. Until today nothing checked who a test send went to, so any client
+# that set the flag could mail an owner past every one of those. The flag now counts only when
+# every recipient is one of ours: the advisor (Brief Jesse, tracker_template.html _JESSE; the same
+# set as call_mode.ADVISOR_EMAILS) or the sending login itself (self smoke-tests). A test flag on a
+# send to anyone else is refused outright, never downgraded and never sent.
+ADVISOR_EMAILS = frozenset({'celusa13@gmail.com'})
+
+
+def _operator_recipients(addrs, login=None):
+    """True when every address in addrs is the advisor or the sending login. Empty is False."""
+    own = set(ADVISOR_EMAILS)
+    if login:
+        own.add(str(login).strip().lower())
+    rc = [str(a).strip().lower() for a in addrs if str(a).strip()]
+    return bool(rc) and all(a in own for a in rc)
+
+
 OPTOUT_MAX_AGE_DAYS = float(os.environ.get('DEALFLOW_OPTOUT_MAX_AGE_DAYS', '2'))
 
 
@@ -2169,6 +2188,8 @@ class Handler(BaseHTTPRequestHandler):
         subj = str(payload.get('subj') or '').strip()
         body = str(payload.get('body') or '')
         meta = payload.get('meta') or {}
+        if not isinstance(meta, dict):
+            return self._json(400, {'ok': False, 'err': 'meta must be an object'})
         # Local file paths to attach (case workups: docket PDFs, judgments, deeds). List of strings.
         attach = payload.get('attach') or []
         if isinstance(attach, str):
@@ -2187,7 +2208,18 @@ class Handler(BaseHTTPRequestHandler):
         # it. meta.test sends (1:1 to the advisor/operator, never an owner) stay allowed — the
         # email-level opt-out match below still applies to them.
         _age = _optout_age_days()
-        _is_test = bool((meta or {}).get('test'))
+        _is_test = bool(meta.get('test'))
+        # Checked against the BCC as the client sent it, before the follow-up trim above dropped
+        # it: a test flag offered with any owner address on it is refused, trimmed or not.
+        if _is_test and not _operator_recipients(
+                [to] + str(payload.get('bcc') or '').split(','),
+                (_load_credentials() or (None, None))[0]):
+            self.log_message('SEND REFUSED [test_not_operator] case=%s',
+                             str(meta.get('c') or '-')[:40])
+            return self._json(451, {
+                'ok': False, 'blocked': 'test_not_operator', 'skip': True,
+                'err': ('send refused: meta.test is only for the advisor or the sending account; '
+                        'a send to anyone else goes through every owner check')})
         if not _is_test and (_age is None or _age > OPTOUT_MAX_AGE_DAYS):
             return self._json(200, {
                 'ok': False, 'blocked': 'optout_stale',

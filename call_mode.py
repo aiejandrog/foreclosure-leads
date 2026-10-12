@@ -2092,6 +2092,7 @@ def _recipient_index(slim):
 
 
 # Our own recipients for meta.test sends (Brief Jesse: tracker_template.html _JESSE).
+# Keep equal to send_server.ADVISOR_EMAILS, which gates who a test send may reach.
 ADVISOR_EMAILS = {'celusa13@gmail.com'}
 
 
@@ -2130,8 +2131,9 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
         Counted in `matched`.
       * an email row with `test_mode` true whose recipient is one of OUR OWN addresses (the
         advisor, ADVISOR_EMAILS, or the sending account itself, `login`/`from`) reached no lead.
-        Counted in `test`. The flag alone is not trusted: send_server takes meta.test from the
-        request body and never checks who it went to, so a test row to any other address stays
+        Counted in `test`. The flag alone is not trusted: until 2026-10-12 send_server took
+        meta.test from the request body without checking who it went to (it now refuses a test
+        send to anyone but these addresses), so an older test row to any other address stays
         unattributed.
     Anything left (a delivered, non-test send to an address or number on no lead) still counts as
     unattributed and still turns ledgers_ok off: that recipient may be a lead whose address this
