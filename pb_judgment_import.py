@@ -6,7 +6,7 @@ Landmark does not publish amounts. This script does not open either. Alex saves 
 PDF by hand into a folder. The script reads that local file, runs the same check as
 broward_judgment_read.read_judgment, and writes the same record.
 
-    python pb_judgment_import.py --in DIR --out judgment_records.json
+    python pb_judgment_import.py --in DIR --out judgment_records.json   # -> DEALFLOW_DIR\judgment_records.json
 
 A .txt file whose pages are separated by a form feed is accepted so a test can run without
 a PDF library. A PDF is read with the local text extractor (PyMuPDF) when it is installed.
@@ -119,12 +119,30 @@ def import_folder(folder, out_path, opener=None):
             counts['records'] += 1
         else:
             counts['failed'] += 1
+    if not records and os.path.exists(out_path):
+        return counts                                  # a run that read nothing never empties an earlier file
     tmp = out_path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=1, sort_keys=True)
         f.write('\n')
     os.replace(tmp, out_path)
     return counts
+
+
+def resolve_out(out):
+    """Records carry case ids, so they live outside the repo and outside OneDrive (CLAUDE.md, Output
+    paths). A bare name goes to paths.P.out(); a path inside the repo or OneDrive -> '' (refused)."""
+    out = str(out or '').strip()
+    if not out:
+        return ''
+    if not os.path.isabs(out) and os.path.dirname(out) in ('', '.'):
+        import paths as P
+        return P.out(os.path.basename(out))
+    full = os.path.realpath(os.path.abspath(out))
+    repo = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+    if full == repo or full.startswith(repo + os.sep) or 'onedrive' in full.lower():
+        return ''
+    return full
 
 
 def main(argv):
@@ -135,7 +153,11 @@ def main(argv):
     p.add_argument('--in', dest='folder', required=True)
     p.add_argument('--out', required=True)
     args = p.parse_args(argv)
-    counts = import_folder(args.folder, args.out)
+    out = resolve_out(args.out)
+    if not out:
+        print('refused: --out must be a file name (written to DEALFLOW_DIR) or a path outside the repo and OneDrive')
+        return 2
+    counts = import_folder(args.folder, out)
     print('files=%d records=%d void=%d hoa=%d failed=%d' % (
         counts['files'], counts['records'], counts['void'], counts['hoa'], counts['failed']))
     return 0
