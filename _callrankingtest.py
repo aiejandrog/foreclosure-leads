@@ -122,5 +122,21 @@ ids, by = order([lead('LOW', 20, eq=50, judg=200000, orsurv=100000, orconf='low'
 rec('a low-confidence chain does not rank a lead down', by['LOW'].get('e') == 50.0 and by['LOW'].get('el') is None,
     (by['LOW'].get('e'), by['LOW'].get('el')))
 
+print('\nMOBILE BEFORE LANDLINE INSIDE A BAND')
+_mob = lambda c, eq, t: lead(c, 20, eq=eq, judg=200000, eqstate='priced', phtype=[t])
+ids, by = order([_mob('LAND-60', 60, 'landline'), _mob('MOB-30', 30, 'mobile'), lead('UNTYPED-40', 20, eq=40, judg=240000, eqstate='priced')])
+rec('a mobile lead outranks a landline-only lead with more equity', ids.index('MOB-30') < ids.index('LAND-60'), ids)
+rec('a lead with no phtype at all is not moved behind', ids.index('UNTYPED-40') < ids.index('LAND-60'), ids)
+rec('the landline lead still ships', 'LAND-60' in by, ids)
+rec('the build-time flag never reaches the page', all('_ll' not in r for r in by.values()), list(by.values())[0])
+ids2, _ = order([lead('LAND-SOON', 10, phtype=['landline']), lead('MOB-LATE', 50, phtype=['mobile'])])
+rec('the sale-date band still comes first', ids2 == ['LAND-SOON', 'MOB-LATE'], ids2)
+os.environ['CALLMODE_MOBILE_FIRST'] = '0'
+try:
+    ids3, _ = order([_mob('LAND-60', 60, 'landline'), _mob('MOB-30', 30, 'mobile')])
+finally:
+    os.environ.pop('CALLMODE_MOBILE_FIRST', None)
+rec('CALLMODE_MOBILE_FIRST=0 restores the equity order', ids3 == ['LAND-60', 'MOB-30'], ids3)
+
 print('\n==== %d FAIL(S) ====' % len(FAIL) if FAIL else '\n==== all %d Call Mode ranking checks passed ====' % len(PASS))
 sys.exit(1 if FAIL else 0)
