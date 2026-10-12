@@ -2468,6 +2468,16 @@ def _text_hold_json():
 _MODDIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def _refresh_status_html():
+    """How the last refresh ended, one line above the gate (refresh_status.py). Counts and times
+    only, so it is safe outside the encrypted payload. Never raises: '' if anything goes wrong."""
+    try:
+        import refresh_status
+        return refresh_status.page_html()
+    except Exception:
+        return ''
+
+
 def _read_module(name):
     # beside this file, not HERE: tests re-point HERE at a scratch dir
     with open(os.path.join(_MODDIR, name), encoding='utf-8') as fh:
@@ -2493,7 +2503,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
-                       ('__BSIGNER__', 1), ('__SEAT__', 1)):
+                       ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -2552,7 +2562,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__TEXTHOLD__', _text_hold_json()) \
                 .replace('__HISTCOV__', histcov) \
                 .replace('__CWJS__', _read_module('call_workflow.js')) \
-                .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js'))
+                .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js')) \
+                .replace('__REFRESHSTATUS__', _refresh_status_html())
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -3214,6 +3225,7 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
    it). The script belongs to the CALL; while logging, the sheet was only a tap-thief. */
 .sheet.hid{display:none}
 </style></head><body>
+__REFRESHSTATUS__
 <div id="app" class="wrap"><div class="gate"><h2>Call Mode</h2>
 <p class="mut" id="gmsg">Enter your access code.</p>
 <input id="code" type="password" inputmode="text" autocomplete="one-time-code" placeholder="DEALFLOW-XXXXXXXX">
