@@ -77,6 +77,25 @@ def main():
     check('no ENDED line after 6h = killed (-1), good falls back',
           s['last']['rc'] == -1 and s['good'] == '2026-10-12T12:21', str(s))
 
+    manual = LOG_1012.split('==================== REFRESH Mon 10/12/2026 12:21')[0] + (
+        '==== run Mon 10/12/2026  9:10:00.00 ==== \n'
+        'scraping...\n')
+    s = R.summary(write(manual), now=datetime(2026, 10, 12, 9, 40))
+    check('run-leads.bat after a failed 05:30: the manual run baking its board is the last run, good',
+          s['last']['at'] == '2026-10-12T09:10' and s['last']['rc'] is None and s['good'] == '2026-10-12T09:10'
+          and s['earlier']['rc'] == 3, str(s))
+    s = R.summary(write(manual + '==== done ==== \n'), now=datetime(2026, 10, 12, 9, 40))
+    check('run-leads.bat done = rc 0', s['last']['rc'] == 0, str(s))
+    s = R.summary(write(manual + 'SCRAPE FAILED - skipping commit/push, live site left intact \n'),
+                  now=datetime(2026, 10, 12, 9, 40))
+    check('run-leads.bat SCRAPE FAILED = rc 1, good stays 10/11', s['last']['rc'] == 1
+          and s['good'] == '2026-10-11T05:30', str(s))
+    killed = LOG_1012.replace('==== REFRESH ENDED rc=7 Mon 10/12/2026 16:20:00.00 ====\n', '') + (
+        '==================== REFRESH Mon 10/12/2026 17:00:00.00 ====================\n'
+        '==== REFRESH ENDED rc=3 Mon 10/12/2026 17:04:00.00 ====\n')
+    s = R.summary(write(killed), now=datetime(2026, 10, 12, 17, 30))
+    check('an earlier run with no ENDED line is not counted as good', s['good'] == '2026-10-11T05:30', str(s))
+
     s = R.summary(os.path.join(tempfile.mkdtemp(), 'missing.log'), now=now)
     check('no log: empty summary, no crash', s['last'] is None and s['good'] is None)
 

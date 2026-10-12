@@ -38,7 +38,7 @@ WHY = {
     5: 'live site did not update',
     6: 'publish guard blocked it',
     7: 'lis pendens lane partial',
-    9: 'other machine holds the lease',
+    9: 'run lease refused',
     10: 'lease lost mid-run',
 }
 # Codes where no new scrape reached the board.
@@ -46,7 +46,11 @@ FAILED = {1, 3, 9, 10}
 
 _START = re.compile(r'^=+ REFRESH (?!ENDED)(.*?) =+\s*$')
 _ENDED = re.compile(r'^=+ REFRESH ENDED rc=(-?\d+)(.*?)=*\s*$')
-_LEASE = re.compile(r'^\[(.*?)\] refresh-dealflow\.bat did not start - cross-machine lease exit (\d+)')
+_LEASE = re.compile(r'^\[(.*?)\] (?:refresh-dealflow|run-leads)\.bat did not start - cross-machine lease exit (\d+)')
+# run-leads.bat, the manual scrape + publish: "==== run <date> <time> ====" ... "==== done ====",
+# with no ENDED line, so its outcome is read from the lines it prints.
+_MANUAL = re.compile(r'^=+ run (.*?) =+\s*$')
+_MANUAL_DONE = re.compile(r'^=+ done =+\s*$')
 # cmd's %date% %time% on this laptop: "Mon 10/12/2026 12:21:05.12" (en-US). ISO is accepted too.
 _US = re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})\D+(\d{1,2}):(\d{2})')
 _ISO = re.compile(r'(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})')
@@ -72,8 +76,26 @@ def runs(log_text):
     """Each refresh in the log, oldest first: {'at', 'rc', 'why'}. rc None = started, no ENDED line
     yet (still running, or killed from outside)."""
     out = []
+    manual = None                     # the open run-leads.bat run, if the last banner was one
     for line in log_text.splitlines():
         line = line.strip()
+        m = _MANUAL.match(line)
+        if m:
+            manual = {'at': _when(m.group(1)), 'rc': None, 'end': None}
+            out.append(manual)
+            continue
+        if manual is not None and manual['rc'] is None:
+            if 'NETWORK NOT UP' in line:
+                manual['rc'] = 3
+            elif line.startswith('SCRAPE FAILED'):
+                manual['rc'] = 1
+            elif 'MIRROR DID NOT PUBLISH' in line:
+                manual['mirror'] = True
+            elif _MANUAL_DONE.match(line):
+                manual['rc'] = 5 if manual.get('mirror') else 0
+            if manual['rc'] is not None:
+                manual = None
+                continue
         m = _ENDED.match(line)
         if m:
             rc = int(m.group(1))
@@ -85,6 +107,7 @@ def runs(log_text):
             continue
         m = _START.match(line)
         if m:
+            manual = None
             out.append({'at': _when(m.group(1)), 'rc': None, 'end': None})
             continue
         m = _LEASE.match(line)
@@ -93,6 +116,7 @@ def runs(log_text):
             t = _when(m.group(1))
             out.append({'at': t, 'rc': int(m.group(2)), 'end': t})
     for r in out:
+        r.pop('mirror', None)
         r['why'] = WHY.get(r['rc'], 'exit %s' % r['rc']) if r['rc'] is not None else None
     return out
 
@@ -131,6 +155,9 @@ def summary(log_path=LOG, now=None):
     # fails its scrape or its network check goes straight to :end and never builds one.
     good = None
     for r in reversed(rs[:-1] + [last] if rs else []):
+        # An earlier run with no outcome was killed or lost its lease: not known to have scraped.
+        if r['rc'] is None and r is not last:
+            continue
         if r['at'] and r['rc'] not in FAILED and r['rc'] != -1:
             good = r['at']
             break
