@@ -23,7 +23,9 @@ coverage(chain) -> {'search': ..., 'anchor': ..., 'gaps': [...], 'fact_supported
                                       or no anchor)
            lender_forecloses_separately  a lender's own foreclosure on this parcel (or one of the
                                       owner's units) was found: an open mortgage the list may miss
-           subdivision_only_mortgage  an OPEN mortgage placed by subdivision + surname, no folio
+           subdivision_only_mortgage  an OPEN mortgage placed by subdivision + surname, no folio,
+                                      and not recorded right behind one of the parcel's own deeds
+                                      (the appraiser's sale book/page, lead['sale_refs'])
            other_lien_unanchored      an open lien, judgment or warrant (not this case's own) whose
                                       row does not say it was tied to the parcel by folio
            modification_as_loan       an OPEN 'mortgage' row whose document is a modification,
@@ -88,6 +90,45 @@ def _search(chain):
     if not chain.get('parcel_found'):
         return 'missed'
     return 'complete'
+
+
+# A purchase loan is recorded with its deed: same book, the next pages, the same day. When the
+# appraiser's own sale record for THIS folio names that deed's book/page, a mortgage recorded right
+# behind it is this parcel's, whatever surname or subdivision the clerk index shows. Window: up to
+# DEED_PAGE_SPAN pages after the deed, recorded within DEED_DAYS days of the sale date.
+DEED_PAGE_SPAN = 60
+DEED_DAYS = 3
+
+
+def _bp(x):
+    nums = re.findall(r'\d+', str(x or ''))
+    return (int(nums[0]), int(nums[1])) if len(nums) >= 2 else None
+
+
+def _day(x):
+    try:
+        import sale_pick
+        return sale_pick.sale_date(x)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def deed_anchored(row, sale_refs):
+    """True when this mortgage row was recorded right behind one of the parcel's appraiser-listed
+    deeds (same book, page within DEED_PAGE_SPAN after it, date within DEED_DAYS). Never guesses:
+    an unreadable book/page or date is False."""
+    mbp, md = _bp(row.get('bp')), _day(row.get('d'))
+    if not mbp or md is None:
+        return False
+    for ref in sale_refs if isinstance(sale_refs, list) else []:
+        if not isinstance(ref, dict):
+            continue
+        dbp, dd = _bp('%s %s' % (ref.get('b'), ref.get('p'))), _day(ref.get('d'))
+        if not dbp or dd is None:
+            continue
+        if mbp[0] == dbp[0] and dbp[1] < mbp[1] <= dbp[1] + DEED_PAGE_SPAN and abs((md - dd).days) <= DEED_DAYS:
+            return True
+    return False
 
 
 def _int(x):
@@ -164,7 +205,9 @@ def coverage(chain, lead=None, county=None):
         gaps.append('low_confidence')              # >45 records, >4 open loans, or no anchor
     if chain.get('second_fc') or chain.get('second_fc_unsure'):
         gaps.append('lender_forecloses_separately')
-    if any(l.get('anchor') == 'subdivision' for l in opens):
+    refs = (lead or {}).get('sale_refs') if isinstance(lead, dict) else None
+    deed = [l for l in opens if l.get('anchor') == 'subdivision' and deed_anchored(l, refs)]
+    if any(l.get('anchor') == 'subdivision' and l not in deed for l in opens):
         gaps.append('subdivision_only_mortgage')
     # a lien other than a mortgage that rides on the parcel was placed the same way (folio, else
     # subdivision); its rows do not record which, so an open one is a gap until they do
@@ -184,7 +227,8 @@ def coverage(chain, lead=None, county=None):
     if opens and any('anchor' not in l for l in opens):
         gaps.append('row_anchor_unrecorded')
     ok = state in ES.FACT and search == 'complete' and anchor == 'folio' and not gaps
-    return {'search': search, 'anchor': anchor, 'gaps': gaps, 'state': state, 'fact_supported': ok}
+    return {'search': search, 'anchor': anchor, 'gaps': gaps, 'state': state, 'fact_supported': ok,
+            'deed_anchored': len(deed)}
 
 
 def summarize(chains, leads=None, county=None):
@@ -193,7 +237,7 @@ def summarize(chains, leads=None, county=None):
     by_search = Counter()
     gaps = Counter()
     kinds = Counter()
-    fact = supported = 0
+    fact = supported = deed = 0
     no_chain = sum(1 for c in (leads or {}) if c not in (chains or {}))
     for case, ch in (chains or {}).items():
         cv = coverage(ch, (leads or {}).get(case), county)
@@ -211,11 +255,12 @@ def summarize(chains, leads=None, county=None):
         by_search[cv['search']] += 1
         for g in cv['gaps']:
             gaps[g] += 1
+        deed += cv.get('deed_anchored', 0)
         if cv['state'] in ES.FACT:
             fact += 1
             supported += cv['fact_supported']
     return {'chains': sum(by_state.values()), 'no_chain': no_chain, 'board_fact': fact,
-            'fact_supported': supported,
+            'fact_supported': supported, 'deed_anchored_mortgages': deed,
             'state': dict(by_state), 'search': dict(by_search), 'gaps': dict(gaps), 'kinds': dict(kinds)}
 
 
@@ -262,6 +307,8 @@ def main():
         print('  leads with no chain (never searched, or the search failed)  %d' % s['no_chain'])
     print('  board says VERIFIED/CLEAR  %d' % s['board_fact'])
     print('  ...backed by a complete, anchored, gap-free search  %d' % s['fact_supported'])
+    print('  open mortgages tied to the parcel by the appraiser\'s deed book/page  %d'
+          % s['deed_anchored_mortgages'])
     print('  state   ' + json.dumps(s['state'], sort_keys=True))
     print('  search  ' + json.dumps(s['search'], sort_keys=True))
     print('  gaps    ' + json.dumps(s['gaps'], sort_keys=True))

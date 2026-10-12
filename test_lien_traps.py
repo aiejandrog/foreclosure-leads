@@ -208,7 +208,40 @@ rec('an unpriced loan released by inference still reads release_inferred (Codex 
 s2 = LC.summarize({'A': c}, {'A': {}, 'B': {}})
 rec('a lead with no chain is counted, never dropped', s2['no_chain'] == 1, s2)
 
-# ---------------------------------------------------------------- 7. summary counts only
+# ---------------------------------------------------------------- 7. deed book/page anchoring
+print('DEED ANCHOR')
+lead = {'sale_refs': [{'b': '29000', 'p': '0100', 'd': '01/02/2015', 'i': 'DEE'}]}
+c = run([deed(), loan()])[0]
+cv = LC.coverage(c, lead)
+rec('a loan recorded right behind the appraiser-listed deed is tied to the parcel',
+    cv['deed_anchored'] == 1 and 'subdivision_only_mortgage' not in cv['gaps'] and cv['fact_supported'], cv)
+rec('...without the deed reference it stays subdivision-only', not LC.coverage(c)['fact_supported'])
+for name, ref in (('a different book', {'b': '29001', 'p': '100', 'd': '01/02/2015'}),
+                  ('a page before the deed', {'b': '29000', 'p': '102', 'd': '01/02/2015'}),
+                  ('a page far after the deed', {'b': '29000', 'p': '20', 'd': '01/02/2015'}),
+                  ('a sale a month apart', {'b': '29000', 'p': '100', 'd': '02/02/2015'}),
+                  ('an unreadable date', {'b': '29000', 'p': '100', 'd': 'soon'}),
+                  ('no page', {'b': '29000', 'p': '', 'd': '01/02/2015'})):
+    cv = LC.coverage(c, {'sale_refs': [ref]})
+    rec('%s does not tie the loan' % name, cv['deed_anchored'] == 0 and not cv['fact_supported'], cv)
+rec('an ISO sale date reads too', LC.coverage(c, {'sale_refs': [{'b': '29000', 'p': '100',
+    'd': '2015-01-02'}]})['deed_anchored'] == 1)
+c = run([deed(), loan(), namesake])[0]
+cv = LC.coverage(c, lead)
+rec('a later namesake mortgage in the subdivision is still a gap', cv['deed_anchored'] == 1
+    and 'subdivision_only_mortgage' in cv['gaps'] and not cv['fact_supported'], cv)
+rec('garbage sale_refs never raise', LC.coverage(c, {'sale_refs': 'x'})['deed_anchored'] == 0
+    and LC.coverage(c, {'sale_refs': [None, 5]})['deed_anchored'] == 0)
+s3 = LC.summarize({'A': run([deed(), loan()])[0]}, {'A': lead})
+rec('summarize counts deed-anchored mortgages', s3['deed_anchored_mortgages'] == 1 and s3['fact_supported'] == 1, s3)
+import foreclosure_leads as FL  # noqa: E402
+refs = FL._sale_refs([{'OfficialRecordBook': '12945', 'OfficialRecordPage': '0623', 'DateOfSale': '3/4/1986',
+                       'SaleInstrument': '', 'GranteeName1': 'NOBODY', 'SalePrice': 9},
+                      {'OfficialRecordBook': '', 'OfficialRecordPage': '1'}, 'junk'])
+rec('enrich keeps book, page (leading zero), date and instrument, and drops names and prices',
+    refs == [{'b': '12945', 'p': '0623', 'd': '3/4/1986', 'i': ''}], refs)
+
+# ---------------------------------------------------------------- 8. summary counts only
 print('SUMMARY')
 chains = {'A': run([deed(), folio_loan])[0], 'B': run([deed(), folio_loan] + filler(499))[0],
           'C': run([])[0]}
