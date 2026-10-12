@@ -1928,8 +1928,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # MOBILE BEFORE LANDLINE (2026-10-12, outcome_learn.py on 293 logged dials): numbers typed
     # mobile reached a person 25 of 134 times, landlines 0 of 26. County, equity, homestead and tier
     # made no difference to pickup. So within a band, a lead whose first number is a landline waits
-    # behind the mobile leads. Nobody is dropped. Untyped numbers are not penalised: only an explicit
-    # 'landline' moves. CALLMODE_MOBILE_FIRST=0 turns it off.
+    # behind the mobile leads. CALLMODE_MOBILE_FIRST=0 turns it off.
+    # 'landline' here means NOT TYPED MOBILE: both skiptrace merges bake every non-'mob*' type
+    # (VoIP, blank, unknown) as 'landline' (foreclosure_leads.py:2149, :2384), and that is the same
+    # bucket the 0-of-26 was measured on. Only a lead with no phtype at all, or a Whitepages '' type,
+    # is left in place. Nobody leaves the qualified pool, but because this key outranks verified
+    # equity it decides who lands in the protected head: a landline lead pushed past CALLMODE_HEAD
+    # ships on its rotation day instead of every day.
     _mf = os.environ.get('CALLMODE_MOBILE_FIRST', '1') != '0'
     out.sort(key=lambda r: (_band(r), (r.get('_ll', 0) if _mf else 0), 0 if r.get('eqv') else 1,
                             0 if r.get('e') is not None else 1, -(r.get('e') or 0),
