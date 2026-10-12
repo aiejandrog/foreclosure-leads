@@ -493,7 +493,8 @@ check('entity -> one search on the name without its suffix',
 for raw, why in (('ESTATE OF QUINCY TESTPERSON', 'estate'), ('TESTPERSON QUINCY TR', 'trust'),
                  ('QUINCY TESTPERSON REVOCABLE TRUST', 'trust'), ('CITY OF FAKEVILLE', 'government'),
                  ('(owner via title search)', 'no owner'), ('TESTPERSON', 'one-word'),
-                 ('A B C D E F', 'more than four'), ('', 'no owner')):
+                 ('A B C D E F', 'more than four'), ('', 'no owner'),
+                 ('TESTPERSON QUINCY &', 'co-owner is missing'), ('TESTPERSON QUINCY & ', 'co-owner is missing')):
     sj, problem = PS.parse_owner(raw, 'last_first')
     check('not searched (no cost): %r -> %s' % (raw, why), not sj and why in problem, problem)
 # oname / paOwner fallback (ce154cc): its order is unknown, so it is read both ways ('either')
@@ -561,7 +562,15 @@ check('exact name, open case in flsbk -> ACTIVE, filing date and case number rec
 check('the stored case has no name or caption', 'QUINCY' not in json.dumps(v[2]) and 'caseTitle' not in json.dumps(v[2]))
 check('open case in the Middle District of Florida -> active', verdict([row('TESTPERSON', 'QUINCY', court='flmbk')])[0] == 'active')
 check('closed case -> clear', verdict([row('TESTPERSON', 'QUINCY', termed='2024-01-05')])[0] == 'clear')
-check('dismissed 60 days ago, not yet closed -> clear', verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-60))])[0] == 'clear')
+v = verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-60))])
+check('dismissed 60 days ago, not yet closed -> unverifiable (a vacated dismissal would not show; 2026-10-12)',
+      v[0] == 'unverifiable' and 'dismissed, not closed' in v[1], v)
+check('dismissed 60 days ago AND closed -> clear',
+      verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-60), termed=iso(-20))])[0] == 'clear')
+check('an OPEN case filed before the 8-year lookback still counts -> active',
+      verdict([row('TESTPERSON', 'QUINCY', filed='2010-03-01')])[0] == 'active')
+check('a CLOSED case filed before the lookback is ignored -> clear',
+      verdict([row('TESTPERSON', 'QUINCY', filed='2010-03-01', termed='2012-01-01')])[0] == 'clear')
 check('dismissed 10 days ago, not yet closed -> unverifiable (reinstatement window)',
       verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-10))])[0] == 'unverifiable')
 check('closed then reopened -> active', verdict([row('TESTPERSON', 'QUINCY', termed=iso(-400), reopened=iso(-56))])[0] == 'active')
@@ -573,7 +582,7 @@ check('similar name but CLOSED -> clear', verdict([row('TESTPERSON', 'Q', termed
 check('creditor row ignored', verdict([row('TESTPERSON', 'QUINCY', role='cr')])[0] == 'clear')
 check('adversary proceeding ignored', verdict([row('TESTPERSON', 'QUINCY', ctype='ap')])[0] == 'clear')
 check('civil case ignored', verdict([row('TESTPERSON', 'QUINCY', court='flsdc', juris='Civil', ctype='cv')])[0] == 'clear')
-check('filed before the lookback ignored', verdict([row('TESTPERSON', 'QUINCY', filed='2015-01-01')])[0] == 'clear')
+check('an open case filed before the lookback is no longer ignored (2026-10-12) -> active', verdict([row('TESTPERSON', 'QUINCY', filed='2015-01-01')])[0] == 'active')
 check('overflow (unread pages) -> unverifiable even with no match on page 0', verdict([], overflow=True)[0] == 'unverifiable')
 check('active beats every doubt', verdict([row('TESTPERSON', 'Q'), row('TESTPERSON', 'QUINCY', no='1:99-bk-3')], overflow=True)[0] == 'active')
 check('an unknown role still counts (fail closed)', verdict([row('TESTPERSON', 'QUINCY', role='')])[0] == 'active')
