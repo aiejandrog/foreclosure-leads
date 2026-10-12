@@ -1244,13 +1244,40 @@ def recheck_days(ent, near):
     return RECHECK['near'] if near else RECHECK['clear']
 
 
-def plan(leads, cache, today, now_ts, only_case=None):
-    """Due leads in the order they are searched. Each item: (lead, tier, near)."""
+def owners_hash(ld):
+    """A short digest of the owner names a lead was searched under (no name is stored), so a skip
+    never outlives a change of owner."""
+    import hashlib
+    raw = '|'.join(sorted('%s/%s' % (o, order) for o, order in ((ld or {}).get('owners') or [])))
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]
+
+
+def overflow_settled(ent, max_pages, ld=None):
+    """True when this entry is an 'unverifiable' common name whose search already ran out of pages at
+    max_pages or deeper. Searching it again at the same depth buys the same unreadable page: the
+    rows only grow, so the answer cannot change. The lead stays held (unverifiable) until someone
+    reads deeper (--max-pages), which is a spend decision."""
+    if not isinstance(ent, dict) or ent.get('verdict') != 'unverifiable' or ent.get('err'):
+        return False
+    try:
+        ovf = int(ent.get('ovf') or 0)
+    except (TypeError, ValueError):
+        return False
+    if ovf <= 0 or int(max_pages or 1) > ovf or ent.get('names') != NAME_READING:
+        return False
+    return ld is None or ent.get('oh') == owners_hash(ld)
+
+
+def plan(leads, cache, today, now_ts, only_case=None, max_pages=None):
+    """Due leads in the order they are searched. Each item: (lead, tier, near). With max_pages, a
+    common name already read that deep is left out (overflow_settled): it stays held, unbought."""
     import stay_gate
     want = stay_gate.pacer_key(only_case) if only_case else ''
     items = []
     for key, ld in leads.items():
         if want and key != want:
+            continue
+        if max_pages and not want and overflow_settled(cache.get(key), max_pages, ld):
             continue
         a = ld.get('auction')
         days = (a - today).days if a else None
@@ -1345,6 +1372,11 @@ def check_lead(pcl, budget, ld, subjects, today, date_from, region, max_pages):
         results.append((si, res))
     verdict, why, cases, bd = decide(subjects, results, today, date_from)
     info = {'pages': pages, 'cost': round(budget.spent - cost0, 4), 'searches': len(by_query)}
+    if any(r.get('overflow') for r in by_query.values()):
+        # a common name: record how deep it was read (ovf) and how deep PCL said it goes (tp), so the
+        # next run does not buy the same unreadable page again and the cost of reading it is known
+        info['ovf'] = max(1, int(max_pages or 1))
+        info['tp'] = max(int(r.get('total_pages') or 0) for r in by_query.values())
     if errors and verdict != 'active':
         return dict(info, verdict='unverifiable', why='PCL error: ' + errors[0], cases=cases, bd=''), 'error', errors[0]
     return dict(info, verdict=verdict, why=why, cases=cases, bd=bd), 'done', ''
@@ -1359,6 +1391,7 @@ def _entry(fields, ld, env_name, region, date_from, now_ts):
         'pages': fields.get('pages', 0), 'cost': fields.get('cost', 0.0), 'why': fields.get('why', ''),
         'cases': fields.get('cases') or [], 'lookback_from': date_from, 'region': region, 'v': 1,
         'names': NAME_READING,
+        **({'ovf': fields['ovf'], 'tp': fields.get('tp') or 0, 'oh': owners_hash(ld)} if fields.get('ovf') else {}),
     }
 
 
@@ -1776,6 +1809,11 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         out.update(status='refused', why=prob)
         return out
     ent = cache.get(key)
+    if not manual and overflow_settled(ent, 1, _leads_cached(here).get(key)):
+        out.update(status='cached', verdict='unverifiable',
+                   why='a common name: the last search ran past %s page(s), so another one-page search cannot '
+                       'clear it (held)' % ent.get('ovf'))
+        return out
     if not manual and isinstance(ent, dict) and not stay_gate.pacer_needs_lookup(ent, now_ts):
         out.update(status='cached', verdict=str(ent.get('verdict') or ''),
                    why='the PACER verdict from %s is still inside the max age' % str(ent.get('q') or '?')[:10])
@@ -1892,6 +1930,95 @@ def refresh_hits(leads, idx, hits_path, today, now_ts, env_name):
 # --------------------------------------------------------------------------------------------------
 # the nightly run
 # --------------------------------------------------------------------------------------------------
+WHY_BUCKETS = (
+    ('common name', 'page(s) of results for one owner name'),             # overflow: more pages than read
+    ('same name, open case outside Florida', 'an open bankruptcy for the same name'),
+    ('similar name, open case', 'an open bankruptcy for a similar name'),
+    ('dismissed < 30 days, not closed', 'a bankruptcy dismissed'),
+    ('PCL error', 'PCL error'),
+)
+
+
+def why_buckets(why):
+    """The reasons an 'unverifiable' verdict gives, as fixed labels (a lead can carry several)."""
+    w = str(why or '')
+    out = [label for label, pre in WHY_BUCKETS if pre in w]
+    if not out:
+        out = ['owner cannot be searched: ' + w[:60]] if w else ['no reason recorded']
+    return out
+
+
+def report(leads, cache, today, now_ts, phoned=None):
+    """No network, no login, no spend: what the cache says per county, why held leads are held, and
+    what keeping them released costs. Counts, court ids and dollars only -- never a name."""
+    import stay_gate
+    by = {}
+    for key, ld in leads.items():
+        if stay_gate.case_stem(key):
+            continue                                   # Miami-Dade: the docket gate decides, not PACER
+        c = by.setdefault(ld.get('county') or '?', {
+            'leads': 0, 'phoned': 0, 'unchecked': 0, 'unchecked_phoned': 0, 'clear_fresh': 0,
+            'clear_stale': 0, 'active': 0, 'unverifiable': 0, 'error': 0, 'why': {}, 'ovf_tp': [],
+            'cost': 0.0, 'pages': 0, 'clear_fresh_phoned': 0})
+        a = ld.get('auction')
+        if a and (a - today).days < -1:
+            continue
+        c['leads'] += 1
+        ph = phoned is None or key in phoned
+        c['phoned'] += 1 if phoned is not None and ph else 0
+        ent = cache.get(key) if isinstance(cache.get(key), dict) else None
+        if ent is None:
+            c['unchecked'] += 1
+            c['unchecked_phoned'] += 1 if phoned is not None and ph else 0
+            continue
+        c['cost'] += float(ent.get('cost') or 0)
+        c['pages'] += int(ent.get('pages') or 0)
+        if ent.get('err') and ent.get('verdict') not in ('clear', 'active', 'unverifiable'):
+            c['error'] += 1
+            continue
+        v = ent.get('verdict')
+        if v == 'clear':
+            st, _ = stay_gate.pacer_verdict(ent, now_ts)
+            fresh = st == stay_gate.CLEAR
+            c['clear_fresh' if fresh else 'clear_stale'] += 1
+            c['clear_fresh_phoned'] += 1 if fresh and phoned is not None and ph else 0
+        elif v == 'active':
+            c['active'] += 1
+        elif v == 'unverifiable':
+            c['unverifiable'] += 1
+            for b in why_buckets(ent.get('why')):
+                c['why'][b] = c['why'].get(b, 0) + 1
+            if ent.get('ovf'):
+                c['ovf_tp'].append(int(ent.get('tp') or 0))
+        else:
+            c['error'] += 1
+    if not by:
+        log('PACER report: no Broward / Palm Beach / other non-Miami-Dade leads in the lead files')
+    for cty, c in sorted(by.items()):
+        done = c['clear_fresh'] + c['clear_stale'] + c['active'] + c['unverifiable']
+        log('PACER report %s: %d open lead(s)%s; %d never searched%s' % (
+            cty, c['leads'], (' (%d with a phone)' % c['phoned']) if phoned is not None else '',
+            c['unchecked'], (' (%d with a phone)' % c['unchecked_phoned']) if phoned is not None else ''))
+        log('  searched %d: clear %d released now%s + %d expired (older than the gate\'s max age, held again), '
+            'active %d, unverifiable %d, error %d; $%.2f / %d page(s) recorded'
+            % (done, c['clear_fresh'], (' (%d with a phone)' % c['clear_fresh_phoned']) if phoned is not None else '',
+               c['clear_stale'], c['active'], c['unverifiable'], c['error'], c['cost'], c['pages']))
+        for b, n in sorted(c['why'].items(), key=lambda kv: -kv[1]):
+            log('    unverifiable because %-40s %4d' % (b, n))
+        if c['ovf_tp']:
+            known = [t for t in c['ovf_tp'] if t > 0]
+            log('    common names with a recorded depth: %d of %d; reading every page of those would cost ~$%.2f'
+                % (len(known), len(c['ovf_tp']), sum(known) * PAGE_USD))
+    tot_fresh = sum(c['clear_fresh'] for c in by.values())
+    tot_unchecked = sum((c['unchecked_phoned'] if phoned is not None else c['unchecked']) for c in by.values())
+    log('PACER report: keeping %d released lead(s) released costs ~$%.2f a month (one page per lead every %d days, '
+        'gate max age %g days); first search of the %d never-searched %slead(s) ~$%.2f (one page per owner name)'
+        % (tot_fresh, tot_fresh * PAGE_USD * 30.0 / RECHECK['clear'], RECHECK['clear'],
+           stay_gate.pacer_max_age_days(), tot_unchecked, 'phoned ' if phoned is not None else '',
+           tot_unchecked * PAGE_USD))
+    return by
+
+
 def _log_status(quarter, idx, today, env):
     import paid_reads
     qs, ms = quarter.status(), paid_reads.status()
@@ -1933,6 +2060,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
                          "releases nothing at the send gate")
     ap.add_argument('--plan', action='store_true', help='no network: print what would be searched and its cost')
     ap.add_argument('--status', action='store_true', help='print quarter / month spend and the pre-send allowance')
+    ap.add_argument('--report', action='store_true',
+                    help='no network, no spend: per county, how many leads PACER released, why the rest are held, '
+                         'and what keeping them released costs (counts only, no names)')
     ap.add_argument('--max-pages', type=int, default=1,
                     help='pages read per name before calling it a common name (unverifiable)')
     ap.add_argument('--lookback-years', type=int, default=LOOKBACK_YEARS)
@@ -1963,7 +2093,16 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     leads, skipped = load_leads(here)
     cpath = cache_path(here, env_name)
     cache, cprob = load_cache_strict(cpath)
-    queue = plan(leads, cache or {}, today, now_ts, None) if not cprob else []
+    if a.report:
+        if cprob:
+            log('PACER report: %s' % cprob)
+            return 3
+        phoned, pwhy = phoned_keys(str(env.get('PACER_TWIN_PATH') or '') or None)
+        log('PACER report: phones from %s' % pwhy)
+        report(leads, cache or {}, today, now_ts, phoned)
+        _log_status(quarter, idx, today, env)
+        return 0
+    queue = plan(leads, cache or {}, today, now_ts, None, a.max_pages) if not cprob else []
     if bulk == 'off':
         queue = []
     elif bulk == 'md-near':
