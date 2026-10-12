@@ -405,6 +405,23 @@ check('--report: per-county counts and reasons', 'never searched' in out and 'cl
       and '~$0.40' in out, out)
 check('--report: no owner name printed', 'REPORTNAME' not in out, out)
 
+# ---- 4c an earlier clear the current owner reading refuses is withdrawn (free, no credentials)
+wr_leads = [{'county': 'BROWARD', 'case': 'CACE-99-000830', 'owners': 'TESTPERSON QUINCY &', 'auction': mdy(30)},
+            {'county': 'BROWARD', 'case': 'CACE-99-000831', 'owners': 'TESTPERSON RALPH', 'auction': mdy(30)}]
+d = work({'broward_leads.json': wr_leads})
+(d / 'pacer_stay_cache.json').write_text(json.dumps({
+    'CACE-99-000830': dict(base, verdict='clear', why='no open bankruptcy'),
+    'CACE-99-000831': dict(base, verdict='clear', why='no open bankruptcy')}), encoding='utf-8')
+h = FakeHTTP()
+rc, out = run(d, h, e={}, raw=True)
+wc = json.loads((d / 'pacer_stay_cache.json').read_text())
+check('a clear for an owner that now reads as not searchable (ends in "&") is withdrawn -> unverifiable, '
+      'with no credentials and no HTTP', h.calls == [] and wc['CACE-99-000830']['verdict'] == 'unverifiable'
+      and 'withdrawn' in wc['CACE-99-000830']['why'] and 'withdrawn' in out, (out, wc))
+check('... a clear for a searchable owner is left alone', wc['CACE-99-000831']['verdict'] == 'clear', wc)
+rc, out = run(d, FakeHTTP(), e={}, args=['--report'], raw=True)
+check('--report never rewrites the cache', json.loads((d / 'pacer_stay_cache.json').read_text()) == wc)
+
 # ------------------------------------------------------------------------------------ 5 cost
 print('-- 5 cost accounting')
 reset_ledgers()

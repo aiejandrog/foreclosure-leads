@@ -1316,6 +1316,24 @@ def plan(leads, cache, today, now_ts, only_case=None, max_pages=None):
     return [(ld, tier, near) for _, ld, tier, near in items]
 
 
+def withdraw_reparsed(leads, cache):
+    """Clears whose lead the CURRENT owner reading refuses -> unverifiable, in place. Free, no search.
+    A stricter parse_owner (an owner ending in '&', an unnamed ET AL) means the search behind an older
+    clear did not cover every owner, and a refused lead is also left out of the new-filer match, so
+    that clear must not keep releasing the lead until its recheck. -> keys withdrawn."""
+    out = []
+    for key, ld in leads.items():
+        ent = cache.get(key)
+        if not isinstance(ent, dict) or ent.get('verdict') != 'clear':
+            continue
+        _, problem, _ = lead_subjects(ld.get('owners') or [])
+        if problem:
+            ent.update(verdict='unverifiable', a=False, cases=[],
+                       why=('earlier clear withdrawn: the owner now reads as not searchable (%s)' % problem)[:200])
+            out.append(key)
+    return out
+
+
 def cache_path(here, env_name):
     return os.path.join(here, QA_CACHE_NAME if env_name == 'qa' else CACHE_NAME)
 
@@ -2157,6 +2175,18 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         report(leads, cache or {}, today, now_ts, phoned)
         _log_status(quarter, idx, today, env)
         return 0
+    if cache and not cprob and not a.plan:
+        import paid_reads
+        with paid_reads._FileLock(cpath) as lk:
+            fresh, fprob = load_cache_strict(cpath) if lk.held else (None, 'locked')
+            gone = withdraw_reparsed(leads, fresh) if not fprob else []
+            if gone:
+                save_cache(cpath, fresh)
+                cache = fresh
+        if fprob:
+            log('PACER: could not re-check cached clears against the owner reading (%s)' % fprob)
+        elif gone:
+            log('PACER: %d earlier clear(s) withdrawn -- the owner now reads as not searchable (held)' % len(gone))
     queue = plan(leads, cache or {}, today, now_ts, None, a.max_pages) if not cprob else []
     if bulk == 'off':
         queue = []
