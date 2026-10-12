@@ -50,6 +50,8 @@ _LEASE = re.compile(r'^\[(.*?)\] (?:refresh-dealflow|run-leads)\.bat did not sta
 # run-leads.bat, the manual scrape + publish: "==== run <date> <time> ====" ... "==== done ====",
 # with no ENDED line, so its outcome is read from the lines it prints.
 _MANUAL = re.compile(r'^=+ run (.*?) =+\s*$')
+# The scrape's per-county row counts, as foreclosure_leads.py prints them ("BROWARD: 319 rows").
+_COUNTY = re.compile(r'\b(MIAMI-DADE|BROWARD|PALM BEACH):\s*(\d+)\s*row')
 _MANUAL_DONE = re.compile(r'^=+ done =+\s*$')
 # cmd's %date% %time% on this laptop: "Mon 10/12/2026 12:21:05.12" (en-US). ISO is accepted too.
 _US = re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})\D+(\d{1,2}):(\d{2})')
@@ -79,6 +81,9 @@ def runs(log_text):
     manual = None                     # the open run-leads.bat run, if the last banner was one
     for line in log_text.splitlines():
         line = line.strip()
+        m = _COUNTY.search(line)
+        if m and out and (out[-1]['rc'] is None or out[-1] is manual):
+            out[-1].setdefault('rows', {})[m.group(1)] = int(m.group(2))
         m = _MANUAL.match(line)
         if m:
             manual = {'at': _when(m.group(1)), 'rc': None, 'end': None}
@@ -117,6 +122,7 @@ def runs(log_text):
             out.append({'at': t, 'rc': int(m.group(2)), 'end': t})
     for r in out:
         r.pop('mirror', None)
+        r.setdefault('rows', {})
         r['why'] = WHY.get(r['rc'], 'exit %s' % r['rc']) if r['rc'] is not None else None
     return out
 
@@ -154,14 +160,18 @@ def summary(log_path=LOG, now=None):
     # The last run that got past the scrape. rc None is the run baking this very board: a run that
     # fails its scrape or its network check goes straight to :end and never builds one.
     good = None
+    rows = {}
     for r in reversed(rs[:-1] + [last] if rs else []):
         # An earlier run with no outcome was killed or lost its lease: not known to have scraped.
         if r['rc'] is None and r is not last:
             continue
         if r['at'] and r['rc'] not in FAILED and r['rc'] != -1:
-            good = r['at']
+            good, rows = r['at'], r.get('rows') or {}
             break
-    return {'baked': now.strftime('%Y-%m-%dT%H:%M'), 'good': good,
+    # Rows scraped per county by that run, in a fixed order (counts only).
+    rows = [[n, rows[k]] for k, n in (('BROWARD', 'Broward'), ('MIAMI-DADE', 'Miami'),
+                                      ('PALM BEACH', 'Palm Beach')) if k in rows]
+    return {'baked': now.strftime('%Y-%m-%dT%H:%M'), 'good': good, 'rows': rows,
             'last': ({k: last[k] for k in ('at', 'rc', 'why')} if last else None),
             'earlier': earlier}
 
@@ -192,6 +202,7 @@ if(L && (L.rc===1||L.rc===3||L.rc===9||L.rc===10||L.rc===-1)){
 } else {
   lvl='warn'; msg='No refresh record on the machine that built this board';
 }
+if(lvl!=='bad' && S.rows && S.rows.length) msg+=' &middot; '+S.rows.map(function(x){return x[0]+' '+x[1];}).join(' &middot; ');
 if(S.earlier && lvl!=='bad') msg+=' &middot; '+hm(S.earlier.at).replace(/^today /,'')+' run failed ('+S.earlier.why+'), recovered';
 var c={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF']}[lvl];
 el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
