@@ -116,7 +116,7 @@ def search_docs(sess, search_name):
         j = json.loads(grid)
     except Exception:
         return None
-    data = j.get('data', [])
+    data = j.get('data') or []
     # The grid is read as ONE page of 400. A name with more records than that is cut short (the oldest or
     # newest 400, whichever the grid sorts to), and a release or the real mortgage may be on the page not
     # read: the chain must say so instead of reading as complete (equity_state.coverage_documented).
@@ -826,7 +826,11 @@ def _needs_relink(h):
     if bool(h.get('liens')) and int(h.get('pv') or 1) < PAIRING_VERSION:
         return True
     # a successful chain from before other_liens (2026-10-12) never recorded its non-mortgage liens
-    return h.get('conf') in ('ok', 'low', 'unpriced') and 'other_v' not in h
+    if h.get('conf') in ('ok', 'low', 'unpriced') and 'other_v' not in h:
+        return True
+    # a chain read as 'ok' from a name search that hit the 400-row grid page was cut short: re-trace so
+    # mark_truncated can downgrade it (a truncated re-trace becomes low, so this cannot loop)
+    return h.get('conf') == 'ok' and int(h.get('nrec') or 0) >= 400
 
 
 def _relink_rank(h):

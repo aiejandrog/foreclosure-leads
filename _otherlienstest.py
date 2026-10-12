@@ -285,5 +285,8 @@ with tempfile.TemporaryDirectory() as td:
         'CACE' not in out and 'INTERNAL' not in out and '18500' not in out, out)
     chk('CLI counts the lead with no chain', 'never searched, or the search failed)  1' in out, out)
 
+import broward_liens as _BL
+chk('14g: cached ok chain with 400 recs is queued for re-trace', _BL._needs_relink({'conf':'ok','nrec':400,'pv':_BL.PAIRING_VERSION,'other_v':1,'liens':[]}))
+chk('14g: cached ok chain with 120 recs is not', not _BL._needs_relink({'conf':'ok','nrec':120,'pv':_BL.PAIRING_VERSION,'other_v':1,'liens':[]}))
 print('\n%d failed' % len(FAIL) if FAIL else '\nALL PASS')
 sys.exit(1 if FAIL else 0)
