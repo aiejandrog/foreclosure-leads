@@ -15,12 +15,11 @@ WHAT THIS PINS
      never a FACT, a search without the subject folio is not parcel-found, an assignment is not a
      loan, a satisfaction that names the loan's book/page releases it.
 
-KNOWN analyze() BEHAVIOUR, printed as 'note' and not asserted (equity is frozen until the evidence
-is reviewed with Alex, so these are reported, not changed):
-  * a lender's partial release of ANOTHER parcel marks this parcel's loan SATISFIED ('lender chain')
-  * a modification that carries an amount is counted as a second open loan
-  * a namesake's mortgage in the same subdivision is counted as this owner's debt
-  * a priced chain on a capped (500+) search is still 'priced'
+  3. The four analyze() defects found 2026-10-12, fixed after Alex's go the same day:
+     * a lender's release of ANOTHER parcel or ANOTHER book/page never frees this parcel's loan
+     * a priced modification amends the loan it modifies; it is a second loan only when no loan is found
+     * a loan placed only by subdivision whose borrower is clearly a namesake is not this owner's debt
+     * a priced chain on a capped (500+) search is UNVERIFIED ('none'), never 'priced'
 """
 import os
 import sys
@@ -102,8 +101,8 @@ c, cv, st = run([deed(), folio_loan] + filler(499))
 rec('501 records is marked capped', c['capped'] is True and c['nrec'] == 501, c['nrec'])
 rec('a capped search is never fact_supported, even folio-anchored', cv['search'] == 'capped'
     and not cv['fact_supported'], cv)
-if st in ES.FACT:
-    note('analyze()+state_of() still call a capped search %r (the 500-record page can hide a loan)' % st)
+rec('a priced chain on a capped search is not a FACT (the newest loans are past the cap)',
+    st not in ES.FACT and st == 'none', st)
 same_day = [r('DEED - DEE', '01/02/2015', '0130000008%03d' % i, sd='OTHER SUB', b='2', p=str(i))
             for i in range(500)] + [loan()]
 c, cv, st = run(same_day)
@@ -118,8 +117,25 @@ namesake = r('MORTGAGE - MOR', '03/05/2019', '', b='31000', p='5', amt=90000, p2
 c, cv, st = run([deed(), folio_loan, namesake])
 rec('a same-subdivision mortgage with no folio is flagged subdivision_only_mortgage',
     'subdivision_only_mortgage' in cv['gaps'] and not cv['fact_supported'], cv)
-if any(l['amt'] == 90000 and l['st'] == 'OPEN' for l in c['liens']):
-    note('analyze() counts a same-subdivision namesake mortgage as open debt on this parcel')
+rec('with the owner unknown, a same-subdivision loan still counts (too much debt, never too little)',
+    any(l['amt'] == 90000 and l['st'] == 'OPEN' for l in c['liens']), mtg(c))
+OWNER = 'OWNER TESTA'          # surname TESTA, given OWNER
+mario = dict(namesake, firsT_PARTY='TESTA MARIO')
+c = R.analyze([deed(), folio_loan, mario], FOL, 150000, owner=OWNER)
+rec("a subdivision-only loan to the owner's surname with another given name is a namesake's",
+    not any(l['amt'] == 90000 for l in c['liens']) and c['mtg_namesake_skipped'] == 1, (mtg(c), c['mtg_namesake_skipped']))
+for p1 in ('TESTA O', 'TESTA', 'TESTA OWNER M', 'OWNER TESTA & MARIO'):
+    c = R.analyze([deed(), folio_loan, dict(namesake, firsT_PARTY=p1)], FOL, 150000, owner=OWNER)
+    rec('a borrower that may be the owner (%s) still counts' % p1,
+        any(l['amt'] == 90000 and l['st'] == 'OPEN' for l in c['liens']), mtg(c))
+c = R.analyze([deed(), folio_loan, dict(namesake, firsT_PARTY='TESTA MARIO', foliO_NUMBER=FOL)], FOL, 150000,
+              owner=OWNER)
+rec('a namesake-looking loan indexed to the subject folio still counts',
+    any(l['amt'] == 90000 for l in c['liens']), mtg(c))
+spouse = r('DEED - DEE', '01/02/2015', FOL, b='29000', p='100', p2='TESTA OWNER & MARIA')
+c = R.analyze([spouse, folio_loan, dict(namesake, firsT_PARTY='TESTA MARIA')], FOL, 150000, owner=OWNER)
+rec("a spouse named on the parcel's deed is household, not a namesake",
+    any(l['amt'] == 90000 for l in c['liens']), mtg(c))
 
 # ---------------------------------------------------------------- 3. partial release for another parcel
 print('PARTIAL RELEASE')
@@ -128,12 +144,20 @@ partial = r('PARTIAL RELEASE - PRL', '06/01/2016', OTHER, b='30000', p='7', p1='
 c, cv, st = run([deed(), folio_loan, partial])
 rec('a release that names another book/page never counts as a book/page release',
     not any(l.get('sat_by') == 'book/page' for l in c['liens']), mtg(c))
-rec('a loan released only by inference is flagged release_inferred',
-    'release_inferred' in cv['gaps'] or all(l['st'] == 'OPEN' for l in c['liens']), cv)
-rec('...and is never fact_supported', not cv['fact_supported'], cv)
-if any(l['st'] == 'SATISFIED' for l in c['liens']):
-    note("analyze() marks this parcel's loan SATISFIED from a lender's release of parcel %s "
-         "(sat_by %r): debt understated" % (OTHER, c['liens'][0].get('sat_by')))
+rec("a lender's partial release of another parcel leaves this parcel's loan OPEN",
+    all(l['st'] == 'OPEN' for l in c['liens']) and c['open_count'] == 1, mtg(c))
+for name, rel in (('a full release indexed to another folio',
+                   r('SATISFACTION - SAT', '06/01/2016', OTHER, b='30000', p='8', p2='ALPHA BANK NA')),
+                  ('a release naming another book/page',
+                   r('SATISFACTION - SAT', '06/01/2016', '', b='30000', p='9', p2='ALPHA BANK NA',
+                     ob='27000', op='5')),
+                  ('a partial release with no folio',
+                   r('PARTIAL RELEASE - PRL', '06/01/2016', '', b='30000', p='10', p2='ALPHA BANK NA'))):
+    c = run([deed(), folio_loan, rel])[0]
+    rec('%s does not free the loan' % name, all(l['st'] == 'OPEN' for l in c['liens']), mtg(c))
+c = run([deed(), folio_loan, r('SATISFACTION - SAT', '06/01/2016', '', b='30000', p='11', p2='ALPHA BANK NA')])[0]
+rec('a lender release with no book/page and no folio still frees it by inference (unchanged)',
+    c['liens'][0]['st'] == 'SATISFIED' and 'release_inferred' in LC.coverage(c)['gaps'], mtg(c))
 named = r('SATISFACTION - SAT', '06/01/2020', '', b='32000', p='1', p1='ALPHA BANK NA',
           p2='OWNER TESTA', ob='29000', op='101')
 c, cv, st = run([deed(), folio_loan, named])
@@ -150,11 +174,22 @@ rec('an assignment is not a second loan', [l['amt'] for l in c['liens']] == [200
 rec('...and the chain stays fact_supported', cv['fact_supported'], cv)
 modif = r('MORTGAGE MODIFICATION - MMO', '01/02/2018', FOL, b='30500', p='3', amt=180000, p2='ALPHA BANK NA')
 c, cv, st = run([deed(), folio_loan, modif])
-rec('an open modification row is flagged modification_as_loan', 'modification_as_loan' in cv['gaps']
-    and not cv['fact_supported'], cv)
-if sum(l['amt'] for l in c['liens'] if l['st'] == 'OPEN') > 200000:
-    note('analyze() adds a priced modification as a second open loan: %s'
-         % [l['amt'] for l in c['liens'] if l['st'] == 'OPEN'])
+rec('a priced modification amends its loan, never a second one', [l['amt'] for l in c['liens']] == [200000]
+    and c['liens'][0].get('amended_by') == ['30500/3'], mtg(c))
+up = dict(modif, consideratioN_1=230000)
+c = run([deed(), folio_loan, up])[0]
+rec('...and a larger modification raises that loan to its figure', [l['amt'] for l in c['liens']] == [230000], mtg(c))
+named_mod = dict(modif, seconD_PARTY='OMEGA SERVICING', oriG_REC_BOOK='29000', oriG_REC_PAGE='0101')
+c = run([deed(), folio_loan, named_mod])[0]
+rec('a modification naming the loan book/page attaches whoever files it', [l['amt'] for l in c['liens']] == [200000], mtg(c))
+paid = r('SATISFACTION - SAT', '06/01/2017', '', b='30450', p='1', p2='ALPHA BANK NA', ob='29000', op='101')
+c = run([deed(), folio_loan, paid, modif])[0]
+rec('a later modification from the lender of a paid-off loan is not folded into it', len(c['liens']) == 2
+    and [l['st'] for l in c['liens']] == ['SATISFIED', 'OPEN'], mtg(c))
+lone = dict(modif, seconD_PARTY='OMEGA SERVICING')
+c, cv, st = run([deed(), folio_loan, lone])
+rec('a modification with no loan to attach to stays its own row and is flagged', len(c['liens']) == 2
+    and 'modification_as_loan' in cv['gaps'] and not cv['fact_supported'], (mtg(c), cv))
 zero_mod = dict(modif, consideratioN_1=0)
 c, cv, st = run([deed(), folio_loan, zero_mod])
 rec('a $0 modification is not counted at all', [l['amt'] for l in c['liens']] == [200000]
@@ -269,7 +304,7 @@ print('SUMMARY')
 chains = {'A': run([deed(), folio_loan])[0], 'B': run([deed(), folio_loan] + filler(499))[0],
           'C': run([])[0]}
 s = LC.summarize(chains)
-rec('summarize counts board FACT vs supported', s['chains'] == 3 and s['board_fact'] == 2
+rec('summarize counts board FACT vs supported', s['chains'] == 3 and s['board_fact'] == 1
     and s['fact_supported'] == 1, s)
 rec('summarize carries no case numbers in its counts', 'A' not in str(s['gaps']) + str(s['search']), s)
 
