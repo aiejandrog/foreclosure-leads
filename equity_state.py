@@ -69,9 +69,18 @@ LENDER_OWN_CASE_WHY = ('UNVERIFIED — a lender is foreclosing on this parcel, b
                        'found no open mortgage; the chain missed it')
 
 
-def low_capped(chain):
+def county_chain(chain, lead=None, county=None):
+    """A Broward / Palm Beach chain (broward_liens.analyze shape). Chains cached before the analyzer
+    wrote `deed_conf` are told apart by the lead's county; Miami chains are never one."""
+    if isinstance(chain, dict) and 'deed_conf' in chain:
+        return True
+    c = str(county or (lead or {}).get('county') or '').upper().replace(' ', '')
+    return c.startswith(('BROW', 'PALMB', 'PB'))
+
+
+def low_capped(chain, lead=None, county=None):
     """True when the common-name cap turned this chain from a priced FACT into a CEILING."""
-    if not isinstance(chain, dict) or 'deed_conf' not in chain:
+    if not isinstance(chain, dict) or not county_chain(chain, lead, county):
         return False
     liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
     return bool(liens and str(chain.get('conf') or '').lower() == 'low'
@@ -152,7 +161,7 @@ def _state_of(chain, lead=None):
     # still owed, so a low chain's total can be wrong in EITHER direction. It may show what was found
     # (the rows, eqlow, the CEILING) and never stands as a priced FACT. Miami chains (no deed_conf key,
     # anchored by subdivision) keep the asymmetry described in state_of; that is a separate decision.
-    if liens and conf == 'low' and 'deed_conf' in chain:
+    if liens and conf == 'low' and county_chain(chain, lead):
         return 'unpriced'
     if liens:
         # priced ONLY when every surviving instrument carries a figure. Any gap and the total is
@@ -187,7 +196,7 @@ def apply(lead, chain):
     if st == 'none' and lender_foreclosure(lead) and _state_of(chain) == 'clear':
         lead['eqstate_why'] = LENDER_OWN_CASE_WHY
     if (st == 'unpriced' and isinstance(chain, dict) and str(chain.get('conf') or '').lower() == 'low'
-            and 'deed_conf' in chain and (chain.get('liens') or [])
+            and county_chain(chain, lead) and (chain.get('liens') or [])
             and all(l.get('amt') for l in chain['liens'] if isinstance(l, dict))
             and not (chain.get('mtg_open_unpriced') or 0) and not (chain.get('other_open_unpriced') or 0)):
         lead['eqstate_why'] = LOW_CEILING_WHY

@@ -208,7 +208,7 @@ def summarize(chains, leads=None, county=None):
         for k in seen:
             kinds[k] += 1
         by_state[cv['state']] += 1
-        if ES.low_capped(ch):
+        if ES.low_capped(ch, (leads or {}).get(case), county):
             fact_low += 1
         by_search[cv['search']] += 1
         for g in cv['gaps']:

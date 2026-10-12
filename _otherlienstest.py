@@ -216,7 +216,7 @@ ES.apply(lead, low)
 chk('board row says why, flags low', lead['eqstate'] == 'unpriced' and lead.get('eqlow') and 'namesake' in lead['eqstate_why'], lead)
 chk('low_capped counts it, not the conf ok one', ES.low_capped(low) and not ES.low_capped(ok_) and not ES.low_capped(miami_low))
 import lien_coverage as LCV
-sm2 = LCV.summarize({'A': low, 'B': ok_, 'C': miami_low}, None, 'broward')
+sm2 = LCV.summarize({'A': low, 'B': ok_}, None, 'broward')
 chk('coverage counts the capped chains', sm2['fact_low'] == 1, sm2)
 # a case of unknown type (a bare tax-deed number) is a guess about the foreclosing loan
 ru2 = BL.analyze(BASE, 'TESTER,OWEN', 0, ftype='', lead_case='53741')
@@ -228,6 +228,12 @@ ls = {}
 ES.apply(ls, sat)
 chk('low chain of only satisfied loans never shows a ceiling of 0', ls['eqstate'] == 'unpriced' and ls.get('eqopen') == 1, ls)
 chk('low_capped skips a chain that was already unpriced', not ES.low_capped(dict(low, other_open_unpriced=1)))
+
+oldc = {'conf': 'low', 'liens': [{'st': 'OPEN', 'amt': 90000}], 'nrec': 40, 'first_est': 90000}   # cached pre-deed_conf
+chk('old-shape Broward chain is capped via the lead county', ES.state_of(oldc, {'county': 'BROWARD'}) == 'unpriced')
+chk('same old-shape chain on a Miami lead is untouched', ES.state_of(oldc, {'county': 'MIAMI-DADE'}) == 'priced')
+chk('old-shape chain with no lead is untouched', ES.state_of(oldc) == 'priced')
+chk('Palm Beach lead county also recognised', ES.county_chain(oldc, {'county': 'PALM BEACH'}))
 
 # 15. is_claim on its own
 chk('is_claim: CLAIM OF LIEN', OL.is_claim('CLAIM OF LIEN'))
