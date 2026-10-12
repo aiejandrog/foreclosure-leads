@@ -96,11 +96,11 @@ VM_SALE = {
 # detached so it reads as a note, not a pitch — that softness is what earns the callback. Rendered as
 # a muted coaching line above the script (like the NEPQ beat-purpose lines), NOT spoken aloud.
 VM_TONE_EN = ("HOW TO SAY IT — low and unhurried, like a neighbor leaving a note, not a salesman. "
-              "Pause on every '...'. Sound a little detached, almost unsure you've even got the right "
+              "Pause at every period. Sound a little detached, almost unsure you've even got the right "
               "person — that softness is what earns the callback. Warm, never urgent, and slow down "
               "on the phone number so they can write it.")
 VM_TONE_ES = ("CÓMO DECIRLO — bajo y sin prisa, como un vecino que deja un recado, no un vendedor. Haga "
-              "pausa en cada '...'. Suene un poco desapegado, casi como si no estuviera seguro de tener "
+              "pausa en cada punto. Suene un poco desapegado, casi como si no estuviera seguro de tener "
               "a la persona correcta — esa suavidad es la que gana la llamada de vuelta. Cálido, nunca "
               "con urgencia, y despacio con el número de teléfono para que lo puedan anotar.")
 
@@ -947,7 +947,7 @@ def _flow():
         {'id': 'vm', 'k': 'VOICEMAIL — read it live',
          'en': VOICEMAIL_EN, 'es': VOICEMAIL_ES,
          'tone': VM_TONE_EN,
-         'listen': 'Hang up after "Thanks." Do not ramble.',
+         'listen': 'Hang up after "Thank you." Do not ramble.',
          'br': [['Left it', 'end:voicemail']],
          'ret': 'vm'},
     ]
@@ -2779,8 +2779,8 @@ BALLOON_SCRIPT = {
         {'t': 'Who are you', 'w': 'Identity, straight.',
          's': "{sender}, Biscayne Solutions Group, Miami. We place DSCR and hard-equity loans on investment property. Your note on {st1} is public record; that's how I found you."},
     ],
-    # Voicemail for the investor lane. The homeowner one ("maps your free backup... a day is
-    # everything") is a rescue message and reads absurd left for an LLC manager about a rate.
+    # Voicemail for the investor lane. The homeowner one (VOICEMAIL_EN, a court-sale message)
+    # is a homeowner message and reads absurd left for an LLC manager about a rate.
     'vm': {
         'en': "Hi{first}, this is {sender} with Biscayne Solutions Group, about the hard-money note on {st1}. If you're paying twelve on it, I can likely get you seven. Fifteen minutes to price it, no commitment, and if I can't beat it I'll say so. {phone}. Thanks.",
         'es': "Hola{first}, le habla {sender} de Biscayne Solutions Group, por el préstamo privado sobre {st1}. Si está pagando doce, probablemente le consigo siete. Quince minutos para cotizarlo, sin compromiso, y si no lo mejoro se lo digo. {phone}. Gracias.",
@@ -3334,6 +3334,7 @@ function nowTS(){return new Date().toLocaleString();}
    "this is Biscayne Solutions Group with Biscayne Solutions Group", and the legacy auto-injected "Jose"
    must not win over the real identity. Empty saved values must never clobber the default. */
 var SENDER = {name:'Alejandro Gonzalez', phone:'(786) 631-1823', bsigner:__BSIGNER__};   /* bsigner: sender.json balloon_signer, investor lane only */
+var _SENDER_DEF = {name: SENDER.name, phone: SENDER.phone};   /* before any saved override (_vmVoiceWrong) */
 try{
   var _sv = JSON.parse(localStorage.getItem('fcSender')||'{}');
   if(_sv.name === 'Jose') delete _sv.name;
@@ -3341,10 +3342,25 @@ try{
   ['name','phone'].forEach(function(k){ if(_sv[k]) SENDER[k] = _sv[k]; });
 }catch(e){}
 
-/* True when this is a named seat page whose caller is not the name the scripts will speak. */
+/* True when this is a named seat page whose caller is not the name the scripts will speak, OR whose
+   callback number is still the default owner's while the seat is someone else. The board's
+   saveSender() saves the whole object seeded from SENDER_DEFAULTS, so a phone that typed only a
+   name still carries Alejandro's number. */
 function _vmVoiceWrong(){
   if(typeof SEAT === 'undefined' || !SEAT || !SEAT.w) return false;
-  return String(SENDER.name||'').toLowerCase().indexOf(String(SEAT.w).toLowerCase()) < 0;
+  var w = String(SEAT.w).toLowerCase();
+  if(String(SENDER.name||'').toLowerCase().indexOf(w) < 0) return true;
+  var dig = function(x){ return String(x||'').replace(/\D/g,''); };
+  var defIsSeat = String(_SENDER_DEF.name||'').toLowerCase().indexOf(w) >= 0;
+  return !defIsSeat && (!dig(SENDER.phone) || dig(SENDER.phone) === dig(_SENDER_DEF.phone));
+}
+/* The warning line itself, shown above the voicemail on BOTH the full sheet and the guided vm step. */
+function _vmWarnHtml(){
+  if(!_vmVoiceWrong()) return '';
+  return '<div class="mut" style="font-size:12px;margin:2px 0 7px;color:#ff8a80">'
+       + '&#9888; This voicemail says ' + esc(SENDER.name) + ' / ' + esc(SENDER.phone || 'no number')
+       + ' but this page is ' + esc(SEAT.w) + '&rsquo;s. Set your own name and callback'
+       + ' number on the board (Sender) on this phone first.</div>';
 }
 
 /* Fill a script template. Global replace — String.replace with a string argument only swaps the
@@ -3390,10 +3406,10 @@ function _vmSale(r, lg){
   var V = (typeof SCRIPT_ALL !== 'undefined' && SCRIPT_ALL && SCRIPT_ALL.vmsale) ? SCRIPT_ALL.vmsale[lg] : null;
   if(!V) return '';
   var d = (r && typeof liveDays === 'function') ? liveDays(r) : null;
-  if(typeof d !== 'number' || d < 0) return V.none;
-  if(d === 0) return V.today;
-  if(d === 1) return V.tomorrow;
-  return V.days.split('{n}').join(String(d));
+  var t = (typeof d !== 'number' || d < 0) ? V.none : (d === 0 ? V.today : (d === 1 ? V.tomorrow : V.days));
+  /* No street on the row: drop the clause, or it reads "on your property at your property". */
+  if(!(((r && r.a) || '').split(',')[0].trim())) t = t.split(' at {st1}').join('').split(' en {st1}').join('');
+  return t.split('{n}').join(String(d));
 }
 function fillScript(t, r){
   var first = firstName(r);
@@ -7179,6 +7195,7 @@ function renderGuided(r, S, named, warm){
     else if(!named){ en=s.aen||en; esl=s.aes||esl; }
   }
   b+='<div class="ltag">'+esc(s.k||s.id)+'</div>';
+  if(s.id==='vm') b+=_vmWarnHtml();
   if(s.id==='greet' && named && !warm){ var sn=secondName(r); if(sn) b+='<div class="noes">Co-owner on the card: <b>'+esc(sn)+'</b> &mdash; if that is who picked up, use their name.</div>'; }
   if(s.rail){
     var rl=(es&&s.rail.es)?s.rail.es:s.rail.en;
@@ -7343,10 +7360,7 @@ function renderSheet(r){
         the page-level VMEN/VMES and stays exactly what it was for every other row */
      /* WRONG VOICE GUARD (2026-10-12): an unset phone falls back to Alejandro's name and number, so
         on Carlos's page the voicemail would leave Alejandro's callback. Say so above the words. */
-     + (_vmVoiceWrong() ? '<div class="mut" style="font-size:12px;margin:2px 0 7px;color:#ff8a80">'
-                          + '&#9888; This voicemail says ' + esc(SENDER.name) + ' / ' + esc(SENDER.phone)
-                          + ' but this page is ' + esc(SEAT.w) + '&rsquo;s. Set your name and callback'
-                          + ' number on the board (Sender) on this phone first.</div>' : '')
+     + _vmWarnHtml()
      + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
 
   // BUSY / CALL ME BACK (NEPQ Calendar Commitment) — the most common early bail. Flip status: YOUR

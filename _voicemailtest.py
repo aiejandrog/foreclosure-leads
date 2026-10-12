@@ -60,12 +60,14 @@ rec('miss set still includes voicemail', "o.k==='voicemail'" in SRC)
 if subprocess.run(['node', '--version'], capture_output=True).returncode != 0:
     rec('node available', True, 'node missing; JS assertions skipped')
 else:
-    FNS = ''.join(grab_fn(n) for n in ('_vmSale', 'fillScript', 'liveDays', '_vmVoiceWrong'))
+    FNS = ''.join(grab_fn(n) for n in ('_vmSale', 'fillScript', 'liveDays', '_vmVoiceWrong', '_vmWarnHtml'))
     script = {'vmsale': CM.VM_SALE}
     js = ('var SCRIPT_ALL=' + json.dumps(script, ensure_ascii=False) + ';\n'
           'var VMEN=' + json.dumps(CM.VOICEMAIL_EN, ensure_ascii=False) + ', VMES='
           + json.dumps(CM.VOICEMAIL_ES, ensure_ascii=False) + ';\n'
           "var SENDER={name:'Alejandro Gonzalez', phone:'(786) 631-1823', bsigner:''}, SEAT=null;\n"
+          "var _SENDER_DEF={name:SENDER.name, phone:SENDER.phone};\n"
+          "function esc(x){ return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }\n"
           "function firstName(r){ return (r&&r.f)||''; }\n"
           "function isBalloon(r){ return r.st==='BAL'; }\n"
           + FNS + r"""
@@ -86,7 +88,11 @@ out.other_en = fillScript('Hi {first}, about {st1}.', row({x: md(5), d: 5}));
 out.wrong0 = _vmVoiceWrong();
 SEAT = {n:2, i:0, w:'Alejandro'}; out.wrongA = _vmVoiceWrong();
 SEAT = {n:2, i:1, w:'Carlos'}; out.wrongC = _vmVoiceWrong();
-SENDER.name = 'Carlos Gonzalez'; out.wrongC2 = _vmVoiceWrong();
+SENDER.name = 'Carlos Gonzalez'; out.wrongCdefphone = _vmVoiceWrong();
+out.warnhtml = _vmWarnHtml();
+SENDER.phone = '(305) 555-0100'; out.wrongC2 = _vmVoiceWrong(); out.warnnone = _vmWarnHtml();
+SEAT = {n:2, i:0, w:'Alejandro'}; SENDER.name='Alejandro Gonzalez'; SENDER.phone='(786) 631-1823'; out.wrongA2 = _vmVoiceWrong();
+out.noaddr_es = fillScript(VMES, {f:'', x: md(5), d: 5});
 console.log(JSON.stringify(out));
 """)
     fd, path = tempfile.mkstemp(suffix='.js')
@@ -119,13 +125,20 @@ console.log(JSON.stringify(out));
     rec('no sale date ES', 'un caso judicial presentado sobre su propiedad en 123 NW 5 ST.' in o.get('lp_es', ''), o.get('lp_es'))
     rec('passed sale reads as case filed', 'court case filed' in o.get('past_en', ''), o.get('past_en'))
     rec('no name, no address still reads', o.get('noaddr_en', '').startswith('Hi, this is ')
-        and 'at your property in about 5 days' in o.get('noaddr_en', ''), o.get('noaddr_en'))
+        and 'scheduled on your property in about 5 days.' in o.get('noaddr_en', ''), o.get('noaddr_en'))
+    rec('no address ES drops the clause', 'para su propiedad en unos 5 días.' in o.get('noaddr_es', '')
+        and 'your property' not in o.get('noaddr_es', ''), o.get('noaddr_es'))
     rec('no token survives', all('{' not in str(v) for v in o.values()), o)
     rec('other scripts untouched', o.get('other_en') == 'Hi Maria, about 123 NW 5 ST.', o.get('other_en'))
     rec('whole-list page: no voice warning', o.get('wrong0') is False)
     rec('Alejandro seat with default sender: no warning', o.get('wrongA') is False)
     rec('Carlos seat with Alejandro default: warning', o.get('wrongC') is True)
-    rec('Carlos seat with his own name saved: no warning', o.get('wrongC2') is False)
+    rec('Carlos name but Alejandro number: warning', o.get('wrongCdefphone') is True)
+    rec('warning html names the page', 'Carlos' in o.get('warnhtml', '') and '&#9888;' in o.get('warnhtml', ''))
+    rec('Carlos with his own name and number: no warning', o.get('wrongC2') is False and o.get('warnnone') == '')
+    rec('Alejandro seat, own number: no warning', o.get('wrongA2') is False)
+rec('guided vm step shows the warning too', "if(s.id==='vm') b+=_vmWarnHtml();" in SRC)
+rec('full sheet shows the warning', SRC.count('_vmWarnHtml()') >= 3)
 
 print('\n%s: %d failure(s)' % ('FAIL' if fails else 'PASS', len(fails)))
 sys.exit(1 if fails else 0)
