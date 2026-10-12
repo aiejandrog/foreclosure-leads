@@ -191,8 +191,6 @@ def apply(lead, chain):
             and all(l.get('amt') for l in chain['liens'] if isinstance(l, dict))
             and not (chain.get('mtg_open_unpriced') or 0) and not (chain.get('other_open_unpriced') or 0)):
         lead['eqstate_why'] = LOW_CEILING_WHY
-        if not lead.get('eqopen'):
-            lead['eqopen'] = len(chain['liens'])   # recorded loans: a ceiling of 0 would read like a clear one
     if st == 'unpriced' and _state_of(chain, lead) == 'clear':
         lead['eqmtgclear'] = True    # the MORTGAGE verdict was clear; only an amountless lien made it
                                      # a ceiling, so a lender's separate case still demotes it
@@ -223,6 +221,8 @@ def apply(lead, chain):
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure
+        if lead.get('eqstate_why') == LOW_CEILING_WHY and not lead.get('eqopen'):
+            lead['eqopen'] = len(chain['liens'])   # recorded loans: a ceiling of 0 would read like a clear one
         if chain.get('xs_conflict'):
             lead['eqxs'] = len(chain['xs_conflict'])   # a second source shows instruments this chain lacks
             if st == 'unpriced' and not lead.get('eqopen'):
