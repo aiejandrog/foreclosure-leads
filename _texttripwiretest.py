@@ -80,7 +80,10 @@ try:
     n1 = len(rows())
     text('2099-000001-CA-01', '3055550104', confirmed=False)
     rec('an unconfirmed composer open is not contact and writes no tripwire row', len(rows()) == n1, rows())
-    rec('no phone number is stored in the tripwire rows', all('555' not in json.dumps(r) for r in rows()), rows())
+    # ts_utc is excluded: its microseconds are digits, and one containing "555" (CI, 2026-10-12
+    # 19:52:43.055572) read as the fake 555 numbers. Every other field is still searched.
+    rec('no phone number is stored in the tripwire rows',
+        all('555' not in json.dumps({k: v for k, v in r.items() if k != 'ts_utc'}) for r in rows()), rows())
     sent = json.loads((work / 'text_sent.json').read_text(encoding='utf-8'))
     rec('all confirmed rows reached text_sent.json', len([x for x in sent if x['confirmed']]) == 3, sent)
 finally:

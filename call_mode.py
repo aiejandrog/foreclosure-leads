@@ -2091,6 +2091,36 @@ def _recipient_index(slim):
     return by_email, by_phone
 
 
+# A property address shared by more cases than this is a building or a placeholder, not one owner's
+# property: it ties nothing (the send stays unattributed, which is the cautious reading).
+_ADDR_TIE_MAX_CASES = 2
+
+
+def _ledger_addr_key(addr):
+    """A property address reduced to upper-case words, '' when it cannot identify one property.
+
+    Whole string (street, city, state, ZIP), so a street shared across cities or ZIPs does not tie.
+    Words keep a single space between them: dropping the spaces would let '1 21st St' and
+    '12 1st St' collide. An address that does not start with a house number followed by a street
+    ('HOMESTEAD, FL 33034', '1ST ST, MIAMI BEACH', '0', a bare ZIP) names no one property and keys
+    to nothing."""
+    a = re.sub(r'[^A-Z0-9]+', ' ', str(addr or '').upper()).strip()
+    return a if re.match(r'\d+\s+\S', a) else ''
+
+
+def _address_index(slim):
+    """normalised property address -> cases, from the leads being built. Same rule as
+    _recipient_index: a match can only mark a lead contacted. An address held by more than
+    _ADDR_TIE_MAX_CASES cases (a condo with no unit, a county placeholder) is left out."""
+    by_addr = {}
+    for d in (slim or []):
+        case = str(d.get('case') or '').strip()
+        k = _ledger_addr_key(d.get('addr'))
+        if case and k:
+            by_addr.setdefault(k, set()).add(case)
+    return {k: v for k, v in by_addr.items() if len(v) <= _ADDR_TIE_MAX_CASES}
+
+
 # Our own recipients for meta.test sends (Brief Jesse: tracker_template.html _JESSE).
 # Keep equal to send_server.ADVISOR_EMAILS, which gates who a test send may reach.
 ADVISOR_EMAILS = {'celusa13@gmail.com'}
@@ -2129,18 +2159,28 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
       * `to`/`bcc` (email) or `to` (text) matching an address or number on a lead being built puts
         that lead in `cases`: it WAS contacted, so it is stamped lu:1 and leaves Untouched.
         Counted in `matched`.
+      * an email row whose recipient is on no lead is tried by PROPERTY ADDRESS next (2026-10-12):
+        the row carries the `addr` the send was about, the same board string the lead carries. A
+        recipient that is no longer on any lead (the bounce guard strips dead addresses from the
+        cards) therefore still ties to its property. Whole-string match only, on an address that
+        starts with a house number and street and is held by at most _ADDR_TIE_MAX_CASES cases; a
+        text row has no address and keeps the recipient-only rule. A row that went only to us
+        (advisor or sending login) is never tied this way. A test-flagged row to anyone else can be:
+        that recipient may be an owner, and marking the lead contacted is the safe reading. Counted in
+        `matched` too.
       * an email row with `test_mode` true whose recipient is one of OUR OWN addresses (the
         advisor, ADVISOR_EMAILS, or the sending account itself, `login`/`from`) reached no lead.
         Counted in `test`. The flag alone is not trusted: until 2026-10-12 send_server took
         meta.test from the request body without checking who it went to (it now refuses a test
         send to anyone but these addresses), so an older test row to any other address stays
-        unattributed.
+        unattributed unless the property address it carries ties it to a lead.
     Anything left (a delivered, non-test send to an address or number on no lead) still counts as
     unattributed and still turns ledgers_ok off: that recipient may be a lead whose address this
     build no longer carries. `rows` describes those leftovers with no address, name or subject:
     date, channel, recipient domain (webmail names only, else 'other'), lane. `python call_mode.py --ledger-audit` prints them."""
     out = {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'matched': 0, 'test': 0, 'rows': []}
     by_email, by_phone = _recipient_index(slim) if slim is not None else ({}, {})
+    by_addr = _address_index(slim) if slim is not None else {}
     for name, path, is_text in (('mail_sent.json', mail_path, False), ('text_sent.json', text_path, True)):
         pth = path or os.path.join(HERE, name)
         try:
@@ -2176,6 +2216,12 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
                         a = str(a).strip().lower()
                         if a:
                             hit |= by_email.get(a, set())
+                    if not hit and not _is_operator(e):
+                        # An address that is on no lead any more (stripped by the bounce guard, or a
+                        # contact that was replaced) still leaves the property the email was about.
+                        # Never for a row that went only to us (advisor or sending login): that one
+                        # reached no owner, whatever its test flag says.
+                        hit |= by_addr.get(_ledger_addr_key(e.get('addr')), set())
                 if hit:
                     out['cases'] |= hit
                     out['matched'] += 1
@@ -2192,6 +2238,7 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
                         'lane': str(e.get('lane') or e.get('wl') or '')[:20],
                         'test': e.get('test_mode') is True,
                         'owner': bool(str(e.get('owner') or '').strip()),
+                        'addr': bool(str(e.get('addr') or '').strip()),
                     })
             elif not dated:
                 if case:
@@ -4358,6 +4405,18 @@ function _viewOf(r){
   for(var k = 0; k < sib.length; k++){ if(sib[k] !== r.c && lastCall(notes[sib[k]])) return 'retries'; }
   return _histWhy() ? 'history_unknown' : 'untouched';
 }
+/* The page-wide History-unknown banner. It is page-wide but it only moves a lead with no recorded
+   contact, so it also says what it is costing in the counts above: a lane where every lead already
+   has a contact has nothing to move, and the banner used to read as if it were hiding cards. */
+function histBanner(hw){
+  if(!hw) return '';
+  var hn = _VIEWN.history_unknown|0;
+  return '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
+    + '. Nothing shows as untouched until that clears. '
+    + (hn ? hn+' lead'+(hn===1?'':'s')+' counted above '+(hn===1?'is':'are')+' filed under History unknown because of it.'
+          : 'No lead counted above is held back by it: every one already has a recorded contact.')
+    + '</div>';
+}
 function viewBar(){
   var b = _QV.map(function(k){
     return '<button data-v="'+k+'" class="'+(QVIEW===k?'on':'')+'">'+_QVL[k]+' &middot; '+_VIEWN[k]+'</button>'; }).join('');
@@ -4366,9 +4425,7 @@ function viewBar(){
     + ((typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
         ? ' <b>Partial:</b> '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded on the crew pages.' : '')
     + '</div>';
-  var hw = _histWhy();
-  if(hw) o += '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
-    + '. Nothing shows as untouched until that clears.</div>';
+  o += histBanner(_histWhy());
   o += wfBar();
   if(QVIEW === 'callbacks') o += cbNote();
   return o;
@@ -7340,12 +7397,12 @@ boot();
 
 def _print_ledger_audit(audit):
     """One line per category, then the leftover rows. No address, name, number or subject."""
-    print('ledger audit: %d case-less send(s) tied to a lead by recipient, %d advisor/test send(s) '
+    print('ledger audit: %d case-less send(s) tied to a lead by recipient or property address, %d advisor/test send(s) '
           'reaching no lead, %d still unattributed'
           % (audit.get('matched', 0), audit.get('test', 0), audit.get('unattributed', 0)))
     for r in audit.get('rows') or []:
-        print('  unattributed: %s %-5s to-domain=%s lane=%s test=%s owner-named=%s'
-              % (r['d'] or '?', r['ch'], r['dom'], r['lane'] or '-', r['test'], r['owner']))
+        print('  unattributed: %s %-5s to-domain=%s lane=%s test=%s owner-named=%s addr-named=%s'
+              % (r['d'] or '?', r['ch'], r['dom'], r['lane'] or '-', r['test'], r['owner'], r.get('addr', False)))
 
 
 if __name__ == '__main__' and '--ledger-audit' in __import__('sys').argv[1:]:
