@@ -798,7 +798,10 @@ def _search_name(lead):
 def _needs_relink(h):
     """A cached chain whose statuses predate link pairing (no pv stamp) or whose link read was incomplete."""
     h = h or {}
-    return bool(h.get('liens')) and int(h.get('pv') or 1) < PAIRING_VERSION
+    if bool(h.get('liens')) and int(h.get('pv') or 1) < PAIRING_VERSION:
+        return True
+    # a successful chain from before other_liens (2026-10-12) never recorded its non-mortgage liens
+    return h.get('conf') in ('ok', 'low', 'unpriced') and 'other_v' not in h
 
 
 def _relink_rank(h):
@@ -810,9 +813,10 @@ def _relink_rank(h):
     h = h or {}
     liens = h.get('liens') or []
     common = int(h.get('nrec') or 0) > 35
+    stale_pv = bool(liens) and int(h.get('pv') or 1) < PAIRING_VERSION   # pre-link chains still go first
     none_open = h.get('ftype') == 'MORTGAGE' and not int(h.get('open_count') or 0)
     mers = sum(1 for l in liens if MERS_RE.search(l.get('party') or ''))
-    return (1 if common else 0, 0 if none_open else 1, 0 if mers >= 2 else 1, -len(liens))
+    return (1 if common else 0, 0 if stale_pv else 1, 0 if none_open else 1, 0 if mers >= 2 else 1, -len(liens))
 
 
 def main():

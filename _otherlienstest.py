@@ -197,6 +197,13 @@ und = [row('2024-01-01', 'Lien', 'To', 'CITY OF TESTVILLE', 0), row('2024-01-01'
 for u in und: u['RecordDate'] = ''
 chk('undated lien is not freed by an undated release', len(opens(run(und), 'code')) == 1, run(und).get('other'))
 
+# 14d. a cached chain from before other_liens is queued for a re-trace; one that has it is not
+chk('pre-other_liens chain is queued for re-trace', BL._needs_relink({'conf': 'ok', 'pv': 2}))
+chk('current chain is not re-queued', not BL._needs_relink({'conf': 'ok', 'pv': 2, 'other_v': 1}))
+chk('failed search is the retry path, not relink', not BL._needs_relink({'conf': 'none', 'pv': 2}))
+chk('pre-link chains still rank ahead of other_liens ones',
+    BL._relink_rank({'liens': [{'party': 'X'}], 'pv': 1}) < BL._relink_rank({'conf': 'ok', 'pv': 2}))
+
 # 15. is_claim on its own
 chk('is_claim: CLAIM OF LIEN', OL.is_claim('CLAIM OF LIEN'))
 chk('is_claim: FEDERAL TAX LIEN', OL.is_claim('FEDERAL TAX LIEN'))
