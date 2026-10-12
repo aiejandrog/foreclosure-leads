@@ -1713,7 +1713,13 @@ def subst_build_facts(tpl, updated):
     import board_url as _burl
     name, _doc, _warn = _entity.display_llc()
     snd = _entity.sender()
+    try:
+        import scraper_status as _ss
+        _scrape = _ss.scrape_status_html()                 # fail-safe: never raises; '' if unavailable
+    except Exception:
+        _scrape = ''                                        # module missing -> drop the placeholder, never ship it raw
     out = (tpl.replace('__UPDATED__', updated)
+              .replace('__SCRAPER_STATUS__', _scrape)
               .replace('__ENTITY_VERIFIED__', 'true' if _entity.verified() else 'false')
               .replace('__ENTITY_LLC__', _js(name))
               .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
