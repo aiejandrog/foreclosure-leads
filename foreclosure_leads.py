@@ -1707,6 +1707,7 @@ def subst_build_facts(tpl, updated):
                        already built -- so the live site kept offering the retired address until
                        something rebuilt it, which nothing did. A baked value cannot do that,
                        because check_board_urls() below refuses to ship a page carrying any other.
+      __REFRESHSTATUS__ how the last refresh ended, from leads-run.log (refresh_status.py).
     """
     import entity as _entity
     import bsg_brand as _brand
@@ -1720,6 +1721,9 @@ def subst_build_facts(tpl, updated):
               .replace('__EMBLEM_W__', str(_brand.NATIVE_W))
               .replace('__EMBLEM_H__', str(_brand.NATIVE_H))
               .replace('__BOARDURL__', _burl.BOARD_URL))
+    # The last refresh's result, one line at the top of the page (refresh_status.py). Never raises.
+    import refresh_status as _rs
+    out = out.replace('__REFRESHSTATUS__', _rs.page_html())
     # Both template readers go through here, so this is the one place that sees every built page
     # before it is written. A retired address anywhere in it is a stale build, and a stale build is
     # exactly what published a dead "Call these 30 now" button on 2026-09-18.

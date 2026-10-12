@@ -1,0 +1,189 @@
+"""refresh_status.py - the one line at the top of the board and Call Mode that says how the last
+refresh went.
+
+WHY (2026-10-12). The 05:30 refresh refused at net-ready (rc=3, no DNS), a later run scraped and
+ended rc=7, and nobody looking at the board could tell either from a clean morning. The laptop's
+own reading of that day was wrong twice: first "no scrape today", then "rc=7 is the lease refusing a
+second scrape". rc=7 is refresh-dealflow.bat's own RUNEXIT (the lis pendens chain did not fully
+refresh), which runner_lock.py passes through unchanged; the outer wrapper then logs it as
+"did not start - cross-machine lease exit 7", which is only true for exit 9 or 10. So this file
+reads the ENDED line for the verdict and counts a lease line only when it carries 9 or 10.
+
+Source: leads-run.log only (the REFRESH banners, the "REFRESH ENDED rc=N" lines, lease
+refusals). Nothing new is written anywhere. leads_final.json's mtime is NOT used: two dozen scripts
+rewrite that file, so its age says nothing about the last scrape.
+The bake time is the board's own build time; the page compares it with the viewer's clock, so a
+board that nothing rebuilt still turns red by itself when it gets old.
+
+Counts and times only. No name, phone, address or case number reaches the page from here.
+
+    python refresh_status.py          # print what the line would say right now
+"""
+import json
+import os
+import re
+from datetime import datetime
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+LOG = os.path.join(HERE, 'leads-run.log')
+TAIL_BYTES = 400 * 1024
+
+# refresh-dealflow.bat RUNEXIT, and runner_lock.py's own refusals (NOT_ACQUIRED 9, LOST 10).
+WHY = {
+    0: 'ok',
+    1: 'scrape failed',
+    2: 'compliance block',
+    3: 'no network',
+    4: 'a source is down',
+    5: 'live site did not update',
+    6: 'publish guard blocked it',
+    7: 'lis pendens lane partial',
+    9: 'other machine holds the lease',
+    10: 'lease lost mid-run',
+}
+# Codes where no new scrape reached the board.
+FAILED = {1, 3, 9, 10}
+
+_START = re.compile(r'^=+ REFRESH (?!ENDED)(.*?) =+\s*$')
+_ENDED = re.compile(r'^=+ REFRESH ENDED rc=(-?\d+)(.*?)=*\s*$')
+_LEASE = re.compile(r'^\[(.*?)\] refresh-dealflow\.bat did not start - cross-machine lease exit (\d+)')
+# cmd's %date% %time% on this laptop: "Mon 10/12/2026 12:21:05.12" (en-US). ISO is accepted too.
+_US = re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})\D+(\d{1,2}):(\d{2})')
+_ISO = re.compile(r'(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})')
+
+
+def _when(text):
+    """'2026-10-12T05:33' from a cmd date/time string, or None."""
+    m = _US.search(text or '')
+    if m:
+        mo, d, y, h, mi = (int(x) for x in m.groups())
+    else:
+        m = _ISO.search(text or '')
+        if not m:
+            return None
+        y, mo, d, h, mi = (int(x) for x in m.groups())
+    try:
+        return datetime(y, mo, d, h, mi).strftime('%Y-%m-%dT%H:%M')
+    except ValueError:
+        return None
+
+
+def runs(log_text):
+    """Each refresh in the log, oldest first: {'at', 'rc', 'why'}. rc None = started, no ENDED line
+    yet (still running, or killed from outside)."""
+    out = []
+    for line in log_text.splitlines():
+        line = line.strip()
+        m = _ENDED.match(line)
+        if m:
+            rc = int(m.group(1))
+            if out and out[-1]['rc'] is None:
+                out[-1]['rc'] = rc
+                out[-1]['end'] = _when(m.group(2))
+            else:   # an ENDED with no banner above it in the tail we read
+                out.append({'at': _when(m.group(2)), 'rc': rc, 'end': _when(m.group(2))})
+            continue
+        m = _START.match(line)
+        if m:
+            out.append({'at': _when(m.group(1)), 'rc': None, 'end': None})
+            continue
+        m = _LEASE.match(line)
+        # Any other code on this line is the INNER run's own exit, already on its ENDED line.
+        if m and int(m.group(2)) in (9, 10):
+            t = _when(m.group(1))
+            out.append({'at': t, 'rc': int(m.group(2)), 'end': t})
+    for r in out:
+        r['why'] = WHY.get(r['rc'], 'exit %s' % r['rc']) if r['rc'] is not None else None
+    return out
+
+
+def _read_tail(path):
+    try:
+        with open(path, 'rb') as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - TAIL_BYTES))
+            return f.read().decode('utf-8', 'replace')
+    except OSError:
+        return ''
+
+
+def summary(log_path=LOG, now=None):
+    now = now or datetime.now()
+    rs = runs(_read_tail(log_path))
+    last = rs[-1] if rs else None
+    # A run with no ENDED line that started more than 6 hours ago did not finish: it was killed.
+    if last and last['rc'] is None and last['at']:
+        try:
+            if (now - datetime.strptime(last['at'], '%Y-%m-%dT%H:%M')).total_seconds() > 6 * 3600:
+                last = dict(last, rc=-1, why='never finished')
+        except ValueError:
+            pass
+    # The most recent failure earlier the same day as the last run, so a recovered morning says so.
+    earlier = None
+    if last and last['at']:
+        for r in reversed(rs[:-1]):
+            if not r['at'] or r['at'][:10] != last['at'][:10]:
+                break
+            if r['rc'] in FAILED:
+                earlier = {'at': r['at'], 'rc': r['rc'], 'why': r['why']}
+                break
+    # The last run that got past the scrape. rc None is the run baking this very board: a run that
+    # fails its scrape or its network check goes straight to :end and never builds one.
+    good = None
+    for r in reversed(rs[:-1] + [last] if rs else []):
+        if r['at'] and r['rc'] not in FAILED and r['rc'] != -1:
+            good = r['at']
+            break
+    return {'baked': now.strftime('%Y-%m-%dT%H:%M'), 'good': good,
+            'last': ({k: last[k] for k in ('at', 'rc', 'why')} if last else None),
+            'earlier': earlier}
+
+
+# Self-contained: no board CSS, no board JS. The verdict is decided at VIEW time, so a board that
+# nothing rebuilt still goes red on its own once it is old.
+_JS = r"""(function(){
+var S=%s, el=document.getElementById('rfstat'); if(!el) return;
+function t(s){ if(!s) return null; var d=new Date(s); return isNaN(d.getTime())?null:d; }
+function hm(s){ var d=t(s); if(!d) return '?'; var h=d.getHours(), m=('0'+d.getMinutes()).slice(-2);
+  var day=(d.toDateString()===new Date().toDateString())?'today':(d.getMonth()+1)+'/'+d.getDate();
+  return day+' '+((h+11)%%12+1)+':'+m+(h<12?' AM':' PM'); }
+function age(s){ var d=t(s); if(!d) return ''; var h=(Date.now()-d.getTime())/36e5;
+  return h<1?'under an hour old':h<48?Math.round(h)+'h old':Math.round(h/24)+' days old'; }
+var L=S.last, G=S.good, lvl='ok', msg;
+var oldH = t(S.baked) ? (Date.now()-t(S.baked).getTime())/36e5 : 0;
+var from=' &middot; leads from '+(G?hm(G)+' ('+age(G)+')':'an older run');
+if(L && (L.rc===1||L.rc===3||L.rc===9||L.rc===10||L.rc===-1)){
+  lvl='bad'; msg='&#10007; Refresh FAILED '+hm(L.at)+': '+L.why+from;
+} else if(oldH>26){
+  lvl='bad'; msg='&#10007; No refresh since '+hm(S.baked)+' &middot; board '+age(S.baked);
+} else if(L && L.rc===null){
+  msg='&#10003; Refreshed '+hm(L.at);
+} else if(L && L.rc!==0){
+  lvl='warn'; msg='&#9888; Refreshed '+hm(L.at)+', '+L.why;
+} else if(L){
+  msg='&#10003; Refreshed '+hm(L.at);
+} else {
+  lvl='warn'; msg='No refresh record on the machine that built this board';
+}
+if(S.earlier && lvl!=='bad') msg+=' &middot; '+hm(S.earlier.at).replace(/^today /,'')+' run failed ('+S.earlier.why+'), recovered';
+var c={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF']}[lvl];
+el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
+  +'background:'+c[0]+';color:'+c[1]+';text-align:center';
+el.innerHTML=msg;
+})();"""
+
+
+def page_html(s=None):
+    """The <div> and its script, for __REFRESHSTATUS__. Never raises: a broken status line must not
+    stop a board from building, so any failure gives an empty string and the page goes without."""
+    try:
+        s = s if s is not None else summary()
+        data = json.dumps(s, separators=(',', ':')).replace('</', '<\\/')
+        return '<div id="rfstat" style="display:none"></div><script>' + (_JS % data) + '</script>'
+    except Exception as e:      # noqa: BLE001 - see docstring
+        print('refresh status line skipped (%s)' % e)
+        return ''
+
+
+if __name__ == '__main__':
+    print(json.dumps(summary(), indent=1))
