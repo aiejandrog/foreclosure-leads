@@ -13,6 +13,7 @@ _*.py
 !_lookupstaytest.py
 !_optoutgapstest.py
 !_siblingoptouttest.py
+!_replysendtest.py
 !_workersendracetest.py
 !_inflightretrytest.py
 !_wplinktest.py
