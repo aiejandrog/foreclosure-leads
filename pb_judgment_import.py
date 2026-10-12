@@ -140,7 +140,8 @@ def resolve_out(out):
         return P.out(os.path.basename(out))
     full = os.path.realpath(os.path.abspath(out))
     repo = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
-    if full == repo or full.startswith(repo + os.sep) or 'onedrive' in full.lower():
+    f, r = os.path.normcase(full), os.path.normcase(repo)
+    if f == r or f.startswith(r + os.sep) or 'onedrive' in f.lower() or os.path.isdir(full):
         return ''
     return full
 
