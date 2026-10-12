@@ -119,6 +119,29 @@ State as of the claim: cadence calls `replies.is_stop_text()` (no local detector
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
 
+## Replies and one-off email: `reply_send.py` only
+
+On 2026-10-12 four homeowner replies were sent over SMTP by a script that called
+`outreach_email._smtp_send` directly. That function ran `mail_guard` and nothing else, so the stay
+gate, the case and same-owner do-not-contact checks, the bounce list and the dedupe never ran, and
+the sends never reached `mail_sent.json`. Three of those homeowners had no passing stay check.
+
+- `_smtp_send` (both `outreach_email` and `send_server`) now raises unless the caller is inside
+  `mail_guard.gated('<name>')` or the mail goes only to the advisor or the sending login. The gated
+  callers are `send_server /send`, `outreach_email.main`, `cadence`, and `reply_send`.
+- To email a homeowner who wrote in, or any one-off: `python reply_send.py --case C --to A
+  --subject S --body-file F` (dry run, prints the gate verdict), then add `--send`. It checks that
+  the case resolves, the opt-out ledger is readable, fresh and synced today, the case, address and
+  same-owner cases are not on it, the address has not hard-bounced, `stay_gate.check` is clear and
+  `bk_lookup.send_hold` does not hold, and the subject was not sent to that address in 24 hours.
+  Then it sends and writes a `mail_sent.json` row with `source` and `machine`. It never spends on a
+  lookup; a case that needs a paid search is refused.
+- This does not stop a script that opens its own `smtplib` connection. Do not write one. A new
+  module that calls `_smtp_send` must wrap it in `gated()`; `_replysendtest.py` fails on one that
+  does not.
+- Not changed: `cadence.py`'s legacy hand-built SMTP branch (reached only when `import send_server`
+  fails) and `warmup.py` (mails owned seed inboxes). Reported, not fixed.
+
 ## Send bridge reload
 
 Since 2026-10-07 (#175, Alejandro chose "Self-restart") `send_server.py` restarts itself on new

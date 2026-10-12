@@ -782,8 +782,9 @@ def _run(args):
         if _LANES_OK:
             # Reuses the bridge's own sender: alias in From AND the envelope, Message-ID stamped
             # with the alias domain. from_addr=None reproduces the old login-From behaviour exactly.
-            mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
-                                 subj, body, from_addr=alias or None)
+            with _MG.gated('cadence'):
+                mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
+                                     subj, body, from_addr=alias or None)
         else:
             # LEGACY FALLBACK -- reached only when `import send_server` failed at the top of this
             # file (carried over from #46, 2026-09-26). The lane path above goes through

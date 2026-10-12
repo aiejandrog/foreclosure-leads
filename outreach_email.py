@@ -963,6 +963,7 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     import mail_guard as _MG
     unsub = _MG.unsubscribe_header(user, _unsub_url())
     _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
+    _MG.require_gated(to_addr, login=user)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
@@ -1210,7 +1211,8 @@ def main():
                     continue
                 from_addr = _cand if _cand != user else None
         try:
-            mid, resp = _smtp_send(user, pw, from_display, e['to'], e['subj'], e['body'], from_addr=from_addr)
+            with _MG.gated('outreach_email'):
+                mid, resp = _smtp_send(user, pw, from_display, e['to'], e['subj'], e['body'], from_addr=from_addr)
             _append_ledger({
                 'd': datetime.date.today().isoformat(),
                 'ts_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),

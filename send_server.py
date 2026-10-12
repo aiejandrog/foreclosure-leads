@@ -1621,6 +1621,7 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
     import mail_guard as _MG
     unsub = _MG.unsubscribe_header(user, _unsub_url())
     _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
+    _MG.require_gated(to_addr, bcc, login=user)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
@@ -2591,7 +2592,9 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---- send ----
         try:
-            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach, from_addr=from_addr)
+            import mail_guard as _MG
+            with _MG.gated('send_server'):
+                mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach, from_addr=from_addr)
         except smtplib.SMTPAuthenticationError as e:
             _release_recipients(_claimed)
             _release_first_touch_slot(_ft_slot)      # nothing left: the slot is free again
