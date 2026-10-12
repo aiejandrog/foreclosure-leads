@@ -986,6 +986,26 @@ check('PACER_NEWFILER_WEEKENDS=1 pulls weekend days too', w[0] == dt.date(2026, 
 w = PS.pull_window({'last_to': '2026-09-01'}, dt.date(2026, 10, 8), {})
 check('more than 14 days behind: pulls the latest 14 and says what was never pulled',
       w[0] == dt.date(2026, 9, 24) and w[1] == dt.date(2026, 10, 7) and 'never pulled' in w[2], w)
+OVF = {'status': 'partial', 'from': '2026-09-16', 'to': '2026-09-29',
+       'why': '83 pages of results, 20 read (PACER_NEWFILER_MAX_PAGES) -- window not marked covered'}
+w = PS.pull_window({'last_to': '', 'pulls': [OVF]}, dt.date(2026, 10, 13), {})
+check('after an overflowed 14-day pull (83 pages, old record with no tp): the next window shrinks to fit 20 pages',
+      w[:2] == (dt.date(2026, 9, 29), dt.date(2026, 9, 30)) and '83 pages' in w[2], w)
+w = PS.pull_window({'last_to': '2026-09-30', 'pulls': [OVF, dict(OVF, status='done', ok=True, why='', tp=10, pages=10,
+                                                                  **{'from': '2026-09-29', 'to': '2026-09-30'})]},
+                   dt.date(2026, 10, 13), {})
+check('after the shrunk pull finishes: catch-up stays sized (2 days at 5 pages/day), from the day after last_to',
+      w[:2] == (dt.date(2026, 10, 1), dt.date(2026, 10, 3)), w)
+w = PS.pull_window({'last_to': '', 'pulls': [dict(OVF, why='300 pages of results, 20 read')]}, dt.date(2026, 10, 13), {})
+check('volume so high not even one day fits the page cap: no pull, says raising it is spend',
+      w[0] is None and 'raising it is spend' in w[2], w)
+w = PS.pull_window({'last_to': '', 'pulls': [dict(OVF, why='300 pages of results, 20 read')]}, dt.date(2026, 10, 13),
+                   {'PACER_NEWFILER_MAX_PAGES': '40'})
+check('... a higher PACER_NEWFILER_MAX_PAGES re-sizes to one day', w[:2] == (dt.date(2026, 9, 29),) * 2, w)
+w = PS.pull_window({'last_to': '2026-10-06', 'pulls': [{'status': 'done', 'ok': True, 'from': '2026-10-06',
+                                                        'to': '2026-10-06', 'pages': 2, 'tp': 2}]},
+                   dt.date(2026, 10, 8), {})
+check('normal volume (2 pages a day): the window is not cut', w[:2] == (dt.date(2026, 10, 7), dt.date(2026, 10, 7)), w)
 check('bad backfill / overlap settings -> no pull', PS.pull_window({}, Q4, {'PACER_NEWFILER_BACKFILL_DAYS': 'lots'})[0] is None
       and PS.pull_window({}, Q4, {'PACER_NEWFILER_OVERLAP_DAYS': '99'})[0] is None)
 
@@ -1056,6 +1076,8 @@ idx = json.loads((d / 'pacer_newfilers.json').read_text())
 check('more pages than PACER_NEWFILER_MAX_PAGES: stops at 2, rows kept, window NOT marked covered',
       len([c for c in h.calls if c[0] == 'pull']) == 2 and len(idx['rows']) == 108 and idx['last_to'] == ''
       and idx['pulls'][-1]['status'] == 'partial', idx['pulls'])
+check('... and the partial pull records the total pages it saw and the cap it read under',
+      idx['pulls'][-1].get('tp') == 3 and idx['pulls'][-1].get('maxp') == 2, idx['pulls'])
 reset_ledgers()
 d = work({'broward_leads.json': BR})
 rc, out = run(d, PullHTTP(pull=lambda b, pg: Resp(500, {})), raw=True)

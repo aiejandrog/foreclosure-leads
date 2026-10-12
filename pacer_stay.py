@@ -1547,7 +1547,49 @@ def pull_window(idx, today, env):
         note = ('filings %s..%s were never pulled (more than %d days behind) -- the index does not cover them'
                 % (start, gap_to, NF_MAX_WINDOW_DAYS))
         start = gap_to + dt.timedelta(days=1)
-    return start, yday, note
+    to = yday
+    fit = _fit_days(idx, env)
+    if fit is not None:
+        days, maxp, last = fit
+        if days < 1:
+            return None, None, ('the last pull saw %d pages for %s..%s, so even one day would not fit '
+                                'PACER_NEWFILER_MAX_PAGES=%d -- no pull (raising it is spend)'
+                                % (last['tp'], last['from'], last['to'], maxp))
+        if (to - start).days + 1 > days:
+            to = start + dt.timedelta(days=days - 1)
+            note = ('; '.join(x for x in (note, 'a pull saw %d pages for %s..%s: pulling %s..%s so the '
+                                          'window fits %d pages' % (last['tp'], last['from'], last['to'], start, to,
+                                                                    maxp)) if x))
+    return start, to, note
+
+
+def _pull_pages(rec):
+    """Total result pages a pull saw: 'tp' when recorded, else read from a partial pull's why."""
+    try:
+        if rec.get('tp'):
+            return int(rec['tp'])
+        m = re.match(r'(\d+) pages of results, \d+ read', str(rec.get('why') or ''))
+        return int(m.group(1)) if m else (int(rec.get('pages') or 0) if rec.get('ok') else 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fit_days(idx, env):
+    """(calendar days a window may span, max pages, measured pull) from the latest pull that measured the
+    volume (finished or overflowed), else None. A partial pull marks nothing covered, so re-running the same
+    window every night re-buys its first pages and never finishes; a window sized to the measured volume
+    does finish and moves last_to, and stays sized so the catch-up after it does not overflow again."""
+    pulls = [p for p in ((idx or {}).get('pulls') or []) if isinstance(p, dict)
+             and p.get('status') in ('partial', 'done') and _pull_pages(p)]
+    if not pulls:
+        return None
+    last = pulls[-1]
+    tp, f, t = _pull_pages(last), _date(last.get('from')), _date(last.get('to'))
+    maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
+    if prob or not (tp and f and t and t >= f):
+        return None
+    per_day = tp / float((t - f).days + 1)
+    return int(maxp * 0.8 / per_day), maxp, dict(last, tp=tp)
 
 
 def nf_roles(env):
@@ -1580,7 +1622,8 @@ def pull_new_filers(pcl, budget, idx, win, today, now_ts, env):
             k = _nf_key(x)
             rec['new'] += k not in idx['rows']
             idx['rows'][k] = x
-    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4))
+    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4),
+               tp=int(res.get('total_pages') or 0), maxp=maxp)
     if res['refused']:
         rec.update(status='refused', why=res['refused'])
     elif res['error']:
