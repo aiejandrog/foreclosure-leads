@@ -365,8 +365,69 @@ def _valid_folio(s):
     f = re.sub(r'\D', '', s or '')
     return f if len(f) == 13 else ''
 
-def enrich(leads):
+# The appraiser fields enrich() writes. When a night's appraiser call fails these are carried from
+# the last good read of the same folio (_carry_enrichment) instead of shipping blank.
+ENRICH_FIELDS = ('owners', 'mailing_address', 'market_value', 'dor_desc', 'beds', 'baths',
+                 'living_area', 'year_folio', 'homestead', 'widow', 'last_sale_price',
+                 'last_sale_date', 'owners_repaired_from')
+ENRICH_CARRY_MAX_DAYS = 30
+
+
+def _prior_enrichment(path=None):
+    """folio -> the last good appraiser read in the previous leads_final.json, or {}.
+
+    Read BEFORE main() overwrites the file. A row qualifies only when it was enriched and carries a
+    real market value. `enriched_on` dates the read; a file from before that stamp existed dates
+    its rows by the file's own modification day, so a carry can never look newer than it is."""
+    path = path or os.path.join(HERE, 'leads_final.json')
+    try:
+        rows = json.load(open(path, encoding='utf-8'))
+        fday = date.fromtimestamp(os.path.getmtime(path)).isoformat()
+    except Exception:
+        return {}
+    out = {}
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict) or not r.get('enriched') or not (r.get('market_value') or 0) > 0:
+            continue
+        fol = _valid_folio(r.get('Folio', ''))
+        if fol:
+            out[fol] = dict({k: r.get(k) for k in ENRICH_FIELDS if k in r},
+                            enriched_on=str(r.get('enriched_on') or fday)[:10])
+    return out
+
+
+def _carry_enrichment(r, folio, prior, today=None):
+    """A failed appraiser read takes the last good one for the SAME folio, if it is recent.
+
+    WHY (2026-10-12): the 09-30 evening board shipped 194 of 194 Miami auction leads with a folio
+    and no market value, beds, homestead or mailing address; the code and the endpoint were both
+    fine the next week, so that run's appraiser calls failed and enrich() moved on, leaving every
+    row blank. No value means no equity on any callable Miami lead. A roll value does not change
+    night to night, so the last good read is the honest answer, stamped as carried and dated."""
+    p = prior.get(folio) if prior else None
+    if not p:
+        return False
+    today = today or date.today()
+    try:
+        age = (today - date.fromisoformat(p['enriched_on'])).days
+    except Exception:
+        return False
+    if age < 0 or age > ENRICH_CARRY_MAX_DAYS:
+        return False
+    for k in ENRICH_FIELDS:
+        if k in p:
+            r[k] = p[k]
+    r['enriched'] = True
+    r['enriched_on'] = p['enriched_on']
+    r['enrich_carried'] = True
+    return True
+
+
+def enrich(leads, prior=None):
     s = requests.Session(); s.headers['User-Agent'] = UA
+    if prior is None:
+        prior = _prior_enrichment()
+    ok = failed = carried = 0
     for i, r in enumerate(leads):
         folio = _valid_folio(r.get('Folio',''))
         if not folio:
@@ -399,8 +460,10 @@ def enrich(leads):
             # newest by DATE, not SalesInfos[0]: the appraiser does not always list newest first,
             # and on the 09-23 audit two leads showed a previous owner's purchase (sale_pick.py)
             last_sale = newest_sale(d.get('SalesInfos') or [])
+            if not mkt and not pi.get('FolioNumber'):
+                raise ValueError('appraiser returned no property or value for this folio')
             r.update({
-                'enriched': True, 'owners': '; '.join(owners),
+                'enriched': True, 'enriched_on': date.today().isoformat(), 'owners': '; '.join(owners),
                 'mailing_address': ', '.join(x for x in [ma.get('Address1',''), ma.get('Address2',''), ma.get('City',''), ma.get('State',''), ma.get('ZipCode','')] if x),
                 'market_value': mkt, 'dor_desc': pi.get('DORDescription',''),
                 'beds': pi.get('BedroomCount',0), 'baths': pi.get('BathroomCount',0),
@@ -435,9 +498,24 @@ def enrich(leads):
                     r['Address'] = ', '.join(x for x in (_street, _city, 'FL ' + _zip if _zip else 'FL') if x)
                     r['addr_src'] = 'pa-folio'     # provenance: backfilled from the appraiser roll
         except Exception as e:
-            print("PA fail", folio, e); time.sleep(1); continue
+            print("PA fail", folio, e)
+            if not r.get('enriched'):
+                failed += 1
+                if _carry_enrichment(r, folio, prior):
+                    carried += 1
+            else:
+                ok += 1     # the fields were set; only the site-address backfill after them failed
+            time.sleep(1); continue
+        ok += 1
         if (i+1) % 20 == 0: print(f"enriched {i+1}/{len(leads)}")
         time.sleep(0.35)
+    # One line the log can be grepped for. A night where most calls fail is a broken run, not a
+    # quiet one: say so loudly, and say how many rows went out on a carried read.
+    tried = ok + failed
+    print(f"PA enrich: {ok} read, {failed} failed, {carried} carried from the last good read")
+    if tried and failed > tried // 2:
+        print(f"PA enrich: WARNING - {failed} of {tried} appraiser reads failed; "
+              f"{failed - carried} lead(s) ship with no market value")
     return leads
 
 CLERK = "https://www2.miamidadeclerk.gov"
@@ -3502,6 +3580,13 @@ def make_tracker(leads):
         'arv':    sum(1 for d in slim if d.get('arv')),
         'rfval':  sum(1 for d in slim if d.get('rfval')),
         'zest':   sum(1 for d in slim if d.get('zest')),
+        # Miami-Dade rows with a parcel AND an appraiser market value. The 09-30 evening board had
+        # 194 Miami auction leads with a folio and not one value (every appraiser read failed), and
+        # nothing here counted it, so the guard could not see that equity was gone board-wide.
+        # Auction lane only: lis pendens rows take their value from lp_values, not this read, and
+        # counting them would hide an auction-lane wipeout inside a still-large total.
+        'mdval':  sum(1 for d in slim if d.get('county') == 'MIAMI-DADE' and d.get('st') != 'LP'
+                      and d.get('folio') and (d.get('value') or 0) > 0),
         # §362 STAYS ON THE ACTUAL BUILD. healthcheck's "RULE: §362 stay flags reach the build" is
         # one of only three FAILs that block a publish, and it counted the INPUT LEAD FILES — it
         # never looked at the build it is named for. The 2026-07-21 hole was cache-had-67,

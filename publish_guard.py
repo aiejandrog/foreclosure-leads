@@ -48,6 +48,11 @@ FIELDS = {
     'taxes':     (0.50, 3),
     'judgdt':    (0.50, 3),
     'ownflip':   (0.50, 3),
+    # ADDED 2026-10-12 — Miami auction-lane appraiser market values. Without a value no Miami lead
+    # has an equity figure, and the 09-30 evening board shipped 0 of 194. 0.55 matches scrape_guard's
+    # floor for the Miami auction count, so ordinary churn never trips it. A live board from before
+    # this field existed reads 0 here, which the loop below skips, so the first build publishes.
+    'mdval':     (0.55, 25),
     # 'bkstay' deliberately NOT here: §362 stays are already a hard FAIL in healthcheck, and
     # duplicating a blocking rule in two files means fixing it in one and believing you fixed both.
     #
