@@ -82,8 +82,11 @@ is ambiguous (FIRST MIDDLE LAST vs FIRST LAST1 LAST2 -- common in Miami), so eac
 is searched; PCL's name search is "starts with", so searching GARCIA also returns GARCIA LOPEZ and
 GARCIA-LOPEZ. A co-owner written as a bare first name (SMITH JOHN & MARY) shares the surname before
 it. Estates, trusts, government owners, placeholders and one-word names are never searched: there is
-no single debtor name to search, so the lead is 'unverifiable' at no cost. More than 4 people or 6
-searches on one lead: unverifiable.
+no single debtor name to search, so the lead is 'unverifiable' at no cost. "ET AL", and "ET UX" or
+"ET VIR" with no name after the marker, are the same hold: the roll says there is another person
+and does not name them, so a clear of the one named person is not a full read. Searching the named
+person beside a trust, an estate, or a dotted "L.L.C." would be a new PCL page; that spend is not
+taken here. More than 4 people or 6 searches on one lead: unverifiable.
 
 VERDICT per lead (never "clear" on doubt):
     active        a debtor row whose name matches exactly (first + surname, compatible middle) on an
@@ -740,6 +743,11 @@ ENTITY_TAIL = {'LLC', 'L', 'C', 'INC', 'INCORPORATED', 'CORP', 'CORPORATION', 'C
 TRUST_RE = re.compile(r'\b(?:TR|TRS|TRUST|TRUSTS|TRUSTEE|TRUSTEES|REVOCABLE|IRREVOCABLE)\b')
 ESTATE_RE = re.compile(r'\b(?:EST|ESTATE|DECEASED|DECD|HEIRS?|DEVISEES|BENEFICIARIES|UNKNOWN|'
                        r'PERSONAL\s+REPRESENTATIVE)\b')
+# "ET AL" names other people without naming them. Stripping it and searching the one person left
+# can clear a lead whose other owners were never searched. Bare "ET UX" / "ET VIR" is the same
+# when no spouse name follows the marker. A spouse who is named ("ET UX ROSALIND") is still searched.
+_ET_AL_RE = re.compile(r'\b(?:ET\s*AL|ETAL)\b')
+_ET_SPOUSE_RE = re.compile(r'\b(?:ET\s*UX|ETUX|ET\s*VIR|ETVIR)\b')
 GOV_RE = re.compile(r'\b(?:CITY\s+OF|COUNTY|STATE\s+OF|UNITED\s+STATES|SECRETARY\s+OF|HUD|'
                     r'DEPARTMENT\s+OF|HOUSING\s+AUTHORITY)\b')
 
@@ -832,6 +840,19 @@ def _strip_person(part):
     return toks
 
 
+def _unnamed_spouse(s):
+    """True when ET UX / ET VIR appears and no name token follows it in that owner chunk."""
+    for chunk in str(s or '').split(';'):
+        m = _ET_SPOUSE_RE.search(chunk)
+        if not m:
+            continue
+        tail = NOISE_RE.sub(' ', chunk[m.end():])
+        toks = [t for t in name_tokens(tail) if t not in GENERATIONS and t != 'AND']
+        if not toks:
+            return True
+    return False
+
+
 def parse_owner(raw, order):
     """(subjects, problem). subjects: Person / Entity objects to search. problem: why this owner
     cannot be searched at all ('' when it can). order: 'first_last' | 'last_first' | 'either' (both readings; see _owner_field)."""
@@ -842,6 +863,10 @@ def parse_owner(raw, order):
     s = re.sub(r'^[\s;&]+|[\s;&]+$', '', s)
     if not s or '(' in s or 'TITLE SEARCH' in s:
         return [], 'no owner name on the lead'
+    if _ET_AL_RE.search(s):
+        return [], 'other owners are named only as et al -- no single debtor name for each'
+    if _unnamed_spouse(s):
+        return [], 'a spouse is named only as et ux or et vir -- no single debtor name to search'
     if ESTATE_RE.search(s):
         return [], 'owner is an estate or heirs -- no single debtor name to search'
     if TRUST_RE.search(s):
@@ -1063,6 +1088,7 @@ def decide(subjects, results, today, date_from):
             if st == 'open' and q == 'strong' and fl:
                 evidence.append(cv)
             elif st == 'open' and q == 'strong':
+                # PCL returns no address, so the same name in another state is not this owner.
                 reasons.append('an open bankruptcy for the same name in %s (cannot tell if it is this owner)'
                                % (cv['court'] or 'another court'))
             elif st == 'open':

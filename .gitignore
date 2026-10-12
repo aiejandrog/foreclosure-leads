@@ -383,6 +383,8 @@ hardmoney_enriched.json
 llc_officers.json
 llc_officers_status.json
 judgment_dates_misses.json
+# pb_judgment_import.py writes this next to a hand-saved PDF. It carries the case id from that file.
+judgment_records.json
 # county-PA value fallback cache: resolved folios + owner names for people in foreclosure —
 # public repo, keep it out (same reason as skiptrace_results.json / lp_addresses.json)
 pa_values_cache.json
@@ -666,6 +668,10 @@ clerk_bk_cache.json.tmp
 clerk_bk_status.json.tmp
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
+# Broward / Palm Beach hold funnel, name guard, and judgment reader. Fake names and fake case ids only.
+!_bwpbholdtest.py
+!_browardjudgmentreadtest.py
+!_holdfunneltest.py
 # _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
 !_titlechaintest.py
 # _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
