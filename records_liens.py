@@ -941,6 +941,25 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         return (m.group(3), m.group(1).zfill(2), m.group(2).zfill(2)) if m else ('0000', '00', '00')
     liens, opens = [], []
     seen_instruments = set()
+    # REPORT-ONLY evidence for lien_coverage's deed anchoring: who signed each mortgage (does it name
+    # the searched owner?) and the nearest deed recorded before it in the same book AMONG THE RECORDS
+    # THIS SURNAME SEARCH RETURNED. Another family's deed in between is not in the search, so deed_bp
+    # alone proves nothing; lien_coverage also needs by_owner, <=10 pages and <=3 days.
+    _mw = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w]
+
+    def _bpn(b, p):
+        try:
+            return int(str(b).strip()), int(str(p).strip())
+        except (TypeError, ValueError):
+            return None
+    _deeds = sorted(x for x in (_bpn(r.get('reC_BOOK'), r.get('reC_PAGE')) for r in models
+                                if re.search(r'\bDEED\b|CERTIFICATE OF TITLE', (r.get('doC_TYPE', '') or '').upper()))
+                    if x)
+
+    def _deed_before(b, p):
+        m = _bpn(b, p)
+        prior = [d for d in _deeds if m and d[0] == m[0] and d[1] < m[1]]
+        return '%d/%d' % max(prior) if prior else ''
     for r in sorted(models, key=sortkey):
         if not (r.get('doC_TYPE', '') or '').upper().startswith('MORTGAGE'):
             continue
@@ -981,7 +1000,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                # coverage report (lien_coverage.py) can tell a folio-indexed loan from one placed
                # only by subdivision + surname, and a modification from a new loan. Report-only.
                'anchor': 'folio' if (rf and rf == fol) else 'subdivision',
-               'doc': (r.get('doC_TYPE', '') or '')[:40]}
+               'doc': (r.get('doC_TYPE', '') or '')[:40],
+               'by_owner': _names_owner(r.get('firsT_PARTY') or '', _mw),
+               'deed_bp': _deed_before(r.get('reC_BOOK'), r.get('reC_PAGE'))}
         if not is_open:
             row['sat_by'] = 'book/page'       # a release that names this loan (the others below infer it)
         if nopx:
