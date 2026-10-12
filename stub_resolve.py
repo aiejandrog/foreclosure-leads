@@ -91,10 +91,30 @@ def _save_cache(c):
     os.replace(tmp, CACHE_PATH)
 
 
+# Cache entries written before the strict owner-unique rule (2026-10-12) are re-resolved once
+# instead of trusted: that rule matched name TOKENS, so a namesake ('GARCIA MARIA JOSE' for Jose
+# Garcia) could be the one parcel it found, and a hit never expired.
+RULE = 2
+
+
+def _trusted(e):
+    """The cached folio, or '' when the entry is a miss or a legacy owner-unique pick."""
+    if not isinstance(e, dict) or e.get('miss') or not e.get('folio'):
+        return ''
+    if e.get('how') == 'owner-unique' and int(e.get('rule') or 0) < RULE:
+        return ''
+    return e['folio']
+
+
+def _legacy(e):
+    """A cached hit that is no longer trusted: its lead lost the folio and must be re-resolved,
+    whatever warning the nightly gave it (only 'parcel not linked' rows were swept before)."""
+    return isinstance(e, dict) and not e.get('miss') and bool(e.get('folio')) and not _trusted(e)
+
+
 def folio_for(case):
     """Nightly-pipeline hook: the resolved folio for a case, or ''. Never fetches."""
-    e = _load_cache().get(str(case) or '')
-    return (e.get('folio') or '') if isinstance(e, dict) and not e.get('miss') else ''
+    return _trusted(_load_cache().get(str(case) or ''))
 
 
 def people_from(defs):
@@ -185,9 +205,12 @@ def _bw_candidates(last, first):
     except Exception:
         return []
     out = []
+    capped = len(items) >= 200
     for c in items:
+        slots = [str(c.get(k) or '').strip() for k in ('ownerName1', 'ownerName2')]
         out.append({'folio': str(c.get('folioNumber') or '').strip(),
                     'owner': '%s %s' % (c.get('ownerName1') or '', c.get('ownerName2') or ''),
+                    'slots': [x for x in slots if x], 'capped': capped,
                     'addr': str(c.get('siteAddress1') or '').strip(), 'legal': ''})
     return out
 
@@ -204,8 +227,10 @@ def _pb_candidates(last, first):
     for c in items:
         pcn = re.sub(r'^P:', '', str(c.get('pcn') or '').strip())
         if re.sub(r'\D', '', pcn):
+            # the search publishes no page size, so it can never show it returned everything:
+            # 'capped' keeps the one-parcel rule off here (Palm Beach had no such hit cached)
             out.append({'folio': pcn, 'owner': str(c.get('text') or ''),
-                        'addr': '', 'legal': ''})
+                        'addr': '', 'legal': '', 'capped': True})
     return out
 
 
@@ -263,6 +288,63 @@ def _legal_of(county, folio):
     return (info or {}).get('legal', ''), info
 
 
+def given_names(defs):
+    """(LAST, FIRST) -> every given-name token the case spells for that person, so a defendant
+    filed as 'Garcia, Jose Antonio' still matches an owner record 'GARCIA JOSE ANTONIO'."""
+    out = {}
+    for party in (defs or '').split(';'):
+        party = party.strip()
+        if not party or _SKIP_PARTY.search(party):
+            continue
+        if ',' in party:
+            last, _, first = party.partition(',')
+        else:
+            toks = party.split()
+            if len(toks) < 2:
+                continue
+            last, first = toks[-1], ' '.join(toks[:-1])
+        last = re.sub(r'[^A-Z ]', '', last.upper()).strip()
+        given = re.sub(r'[^A-Z ]', '', first.upper()).split()
+        if len(last) >= 2 and given and len(given[0]) >= 2:
+            out.setdefault((last, given[0]), set()).update(given)
+    return out
+
+
+def _slots_of(c):
+    """Owner slots of a candidate: the appraiser's own owner fields when kept (Miami-Dade, Broward),
+    else the owner text, each split on the joint-owner separators. The roll writes a couple in one
+    field as 'GARCIA JOSE &W MARIA'; the '&W' / '&H' marker leaves a 'W' / 'H' that is dropped."""
+    base = c.get('slots') or [c.get('owner') or '']
+    out = []
+    for b in base:
+        b = re.sub(r'\(?\bH/E\b\)?', ' ', str(b).upper())
+        for part in re.split(r'&|;|\bAND\b', b):
+            part = re.sub(r'^\s*(?:WF|HUS|HUSB|WIFE|[WH])\b', '', part)
+            # roll designators, not names: a remainderman, joint tenancy, and a life estate only
+            # when bracketed, since Le is a common Vietnamese surname and middle name
+            part = re.sub(r'\(LE\)|\(?\b(?:REM|JTRS|JTWROS)\b\)?', ' ', part)
+            part = ' '.join(part.split())
+            if part:
+                out.append(part)
+    return out
+
+
+def _strict_ok(last, first, given, slot):
+    """One owner slot is this person: their surname and first name, their own other given names,
+    and at most one single-letter initial. Anything else ('GARCIA MARIA JOSE', 'GARCIA JOSE JR',
+    'GARCIA JOSE LUIS' for a Jose Garcia filed with no middle name) is someone else, or may be."""
+    toks = re.sub(r'[^A-Z ]', ' ', (slot or '').upper()).split()
+    if not toks or toks.count(first) != 1:
+        return False
+    lt = last.split()
+    if not all(t in toks for t in lt):
+        return False
+    if toks[0] not in lt + [first]:          # the roll writes LAST FIRST; a slot led by another word is not them
+        return False
+    extra = [t for t in toks if t not in lt and t not in given and t != first]
+    return len(extra) == 0 or (len(extra) == 1 and len(extra[0]) == 1)
+
+
 def _same_person(a, b):
     """(LAST, FIRST) pairs that can be one human listed twice ('Garcia' / 'Garcia Lopez')."""
     return a[1] == b[1] and bool(set(a[0].split()) & set(b[0].split()))
@@ -277,7 +359,7 @@ def _owner_pair(cands, persons, me, toks, county):
     Never guessed: two or more such parcels, a search that may have been cut at its page cap, a
     second 'defendant' who may be the same person under another surname, or (in an association
     case) a parcel whose legal does not name the association's complex all leave it unresolved.
-    Only the Miami-Dade search keeps the owner slots apart; the other counties never reach here."""
+    Miami-Dade and Broward keep the owner slots apart; Palm Beach's one-line text never pairs."""
     others = [p for p in persons if p != me and not _same_person(p, me)]
     if len(cands) < 2 or not others or any(c.get('capped') for c in cands):
         return None
@@ -285,9 +367,15 @@ def _owner_pair(cands, persons, me, toks, county):
         return None
     pair = []
     for c in cands:
-        mine = [i for i, o in enumerate(c['slots']) if _name_ok(me[0], me[1], o)]
+        sl = _slots_of(c)
+        mine = [i for i, o in enumerate(sl) if _name_ok(me[0], me[1], o)]
         # a slot that also names THIS defendant (a middle name, a Jr/Sr namesake) is never the other
-        theirs = [i for i, o in enumerate(c['slots']) if i not in mine
+        # The other defendant's slot must carry their surname. 'GARCIA JOSE L &W MARIA' leaves a bare
+        # 'MARIA' slot; reading it as Maria Garcia picked a namesake couple's parcel whenever the
+        # real one was titled wife-first ('GARCIA MARIA &H JOSE') and so never came back from the
+        # Jose search (review 2026-10-12). A couple sharing a surname in one field stays
+        # unresolved; 'GARCIA JOSE & LOPEZ MARIA' names both surnames and still pairs.
+        theirs = [i for i, o in enumerate(sl) if i not in mine
                   for l2, f2 in others if _name_ok(l2, f2, o)]
         if any(i != j for i in mine for j in theirs):
             pair.append(c)
@@ -307,6 +395,7 @@ def _owner_pair(cands, persons, me, toks, county):
 def resolve_case(county, case, plaintiff, defs, verbose=False):
     """-> {folio, how, owner, addr, info} or None. Corroborated or nothing."""
     persons = people_from(defs)
+    given = given_names(defs)
     toks = assoc_tokens(plaintiff, defs)
     if verbose:
         print('  %s: persons=%s assoc=%s' % (case, persons[:3], sorted(toks)[:6]))
@@ -336,7 +425,12 @@ def resolve_case(county, case, plaintiff, defs, verbose=False):
                     hits.append(c)
             if len(hits) == 1:
                 picked, how = hits[0], 'owner+assoc-legal'
-        if not picked and len(cands) == 1:
+        # THE ONLY PARCEL is evidence only when the search was whole and that parcel's owner slot is
+        # this person and nobody else (_strict_ok): a capped search may hold their real parcel past
+        # the cut, and a token match takes namesakes whose middle name is this first name.
+        if (not picked and len(cands) == 1 and not cands[0].get('capped')
+                and any(_strict_ok(last, first, given.get((last, first), {first}), sl)
+                        for sl in _slots_of(cands[0]))):
             picked, how = cands[0], 'owner-unique'
         if not picked:
             pair = _owner_pair(cands, persons, (last, first), toks, county)
@@ -375,16 +469,17 @@ def _patch_county(county, path, cache, clerk_budget, verbose):
     cfg = CL.COUNTIES[county]
     n = 0
     for r in rows:
-        if 'parcel not linked' not in (r.get('warn') or ''):
-            continue
         case = r.get('case') or ''
         if not case:
             continue
         e = cache.get(case)
+        if 'parcel not linked' not in (r.get('warn') or '') and not (
+                _legacy(e) and not r.get('folio')):
+            continue
         if isinstance(e, dict) and e.get('miss') and _fresh_miss(e):
             continue
         res = None
-        if isinstance(e, dict) and e.get('folio'):
+        if _trusted(e):
             _, info = _legal_of(county, e['folio'])
             res = {'folio': e['folio'], 'how': e.get('how', 'cache'), 'info': info,
                    'owner': '', 'addr': ''}
@@ -407,7 +502,7 @@ def _patch_county(county, path, cache, clerk_budget, verbose):
             res = resolve_case(county, case, r.get('plaintiff') or '', defs, verbose)
             if res:
                 cache[case] = {'folio': res['folio'], 'county': county, 'how': res['how'],
-                               'when': datetime.date.today().isoformat()}
+                               'rule': RULE, 'when': datetime.date.today().isoformat()}
             else:
                 cache[case] = {'miss': True, 'county': county,
                                'when': datetime.date.today().isoformat()}
@@ -467,15 +562,16 @@ def _patch_md(cache, verbose):
         return 0
     n = 0
     for r in rows:
-        if 'parcel not linked' not in (r.get('warning') or ''):
-            continue
         case = r.get('Case #') or ''
         if not case:
             continue
         e = cache.get(case)
+        if 'parcel not linked' not in (r.get('warning') or '') and not (
+                _legacy(e) and not r.get('Folio')):
+            continue
         if isinstance(e, dict) and e.get('miss') and _fresh_miss(e):
             continue
-        if isinstance(e, dict) and e.get('folio'):
+        if _trusted(e):
             res = {'folio': e['folio'], 'how': e.get('how', 'cache'), 'addr': ''}
             _, info = _legal_of('MIAMI-DADE', e['folio'])
             res['info'] = info
@@ -483,7 +579,7 @@ def _patch_md(cache, verbose):
             res = resolve_case('MIAMI-DADE', case, r.get('plaintiff') or '',
                                r.get('defendants') or '', verbose)
             cache[case] = ({'folio': res['folio'], 'county': 'MIAMI-DADE', 'how': res['how'],
-                            'when': datetime.date.today().isoformat()} if res
+                            'rule': RULE, 'when': datetime.date.today().isoformat()} if res
                            else {'miss': True, 'county': 'MIAMI-DADE',
                                  'when': datetime.date.today().isoformat()})
             _save_cache(cache)
@@ -512,7 +608,9 @@ def _patch_md(cache, verbose):
         else:
             r['equity'] = round(info['market_value'] - judg)
             r['equity_pct'] = round((info['market_value'] - judg) / info['market_value'] * 100)
-            r['warning'] = ''
+            # clears the stub's own warning; a re-resolved legacy row keeps whatever it said
+            if 'parcel not linked' in (r.get('warning') or ''):
+                r['warning'] = ''
         r['pa_url'] = 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + fol
         if not (r.get('Address') or '').strip():
             addr = res.get('addr') or info.get('site_addr') or ''
