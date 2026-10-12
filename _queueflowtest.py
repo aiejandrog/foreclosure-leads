@@ -309,7 +309,26 @@ rec('a test send that reached only us is not tied to the lead whose address it n
 rec('another ZIP or another city is a different property', a6['matched'] == 1 and a6['cases'] == {'R'}, a6)
 rec('a recipient match wins and the address tie does not also fire', 'OAK' not in a6['cases'] and 'R' in a6['cases'], a6)
 rec('the five leftover sends stay unattributed (main behaviour)', a6['unattributed'] == 5, a6)
-rec('viewBar actually renders the banner', 'o += histBanner(_histWhy());' in SRC[SRC.find('function viewBar()'):SRC.find('function viewEmptyHtml()')])
+# the street-number rule on its own: street-less / non-house-number addresses held by only one or two leads
+mp7 = os.path.join(td3, 'mail7.json')
+json.dump([_row('s1', 'x1@nowhere.com', '1ST ST, Miami Beach FL 33139'),
+           _row('s2', 'x2@nowhere.com', '0'),
+           _row('s3', 'x3@nowhere.com', '33034'),
+           _row('s4', 'x4@nowhere.com', 'HOMESTEAD, FL- 33034'),
+           _row('s5', 'x5@nowhere.com', '14 Pine Rd, Miami FL 33101')], io.open(mp7, 'w'))
+slim7 = [{'case': 'S1', 'addr': '1ST ST, Miami Beach FL 33139'}, {'case': 'S2', 'addr': '0'}, {'case': 'S3', 'addr': '33034'},
+         {'case': 'S4', 'addr': 'HOMESTEAD, FL 33034'}, {'case': 'S5', 'addr': '14 Pine Rd, Miami FL 33101'}]
+a7 = call_mode.ledger_audit(mp7, os.path.join(td3, 'missing.json'), slim=slim7)
+rec('only an address that starts with a house number and a street can tie, even for one or two leads',
+    a7['cases'] == {'S5'} and a7['unattributed'] == 4, a7)
+# a row that went only to us never ties by address, flagged test or not; a test-flagged row to anyone else can
+mp8 = os.path.join(td3, 'mail8.json')
+json.dump([_row('o1', sorted(call_mode.ADVISOR_EMAILS)[0], '7 Oak Ln, Miami FL 33101'),
+           _row('o2', 'someone@nowhere.com', '8 Oak Ln, Miami FL 33101', test_mode=True)], io.open(mp8, 'w'))
+a8 = call_mode.ledger_audit(mp8, os.path.join(td3, 'missing.json'),
+                            slim=[{'case': 'O7', 'addr': '7 Oak Ln, Miami FL 33101'}, {'case': 'O8', 'addr': '8 Oak Ln, Miami FL 33101'}])
+rec('an advisor-only row is never tied by address; an old test row to someone else is',
+    a8['cases'] == {'O8'} and a8['unattributed'] == 1 and a8['test'] == 0, a8)
 # the only-test case: coverage goes back to ok
 mp4 = os.path.join(td3, 'mail4.json')
 json.dump([{'ch': 'email', 'message_id': 'c', 'to': sorted(call_mode.ADVISOR_EMAILS)[0], 'test_mode': True,

@@ -2101,10 +2101,11 @@ def _ledger_addr_key(addr):
 
     Whole string (street, city, state, ZIP), so a street shared across cities or ZIPs does not tie.
     Words keep a single space between them: dropping the spaces would let '1 21st St' and
-    '12 1st St' collide. An address with no street number ('HOMESTEAD, FL 33034') names a town, not
-    a property, and keys to nothing."""
+    '12 1st St' collide. An address that does not start with a house number followed by a street
+    ('HOMESTEAD, FL 33034', '1ST ST, MIAMI BEACH', '0', a bare ZIP) names no one property and keys
+    to nothing."""
     a = re.sub(r'[^A-Z0-9]+', ' ', str(addr or '').upper()).strip()
-    return a if re.match(r'\d', a) else ''
+    return a if re.match(r'\d+\s+\S', a) else ''
 
 
 def _address_index(slim):
@@ -2162,15 +2163,17 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
         the row carries the `addr` the send was about, the same board string the lead carries. A
         recipient that is no longer on any lead (the bounce guard strips dead addresses from the
         cards) therefore still ties to its property. Whole-string match only, on an address that
-        starts with a street number and is held by at most _ADDR_TIE_MAX_CASES cases; a text row has
-        no address and keeps the recipient-only rule. A test send to ourselves is never tied this
-        way. Counted in `matched` too.
+        starts with a house number and street and is held by at most _ADDR_TIE_MAX_CASES cases; a
+        text row has no address and keeps the recipient-only rule. A row that went only to us
+        (advisor or sending login) is never tied this way. A test-flagged row to anyone else can be:
+        that recipient may be an owner, and marking the lead contacted is the safe reading. Counted in
+        `matched` too.
       * an email row with `test_mode` true whose recipient is one of OUR OWN addresses (the
         advisor, ADVISOR_EMAILS, or the sending account itself, `login`/`from`) reached no lead.
         Counted in `test`. The flag alone is not trusted: until 2026-10-12 send_server took
         meta.test from the request body without checking who it went to (it now refuses a test
         send to anyone but these addresses), so an older test row to any other address stays
-        unattributed.
+        unattributed unless the property address it carries ties it to a lead.
     Anything left (a delivered, non-test send to an address or number on no lead) still counts as
     unattributed and still turns ledgers_ok off: that recipient may be a lead whose address this
     build no longer carries. `rows` describes those leftovers with no address, name or subject:
@@ -2213,10 +2216,11 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
                         a = str(a).strip().lower()
                         if a:
                             hit |= by_email.get(a, set())
-                    if not hit and not (e.get('test_mode') is True and _is_operator(e)):
+                    if not hit and not _is_operator(e):
                         # An address that is on no lead any more (stripped by the bounce guard, or a
                         # contact that was replaced) still leaves the property the email was about.
-                        # Never for a test send that reached only us: that one reached no owner.
+                        # Never for a row that went only to us (advisor or sending login): that one
+                        # reached no owner, whatever its test flag says.
                         hit |= by_addr.get(_ledger_addr_key(e.get('addr')), set())
                 if hit:
                     out['cases'] |= hit
