@@ -426,9 +426,19 @@ import unittest.mock as _um
 with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
                                                              (None, 'locked')]):
     rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
-check('cache lock not taken for the re-check: says so and leaves the new-filer hits file as it was',
+check('cache lock not taken for the re-check: says so and keeps every earlier new-filer hit',
       'could not re-check' in out and json.loads((d / PS.HITS_NAME).read_text())
       == {'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}, out)
+_old_mi = PS.match_index
+PS.match_index = lambda *a_, **k_: {'CACE-99-000830': {'src': 'pacer_newfilers', 'new': 1}}
+try:
+    with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
+                                                                 (None, 'locked')]):
+        rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+finally:
+    PS.match_index = _old_mi
+check('... and still adds tonight\'s new matches alongside them',
+      set(json.loads((d / PS.HITS_NAME).read_text())) == {'CACE-99-000830', 'CACE-99-000831'}, out)
 rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
 check('... and with the lock taken the same run does rewrite it (the check above is not vacuous)',
       json.loads((d / PS.HITS_NAME).read_text()) == {}, out)

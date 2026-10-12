@@ -1994,8 +1994,17 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
     return out
 
 
-def refresh_hits(leads, idx, hits_path, today, now_ts, env_name):
+def refresh_hits(leads, idx, hits_path, today, now_ts, env_name, keep_old=False):
+    """keep_old: tonight's matches PLUS every hit already on file (used when cached clears could not be
+    re-checked, so a hit holding a now-refused lead must not be dropped). An unreadable old file is then
+    left untouched rather than replaced."""
     hits = match_index(leads, idx, today, now_ts, env_name)
+    if keep_old and os.path.exists(hits_path):
+        old = _load_json(hits_path)
+        if not isinstance(old, dict):
+            return hits
+        for k, v in old.items():
+            hits.setdefault(k, v)
     save_cache(hits_path, hits)
     return hits
 
@@ -2407,10 +2416,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             out = pcl.logout()
             if pcl.creds and not out:
                 log('PACER: logout did not confirm (the token expires on its own)')
-    if wd_prob:
-        pass            # a clear we could not re-check must not lose the hit that holds it: keep the old hits file
-    elif idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
-        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name)
+    if idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
+        # a clear we could not re-check must not lose the hit that holds it: then keep the old hits too
+        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name, keep_old=bool(wd_prob))
         log('PACER new filers: index %d rows; %d lead(s) match an owner on an open flsb case (blocked)%s'
             % (len(idx.get('rows') or {}), len(hits), (': ' + ', '.join(sorted(hits)[:20])) if hits else ''))
     elif iprob:
