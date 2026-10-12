@@ -233,7 +233,7 @@ try:
     st_, j = call(port, '/send', SEND)
     rec('no sync today -> /send HELD', j.get('ok') is False and j.get('hold') == 'sync', j)
     rec('...as blocked=optout_stale, the refusal the Morning Worker PAUSES on', j.get('blocked') == 'optout_stale')
-    st_, j = call(port, '/send', dict(SEND, meta={'c': 'FAKE-CASE-2', 'test': True}))
+    st_, j = call(port, '/send', dict(SEND, to='tester@example.com', meta={'c': 'FAKE-CASE-2', 'test': True}))
     rec('...test sends are held too (ALL sends)', j.get('hold') == 'sync', j)
     rec('...nothing reached SMTP', not (work / 'smtp_calls.txt').exists())
     rec('...and no mail_sent.json row was written', not (work / 'mail_sent.json').exists() or

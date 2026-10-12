@@ -120,9 +120,17 @@ def main():
         rec('a refused duplicate writes NO ledger row', len(led) == 1, len(led))
 
         # test:true bypasses the dedupe so smoke-testing to your own inbox stays possible
+        st0, j0 = call(port, '/send', {'to': 'tester@example.com', 'subj': 'S', 'body': 'B',
+                                       'meta': {'c': 'CASE-1c', 'test': True}})
+        st, j = call(port, '/send', {'to': 'tester@example.com', 'subj': 'S', 'body': 'B',
+                                     'meta': {'c': 'CASE-1c', 'test': True}})
+        rec('meta.test bypasses the 24h dedupe (self smoke-tests to the login)',
+            st0 == 200 and st == 200, {'st0': st0, 'st': st, 'j': j})
+        # ...but only to our own addresses: the same flag on a send to anyone else is refused
         st, j = call(port, '/send', {'to': 'a@example.com', 'subj': 'S', 'body': 'B',
                                      'meta': {'c': 'CASE-1c', 'test': True}})
-        rec('meta.test bypasses the 24h dedupe (self smoke-tests)', st == 200, {'st': st, 'j': j})
+        rec('meta.test to a non-operator address is refused (451 test_not_operator)',
+            st == 451 and j.get('blocked') == 'test_not_operator', {'st': st, 'j': j})
 
         # ---------- validation ----------------------------------------------------------
         st, j = call(port, '/send', {'to': 'not-an-email', 'subj': 'S', 'body': 'B'})
