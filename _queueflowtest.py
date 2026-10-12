@@ -279,6 +279,37 @@ call_mode.stamp_unknown(rows5, a5)
 rec('the address tie marks leads contacted and clears nothing', [r.get('lu') for r in rows5] == [1, 1, None, 1], rows5)
 a5n = call_mode.ledger_audit(mp5, os.path.join(td3, 'text5.json'))
 rec('without the lead list nothing is tied by address either', a5n['matched'] == 0 and a5n['cases'] == set(), a5n)
+# ---- review findings (address tie limits): street-less, shared, merged digits, test sends, ZIP/city ----
+mp6 = os.path.join(td3, 'mail6.json')
+def _row(mid, to, addr, **kw):
+    r = {'ch': 'email', 'message_id': mid, 'to': to, 'addr': addr, 'ts_utc': '2026-10-01T10:00:00', 'd': '2026-10-01'}
+    r.update(kw); return r
+json.dump([
+    _row('h', 'a@nowhere.com', 'HOMESTEAD, FL- 33034'),                    # a town, no street number
+    _row('b', 'b@nowhere.com', '1200 Brickell Bay Dr, Miami FL 33131'),    # shared by 3 cases (a building)
+    _row('m', 'c@nowhere.com', '1 21st St, Miami FL 33101'),               # must not collide with '12 1st St'
+    _row('t', sorted(call_mode.ADVISOR_EMAILS)[0], '7 Oak Ln, Miami FL 33101', test_mode=True),   # reached only us
+    _row('z', 'd@nowhere.com', '7 Oak Ln, Miami FL 33102'),                # same street + city, other ZIP
+    _row('y', 'e@nowhere.com', '7 Oak Ln, Hialeah FL 33101'),              # same street + ZIP, other city
+    _row('w', 'r@example.com', '7 Oak Ln, Miami FL 33101'),                # recipient is lead R: address must NOT also fire
+], io.open(mp6, 'w'))
+slim6 = [{'case': 'T%d' % i, 'addr': 'HOMESTEAD, FL 33034'} for i in range(5)] \
+      + [{'case': 'U%d' % i, 'addr': '1200 Brickell Bay Dr, Miami FL 33131'} for i in range(3)] \
+      + [{'case': 'M', 'addr': '12 1st St, Miami FL 33101'},
+         {'case': 'OAK', 'addr': '7 Oak Ln, Miami FL 33101'},
+         {'case': 'R', 'addr': '9 Elm Ct, Miami FL 33101', 'emails': ['r@example.com']}]
+a6 = call_mode.ledger_audit(mp6, os.path.join(td3, 'missing.json'), slim=slim6)
+rec('an address with no street number ties nothing, however many leads share it',
+    not any(c.startswith('T') for c in a6['cases']), a6)
+rec('an address held by more than two cases (a building) ties nothing',
+    not any(c.startswith('U') for c in a6['cases']), a6)
+rec('spacing is kept, so 1 21st St cannot tie 12 1st St', 'M' not in a6['cases'], a6)
+rec('a test send that reached only us is not tied to the lead whose address it names',
+    'OAK' not in a6['cases'] and a6['test'] == 1, a6)
+rec('another ZIP or another city is a different property', a6['matched'] == 1 and a6['cases'] == {'R'}, a6)
+rec('a recipient match wins and the address tie does not also fire', 'OAK' not in a6['cases'] and 'R' in a6['cases'], a6)
+rec('the five leftover sends stay unattributed (main behaviour)', a6['unattributed'] == 5, a6)
+rec('viewBar actually renders the banner', 'o += histBanner(_histWhy());' in SRC[SRC.find('function viewBar()'):SRC.find('function viewEmptyHtml()')])
 # the only-test case: coverage goes back to ok
 mp4 = os.path.join(td3, 'mail4.json')
 json.dump([{'ch': 'email', 'message_id': 'c', 'to': sorted(call_mode.ADVISOR_EMAILS)[0], 'test_mode': True,

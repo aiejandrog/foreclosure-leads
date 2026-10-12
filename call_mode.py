@@ -2091,25 +2091,33 @@ def _recipient_index(slim):
     return by_email, by_phone
 
 
-def _ledger_addr_key(addr):
-    """A property address reduced to letters and digits, upper-cased. '' when there is nothing to key.
+# A property address shared by more cases than this is a building or a placeholder, not one owner's
+# property: it ties nothing (the send stays unattributed, which is the cautious reading).
+_ADDR_TIE_MAX_CASES = 2
 
-    Whole-string on purpose (street, city, state, ZIP): the send row's `addr` and the lead's `addr`
-    are the same board string, and a street-only key would tie two different properties that share a
-    street name across cities."""
-    return re.sub(r'[^A-Z0-9]', '', str(addr or '').upper())
+
+def _ledger_addr_key(addr):
+    """A property address reduced to upper-case words, '' when it cannot identify one property.
+
+    Whole string (street, city, state, ZIP), so a street shared across cities or ZIPs does not tie.
+    Words keep a single space between them: dropping the spaces would let '1 21st St' and
+    '12 1st St' collide. An address with no street number ('HOMESTEAD, FL 33034') names a town, not
+    a property, and keys to nothing."""
+    a = re.sub(r'[^A-Z0-9]+', ' ', str(addr or '').upper()).strip()
+    return a if re.match(r'\d', a) else ''
 
 
 def _address_index(slim):
     """normalised property address -> cases, from the leads being built. Same rule as
-    _recipient_index: a match can only mark a lead contacted."""
+    _recipient_index: a match can only mark a lead contacted. An address held by more than
+    _ADDR_TIE_MAX_CASES cases (a condo with no unit, a county placeholder) is left out."""
     by_addr = {}
     for d in (slim or []):
         case = str(d.get('case') or '').strip()
         k = _ledger_addr_key(d.get('addr'))
         if case and k:
             by_addr.setdefault(k, set()).add(case)
-    return by_addr
+    return {k: v for k, v in by_addr.items() if len(v) <= _ADDR_TIE_MAX_CASES}
 
 
 # Our own recipients for meta.test sends (Brief Jesse: tracker_template.html _JESSE).
@@ -2153,8 +2161,10 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
       * an email row whose recipient is on no lead is tried by PROPERTY ADDRESS next (2026-10-12):
         the row carries the `addr` the send was about, the same board string the lead carries. A
         recipient that is no longer on any lead (the bounce guard strips dead addresses from the
-        cards) therefore still ties to its property. Whole-string match only; a text row has no
-        address and keeps the recipient-only rule. Counted in `matched` too.
+        cards) therefore still ties to its property. Whole-string match only, on an address that
+        starts with a street number and is held by at most _ADDR_TIE_MAX_CASES cases; a text row has
+        no address and keeps the recipient-only rule. A test send to ourselves is never tied this
+        way. Counted in `matched` too.
       * an email row with `test_mode` true whose recipient is one of OUR OWN addresses (the
         advisor, ADVISOR_EMAILS, or the sending account itself, `login`/`from`) reached no lead.
         Counted in `test`. The flag alone is not trusted: until 2026-10-12 send_server took
@@ -2203,9 +2213,10 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
                         a = str(a).strip().lower()
                         if a:
                             hit |= by_email.get(a, set())
-                    if not hit:
+                    if not hit and not (e.get('test_mode') is True and _is_operator(e)):
                         # An address that is on no lead any more (stripped by the bounce guard, or a
                         # contact that was replaced) still leaves the property the email was about.
+                        # Never for a test send that reached only us: that one reached no owner.
                         hit |= by_addr.get(_ledger_addr_key(e.get('addr')), set())
                 if hit:
                     out['cases'] |= hit
