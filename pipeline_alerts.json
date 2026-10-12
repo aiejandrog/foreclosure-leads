@@ -1,127 +1,119 @@
 {
  "alerts": [
   {
-   "at": "2026-10-10T09:57:48-04:00",
-   "key": "healthcheck-fail",
-   "severity": "fail",
-   "text": "healthcheck FAIL stages: skiptrace freshness."
-  },
-  {
-   "at": "2026-10-10T09:57:48-04:00",
+   "at": "2026-10-12T17:06:14-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-09 21:13): 1 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Evening readiness check last ran 68h ago."
   },
   {
-   "at": "2026-10-10T09:57:48-04:00",
-   "key": "morning-sends",
-   "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 15, 15) and 48 leads were eligible, but 0 first-touch emails were sent."
+   "at": "2026-10-12T17:06:14-04:00",
+   "key": "paid-reads-cap",
+   "severity": "warn",
+   "text": "Paid reads $49.96 of $50.00 (100%) this month, warn at 80%."
   },
   {
-   "at": "2026-10-10T09:57:48-04:00",
+   "at": "2026-10-12T17:06:14-04:00",
    "key": "tracerfy-credits",
-   "severity": "fail",
-   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
+   "severity": "warn",
+   "text": "Tracerfy balance 1161 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-10T09:57:48-04:00",
+ "published_at": "2026-10-12T17:06:14-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 0,
-   "filings": 1468,
-   "holds": 450,
-   "leads_checked": 3,
+   "errors": 1,
+   "filings": 1495,
+   "holds": 438,
+   "leads_checked": 4,
    "provider": "courtlistener",
-   "pull_age_h": 0.68,
+   "pull_age_h": 0.67,
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 122,
-   "truncated": 1
+   "reason": "time_budget",
+   "requests_used": 34,
+   "truncated": 3
   },
   "bounce": {
    "ceiling": 0.1,
    "day_blocked": false,
    "day_ceiling": 0.05,
-   "day_date": "2026-10-04",
+   "day_date": "2026-10-12",
    "day_dead": 1,
    "day_min": 20,
-   "day_rate": 0.1,
-   "day_sent": 10,
+   "day_rate": 0.25,
+   "day_sent": 4,
    "dead": 1,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 1,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.09090909090909091,
+   "ft_rate": 0.2,
    "ft_restart_cap": 10,
    "ft_rule": "slow_restart",
-   "ft_sent": 11,
+   "ft_sent": 5,
    "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.005537717362550956,
-   "mailed": 32,
+   "lb": 0.006821808976989882,
+   "mailed": 26,
    "post_dead": 1,
-   "post_lb": 0.005537717362550956,
-   "post_mailed": 32,
-   "post_rate": 0.03125,
+   "post_lb": 0.006821808976989882,
+   "post_mailed": 26,
+   "post_rate": 0.038461538461538464,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.03125,
+   "rate": 0.038461538461538464,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 16.37953
+   "usd": 15.91871
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
    "fresh": true,
-   "names": [
-    "skiptrace freshness"
-   ]
+   "names": []
   },
   "morning_sends": {
    "addresses": 2,
-   "cap": 15,
+   "cap": 20,
    "caps": [
-    15,
-    15
+    20,
+    20
    ],
-   "date": "2026-10-10",
-   "eligible": 48,
+   "date": "2026-10-12",
+   "eligible": 50,
    "judged": true,
    "readable": true,
    "scheduled": true,
-   "sent": 0
+   "sent": 4
   },
   "optout_ledger": {
    "readable": true,
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-10",
+   "date": "2026-10-12",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1791630903,
+   "started_at": 1791822083,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 50.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 31.8636
+   "spent": 49.9629
   },
   "readiness": {
    "at": "2026-10-09T21:13:59-04:00",
@@ -156,7 +148,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 1
+   "credits": 1161
   }
  },
  "version": 1
