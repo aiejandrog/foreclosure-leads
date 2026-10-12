@@ -835,7 +835,7 @@ def _trace(a, picked, out):
             blocked += 1
             continue
         ftype = r.get('ftype') or _fc_type_plaintiff(r.get('plaintiff', '')) or ''
-        res = analyze(docs, owner, _num(r.get('judg')), ftype=ftype, lead_case=case)
+        res = analyze(docs, owner, _num(r.get('judg')), ftype=ftype, lead_case=case, county='palmbeach')
         # Landmark publishes no dollar amounts -> analyze() drops every PB mortgage and its zeros
         # read as a clean chain. Restate what we actually know. See pb_chain_truth.
         res = pb_chain_truth(res, docs)

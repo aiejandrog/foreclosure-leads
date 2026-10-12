@@ -532,7 +532,7 @@ def _pair_by_links(pool, morts, sats, links, lc):
     return linked_rel, claimed, fore_link
 
 
-def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=False):
+def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=False, county=''):
     """Open-mortgage picture + deal-killer flags for the subject owner. Precision > recall: guards force
     conf='low' on common names / MERS ambiguity so we never assert a fantasy (the template shows low-conf
     flags as 'possible - verify', never solid red).
@@ -733,6 +733,7 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
                 return True
         return False
     hoa_open = code_open = irs_open = 0
+    _counted, _rel = set(), set()                      # which rows this loop summed / skipped as released
     for d in exact:
         if not _LIEN_DOC_RE.match((d.get('DocTypeDescription') or '').upper().strip()):
             continue
@@ -741,7 +742,10 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
             continue
         party = d.get('CrossPartyName') or ''
         inst = _inst(party)
-        if not inst or _released(inst):
+        if not inst:
+            continue
+        if _released(inst):
+            _rel.add(id(d))
             continue
         if _IRS_RE.search(party):
             irs_open += amt
@@ -749,8 +753,23 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
             hoa_open += amt
         elif _CODE_RE.search(party):
             code_open += amt
+        else:
+            continue
+        _counted.add(id(d))
+    # Every lien, row by row, priced or not (other_liens, 2026-10-12): the loop above drops a lien
+    # the index lists with no amount (most Broward city liens, every Palm Beach lien) and a priced
+    # lien it has no bucket for (a mechanic's lien, a private judgment). Only ever ADDS debt.
+    extra = {}
+    if not _legacy:
+        import other_liens
+        ol = other_liens.rows(pool, lead_case=lc, legacy_counted=_counted, legacy_released=_rel,
+                              holder_release=(county != 'palmbeach'), judgment=judgment or 0)
+        hoa_open += ol['add']['hoa_open']; code_open += ol['add']['code_open']; irs_open += ol['add']['irs_open']
+        extra = {'other': ol['other'], 'other_open_unpriced': ol['other_open_unpriced'], 'other_v': 1}
+        if ol['hoa_own_in']:
+            extra['hoa_own_in'] = True
 
-    return {'liens': [{k: v for k, v in r.items() if k != 'mers'} for r in liens],
+    return {**extra, 'liens': [{k: v for k, v in r.items() if k != 'mers'} for r in liens],
             'open_count': len(opens), 'junior': junior, 'first_est': first,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open, 'ftype': ftype,
