@@ -225,6 +225,13 @@ rec('...and one dated before that release is paid off with its loan',
 c, cv, st = run([deed(), unp, dict(m_other, oriG_REC_BOOK='', oriG_REC_PAGE='')])
 rec('a modification only GUESSED to amend an unpriced loan does not price it', st not in ES.FACT
     and c['mtg_open_unpriced'] == 1, (mtg(c), st))
+to_b = r('ASSIGNMENT - ASG', '01/02/2020', '', b='31500', p='9', p1='ALPHA BANK NA', p2='BETA BANK NA')
+b_mod = dict(modif, seconD_PARTY='BETA BANK NA', consideratioN_1=150000)       # 2018, before the 2020 assignment
+c = run([deed(), folio_loan, to_b, b_mod])[0]
+rec("a modification by a lender the loan passed to only LATER stays its own row (Codex review)",
+    sorted(l['amt'] for l in c['liens']) == [150000, 200000], mtg(c))
+c = run([deed(), folio_loan, dict(to_b, reC_DATE='01/02/2017'), b_mod])[0]
+rec('...and one by the holder it had already passed to attaches', [l['amt'] for l in c['liens']] == [200000], mtg(c))
 lone = dict(modif, seconD_PARTY='OMEGA SERVICING')
 c, cv, st = run([deed(), folio_loan, lone])
 rec('a modification with no loan to attach to stays its own row and is flagged', len(c['liens']) == 2

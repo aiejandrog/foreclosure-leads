@@ -1154,6 +1154,16 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # from the intangible tax is ADDED to the loan; a stated consideration is the modified balance, so
     # the loan takes the larger of the two. An unpriced loan stays unpriced (its size is unknown, and
     # the amendment's figure is not its balance). One with nowhere to go stays its own row.
+    def _chain_until(lend, until):
+        out, frontier = {lend}, [lend]
+        while frontier:
+            cur = frontier.pop()
+            for a in assigns:
+                if (a['_dt'] and a['_dt'] <= until and _inst(a.get('firsT_PARTY')) == cur):
+                    nxt = _inst(a.get('seconD_PARTY'))
+                    if nxt and nxt not in out:
+                        out.add(nxt); frontier.append(nxt)
+        return out
     for m in amends:
         tgt = None
         if all(m['_ob']):
@@ -1161,8 +1171,10 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                         and (o['st'] == 'OPEN' or (o.get('sat_by') == 'book/page' and not m['_dt'].startswith('0000')
                                                    and (sat_dt.get(_bpn(*o['_bpk'])) or '') >= m['_dt']))), None)
         elif m['_lend']:
+            # only assignments recorded by the amendment's date: a holder the loan passes to LATER
+            # cannot have modified it earlier (Codex review: chain_of ignores dates)
             cands = [o for o in liens if o['st'] == 'OPEN' and not o.get('_nopx') and o['_dt'] <= m['_dt']
-                     and m['_lend'] in chain_of(o['_lend'], o['_dt'])]
+                     and m['_lend'] in _chain_until(o['_lend'], m['_dt'])]
             tgt = max(cands, key=lambda o: o['_dt']) if cands else None
         if tgt is None:
             liens.append(m)                             # OPEN unless a release names its own book/page
