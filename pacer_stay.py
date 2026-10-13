@@ -117,6 +117,8 @@ titles (a bankruptcy caption is the debtor's name). An API error never overwrite
 COST. $0.10 a page, and PACER waives the bill for a quarter that accrues $30 or less -- one cent more
 and the WHOLE quarter bills. So three ceilings, all fail closed:
     quarter  PACER_QUARTER_CAP (default $25: $5 of headroom under $30 for any manual PACER use),
+             never above $30 unless PACER_BILL_QUARTER names this quarter (e.g. 2026-Q4) -- a raised
+             cap alone is held to the waiver (2026-10-13, after a raised cap took Q4 to $59),
              in DEALFLOW_DIR/pacer_quarter_ledger.json, calendar quarters. Reserve before each page,
              settle to the receipt's searchFee after.
     month    #74's shared paid-reads cap (paid_reads.debit / adjust, spender 'pacer_stay'), so PACER
@@ -175,6 +177,7 @@ QA_CACHE_NAME = 'pacer_stay_cache_qa.json'
 QUARTER_LEDGER_NAME = 'pacer_quarter_ledger.json'
 ENV_QUARTER_LEDGER = 'PACER_QUARTER_LEDGER'
 ENV_QUARTER_CAP = 'PACER_QUARTER_CAP'
+ENV_BILL_QUARTER = 'PACER_BILL_QUARTER'      # e.g. 2026-Q4: the ONLY way past the $30 waiver, one quarter at a time
 ENV_RUN_MAX = 'PACER_RUN_MAX'
 SPENDER = 'pacer_stay'
 
@@ -358,6 +361,17 @@ class QuarterLedger:
         self.today = today or dt.date.today()
         self.q = quarter_of(self.today)
         self.broken = ''
+        # HARD STOP AT THE WAIVER (2026-10-13). One cent over $30 bills the WHOLE quarter, and on 10-12 a
+        # PACER_QUARTER_CAP raised in a shell took Q4 to $59. A raised cap alone can no longer pass $30:
+        # PACER_BILL_QUARTER must also name this exact quarter, so the decision is per quarter and an env
+        # var left behind cannot carry it into the next one.
+        self.cap_set = self.cap
+        self.bill = str(env.get(ENV_BILL_QUARTER) or '').strip().upper() == self.q
+        self.waiver_note = ''
+        if not self.cap_problem and not self.bill and self.cap > FREE_QUARTER_USD:
+            self.cap = FREE_QUARTER_USD
+            self.waiver_note = ('%s=$%.2f held to the $%.0f waiver; set %s=%s to let this quarter be billed'
+                                % (ENV_QUARTER_CAP, self.cap_set, FREE_QUARTER_USD, ENV_BILL_QUARTER, self.q))
 
     def _read(self):
         try:
@@ -393,6 +407,9 @@ class QuarterLedger:
             out['why'] = 'PACER quarter cap setting invalid: %s' % self.cap_problem
         elif out['spent'] + 1e-9 >= self.cap:
             out['why'] = 'PACER quarter cap reached: $%.2f of $%.2f in %s' % (out['spent'], self.cap, self.q)
+            if self.cap >= FREE_QUARTER_USD and not self.bill:
+                out['why'] += (' -- the $%.0f waiver; only %s=%s lets this quarter be billed'
+                               % (FREE_QUARTER_USD, ENV_BILL_QUARTER, self.q))
         else:
             out['ok'] = True
         return out
@@ -2132,6 +2149,8 @@ def _log_status(quarter, idx, today, env):
     qs, ms = quarter.status(), paid_reads.status()
     log('PACER quarter %s: $%.2f of $%.2f (%d pages)%s' % (qs['quarter'], qs['spent'], qs['cap'], qs['pages'],
                                                          '' if qs['ok'] else ' -- ' + qs['why']))
+    if quarter.waiver_note:
+        log('  ' + quarter.waiver_note)
     kinds = {}
     for v in (qs.get('days') or {}).values():
         for k, usd in v.items():
@@ -2305,9 +2324,14 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         if not qs['ok']:
             log('PACER: %s -- no paid searches tonight' % qs['why'])
             do_pull, queue = False, []
+        elif quarter.bill and qs['cap'] > FREE_QUARTER_USD:
+            log('PACER: WARNING %s=%s and PACER_QUARTER_CAP $%.2f -- this quarter will be billed'
+                % (ENV_BILL_QUARTER, quarter.q, qs['cap']))
         elif qs['cap'] >= FREE_QUARTER_USD:
-            log('PACER: WARNING PACER_QUARTER_CAP $%.2f is at or above the $30 waiver -- this quarter will be billed'
-                % qs['cap'])
+            log('PACER: WARNING the quarter cap is the full $30 waiver -- a single manual PACER web search on top '
+                'of it bills the whole quarter')
+        if quarter.waiver_note:
+            log('PACER: ' + quarter.waiver_note)
         if do_pull:
             maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
             pull_cap = min((maxp or 0) * PAGE_USD, qs['remaining'], ms_left)
