@@ -198,19 +198,25 @@ rec('the board tone rule is the shared one too',
     '_textTone(' in extract(TPL_SRC, '_defaultTextTone'))
 
 # ─────────────────────────────────────────────────────────── 5. the page: adapter + wiring
+# 2026-10-13 (Alejandro: "i want call mode to send this out what morning worker does for texts").
+# The phone's ladder button sends the worker's message itself: the shared bodies, English then
+# Spanish in one text, exactly smsMsg(r, 'both'). Balloon rows keep the page's own ladder.
 PAGE = strip_js_comments(C._PAGE)
 BTB = extract(C._PAGE, 'boardTextBody')
+TB = extract(C._PAGE, 'textBody')
 rec('the phone composes from the shared bodies, not from a local table',
     '_textBodies({' in BTB and '_textTone(' in BTB)
 rec('the phone picks its rung from ITS OWN stage count', 'textStage(r)' in BTB)
-rec('the phone honours the EN|ES toggle rather than sending both after a call',
-    "lang() === 'es'" in BTB and 'B.es' in BTB and 'B.en' in BTB)
+rec('the phone sends English then Spanish in one text, like the worker',
+    "B.en + '\\n\\n' + B.es" in BTB)
+rec('the ladder button sends the worker message on every homeowner row',
+    "if(!(r && r.st === 'BAL')) return boardTextBody(r);" in TB)
+rec('the old two-chip choice is gone', 'data-sit="batch"' not in C._PAGE and "_txk==='batch'" not in C._PAGE)
 
-# The chip is offered only where the cold ladder itself is offered. Everything above it in
-# afterCall's if/else chain is a hard gate, and the batch script must sit BELOW all of them.
+# Every hard gate in afterCall's if/else chain must sit ABOVE the ladder send button.
 after = C._PAGE[C._PAGE.index('function afterCall(r, o, nextC){'):]
 after = after[:after.index("var go = function(){ advance(r.c, nextC); };")]
-_chip = after.index('data-sit="batch"')
+_btn = after.index("var lbl = txLabel('ladder', st);")
 for gate, why in ((r"hardSuppressed\(r\)", 'suppression'),
                   (r"o\.k==='badnum'", 'bad number'),
                   (r"dnt\b", 'do-not-text'),
@@ -218,91 +224,57 @@ for gate, why in ((r"hardSuppressed\(r\)", 'suppression'),
                   (r"st === 'retired'", 'retired ladder'),
                   (r"st === 'replied'", 'they already replied')):
     m = [x for x in re.finditer(gate, after) if x.start() < len(after)]
-    rec('the batch chip sits below the %s gate' % why,
-        bool(m) and m[0].start() < _chip, 'gate at %s, chip at %d' % (m[0].start() if m else None, _chip))
+    rec('the text button sits below the %s gate' % why,
+        bool(m) and m[0].start() < _btn, 'gate at %s, button at %d' % (m[0].start() if m else None, _btn))
 
-rec('the batch chip is not offered on a balloon/investor row',
-    "r.st === 'BAL'" in after[:_chip + 400])
-rec('the send button routes the batch chip to the shared bodies',
-    "(_txk==='batch')  ? boardTextBody(r)" in C._PAGE)
+rec('the send button routes the ladder through textBody',
+    "(_txk==='ladder') ? textBody(r, st)" in C._PAGE)
 tx = C._PAGE[C._PAGE.index("if($('tx')) $('tx').onclick = function(){"):]
 tx = tx[:tx.index("$('txn').onclick")]
-rec('the batch text spends the SAME touch as the ladder -- one write, one ledger',
+rec('a text spends ONE touch -- one write, one ledger',
     tx.count('touches.push(') == 1, tx.count('touches.push('))
 rec('and it is still logged as an open, not a send, until he confirms',
     'n.textopen = today();' in tx and "$('txy').onclick" in tx)
 rec('the log line says which script went out', 'txKind(_txk, st)' in tx)
 
-# ─────────────────────────────────────────────────────────── 5b. the after-call ladder's first touch
-# 2026-10-12 (Alejandro: "focus on urgency ... sounds robotic ... look like we handwrote it"). The
-# first touch picks a body by LIVE days to sale. Urgency must come only from the row's own sale
-# date, and a row without a readable future date must fall back to the plain body.
-_i = CM_SRC.index('var TEXT_T = {')
-_j = CM_SRC.index('function textBody(')
-_ladder = CM_SRC[_i:_j] + extract(CM_SRC, 'textBody') + '\n' + extract(CM_SRC, 'liveDays')
-_LAD_HEAD = r"""
-var SENDER = {name:'Alejandro Gonzalez'}, _LANG = 'en';
-function lang(){ return _LANG; }
-function isBalloon(r){ return r.st==='BAL'; }
+# The words that actually leave the phone, run end to end through the page's own adapter.
+PH = node(BLOCK + '\n' + BTB + '\n' + TB + r'''
+var SENDER = {name:'Alejandro Gonzalez'}, _STAGE = 'cold';
 function firstName(r){ return r.on || ''; }
-"""
-_LAD_TAIL = r"""
-function mdy(d){ var t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()+d);
-  return (t.getMonth()+1)+'/'+t.getDate()+'/'+t.getFullYear(); }
-var base = {on:'Richard', a:'10936 LAKEMORE LN, MIAMI, FL 33176'};
+function textStage(r){ return _STAGE; }
+function lang(){ return 'en'; }
+function fillScript(t){ return 'LADDER:' + t; }
+var TEXT_T = {cold:'balloon cold'}, TEXT_T_ES = TEXT_T;
+var base = {on:'Juan', a:'3461 NW 171 ST, MIAMI GARDENS, FL 33056'};
 function row(o){ return Object.assign({}, base, o); }
 var out = {
-  soon3:  textBody(row({x: mdy(3), d: 3}), 'cold'),
-  soon1:  textBody(row({x: mdy(1), d: 1}), 'cold'),
-  month:  textBody(row({x: mdy(18), d: 18}), 'cold'),
-  far:    textBody(row({x: mdy(45), d: 45}), 'cold'),
-  lp:     textBody(row({x: mdy(3), d: 3, lp: 1}), 'cold'),
-  passed: textBody(row({x: mdy(-2), d: -2}), 'cold'),
-  nodate: textBody(row({x: '', d: 9999}), 'cold'),
-  follow: textBody(row({x: mdy(3), d: 3}), 'follow'),
-  nw:     textBody(row({x: '', d: 9999, a: '1240 NW 54TH ST, MIAMI'}), 'cold'),
-  mixed:  textBody(row({x: '', d: 9999, a: '12 Ocean Dr, MIAMI'}), 'cold'),
-  noaddr: textBody(row({x: '', d: 9999, a: ''}), 'cold'),
-  route:  textBody(row({x: '', d: 9999, a: '1234 US HIGHWAY 1, HOMESTEAD'}), 'cold'),
-  mc:     textBody(row({x: '', d: 9999, a: "12 MCDONALD ST, MIAMI"}), 'cold'),
-  ob:     textBody(row({x: '', d: 9999, a: "12 O'BRIEN CT APT 3B, MIAMI"}), 'cold')
+  cold:   textBody(row({d: 40, st: ''}), 'cold'),
+  urgent: textBody(row({d: 5, st: ''}), 'cold'),
+  lp:     textBody(row({d: 9999, st: 'LP'}), 'cold'),
+  bal:    textBody(row({d: 9999, st: 'BAL'}), 'cold')
 };
-_LANG = 'es';
-out.es = textBody(row({x: mdy(3), d: 3}), 'cold');
+_STAGE = 'follow'; out.follow = textBody(row({d: 40, st: ''}), 'follow');
+_STAGE = 'final';  out.last   = textBody(row({d: 40, st: ''}), 'final');
 console.log(JSON.stringify(out));
-"""
-# fillScript holds a lone '{vmsale' string literal, so a brace count cannot find its end: slice it
-# to the next top-level declaration instead.
-_fs = CM_SRC.index('function fillScript(')
-_fs_end = re.search(r'\n(?:function |var )', CM_SRC[_fs + 1:]).start() + _fs + 1
-LAD = node(_LAD_HEAD + CM_SRC[_fs:_fs_end] + '\n' + _ladder + _LAD_TAIL)
-OPT = " If now's not a good time, just let me know and I won't text you again."
-rec('ladder: sale in 3 days names the day and date, and asks for a plan',
-    'The court has the sale set for ' in LAD['soon3'] and 'Do you have a plan in place yet?' in LAD['soon3']
-    and LAD['soon3'].startswith("Hi Richard, it's Alejandro Gonzalez with Biscayne Solutions Group."), LAD['soon3'])
-rec('ladder: sale tomorrow says tomorrow', 'set for tomorrow, ' in LAD['soon1'], LAD['soon1'])
-rec('ladder: 18 days out states the count off the row',
-    ', 18 days from now.' in LAD['month'] and 'couple weeks to set up' in LAD['month'], LAD['month'])
-for _k in ('far', 'lp', 'passed', 'nodate'):
-    rec('ladder: %s falls back to the plain body, no date, no count' % _k,
-        'I saw the court filing on it.' in LAD[_k] and 'set for' not in LAD[_k]
-        and 'days from now' not in LAD[_k], LAD[_k])
-rec('ladder: the 2nd touch is unchanged by the rung', 'again about' in LAD['follow'], LAD['follow'])
-rec('ladder: every first touch ends with the let-me-know line',
-    all(LAD[k].endswith(OPT) for k in ('soon3', 'soon1', 'month', 'far', 'nodate')))
-rec('ladder: no placeholder survives', not any('{' in v for v in LAD.values()))
-rec('ladder: an all-caps street reads as typed', 'about 10936 Lakemore Ln.' in LAD['soon3'], LAD['soon3'])
-rec('ladder: directionals stay upper, ordinals go lower', 'about 1240 NW 54th St.' in LAD['nw'], LAD['nw'])
-rec('ladder: a street already in mixed case is left alone', 'about 12 Ocean Dr.' in LAD['mixed'], LAD['mixed'])
-rec('ladder: route prefixes stay upper', 'about 1234 US Highway 1.' in LAD['route'], LAD['route'])
-rec('ladder: Mc and O\' keep their inner capital',
-    'about 12 McDonald St.' in LAD['mc'] and "about 12 O'Brien Ct Apt 3B." in LAD['ob'], LAD['mc'] + ' / ' + LAD['ob'])
-rec('ladder: no address still says your property', 'about your property.' in LAD['noaddr'], LAD['noaddr'])
-rec('ladder: Spanish first touch is the existing body',
-    LAD['es'].startswith('Hola Richard, le habla Alejandro'), LAD['es'])
-_lad_code = strip_js_comments(CM_SRC[_i:CM_SRC.index('var TEXT_T_ES = {')]).lower()   # the EN words only
-for _bad in ('stop the sale', 'lose your home', 'lose the house', 'guarantee', 'delay the sale', '$'):
-    rec('ladder copy never says %r' % _bad, _bad not in _lad_code)
+''')
+_OPT_EN = " If now's not a good time, just let me know and I won't text you again."
+_OPT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+rec('phone first text is the worker first text, word for word',
+    PH['cold'].startswith('Hi Juan, this is Alejandro Gonzalez with Biscayne Solutions Group. There is a court '
+                          'sale date on 3461 NW 171 ST. Not a lender, nothing to sign. If you have a plan, keep it.'
+                          ' Our senior advisor, 30 plus years, maps every option free in 5 minutes. What do you '
+                          'want to do with the house?' + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
+    PH['cold'][:160])
+rec('phone sale-is-close text is the worker text', 'The sale date on 3461 NW 171 ST is close.' in PH['urgent']
+    and 'La subasta de 3461 NW 171 ST está cerca.' in PH['urgent'], PH['urgent'][:160])
+rec('phone just-filed text is the worker text', 'A case was just filed at the courthouse on 3461 NW 171 ST.' in PH['lp'],
+    PH['lp'][:160])
+rec('phone follow-up is the worker second text', 'again about 3461 NW 171 ST. Not trying to crowd you.' in PH['follow'],
+    PH['follow'][:160])
+rec('phone last text is the worker third text', 'my last text about 3461 NW 171 ST.' in PH['last'], PH['last'][:160])
+rec('every phone text carries both let-me-know lines',
+    all(PH[k].count(_OPT_EN) == 1 and PH[k].endswith(_OPT_ES) for k in ('cold', 'urgent', 'lp', 'follow', 'last')))
+rec('a balloon row still gets the page ladder, not foreclosure copy', PH['bal'] == 'LADDER:balloon cold', PH['bal'])
 
 # ─────────────────────────────────────────────────────────── 6. the whole page still assembles
 sync_js = C.extract_sync_js(TPL_SRC)
