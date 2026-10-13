@@ -6058,14 +6058,17 @@ function _coldRung(r){
   return null;
 }
 /* The street as a person would type it. The county roll is ALL CAPS ("10936 LAKEMORE LN") and that
-   alone reads like a mail merge. Only an all-caps street is touched; directionals stay upper (NW),
-   ordinals go lower (54th). Empty in, empty out, so fillScript keeps its 'your property' fallback. */
+   alone reads like a mail merge. Only an all-caps street is touched; directionals, route prefixes
+   (US 1, SR 7) and roman numerals stay upper, ordinals go lower (54th), Mc/O' keep their capital.
+   Applies to every ladder body, both languages: it changes the casing, never the words. Empty in, empty out, so fillScript keeps its 'your property' fallback. */
 function _textStreet(r){
   var s = (((r && r.a) || '').split(',')[0] || '').trim();
   if(!s || /[a-z]/.test(s)) return s;
   return s.split(/\s+/).map(function(w){
-    if(/^(N|S|E|W|NE|NW|SE|SW)$/.test(w)) return w;
+    if(/^(N|S|E|W|NE|NW|SE|SW|US|SR|CR|FL|MLK|II|III|IV|VI|VII|VIII|IX|XI|XII)$/.test(w)) return w;
     if(/^\d+(ST|ND|RD|TH)$/.test(w)) return w.toLowerCase();
+    if(/^MC[A-Z]{2,}$/.test(w)) return 'Mc' + w.charAt(2) + w.slice(3).toLowerCase();
+    if(/^O'[A-Z]{2,}$/.test(w)) return "O'" + w.charAt(2) + w.slice(3).toLowerCase();
     if(/^[A-Z]/.test(w)) return w.charAt(0) + w.slice(1).toLowerCase();
     return w;
   }).join(' ');

@@ -262,7 +262,10 @@ var out = {
   follow: textBody(row({x: mdy(3), d: 3}), 'follow'),
   nw:     textBody(row({x: '', d: 9999, a: '1240 NW 54TH ST, MIAMI'}), 'cold'),
   mixed:  textBody(row({x: '', d: 9999, a: '12 Ocean Dr, MIAMI'}), 'cold'),
-  noaddr: textBody(row({x: '', d: 9999, a: ''}), 'cold')
+  noaddr: textBody(row({x: '', d: 9999, a: ''}), 'cold'),
+  route:  textBody(row({x: '', d: 9999, a: '1234 US HIGHWAY 1, HOMESTEAD'}), 'cold'),
+  mc:     textBody(row({x: '', d: 9999, a: "12 MCDONALD ST, MIAMI"}), 'cold'),
+  ob:     textBody(row({x: '', d: 9999, a: "12 O'BRIEN CT APT 3B, MIAMI"}), 'cold')
 };
 _LANG = 'es';
 out.es = textBody(row({x: mdy(3), d: 3}), 'cold');
@@ -287,6 +290,9 @@ rec('ladder: no placeholder survives', not any('{' in v for v in LAD.values()))
 rec('ladder: an all-caps street reads as typed', 'about 10936 Lakemore Ln.' in LAD['soon3'], LAD['soon3'])
 rec('ladder: directionals stay upper, ordinals go lower', 'about 1240 NW 54th St.' in LAD['nw'], LAD['nw'])
 rec('ladder: a street already in mixed case is left alone', 'about 12 Ocean Dr.' in LAD['mixed'], LAD['mixed'])
+rec('ladder: route prefixes stay upper', 'about 1234 US Highway 1.' in LAD['route'], LAD['route'])
+rec('ladder: Mc and O\' keep their inner capital',
+    'about 12 McDonald St.' in LAD['mc'] and "about 12 O'Brien Ct Apt 3B." in LAD['ob'], LAD['mc'] + ' / ' + LAD['ob'])
 rec('ladder: no address still says your property', 'about your property.' in LAD['noaddr'], LAD['noaddr'])
 rec('ladder: Spanish first touch is the existing body',
     LAD['es'].startswith('Hola Richard, le habla Alejandro'), LAD['es'])
