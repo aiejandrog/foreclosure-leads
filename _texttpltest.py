@@ -233,6 +233,67 @@ rec('and it is still logged as an open, not a send, until he confirms',
     'n.textopen = today();' in tx and "$('txy').onclick" in tx)
 rec('the log line says which script went out', 'txKind(_txk, st)' in tx)
 
+# ─────────────────────────────────────────────────────────── 5b. the after-call ladder's first touch
+# 2026-10-12 (Alejandro: "focus on urgency ... sounds robotic ... look like we handwrote it"). The
+# first touch picks a body by LIVE days to sale. Urgency must come only from the row's own sale
+# date, and a row without a readable future date must fall back to the plain body.
+_i = CM_SRC.index('var TEXT_T = {')
+_j = CM_SRC.index('function textBody(')
+_ladder = CM_SRC[_i:_j] + extract(CM_SRC, 'textBody') + '\n' + extract(CM_SRC, 'liveDays')
+_LAD_HEAD = r"""
+var SENDER = {name:'Alejandro Gonzalez'}, _LANG = 'en';
+function lang(){ return _LANG; }
+function isBalloon(r){ return r.st==='BAL'; }
+function firstName(r){ return r.on || ''; }
+"""
+_LAD_TAIL = r"""
+function mdy(d){ var t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()+d);
+  return (t.getMonth()+1)+'/'+t.getDate()+'/'+t.getFullYear(); }
+var base = {on:'Richard', a:'10936 LAKEMORE LN, MIAMI, FL 33176'};
+function row(o){ return Object.assign({}, base, o); }
+var out = {
+  soon3:  textBody(row({x: mdy(3), d: 3}), 'cold'),
+  soon1:  textBody(row({x: mdy(1), d: 1}), 'cold'),
+  month:  textBody(row({x: mdy(18), d: 18}), 'cold'),
+  far:    textBody(row({x: mdy(45), d: 45}), 'cold'),
+  lp:     textBody(row({x: mdy(3), d: 3, lp: 1}), 'cold'),
+  passed: textBody(row({x: mdy(-2), d: -2}), 'cold'),
+  nodate: textBody(row({x: '', d: 9999}), 'cold'),
+  follow: textBody(row({x: mdy(3), d: 3}), 'follow'),
+  nw:     textBody(row({x: '', d: 9999, a: '1240 NW 54TH ST, MIAMI'}), 'cold'),
+  mixed:  textBody(row({x: '', d: 9999, a: '12 Ocean Dr, MIAMI'}), 'cold'),
+  noaddr: textBody(row({x: '', d: 9999, a: ''}), 'cold')
+};
+_LANG = 'es';
+out.es = textBody(row({x: mdy(3), d: 3}), 'cold');
+console.log(JSON.stringify(out));
+"""
+LAD = node(_LAD_HEAD + extract(CM_SRC, 'fillScript') + '\n' + _ladder + _LAD_TAIL)
+OPT = " If now's not a good time, just let me know and I won't text you again."
+rec('ladder: sale in 3 days names the day and date, and asks for a plan',
+    'The court has the sale set for ' in LAD['soon3'] and 'Do you have a plan in place yet?' in LAD['soon3']
+    and LAD['soon3'].startswith("Hi Richard, it's Alejandro Gonzalez with Biscayne Solutions Group."), LAD['soon3'])
+rec('ladder: sale tomorrow says tomorrow', 'set for tomorrow, ' in LAD['soon1'], LAD['soon1'])
+rec('ladder: 18 days out states the count off the row',
+    ', 18 days from now.' in LAD['month'] and 'couple weeks to set up' in LAD['month'], LAD['month'])
+for _k in ('far', 'lp', 'passed', 'nodate'):
+    rec('ladder: %s falls back to the plain body, no date, no count' % _k,
+        'I saw the court filing on it.' in LAD[_k] and 'set for' not in LAD[_k]
+        and 'days from now' not in LAD[_k], LAD[_k])
+rec('ladder: the 2nd touch is unchanged by the rung', 'again about' in LAD['follow'], LAD['follow'])
+rec('ladder: every first touch ends with the let-me-know line',
+    all(LAD[k].endswith(OPT) for k in ('soon3', 'soon1', 'month', 'far', 'nodate')))
+rec('ladder: no placeholder survives', not any('{' in v for v in LAD.values()))
+rec('ladder: an all-caps street reads as typed', 'about 10936 Lakemore Ln.' in LAD['soon3'], LAD['soon3'])
+rec('ladder: directionals stay upper, ordinals go lower', 'about 1240 NW 54th St.' in LAD['nw'], LAD['nw'])
+rec('ladder: a street already in mixed case is left alone', 'about 12 Ocean Dr.' in LAD['mixed'], LAD['mixed'])
+rec('ladder: no address still says your property', 'about your property.' in LAD['noaddr'], LAD['noaddr'])
+rec('ladder: Spanish first touch is the existing body',
+    LAD['es'].startswith('Hola Richard, le habla Alejandro'), LAD['es'])
+_lad_code = strip_js_comments(CM_SRC[_i:CM_SRC.index('var TEXT_T_ES = {')]).lower()   # the EN words only
+for _bad in ('stop the sale', 'lose your home', 'lose the house', 'guarantee', 'delay the sale', '$'):
+    rec('ladder copy never says %r' % _bad, _bad not in _lad_code)
+
 # ─────────────────────────────────────────────────────────── 6. the whole page still assembles
 sync_js = C.extract_sync_js(TPL_SRC)
 funnel_js = C.extract_funnel_js(TPL_SRC)

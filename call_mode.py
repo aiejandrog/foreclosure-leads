@@ -6000,11 +6000,20 @@ __TEXTTPLJS__
    read-back close at SMS size. Run through fillScript -- SENDER is an OBJECT, a raw `+ SENDER +`
    renders "[object Object]". The opt-out sentence is longer than the old STOP line, so a filled
    body can run past two GSM segments. ES pending a language path. */
+/* 2026-10-12 (Alejandro: "focus on urgency ... it sounds robotic ... needs to look like we
+   handwrote it"). The first touch now picks one of three bodies by LIVE days to sale (_coldRung).
+   Every bit of urgency is a fact off the row: the court's sale date and the days left. Nothing
+   here says we can stop or delay the sale, threatens the house, or names a number. A row with no
+   readable future sale date (lis pendens, balloon, passed, unparseable) gets the plain cold body. */
 var TEXT_T = {
-  cold:   'Hi{first}, it is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
-        + 'This might be off base so tell me if it is. I work with a few owners going through the same '
-        + 'court filing you have, and there is one part of it almost nobody gets told. Can I ask you '
-        + 'something about it?',
+  cold:   "Hi{first}, it's {sender} with Biscayne Solutions Group. Just tried calling you about {st1}. "
+        + "I saw the court filing on it. Quick question, do you already have a plan for the house?",
+  soon:   "Hi{first}, it's {sender} with Biscayne Solutions Group. Just tried calling you about {st1}. "
+        + "The court has the sale set for {when}. A lot of the options you have today close on that "
+        + "date. Do you have a plan in place yet? Even a quick yes or no helps.",
+  month:  "Hi{first}, it's {sender} with Biscayne Solutions Group. Just tried calling you about {st1}. "
+        + "The court sale is set for {mdy}, {left} days from now. That's still time, but most options "
+        + "take a couple weeks to set up. Do you have a plan yet?",
   follow: 'Hi{first}, {sender} again about {st1}. Not trying to crowd you. If you already have a plan '
         + 'you trust, honestly ignore me and I hope it works out. If you are not fully sure it will, '
         + 'that is the part I would want a second set of eyes on for you. Worth a quick look?',
@@ -6032,9 +6041,42 @@ var TEXT_OPTOUT = {en:" If now's not a good time, just let me know and I won't t
                    es:' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'};
 Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf("won't text you again") < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
 Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('vuelvo a escribir') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
+/* Which first-touch body, from LIVE days to sale (liveDays recomputes off r.x, so a page left open
+   overnight does not keep yesterday's count). 0-7 days 'soon', 8-30 'month', anything else the
+   plain cold body. Needs a parseable M/D/YYYY in r.x: {mdy} is never rendered from a guess. */
+function _coldRung(r){
+  var d = liveDays(r);
+  var m = String((r && r.x) || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(!m || typeof d !== 'number' || d < 0) return null;
+  var mdy = (+m[1]) + '/' + (+m[2]);
+  if(d <= 7){
+    var wd = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(+m[3], +m[1]-1, +m[2]).getDay()];
+    var when = d === 0 ? 'today, ' + mdy : d === 1 ? 'tomorrow, ' + mdy : wd + ', ' + mdy;
+    return {key:'soon', when:when, mdy:mdy, left:d};
+  }
+  if(d <= 30) return {key:'month', when:mdy, mdy:mdy, left:d};
+  return null;
+}
+/* The street as a person would type it. The county roll is ALL CAPS ("10936 LAKEMORE LN") and that
+   alone reads like a mail merge. Only an all-caps street is touched; directionals stay upper (NW),
+   ordinals go lower (54th). Empty in, empty out, so fillScript keeps its 'your property' fallback. */
+function _textStreet(r){
+  var s = (((r && r.a) || '').split(',')[0] || '').trim();
+  if(!s || /[a-z]/.test(s)) return s;
+  return s.split(/\s+/).map(function(w){
+    if(/^(N|S|E|W|NE|NW|SE|SW)$/.test(w)) return w;
+    if(/^\d+(ST|ND|RD|TH)$/.test(w)) return w.toLowerCase();
+    if(/^[A-Z]/.test(w)) return w.charAt(0) + w.slice(1).toLowerCase();
+    return w;
+  }).join(' ');
+}
 function textBody(r, stage){
-  var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
-  return fillScript(T[stage] || T.cold, r);
+  var es = (lang()==='es'), T = es ? TEXT_T_ES : TEXT_T, key = stage, rung = null;
+  if(!es && stage === 'cold'){ rung = _coldRung(r); if(rung) key = rung.key; }
+  var t = T[key] || T.cold, st = _textStreet(r);
+  if(st) t = t.split('{st1}').join(st);
+  if(rung) t = t.split('{when}').join(rung.when).split('{mdy}').join(rung.mdy).split('{left}').join(String(rung.left));
+  return fillScript(t, r);
 }
 /* ── SITUATIONAL TEXTS (2026-09-05) — sequences beyond the cold ladder ──────────────────────────
    Appointment confirm/remind/no-show, post-conversation, callback-promised, and the self-serve
