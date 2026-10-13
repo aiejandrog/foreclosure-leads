@@ -215,6 +215,9 @@ late = dict(modif, reC_DATE='01/02/2018', oriG_REC_BOOK='29000', oriG_REC_PAGE='
 c = run([deed(), folio_loan, paid_bp, late])[0]
 rec('a modification dated after the release that pays its loan stays OPEN on its own',
     [(l['st'], l['amt']) for l in c['liens']] == [('SATISFIED', 200000), ('OPEN', 250000)], mtg(c))
+c = run([deed(), folio_loan, paid_bp, dict(late, reC_DATE='')])[0]
+rec('an undated modification is never folded into a paid loan', [l['st'] for l in c['liens']].count('OPEN') == 1,
+    mtg(c))
 early_paid = dict(paid_bp, reC_DATE='06/01/2019')
 c = run([deed(), folio_loan, early_paid, late])[0]
 rec('...and one dated before that release is paid off with its loan',

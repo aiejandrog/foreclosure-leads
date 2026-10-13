@@ -1158,7 +1158,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         tgt = None
         if all(m['_ob']):
             tgt = next((o for o in liens if _bpn(*o['_bpk']) and _bpn(*o['_bpk']) == _bpn(*m['_ob'])
-                        and (o['st'] == 'OPEN' or (o.get('sat_by') == 'book/page'
+                        and (o['st'] == 'OPEN' or (o.get('sat_by') == 'book/page' and not m['_dt'].startswith('0000')
                                                    and (sat_dt.get(_bpn(*o['_bpk'])) or '') >= m['_dt']))), None)
         elif m['_lend']:
             cands = [o for o in liens if o['st'] == 'OPEN' and not o.get('_nopx') and o['_dt'] <= m['_dt']
