@@ -6103,7 +6103,9 @@ function _defaultTextTone(r){
   /* The RULE moved next to the bodies it selects (_textTone), so Call Mode picks the same rung
      from its own stage count instead of re-deriving one. This function stays the board's entry
      point: it is what knows how to read a board row. */
-  return _textTone(_textStage(r), r.days, r.st==='LP');
+  /* _saleDays, not r.days: a lead with no auction date is baked days=0, and the text would call that
+     a sale today. No date reads as no countdown, so the tone is cold. */
+  return _textTone(_textStage(r), _saleDays(r), r.st==='LP');
 }
 /* Email retargeting counterpart of _defaultTextTone. Counts confirmed OUTBOUND email touches and
    spots an inbound reply (the OWNER REPLIED marker shares ch:'email' — it is inbound, not a send).
@@ -6323,7 +6325,7 @@ function smsMsg(r, lang, tone){
      second copy of this copy on the phone would be a fourth text vocabulary; the phone already
      carries its own after-call ladder, and the batch script has to be the SAME script. */
   const B = _textBodies({first: first, sender: sN, stEN: stEN, stES: stES,
-                         td: td, lp: lp, tone: tone, days: r.days});
+                         td: td, lp: lp, tone: tone, days: _saleDays(r)});
   if(lang==='en') return B.en;
   if(lang==='es') return B.es;
   return B.en+'\n\n'+B.es;
@@ -6380,7 +6382,7 @@ function _textBodies(o){
      says the date is set without counting. */
   const d = (!lp && typeof o.days === 'number' && o.days >= 0 && o.days <= 365) ? Math.floor(o.days) : -1;
   const inEN = d === 0 ? 'today' : d === 1 ? 'tomorrow' : d > 1 ? 'in about '+d+' days' : '';
-  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'en unos '+d+' días' : '';
+  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' días' : '';
   let en, es;
   /* 2026-10-13 rewrite (Alejandro: the old bodies read "robotic, super scripted", then "i dont like
      ... if you have a plan keep it, just get to the point like be urgent"). Written the way a person
@@ -6405,19 +6407,21 @@ function _textBodies(o){
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
        ever weakened, delete this body in the same commit. */
     en = hi+", it's "+sN+' with Biscayne Solutions Group. This is my last text about '+stEN+'.'
-       + (inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
-               : ' Once the sale happens, most options are gone.')
+       + (lp ? ' The longer the case runs, the fewer options are left.'
+             : inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
+             : ' Once the sale happens, most options are gone.')
        + ' If you want to talk before then, save my number. The call with our senior advisor is free.'+stopEN;
     es = hola+', soy '+sN+' de Biscayne Solutions Group. Este es mi último mensaje sobre '+stES+'.'
-       + (inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
-               : ' Después de la subasta, casi todas las opciones se acaban.')
+       + (lp ? ' Mientras más avanza el caso, menos opciones quedan.'
+             : inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
+             : ' Después de la subasta, casi todas las opciones se acaban.')
        + ' Si quiere hablar antes, guarde mi número. La llamada con nuestro asesor principal es gratis.'+stopES;
   } else if(tone==='followup'){
     en = hi+', '+sN+' again from Biscayne Solutions Group about '+stEN+'.'
        + (inEN ? ' The sale is '+inEN+', and every week takes options off the table.'
                : ' Every week this goes on takes options off the table.')
        + ' A call with our senior advisor is free and takes 5 minutes. Want me to set it up today?'+stopEN;
-    es = hola+', soy '+sN+' otra vez, de Biscayne Solutions Group, por '+stES+'.'
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Le escribo otra vez sobre '+stES+'.'
        + (inES ? ' La subasta es '+inES+', y cada semana quedan menos opciones.'
                : ' Cada semana que pasa quedan menos opciones.')
        + ' Hablar con nuestro asesor principal es gratis y toma 5 minutos. ¿Se lo coordino hoy?'+stopES;
@@ -6441,13 +6445,14 @@ function _textBodies(o){
        + ' menos. Nuestro asesor principal se las explica gratis. ¿Quiere quedarse con la casa o está'
        + ' pensando en venderla?'+stopES;
   } else {
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. '+stEN+' has a court sale set'+(inEN?' '+inEN:'')+'.'
-       + " Every week that passes takes options off the table. Our senior advisor (30+ years) can go"
-       + " over what's still open with you for free. Are you hoping to keep the house, or open to selling?"+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. '+stES+' tiene fecha de subasta'+(inES?' '+inES:'')+'.'
-       + ' Cada semana que pasa quedan menos opciones. Nuestro asesor principal (más de 30 años) le'
-       + ' explica gratis lo que todavía está abierto. ¿Quiere quedarse con la casa o está pensando en'
-       + ' venderla?'+stopES;
+    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a court sale set on "+stEN+(inEN?' '+inEN:'')+'.'
+       + " We're not a lender. Every week that passes takes options off the table. Our senior advisor"
+       + " (30+ years) can go over what's still open with you for free. Are you hoping to keep the house,"
+       + ' or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
+       + ' No somos prestamistas. Cada semana que pasa quedan menos opciones. Nuestro asesor principal'
+       + ' (más de 30 años) le explica gratis las opciones que todavía tiene. ¿Quiere quedarse con la'
+       + ' casa o está pensando en venderla?'+stopES;
   }
   return {en: en, es: es};
 }
