@@ -39,7 +39,7 @@ os.environ.pop('DEALFLOW_PAID_MONTHLY_CAP', None)
 os.environ.pop('DEALFLOW_PACER_MAX_AGE_DAYS', None)
 os.environ.pop('DEALFLOW_CLERK_BK', None)
 for _k in ('PACER_USERNAME', 'PACER_PASSWORD', 'PACER_OTP_SECRET', 'PACER_CLIENT_CODE', 'PACER_ENV',
-           'PACER_QUARTER_CAP', 'PACER_RUN_MAX', 'PACER_QUARTER_LEDGER', 'PACER_REDACT_FLAG'):
+           'PACER_QUARTER_CAP', 'PACER_RUN_MAX', 'PACER_QUARTER_LEDGER', 'PACER_REDACT_FLAG', 'PACER_BILL_QUARTER'):
     os.environ.pop(_k, None)
 
 import paid_reads as PR
@@ -965,6 +965,37 @@ st = ql.status()
 check('quarter ledger keeps per-day spend by kind (pull / presend), settlements included',
       abs(st['days'][TODAY.isoformat()]['pull'] - 0.10) < 1e-9 and abs(st['days'][TODAY.isoformat()]['presend'] - 0.05) < 1e-9
       and abs(st['spent'] - 0.15) < 1e-9, st)
+
+# the $30 waiver is a hard stop: a raised cap alone cannot pass it (2026-10-13, Q4 reached $59 that way)
+reset_ledgers()
+TQ = PS.quarter_of(TODAY)
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60'), today=TODAY)
+check('PACER_QUARTER_CAP=60 with no PACER_BILL_QUARTER is held to $30, and says how to bill',
+      ql.cap == 30.0 and ql.cap_set == 60.0 and 'PACER_BILL_QUARTER=' + TQ in ql.waiver_note, (ql.cap, ql.waiver_note))
+ql.debit(29.90, 299, kind='bulk')
+check('... the page that lands exactly on $30.00 is allowed (the waiver is $30 or less)', ql.debit(0.10, 1)[0])
+ok, why = ql.debit(0.10, 1)
+st = ql.status()
+check('... the next page is refused and the quarter stays at $30.00', not ok and abs(st['spent'] - 30.0) < 1e-9, (why, st))
+check('... status names the waiver and the flag', not st['ok'] and 'waiver' in st['why'] and 'PACER_BILL_QUARTER' in st['why'], st)
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60', PACER_BILL_QUARTER='1999-Q1'), today=TODAY)
+check('a PACER_BILL_QUARTER naming another quarter does not lift the stop', ql.cap == 30.0 and not ql.debit(0.10, 1)[0])
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60', PACER_BILL_QUARTER=TQ.lower()), today=TODAY)
+check('PACER_BILL_QUARTER naming this quarter plus a raised cap lets it be billed, up to the cap',
+      ql.cap == 60.0 and not ql.waiver_note and ql.debit(0.10, 1)[0])
+ql = PS.QuarterLedger(env=env(PACER_BILL_QUARTER=TQ), today=TODAY)
+check('PACER_BILL_QUARTER alone does not raise the $25 default', ql.cap == 25.0)
+reset_ledgers()
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60'), today=TODAY)
+ql._write(59.0, 590, 0, False)
+st = ql.status()
+check('a quarter already at $59 (the real 10-12 state) with a raised cap refuses with the waiver message',
+      not ql.debit(0.10, 1)[0] and not st['ok'] and 'waiver' in st['why'], st)
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='lots', PACER_BILL_QUARTER=TQ), today=TODAY)
+check('an invalid cap stays $0 even with PACER_BILL_QUARTER', ql.cap == 0.0 and not ql.debit(0.10, 1)[0])
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='29.50'), today=TODAY)
+check('a cap under $30 is left as set', ql.cap == 29.5 and not ql.waiver_note)
+reset_ledgers()
 Q4 = dt.date(2026, 10, 1)
 
 
