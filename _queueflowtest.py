@@ -352,5 +352,33 @@ rec('both build sites pass the lead list',
     'audit = ledger_audit(slim=slim)' in SRC and 'ledger_audit(slim=slim)' in io.open(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read())
 
+# ---- 2026-10-13: a manual send the sender marked "not on board" does not hold the whole crew ----
+mp9 = os.path.join(td3, 'mail9.json')
+_ob = 'manual intro, not on board, Miami Lakes 33016, sent per Alej'
+json.dump([
+    {'ch': 'email', 'message_id': 'n1', 'to': 'stranger1@nowhere.com', 'note': _ob, 'portfolio': [], 'ts_utc': '2026-09-07T15:08:00'},
+    {'ch': 'email', 'message_id': 'n2', 'to': 'STRANGER2@nowhere.com', 'note': _ob.upper(), 'ts_utc': '2026-09-07T15:08:00'},
+    {'ch': 'email', 'message_id': 'n3', 'to': 'q@example.com', 'note': _ob, 'ts_utc': '2026-09-07T15:08:00'},     # recipient IS a lead
+    {'ch': 'email', 'message_id': 'n4', 'to': 'other@nowhere.com', 'note': _ob, 'addr': '5 Fig St, Miami FL 33101',
+     'ts_utc': '2026-09-07T15:08:00'},                                                                              # names a property
+    {'ch': 'email', 'message_id': 'n5', 'to': 'plain@nowhere.com', 'note': 'manual intro', 'ts_utc': '2026-09-07T15:08:00'},
+], io.open(mp9, 'w'))
+json.dump([{'ch': 'text', 'confirmed': True, 'to': '3055550000', 'note': _ob, 'ts_utc': '2026-09-07T15:08:00'}],
+          io.open(os.path.join(td3, 'text9.json'), 'w'))
+a9 = call_mode.ledger_audit(mp9, os.path.join(td3, 'text9.json'),
+                            slim=[{'case': 'Q', 'addr': '9 Elm Ct, Miami FL 33101', 'emails': ['q@example.com']}])
+rec('a case-less email noted "not on board" with no property is counted offboard, not unattributed',
+    a9['offboard'] == 2, a9)
+rec('the recipient tie still runs first: a noted send to a lead marks that lead contacted',
+    a9['cases'] == {'Q'} and a9['matched'] == 1, a9)
+rec('a noted send that names a property, an unnoted send and a text stay unattributed',
+    a9['unattributed'] == 3, a9)
+td9 = tempfile.mkdtemp()
+json.dump([], io.open(os.path.join(td9, 'mail_sent.json'), 'w')); json.dump([], io.open(os.path.join(td9, 'text_sent.json'), 'w'))
+_here = call_mode.HERE; call_mode.HERE = td9
+hc9 = json.loads(call_mode.history_coverage(10, 10, {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'offboard': 2}))
+call_mode.HERE = _here
+rec('off-board sends alone leave ledgers_ok on', hc9['ledgers_ok'] is True, hc9)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
