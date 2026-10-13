@@ -3075,6 +3075,21 @@ a.dial,button.big{display:block;width:100%;min-height:58px;margin-top:12px;borde
 a.dial{background:var(--ok);color:#fff}
 /* Redial: same tel: mechanics as the main dial button, styled as the secondary action it is —
    outlined, not filled, so the outcome buttons stay the visual priority on the screen. */
+/* VOICEMAIL BUTTON + full-screen script (2026-10-12, Alejandro: "a button i press and the voice
+   message script shows up on the screen"). z-65: above the sheet (40), the pill (50) and the toast
+   (60), so nothing covers the words while he reads them into the machine. */
+.vmbtn{display:block;width:100%;min-height:54px;margin-top:10px;border-radius:12px;border:0;background:var(--gold);
+     color:#0b1730;font-size:17px;font-weight:800;touch-action:manipulation}
+.vmfull{position:fixed;top:0;left:0;right:0;bottom:0;z-index:65;background:var(--bg);overflow-y:auto;
+     -webkit-overflow-scrolling:touch;padding:16px 16px calc(28px + env(safe-area-inset-bottom))}
+.vmfull .vmin{max-width:640px;margin:0 auto}
+.vmfull .vmtop{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--gold);
+     font-weight:800;letter-spacing:.04em;font-size:14px}
+.vmfull .vmsay{font-size:23px;line-height:1.5;margin:14px 0 22px;color:var(--ink)}
+.vmfull button.vmlog{display:block;width:100%;min-height:56px;border:0;border-radius:12px;background:var(--ok);
+     color:#fff;font-size:17px;font-weight:800;touch-action:manipulation}
+.vmfull button.vmx{display:block;width:100%;min-height:48px;margin-top:10px;border-radius:12px;background:transparent;
+     border:1px solid var(--mut);color:var(--ink);font-size:16px;touch-action:manipulation}
 a.redial{display:block;width:100%;min-height:50px;line-height:50px;margin-top:10px;border-radius:12px;
      border:1px solid var(--ok);color:var(--ok);background:transparent;font-size:16px;font-weight:700;
      text-align:center;text-decoration:none;touch-action:manipulation}
@@ -4834,7 +4849,8 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
-  var _wl = lane, _rest = _qvRestore();   // _rest: he was on a one-off; view, lane and card are back
+  var _wl = lane, _rest = _qvRestore();
+  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
@@ -6312,6 +6328,8 @@ function screenOutcome(){
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
     +sessStrip()
+    /* FIRST thing under the number: the moment it goes to voicemail there is no time to scroll. */
+    +'<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>'
     + refBlock
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
@@ -6325,6 +6343,7 @@ function screenOutcome(){
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
   wireBrief(document, r);
+  $('vmbtn').onclick = function(){ vmOpen(r); };
   $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
@@ -6439,6 +6458,7 @@ function stopEverywhere(r, digits){
    screen that exists because he dials from the phone, writes the number on paper, and never comes
    back to the laptop to log it. Everything here writes to the SAME notes the board reads. */
 function afterCall(r, o, nextC){
+  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */
   SCREEN='after';
   _lastAfter=[r, o, nextC];
   document.getElementById('sheet').classList.add('hid');   // same tap-thief reasoning as screenOutcome
@@ -7135,6 +7155,37 @@ function wireLang(root){
   Array.prototype.forEach.call((root||document).querySelectorAll('.lchip'), function(b){
     b.onclick=function(ev){ ev.stopPropagation(); setLang(b.dataset.lang); };
   });
+}
+/* FULL-SCREEN VOICEMAIL. The same words as the sheet's "IF NO ANSWER" block (VMEN/VMES, or the
+   investor lane's SCRIPT.vm), big, alone on the screen. Logging goes through the SAME .oc outcome
+   button the card uses, so a voicemail logged here is exactly a "Left voicemail" tap: a miss, 24h. */
+function _vmTexts(r){
+  var S = (r && r.st==='BAL' && SCRIPT_ALL.bal) ? SCRIPT_ALL.bal : SCRIPT_ALL;
+  return S.vm ? {en:S.vm.en, es:S.vm.es, tone:null} : {en:VMEN, es:VMES, tone:S.vmtone||null};
+}
+function vmClose(){ var o=document.getElementById('vmfull'); if(o && o.parentNode) o.parentNode.removeChild(o); }
+function vmOpen(r){
+  vmClose();
+  var t=_vmTexts(r), es=(lang()==='es' && t.es);
+  var o=document.createElement('div'); o.id='vmfull'; o.className='vmfull';
+  o.innerHTML='<div class="vmin"><div class="vmtop"><span>VOICEMAIL &middot; READ IT LIVE</span>'+langChips()+'</div>'
+    + _vmWarnHtml()
+    + (t.tone ? '<div class="mut" style="font-size:12px;margin-top:8px">'+esc(es && t.tone.es ? t.tone.es : t.tone.en)+'</div>' : '')
+    /* the callback number never breaks across lines: he reads it aloud, slowly, twice */
+    + '<div class="vmsay">'+esc(fillScript(es ? t.es : t.en, r))
+        .split(esc(SENDER.phone||'\u0000')).join('<span style="white-space:nowrap">'+esc(SENDER.phone||'')+'</span>')+'</div>'
+    + '<button class="vmlog" id="vmlog">&#10003;&nbsp; Left voicemail &mdash; log it</button>'
+    + '<button class="vmx" id="vmx">Close</button></div>';
+  document.body.appendChild(o);
+  Array.prototype.forEach.call(o.querySelectorAll('.lchip'), function(b){
+    b.onclick=function(ev){ ev.stopPropagation(); setLang(b.dataset.lang); vmOpen(r); };
+  });
+  o.querySelector('#vmx').onclick=function(){ vmClose(); };
+  o.querySelector('#vmlog').onclick=function(){
+    vmClose();
+    var b=document.querySelector('.oc button[data-oc="voicemail"]');
+    if(b && !b.disabled) b.click(); else toast('Tap "Left voicemail" below to log it');
+  };
 }
 function say(en, es, r){
   if(lang()==='es' && es) return '<div class="say es">'+esc(fillScript(es, r))+'</div>';
