@@ -496,9 +496,15 @@ check("a release INFERRED from a lender's name (it may be a namesake's) never re
       RL._mortgages_narrower({'liens': [{'bp': '26100/11', 'st': 'OPEN', 'amt': 1}]},
                              {'liens': [{'bp': '26100/11', 'st': 'SATISFIED', 'amt': 1, 'sat_by': 'lender chain'}]}))
 _wf = rec('MORTGAGE', '2/1/2012', '29900', '101', 280000, 'WELLS FARGO BANK NA', first='OWNER TESTER')
+# no folio and no book/page: the lender's name is the only link, so the release is inferred (since
+# 2026-10-12 a release indexed to ANOTHER folio never frees this parcel's loan at all, checked next)
 _nsat = rec('SATISFACTION', '6/1/2021', '32000', '9', 0, 'WELLS FARGO BANK NA', first='TESTER MARIA',
-            folio='3099999999999', subdiV_NAME='ELSEWHERE')
+            folio='', subdiV_NAME='ELSEWHERE')
 _rd = RL.analyze([deed, _wf, _nsat], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
+_rel = RL.analyze([deed, _wf, dict(_nsat, foliO_NUMBER='3099999999999')], FOLIO, 12000, ftype='HOA',
+                  owner='OWNER TESTER')
+check("a lender's satisfaction indexed to another folio never frees this parcel's loan",
+      [l['st'] for l in _rel['liens']] == ['OPEN'], _rel['liens'])
 check("analyze says how it decided a loan was satisfied",
       [(l['st'], l.get('sat_by')) for l in _rd['liens']] == [('SATISFIED', 'lender chain')], _rd['liens'])
 check("so a namesake's satisfaction on a re-read keeps the old chain's open loan",

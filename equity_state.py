@@ -137,6 +137,17 @@ def state_of(chain, lead=None):
     # carry, so the chain is incomplete and cannot be a FACT. Only ever demotes.
     if st in FACT and chain.get('xs_conflict'):
         return 'unpriced'
+    # A SEARCH THAT STOPPED EARLY (trap fixture 2026-10-12). The Miami index returns at most 500
+    # records, oldest first, so a full page is missing the NEWEST recordings, the loans most likely
+    # still open. The loans it did find are real, but the total is not established: UNVERIFIED,
+    # never a FACT. (An empty capped chain already fails coverage_documented.)
+    if st == 'priced' and (chain.get('capped') or chain.get('truncated')):
+        return 'none'
+    # A LOAN SET ASIDE AS A NAMESAKE'S. records_liens skips a subdivision-only loan whose borrower
+    # reads as another person of the owner's surname, but the index abbreviates given names ('SMITH
+    # WM'), so that call can be wrong: the total it leaves is not a FACT, and a clear is not a clear.
+    if st in FACT and (chain.get('mtg_namesake_skipped') or 0) > 0:
+        return 'none'
     # A PRICED one stays 'clear' on purpose: the state is the MORTGAGE verdict (demote_for_bank_fc and
     # the lender rule key on it), and the lien's figure reaches the deal math as orcode/orhoa/orirs.
     return st
