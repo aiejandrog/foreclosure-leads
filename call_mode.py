@@ -1747,6 +1747,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
             'd': days,
             'lp': 1 if is_lp else 0,
+            # Tax deed. The board knows it as st=='TD'; the phone row never carried st (only 'BAL'),
+            # so the text button needs it shipped to pick the tax-deed text the worker sends.
+            'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0,
             'p': [keep[k] for k in order],
             # build-time only, popped after the sort: is the number dialed first explicitly a landline?
             '_ll': 1 if (lambda _t: keep_oi[order[0]] < len(_t) and _t[keep_oi[order[0]]] == 'landline')(
@@ -1861,6 +1864,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # `lp` and `k` follow the same rule; `d` (days) must NOT — 0 means the auction is TODAY.
         if not row['lp']:
             row.pop('lp')
+        if not row['td']:
+            row.pop('td')
         if not row['k']:
             row.pop('k')
         # ---- flags: one packed string instead of a dozen booleans ----
@@ -6178,9 +6183,8 @@ function sitBody(r, key){
    r.addr, r.days) out of a phone row (r.on, r.a, r.d) and hands it over.
 
    Differences from the board's own call, both deliberate:
-     - ONE LANGUAGE, not both. The batch bakes EN + ES together because it cannot know which the
-       owner reads. On the phone he has just spoken to them, and the EN|ES chips above this button
-       already say which — sending both after a conversation reads like a blast.
+     - (Until 2026-10-13 this sent ONE language off the EN|ES chips. Alejandro asked for the
+       worker's message, so it now sends English then Spanish in one text, like smsMsg 'both'.)
      - The street falls back INSIDE _textBodies, which picks the fallback in the right language
        ('su propiedad', not 'your property' in a Spanish body). So pass '' and let it choose. */
 function boardTextBody(r){
@@ -6189,11 +6193,11 @@ function boardTextBody(r){
     first:  firstName(r),
     sender: SENDER.name || '',
     stEN:   st1, stES: st1,
-    td:     (r && r.st === 'TD'),
-    lp:     (r && r.st === 'LP'),
+    td:     !!(r && (r.td || r.st === 'TD')),
+    lp:     !!(r && (r.lp || r.st === 'LP')),
     /* The rung comes from THIS device's stage count fed through the board's own rule, so touch 2
        gets the follow-up body and touch 3 gets the one that promises it is the last. */
-    tone:   _textTone(textStage(r), (r && r.d), (r && r.st === 'LP'))
+    tone:   _textTone(textStage(r), (r && r.d), !!(r && (r.lp || r.st === 'LP')))
   });
   /* English first, Spanish below it, in ONE message: what the Morning Worker sends (smsMsg 'both'). */
   return B.en + '\n\n' + B.es;

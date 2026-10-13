@@ -250,7 +250,8 @@ function row(o){ return Object.assign({}, base, o); }
 var out = {
   cold:   textBody(row({d: 40, st: ''}), 'cold'),
   urgent: textBody(row({d: 5, st: ''}), 'cold'),
-  lp:     textBody(row({d: 9999, st: 'LP'}), 'cold'),
+  lp:     textBody(row({d: 9999, lp: 1}), 'cold'),
+  td:     textBody(row({d: 40, td: 1}), 'cold'),
   bal:    textBody(row({d: 9999, st: 'BAL'}), 'cold')
 };
 _STAGE = 'follow'; out.follow = textBody(row({d: 40, st: ''}), 'follow');
@@ -269,6 +270,8 @@ rec('phone sale-is-close text is the worker text', 'The sale date on 3461 NW 171
     and 'La subasta de 3461 NW 171 ST está cerca.' in PH['urgent'], PH['urgent'][:160])
 rec('phone just-filed text is the worker text', 'A case was just filed at the courthouse on 3461 NW 171 ST.' in PH['lp'],
     PH['lp'][:160])
+rec('phone tax-deed text is the worker text', 'There is a tax deed sale on 3461 NW 171 ST.' in PH['td'], PH['td'][:160])
+rec('the phone row ships the tax-deed flag', "'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0" in CM_SRC)
 rec('phone follow-up is the worker second text', 'again about 3461 NW 171 ST. Not trying to crowd you.' in PH['follow'],
     PH['follow'][:160])
 rec('phone last text is the worker third text', 'my last text about 3461 NW 171 ST.' in PH['last'], PH['last'][:160])
