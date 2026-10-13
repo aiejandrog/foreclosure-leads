@@ -6195,6 +6195,7 @@ function boardTextBody(r){
     stEN:   st1, stES: st1,
     td:     !!(r && (r.td || r.st === 'TD')),
     lp:     !!(r && (r.lp || r.st === 'LP')),
+    days:   r ? liveDays(r) : null,   // the live count, same as the voicemail's sale sentence
     /* The rung comes from THIS device's stage count fed through the board's own rule, so touch 2
        gets the follow-up body and touch 3 gets the one that promises it is the last. */
     tone:   _textTone(textStage(r), (r && r.d), !!(r && (r.lp || r.st === 'LP')))
