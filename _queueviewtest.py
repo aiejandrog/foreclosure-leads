@@ -39,13 +39,14 @@ def node(js):
 FNS = ('var OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};\n'
        'function esc(s){return String(s==null?"":s);}\n'
        + ''.join(grab_fn(n) for n in ('lastCall', '_inbound', 'lastOutreach', '_replyOpen', '_contactTier',
-                                      '_histWhy', '_viewOf', 'viewEmptyHtml', 'histBanner', 'viewBar')))
+                                      '_histWhy', '_viewOf', 'viewEmptyHtml', 'histBanner', '_qvShown', 'viewBar')))
 HARNESS = r"""
 var store = {};
 var localStorage = {getItem:function(k){return k in store ? store[k] : null;}, setItem:function(k,v){store[k]=String(v);}};
 var _NOTESBAD = false, QVIEW = 'untouched', _CBDUE = Object.create(null);
 var lane = 'all', _QV = ['untouched','callbacks','replies','retries','history_unknown'],
-    _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
+    _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Reached out', history_unknown:'History unknown'},
+    _QV_ALWAYS = {untouched:1, callbacks:1, retries:1};
 function laneDef(){ return {lbl:'Fresh filings'}; }
 function wfBar(){ return ''; }
 function cbNote(){ return ''; }
@@ -83,6 +84,8 @@ QVIEW = 'retries'; out.emptyRetries = viewEmptyHtml(); QVIEW = 'untouched';
 out.bannerOff = histBanner('');
 HISTCOV.ledgers_ok = false; HISTCOV.why = 'two sends'; out.barBad = viewBar();
 HISTCOV.ledgers_ok = true; HISTCOV.why = ''; out.barOk = viewBar();
+_VIEWN = {untouched:5, callbacks:0, replies:0, retries:8, history_unknown:0}; out.barThree = viewBar();
+QVIEW = 'replies'; out.barOpenEmpty = viewBar(); QVIEW = 'untouched';
 _VIEWN = {untouched:0, callbacks:0, replies:0, retries:104, history_unknown:0};
 out.bannerNoneHeld = histBanner('2 confirmed send(s) in the ledgers name no case or person');
 _VIEWN = {untouched:0, callbacks:0, replies:0, retries:3, history_unknown:1};
@@ -113,12 +116,12 @@ rec('team sync on and pulled -> untouched', res.get('syncPulled') == 'untouched'
 rec('no coverage manifest at all -> History unknown', res.get('noHistcov') == 'history_unknown', res)
 e = res.get('emptyUntouched', '')
 rec('Q02 empty Untouched says so and counts what waits elsewhere, without opening it',
-    'No untouched leads in the checked inventory' in e and '8 retr' in e and '1 reply' in e and '2 with history unknown' in e, e)
+    'No untouched leads in the checked inventory' in e and '8 reached out' in e and '1 reply' in e and '2 with history unknown' in e, e)
 rec('Q09 a capped build says the inventory is partial', 'Partial inventory' in e and '400 of 783' in e, e)
 rec('no history problem -> no banner', res.get('bannerOff') == '', res.get('bannerOff'))
 rec('viewBar renders the banner when history is incomplete and not otherwise',
     'History unknown:' in res.get('barBad', '') and 'two sends' in res.get('barBad', '')
-    and 'History unknown:' not in res.get('barOk', '') and 'Retries' in res.get('barOk', ''), [res.get('barBad'), res.get('barOk')])
+    and 'History unknown:' not in res.get('barOk', '') and 'Reached out' in res.get('barOk', ''), [res.get('barBad'), res.get('barOk')])
 bn = res.get('bannerNoneHeld', '')
 rec('the banner keeps its reason and its "nothing shows as untouched" line', 'name no case or person' in bn and 'Nothing shows as untouched until that clears.' in bn, bn)
 rec('a lane with no History unknown rows says the banner is holding nothing back there',
@@ -127,7 +130,14 @@ rec('a lane with held rows says how many (singular and plural)',
     '1 lead counted above is filed under History unknown because of it' in res.get('bannerOneHeld', '')
     and '5 leads counted above are filed under History unknown because of it' in res.get('bannerFiveHeld', ''),
     [res.get('bannerOneHeld'), res.get('bannerFiveHeld')])
-rec('empty Retries does not fall through to anything', 'No retries due' in res.get('emptyRetries', ''), res.get('emptyRetries'))
+rec('empty Reached out does not fall through to anything', 'Nobody reached out to is due' in res.get('emptyRetries', ''), res.get('emptyRetries'))
+b3 = res.get('barThree', '')
+rec('a normal day shows exactly three tabs: Untouched, Callbacks, Reached out',
+    b3.count('<button data-v=') == 3 and 'data-v="untouched"' in b3 and 'data-v="callbacks"' in b3
+    and 'data-v="retries"' in b3 and 'Reached out' in b3, b3)
+rec('Replies and History unknown get a tab while they hold a lead',
+    'data-v="replies"' in res.get('barOk', '') and 'data-v="history_unknown"' in res.get('barOk', ''), res.get('barOk'))
+rec('the tab that is open is always drawn, even at 0', 'data-v="replies"' in res.get('barOpenEmpty', ''), res.get('barOpenEmpty'))
 
 # ---- structure: the view narrows AFTER the gates, defaults are untouched/all, no old restore ----
 pool = SRC[SRC.find('function pool()'):SRC.find('\n}\n', SRC.find('function pool()'))]

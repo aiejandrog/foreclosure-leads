@@ -4462,7 +4462,17 @@ function teamRecheck(){
    UNKNOWN, never untouched. Missing history is not zero. */
 var QVIEW = 'untouched';
 var _QV = ['untouched', 'callbacks', 'replies', 'retries', 'history_unknown'];
-var _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
+var _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Reached out', history_unknown:'History unknown'};
+/* THREE TABS (2026-10-13, Alejandro: "keep the categories simple like untouched leads and the ones
+   you've reached out to already"). Untouched, Callbacks and Reached out always show. Replies and
+   History unknown are still their own views, but their tab appears only while it holds a lead (or
+   is the one open), so a normal day reads as three buttons. Nothing is regrouped or hidden: a lead
+   in a tab that is not drawn is still counted on it the moment that tab has anything. */
+var _QV_ALWAYS = {untouched:1, callbacks:1, retries:1};
+function _qvShown(){
+  return ['untouched', 'callbacks', 'retries', 'replies', 'history_unknown'].filter(function(k){
+    return _QV_ALWAYS[k] || (_VIEWN[k]|0) > 0 || QVIEW === k; });
+}
 var _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
 /* A lead opened on purpose from a board list or the lookup may sit in another view. That is a
    ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
@@ -4528,10 +4538,10 @@ function histBanner(hw){
     + '</div>';
 }
 function viewBar(){
-  var b = _QV.map(function(k){
+  var b = _qvShown().map(function(k){
     return '<button data-v="'+k+'" class="'+(QVIEW===k?'on':'')+'">'+_QVL[k]+' &middot; '+_VIEWN[k]+'</button>'; }).join('');
   var o = '<div class="lane">'+b+'</div>'
-    + '<div class="supn">Counts: this seat, '+(lane==='all'?'all lanes':esc(laneDef(lane).lbl))+'. Retries are a deliberate choice, never the next card.'
+    + '<div class="supn">Counts: this seat, '+(lane==='all'?'all lanes':esc(laneDef(lane).lbl))+'. Reached out = already called, texted or emailed; open it when you choose to.'
     + ((typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
         ? ' <b>Partial:</b> '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded on the crew pages.' : '')
     + '</div>';
@@ -4545,12 +4555,12 @@ function viewEmptyHtml(){
     ? '<div class="sub">Partial inventory: only '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded, so this does not mean the crew is out of fresh leads.</div>' : '';
   if(QVIEW === 'untouched')
     return '<b>No untouched leads in the checked inventory for this seat.</b>'
-      + '<div class="sub">Waiting elsewhere: '+n.callbacks+' callback'+(n.callbacks===1?'':'s')+', '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' retr'+(n.retries===1?'y':'ies')
+      + '<div class="sub">Waiting elsewhere: '+n.callbacks+' callback'+(n.callbacks===1?'':'s')+', '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' reached out'
       + ', '+n.history_unknown+' with history unknown. Open one from the buttons above when you choose to.</div>'
       + (hw ? '<div class="sub">History is incomplete ('+esc(hw)+'), so uncontacted leads are listed as History unknown.</div>' : '') + part;
   if(QVIEW === 'callbacks') return '<b>No requested callbacks due now.</b><div class="sub">Reminders after a no-answer and inbound replies are not callbacks.</div>' + cbNote() + part;
   if(QVIEW === 'replies') return '<b>No open replies.</b><div class="sub">Switch view above.</div>' + part;
-  if(QVIEW === 'retries') return '<b>No retries due for this seat.</b><div class="sub">Switch view above.</div>' + part;
+  if(QVIEW === 'retries') return '<b>Nobody reached out to is due for this seat.</b><div class="sub">Switch view above.</div>' + part;
   return '<b>Nothing with unknown history.</b><div class="sub">Switch view above.</div>' + part;
 }
 function pool(){
