@@ -2162,6 +2162,17 @@ def _is_operator(e):
     return bool(rcpts) and all(a in own for a in rcpts)
 
 
+def _is_offboard(e):
+    """A case-less email the sender recorded as going to someone who is not a board lead.
+
+    Only when the row says so itself (`note` containing "not on board") and names no property: a
+    row that carries an `addr` was about a lead's house and is never excused this way. A text row
+    is never off-board: the /text bridge refuses a send with no case."""
+    if str(e.get('ch') or '') != 'email' or str(e.get('addr') or '').strip():
+        return False
+    return 'not on board' in str(e.get('note') or '').lower()
+
+
 _WEBMAIL = {'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com',
             'live.com', 'msn.com', 'comcast.net', 'att.net', 'bellsouth.net', 'me.com'}
 
@@ -2198,11 +2209,18 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
         meta.test from the request body without checking who it went to (it now refuses a test
         send to anyone but these addresses), so an older test row to any other address stays
         unattributed unless the property address it carries ties it to a lead.
+      * an email row the sender marked as not a board lead (`note` says "not on board") and that
+        names no property (`addr` empty), when neither the recipient nor anything else ties it to a
+        lead. Counted in `offboard` (2026-10-13). Three manual 09-07 intros carry exactly that note;
+        one ties by recipient, the other two went to people who were never leads, and from the 10-09
+        build they kept ledgers_ok off, so both seats opened on an empty Untouched list and every
+        never-contacted lead sat under History unknown. The recipient tie runs first, so if that
+        person later becomes a lead at that address the send still marks the lead contacted.
     Anything left (a delivered, non-test send to an address or number on no lead) still counts as
     unattributed and still turns ledgers_ok off: that recipient may be a lead whose address this
     build no longer carries. `rows` describes those leftovers with no address, name or subject:
     date, channel, recipient domain (webmail names only, else 'other'), lane. `python call_mode.py --ledger-audit` prints them."""
-    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'matched': 0, 'test': 0, 'rows': []}
+    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'matched': 0, 'test': 0, 'offboard': 0, 'rows': []}
     by_email, by_phone = _recipient_index(slim) if slim is not None else ({}, {})
     by_addr = _address_index(slim) if slim is not None else {}
     for name, path, is_text in (('mail_sent.json', mail_path, False), ('text_sent.json', text_path, True)):
@@ -2251,6 +2269,8 @@ def ledger_audit(mail_path=None, text_path=None, slim=None):
                     out['matched'] += 1
                 elif not is_text and e.get('test_mode') is True and _is_operator(e):
                     out['test'] += 1
+                elif _is_offboard(e):
+                    out['offboard'] += 1
                 else:
                     out['unattributed'] += 1
                     _to = str(e.get('to') or '')
@@ -7529,8 +7549,8 @@ boot();
 def _print_ledger_audit(audit):
     """One line per category, then the leftover rows. No address, name, number or subject."""
     print('ledger audit: %d case-less send(s) tied to a lead by recipient or property address, %d advisor/test send(s) '
-          'reaching no lead, %d still unattributed'
-          % (audit.get('matched', 0), audit.get('test', 0), audit.get('unattributed', 0)))
+          'reaching no lead, %d marked not on board, %d still unattributed'
+          % (audit.get('matched', 0), audit.get('test', 0), audit.get('offboard', 0), audit.get('unattributed', 0)))
     for r in audit.get('rows') or []:
         print('  unattributed: %s %-5s to-domain=%s lane=%s test=%s owner-named=%s addr-named=%s'
               % (r['d'] or '?', r['ch'], r['dom'], r['lane'] or '-', r['test'], r['owner'], r.get('addr', False)))
