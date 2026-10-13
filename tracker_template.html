@@ -6362,17 +6362,17 @@ function _textBodies(o){
   let en, es;
   /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
      plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
-     ADVISOR, "ask the court for more time" = the plain-language rendering of petition-to-postpone
-     (never "we will stop the sale"), the word "foreclosure" removed from every body (third-party
+     ADVISOR, never "we will stop the sale" ("we can ask the court for more time" came out of the
+     urgent body 2026-10-13 until the attorney approves it, along with "No fees ever"), the word "foreclosure" removed from every body (third-party
      protocol: a text can be read by someone not on title), ID + STOP on every message, no em
      dashes (reads as AI). nameEN/disclEN stay defined above for any other caller. */
   if(tone==='urgent'){
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. The sale date on '+stEN+' is close.'
        + ' If you have a plan, keep it. Let us be the parachute if it lands late. Free 5 minutes'
-       + ' with our senior advisor, and we can ask the court for more time. No fees ever.'+stopEN;
+       + ' with our senior advisor.'+stopEN;
     es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. La subasta de '+stES+' está cerca.'
        + ' Si tiene un plan, sígalo. Nosotros somos el paracaídas si llega tarde. 5 minutos gratis'
-       + ' con nuestro asesor principal, y se puede pedir más tiempo a la corte.'+stopES;
+       + ' con nuestro asesor principal.'+stopES;
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
@@ -6387,13 +6387,14 @@ function _textBodies(o){
        + ' con nuestro asesor principal, más de 30 años, le muestra lo que aún sirve. De cualquier'
        + ' forma, guarde mi número en su teléfono.'+stopES;
   } else if(tone==='followup'){
-    // The parachute card's scalpel: ONE question that tests the plan without attacking it.
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' with Biscayne Solutions Group again about '+stEN+'. Not trying to crowd you.'
-       + ' If you already have a plan you trust, honestly ignore me and I hope it works out. If you'
-       + ' are not fully sure it will, that is the part I would want a second set of eyes on. Worth a quick look?'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Biscayne Solutions Group otra vez, por '+stES+'. No quiero abrumarlo.'
-       + ' Si ya tiene un plan en el que confía, ignóreme y ojalá le funcione. Si no está del todo'
-       + ' seguro de que va a funcionar, esa es la parte en la que le daría una segunda opinión. ¿Vale la pena una mirada rápida?'+stopES;
+    // Keep or sell, the two paths named (2026-10-13, Chad's framework). We POINT them to whoever
+    // handles a catch-up plan; we never arrange or lend.
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' with Biscayne Solutions Group again about '+stEN+'. No pressure.'
+       + ' If you want to keep it, I can point you to the people who handle catch-up plans. If you would'
+       + ' rather move on, I can walk you through that. Which is closer?'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Biscayne Solutions Group otra vez, por '+stES+'. Sin presión.'
+       + ' Si quiere quedarse con ella, le puedo indicar quién ve los planes para ponerse al día. Si prefiere'
+       + ' seguir adelante, le explico cómo sería. ¿Qué se acerca más?'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
@@ -6413,13 +6414,16 @@ function _textBodies(o){
        + ' corte sobre '+stES+'. Hoy es cuando más opciones tiene, y toman semanas. Nuestro asesor'
        + ' principal se las explica gratis en 5 minutos. ¿Qué quiere hacer con la casa?'+stopES;
   } else {
+    /* Keep or sell, then nothing else (2026-10-13, Chad's framework). "Not going to throw an offer at
+       you" is true by #57: no number until equity is verified. */
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. There is a court sale date on '+stEN+'.'
-       + ' Not a lender, nothing to sign. If you have a plan, keep it. Our senior advisor, 30 plus'
-       + ' years, maps every option free in 5 minutes. What do you want to do with the house?'+stopEN;
+       + ' You have probably heard from a few people already. I am not your lender and I am not going to'
+       + ' throw an offer at you. One question: do you want to keep the house, or would a fresh start be'
+       + ' better? Either answer is fine.'+stopEN;
     es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+'.'
-       + ' No presto dinero, nada que firmar. Si tiene un plan, sígalo. Nuestro asesor principal,'
-       + ' más de 30 años, le da opciones gratis en 5 minutos. ¿Qué quiere hacer con la'
-       + ' casa?'+stopES;
+       + ' Seguramente ya le han escrito otras personas. No soy su prestamista y no le voy a tirar una'
+       + ' oferta. Una pregunta: ¿quiere quedarse con la casa, o le convendría más empezar de nuevo?'
+       + ' Cualquier respuesta está bien.'+stopES;
   }
   return {en: en, es: es};
 }

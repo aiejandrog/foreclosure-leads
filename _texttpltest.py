@@ -262,9 +262,10 @@ _OPT_EN = " If now's not a good time, just let me know and I won't text you agai
 _OPT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 rec('phone first text is the worker first text, word for word',
     PH['cold'].startswith('Hi Juan, this is Alejandro Gonzalez with Biscayne Solutions Group. There is a court '
-                          'sale date on 3461 NW 171 ST. Not a lender, nothing to sign. If you have a plan, keep it.'
-                          ' Our senior advisor, 30 plus years, maps every option free in 5 minutes. What do you '
-                          'want to do with the house?' + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
+                          'sale date on 3461 NW 171 ST. You have probably heard from a few people already. I am '
+                          'not your lender and I am not going to throw an offer at you. One question: do you want '
+                          'to keep the house, or would a fresh start be better? Either answer is fine.'
+                          + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
     PH['cold'][:160])
 rec('phone sale-is-close text is the worker text', 'The sale date on 3461 NW 171 ST is close.' in PH['urgent']
     and 'La subasta de 3461 NW 171 ST está cerca.' in PH['urgent'], PH['urgent'][:160])
@@ -272,7 +273,7 @@ rec('phone just-filed text is the worker text', 'A case was just filed at the co
     PH['lp'][:160])
 rec('phone tax-deed text is the worker text', 'There is a tax deed sale on 3461 NW 171 ST.' in PH['td'], PH['td'][:160])
 rec('the phone row ships the tax-deed flag', "'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0" in CM_SRC)
-rec('phone follow-up is the worker second text', 'again about 3461 NW 171 ST. Not trying to crowd you.' in PH['follow'],
+rec('phone follow-up is the worker second text', 'again about 3461 NW 171 ST. No pressure.' in PH['follow'],
     PH['follow'][:160])
 rec('phone last text is the worker third text', 'my last text about 3461 NW 171 ST.' in PH['last'], PH['last'][:160])
 rec('every phone text carries both let-me-know lines',
