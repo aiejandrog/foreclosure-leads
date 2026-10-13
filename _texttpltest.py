@@ -159,24 +159,67 @@ rec('a far sale and a dateless lead both open cold',
     T['far'] == 'cold' and T['nodate'] == 'cold')
 
 # ─────────────────────────────────────────────────────────── 3. the words he approved
-# Pasted by Alejandro 2026-09-18 with HILL and 1887 NW 44 ST standing in for the owner's first name
-# and the street. Character for character: this is homeowner-facing copy that has been through the
-# compliance read, and "improving" it in passing is how five versions of the disclaimer happened.
-APPROVED_EN = ("Hi HILL, this is Alejandro Gonzalez with Biscayne Solutions Group. A case was just "
-               "filed at the courthouse on 1887 NW 44 ST. Right now you have the most choices, and "
-               "most take weeks to set up. Our senior advisor maps them free in 5 minutes. What do "
-               "you want to do with the house?"
+# 2026-10-13: Alejandro found the 09-18 bodies "robotic, super scripted" and chose the rewrite (new
+# wording, English then Spanish in one text, street title-cased), then "get to the point like be
+# urgent": the real days to the sale, options narrowing, no "keep your plan". HILL and 1887 NW 44 ST stand in for
+# the owner's first name and the street. Character for character: this is homeowner-facing copy, and
+# "improving" it in passing is how five versions of the disclaimer happened.
+APPROVED_EN = ("Hi HILL, it's Alejandro Gonzalez with Biscayne Solutions Group. I saw a case was just "
+               "filed at the courthouse on 1887 NW 44 St. Right now you have the most options, and they "
+               "shrink every week the case moves. Our senior advisor can walk you through them for "
+               "free. Are you hoping to keep the house, or open to selling?"
                # 2026-09-26: attorney replaced "Reply STOP". Appended by stopEN, nothing else moved.
                " If now's not a good time, just let me know and I won't text you again.")
-APPROVED_ES = ("Hola HILL, le escribe Alejandro Gonzalez de Biscayne Solutions Group. Acaban de "
-               "abrir un caso en la corte sobre 1887 NW 44 ST. Hoy es cuando más opciones tiene, y "
-               "toman semanas. Nuestro asesor principal se las explica gratis en 5 minutos. "
-               "¿Qué quiere hacer con la casa?"
+APPROVED_ES = ("Hola HILL, soy Alejandro Gonzalez de Biscayne Solutions Group. Vi que acaban de abrir "
+               "un caso en la corte sobre 1887 NW 44 St. Ahora es cuando más opciones tiene, y cada "
+               "semana que avanza el caso quedan menos. Nuestro asesor principal se las explica "
+               "gratis. ¿Quiere quedarse con la casa o está pensando en venderla?"
                " Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.")
 rec('the English just-filed body is the approved wording, character for character',
     MATRIX['cold|LP']['en'] == APPROVED_EN, MATRIX['cold|LP']['en'])
 rec('the Spanish just-filed body is the approved wording, character for character',
     MATRIX['cold|LP']['es'] == APPROVED_ES, MATRIX['cold|LP']['es'])
+SC = node(BLOCK + r'''
+function st(x){ return _textBodies({first:'A', sender:'S', stEN:x, stES:x, tone:'cold'}); }
+console.log(JSON.stringify({
+  caps: st('6270 NW 18 ST').en, ord: st('1201 SW 18TH TER').en, unit: st('100 N BISCAYNE BLVD APT 3B').en,
+  apos: st("12 O'BRIEN CT").en, us: st('2250 US 1').en, ph: st('[street]').en, none: st('').es
+}));
+''')
+rec('a capitals street is title-cased in the text', "There's a court sale set for 6270 NW 18 St." in SC['caps'], SC['caps'][60:110])
+rec('ordinals go lower, directions stay capitals', '1201 SW 18th Ter' in SC['ord'], SC['ord'][60:110])
+rec('a unit number is left alone', '100 N Biscayne Blvd Apt 3B' in SC['unit'], SC['unit'][60:120])
+rec('a name with an apostrophe keeps both capitals', "12 O'Brien Ct" in SC['apos'], SC['apos'][60:110])
+rec('a US route keeps its capitals', '2250 US 1' in SC['us'], SC['us'][60:110])
+rec('a placeholder street passes through untouched', '[street]' in SC['ph'], SC['ph'][60:110])
+rec('an empty street still falls back', 'su propiedad' in SC['none'], SC['none'][60:120])
+DY = node(BLOCK + r'''
+function u(d, o){ return _textBodies(Object.assign({first:'A', sender:'S', stEN:'1 MAIN ST', stES:'1 MAIN ST', tone:'urgent', days:d}, o||{})); }
+console.log(JSON.stringify({
+  today: u(0), tomorrow: u(1), nine: u(9), none: u(undefined), neg: u(-1), far: u(9999),
+  lp: u(9, {lp:true, tone:'cold'}), lpf: u(9, {lp:true, tone:'followup'}), lpt: u(9, {lp:true, tone:'t3'}), t3nd: u(undefined, {tone:'t3'})
+}));
+''')
+rec('sale today says today', 'is today.' in DY['today']['en'] and 'es hoy.' in DY['today']['es'])
+rec('sale tomorrow says tomorrow', 'is tomorrow.' in DY['tomorrow']['en'] and 'es mañana.' in DY['tomorrow']['es'])
+rec('a counted sale says about N days', 'is in about 9 days.' in DY['nine']['en'] and 'es dentro de unos 9 días.' in DY['nine']['es'])
+rec('an unknown, past or sentinel day count never shows a number',
+    all('coming up soon' in DY[k]['en'] and 'muy pronto' in DY[k]['es'] for k in ('none', 'neg', 'far')))
+rec('a just-filed case never gets a sale countdown',
+    'days' not in DY['lp']['en'] and 'The sale is' not in DY['lpf']['en'] and 'días' not in DY['lp']['es']
+    and 'sale' not in DY['lpt']['en'] and 'subasta' not in DY['lpt']['es'])
+rec('a just-filed last text is the same text the worker preview shows',
+    DY['lpt'] == DY['t3nd'], DY['lpt']['en'][60:160])
+rec('no body tells them to keep their plan',
+    not any(p in (v['en'] + v['es']) for _k, v in _bodies for p in ('plan, keep it', 'stick with it', 'sígalo')))
+# The rewrite dropped the two phrases flagged near s. 501.1377 and the "parachute" metaphor. Pin it.
+rec('no body promises court time, denies fees or says parachute',
+    not any(p in (v['en'] + v['es']) for _k, v in _bodies
+            for p in ('more time', 'No fees', 'parachute', 'paracaídas', 'más tiempo', 'foreclosure')))
+rec('every first text asks keep or sell',
+    all('keep the house, or open to selling?' in MATRIX[k]['en']
+        and '¿Quiere quedarse con la casa o está pensando en venderla?' in MATRIX[k]['es']
+        for k in ('cold|LP', 'cold|FC', 'urgent|FC')))
 _LINE_EN = "If now's not a good time, just let me know and I won't text you again."
 _LINE_ES = 'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 rec('every board text carries its line and not the carrier-keyword instruction',
@@ -187,8 +230,8 @@ rec('every board text carries its line and not the carrier-keyword instruction',
 
 # ─────────────────────────────────────────────────────────── 4. nobody copied them
 # The point of the whole change. Two phrases that appear in no comment anywhere, one per language.
-for phrase, lang in (('Right now you have the most choices', 'EN'),
-                     ('Acaban de abrir un caso', 'ES')):
+for phrase, lang in (('they shrink every week the case moves', 'EN'),
+                     ('cada semana que avanza el caso', 'ES')):
     rec('the %s body exists exactly once, in the template' % lang,
         TPL_SRC.count(phrase) == 1 and strip_js_comments(CM_SRC).count(phrase) == 0,
         'template %d, call_mode %d' % (TPL_SRC.count(phrase), CM_SRC.count(phrase)))
@@ -240,19 +283,22 @@ rec('the log line says which script went out', 'txKind(_txk, st)' in tx)
 # The words that actually leave the phone, run end to end through the page's own adapter.
 PH = node(BLOCK + '\n' + BTB + '\n' + TB + r'''
 var SENDER = {name:'Alejandro Gonzalez'}, _STAGE = 'cold';
+function liveDays(r){ return r.lp ? null : r.d; }
 function firstName(r){ return r.on || ''; }
 function textStage(r){ return _STAGE; }
 function lang(){ return 'en'; }
 function fillScript(t){ return 'LADDER:' + t; }
 var TEXT_T = {cold:'balloon cold'}, TEXT_T_ES = TEXT_T;
-var base = {on:'Juan', a:'3461 NW 171 ST, MIAMI GARDENS, FL 33056'};
+var base = {on:'Juan', a:'3461 NW 171 ST, MIAMI GARDENS, FL 33056', x:'11/20/2026'};
 function row(o){ return Object.assign({}, base, o); }
 var out = {
   cold:   textBody(row({d: 40, st: ''}), 'cold'),
   urgent: textBody(row({d: 5, st: ''}), 'cold'),
   lp:     textBody(row({d: 9999, lp: 1}), 'cold'),
   td:     textBody(row({d: 40, td: 1}), 'cold'),
-  bal:    textBody(row({d: 9999, st: 'BAL'}), 'cold')
+  bal:    textBody(row({d: 9999, st: 'BAL'}), 'cold'),
+  nodate: textBody(row({d: 0, st: '', x: ''}), 'cold'),
+  noaddr: textBody(row({d: 40, st: '', a: ''}), 'cold')
 };
 _STAGE = 'follow'; out.follow = textBody(row({d: 40, st: ''}), 'follow');
 _STAGE = 'final';  out.last   = textBody(row({d: 40, st: ''}), 'final');
@@ -261,20 +307,34 @@ console.log(JSON.stringify(out));
 _OPT_EN = " If now's not a good time, just let me know and I won't text you again."
 _OPT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 rec('phone first text is the worker first text, word for word',
-    PH['cold'].startswith('Hi Juan, this is Alejandro Gonzalez with Biscayne Solutions Group. There is a court '
-                          'sale date on 3461 NW 171 ST. Not a lender, nothing to sign. If you have a plan, keep it.'
-                          ' Our senior advisor, 30 plus years, maps every option free in 5 minutes. What do you '
-                          'want to do with the house?' + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
+    PH['cold'].startswith("Hi Juan, it's Alejandro Gonzalez with Biscayne Solutions Group. There's a court sale "
+                          "set for 3461 NW 171 St in about 40 days. We're not a lender. Every week that passes "
+                          "takes options off the table. Our senior advisor (30+ years) can go over what's still "
+                          "open with you for free. Are you hoping to keep the house, or open to selling?"
+                          + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
     PH['cold'][:160])
-rec('phone sale-is-close text is the worker text', 'The sale date on 3461 NW 171 ST is close.' in PH['urgent']
-    and 'La subasta de 3461 NW 171 ST está cerca.' in PH['urgent'], PH['urgent'][:160])
-rec('phone just-filed text is the worker text', 'A case was just filed at the courthouse on 3461 NW 171 ST.' in PH['lp'],
+rec('phone sale-is-close text counts the live days', 'The court sale on 3461 NW 171 St is in about 5 days.' in PH['urgent']
+    and 'La subasta de 3461 NW 171 St es dentro de unos 5 días.' in PH['urgent'], PH['urgent'][:160])
+rec('phone just-filed text is the worker text', 'I saw a case was just filed at the courthouse on 3461 NW 171 St.' in PH['lp'],
     PH['lp'][:160])
-rec('phone tax-deed text is the worker text', 'There is a tax deed sale on 3461 NW 171 ST.' in PH['td'], PH['td'][:160])
+rec('phone tax-deed text is the worker text', "There's a tax deed sale set for 3461 NW 171 St in about 40 days." in PH['td'], PH['td'][:160])
 rec('the phone row ships the tax-deed flag', "'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0" in CM_SRC)
-rec('phone follow-up is the worker second text', 'again about 3461 NW 171 ST. Not trying to crowd you.' in PH['follow'],
+rec('phone follow-up is the worker second text',
+    'again from Biscayne Solutions Group about 3461 NW 171 St. The sale is in about 40 days' in PH['follow'],
     PH['follow'][:160])
-rec('phone last text is the worker third text', 'my last text about 3461 NW 171 ST.' in PH['last'], PH['last'][:160])
+rec('phone last text is the worker third text', 'This is my last text about 3461 NW 171 St. The sale is in about 40 days'
+    in PH['last'], PH['last'][:160])
+rec('the phone reads the live day count, not the baked one', 'liveDays(r)' in BTB)
+# A dateless row is baked d=0. Before 2026-10-13 review it would have said "the sale is today".
+rec('a phone row with no auction date gets no countdown and no urgency',
+    'today' not in PH['nodate'] and ' hoy' not in PH['nodate'] and 'coming up soon' not in PH['nodate']
+    and "There's a court sale set for 3461 NW 171 St." in PH['nodate'], PH['nodate'][:160])
+rec('the phone picks the tone from the same live count it prints', '_textTone(textStage(r), dd,' in BTB)
+rec('a missing street never starts a sentence in lower case',
+    not re.search(r'\. [a-z]', PH['noaddr']), PH['noaddr'][:200])
+rec('the board text reads the live sale days, not the baked r.days',
+    'days: _saleDays(r)' in extract(TPL_SRC, 'smsMsg')
+    and '_saleDays(r)' in extract(TPL_SRC, '_defaultTextTone'))
 rec('every phone text carries both let-me-know lines',
     all(PH[k].count(_OPT_EN) == 1 and PH[k].endswith(_OPT_ES) for k in ('cold', 'urgent', 'lp', 'follow', 'last')))
 rec('a balloon row still gets the page ladder, not foreclosure copy', PH['bal'] == 'LADDER:balloon cold', PH['bal'])

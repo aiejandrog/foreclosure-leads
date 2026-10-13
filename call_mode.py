@@ -6189,15 +6189,20 @@ function sitBody(r, key){
        ('su propiedad', not 'your property' in a Spanish body). So pass '' and let it choose. */
 function boardTextBody(r){
   var st1 = String((r && r.a) || '').split(',')[0].trim();
+  /* The live count, the same one the voicemail's sale sentence reads, for BOTH the body and the
+     tone. Only when the row carries a date (r.x: the auction, or the filing date on a lis pendens,
+     which liveDays never counts): a dateless row is baked d=0, which would read as "the sale is today". Held after the hammer is -1, which _textBodies never counts. */
+  var dd = (r && String(r.x || '').trim()) ? liveDays(r) : null;
   var B = _textBodies({
     first:  firstName(r),
     sender: SENDER.name || '',
     stEN:   st1, stES: st1,
     td:     !!(r && (r.td || r.st === 'TD')),
     lp:     !!(r && (r.lp || r.st === 'LP')),
+    days:   dd,
     /* The rung comes from THIS device's stage count fed through the board's own rule, so touch 2
        gets the follow-up body and touch 3 gets the one that promises it is the last. */
-    tone:   _textTone(textStage(r), (r && r.d), !!(r && (r.lp || r.st === 'LP')))
+    tone:   _textTone(textStage(r), dd, !!(r && (r.lp || r.st === 'LP')))
   });
   /* English first, Spanish below it, in ONE message: what the Morning Worker sends (smsMsg 'both'). */
   return B.en + '\n\n' + B.es;
