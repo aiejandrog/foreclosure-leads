@@ -6190,8 +6190,8 @@ function sitBody(r, key){
 function boardTextBody(r){
   var st1 = String((r && r.a) || '').split(',')[0].trim();
   /* The live count, the same one the voicemail's sale sentence reads, for BOTH the body and the
-     tone. Only when the row has an auction date: a dateless row is baked d=0, which would read as
-     "the sale is today". Held after the hammer is -1, which _textBodies never counts. */
+     tone. Only when the row carries a date (r.x: the auction, or the filing date on a lis pendens,
+     which liveDays never counts): a dateless row is baked d=0, which would read as "the sale is today". Held after the hammer is -1, which _textBodies never counts. */
   var dd = (r && String(r.x || '').trim()) ? liveDays(r) : null;
   var B = _textBodies({
     first:  firstName(r),

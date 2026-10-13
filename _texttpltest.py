@@ -186,7 +186,7 @@ console.log(JSON.stringify({
   apos: st("12 O'BRIEN CT").en, us: st('2250 US 1').en, ph: st('[street]').en, none: st('').es
 }));
 ''')
-rec('a capitals street is title-cased in the text', "There's a court sale set on 6270 NW 18 St." in SC['caps'], SC['caps'][60:110])
+rec('a capitals street is title-cased in the text', "There's a court sale set for 6270 NW 18 St." in SC['caps'], SC['caps'][60:110])
 rec('ordinals go lower, directions stay capitals', '1201 SW 18th Ter' in SC['ord'], SC['ord'][60:110])
 rec('a unit number is left alone', '100 N Biscayne Blvd Apt 3B' in SC['unit'], SC['unit'][60:120])
 rec('a name with an apostrophe keeps both capitals', "12 O'Brien Ct" in SC['apos'], SC['apos'][60:110])
@@ -197,7 +197,7 @@ DY = node(BLOCK + r'''
 function u(d, o){ return _textBodies(Object.assign({first:'A', sender:'S', stEN:'1 MAIN ST', stES:'1 MAIN ST', tone:'urgent', days:d}, o||{})); }
 console.log(JSON.stringify({
   today: u(0), tomorrow: u(1), nine: u(9), none: u(undefined), neg: u(-1), far: u(9999),
-  lp: u(9, {lp:true, tone:'cold'}), lpf: u(9, {lp:true, tone:'followup'}), lpt: u(9, {lp:true, tone:'t3'})
+  lp: u(9, {lp:true, tone:'cold'}), lpf: u(9, {lp:true, tone:'followup'}), lpt: u(9, {lp:true, tone:'t3'}), t3nd: u(undefined, {tone:'t3'})
 }));
 ''')
 rec('sale today says today', 'is today.' in DY['today']['en'] and 'es hoy.' in DY['today']['es'])
@@ -208,6 +208,8 @@ rec('an unknown, past or sentinel day count never shows a number',
 rec('a just-filed case never gets a sale countdown',
     'days' not in DY['lp']['en'] and 'The sale is' not in DY['lpf']['en'] and 'días' not in DY['lp']['es']
     and 'sale' not in DY['lpt']['en'] and 'subasta' not in DY['lpt']['es'])
+rec('a just-filed last text is the same text the worker preview shows',
+    DY['lpt'] == DY['t3nd'], DY['lpt']['en'][60:160])
 rec('no body tells them to keep their plan',
     not any(p in (v['en'] + v['es']) for _k, v in _bodies for p in ('plan, keep it', 'stick with it', 'sígalo')))
 # The rewrite dropped the two phrases flagged near s. 501.1377 and the "parachute" metaphor. Pin it.
@@ -306,7 +308,7 @@ _OPT_EN = " If now's not a good time, just let me know and I won't text you agai
 _OPT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
 rec('phone first text is the worker first text, word for word',
     PH['cold'].startswith("Hi Juan, it's Alejandro Gonzalez with Biscayne Solutions Group. There's a court sale "
-                          "set on 3461 NW 171 St in about 40 days. We're not a lender. Every week that passes "
+                          "set for 3461 NW 171 St in about 40 days. We're not a lender. Every week that passes "
                           "takes options off the table. Our senior advisor (30+ years) can go over what's still "
                           "open with you for free. Are you hoping to keep the house, or open to selling?"
                           + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
@@ -326,7 +328,7 @@ rec('the phone reads the live day count, not the baked one', 'liveDays(r)' in BT
 # A dateless row is baked d=0. Before 2026-10-13 review it would have said "the sale is today".
 rec('a phone row with no auction date gets no countdown and no urgency',
     'today' not in PH['nodate'] and ' hoy' not in PH['nodate'] and 'coming up soon' not in PH['nodate']
-    and "There's a court sale set on 3461 NW 171 St." in PH['nodate'], PH['nodate'][:160])
+    and "There's a court sale set for 3461 NW 171 St." in PH['nodate'], PH['nodate'][:160])
 rec('the phone picks the tone from the same live count it prints', '_textTone(textStage(r), dd,' in BTB)
 rec('a missing street never starts a sentence in lower case',
     not re.search(r'\. [a-z]', PH['noaddr']), PH['noaddr'][:200])

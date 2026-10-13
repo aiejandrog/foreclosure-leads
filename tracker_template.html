@@ -6407,15 +6407,13 @@ function _textBodies(o){
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
        ever weakened, delete this body in the same commit. */
     en = hi+", it's "+sN+' with Biscayne Solutions Group. This is my last text about '+stEN+'.'
-       + (lp ? ' The longer the case runs, the fewer options are left.'
-             : inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
-             : ' Once the sale happens, most options are gone.')
-       + ' If you want to talk before then, save my number. The call with our senior advisor is free.'+stopEN;
+       + (inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
+               : ' Every week that passes, fewer options are left.')
+       + ' If you want to talk, save my number. The call with our senior advisor is free.'+stopEN;
     es = hola+', soy '+sN+' de Biscayne Solutions Group. Este es mi último mensaje sobre '+stES+'.'
-       + (lp ? ' Mientras más avanza el caso, menos opciones quedan.'
-             : inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
-             : ' Después de la subasta, casi todas las opciones se acaban.')
-       + ' Si quiere hablar antes, guarde mi número. La llamada con nuestro asesor principal es gratis.'+stopES;
+       + (inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
+               : ' Cada semana que pasa quedan menos opciones.')
+       + ' Si quiere hablar, guarde mi número. La llamada con nuestro asesor principal es gratis.'+stopES;
   } else if(tone==='followup'){
     en = hi+', '+sN+' again from Biscayne Solutions Group about '+stEN+'.'
        + (inEN ? ' The sale is '+inEN+', and every week takes options off the table.'
@@ -6445,7 +6443,7 @@ function _textBodies(o){
        + ' menos. Nuestro asesor principal se las explica gratis. ¿Quiere quedarse con la casa o está'
        + ' pensando en venderla?'+stopES;
   } else {
-    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a court sale set on "+stEN+(inEN?' '+inEN:'')+'.'
+    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
        + " We're not a lender. Every week that passes takes options off the table. Our senior advisor"
        + " (30+ years) can go over what's still open with you for free. Are you hoping to keep the house,"
        + ' or open to selling?'+stopEN;
