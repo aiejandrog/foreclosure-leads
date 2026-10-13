@@ -198,19 +198,25 @@ rec('the board tone rule is the shared one too',
     '_textTone(' in extract(TPL_SRC, '_defaultTextTone'))
 
 # ─────────────────────────────────────────────────────────── 5. the page: adapter + wiring
+# 2026-10-13 (Alejandro: "i want call mode to send this out what morning worker does for texts").
+# The phone's ladder button sends the worker's message itself: the shared bodies, English then
+# Spanish in one text, exactly smsMsg(r, 'both'). Balloon rows keep the page's own ladder.
 PAGE = strip_js_comments(C._PAGE)
 BTB = extract(C._PAGE, 'boardTextBody')
+TB = extract(C._PAGE, 'textBody')
 rec('the phone composes from the shared bodies, not from a local table',
     '_textBodies({' in BTB and '_textTone(' in BTB)
 rec('the phone picks its rung from ITS OWN stage count', 'textStage(r)' in BTB)
-rec('the phone honours the EN|ES toggle rather than sending both after a call',
-    "lang() === 'es'" in BTB and 'B.es' in BTB and 'B.en' in BTB)
+rec('the phone sends English then Spanish in one text, like the worker',
+    "B.en + '\\n\\n' + B.es" in BTB)
+rec('the ladder button sends the worker message on every homeowner row',
+    "if(!(r && r.st === 'BAL')) return boardTextBody(r);" in TB)
+rec('the old two-chip choice is gone', 'data-sit="batch"' not in C._PAGE and "_txk==='batch'" not in C._PAGE)
 
-# The chip is offered only where the cold ladder itself is offered. Everything above it in
-# afterCall's if/else chain is a hard gate, and the batch script must sit BELOW all of them.
+# Every hard gate in afterCall's if/else chain must sit ABOVE the ladder send button.
 after = C._PAGE[C._PAGE.index('function afterCall(r, o, nextC){'):]
 after = after[:after.index("var go = function(){ advance(r.c, nextC); };")]
-_chip = after.index('data-sit="batch"')
+_btn = after.index("var lbl = txLabel('ladder', st);")
 for gate, why in ((r"hardSuppressed\(r\)", 'suppression'),
                   (r"o\.k==='badnum'", 'bad number'),
                   (r"dnt\b", 'do-not-text'),
@@ -218,20 +224,60 @@ for gate, why in ((r"hardSuppressed\(r\)", 'suppression'),
                   (r"st === 'retired'", 'retired ladder'),
                   (r"st === 'replied'", 'they already replied')):
     m = [x for x in re.finditer(gate, after) if x.start() < len(after)]
-    rec('the batch chip sits below the %s gate' % why,
-        bool(m) and m[0].start() < _chip, 'gate at %s, chip at %d' % (m[0].start() if m else None, _chip))
+    rec('the text button sits below the %s gate' % why,
+        bool(m) and m[0].start() < _btn, 'gate at %s, button at %d' % (m[0].start() if m else None, _btn))
 
-rec('the batch chip is not offered on a balloon/investor row',
-    "r.st === 'BAL'" in after[:_chip + 400])
-rec('the send button routes the batch chip to the shared bodies',
-    "(_txk==='batch')  ? boardTextBody(r)" in C._PAGE)
+rec('the send button routes the ladder through textBody',
+    "(_txk==='ladder') ? textBody(r, st)" in C._PAGE)
 tx = C._PAGE[C._PAGE.index("if($('tx')) $('tx').onclick = function(){"):]
 tx = tx[:tx.index("$('txn').onclick")]
-rec('the batch text spends the SAME touch as the ladder -- one write, one ledger',
+rec('a text spends ONE touch -- one write, one ledger',
     tx.count('touches.push(') == 1, tx.count('touches.push('))
 rec('and it is still logged as an open, not a send, until he confirms',
     'n.textopen = today();' in tx and "$('txy').onclick" in tx)
 rec('the log line says which script went out', 'txKind(_txk, st)' in tx)
+
+# The words that actually leave the phone, run end to end through the page's own adapter.
+PH = node(BLOCK + '\n' + BTB + '\n' + TB + r'''
+var SENDER = {name:'Alejandro Gonzalez'}, _STAGE = 'cold';
+function firstName(r){ return r.on || ''; }
+function textStage(r){ return _STAGE; }
+function lang(){ return 'en'; }
+function fillScript(t){ return 'LADDER:' + t; }
+var TEXT_T = {cold:'balloon cold'}, TEXT_T_ES = TEXT_T;
+var base = {on:'Juan', a:'3461 NW 171 ST, MIAMI GARDENS, FL 33056'};
+function row(o){ return Object.assign({}, base, o); }
+var out = {
+  cold:   textBody(row({d: 40, st: ''}), 'cold'),
+  urgent: textBody(row({d: 5, st: ''}), 'cold'),
+  lp:     textBody(row({d: 9999, lp: 1}), 'cold'),
+  td:     textBody(row({d: 40, td: 1}), 'cold'),
+  bal:    textBody(row({d: 9999, st: 'BAL'}), 'cold')
+};
+_STAGE = 'follow'; out.follow = textBody(row({d: 40, st: ''}), 'follow');
+_STAGE = 'final';  out.last   = textBody(row({d: 40, st: ''}), 'final');
+console.log(JSON.stringify(out));
+''')
+_OPT_EN = " If now's not a good time, just let me know and I won't text you again."
+_OPT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+rec('phone first text is the worker first text, word for word',
+    PH['cold'].startswith('Hi Juan, this is Alejandro Gonzalez with Biscayne Solutions Group. There is a court '
+                          'sale date on 3461 NW 171 ST. Not a lender, nothing to sign. If you have a plan, keep it.'
+                          ' Our senior advisor, 30 plus years, maps every option free in 5 minutes. What do you '
+                          'want to do with the house?' + _OPT_EN + '\n\nHola Juan, soy Alejandro Gonzalez'),
+    PH['cold'][:160])
+rec('phone sale-is-close text is the worker text', 'The sale date on 3461 NW 171 ST is close.' in PH['urgent']
+    and 'La subasta de 3461 NW 171 ST está cerca.' in PH['urgent'], PH['urgent'][:160])
+rec('phone just-filed text is the worker text', 'A case was just filed at the courthouse on 3461 NW 171 ST.' in PH['lp'],
+    PH['lp'][:160])
+rec('phone tax-deed text is the worker text', 'There is a tax deed sale on 3461 NW 171 ST.' in PH['td'], PH['td'][:160])
+rec('the phone row ships the tax-deed flag', "'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0" in CM_SRC)
+rec('phone follow-up is the worker second text', 'again about 3461 NW 171 ST. Not trying to crowd you.' in PH['follow'],
+    PH['follow'][:160])
+rec('phone last text is the worker third text', 'my last text about 3461 NW 171 ST.' in PH['last'], PH['last'][:160])
+rec('every phone text carries both let-me-know lines',
+    all(PH[k].count(_OPT_EN) == 1 and PH[k].endswith(_OPT_ES) for k in ('cold', 'urgent', 'lp', 'follow', 'last')))
+rec('a balloon row still gets the page ladder, not foreclosure copy', PH['bal'] == 'LADDER:balloon cold', PH['bal'])
 
 # ─────────────────────────────────────────────────────────── 6. the whole page still assembles
 sync_js = C.extract_sync_js(TPL_SRC)

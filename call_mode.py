@@ -1747,6 +1747,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
             'd': days,
             'lp': 1 if is_lp else 0,
+            # Tax deed. The board knows it as st=='TD'; the phone row never carried st (only 'BAL'),
+            # so the text button needs it shipped to pick the tax-deed text the worker sends.
+            'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0,
             'p': [keep[k] for k in order],
             # build-time only, popped after the sort: is the number dialed first explicitly a landline?
             '_ll': 1 if (lambda _t: keep_oi[order[0]] < len(_t) and _t[keep_oi[order[0]]] == 'landline')(
@@ -1861,6 +1864,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # `lp` and `k` follow the same rule; `d` (days) must NOT — 0 means the auction is TODAY.
         if not row['lp']:
             row.pop('lp')
+        if not row['td']:
+            row.pop('td')
         if not row['k']:
             row.pop('k')
         # ---- flags: one packed string instead of a dozen booleans ----
@@ -6106,7 +6111,12 @@ var TEXT_OPTOUT = {en:" If now's not a good time, just let me know and I won't t
                    es:' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'};
 Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf("won't text you again") < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
 Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('vuelvo a escribir') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
+/* 2026-10-13 (Alejandro: "i want call mode to send this out what morning worker does for texts").
+   Every homeowner text from this page is now the Morning Worker's own message, the same bytes the
+   text batch sends: boardTextBody, English then Spanish. TEXT_T / TEXT_T_ES above survive only for
+   balloon (investor) rows, which the worker's foreclosure copy has nothing to say to. */
 function textBody(r, stage){
+  if(!(r && r.st === 'BAL')) return boardTextBody(r);
   var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
   return fillScript(T[stage] || T.cold, r);
 }
@@ -6173,9 +6183,8 @@ function sitBody(r, key){
    r.addr, r.days) out of a phone row (r.on, r.a, r.d) and hands it over.
 
    Differences from the board's own call, both deliberate:
-     - ONE LANGUAGE, not both. The batch bakes EN + ES together because it cannot know which the
-       owner reads. On the phone he has just spoken to them, and the EN|ES chips above this button
-       already say which — sending both after a conversation reads like a blast.
+     - (Until 2026-10-13 this sent ONE language off the EN|ES chips. Alejandro asked for the
+       worker's message, so it now sends English then Spanish in one text, like smsMsg 'both'.)
      - The street falls back INSIDE _textBodies, which picks the fallback in the right language
        ('su propiedad', not 'your property' in a Spanish body). So pass '' and let it choose. */
 function boardTextBody(r){
@@ -6184,13 +6193,14 @@ function boardTextBody(r){
     first:  firstName(r),
     sender: SENDER.name || '',
     stEN:   st1, stES: st1,
-    td:     (r && r.st === 'TD'),
-    lp:     (r && r.st === 'LP'),
+    td:     !!(r && (r.td || r.st === 'TD')),
+    lp:     !!(r && (r.lp || r.st === 'LP')),
     /* The rung comes from THIS device's stage count fed through the board's own rule, so touch 2
        gets the follow-up body and touch 3 gets the one that promises it is the last. */
-    tone:   _textTone(textStage(r), (r && r.d), (r && r.st === 'LP'))
+    tone:   _textTone(textStage(r), (r && r.d), !!(r && (r.lp || r.st === 'LP')))
   });
-  return (lang() === 'es') ? B.es : B.en;
+  /* English first, Spanish below it, in ONE message: what the Morning Worker sends (smsMsg 'both'). */
+  return B.en + '\n\n' + B.es;
 }
 /* The label on the send button, and the label written into the touch log. Each was built inline in
    two places (the initial render and the chip handler), and adding a third script to choose from is
@@ -6198,11 +6208,10 @@ function boardTextBody(r){
 function txLabel(k, st){
   if(k === 'ladder') return st === 'cold' ? 'Send 1st text'
                           : st === 'follow' ? 'Send follow-up (2 of 3)' : 'Send final text (3 of 3)';
-  if(k === 'batch')  return 'Send the board script';
   return 'Send: ' + ((TEXT_SIT[k] || {}).t || '');
 }
 function txKind(k, st){
-  return k === 'ladder' ? st : k === 'batch' ? ('board script, ' + st) : k;
+  return k === 'ladder' ? st : k;
 }
 /* Callback. Writes n.next, the same field the board reads to re-surface a lead — so a promise made
    on the phone shows up on the laptop instead of living in his head. */
@@ -6511,18 +6520,12 @@ function afterCall(r, o, nextC){
   else if(st === 'retired') txt = '<div class="nc">Three messages already sent to this person. The ladder is closed — call only.</div>';
   else if(st === 'replied') txt = '<div class="nc">They have replied before. Do not send a cold-ladder text; talk to them.</div>';
   else {
-    /* TWO COLD SCRIPTS, ONE RUNG. "After the call" is this page's own ladder and opens with "I just
-       tried calling", which is true only here. "Board script" is the text batch's body for this
-       lead — the just-filed one for an LP, the tax-deed one for a TD, the sale-date one otherwise.
-       Both spend the SAME touch: whichever he sends writes one ch:'text' touch, so textStage counts
-       it and the 3-message lifetime ladder cannot be walked around by switching chips.
-       BAL rows get no chip: the batch bodies are homeowner-foreclosure copy and the balloon lane is
-       an investor with no sale date, so the board would have nothing to say to them here. */
+    /* ONE SCRIPT (2026-10-13): the ladder button sends the Morning Worker's message for this lead's
+       rung (first, sale is close, just filed, tax deed, follow-up, last), English then Spanish.
+       The old "After the call" / "Board script" chips are gone because both now say the same
+       thing. Every send writes one ch:'text' touch, so textStage counts it and the 3-message
+       lifetime ladder holds. */
     var lbl = txLabel('ladder', st);
-    if(!(r && r.st === 'BAL')){
-      _chips = '<div><button class="txch on" data-sit="ladder">After the call</button>'
-             + '<button class="txch" data-sit="batch">Board script</button></div>';
-    }
     txt = '<button id="tx" class="'+(miss?'':'ghost')+'">'+esc(lbl)+'</button>';
   }
   /* NAME THE NUMBER. The text button targets r.p[phIdx] — whichever number he actually dialled —
@@ -6612,9 +6615,7 @@ function afterCall(r, o, nextC){
       _openText();
     });
     function _openText(){
-    var body = (_txk==='ladder') ? textBody(r, st)
-             : (_txk==='batch')  ? boardTextBody(r)
-             : sitBody(r, _txk);
+    var body = (_txk==='ladder') ? textBody(r, st) : sitBody(r, _txk);
     /* Log the OPEN, not a send. Opening a composer is not a delivery — the board draws this exact
        line (the worker's textopen posts confirmed:false) and blurring it is how the ladder burns a
        touch on a message that was never sent. He confirms below once it is actually gone. */
