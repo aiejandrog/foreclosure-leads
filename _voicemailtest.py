@@ -139,6 +139,17 @@ console.log(JSON.stringify(out));
     rec('Alejandro seat, own number: no warning', o.get('wrongA2') is False)
 rec('guided vm step shows the warning too', "if(s.id==='vm') b+=_vmWarnHtml();" in SRC)
 rec('full sheet shows the warning', SRC.count('_vmWarnHtml()') >= 3)
+# ---- the full-screen button (2026-10-12: "a button i press and the voice message script shows up")
+rec('outcome screen has the Voicemail button', 'id="vmbtn"' in SRC and "$('vmbtn').onclick = function(){ vmOpen(r); };" in SRC)
+_oc = SRC[SRC.find('function screenOutcome('):SRC.find('function screenOutcome(') + 12000]
+rec('button sits above the reference block', 0 < _oc.find('id="vmbtn"') < _oc.find('+ refBlock'))
+_vo = SRC[SRC.find('function vmOpen('):SRC.find('function say(')]
+rec('overlay reads the same VMEN/VMES as the sheet', 'function _vmTexts(' in SRC and '{en:VMEN, es:VMES' in SRC)
+rec('overlay logs through the card outcome button, not its own write',
+    '.oc button[data-oc="voicemail"]' in _vo and 'logOutcome' not in _vo and 'notes[' not in _vo)
+rec('overlay shows the wrong-voice warning', '_vmWarnHtml()' in _vo)
+rec('overlay never survives a screen change',
+    SRC.count("try{ vmClose(); }catch(e){}") == 2)
 
 print('\n%s: %d failure(s)' % ('FAIL' if fails else 'PASS', len(fails)))
 sys.exit(1 if fails else 0)
