@@ -4849,8 +4849,8 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
-  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */
-  var _wl = lane, _rest = _qvRestore();   // _rest: he was on a one-off; view, lane and card are back
+  var _wl = lane, _rest = _qvRestore();
+  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
