@@ -271,7 +271,11 @@ _LANG = 'es';
 out.es = textBody(row({x: mdy(3), d: 3}), 'cold');
 console.log(JSON.stringify(out));
 """
-LAD = node(_LAD_HEAD + extract(CM_SRC, 'fillScript') + '\n' + _ladder + _LAD_TAIL)
+# fillScript holds a lone '{vmsale' string literal, so a brace count cannot find its end: slice it
+# to the next top-level declaration instead.
+_fs = CM_SRC.index('function fillScript(')
+_fs_end = re.search(r'\n(?:function |var )', CM_SRC[_fs + 1:]).start() + _fs + 1
+LAD = node(_LAD_HEAD + CM_SRC[_fs:_fs_end] + '\n' + _ladder + _LAD_TAIL)
 OPT = " If now's not a good time, just let me know and I won't text you again."
 rec('ladder: sale in 3 days names the day and date, and asks for a plan',
     'The court has the sale set for ' in LAD['soon3'] and 'Do you have a plan in place yet?' in LAD['soon3']
