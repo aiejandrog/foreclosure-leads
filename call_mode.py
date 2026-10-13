@@ -185,9 +185,12 @@ _OPEN_BODY_ES = ("Le habla {sender}, de Biscayne Solutions Group. Puede sonar un
 # money consequence, 4 is what it has already cost them, 5 is the personal one (the beat the 3-question
 # stack was missing entirely, and the one Miner builds the whole call around), 6 asks for the advisor.
 NEPQ_Q_EN = [
-    # 1 · SITUATION. Open, never a binary -- "hold it or are you past it?" is exactly the this-or-that
-    # Jesse killed. Let them say it in their own words; everything after is built on this answer.
-    "Before I get into any of it, what is it you are actually hoping happens with {st1}?",
+    # 1 · SITUATION. Keep or sell, then SILENCE (2026-10-13, Alejandro, from Chad's foreclosure
+    # framework; #57 already says ask keep-or-sell first). This is an either/or, but not the kind Jesse
+    # killed on 09-04: his rule bans a second half that is an exit ("or are you pretty set?"). Both
+    # halves here are engagement, and whichever they pick routes the call (keep -> k1, sell -> s1).
+    "One question first. Do you want to keep the house, or would you rather sell it and get a fresh "
+    "start?",
     # 2 · PROBLEM AWARENESS.
     "When the bank or the attorney talked to you about that sale date, did anybody actually explain "
     "what happens to your balance every time that date gets pushed back?",
@@ -211,7 +214,8 @@ NEPQ_Q_EN = [
     "Let me get you on his calendar. Is later today better, or first thing tomorrow?",
 ]
 NEPQ_Q_ES = [
-    "Antes de meterme en nada, ¿qué es lo que usted de verdad quisiera que pasara con {st1}?",
+    "Una sola pregunta primero. ¿Usted quiere quedarse con la casa, o preferiría venderla y empezar "
+    "de nuevo?",
     "Cuando el banco o el abogado le habló de esa fecha de subasta, ¿alguien de verdad le explicó qué "
     "le pasa a su saldo cada vez que esa fecha se pospone?",
     "Eso es lo que escucho de casi todos. Cada vez que se mueve, los intereses y los gastos legales "
@@ -241,8 +245,9 @@ if len(NEPQ_Q_EN) != len(NEPQ_Q_ES):
 # to remember WHY beat 4 exists — the page says it, one line, the way CIOC's `w` column does. The
 # purpose lines are the NEPQ mechanics: tone, silence, who says the pain out loud.
 NEPQ_K = [
-    ('WHAT DO THEY WANT',
-     'Their answer picks the program. Open question, never a binary — everything after is built on this.'),
+    ('KEEP OR SELL',
+     'Ask it, then say NOTHING, even through five seconds of quiet. What they say first tells you how deep '
+     'their head is in the sand. Their answer picks the branch: keep or sell.'),
     ('PROBLEM AWARENESS',
      'Curious tone, slow down. When they say "no, nobody explained it" — let the silence sit.'),
     ('THE MONEY CONSEQUENCE',
@@ -708,13 +713,11 @@ DEFUSE_BUY_EN = "No — I'm not buying anything, I promise. That's not what this
 DEFUSE_BUY_ES = "No — no le vengo a comprar nada, se lo prometo. Esto no es eso."
 CONSEQ_EN = [
     "Do you want to have to go through all that... if you... if you didn't have to?",
-    "Can you afford to take that risk?",
     "Why look at fixing this now? Why not just push it down the road like a lot of people do... who end "
     "up losing the house they could've kept?",
 ]
 CONSEQ_ES = [
     "¿Usted quiere tener que pasar por todo eso... si... si no tuviera que hacerlo?",
-    "¿Se puede dar el lujo de correr ese riesgo?",
     "¿Por qué ver cómo resolver esto ahora? ¿Por qué no dejarlo para después como hace mucha gente... que "
     "termina perdiendo la casa que pudo haber conservado?",
 ]
@@ -768,6 +771,75 @@ REINSTATED_EN = ("Oh good, honestly that's the best way this can end, and a lot 
 REINSTATED_ES = ("Ah, qué bueno. La verdad es la mejor forma en que esto puede terminar, y mucha gente nunca "
                  "lo logra. No le quito tiempo. Nada más para no molestarlo otra vez sin razón... ¿el caso en "
                  "la corte ya se cerró, o todavía aparece abierto?")
+
+
+# ── CHAD'S FRAMEWORK (2026-10-13, Alejandro: "yes go on" on the draft in the thread) ──────────────
+# Taken from a probate coaching call: his POSTURE, not his toolbox. Permission before personal
+# questions, keep-or-sell then silence, separate keep and sell branches, the house only after a yes,
+# everyone on the deed at the meeting. NOT taken, on purpose: a bankruptcy "emergency button", "we
+# can stop it in hours", bridge loans, listing the house, sub-to / lease options, quoting equity.
+# Those are legal advice, promised outcomes, lending or licensed work (#57, s. 501.1377, NEVER_SAY).
+# "most of them opened with an offer. I'm not going to do that" is true by #57 (no number until
+# equity is verified); never turn it into "I'm not a buyer" (see INVESTOR_EN).
+PERMISSION_EN = ("Before I ask you anything... you've probably had a few people call about this house "
+                 "already, and most of them opened with an offer. I'm not going to do that. To be any use "
+                 "to you I'd have to ask a couple of personal questions. If one of them is none of my "
+                 "business, just tell me and I'll skip it. Is that okay?")
+PERMISSION_ES = ("Antes de preguntarle nada... seguramente ya lo han llamado varias personas por esta casa, "
+                 "y la mayoría empezó con una oferta. Yo no voy a hacer eso. Para poder servirle de algo "
+                 "tendría que hacerle un par de preguntas personales. Si alguna no es asunto mío, dígamelo "
+                 "y la salto. ¿Le parece bien?")
+# KEEP branch: can it actually be caught up? We refer and introduce; we never arrange or lend.
+KEEP_EN = [
+    "What happened, if you don't mind me asking?",
+    "Is the income back, or coming back? Roughly when?",
+    "If it came to it, is there anyone, family or friends, who could help you catch it up?",
+    "Has the bank or their attorney given you the number to catch it up?",
+]
+KEEP_ES = [
+    "¿Qué pasó, si no le molesta que le pregunte?",
+    "¿Ya volvió el ingreso, o va a volver? ¿Más o menos cuándo?",
+    "Si hiciera falta, ¿hay alguien, familia o amigos, que le pueda ayudar a ponerse al día?",
+    "¿El banco o su abogado le ha dado la cantidad para ponerse al día?",
+]
+KEEP_TURN_EN = ("If keeping it doesn't work on these numbers, would it help to at least see what selling "
+                "looks like, so it's your choice and not the court's?")
+KEEP_TURN_ES = ("Si quedarse con ella no da con estos números, ¿le ayudaría por lo menos ver cómo sería "
+                "venderla, para que la decisión sea suya y no de la corte?")
+# SELL branch: ask only. Write their numbers down; never subtract out loud (#57: no number until
+# equity is verified).
+SELL_EN = [
+    "Roughly what do you still owe on it, if you know?",
+    "What do you think it would sell for today?",
+    "If it sold, where would you go? Do you have something lined up?",
+    "Who else is on the deed, or part of this decision?",
+]
+SELL_ES = [
+    "¿Más o menos cuánto debe todavía, si lo sabe?",
+    "¿En cuánto cree que se vendería hoy?",
+    "Si se vende, ¿a dónde iría? ¿Tiene algo en mente?",
+    "¿Quién más está en la escritura, o es parte de esta decisión?",
+]
+NONUMBER_EN = "I'll check the records before I say anything about numbers. I'd rather be right than fast."
+NONUMBER_ES = "Voy a revisar los registros antes de decirle cualquier número. Prefiero estar en lo correcto que ser rápido."
+EVERYONE_EN = ("When we sit down, I'd like everyone on the deed there, so nobody hears it secondhand. Can "
+               "you get them there?")
+EVERYONE_ES = ("Cuando nos sentemos, me gustaría que estén todos los que aparecen en la escritura, para que "
+               "nadie se entere de segunda mano. ¿Los puede reunir?")
+HOUSE_EN = ("Thanks. Now that we've talked about you, can I ask a few quick things about the house so I do "
+            "my homework before we meet? Bedrooms and baths, anything that needs fixing, how old the roof "
+            "is, and is anyone renting it?")
+HOUSE_ES = ("Gracias. Ya que hablamos de usted, ¿le puedo hacer unas preguntas rápidas sobre la casa para "
+            "preparar todo antes de vernos? Cuartos y baños, algo que necesite arreglo, la edad del techo, "
+            "y si alguien la está rentando.")
+# Bankruptcy only when THEY raise it. Never advise filing, never "file and don't finish it".
+BKREF_EN = ("That's a question for a bankruptcy attorney, not me, and I can get you a free referral. I "
+            "can't tell you whether to file.")
+BKREF_ES = ("Esa es una pregunta para un abogado de bancarrota, no para mí, y le puedo conseguir una "
+            "referencia gratis. Yo no le puedo decir si debe declararse o no.")
+for _a, _b in ((KEEP_EN, KEEP_ES), (SELL_EN, SELL_ES)):
+    if len(_a) != len(_b):
+        raise RuntimeError('call_mode: keep/sell branch has %d EN vs %d ES lines' % (len(_a), len(_b)))
 
 
 def _beat(i):
@@ -846,16 +918,90 @@ def _flow():
          'en': STATUS_FRAME_EN, 'es': STATUS_FRAME_ES,
          'tone': 'Neutral, expert, unhurried. You are setting the table, not pitching.',
          'listen': 'Their "yeah, that\'d help" is the first micro-yes.',
-         'br': [['Sure / that\'d help', 'q1'], ['What kind of options? (do NOT present — ask)', 'q1'],
+         'br': [['Sure / that\'d help', 'permission'], ['What kind of options? (do NOT present — ask)', 'permission'],
                 ['I\'ve got it handled', 'obj:1'], ['We already reinstated', 'reinstated'], ['Are you an investor?', 'investor'],
                 ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15']],
+         'ret': 'permission'},
+        {'id': 'permission', 'k': 'ASK PERMISSION — this call is different',
+         'en': PERMISSION_EN, 'es': PERMISSION_ES,
+         'tone': 'Slow, low, unhurried. You are asking, not telling. If they sound ashamed, add one line: '
+                 '"This happens to a lot of good people. Nothing to be embarrassed about."',
+         'listen': 'Wait for the yes. It is the first yes that is not about money.',
+         'br': [['Okay / go ahead', 'q1'], ['Why do you care? / what do you do?', 'intro30'],
+                ['Are you an investor?', 'investor'], ['Not interested', 'obj:15'], ["Don't call me again", 'end:dnc']],
          'ret': 'q1'},
         {'id': 'q1', 'k': '1 · ' + q1[0], 'en': q1[2], 'es': q1[3],
          'tone': 'Curious. Open question. ' + q1[1],
-         'listen': 'Their answer picks the program. Do not fill the silence.',
-         'br': [['Keep the house', 'q2'], ['Sell / get out / start fresh', 'q2'], ["Selling it myself / I'm a realtor", 'realtor'], ['I don\'t know', 'probe'],
+         'listen': 'Their answer picks the branch. Do not fill the silence.',
+         'br': [['Keep the house', 'k1'], ['Sell / get out / start fresh', 's1'], ["Selling it myself / I'm a realtor", 'realtor'], ['I don\'t know', 'probe'],
                 ['It\'s handled / bank / mod', 'obj:1'], ['My lawyer\'s on it', 'obj:2']],
          'ret': 'q2'},
+        {'id': 'k1', 'k': 'KEEP · what happened',
+         'en': KEEP_EN[0], 'es': KEEP_ES[0],
+         'tone': 'Soft, curious. Never make them say they are behind. We already know.',
+         'listen': 'Job, health, divorce, a death. Let them tell it.',
+         'br': [['They told me', 'k2'], ["Rather not say", 'k2']],
+         'ret': 'k2'},
+        {'id': 'k2', 'k': 'KEEP · is the income back',
+         'en': KEEP_EN[1], 'es': KEEP_ES[1],
+         'tone': 'Matter of fact. You are checking whether keeping it is real, not judging.',
+         'listen': 'Back now, coming back, or not in sight.',
+         'br': [['Back / coming back soon', 'k3'], ['Not in sight', 'k3'], ['Money\'s coming (check / family)', 'obj:4']],
+         'ret': 'k3'},
+        {'id': 'k3', 'k': 'KEEP · anyone who could help',
+         'en': KEEP_EN[2], 'es': KEEP_ES[2],
+         'tone': 'Gentle. Asking for family money is hard to say out loud.',
+         'listen': 'A name, or no one.',
+         'br': [['Yes, someone', 'k4'], ['No one', 'k4']],
+         'ret': 'k4'},
+        {'id': 'k4', 'k': 'KEEP · the catch-up number',
+         'en': KEEP_EN[3], 'es': KEEP_ES[3],
+         'tone': 'Curious. If they have it, write it down. Never say whether it is affordable.',
+         'listen': 'Income or help that could cover it means keeping is realistic. Neither means it is not.',
+         'br': [['Realistic: income or help', 'q2'], ['Not realistic', 'kturn'], ['Bank mod / lawyer on it', 'obj:1']],
+         'ret': 'q2'},
+        {'id': 'kturn', 'k': 'KEEP NOT WORKING — offer the other path',
+         'en': KEEP_TURN_EN, 'es': KEEP_TURN_ES,
+         'tone': 'Kind and slow. Their choice, not ours. Never push the sale.',
+         'listen': 'A yes moves to selling. A no is respected.',
+         'br': [['Yes, show me', 's1'], ['No, I want to keep it', 'q2'], ['Not interested', 'f15']],
+         'ret': 's1'},
+        {'id': 's1', 'k': 'SELL · what they owe',
+         'en': SELL_EN[0], 'es': SELL_ES[0],
+         'tone': 'Easy. Write it down. Do not react to the number.',
+         'listen': 'A number, a guess, or "no idea". All fine.',
+         'br': [['Gave a number', 's2'], ["Doesn't know", 's2']],
+         'ret': 's2'},
+        {'id': 's2', 'k': 'SELL · what they think it\'s worth',
+         'en': SELL_EN[1], 'es': SELL_ES[1],
+         'tone': 'Curious. Write it down. NEVER subtract out loud and never say an equity or offer number.',
+         'listen': 'Their number, not ours.',
+         'br': [['Gave a number', 's3'], ["Doesn't know", 's3'], ['What would YOU pay? / what\'s it worth?', 'nonumber']],
+         'ret': 's3'},
+        {'id': 'nonumber', 'k': 'NO NUMBER YET',
+         'en': NONUMBER_EN, 'es': NONUMBER_ES,
+         'tone': 'Calm and sure. This is the honest answer, not a dodge.',
+         'listen': 'Then carry on with where they would go.',
+         'br': [['Okay', 's3']],
+         'ret': 's3'},
+        {'id': 's3', 'k': 'SELL · where would they go',
+         'en': SELL_EN[2], 'es': SELL_ES[2],
+         'tone': 'Concerned, slow. This is the real stakes question. Let the silence sit.',
+         'listen': 'A plan, family, or nothing at all.',
+         'br': [['Has somewhere', 's4'], ['Nowhere yet', 's4']],
+         'ret': 's4'},
+        {'id': 's4', 'k': 'SELL · who else decides',
+         'en': SELL_EN[3], 'es': SELL_ES[3],
+         'tone': 'Practical. Everyone on title has to sign anyway.',
+         'listen': 'Names. Spouse, siblings, an heir.',
+         'br': [['Others on the deed / in the decision', 'everyone'], ['Just me', 'bridge']],
+         'ret': 'bridge'},
+        {'id': 'everyone', 'k': 'EVERYONE ON THE DEED AT THE MEETING',
+         'en': EVERYONE_EN, 'es': EVERYONE_ES,
+         'tone': 'Warm. At their pace, never "tonight". Adults on title, not the kids.',
+         'listen': 'Saves a dead second meeting.',
+         'br': [['Yes', 'bridge'], ['Not sure / hard to get them', 'bridge']],
+         'ret': 'bridge'},
         {'id': 'probe', 'k': 'THEY WENT VAGUE — echo it back',
          'rail': {'en': PROBE_EN, 'es': PROBE_ES},
          'tone': 'Mirror their last words as a question. Get specific. One at a time.',
@@ -878,7 +1024,7 @@ def _flow():
          'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
          'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
          'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
-                ['Bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
+                ['Bankruptcy', 'bkref'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
                 ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
          'ret': 'q5'},
         {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],
@@ -924,6 +1070,12 @@ def _flow():
          'listen': 'Wait for a time. If they give one, lock it.',
          'br': [['Gave me a time', 'end:callback'], ['Booked a slot', 'end:callback'], ['Brushed me off', 'end:notint']],
          'ret': 'q6'},
+        {'id': 'bkref', 'k': 'THEY RAISED BANKRUPTCY — refer, never advise',
+         'en': BKREF_EN, 'es': BKREF_ES,
+         'tone': 'Calm. Never bring bankruptcy up yourself, never say whether to file, never "file and don\'t finish it".',
+         'listen': 'Then back to what they want.',
+         'br': [['Okay', 'q5'], ['My lawyer is already filing', 'obj:6']],
+         'ret': 'q5'},
         {'id': 'f15', 'k': 'THE 15-SECOND OUT',
          'en': FIFTEEN_SEC, 'es': FIFTEEN_SEC,
          'tone': 'Totally relaxed. You are leaving, not chasing. One line, voice down, then let go.',
@@ -935,9 +1087,15 @@ def _flow():
          'tone': 'Slow on the number. A clean read-back means it is real. "Pen ran out of ink" = do not count it. '
                  'Advisor consult: he reads the MARS block first.',
          'listen': 'Listen for the read-back.',
-         'br': [['Read it back clean ✓', 'end:appt'], ['Fumbled it / "pen ran out" (log it, count it soft)', 'end:appt'],
+         'br': [['Read it back clean ✓', 'house'], ['Fumbled it / "pen ran out" (log it, count it soft)', 'house'],
                 ['Backed out', 'f15']],
          'ret': 'book'},
+        {'id': 'house', 'k': 'NOW THE HOUSE — only after the yes',
+         'en': HOUSE_EN, 'es': HOUSE_ES,
+         'tone': 'Relaxed. The people part is done. Write down what they say for the meeting.',
+         'listen': 'If they are out of time, skip it and ask at the meeting.',
+         'br': [['Answered', 'end:appt'], ['No time now', 'end:appt']],
+         'ret': 'house'},
         {'id': 'gate', 'k': 'NOT THE OWNER — gatekeeper',
          'en': GATE_EN, 'es': GATE_ES,
          'tone': 'Easy, friendly. Never say "foreclosure" to anyone but the owner — "the property" only.',
