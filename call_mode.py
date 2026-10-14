@@ -1731,6 +1731,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'c': case,
             # release expiry (bk_lookup.release_until): the page drops this row once it passes
             'bu': d.get('bkUntil') or None,
+            # bankruptcy not checked (owner waiver, bk_lookup.UNCHECKED_WHY): the card asks first
+            'bq': 1 if d.get('bkAsk') else None,
             'o': (d.get('owners') or d.get('oname') or '').strip(),
             # GREETING NAME, separate from the display string above.
             # `owners` comes off the county roll as "LAST,FIRST" on 32% of leads (measured across
@@ -5818,6 +5820,10 @@ function screenLead(){
   if(has(r,'W')) wc += '<span class="chip">elder signal</span>';
   if(wc) who += '<div class="chips">'+wc+'</div>';
   if(r.po) who += '<div class="warnbar">Roll owner is now <b>'+esc(r.po)+'</b> &mdash; do NOT open with the name above. Ask who you are speaking with.</div>';
+  /* BANKRUPTCY NOT CHECKED (2026-10-13). This lead is on the list only because the attorney approved
+     contacting unchecked Broward / Palm Beach homeowners. His condition is the first question. */
+  if(r.bq) who += '<div class="warnbar">&#9888; <b>Bankruptcy not checked.</b> Ask first: &ldquo;Have you filed for bankruptcy?&rdquo; '
+    + 'If yes: end the call, say nothing else, and tap <b>Do Not Contact</b>.</div>';
   /* DIALED TODAY, NO OUTCOME. The one hole cooldown suppression cannot cover: a dial with no logged
      outcome starts no cooldown, so the lead resurfaces everywhere — which is exactly "why am I
      calling the same people". Say it on the card instead of letting it happen silently. */

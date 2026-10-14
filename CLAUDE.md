@@ -380,6 +380,21 @@ with a name, a phone, or the token.
 is asking Free Law Project. Until that is answered, keep the provider swappable and do
 not add a second CourtListener client.
 
+**Unchecked-lead waiver (2026-10-13, attorney approved in writing, calls then texts and
+emails the same day; screenshots under project files `callmode-carlos/ATTORNEY-OK-UNCHECKED-BK-*.png`).**
+`bk_waiver.json` (tracked, `unchecked_contact: true`) or `DEALFLOW_BK_ALLOW_UNCHECKED=1` releases a
+Broward or Palm Beach lead whose federal check has **not run, errored, gone stale, or is a
+CourtListener `clear_unconfirmed`**: `bk_lookup.unchecked_allowed()` / `_unchecked_release()`, read by
+`gate_opinion` (send gate, so email, text and letters), `HoldIndex.hold` (dial queue, Call Mode, knock
+planner) and `flags_for_cases` (board bake, `ask: true` -> `bkAsk` -> Call Mode `bq`). It never
+releases an open or possible CourtListener match, a PACER new-filer hit, a never-contact case, a
+Miami-Dade stem's docket verdict, or an unreadable cache. Every released card opens with
+"Bankruptcy not checked. Ask first: Have you filed for bankruptcy?"; a yes ends the call and is
+marked Do Not Contact, which ledgers it. `DEALFLOW_BK_ALLOW_UNCHECKED=0` wins over the file and is
+the off switch; the base-gate suites set it so they keep modelling the held world, and
+`_bkuncheckedtest.py` covers the waiver. Withdrawing the waiver is the attorney's or Alejandro's
+call: flip the file, do not edit the gate.
+
 ## Clerk docket bankruptcy check (Broward / Palm Beach)
 
 `clerk_bk.py` reads the foreclosure case's own docket for a bankruptcy stay. It is off

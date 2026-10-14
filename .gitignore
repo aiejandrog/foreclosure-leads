@@ -738,3 +738,5 @@ logs/
 # _otherlienstest: Broward / Palm Beach non-mortgage liens (other_liens.py). Synthetic names and numbers only.
 !_otherlienstest.py
 !_refreshstatustest.py
+# _bkuncheckedtest: the attorney-approved unchecked Broward / Palm Beach waiver (bk_waiver.json). Synthetic case numbers only.
+!_bkuncheckedtest.py

@@ -1874,6 +1874,10 @@ def stamp_federal_bk(slim):
                     f = flags.get(_pk(d.get('case')))
                 except Exception:
                     f = None
+        if f and not f.get('hold') and f.get('ask'):
+            # Released only because the owner waived the federal check (DEALFLOW_BK_ALLOW_UNCHECKED):
+            # the card and the text/email scripts read bkAsk and open with the bankruptcy question.
+            d['bkAsk'] = True
         if not f or not f.get('hold'):
             # RELEASE EXPIRY (2026-10-12). A Broward / Palm Beach row that passes here is released
             # only for as long as its evidence lasts; the board and Call Mode re-hold it after bkUntil

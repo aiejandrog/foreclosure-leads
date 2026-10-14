@@ -37,6 +37,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 os.environ.pop('DEALFLOW_CLERK_BK', None)
+# these suites model the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
 import stay_gate as SG  # noqa: E402
 
 ok, bad = [], []
