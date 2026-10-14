@@ -64,6 +64,8 @@ def isolate(name, token=TOKEN):
     os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
     os.environ.pop('DEALFLOW_CLERK_BK', None)
     BL._HOLD_MEMO = None
+    # these suites model the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+    os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)
     else:

@@ -57,6 +57,8 @@ def isolate(name):
     os.environ.pop('BROWARD_CLERK_API_KEY', None)
     os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
     os.environ['CLERK_BK_MIN_INTERVAL'] = '0'
+    # these suites model the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+    os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
     CK._MEMO = None
     CK._COUNTY_MEMO = None
     CK._LEADS_HERE = None

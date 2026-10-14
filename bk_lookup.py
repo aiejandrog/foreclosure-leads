@@ -90,6 +90,19 @@ ENV_FILED_YEARS = 'BK_FILED_AFTER_YEARS'
 # A CourtListener clear is not a PACER clear. Broward and Palm Beach stay held unless
 # the owner sets this to 1. That is a business decision, not the default.
 ENV_ALLOW_CL_CLEAR = 'DEALFLOW_BK_ALLOW_CL_CLEAR'
+# 2026-10-13, attorney approved in writing (texts to Alejandro, saved in the project files as
+# ATTORNEY-OK-UNCHECKED-BK-CALLS-2026-10-13.png and ATTORNEY-OK-UNCHECKED-BK-ALL-CHANNELS-2026-10-13.png):
+# Broward and Palm Beach homeowners in active foreclosure may be phoned, texted and emailed BEFORE a
+# bankruptcy search has run on them, on two conditions: anyone who says they filed is never contacted
+# again, and leads already known to be in bankruptcy stay off the list. This flag is that decision.
+# It releases ONLY the verdicts that mean "nobody has looked": no cache entry, a check that has not
+# run, errored or gone stale, and a CourtListener clear the owner had not accepted. An open or
+# possible match, a PACER active hit, a new-filer hit, a Miami docket stay and NEVER_CONTACT are
+# never touched by it. Every release carries UNCHECKED_WHY so the card can say "ask first".
+ENV_ALLOW_UNCHECKED = 'DEALFLOW_BK_ALLOW_UNCHECKED'
+UNCHECKED_CODE = 'unchecked'
+UNCHECKED_WHY = ('bankruptcy not checked: attorney-approved contact (2026-10-13). Ask first; '
+                 'if they filed, end the call and mark Do Not Contact')
 VERDICT_CLEAR_UNCONFIRMED = 'clear_unconfirmed'
 DOCKET_WINDOW_DAYS = 3
 # One page of the docket day. Shoulders and extra pages would spend the 125/day budget
@@ -866,6 +879,87 @@ def cl_clear_allowed(env=None):
     return str((env or {}).get(ENV_ALLOW_CL_CLEAR) or '').strip() == '1'
 
 
+WAIVER_NAME = 'bk_waiver.json'   # tracked, beside this file: {"unchecked_contact": true, "approved": ...}
+
+
+def unchecked_allowed(env=None, here=None):
+    """True when the owner released unchecked leads: DEALFLOW_BK_ALLOW_UNCHECKED=1 in the
+    environment, or the tracked bk_waiver.json beside this file says unchecked_contact true.
+    The file exists because the laptop's scheduled tasks do not see a new user env var until
+    Alejandro signs out and in, and the attorney's approval is dated: the file carries the date
+    and the screenshot names, so git history shows when the release began. Anything but a
+    literal true is not a release. DEALFLOW_BK_ALLOW_UNCHECKED=0 turns it off whatever the file says."""
+    env = os.environ if env is None else env
+    v = str((env or {}).get(ENV_ALLOW_UNCHECKED) or '').strip()
+    if v == '1':
+        return True
+    if v == '0':
+        return False
+    try:
+        path = os.path.join(here or os.path.dirname(os.path.abspath(__file__)), WAIVER_NAME)
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return isinstance(data, dict) and data.get('unchecked_contact') is True
+    except Exception:
+        return False
+
+
+def _pacer_flagged(key, now=None):
+    """True when PACER evidence, or the never-contact list, says this lead is NOT "unchecked":
+    a never-contact case, a PACER per-lead entry whose verdict is stay_active, a production
+    new-filer hit that blocks, or a PACER cache / hit index that cannot be read (fail closed).
+    A missing PACER file is not a flag: nobody has looked, which is what the waiver covers.
+    The send gate already reads these before _merge_bk; the dial queue and the board bake
+    did not, so the waiver reads them itself (review of #234, 2026-10-14)."""
+    try:
+        import stay_gate
+        if stay_gate.never_contact(key):
+            return True
+        root = PACER_ROOT or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, err, exists = stay_gate._load_pacer(os.path.join(root, stay_gate.PACER_NAME))
+        if err:
+            return True
+        ent = idx[0].get(key) if (exists and idx) else None
+        if ent is not None and stay_gate.pacer_verdict(ent, now)[0] == stay_gate.STAY_ACTIVE:
+            return True
+        hidx, herr, hexists = stay_gate._load_hits(os.path.join(root, stay_gate.HITS_NAME))
+        if herr:
+            return True
+        hit = hidx[0].get(key) if (hexists and hidx) else None
+        return bool(hit is not None and stay_gate.hit_blocks(hit, ent, now))
+    except Exception:
+        return True
+
+
+def _unchecked_release(key, op, now=None):
+    """The release opinion for a Broward / Palm Beach lead nobody has checked, when the owner
+    set DEALFLOW_BK_ALLOW_UNCHECKED=1; None otherwise.
+
+    Takes the same shape of evidence _pacer_release takes and refuses the same things: an open
+    exact match (stay_active) and a plausible match (blocks, no further search wanted) are never
+    released here. What it does release is every opinion that says the check is missing: no entry
+    (op None), not run / errored / stale (bk_need), and clear_unconfirmed. A Miami-Dade stem is
+    never this function's to decide. The result says why on every row (UNCHECKED_WHY)."""
+    if not unchecked_allowed():
+        return None
+    try:
+        import stay_gate
+        if stay_gate.case_stem(key) or not stay_gate.pacer_key(key):
+            return None
+    except Exception:
+        return None
+    if _pacer_flagged(key, now):
+        return None
+    if op:
+        code = op.get('code')
+        if code == 'stay_active':
+            return None
+        if op.get('blocks') and not op.get('bk_need') and code != VERDICT_CLEAR_UNCONFIRMED:
+            return None
+    return {'blocks': False, 'ok': True, 'code': UNCHECKED_CODE, 'bk_need': False, 'bd': '',
+            'why': UNCHECKED_WHY, 'src': 'owner_waiver'}
+
+
 PACER_ROOT = None   # folder holding pacer_stay_cache.json; None = beside stay_gate.py (tests override)
 
 
@@ -1208,22 +1302,25 @@ def gate_opinion(case, now=None):
     if not key:
         return None
     data, exists = _load(cache_path())
+    now = time.time() if now is None else now
     if not exists:
-        return None
+        # No cache yet: the PACER path decides, unless the owner released unchecked leads.
+        return _unchecked_release(key, None, now)
     if not isinstance(data, dict):
         return {'blocks': True, 'ok': False, 'code': 'stay_unverified', 'bk_need': True, 'bd': '',
                 'why': 'federal bankruptcy cache is unreadable — lead stays held',
                 'src': 'courtlistener'}
-    now = time.time() if now is None else now
     ent = data.get(key)
     if not isinstance(ent, dict):
-        return {'blocks': False, 'ok': False, 'code': '', 'why': '', 'bk_need': True, 'bd': '',
-                'src': 'courtlistener'}
+        return _unchecked_release(key, None, now) or {
+            'blocks': False, 'ok': False, 'code': '', 'why': '', 'bk_need': True, 'bd': '',
+            'src': 'courtlistener'}
     op = entry_opinion(key, ent, load_overrides(), now)
     # Release direction only: a Broward / Palm Beach lead CourtListener could not confirm is
-    # cleared when PACER has a fresh clear. Everything else is returned exactly as before.
+    # cleared when PACER has a fresh clear, or when the owner released unchecked leads
+    # (_unchecked_release refuses an open or possible match). Everything else is returned as before.
     if op and not op.get('ok') and not stay_gate.case_stem(key):
-        op = _pacer_release(key, op, now) or op
+        op = _pacer_release(key, op, now) or _unchecked_release(key, op, now) or op
     return op
 
 
@@ -1262,7 +1359,7 @@ def _pacer_release(key, op, now):
 
 def _non_stem_opinion(key, op, now):
     """A Broward / Palm Beach lead CourtListener did not clear: held unless _pacer_release."""
-    rel = _pacer_release(key, op, now)
+    rel = _pacer_release(key, op, now) or _unchecked_release(key, op, now)
     if rel:
         return rel
     op = dict(op)
@@ -1314,7 +1411,8 @@ class HoldIndex:
                     out = (True, op.get('why') or 'federal bankruptcy check has not run for this lead')
                 else:
                     out = (False, '')
-            elif not stay_gate.case_stem(pk) and not pacer_confirmed(pk, self.now):
+            elif (not stay_gate.case_stem(pk) and not pacer_confirmed(pk, self.now)
+                  and not _unchecked_release(pk, None, self.now)):
                 out = (True, 'federal bankruptcy check has not run for this lead')
             else:
                 out = (False, '')
@@ -1579,13 +1677,18 @@ def flags_for_cases(cases, now=None):
                 if op and not stay_gate.case_stem(key) and not op.get('ok'):
                     op = _non_stem_opinion(key, op, now)
             elif not stay_gate.case_stem(key) and not pacer_confirmed(key, now):
-                op = {'blocks': True, 'code': 'stay_unverified',
-                      'why': 'federal bankruptcy check has not run for this lead'}
+                op = _unchecked_release(key, None, now) or {
+                    'blocks': True, 'code': 'stay_unverified',
+                    'why': 'federal bankruptcy check has not run for this lead'}
             else:
                 op = None
             if op and op.get('blocks'):
                 out[key] = {'hold': True, 'why': str(op.get('why') or '')[:180],
                             'hard': op.get('code') == 'stay_active'}
+            elif op and op.get('code') == UNCHECKED_CODE:
+                # Released only because the owner waived the check: the bake stamps bkAsk so the
+                # card and the scripts say "ask first". Not a hold.
+                out[key] = {'hold': False, 'ask': True, 'why': str(op.get('why') or '')[:180], 'hard': False}
             ps = _pacer_stem_hold(key)
             if ps:
                 hard = not str(ps[1]).startswith('PACER stay check failed')
@@ -1603,7 +1706,8 @@ def flags_for_cases(cases, now=None):
                     'why': 'clerk docket check failed. Lead stays held.'}
                    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1' else None)
         if isinstance(cop, dict) and cop.get('blocks'):
-            if cop.get('code') == 'stay_active' or key not in out:
+            # A waiver 'ask' entry is not a hold: the clerk read still replaces it.
+            if cop.get('code') == 'stay_active' or not (out.get(key) or {}).get('hold'):
                 out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
                             'hard': cop.get('code') == 'stay_active'}
     why = []

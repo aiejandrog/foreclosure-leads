@@ -34,6 +34,8 @@ for _k in ('COURTLISTENER_TOKEN', 'DEALFLOW_BK_PROVIDER', 'DEALFLOW_BK_MAX_AGE_D
            'DEALFLOW_BK_ALLOW_CL_CLEAR', 'DEALFLOW_CLERK_BK'):
     os.environ.pop(_k, None)
 os.environ['DEALFLOW_DIR'] = str(TMP)
+# this suite models the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
 os.environ['DEALFLOW_BK_CACHE'] = str(TMP / 'bk_lead_cache.json')
 os.environ['DEALFLOW_BK_FILINGS'] = str(TMP / 'bk_filings.json')
 os.environ['DEALFLOW_BK_OVERRIDES'] = str(TMP / 'bk_overrides.json')
