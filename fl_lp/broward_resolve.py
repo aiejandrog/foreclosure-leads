@@ -107,19 +107,24 @@ def _mail_of(cad):
     return ' '.join(str((cad or {}).get('mail_addr') or '').split())
 
 
-def backfill_mail(prev, cap=200, pause=0.4):
+def backfill_mail(prev, cap=200, pause=0.4, budget_s=180, max_fails=5):
     """Add `mailAddr` to rows resolved before it was stored. Plain-numeric folios only (the roll's
-    PARCEL_ID join strips letters, same limit as the homestead cross-check). Free, bounded per run;
-    a row the roll cannot return is left without the key and retried next run. Returns rows filled."""
-    n = 0
+    PARCEL_ID join strips letters, same limit as the homestead cross-check). Free, and bounded three
+    ways so a slow or down roll cannot stall the lp_refresh chain behind it: `cap` counts every
+    ATTEMPT (not just fills), `budget_s` is a wall-clock limit, and `max_fails` consecutive misses
+    stop the run. A row the roll cannot return is left without the key and retried next run.
+    Returns rows filled."""
+    n = tried = fails = 0
+    t0 = time.time()
     for case, v in prev.items():
-        if n >= cap:
+        if tried >= cap or fails >= max_fails or time.time() - t0 > budget_s:
             break
         if not isinstance(v, dict) or 'mailAddr' in v or (v.get('county') or '').upper() != 'BROWARD':
             continue
         folio = str(v.get('folio') or '').strip()
         if not folio or re.search(r'[A-Za-z]', folio):
             continue
+        tried += 1
         try:
             cad = FC.enrich(parcel_id=folio)
         except Exception:
@@ -129,6 +134,9 @@ def backfill_mail(prev, cap=200, pause=0.4):
         if m:
             v['mailAddr'] = m
             n += 1
+            fails = 0
+        else:
+            fails += 1
     return n
 
 
@@ -184,7 +192,8 @@ def resolve_row(rec):
         if cad:
             row['value'] = int(cad.get('market_value') or 0)
             row['hs'] = bool(cad.get('homestead'))
-            row['mailAddr'] = _mail_of(cad)
+            if _mail_of(cad):
+                row['mailAddr'] = _mail_of(cad)
             if row['hs']:
                 row['confidence'] = 'high'
                 row['rung'] = 'bcpa-name'

@@ -43,6 +43,11 @@ BR.FC.enrich = lambda parcel_id=None, **k: dict(CAD, homestead=True)
 r = BR.resolve_row({'owner': 'MARTIN, SHAWN E'})
 chk('high row carries the mailing address', r.get('confidence') == 'high' and r.get('mailAddr') == '500 OCEAN DR MIAMI BEACH FL 33139')
 
+# 2b. roll has the parcel but no owner address -> key absent, so the backfill retries it later
+BR.FC.enrich = lambda parcel_id=None, **k: dict(CAD, mail_addr='  ')
+r = BR.resolve_row({'owner': 'MARTIN, SHAWN E'})
+chk('empty mailing address is not stored as an empty key', 'mailAddr' not in r)
+
 # 3. cadastral returns nothing -> no key invented
 BR.FC.enrich = lambda parcel_id=None, **k: None
 r = BR.resolve_row({'owner': 'MARTIN, SHAWN E'})
@@ -79,6 +84,23 @@ calls[:] = []
 many = {'K%d' % i: {'county': 'BROWARD', 'folio': str(1000 + i)} for i in range(10)}
 n = BR.backfill_mail(many, cap=3, pause=0)
 chk('backfill honours its per-run cap', n == 3 and len(calls) == 3)
+
+# cap counts ATTEMPTS: a roll that returns nothing must not be queried more than `cap` times
+calls[:] = []
+BR.FC.enrich = lambda parcel_id=None, **k: (calls.append(parcel_id), None)[1]
+dead = {'D%d' % i: {'county': 'BROWARD', 'folio': str(2000 + i)} for i in range(50)}
+n = BR.backfill_mail(dead, cap=20, pause=0, max_fails=1000)
+chk('cap bounds attempts, not just fills', n == 0 and len(calls) == 20)
+
+# consecutive failures stop the run early
+calls[:] = []
+n = BR.backfill_mail(dead, cap=50, pause=0, max_fails=5)
+chk('stops after max_fails consecutive misses', len(calls) == 5)
+
+# wall-clock budget stops the run
+calls[:] = []
+n = BR.backfill_mail(dead, cap=50, pause=0, budget_s=-1, max_fails=1000)
+chk('wall-clock budget stops the run', len(calls) == 0)
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
