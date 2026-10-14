@@ -98,6 +98,40 @@ def _split_site(hit):
     return a1, (m.group(1).strip().title() if m else ''), (m.group(2) or '' if m else '')
 
 
+def _mail_of(cad):
+    """The owner's MAILING address off the FL cadastral roll (OWN_ADDR1/CITY/STATE/ZIP). Kept apart
+    from `addr` on purpose: it says where the owner of the matched parcel lives, not where the lis
+    pendens property is, so a letter can reach the owner even when the parcel itself is a guess.
+    Nothing reads it yet except a future mailing pool; it is never an `addr`, door or skip-trace input.
+    The roll is a county record, but it is advisory until a person has approved a mailing use."""
+    return ' '.join(str((cad or {}).get('mail_addr') or '').split())
+
+
+def backfill_mail(prev, cap=200, pause=0.4):
+    """Add `mailAddr` to rows resolved before it was stored. Plain-numeric folios only (the roll's
+    PARCEL_ID join strips letters, same limit as the homestead cross-check). Free, bounded per run;
+    a row the roll cannot return is left without the key and retried next run. Returns rows filled."""
+    n = 0
+    for case, v in prev.items():
+        if n >= cap:
+            break
+        if not isinstance(v, dict) or 'mailAddr' in v or (v.get('county') or '').upper() != 'BROWARD':
+            continue
+        folio = str(v.get('folio') or '').strip()
+        if not folio or re.search(r'[A-Za-z]', folio):
+            continue
+        try:
+            cad = FC.enrich(parcel_id=folio)
+        except Exception:
+            cad = None
+        time.sleep(pause)
+        m = _mail_of(cad)
+        if m:
+            v['mailAddr'] = m
+            n += 1
+    return n
+
+
 def resolve_row(rec):
     owner = rec.get('owner') or ''
     hits, tried, unreachable = [], [], True
@@ -150,6 +184,7 @@ def resolve_row(rec):
         if cad:
             row['value'] = int(cad.get('market_value') or 0)
             row['hs'] = bool(cad.get('homestead'))
+            row['mailAddr'] = _mail_of(cad)
             if row['hs']:
                 row['confidence'] = 'high'
                 row['rung'] = 'bcpa-name'
@@ -193,6 +228,9 @@ def main():
             json.dump(prev, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
             os.replace(tmp, OUT)
         time.sleep(0.45)
+    filled = backfill_mail(prev)
+    if filled:
+        print('mailing address added to %d earlier row(s)' % filled)
     tmp = OUT + '.tmp'
     json.dump(prev, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
     os.replace(tmp, OUT)
