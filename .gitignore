@@ -740,3 +740,6 @@ logs/
 !_refreshstatustest.py
 # _bkuncheckedtest: the attorney-approved unchecked Broward / Palm Beach waiver (bk_waiver.json). Synthetic case numbers only.
 !_bkuncheckedtest.py
+
+# _mailaddrtest: broward_resolve keeps the owner mailing address off the cadastral roll (offline, faked calls).
+!_mailaddrtest.py
