@@ -10,8 +10,8 @@
   ],
   "conditions": [
     "anyone who says they filed is marked Do Not Contact and never contacted again",
-    "leads already known to be in bankruptcy (open or possible match, PACER hit, docket stay, NEVER_CONTACT) stay held",
-    "every released card opens with the bankruptcy question (bk_lookup.UNCHECKED_WHY)"
+    "leads already known to be in bankruptcy (open or possible match, PACER active entry or new-filer hit, docket stay, NEVER_CONTACT) stay held",
+    "every released Call Mode card opens with the bankruptcy question (bk_lookup.UNCHECKED_WHY); email and text copy are unchanged"
   ],
   "off_switch": "set DEALFLOW_BK_ALLOW_UNCHECKED=0, or change unchecked_contact to false"
 }

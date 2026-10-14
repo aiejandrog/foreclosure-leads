@@ -904,6 +904,33 @@ def unchecked_allowed(env=None, here=None):
         return False
 
 
+def _pacer_flagged(key, now=None):
+    """True when PACER evidence, or the never-contact list, says this lead is NOT "unchecked":
+    a never-contact case, a PACER per-lead entry whose verdict is stay_active, a production
+    new-filer hit that blocks, or a PACER cache / hit index that cannot be read (fail closed).
+    A missing PACER file is not a flag: nobody has looked, which is what the waiver covers.
+    The send gate already reads these before _merge_bk; the dial queue and the board bake
+    did not, so the waiver reads them itself (review of #234, 2026-10-14)."""
+    try:
+        import stay_gate
+        if stay_gate.never_contact(key):
+            return True
+        root = PACER_ROOT or os.path.dirname(os.path.abspath(stay_gate.__file__))
+        idx, err, exists = stay_gate._load_pacer(os.path.join(root, stay_gate.PACER_NAME))
+        if err:
+            return True
+        ent = idx[0].get(key) if (exists and idx) else None
+        if ent is not None and stay_gate.pacer_verdict(ent, now)[0] == stay_gate.STAY_ACTIVE:
+            return True
+        hidx, herr, hexists = stay_gate._load_hits(os.path.join(root, stay_gate.HITS_NAME))
+        if herr:
+            return True
+        hit = hidx[0].get(key) if (hexists and hidx) else None
+        return bool(hit is not None and stay_gate.hit_blocks(hit, ent, now))
+    except Exception:
+        return True
+
+
 def _unchecked_release(key, op, now=None):
     """The release opinion for a Broward / Palm Beach lead nobody has checked, when the owner
     set DEALFLOW_BK_ALLOW_UNCHECKED=1; None otherwise.
@@ -920,6 +947,8 @@ def _unchecked_release(key, op, now=None):
         if stay_gate.case_stem(key) or not stay_gate.pacer_key(key):
             return None
     except Exception:
+        return None
+    if _pacer_flagged(key, now):
         return None
     if op:
         code = op.get('code')
@@ -1677,7 +1706,8 @@ def flags_for_cases(cases, now=None):
                     'why': 'clerk docket check failed. Lead stays held.'}
                    if str(os.environ.get('DEALFLOW_CLERK_BK') or '').strip() == '1' else None)
         if isinstance(cop, dict) and cop.get('blocks'):
-            if cop.get('code') == 'stay_active' or key not in out:
+            # A waiver 'ask' entry is not a hold: the clerk read still replaces it.
+            if cop.get('code') == 'stay_active' or not (out.get(key) or {}).get('hold'):
                 out[key] = {'hold': True, 'why': str(cop.get('why') or '')[:180],
                             'hard': cop.get('code') == 'stay_active'}
     why = []

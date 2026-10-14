@@ -46,6 +46,7 @@ def isolate(name):
                  ('DEALFLOW_BK_STATUS', 'bk_lookup_status.json'), ('DEALFLOW_BK_BUDGET', 'bk_budget.json'),
                  ('DEALFLOW_BK_FILINGS', 'bk_filings.json'), ('DEALFLOW_BK_PULL_STATE', 'bk_pull_state.json')):
         os.environ[k] = str(d / f)
+    BL.PACER_ROOT = str(d)          # pacer_stay_cache.json / pacer_newfiler_hits.json live here too
     BL._HOLD_MEMO = None
     return d
 
@@ -131,15 +132,39 @@ try:
           and flags.get(BR_POSSIBLE, {}).get('hold') is True and flags[BR_POSSIBLE].get('ask') is not True, flags)
     check('on: every release carries the ask-first wording',
           all('Ask first' in flags[c]['why'] for c in rel), flags)
-    # PACER new-filer hit on a Broward key still blocks the send gate
+    # PACER evidence on a Broward key: the waiver is for leads NOBODY looked at. A production
+    # new-filer hit, a PACER active entry, or a torn PACER file holds every path (review of #234).
+    def _all_paths(case):
+        BL._HOLD_MEMO = None
+        return (SG.check(case, sh)['ok'], BL.federal_hold(case)[0],
+                BL.flags_for_cases([case]).get(case, {}).get('hold'))
     (d / 'pacer_newfiler_hits.json').write_text(json.dumps({
         BR_NONE: {'env': 'prod', 'cases': [{'no': '26-77701', 'filed': '2026-10-01', 'court': 'flsb',
                                             'open': True, 'match': 'exact'}], 'kind': 'exact', 't': NOW}}),
         encoding='utf-8')
-    v = SG.check(BR_NONE, sh)
-    check('on: a PACER new-filer hit still holds the send gate',
-          v['ok'] is False, v)
+    r = _all_paths(BR_NONE)
+    check('on: a PACER new-filer hit still holds the send gate, the dial queue and the board', r == (False, True, True), r)
     os.remove(d / 'pacer_newfiler_hits.json')
+    (d / 'pacer_stay_cache.json').write_text(json.dumps({
+        BR_NONE: {'env': 'prod', 'verdict': 'active', 'a': True, 't': NOW, 'bd': '2026-09-01',
+                  'cases': [{'no': '26-77701', 'open': True}]}}), encoding='utf-8')
+    r = _all_paths(BR_NONE)
+    check('on: a PACER active entry still holds the send gate, the dial queue and the board', r == (False, True, True), r)
+    (d / 'pacer_stay_cache.json').write_text('{bad', encoding='utf-8')
+    r = _all_paths(BR_NONE)
+    check('on: a torn PACER cache is not "unchecked": dial queue and board hold', r[1] is True and r[2] is True, r)
+    os.remove(d / 'pacer_stay_cache.json')
+    check('on: a never-contact case is held on the board bake too',
+          BL.flags_for_cases([NEVER]).get(NEVER, {}).get('hold') is True)
+    # clerk flag on: a Palm Beach key's clerk hold replaces the ask entry, not the other way round
+    os.environ['DEALFLOW_CLERK_BK'] = '1'
+    try:
+        BL._HOLD_MEMO = None
+        f = BL.flags_for_cases([PB_NONE]).get(PB_NONE, {})
+        check('on: with DEALFLOW_CLERK_BK=1 the clerk hold still wins on the board', f.get('hold') is True and f.get('ask') is not True, f)
+    finally:
+        os.environ.pop('DEALFLOW_CLERK_BK', None)
+        BL._HOLD_MEMO = None
     # unreadable cache: still held
     (d / 'bk_lead_cache.json').write_text('{not json', encoding='utf-8')
     BL._HOLD_MEMO = None
@@ -167,9 +192,9 @@ check('the tracked bk_waiver.json releases unchecked contact and names its recor
 check('the bake stamps bkAsk from the ask flag',
       "d['bkAsk'] = True" in (HERE / 'foreclosure_leads.py').read_text(encoding='utf-8'))
 src = (HERE / 'call_mode.py').read_text(encoding='utf-8')
-check('Call Mode ships the ask flag and the card asks first',
-      "'bq': 1 if d.get('bkAsk') else None" in src and 'if(r.bq) who +=' in src
-      and 'Have you filed for bankruptcy?' in src)
+check('Call Mode ships the ask flag and the card asks first, on the balloon card too',
+      "'bq': 1 if d.get('bkAsk') else None" in src and src.count('if(r.bq) who += _bqBar();') == 2
+      and 'function _bqBar' in src and 'Have you filed for bankruptcy?' in src)
 
 print('\n%d failure(s)' % len(FAILS))
 sys.exit(1 if FAILS else 0)

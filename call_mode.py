@@ -5784,6 +5784,12 @@ function _balCard(r){
     + '</div>';
   return {when:when, who:who, clock:clock, mny:mny, whoFc:whoFc};
 }
+/* BANKRUPTCY NOT CHECKED (2026-10-13). A row with r.bq is on the list only because the attorney approved
+   contacting unchecked Broward / Palm Beach homeowners. His condition is the first question, on every card. */
+function _bqBar(){
+  return '<div class="warnbar">&#9888; <b>Bankruptcy not checked.</b> Ask first: &ldquo;Have you filed for bankruptcy?&rdquo; '
+    + 'If yes: end the call, say nothing else, and tap <b>Do Not Contact</b>.</div>';
+}
 function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
@@ -5822,8 +5828,7 @@ function screenLead(){
   if(r.po) who += '<div class="warnbar">Roll owner is now <b>'+esc(r.po)+'</b> &mdash; do NOT open with the name above. Ask who you are speaking with.</div>';
   /* BANKRUPTCY NOT CHECKED (2026-10-13). This lead is on the list only because the attorney approved
      contacting unchecked Broward / Palm Beach homeowners. His condition is the first question. */
-  if(r.bq) who += '<div class="warnbar">&#9888; <b>Bankruptcy not checked.</b> Ask first: &ldquo;Have you filed for bankruptcy?&rdquo; '
-    + 'If yes: end the call, say nothing else, and tap <b>Do Not Contact</b>.</div>';
+  if(r.bq) who += _bqBar();
   /* DIALED TODAY, NO OUTCOME. The one hole cooldown suppression cannot cover: a dial with no logged
      outcome starts no cooldown, so the lead resurfaces everywhere — which is exactly "why am I
      calling the same people". Say it on the card instead of letting it happen silently. */
@@ -5962,7 +5967,10 @@ function screenLead(){
   /* Balloon rows swap the four bands' CONTENT (see _balCard); layout, dial link, file band and the
      outcome flow are shared. Done last so nothing above has to know the lane exists. */
   var _isBal = (r.st==='BAL');
-  if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc; }
+  if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc;
+    /* the balloon card builds its own WHO band; the bankruptcy question is the attorney's condition
+       and must open every released card, this lane included */
+    if(r.bq) who += _bqBar(); }
   $('app').innerHTML = head()
     + '<div class="card">'
     +   priorBar(r)

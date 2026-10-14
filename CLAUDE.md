@@ -387,8 +387,11 @@ Broward or Palm Beach lead whose federal check has **not run, errored, gone stal
 CourtListener `clear_unconfirmed`**: `bk_lookup.unchecked_allowed()` / `_unchecked_release()`, read by
 `gate_opinion` (send gate, so email, text and letters), `HoldIndex.hold` (dial queue, Call Mode, knock
 planner) and `flags_for_cases` (board bake, `ask: true` -> `bkAsk` -> Call Mode `bq`). It never
-releases an open or possible CourtListener match, a PACER new-filer hit, a never-contact case, a
-Miami-Dade stem's docket verdict, or an unreadable cache. Every released card opens with
+releases an open or possible CourtListener match, a PACER active entry or new-filer hit, a torn
+PACER file, a never-contact case, a Miami-Dade stem's docket verdict, or an unreadable cache
+(`_pacer_flagged` reads the PACER evidence on the dial queue and the board bake, which never did
+before). With `DEALFLOW_CLERK_BK=1` the clerk hold still wins on the board. Every released Call Mode
+card, the balloon lane included, opens with
 "Bankruptcy not checked. Ask first: Have you filed for bankruptcy?"; a yes ends the call and is
 marked Do Not Contact, which ledgers it. `DEALFLOW_BK_ALLOW_UNCHECKED=0` wins over the file and is
 the off switch; the base-gate suites set it so they keep modelling the held world, and
