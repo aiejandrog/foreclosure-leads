@@ -109,6 +109,7 @@ out.year_en = fillScript(VMEN, row({x: 2025, d: 0, xf: 1}));
 out.year_es = fillScript(VMES, row({x: 2025, d: 0, xf: 1}));
 out.open_year = fillScript('paperwork on {st1}{date} here', row({x: 2025, d: 0, xf: 1}));
 out.open_sale = fillScript('paperwork on {st1}{date} here', row({x: '11/3/2026', d: 19}));
+out.open_year_es = fillScript('foreclosure{date_es}?', row({x: 2025, d: 0, xf: 1}));
 console.log(JSON.stringify(out));
 """)
     fd, path = tempfile.mkstemp(suffix='.js')
@@ -149,6 +150,7 @@ console.log(JSON.stringify(out));
             and 'venta judicial' not in o.get(k, ''), o.get(k))
     rec('a dated sale today still says today', 'at 123 NW 5 ST for today.' in o.get('today_en', ''), o.get('today_en'))
     rec('call opener: no sale date clause for a filing year', o.get('open_year') == 'paperwork on 123 NW 5 ST here', o.get('open_year'))
+    rec('call opener ES: no sale date clause for a filing year', o.get('open_year_es') == 'foreclosure?', o.get('open_year_es'))
     rec('call opener: a real sale date still said', o.get('open_sale') == 'paperwork on 123 NW 5 ST with a sale date of 11/3/2026 here', o.get('open_sale'))
     rec('passed sale reads as case filed', 'court case filed' in o.get('past_en', ''), o.get('past_en'))
     rec('no name, no address still reads', o.get('noaddr_en', '').startswith('Hi, this is ')
