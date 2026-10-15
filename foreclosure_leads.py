@@ -2501,6 +2501,11 @@ def make_tracker(leads):
                                     for p in _sph]
                     _d['phsrc'] = [PHSRC_TRACE] * len(_sph)
                     _d['emails'] = (_ph.get('emails') or [])[:3]
+                    # Searched by tax-roll MAILING address on a one-parcel Broward filing (lp_leads
+                    # mailTrace): the property is not confirmed, so no email -- nothing automatic
+                    # (Morning Worker, cadence) first-touches it. Phones stay for a person to call.
+                    if _d.get('mailTrace') and not (_d.get('addr') or '').strip():
+                        _d['emails'] = []
             slim.extend(xl)
             _nl = sum(1 for _d in xl if _d.get('orliens'))
             _np = sum(1 for _d in xl if _d.get('phones'))

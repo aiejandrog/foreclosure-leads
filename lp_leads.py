@@ -100,6 +100,7 @@ def build():
     addrs = _addresses()
     stats = _statuses()
     nhigh = nadv = nmismatch = nvalued = ndismissed = nclosed = nunanchored = 0
+    nmailtrace = 0
     npbnocase = 0
     out, seen = [], set()
     for lp in feed:
@@ -164,6 +165,18 @@ def build():
         mismatch = bool(a.get('ownerMismatch')) and bool(addr or addr_guess)
         if mismatch:
             nmismatch += 1
+        # PHONE SEARCH BY MAILING ADDRESS (2026-10-15, Alejandro chose "Yes, one-match only").
+        # A medium Broward row is ONE parcel in the county carrying every token of the defendant's
+        # name, short of the homestead corroboration that makes it 'high'. The tax roll's mailing
+        # address on that parcel is where its owner gets mail, so skiptrace may search the person
+        # there. It is NOT the property address: `addr` stays empty, so doors, letters and the map
+        # never read it, and call_mode keeps the row off the dial queue until an address is confirmed.
+        mail_trace = ''
+        if (conf == 'medium' and not addr and not unanchored and not mismatch and not _cands
+                and str(a.get('county') or lp.get('county') or '').upper() == 'BROWARD'):
+            mail_trace = str(a.get('mailAddr') or '').strip()
+            if mail_trace:
+                nmailtrace += 1
 
         # VALUE (lp_values.py, off the Property Appraiser). Gated on `high` for the same reason the
         # address is: pricing a parcel we are not sure we identified produces a confident number
@@ -267,6 +280,8 @@ def build():
             out[-1]['unanchored'] = True
             out[-1]['anchorN'] = len(_cands)
             out[-1]['anchorWhy'] = str(a.get('evidence') or '')[:180]
+        if mail_trace:
+            out[-1]['mailTrace'] = mail_trace
     # This file had NO write guard at all — 1,007 rows, overwritten unconditionally, so an upstream
     # lis_pendens.json that came back thin (a walled sweep, an interrupted write) silently emptied
     # the entire Fresh-filings lane and the board simply showed fewer leads. Same ratio rule as the
@@ -284,6 +299,8 @@ def build():
     if addrs:
         print(f'  addresses: {nhigh} filled (high confidence, skiptrace-ready) · '
               f'{nadv} advisory only (needs human) · {nmismatch} owner-of-record changed since filing')
+        print(f'  mailing-address phone search: {nmailtrace} one-parcel Broward row(s) '
+              f'(phones only, off the dial queue until the address is confirmed)')
         # Printed unconditionally, zero included: "0 unanchored" and "the stamp stopped running"
         # are different facts and only one of them is good news.
         print(f'  anchor:    {nunanchored} row(s) UNANCHORED — the defendant\'s name sits on '

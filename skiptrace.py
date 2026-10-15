@@ -233,7 +233,10 @@ def _lp_age_days(filed):
 
 def address_for(lead):
     # prefer the mailing address (where the owner actually is, incl. absentee owners), fall back to the property
-    return parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
+    # mailTrace last: a one-parcel Broward LP row's tax-roll mailing address (lp_leads.py), set only
+    # where there is no confirmed property address at all.
+    return (parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
+            or parse_addr(lead.get('mailTrace', '') or ''))
 
 def _officer_target(case, llcs):
     """For a company-owned lead, the human to actually skip-trace: the first Sunbiz officer with a

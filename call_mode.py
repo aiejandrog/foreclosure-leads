@@ -1707,6 +1707,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
         if is_lp and d.get('auction') and days < 0:
             continue
+        # A one-parcel Broward filing whose phones came from the owner's tax-roll MAILING address
+        # (lp_leads mailTrace) has no confirmed property and no value, so no equity. It waits on
+        # the board until the address is confirmed (2026-10-15, Alejandro: equity-qualified only).
+        if is_lp and d.get('mailTrace') and not (d.get('addr') or '').strip():
+            continue
         # Non-business classes never reach the dialer: vacant land and timeshares/unlinked parcels
         # are not rescuable homes, and neither warn nor vac used to ship to this page.
         if d.get('vac'):
