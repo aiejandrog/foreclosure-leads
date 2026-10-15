@@ -5096,7 +5096,7 @@ function head(){
        nowhere, so a phone serving last week's list had no visible tell — the operator's only signal
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
        covers anything placed there; the top bar is the one strip nothing ever overlays. */
-    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+'</div>'
+    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+' &middot; <a href="#" id="cstatslink" style="color:var(--gold)">call stats</a></div>'
     +sessStrip()
     +'</div>';
 }
@@ -5332,6 +5332,70 @@ function isWarm(r){
   (r.pcs||[]).forEach(chk);
   return warm;
 }
+/* CALLSTATS-BEGIN
+   DAILY CALL-STATS EXPORT (2026-10-15). READ-ONLY over notes[case].dials[]; writes nothing and
+   changes no queue, cooldown or disposition. Mirrors call_stats.py (the command-line twin);
+   _callstatstest.py runs both on one fixture and fails if they disagree.
+   One row per day per seat. A dial = a logged outcome, plus any dial-tap/redial row that never got
+   an outcome that day (no_outcome). Talk time is NOT tracked: dial_to_log_min is dial tap -> outcome
+   tap on ANSWERED calls only (ring time + talk + the seconds before the tap), 0 < gap <= 60 min. */
+var CS_ANSWERED = {talked:1,callback:1,appt:1,notint:1,dnc:1,gate:1};
+var CS_NOANS = {noanswer:1,voicemail:1};
+var CS_BAD = {badnum:1,wrong:1};
+function callStatsRows(nts, who, days, nowMs){
+  var by = {}, cutoff = '';
+  if(days){ var c = new Date((nowMs||Date.now()) - (days-1)*86400000);
+    cutoff = c.getFullYear()+'-'+String(c.getMonth()+1).padStart(2,'0')+'-'+String(c.getDate()).padStart(2,'0'); }
+  Object.keys(nts||{}).forEach(function(k){
+    if(k.charAt(0)==='@' || k.charAt(0)==='#') return;
+    var dl = (nts[k] && nts[k].dials) || [];
+    for(var i=0;i<dl.length;i++){
+      var d = dl[i];
+      if(!d || typeof d!=='object' || !d.d) continue;
+      if(cutoff && d.d < cutoff) continue;
+      if(who && d.by && d.by!==who) continue;
+      var seat = d.by || '', oc = d.oc || '', key = d.d+'|'+seat;
+      var r = by[key] = by[key] || {date:d.d, seat:seat, dials:0, answered:0, no_answer_vm:0,
+        wrong_or_disconnected:0, appointments:0, no_outcome:0, other:0, dial_to_log_min:0, timed_calls:0};
+      if(oc==='pending' || oc==='redial'){
+        var resolved = false;
+        for(var j=i+1;j<dl.length;j++){ if(dl[j] && dl[j].d===d.d && dl[j].oc!=='pending' && dl[j].oc!=='redial'){ resolved = true; break; } }
+        if(!resolved){ r.dials++; r.no_outcome++; }
+        continue;
+      }
+      r.dials++;
+      if(CS_ANSWERED[oc]){
+        r.answered++;
+        var g = (+d.tsu - +d.tsd) / 1000;
+        if(d.tsd && g > 0 && g <= 3600){ r.dial_to_log_min += g/60; r.timed_calls++; }
+      }
+      else if(CS_NOANS[oc]) r.no_answer_vm++;
+      else if(CS_BAD[oc]) r.wrong_or_disconnected++;
+      else r.other++;
+      if(oc==='appt') r.appointments++;
+    }
+  });
+  return Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.seat < b.seat ? -1 : a.seat > b.seat ? 1 : 0); });
+}
+var CS_COLS = ['date','seat','total_dials','answered','no_answer_vm','wrong_or_disconnected','appointments',
+  'no_outcome_tapped','other','dial_to_log_min','timed_calls','answer_rate','appt_rate'];
+function callStatsCsv(rows){
+  var out = [CS_COLS.join(',')];
+  rows.forEach(function(r){
+    var logged = r.dials - r.no_outcome;
+    out.push([r.date, r.seat, r.dials, r.answered, r.no_answer_vm, r.wrong_or_disconnected, r.appointments,
+      r.no_outcome, r.other, (Math.round(r.dial_to_log_min*10)/10).toFixed(1), r.timed_calls,
+      logged ? (r.answered/logged).toFixed(3) : '', logged ? (r.appointments/logged).toFixed(3) : ''].join(','));
+  });
+  return out.join('\n');
+}
+var CS_NOTE = 'DealFlow Call Mode daily stats. total_dials = logged outcomes + dials with no outcome tapped. '
+  + 'answered = a person picked up (talked, callback, appointment, soft no, hard no, not the owner). '
+  + 'wrong_or_disconnected = wrong number + bad number. answer_rate and appt_rate = over logged dials '
+  + '(total_dials minus no_outcome_tapped). Talk time is not tracked: dial_to_log_min is the minutes from '
+  + 'the dial tap to the outcome tap on answered calls (includes ringing), timed_calls says how many had it.';
+/* CALLSTATS-END */
 /* THE SESSION STRIP — on every screen. "How many calls have I made, how many people have I been
    through" answered where he is looking, and the number MOVING on each logged outcome is the live
    proof the logging works. Today = from notes (survives reloads, includes what synced in);
@@ -5406,6 +5470,52 @@ function screenRegistry(){
     +   '<button class="big" id="regback" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
   $('regback').onclick = function(){ SCREEN='lead'; render(); };
+}
+/* EXPORT TODAY'S CALL STATS (2026-10-15). Read-only screen: counts from notes[].dials[], this seat
+   only (same `by` filter as sessStrip), copy-paste text or a CSV download. Reachable from the top
+   bar ("call stats"). Touches nothing in the queue. */
+var _csDays = 1;
+function screenCallStats(){
+  SCREEN = 'cstats';
+  var me = caller(), rows = callStatsRows(notes, me, _csDays);
+  var csv = callStatsCsv(rows);
+  var text = CS_NOTE + '\n\n' + csv + '\n';
+  var shown = rows.length ? rows.map(function(r){
+    var logged = r.dials - r.no_outcome;
+    return '<div class="regrow"><div class="regtop"><b>' + esc(r.date) + '</b><span class="regago">'
+      + esc(r.seat || 'this phone') + '</span></div>'
+      + '<div class="regsub">' + r.dials + ' dials &middot; ' + r.answered + ' answered &middot; '
+      + r.no_answer_vm + ' no answer/VM &middot; ' + r.wrong_or_disconnected + ' wrong/disconnected &middot; '
+      + r.appointments + ' appt' + (r.no_outcome ? ' &middot; ' + r.no_outcome + ' with no outcome tapped' : '')
+      + (logged ? ' &middot; answer rate ' + Math.round(100*r.answered/logged) + '%' : '') + '</div></div>';
+  }).join('') : '<div class="regsub" style="padding:14px 2px">No dials logged ' + (_csDays===1 ? 'today' : 'in this window') + ' on this seat.</div>';
+  $('app').innerHTML = head()
+    + '<div class="card"><div class="band"><div class="bl">CALL STATS' + (me ? ' &middot; ' + esc(me) : '') + '</div>'
+    +   '<div class="regsub" style="margin-top:6px">Talk time is not tracked. dial_to_log_min is dial tap to outcome tap '
+    +   'on answered calls, ringing included.</div></div>'
+    + '<div class="reglist">' + shown + '</div>'
+    + '<button class="big" id="cscopy" style="margin-top:14px">Copy as text</button>'
+    + '<button class="big" id="csdl" style="margin-top:8px">Download CSV</button>'
+    + '<button class="ghost" id="cswin" style="margin-top:8px">' + (_csDays===1 ? 'Show last 14 days' : 'Show today only') + '</button>'
+    + '<button class="ghost" id="csback" style="margin-top:8px">&larr; Back to the queue</button>'
+    + '</div><div class="sheetpad"></div>';
+  $('csback').onclick = function(){ SCREEN='lead'; render(); };
+  $('cswin').onclick = function(){ _csDays = (_csDays===1 ? 14 : 1); screenCallStats(); };
+  $('cscopy').onclick = function(){
+    var done = function(){ toast('Copied'); };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ prompt('Copy this:', text); }); }
+      else prompt('Copy this:', text);
+    }catch(e){ prompt('Copy this:', text); }
+  };
+  $('csdl').onclick = function(){
+    try{
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv + '\n'], {type:'text/csv'}));
+      a.download = 'call-stats-' + today() + (me ? '-' + me.replace(/[^A-Za-z0-9_-]/g,'') : '') + '.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }catch(e){ prompt('Copy this:', text); }
+  };
 }
 /* ===== WHO TEXTED ME? ===========================================================================
    An inbound text is the highest-value event in this business — a reply outranks every score and
@@ -6791,10 +6901,18 @@ function logOutcome(r,o,digits){
      row per attempt, not doubled. Matched on same number + same day so it never eats a genuinely
      separate earlier attempt. */
   var _lastD = n.dials[n.dials.length-1];
+  /* CALLSTATS-TSD-BEGIN  tsd = when the dial/redial tap happened (read BEFORE the pop below), carried
+     onto the outcome row so the daily call-stats export can show dial->log minutes (2026-10-15).
+     Additive: nothing reads it but the export; a row without it is simply untimed. */
+  var _tsd = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
+              && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsu) || 0;
+  /* CALLSTATS-TSD-END */
   if(_lastD && _lastD.oc==='pending' && _lastD.d===today() && _lastD.ph4===String(digits).slice(-4)){
     n.dials.pop();
   }
-  n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
+  var _row = {d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()};
+  if(_tsd) _row.tsd = _tsd;
+  n.dials.push(_row);
   n.cooldownH=o.h;
   /* THE NO POLICY (see noState). A soft no that is served on its one resurface is spent by ANY
      outcome logged on that serve; a real conversation (talked / appointment / callback) clears the
@@ -6958,6 +7076,8 @@ function wire(){
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
   if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };
+  var cl = $('cstatslink');
+  if(cl) cl.onclick = function(e){ e.preventDefault(); _csDays = 1; screenCallStats(); };
 }
 /* Stale-cache heal. iPhone Safari is the named worst offender and a phone quietly serving last
    week's list is the failure most likely to go unnoticed. Never auto-reload once an outcome has
