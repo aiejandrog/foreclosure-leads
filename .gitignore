@@ -15,6 +15,7 @@ _*.py
 !_siblingoptouttest.py
 !_replysendtest.py
 !_bksaidtest.py
+!_pbcasetest.py
 !_workersendracetest.py
 !_inflightretrytest.py
 !_wplinktest.py

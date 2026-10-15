@@ -197,7 +197,7 @@ def _dedupe(rows):
 
 
 def _rows_to_canonical(docs):
-    from lis_pendens import LENDER_RE, HOA_RE
+    from lis_pendens import LENDER_RE, HOA_RE, pb_case
     out = []
     for d in docs:
         if 'LIS' not in (d.get('DocTypeDescription') or '').upper():
@@ -216,7 +216,7 @@ def _rows_to_canonical(docs):
         kind = ('BANK-1st' if LENDER_RE.search(plaintiff)
                 else 'HOA/JUNIOR' if HOA_RE.search(plaintiff) else 'OTHER/PRIVATE')
         out.append({'date': _norm_date(d.get('RecordDate')),
-                    'case': (d.get('CaseNumber') or '').strip(),
+                    'case': pb_case(d.get('CaseNumber'), d.get('DocLegalDescription') or d.get('Legal')),
                     'docType': (d.get('DocTypeDescription') or 'LIS PENDENS').strip(),
                     'bookpage': (d.get('BookPage') or '').strip(),
                     'legal': (d.get('DocLegalDescription') or d.get('Legal') or '').strip(),
