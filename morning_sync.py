@@ -137,7 +137,8 @@ def main():
         for a in after:
             if not a['ok']:
                 print('[sync] note: %s failed (%s). Logged only - the opt-out sync result above stands '
-                      'and sends are not held for it. Re-run: python %s' % (a['name'], a.get('why', '?'), a['name'] + '.py'),
+                      'and sends are not held for it. Re-run: python %s'
+                      % (a['name'], a.get('why', '?'), dict((n, sc) for n, sc, _t in AFTER).get(a['name'], a['name'] + '.py')),
                       flush=True)
         st['after'] = after
         _write(st)

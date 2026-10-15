@@ -13,11 +13,17 @@ HOLD = ['We filed chapter 13 last week, our attorney said not to talk to anyone'
         'I am in bankruptcy', 'my bankruptcy attorney will call you', 'Talk to my BK attorney',
         'estoy en bancarrota', 'Me declaré en quiebra', 'ya radicamos el capítulo 13',
         'Case 25-12345-RAM was filed', 'there is an automatic stay', 'Chapter 7 discharged',
-        'No thanks. We filed bankruptcy.', 'I did not call you. We are in chapter 13.']
+        'No thanks. We filed bankruptcy.', 'I did not call you. We are in chapter 13.',
+        # review 2026-10-15: a leading no/don't in the same sentence is not a denial of the filing
+        'no, we filed bankruptcy', 'not sure, but we filed chapter 13', 'No thanks, we already filed bankruptcy',
+        "Don't call me, I filed bankruptcy", "Please don't contact us, we filed chapter 13",
+        "I won't sell, filed bankruptcy", 'No me llame, estamos en bancarrota', 'no gracias estamos en quiebra',
+        'we filed bankrupcy', 'we are in bankruptsy', "we're in BK", 'estamos en banca rota']
 PASS = ['Not interested', 'Can you stop the foreclosure?', 'call me tomorrow',
         'We never filed bankruptcy', "I don't want to file bankruptcy", 'no bankruptcy here',
         'no estoy en bancarrota', 'nunca me declaré en quiebra', 'Case 2025-012345-CA-01',
-        'If now is not a good time, just tell me']
+        'If now is not a good time, just tell me', 'we are not going to file bankruptcy',
+        "we haven't filed any bankruptcy", 'BK is not something we did', 'call my bank']
 for t in HOLD:
     rec('holds: ' + t, B.says_bankruptcy(t))
 for t in PASS:

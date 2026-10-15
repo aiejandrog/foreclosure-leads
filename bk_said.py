@@ -47,7 +47,10 @@ STATE_NAME = 'bk_said_state.json'
 # A mention of bankruptcy, in the words a homeowner uses. Kept broad on purpose: a false hold costs
 # one lead until a person clears it; a missed one is a contact during an automatic stay.
 _MENTION = [
-    r'\bbankrupt(?:cy|cies|ed)?\b',
+    # bankrupt, bankruptcy, and the usual misspellings (bankrupcy, bankruptsy, bankrapt)
+    r'\bbankr[aeiu]?p\w*',
+    r'\b(?:in|filed|filing|file|declared)\s+(?:for\s+)?(?:a\s+)?bk\b',
+    r'\bbanca\s+rota\b',
     r'\bbk\s+(?:case|attorney|lawyer|filing|trustee|court)\b',
     r'\bchapter\s*(?:7|11|13|seven|thirteen)\b',
     r'\bch\.?\s*(?:7|13)\b',
@@ -63,20 +66,25 @@ _MENTION = [
 ]
 _MENTION_RE = re.compile('|'.join('(?:%s)' % p for p in _MENTION), re.I)
 
-# A plain denial in the few words before the mention: "never filed bankruptcy", "not filing
-# bankruptcy", "no bankruptcy", "I don't want to file bankruptcy", "no estoy en bancarrota".
+# A plain denial right before the mention: "never filed bankruptcy", "not filing bankruptcy", "no
+# bankruptcy", "I don't want to file bankruptcy", "no estoy en bancarrota", "nunca me declaré en
+# quiebra". The words between the denial and the mention must all be filing words, joined by
+# spaces only, so "No thanks, we filed bankruptcy", "Don't call me, I filed chapter 13" and
+# "no gracias estamos en quiebra" are NOT denials (review 2026-10-15).
+_FILLER = (r"(?:filed|filing|file|to|want|wanna|going|gonna|plan|planning|plans|in|for|a|any|an|"
+           r"declared|declare|declaring|have|ever|been|be|of|considering|thinking|about|"
+           r"estoy|estamos|me|nos|declar[eé]|declaramos|en|vamos|voy|a|ir|hemos|he|"
+           r"radicado|radicar|radiqu[eé]|ninguna|ning[uú]n|una|un)")
 _NEGATION_RE = re.compile(
     r"\b(?:not|never|no|don'?t|didn'?t|won'?t|haven'?t|hasn'?t|isn'?t|aren'?t|wasn'?t|without|"
-    r"nunca|tampoco|sin)\b(?:\W+\w+){0,4}\W*$", re.I)
+    r"nunca|tampoco|sin)(?:\s+" + _FILLER + r"){0,4}\s+$", re.I)
 
 
 def says_bankruptcy(text):
     """True when the text mentions bankruptcy and at least one mention is not a plain denial."""
     s = ' '.join(str(text or '').split())
     for m in _MENTION_RE.finditer(s):
-        before = s[max(0, m.start() - 60):m.start()]
-        # Only the clause the mention sits in: a denial in an earlier sentence does not count.
-        before = re.split(r'[.!?;]', before)[-1]
+        before = s[max(0, m.start() - 80):m.start()]
         if not _NEGATION_RE.search(before):
             return True
     return False
@@ -177,7 +185,8 @@ def from_replies(replies_path=REPLIES, apply=False, state_path=None, nc_path=Non
         if not says_bankruptcy(' '.join([str(rec.get('subject') or ''), str(rec.get('excerpt') or '')])):
             continue
         counts['said'] += 1
-        when = str(rec.get('when') or rec.get('checked') or '')
+        # the reply's own date; 'checked' changes every scan, so it would undo a hand-clear daily
+        when = str(rec.get('when') or ('excerpt:' + str(rec.get('excerpt') or '')[:80]))
         if str(k).startswith('@'):
             said_addrs.append((k, rec))
             continue
@@ -228,8 +237,9 @@ def main(argv=None):
           % (datetime.now().strftime('%Y-%m-%d %H:%M'), c['replies'], c['said'], c['added'],
              c['already'], c['refused'], c['no_case'], c['seen_before'],
              (' - ERROR ' + c['error']) if c['error'] else ''))
-    # Never stops the morning publish: the board rebuild must still run. A failure is printed.
-    return 0
+    # A failed write exits 1 so morning_sync records the step as failed. Neither caller stops on it:
+    # run-replies-daily.bat goes on to the rebuild, and morning_sync's AFTER steps are log-only.
+    return 1 if c['error'] else 0
 
 
 if __name__ == '__main__':
