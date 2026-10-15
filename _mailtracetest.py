@@ -97,6 +97,15 @@ sk = open('skiptrace.py', encoding='utf-8').read()
 chk('skiptrace: stores no email for a via-mailTrace search', "results[case]['emails'] = []" in sk)
 chk('skiptrace: re-searches once the address is confirmed', '_mail_only_cached(r)]' in sk)
 
+import call_mode as _CMD
+_lp = {'case': 'CACE-26-000777', 'days': 9999, 'auction': '', 'mailTrace': '1 MAIL ST, MIAMI, FL 33101',
+       'addr': '', 'owner': 'X', 'phones': ['3055550100'], 'phdnc': [0], 'phtype': ['m'], 'phsrc': ['t'],
+       'phrank': [1], 'phbest': '3055550100', 'county': 'BROWARD'}
+_au = {'case': 'CACE-26-000777', 'days': 30, 'auction': '2026-11-14', 'addr': '9 REAL RD', 'owner': 'X'}
+_m, _n, _ = _CMD.dedupe_calendar_rows([_lp, _au], key='case', days='days', date='auction')
+chk('case merge: the auction row with a real address beats the fuller mailTrace LP row',
+    _n == 1 and len(_m) == 1 and _m[0].get('addr') == '9 REAL RD')
+
 for f in fails:
     print('  FAILED: ' + f)
 print('%d checks, %d failed' % (len(ran), len(fails)))

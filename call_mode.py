@@ -2886,6 +2886,9 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
     def _full(r):
         return sum(1 for v in r.values() if v not in (None, '', [], {}))
 
+    def _unconfirmed(r):
+        return bool(r.get('mailTrace')) and not str(r.get('addr') or '').strip()
+
     def _d(r):
         v = r.get(days)
         return v if isinstance(v, (int, float)) else 9999
@@ -2905,7 +2908,10 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
         if len(grp) == 1:
             out.append(grp[0])
             continue
-        best = max(grp, key=lambda r: (_full(r), -_d(r)))
+        # An LP row whose phones came from the owner's MAILING address (lp_leads mailTrace, no
+        # confirmed property) is held on every path. Its extra phone fields must not let it beat
+        # the auction row for the same case, which has a real address and sale date.
+        best = max(grp, key=lambda r: (not _unconfirmed(r), _full(r), -_d(r)))
         others = [r for r in grp if r is not best]
         collapsed += len(others)
         best['dupn'] = len(others)
