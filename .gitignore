@@ -743,3 +743,4 @@ logs/
 
 # _mailaddrtest: broward_resolve keeps the owner mailing address off the cadastral roll (offline, faked calls).
 !_mailaddrtest.py
+!_maxdaystest.py

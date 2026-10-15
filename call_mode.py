@@ -1051,7 +1051,7 @@ _OPT_END = 'function _dneg(iso)'
 # ═══════════════ THE BOARD'S OWN FUNNEL CLASSIFIER (2026-09-17) ═══════════════
 # Alejandro reads nine lane counts off the board — WARM / URGENT / CALL / WRITE / LETTER / DOOR /
 # TRACE / WAITING / OUT — and could not find those lanes on the phone at all. Call Mode had nine
-# lanes of its own (3-DAY, Emailed, Worker, Urgent 0-7, Sale soon, 46-60, Fresh filings, Balloon,
+# lanes of its own (3-DAY, Emailed, Worker, Urgent 0-7, Sale soon, 46+ days, Fresh filings, Balloon,
 # Buy-box) over a DIFFERENT, much smaller population, so no lead could be followed from one surface
 # to the other and no two numbers agreed.
 #
@@ -1493,7 +1493,7 @@ def lookup_hold_fn(slim, optouts=None, deads=None):
 
     The same stay and suppression drops call_rows makes, read from the same sources, so the
     "Who texted me?" screen cannot hand out a tel:/sms: link that the dial queue withheld.
-    Deliberately NOT the queue's other drops (60-day window, cap, other seat, equity floor):
+    Deliberately NOT the queue's other drops (sale-date window, cap, other seat, equity floor):
     those are "not due today", and calling back someone who texted in is fine for them."""
     optouts, deads = (optouts or {}), (deads or {})
     _id_opted = _identity_opted_fn(slim, optouts)
@@ -1560,7 +1560,23 @@ def _call_equity(d):
     return _call_equity_parts(d)[0]
 
 
-def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
+# HOW FAR OUT A DATED SALE MAY BE AND STILL REACH THE DIAL QUEUE (2026-10-15, Alejandro: "anything
+# blocking leads coming in, unblock it", equity bar kept). Was 60. The auction calendars are scraped
+# 120 days ahead (foreclosure_leads.AUCTION_HORIZON_DAYS), so a 60-day cut held every lead 61-120
+# days out off the phone until it aged in, which cost the caller the longest runway on exactly the
+# leads with the most time to work. LP rows and balloons never had this cut. CALLMODE_MAX_DAYS tunes it.
+def _env_max_days(default=120):
+    try:
+        v = int(os.environ.get('CALLMODE_MAX_DAYS', '') or default)
+    except ValueError:
+        return default
+    return v if v > 0 else default
+
+
+MAX_DAYS = _env_max_days()
+
+
+def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
     Everything is decided HERE, at build time, so the phone does no filtering — it only renders.
@@ -1685,7 +1701,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # wall = HOTTEST, so it must not read as "auction already passed" below.
             _bd = (d.get('bal') or {}).get('days')
             days = int(_bd) if isinstance(_bd, (int, float)) else 9999
-        if not is_lp and not is_bal and (days < 0 or days > max_days):     # auction already passed, or too far out
+        if not is_lp and not is_bal and (days < 0 or days > (max_days or MAX_DAYS)):     # auction already passed, or too far out
             continue
         # An LP row that GAINED a sale date which then passed is a sold property, not a fresh
         # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
@@ -1926,7 +1942,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # tomorrow leaves no time to reinstate, list, or petition anything. Convertibility is equity
     # to protect TIMES runway to act:
     #   band 0: sale 7-45 days out — a real clock AND real time to work it (the prime window)
-    #   band 1: 46 days out up to max_days (60 by default; later foreclosure sales never reach this
+    #   band 1: 46 days out up to max_days (MAX_DAYS, 120 by default; later sales never reach this
     #           queue), or an LP row with no date or any later date — pure runway, first-mover ground
     #   band 2: 5-6 days — very tight; worth a dial only when the equity is real
     #   band 3: 0-4 days (or already passed) — too late to convert; surplus-only talk, parked LAST
@@ -2312,7 +2328,7 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     WHY (2026-09-17, Alejandro): the board's nine funnel lanes cover all 2,297 leads; Call Mode
     carried ~400. TRACE alone is 1,068 leads — 46% of the book — and none of it was reachable from
     the phone, so "what still needs skip-tracing" was a question only the laptop could answer. Same
-    for the LETTER and DOOR backlogs past the dial queue's 60-day window.
+    for the LETTER and DOOR backlogs past the dial queue's sale-date window.
 
     These rows exist to be COUNTED, SORTED and HANDED OFF — never dialled. That is enforced by what
     is in them rather than by a flag the renderer has to remember to check:
@@ -2986,7 +3002,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
     #
     # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead THIS page's
-    # dial queue does not carry (no traced number, auction past the 60-day window, over the cap, or
+    # dial queue does not carry (no traced number, auction past the sale-date window, over the cap, or
     # on the other caller's phone) as a countable, sortable, un-dialable row, so the nine board lane
     # counts on a handset describe the whole business. See coverage_rows for what is deliberately
     # absent from them, and the cut note above for why it is this page's list and not the crew's.
@@ -3557,7 +3573,7 @@ __FUNNELJS__
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
 
 /* COVERAGE ROWS — the rest of the book (coverage_rows in call_mode.py). Every lead the dial queue
-   drops: no traced number, auction past the 60-day window, or over the cap. They carry NO phone
+   drops: no traced number, auction past the sale-date window, or over the cap. They carry NO phone
    numbers and NO email addresses, only counts, so nothing here can be dialled or written to by
    accident — see the docstring on the Python side for why that is structural and not a flag. */
 var COV = [], BLANE = null;      /* BLANE: null = the dial queue; a FUNNEL key = the board-lane view */
@@ -4236,7 +4252,7 @@ var LANES = [
   {k:'worker', lbl:'Worker',            pred:isWorker,   hide0:true, ch:'worker'},
   {k:'urgent', lbl:'Urgent 0-7',        pred:function(r){ return _dayLane(r,0,7); },   hide0:true},
   {k:'soon',   lbl:'Sale soon 8-45',    pred:function(r){ return _dayLane(r,8,45); },  hide0:false},
-  {k:'late',   lbl:'46-60',             pred:function(r){ return _dayLane(r,46,60); }, hide0:true},
+  {k:'late',   lbl:'46+ days',          pred:function(r){ return _dayLane(r,46,9998); }, hide0:true},
   {k:'lp',     lbl:'Fresh filings',     pred:function(r){ return !!r.lp && !isBalloon(r); }, hide0:false},
   {k:'bal',    lbl:'Balloon',           pred:isBalloon,  hide0:true},
   {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true},
