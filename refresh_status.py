@@ -53,6 +53,14 @@ _MANUAL = re.compile(r'^=+ run (.*?) =+\s*$')
 # The scrape's per-county row counts, as foreclosure_leads.py prints them ("BROWARD: 319 rows").
 _COUNTY = re.compile(r'\b(MIAMI-DADE|BROWARD|PALM BEACH):\s*(\d+)\s*row')
 _MANUAL_DONE = re.compile(r'^=+ done =+\s*$')
+# What lp_refresh.py and lis_pendens.py print when the lane does not fully refresh (rc 7). rc 7 alone
+# says only that SOME step of an eight-script chain was not clean; these lines say which.
+_LP_PARTIAL = re.compile(r'^PARTIAL SWEEP: (.*?) did not run')
+_LP_NONE_NEW = re.compile(r'^sweep ran, no new filings in the window\. FAILED: (.*)$')
+_LP_ALL = re.compile(r'^no LP sweep completed')
+_LP_STOPPED = re.compile(r'^CHAIN STOPPED at (.*?) \(exit (-?\d+)\)')
+_LP_DEGRADED = re.compile(r'^- (.*?) \((?:exit -?\d+|no loadable skip-trace key[^)]*)\)$')
+_LP_COUNTY = {'MIAMI-DADE': 'Miami', 'BROWARD': 'Broward', 'PALM BEACH': 'Palm Beach'}
 # cmd's %date% %time% on this laptop: "Mon 10/12/2026 12:21:05.12" (en-US). ISO is accepted too.
 _US = re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})\D+(\d{1,2}):(\d{2})')
 _ISO = re.compile(r'(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})')
@@ -81,6 +89,7 @@ def runs(log_text):
     manual = None                     # the open run-leads.bat run, if the last banner was one
     for line in log_text.splitlines():
         line = line.strip()
+        _lp_line(out[-1] if out and out[-1]['rc'] is None else None, line)
         m = _COUNTY.search(line)
         if m and out and (out[-1]['rc'] is None or out[-1] is manual):
             out[-1].setdefault('rows', {})[m.group(1)] = int(m.group(2))
@@ -123,8 +132,65 @@ def runs(log_text):
     for r in out:
         r.pop('mirror', None)
         r.setdefault('rows', {})
+        lp = r.pop('lp', None)
         r['why'] = WHY.get(r['rc'], 'exit %s' % r['rc']) if r['rc'] is not None else None
+        if r['rc'] == 7 and lp:
+            r['why'] = _lp_why(lp)
     return out
+
+
+def _lp_line(run, line):
+    """Note on the open run what the lis pendens chain said about itself, if this line is one of those."""
+    if run is None:
+        return
+    lp = run.setdefault('lp', {})
+    m = _LP_PARTIAL.match(line) or _LP_NONE_NEW.match(line)
+    if m:
+        lp['failed'] = [c.strip() for c in m.group(1).split(',') if c.strip()]
+        return
+    if _LP_ALL.match(line):
+        lp['failed'] = list(_LP_COUNTY)
+        return
+    m = _LP_STOPPED.match(line)
+    if m:
+        lp['stopped'] = m.group(1)
+        return
+    if line.startswith('DEGRADED RUN'):
+        lp['_list'] = True                           # the "  - <step> (exit N)" lines follow
+        return
+    m = _LP_DEGRADED.match(line) if lp.get('_list') else None
+    if not m:
+        lp.pop('_list', None)
+        return
+    if not m.group(1).startswith('SWEEP'):           # a partial sweep is already named by county
+        lp.setdefault('degraded', []).append(m.group(1))
+
+
+def _step(label):
+    """'PHONES (LP fast lane)' -> the plain words for that step."""
+    if label.startswith('PHONES'):
+        return 'no phones traced for new filings'
+    if label.startswith('RESOLVE BROWARD PARCEL'):
+        return 'Broward parcel match skipped'
+    return label.split(' (')[0].lower() + ' step did not run'
+
+
+def _lp_why(lp):
+    """rc 7 in words a caller can act on, from what the chain printed. Falls back to the generic
+    reason when the chain printed none of the lines we know."""
+    parts = []
+    failed = [_LP_COUNTY.get(c, c.title()) for c in _LP_COUNTY if c in (lp.get('failed') or [])]
+    failed += [c for c in (lp.get('failed') or []) if c not in _LP_COUNTY]
+    if failed:
+        if len(failed) == len(_LP_COUNTY):
+            parts.append('no new lis pendens filings pulled in any county')
+        else:
+            parts.append('no new lis pendens filings pulled for ' + ' or '.join(failed))
+    if lp.get('stopped'):
+        parts.append('lis pendens chain stopped at ' + lp['stopped'].split(' (')[0].lower()
+                     + ', later steps did not run')
+    parts += [_step(d) for d in lp.get('degraded') or []]
+    return '; '.join(parts) if parts else WHY[7]
 
 
 def _read_tail(path):
@@ -168,7 +234,9 @@ def summary(log_path=LOG, now=None):
         if r['at'] and r['rc'] not in FAILED and r['rc'] != -1:
             good, rows = r['at'], r.get('rows') or {}
             break
-    # Rows scraped per county by that run, in a fixed order (counts only).
+    # Rows scraped per county by that run, in a fixed order (counts only). These are the pending
+    # auction calendar rows each county's scrape kept (scrape_guard's "BROWARD: 329 row(s)"), NOT
+    # leads on the board and NOT lis pendens filings, so the page labels them "auction lists".
     rows = [[n, rows[k]] for k, n in (('BROWARD', 'Broward'), ('MIAMI-DADE', 'Miami'),
                                       ('PALM BEACH', 'Palm Beach')) if k in rows]
     return {'baked': now.strftime('%Y-%m-%dT%H:%M'), 'good': good, 'rows': rows,
@@ -202,7 +270,7 @@ if(L && (L.rc===1||L.rc===3||L.rc===9||L.rc===10||L.rc===-1)){
 } else {
   lvl='warn'; msg='No refresh record on the machine that built this board';
 }
-if(lvl!=='bad' && S.rows && S.rows.length) msg+=' &middot; '+S.rows.map(function(x){return x[0]+' '+x[1];}).join(' &middot; ');
+if(lvl!=='bad' && S.rows && S.rows.length) msg+=' &middot; auction lists '+S.rows.map(function(x){return x[0]+' '+x[1];}).join(', ');
 if(S.earlier && lvl!=='bad') msg+=' &middot; '+hm(S.earlier.at).replace(/^today /,'')+' run failed ('+S.earlier.why+'), recovered';
 var c={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF']}[lvl];
 el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
