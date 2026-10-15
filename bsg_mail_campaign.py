@@ -15,7 +15,7 @@ letter. A short note reads as a person; a long one reads as a copied script, whi
 would be. A short note, about three minutes each including the envelope.
 
 COMPLIANCE IS NOT OPTIONAL AND IS NOT COPIED
-The two MARS/Reg O sentences come from disclaimer.mars_part(), the same source bsg_letter and
+The three MARS/Reg O sentences come from disclaimer.mars_part(), the same source bsg_letter and
 carlos_letter_packet use -- hand-copying compliance text is exactly how four surfaces drifted into
 four different disclaimers before disclaimer.py existed. The government/lender denial, the
 not-a-lawyer line and the opt-out sentence are in the body itself. Every one of them is load
@@ -240,10 +240,10 @@ def contact_phone():
 
 
 def letter(r):
-    """~90 words. Short because it is HANDWRITTEN, not because anything legal was trimmed.
+    """About 145 words. Short because it is HANDWRITTEN, not because anything legal was trimmed.
 
     Carries, in order: who I am, the four denials (government / lender / lawyer / no money), why I
-    am writing, the offer, the two MARS sentences from disclaimer.mars_part(), and the opt-out.
+    am writing, the offer, the three MARS sentences from disclaimer.mars_part(), and the opt-out.
     """
     street = street_case(r['addr'].split(',')[0])
     # The three federally mandated MARS / Reg O sentences (disclaimer.py: govt, may_agree, may_stop) and
