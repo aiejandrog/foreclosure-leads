@@ -17,7 +17,7 @@ rows = [lead('L-OK'), lead('L-DISM', lpDismissed=True), lead('L-CLOSED', lpClose
         lead('L-MOVED', ownerMismatch=True), dict(lead('A-1'), st='A', lpDismissed=True)]
 args = types.SimpleNamespace(lp_fresh=0, case='', cases_file='', all=True, tier='A')
 got = sorted(S._case(r) for r in S.select([dict(r) for r in rows], args))
-check('nightly --all skips dead lis pendens, keeps live LP and non-LP rows', got == ['A-1', 'L-OK'], got)
+check('nightly --all skips dismissed / owner-changed lis pendens, keeps closed (judgment) and live LP and non-LP rows', got == ['A-1', 'L-CLOSED', 'L-OK'], got)
 args.case = 'L-DISM'; args.all = False
 got = [S._case(r) for r in S.select([dict(r) for r in rows], args)]
 check('an explicit --case still traces it', got == ['L-DISM'], got)

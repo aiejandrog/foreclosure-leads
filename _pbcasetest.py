@@ -12,6 +12,9 @@ rec('CASE -> number from legal', L.pb_case('CASE', 'Case Number: Case Number: 50
 rec('county civil recovered', L.pb_case('CASE', 'Case Number: Case Number: 502026CC014716XXXASB') == '502026CC014716XXXASB')
 rec('family case not recovered', L.pb_case('CASE', 'Case Number: Case Number: 502026DR001448FZ') == '')
 rec('truncated number not recovered', L.pb_case('CASE', 'Case Number: Case Number: 502026CA0094') == '')
+rec('no suffix kept as is', L.pb_case('CASE', 'Case Number: 502026CA008606 L: 3') == '502026CA008606')
+rec('no 50 prefix, short number padded', L.pb_case('CASE', 'Case Number: 2026CA8204 L: 3') == '502026CA008204')
+rec('a PCN or parcel is not a case', L.pb_case('CASE', 'PCN: 00-41-47-23-11-000-0750') == '')
 rec('nothing in legal -> blank', L.pb_case('CASE', 'L: 8 SUB: WEITZER') == '')
 
 rows = [{'county': 'PALM BEACH', 'case': 'CASE', 'legal': 'Case Number: 502026CA000111XXXAMB', 'instrument': '1'},

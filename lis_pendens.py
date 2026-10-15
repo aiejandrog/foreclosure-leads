@@ -307,7 +307,9 @@ def sweep_verdict(status):
 # all but ONE of them were dropped from the board, and lp_resolve/lp_status keyed them all to the
 # same "CASE" entry. Only a circuit-civil (CA) or county-civil (CC) number is recovered: those are
 # the foreclosure and HOA cases. A family, probate or truncated number stays unrecovered ('').
-_PB_CASE_RE = re.compile(r'\b(50\d{4}(?:CA|CC)\d{6}[A-Z]{3,6})\b')
+# Also '502026CA008606' with no suffix and '2026CA8204' with no 50 prefix or zero padding (review
+# 2026-10-15): written back in the canonical 50YYYYTTnnnnnn form, suffix kept when there is one.
+_PB_CASE_RE = re.compile(r'(?<![0-9A-Z])(?:50)?(\d{4})(CA|CC)(\d{4,6})([A-Z]{3,6})?(?![0-9])')
 
 
 def pb_case(case, legal=''):
@@ -317,7 +319,14 @@ def pb_case(case, legal=''):
     if len(re.findall(r'\d', c)) >= 5:
         return c
     m = _PB_CASE_RE.search(str(legal or '').upper())
-    return m.group(1) if m else ''
+    if not m:
+        return ''
+    year, kind, num, suffix = m.groups()
+    if not ('19' <= year[:2] <= '20'):
+        return ''
+    if len(num) < 6 and num.startswith('0'):
+        return ''                    # '502026CA0094' is a cut-off six-digit number, not case 94
+    return '50%s%s%s%s' % (year, kind, num.zfill(6), suffix or '')
 
 
 def _repair_pb_cases(rows):

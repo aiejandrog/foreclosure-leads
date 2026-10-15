@@ -1774,6 +1774,12 @@ def _run(a, ap):
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
+                if not models and not a.cached_only:
+                    # An expired token comes back EMPTY rather than failing. Read as "no cached
+                    # answer", so the search runs afresh (Camoufox first, then paid) instead of
+                    # freezing a conf 'none' chain on an empty list. Review 2026-10-15: paid tokens
+                    # are cached now too, so this matters for every owner, not just Camoufox ones.
+                    models = None
                 if a.repull and not _parcel_in(models, folio):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached

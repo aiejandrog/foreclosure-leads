@@ -30,5 +30,9 @@ i = src.index("models = fetch_via_turnstile(sp)")
 check('owner loop writes the paid token to records_qs.json',
       "qs_cache[oc] = _PAID_QS['last']" in src[i:i + 900] and 'json.dump(qs_cache, open(QS_CACHE' in src[i:i + 900])
 
+j = src.index("models = records_by_qs(qs_cache[oc])")
+check('an empty cached read is treated as expired, not as an answer',
+      'if not models and not a.cached_only:' in src[j:j + 700] and 'models = None' in src[j:j + 700])
+
 print('\n' + ('ALL PASS' if not FAILS else 'FAILED: %s' % FAILS))
 sys.exit(1 if FAILS else 0)
