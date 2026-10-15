@@ -1889,6 +1889,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             'ag': (d.get('addrGuess') or '').strip() or None,
             'aw': (d.get('addrWhy') or '').strip() or None,
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
+            # x is a FILING date, not a sale (no auction on record). Without this the page cannot
+            # tell the two apart, and a case filed today counts as "the sale is today" (2026-10-15).
+            'xf': 1 if (not is_lp and not d.get('auction') and (d.get('filedDate') or d.get('filed'))) else None,
             'd': days,
             'lp': 1 if is_lp else 0,
             # Tax deed. The board knows it as st=='TD'; the phone row never carried st (only 'BAL'),
@@ -3611,7 +3614,10 @@ function firstName(r){
 function _vmSale(r, lg){
   var V = (typeof SCRIPT_ALL !== 'undefined' && SCRIPT_ALL && SCRIPT_ALL.vmsale) ? SCRIPT_ALL.vmsale[lg] : null;
   if(!V) return '';
-  var d = (r && typeof liveDays === 'function') ? liveDays(r) : null;
+  /* Count only a SALE date. A row with no auction is baked d=0 and liveDays falls back to r.d when
+     r.x is absent, so a dateless lead read "a court sale ... for today" (2026-10-15). r.xf marks an
+     r.x that is the filing date. Same guard as boardTextBody. */
+  var d = (r && !r.xf && String(r.x || '').trim() && typeof liveDays === 'function') ? liveDays(r) : null;
   var t = (typeof d !== 'number' || d < 0) ? V.none : (d === 0 ? V.today : (d === 1 ? V.tomorrow : V.days));
   /* No street on the row: drop the clause, or it reads "on your property at your property". */
   if(!(((r && r.a) || '').split(',')[0].trim())) t = t.split(' at {st1}').join('').split(' en {st1}').join('');
@@ -3642,11 +3648,13 @@ function fillScript(t, r){
     .split('{st1}').join(((r && r.a) || '').split(',')[0].trim() || 'your property')
     /* {date} — the email's strongest line is the owner's own sale date, so the call says it too.
        Renders the whole clause (with its leading space) or NOTHING: an LP lead has no auction date
-       and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud. */
+       and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud.
+       r.xf: no auction, r.x is the filing year/date and r.d is a baked 0 — "a sale date of 2025"
+       was said aloud for a case with no sale (2026-10-15). */
     .split('{date_es}').join(
-      (r && r.x && r.d != null && r.d < 9000) ? (' con fecha de subasta el ' + _esDate(r.x)) : '')
+      (r && r.x && !r.xf && r.d != null && r.d < 9000) ? (' con fecha de subasta el ' + _esDate(r.x)) : '')
     .split('{date}').join(
-      (r && r.x && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
+      (r && r.x && !r.xf && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
     /* {gap} — balloon lane only: THEIR monthly 12%-vs-7% gap off the recorded amount, or the $400k
        example when the amount is unknown. Rounded to $50 because their rate is an assumption. */
@@ -6508,7 +6516,7 @@ function boardTextBody(r){
   /* The live count, the same one the voicemail's sale sentence reads, for BOTH the body and the
      tone. Only when the row carries a date (r.x: the auction, or the filing date on a lis pendens,
      which liveDays never counts): a dateless row is baked d=0, which would read as "the sale is today". Held after the hammer is -1, which _textBodies never counts. */
-  var dd = (r && String(r.x || '').trim()) ? liveDays(r) : null;
+  var dd = (r && !r.xf && String(r.x || '').trim()) ? liveDays(r) : null;
   var B = _textBodies({
     first:  firstName(r),
     sender: SENDER.name || '',
