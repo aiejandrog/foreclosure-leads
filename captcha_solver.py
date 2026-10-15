@@ -18,6 +18,7 @@ Docs: https://2captcha.com/api-docs/recaptcha-v2
       https://2captcha.com/2captcha-api
 """
 import os
+import threading
 import time
 
 import requests
@@ -25,6 +26,21 @@ import requests
 HERE = os.path.dirname(os.path.abspath(__file__))
 IN_URL = 'https://2captcha.com/in.php'
 RES_URL = 'https://2captcha.com/res.php'
+
+
+# Whether the last solve on THIS thread got a task queued at 2Captcha (2026-10-15). False only when
+# nothing was submitted or in.php said no (no key, zero balance, bad key, no slot): 2Captcha bills
+# nothing then, so paid_reads.guarded gives the reservation back. None means unknown (in.php never
+# answered, so a task may exist) and True means queued; both keep the charge.
+_TL = threading.local()
+
+
+def reset_task_queued():
+    _TL.queued = None
+
+
+def task_queued():
+    return getattr(_TL, 'queued', None)
 
 
 def _key():
@@ -77,6 +93,7 @@ def solve_recaptcha_v3(site_key, action, page_url, min_score=0.3, timeout=140, p
     key = _key()
     if not key:
         print('  [2captcha] no key (captcha.key / TWOCAPTCHA_KEY) — cannot solve')
+        _TL.queued = False
         return None
     try:
         r = requests.post(IN_URL, data={
@@ -89,7 +106,9 @@ def solve_recaptcha_v3(site_key, action, page_url, min_score=0.3, timeout=140, p
         return None
     if r.get('status') != 1:
         print(f'  [2captcha] submit rejected: {r.get("request")}')
+        _TL.queued = False
         return None
+    _TL.queued = True
     return _poll(key, r['request'], timeout, poll, label='2captcha-v3')
 
 
@@ -102,9 +121,11 @@ def solve_recaptcha_v2(site_key, page_url, timeout=240, poll=5):
     key = _key()
     if not key:
         print('  [2captcha] no key — cannot solve recaptcha v2')
+        _TL.queued = False
         return None
     if not site_key or not page_url:
         print('  [2captcha] v2 requires site_key + full page_url')
+        _TL.queued = False
         return None
     try:
         # https://2captcha.com/2captcha-api#solving_recaptchav2_new
@@ -117,7 +138,9 @@ def solve_recaptcha_v2(site_key, page_url, timeout=240, poll=5):
         return None
     if r.get('status') != 1:
         print(f'  [2captcha] v2 submit rejected: {r.get("request")}')
+        _TL.queued = False
         return None
+    _TL.queued = True
     print(f'  [2captcha] v2 task {r["request"]} queued — polling…')
     return _poll(key, r['request'], timeout, poll, label='2captcha-v2')
 
@@ -130,6 +153,7 @@ def solve_turnstile(site_key, page_url, action=None, timeout=140, poll=5):
     key = _key()
     if not key:
         print('  [2captcha] no key — cannot solve turnstile')
+        _TL.queued = False
         return None
     data = {'key': key, 'method': 'turnstile', 'sitekey': site_key, 'pageurl': page_url, 'json': 1}
     if action:
@@ -141,7 +165,9 @@ def solve_turnstile(site_key, page_url, action=None, timeout=140, poll=5):
         return None
     if r.get('status') != 1:
         print(f'  [2captcha] turnstile submit rejected: {r.get("request")}')
+        _TL.queued = False
         return None
+    _TL.queued = True
     return _poll(key, r['request'], timeout, poll, label='2captcha-turnstile')
 
 

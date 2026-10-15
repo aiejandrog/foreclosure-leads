@@ -325,6 +325,17 @@ def adjust(delta, source):
     return _write(delta, source, False)[0]
 
 
+def _captcha_solver():
+    try:
+        import captcha_solver
+    except Exception:
+        return None
+    # A stand-in module (the suites fake one) without the flag is treated as unknown: no refund.
+    if not (hasattr(captcha_solver, 'reset_task_queued') and hasattr(captcha_solver, 'task_queued')):
+        return None
+    return captcha_solver
+
+
 def guarded(solve, source, unit=SOLVE_USD):
     """Wrap a 2Captcha solve function: check the month first, count the solve BEFORE submitting it.
     Returns None (a failed solve, which every caller already handles) when the cap refuses."""
@@ -332,7 +343,17 @@ def guarded(solve, source, unit=SOLVE_USD):
         ok, _ = debit(unit, source)            # checked and counted in one locked step
         if not ok:
             return None
-        return solve(*args, **kwargs)
+        cs = _captcha_solver()
+        if cs is not None:
+            cs.reset_task_queued()
+        out = solve(*args, **kwargs)
+        # A solve that never got a task queued (no key, in.php rejected it: zero balance, bad key,
+        # no slot) was not billed by 2Captcha, so the reservation comes back. Before 2026-10-15 it
+        # stayed booked: Palm Beach's six pool workers retry every 5 s, so a night 2Captcha said no
+        # booked about $1 of solves that never happened against the shared monthly cap.
+        if not out and cs is not None and cs.task_queued() is False:
+            adjust(-unit, source)
+        return out
     _solve._paid_reads = True
     return _solve
 
