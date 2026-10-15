@@ -57,6 +57,9 @@ os.environ['CALLMODE_MAX_DAYS'] = '0'
 chk('zero falls back to 120', CM._env_max_days() == 120)
 os.environ.pop('CALLMODE_MAX_DAYS', None)
 chk('the 46+ lane has no 60-day ceiling', "_dayLane(r,46,9998)" in open(CM.__file__, encoding='utf-8').read())
+chk('call mode has no 400-per-seat cap at the build site',
+    '400 * _cm_seats' not in open('foreclosure_leads.py', encoding='utf-8').read()
+    and 'CALLMODE_CAP' in open('foreclosure_leads.py', encoding='utf-8').read())
 
 for f in fails:
     print('  FAILED: ' + f)
