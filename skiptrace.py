@@ -575,6 +575,10 @@ def main():
 
     todo = [r for r in picked if args.refresh or (_case(r) not in results)
             or _stale_empty(_case(r)) or (_case(r) in retrace_cases) or _mail_only_cached(r)]
+    # A case listed both as an auction row (real address) and as a mailing-address LP row: search
+    # the confirmed address only. Searching both pays twice and the LP result overwrites the other.
+    _confirmed_cases = {_case(r) for r in picked if _confirmed_addr(r)}
+    todo = [r for r in todo if not (_via(r) == 'mailTrace' and _case(r) in _confirmed_cases)]
 
     def _urgency(r):
         """Auction-dated leads first, soonest sale leading; then LP by freshest filing.

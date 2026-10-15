@@ -106,6 +106,8 @@ _m, _n, _ = _CMD.dedupe_calendar_rows([_lp, _au], key='case', days='days', date=
 chk('case merge: the auction row with a real address beats the fuller mailTrace LP row',
     _n == 1 and len(_m) == 1 and _m[0].get('addr') == '9 REAL RD')
 
+chk('skiptrace: a mailing-address row is not searched when its case has a confirmed row',
+    "todo = [r for r in todo if not (_via(r) == 'mailTrace' and _case(r) in _confirmed_cases)]" in sk)
 for f in fails:
     print('  FAILED: ' + f)
 print('%d checks, %d failed' % (len(ran), len(fails)))
