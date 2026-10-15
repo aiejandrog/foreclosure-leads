@@ -3791,7 +3791,15 @@ def make_tracker(leads):
         # split then cut that same 400 in half, so each caller got 200 and 390 of 790 qualified
         # leads were on no phone at all. Each seat gets the full per-phone budget now.
         _cm_seats = len([s for s in call_mode.CALL_SEATS if s]) or 1
-        _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads, cap=400 * _cm_seats)
+        # NO CAP (Alejandro 2026-10-15: "i dont want there to be a cap of phone numbers i need the
+        # sky to be the limit"). Every qualifying lead ships. CALLMODE_CAP=<n> brings a ceiling back
+        # if the encrypted page ever gets too heavy for a handset (call mode prints its size).
+        try:
+            _cm_cap = int(os.environ.get('CALLMODE_CAP', '') or 0)
+        except ValueError:
+            _cm_cap = 0
+        _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads,
+                                      cap=_cm_cap if _cm_cap > 0 else 10 ** 6)
         # Server-confirmed emails and texts (mail_sent.json / text_sent.json) onto the dial rows, so a
         # lead cadence already mailed stops sorting as never-contacted on the phone. Order and the
         # "already contacted" bar only; Call Mode's hiding rules do not read these fields.
