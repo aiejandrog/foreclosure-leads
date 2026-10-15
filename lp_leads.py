@@ -170,9 +170,11 @@ def build():
         # name, short of the homestead corroboration that makes it 'high'. The tax roll's mailing
         # address on that parcel is where its owner gets mail, so skiptrace may search the person
         # there. It is NOT the property address: `addr` stays empty, so doors, letters and the map
-        # never read it, and call_mode keeps the row off the dial queue until an address is confirmed.
+        # never read it, and diligence_flags ADDRESS_UNCONFIRMED holds the row from every contact
+        # path (Call Mode, Morning Worker, call sheet) until an address is confirmed.
         mail_trace = ''
         if (conf == 'medium' and not addr and not unanchored and not mismatch and not _cands
+                and not a.get('ownerMismatch')
                 and str(a.get('county') or lp.get('county') or '').upper() == 'BROWARD'):
             mail_trace = str(a.get('mailAddr') or '').strip()
             if mail_trace:

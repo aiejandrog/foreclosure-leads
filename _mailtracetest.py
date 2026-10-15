@@ -77,9 +77,25 @@ chk('confirmed-address twin still ships', 'CACE-26-000103' in got)
 r1b = dict(r1, addr='10 EAST ST, SUNRISE, FL 33313')
 chk('once the address is confirmed it ships', 'CACE-26-000101' in {r.get('c') for r in CM.call_rows([r1b])[0]})
 
+import diligence_flags as DF   # noqa: E402
+import diligence_gate as DG    # noqa: E402
+chk('diligence: mailTrace row with no addr is ADDRESS_UNCONFIRMED', DF.address_unconfirmed(r1))
+chk('diligence: confirmed twin is not', not DF.address_unconfirmed(r3) and not DF.address_unconfirmed(r1b))
+chk('diligence: the code is a hold-always code', 'ADDRESS_UNCONFIRMED' in DF._HOLD_ALWAYS)
+chk('diligence: the gate holds it (Morning Worker, call sheet, Call Mode read this)', DG.is_hold(r1) and DG.gate(r1)['hold'])
+chk('diligence: the gate off switch cannot release it', 'ADDRESS_UNCONFIRMED' in DG.NEVER_RELEASED)
+chk('diligence: junk never raises', DF.address_unconfirmed(None) is False and DF.address_unconfirmed({}) is False)
+
+chk('skiptrace: a mailing-address-only search is stamped via mailTrace', S._via(rows['CACE-26-000101']) == 'mailTrace')
+chk('skiptrace: a confirmed address is not', S._via(rows['CACE-26-000103']) == '' and S._via(r1b) == '')
+
 src = open('foreclosure_leads.py', encoding='utf-8').read()
-chk('board merge drops email on a mailTrace row with no addr',
-    "if _d.get('mailTrace') and not (_d.get('addr') or '').strip():\n                        _d['emails'] = []" in src)
+chk('board merge: a via-mailTrace result attaches only to the unconfirmed LP row',
+    "if _ph and _ph.get('via') == 'mailTrace' and not _mtrow:" in src)
+chk('board merge: no email on that row', "if _mtrow:\n                        _d['emails'] = []" in src)
+sk = open('skiptrace.py', encoding='utf-8').read()
+chk('skiptrace: stores no email for a via-mailTrace search', "results[case]['emails'] = []" in sk)
+chk('skiptrace: re-searches once the address is confirmed', '_mail_only_cached(r)]' in sk)
 
 for f in fails:
     print('  FAILED: ' + f)
