@@ -282,6 +282,12 @@ def select(leads, args, llcs=None):
     out = []
     lp_days = getattr(args, 'lp_fresh', 0) or 0
     for r in leads:
+        # A dismissed or closed lis pendens, or one whose owner of record changed since filing, is
+        # not worth a trace in ANY mode (2026-10-15). Only the --lp-fresh lane skipped them; the
+        # nightly --all traced them at Tracerfy's per-hit price. An explicit --case still traces.
+        if (not args.case and (r.get('st') or '') == 'LP'
+                and (r.get('lpDismissed') or r.get('lpClosed') or r.get('ownerMismatch'))):
+            continue
         if lp_days:
             # FRESH-FILING FAST LANE. A lis pendens is the one moment the owner has heard from
             # nobody — the whole edge is reaching them first, and that dies if their phone shows up

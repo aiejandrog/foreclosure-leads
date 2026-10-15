@@ -18,6 +18,7 @@ _*.py
 !_pbcasetest.py
 !_captcharefundtest.py
 !_paidqstest.py
+!_skiptracelptest.py
 !_workersendracetest.py
 !_inflightretrytest.py
 !_wplinktest.py
