@@ -70,6 +70,7 @@ else:
           "function esc(x){ return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }\n"
           "function firstName(r){ return (r&&r.f)||''; }\n"
           "function isBalloon(r){ return r.st==='BAL'; }\n"
+          "function _heldNow(x){ return false; }\n"
           + FNS + r"""
 function md(off){ var d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+off);
   return (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear(); }
@@ -93,6 +94,21 @@ out.warnhtml = _vmWarnHtml();
 SENDER.phone = '(305) 555-0100'; out.wrongC2 = _vmVoiceWrong(); out.warnnone = _vmWarnHtml();
 SEAT = {n:2, i:0, w:'Alejandro'}; SENDER.name='Alejandro Gonzalez'; SENDER.phone='(786) 631-1823'; out.wrongA2 = _vmVoiceWrong();
 out.noaddr_es = fillScript(VMES, {f:'', x: md(5), d: 5});
+/* 2026-10-15: a dateless row is baked d=0 (call_rows keeps it: 0 is not < 0). liveDays falls back
+   to r.d when r.x is empty, so the voicemail said 'for today' with no sale on record. */
+out.nodate_en = fillScript(VMEN, row({x: '', d: 0}));
+out.nodate_es = fillScript(VMES, row({x: '', d: 0}));
+out.nodate_sp_en = fillScript(VMEN, row({x: '  ', d: 1}));
+out.nodate_nod_en = fillScript(VMEN, row({d: 3}));
+out.today_en = fillScript(VMEN, row({x: md(0), d: 0}));
+/* no auction, x is the filing date (call_rows ships xf=1): filed today must not read as a sale today */
+out.filedtoday_en = fillScript(VMEN, row({x: md(0), d: 0, xf: 1}));
+out.filedtoday_es = fillScript(VMES, row({x: md(0), d: 0, xf: 1}));
+/* the real shape: no auction, x is the bare filing year (call_rows 'filed'), d baked 0 */
+out.year_en = fillScript(VMEN, row({x: 2025, d: 0, xf: 1}));
+out.year_es = fillScript(VMES, row({x: 2025, d: 0, xf: 1}));
+out.open_year = fillScript('paperwork on {st1}{date} here', row({x: 2025, d: 0, xf: 1}));
+out.open_sale = fillScript('paperwork on {st1}{date} here', row({x: '11/3/2026', d: 19}));
 console.log(JSON.stringify(out));
 """)
     fd, path = tempfile.mkstemp(suffix='.js')
@@ -123,6 +139,17 @@ console.log(JSON.stringify(out));
     rec('tomorrow ES', 'en 123 NW 5 ST para mañana.' in o.get('tom_es', ''), o.get('tom_es'))
     rec('no sale date EN', 'a court case filed on your property at 123 NW 5 ST.' in o.get('lp_en', ''), o.get('lp_en'))
     rec('no sale date ES', 'un caso judicial presentado sobre su propiedad en 123 NW 5 ST.' in o.get('lp_es', ''), o.get('lp_es'))
+    for k in ('nodate_en', 'nodate_sp_en', 'nodate_nod_en', 'filedtoday_en', 'year_en'):
+        rec('no sale date on record reads as case filed: ' + k,
+            'a court case filed on your property at 123 NW 5 ST.' in o.get(k, '')
+            and 'court sale' not in o.get(k, ''), o.get(k))
+    for k in ('nodate_es', 'filedtoday_es', 'year_es'):
+        rec('no sale date on record ES reads as case filed: ' + k,
+            'un caso judicial presentado sobre su propiedad en 123 NW 5 ST.' in o.get(k, '')
+            and 'venta judicial' not in o.get(k, ''), o.get(k))
+    rec('a dated sale today still says today', 'at 123 NW 5 ST for today.' in o.get('today_en', ''), o.get('today_en'))
+    rec('call opener: no sale date clause for a filing year', o.get('open_year') == 'paperwork on 123 NW 5 ST here', o.get('open_year'))
+    rec('call opener: a real sale date still said', o.get('open_sale') == 'paperwork on 123 NW 5 ST with a sale date of 11/3/2026 here', o.get('open_sale'))
     rec('passed sale reads as case filed', 'court case filed' in o.get('past_en', ''), o.get('past_en'))
     rec('no name, no address still reads', o.get('noaddr_en', '').startswith('Hi, this is ')
         and 'scheduled on your property in about 5 days.' in o.get('noaddr_en', ''), o.get('noaddr_en'))
@@ -137,6 +164,11 @@ console.log(JSON.stringify(out));
     rec('warning html names the page', 'Carlos' in o.get('warnhtml', '') and '&#9888;' in o.get('warnhtml', ''))
     rec('Carlos with his own name and number: no warning', o.get('wrongC2') is False and o.get('warnnone') == '')
     rec('Alejandro seat, own number: no warning', o.get('wrongA2') is False)
+# ---- call_rows marks a filing-date x (2026-10-15) ----------------------------------------------
+_cr = SRC[SRC.find("'x': d.get('auction')"):SRC.find("'x': d.get('auction')") + 600]
+rec('call_rows ships xf when x is a filing date, not a sale',
+    "'xf': 1 if (not is_lp and not d.get('auction')" in _cr)
+rec('the text body uses the same sale-date guard', "var dd = (r && !r.xf && String(r.x || '').trim()) ? liveDays(r) : null;" in SRC)
 rec('guided vm step shows the warning too', "if(s.id==='vm') b+=_vmWarnHtml();" in SRC)
 rec('full sheet shows the warning', SRC.count('_vmWarnHtml()') >= 3)
 # ---- the full-screen button (2026-10-12: "a button i press and the voice message script shows up")
