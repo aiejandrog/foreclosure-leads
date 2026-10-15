@@ -49,7 +49,8 @@ def board_rows(path=None):
 def _optouts():
     raw = _load('optouts.json', {}) or {}
     notes = raw.get('notes') if isinstance(raw, dict) and isinstance(raw.get('notes'), dict) else raw
-    return {k: v for k, v in (notes or {}).items() if isinstance(v, dict)}
+    return {k: v for k, v in (notes or {}).items() if isinstance(v, dict)
+            and (v.get('optout') or str(v.get('status') or '').upper() in ('DO NOT CONTACT', 'OPTED OUT'))}
 
 
 def _deads():
@@ -97,6 +98,8 @@ def _last_call_ms(n):
                 best = max(best, int(d.get('tsu') or 0))
             except (TypeError, ValueError):
                 pass
+    if not best and any(isinstance(t, dict) and (t.get('ch') or '') == 'call' for t in (n or {}).get('touches') or []):
+        best = 1                                     # an older call touch with no tsu: called, date unknown
     return best
 
 
@@ -154,6 +157,8 @@ def main():
         print('   %-8s groups %4d  extra rows %4d  on BOTH callers %4d -> %d   (groups with 2+ person keys %d)'
               % (k, o['groups'], o['extra_rows'], o['on_both_seats'], n['on_both_seats'], o['different_person_key']))
     print('   rows per caller: before %s   after %s' % (dict(sorted(old_seat.items())), dict(sorted(new_seat.items()))))
+    grp = collections.Counter(r['sb'] for r in rows)
+    print('   largest bucket %d rows of %d (12 buckets; ~%d each if even)' % (max(grp.values() or [0]), len(rows), len(rows) // 12))
 
     notes = (_load('worker_notes.json', {}) or {}).get('notes') or {}
     mail, texts = _mail_last(), _text_cases()

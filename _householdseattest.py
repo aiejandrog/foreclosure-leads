@@ -46,6 +46,16 @@ before = [r['sb'] for r in rows]
 CM._seat_by_household(rows)
 ok([r['sb'] for r in rows] == before, 'a street line with no number does not link')
 
+rows = [row(a, pk='P1', a='12 NW 3 ST, MIAMI'), row(b, pk='P2', a='12 NW 3 ST, MIAMI')]
+before = [r['sb'] for r in rows]
+CM._seat_by_household(rows)
+ok([r['sb'] for r in rows] == before, 'a street line with no ZIP does not link')
+
+tower = [row(c, pk='T%d' % i, a='100 COLLINS AVE', z='33139') for i, c in enumerate([a, b, c3])]
+before = [r['sb'] for r in tower]
+CM._seat_by_household(tower)
+ok([r['sb'] for r in tower] == before, 'a street line on 3+ person keys (a building) does not link')
+
 rows = [{'sb': 3, 'pk': 'P1'}, row(a, pk='P1')]
 CM._seat_by_household(rows)
 ok(rows[0]['sb'] == 3, 'a caseless row is left alone')

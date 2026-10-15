@@ -1590,8 +1590,8 @@ def _seat_links(r):
     if r.get('pk'):
         keys.append('k:' + str(r['pk']))
     a1 = re.sub(r'[^A-Z0-9]', '', str(r.get('a') or '').split(',')[0].upper())
-    if len(a1) > 5 and any(ch.isdigit() for ch in a1):
-        keys.append('a:' + a1 + ':' + str(r.get('z') or ''))
+    if len(a1) > 5 and any(ch.isdigit() for ch in a1) and r.get('z'):
+        keys.append('a:' + a1 + ':' + str(r['z']))
     for p in r.get('p') or []:
         d = re.sub(r'\D', '', str(p))[-10:]
         if len(d) == 10:
@@ -1609,6 +1609,14 @@ def _seat_by_household(rows):
     bucket, so singletons do not move between callers. Seat assignment only: nothing is hidden, and
     the person-wide suppression list (pcs) is untouched. Returns the number of rows that moved."""
     parent = {}
+    # A street line shared by 3+ person keys is a building (condo tower, HOA filing against several
+    # units with no unit number), not a household: it does not link.
+    _line_pks = {}
+    for r in rows:
+        for k in _seat_links(r):
+            if k.startswith('a:'):
+                _line_pks.setdefault(k, set()).add(r.get('pk') or r.get('c'))
+    _building = {k for k, v in _line_pks.items() if len(v) > 2}
 
     def find(x):
         while parent.get(x, x) != x:
@@ -1621,6 +1629,8 @@ def _seat_by_household(rows):
             continue
         node = 'r:%d' % i
         for k in _seat_links(r):
+            if k in _building:
+                continue
             a, b = find(node), find(k)
             if a != b:
                 parent[a] = b
@@ -1998,6 +2008,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # Deterministic across builds: same case -> same bucket, every night, so a lead does not
         # hop between callers when the board refreshes mid-session. Changing the SEAT COUNT does
         # reshuffle assignments, which is correct and is why the page warns before doing it.
+        # EXCEPTION (2026-10-15): rows of one household are regrouped onto ONE bucket after this
+        # loop (_seat_by_household). A grouped row can move seats at a rebuild when its group gains
+        # or loses a member; a row linked to nothing keeps this case-only bucket.
         _cs = str(d.get('case') or '')
         if _cs:
             _h = 2166136261
@@ -4346,7 +4359,8 @@ function laneDef(k){ for(var q=0;q<LANES.length;q++) if(LANES[q].k===k) return L
    means solo and every filter below is a no-op, so a lone caller sees exactly what he saw before.
 
    THE PARTITION IS THE DEFENCE. r.sb is a stable 0-11 bucket of the case number stamped at build
-   (see call_rows). With n seats I take the buckets where sb % n === i, so with two phones the
+   (see call_rows); rows of one household (person key, street line + ZIP, phone) share their
+   group's bucket (_seat_by_household). With n seats I take the buckets where sb % n === i, so with two phones the
    same lead is NEVER in both queues at once. Nothing is negotiated, so there is nothing to race
    and nothing to be offline for.
 
