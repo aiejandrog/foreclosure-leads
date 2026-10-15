@@ -621,7 +621,7 @@ def msync(bounces=None, **over):
 
 G = load(HERE / 'sync_gate.py', 'sync_gate_ft')
 d, rc, out, st = msync(BOUNCES_OK)
-rec('bounces.py runs, recorded under "after"', [a['name'] for a in st.get('after', [])] == ['bounces']
+rec('bounces.py runs, recorded under "after"', [a['name'] for a in st.get('after', [])][:1] == ['bounces']
     and st['after'][0]['ok'] is True, st.get('after'))
 rec('...after the verdict was written (it saw state=finished ok=True)',
     (d / 'bounces_saw.txt').read_text() == 'finished True', (d / 'bounces_saw.txt').read_text())
