@@ -155,16 +155,33 @@ TONALITY = [
 # NEPQ_Q stack below only runs if they are still talking. "Five minutes" is the advisor consult
 # (matches FIFTEEN_SEC, VOICEMAIL, outreach_copy); do not introduce a conflicting ten/fifteen here,
 # cross_surface_check() greps this file for it.
-_OPEN_BODY_EN = ("It is {sender} with Biscayne Solutions Group. This might sound a little random, but "
-                 "I have a copy of the court paperwork on {st1}{date} right in front of me, and I was "
-                 "hoping you could help me out for a second. I am not your lender and I am not calling "
-                 "to buy the place. Can I ask you something real quick?")
+# 2026-10-15 (Alejandro): "i dont like how robotic the nepq one is". His own phone opener leads:
+# "Do you know your property is in pre foreclosure?" It is a real question, so the page STOPS after
+# it and lets them answer; the two nots and the permission ask come second, in plain words. The old
+# "this might sound a little random... help me out" disarm is retired. Accuracy: {date} renders
+# " with a sale date of <date>" only when an auction is actually set, and nothing otherwise, so an LP
+# lead hears "pre-foreclosure" and a set sale hears its date. "Foreclosure" is said only after the
+# greeting has settled that this is the owner (NEVER_SAY).
+_OPEN_ASK_EN = ("It is {sender} with Biscayne Solutions Group. Do you know your property on {st1} is "
+                "in pre-foreclosure{date}?")
+_OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy it. I help owners see what options "
+                 "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_BODY_ES = ("Le habla {sender}, de Biscayne Solutions Group. Puede sonar un poco raro, pero tengo "
-                 "una copia del papeleo de la corte sobre {st1}{date} aquí enfrente, y esperaba que me "
-                 "pudiera ayudar un momento. No soy su prestamista y no le vengo a comprar la casa. "
-                 "¿Le puedo hacer una pregunta rápida?")
+_OPEN_ASK_ES = ("Le habla {sender}, de Biscayne Solutions Group. ¿Usted sabe que su propiedad en {st1} "
+                "está en proceso de foreclosure{date_es}?")
+_OPEN_NOTS_ES = ("No soy su prestamista y no le llamo para comprarle la casa. Ayudo a los dueños a ver "
+                 "qué opciones tienen antes de que esto avance más. ¿Le puedo hacer un par de preguntas "
+                 "rápidas?")
+# If they did not know: they just heard it from a stranger. Be human first, then the nots.
+_OPEN_NEWS_EN = ("I'm sorry to be the one telling you. It's in the public court records, and that's "
+                 "the only reason I called.")
+_OPEN_NEWS_ES = ("Siento ser yo quien se lo diga. Está en los registros públicos de la corte, y es la "
+                 "única razón por la que le llamé.")
+# The full sheet reads as one block, so the pause is written in as a [bracket] cue (rendered
+# literally; fillScript only touches {curly}).
+_OPEN_BODY_EN = _OPEN_ASK_EN + " [Stop. Let them answer.] " + _OPEN_NOTS_EN
+_OPEN_BODY_ES = _OPEN_ASK_ES + " [Pare. Deje que conteste.] " + _OPEN_NOTS_ES
 
 # THE QUESTION STACK -- NEPQ. Runs after the opener, only if they engage. Situation -> problem
 # awareness -> consequence (money side only, no case merits, no promised outcome) -> what it has cost
@@ -791,12 +808,30 @@ def _flow():
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
-        {'id': 'disarm', 'k': 'THE DISARM',
-         'en': _OPEN_BODY_EN, 'es': _OPEN_BODY_ES,
-         'tone': 'Confused, low-status, slow. Say your FIRST name... pause... then full name + company, '
-                 'like they should already know you. Slow on the two NOTS. Then STOP.',
+        {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
+         'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
+         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
+                 'question. Then STOP.',
+         'listen': 'Wait for the answer. Do not explain anything yet.',
+         'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
+                ['What do you do?', 'intro30'],
+                ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
+                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
+                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
+         'ret': 'nots'},
+        {'id': 'news', 'k': "THEY DIDN'T KNOW — be human first",
+         'en': _OPEN_NEWS_EN, 'es': _OPEN_NEWS_ES,
+         'tone': 'Soft and slow. This is news to them. No pitch, no hurry.',
+         'listen': 'Give them a second. Let them react.',
+         'br': [['Continue →', 'nots'], ['We already reinstated', 'reinstated'], ['Not interested', 'obj:15'],
+                ['Don\'t call me again', 'end:dnc']],
+         'ret': 'nots'},
+        {'id': 'nots', 'k': 'THE TWO NOTS + permission',
+         'en': _OPEN_NOTS_EN, 'es': _OPEN_NOTS_ES,
+         'tone': 'Slow on the two NOTS. Then ask permission and STOP.',
          'listen': 'They will test you here. Whatever they say, do not get defensive.',
-         'br': [['Okay / sure / what?', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
+         'br': [['Okay / sure', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
                 ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
@@ -3511,6 +3546,8 @@ function fillScript(t, r){
     /* {date} — the email's strongest line is the owner's own sale date, so the call says it too.
        Renders the whole clause (with its leading space) or NOTHING: an LP lead has no auction date
        and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud. */
+    .split('{date_es}').join(
+      (r && r.x && r.d != null && r.d < 9000) ? (' con fecha de subasta el ' + r.x) : '')
     .split('{date}').join(
       (r && r.x && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
