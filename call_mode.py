@@ -1701,7 +1701,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             # wall = HOTTEST, so it must not read as "auction already passed" below.
             _bd = (d.get('bal') or {}).get('days')
             days = int(_bd) if isinstance(_bd, (int, float)) else 9999
-        if not is_lp and not is_bal and (days < 0 or days > (max_days or MAX_DAYS)):     # auction already passed, or too far out
+        if not is_lp and not is_bal and (days < 0 or days > (MAX_DAYS if max_days is None else max_days)):     # auction already passed, or too far out
             continue
         # An LP row that GAINED a sale date which then passed is a sold property, not a fresh
         # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
