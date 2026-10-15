@@ -161,10 +161,11 @@ TONALITY = [
 # "this might sound a little random... help me out" disarm is retired. Accuracy: {date} renders
 # " with a sale date of <date>" only when an auction is actually set, and nothing otherwise, so an LP
 # lead hears "pre-foreclosure" and a set sale hears its date. "Foreclosure" is said only after the
-# greeting has settled that this is the owner (NEVER_SAY).
+# greeting has settled that this is the owner (NEVER_SAY): the full sheet carries a [Wait for yes.]
+# cue after the greeting, and the guided "who's asking?" answer re-confirms the owner first.
 _OPEN_ASK_EN = ("It is {sender} with Biscayne Solutions Group. Do you know your property on {st1} is "
                 "in pre-foreclosure{date}?")
-_OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy it. I help owners see what options "
+_OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy your house. I help owners see what options "
                  "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
@@ -281,12 +282,12 @@ if len(NEPQ_K) != len(NEPQ_Q_EN):
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
-PHONE_OPENER_EN = "Hi, is this {first}? " + _OPEN_BODY_EN
-PHONE_OPENER_ES = "Hola, ¿hablo con {first}? " + _OPEN_BODY_ES
+PHONE_OPENER_EN = "Hi, is this {first}? [Wait for yes.] " + _OPEN_BODY_EN
+PHONE_OPENER_ES = "Hola, ¿hablo con {first}? [Espere el sí.] " + _OPEN_BODY_ES
 # {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
-PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? " + _OPEN_BODY_EN
-PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? " + _OPEN_BODY_ES
+PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? [Wait for yes.] " + _OPEN_BODY_EN
+PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? [Espere el sí.] " + _OPEN_BODY_ES
 
 # WARM opener (2026-09-05, Alejandro's own field style): when he already KNOWS the person — a prior
 # Talked / Appointment / Callback on this human — the cold disarm reads as amnesia. His open is just
@@ -750,6 +751,8 @@ BOOK_ES = ("Perfecto — lo tengo anotado para [la hora que escogió]. Hágame u
            "guarde mi número ahora mismo... es el {phone}. ... Ahora léamelo de vuelta, para saber que lo "
            "tiene bien.")
 # Gatekeeper / not the owner: "the property on {st1}", never the word foreclosure (NEVER_SAY).
+WHO_EN = "It's {sender} with Biscayne Solutions Group. I'm trying to reach the owner of {st1}. Is that you?"
+WHO_ES = "Le habla {sender}, de Biscayne Solutions Group. Busco al dueño de {st1}. ¿Es usted?"
 GATE_EN = ("No problem at all — when's usually a good time to catch them? ... Or if it's easier, could I "
            "leave my number with you? It's {phone}, and it's about the property on {st1}.")
 GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fácil, ¿le puedo dejar mi número? "
@@ -804,9 +807,18 @@ def _flow():
          'aen': 'Hi, am I speaking with the owner of {st1}?', 'aes': 'Hola, ¿hablo con el dueño de {st1}?',
          'tone': 'Warm and casual, voice DOWN on the name — like you half-know them. Then STOP.',
          'listen': 'Wait. Let them answer. Do not fill the gap.',
-         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'disarm'],
+         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
+         'ret': 'disarm'},
+        # "Who's asking?" is not a yes: a spouse or a tenant asks it too, and the next line says
+        # foreclosure (NEVER_SAY). Name yourself, then confirm the owner before the question.
+        {'id': 'who', 'k': '"WHO\'S ASKING?" — confirm the owner first',
+         'en': WHO_EN, 'es': WHO_ES,
+         'tone': 'Easy and friendly. Your name, the company, then confirm. No reason yet.',
+         'listen': 'Only a clear yes gets the next line.',
+         'br': [['Yes, that\'s me', 'disarm'], ['No / not here', 'gate'], ['What\'s it about?', 'gate'],
+                ['Wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
          'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
@@ -3528,6 +3540,13 @@ function _vmSale(r, lg){
   return t.split('{n}').join(String(d));
 }
 function fillScript(t, r){
+  /* "11/05/2026" reads as 11 May to a Spanish speaker. Spell the month out: "5 de noviembre". */
+  function _esDate(x){
+    var m = String(x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(!m) return String(x||'');
+    var M = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return (+m[2]) + ' de ' + (M[+m[1]-1] || m[1]);
+  }
   var first = firstName(r);
   t = String(t||'');
   if(t.indexOf('{vmsale') >= 0)
@@ -3547,7 +3566,7 @@ function fillScript(t, r){
        Renders the whole clause (with its leading space) or NOTHING: an LP lead has no auction date
        and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud. */
     .split('{date_es}').join(
-      (r && r.x && r.d != null && r.d < 9000) ? (' con fecha de subasta el ' + r.x) : '')
+      (r && r.x && r.d != null && r.d < 9000) ? (' con fecha de subasta el ' + _esDate(r.x)) : '')
     .split('{date}').join(
       (r && r.x && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')

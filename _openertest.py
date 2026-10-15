@@ -31,7 +31,7 @@ chk('Do you know your property on {st1} is in pre-foreclosure{date}?' in C._OPEN
 chk('está en proceso de foreclosure{date_es}?' in C._OPEN_ASK_ES, 'ES opener carries the Spanish date token')
 chk('{date}' not in C._OPEN_ASK_ES, 'ES opener never renders the English date clause')
 chk('random' not in C._OPEN_BODY_EN and 'help me out' not in C._OPEN_BODY_EN, 'old disarm retired')
-chk(C.PHONE_OPENER_EN.startswith('Hi, is this {first}? It is {sender}'), 'named opener keeps the greeting')
+chk(C.PHONE_OPENER_EN.startswith('Hi, is this {first}? [Wait for yes.] It is {sender}'), 'named opener keeps the greeting')
 chk('not your lender' in C._OPEN_NOTS_EN and 'not calling to buy' in C._OPEN_NOTS_EN, 'two nots kept')
 for w in ('stop the sale', 'save your home', 'fee', 'offer'):
     chk(w not in (C._OPEN_BODY_EN + C._OPEN_NEWS_EN).lower(), 'no "%s" in the opener' % w)
@@ -44,6 +44,14 @@ chk(F['disarm']['en'] == C._OPEN_ASK_EN, 'guided disarm is the question alone')
 chk(dis.get("No, I didn't know") == 'news' and dis.get('Yes, I know') == 'nots', 'yes -> nots, no -> news')
 chk(dict((b[0], b[1]) for b in F['news']['br']).get('Continue →') == 'nots', 'news -> nots')
 chk(dict((b[0], b[1]) for b in F['nots']['br']).get('Okay / sure') == 'frame', 'nots -> frame')
+
+for k in ('PHONE_OPENER_EN', 'PHONE_OPENER_ES', 'PHONE_OPENER_ANON_EN', 'PHONE_OPENER_ANON_ES'):
+    v = getattr(C, k)
+    cue = '[Wait for yes.]' if k.endswith('EN') else '[Espere el sí.]'
+    chk(cue in v and v.index(cue) < v.lower().index('foreclosure'), k + ': stop for the owner before "foreclosure"')
+chk(greet.get("Who's this? / who's asking?") == 'who', "who's asking -> confirm the owner, not the question")
+chk('foreclosure' not in (F['who']['en'] + F['who']['es']).lower(), 'who step never says foreclosure')
+chk(dict((b[0], b[1]) for b in F['who']['br']).get("Yes, that's me") == 'disarm', 'who -> yes -> question')
 
 JS = (r"""
 var SENDER={name:'Alejandro',phone:'(786) 631-1823'};
@@ -59,7 +67,7 @@ for o in out:
     print('     ' + o)
 chk(out[0].endswith('Do you know your property on 1240 NW 54 ST is in pre-foreclosure with a sale date of 11/05/2026?'), 'dated EN says the sale date')
 chk(out[1].endswith('is in pre-foreclosure?'), 'LP EN: no date clause')
-chk(out[2].endswith('está en proceso de foreclosure con fecha de subasta el 11/05/2026?'), 'dated ES in Spanish')
+chk(out[2].endswith('está en proceso de foreclosure con fecha de subasta el 5 de noviembre?'), 'dated ES in Spanish, month spelled out')
 chk(out[3].endswith('está en proceso de foreclosure?'), 'LP ES: no date clause')
 
 print('\n%s -- %d failure(s)' % ('PASSED' if not bad else 'FAILED', len(bad)))
