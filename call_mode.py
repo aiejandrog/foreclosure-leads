@@ -878,7 +878,7 @@ def _flow():
          'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
          'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
          'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
-                ['Bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
+                ['Already filed bankruptcy', 'end:dnc'], ['Planning to file bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
                 ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
          'ret': 'q5'},
         {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],

@@ -100,12 +100,22 @@ def build():
     addrs = _addresses()
     stats = _statuses()
     nhigh = nadv = nmismatch = nvalued = ndismissed = nclosed = nunanchored = 0
+    npbnocase = 0
     out, seen = [], set()
     for lp in feed:
         case = str(lp.get('case') or '').strip()
         owner = str(lp.get('owner') or '').strip()
         if not owner:
             continue
+        if (lp.get('county') or '').upper() == 'PALM BEACH':
+            # The grid's literal "CASE" collapsed every such row into one lead (lis_pendens.pb_case).
+            # Read the number from the legal text; a row with no usable number is not a lead: no
+            # docket, stay or address lookup can key it.
+            import lis_pendens as _LP
+            case = _LP.pb_case(case, lp.get('legal'))
+            if not case:
+                npbnocase += 1
+                continue
         key = case or (owner + lp.get('date', ''))
         if key in seen:
             continue
@@ -269,6 +279,8 @@ def build():
         raise SystemExit(1)
     json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
     print(f'DONE: {len(out)} LP leads -> lp_leads.json (st=LP -> board play LP-EARLY)')
+    if npbnocase:
+        print(f'  palm beach: {npbnocase} row(s) with no CA/CC case number in the legal text, left off')
     if addrs:
         print(f'  addresses: {nhigh} filled (high confidence, skiptrace-ready) · '
               f'{nadv} advisory only (needs human) · {nmismatch} owner-of-record changed since filing')

@@ -410,6 +410,13 @@ def _ledger_save(charged=None, final=False):
     print('  ! %s' % _SPEND['stopped'])
 
 
+# The search token the last paid solve bought (2026-10-15). Camoufox's token was always written to
+# records_qs.json, which puts the next run for that owner on the free cached path; a token 2Captcha
+# paid for was thrown away, so every nightly retry of a cached conf 'none' chain (up to --retries 80)
+# paid for the same search again and got the same answer. The owner loop caches it like Camoufox's.
+_PAID_QS = {'last': None}
+
+
 def fetch_via_turnstile(owner_lf, tries=3):
     """THE UNLOCK — pull an owner's recorded docs by solving Cloudflare Turnstile (2Captcha), no
     browser. Solves the token, POSTs the same standardsearch the app uses with it in the
@@ -454,6 +461,7 @@ def fetch_via_turnstile(owner_lf, tries=3):
             continue
         qs = j.get('qs') if isinstance(j, dict) else None
         if qs:
+            _PAID_QS['last'] = qs
             return records_by_qs(qs)
         # isValidSearch:false with a fresh token = a bad solve; loop and re-solve
         time.sleep(1)
@@ -1766,6 +1774,12 @@ def _run(a, ap):
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
+                if not models and not a.cached_only:
+                    # An expired token comes back EMPTY rather than failing. Read as "no cached
+                    # answer", so the search runs afresh (Camoufox first, then paid) instead of
+                    # freezing a conf 'none' chain on an empty list. Review 2026-10-15: paid tokens
+                    # are cached now too, so this matters for every owner, not just Camoufox ones.
+                    models = None
                 if a.repull and not _parcel_in(models, folio):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
@@ -1812,9 +1826,18 @@ def _run(a, ap):
                     # Turnstile failure. `--persist` on the batch is a no-op when the fallback is dead.
                     if models is None:
                         paid += 1
+                        _PAID_QS['last'] = None
                         models = fetch_via_turnstile(sp)
                         _src = 'paid'
                         _def_blocked = models is None and not _SPEND['stopped']
+                        if models is not None and _PAID_QS['last']:
+                            # surname-only search: wider than the owner's name, and analyze()
+                            # isolates by folio, so it is a safe cached read for this owner
+                            qs_cache[oc] = _PAID_QS['last']
+                            try:
+                                json.dump(qs_cache, open(QS_CACHE, 'w', encoding='utf-8'), indent=1)
+                            except Exception:
+                                pass
                     if models is None:
                         _src = 'mint'
                         src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()

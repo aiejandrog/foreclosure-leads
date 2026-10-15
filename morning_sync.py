@@ -68,6 +68,9 @@ STEPS = (
 # (name, script, timeout seconds) - run after the verdict is recorded; a failure is logged, never fatal
 AFTER = (
     ('bounces', 'bounces.py', 8 * 60),
+    # A reply that says the owner filed bankruptcy puts the case on never_contact.json before the
+    # 08:00 Morning Worker and the 10:00 cadence run (bk_said.py, 2026-10-15). Add-only.
+    ('bk_said', 'bk_said.py --apply', 2 * 60),
 )
 
 
@@ -88,11 +91,12 @@ def _mtime(p):
 def run_step(name, script, timeout, needs_replies):
     t0 = time.time()
     print('[sync] %s: python %s' % (name, script), flush=True)
-    if not os.path.exists(os.path.join(HERE, script)):
+    argv = script.split()
+    if not os.path.exists(os.path.join(HERE, argv[0])):
         return {'name': name, 'rc': None, 'ok': False, 'secs': 0, 'why': '%s not found' % script}
     before = _mtime(REPLIES_JSON)
     try:
-        p = subprocess.run([sys.executable, '-u', script], cwd=HERE, timeout=timeout)
+        p = subprocess.run([sys.executable, '-u'] + argv, cwd=HERE, timeout=timeout)
         rc = p.returncode
     except subprocess.TimeoutExpired:
         return {'name': name, 'rc': 'timeout', 'ok': False, 'secs': round(time.time() - t0),
@@ -133,7 +137,8 @@ def main():
         for a in after:
             if not a['ok']:
                 print('[sync] note: %s failed (%s). Logged only - the opt-out sync result above stands '
-                      'and sends are not held for it. Re-run: python %s' % (a['name'], a.get('why', '?'), a['name'] + '.py'),
+                      'and sends are not held for it. Re-run: python %s'
+                      % (a['name'], a.get('why', '?'), dict((n, sc) for n, sc, _t in AFTER).get(a['name'], a['name'] + '.py')),
                       flush=True)
         st['after'] = after
         _write(st)
