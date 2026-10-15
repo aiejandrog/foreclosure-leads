@@ -69,6 +69,42 @@ def main():
     check('good = 12:21 (rc 7 still scraped)', s['good'] == '2026-10-12T12:21', str(s['good']))
     check('county rows from that run, fixed order', s['rows'] == [['Broward', 319], ['Miami', 88], ['Palm Beach', 402]], str(s['rows']))
 
+    # rc 7 says only that some step of the lis pendens chain was not clean. The chain's own lines
+    # say which, and the 10-13 morning (paid-read cap spent, Palm Beach captcha refused) needed that.
+    lp_1013 = LOG_1012.replace(
+        '    !! LP CHAIN exit 4',
+        '  PALM BEACH sweep blocked/portal down \u2014 other counties (if any) still merge.\n'
+        'PARTIAL SWEEP: MIAMI-DADE, PALM BEACH did not run. The rows above are from BROWARD only; x\n'
+        'CHAIN DONE.\n'
+        'DEGRADED RUN \u2014 the chain finished, but not everything ran:\n'
+        '  - SWEEP (lis_pendens, all 3 counties) (exit 4)\n'
+        '  - PHONES (LP fast lane) (exit 2)\n'
+        '\n'
+        '    !! LP CHAIN exit 4')
+    s = R.summary(write(lp_1013), now=now)
+    check('rc 7 names the counties whose filings were not pulled, and the phone step',
+          s['last']['why'] == 'no new lis pendens filings pulled for Miami or Palm Beach; phones for new filings not fully traced',
+          str(s['last']))
+    s = R.summary(write(LOG_1012.replace('    !! LP CHAIN exit 4',
+                                         'CHAIN STOPPED at VALUE (lp_values) (exit 1) \u2014 nothing after it ran\n'
+                                         '    !! LP CHAIN exit 1')), now=now)
+    check('rc 7 from a stopped chain names the step', s['last']['why'] ==
+          'lis pendens chain stopped at value, later steps did not run', str(s['last']))
+    s = R.summary(write(LOG_1012.replace('    !! LP CHAIN exit 4', 'no LP sweep completed \u2014 every source blocked.')),
+                  now=now)
+    check('every county blocked', s['last']['why'] == 'no new lis pendens filings pulled in any county', str(s['last']))
+    s = R.summary(write(LOG_1012.replace('    !! LP CHAIN exit 4',
+                                         'sweep ran, no new filings in the window. FAILED: BROWARD\n')), now=now)
+    check('empty sweep with a failed county', s['last']['why'] ==
+          'no new lis pendens filings pulled for Broward', str(s['last']))
+    s = R.summary(write(LOG_1012.replace('    !! LP CHAIN exit 4', '  - foo (exit 2)\nDEGRADED RUN \u2014 x\n'
+                                         '  - RESOLVE BROWARD PARCEL (mortgage PIN) (exit 2)\nother line\n  - bar (exit 3)')),
+                  now=now)
+    check('only lines under DEGRADED RUN count', s['last']['why'] == 'Broward parcel match skipped', str(s['last']))
+    s = R.summary(write(LOG_1012.replace('rc=7', 'rc=0').replace('    !! LP CHAIN exit 4',
+                                         'PARTIAL SWEEP: BROWARD did not run.')), now=now)
+    check('lp lines do not change a clean run', s['last']['why'] == 'ok', str(s['last']))
+
     lease = LOG_1012 + '[Mon 10/12/2026 17:30:00.00] refresh-dealflow.bat did not start - cross-machine lease exit 9. See runner-lock.log.\n'
     s = R.summary(write(lease), now=datetime(2026, 10, 12, 17, 31))
     check('lease exit 9 IS a run that did not start', s['last']['rc'] == 9 and s['good'] == '2026-10-12T12:21', str(s))
@@ -128,7 +164,7 @@ def main():
         s = R.summary(write(LOG_1012), now=now)
         r = render(s, '2026-10-12T18:00')
         check('10-12 board: amber, says the 12:21 run had a problem and the 5:30 run failed',
-              'Refreshed today 12:21 PM, lis pendens lane partial &middot; Broward 319 &middot; Miami 88 &middot; Palm Beach 402' in r['h'] and '5:30 AM run failed (no network), recovered' in r['h']
+              'Refreshed today 12:21 PM, lis pendens lane partial &middot; auction lists Broward 319, Miami 88, Palm Beach 402' in r['h'] and '5:30 AM run failed (no network), recovered' in r['h']
               and '#FBF1DC' in r['c'], r['h'])
         r = render(s, '2026-10-13T20:00')
         check('same board 27h later with nothing rebuilt: red, says how old', 'No refresh since' in r['h']
