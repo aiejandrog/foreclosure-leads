@@ -752,3 +752,6 @@ logs/
 !_mailtracetest.py
 !bk_review.py
 !_bkreviewtest.py
+
+# _mailletterlinestest: mailed letters carry the MARS sentences and the opt-out line (offline).
+!_mailletterlinestest.py
