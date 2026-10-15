@@ -233,7 +233,20 @@ def _lp_age_days(filed):
 
 def address_for(lead):
     # prefer the mailing address (where the owner actually is, incl. absentee owners), fall back to the property
+    # mailTrace last: a one-parcel Broward LP row's tax-roll mailing address (lp_leads.py), set only
+    # where there is no confirmed property address at all.
+    return _confirmed_addr(lead) or parse_addr(lead.get('mailTrace', '') or '')
+
+
+def _confirmed_addr(lead):
     return parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
+
+
+def _via(lead):
+    """'mailTrace' when the only address skiptrace can use is the one-parcel tax-roll mailing
+    address (lp_leads mailTrace). The result is stamped with it so every merge can tell a number
+    found for an UNCONFIRMED property from one found at the property itself."""
+    return 'mailTrace' if (lead.get('mailTrace') and not _confirmed_addr(lead)) else ''
 
 def _officer_target(case, llcs):
     """For a company-owned lead, the human to actually skip-trace: the first Sunbiz officer with a
@@ -554,8 +567,18 @@ def main():
     for r in leads:
         if _case(r) in retrace_cases and _case(r) not in _picked_cases:
             picked.append(r)
+    def _mail_only_cached(r):
+        # cached from the tax-roll mailing address, and this lead now has a confirmed address:
+        # search again at the real one rather than inherit a number tied to an unconfirmed parcel
+        c = results.get(_case(r)) or {}
+        return c.get('via') == 'mailTrace' and not _via(r)
+
     todo = [r for r in picked if args.refresh or (_case(r) not in results)
-            or _stale_empty(_case(r)) or (_case(r) in retrace_cases)]
+            or _stale_empty(_case(r)) or (_case(r) in retrace_cases) or _mail_only_cached(r)]
+    # A case listed both as an auction row (real address) and as a mailing-address LP row: search
+    # the confirmed address only. Searching both pays twice and the LP result overwrites the other.
+    _confirmed_cases = {_case(r) for r in picked if _confirmed_addr(r)}
+    todo = [r for r in todo if not (_via(r) == 'mailTrace' and _case(r) in _confirmed_cases)]
 
     def _urgency(r):
         """Auction-dated leads first, soonest sale leading; then LP by freshest filing.
@@ -718,6 +741,12 @@ def main():
                 'county': r.get('county', 'MIAMI-DADE'),
                 'phones': phones, 'emails': emails, 'traced': f"{date.today():%Y-%m-%d}", 'source': provider,
             }
+            if _via(r) == 'mailTrace':
+                # unconfirmed property: keep the phones for a person, never an email anything
+                # automatic could first-touch, and mark the entry so no merge treats it as confirmed
+                results[case]['via'] = 'mailTrace'
+                results[case]['emails'] = []
+                emails = []
             if phones: ok += 1
             print(f"  [{i}/{len(todo)}] {case}: {len(phones)} phone(s), {len(emails)} email(s)")
             time.sleep(0.3)

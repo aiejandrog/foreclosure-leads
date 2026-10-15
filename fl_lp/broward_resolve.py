@@ -102,8 +102,10 @@ def _mail_of(cad):
     """The owner's MAILING address off the FL cadastral roll (OWN_ADDR1/CITY/STATE/ZIP). Kept apart
     from `addr` on purpose: it says where the owner of the matched parcel lives, not where the lis
     pendens property is, so a letter can reach the owner even when the parcel itself is a guess.
-    Nothing reads it yet except a future mailing pool; it is never an `addr`, door or skip-trace input.
-    The roll is a county record, but it is advisory until a person has approved a mailing use."""
+    It is never an `addr` or a door input. Since 2026-10-15 (Alejandro) lp_leads passes it as
+    `mailTrace` on a one-parcel 'medium' row so skiptrace can search the owner there; those phones
+    stay off the dial queue and get no email until the property is confirmed. Mailing a letter to it
+    is still advisory until a person has approved that use."""
     return ' '.join(str((cad or {}).get('mail_addr') or '').split())
 
 

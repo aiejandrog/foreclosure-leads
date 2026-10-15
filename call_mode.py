@@ -1707,6 +1707,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
         if is_lp and d.get('auction') and days < 0:
             continue
+        # A one-parcel Broward filing whose phones came from the owner's tax-roll MAILING address
+        # (lp_leads mailTrace) has no confirmed property and no value, so no equity. It waits on
+        # the board until the address is confirmed (2026-10-15, Alejandro: equity-qualified only).
+        if is_lp and d.get('mailTrace') and not (d.get('addr') or '').strip():
+            continue
         # Non-business classes never reach the dialer: vacant land and timeshares/unlinked parcels
         # are not rescuable homes, and neither warn nor vac used to ship to this page.
         if d.get('vac'):
@@ -2881,6 +2886,9 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
     def _full(r):
         return sum(1 for v in r.values() if v not in (None, '', [], {}))
 
+    def _unconfirmed(r):
+        return bool(r.get('mailTrace')) and not str(r.get('addr') or '').strip()
+
     def _d(r):
         v = r.get(days)
         return v if isinstance(v, (int, float)) else 9999
@@ -2900,7 +2908,10 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
         if len(grp) == 1:
             out.append(grp[0])
             continue
-        best = max(grp, key=lambda r: (_full(r), -_d(r)))
+        # An LP row whose phones came from the owner's MAILING address (lp_leads mailTrace, no
+        # confirmed property) is held on every path. Its extra phone fields must not let it beat
+        # the auction row for the same case, which has a real address and sale date.
+        best = max(grp, key=lambda r: (not _unconfirmed(r), _full(r), -_d(r)))
         others = [r for r in grp if r is not best]
         collapsed += len(others)
         best['dupn'] = len(others)

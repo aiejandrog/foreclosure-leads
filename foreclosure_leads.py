@@ -2473,6 +2473,13 @@ def make_tracker(leads):
                 _es.demote_for_bank_fc(_d)                            # CLEAR beside a 2ND FORECLOSURE -> UNVERIFIED
                 # skip-traced phones/emails for this county lead (skiptrace.py now covers all counties)
                 _ph = st.get(_d.get('case', ''))
+                # A number found at the tax-roll MAILING address of a one-parcel Broward filing
+                # (skiptrace via='mailTrace') belongs only on that unconfirmed LP row, which the
+                # diligence gate holds. An auction row or a now-confirmed row on the same case
+                # number waits for its own search at the property instead of inheriting it.
+                _mtrow = bool(_d.get('mailTrace')) and not (_d.get('addr') or '').strip()
+                if _ph and _ph.get('via') == 'mailTrace' and not _mtrow:
+                    _ph = None
                 if _ph and _ph.get('phones'):
                     # ONE filtered sequence, three arrays. `phones` used to filter `if p.get('number')`
                     # while `phdnc`/`phtype` did not — so a single empty-number row in the skiptrace
@@ -2501,6 +2508,11 @@ def make_tracker(leads):
                                     for p in _sph]
                     _d['phsrc'] = [PHSRC_TRACE] * len(_sph)
                     _d['emails'] = (_ph.get('emails') or [])[:3]
+                    # Searched by tax-roll MAILING address on a one-parcel Broward filing (lp_leads
+                    # mailTrace): the property is not confirmed, so no email -- nothing automatic
+                    # (Morning Worker, cadence) first-touches it. Phones stay for a person to call.
+                    if _mtrow:
+                        _d['emails'] = []
             slim.extend(xl)
             _nl = sum(1 for _d in xl if _d.get('orliens'))
             _np = sum(1 for _d in xl if _d.get('phones'))

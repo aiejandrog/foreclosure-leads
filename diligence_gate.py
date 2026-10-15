@@ -136,7 +136,8 @@ except Exception as _e:                                        # pragma: no cove
 # the old carve-out could not offer at any data state.
 _ALWAYS = tuple(getattr(_DF, '_HOLD_ALWAYS', ()) or
                 ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                 'SOLD_ABOVE_VALUE', 'PARCEL_UNANCHORED', 'CASE_COUNTY_MISMATCH')) if _DF else ()
+                 'SOLD_ABOVE_VALUE', 'PARCEL_UNANCHORED', 'CASE_COUNTY_MISMATCH',
+                 'ADDRESS_UNCONFIRMED')) if _DF else ()
 # HOA_CODEFENDANT and RECENT_SALE stay dive-gated holds: a live association case behind our own,
 # and a fresh sale on a distressed parcel, are both affirmative facts about the FILE, not gaps.
 _ON_DIVE = tuple(getattr(_DF, '_HOLD_ON_DIVE', ()) or
@@ -152,10 +153,11 @@ UNCHECKED_CODES = ('GATE_NO_ROW', 'GATE_ERROR', 'GATE_UNAVAILABLE')
 # The conditional one. See the policy essay in the module docstring.
 CONDITIONAL_CODE = 'EQ_UNRELIABLE'
 
-# TWO DATA-INTEGRITY CODES SURVIVE THE ESCAPE HATCH. PARCEL_UNANCHORED says we do not know which
-# house the case is about; CASE_COUNTY_MISMATCH says the row is joined to the wrong county source.
+# THREE DATA-INTEGRITY CODES SURVIVE THE ESCAPE HATCH. PARCEL_UNANCHORED says we do not know which
+# house the case is about; CASE_COUNTY_MISMATCH says the row is joined to the wrong county source;
+# ADDRESS_UNCONFIRMED says the phones were found at a mailing address for an unconfirmed parcel.
 # Neither is a policy judgement that a business override can safely release.
-NEVER_RELEASED = ('PARCEL_UNANCHORED', 'CASE_COUNTY_MISMATCH')
+NEVER_RELEASED = ('PARCEL_UNANCHORED', 'CASE_COUNTY_MISMATCH', 'ADDRESS_UNCONFIRMED')
 
 # Escape hatch, and it is deliberately awkward to reach. DEALFLOW_DILIGENCE_GATE=off releases
 # everything EXCEPT the codes above, and every report still prints, in full, what WOULD have been
