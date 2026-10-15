@@ -38,6 +38,10 @@ def possible_rows(leads=None, cache=None, overrides=None):
     for key, ent in sorted(cache.items()):
         if not isinstance(ent, dict):
             continue
+        # An index-only hit (searched/ok_check false) is never listed: clearing it would turn the
+        # verdict to clear without a full-court party search ever running (review 2026-10-15).
+        if not (ent.get('searched') and ent.get('ok_check')) or ent.get('err'):
+            continue
         cases = BK.apply_override(ent.get('cases') or [], key, overrides)
         if BK.verdict_of(cases, bool(ent.get('searched')), bool(ent.get('ok_check')),
                          str(ent.get('err') or ''))[0] != 'possible':
@@ -48,7 +52,7 @@ def possible_rows(leads=None, cache=None, overrides=None):
             if c.get('open') and c.get('match') == 'plausible' and c.get('no'):
                 q = urllib.parse.urlencode({'q': c['no'], 'type': 'r'})
                 rows.append({'decision': '', 'lead_id': key, 'county': ld.get('county', ''),
-                             'owners': owners, 'case_number': c['no'], 'court': c.get('court', ''),
+                             'owners': owners.lstrip('=+@-\t\r') if owners[:1] in '=+@-\t\r' else owners, 'case_number': c['no'], 'court': c.get('court', ''),
                              'filed': c.get('filed', ''),
                              'search_link': 'https://www.courtlistener.com/?' + q})
     return rows
@@ -106,7 +110,10 @@ def main(argv=None):
     rows = possible_rows()
     if '--apply' in argv:
         i = argv.index('--apply')
-        sheet = argv[i + 1] if i + 1 < len(argv) else _out_path()
+        if i + 1 >= len(argv):
+            print('BK-REVIEW apply: give the sheet path after --apply')
+            return 1
+        sheet = argv[i + 1]
         added, skipped, err = apply_sheet(sheet, rows)
         print('BK-REVIEW apply: %d cleared, %d skipped (not a live plausible hold, or already cleared)%s'
               % (added, skipped, (' - ERROR ' + err) if err else ''))

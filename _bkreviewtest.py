@@ -11,9 +11,11 @@ cache = {
  '2099-000002-CA-01': {'searched': True, 'ok_check': True, 'cases': [
      {'no': '25-22222-ABC', 'court': 'flsb', 'open': True, 'match': 'exact', 'filed': '2025-01-02'}]},
  '2099-000003-CA-01': {'searched': True, 'ok_check': True, 'cases': []}}
+cache['2099-000004-CA-01'] = {'searched': False, 'ok_check': False, 'verdict': 'possible', 'cases': [
+     {'no': '25-33333-ABC', 'court': 'flsb', 'open': True, 'match': 'plausible', 'filed': '2025-01-02'}]}
 leads = {'2099-000001-CA-01': {'county': 'BROWARD', 'owners_raw': [('DOE JOHN', 'last_first')]}}
 rows = R.possible_rows(leads, cache, {})
-rec('only the plausible lead is listed', [r['lead_id'] for r in rows] == ['2099-000001-CA-01'], rows)
+rec('only the plausible lead is listed (index-only hit excluded)', [r['lead_id'] for r in rows] == ['2099-000001-CA-01'], rows)
 sheet = R.write_sheet(rows)
 txt = open(sheet, encoding='utf-8-sig').read()
 rec('sheet carries owner, case, link', 'DOE JOHN' in txt and '25-11111-ABC' in txt and 'courtlistener' in txt)
