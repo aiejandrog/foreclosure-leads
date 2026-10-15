@@ -83,7 +83,7 @@ def main():
         '    !! LP CHAIN exit 4')
     s = R.summary(write(lp_1013), now=now)
     check('rc 7 names the counties whose filings were not pulled, and the phone step',
-          s['last']['why'] == 'no new lis pendens filings pulled for Miami or Palm Beach; no phones traced for new filings',
+          s['last']['why'] == 'no new lis pendens filings pulled for Miami or Palm Beach; phones for new filings not fully traced',
           str(s['last']))
     s = R.summary(write(LOG_1012.replace('    !! LP CHAIN exit 4',
                                          'CHAIN STOPPED at VALUE (lp_values) (exit 1) \u2014 nothing after it ran\n'

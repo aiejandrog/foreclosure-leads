@@ -169,7 +169,7 @@ def _lp_line(run, line):
 def _step(label):
     """'PHONES (LP fast lane)' -> the plain words for that step."""
     if label.startswith('PHONES'):
-        return 'no phones traced for new filings'
+        return 'phones for new filings not fully traced'
     if label.startswith('RESOLVE BROWARD PARCEL'):
         return 'Broward parcel match skipped'
     return label.split(' (')[0].lower() + ' step did not run'
