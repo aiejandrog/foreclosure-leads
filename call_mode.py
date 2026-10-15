@@ -6901,15 +6901,15 @@ function logOutcome(r,o,digits){
      row per attempt, not doubled. Matched on same number + same day so it never eats a genuinely
      separate earlier attempt. */
   var _lastD = n.dials[n.dials.length-1];
+  /* CALLSTATS-TSD-BEGIN  tsd = when the dial/redial tap happened (read BEFORE the pop below), carried
+     onto the outcome row so the daily call-stats export can show dial->log minutes (2026-10-15).
+     Additive: nothing reads it but the export; a row without it is simply untimed. */
+  var _tsd = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
+              && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsu) || 0;
+  /* CALLSTATS-TSD-END */
   if(_lastD && _lastD.oc==='pending' && _lastD.d===today() && _lastD.ph4===String(digits).slice(-4)){
     n.dials.pop();
   }
-  /* tsd = when the dial/redial tap happened, carried onto the outcome row so the daily call-stats
-     export can show dial->log minutes (2026-10-15; the only talk-time signal there is). Additive:
-     nothing reads it but the export, and a row without it is simply untimed. */
-  var _dr = n.dials.length ? n.dials[n.dials.length-1] : null;
-  var _tsd = (_dr && (_dr.oc==='pending' || _dr.oc==='redial') && _dr.d===today()
-              && _dr.ph4===String(digits).slice(-4) && +_dr.tsu) || 0;
   var _row = {d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()};
   if(_tsd) _row.tsd = _tsd;
   n.dials.push(_row);

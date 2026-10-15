@@ -57,6 +57,19 @@ process.stdout.write(callStatsCsv(rows));""" % json.dumps(NOTES)
             out = subprocess.run([node, p], capture_output=True, text=True)
             if out.returncode: fails.append('node failed: ' + out.stderr[:300])
             else: eq('python vs page csv', out.stdout.strip(), csv.strip())
+    # logOutcome's tsd capture, run from the page source: pending -> outcome must be timed
+    if node:
+        m2 = re.search(r'/\* CALLSTATS-TSD-BEGIN.*?/\* CALLSTATS-TSD-END \*/', src, re.S)
+        if not m2: fails.append('TSD block not found')
+        else:
+            js2 = ("function today(){return 'D';}\nfunction run(dials,digits){var n={dials:dials};var _lastD=n.dials[n.dials.length-1];"
+                   + m2.group(0) + "\nif(_lastD&&_lastD.oc==='pending'&&_lastD.d===today()&&_lastD.ph4===String(digits).slice(-4))n.dials.pop();return _tsd;}\n"
+                   "var r=[run([{d:'D',ph4:'1111',oc:'pending',tsu:777}],'5551111'),run([{d:'D',ph4:'1111',oc:'redial',tsu:888}],'5551111'),"
+                   "run([{d:'D',ph4:'2222',oc:'pending',tsu:5}],'5551111'),run([{d:'D',ph4:'1111',oc:'talked',tsu:5}],'5551111'),run([],'5551111')];"
+                   "process.stdout.write(JSON.stringify(r));")
+            p2 = os.path.join(tempfile.mkdtemp(), 't2.js'); open(p2, 'w').write(js2)
+            o2 = subprocess.run([node, p2], capture_output=True, text=True)
+            eq('tsd capture', o2.stdout.strip(), '[777,888,0,0,0]')
     if fails:
         print('FAIL\n' + '\n'.join(fails)); return 1
     print('ok: call_stats.py and the page agree'); return 0
