@@ -12,7 +12,7 @@ carlos_letter_packet's letter is six paragraphs. That is the right length for a 
 mail is the ONLY channel left. It is the wrong length for 90, because nobody handwrites six
 paragraphs ninety times -- and more to the point, nobody BELIEVES a six-paragraph handwritten
 letter. A short note reads as a person; a long one reads as a copied script, which is what it
-would be. Five sentences, ~90 words, about two minutes each including the envelope.
+would be. A short note, about three minutes each including the envelope.
 
 COMPLIANCE IS NOT OPTIONAL AND IS NOT COPIED
 The two MARS/Reg O sentences come from disclaimer.mars_part(), the same source bsg_letter and
@@ -39,6 +39,7 @@ import os
 import re
 
 import disclaimer as D
+import outreach_copy as OC
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -245,15 +246,23 @@ def letter(r):
     am writing, the offer, the two MARS sentences from disclaimer.mars_part(), and the opt-out.
     """
     street = street_case(r['addr'].split(',')[0])
+    # The three federally mandated MARS / Reg O sentences (disclaimer.py: govt, may_agree, may_stop) and
+    # the approved opt-out line, EN then ES, exactly as every email carries them (outreach_copy).
+    # Neither was in this body before 2026-10-15 although this docstring said both were. Imported,
+    # never retyped: a missing key raises here instead of printing a letter without them.
+    mars = D.mars_part('govt', 'may_agree', 'may_stop', company=SENDER['co'], as_html=False)
+    optout = '%s %s' % (OC.OPTOUT_LINE_EN, OC.OPTOUT_LINE_ES)
     return (
         "%s,\n\n"
         "I'm %s with %s, here in South Florida. I'm not with the government or your lender, "
         "I'm not a lawyer, and I'm not asking you for any money.\n\n"
         "I saw the court filing on %s. If selling is something you'd consider, I buy houses in "
         "this situation, or I can help you sell before a sale date gets set.\n\n"
+        "%s\n\n"
+        "%s\n\n"
         "%s\n%s"
         % (r['first'], SENDER['name'], SENDER['co'], street,
-           SENDER['name'], contact_phone())
+           mars, optout, SENDER['name'], contact_phone())
     )
 
 
@@ -314,7 +323,7 @@ def build(rows, budget, days, drops, total_pool):
            '<div class="how">'
            '<h2>&#9993; HOW TO RUN THIS</h2><ol>'
            '<li><b>Copy each letter by hand.</b> Blue or black pen, plain paper or a note card. '
-           'It is five sentences on purpose &mdash; about two minutes each. Do NOT print it: a '
+           'It is short on purpose &mdash; about three minutes each. Do NOT print it: a '
            'printed "handwritten" letter is worse than an honestly printed one.</li>'
            '<li><b>Hand-address the envelope too, and use a real stamp.</b> This is the part that '
            'decides whether it gets opened. A metered or labelled envelope reads as bulk mail and '
@@ -336,8 +345,8 @@ def build(rows, budget, days, drops, total_pool):
            '<li><b>If anyone says stop</b> &mdash; by mail, phone, text or at the door &mdash; that '
            'is permanent and it covers every channel. Tell Alex the same day.</li>'
            '</ul>'
-           '<div class="warn"><b>The last line of every letter stays in.</b> It is not filler; it '
-           'is the line that makes the rest of it legal to send.</div></div>'
+           '<div class="warn"><b>The "not a good time" line and the three sentences above it stay in.</b> '
+           'They are not filler; they are what makes the rest of it legal to send.</div></div>'
            % (len(rows), half)]
 
     for n, r in enumerate(rows, 1):

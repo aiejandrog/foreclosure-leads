@@ -201,6 +201,14 @@ MARS/Reg O), `identity()` ("I am not your lender / the government / a rescue com
 drifted into five versions, each weaker than the last in a different way. Add a caller, not a copy.
 Changing the wording is a legal decision — raise it, don't just edit it.
 
+**2026-10-15, at Alejandro's direction:** every mailed letter from `bsg_mail_campaign.letter()` now
+carries the three federally mandated MARS sentences (`disclaimer.mars_part('govt', 'may_agree',
+'may_stop')`) and the approved opt-out line, EN then ES (`outreach_copy.OPTOUT_LINE_EN/ES`). The
+module's docstring said both were there; the body had neither. Not yet decided by the attorney in
+writing: a no-street letter to the owner's mailing address (`mailAddr`, #235) and mailing Broward /
+Palm Beach rows before a bankruptcy search. Neither is built; draft wording is under project files
+`letters-mailing-address/`.
+
 ## Never commit
 
 Homeowner PII, `leads_*.json`, `worker_notes.json`, `optouts.json`, `mail_sent.json`, and any
