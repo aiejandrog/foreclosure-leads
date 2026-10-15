@@ -89,6 +89,24 @@ def to_csv(rows):
     return '\n'.join(out)
 
 
+def write_daily(notes_path=None, days=14):
+    """Write call-stats/call-stats-<date>.csv and latest.csv (the text form, definitions on top) to
+    DEALFLOW_DIR. Counts only. Returns the path. Called by the 21:00 evening task; fail-soft there."""
+    import paths as P
+    with open(notes_path or os.path.join(HERE, 'worker_notes.json'), encoding='utf-8') as f:
+        wn = json.load(f)
+    rows = rows_from_notes(wn.get('notes') if isinstance(wn, dict) and 'notes' in wn else wn, None, days)
+    body = NOTE + '\n\n' + to_csv(rows) + '\n'
+    day = dt.date.today().isoformat()
+    d = os.path.dirname(P.out('call-stats', 'x'))
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, 'call-stats-%s.csv' % day)
+    for p in (path, os.path.join(d, 'latest.csv')):
+        with open(p, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(body)
+    return path
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--days', type=int, default=14)
@@ -96,7 +114,15 @@ def main(argv=None):
     ap.add_argument('--format', choices=('csv', 'text', 'json'), default='csv')
     ap.add_argument('--notes', default=os.path.join(HERE, 'worker_notes.json'))
     ap.add_argument('--out')
+    ap.add_argument('--write', action='store_true', help='write the dated file + latest.csv to DEALFLOW_DIR/call-stats')
     a = ap.parse_args(argv)
+    if a.write:
+        try:
+            print(write_daily(a.notes, a.days))
+            return 0
+        except Exception as e:
+            print('call_stats: write failed (%s)' % e.__class__.__name__, file=sys.stderr)
+            return 2
     try:
         with open(a.notes, encoding='utf-8') as f:
             wn = json.load(f)
