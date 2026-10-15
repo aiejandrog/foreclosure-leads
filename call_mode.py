@@ -1576,6 +1576,70 @@ def _env_max_days(default=120):
 MAX_DAYS = _env_max_days()
 
 
+def _seat_bucket(case):
+    """Stable 0-11 seat bucket of a case number (FNV-1a, 32-bit). See the SEAT BUCKET note in call_rows."""
+    h = 2166136261
+    for ch in str(case or ''):
+        h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
+    return h % 12
+
+
+def _seat_links(r):
+    """The keys that say two dial rows reach the same household: person key, street line, phone."""
+    keys = []
+    if r.get('pk'):
+        keys.append('k:' + str(r['pk']))
+    a1 = re.sub(r'[^A-Z0-9]', '', str(r.get('a') or '').split(',')[0].upper())
+    if len(a1) > 5 and any(ch.isdigit() for ch in a1):
+        keys.append('a:' + a1 + ':' + str(r.get('z') or ''))
+    for p in r.get('p') or []:
+        d = re.sub(r'\D', '', str(p))[-10:]
+        if len(d) == 10:
+            keys.append('p:' + d)
+    return keys
+
+
+def _seat_by_household(rows):
+    """ONE HOUSEHOLD, ONE SEAT (2026-10-15). The seat bucket is a hash of the CASE number, so a person
+    with two cases (an HOA case and a bank case, an auction row and an LP row, two properties), two
+    owners of one house under different person keys, or two rows carrying the same phone could land
+    half on each seat: Alejandro and Carlos then both call the same human the same day, each seeing a
+    fresh lead. Rows linked by person key, street line + ZIP, or a phone number form one group, and the
+    whole group takes the bucket of its lowest case number. A row linked to nothing keeps its own
+    bucket, so singletons do not move between callers. Seat assignment only: nothing is hidden, and
+    the person-wide suppression list (pcs) is untouched. Returns the number of rows that moved."""
+    parent = {}
+
+    def find(x):
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    for i, r in enumerate(rows):
+        if not r.get('c'):
+            continue
+        node = 'r:%d' % i
+        for k in _seat_links(r):
+            a, b = find(node), find(k)
+            if a != b:
+                parent[a] = b
+    groups = {}
+    for i, r in enumerate(rows):
+        if r.get('c'):
+            groups.setdefault(find('r:%d' % i), []).append(r)
+    moved = 0
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        sb = _seat_bucket(min(str(r['c']) for r in g))
+        for r in g:
+            if r.get('sb') != sb:
+                moved += 1
+            r['sb'] = sb
+    return moved
+
+
 def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
@@ -1941,6 +2005,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
                 _h = ((_h ^ ord(_ch)) * 16777619) & 0xFFFFFFFF
             row['sb'] = _h % 12
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
+    _seat_by_household(out)
     # HIGHEST-CONVERTING FIRST (2026-08-19, his words: "I don't want clients whose auction date is
     # today or two-three days out. I need the highest converting leads.") The old key was
     # soonest-sale-first, which opened every session on the exact leads nothing can save — a sale
