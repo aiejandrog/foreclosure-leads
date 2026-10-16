@@ -181,7 +181,7 @@ def reset_ledgers():
 
 
 def env(**kw):
-    e = {'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123',
+    e = {'DEALFLOW_PACER_AUTO': '1', 'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123',
          'PACER_QUARTER_LEDGER': str(TMP / 'pacer_q.json')}
     e.update({k: str(v) for k, v in kw.items() if v is not None})
     for k in [k for k, v in kw.items() if v is None]:
@@ -415,7 +415,7 @@ d = work({'broward_leads.json': wr_leads})
     'CACE-99-000830': dict(base, verdict='clear', why='no open bankruptcy'),
     'CACE-99-000831': dict(base, verdict='clear', why='no open bankruptcy')}), encoding='utf-8')
 h = FakeHTTP()
-rc, out = run(d, h, e={}, raw=True)
+rc, out = run(d, h, e={'DEALFLOW_PACER_AUTO': '1'}, raw=True)
 wc = json.loads((d / 'pacer_stay_cache.json').read_text())
 check('a clear for an owner that now reads as not searchable (ends in "&") is withdrawn -> unverifiable, '
       'with no credentials and no HTTP', h.calls == [] and wc['CACE-99-000830']['verdict'] == 'unverifiable'
@@ -444,7 +444,7 @@ check('... and still adds tonight\'s new matches alongside them',
 rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
 check('... and with the lock taken the same run does rewrite it (the check above is not vacuous)',
       json.loads((d / PS.HITS_NAME).read_text()) == {}, out)
-rc, out = run(d, FakeHTTP(), e={}, args=['--report'], raw=True)
+rc, out = run(d, FakeHTTP(), e={'DEALFLOW_PACER_AUTO': '1'}, args=['--report'], raw=True)
 check('--report never rewrites the cache', json.loads((d / 'pacer_stay_cache.json').read_text()) == wc)
 
 # ------------------------------------------------------------------------------------ 5 cost
@@ -1701,7 +1701,7 @@ def bridge19(creds=True):
     for k_ in ('PACER_USERNAME', 'PACER_PASSWORD', 'PACER_ENV', 'PACER_QUARTER_CAP', 'PACER_PRESEND_DAILY_MAX'):
         e.pop(k_, None)
     e.update({'PACER_QUARTER_LEDGER': str(QL19), 'DEALFLOW_PAID_LEDGER': str(srv19 / 'paid19.json'),
-              'PACER_NEWFILER_EST_PAGES_PER_DAY': '0.5'})
+              'PACER_NEWFILER_EST_PAGES_PER_DAY': '0.5', 'DEALFLOW_PACER_AUTO': '1'})
     if creds:
         e.update({'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123'})
     port_ = free_port()
@@ -1783,6 +1783,17 @@ try:
               st == 200 and len(finds19()) == 2, (st, j))
 finally:
     stop19(proc19)
+
+# 20. AUTOMATIC PACER IS REMOVED (2026-10-16): default off, by-hand paths still run, nothing spends.
+_off = {k: v for k, v in env().items() if k != 'DEALFLOW_PACER_AUTO'}
+check('auto: switch is off by default', PS.auto_enabled(_off) is False and PS.auto_enabled(env()) is True)
+_h20 = FakeHTTP()
+_r20 = PS.presend_check('CACE-99-001801', here=str(g17), env=_off, session=_h20, now=NOW)
+check('auto: send-bridge pre-send does not search or spend', _r20.get('status') == 'off' and _r20.get('cost') == 0.0, _r20)
+_rc = PS.main([], here=str(g17), env=_off, now=NOW)
+check('auto: a no-argument (nightly) run does nothing and exits 0', _rc == 0, _rc)
+_rc = PS.main(['--bulk', 'all'], here=str(g17), env=_off, now=NOW)
+check('auto: --bulk without the switch does nothing', _rc == 0, _rc)
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all PACER stay checks passed ====')
