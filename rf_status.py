@@ -121,6 +121,10 @@ def merge(old, got, waiting, sale_dates_read, today):
     for c, e in got.items():
         if c in waiting.get(e['sale'], ()):
             continue
+        prev = out.get(c)
+        if (prev and prev.get('st') in HOLD_ST and prev.get('sale') == e['sale']
+                and e['st'] not in HOLD_ST):
+            continue                      # an unrecognised new status never lifts a hold
         out[c] = e
     return out
 
@@ -198,7 +202,8 @@ def read_all(dates, today):
                 SUBS[co], d.strftime('%m/%d/%Y'))
             try:
                 page.goto(url, timeout=45000)
-                page.wait_for_selector('#Area_W, #Area_C', timeout=25000, state='attached')
+                page.wait_for_selector('#Area_W .AUCTION_DETAILS tr, #Area_C .AUCTION_DETAILS tr',
+                                       timeout=25000, state='attached')
                 page.wait_for_timeout(1500)
                 raw = json.loads(page.evaluate(READ_JS))
             except Exception as e:

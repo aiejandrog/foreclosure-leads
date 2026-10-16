@@ -43,6 +43,8 @@ check('merge: reinstated entry removed, unread date kept, long-passed pruned',
 new = R.merge(old, {}, {}, set(), today)
 check('merge: nothing read removes nothing but the passed sale', set(new) == {'2025-000001-CA-01', '2025-000009-CA-01'}, new)
 
+new = R.merge({'X': {'st': 'bk', 'sale': '2026-10-20'}}, {'X': {'st': 'other', 'sale': '2026-10-20'}}, {}, {'2026-10-20'}, today)
+check('merge: an unrecognised status does not lift a hold', new['X']['st'] == 'bk', new)
 d = tempfile.mkdtemp()
 p = os.path.join(d, 'rf.json')
 json.dump({'2025-000001-CA-01': {'st': 'redeemed', 'sale': '2026-10-20'},
