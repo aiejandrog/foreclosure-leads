@@ -46,6 +46,19 @@ _PROBE = """(c) => {
           okWithText:  lines.filter(l=>!l.dnc && l.text).length};
 }"""
 
+
+# The board lazy-renders ~124 rows of ~3,800, so a lead found in DATA is usually NOT in the DOM and
+# the bare probe returned {err: 'no logbtn'} -- which made two "nothing == nothing" checks pass
+# vacuously and four others fail (2026-10-16). Filter to the case the way a human looks, probe,
+# then clear the filter so the later checks see the whole board.
+_SEARCH = """(c) => { const q = document.querySelector('#q,#search,input[type=search]');
+  if(!q) return false; q.value = c; q.dispatchEvent(new Event('input', {bubbles:true})); return true; }"""
+def probe_case(pg, c):
+    pg.evaluate(_SEARCH, c); pg.wait_for_timeout(700)
+    out = pg.evaluate(_PROBE, c)
+    pg.evaluate(_SEARCH, ''); pg.wait_for_timeout(300)
+    return out
+
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True); ctx = b.new_context(viewport={'width':390,'height':844})  # mobile width
     pg = ctx.new_page(); errs=[]
@@ -64,11 +77,11 @@ with sync_playwright() as p:
     }""")
     rec('Found a live all-DNC lead to test against', bool(allDnc), str(allDnc))
     if allDnc:
-        c = pg.evaluate(_PROBE, allDnc)
+        c = probe_case(pg, allDnc)
         rec('All-DNC lead renders a contact line per number', not c.get('err') and c['n'] >= 2, str(c)[:120])
-        rec('Every line on it is tagged DNC', c.get('dnc') == c.get('n'), str(c)[:120])
-        rec('NO DNC line offers Text or WhatsApp', c.get('dncWithText') == 0, str(c)[:160])
-        rec('DNC numbers stay manually dialable', c.get('dncWithCall') == c.get('dnc'), str(c)[:120])
+        rec('Every line on it is tagged DNC', c.get('n') is not None and c.get('dnc') == c.get('n'), str(c)[:120])
+        rec('NO DNC line offers Text or WhatsApp', c.get('n') is not None and c.get('dncWithText') == 0, str(c)[:160])
+        rec('DNC numbers stay manually dialable', c.get('n') is not None and c.get('dncWithCall') == c.get('dnc'), str(c)[:120])
 
     # a MIXED lead — the gate must be per-number, not per-lead
     mixed = pg.evaluate("""() => {
@@ -78,8 +91,8 @@ with sync_playwright() as p:
       return r ? r.case : null;
     }""")
     if mixed:
-        m = pg.evaluate(_PROBE, mixed)
-        rec('Mixed lead: DNC lines still refuse Text/WA', m.get('dncWithText') == 0, str(m)[:160])
+        m = probe_case(pg, mixed)
+        rec('Mixed lead: DNC lines still refuse Text/WA', m.get('n') is not None and m.get('dncWithText') == 0, str(m)[:160])
         rec('Mixed lead: the clean mobile DOES get Text', m.get('okWithText', 0) >= 1, str(m)[:160])
     else:
         rec('Mixed good+DNC all-mobile lead exists to test', False, 'none in current dataset — skipped')

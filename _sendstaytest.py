@@ -37,6 +37,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 os.environ.pop('DEALFLOW_CLERK_BK', None)
+# these suites model the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
 import stay_gate as SG  # noqa: E402
 
 ok, bad = [], []
@@ -284,6 +286,20 @@ def parity():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def advisor_parity():
+    """The one address a meta.test send may reach is the same in all three places."""
+    print('-- meta.test recipients')
+    import re as _re
+    def grab(path, pat):
+        m = _re.search(pat, (HERE / path).read_text(encoding='utf-8'))
+        return set(_re.findall(r"'([^']+@[^']+)'", m.group(1))) if m else None
+    ss = grab('send_server.py', r"ADVISOR_EMAILS = frozenset\(\{([^}]*)\}\)")
+    cm = grab('call_mode.py', r"ADVISOR_EMAILS = \{([^}]*)\}")
+    tt = grab('tracker_template.html', r"var _JESSE = ('[^']+')")
+    rec('send_server.ADVISOR_EMAILS == call_mode.ADVISOR_EMAILS == board _JESSE',
+        bool(ss) and ss == cm == tt, {'send_server': ss, 'call_mode': cm, 'board': tt})
+
+
 # ------------------------------------------------------------------------------ live server
 def free_port():
     s = socket.socket()
@@ -382,14 +398,15 @@ def server():
 
         n = [0]
 
-        def send(case, test=False, drop_c=False):
+        def send(case, test=False, drop_c=False, to=None, bcc=''):
             n[0] += 1
             meta = {'owner': 'Jane', 'addr': '1 Main St', 'wl': 'active'}
             if not drop_c:
                 meta['c'] = case
             if test:
                 meta['test'] = True
-            return call(port, '/send', {'to': 'owner%d@example.com' % n[0], 'subj': 'About 1 Main St',
+            return call(port, '/send', {'to': to or 'owner%d@example.com' % n[0], 'bcc': bcc,
+                                        'subj': 'About 1 Main St',
                                         'body': 'Hello Jane, a short note about 1 Main St.', 'meta': meta})
 
         st, h = call(port, '/health')
@@ -433,8 +450,24 @@ def server():
         rec('stem: bare stem vs -CA-01 cache key -> refused', st == 451 and j.get('blocked') == 'stay_active',
             {'st': st, 'j': j})
 
-        st, j = send('2099-000001-CA-01', test=True)
+        st, j = send('2099-000001-CA-01', test=True, to='celusa13@gmail.com')
         rec('meta.test (advisor/operator 1:1, never an owner) is not stay-gated', st == 200, {'st': st, 'j': j})
+        st, j = send('2099-000001-CA-01', test=True, to='tester@example.com')
+        rec('meta.test to the sending login itself is not stay-gated', st == 200, {'st': st, 'j': j})
+        # THE BYPASS (2026-10-12): meta.test came from the request body and nothing checked who it
+        # went to, so the flag alone carried an owner past the stay gate.
+        st, j = send('2099-000001-CA-01', test=True)
+        rec('meta.test on a send to an owner of a STAYED case is refused (451 test_not_operator)',
+            st == 451 and j.get('blocked') == 'test_not_operator', {'st': st, 'j': j})
+        st, j = send('2099-000001-CA-01', test=True, to='celusa13@gmail.com', bcc='owner-x@example.com')
+        # (the advisor was mailed just above, so the bridge's follow-up trim would drop this BCC;
+        # the test-flag check reads the BCC as offered, so it refuses regardless)
+        rec('...and an owner in BCC behind the advisor is refused the same way',
+            st == 451 and j.get('blocked') == 'test_not_operator', {'st': st, 'j': j})
+        st, j = send('2099-000001-CA-01', test=True, to='CelUSA13@Gmail.com ')
+        rec('advisor match ignores case and spaces', st == 200, {'st': st, 'j': j})
+        st, j = call(port, '/send', {'to': 'owner-y@example.com', 'subj': 'S', 'body': 'B', 'meta': ['test']})
+        rec('a meta that is not an object is refused 400, not a crash', st == 400, {'st': st, 'j': j})
 
         # stale board, fresh cache: the case turns stayed AFTER the bridge started
         c2 = dict(CACHE)
@@ -550,6 +583,7 @@ def no_warmup_hold():
 if __name__ == '__main__':
     unit()
     parity()
+    advisor_parity()
     server()
     no_warmup_hold()
     total = len(ok) + len(bad)

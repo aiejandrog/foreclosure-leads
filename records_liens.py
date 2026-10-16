@@ -410,6 +410,13 @@ def _ledger_save(charged=None, final=False):
     print('  ! %s' % _SPEND['stopped'])
 
 
+# The search token the last paid solve bought (2026-10-15). Camoufox's token was always written to
+# records_qs.json, which puts the next run for that owner on the free cached path; a token 2Captcha
+# paid for was thrown away, so every nightly retry of a cached conf 'none' chain (up to --retries 80)
+# paid for the same search again and got the same answer. The owner loop caches it like Camoufox's.
+_PAID_QS = {'last': None}
+
+
 def fetch_via_turnstile(owner_lf, tries=3):
     """THE UNLOCK — pull an owner's recorded docs by solving Cloudflare Turnstile (2Captcha), no
     browser. Solves the token, POSTs the same standardsearch the app uses with it in the
@@ -454,6 +461,7 @@ def fetch_via_turnstile(owner_lf, tries=3):
             continue
         qs = j.get('qs') if isinstance(j, dict) else None
         if qs:
+            _PAID_QS['last'] = qs
             return records_by_qs(qs)
         # isValidSearch:false with a fresh token = a bad solve; loop and re-solve
         time.sleep(1)
@@ -761,6 +769,8 @@ def bank_foreclosure(models, fol, subj_subdiv, today=None):
 
 
 _UNPRICED_SKIP_RE = re.compile(r'MODIF|ASSUMP|SUBORD|SPREAD|AMEND|ASSIGN|RELEASE|SATIS|CORRECT', re.I)
+# a priced row of these changes or re-records a loan; analyze() attaches it to that loan, never a 2nd one
+_AMENDS_LOAN_RE = re.compile(r'MODIF|ASSUMP|SUBORD|SPREAD|AMEND|ASSIGN|CORRECT|CONSOLID|EXTEN', re.I)
 
 
 def clear_undocumented(res, case=''):
@@ -939,8 +949,55 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     def sortkey(r):
         m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (r.get('reC_DATE', '') or '').strip())
         return (m.group(3), m.group(1).zfill(2), m.group(2).zfill(2)) if m else ('0000', '00', '00')
+    # when each book/page was released (latest release naming it), for attaching amendments below
+    sat_dt = {}
+    for r in models:
+        if 'SATISFACTION' in (r.get('doC_TYPE', '') or '').upper():
+            try:
+                k = (int(str(r.get('oriG_REC_BOOK', '')).strip()), int(str(r.get('oriG_REC_PAGE', '')).strip()))
+            except (TypeError, ValueError):
+                continue
+            sat_dt[k] = max(sat_dt.get(k, ''), '-'.join(sortkey(r)))
     liens, opens = [], []
     seen_instruments = set()
+    mtg_namesake = 0
+    amends = []                                         # modifications and the like, attached below
+    _ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
+    # The parcel's own deeds name the household too ('SMITH JOHN & HELEN'), and an LP lead carries no
+    # defendants: every given name recorded beside the owner's surname on a deed to this folio is an owner.
+    _o0 = _owner_words(owner)
+    if _o0 and _o0[0] == 'person':
+        _sn = re.findall(r'[A-Z0-9]+', _o0[1].replace("'", ''))
+        for r in models:
+            if 'DEED' not in (r.get('doC_TYPE', '') or '').upper() or norm_folio(r.get('foliO_NUMBER', '')) != fol:
+                continue
+            # the GRANTEE only: a same-surname seller deeding to the owner is not the household. And
+            # never a suffix or a role word: 'GARCIA JOSE JR' must not make every GARCIA JR an owner,
+            # whose release in the subdivision would then free this owner's lien.
+            toks = re.findall(r'[A-Z0-9]+', (r.get('seconD_PARTY') or '').upper().replace("'", ''))
+            if _sn and all(t in toks for t in _sn):
+                for g in toks:
+                    if len(g) > 1 and g not in _sn and g not in _NOT_GIVEN and not g.isdigit():
+                        _ow.append(('person', _o0[1], g))
+    # REPORT-ONLY evidence for lien_coverage's deed anchoring: who signed each mortgage (does it name
+    # the searched owner?) and the nearest deed recorded before it in the same book AMONG THE RECORDS
+    # THIS SURNAME SEARCH RETURNED. Another family's deed in between is not in the search, so deed_bp
+    # alone proves nothing; lien_coverage also needs by_owner, <=10 pages and <=3 days.
+    _mw = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w]
+
+    def _bpn(b, p):
+        try:
+            return int(str(b).strip()), int(str(p).strip())
+        except (TypeError, ValueError):
+            return None
+    _deeds = sorted(x for x in (_bpn(r.get('reC_BOOK'), r.get('reC_PAGE')) for r in models
+                                if re.search(r'\bDEED\b|CERTIFICATE OF TITLE', (r.get('doC_TYPE', '') or '').upper()))
+                    if x)
+
+    def _deed_before(b, p):
+        m = _bpn(b, p)
+        prior = [d for d in _deeds if m and d[0] == m[0] and d[1] < m[1]]
+        return '%d/%d' % max(prior) if prior else ''
     for r in sorted(models, key=sortkey):
         if not (r.get('doC_TYPE', '') or '').upper().startswith('MORTGAGE'):
             continue
@@ -948,6 +1005,18 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         sd = (r.get('subdiV_NAME', '') or '').strip().upper()
         if not ((rf and rf == fol) or (subj_subdiv and sd == subj_subdiv)):
             continue                                   # subject parcel only (folio when present, else subdivision)
+        # A NAMESAKE'S LOAN (trap fixture 2026-10-12). The search is by surname, so a subdivision holds
+        # other families of that name. A loan placed only by subdivision whose borrower is the owner's
+        # surname with ANOTHER given name, and nothing that could be the owner indexed short, is theirs.
+        # Same test the person-wide liens below use. A loan on the folio, an unknown owner, or a
+        # borrower that might be the owner ('TESTA M', 'TESTA') still counts: too much debt, never too little.
+        # The index also abbreviates given names ('SMITH WM' for WILLIAM), so a skip is counted in
+        # mtg_namesake_skipped and equity_state never lets that chain read as a FACT.
+        if not (rf and rf == fol) and _ow is not None:
+            _b = r.get('firsT_PARTY') or ''
+            if _other_person(_b, _ow) and not _names_owner(_b, _ow):
+                mtg_namesake += 1
+                continue
         it, cons = num(r.get('intangible')), num(r.get('consideratioN_1'))
         amt = round(it / 0.002) if it > 0 else round(cons)
         nopx = False
@@ -976,11 +1045,27 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         is_open = bp not in satisfied
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
                'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
-               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY'))}
+               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY')), '_bpk': bp,
+               # what tied this mortgage to the parcel, and its document type: written down so the
+               # coverage report (lien_coverage.py) can tell a folio-indexed loan from one placed
+               # only by subdivision + surname, and a modification from a new loan. Report-only.
+               'anchor': 'folio' if (rf and rf == fol) else 'subdivision',
+               'doc': (r.get('doC_TYPE', '') or '')[:40],
+               'by_owner': _names_owner(r.get('firsT_PARTY') or '', _mw),
+               'deed_bp': _deed_before(r.get('reC_BOOK'), r.get('reC_PAGE'))}
         if not is_open:
             row['sat_by'] = 'book/page'       # a release that names this loan (the others below infer it)
         if nopx:
             row['_nopx'] = True
+        if not nopx and _AMENDS_LOAN_RE.search(r.get('doC_TYPE', '') or ''):
+            # a priced MODIFICATION (or spreader, extension, consolidation...) changes a loan, it is
+            # not a second one: attached to the loan it amends below, and kept on its own only when
+            # no such loan was found (then it is the only evidence of that loan: too much debt, never
+            # too little).
+            row['_ob'] = (str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip())
+            row['_by_tax'] = it > 0                     # intangible tax = the NEW money only
+            amends.append(row)
+            continue
         liens.append(row)
         if is_open:
             opens.append(row)
@@ -993,7 +1078,19 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     def _months(a, b):
         try: return (int(b[:4]) - int(a[:4])) * 12 + (int(b[5:7]) - int(a[5:7]))
         except Exception: return 99
-    sats2 = [r for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())]
+    # A release that is provably about ANOTHER property or ANOTHER instrument frees nothing here by
+    # inference (trap fixture 2026-10-12: a lender's partial release of the owner's other parcel marked
+    # this loan SATISFIED, so the debt read low): a PARTIAL release not indexed to this folio, any
+    # release indexed to a different folio, and one naming a book/page that is not the loan's.
+    def _rel_elsewhere(s):
+        sf = norm_folio(s.get('foliO_NUMBER', ''))
+        return bool(sf and sf != fol) or ('PARTIAL' in (s.get('doC_TYPE', '') or '').upper() and sf != fol)
+
+    def _rel_names_other(s, o):
+        ob = _bpn(s.get('oriG_REC_BOOK'), s.get('oriG_REC_PAGE'))
+        return bool(ob) and ob != _bpn(*o['_bpk'])
+    sats2 = [r for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())
+             and not _rel_elsewhere(r)]
     for r in sats2: r['_dt'] = '-'.join(sortkey(r))
     assigns = [r for r in models if 'ASSIGNMENT' in (r.get('doC_TYPE', '') or '').upper()]
     for r in assigns: r['_dt'] = '-'.join(sortkey(r))
@@ -1027,7 +1124,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         for s in sats2:
             if not s['_dt'] or s['_dt'] < o['_dt']: continue
             si = _inst(s.get('seconD_PARTY'))
-            if si and si in chain:
+            if si and si in chain and not _rel_names_other(s, o):
                 o['st'] = 'SATISFIED'; o['sat_by'] = 'lender chain'; break
     opens = [o for o in liens if o['st'] == 'OPEN']
     # rule 2: a LENDER-party release kills the NEWEST still-open mortgage recorded 3-24 months
@@ -1038,7 +1135,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         if not (s['_dt'] and _LENDER_RE.search(s.get('seconD_PARTY') or '')): continue
         # an unpriced row never absorbs a release here: it would free the priced loan the release
         # was really for, and rule 2 is a guess about WHICH loan, not proof
-        prior = [o for o in opens if not o.get('_nopx') and o['_dt'] < s['_dt']
+        prior = [o for o in opens if not o.get('_nopx') and o['_dt'] < s['_dt'] and not _rel_names_other(s, o)
                  and 3 <= _months(o['_dt'], s['_dt'][:10]) <= 24]
         if prior:
             newest = max(prior, key=lambda o: o['_dt'])
@@ -1054,9 +1151,58 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             if (_months(o['_dt'], m2['_dt']) <= 24 and m2['amt'] >= o['amt'] * 0.9
                     and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain3):
                 o['st'] = 'SATISFIED'; o['sat_by'] = 'refinance'; break
+    # Attach each amendment to the loan it amends, AFTER the release rules: an inferred release must
+    # never take an amendment's debt down with the loan it was folded into (review 2026-10-12).
+    #   * it names a book/page: that loan when the search returned it, else it stays its own row (it is
+    #     the only evidence of the loan it names; folding it into another loan would drop one debt);
+    #   * it names none: the newest OPEN priced loan before it from the same lender or its assignees.
+    # The loan must be OPEN, or paid by a release that names its book/page dated ON OR AFTER the
+    # amendment (one dated before it is a mis-keyed release or a re-recorded loan: the amendment stays).
+    # The figure: Florida taxes a modification only on its NEW money (s. 199.145), so an amount read
+    # from the intangible tax is ADDED to the loan; a stated consideration is the modified balance, so
+    # the loan takes the larger of the two. An unpriced loan stays unpriced (its size is unknown, and
+    # the amendment's figure is not its balance). One with nowhere to go stays its own row.
+    def _chain_until(lend, until):
+        out, frontier = {lend}, [lend]
+        while frontier:
+            cur = frontier.pop()
+            for a in assigns:
+                if (a['_dt'] and a['_dt'] <= until and _inst(a.get('firsT_PARTY')) == cur):
+                    nxt = _inst(a.get('seconD_PARTY'))
+                    if nxt and nxt not in out:
+                        out.add(nxt); frontier.append(nxt)
+        return out
+    for m in amends:
+        tgt = None
+        if all(m['_ob']):
+            tgt = next((o for o in liens if _bpn(*o['_bpk']) and _bpn(*o['_bpk']) == _bpn(*m['_ob'])
+                        and (o['st'] == 'OPEN' or (o.get('sat_by') == 'book/page' and not m['_dt'].startswith('0000')
+                                                   and (sat_dt.get(_bpn(*o['_bpk'])) or '') >= m['_dt']))), None)
+        elif m['_lend']:
+            # only assignments recorded by the amendment's date: a holder the loan passes to LATER
+            # cannot have modified it earlier (Codex review: chain_of ignores dates)
+            cands = [o for o in liens if o['st'] == 'OPEN' and not o.get('_nopx') and o['_dt'] <= m['_dt']
+                     and m['_lend'] in _chain_until(o['_lend'], m['_dt'])]
+            tgt = max(cands, key=lambda o: o['_dt']) if cands else None
+        if tgt is None:
+            liens.append(m)                             # OPEN unless a release names its own book/page
+            continue
+        tgt.setdefault('amended_by', []).append(m['bp'])
+        if not tgt.get('_nopx'):
+            tgt['amt'] = tgt['amt'] + m['amt'] if m.get('_by_tax') else max(m['amt'], tgt['amt'])
+    liens.sort(key=lambda o: o['_dt'])
+    for o in liens:
+        o.pop('_ob', None)
+        o.pop('_by_tax', None)
     # unpriced loans leave the list here: counted, never summed, never shown as a $0 lien
     unpriced_open = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'OPEN')
+    # an unpriced loan released only by inference leaves the list too; counted so the coverage
+    # report (lien_coverage.py) can still see that release was a guess. Report-only.
+    unpriced_inferred = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'SATISFIED'
+                            and o.get('sat_by') != 'book/page')
     liens = [o for o in liens if not o.get('_nopx')]
+    for o in liens:
+        o.pop('_bpk', None)
     opens = [o for o in liens if o['st'] == 'OPEN']
     _sv = _surv_of(opens, ftype, judgment)
     junior, first_amt, surv, surv_first = _sv['junior'], _sv['first_est'], _sv['surv'], _sv['surv_first']
@@ -1106,23 +1252,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     _pnorm = lambda x: _inst(re.sub(r'\bASS(?:N|OC)\b', 'ASSOCIATION',
                                     re.sub(r'\s(?:AS\s+)?(?:TRUSTEE|TR)\b.*$', '', re.sub(r'[.,]', ' ', (x or '').upper()))))
     _pl = _pnorm(plaintiff)
-    _ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
-    # The parcel's own deeds name the household too ('SMITH JOHN & HELEN'), and an LP lead carries no
-    # defendants: every given name recorded beside the owner's surname on a deed to this folio is an owner.
-    _o0 = _owner_words(owner)
-    if _o0 and _o0[0] == 'person':
-        _sn = re.findall(r'[A-Z0-9]+', _o0[1].replace("'", ''))
-        for r in models:
-            if 'DEED' not in (r.get('doC_TYPE', '') or '').upper() or norm_folio(r.get('foliO_NUMBER', '')) != fol:
-                continue
-            # the GRANTEE only: a same-surname seller deeding to the owner is not the household. And
-            # never a suffix or a role word: 'GARCIA JOSE JR' must not make every GARCIA JR an owner,
-            # whose release in the subdivision would then free this owner's lien.
-            toks = re.findall(r'[A-Z0-9]+', (r.get('seconD_PARTY') or '').upper().replace("'", ''))
-            if _sn and all(t in toks for t in _sn):
-                for g in toks:
-                    if len(g) > 1 and g not in _sn and g not in _NOT_GIVEN and not g.isdigit():
-                        _ow.append(('person', _o0[1], g))
+    # _ow (owner, co-owners, and the household given names on this parcel's deeds) is built above,
+    # before the mortgages, which need it to tell a namesake's loan from the owner's.
     _legacy_sats = {_legacy_norm(r.get('seconD_PARTY')) for r in models
                     if re.search(r'SATISFACTION|RELEASE', (r.get('doC_TYPE', '') or '').upper())}
     _cy = re.match(r'\s*(\d{4})-', case or '')
@@ -1357,7 +1488,8 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     # the mortgages whose amount the index does not publish.
     return {'second_fc': second_fc, 'second_fc_unsure': second_fc_unsure, 'nrec': len(models),
             'anchor': 'folio+subdivision' if subj_subdiv else '',
-            'mtg_open_unpriced': unpriced_open,
+            'mtg_open_unpriced': unpriced_open, 'mtg_unpriced_release_inferred': unpriced_inferred,
+            'mtg_namesake_skipped': mtg_namesake,
             'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open,
@@ -1642,6 +1774,12 @@ def _run(a, ap):
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
+                if not models and not a.cached_only:
+                    # An expired token comes back EMPTY rather than failing. Read as "no cached
+                    # answer", so the search runs afresh (Camoufox first, then paid) instead of
+                    # freezing a conf 'none' chain on an empty list. Review 2026-10-15: paid tokens
+                    # are cached now too, so this matters for every owner, not just Camoufox ones.
+                    models = None
                 if a.repull and not _parcel_in(models, folio):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
@@ -1688,9 +1826,18 @@ def _run(a, ap):
                     # Turnstile failure. `--persist` on the batch is a no-op when the fallback is dead.
                     if models is None:
                         paid += 1
+                        _PAID_QS['last'] = None
                         models = fetch_via_turnstile(sp)
                         _src = 'paid'
                         _def_blocked = models is None and not _SPEND['stopped']
+                        if models is not None and _PAID_QS['last']:
+                            # surname-only search: wider than the owner's name, and analyze()
+                            # isolates by folio, so it is a safe cached read for this owner
+                            qs_cache[oc] = _PAID_QS['last']
+                            try:
+                                json.dump(qs_cache, open(QS_CACHE, 'w', encoding='utf-8'), indent=1)
+                            except Exception:
+                                pass
                     if models is None:
                         _src = 'mint'
                         src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()

@@ -753,6 +753,10 @@ def load_tracked_cases(repo):
         elif isinstance(data, dict):
             for row in data.values():
                 _consider_lead(cases, row)
+    try:
+        from stub_resolve import RULE as _STUB_RULE
+    except Exception:
+        _STUB_RULE = 2
     stub_path = os.path.join(repo, 'stub_folios.json')
     try:
         stub = json.load(open(stub_path, encoding='utf-8'))
@@ -762,6 +766,9 @@ def load_tracked_cases(repo):
         for case, ent in stub.items():
             key = norm_case(case)
             if key not in cases or not isinstance(ent, dict) or ent.get('miss'):
+                continue
+            # a legacy 'owner-unique' pick is not trusted any more (stub_resolve._trusted)
+            if ent.get('how') == 'owner-unique' and int(ent.get('rule') or 0) < _STUB_RULE:
                 continue
             folio = norm_folio(ent.get('folio'))
             if folio:

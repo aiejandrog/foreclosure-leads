@@ -430,6 +430,14 @@ def _optout_set():
             emails.add(s.lstrip('@'))
         else:
             cases.add(s)
+            # An older phone key saved with punctuation or a leading 1 ('#(305) 555-0100') also
+            # stands as '#' + 10 digits, the form /text looks up. Hashed keys (letters) are skipped.
+            if s.startswith('#') and not re.search(r'[^0-9()+.\-\s]', s[1:]):
+                _d = re.sub(r'\D', '', s)
+                if len(_d) == 11 and _d[0] == '1':
+                    _d = _d[1:]
+                if _d:
+                    cases.add('#' + _d)
         # 2026-09-05 (desktop finding): a case-keyed opt-out can carry the person's email only in
         # its VALUE (Hendy: live address in the note text, never a key). Keys-only harvesting left
         # that person protected by case match alone — a second property or a re-scraped case id
@@ -450,6 +458,25 @@ def _optout_set():
     except Exception:
         pass
     return cases, emails
+
+
+# OPERATOR RECIPIENTS FOR meta.test (2026-10-12). meta.test comes from the request body, and it
+# skips the stay gate, the case and same-owner opt-out checks, the deliverability gate, the bounce
+# breaker and the 24h dedupe. Until today nothing checked who a test send went to, so any client
+# that set the flag could mail an owner past every one of those. The flag now counts only when
+# every recipient is one of ours: the advisor (Brief Jesse, tracker_template.html _JESSE; the same
+# set as call_mode.ADVISOR_EMAILS) or the sending login itself (self smoke-tests). A test flag on a
+# send to anyone else is refused outright, never downgraded and never sent.
+ADVISOR_EMAILS = frozenset({'celusa13@gmail.com'})
+
+
+def _operator_recipients(addrs, login=None):
+    """True when every address in addrs is the advisor or the sending login. Empty is False."""
+    own = set(ADVISOR_EMAILS)
+    if login:
+        own.add(str(login).strip().lower())
+    rc = [str(a).strip().lower() for a in addrs if str(a).strip()]
+    return bool(rc) and all(a in own for a in rc)
 
 
 OPTOUT_MAX_AGE_DAYS = float(os.environ.get('DEALFLOW_OPTOUT_MAX_AGE_DAYS', '2'))
@@ -1602,6 +1629,7 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
     import mail_guard as _MG
     unsub = _MG.unsubscribe_header(user, _unsub_url())
     _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
+    _MG.require_gated(to_addr, bcc, login=user)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
@@ -2169,6 +2197,8 @@ class Handler(BaseHTTPRequestHandler):
         subj = str(payload.get('subj') or '').strip()
         body = str(payload.get('body') or '')
         meta = payload.get('meta') or {}
+        if not isinstance(meta, dict):
+            return self._json(400, {'ok': False, 'err': 'meta must be an object'})
         # Local file paths to attach (case workups: docket PDFs, judgments, deeds). List of strings.
         attach = payload.get('attach') or []
         if isinstance(attach, str):
@@ -2187,7 +2217,18 @@ class Handler(BaseHTTPRequestHandler):
         # it. meta.test sends (1:1 to the advisor/operator, never an owner) stay allowed — the
         # email-level opt-out match below still applies to them.
         _age = _optout_age_days()
-        _is_test = bool((meta or {}).get('test'))
+        _is_test = bool(meta.get('test'))
+        # Checked against the BCC as the client sent it, before the follow-up trim above dropped
+        # it: a test flag offered with any owner address on it is refused, trimmed or not.
+        if _is_test and not _operator_recipients(
+                [to] + str(payload.get('bcc') or '').split(','),
+                (_load_credentials() or (None, None))[0]):
+            self.log_message('SEND REFUSED [test_not_operator] case=%s',
+                             str(meta.get('c') or '-')[:40])
+            return self._json(451, {
+                'ok': False, 'blocked': 'test_not_operator', 'skip': True,
+                'err': ('send refused: meta.test is only for the advisor or the sending account; '
+                        'a send to anyone else goes through every owner check')})
         if not _is_test and (_age is None or _age > OPTOUT_MAX_AGE_DAYS):
             return self._json(200, {
                 'ok': False, 'blocked': 'optout_stale',
@@ -2559,7 +2600,9 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---- send ----
         try:
-            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach, from_addr=from_addr)
+            import mail_guard as _MG
+            with _MG.gated('send_server'):
+                mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach, from_addr=from_addr)
         except smtplib.SMTPAuthenticationError as e:
             _release_recipients(_claimed)
             _release_first_touch_slot(_ft_slot)      # nothing left: the slot is free again

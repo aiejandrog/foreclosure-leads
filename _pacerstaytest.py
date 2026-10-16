@@ -38,8 +38,10 @@ os.environ['DEALFLOW_PAID_LEDGER'] = str(TMP / 'paid_reads_ledger.json')
 os.environ.pop('DEALFLOW_PAID_MONTHLY_CAP', None)
 os.environ.pop('DEALFLOW_PACER_MAX_AGE_DAYS', None)
 os.environ.pop('DEALFLOW_CLERK_BK', None)
+# these suites model the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
 for _k in ('PACER_USERNAME', 'PACER_PASSWORD', 'PACER_OTP_SECRET', 'PACER_CLIENT_CODE', 'PACER_ENV',
-           'PACER_QUARTER_CAP', 'PACER_RUN_MAX', 'PACER_QUARTER_LEDGER', 'PACER_REDACT_FLAG'):
+           'PACER_QUARTER_CAP', 'PACER_RUN_MAX', 'PACER_QUARTER_LEDGER', 'PACER_REDACT_FLAG', 'PACER_BILL_QUARTER'):
     os.environ.pop(_k, None)
 
 import paid_reads as PR
@@ -179,7 +181,7 @@ def reset_ledgers():
 
 
 def env(**kw):
-    e = {'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123',
+    e = {'DEALFLOW_PACER_AUTO': '1', 'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123',
          'PACER_QUARTER_LEDGER': str(TMP / 'pacer_q.json')}
     e.update({k: str(v) for k, v in kw.items() if v is not None})
     for k in [k for k, v in kw.items() if v is None]:
@@ -344,6 +346,107 @@ check('--max-pages 3 walks page=0,1,2', [c[1].rsplit('=', 1)[1] for c in h.finds
 check('... all pages read and every row closed -> clear, 3 pages billed',
       ent['verdict'] == 'clear' and ent['pages'] == 3 and abs(ent['cost'] - 0.30) < 1e-9, ent)
 
+# ---- 4b a common name is not bought again at the same depth (2026-10-12)
+print('-- 4b common name: depth recorded, not re-bought, report')
+reset_ledgers()
+d = work({'broward_leads.json': BR})
+h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
+rc, out = run(d, h)
+ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
+check('an overflowed search records how deep it read (ovf 1) and how deep PCL said it goes (tp 3)',
+      ent.get('ovf') == 1 and ent.get('tp') == 3 and ent['verdict'] == 'unverifiable', ent)
+cp = d / 'pacer_stay_cache.json'
+c_ = json.loads(cp.read_text())
+c_['CACE-99-000101']['t'] = NOW - 31 * 86400               # past the 30-day unverifiable re-check
+cp.write_text(json.dumps(c_), encoding='utf-8')
+later = NOW
+h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
+rc, out = run(d, h, now=later)
+check('31 days on, at the same --max-pages: not searched again (same page, same answer), still held',
+      h.finds() == [] and json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']['verdict']
+      == 'unverifiable', [c[2] for c in h.finds()])
+h = FakeHTTP(by_name={('TESTPERSON', 'QUINCY'): three_pages})
+reset_ledgers()
+rc, out = run(d, h, args=['--max-pages', '3', '--max-spend', '1'], now=later)
+ent = json.loads((d / 'pacer_stay_cache.json').read_text())['CACE-99-000101']
+check('... a deeper --max-pages does search it, and reading every page can clear it',
+      len(h.finds()) == 3 and ent['verdict'] == 'clear' and 'ovf' not in ent, (len(h.finds()), ent.get('verdict'), ent.get('why')))
+unv = {'verdict': 'unverifiable', 'ovf': 2, 'why': 'x', 'names': PS.NAME_READING}
+ldx = {'owners': [('SOMEONE ELSE', 'last_first')]}
+check('overflow_settled: a changed owner or an older name reading is searched again',
+      not PS.overflow_settled(dict(unv, oh=PS.owners_hash({'owners': [('A B', 'last_first')]})), 1, ldx)
+      and PS.overflow_settled(dict(unv, oh=PS.owners_hash(ldx)), 1, ldx)
+      and not PS.overflow_settled(dict(unv, names='old'), 1))
+check('overflow_settled: only an unverifiable common name at or below its recorded depth',
+      PS.overflow_settled(unv, 1) and PS.overflow_settled(unv, 2) and not PS.overflow_settled(unv, 3)
+      and not PS.overflow_settled(dict(unv, verdict='clear'), 1) and not PS.overflow_settled(dict(unv, err='e'), 1)
+      and not PS.overflow_settled({'verdict': 'unverifiable', 'why': 'x'}, 1) and not PS.overflow_settled(None, 1))
+check('why_buckets: a parse problem that starts "more than" is not a common name',
+      PS.why_buckets('more than 4 owners on one lead')[0].startswith('owner cannot be searched')
+      and PS.why_buckets('more than 1 page(s) of results for one owner name (a common name); an open bankruptcy '
+                         'for a similar name in txsbk') == ['common name', 'similar name, open case'])
+# report: counts only, no names, no network
+rep_leads = [{'county': 'BROWARD', 'case': 'CACE-99-00080%d' % i, 'owners': 'REPORTNAME%s PERSON' % chr(65 + i),
+              'auction': mdy(30)} for i in range(4)]
+d = work({'broward_leads.json': rep_leads})
+iso_now = dt.datetime.fromtimestamp(NOW).astimezone().isoformat(timespec='seconds')
+base = {'env': 'prod', 'src': 'pacer_pcl', 'region': 'national', 'lookback_from': PS.lookback_from(TODAY, 8),
+        'q': iso_now, 't': NOW, 'pages': 1, 'cost': 0.1, 'v': 1}
+(d / 'pacer_stay_cache.json').write_text(json.dumps({
+    'CACE-99-000800': dict(base, verdict='clear', why='no open bankruptcy'),
+    'CACE-99-000801': dict(base, verdict='unverifiable', ovf=1, tp=4,
+                           why='more than 1 page(s) of results for one owner name (a common name)'),
+    'CACE-99-000802': dict(base, verdict='unverifiable',
+                           why='an open bankruptcy for the same name in nysbk (cannot tell if it is this owner)'),
+}), encoding='utf-8')
+h = FakeHTTP()
+rc, out = run(d, h, args=['--report'], raw=True)
+check('--report: no HTTP at all, exit 0', rc == 0 and h.calls == [], (rc, h.calls))
+check('--report: per-county counts and reasons', 'never searched' in out and 'clear 1 released now' in out
+      and 'unverifiable 2' in out and 'common name' in out and 'same name, open case outside Florida' in out
+      and '~$0.40' in out, out)
+check('--report: no owner name printed', 'REPORTNAME' not in out, out)
+
+# ---- 4c an earlier clear the current owner reading refuses is withdrawn (free, no credentials)
+wr_leads = [{'county': 'BROWARD', 'case': 'CACE-99-000830', 'owners': 'TESTPERSON QUINCY &', 'auction': mdy(30)},
+            {'county': 'BROWARD', 'case': 'CACE-99-000831', 'owners': 'TESTPERSON RALPH', 'auction': mdy(30)}]
+d = work({'broward_leads.json': wr_leads})
+(d / 'pacer_stay_cache.json').write_text(json.dumps({
+    'CACE-99-000830': dict(base, verdict='clear', why='no open bankruptcy'),
+    'CACE-99-000831': dict(base, verdict='clear', why='no open bankruptcy')}), encoding='utf-8')
+h = FakeHTTP()
+rc, out = run(d, h, e={'DEALFLOW_PACER_AUTO': '1'}, raw=True)
+wc = json.loads((d / 'pacer_stay_cache.json').read_text())
+check('a clear for an owner that now reads as not searchable (ends in "&") is withdrawn -> unverifiable, '
+      'with no credentials and no HTTP', h.calls == [] and wc['CACE-99-000830']['verdict'] == 'unverifiable'
+      and 'withdrawn' in wc['CACE-99-000830']['why'] and 'withdrawn' in out, (out, wc))
+check('... a clear for a searchable owner is left alone', wc['CACE-99-000831']['verdict'] == 'clear', wc)
+import unittest.mock as _um
+(d / PS.HITS_NAME).write_text(json.dumps({'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}))
+(d / 'pacer_newfilers.json').write_text(json.dumps({'v': 1, 'court': 'flsbk', 'env': 'prod', 'last_to': '',
+                                                     'covered': [], 'pulls': [], 'rows': {'x': {'lastName': 'Z'}}}))
+with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
+                                                             (None, 'locked')]):
+    rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+check('cache lock not taken for the re-check: says so and keeps every earlier new-filer hit',
+      'could not re-check' in out and json.loads((d / PS.HITS_NAME).read_text())
+      == {'CACE-99-000831': {'src': 'pacer_newfilers', 'kept': 1}}, out)
+_old_mi = PS.match_index
+PS.match_index = lambda *a_, **k_: {'CACE-99-000830': {'src': 'pacer_newfilers', 'new': 1}}
+try:
+    with _um.patch.object(PS, 'load_cache_strict', side_effect=[(json.loads((d / 'pacer_stay_cache.json').read_text()), ''),
+                                                                 (None, 'locked')]):
+        rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+finally:
+    PS.match_index = _old_mi
+check('... and still adds tonight\'s new matches alongside them',
+      set(json.loads((d / PS.HITS_NAME).read_text())) == {'CACE-99-000830', 'CACE-99-000831'}, out)
+rc, out = run(d, FakeHTTP(), args=['--no-pull'], raw=True)
+check('... and with the lock taken the same run does rewrite it (the check above is not vacuous)',
+      json.loads((d / PS.HITS_NAME).read_text()) == {}, out)
+rc, out = run(d, FakeHTTP(), e={'DEALFLOW_PACER_AUTO': '1'}, args=['--report'], raw=True)
+check('--report never rewrites the cache', json.loads((d / 'pacer_stay_cache.json').read_text()) == wc)
+
 # ------------------------------------------------------------------------------------ 5 cost
 print('-- 5 cost accounting')
 reset_ledgers()
@@ -432,7 +535,8 @@ check('entity -> one search on the name without its suffix',
 for raw, why in (('ESTATE OF QUINCY TESTPERSON', 'estate'), ('TESTPERSON QUINCY TR', 'trust'),
                  ('QUINCY TESTPERSON REVOCABLE TRUST', 'trust'), ('CITY OF FAKEVILLE', 'government'),
                  ('(owner via title search)', 'no owner'), ('TESTPERSON', 'one-word'),
-                 ('A B C D E F', 'more than four'), ('', 'no owner')):
+                 ('A B C D E F', 'more than four'), ('', 'no owner'),
+                 ('TESTPERSON QUINCY &', 'co-owner is missing'), ('TESTPERSON QUINCY & ', 'co-owner is missing')):
     sj, problem = PS.parse_owner(raw, 'last_first')
     check('not searched (no cost): %r -> %s' % (raw, why), not sj and why in problem, problem)
 # oname / paOwner fallback (ce154cc): its order is unknown, so it is read both ways ('either')
@@ -500,7 +604,15 @@ check('exact name, open case in flsbk -> ACTIVE, filing date and case number rec
 check('the stored case has no name or caption', 'QUINCY' not in json.dumps(v[2]) and 'caseTitle' not in json.dumps(v[2]))
 check('open case in the Middle District of Florida -> active', verdict([row('TESTPERSON', 'QUINCY', court='flmbk')])[0] == 'active')
 check('closed case -> clear', verdict([row('TESTPERSON', 'QUINCY', termed='2024-01-05')])[0] == 'clear')
-check('dismissed 60 days ago, not yet closed -> clear', verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-60))])[0] == 'clear')
+v = verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-60))])
+check('dismissed 60 days ago, not yet closed -> unverifiable (a vacated dismissal would not show; 2026-10-12)',
+      v[0] == 'unverifiable' and 'dismissed, not closed' in v[1], v)
+check('dismissed 60 days ago AND closed -> clear',
+      verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-60), termed=iso(-20))])[0] == 'clear')
+check('an OPEN case filed before the 8-year lookback still counts -> active',
+      verdict([row('TESTPERSON', 'QUINCY', filed='2010-03-01')])[0] == 'active')
+check('a CLOSED case filed before the lookback is ignored -> clear',
+      verdict([row('TESTPERSON', 'QUINCY', filed='2010-03-01', termed='2012-01-01')])[0] == 'clear')
 check('dismissed 10 days ago, not yet closed -> unverifiable (reinstatement window)',
       verdict([row('TESTPERSON', 'QUINCY', dismissed=iso(-10))])[0] == 'unverifiable')
 check('closed then reopened -> active', verdict([row('TESTPERSON', 'QUINCY', termed=iso(-400), reopened=iso(-56))])[0] == 'active')
@@ -512,7 +624,7 @@ check('similar name but CLOSED -> clear', verdict([row('TESTPERSON', 'Q', termed
 check('creditor row ignored', verdict([row('TESTPERSON', 'QUINCY', role='cr')])[0] == 'clear')
 check('adversary proceeding ignored', verdict([row('TESTPERSON', 'QUINCY', ctype='ap')])[0] == 'clear')
 check('civil case ignored', verdict([row('TESTPERSON', 'QUINCY', court='flsdc', juris='Civil', ctype='cv')])[0] == 'clear')
-check('filed before the lookback ignored', verdict([row('TESTPERSON', 'QUINCY', filed='2015-01-01')])[0] == 'clear')
+check('an open case filed before the lookback is no longer ignored (2026-10-12) -> active', verdict([row('TESTPERSON', 'QUINCY', filed='2015-01-01')])[0] == 'active')
 check('overflow (unread pages) -> unverifiable even with no match on page 0', verdict([], overflow=True)[0] == 'unverifiable')
 check('active beats every doubt', verdict([row('TESTPERSON', 'Q'), row('TESTPERSON', 'QUINCY', no='1:99-bk-3')], overflow=True)[0] == 'active')
 check('an unknown role still counts (fail closed)', verdict([row('TESTPERSON', 'QUINCY', role='')])[0] == 'active')
@@ -855,6 +967,37 @@ st = ql.status()
 check('quarter ledger keeps per-day spend by kind (pull / presend), settlements included',
       abs(st['days'][TODAY.isoformat()]['pull'] - 0.10) < 1e-9 and abs(st['days'][TODAY.isoformat()]['presend'] - 0.05) < 1e-9
       and abs(st['spent'] - 0.15) < 1e-9, st)
+
+# the $30 waiver is a hard stop: a raised cap alone cannot pass it (2026-10-13, Q4 reached $59 that way)
+reset_ledgers()
+TQ = PS.quarter_of(TODAY)
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60'), today=TODAY)
+check('PACER_QUARTER_CAP=60 with no PACER_BILL_QUARTER is held to $30, and says how to bill',
+      ql.cap == 30.0 and ql.cap_set == 60.0 and 'PACER_BILL_QUARTER=' + TQ in ql.waiver_note, (ql.cap, ql.waiver_note))
+ql.debit(29.90, 299, kind='bulk')
+check('... the page that lands exactly on $30.00 is allowed (the waiver is $30 or less)', ql.debit(0.10, 1)[0])
+ok, why = ql.debit(0.10, 1)
+st = ql.status()
+check('... the next page is refused and the quarter stays at $30.00', not ok and abs(st['spent'] - 30.0) < 1e-9, (why, st))
+check('... status names the waiver and the flag', not st['ok'] and 'waiver' in st['why'] and 'PACER_BILL_QUARTER' in st['why'], st)
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60', PACER_BILL_QUARTER='1999-Q1'), today=TODAY)
+check('a PACER_BILL_QUARTER naming another quarter does not lift the stop', ql.cap == 30.0 and not ql.debit(0.10, 1)[0])
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60', PACER_BILL_QUARTER=TQ.lower()), today=TODAY)
+check('PACER_BILL_QUARTER naming this quarter plus a raised cap lets it be billed, up to the cap',
+      ql.cap == 60.0 and not ql.waiver_note and ql.debit(0.10, 1)[0])
+ql = PS.QuarterLedger(env=env(PACER_BILL_QUARTER=TQ), today=TODAY)
+check('PACER_BILL_QUARTER alone does not raise the $25 default', ql.cap == 25.0)
+reset_ledgers()
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='60'), today=TODAY)
+ql._write(59.0, 590, 0, False)
+st = ql.status()
+check('a quarter already at $59 (the real 10-12 state) with a raised cap refuses with the waiver message',
+      not ql.debit(0.10, 1)[0] and not st['ok'] and 'waiver' in st['why'], st)
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='lots', PACER_BILL_QUARTER=TQ), today=TODAY)
+check('an invalid cap stays $0 even with PACER_BILL_QUARTER', ql.cap == 0.0 and not ql.debit(0.10, 1)[0])
+ql = PS.QuarterLedger(env=env(PACER_QUARTER_CAP='29.50'), today=TODAY)
+check('a cap under $30 is left as set', ql.cap == 29.5 and not ql.waiver_note)
+reset_ledgers()
 Q4 = dt.date(2026, 10, 1)
 
 
@@ -916,6 +1059,26 @@ check('PACER_NEWFILER_WEEKENDS=1 pulls weekend days too', w[0] == dt.date(2026, 
 w = PS.pull_window({'last_to': '2026-09-01'}, dt.date(2026, 10, 8), {})
 check('more than 14 days behind: pulls the latest 14 and says what was never pulled',
       w[0] == dt.date(2026, 9, 24) and w[1] == dt.date(2026, 10, 7) and 'never pulled' in w[2], w)
+OVF = {'status': 'partial', 'from': '2026-09-16', 'to': '2026-09-29',
+       'why': '83 pages of results, 20 read (PACER_NEWFILER_MAX_PAGES) -- window not marked covered'}
+w = PS.pull_window({'last_to': '', 'pulls': [OVF]}, dt.date(2026, 10, 13), {})
+check('after an overflowed 14-day pull (83 pages, old record with no tp): the next window shrinks to fit 20 pages',
+      w[:2] == (dt.date(2026, 9, 29), dt.date(2026, 9, 30)) and '83 pages' in w[2], w)
+w = PS.pull_window({'last_to': '2026-09-30', 'pulls': [OVF, dict(OVF, status='done', ok=True, why='', tp=10, pages=10,
+                                                                  **{'from': '2026-09-29', 'to': '2026-09-30'})]},
+                   dt.date(2026, 10, 13), {})
+check('after the shrunk pull finishes: catch-up stays sized (2 days at 5 pages/day), from the day after last_to',
+      w[:2] == (dt.date(2026, 10, 1), dt.date(2026, 10, 3)), w)
+w = PS.pull_window({'last_to': '', 'pulls': [dict(OVF, why='300 pages of results, 20 read')]}, dt.date(2026, 10, 13), {})
+check('volume so high not even one day fits the page cap: no pull, says raising it is spend',
+      w[0] is None and 'raising it is spend' in w[2], w)
+w = PS.pull_window({'last_to': '', 'pulls': [dict(OVF, why='300 pages of results, 20 read')]}, dt.date(2026, 10, 13),
+                   {'PACER_NEWFILER_MAX_PAGES': '40'})
+check('... a higher PACER_NEWFILER_MAX_PAGES re-sizes to one day', w[:2] == (dt.date(2026, 9, 29),) * 2, w)
+w = PS.pull_window({'last_to': '2026-10-06', 'pulls': [{'status': 'done', 'ok': True, 'from': '2026-10-06',
+                                                        'to': '2026-10-06', 'pages': 2, 'tp': 2}]},
+                   dt.date(2026, 10, 8), {})
+check('normal volume (2 pages a day): the window is not cut', w[:2] == (dt.date(2026, 10, 7), dt.date(2026, 10, 7)), w)
 check('bad backfill / overlap settings -> no pull', PS.pull_window({}, Q4, {'PACER_NEWFILER_BACKFILL_DAYS': 'lots'})[0] is None
       and PS.pull_window({}, Q4, {'PACER_NEWFILER_OVERLAP_DAYS': '99'})[0] is None)
 
@@ -986,6 +1149,8 @@ idx = json.loads((d / 'pacer_newfilers.json').read_text())
 check('more pages than PACER_NEWFILER_MAX_PAGES: stops at 2, rows kept, window NOT marked covered',
       len([c for c in h.calls if c[0] == 'pull']) == 2 and len(idx['rows']) == 108 and idx['last_to'] == ''
       and idx['pulls'][-1]['status'] == 'partial', idx['pulls'])
+check('... and the partial pull records the total pages it saw and the cap it read under',
+      idx['pulls'][-1].get('tp') == 3 and idx['pulls'][-1].get('maxp') == 2, idx['pulls'])
 reset_ledgers()
 d = work({'broward_leads.json': BR})
 rc, out = run(d, PullHTTP(pull=lambda b, pg: Resp(500, {})), raw=True)
@@ -1137,6 +1302,9 @@ r = ps17('509999CA001703XXXAMB', h)
 check('pre-send, common name (3 pages) -> unverifiable, refused', r['verdict'] == 'unverifiable'
       and SG.check('509999CA001703XXXAMB', sh17)['code'] == SG.UNVERIFIED and not SG.check('509999CA001703XXXAMB', sh17)['pacer_need'])
 n0 = len(h.calls)
+r = ps17('509999CA001703XXXAMB', h, now=NOW + 20 * 86400)
+check('pre-send 20 days on (past the gate max age): the common name is not bought again, still held',
+      r['status'] == 'cached' and r['verdict'] == 'unverifiable' and len(h.calls) == n0, r)
 r = ps17('CACE-99-001705', h)
 check('pre-send, unsearchable owner (trust): unverifiable at no cost', r['status'] == 'unsearchable' and len(h.calls) == n0
       and SG.check('CACE-99-001705', sh17)['code'] == SG.UNVERIFIED)
@@ -1256,6 +1424,36 @@ check('--owner on an owner already in the new-filer index: index_hit reported, h
 r = PS.presend_check('CACE-99-007002', here=str(g17o), env=e17, session=h, now=NOW, manual=True, owner='SMITH TRUST')
 check('--owner that cannot be searched (a trust): unsearchable, still nothing written',
       r['status'] == 'unsearchable' and not (g17o / 'pacer_stay_cache.json').exists(), r)
+
+# ---- save_cache survives a target that is briefly locked (WinError 5 on os.replace, 2026-10-10)
+print('-- 17c save_cache retries a transient replace failure')
+_c17 = TMP / 'save17c.json'
+_real_replace, _calls17 = os.replace, []
+def _flaky(a, b):
+    _calls17.append(1)
+    if len(_calls17) < 3:
+        raise PermissionError(5, 'Access is denied')
+    return _real_replace(a, b)
+os.replace = _flaky
+try:
+    PS.save_cache(str(_c17), {'k': 1})
+finally:
+    os.replace = _real_replace
+check('save_cache: two refused replaces, then the write lands intact',
+      len(_calls17) == 3 and json.loads(_c17.read_text()) == {'k': 1}, _calls17)
+def _always(a, b):
+    raise PermissionError(5, 'Access is denied')
+os.replace = _always
+try:
+    try:
+        PS.save_cache(str(_c17), {'k': 2}, tries=2)
+        _raised = False
+    except PermissionError:
+        _raised = True
+finally:
+    os.replace = _real_replace
+check('save_cache: a lock that never lifts still raises, and the old file is untouched',
+      _raised and json.loads(_c17.read_text()) == {'k': 1}, _raised)
 
 # ------------------------------------------------------------------------------------ 18 bulk modes
 print('-- 18 nightly per-lead bulk: off by default, md-near only with surplus')
@@ -1503,7 +1701,7 @@ def bridge19(creds=True):
     for k_ in ('PACER_USERNAME', 'PACER_PASSWORD', 'PACER_ENV', 'PACER_QUARTER_CAP', 'PACER_PRESEND_DAILY_MAX'):
         e.pop(k_, None)
     e.update({'PACER_QUARTER_LEDGER': str(QL19), 'DEALFLOW_PAID_LEDGER': str(srv19 / 'paid19.json'),
-              'PACER_NEWFILER_EST_PAGES_PER_DAY': '0.5'})
+              'PACER_NEWFILER_EST_PAGES_PER_DAY': '0.5', 'DEALFLOW_PACER_AUTO': '1'})
     if creds:
         e.update({'PACER_USERNAME': 'fakeuser', 'PACER_PASSWORD': 'fake-pass-123'})
     port_ = free_port()
@@ -1585,6 +1783,17 @@ try:
               st == 200 and len(finds19()) == 2, (st, j))
 finally:
     stop19(proc19)
+
+# 20. AUTOMATIC PACER IS REMOVED (2026-10-16): default off, by-hand paths still run, nothing spends.
+_off = {k: v for k, v in env().items() if k != 'DEALFLOW_PACER_AUTO'}
+check('auto: switch is off by default', PS.auto_enabled(_off) is False and PS.auto_enabled(env()) is True)
+_h20 = FakeHTTP()
+_r20 = PS.presend_check('CACE-99-001801', here=str(g17), env=_off, session=_h20, now=NOW)
+check('auto: send-bridge pre-send does not search or spend', _r20.get('status') == 'off' and _r20.get('cost') == 0.0, _r20)
+_rc = PS.main([], here=str(g17), env=_off, now=NOW)
+check('auto: a no-argument (nightly) run does nothing and exits 0', _rc == 0, _rc)
+_rc = PS.main(['--bulk', 'all'], here=str(g17), env=_off, now=NOW)
+check('auto: --bulk without the switch does nothing', _rc == 0, _rc)
 
 print()
 print('==== %d FAIL(S) ====' % len(FAILS) if FAILS else '==== all PACER stay checks passed ====')

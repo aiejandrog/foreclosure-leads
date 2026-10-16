@@ -197,5 +197,188 @@ rec('a send that is only undated does not turn ledgers_ok off by itself (it is s
     hc2['ledgers_ok'] is True, hc2)
 rec('_contactTier counts lu as contacted', 'if(r.le || r.lt || r.lu) return 1;' in SRC)
 
+# ---- 2026-10-10: case-less sends are tied by recipient before they blank Untouched ------------
+td3 = tempfile.mkdtemp()
+mp3, tp3 = os.path.join(td3, 'mail.json'), os.path.join(td3, 'text.json')
+json.dump([
+    {'ch': 'email', 'message_id': 'a', 'to': 'Owner@Example.com', 'ts_utc': '2026-10-01T10:00:00'},   # lead A
+    {'ch': 'email', 'message_id': 'b', 'to': 'x@nowhere.com', 'bcc': 'b2@example.com',
+     'ts_utc': '2026-10-01T10:00:00'},                                                               # lead B via bcc
+    {'ch': 'email', 'message_id': 'c', 'to': 'ops@example.org', 'login': 'ops@example.org', 'test_mode': True,
+     'ts_utc': '2026-10-01T10:00:00'},                                                               # to ourselves
+    {'ch': 'email', 'message_id': 'g', 'to': 'stranger2@family-name.net', 'login': 'ops@example.org',
+     'test_mode': True, 'ts_utc': '2026-10-01T10:00:00'},                     # flagged test, but not to us
+    {'ch': 'email', 'message_id': 'd', 'to': 'stranger@gmail.com', 'owner': 'Somebody', 'lane': 'urgent',
+     'ts_utc': '2026-10-02T10:00:00', 'd': '2026-10-02', 'subj': '123 Main St'},                     # unknown
+    {'ch': 'email', 'message_id': 'e', 'to': 'owner@example.com', 'test_mode': True,
+     'ts_utc': '2026-10-01T10:00:00'},                                         # a test that reached an owner
+    {'ch': 'email', 'message_id': 'f', 'to': 'other@gmail.com', 'test_mode': 'yes',
+     'ts_utc': '2026-10-01T10:00:00'},                                         # not a real True: stays strict
+], io.open(mp3, 'w'))
+json.dump([
+    {'ch': 'text', 'confirmed': True, 'to': '13055550100', 'ts_utc': '2026-10-01T10:00:00'},          # lead C, 11 digits
+    {'ch': 'text', 'confirmed': True, 'to': '555', 'ts_utc': '2026-10-01T10:00:00'},                 # short: unattributed
+], io.open(tp3, 'w'))
+slim3 = [{'case': 'A', 'emails': ['owner@example.com']}, {'case': 'B', 'emails': ['B2@example.com']},
+         {'case': 'C', 'phones': ['(305) 555-0100']}, {'case': 'S', 'phones': ['555']},
+         {'case': 'AG', 'phones': ['3055550100'], 'phsrc': ['ag']}, {'case': 'D'}]
+a3 = call_mode.ledger_audit(mp3, tp3, slim=slim3)
+rec('case-less sends tie to leads by to, bcc and 11-digit number', a3['cases'] == {'A', 'B', 'C'} and a3['matched'] == 4, a3)
+rec('an advisor/test send that reaches no lead is not unattributed', a3['test'] == 1, a3)
+rec('unknown send, short number, non-True flag and a test not addressed to us stay unattributed',
+    a3['unattributed'] == 4, a3)
+rec('a listing-agent number on another lead is not tied', 'AG' not in a3['cases'], a3)
+rec('a non-webmail recipient domain prints as other', 'family-name' not in json.dumps(a3['rows'])
+    and any(r['dom'] == 'other' for r in a3['rows']), a3['rows'])
+_leak = json.dumps(a3['rows'])
+rec('leftover rows carry no address, name or subject',
+    'stranger' not in _leak and 'Somebody' not in _leak and 'Main' not in _leak and 'gmail.com' in _leak, a3['rows'])
+rows3 = [{'c': 'A'}, {'c': 'B'}, {'c': 'C'}, {'c': 'D'}]
+call_mode.stamp_unknown(rows3, a3)
+rec('tied leads are stamped contacted, others are not', [r.get('lu') for r in rows3] == [1, 1, 1, None], rows3)
+a3n = call_mode.ledger_audit(mp3, tp3)
+rec('without the lead list nothing is tied (old behaviour)', a3n['matched'] == 0 and a3n['unattributed'] == 8 and a3n['test'] == 1, a3n)
+# ---- 2026-10-12: a case-less email whose recipient is on no lead ties by PROPERTY ADDRESS ----------
+mp5 = os.path.join(td3, 'mail5.json')
+json.dump([
+    # recipient on no lead (the bounce guard stripped it), address is lead P's
+    {'ch': 'email', 'message_id': 'p', 'to': 'gone@nowhere.com', 'addr': '12 Palm Ave, Miami FL 33101',
+     'ts_utc': '2026-10-01T10:00:00'},
+    # same street name, different city/ZIP: must NOT tie to P or to Q
+    {'ch': 'email', 'message_id': 'q', 'to': 'other@nowhere.com', 'addr': '12 Palm Ave, Hialeah FL 33010',
+     'ts_utc': '2026-10-01T10:00:00', 'd': '2026-10-01', 'lane': 'urgent'},
+    # recipient matches lead R: recipient wins, address not needed
+    {'ch': 'email', 'message_id': 'r', 'to': 'r@example.com', 'addr': 'unrelated',
+     'ts_utc': '2026-10-01T10:00:00'},
+    # an address that is only punctuation keys to nothing and ties to nothing
+    {'ch': 'email', 'message_id': 's', 'to': 's@nowhere.com', 'addr': ' ,. ',
+     'ts_utc': '2026-10-01T10:00:00', 'd': '2026-10-01'},
+    # a send that names a case is not touched by this tie (it never reaches the case-less branch)
+    {'ch': 'email', 'message_id': 't', 'to': 't@nowhere.com', 'case': 'CASED', 'addr': '12 Palm Ave, Miami FL 33101',
+     'ts_utc': '2026-10-01T10:00:00'},
+], io.open(mp5, 'w'))
+json.dump([{'ch': 'text', 'confirmed': True, 'to': '3055550199', 'addr': '12 Palm Ave, Miami FL 33101',
+            'ts_utc': '2026-10-01T10:00:00'}], io.open(os.path.join(td3, 'text5.json'), 'w'))
+slim5 = [{'case': 'P', 'addr': '12 PALM AVE,  MIAMI FL 33101', 'emails': ['p@example.com']},
+         {'case': 'P2', 'addr': '12 Palm Ave Miami FL 33101'},                       # same property, second case
+         {'case': 'Z', 'addr': '99 Other St, Miami FL 33101'},
+         {'case': 'R', 'addr': '5 Reed Rd, Miami FL 33101', 'emails': ['R@example.com']},
+         {'case': 'NOADDR'}]
+a5 = call_mode.ledger_audit(mp5, os.path.join(td3, 'text5.json'), slim=slim5)
+rec('a case-less email ties to every lead at its property address, ignoring case, spacing and punctuation',
+    a5['cases'] >= {'P', 'P2'} and 'Z' not in a5['cases'], a5)
+rec('same street in another city or ZIP does not tie, and stays unattributed',
+    'NOADDR' not in a5['cases'] and a5['unattributed'] == 3 and a5['matched'] == 2, a5)
+rec('a recipient match still wins over the address', 'R' in a5['cases'], a5)
+rec('a text row has no property address, so an addr on it is ignored', a5['unattributed'] == 3
+    and any(r['ch'] == 'text' for r in a5['rows']), a5['rows'])
+rec('leftover rows say whether the send named a property, not which', all('addr' in r and isinstance(r['addr'], bool) for r in a5['rows'])
+    and 'Palm' not in json.dumps(a5['rows']), a5['rows'])
+rows5 = [{'c': 'P'}, {'c': 'P2'}, {'c': 'Z'}, {'c': 'R'}]
+call_mode.stamp_unknown(rows5, a5)
+rec('the address tie marks leads contacted and clears nothing', [r.get('lu') for r in rows5] == [1, 1, None, 1], rows5)
+a5n = call_mode.ledger_audit(mp5, os.path.join(td3, 'text5.json'))
+rec('without the lead list nothing is tied by address either', a5n['matched'] == 0 and a5n['cases'] == set(), a5n)
+# ---- review findings (address tie limits): street-less, shared, merged digits, test sends, ZIP/city ----
+mp6 = os.path.join(td3, 'mail6.json')
+def _row(mid, to, addr, **kw):
+    r = {'ch': 'email', 'message_id': mid, 'to': to, 'addr': addr, 'ts_utc': '2026-10-01T10:00:00', 'd': '2026-10-01'}
+    r.update(kw); return r
+json.dump([
+    _row('h', 'a@nowhere.com', 'HOMESTEAD, FL- 33034'),                    # a town, no street number
+    _row('b', 'b@nowhere.com', '1200 Brickell Bay Dr, Miami FL 33131'),    # shared by 3 cases (a building)
+    _row('m', 'c@nowhere.com', '1 21st St, Miami FL 33101'),               # must not collide with '12 1st St'
+    _row('t', sorted(call_mode.ADVISOR_EMAILS)[0], '7 Oak Ln, Miami FL 33101', test_mode=True),   # reached only us
+    _row('z', 'd@nowhere.com', '7 Oak Ln, Miami FL 33102'),                # same street + city, other ZIP
+    _row('y', 'e@nowhere.com', '7 Oak Ln, Hialeah FL 33101'),              # same street + ZIP, other city
+    _row('w', 'r@example.com', '7 Oak Ln, Miami FL 33101'),                # recipient is lead R: address must NOT also fire
+], io.open(mp6, 'w'))
+slim6 = [{'case': 'T%d' % i, 'addr': 'HOMESTEAD, FL 33034'} for i in range(5)] \
+      + [{'case': 'U%d' % i, 'addr': '1200 Brickell Bay Dr, Miami FL 33131'} for i in range(3)] \
+      + [{'case': 'M', 'addr': '12 1st St, Miami FL 33101'},
+         {'case': 'OAK', 'addr': '7 Oak Ln, Miami FL 33101'},
+         {'case': 'R', 'addr': '9 Elm Ct, Miami FL 33101', 'emails': ['r@example.com']}]
+a6 = call_mode.ledger_audit(mp6, os.path.join(td3, 'missing.json'), slim=slim6)
+rec('an address with no street number ties nothing, however many leads share it',
+    not any(c.startswith('T') for c in a6['cases']), a6)
+rec('an address held by more than two cases (a building) ties nothing',
+    not any(c.startswith('U') for c in a6['cases']), a6)
+rec('spacing is kept, so 1 21st St cannot tie 12 1st St', 'M' not in a6['cases'], a6)
+rec('a test send that reached only us is not tied to the lead whose address it names',
+    'OAK' not in a6['cases'] and a6['test'] == 1, a6)
+rec('another ZIP or another city is a different property', a6['matched'] == 1 and a6['cases'] == {'R'}, a6)
+rec('a recipient match wins and the address tie does not also fire', 'OAK' not in a6['cases'] and 'R' in a6['cases'], a6)
+rec('the five leftover sends stay unattributed (main behaviour)', a6['unattributed'] == 5, a6)
+# the street-number rule on its own: street-less / non-house-number addresses held by only one or two leads
+mp7 = os.path.join(td3, 'mail7.json')
+json.dump([_row('s1', 'x1@nowhere.com', '1ST ST, Miami Beach FL 33139'),
+           _row('s2', 'x2@nowhere.com', '0'),
+           _row('s3', 'x3@nowhere.com', '33034'),
+           _row('s4', 'x4@nowhere.com', 'HOMESTEAD, FL- 33034'),
+           _row('s5', 'x5@nowhere.com', '14 Pine Rd, Miami FL 33101')], io.open(mp7, 'w'))
+slim7 = [{'case': 'S1', 'addr': '1ST ST, Miami Beach FL 33139'}, {'case': 'S2', 'addr': '0'}, {'case': 'S3', 'addr': '33034'},
+         {'case': 'S4', 'addr': 'HOMESTEAD, FL 33034'}, {'case': 'S5', 'addr': '14 Pine Rd, Miami FL 33101'}]
+a7 = call_mode.ledger_audit(mp7, os.path.join(td3, 'missing.json'), slim=slim7)
+rec('only an address that starts with a house number and a street can tie, even for one or two leads',
+    a7['cases'] == {'S5'} and a7['unattributed'] == 4, a7)
+# a row that went only to us never ties by address, flagged test or not; a test-flagged row to anyone else can
+mp8 = os.path.join(td3, 'mail8.json')
+json.dump([_row('o1', sorted(call_mode.ADVISOR_EMAILS)[0], '7 Oak Ln, Miami FL 33101'),
+           _row('o2', 'someone@nowhere.com', '8 Oak Ln, Miami FL 33101', test_mode=True)], io.open(mp8, 'w'))
+a8 = call_mode.ledger_audit(mp8, os.path.join(td3, 'missing.json'),
+                            slim=[{'case': 'O7', 'addr': '7 Oak Ln, Miami FL 33101'}, {'case': 'O8', 'addr': '8 Oak Ln, Miami FL 33101'}])
+rec('an advisor-only row is never tied by address; an old test row to someone else is',
+    a8['cases'] == {'O8'} and a8['unattributed'] == 1 and a8['test'] == 0, a8)
+# the only-test case: coverage goes back to ok
+mp4 = os.path.join(td3, 'mail4.json')
+json.dump([{'ch': 'email', 'message_id': 'c', 'to': sorted(call_mode.ADVISOR_EMAILS)[0], 'test_mode': True,
+            'ts_utc': '2026-10-01T10:00:00'},
+           {'ch': 'email', 'message_id': 'a', 'to': 'owner@example.com', 'ts_utc': '2026-10-01T10:00:00'}],
+          io.open(mp4, 'w'))
+a4 = call_mode.ledger_audit(mp4, os.path.join(td3, 'missing.json'), slim=slim3)
+td4 = tempfile.mkdtemp()
+shutil.copy(mp4, os.path.join(td4, 'mail_sent.json')); shutil.copy(tp3, os.path.join(td4, 'text_sent.json'))
+_here = call_mode.HERE; call_mode.HERE = td4
+hc4 = json.loads(call_mode.history_coverage(10, 10, a4))
+hc5 = json.loads(call_mode.history_coverage(10, 10, a3))
+call_mode.HERE = _here
+rec('tied and advisor-only case-less sends leave ledgers_ok on', hc4['ledgers_ok'] is True, hc4)
+rec('a leftover unattributed send still turns ledgers_ok off', hc5['ledgers_ok'] is False and '4 confirmed' in hc5['why'], hc5)
+rec('both seat pages bake HISTCOV from the same audit that stamped the rows',
+    "histcov=history_coverage(total, _shipped_all, audit))" in SRC
+    and io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'),
+                encoding='utf-8').read().count('rows=_cm_all, audit=_cm_audit)') == 2)
+rec('both build sites pass the lead list',
+    'audit = ledger_audit(slim=slim)' in SRC and 'ledger_audit(slim=slim)' in io.open(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read())
+
+# ---- 2026-10-13: a manual send the sender marked "not on board" does not hold the whole crew ----
+mp9 = os.path.join(td3, 'mail9.json')
+_ob = 'manual intro, not on board, Miami Lakes 33016, sent per Alej'
+json.dump([
+    {'ch': 'email', 'message_id': 'n1', 'to': 'stranger1@nowhere.com', 'note': _ob, 'portfolio': [], 'ts_utc': '2026-09-07T15:08:00'},
+    {'ch': 'email', 'message_id': 'n2', 'to': 'STRANGER2@nowhere.com', 'note': _ob.upper(), 'ts_utc': '2026-09-07T15:08:00'},
+    {'ch': 'email', 'message_id': 'n3', 'to': 'q@example.com', 'note': _ob, 'ts_utc': '2026-09-07T15:08:00'},     # recipient IS a lead
+    {'ch': 'email', 'message_id': 'n4', 'to': 'other@nowhere.com', 'note': _ob, 'addr': '5 Fig St, Miami FL 33101',
+     'ts_utc': '2026-09-07T15:08:00'},                                                                              # names a property
+    {'ch': 'email', 'message_id': 'n5', 'to': 'plain@nowhere.com', 'note': 'manual intro', 'ts_utc': '2026-09-07T15:08:00'},
+], io.open(mp9, 'w'))
+json.dump([{'ch': 'text', 'confirmed': True, 'to': '3055550000', 'note': _ob, 'ts_utc': '2026-09-07T15:08:00'}],
+          io.open(os.path.join(td3, 'text9.json'), 'w'))
+a9 = call_mode.ledger_audit(mp9, os.path.join(td3, 'text9.json'),
+                            slim=[{'case': 'Q', 'addr': '9 Elm Ct, Miami FL 33101', 'emails': ['q@example.com']}])
+rec('a case-less email noted "not on board" with no property is counted offboard, not unattributed',
+    a9['offboard'] == 2, a9)
+rec('the recipient tie still runs first: a noted send to a lead marks that lead contacted',
+    a9['cases'] == {'Q'} and a9['matched'] == 1, a9)
+rec('a noted send that names a property, an unnoted send and a text stay unattributed',
+    a9['unattributed'] == 3, a9)
+td9 = tempfile.mkdtemp()
+json.dump([], io.open(os.path.join(td9, 'mail_sent.json'), 'w')); json.dump([], io.open(os.path.join(td9, 'text_sent.json'), 'w'))
+_here = call_mode.HERE; call_mode.HERE = td9
+hc9 = json.loads(call_mode.history_coverage(10, 10, {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'offboard': 2}))
+call_mode.HERE = _here
+rec('off-board sends alone leave ledgers_ok on', hc9['ledgers_ok'] is True, hc9)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

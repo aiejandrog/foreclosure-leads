@@ -64,6 +64,8 @@ def isolate(name, token=TOKEN):
     os.environ.pop('DEALFLOW_BK_ALLOW_CL_CLEAR', None)
     os.environ.pop('DEALFLOW_CLERK_BK', None)
     BL._HOLD_MEMO = None
+    # these suites model the base gate; the shipped bk_waiver.json is covered by _bkuncheckedtest.py
+    os.environ['DEALFLOW_BK_ALLOW_UNCHECKED'] = '0'
     if token is None:
         os.environ.pop('COURTLISTENER_TOKEN', None)
     else:
@@ -1293,6 +1295,17 @@ check('a PACER clear older than the max age does not release',
 check('a fresh PACER clear releases a lead CourtListener has not searched',
       released('CACE-99-556007'), (v['CACE-99-556007'], dial['CACE-99-556007'], flg.get('CACE-99-556007')))
 check('a QA-environment PACER clear never releases', held('CACE-99-556008'), v['CACE-99-556008'])
+# release expiry (2026-10-12): pages built now re-hold a released lead at release_until
+u = BL.release_until('CACE-99-556007', now)
+check('release_until: a fresh PACER clear -> at most 48h after the build', u == int(now + 48 * 3600), (u, now))
+old_clear = dict(pc_clear, t=now - 13 * 86400)
+(d / SG.PACER_NAME).write_text(json.dumps(dict(json.loads((d / SG.PACER_NAME).read_text()),
+                                               **{'CACE-99-556010': old_clear})), encoding='utf-8')
+u = BL.release_until('CACE-99-556010', now)
+check('release_until: a 13-day-old clear -> its own expiry one day out, not 48h',
+      abs(u - (now + (SG.pacer_max_age_days() - 13) * 86400)) < 2, (u - now) / 3600.0)
+check('release_until: Miami-Dade stem -> None (the docket gate decides)', BL.release_until('2099-000203-CA-01', now) is None)
+check('release_until: no PACER entry -> still bounded by 48h', BL.release_until('CACE-99-559999', now) == int(now + 48 * 3600))
 (d / SG.HITS_NAME).write_text(json.dumps({'CACE-99-556001': {
     'env': 'prod', 't': now, 'seen_t': now, 'cases': [{'no': '26-55700', 'filed': '2026-09-27'}]}}),
     encoding='utf-8')

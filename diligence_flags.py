@@ -586,6 +586,14 @@ def title_status_of(row):
 _UNANCHORED_GUESS_RE = re.compile(r'^\s*ONE\s+OF\s+(\d+)\s+PARCELS\s*:', re.I)
 
 
+def address_unconfirmed(row):
+    """True on a row skip-traced at the owner's tax-roll mailing address (lp_leads `mailTrace`)
+    while no property address is confirmed (`addr` empty)."""
+    if not isinstance(row, dict):
+        return False
+    return bool(str(row.get('mailTrace') or '').strip()) and not str(row.get('addr') or '').strip()
+
+
 def parcel_unanchored(row):
     """How many candidate parcels this case could not be narrowed past. 0 = anchored, or n/a.
 
@@ -780,6 +788,23 @@ def risk_flags(row):
                 'pendens image at %s and match its legal description against the candidates. If '
                 'neither settles it, it stays held — a guess is not an answer here.'
                 % (case_of(r) or '<case>', links['records'] or 'the county official records')))
+
+        # ---- ADDRESS_UNCONFIRMED — phones found at the OWNER's mailing address, house not confirmed.
+        # 2026-10-15 (Alejandro, "Yes, one-match only"): a one-parcel Broward filing is skip-traced at
+        # the tax-roll mailing address of the single parcel carrying every name token (lp_leads
+        # mailTrace), because no confirmed property address exists to trace. The number is useful;
+        # the lead is not contactable yet. There is no value, so no equity, and a namesake is still
+        # possible. Held on the DATA, like PARCEL_UNANCHORED, until `addr` is confirmed.
+        if address_unconfirmed(r):
+            out.append(_flag(
+                'ADDRESS_UNCONFIRMED', SEV_CRITICAL,
+                'The phone numbers on this filing were found at the owner\'s tax-roll mailing '
+                'address, not at a confirmed property. The property is a one-parcel name match '
+                'without homestead proof, so there is no value or equity on it yet.',
+                'Confirm the property first: pull the lis pendens or the foreclosed mortgage at %s '
+                'and check its legal description against the matched parcel. Once the address is '
+                'confirmed the row is released on the next build.'
+                % (links['records'] or 'the county official records')))
 
         # ---- TAX_DEED_SALE — a different animal wearing a foreclosure lead's clothes.
         # Nothing in the contact path tested for this until 2026-08-31: 34 rows on the board, 15 of
@@ -1063,7 +1088,7 @@ def severity_of(row):
 # say which house it is.
 _HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
                 'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE', 'TAX_DEED_SALE', 'PARCEL_UNANCHORED',
-                'CASE_COUNTY_MISMATCH')
+                'CASE_COUNTY_MISMATCH', 'ADDRESS_UNCONFIRMED')
 _HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 

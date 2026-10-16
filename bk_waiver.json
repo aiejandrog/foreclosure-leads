@@ -1,0 +1,17 @@
+{
+  "unchecked_contact": true,
+  "approved": "2026-10-13",
+  "by": "attorney (text message to Alejandro, contact 'Lawyer')",
+  "question": "Can we phone, text or email Broward and Palm Beach homeowners in active foreclosure about buying their house before we have run a bankruptcy search on them? If one says they've filed bankruptcy, we end the call right away and never contact them again. Leads we already know are in bankruptcy stay off the list.",
+  "answer": "Yes (calls, 2026-10-13 19:19); Yes (texts and emails, 2026-10-13 19:34)",
+  "records": [
+    "project files: callmode-carlos/ATTORNEY-OK-UNCHECKED-BK-CALLS-2026-10-13.png",
+    "project files: callmode-carlos/ATTORNEY-OK-UNCHECKED-BK-ALL-CHANNELS-2026-10-13.png"
+  ],
+  "conditions": [
+    "anyone who says they filed is marked Do Not Contact and never contacted again",
+    "leads already known to be in bankruptcy (open or possible match, PACER active entry or new-filer hit, docket stay, NEVER_CONTACT) stay held",
+    "every released Call Mode card opens with the bankruptcy question (bk_lookup.UNCHECKED_WHY); email and text copy are unchanged"
+  ],
+  "off_switch": "set DEALFLOW_BK_ALLOW_UNCHECKED=0, or change unchecked_contact to false"
+}

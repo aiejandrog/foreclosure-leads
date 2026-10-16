@@ -1560,6 +1560,11 @@ def main(argv):
                 bk_lookup.run_nightly()
         except Exception as exc:
             _log('bk evening pass failed: %s' % type(exc).__name__)
+        try:
+            import call_stats          # daily Call Mode counts -> DEALFLOW_DIR/call-stats/, counts only
+            _log('call stats written: %s' % os.path.basename(call_stats.write_daily()))
+        except Exception as exc:
+            _log('call stats skipped: %s' % type(exc).__name__)
         return publish(measure=True)
     if cmd == 'publish':
         return publish(measure=False)

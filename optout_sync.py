@@ -33,6 +33,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -105,6 +106,22 @@ def _read_ledger_for_write(path):
         _refuse_unreadable_ledger(path, e)
 
 
+def _norm_phone_key(k):
+    """'#(305) 555-0100' / '#+1 305 555 0100' / '#13055550100' -> '#3055550100'. Any other key, and a
+    hashed '#' key (hex with letters), is returned unchanged."""
+    if not k.startswith('#'):
+        return k
+    body = k[1:].strip()
+    d = re.sub(r'\D', '', body)
+    # Only a phone-shaped body is rewritten: digits plus ( ) - . + and spaces. Letters mean a hashed
+    # key (base36) or an extension ('x12'); both are left exactly as they were.
+    if not d or re.search(r'[^0-9()+.\-\s]', body):
+        return k
+    if len(d) == 11 and d[0] == '1':
+        d = d[1:]
+    return '#' + d
+
+
 def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt=''):
     """THE ONE WRITER of optouts.json (2026-09-25). Add-only, atomic, envelope-preserving.
 
@@ -127,6 +144,10 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
     when = (str(when) if when else now)[:32]
     keys = [str(k).strip() for k in keys if k and str(k).strip()]
     keys = [k.lower() if (k.startswith('@') or k.startswith('#')) else k for k in keys]
+    # A phone key is digits only, in the 10-digit US form leads carry. A number typed as
+    # '(305) 555-0100' used to be stored as '#(305) 555-0100', which a reader comparing strings
+    # (the door planner) could never match. 2 of the 10 phone keys on 2026-10-16 were that shape.
+    keys = [_norm_phone_key(k) for k in keys]
     # Read BEFORE any write, including a dry run. A file we cannot parse is not an empty ledger.
     opt = _read_ledger_for_write(OPTOUTS)
     if opt is None:
@@ -216,8 +237,31 @@ def notes_dnc_keys(path=None):
         if st in _DNC_STATUS or n.get('optout') or str(n.get('no') or '').lower() == 'hard':
             out.add(str(k).strip().lower())
             for p in (n.get('dntph') or []):
-                out.add('#' + str(p).strip())
+                # Same 10-digit form ledger_add writes, so a reader comparing '#digits' finds it.
+                out.add(_norm_phone_key('#' + str(p).strip()))
     return out
+
+
+def backfill_phone_keys(dry_run=False):
+    """Add the 10-digit '#' key next to every phone-shaped key written before ledger_add normalized
+    them ('#(305) 555-0100', '#13055550100'). Add-only: the old key stays, so nothing that matched
+    before stops matching. Hashed keys (letters) are left alone. Returns (added, already)."""
+    opt = _read_ledger_for_write(OPTOUTS)
+    notes = (opt.get('notes') if isinstance(opt, dict) else None) or {}
+    if not isinstance(notes, dict):
+        return [], []
+    want = set()
+    for k, v in notes.items():
+        k = str(k).strip().lower()
+        n = _norm_phone_key(k) if (v and k.startswith('#')) else k
+        if n != k and n[1:].isdigit():
+            want.add(n)
+    want = sorted(want)
+    if not want:
+        return [], []
+    return ledger_add(want, 'digits-only copy of an older punctuated phone key. Covers ALL channels: '
+                            'no email, no call, no text, no door.', 'optout_sync.backfill_phone_keys',
+                      dry_run=dry_run)
 
 
 def ledger_from_notes(payload, src='call-mode notes push', dry_run=False):
@@ -295,6 +339,10 @@ def _main(a):
     added += _na
     already += _nb
 
+    # Phone keys saved before ledger_add normalized them get their digits-only twin.
+    # Not counted in `added`: these people were already suppressed under the old key.
+    _pa, _ = backfill_phone_keys(dry_run=a.dry_run)
+
     # This process, not ledger_add, is what makes "nobody new opted out" a fresh ledger. A
     # /notes push never reaches here, so it cannot refresh a stale file by adding nothing.
     if not a.dry_run:
@@ -304,6 +352,9 @@ def _main(a):
     print('  already ledgered : %d' % len(already))
     print('  %s: %d %s' % ('WOULD ledger' if a.dry_run else 'newly ledgered', len(added),
                            added or ''))
+    if _pa:
+        print('  %s: %d older phone key(s)' % ('WOULD add a 10-digit twin to' if a.dry_run
+                                              else 'added a 10-digit twin to', len(_pa)))
     if added and not a.dry_run:
         print('\n!! %d opt-out(s) were detected but NOT suppressed until this run. If any send went '
               'out to them in between, that is a real compliance event — check the Sent label.'

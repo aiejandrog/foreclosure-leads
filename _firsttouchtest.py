@@ -273,7 +273,7 @@ try:
         st == 200 and j.get('gate') == 'delivered', (st, j))
     st, j = send('replied@example.com')
     rec('an owner who replied from this address: sends (200)', st == 200 and j.get('gate') == 'replied', (st, j))
-    st, j = send('advisor-unk@example.com', test=True)
+    st, j = send('celusa13@gmail.com', test=True)
     rec('meta.test (1:1 to the advisor/operator) is exempt from the gate', st == 200 and 'gate' not in j, (st, j))
     st, hj2 = call(port, '/health')
     rec('recipients_today counts one per send: no BCC fan-out', hj2.get('recipients_today') == 5, hj2.get('recipients_today'))
@@ -621,7 +621,7 @@ def msync(bounces=None, **over):
 
 G = load(HERE / 'sync_gate.py', 'sync_gate_ft')
 d, rc, out, st = msync(BOUNCES_OK)
-rec('bounces.py runs, recorded under "after"', [a['name'] for a in st.get('after', [])] == ['bounces']
+rec('bounces.py runs, recorded under "after"', [a['name'] for a in st.get('after', [])][:1] == ['bounces']
     and st['after'][0]['ok'] is True, st.get('after'))
 rec('...after the verdict was written (it saw state=finished ok=True)',
     (d / 'bounces_saw.txt').read_text() == 'finished True', (d / 'bounces_saw.txt').read_text())

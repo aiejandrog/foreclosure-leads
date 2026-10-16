@@ -432,19 +432,14 @@ python -u ownership_scan.py --days 45 --max 500 --budget 1500 >> "%LOG%" 2>&1
 
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 
-echo [3g/5] Federal bankruptcy stay lookup (PACER PCL; OFF without PACER_USERNAME/PASSWORD)...
-rem  ADDED 2026-09-26: feeds stay_gate.py. Free tier: ONE daily flsb new-filer search (blocks leads
-rem  whose owner just filed); the nightly per-lead search is OFF unless PACER_BULK=md-near/all. Per-lead
-rem  checks happen in the send bridge just before a send. No-op (exit 0, no network) when the PACER env
-rem  vars are missing. Every page is reserved against paid_reads (monthly cap) + the $25 PACER quarter
-rem  cap first; fails closed.
-python -u pacer_stay.py >> "%LOG%" 2>&1
+rem  [3g/5] PACER stay lookup REMOVED 2026-10-16 (Alejandro: PACER is a by-hand tool for a client's bankruptcy).
+rem  pacer_stay.py --case still works by hand. Existing clears expire and active hits keep holding.
 
 echo [3g2/5] Federal bankruptcy check - CourtListener, leads stay held without COURTLISTENER_TOKEN...
-rem  ADDED 2026-09-27. Primary provider for the stay gate. PACER above stays parked until an
+rem  ADDED 2026-09-27. Primary provider for the stay gate. PACER is by hand only, see above. Parked until an
 rem  account exists. No token: exit 0, no network, a counts-only status, and the pipeline alert
 rem  fails. Cache and the override file live in DEALFLOW_DIR, not this repo. A failed pull does
-rem  not stop the 5:30 refresh; the next echo clears errorlevel the same way the PACER line does.
+rem  not stop the 5:30 refresh; the next echo clears errorlevel.
 python -u bk_lookup.py >> "%LOG%" 2>&1
 
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
@@ -520,6 +515,12 @@ rem  30 days, including cases the scrape already dropped, and writes sale_result
 rem  The [4/5] rebuild bakes it as row.sr. Display only, gates nothing; capped at 420s. Never a gate:
 rem  a clerk outage costs the chips, never the publish.
 python -u sale_results.py >> "%LOG%" 2>&1
+
+echo [3q2/5] RealForeclose Closed/Canceled status - cancelled, redeemed, dismissed, bankruptcy - all 3 counties, free...
+rem  rf_status.py reads the Closed/Canceled list for every upcoming sale date we hold and writes
+rem  rf_status.json - gitignored. The [4/5] rebuild bakes it as row.rf; Call Mode drops redeemed, dismissed
+rem  and bankruptcy-cancelled sales. Add-only, never fatal: a failed read costs the stamps, never the publish.
+python -u rf_status.py >> "%LOG%" 2>&1
 
 echo [3p/5] Live dockets (Miami-Dade OCS JSON API) - the FILINGS, shown inline on the board...
 rem  A "click Docket, land on the docket" LINK is impossible: MD retired /ocs/Search.aspx and their

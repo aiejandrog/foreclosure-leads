@@ -2160,6 +2160,7 @@ body.compact .dg-v{font-size:14.5px}
   </footer>
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
+__REFRESHSTATUS__
 <header>
 <div class="brand">
 <div>
@@ -2385,7 +2386,25 @@ const MAILTO  = (function(){ try { return __MAILTO__;  } catch(e){ return {}; } 
    the ledger existed simply behaves as it did. */
 const TEXTLOG    = (function(){ try { return __TEXTLOG__;    } catch(e){ return {}; } })();
 const TEXTPERSON = (function(){ try { return __TEXTPERSON__; } catch(e){ return {}; } })();
-let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
+/* RELEASE EXPIRY (2026-10-12). A Broward / Palm Beach lead is released from the bankruptcy hold only
+   as long as its evidence lasts: the bake stamps bkUntil (bk_lookup.release_until: the PACER clear's
+   expiry, at most 48h after the build). A page left open, or opened after a missed rebuild, must not
+   keep offering that lead, so past bkUntil it is held here exactly like a baked saleBkAct. */
+function _expireReleases(rows){
+  try{
+    const now = Date.now()/1000;
+    (rows||[]).forEach(r => {
+      if(r && r.bkUntil && !r.saleBkAct && now > r.bkUntil){
+        r.saleBkAct = true;
+        r.bkWhy = 'Bankruptcy check expired on this page (built ' + (typeof BUILTAT==='string' ? BUILTAT : '?') +
+                  '). Held until the board is rebuilt.';
+        delete r.saleLift;
+      }
+    });
+  }catch(e){}
+  return rows;
+}
+let DATA = _expireReleases(Array.isArray(RAW) ? RAW : []);   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
 let notes = {};
@@ -2739,8 +2758,8 @@ function _workQueue(){
 // company. Injected at build time -- the board is JS and cannot ask Python at runtime.
 const ENTITY_VERIFIED = __ENTITY_VERIFIED__;
 const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'__ENTITY_LLC__', phone:'(786) 631-1823',
-                         addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
-                         email:'agonzalez0311707@gmail.com', web:'', partner:''};
+                         addr:'8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122', title:'Acquisitions',
+                         email:'alejandro@bsgflorida.com', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
@@ -2764,6 +2783,12 @@ try {
   //      documents long after every other surface stopped.
   // Both collapse to: any recognised company string becomes the current build-time display value.
   if (typeof saved.llc === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = SENDER_DEFAULTS.llc;
+  // 2026-10-16 (Alejandro): retired contact block. The personal Gmail and the 109th Ave address
+  // were the defaults until today, and a device that ever saved Sender setup holds them in
+  // fcSender, which wins the merge below. Drop exactly those two old values so the business inbox
+  // and the Doral mailbox reach every device; any other saved value is the operator's own.
+  if (typeof saved.email === 'string' && /^\s*agonzalez0311707@gmail\.com\s*$/i.test(saved.email)) delete saved.email;
+  if (typeof saved.addr === 'string' && /^\s*231\s+N\.?\s*W\.?\s+109(th)?\s+Ave(nue)?\b/i.test(saved.addr)) delete saved.addr;
   for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
 } catch(e) {}
 // deal-model controls (persisted)
@@ -6084,7 +6109,9 @@ function _defaultTextTone(r){
   /* The RULE moved next to the bodies it selects (_textTone), so Call Mode picks the same rung
      from its own stage count instead of re-deriving one. This function stays the board's entry
      point: it is what knows how to read a board row. */
-  return _textTone(_textStage(r), r.days, r.st==='LP');
+  /* _saleDays, not r.days: a lead with no auction date is baked days=0, and the text would call that
+     a sale today. No date reads as no countdown, so the tone is cold. */
+  return _textTone(_textStage(r), _saleDays(r), r.st==='LP');
 }
 /* Email retargeting counterpart of _defaultTextTone. Counts confirmed OUTBOUND email touches and
    spots an inbound reply (the OWNER REPLIED marker shares ch:'email' — it is inbound, not a send).
@@ -6304,7 +6331,7 @@ function smsMsg(r, lang, tone){
      second copy of this copy on the phone would be a fourth text vocabulary; the phone already
      carries its own after-call ladder, and the batch script has to be the SAME script. */
   const B = _textBodies({first: first, sender: sN, stEN: stEN, stES: stES,
-                         td: td, lp: lp, tone: tone});
+                         td: td, lp: lp, tone: tone, days: _saleDays(r)});
   if(lang==='en') return B.en;
   if(lang==='es') return B.es;
   return B.en+'\n\n'+B.es;
@@ -6332,75 +6359,104 @@ function _textTone(stage, days, isLP){
 }
 function _textBodies(o){
   o = o || {};
+  /* Clerk and appraiser records carry the street in capitals ("6270 NW 18 ST"), which reads like a
+     form letter in a text. Title-case it ("6270 NW 18 St"): directions and a few route prefixes stay
+     capitals, ordinals go lower ("18th"), a unit like "3B" is left alone. Anything that already has a
+     lower-case letter (a placeholder like "[street]", the "your property" fallback) passes through. */
+  const _streetCase = (s) => {
+    s = s || '';
+    if(/[a-z]/.test(s)) return s;
+    const KEEP = ['N','S','E','W','NE','NW','SE','SW','US','SR','CR','PO','II','III','IV'];
+    return s.split(' ').map((t) => {
+      if(KEEP.indexOf(t) >= 0) return t;
+      if(/^\d+(ST|ND|RD|TH)$/.test(t)) return t.toLowerCase();
+      if(/\d/.test(t)) return t;
+      return t.toLowerCase().replace(/(^|['\-])([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
+    }).join(' ');
+  };
   const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
-  const stEN = o.stEN || 'your property', stES = o.stES || 'su propiedad';
+  const stEN = _streetCase(o.stEN) || 'your property', stES = _streetCase(o.stES) || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
   /* Opt-out on every batch text (2026-09-26, attorney: not the carrier-keyword instruction). The owner is
      told to say it is not a good time; inbound STOP / PARE / "not a good time" still opt out.
      Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
   const stopEN = " If now's not a good time, just let me know and I won't text you again.";
   const stopES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.';
+  const hi = 'Hi'+(first?' '+first:''), hola = 'Hola'+(first?' '+first:'');
+  /* The real days to the sale, when the caller knows them and it is a sale (never a just-filed case).
+     "about" because a sale can be reset after the nightly read. Empty when unknown: the body then
+     says the date is set without counting. */
+  const d = (!lp && typeof o.days === 'number' && o.days >= 0 && o.days <= 365) ? Math.floor(o.days) : -1;
+  const inEN = d === 0 ? 'today' : d === 1 ? 'tomorrow' : d > 1 ? 'in about '+d+' days' : '';
+  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' días' : '';
   let en, es;
-  /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
-     plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
-     ADVISOR, "ask the court for more time" = the plain-language rendering of petition-to-postpone
-     (never "we will stop the sale"), the word "foreclosure" removed from every body (third-party
-     protocol: a text can be read by someone not on title), ID + STOP on every message, no em
-     dashes (reads as AI). nameEN/disclEN stay defined above for any other caller. */
+  /* 2026-10-13 rewrite (Alejandro: the old bodies read "robotic, super scripted", then "i dont like
+     ... if you have a plan keep it, just get to the point like be urgent"). Written the way a person
+     texts: who I am, the real date, what is true about time running out, ONE question.
+     URGENCY HERE IS ONLY WHAT IS TRUE: the actual days to the sale and the fact that options narrow
+     as it nears and mostly end at it. No invented scarcity (spots, offers that expire), no threat,
+     no promise about the sale: those are what s. 501.1377, the MARS rule and FDUTPA read as
+     deceptive to a homeowner in distress. Unchanged rules: sender and company first, the attorney's
+     let-me-know line last, the first question is keep or sell (#57), no sale number, no fee claim
+     beyond "free" on the advisor call, no em dashes, and the word "foreclosure" stays out (a text
+     can be read by someone not on title). */
   if(tone==='urgent'){
-    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. The sale date on '+stEN+' is close.'
-       + ' If you have a plan, keep it. Let us be the parachute if it lands late. Free 5 minutes'
-       + ' with our senior advisor, and we can ask the court for more time. No fees ever.'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. La subasta de '+stES+' está cerca.'
-       + ' Si tiene un plan, sígalo. Nosotros somos el paracaídas si llega tarde. 5 minutos gratis'
-       + ' con nuestro asesor principal, y se puede pedir más tiempo a la corte.'+stopES;
+    en = hi+", it's "+sN+' with Biscayne Solutions Group. The court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
+       + " After the sale, most options are gone. Our senior advisor can go over what's still possible"
+       + ' with you for free, today if you want. Are you hoping to keep the house, or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. La subasta de '+stES+' es '+(inES||'muy pronto')+'.'
+       + ' Después de la subasta, casi todas las opciones se acaban. Nuestro asesor principal le explica'
+       + ' gratis lo que todavía se puede hacer, hoy mismo si quiere. ¿Quiere quedarse con la casa o está'
+       + ' pensando en venderla?'+stopES;
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
-       ever weakened, delete this body in the same commit. "Save this number" is drill card 14
-       (the read-back close) compressed to SMS — the save action is the thermometer. */
-    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group, my last text about '+stEN+'.'
-       + ' I hope your plan lands right on time. If anything slips before the sale date, one free call'
-       + ' with our senior advisor, 30 plus years, maps what still works. Either way, keep my number'
-       + ' in your phone.'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Biscayne Solutions Group, mi último mensaje sobre '+stES+'.'
-       + ' Ojalá su plan salga a tiempo. Si algo falla antes de la fecha de subasta, una llamada gratis'
-       + ' con nuestro asesor principal, más de 30 años, le muestra lo que aún sirve. De cualquier'
-       + ' forma, guarde mi número en su teléfono.'+stopES;
+       ever weakened, delete this body in the same commit. */
+    en = hi+", it's "+sN+' with Biscayne Solutions Group. This is my last text about '+stEN+'.'
+       + (inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
+               : ' Every week that passes, fewer options are left.')
+       + ' If you want to talk, save my number. The call with our senior advisor is free.'+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Este es mi último mensaje sobre '+stES+'.'
+       + (inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
+               : ' Cada semana que pasa quedan menos opciones.')
+       + ' Si quiere hablar, guarde mi número. La llamada con nuestro asesor principal es gratis.'+stopES;
   } else if(tone==='followup'){
-    // The parachute card's scalpel: ONE question that tests the plan without attacking it.
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' with Biscayne Solutions Group again about '+stEN+'. Not trying to crowd you.'
-       + ' If you already have a plan you trust, honestly ignore me and I hope it works out. If you'
-       + ' are not fully sure it will, that is the part I would want a second set of eyes on. Worth a quick look?'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Biscayne Solutions Group otra vez, por '+stES+'. No quiero abrumarlo.'
-       + ' Si ya tiene un plan en el que confía, ignóreme y ojalá le funcione. Si no está del todo'
-       + ' seguro de que va a funcionar, esa es la parte en la que le daría una segunda opinión. ¿Vale la pena una mirada rápida?'+stopES;
+    en = hi+', '+sN+' again from Biscayne Solutions Group about '+stEN+'.'
+       + (inEN ? ' The sale is '+inEN+', and every week takes options off the table.'
+               : ' Every week this goes on takes options off the table.')
+       + ' A call with our senior advisor is free and takes 5 minutes. Want me to set it up today?'+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Le escribo otra vez sobre '+stES+'.'
+       + (inES ? ' La subasta es '+inES+', y cada semana quedan menos opciones.'
+               : ' Cada semana que pasa quedan menos opciones.')
+       + ' Hablar con nuestro asesor principal es gratis y toma 5 minutos. ¿Se lo coordino hoy?'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
-    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. There is a tax deed sale on '+stEN+'.'
-       + ' Two things most owners never hear: paying the back taxes stops it, and if it sells for'
-       + ' more than what is owed, the extra money is yours. Free 5 minutes covers both.'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. Hay una subasta por impuestos'
-       + ' sobre '+stES+'. Dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende'
-       + ' por más de lo que se debe, lo extra es suyo. 5 minutos gratis y se lo explico.'+stopES;
+    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " Two things many owners don't hear: paying the back taxes stops it, and if it sells for"
+       + " more than what's owed, the extra money is yours. Want me to walk you through it?"+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
+       + ' Dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por más de lo que'
+       + ' se debe, lo extra es suyo. ¿Quiere que se lo explique?'+stopES;
   } else if(lp){
-    // Just filed. NO urgency language — the honest fact is stronger: most choices exist NOW.
-    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. A case was just filed at the'
-       + ' courthouse on '+stEN+'. Right now you have the most choices, and most take weeks to set'
-       + ' up. Our senior advisor maps them free in 5 minutes. What do you want to do with the'
-       + ' house?'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. Acaban de abrir un caso en la'
-       + ' corte sobre '+stES+'. Hoy es cuando más opciones tiene, y toman semanas. Nuestro asesor'
-       + ' principal se las explica gratis en 5 minutos. ¿Qué quiere hacer con la casa?'+stopES;
+    // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
+    en = hi+", it's "+sN+' with Biscayne Solutions Group. I saw a case was just filed at the courthouse'
+       + ' on '+stEN+'. Right now you have the most options, and they shrink every week the case moves.'
+       + ' Our senior advisor can walk you through them for free. Are you hoping to keep the house, or'
+       + ' open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Vi que acaban de abrir un caso en la corte'
+       + ' sobre '+stES+'. Ahora es cuando más opciones tiene, y cada semana que avanza el caso quedan'
+       + ' menos. Nuestro asesor principal se las explica gratis. ¿Quiere quedarse con la casa o está'
+       + ' pensando en venderla?'+stopES;
   } else {
-    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group. There is a court sale date on '+stEN+'.'
-       + ' Not a lender, nothing to sign. If you have a plan, keep it. Our senior advisor, 30 plus'
-       + ' years, maps every option free in 5 minutes. What do you want to do with the house?'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+'.'
-       + ' No presto dinero, nada que firmar. Si tiene un plan, sígalo. Nuestro asesor principal,'
-       + ' más de 30 años, le da opciones gratis en 5 minutos. ¿Qué quiere hacer con la'
-       + ' casa?'+stopES;
+    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " We're not a lender. Every week that passes takes options off the table. Our senior advisor"
+       + " (30+ years) can go over what's still open with you for free. Are you hoping to keep the house,"
+       + ' or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
+       + ' No somos prestamistas. Cada semana que pasa quedan menos opciones. Nuestro asesor principal'
+       + ' (más de 30 años) le explica gratis las opciones que todavía tiene. ¿Quiere quedarse con la'
+       + ' casa o está pensando en venderla?'+stopES;
   }
   return {en: en, es: es};
 }
@@ -13639,7 +13695,7 @@ function genMorningWorker(lane, autostart){
     +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
-    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||"", pcs:(r.pcs||[])});'
     +     'renderTextQ();'
     +   '}'
     /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
@@ -13741,9 +13797,9 @@ function genMorningWorker(lane, autostart){
        text per lead here, and _workerEligible already required 24h+ since the last touch. */
     +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
     +   'function textBatchStart(){'
-    +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
-    +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
-    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +   'if(TEXT_HOLD){ txFail("Text batch", TEXT_HOLD); return; }'
+    +   'if(!TEXTQ.length){ txFail("Text batch", "text queue is empty — leads join it during a run (phone-only with a textable number)"); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ txFail("Text batch", "⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET."); return; }'
     +     'if(SYNCWAIT){ cancelSyncWait(); addLog("skip","auto-run","stopped waiting for the opt-out sync because the text batch started — the email queue is untouched, press Start after the batch."); }'
     +     'textBatchPreview();'
     +   '}'
@@ -13776,8 +13832,8 @@ function genMorningWorker(lane, autostart){
     +     'if(cb) cb.onclick=function(){ addLog("skip","batch","text batch not started — nothing sent"); renderTextQ(); renderRunBar(); try{ render(); }catch(e){} };'
     +   '}'
     +   'function textBatchGo(){'
-    +     'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
-    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'if(TEXT_HOLD){ txFail("Text batch", TEXT_HOLD); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ txFail("Text batch", "⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET."); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
     +   'var TGBUSY=false;'
@@ -13801,20 +13857,31 @@ function genMorningWorker(lane, autostart){
     +         'var bx=function(lbl,t){ return "<div style=\'font:700 10.5px/1 Segoe UI,Arial;letter-spacing:.12em;text-transform:uppercase;color:#5b6472;margin:8px 0 4px;text-align:left\'>"+lbl+"</div><div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:130px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(t)+"</div>"; };'
     +         'if(!body) return bx("Message","(message pre-filled in Messages)");'
     +         'return bx("English",en)+(es?bx("Espa&ntilde;ol",es):""); })()'
+    +       '+"<div id=\'tb-why\' role=\'alert\' style=\'display:none;margin-top:12px;background:#fdecec;color:#8a1c1c;border:1px solid #f1b4b4;border-radius:8px;padding:10px 12px;text-align:left;font:600 13px/1.45 Segoe UI,Arial\'></div>"'
     +       '+"<button id=\'tb-open\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#128241; Open Messages &mdash; pre-filled<span class=\'sub\'>press send there, then confirm</span></button>"'
     +       '+"<button id=\'tb-skip\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>&#9197; Skip this one<span class=\'sub\'>stays for tomorrow</span></button>"'
     +     '+"</div>";'
     +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
     +     'if(ob) ob.onclick=function(){'
-    +   'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
-    +       'textGate(x.c, x.sms, null, x.name, function(){'
-    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +   'if(TEXT_HOLD){ txFail(x.name, TEXT_HOLD); return; }'
+    +       'textGate(x.c, x.sms, x.pcs, x.name, function(){'
+    +         '_txClip(x.sms);'
+    +         'if(!openHere(x.sms)){ txFail(x.name, "Messages window blocked — check the popup blocker icon, then tap again"); return; }'
     +         'post("textopen",{qc:x.c});'
-    +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +         'addLog("textopen", x.name, "Messages opened pre-filled (the text is also on the clipboard) — press send there, then confirm");'
     +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
     +       '});'
     +     '};'
     +     'if(sb) sb.onclick=function(){ TBSKIP++; addLog("skip", x.name, "text skipped — stays for tomorrow"); TBI++; textBatchStep(); };'
+    // LOOK AHEAD. The same /text/check the tap will run, asked as the card paints, so a person the
+    // bridge refuses says so on the card instead of after a tap that opens nothing. Only an answer
+    // from the bridge greys the button; a slow or missing bridge leaves it live and the tap decides.
+    // This never opens anything: the tap still runs textGate inside its own click.
+    +     'var _ti=TBI; _tcheck(x.c, x.sms, x.pcs, function(ok, why, ans){'
+    +       'if(ok || !ans || !tbOn || TBI!==_ti || !TEXTQ[TBI] || TEXTQ[TBI].c!==x.c) return;'
+    +       'var w=document.getElementById("tb-why"); if(w){ w.style.display="block"; w.textContent="This one will not open: "+String(why).replace(/[.\\s]+$/,"")+". Skip it and go to the next person."; }'
+    +       'var o=document.getElementById("tb-open"); if(o){ o.disabled=true; o.style.opacity=".45"; o.style.cursor="not-allowed"; }'
+    +     '});'
     +   '}'
     +   'function textBatchDone(){'
     +     'tbOn=false;'
@@ -13838,14 +13905,47 @@ function genMorningWorker(lane, autostart){
     // anchor fallback still counts as a user tap.
     +   'function textGate(c, href, pcs, label, go){'
     +     'if(TGBUSY) return;'
-    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null, g0=(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:""); TGBUSY=true;'
-    +     'var fin=function(ok, why){ if(done) return; done=true; TGBUSY=false; if(t) clearTimeout(t); if(!ok) addLog("fail", label, "Not texted — "+why, "warn"); else if(g0!==(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:"")) addLog("fail", label, "Not texted — you moved to another lead while the check ran; tap again", "warn"); else go(); };'
+    +     'var g0=(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:""); TGBUSY=true;'
+    +     '_tcheck(c, href, pcs, function(ok, why){ TGBUSY=false; if(!ok) txFail(label, "Not texted — "+why); else if(g0!==(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:"")) txFail(label, "Not texted — you moved to another lead while the check ran; tap again"); else go(); });'
+    +   '}'
+    // The fetch itself, shared by the click gate above and the batch screen's look-ahead below.
+    // cb(ok, why, answered): answered is true only when the bridge itself said yes or no, so a slow
+    // or missing bridge is never shown as "this person is blocked".
+    +   'function _tcheck(c, href, pcs, cb){'
+    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null;'
+    +     'var fin=function(ok, why, ans){ if(done) return; done=true; if(t) clearTimeout(t); cb(ok, why, !!ans); };'
     +     't=setTimeout(function(){ fin(false, "the bridge did not answer the do-not-contact check"); }, 3500);'
     +     'try{ fetch("http://127.0.0.1:8823/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
     +       '.then(function(rs){ return rs.json(); })'
-    +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check"); })'
+    +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check", true); })'
     +       '.catch(function(){ fin(false, "the bridge is not reachable"); }); }'
     +     'catch(e){ fin(false, "the bridge is not reachable"); }'
+    +   '}'
+    /* A REFUSED TEXT HAS TO SAY SO WHERE HE IS LOOKING (2026-10-16, "the text batch buttons dont work,
+       it doesnt send me to the phone link messages draft"). Every refusal on the text path (a hold,
+       the 8 AM-8 PM window, the cap, the do-not-contact / stay pre-flight) went to addLog only, and
+       the activity log sits below the queue panels, off the bottom of a laptop screen. The tap
+       changed nothing he could see, so a correct refusal read as a dead button. txFail keeps the log
+       line and also pins the reason to the bottom of the window until he taps it away. */
+    +   'function txNotice(msg){'
+    +     'try{'
+    +       'var n=document.getElementById("mwtxwhy");'
+    +       'if(!n){ n=document.createElement("div"); n.id="mwtxwhy"; n.setAttribute("role","alert");'
+    +         'n.style.cssText="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:calc(100% - 32px);max-width:640px;box-sizing:border-box;background:#fdecec;color:#8a1c1c;border:1px solid #f1b4b4;border-radius:10px;padding:12px 14px;font:600 13.5px/1.45 Segoe UI,Arial;box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:9999;cursor:pointer;text-align:left";'
+    +         'n.title="tap to close"; n.onclick=function(){ n.style.display="none"; }; document.body.appendChild(n); }'
+    +       'n.textContent=msg; n.style.display="block";'
+    +       'if(n._t) clearTimeout(n._t); n._t=setTimeout(function(){ n.style.display="none"; }, 20000);'
+    +     '}catch(e){}'
+    +   '}'
+    +   'function txFail(who, msg){ addLog("fail", who, msg, "warn"); txNotice((who?who+": ":"")+msg); }'
+    /* CLIPBOARD FIRST, same as Call Mode's composer (reproduced on DESKTOP-35NNMFL 2026-09-05): Phone
+       Link swallows an sms: activation while its own window is already open, so the composer can come
+       up blank or not at all. The body is on the clipboard on every open, so that costs a paste, not
+       the message. Fire-and-forget: a denied clipboard never blocks the open. */
+    +   'function _txClip(href){'
+    +     'try{ var m=/[?&]body=([^&]*)/.exec(String(href||"")); if(!m) return;'
+    +       'var b=decodeURIComponent(m[1].replace(/\\+/g," "));'
+    +       'if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(b).catch(function(){}); }catch(e){}'
     +   '}'
     +   'function openHere(url){'
     +     'if(!url) return false;'
@@ -14657,11 +14757,12 @@ function genMorningWorker(lane, autostart){
     +       'var xc=tb.getAttribute("data-qtext"), x=null;'
     +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
     +       'if(!x) return;'
-    +       'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
-    +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
-    +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
-    +       'textGate(x.c, x.sms, null, x.name, function(){'
-    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +       'if(TEXT_HOLD){ txFail(x.name, TEXT_HOLD); return; }'
+    +       'var g=_wftsa(); if(!g.safe){ txFail(x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead."); return; }'
+    +       'if(sentToday()>=CAP.max){ txFail(x.name, "⛔ daily cap reached — keep calling instead."); return; }'
+    +       'textGate(x.c, x.sms, x.pcs, x.name, function(){'
+    +         '_txClip(x.sms);'
+    +         'if(!openHere(x.sms)){ txFail(x.name, "Messages window blocked — check the popup blocker icon, then tap again"); return; }'
     +         'post("textopen",{qc:x.c});'
     +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
     +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
@@ -14738,13 +14839,14 @@ function genMorningWorker(lane, autostart){
     // at ("switch tabs to send") — he never switched, and six leads were still logged as texted.
     // A text is an ATTEMPT until he says otherwise: no cap charge, no CRM touch, lead stays queued.
     +       'if(fn==="text"){'
-    +         'if(TEXT_HOLD){ addLog("fail", r.first||r.owner, TEXT_HOLD, "warn"); return; }'
-    +         'if(!r.smsHref){ addLog("fail", r.first||r.owner, "no textable number (DNC or landline) — call instead", "warn"); return; }'
+    +         'if(TEXT_HOLD){ txFail(r.first||r.owner, TEXT_HOLD); return; }'
+    +         'if(!r.smsHref){ txFail(r.first||r.owner, "no textable number (DNC or landline) — call instead"); return; }'
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
-    +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
+    +         'var _tf=_wftsa(); if(!_tf.safe){ txFail(r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET."); return; }'
     +         'textGate(r.c, r.smsHref, r.pcs, r.first||r.owner, function(){'
-    +           'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +           '_txClip(r.smsHref);'
+    +           'if(!openHere(r.smsHref)){ txFail(r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again"); return; }'
     +           'post("textopen",{qc:r.c});'
     +           'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
     +           'confirmSend(r, "text");'
@@ -16118,6 +16220,11 @@ function _subjLine(street, dt, td, lang){
    2026-08-29 body below, which is itself compliant (identity disclosure, STOP line, CAN-SPAM sig).
    Never a raw placeholder: assert_no_placeholders would fail the build first. */
 var _ALEXMAIL_EN = "__ALEXMAIL_EN__";
+// Email opt-out sentence, baked from outreach_copy._unsub() so every body below moves with it. An
+// unbaked placeholder (raw template in a test) falls back to the approved wording.
+var _OPTOUT_EN = "__OPTOUT_EN__", _OPTOUT_ES = "__OPTOUT_ES__";
+if(_OPTOUT_EN.indexOf('__OPTOUT')===0) _OPTOUT_EN = "If now's not a good time, just tell me and I won't reach out again.";
+if(_OPTOUT_ES.indexOf('__OPTOUT')===0) _OPTOUT_ES = "Si ahora no es buen momento, solo d\u00edgamelo y no lo vuelvo a contactar.";
 function _alexFill(t, v){
   t = String(t||'');
   if(!v.first) t = t.split('Hi \u0001FIRST\u0001,').join('Hi,');
@@ -16173,6 +16280,12 @@ function genEmail(r, quiet){
   const bcc = emails.slice(1).join(', ');
   // professional signature block (blank fields skipped)
   const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
+  // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
+  // every email keeps it). outreach_email.py has always appended it (sig_en / sig_es); these bodies
+  // did not, so the board's early, tax-deed, Spanish, follow and final emails went out without it.
+  // bodyColdEN is Alejandro's baked template and already carries it after the SIG token.
+  const sigEN = sig + "\n\n" + _OPTOUT_EN;
+  const sigES = sig + "\n\n" + _OPTOUT_ES;
   /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
      tail replies.py needs; both are satisfiable and both are required. Built by _subjLine() above,
      which outreach_email.py mirrors line for line, so the manual composer and the unattended
@@ -16216,14 +16329,19 @@ function genEmail(r, quiet){
   const _IDENT_EN = `__IDENT_EN__`;
   const introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. ${_IDENT_EN}`;
   const introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. __IDENT_ES__`;
-  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nA foreclosure case was just filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. There is no auction date yet. That means right now you have the most choices you will ever have.\n\nChoices close one by one as time passes. That is the only reason for this note.\n\nOur senior advisor, over 30 years in mortgages and foreclosure workouts, can go over them with you. Five minutes, free, no fee ever. If nothing fits, we shake hands and part friends.\n\nCall or text me.\n\n${sig}\n\n`;
-  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nSe acaba de presentar un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta. Eso significa que ahora mismo usted tiene más opciones que nunca.\n\nLas opciones se van cerrando una por una con el tiempo. Ese es el único punto de esta nota.\n\nNuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución, puede repasarlas con usted. Cinco minutos, gratis, sin cobrarle nunca. Si nada le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto.\n\n${sig}\n\n`;
+  // EARLY-STAGE COPY, 2026-10-16 (Alejandro: "make it more urgent"). No sale date exists yet, so the
+  // urgency comes only from things true of every fresh Florida case: the sale is usually set 20 to
+  // 35 days after a final judgment (s. 45.031(1)(a), unless the court orders otherwise), a served
+  // defendant generally has 20 days to respond (Fla. R. Civ. P. 1.140(a)), and every option takes
+  // weeks to set up. No invented deadline, no claim that we stop or delay the sale.
+  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nA foreclosure case was just filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. The clock on that case is already running.\n\nIn Florida, once the court enters a final judgment, the auction is usually set just 20 to 35 days later. After that, most of your choices are gone. Right now there is no auction date, and that is the strongest position you will be in.\n\nCatching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours: each one takes weeks to set up, and each one gets harder every week the case moves. If you were served court papers, they carry a deadline to respond, usually 20 days. An attorney can tell you exactly where yours stands.\n\nOur senior advisor, over 30 years in mortgages and foreclosure workouts, can go over your options with you this week. Five minutes, free, no fee ever. If nothing fits, we shake hands and part friends.\n\nCall or text me today.\n\n${sigEN}\n\n`;
+  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nSe acaba de presentar un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. El reloj de ese caso ya está corriendo.\n\nEn Florida, cuando la corte dicta la sentencia final, la subasta normalmente se fija apenas de 20 a 35 días después. A partir de ahí, la mayoría de sus opciones se acaban. Ahora mismo no hay fecha de subasta, y esa es la posición más fuerte en la que va a estar.\n\nPonerse al día con el préstamo, ajustarlo con el banco, vender en sus términos y quedarse con lo suyo: cada una toma semanas en prepararse, y cada una se pone más difícil cada semana que el caso sigue adelante. Si a usted le entregaron documentos de la corte, traen un plazo para responder, normalmente 20 días. Un abogado le puede decir exactamente dónde está el suyo.\n\nNuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución, puede repasar sus opciones con usted esta semana. Cinco minutos, gratis, sin cobrarle nunca. Si nada le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto hoy.\n\n${sigES}\n\n`;
   const bodyEN = td
-    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nCounty records show ${addr} has a tax deed sale set for ${dt}${caseTagEN}. You can check that number yourself on the county's site.\n\nBefore that date you still have real paths: pay the back taxes and keep it, sell first (we can buy as-is if that fits), or claim the surplus if it sells for more than what is owed.\n\nOur senior advisor can tell you which one fits. Five free minutes, no fee ever. If none of them fit, we shake hands and part friends.\n\nCall or text me.\n\n${sig}\n\n`
-    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sig}\n\n`;
+    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nCounty records show ${addr} has a tax deed sale set for ${dt}${caseTagEN}. You can check that number yourself on the county's site.\n\nBefore that date you still have real paths: pay the back taxes and keep it, sell first (we can buy as-is if that fits), or claim the surplus if it sells for more than what is owed.\n\nOur senior advisor can tell you which one fits. Five free minutes, no fee ever. If none of them fit, we shake hands and part friends.\n\nCall or text me.\n\n${sigEN}\n\n`
+    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
   const bodyES = td
-    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Puede verificar ese número usted mismo en el sitio del condado.\n\nAntes de esa fecha todavía tiene caminos reales: pagar los impuestos atrasados y quedarse con la propiedad, vender antes (podemos comprar tal cual si le sirve), o reclamar el excedente si se vende por más de lo que se debe.\n\nNuestro asesor principal le puede decir cuál le conviene. Cinco minutos gratis, sin cobrarle nunca. Si ninguno le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto.\n\n${sig}\n\n`
-    : `Hola${first?' '+first:''},\n\n${addr} está programada para venderse en subasta el ${dt}${caseTagES}${plaintiff?`, en un caso presentado por ${plaintiff}`:''}.\n\nEse número de caso es real. Búsquelo en el sitio del clerk del condado y usted mismo lo puede ver en un minuto.\n\n${introES} Sé que está recibiendo mucha correspondencia y muchas llamadas ahora mismo, así que voy a ser breve.\n\nNo sé si usted ya tiene un plan. La mayoría de los dueños con quienes hablamos lo tienen, y si el suyo está funcionando, sígalo. Lo que es cierto para todo plan es que necesita tiempo. Ponerse al día con el préstamo, ajustarlo con el banco, vender en sus términos y quedarse con lo suyo, o que un abogado le pida más tiempo a la corte: todas requieren tiempo, y esa fecha no se mueve sola.\n\nCinco minutos gratis con nuestro asesor principal, más de 30 años en hipotecas y casos de ejecución, y usted va a saber cuáles de esas siguen abiertas para usted. Sin cobrarle nunca. Si ninguna le sirve, nos damos la mano y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número de teléfono y la mejor hora para llamarlo. O llámeme o mándeme un texto y lo coordinamos.\n\n${sig}\n\n`;
+    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Puede verificar ese número usted mismo en el sitio del condado.\n\nAntes de esa fecha todavía tiene caminos reales: pagar los impuestos atrasados y quedarse con la propiedad, vender antes (podemos comprar tal cual si le sirve), o reclamar el excedente si se vende por más de lo que se debe.\n\nNuestro asesor principal le puede decir cuál le conviene. Cinco minutos gratis, sin cobrarle nunca. Si ninguno le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto.\n\n${sigES}\n\n`
+    : `Hola${first?' '+first:''},\n\n${addr} está programada para venderse en subasta el ${dt}${caseTagES}${plaintiff?`, en un caso presentado por ${plaintiff}`:''}.\n\nEse número de caso es real. Búsquelo en el sitio del clerk del condado y usted mismo lo puede ver en un minuto.\n\n${introES} Sé que está recibiendo mucha correspondencia y muchas llamadas ahora mismo, así que voy a ser breve.\n\nNo sé si usted ya tiene un plan. La mayoría de los dueños con quienes hablamos lo tienen, y si el suyo está funcionando, sígalo. Lo que es cierto para todo plan es que necesita tiempo. Ponerse al día con el préstamo, ajustarlo con el banco, vender en sus términos y quedarse con lo suyo, o que un abogado le pida más tiempo a la corte: todas requieren tiempo, y esa fecha no se mueve sola.\n\nCinco minutos gratis con nuestro asesor principal, más de 30 años en hipotecas y casos de ejecución, y usted va a saber cuáles de esas siguen abiertas para usted. Sin cobrarle nunca. Si ninguna le sirve, nos damos la mano y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número de teléfono y la mejor hora para llamarlo. O llámeme o mándeme un texto y lo coordinamos.\n\n${sigES}\n\n`;
   /* ---- ALEJANDRO'S COPY — ENGLISH COLD BODY ----------------------------------------------------
      He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME template
      string outreach_email.py renders (baked above from outreach_copy.email_body_template()), so
@@ -16252,12 +16370,12 @@ function genEmail(r, quiet){
   // surface reaching a homeowner with no statement of who is writing or who they are not.
   // Email also gets read out of order, forwarded, or never delivered, so 'they saw it in the
   // first one' is not a safe assumption.
-  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${sN} with ${sL||'Biscayne Solutions Group'} again. __IDENT_EN__ I wrote you a few days back about ${street}.\n\n${dt?`The sale date is still ${dt}.`:'The case is still moving.'}\n\nIf you're working a plan right now, the bank, a lawyer, money on the way, keep going. You did the right thing, and I'm not asking you to change any of it.\n\nI'm asking to be your parachute. Plans can land late, and late can cost the house. So let a backup sit ready ${dlEN}. It costs nothing: five free minutes with our senior advisor, no fee ever. If your plan works, tear the backup up and we part friends.\n\nAll I need is a reply with a good number and the best time to reach you.\n\n${sig}\n\n`;
-  const bodyFollowES = `Hola${first?' '+first:''},\n\nSoy ${sN}, de ${sL||'Biscayne Solutions Group'}, otra vez. __IDENT_ES__ Le escribí hace unos días sobre ${street}.\n\n${dt?`La fecha de subasta sigue siendo el ${dt}.`:'El caso sigue avanzando.'}\n\nSi usted ya tiene un plan en marcha, el banco, un abogado, dinero en camino, sígalo. Hizo lo correcto, y no le pido que cambie nada.\n\nLe pido ser su paracaídas. Los planes a veces llegan tarde, y tarde puede costar la casa. Deje un respaldo listo ${dlES}. No cuesta nada: cinco minutos gratis con nuestro asesor principal, sin cobrarle nunca. Si su plan funciona, rompa el respaldo y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número y la mejor hora para llamarlo.\n\n${sig}\n\n`;
+  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${sN} with ${sL||'Biscayne Solutions Group'} again. __IDENT_EN__ I wrote you a few days back about ${street}.\n\n${dt?`The sale date is still ${dt}.`:'The case is still moving.'}\n\nIf you're working a plan right now, the bank, a lawyer, money on the way, keep going. You did the right thing, and I'm not asking you to change any of it.\n\nI'm asking to be your parachute. Plans can land late, and late can cost the house. So let a backup sit ready ${dlEN}. It costs nothing: five free minutes with our senior advisor, no fee ever. If your plan works, tear the backup up and we part friends.\n\nAll I need is a reply with a good number and the best time to reach you.\n\n${sigEN}\n\n`;
+  const bodyFollowES = `Hola${first?' '+first:''},\n\nSoy ${sN}, de ${sL||'Biscayne Solutions Group'}, otra vez. __IDENT_ES__ Le escribí hace unos días sobre ${street}.\n\n${dt?`La fecha de subasta sigue siendo el ${dt}.`:'El caso sigue avanzando.'}\n\nSi usted ya tiene un plan en marcha, el banco, un abogado, dinero en camino, sígalo. Hizo lo correcto, y no le pido que cambie nada.\n\nLe pido ser su paracaídas. Los planes a veces llegan tarde, y tarde puede costar la casa. Deje un respaldo listo ${dlES}. No cuesta nada: cinco minutos gratis con nuestro asesor principal, sin cobrarle nunca. Si su plan funciona, rompa el respaldo y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número y la mejor hora para llamarlo.\n\n${sigES}\n\n`;
   const fdEN = dt ? `If the ${dt} sale date is already handled` : 'If the case is already handled';
   const fdES = dt ? `Si la subasta del ${dt} ya está resuelta` : 'Si el caso ya está resuelto';
-  const bodyFinalEN = `Hi${first?' '+first:''},\n\nThis is my last note about ${street}.\n\n${fdEN}, ignore this and I truly wish you well.\n\nIf it's not, the door stays open. Our senior advisor will still go over your options with you, five minutes, free, no fee ever. Every choice stays yours.\n\nI won't email you again after this. My number stays good.\n\n${sig}\n\n`;
-  const bodyFinalES = `Hola${first?' '+first:''},\n\nEsta es mi última nota sobre ${street}.\n\n${fdES}, ignore este mensaje y le deseo lo mejor, de verdad.\n\nSi no lo está, la puerta sigue abierta. Nuestro asesor principal todavía puede repasar sus opciones con usted, cinco minutos, gratis, sin cobrarle nunca. Cada decisión sigue siendo suya.\n\nNo le vuelvo a escribir después de esta. Mi número queda a su disposición.\n\n${sig}\n\n`;
+  const bodyFinalEN = `Hi${first?' '+first:''},\n\nThis is my last note about ${street}.\n\n${fdEN}, ignore this and I truly wish you well.\n\nIf it's not, the door stays open. Our senior advisor will still go over your options with you, five minutes, free, no fee ever. Every choice stays yours.\n\nI won't email you again after this. My number stays good.\n\n${sigEN}\n\n`;
+  const bodyFinalES = `Hola${first?' '+first:''},\n\nEsta es mi última nota sobre ${street}.\n\n${fdES}, ignore este mensaje y le deseo lo mejor, de verdad.\n\nSi no lo está, la puerta sigue abierta. Nuestro asesor principal todavía puede repasar sus opciones con usted, cinco minutos, gratis, sin cobrarle nunca. Cada decisión sigue siendo suya.\n\nNo le vuelvo a escribir después de esta. Mi número queda a su disposición.\n\n${sigES}\n\n`;
   // 'replied' composes the follow body (a manual send should still be short + threaded, never the
   // cold pitch); 'done' composes the final body. Both are manual-only paths — _cardMail blanks them.
   const isFinal  = (stage==='final' || stage==='done');
@@ -16391,7 +16509,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'I\'m writing you once instead of once per property. Each one has its own way out — keep ' +
     'one, sell another, let a third go — and it all works best as one conversation.\n\n' +
     'If it\'d help, I can walk the numbers on any of them. No cost, no obligation — and if ' +
-    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\n' +
+    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\n' + _OPTOUT_EN + '\n\n' +
     '';
   var bodyES = 'Hola ' + first + ',\n\n' +
     'Soy ' + sN + ', de Biscayne Solutions Group. No soy su prestamista, no soy del gobierno, y ' +
@@ -16402,7 +16520,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'Le escribo una sola vez y no por cada propiedad. Cada una tiene su propia salida — quedarse ' +
     'con una, vender otra, dejar ir una tercera — y todo se trabaja mejor en una sola conversación.\n\n' +
     'Si le sirve, puedo repasar los números de cualquiera de ellas. Sin costo, sin compromiso — ' +
-    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\n' +
+    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\n' + _OPTOUT_ES + '\n\n' +
     '';
   var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   try {
@@ -19218,7 +19336,7 @@ async function decryptPayload(enc, password){
    Shape: {rows:[...], side:{rp:{case:{subject,excerpt,note}}, dw:{case:'why'}}}. A plain array is
    the pre-2026-09-17 payload (and the plaintext Desktop twin), which still has its text inline. */
 function _applyPayload(pl){
-  if(Array.isArray(pl)) return pl;                 // legacy payload: nothing sealed, nothing to merge
+  if(Array.isArray(pl)) return _expireReleases(pl);                 // legacy payload: nothing sealed, nothing to merge
   const side = (pl && pl.side) || {};
   try{
     const rp = side.rp || {};
@@ -19227,7 +19345,7 @@ function _applyPayload(pl){
     Object.keys(dw).forEach(c => { if(SERVER_DEADS && SERVER_DEADS[c]) SERVER_DEADS[c].why = dw[c]; });
     if(Object.keys(dw).length) _applyServerDeadNotes();   // the reason only exists now — seed the note
   }catch(e){ /* a merge failure must never cost the unlock — the board still opens, text-free */ }
-  return (pl && pl.rows) || [];
+  return _expireReleases((pl && pl.rows) || []);
 }
 function _greetWord(){
   try{ const h = new Date().getHours(); return h<12 ? 'Good morning' : h<18 ? 'Good afternoon' : 'Good evening'; }
@@ -19470,10 +19588,22 @@ async function boot(){
     }catch(e){}
   };
   setInterval(_dayTick, 15*60*1000);
+  // RELEASE EXPIRY while the page stays open: a bkUntil that passes mid-session re-holds the row now,
+  // not at the next load (the load-time pass alone left an open tab offering it until reload)
+  var _expTick = function(){
+    try{
+      var n = DATA.filter(function(r){ return r && r.saleBkAct; }).length;
+      _expireReleases(DATA);
+      if(DATA.filter(function(r){ return r && r.saleBkAct; }).length !== n){
+        try{ recompute(); }catch(e){} try{ render(); }catch(e){}
+      }
+    }catch(e){}
+  };
+  setInterval(_expTick, 60*1000);
   // the sale hour is a boundary, not just another tick (see _msToSaleHour)
   (function _armSaleHour(){ setTimeout(function(){ _dayTick(); _armSaleHour(); }, _msToSaleHour()); })();
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible') _dayTick();
+    if(document.visibilityState === 'visible'){ _expTick(); _dayTick(); }
   });
   // REPLAY bridge-buffered marks. worker_marks.jsonl was write-only — a mark that outlived its
   // worker tab was safe on disk and useless forever. Fetch it from the local bridge and re-inject

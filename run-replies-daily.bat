@@ -58,6 +58,11 @@ REM rebuild below so a fresh opt-out reaches the board in the same pass. It only
 REM re-running is a no-op, so a failure here must not stop the publish.
 python -u optout_sync.py >> "%LOG%" 2>&1
 
+REM BANKRUPTCY SAID IN A REPLY (2026-10-15). A homeowner who writes "we filed chapter 13" or
+REM "estoy en bancarrota" is put on never_contact.json, which every send, text, letter, Call Mode
+REM and board gate already reads. Add-only; a failure is printed and does not stop the publish.
+python -u bk_said.py --apply >> "%LOG%" 2>&1
+
 REM Bake the fresh replies into the board and publish. Rebuild-only (no scrape) — this is
 REM the same command the memory file records for time-critical rebuilds, ~2 min total.
 python -u -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1

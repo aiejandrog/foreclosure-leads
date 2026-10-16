@@ -119,6 +119,29 @@ State as of the claim: cadence calls `replies.is_stop_text()` (no local detector
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
 
+## Replies and one-off email: `reply_send.py` only
+
+On 2026-10-12 four homeowner replies were sent over SMTP by a script that called
+`outreach_email._smtp_send` directly. That function ran `mail_guard` and nothing else, so the stay
+gate, the case and same-owner do-not-contact checks, the bounce list and the dedupe never ran, and
+the sends never reached `mail_sent.json`. Three of those homeowners had no passing stay check.
+
+- `_smtp_send` (both `outreach_email` and `send_server`) now raises unless the caller is inside
+  `mail_guard.gated('<name>')` or the mail goes only to the advisor or the sending login. The gated
+  callers are `send_server /send`, `outreach_email.main`, `cadence`, and `reply_send`.
+- To email a homeowner who wrote in, or any one-off: `python reply_send.py --case C --to A
+  --subject S --body-file F` (dry run, prints the gate verdict), then add `--send`. It checks that
+  the case resolves, the opt-out ledger is readable, fresh and synced today, the case, address and
+  same-owner cases are not on it, the address has not hard-bounced, `stay_gate.check` is clear and
+  `bk_lookup.send_hold` does not hold, and the subject was not sent to that address in 24 hours.
+  Then it sends and writes a `mail_sent.json` row with `source` and `machine`. It never spends on a
+  lookup; a case that needs a paid search is refused.
+- This does not stop a script that opens its own `smtplib` connection. Do not write one. A new
+  module that calls `_smtp_send` must wrap it in `gated()`; `_replysendtest.py` fails on one that
+  does not.
+- Not changed: `cadence.py`'s legacy hand-built SMTP branch (reached only when `import send_server`
+  fails) and `warmup.py` (mails owned seed inboxes). Reported, not fixed.
+
 ## Send bridge reload
 
 Since 2026-10-07 (#175, Alejandro chose "Self-restart") `send_server.py` restarts itself on new
@@ -177,6 +200,14 @@ MARS/Reg O), `identity()` ("I am not your lender / the government / a rescue com
 **Never re-type this text into a new module.** It was hand-copied across four files once already and
 drifted into five versions, each weaker than the last in a different way. Add a caller, not a copy.
 Changing the wording is a legal decision — raise it, don't just edit it.
+
+**2026-10-15, at Alejandro's direction:** every mailed letter from `bsg_mail_campaign.letter()` now
+carries the three federally mandated MARS sentences (`disclaimer.mars_part('govt', 'may_agree',
+'may_stop')`) and the approved opt-out line, EN then ES (`outreach_copy.OPTOUT_LINE_EN/ES`). The
+module's docstring said both were there; the body had neither. Not yet decided by the attorney in
+writing: a no-street letter to the owner's mailing address (`mailAddr`, #235) and mailing Broward /
+Palm Beach rows before a bankruptcy search. Neither is built; draft wording is under project files
+`letters-mailing-address/`.
 
 ## Never commit
 
@@ -344,6 +375,15 @@ username/password, written on the laptop by Alejandro) or the PACER_* env vars. 
 searches Broward / Palm Beach leads that have a phone on the board twin, inside
 `PACER_QUARTER_CAP` (default $25, under the $30 quarterly waiver) and the $50/month paid-reads cap.
 
+**2026-10-16, at Alejandro's direction ("remove pacer completely"): PACER is a by-hand tool.** It is for
+checking whether a client's bankruptcy was filed, and filed correctly, not a pipeline step. The nightly
+`[3g/5]` step is gone from `refresh-dealflow.bat`, and `pacer_stay.py` does nothing automatic unless
+`DEALFLOW_PACER_AUTO=1` (default off): no nightly pull, no `--bulk`, no send-bridge pre-send search
+(`presend_check` returns `off` and the refusal stands). `pacer_stay.py --case C`, `--plan`, `--status`
+and `--report` still run. Nothing was released: existing clears keep expiring on their 14-day age and are
+not renewed, existing active hits and new-filer hits keep holding, and `bk_lookup.pacer_confirmed()` is
+unchanged.
+
 Miami-Dade keeps the #72 docket gate. This lookup only adds a hold there. A CourtListener
 clear does not lift a docket stay or a PACER active hit.
 
@@ -356,6 +396,24 @@ with a name, a phone, or the token.
 **Terms.** CourtListener's terms may restrict revenue-positive commercial use. Alejandro
 is asking Free Law Project. Until that is answered, keep the provider swappable and do
 not add a second CourtListener client.
+
+**Unchecked-lead waiver (2026-10-13, attorney approved in writing, calls then texts and
+emails the same day; screenshots under project files `callmode-carlos/ATTORNEY-OK-UNCHECKED-BK-*.png`).**
+`bk_waiver.json` (tracked, `unchecked_contact: true`) or `DEALFLOW_BK_ALLOW_UNCHECKED=1` releases a
+Broward or Palm Beach lead whose federal check has **not run, errored, gone stale, or is a
+CourtListener `clear_unconfirmed`**: `bk_lookup.unchecked_allowed()` / `_unchecked_release()`, read by
+`gate_opinion` (send gate, so email, text and letters), `HoldIndex.hold` (dial queue, Call Mode, knock
+planner) and `flags_for_cases` (board bake, `ask: true` -> `bkAsk` -> Call Mode `bq`). It never
+releases an open or possible CourtListener match, a PACER active entry or new-filer hit, a torn
+PACER file, a never-contact case, a Miami-Dade stem's docket verdict, or an unreadable cache
+(`_pacer_flagged` reads the PACER evidence on the dial queue and the board bake, which never did
+before). With `DEALFLOW_CLERK_BK=1` the clerk hold still wins on the board. Every released Call Mode
+card, the balloon lane included, opens with
+"Bankruptcy not checked. Ask first: Have you filed for bankruptcy?"; a yes ends the call and is
+marked Do Not Contact, which ledgers it. `DEALFLOW_BK_ALLOW_UNCHECKED=0` wins over the file and is
+the off switch; the base-gate suites set it so they keep modelling the held world, and
+`_bkuncheckedtest.py` covers the waiver. Withdrawing the waiver is the attorney's or Alejandro's
+call: flip the file, do not edit the gate.
 
 ## Clerk docket bankruptcy check (Broward / Palm Beach)
 

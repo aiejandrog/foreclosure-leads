@@ -57,31 +57,50 @@ CALL_OUTCOMES = [
     ('dnc',       'Hard no (do not call)',     0, True),
 ]
 
-# 15-second voicemail, Copy Pack §5. He READS it — no prerecorded or ringless drop, which would
-# need prior express written consent under the TCPA and is the one part of "auto-dial everything"
-# that stays off the table.
-# 8/17 masterclass voice. {st1} not {street}: the full address read aloud sounds like a process
-# server (Evernia St lesson, 2026-08-16). {phone} is the explicit callback slot — fillScript
-# resolves it from SENDER.phone. Numbers written as words because he READS this live.
-VOICEMAIL_EN = ("Hi {first}, this is {sender} with Biscayne Solutions Group, about {st1}. "
-                "You may have a plan. Keep it. A plan can land a day late, and here a day is "
-                "everything. Our senior advisor, thirty plus years, maps your free backup in five "
-                "minutes. Call me any hour at {phone}. Thanks.")
-VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group, por {st1}. "
-                "Si tiene un plan, sígalo. Un plan puede llegar un día tarde, y aquí un día lo es "
-                "todo. Nuestro asesor principal, más de treinta años, le arma su respaldo gratis "
-                "en cinco minutos. Llámeme a cualquier hora al {phone}. Gracias.")
+# VOICEMAIL (2026-10-12, Alejandro's own dictated script, cleaned for the copy law). He READS it --
+# no prerecorded or ringless drop, which would need prior express written consent under the TCPA
+# and is the one part of "auto-dial everything" that stays off the table.
+# {sender}/{phone} resolve from the dialing phone's own identity (SENDER, fcSender), so Carlos's
+# page says Carlos's name and number once his phone has them saved. {vmsale} is the whole
+# sale-timing sentence, chosen per row by fillScript from VM_SALE below (live days to sale).
+# Copy law: never "we stop the sale", no fee, no number, discovery framing (#57). The number is
+# said twice because a voicemail is heard once, usually while driving.
+VOICEMAIL_EN = ("Hi {first}, this is {sender} with Biscayne Solutions Group. {vmsale} "
+                "We work with homeowners in this situation, and there may be more than one way to "
+                "handle it, depending on what you want to do with the house. If you'd like to talk "
+                "it through, call me at {phone}. Again, that's {phone}. If now's not a good time, "
+                "just let me know and I won't reach out again. Thank you.")
+VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group. {vmsale_es} "
+                "Trabajamos con propietarios en esta situación, y puede haber más de una manera de "
+                "manejarlo, según lo que usted quiera hacer con la casa. Si desea conversarlo, "
+                "llámeme al {phone}. Repito, {phone}. Si ahora no es buen momento, solo dígamelo y "
+                "no lo vuelvo a contactar. Gracias.")
+
+# The sale-timing sentence of the voicemail, by state. 'days' carries {n} (live days to sale, 2+);
+# 'none' is a lead with no sale date (lis pendens), a passed sale, or a date the page cannot read.
+# "court sale", not "foreclosure": a voicemail box is often shared, and the gatekeeper rule below
+# (GATE step) is never to say "foreclosure" to anyone but the owner.
+VM_SALE = {
+    'en': {'days': "Public records show a court sale scheduled on your property at {st1} in about {n} days.",
+           'tomorrow': "Public records show a court sale scheduled on your property at {st1} for tomorrow.",
+           'today': "Public records show a court sale scheduled on your property at {st1} for today.",
+           'none': "Public records show a court case filed on your property at {st1}."},
+    'es': {'days': "Según los registros públicos, hay una venta judicial programada para su propiedad en {st1} en unos {n} días.",
+           'tomorrow': "Según los registros públicos, hay una venta judicial programada para su propiedad en {st1} para mañana.",
+           'today': "Según los registros públicos, hay una venta judicial programada para su propiedad en {st1} para hoy.",
+           'none': "Según los registros públicos, hay un caso judicial presentado sobre su propiedad en {st1}."},
+}
 
 # HOW TO LEAVE IT — the tonality cue rendered right under the voicemail (2026-09-14, Alejandro). A
 # voicemail lives or dies on delivery, not words: NEPQ leaves it low-status, unhurried and a little
 # detached so it reads as a note, not a pitch — that softness is what earns the callback. Rendered as
 # a muted coaching line above the script (like the NEPQ beat-purpose lines), NOT spoken aloud.
 VM_TONE_EN = ("HOW TO SAY IT — low and unhurried, like a neighbor leaving a note, not a salesman. "
-              "Pause on every '...'. Sound a little detached, almost unsure you've even got the right "
+              "Pause at every period. Sound a little detached, almost unsure you've even got the right "
               "person — that softness is what earns the callback. Warm, never urgent, and slow down "
               "on the phone number so they can write it.")
 VM_TONE_ES = ("CÓMO DECIRLO — bajo y sin prisa, como un vecino que deja un recado, no un vendedor. Haga "
-              "pausa en cada '...'. Suene un poco desapegado, casi como si no estuviera seguro de tener "
+              "pausa en cada punto. Suene un poco desapegado, casi como si no estuviera seguro de tener "
               "a la persona correcta — esa suavidad es la que gana la llamada de vuelta. Cálido, nunca "
               "con urgencia, y despacio con el número de teléfono para que lo puedan anotar.")
 
@@ -136,16 +155,34 @@ TONALITY = [
 # NEPQ_Q stack below only runs if they are still talking. "Five minutes" is the advisor consult
 # (matches FIFTEEN_SEC, VOICEMAIL, outreach_copy); do not introduce a conflicting ten/fifteen here,
 # cross_surface_check() greps this file for it.
-_OPEN_BODY_EN = ("It is {sender} with Biscayne Solutions Group. This might sound a little random, but "
-                 "I have a copy of the court paperwork on {st1}{date} right in front of me, and I was "
-                 "hoping you could help me out for a second. I am not your lender and I am not calling "
-                 "to buy the place. Can I ask you something real quick?")
+# 2026-10-15 (Alejandro): "i dont like how robotic the nepq one is". His own phone opener leads:
+# "Do you know your property is in pre foreclosure?" It is a real question, so the page STOPS after
+# it and lets them answer; the two nots and the permission ask come second, in plain words. The old
+# "this might sound a little random... help me out" disarm is retired. Accuracy: {date} renders
+# " with a sale date of <date>" only when an auction is actually set, and nothing otherwise, so an LP
+# lead hears "pre-foreclosure" and a set sale hears its date. "Foreclosure" is said only after the
+# greeting has settled that this is the owner (NEVER_SAY): the full sheet carries a [Wait for yes.]
+# cue after the greeting, and the guided "who's asking?" answer re-confirms the owner first.
+_OPEN_ASK_EN = ("It is {sender} with Biscayne Solutions Group. Do you know your property on {st1} is "
+                "in pre-foreclosure{date}?")
+_OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy your house. I help owners see what options "
+                 "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_BODY_ES = ("Le habla {sender}, de Biscayne Solutions Group. Puede sonar un poco raro, pero tengo "
-                 "una copia del papeleo de la corte sobre {st1}{date} aquí enfrente, y esperaba que me "
-                 "pudiera ayudar un momento. No soy su prestamista y no le vengo a comprar la casa. "
-                 "¿Le puedo hacer una pregunta rápida?")
+_OPEN_ASK_ES = ("Le habla {sender}, de Biscayne Solutions Group. ¿Usted sabe que su propiedad en {st1} "
+                "está en proceso de foreclosure{date_es}?")
+_OPEN_NOTS_ES = ("No soy su prestamista y no le llamo para comprarle la casa. Ayudo a los dueños a ver "
+                 "qué opciones tienen antes de que esto avance más. ¿Le puedo hacer un par de preguntas "
+                 "rápidas?")
+# If they did not know: they just heard it from a stranger. Be human first, then the nots.
+_OPEN_NEWS_EN = ("I'm sorry to be the one telling you. It's in the public court records, and that's "
+                 "the only reason I called.")
+_OPEN_NEWS_ES = ("Siento ser yo quien se lo diga. Está en los registros públicos de la corte, y es la "
+                 "única razón por la que le llamé.")
+# The full sheet reads as one block, so the pause is written in as a [bracket] cue (rendered
+# literally; fillScript only touches {curly}).
+_OPEN_BODY_EN = _OPEN_ASK_EN + " [Stop. Let them answer.] " + _OPEN_NOTS_EN
+_OPEN_BODY_ES = _OPEN_ASK_ES + " [Pare. Deje que conteste.] " + _OPEN_NOTS_ES
 
 # THE QUESTION STACK -- NEPQ. Runs after the opener, only if they engage. Situation -> problem
 # awareness -> consequence (money side only, no case merits, no promised outcome) -> what it has cost
@@ -245,12 +282,12 @@ if len(NEPQ_K) != len(NEPQ_Q_EN):
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
-PHONE_OPENER_EN = "Hi, is this {first}? " + _OPEN_BODY_EN
-PHONE_OPENER_ES = "Hola, ¿hablo con {first}? " + _OPEN_BODY_ES
+PHONE_OPENER_EN = "Hi, is this {first}? [Wait for yes.] " + _OPEN_BODY_EN
+PHONE_OPENER_ES = "Hola, ¿hablo con {first}? [Espere el sí.] " + _OPEN_BODY_ES
 # {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
-PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? " + _OPEN_BODY_EN
-PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? " + _OPEN_BODY_ES
+PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? [Wait for yes.] " + _OPEN_BODY_EN
+PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? [Espere el sí.] " + _OPEN_BODY_ES
 
 # WARM opener (2026-09-05, Alejandro's own field style): when he already KNOWS the person — a prior
 # Talked / Appointment / Callback on this human — the cold disarm reads as amnesia. His open is just
@@ -714,6 +751,8 @@ BOOK_ES = ("Perfecto — lo tengo anotado para [la hora que escogió]. Hágame u
            "guarde mi número ahora mismo... es el {phone}. ... Ahora léamelo de vuelta, para saber que lo "
            "tiene bien.")
 # Gatekeeper / not the owner: "the property on {st1}", never the word foreclosure (NEVER_SAY).
+WHO_EN = "It's {sender} with Biscayne Solutions Group. I'm trying to reach the owner of {st1}. Is that you?"
+WHO_ES = "Le habla {sender}, de Biscayne Solutions Group. Busco al dueño de {st1}. ¿Es usted?"
 GATE_EN = ("No problem at all — when's usually a good time to catch them? ... Or if it's easier, could I "
            "leave my number with you? It's {phone}, and it's about the property on {st1}.")
 GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fácil, ¿le puedo dejar mi número? "
@@ -768,16 +807,43 @@ def _flow():
          'aen': 'Hi, am I speaking with the owner of {st1}?', 'aes': 'Hola, ¿hablo con el dueño de {st1}?',
          'tone': 'Warm and casual, voice DOWN on the name — like you half-know them. Then STOP.',
          'listen': 'Wait. Let them answer. Do not fill the gap.',
-         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'disarm'],
+         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
-        {'id': 'disarm', 'k': 'THE DISARM',
-         'en': _OPEN_BODY_EN, 'es': _OPEN_BODY_ES,
-         'tone': 'Confused, low-status, slow. Say your FIRST name... pause... then full name + company, '
-                 'like they should already know you. Slow on the two NOTS. Then STOP.',
+        # "Who's asking?" is not a yes: a spouse or a tenant asks it too, and the next line says
+        # foreclosure (NEVER_SAY). Name yourself, then confirm the owner before the question.
+        {'id': 'who', 'k': '"WHO\'S ASKING?" — confirm the owner first',
+         'en': WHO_EN, 'es': WHO_ES,
+         'tone': 'Easy and friendly. Your name, the company, then confirm. No reason yet.',
+         'listen': 'Only a clear yes gets the next line.',
+         'br': [['Yes, that\'s me', 'disarm'], ['No / not here', 'gate'], ['What\'s it about?', 'gate'],
+                ['Wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
+         'ret': 'disarm'},
+        {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
+         'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
+         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
+                 'question. Then STOP.',
+         'listen': 'Wait for the answer. Do not explain anything yet.',
+         'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
+                ['What do you do?', 'intro30'],
+                ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
+                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
+                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
+         'ret': 'nots'},
+        {'id': 'news', 'k': "THEY DIDN'T KNOW — be human first",
+         'en': _OPEN_NEWS_EN, 'es': _OPEN_NEWS_ES,
+         'tone': 'Soft and slow. This is news to them. No pitch, no hurry.',
+         'listen': 'Give them a second. Let them react.',
+         'br': [['Continue →', 'nots'], ['We already reinstated', 'reinstated'], ['Not interested', 'obj:15'],
+                ['Don\'t call me again', 'end:dnc']],
+         'ret': 'nots'},
+        {'id': 'nots', 'k': 'THE TWO NOTS + permission',
+         'en': _OPEN_NOTS_EN, 'es': _OPEN_NOTS_ES,
+         'tone': 'Slow on the two NOTS. Then ask permission and STOP.',
          'listen': 'They will test you here. Whatever they say, do not get defensive.',
-         'br': [['Okay / sure / what?', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
+         'br': [['Okay / sure', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
                 ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
@@ -859,7 +925,7 @@ def _flow():
          'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
          'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
          'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
-                ['Bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
+                ['Already filed bankruptcy', 'end:dnc'], ['Planning to file bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
                 ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
          'ret': 'q5'},
         {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],
@@ -928,7 +994,7 @@ def _flow():
         {'id': 'vm', 'k': 'VOICEMAIL — read it live',
          'en': VOICEMAIL_EN, 'es': VOICEMAIL_ES,
          'tone': VM_TONE_EN,
-         'listen': 'Hang up after "Thanks." Do not ramble.',
+         'listen': 'Hang up after "Thank you." Do not ramble.',
          'br': [['Left it', 'end:voicemail']],
          'ret': 'vm'},
     ]
@@ -1032,7 +1098,7 @@ _OPT_END = 'function _dneg(iso)'
 # ═══════════════ THE BOARD'S OWN FUNNEL CLASSIFIER (2026-09-17) ═══════════════
 # Alejandro reads nine lane counts off the board — WARM / URGENT / CALL / WRITE / LETTER / DOOR /
 # TRACE / WAITING / OUT — and could not find those lanes on the phone at all. Call Mode had nine
-# lanes of its own (3-DAY, Emailed, Worker, Urgent 0-7, Sale soon, 46-60, Fresh filings, Balloon,
+# lanes of its own (3-DAY, Emailed, Worker, Urgent 0-7, Sale soon, 46+ days, Fresh filings, Balloon,
 # Buy-box) over a DIFFERENT, much smaller population, so no lead could be followed from one surface
 # to the other and no two numbers agreed.
 #
@@ -1474,7 +1540,7 @@ def lookup_hold_fn(slim, optouts=None, deads=None):
 
     The same stay and suppression drops call_rows makes, read from the same sources, so the
     "Who texted me?" screen cannot hand out a tel:/sms: link that the dial queue withheld.
-    Deliberately NOT the queue's other drops (60-day window, cap, other seat, equity floor):
+    Deliberately NOT the queue's other drops (sale-date window, cap, other seat, equity floor):
     those are "not due today", and calling back someone who texted in is fine for them."""
     optouts, deads = (optouts or {}), (deads or {})
     _id_opted = _identity_opted_fn(slim, optouts)
@@ -1541,7 +1607,97 @@ def _call_equity(d):
     return _call_equity_parts(d)[0]
 
 
-def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
+# HOW FAR OUT A DATED SALE MAY BE AND STILL REACH THE DIAL QUEUE (2026-10-15, Alejandro: "anything
+# blocking leads coming in, unblock it", equity bar kept). Was 60. The auction calendars are scraped
+# 120 days ahead (foreclosure_leads.AUCTION_HORIZON_DAYS), so a 60-day cut held every lead 61-120
+# days out off the phone until it aged in, which cost the caller the longest runway on exactly the
+# leads with the most time to work. LP rows and balloons never had this cut. CALLMODE_MAX_DAYS tunes it.
+def _env_max_days(default=120):
+    try:
+        v = int(os.environ.get('CALLMODE_MAX_DAYS', '') or default)
+    except ValueError:
+        return default
+    return v if v > 0 else default
+
+
+MAX_DAYS = _env_max_days()
+
+
+def _seat_bucket(case):
+    """Stable 0-11 seat bucket of a case number (FNV-1a, 32-bit). See the SEAT BUCKET note in call_rows."""
+    h = 2166136261
+    for ch in str(case or ''):
+        h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
+    return h % 12
+
+
+def _seat_links(r):
+    """The keys that say two dial rows reach the same household: person key, street line, phone."""
+    keys = []
+    if r.get('pk'):
+        keys.append('k:' + str(r['pk']))
+    a1 = re.sub(r'[^A-Z0-9]', '', str(r.get('a') or '').split(',')[0].upper())
+    if len(a1) > 5 and any(ch.isdigit() for ch in a1) and r.get('z'):
+        keys.append('a:' + a1 + ':' + str(r['z']))
+    for p in r.get('p') or []:
+        d = re.sub(r'\D', '', str(p))[-10:]
+        if len(d) == 10:
+            keys.append('p:' + d)
+    return keys
+
+
+def _seat_by_household(rows):
+    """ONE HOUSEHOLD, ONE SEAT (2026-10-15). The seat bucket is a hash of the CASE number, so a person
+    with two cases (an HOA case and a bank case, an auction row and an LP row, two properties), two
+    owners of one house under different person keys, or two rows carrying the same phone could land
+    half on each seat: Alejandro and Carlos then both call the same human the same day, each seeing a
+    fresh lead. Rows linked by person key, street line + ZIP, or a phone number form one group, and the
+    whole group takes the bucket of its lowest case number. A row linked to nothing keeps its own
+    bucket, so singletons do not move between callers. Seat assignment only: nothing is hidden, and
+    the person-wide suppression list (pcs) is untouched. Returns the number of rows that moved."""
+    parent = {}
+    # A street line shared by 3+ person keys is a building (condo tower, HOA filing against several
+    # units with no unit number), not a household: it does not link.
+    _line_pks = {}
+    for r in rows:
+        for k in _seat_links(r):
+            if k.startswith('a:'):
+                _line_pks.setdefault(k, set()).add(r.get('pk') or r.get('c'))
+    _building = {k for k, v in _line_pks.items() if len(v) > 2}
+
+    def find(x):
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    for i, r in enumerate(rows):
+        if not r.get('c'):
+            continue
+        node = 'r:%d' % i
+        for k in _seat_links(r):
+            if k in _building:
+                continue
+            a, b = find(node), find(k)
+            if a != b:
+                parent[a] = b
+    groups = {}
+    for i, r in enumerate(rows):
+        if r.get('c'):
+            groups.setdefault(find('r:%d' % i), []).append(r)
+    moved = 0
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        sb = _seat_bucket(min(str(r['c']) for r in g))
+        for r in g:
+            if r.get('sb') != sb:
+                moved += 1
+            r['sb'] = sb
+    return moved
+
+
+def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
     Everything is decided HERE, at build time, so the phone does no filtering — it only renders.
@@ -1595,6 +1751,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             _ident_dropped += 1
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
+            continue
+        if d.get('rfHold'):                                  # RealForeclose: sale cancelled per bankruptcy, redeemed or dismissed (rf_status.py)
             continue
         if _federal_held(case):
             continue
@@ -1666,11 +1824,16 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # wall = HOTTEST, so it must not read as "auction already passed" below.
             _bd = (d.get('bal') or {}).get('days')
             days = int(_bd) if isinstance(_bd, (int, float)) else 9999
-        if not is_lp and not is_bal and (days < 0 or days > max_days):     # auction already passed, or too far out
+        if not is_lp and not is_bal and (days < 0 or days > (MAX_DAYS if max_days is None else max_days)):     # auction already passed, or too far out
             continue
         # An LP row that GAINED a sale date which then passed is a sold property, not a fresh
         # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
         if is_lp and d.get('auction') and days < 0:
+            continue
+        # A one-parcel Broward filing whose phones came from the owner's tax-roll MAILING address
+        # (lp_leads mailTrace) has no confirmed property and no value, so no equity. It waits on
+        # the board until the address is confirmed (2026-10-15, Alejandro: equity-qualified only).
+        if is_lp and d.get('mailTrace') and not (d.get('addr') or '').strip():
             continue
         # Non-business classes never reach the dialer: vacant land and timeshares/unlinked parcels
         # are not rescuable homes, and neither warn nor vac used to ship to this page.
@@ -1710,6 +1873,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         _a1 = (d.get('addr') or '').split(',')[0].strip().upper()
         row = {
             'c': case,
+            # release expiry (bk_lookup.release_until): the page drops this row once it passes
+            'bu': d.get('bkUntil') or None,
+            # bankruptcy not checked (owner waiver, bk_lookup.UNCHECKED_WHY): the card asks first
+            'bq': 1 if d.get('bkAsk') else None,
             'o': (d.get('owners') or d.get('oname') or '').strip(),
             # GREETING NAME, separate from the display string above.
             # `owners` comes off the county roll as "LAST,FIRST" on 32% of leads (measured across
@@ -1724,9 +1891,18 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'ag': (d.get('addrGuess') or '').strip() or None,
             'aw': (d.get('addrWhy') or '').strip() or None,
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
+            # x is a FILING date, not a sale (no auction on record). Without this the page cannot
+            # tell the two apart, and a case filed today counts as "the sale is today" (2026-10-15).
+            'xf': 1 if (not is_lp and not d.get('auction') and (d.get('filedDate') or d.get('filed'))) else None,
             'd': days,
             'lp': 1 if is_lp else 0,
+            # Tax deed. The board knows it as st=='TD'; the phone row never carried st (only 'BAL'),
+            # so the text button needs it shipped to pick the tax-deed text the worker sends.
+            'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0,
             'p': [keep[k] for k in order],
+            # build-time only, popped after the sort: is the number dialed first explicitly a landline?
+            '_ll': 1 if (lambda _t: keep_oi[order[0]] < len(_t) and _t[keep_oi[order[0]]] == 'landline')(
+                d.get('phtype') or []) else 0,
             # rank is indexed by the ORIGINAL phones position, recovered via keep_oi.
             'r': [(rank[keep_oi[k]][:1].upper()
                    if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') for k in order],
@@ -1837,6 +2013,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # `lp` and `k` follow the same rule; `d` (days) must NOT — 0 means the auction is TODAY.
         if not row['lp']:
             row.pop('lp')
+        if not row['td']:
+            row.pop('td')
         if not row['k']:
             row.pop('k')
         # ---- flags: one packed string instead of a dozen booleans ----
@@ -1882,6 +2060,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # Deterministic across builds: same case -> same bucket, every night, so a lead does not
         # hop between callers when the board refreshes mid-session. Changing the SEAT COUNT does
         # reshuffle assignments, which is correct and is why the page warns before doing it.
+        # EXCEPTION (2026-10-15): rows of one household are regrouped onto ONE bucket after this
+        # loop (_seat_by_household). A grouped row can move seats at a rebuild when its group gains
+        # or loses a member; a row linked to nothing keeps this case-only bucket.
         _cs = str(d.get('case') or '')
         if _cs:
             _h = 2166136261
@@ -1889,13 +2070,14 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
                 _h = ((_h ^ ord(_ch)) * 16777619) & 0xFFFFFFFF
             row['sb'] = _h % 12
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
+    _seat_by_household(out)
     # HIGHEST-CONVERTING FIRST (2026-08-19, his words: "I don't want clients whose auction date is
     # today or two-three days out. I need the highest converting leads.") The old key was
     # soonest-sale-first, which opened every session on the exact leads nothing can save — a sale
     # tomorrow leaves no time to reinstate, list, or petition anything. Convertibility is equity
     # to protect TIMES runway to act:
     #   band 0: sale 7-45 days out — a real clock AND real time to work it (the prime window)
-    #   band 1: 46 days out up to max_days (60 by default; later foreclosure sales never reach this
+    #   band 1: 46 days out up to max_days (MAX_DAYS, 120 by default; later sales never reach this
     #           queue), or an LP row with no date or any later date — pure runway, first-mover ground
     #   band 2: 5-6 days — very tight; worth a dial only when the equity is real
     #   band 3: 0-4 days (or already passed) — too late to convert; surplus-only talk, parked LAST
@@ -1922,9 +2104,22 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # at 45% by the recorded chain — the caller spent the freshest hour of the day on the leads
     # most likely to evaporate (the Acosta pattern, at the top of the queue). Traced first, then
     # the number. Untraced leads still ship; they just stop cutting the line.
-    out.sort(key=lambda r: (_band(r), 0 if r.get('eqv') else 1,
+    # MOBILE BEFORE LANDLINE (2026-10-12, outcome_learn.py on 293 logged dials): numbers typed
+    # mobile reached a person 25 of 134 times, landlines 0 of 26. County, equity, homestead and tier
+    # made no difference to pickup. So within a band, a lead whose first number is a landline waits
+    # behind the mobile leads. CALLMODE_MOBILE_FIRST=0 turns it off.
+    # 'landline' here means NOT TYPED MOBILE: both skiptrace merges bake every non-'mob*' type
+    # (VoIP, blank, unknown) as 'landline' (foreclosure_leads.py:2149, :2384), and that is the same
+    # bucket the 0-of-26 was measured on. Only a lead with no phtype at all, or a Whitepages '' type,
+    # is left in place. Nobody leaves the qualified pool, but because this key outranks verified
+    # equity it decides who lands in the protected head: a landline lead pushed past CALLMODE_HEAD
+    # ships on its rotation day instead of every day.
+    _mf = os.environ.get('CALLMODE_MOBILE_FIRST', '1') != '0'
+    out.sort(key=lambda r: (_band(r), (r.get('_ll', 0) if _mf else 0), 0 if r.get('eqv') else 1,
                             0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
+    for _r in out:
+        _r.pop('_ll', None)
     # ---- ONE ROW PER CASE (2026-09-10) --------------------------------------------------------
     # A case listed on two auction dates is two rows, which put the same HUMAN on the phone twice
     # with two different sale dates. Rationale, evidence and the sooner-date rule live on
@@ -2049,7 +2244,93 @@ def stamp_ledger(rows, mail_log=None, text_log=None):
     return n
 
 
-def ledger_audit(mail_path=None, text_path=None):
+def _recipient_index(slim):
+    """lead email (lowercased) -> cases, and 10-digit phone -> cases, from the leads being built.
+
+    Used only to TIE a confirmed send that carries no case to the lead it reached. A match can only
+    mark a lead contacted; it never hides one and never makes one callable."""
+    by_email, by_phone = {}, {}
+    for d in (slim or []):
+        case = str(d.get('case') or '').strip()
+        if not case:
+            continue
+        for e in (d.get('emails') or []):
+            e = str(e or '').strip().lower()
+            if e:
+                by_email.setdefault(e, set()).add(case)
+        _src = d.get('phsrc') or []
+        for oi, ph in enumerate(d.get('phones') or []):
+            if (_src[oi] if oi < len(_src) else '') in ('ag', 'xl'):
+                continue                    # listing agent / shared office: not the owner's number
+            p10 = _ph10(ph)
+            if len(p10) == 10:
+                by_phone.setdefault(p10, set()).add(case)
+    return by_email, by_phone
+
+
+# A property address shared by more cases than this is a building or a placeholder, not one owner's
+# property: it ties nothing (the send stays unattributed, which is the cautious reading).
+_ADDR_TIE_MAX_CASES = 2
+
+
+def _ledger_addr_key(addr):
+    """A property address reduced to upper-case words, '' when it cannot identify one property.
+
+    Whole string (street, city, state, ZIP), so a street shared across cities or ZIPs does not tie.
+    Words keep a single space between them: dropping the spaces would let '1 21st St' and
+    '12 1st St' collide. An address that does not start with a house number followed by a street
+    ('HOMESTEAD, FL 33034', '1ST ST, MIAMI BEACH', '0', a bare ZIP) names no one property and keys
+    to nothing."""
+    a = re.sub(r'[^A-Z0-9]+', ' ', str(addr or '').upper()).strip()
+    return a if re.match(r'\d+\s+\S', a) else ''
+
+
+def _address_index(slim):
+    """normalised property address -> cases, from the leads being built. Same rule as
+    _recipient_index: a match can only mark a lead contacted. An address held by more than
+    _ADDR_TIE_MAX_CASES cases (a condo with no unit, a county placeholder) is left out."""
+    by_addr = {}
+    for d in (slim or []):
+        case = str(d.get('case') or '').strip()
+        k = _ledger_addr_key(d.get('addr'))
+        if case and k:
+            by_addr.setdefault(k, set()).add(case)
+    return {k: v for k, v in by_addr.items() if len(v) <= _ADDR_TIE_MAX_CASES}
+
+
+# Our own recipients for meta.test sends (Brief Jesse: tracker_template.html _JESSE).
+# Keep equal to send_server.ADVISOR_EMAILS, which gates who a test send may reach.
+ADVISOR_EMAILS = {'celusa13@gmail.com'}
+
+
+def _is_operator(e):
+    """True when an email row went only to the advisor or to the sending account itself."""
+    own = set(ADVISOR_EMAILS)
+    for k in ('login', 'from'):
+        v = str(e.get(k) or '').strip().lower()
+        if v:
+            own.add(v)
+    rcpts = [str(a).strip().lower() for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(',')]
+    rcpts = [a for a in rcpts if a]
+    return bool(rcpts) and all(a in own for a in rcpts)
+
+
+def _is_offboard(e):
+    """A case-less email the sender recorded as going to someone who is not a board lead.
+
+    Only when the row says so itself (`note` containing "not on board") and names no property: a
+    row that carries an `addr` was about a lead's house and is never excused this way. A text row
+    is never off-board: the /text bridge refuses a send with no case."""
+    if str(e.get('ch') or '') != 'email' or str(e.get('addr') or '').strip():
+        return False
+    return 'not on board' in str(e.get('note') or '').lower()
+
+
+_WEBMAIL = {'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com',
+            'live.com', 'msn.com', 'comcast.net', 'att.net', 'bellsouth.net', 'me.com'}
+
+
+def ledger_audit(mail_path=None, text_path=None, slim=None):
     """Confirmed server sends the case-keyed stamps (`le`/`lt`) CANNOT express.
 
     stamp_ledger() reads a case's newest timestamp. A confirmed send whose `ts_utc` does not parse
@@ -2058,8 +2339,43 @@ def ledger_audit(mail_path=None, text_path=None):
     cannot date (stamp_unknown marks them `lu:1`, which the page counts as contacted), and
     `unattributed` counts confirmed sends tied to no case and no person key (history_coverage turns
     ledgers_ok off for those). Counts and keys only; reads the same files history_coverage does.
-    A file that cannot be read adds nothing here: history_coverage already fails on it."""
-    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0}
+    A file that cannot be read adds nothing here: history_coverage already fails on it.
+
+    A CASE-LESS SEND IS TIED BY ITS RECIPIENT FIRST (2026-10-10). From the 10-09 build, 11 such
+    rows turned ledgers_ok off, so every row on both phones filed under History unknown and the
+    default Untouched list opened empty. Before counting a row unattributed:
+      * `to`/`bcc` (email) or `to` (text) matching an address or number on a lead being built puts
+        that lead in `cases`: it WAS contacted, so it is stamped lu:1 and leaves Untouched.
+        Counted in `matched`.
+      * an email row whose recipient is on no lead is tried by PROPERTY ADDRESS next (2026-10-12):
+        the row carries the `addr` the send was about, the same board string the lead carries. A
+        recipient that is no longer on any lead (the bounce guard strips dead addresses from the
+        cards) therefore still ties to its property. Whole-string match only, on an address that
+        starts with a house number and street and is held by at most _ADDR_TIE_MAX_CASES cases; a
+        text row has no address and keeps the recipient-only rule. A row that went only to us
+        (advisor or sending login) is never tied this way. A test-flagged row to anyone else can be:
+        that recipient may be an owner, and marking the lead contacted is the safe reading. Counted in
+        `matched` too.
+      * an email row with `test_mode` true whose recipient is one of OUR OWN addresses (the
+        advisor, ADVISOR_EMAILS, or the sending account itself, `login`/`from`) reached no lead.
+        Counted in `test`. The flag alone is not trusted: until 2026-10-12 send_server took
+        meta.test from the request body without checking who it went to (it now refuses a test
+        send to anyone but these addresses), so an older test row to any other address stays
+        unattributed unless the property address it carries ties it to a lead.
+      * an email row the sender marked as not a board lead (`note` says "not on board") and that
+        names no property (`addr` empty), when neither the recipient nor anything else ties it to a
+        lead. Counted in `offboard` (2026-10-13). Three manual 09-07 intros carry exactly that note;
+        one ties by recipient, the other two went to people who were never leads, and from the 10-09
+        build they kept ledgers_ok off, so both seats opened on an empty Untouched list and every
+        never-contacted lead sat under History unknown. The recipient tie runs first, so if that
+        person later becomes a lead at that address the send still marks the lead contacted.
+    Anything left (a delivered, non-test send to an address or number on no lead) still counts as
+    unattributed and still turns ledgers_ok off: that recipient may be a lead whose address this
+    build no longer carries. `rows` describes those leftovers with no address, name or subject:
+    date, channel, recipient domain (webmail names only, else 'other'), lane. `python call_mode.py --ledger-audit` prints them."""
+    out = {'cases': set(), 'pkeys': set(), 'unattributed': 0, 'matched': 0, 'test': 0, 'offboard': 0, 'rows': []}
+    by_email, by_phone = _recipient_index(slim) if slim is not None else ({}, {})
+    by_addr = _address_index(slim) if slim is not None else {}
     for name, path, is_text in (('mail_sent.json', mail_path, False), ('text_sent.json', text_path, True)):
         pth = path or os.path.join(HERE, name)
         try:
@@ -2085,7 +2401,42 @@ def ledger_audit(mail_path=None, text_path=None):
             except Exception:
                 dated = False
             if not case and not pkey:
-                out['unattributed'] += 1
+                hit = set()
+                if is_text:
+                    p10 = _ph10(e.get('to'))
+                    if len(p10) == 10:
+                        hit |= by_phone.get(p10, set())
+                else:
+                    for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+                        a = str(a).strip().lower()
+                        if a:
+                            hit |= by_email.get(a, set())
+                    if not hit and not _is_operator(e):
+                        # An address that is on no lead any more (stripped by the bounce guard, or a
+                        # contact that was replaced) still leaves the property the email was about.
+                        # Never for a row that went only to us (advisor or sending login): that one
+                        # reached no owner, whatever its test flag says.
+                        hit |= by_addr.get(_ledger_addr_key(e.get('addr')), set())
+                if hit:
+                    out['cases'] |= hit
+                    out['matched'] += 1
+                elif not is_text and e.get('test_mode') is True and _is_operator(e):
+                    out['test'] += 1
+                elif _is_offboard(e):
+                    out['offboard'] += 1
+                else:
+                    out['unattributed'] += 1
+                    _to = str(e.get('to') or '')
+                    out['rows'].append({
+                        'd': str(e.get('d') or e.get('ts_utc') or '')[:10],
+                        'ch': 'text' if is_text else 'email',
+                        'dom': ((lambda dm: dm if dm in _WEBMAIL else 'other')(_to.rsplit('@', 1)[-1].lower())
+                                if '@' in _to else ('number' if _to else 'none')),
+                        'lane': str(e.get('lane') or e.get('wl') or '')[:20],
+                        'test': e.get('test_mode') is True,
+                        'owner': bool(str(e.get('owner') or '').strip()),
+                        'addr': bool(str(e.get('addr') or '').strip()),
+                    })
             elif not dated:
                 if case:
                     out['cases'].add(case)
@@ -2112,7 +2463,7 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     WHY (2026-09-17, Alejandro): the board's nine funnel lanes cover all 2,297 leads; Call Mode
     carried ~400. TRACE alone is 1,068 leads — 46% of the book — and none of it was reachable from
     the phone, so "what still needs skip-tracing" was a question only the laptop could answer. Same
-    for the LETTER and DOOR backlogs past the dial queue's 60-day window.
+    for the LETTER and DOOR backlogs past the dial queue's sale-date window.
 
     These rows exist to be COUNTED, SORTED and HANDED OFF — never dialled. That is enforced by what
     is in them rather than by a flag the renderer has to remember to check:
@@ -2314,6 +2665,16 @@ def _text_hold_json():
 _MODDIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def _refresh_status_html():
+    """How the last refresh ended, one line above the gate (refresh_status.py). Counts and times
+    only, so it is safe outside the encrypted payload. Never raises: '' if anything goes wrong."""
+    try:
+        import refresh_status
+        return refresh_status.page_html()
+    except Exception:
+        return ''
+
+
 def _read_module(name):
     # beside this file, not HERE: tests re-point HERE at a scratch dir
     with open(os.path.join(_MODDIR, name), encoding='utf-8') as fh:
@@ -2339,7 +2700,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
-                       ('__BSIGNER__', 1), ('__SEAT__', 1)):
+                       ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -2364,6 +2725,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'bridge': {'en': BRIDGE_EN, 'es': BRIDGE_ES},
         'busy': {'en': BUSY_EN, 'es': BUSY_ES},
         'vmtone': {'en': VM_TONE_EN, 'es': VM_TONE_ES},   # delivery cue under the voicemail
+        'vmsale': VM_SALE,                                 # {vmsale}/{vmsale_es} in VMEN/VMES (fillScript)
         'tone': [{'k': k, 'v': v} for k, v in TONALITY],  # collapsed tonality reference at top of sheet
         'flow': FLOW,                                      # guided call flow (renderGuided) — homeowner only
         # load_objections() + the hard-coded 'Not interested' card, so a vault-less/stale-vault runner
@@ -2398,7 +2760,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__TEXTHOLD__', _text_hold_json()) \
                 .replace('__HISTCOV__', histcov) \
                 .replace('__CWJS__', _read_module('call_workflow.js')) \
-                .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js'))
+                .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js')) \
+                .replace('__REFRESHSTATUS__', _refresh_status_html())
 
 
 # A REAL person hash: 'P' + 10 hex chars (foreclosure_leads._person_keys). Everything else that can
@@ -2605,8 +2968,8 @@ BALLOON_SCRIPT = {
         {'t': 'Who are you', 'w': 'Identity, straight.',
          's': "{sender}, Biscayne Solutions Group, Miami. We place DSCR and hard-equity loans on investment property. Your note on {st1} is public record; that's how I found you."},
     ],
-    # Voicemail for the investor lane. The homeowner one ("maps your free backup... a day is
-    # everything") is a rescue message and reads absurd left for an LLC manager about a rate.
+    # Voicemail for the investor lane. The homeowner one (VOICEMAIL_EN, a court-sale message)
+    # is a homeowner message and reads absurd left for an LLC manager about a rate.
     'vm': {
         'en': "Hi{first}, this is {sender} with Biscayne Solutions Group, about the hard-money note on {st1}. If you're paying twelve on it, I can likely get you seven. Fifteen minutes to price it, no commitment, and if I can't beat it I'll say so. {phone}. Thanks.",
         'es': "Hola{first}, le habla {sender} de Biscayne Solutions Group, por el préstamo privado sobre {st1}. Si está pagando doce, probablemente le consigo siete. Quince minutos para cotizarlo, sin compromiso, y si no lo mejoro se lo digo. {phone}. Gracias.",
@@ -2653,6 +3016,9 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
     def _full(r):
         return sum(1 for v in r.values() if v not in (None, '', [], {}))
 
+    def _unconfirmed(r):
+        return bool(r.get('mailTrace')) and not str(r.get('addr') or '').strip()
+
     def _d(r):
         v = r.get(days)
         return v if isinstance(v, (int, float)) else 9999
@@ -2672,7 +3038,10 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
         if len(grp) == 1:
             out.append(grp[0])
             continue
-        best = max(grp, key=lambda r: (_full(r), -_d(r)))
+        # An LP row whose phones came from the owner's MAILING address (lp_leads mailTrace, no
+        # confirmed property) is held on every path. Its extra phone fields must not let it beat
+        # the auction row for the same case, which has a real address and sale date.
+        best = max(grp, key=lambda r: (not _unconfirmed(r), _full(r), -_d(r)))
         others = [r for r in grp if r is not best]
         collapsed += len(others)
         best['dupn'] = len(others)
@@ -2698,7 +3067,7 @@ def seat_rows(rows, n, i):
 
 
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
-                  textperson=None, seat=None, subdir='', rows=None):
+                  textperson=None, seat=None, subdir='', rows=None, audit=None):
     """Write docs/call/<subdir>/index.html. `encrypt` is foreclosure_leads._encrypt_multi and
     `guard` is its _js_guard — both INJECTED rather than re-implemented, so the crypto and the
     parse check can never drift from the board's.
@@ -2734,8 +3103,16 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         return 0, 0
     if rows is None:
         rows, total = call_rows(slim, optouts, deads)
+        # Rows built here were never stamped, so the audit used for HISTCOV must stamp them too.
+        if audit is None:
+            audit = ledger_audit(slim=slim)
+        stamp_unknown(rows, audit)
     else:
         rows, total = rows
+        # Rows handed in were stamped by the caller with ITS audit. Without that audit, do not
+        # credit recipient matches this page cannot see on its rows: stay strict (old behaviour).
+        if audit is None:
+            audit = ledger_audit()
     _shipped_all = len(rows)         # crew-wide shipped count, BEFORE the seat split
     if seat:
         _sn, _si, _sw = seat
@@ -2766,7 +3143,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
     #
     # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead THIS page's
-    # dial queue does not carry (no traced number, auction past the 60-day window, over the cap, or
+    # dial queue does not carry (no traced number, auction past the sale-date window, over the cap, or
     # on the other caller's phone) as a countable, sortable, un-dialable row, so the nine board lane
     # counts on a handset describe the whole business. See coverage_rows for what is deliberately
     # absent from them, and the cut note above for why it is this page's list and not the crew's.
@@ -2811,7 +3188,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, text_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
                       seat=seat, funnel_js=funnel_js, text_js=text_js,
-                      histcov=history_coverage(total, _shipped_all, ledger_audit()))
+                      histcov=history_coverage(total, _shipped_all, audit))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -2882,6 +3259,21 @@ a.dial,button.big{display:block;width:100%;min-height:58px;margin-top:12px;borde
 a.dial{background:var(--ok);color:#fff}
 /* Redial: same tel: mechanics as the main dial button, styled as the secondary action it is —
    outlined, not filled, so the outcome buttons stay the visual priority on the screen. */
+/* VOICEMAIL BUTTON + full-screen script (2026-10-12, Alejandro: "a button i press and the voice
+   message script shows up on the screen"). z-65: above the sheet (40), the pill (50) and the toast
+   (60), so nothing covers the words while he reads them into the machine. */
+.vmbtn{display:block;width:100%;min-height:54px;margin-top:10px;border-radius:12px;border:0;background:var(--gold);
+     color:#0b1730;font-size:17px;font-weight:800;touch-action:manipulation}
+.vmfull{position:fixed;top:0;left:0;right:0;bottom:0;z-index:65;background:var(--bg);overflow-y:auto;
+     -webkit-overflow-scrolling:touch;padding:16px 16px calc(28px + env(safe-area-inset-bottom))}
+.vmfull .vmin{max-width:640px;margin:0 auto}
+.vmfull .vmtop{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--gold);
+     font-weight:800;letter-spacing:.04em;font-size:14px}
+.vmfull .vmsay{font-size:23px;line-height:1.5;margin:14px 0 22px;color:var(--ink)}
+.vmfull button.vmlog{display:block;width:100%;min-height:56px;border:0;border-radius:12px;background:var(--ok);
+     color:#fff;font-size:17px;font-weight:800;touch-action:manipulation}
+.vmfull button.vmx{display:block;width:100%;min-height:48px;margin-top:10px;border-radius:12px;background:transparent;
+     border:1px solid var(--mut);color:var(--ink);font-size:16px;touch-action:manipulation}
 a.redial{display:block;width:100%;min-height:50px;line-height:50px;margin-top:10px;border-radius:12px;
      border:1px solid var(--ok);color:var(--ok);background:transparent;font-size:16px;font-weight:700;
      text-align:center;text-decoration:none;touch-action:manipulation}
@@ -3052,6 +3444,7 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
    it). The script belongs to the CALL; while logging, the sheet was only a tap-thief. */
 .sheet.hid{display:none}
 </style></head><body>
+__REFRESHSTATUS__
 <div id="app" class="wrap"><div class="gate"><h2>Call Mode</h2>
 <p class="mut" id="gmsg">Enter your access code.</p>
 <input id="code" type="password" inputmode="text" autocomplete="one-time-code" placeholder="DEALFLOW-XXXXXXXX">
@@ -3152,12 +3545,34 @@ function nowTS(){return new Date().toLocaleString();}
    "this is Biscayne Solutions Group with Biscayne Solutions Group", and the legacy auto-injected "Jose"
    must not win over the real identity. Empty saved values must never clobber the default. */
 var SENDER = {name:'Alejandro Gonzalez', phone:'(786) 631-1823', bsigner:__BSIGNER__};   /* bsigner: sender.json balloon_signer, investor lane only */
+var _SENDER_DEF = {name: SENDER.name, phone: SENDER.phone};   /* before any saved override (_vmVoiceWrong) */
 try{
   var _sv = JSON.parse(localStorage.getItem('fcSender')||'{}');
   if(_sv.name === 'Jose') delete _sv.name;
   if(typeof _sv.name === 'string' && /^\s*miami\s+solutions\s+group\b/i.test(_sv.name)) delete _sv.name;
   ['name','phone'].forEach(function(k){ if(_sv[k]) SENDER[k] = _sv[k]; });
 }catch(e){}
+
+/* True when this is a named seat page whose caller is not the name the scripts will speak, OR whose
+   callback number is still the default owner's while the seat is someone else. The board's
+   saveSender() saves the whole object seeded from SENDER_DEFAULTS, so a phone that typed only a
+   name still carries Alejandro's number. */
+function _vmVoiceWrong(){
+  if(typeof SEAT === 'undefined' || !SEAT || !SEAT.w) return false;
+  var w = String(SEAT.w).toLowerCase();
+  if(String(SENDER.name||'').toLowerCase().indexOf(w) < 0) return true;
+  var dig = function(x){ return String(x||'').replace(/\D/g,''); };
+  var defIsSeat = String(_SENDER_DEF.name||'').toLowerCase().indexOf(w) >= 0;
+  return !defIsSeat && (!dig(SENDER.phone) || dig(SENDER.phone) === dig(_SENDER_DEF.phone));
+}
+/* The warning line itself, shown above the voicemail on BOTH the full sheet and the guided vm step. */
+function _vmWarnHtml(){
+  if(!_vmVoiceWrong()) return '';
+  return '<div class="mut" style="font-size:12px;margin:2px 0 7px;color:#ff8a80">'
+       + '&#9888; This voicemail says ' + esc(SENDER.name) + ' / ' + esc(SENDER.phone || 'no number')
+       + ' but this page is ' + esc(SEAT.w) + '&rsquo;s. Set your own name and callback'
+       + ' number on the board (Sender) on this phone first.</div>';
+}
 
 /* Fill a script template. Global replace — String.replace with a string argument only swaps the
    FIRST match, which is how {sender} survived into a live read-aloud script. */
@@ -3194,9 +3609,35 @@ function firstName(r){
   return tok.charAt(0) + tok.slice(1).toLowerCase();
 }
 
+/* {vmsale} / {vmsale_es} — the voicemail's sale-timing sentence (VM_SALE in call_mode.py, shipped
+   as SCRIPT_ALL.vmsale). liveDays, not r.d: r.d is frozen at build and a page left open overnight
+   would say "in about 3 days" the morning it is 2. Expanded BEFORE {st1} so the sentence's own
+   {st1} is filled by the same pass. */
+function _vmSale(r, lg){
+  var V = (typeof SCRIPT_ALL !== 'undefined' && SCRIPT_ALL && SCRIPT_ALL.vmsale) ? SCRIPT_ALL.vmsale[lg] : null;
+  if(!V) return '';
+  /* Count only a SALE date. A row with no auction is baked d=0 and liveDays falls back to r.d when
+     r.x is absent, so a dateless lead read "a court sale ... for today" (2026-10-15). r.xf marks an
+     r.x that is the filing date. Same guard as boardTextBody. */
+  var d = (r && !r.xf && String(r.x || '').trim() && typeof liveDays === 'function') ? liveDays(r) : null;
+  var t = (typeof d !== 'number' || d < 0) ? V.none : (d === 0 ? V.today : (d === 1 ? V.tomorrow : V.days));
+  /* No street on the row: drop the clause, or it reads "on your property at your property". */
+  if(!(((r && r.a) || '').split(',')[0].trim())) t = t.split(' at {st1}').join('').split(' en {st1}').join('');
+  return t.split('{n}').join(String(d));
+}
 function fillScript(t, r){
+  /* "11/05/2026" reads as 11 May to a Spanish speaker. Spell the month out: "5 de noviembre". */
+  function _esDate(x){
+    var m = String(x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(!m) return String(x||'');
+    var M = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return (+m[2]) + ' de ' + (M[+m[1]-1] || m[1]);
+  }
   var first = firstName(r);
-  return String(t||'')
+  t = String(t||'');
+  if(t.indexOf('{vmsale') >= 0)
+    t = t.split('{vmsale_es}').join(_vmSale(r, 'es')).split('{vmsale}').join(_vmSale(r, 'en'));
+  return t
     .split('{first}').join(first ? (' ' + first).trimEnd() : '')
     /* {sender} — balloon rows introduce the ADVISOR (sender.json balloon_signer, injected as
        SENDER.bsigner): the refi pitch's asset is his name, and the email the same row received was
@@ -3209,9 +3650,13 @@ function fillScript(t, r){
     .split('{st1}').join(((r && r.a) || '').split(',')[0].trim() || 'your property')
     /* {date} — the email's strongest line is the owner's own sale date, so the call says it too.
        Renders the whole clause (with its leading space) or NOTHING: an LP lead has no auction date
-       and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud. */
+       and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud.
+       r.xf: no auction, r.x is the filing year/date and r.d is a baked 0 — "a sale date of 2025"
+       was said aloud for a case with no sale (2026-10-15). */
+    .split('{date_es}').join(
+      (r && r.x && !r.xf && r.d != null && r.d < 9000) ? (' con fecha de subasta el ' + _esDate(r.x)) : '')
     .split('{date}').join(
-      (r && r.x && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
+      (r && r.x && !r.xf && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
     /* {gap} — balloon lane only: THEIR monthly 12%-vs-7% gap off the recorded amount, or the $400k
        example when the amount is unknown. Rounded to $50 because their rate is an assumption. */
@@ -3283,7 +3728,7 @@ __FUNNELJS__
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
 
 /* COVERAGE ROWS — the rest of the book (coverage_rows in call_mode.py). Every lead the dial queue
-   drops: no traced number, auction past the 60-day window, or over the cap. They carry NO phone
+   drops: no traced number, auction past the sale-date window, or over the cap. They carry NO phone
    numbers and NO email addresses, only counts, so nothing here can be dialled or written to by
    accident — see the docstring on the Python side for why that is structural and not a flag. */
 var COV = [], BLANE = null;      /* BLANE: null = the dial queue; a FUNNEL key = the board-lane view */
@@ -3416,10 +3861,29 @@ async function unwrap(code){
   }
   return null;
 }
+/* RELEASE EXPIRY (2026-10-12). A Broward / Palm Beach row is in this queue only because its
+   bankruptcy check released it, and that release has an end (`bu`, epoch seconds: the PACER clear's
+   expiry, at most 48h after the build). A page left open or a decrypted copy cached on this phone
+   must not keep dialing it after that, so expired rows leave the queue until the next build. */
+function _dropExpired(rows){
+  try{ var now=Date.now()/1000;
+    return (rows||[]).filter(function(r){ return !(r && r.bu && now > r.bu); });
+  }catch(e){ return rows||[]; }
+}
+/* ...and again while the page stays open: a `bu` that passes mid-session takes the row out of the
+   queue now. A lead screen repaints at once; an interactive screen (outcome form) is left alone and
+   the next advance() paints from the trimmed ROWS. */
+function _expireTick(){
+  try{ var n=ROWS.length; ROWS=_dropExpired(ROWS);
+    if(ROWS.length!==n && typeof render==='function') render();
+  }catch(e){}
+}
 function b2u(b64){var s=atob(b64),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
 
 async function boot(){
   loadNotes();
+  setInterval(_expireTick, 60*1000);       // release expiry while the page stays open
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _expireTick(); });
   /* Say whose page this is BEFORE the code prompt. Two seat pages look identical otherwise, and the
      one thing a caller must never be unsure about is which list is in front of him. */
   if(SEAT && SEAT.w){ try{ document.title='Call Mode · '+SEAT.w;
@@ -3428,11 +3892,11 @@ async function boot(){
      can resolve numbers that are NOT among the dialable rows (67% of them). Accept BOTH shapes —
      an older decrypted copy can still be sitting in this device's cache. */
   var take=function(p){ if(!p) return null;
-    if(Array.isArray(p)){ ROWS=p; PHIDX=null; COV=[]; return p; }
+    if(Array.isArray(p)){ ROWS=_dropExpired(p); PHIDX=null; COV=[]; return ROWS; }
     /* `b` is the coverage set (2026-09-17). Absent on an older decrypted copy sitting in this
        device's cache, in which case the board lanes count only the dial queue and say so, rather
        than quietly reporting a book two thirds the size of the one on the laptop. */
-    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; return ROWS; };
+    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; ROWS=_dropExpired(ROWS); return ROWS; };
   var saved=null; try{saved=localStorage.getItem('fcPw');}catch(e){}
   if(saved){ var r=await unwrap(saved); if(take(r)){ return start(); } }
   $('go').onclick=async function(){
@@ -3943,7 +4407,7 @@ var LANES = [
   {k:'worker', lbl:'Worker',            pred:isWorker,   hide0:true, ch:'worker'},
   {k:'urgent', lbl:'Urgent 0-7',        pred:function(r){ return _dayLane(r,0,7); },   hide0:true},
   {k:'soon',   lbl:'Sale soon 8-45',    pred:function(r){ return _dayLane(r,8,45); },  hide0:false},
-  {k:'late',   lbl:'46-60',             pred:function(r){ return _dayLane(r,46,60); }, hide0:true},
+  {k:'late',   lbl:'46+ days',          pred:function(r){ return _dayLane(r,46,9998); }, hide0:true},
   {k:'lp',     lbl:'Fresh filings',     pred:function(r){ return !!r.lp && !isBalloon(r); }, hide0:false},
   {k:'bal',    lbl:'Balloon',           pred:isBalloon,  hide0:true},
   {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true},
@@ -3961,7 +4425,8 @@ function laneDef(k){ for(var q=0;q<LANES.length;q++) if(LANES[q].k===k) return L
    means solo and every filter below is a no-op, so a lone caller sees exactly what he saw before.
 
    THE PARTITION IS THE DEFENCE. r.sb is a stable 0-11 bucket of the case number stamped at build
-   (see call_rows). With n seats I take the buckets where sb % n === i, so with two phones the
+   (see call_rows); rows of one household (person key, street line + ZIP, phone) share their
+   group's bucket (_seat_by_household). With n seats I take the buckets where sb % n === i, so with two phones the
    same lead is NEVER in both queues at once. Nothing is negotiated, so there is nothing to race
    and nothing to be offline for.
 
@@ -4171,7 +4636,17 @@ function teamRecheck(){
    UNKNOWN, never untouched. Missing history is not zero. */
 var QVIEW = 'untouched';
 var _QV = ['untouched', 'callbacks', 'replies', 'retries', 'history_unknown'];
-var _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Retries', history_unknown:'History unknown'};
+var _QVL = {untouched:'Untouched', callbacks:'Callbacks', replies:'Replies', retries:'Reached out', history_unknown:'History unknown'};
+/* THREE TABS (2026-10-13, Alejandro: "keep the categories simple like untouched leads and the ones
+   you've reached out to already"). Untouched, Callbacks and Reached out always show. Replies and
+   History unknown are still their own views, but their tab appears only while it holds a lead (or
+   is the one open), so a normal day reads as three buttons. Nothing is regrouped or hidden: a lead
+   in a tab that is not drawn is still counted on it the moment that tab has anything. */
+var _QV_ALWAYS = {untouched:1, callbacks:1, retries:1};
+function _qvShown(){
+  return ['untouched', 'callbacks', 'retries', 'replies', 'history_unknown'].filter(function(k){
+    return _QV_ALWAYS[k] || (_VIEWN[k]|0) > 0 || QVIEW === k; });
+}
 var _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
 /* A lead opened on purpose from a board list or the lookup may sit in another view. That is a
    ONE-OFF: the first move off it (advance, Back, Next) puts the view back, so a single deliberate
@@ -4224,17 +4699,27 @@ function _viewOf(r){
   for(var k = 0; k < sib.length; k++){ if(sib[k] !== r.c && lastCall(notes[sib[k]])) return 'retries'; }
   return _histWhy() ? 'history_unknown' : 'untouched';
 }
+/* The page-wide History-unknown banner. It is page-wide but it only moves a lead with no recorded
+   contact, so it also says what it is costing in the counts above: a lane where every lead already
+   has a contact has nothing to move, and the banner used to read as if it were hiding cards. */
+function histBanner(hw){
+  if(!hw) return '';
+  var hn = _VIEWN.history_unknown|0;
+  return '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
+    + '. Nothing shows as untouched until that clears. '
+    + (hn ? hn+' lead'+(hn===1?'':'s')+' counted above '+(hn===1?'is':'are')+' filed under History unknown because of it.'
+          : 'No lead counted above is held back by it: every one already has a recorded contact.')
+    + '</div>';
+}
 function viewBar(){
-  var b = _QV.map(function(k){
+  var b = _qvShown().map(function(k){
     return '<button data-v="'+k+'" class="'+(QVIEW===k?'on':'')+'">'+_QVL[k]+' &middot; '+_VIEWN[k]+'</button>'; }).join('');
   var o = '<div class="lane">'+b+'</div>'
-    + '<div class="supn">Counts: this seat, '+(lane==='all'?'all lanes':esc(laneDef(lane).lbl))+'. Retries are a deliberate choice, never the next card.'
+    + '<div class="supn">Counts: this seat, '+(lane==='all'?'all lanes':esc(laneDef(lane).lbl))+'. Reached out = already called, texted or emailed; open it when you choose to.'
     + ((typeof HISTCOV==='object' && HISTCOV && HISTCOV.capped)
         ? ' <b>Partial:</b> '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded on the crew pages.' : '')
     + '</div>';
-  var hw = _histWhy();
-  if(hw) o += '<div class="supn" style="background:#3d2c08;color:#F6E9C8"><b>History unknown:</b> '+esc(hw)
-    + '. Nothing shows as untouched until that clears.</div>';
+  o += histBanner(_histWhy());
   o += wfBar();
   if(QVIEW === 'callbacks') o += cbNote();
   return o;
@@ -4244,12 +4729,12 @@ function viewEmptyHtml(){
     ? '<div class="sub">Partial inventory: only '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded, so this does not mean the crew is out of fresh leads.</div>' : '';
   if(QVIEW === 'untouched')
     return '<b>No untouched leads in the checked inventory for this seat.</b>'
-      + '<div class="sub">Waiting elsewhere: '+n.callbacks+' callback'+(n.callbacks===1?'':'s')+', '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' retr'+(n.retries===1?'y':'ies')
+      + '<div class="sub">Waiting elsewhere: '+n.callbacks+' callback'+(n.callbacks===1?'':'s')+', '+n.replies+' repl'+(n.replies===1?'y':'ies')+', '+n.retries+' reached out'
       + ', '+n.history_unknown+' with history unknown. Open one from the buttons above when you choose to.</div>'
       + (hw ? '<div class="sub">History is incomplete ('+esc(hw)+'), so uncontacted leads are listed as History unknown.</div>' : '') + part;
   if(QVIEW === 'callbacks') return '<b>No requested callbacks due now.</b><div class="sub">Reminders after a no-answer and inbound replies are not callbacks.</div>' + cbNote() + part;
   if(QVIEW === 'replies') return '<b>No open replies.</b><div class="sub">Switch view above.</div>' + part;
-  if(QVIEW === 'retries') return '<b>No retries due for this seat.</b><div class="sub">Switch view above.</div>' + part;
+  if(QVIEW === 'retries') return '<b>Nobody reached out to is due for this seat.</b><div class="sub">Switch view above.</div>' + part;
   return '<b>Nothing with unknown history.</b><div class="sub">Switch view above.</div>' + part;
 }
 function pool(){
@@ -4573,7 +5058,8 @@ function screenTeamKey(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
-  var _wl = lane, _rest = _qvRestore();   // _rest: he was on a one-off; view, lane and card are back
+  var _wl = lane, _rest = _qvRestore();
+  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
@@ -4782,7 +5268,7 @@ function head(){
        nowhere, so a phone serving last week's list had no visible tell — the operator's only signal
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
        covers anything placed there; the top bar is the one strip nothing ever overlays. */
-    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+'</div>'
+    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+' &middot; <a href="#" id="cstatslink" style="color:var(--gold)">call stats</a></div>'
     +sessStrip()
     +'</div>';
 }
@@ -5018,6 +5504,70 @@ function isWarm(r){
   (r.pcs||[]).forEach(chk);
   return warm;
 }
+/* CALLSTATS-BEGIN
+   DAILY CALL-STATS EXPORT (2026-10-15). READ-ONLY over notes[case].dials[]; writes nothing and
+   changes no queue, cooldown or disposition. Mirrors call_stats.py (the command-line twin);
+   _callstatstest.py runs both on one fixture and fails if they disagree.
+   One row per day per seat. A dial = a logged outcome, plus any dial-tap/redial row that never got
+   an outcome that day (no_outcome). Talk time is NOT tracked: dial_to_log_min is dial tap -> outcome
+   tap on ANSWERED calls only (ring time + talk + the seconds before the tap), 0 < gap <= 60 min. */
+var CS_ANSWERED = {talked:1,callback:1,appt:1,notint:1,dnc:1,gate:1};
+var CS_NOANS = {noanswer:1,voicemail:1};
+var CS_BAD = {badnum:1,wrong:1};
+function callStatsRows(nts, who, days, nowMs){
+  var by = {}, cutoff = '';
+  if(days){ var c = new Date((nowMs||Date.now()) - (days-1)*86400000);
+    cutoff = c.getFullYear()+'-'+String(c.getMonth()+1).padStart(2,'0')+'-'+String(c.getDate()).padStart(2,'0'); }
+  Object.keys(nts||{}).forEach(function(k){
+    if(k.charAt(0)==='@' || k.charAt(0)==='#') return;
+    var dl = (nts[k] && nts[k].dials) || [];
+    for(var i=0;i<dl.length;i++){
+      var d = dl[i];
+      if(!d || typeof d!=='object' || !d.d) continue;
+      if(cutoff && d.d < cutoff) continue;
+      if(who && d.by && d.by!==who) continue;
+      var seat = d.by || '', oc = d.oc || '', key = d.d+'|'+seat;
+      var r = by[key] = by[key] || {date:d.d, seat:seat, dials:0, answered:0, no_answer_vm:0,
+        wrong_or_disconnected:0, appointments:0, no_outcome:0, other:0, dial_to_log_min:0, timed_calls:0};
+      if(oc==='pending' || oc==='redial'){
+        var resolved = false;
+        for(var j=i+1;j<dl.length;j++){ if(dl[j] && dl[j].d===d.d && dl[j].oc!=='pending' && dl[j].oc!=='redial'){ resolved = true; break; } }
+        if(!resolved){ r.dials++; r.no_outcome++; }
+        continue;
+      }
+      r.dials++;
+      if(CS_ANSWERED[oc]){
+        r.answered++;
+        var g = (+d.tsu - +d.tsd) / 1000;
+        if(d.tsd && g > 0 && g <= 3600){ r.dial_to_log_min += g/60; r.timed_calls++; }
+      }
+      else if(CS_NOANS[oc]) r.no_answer_vm++;
+      else if(CS_BAD[oc]) r.wrong_or_disconnected++;
+      else r.other++;
+      if(oc==='appt') r.appointments++;
+    }
+  });
+  return Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.seat < b.seat ? -1 : a.seat > b.seat ? 1 : 0); });
+}
+var CS_COLS = ['date','seat','total_dials','answered','no_answer_vm','wrong_or_disconnected','appointments',
+  'no_outcome_tapped','other','dial_to_log_min','timed_calls','answer_rate','appt_rate'];
+function callStatsCsv(rows){
+  var out = [CS_COLS.join(',')];
+  rows.forEach(function(r){
+    var logged = r.dials - r.no_outcome;
+    out.push([r.date, r.seat, r.dials, r.answered, r.no_answer_vm, r.wrong_or_disconnected, r.appointments,
+      r.no_outcome, r.other, (Math.round(r.dial_to_log_min*10)/10).toFixed(1), r.timed_calls,
+      logged ? (r.answered/logged).toFixed(3) : '', logged ? (r.appointments/logged).toFixed(3) : ''].join(','));
+  });
+  return out.join('\n');
+}
+var CS_NOTE = 'DealFlow Call Mode daily stats. total_dials = logged outcomes + dials with no outcome tapped. '
+  + 'answered = a person picked up (talked, callback, appointment, soft no, hard no, not the owner). '
+  + 'wrong_or_disconnected = wrong number + bad number. answer_rate and appt_rate = over logged dials '
+  + '(total_dials minus no_outcome_tapped). Talk time is not tracked: dial_to_log_min is the minutes from '
+  + 'the dial tap to the outcome tap on answered calls (includes ringing), timed_calls says how many had it.';
+/* CALLSTATS-END */
 /* THE SESSION STRIP — on every screen. "How many calls have I made, how many people have I been
    through" answered where he is looking, and the number MOVING on each logged outcome is the live
    proof the logging works. Today = from notes (survives reloads, includes what synced in);
@@ -5092,6 +5642,52 @@ function screenRegistry(){
     +   '<button class="big" id="regback" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
   $('regback').onclick = function(){ SCREEN='lead'; render(); };
+}
+/* EXPORT TODAY'S CALL STATS (2026-10-15). Read-only screen: counts from notes[].dials[], this seat
+   only (same `by` filter as sessStrip), copy-paste text or a CSV download. Reachable from the top
+   bar ("call stats"). Touches nothing in the queue. */
+var _csDays = 1;
+function screenCallStats(){
+  SCREEN = 'cstats';
+  var me = caller(), rows = callStatsRows(notes, me, _csDays);
+  var csv = callStatsCsv(rows);
+  var text = CS_NOTE + '\n\n' + csv + '\n';
+  var shown = rows.length ? rows.map(function(r){
+    var logged = r.dials - r.no_outcome;
+    return '<div class="regrow"><div class="regtop"><b>' + esc(r.date) + '</b><span class="regago">'
+      + esc(r.seat || 'this phone') + '</span></div>'
+      + '<div class="regsub">' + r.dials + ' dials &middot; ' + r.answered + ' answered &middot; '
+      + r.no_answer_vm + ' no answer/VM &middot; ' + r.wrong_or_disconnected + ' wrong/disconnected &middot; '
+      + r.appointments + ' appt' + (r.no_outcome ? ' &middot; ' + r.no_outcome + ' with no outcome tapped' : '')
+      + (logged ? ' &middot; answer rate ' + Math.round(100*r.answered/logged) + '%' : '') + '</div></div>';
+  }).join('') : '<div class="regsub" style="padding:14px 2px">No dials logged ' + (_csDays===1 ? 'today' : 'in this window') + ' on this seat.</div>';
+  $('app').innerHTML = head()
+    + '<div class="card"><div class="band"><div class="bl">CALL STATS' + (me ? ' &middot; ' + esc(me) : '') + '</div>'
+    +   '<div class="regsub" style="margin-top:6px">Talk time is not tracked. dial_to_log_min is dial tap to outcome tap '
+    +   'on answered calls, ringing included.</div></div>'
+    + '<div class="reglist">' + shown + '</div>'
+    + '<button class="big" id="cscopy" style="margin-top:14px">Copy as text</button>'
+    + '<button class="big" id="csdl" style="margin-top:8px">Download CSV</button>'
+    + '<button class="ghost" id="cswin" style="margin-top:8px">' + (_csDays===1 ? 'Show last 14 days' : 'Show today only') + '</button>'
+    + '<button class="ghost" id="csback" style="margin-top:8px">&larr; Back to the queue</button>'
+    + '</div><div class="sheetpad"></div>';
+  $('csback').onclick = function(){ SCREEN='lead'; render(); };
+  $('cswin').onclick = function(){ _csDays = (_csDays===1 ? 14 : 1); screenCallStats(); };
+  $('cscopy').onclick = function(){
+    var done = function(){ toast('Copied'); };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ prompt('Copy this:', text); }); }
+      else prompt('Copy this:', text);
+    }catch(e){ prompt('Copy this:', text); }
+  };
+  $('csdl').onclick = function(){
+    try{
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv + '\n'], {type:'text/csv'}));
+      a.download = 'call-stats-' + today() + (me ? '-' + me.replace(/[^A-Za-z0-9_-]/g,'') : '') + '.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }catch(e){ prompt('Copy this:', text); }
+  };
 }
 /* ===== WHO TEXTED ME? ===========================================================================
    An inbound text is the highest-value event in this business — a reply outranks every score and
@@ -5470,6 +6066,12 @@ function _balCard(r){
     + '</div>';
   return {when:when, who:who, clock:clock, mny:mny, whoFc:whoFc};
 }
+/* BANKRUPTCY NOT CHECKED (2026-10-13). A row with r.bq is on the list only because the attorney approved
+   contacting unchecked Broward / Palm Beach homeowners. His condition is the first question, on every card. */
+function _bqBar(){
+  return '<div class="warnbar">&#9888; <b>Bankruptcy not checked.</b> Ask first: &ldquo;Have you filed for bankruptcy?&rdquo; '
+    + 'If yes: end the call, say nothing else, and tap <b>Do Not Contact</b>.</div>';
+}
 function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
@@ -5506,6 +6108,9 @@ function screenLead(){
   if(has(r,'W')) wc += '<span class="chip">elder signal</span>';
   if(wc) who += '<div class="chips">'+wc+'</div>';
   if(r.po) who += '<div class="warnbar">Roll owner is now <b>'+esc(r.po)+'</b> &mdash; do NOT open with the name above. Ask who you are speaking with.</div>';
+  /* BANKRUPTCY NOT CHECKED (2026-10-13). This lead is on the list only because the attorney approved
+     contacting unchecked Broward / Palm Beach homeowners. His condition is the first question. */
+  if(r.bq) who += _bqBar();
   /* DIALED TODAY, NO OUTCOME. The one hole cooldown suppression cannot cover: a dial with no logged
      outcome starts no cooldown, so the lead resurfaces everywhere — which is exactly "why am I
      calling the same people". Say it on the card instead of letting it happen silently. */
@@ -5644,7 +6249,10 @@ function screenLead(){
   /* Balloon rows swap the four bands' CONTENT (see _balCard); layout, dial link, file band and the
      outcome flow are shared. Done last so nothing above has to know the lane exists. */
   var _isBal = (r.st==='BAL');
-  if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc; }
+  if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc;
+    /* the balloon card builds its own WHO band; the bankruptcy question is the attorney's condition
+       and must open every released card, this lane included */
+    if(r.bq) who += _bqBar(); }
   $('app').innerHTML = head()
     + '<div class="card">'
     +   priorBar(r)
@@ -5829,7 +6437,12 @@ var TEXT_OPTOUT = {en:" If now's not a good time, just let me know and I won't t
                    es:' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'};
 Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf("won't text you again") < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
 Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('vuelvo a escribir') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
+/* 2026-10-13 (Alejandro: "i want call mode to send this out what morning worker does for texts").
+   Every homeowner text from this page is now the Morning Worker's own message, the same bytes the
+   text batch sends: boardTextBody, English then Spanish. TEXT_T / TEXT_T_ES above survive only for
+   balloon (investor) rows, which the worker's foreclosure copy has nothing to say to. */
 function textBody(r, stage){
+  if(!(r && r.st === 'BAL')) return boardTextBody(r);
   var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
   return fillScript(T[stage] || T.cold, r);
 }
@@ -5896,24 +6509,29 @@ function sitBody(r, key){
    r.addr, r.days) out of a phone row (r.on, r.a, r.d) and hands it over.
 
    Differences from the board's own call, both deliberate:
-     - ONE LANGUAGE, not both. The batch bakes EN + ES together because it cannot know which the
-       owner reads. On the phone he has just spoken to them, and the EN|ES chips above this button
-       already say which — sending both after a conversation reads like a blast.
+     - (Until 2026-10-13 this sent ONE language off the EN|ES chips. Alejandro asked for the
+       worker's message, so it now sends English then Spanish in one text, like smsMsg 'both'.)
      - The street falls back INSIDE _textBodies, which picks the fallback in the right language
        ('su propiedad', not 'your property' in a Spanish body). So pass '' and let it choose. */
 function boardTextBody(r){
   var st1 = String((r && r.a) || '').split(',')[0].trim();
+  /* The live count, the same one the voicemail's sale sentence reads, for BOTH the body and the
+     tone. Only when the row carries a date (r.x: the auction, or the filing date on a lis pendens,
+     which liveDays never counts): a dateless row is baked d=0, which would read as "the sale is today". Held after the hammer is -1, which _textBodies never counts. */
+  var dd = (r && !r.xf && String(r.x || '').trim()) ? liveDays(r) : null;
   var B = _textBodies({
     first:  firstName(r),
     sender: SENDER.name || '',
     stEN:   st1, stES: st1,
-    td:     (r && r.st === 'TD'),
-    lp:     (r && r.st === 'LP'),
+    td:     !!(r && (r.td || r.st === 'TD')),
+    lp:     !!(r && (r.lp || r.st === 'LP')),
+    days:   dd,
     /* The rung comes from THIS device's stage count fed through the board's own rule, so touch 2
        gets the follow-up body and touch 3 gets the one that promises it is the last. */
-    tone:   _textTone(textStage(r), (r && r.d), (r && r.st === 'LP'))
+    tone:   _textTone(textStage(r), dd, !!(r && (r.lp || r.st === 'LP')))
   });
-  return (lang() === 'es') ? B.es : B.en;
+  /* English first, Spanish below it, in ONE message: what the Morning Worker sends (smsMsg 'both'). */
+  return B.en + '\n\n' + B.es;
 }
 /* The label on the send button, and the label written into the touch log. Each was built inline in
    two places (the initial render and the chip handler), and adding a third script to choose from is
@@ -5921,11 +6539,10 @@ function boardTextBody(r){
 function txLabel(k, st){
   if(k === 'ladder') return st === 'cold' ? 'Send 1st text'
                           : st === 'follow' ? 'Send follow-up (2 of 3)' : 'Send final text (3 of 3)';
-  if(k === 'batch')  return 'Send the board script';
   return 'Send: ' + ((TEXT_SIT[k] || {}).t || '');
 }
 function txKind(k, st){
-  return k === 'ladder' ? st : k === 'batch' ? ('board script, ' + st) : k;
+  return k === 'ladder' ? st : k;
 }
 /* Callback. Writes n.next, the same field the board reads to re-surface a lead — so a promise made
    on the phone shows up on the laptop instead of living in his head. */
@@ -6051,6 +6668,8 @@ function screenOutcome(){
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
     +sessStrip()
+    /* FIRST thing under the number: the moment it goes to voicemail there is no time to scroll. */
+    +'<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>'
     + refBlock
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
@@ -6064,6 +6683,7 @@ function screenOutcome(){
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
   wireBrief(document, r);
+  $('vmbtn').onclick = function(){ vmOpen(r); };
   $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
@@ -6178,6 +6798,7 @@ function stopEverywhere(r, digits){
    screen that exists because he dials from the phone, writes the number on paper, and never comes
    back to the laptop to log it. Everything here writes to the SAME notes the board reads. */
 function afterCall(r, o, nextC){
+  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */
   SCREEN='after';
   _lastAfter=[r, o, nextC];
   document.getElementById('sheet').classList.add('hid');   // same tap-thief reasoning as screenOutcome
@@ -6230,18 +6851,12 @@ function afterCall(r, o, nextC){
   else if(st === 'retired') txt = '<div class="nc">Three messages already sent to this person. The ladder is closed — call only.</div>';
   else if(st === 'replied') txt = '<div class="nc">They have replied before. Do not send a cold-ladder text; talk to them.</div>';
   else {
-    /* TWO COLD SCRIPTS, ONE RUNG. "After the call" is this page's own ladder and opens with "I just
-       tried calling", which is true only here. "Board script" is the text batch's body for this
-       lead — the just-filed one for an LP, the tax-deed one for a TD, the sale-date one otherwise.
-       Both spend the SAME touch: whichever he sends writes one ch:'text' touch, so textStage counts
-       it and the 3-message lifetime ladder cannot be walked around by switching chips.
-       BAL rows get no chip: the batch bodies are homeowner-foreclosure copy and the balloon lane is
-       an investor with no sale date, so the board would have nothing to say to them here. */
+    /* ONE SCRIPT (2026-10-13): the ladder button sends the Morning Worker's message for this lead's
+       rung (first, sale is close, just filed, tax deed, follow-up, last), English then Spanish.
+       The old "After the call" / "Board script" chips are gone because both now say the same
+       thing. Every send writes one ch:'text' touch, so textStage counts it and the 3-message
+       lifetime ladder holds. */
     var lbl = txLabel('ladder', st);
-    if(!(r && r.st === 'BAL')){
-      _chips = '<div><button class="txch on" data-sit="ladder">After the call</button>'
-             + '<button class="txch" data-sit="batch">Board script</button></div>';
-    }
     txt = '<button id="tx" class="'+(miss?'':'ghost')+'">'+esc(lbl)+'</button>';
   }
   /* NAME THE NUMBER. The text button targets r.p[phIdx] — whichever number he actually dialled —
@@ -6331,9 +6946,7 @@ function afterCall(r, o, nextC){
       _openText();
     });
     function _openText(){
-    var body = (_txk==='ladder') ? textBody(r, st)
-             : (_txk==='batch')  ? boardTextBody(r)
-             : sitBody(r, _txk);
+    var body = (_txk==='ladder') ? textBody(r, st) : sitBody(r, _txk);
     /* Log the OPEN, not a send. Opening a composer is not a delivery — the board draws this exact
        line (the worker's textopen posts confirmed:false) and blurring it is how the ladder burns a
        touch on a message that was never sent. He confirms below once it is actually gone. */
@@ -6460,10 +7073,18 @@ function logOutcome(r,o,digits){
      row per attempt, not doubled. Matched on same number + same day so it never eats a genuinely
      separate earlier attempt. */
   var _lastD = n.dials[n.dials.length-1];
+  /* CALLSTATS-TSD-BEGIN  tsd = when the dial/redial tap happened (read BEFORE the pop below), carried
+     onto the outcome row so the daily call-stats export can show dial->log minutes (2026-10-15).
+     Additive: nothing reads it but the export; a row without it is simply untimed. */
+  var _tsd = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
+              && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsu) || 0;
+  /* CALLSTATS-TSD-END */
   if(_lastD && _lastD.oc==='pending' && _lastD.d===today() && _lastD.ph4===String(digits).slice(-4)){
     n.dials.pop();
   }
-  n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
+  var _row = {d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()};
+  if(_tsd) _row.tsd = _tsd;
+  n.dials.push(_row);
   n.cooldownH=o.h;
   /* THE NO POLICY (see noState). A soft no that is served on its one resurface is spent by ANY
      outcome logged on that serve; a real conversation (talked / appointment / callback) clears the
@@ -6627,6 +7248,8 @@ function wire(){
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
   if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };
+  var cl = $('cstatslink');
+  if(cl) cl.onclick = function(e){ e.preventDefault(); _csDays = 1; screenCallStats(); };
 }
 /* Stale-cache heal. iPhone Safari is the named worst offender and a phone quietly serving last
    week's list is the failure most likely to go unnoticed. Never auto-reload once an outcome has
@@ -6875,6 +7498,37 @@ function wireLang(root){
     b.onclick=function(ev){ ev.stopPropagation(); setLang(b.dataset.lang); };
   });
 }
+/* FULL-SCREEN VOICEMAIL. The same words as the sheet's "IF NO ANSWER" block (VMEN/VMES, or the
+   investor lane's SCRIPT.vm), big, alone on the screen. Logging goes through the SAME .oc outcome
+   button the card uses, so a voicemail logged here is exactly a "Left voicemail" tap: a miss, 24h. */
+function _vmTexts(r){
+  var S = (r && r.st==='BAL' && SCRIPT_ALL.bal) ? SCRIPT_ALL.bal : SCRIPT_ALL;
+  return S.vm ? {en:S.vm.en, es:S.vm.es, tone:null} : {en:VMEN, es:VMES, tone:S.vmtone||null};
+}
+function vmClose(){ var o=document.getElementById('vmfull'); if(o && o.parentNode) o.parentNode.removeChild(o); }
+function vmOpen(r){
+  vmClose();
+  var t=_vmTexts(r), es=(lang()==='es' && t.es);
+  var o=document.createElement('div'); o.id='vmfull'; o.className='vmfull';
+  o.innerHTML='<div class="vmin"><div class="vmtop"><span>VOICEMAIL &middot; READ IT LIVE</span>'+langChips()+'</div>'
+    + _vmWarnHtml()
+    + (t.tone ? '<div class="mut" style="font-size:12px;margin-top:8px">'+esc(es && t.tone.es ? t.tone.es : t.tone.en)+'</div>' : '')
+    /* the callback number never breaks across lines: he reads it aloud, slowly, twice */
+    + '<div class="vmsay">'+esc(fillScript(es ? t.es : t.en, r))
+        .split(esc(SENDER.phone||'\u0000')).join('<span style="white-space:nowrap">'+esc(SENDER.phone||'')+'</span>')+'</div>'
+    + '<button class="vmlog" id="vmlog">&#10003;&nbsp; Left voicemail &mdash; log it</button>'
+    + '<button class="vmx" id="vmx">Close</button></div>';
+  document.body.appendChild(o);
+  Array.prototype.forEach.call(o.querySelectorAll('.lchip'), function(b){
+    b.onclick=function(ev){ ev.stopPropagation(); setLang(b.dataset.lang); vmOpen(r); };
+  });
+  o.querySelector('#vmx').onclick=function(){ vmClose(); };
+  o.querySelector('#vmlog').onclick=function(){
+    vmClose();
+    var b=document.querySelector('.oc button[data-oc="voicemail"]');
+    if(b && !b.disabled) b.click(); else toast('Tap "Left voicemail" below to log it');
+  };
+}
 function say(en, es, r){
   if(lang()==='es' && es) return '<div class="say es">'+esc(fillScript(es, r))+'</div>';
   return '<div class="say">'+esc(fillScript(en, r))+'</div>'
@@ -6946,6 +7600,7 @@ function renderGuided(r, S, named, warm){
     else if(!named){ en=s.aen||en; esl=s.aes||esl; }
   }
   b+='<div class="ltag">'+esc(s.k||s.id)+'</div>';
+  if(s.id==='vm') b+=_vmWarnHtml();
   if(s.id==='greet' && named && !warm){ var sn=secondName(r); if(sn) b+='<div class="noes">Co-owner on the card: <b>'+esc(sn)+'</b> &mdash; if that is who picked up, use their name.</div>'; }
   if(s.rail){
     var rl=(es&&s.rail.es)?s.rail.es:s.rail.en;
@@ -7108,6 +7763,9 @@ function renderSheet(r){
                         + '</div>' : '')
      /* the investor lane carries its own voicemail (SCRIPT.vm); the homeowner rescue message is
         the page-level VMEN/VMES and stays exactly what it was for every other row */
+     /* WRONG VOICE GUARD (2026-10-12): an unset phone falls back to Alejandro's name and number, so
+        on Carlos's page the voicemail would leave Alejandro's callback. Say so above the words. */
+     + _vmWarnHtml()
      + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
 
   // BUSY / CALL ME BACK (NEPQ Calendar Commitment) — the most common early bail. Flip status: YOUR
@@ -7202,3 +7860,22 @@ setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); 
 boot();
 </script></body></html>
 """
+
+
+def _print_ledger_audit(audit):
+    """One line per category, then the leftover rows. No address, name, number or subject."""
+    print('ledger audit: %d case-less send(s) tied to a lead by recipient or property address, %d advisor/test send(s) '
+          'reaching no lead, %d marked not on board, %d still unattributed'
+          % (audit.get('matched', 0), audit.get('test', 0), audit.get('offboard', 0), audit.get('unattributed', 0)))
+    for r in audit.get('rows') or []:
+        print('  unattributed: %s %-5s to-domain=%s lane=%s test=%s owner-named=%s addr-named=%s'
+              % (r['d'] or '?', r['ch'], r['dom'], r['lane'] or '-', r['test'], r['owner'], r.get('addr', False)))
+
+
+if __name__ == '__main__' and '--ledger-audit' in __import__('sys').argv[1:]:
+    # Laptop diagnostic: reads mail_sent.json / text_sent.json beside this file. Without the build's
+    # lead list it cannot tie a case-less send by recipient, so "still unattributed" here can be
+    # higher than the nightly build's; the build prints the real figure.
+    _a = ledger_audit()
+    _print_ledger_audit(_a)
+    print(history_coverage(0, 0, _a))

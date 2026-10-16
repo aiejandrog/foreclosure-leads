@@ -13,6 +13,12 @@ _*.py
 !_lookupstaytest.py
 !_optoutgapstest.py
 !_siblingoptouttest.py
+!_replysendtest.py
+!_bksaidtest.py
+!_pbcasetest.py
+!_captcharefundtest.py
+!_paidqstest.py
+!_skiptracelptest.py
 !_workersendracetest.py
 !_inflightretrytest.py
 !_wplinktest.py
@@ -22,6 +28,7 @@ _*.py
 !_bridgereloadtest.py
 !_calldetailtest.py
 !_callrankingtest.py
+!_voicemailtest.py
 !_batsyntaxtest.py
 !_refreshexittest.py
 # 2026-09-23: BSG Warmup failed silently on 09-17 and 09-19..21 (pythonw, no console). This suite pins
@@ -383,6 +390,8 @@ hardmoney_enriched.json
 llc_officers.json
 llc_officers_status.json
 judgment_dates_misses.json
+# pb_judgment_import.py writes this next to a hand-saved PDF. It carries the case id from that file.
+judgment_records.json
 # county-PA value fallback cache: resolved folios + owner names for people in foreclosure —
 # public repo, keep it out (same reason as skiptrace_results.json / lp_addresses.json)
 pa_values_cache.json
@@ -666,6 +675,10 @@ clerk_bk_cache.json.tmp
 clerk_bk_status.json.tmp
 # _pacerstaytest: PACER PCL auth/search/cost/verdict/gate checks on mocked HTTP + fake names only.
 !_pacerstaytest.py
+# Broward / Palm Beach hold funnel, name guard, and judgment reader. Fake names and fake case ids only.
+!_bwpbholdtest.py
+!_browardjudgmentreadtest.py
+!_holdfunneltest.py
 # _titlechaintest: F2 -- run_title_chain schedules title discovery (free) + owner tokens (paid, second switch, monthly cap).
 !_titlechaintest.py
 # _judgmentscopetest: E1 -- judgment body scope, attached_document_title, calendar override measured, alternate OR copy fetch.
@@ -724,3 +737,25 @@ logs/
 !_cadencesiblingtest.py
 !_texttripwiretest.py
 !_textprecheckstest.py
+!_outcomelearntest.py
+# _releaseexpirytest: a PACER release on a built page expires (board re-holds, Call Mode drops). Synthetic case numbers only.
+!_releaseexpirytest.py
+# _otherlienstest: Broward / Palm Beach non-mortgage liens (other_liens.py). Synthetic names and numbers only.
+!_otherlienstest.py
+!_refreshstatustest.py
+# _bkuncheckedtest: the attorney-approved unchecked Broward / Palm Beach waiver (bk_waiver.json). Synthetic case numbers only.
+!_bkuncheckedtest.py
+
+# _mailaddrtest: broward_resolve keeps the owner mailing address off the cadastral roll (offline, faked calls).
+!_mailaddrtest.py
+!_maxdaystest.py
+!_mailtracetest.py
+!_phonekeytest.py
+!bk_review.py
+!_bkreviewtest.py
+
+# _mailletterlinestest: mailed letters carry the MARS sentences and the opt-out line (offline).
+!_mailletterlinestest.py
+# rf_status.json: RealForeclose Closed/Canceled status per case (rf_status.py), rebuilt nightly.
+rf_status.json
+rf_status.json.tmp

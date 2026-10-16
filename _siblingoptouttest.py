@@ -131,11 +131,11 @@ def server():
             p = work / 'smtp_calls.txt'
             return p.read_text(encoding='utf-8').split() if p.exists() else []
 
-        def send(case, **extra):
+        def send(case, to=None, **extra):
             n[0] += 1
             meta = {'c': case, 'owner': 'Jane', 'addr': '1 Main St', 'wl': 'active'}
             meta.update(extra)
-            return call(port, '/send', {'to': 'owner%d@example.com' % n[0], 'subj': 'About 1 Main St',
+            return call(port, '/send', {'to': to or 'owner%d@example.com' % n[0], 'subj': 'About 1 Main St',
                                         'body': 'Hello Jane, a short note.', 'meta': meta})
 
         st, j = send('2099-000001-CA-01')
@@ -153,8 +153,15 @@ def server():
         rec('a sibling list with no opted-out case, or junk entries, changes nothing', j.get('ok') is True, (st, j))
         st, j = send('2099-000006-CA-01', pcs='2099-000001-CA-01')
         rec('a non-list pcs is ignored, not an error', j.get('ok') is True, (st, j))
+        before = len(smtp_calls())
         st, j = send('2099-000007-CA-01', test=True, pcs=['2099-000001-CA-01'])
-        rec('operator test sends (meta.test) skip the sibling check like the case check', j.get('blocked') != 'optout', (st, j))
+        rec('meta.test on a send to an owner is refused, not exempted', st == 451
+            and j.get('blocked') == 'test_not_operator', (st, j))
+        st, j = send('2099-000001-CA-01', test=True)
+        rec('meta.test cannot carry an owner past the ledgered-case check', j.get('blocked') == 'test_not_operator', (st, j))
+        rec('...and neither reached SMTP', len(smtp_calls()) == before, smtp_calls())
+        st, j = send('2099-000008-CA-01', to='celusa13@gmail.com', test=True, pcs=['2099-000001-CA-01'])
+        rec('advisor test sends (meta.test) skip the sibling check like the case check', j.get('ok') is True, (st, j))
     finally:
         if proc:
             proc.terminate()

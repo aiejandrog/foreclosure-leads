@@ -301,6 +301,46 @@ def sweep_verdict(status):
             sorted(k for k, v in counties.items() if v == 'failed'))
 
 
+# PALM BEACH CASE NUMBERS (2026-10-15). Landmark's grid sometimes returns the literal word "CASE" in
+# CaseNumber; the real number is in the legal text ("Case Number: Case Number: 502026CA009528XXXAMB").
+# 373 of 414 Palm Beach rows on file carried "CASE", and lp_leads dedupes on the case number, so
+# all but ONE of them were dropped from the board, and lp_resolve/lp_status keyed them all to the
+# same "CASE" entry. Only a circuit-civil (CA) or county-civil (CC) number is recovered: those are
+# the foreclosure and HOA cases. A family, probate or truncated number stays unrecovered ('').
+# Also '502026CA008606' with no suffix and '2026CA8204' with no 50 prefix or zero padding (review
+# 2026-10-15): written back in the canonical 50YYYYTTnnnnnn form, suffix kept when there is one.
+_PB_CASE_RE = re.compile(r'(?<![0-9A-Z])(?:50)?(\d{4})(CA|CC)(\d{4,6})([A-Z]{3,6})?(?![0-9])')
+
+
+def pb_case(case, legal=''):
+    """The Palm Beach case number for a row: `case` when it has a number in it, else the CA/CC
+    number in the legal text, else ''."""
+    c = str(case or '').strip()
+    if len(re.findall(r'\d', c)) >= 5:
+        return c
+    m = _PB_CASE_RE.search(str(legal or '').upper())
+    if not m:
+        return ''
+    year, kind, num, suffix = m.groups()
+    if not ('19' <= year[:2] <= '20'):
+        return ''
+    if len(num) < 6 and num.startswith('0'):
+        return ''                    # '502026CA0094' is a cut-off six-digit number, not case 94
+    return '50%s%s%s%s' % (year, kind, num.zfill(6), suffix or '')
+
+
+def _repair_pb_cases(rows):
+    """Fix stored Palm Beach rows whose case is a label, in place. Returns how many changed."""
+    n = 0
+    for x in rows:
+        if isinstance(x, dict) and x.get('county') == 'PALM BEACH':
+            fixed = pb_case(x.get('case'), x.get('legal'))
+            if fixed != str(x.get('case') or ''):
+                x['case'] = fixed
+                n += 1
+    return n
+
+
 def _merge_key(x):
     """(county, instrument-or-case) — the cross-county dedupe key. MD rows predate the county
     field, so absence means MIAMI-DADE; MD rows also predate `instrument`, so case/bookpage
@@ -369,7 +409,17 @@ def main():
         # this is a FAILED REFRESH, not an empty county, and the chain must hear about it.
         print('\nno LP sweep completed — every source blocked. lis_pendens.json left as it was.')
         sys.exit(3)
+    prev = []
+    try:
+        prev = json.load(open(OUT, encoding='utf-8'))
+    except Exception:
+        pass
+    repaired = _repair_pb_cases(prev)
+    if repaired:
+        print(f'repaired {repaired} Palm Beach case number(s) read from the legal text')
     if not out:
+        if repaired:
+            json.dump(prev, open(OUT, 'w', encoding='utf-8'), indent=1)
         print('\nsweep ran, no new filings in the window.'
               + (f' FAILED: {", ".join(failed)}' if failed else ''))
         sys.exit(EXIT_PARTIAL if failed else 0)
@@ -377,11 +427,6 @@ def main():
     # holds every filing being worked. Overwriting made a 30-day sweep silently delete every
     # older LP lead — the resolved, valued, on-the-board ones included. Union by the same
     # dedupe key the sweep uses; existing rows win so downstream enrichment is never clobbered.
-    prev = []
-    try:
-        prev = json.load(open(OUT, encoding='utf-8'))
-    except Exception:
-        pass
     merged = {}
     for x in prev:
         merged[_merge_key(x)] = x

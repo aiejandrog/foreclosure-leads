@@ -30,7 +30,9 @@ impossible to ship again, because it sits at the one place every path must pass 
 a message with a hole in it is a message whose data is wrong, and quietly papering over that would
 send a subtly wrong letter instead of an obviously broken one.
 """
+import contextlib
 import re
+import threading
 
 # Placeholders the templates fall back to when a field is missing. Fine on the board, never in a
 # message. Also catches any other SHOUTED bracket token, which is how every one of these is written.
@@ -192,3 +194,66 @@ def assert_sendable(subj='', body='', to='', unsub=None):
             'refusing to send to %s — %s. Fix the lead data or the template; the message was NOT '
             'sent and the step was NOT consumed.' % (to or '(unknown)', '; '.join(bad)))
     return True
+
+
+# ---------------------------------------------------------------------------------------------
+# THE GATE TOKEN (2026-10-12)
+#
+# mail_guard sits in _smtp_send, "the one place every path must pass through" -- and that is exactly
+# why it was the one check that ran when four homeowner replies were sent over SMTP by a script that
+# called outreach_email._smtp_send directly. The stay gate, the case and same-owner opt-out checks,
+# the bounce breaker, the caps and the dedupe all live in the CALLERS (send_server /send,
+# outreach_email.main, cadence, reply_send), so a script that reached past them to the sender
+# skipped every one, and the send was not in the ledger either: three homeowners with no stay check,
+# on a laptop whose ledger never saw them.
+#
+# _smtp_send now refuses unless the caller says which gate it went through. A gated caller wraps
+# its send in `with gated('send_server'):`. The one exception is mail to ourselves (the advisor or
+# the sending login: a deal-desk digest, a smoke test), which has no homeowner to protect.
+# This cannot stop a script that opens its own smtplib connection. It stops the one entry point
+# this repo owns, and makes the bypass an explicit act instead of a default.
+_TL = threading.local()
+_OPERATOR_FALLBACK = frozenset({'celusa13@gmail.com'})
+
+
+@contextlib.contextmanager
+def gated(source):
+    """Mark the current thread as sending through a gate named `source` (a non-empty label)."""
+    label = str(source or '').strip()
+    if not label:
+        raise UnsendableError('gated() needs the name of the gate the send went through')
+    prev = getattr(_TL, 'src', '')
+    _TL.src = label
+    try:
+        yield label
+    finally:
+        _TL.src = prev
+
+
+def current_gate():
+    return getattr(_TL, 'src', '')
+
+
+def _operator_addrs(login=''):
+    own = set(_OPERATOR_FALLBACK)
+    try:
+        import send_server as _SS
+        own |= {str(a).strip().lower() for a in getattr(_SS, 'ADVISOR_EMAILS', ())}
+    except Exception:
+        pass
+    if login:
+        own.add(str(login).strip().lower())
+    return own
+
+
+def require_gated(to='', bcc='', login=''):
+    """Raise UnsendableError unless this send came through a gate, or goes only to us."""
+    if current_gate():
+        return True
+    rc = [a.strip().lower() for a in re.split(r'[,;]', '%s,%s' % (to or '', bcc or '')) if a.strip()]
+    if rc and all(a in _operator_addrs(login) for a in rc):
+        return True
+    raise UnsendableError(
+        'refusing to send to %s -- _smtp_send was called outside a gate. Replies and one-off mail '
+        'go through reply_send.py (stay check, do-not-contact check, ledger row); batches go through '
+        'send_server /send or outreach_email.py. The message was NOT sent.' % (to or '(unknown)'))

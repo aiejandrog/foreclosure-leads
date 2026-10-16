@@ -23,7 +23,7 @@ OUTPUT:
   Plus a single "Route the top 10" Google Maps deep-link at the top so he can
   drop-and-drive from his phone.
 """
-import json, os, math, html, datetime, sys
+import json, os, re, math, html, datetime, sys
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -123,24 +123,31 @@ def _identity_opted(skip, optouts):
     carry an opt-out. Filtering the haystack before searching it is how a suppression misses.
     """
     ident = {str(k) for k in (optouts or {}) if str(k)[:1] in ('@', '#')}
+    # A phone key saved with punctuation ('#(305) 555-0100') or a country code ('#13055550100') also
+    # matches the lead's 10-digit copy. Same reading Call Mode does (call_mode._identity_opted_fn).
+    # Only a phone-shaped body is rewritten; a hashed key (letters) has no number inside it to read.
+    ident |= {'#' + _digits(k[1:]) for k in ident
+              if k[:1] == '#' and not re.search(r'[^0-9()+.\-\s]', k[1:]) and _digits(k[1:])}
     if not ident or not skip:
         return False
     try:
         # function-level: foreclosure_leads imports the route modules, so top-level would be circular
         from foreclosure_leads import _addr_key as _ak
     except Exception:
-        return False
+        # Without the hash we can still match raw keys. Returning False here dropped every raw
+        # '@email' / '#digits' match too, so a failed import put opted-out owners on a door route.
+        _ak = None
     for e in (skip.get('emails') or []):
         e = str(e or '').strip().lower()
         # RAW key or HASHED key. optouts.json itself stores '@someone@gmail.com' verbatim;
         # only the board bake hashes them for publication. Matching hashed-only made this
         # whole function a no-op against the real ledger — verified against optouts.json,
         # not against a synthetic fixture that happened to use the shape I assumed.
-        if e and (('@' + e) in ident or ('@' + _ak(e)) in ident):
+        if e and (('@' + e) in ident or (_ak and ('@' + _ak(e)) in ident)):
             return True
     for p in (skip.get('phones') or []):
         n = _digits(p.get('number') or p.get('phone') or '') if isinstance(p, dict) else _digits(p)
-        if n and (('#' + n) in ident or ('#' + _ak(n)) in ident):
+        if n and (('#' + n) in ident or (_ak and ('#' + _ak(n)) in ident)):
             return True
     return False
 

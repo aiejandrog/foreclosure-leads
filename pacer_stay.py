@@ -82,8 +82,11 @@ is ambiguous (FIRST MIDDLE LAST vs FIRST LAST1 LAST2 -- common in Miami), so eac
 is searched; PCL's name search is "starts with", so searching GARCIA also returns GARCIA LOPEZ and
 GARCIA-LOPEZ. A co-owner written as a bare first name (SMITH JOHN & MARY) shares the surname before
 it. Estates, trusts, government owners, placeholders and one-word names are never searched: there is
-no single debtor name to search, so the lead is 'unverifiable' at no cost. More than 4 people or 6
-searches on one lead: unverifiable.
+no single debtor name to search, so the lead is 'unverifiable' at no cost. "ET AL", and "ET UX" or
+"ET VIR" with no name after the marker, are the same hold: the roll says there is another person
+and does not name them, so a clear of the one named person is not a full read. Searching the named
+person beside a trust, an estate, or a dotted "L.L.C." would be a new PCL page; that spend is not
+taken here. More than 4 people or 6 searches on one lead: unverifiable.
 
 VERDICT per lead (never "clear" on doubt):
     active        a debtor row whose name matches exactly (first + surname, compatible middle) on an
@@ -93,11 +96,14 @@ VERDICT per lead (never "clear" on doubt):
                   property runs until the case closes, 11 U.S.C. 362(c)(1)).
     unverifiable  any of: an open case for the same name outside Florida (could be a namesake);
                   an open case for a SIMILAR name (initial only, nickname-length prefix, extra or
-                  missing surname, different middle initial); a case dismissed within the last 30
-                  days and not yet closed (reinstatement window); more matching rows than
+                  missing surname, different middle initial); a case dismissed and not yet closed
+                  (inside 30 days: reinstatement window; after: a vacated dismissal would not show in
+                  PCL, so it holds until the court closes the case); more matching rows than
                   --max-pages pages (a common name -- the unread pages could hold an open case);
                   an owner that cannot be searched; an API error before the lead finished.
-    clear         every search completed, and every matching bankruptcy is closed or long dismissed.
+    clear         every search completed, and every matching bankruptcy is closed. An OPEN case
+                  filed before the lookback still counts; only closed ones older than it are ignored.
+                  An owner string ending in '&' (the source dropped a co-owner) is unverifiable.
 Rows that are not bankruptcy petitions (adversary proceedings, civil cases) and rows whose role is
 clearly not the debtor (creditor, trustee, attorney, plaintiff/defendant in an adversary) are ignored.
 
@@ -111,6 +117,8 @@ titles (a bankruptcy caption is the debtor's name). An API error never overwrite
 COST. $0.10 a page, and PACER waives the bill for a quarter that accrues $30 or less -- one cent more
 and the WHOLE quarter bills. So three ceilings, all fail closed:
     quarter  PACER_QUARTER_CAP (default $25: $5 of headroom under $30 for any manual PACER use),
+             never above $30 unless PACER_BILL_QUARTER names this quarter (e.g. 2026-Q4) -- a raised
+             cap alone is held to the waiver (2026-10-13, after a raised cap took Q4 to $59),
              in DEALFLOW_DIR/pacer_quarter_ledger.json, calendar quarters. Reserve before each page,
              settle to the receipt's searchFee after.
     month    #74's shared paid-reads cap (paid_reads.debit / adjust, spender 'pacer_stay'), so PACER
@@ -169,6 +177,7 @@ QA_CACHE_NAME = 'pacer_stay_cache_qa.json'
 QUARTER_LEDGER_NAME = 'pacer_quarter_ledger.json'
 ENV_QUARTER_LEDGER = 'PACER_QUARTER_LEDGER'
 ENV_QUARTER_CAP = 'PACER_QUARTER_CAP'
+ENV_BILL_QUARTER = 'PACER_BILL_QUARTER'      # e.g. 2026-Q4: the ONLY way past the $30 waiver, one quarter at a time
 ENV_RUN_MAX = 'PACER_RUN_MAX'
 SPENDER = 'pacer_stay'
 
@@ -195,6 +204,16 @@ FLSB_BUSINESS_DAYS = 250
 PARTY_ROWS_PER_CASE = 1.25
 PRESEND_KEEP_DAYS = 7                            # --bulk md-near leaves a week of pre-send accrual
 ENV_BULK = 'PACER_BULK'
+ENV_AUTO = 'DEALFLOW_PACER_AUTO'   # 1 re-enables the automatic paths (nightly pull, bulk, send-bridge pre-send). OFF.
+
+
+def auto_enabled(env=None):
+    """PACER is a by-hand tool since 2026-10-16 (Alejandro: it is for checking a client's bankruptcy
+    when one turns up, not a pipeline step). Nothing automatic searches, pulls or spends unless this
+    is set. --case, --plan, --status and --report still run. Existing clears keep expiring on their
+    own and existing active hits keep holding; nothing here releases a lead."""
+    env = os.environ if env is None else env
+    return str(env.get(ENV_AUTO) or '').strip().lower() in ('1', 'true', 'yes', 'on')
 ENV_PRESEND_DAILY_MAX = 'PACER_PRESEND_DAILY_MAX'
 
 PAGE_USD = 0.10
@@ -352,6 +371,17 @@ class QuarterLedger:
         self.today = today or dt.date.today()
         self.q = quarter_of(self.today)
         self.broken = ''
+        # HARD STOP AT THE WAIVER (2026-10-13). One cent over $30 bills the WHOLE quarter, and on 10-12 a
+        # PACER_QUARTER_CAP raised in a shell took Q4 to $59. A raised cap alone can no longer pass $30:
+        # PACER_BILL_QUARTER must also name this exact quarter, so the decision is per quarter and an env
+        # var left behind cannot carry it into the next one.
+        self.cap_set = self.cap
+        self.bill = str(env.get(ENV_BILL_QUARTER) or '').strip().upper() == self.q
+        self.waiver_note = ''
+        if not self.cap_problem and not self.bill and self.cap > FREE_QUARTER_USD:
+            self.cap = FREE_QUARTER_USD
+            self.waiver_note = ('%s=$%.2f held to the $%.0f waiver; set %s=%s to let this quarter be billed'
+                                % (ENV_QUARTER_CAP, self.cap_set, FREE_QUARTER_USD, ENV_BILL_QUARTER, self.q))
 
     def _read(self):
         try:
@@ -387,6 +417,9 @@ class QuarterLedger:
             out['why'] = 'PACER quarter cap setting invalid: %s' % self.cap_problem
         elif out['spent'] + 1e-9 >= self.cap:
             out['why'] = 'PACER quarter cap reached: $%.2f of $%.2f in %s' % (out['spent'], self.cap, self.q)
+            if self.cap >= FREE_QUARTER_USD and not self.bill:
+                out['why'] += (' -- the $%.0f waiver; only %s=%s lets this quarter be billed'
+                               % (FREE_QUARTER_USD, ENV_BILL_QUARTER, self.q))
         else:
             out['ok'] = True
         return out
@@ -740,6 +773,11 @@ ENTITY_TAIL = {'LLC', 'L', 'C', 'INC', 'INCORPORATED', 'CORP', 'CORPORATION', 'C
 TRUST_RE = re.compile(r'\b(?:TR|TRS|TRUST|TRUSTS|TRUSTEE|TRUSTEES|REVOCABLE|IRREVOCABLE)\b')
 ESTATE_RE = re.compile(r'\b(?:EST|ESTATE|DECEASED|DECD|HEIRS?|DEVISEES|BENEFICIARIES|UNKNOWN|'
                        r'PERSONAL\s+REPRESENTATIVE)\b')
+# "ET AL" names other people without naming them. Stripping it and searching the one person left
+# can clear a lead whose other owners were never searched. Bare "ET UX" / "ET VIR" is the same
+# when no spouse name follows the marker. A spouse who is named ("ET UX ROSALIND") is still searched.
+_ET_AL_RE = re.compile(r'\b(?:ET\s*AL|ETAL)\b')
+_ET_SPOUSE_RE = re.compile(r'\b(?:ET\s*UX|ETUX|ET\s*VIR|ETVIR)\b')
 GOV_RE = re.compile(r'\b(?:CITY\s+OF|COUNTY|STATE\s+OF|UNITED\s+STATES|SECRETARY\s+OF|HUD|'
                     r'DEPARTMENT\s+OF|HOUSING\s+AUTHORITY)\b')
 
@@ -832,16 +870,37 @@ def _strip_person(part):
     return toks
 
 
+def _unnamed_spouse(s):
+    """True when ET UX / ET VIR appears and no name token follows it in that owner chunk."""
+    for chunk in str(s or '').split(';'):
+        m = _ET_SPOUSE_RE.search(chunk)
+        if not m:
+            continue
+        tail = NOISE_RE.sub(' ', chunk[m.end():])
+        toks = [t for t in name_tokens(tail) if t not in GENERATIONS and t != 'AND']
+        if not toks:
+            return True
+    return False
+
+
 def parse_owner(raw, order):
     """(subjects, problem). subjects: Person / Entity objects to search. problem: why this owner
     cannot be searched at all ('' when it can). order: 'first_last' | 'last_first' | 'either' (both readings; see _owner_field)."""
     s = _ascii_upper(raw).strip()
+    if re.search(r'&\s*$', s):
+        # 'HERNANDEZ NELSON &': the source dropped the co-owner line (county_leads._owner_partial).
+        # Searching only the first owner could clear a lead whose co-owner is the one in bankruptcy.
+        return [], 'an owner name that ends in "&" (a co-owner is missing from the record)'
     s = re.sub(r'&\s*[WH]\b\.?', '& ', s)             # MD appraiser "&W" / "&H" = wife / husband
     # "UNKNOWN SPOUSE OF X" / "UNKNOWN TENANT" are pleading placeholders, not owners: drop the chunk
     s = re.sub(r'UNKNOWN\s+(?:SPOUSE|TENANTS?|PARTIES|HEIRS)\b[^;&]*', ' ', s)
     s = re.sub(r'^[\s;&]+|[\s;&]+$', '', s)
     if not s or '(' in s or 'TITLE SEARCH' in s:
         return [], 'no owner name on the lead'
+    if _ET_AL_RE.search(s):
+        return [], 'other owners are named only as et al -- no single debtor name for each'
+    if _unnamed_spouse(s):
+        return [], 'a spouse is named only as et ux or et vir -- no single debtor name to search'
     if ESTATE_RE.search(s):
         return [], 'owner is an estate or heirs -- no single debtor name to search'
     if TRUST_RE.search(s):
@@ -1045,12 +1104,12 @@ def decide(subjects, results, today, date_from):
             cv = case_view(row)
             if not cv['is_bk'] or cv['role'] in NOT_DEBTOR_ROLES:
                 continue
-            if lb and cv['filed'] and cv['filed'] < lb:
-                continue
+            st = case_status(cv, today)
+            if lb and cv['filed'] and cv['filed'] < lb and st == 'closed':
+                continue                       # older than the lookback AND closed; an old OPEN case still counts
             q = match_row(row, sj)
             if not q:
                 continue
-            st = case_status(cv, today)
             k = (cv['court'], cv['no'])
             if k not in seen:
                 seen.add(k)
@@ -1063,12 +1122,18 @@ def decide(subjects, results, today, date_from):
             if st == 'open' and q == 'strong' and fl:
                 evidence.append(cv)
             elif st == 'open' and q == 'strong':
+                # PCL returns no address, so the same name in another state is not this owner.
                 reasons.append('an open bankruptcy for the same name in %s (cannot tell if it is this owner)'
                                % (cv['court'] or 'another court'))
             elif st == 'open':
                 reasons.append('an open bankruptcy for a similar name in %s' % (cv['court'] or 'a court'))
             elif st == 'dismissed_recent':
                 reasons.append('a bankruptcy dismissed %s and not yet closed in %s (reinstatement window)'
+                               % (cv['dismissed'], cv['court'] or 'a court'))
+            elif st == 'dismissed':
+                # dismissed over 30 days ago but the case is still not closed: a vacated dismissal or
+                # a reinstatement would show nowhere in PCL, so it holds until the court closes it
+                reasons.append('a bankruptcy dismissed %s and not yet closed in %s (dismissed, not closed)'
                                % (cv['dismissed'], cv['court'] or 'a court'))
     cases.sort(key=lambda c: c['filed'], reverse=True)     # newest first ...
     cases.sort(key=lambda c: not c['open'])                # ... open cases ahead of closed ones
@@ -1244,13 +1309,40 @@ def recheck_days(ent, near):
     return RECHECK['near'] if near else RECHECK['clear']
 
 
-def plan(leads, cache, today, now_ts, only_case=None):
-    """Due leads in the order they are searched. Each item: (lead, tier, near)."""
+def owners_hash(ld):
+    """A short digest of the owner names a lead was searched under (no name is stored), so a skip
+    never outlives a change of owner."""
+    import hashlib
+    raw = '|'.join(sorted('%s/%s' % (o, order) for o, order in ((ld or {}).get('owners') or [])))
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]
+
+
+def overflow_settled(ent, max_pages, ld=None):
+    """True when this entry is an 'unverifiable' common name whose search already ran out of pages at
+    max_pages or deeper. Searching it again at the same depth buys the same unreadable page: the
+    rows only grow, so the answer cannot change. The lead stays held (unverifiable) until someone
+    reads deeper (--max-pages), which is a spend decision."""
+    if not isinstance(ent, dict) or ent.get('verdict') != 'unverifiable' or ent.get('err'):
+        return False
+    try:
+        ovf = int(ent.get('ovf') or 0)
+    except (TypeError, ValueError):
+        return False
+    if ovf <= 0 or int(max_pages or 1) > ovf or ent.get('names') != NAME_READING:
+        return False
+    return ld is None or ent.get('oh') == owners_hash(ld)
+
+
+def plan(leads, cache, today, now_ts, only_case=None, max_pages=None):
+    """Due leads in the order they are searched. Each item: (lead, tier, near). With max_pages, a
+    common name already read that deep is left out (overflow_settled): it stays held, unbought."""
     import stay_gate
     want = stay_gate.pacer_key(only_case) if only_case else ''
     items = []
     for key, ld in leads.items():
         if want and key != want:
+            continue
+        if max_pages and not want and overflow_settled(cache.get(key), max_pages, ld):
             continue
         a = ld.get('auction')
         days = (a - today).days if a else None
@@ -1277,6 +1369,24 @@ def plan(leads, cache, today, now_ts, only_case=None):
     return [(ld, tier, near) for _, ld, tier, near in items]
 
 
+def withdraw_reparsed(leads, cache):
+    """Clears whose lead the CURRENT owner reading refuses -> unverifiable, in place. Free, no search.
+    A stricter parse_owner (an owner ending in '&', an unnamed ET AL) means the search behind an older
+    clear did not cover every owner, and a refused lead is also left out of the new-filer match, so
+    that clear must not keep releasing the lead until its recheck. -> keys withdrawn."""
+    out = []
+    for key, ld in leads.items():
+        ent = cache.get(key)
+        if not isinstance(ent, dict) or ent.get('verdict') != 'clear':
+            continue
+        _, problem, _ = lead_subjects(ld.get('owners') or [])
+        if problem:
+            ent.update(verdict='unverifiable', a=False, cases=[],
+                       why=('earlier clear withdrawn: the owner now reads as not searchable (%s)' % problem)[:200])
+            out.append(key)
+    return out
+
+
 def cache_path(here, env_name):
     return os.path.join(here, QA_CACHE_NAME if env_name == 'qa' else CACHE_NAME)
 
@@ -1297,11 +1407,21 @@ def load_cache_strict(path):
     return d, ''
 
 
-def save_cache(path, cache):
+def save_cache(path, cache, tries=6):
+    """Atomic write. On Windows os.replace is refused (WinError 5) while another process -- a scanner, an
+    editor, a reader -- holds the target open for a moment, which killed a paid run after its pages were
+    already charged (2026-10-10). Retry briefly, as the quarter ledger does; the last error still raises."""
     tmp = path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(cache, f, indent=1, sort_keys=True)
-    os.replace(tmp, path)
+    for i in range(max(1, tries)):
+        try:
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(cache, f, indent=1, sort_keys=True)
+            os.replace(tmp, path)
+            return
+        except OSError:
+            if i >= tries - 1:
+                raise
+            time.sleep(0.2 * (i + 1))
 
 
 def lookback_from(today, years):
@@ -1335,6 +1455,11 @@ def check_lead(pcl, budget, ld, subjects, today, date_from, region, max_pages):
         results.append((si, res))
     verdict, why, cases, bd = decide(subjects, results, today, date_from)
     info = {'pages': pages, 'cost': round(budget.spent - cost0, 4), 'searches': len(by_query)}
+    if any(r.get('overflow') for r in by_query.values()):
+        # a common name: record how deep it was read (ovf) and how deep PCL said it goes (tp), so the
+        # next run does not buy the same unreadable page again and the cost of reading it is known
+        info['ovf'] = max(1, int(max_pages or 1))
+        info['tp'] = max(int(r.get('total_pages') or 0) for r in by_query.values())
     if errors and verdict != 'active':
         return dict(info, verdict='unverifiable', why='PCL error: ' + errors[0], cases=cases, bd=''), 'error', errors[0]
     return dict(info, verdict=verdict, why=why, cases=cases, bd=bd), 'done', ''
@@ -1349,6 +1474,7 @@ def _entry(fields, ld, env_name, region, date_from, now_ts):
         'pages': fields.get('pages', 0), 'cost': fields.get('cost', 0.0), 'why': fields.get('why', ''),
         'cases': fields.get('cases') or [], 'lookback_from': date_from, 'region': region, 'v': 1,
         'names': NAME_READING,
+        **({'ovf': fields['ovf'], 'tp': fields.get('tp') or 0, 'oh': owners_hash(ld)} if fields.get('ovf') else {}),
     }
 
 
@@ -1492,7 +1618,49 @@ def pull_window(idx, today, env):
         note = ('filings %s..%s were never pulled (more than %d days behind) -- the index does not cover them'
                 % (start, gap_to, NF_MAX_WINDOW_DAYS))
         start = gap_to + dt.timedelta(days=1)
-    return start, yday, note
+    to = yday
+    fit = _fit_days(idx, env)
+    if fit is not None:
+        days, maxp, last = fit
+        if days < 1:
+            return None, None, ('the last pull saw %d pages for %s..%s, so even one day would not fit '
+                                'PACER_NEWFILER_MAX_PAGES=%d -- no pull (raising it is spend)'
+                                % (last['tp'], last['from'], last['to'], maxp))
+        if (to - start).days + 1 > days:
+            to = start + dt.timedelta(days=days - 1)
+            note = ('; '.join(x for x in (note, 'a pull saw %d pages for %s..%s: pulling %s..%s so the '
+                                          'window fits %d pages' % (last['tp'], last['from'], last['to'], start, to,
+                                                                    maxp)) if x))
+    return start, to, note
+
+
+def _pull_pages(rec):
+    """Total result pages a pull saw: 'tp' when recorded, else read from a partial pull's why."""
+    try:
+        if rec.get('tp'):
+            return int(rec['tp'])
+        m = re.match(r'(\d+) pages of results, \d+ read', str(rec.get('why') or ''))
+        return int(m.group(1)) if m else (int(rec.get('pages') or 0) if rec.get('ok') else 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fit_days(idx, env):
+    """(calendar days a window may span, max pages, measured pull) from the latest pull that measured the
+    volume (finished or overflowed), else None. A partial pull marks nothing covered, so re-running the same
+    window every night re-buys its first pages and never finishes; a window sized to the measured volume
+    does finish and moves last_to, and stays sized so the catch-up after it does not overflow again."""
+    pulls = [p for p in ((idx or {}).get('pulls') or []) if isinstance(p, dict)
+             and p.get('status') in ('partial', 'done') and _pull_pages(p)]
+    if not pulls:
+        return None
+    last = pulls[-1]
+    tp, f, t = _pull_pages(last), _date(last.get('from')), _date(last.get('to'))
+    maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
+    if prob or not (tp and f and t and t >= f):
+        return None
+    per_day = tp / float((t - f).days + 1)
+    return int(maxp * 0.8 / per_day), maxp, dict(last, tp=tp)
 
 
 def nf_roles(env):
@@ -1525,7 +1693,8 @@ def pull_new_filers(pcl, budget, idx, win, today, now_ts, env):
             k = _nf_key(x)
             rec['new'] += k not in idx['rows']
             idx['rows'][k] = x
-    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4))
+    rec.update(rows=len(res['rows']), pages=res['pages'], cost=round(budget.spent - cost0, 4),
+               tp=int(res.get('total_pages') or 0), maxp=maxp)
     if res['refused']:
         rec.update(status='refused', why=res['refused'])
     elif res['error']:
@@ -1718,6 +1887,10 @@ def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, 
     search LOOKUP ONLY: the verdict is returned and printed, never written to the PACER cache, so it cannot
     release anything at the send gate. A typed name cannot prove every owner on the case was searched."""
     out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0, 'recorded': True}
+    if not manual and not auto_enabled(os.environ if env is None else env):
+        out.update(status='off', why='automatic PACER lookups are removed (by-hand only: pacer_stay.py --case); '
+                                     'the refusal stands')
+        return out
     try:
         return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out,
                         owner if manual else None)
@@ -1766,6 +1939,11 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
         out.update(status='refused', why=prob)
         return out
     ent = cache.get(key)
+    if not manual and overflow_settled(ent, 1, _leads_cached(here).get(key)):
+        out.update(status='cached', verdict='unverifiable',
+                   why='a common name: the last search ran past %s page(s), so another one-page search cannot '
+                       'clear it (held)' % ent.get('ovf'))
+        return out
     if not manual and isinstance(ent, dict) and not stay_gate.pacer_needs_lookup(ent, now_ts):
         out.update(status='cached', verdict=str(ent.get('verdict') or ''),
                    why='the PACER verdict from %s is still inside the max age' % str(ent.get('q') or '?')[:10])
@@ -1873,8 +2051,17 @@ def _presend_locked(key, here, env, env_name, creds, session, now, now_ts, paid,
     return out
 
 
-def refresh_hits(leads, idx, hits_path, today, now_ts, env_name):
+def refresh_hits(leads, idx, hits_path, today, now_ts, env_name, keep_old=False):
+    """keep_old: tonight's matches PLUS every hit already on file (used when cached clears could not be
+    re-checked, so a hit holding a now-refused lead must not be dropped). An unreadable old file is then
+    left untouched rather than replaced."""
     hits = match_index(leads, idx, today, now_ts, env_name)
+    if keep_old and os.path.exists(hits_path):
+        old = _load_json(hits_path)
+        if not isinstance(old, dict):
+            return hits
+        for k, v in old.items():
+            hits.setdefault(k, v)
     save_cache(hits_path, hits)
     return hits
 
@@ -1882,11 +2069,102 @@ def refresh_hits(leads, idx, hits_path, today, now_ts, env_name):
 # --------------------------------------------------------------------------------------------------
 # the nightly run
 # --------------------------------------------------------------------------------------------------
+WHY_BUCKETS = (
+    ('common name', 'page(s) of results for one owner name'),             # overflow: more pages than read
+    ('same name, open case outside Florida', 'an open bankruptcy for the same name'),
+    ('similar name, open case', 'an open bankruptcy for a similar name'),
+    ('dismissed, case not closed', 'a bankruptcy dismissed'),
+    ('PCL error', 'PCL error'),
+)
+
+
+def why_buckets(why):
+    """The reasons an 'unverifiable' verdict gives, as fixed labels (a lead can carry several)."""
+    w = str(why or '')
+    out = [label for label, pre in WHY_BUCKETS if pre in w]
+    if not out:
+        out = ['owner cannot be searched: ' + w[:60]] if w else ['no reason recorded']
+    return out
+
+
+def report(leads, cache, today, now_ts, phoned=None):
+    """No network, no login, no spend: what the cache says per county, why held leads are held, and
+    what keeping them released costs. Counts, court ids and dollars only -- never a name."""
+    import stay_gate
+    by = {}
+    for key, ld in leads.items():
+        if stay_gate.case_stem(key):
+            continue                                   # Miami-Dade: the docket gate decides, not PACER
+        c = by.setdefault(ld.get('county') or '?', {
+            'leads': 0, 'phoned': 0, 'unchecked': 0, 'unchecked_phoned': 0, 'clear_fresh': 0,
+            'clear_stale': 0, 'active': 0, 'unverifiable': 0, 'error': 0, 'why': {}, 'ovf_tp': [],
+            'cost': 0.0, 'pages': 0, 'clear_fresh_phoned': 0})
+        a = ld.get('auction')
+        if a and (a - today).days < -1:
+            continue
+        c['leads'] += 1
+        ph = phoned is None or key in phoned
+        c['phoned'] += 1 if phoned is not None and ph else 0
+        ent = cache.get(key) if isinstance(cache.get(key), dict) else None
+        if ent is None:
+            c['unchecked'] += 1
+            c['unchecked_phoned'] += 1 if phoned is not None and ph else 0
+            continue
+        c['cost'] += float(ent.get('cost') or 0)
+        c['pages'] += int(ent.get('pages') or 0)
+        if ent.get('err') and ent.get('verdict') not in ('clear', 'active', 'unverifiable'):
+            c['error'] += 1
+            continue
+        v = ent.get('verdict')
+        if v == 'clear':
+            st, _ = stay_gate.pacer_verdict(ent, now_ts)
+            fresh = st == stay_gate.CLEAR
+            c['clear_fresh' if fresh else 'clear_stale'] += 1
+            c['clear_fresh_phoned'] += 1 if fresh and phoned is not None and ph else 0
+        elif v == 'active':
+            c['active'] += 1
+        elif v == 'unverifiable':
+            c['unverifiable'] += 1
+            for b in why_buckets(ent.get('why')):
+                c['why'][b] = c['why'].get(b, 0) + 1
+            if ent.get('ovf'):
+                c['ovf_tp'].append(int(ent.get('tp') or 0))
+        else:
+            c['error'] += 1
+    if not by:
+        log('PACER report: no Broward / Palm Beach / other non-Miami-Dade leads in the lead files')
+    for cty, c in sorted(by.items()):
+        done = c['clear_fresh'] + c['clear_stale'] + c['active'] + c['unverifiable']
+        log('PACER report %s: %d open lead(s)%s; %d never searched%s' % (
+            cty, c['leads'], (' (%d with a phone)' % c['phoned']) if phoned is not None else '',
+            c['unchecked'], (' (%d with a phone)' % c['unchecked_phoned']) if phoned is not None else ''))
+        log('  searched %d: clear %d released now%s + %d expired (older than the gate\'s max age, held again), '
+            'active %d, unverifiable %d, error %d; $%.2f / %d page(s) recorded'
+            % (done, c['clear_fresh'], (' (%d with a phone)' % c['clear_fresh_phoned']) if phoned is not None else '',
+               c['clear_stale'], c['active'], c['unverifiable'], c['error'], c['cost'], c['pages']))
+        for b, n in sorted(c['why'].items(), key=lambda kv: -kv[1]):
+            log('    unverifiable because %-40s %4d' % (b, n))
+        if c['ovf_tp']:
+            known = [t for t in c['ovf_tp'] if t > 0]
+            log('    common names with a recorded depth: %d of %d; reading every page of those would cost ~$%.2f'
+                % (len(known), len(c['ovf_tp']), sum(known) * PAGE_USD))
+    tot_fresh = sum(c['clear_fresh'] for c in by.values())
+    tot_unchecked = sum((c['unchecked_phoned'] if phoned is not None else c['unchecked']) for c in by.values())
+    log('PACER report: keeping %d released lead(s) released costs ~$%.2f a month (one page per lead every %d days, '
+        'gate max age %g days); first search of the %d never-searched %slead(s) ~$%.2f (one page per owner name)'
+        % (tot_fresh, tot_fresh * PAGE_USD * 30.0 / RECHECK['clear'], RECHECK['clear'],
+           stay_gate.pacer_max_age_days(), tot_unchecked, 'phoned ' if phoned is not None else '',
+           tot_unchecked * PAGE_USD))
+    return by
+
+
 def _log_status(quarter, idx, today, env):
     import paid_reads
     qs, ms = quarter.status(), paid_reads.status()
     log('PACER quarter %s: $%.2f of $%.2f (%d pages)%s' % (qs['quarter'], qs['spent'], qs['cap'], qs['pages'],
                                                          '' if qs['ok'] else ' -- ' + qs['why']))
+    if quarter.waiver_note:
+        log('  ' + quarter.waiver_note)
     kinds = {}
     for v in (qs.get('days') or {}).values():
         for k, usd in v.items():
@@ -1923,6 +2201,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
                          "releases nothing at the send gate")
     ap.add_argument('--plan', action='store_true', help='no network: print what would be searched and its cost')
     ap.add_argument('--status', action='store_true', help='print quarter / month spend and the pre-send allowance')
+    ap.add_argument('--report', action='store_true',
+                    help='no network, no spend: per county, how many leads PACER released, why the rest are held, '
+                         'and what keeping them released costs (counts only, no names)')
     ap.add_argument('--max-pages', type=int, default=1,
                     help='pages read per name before calling it a common name (unverifiable)')
     ap.add_argument('--lookback-years', type=int, default=LOOKBACK_YEARS)
@@ -1931,6 +2212,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     if a.owner and not a.case:
         log('PACER: --owner only works with --case -- nothing searched')
         return 3
+    if not (a.case or a.status or a.report or a.plan) and not auto_enabled(env):
+        log('PACER: automatic runs are removed (by-hand tool: --case, --plan, --status, --report) -- nothing searched, nothing spent')
+        return 0
     now_ts = time.time() if now is None else now
     today = dt.date.fromtimestamp(now_ts)
 
@@ -1953,7 +2237,31 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     leads, skipped = load_leads(here)
     cpath = cache_path(here, env_name)
     cache, cprob = load_cache_strict(cpath)
-    queue = plan(leads, cache or {}, today, now_ts, None) if not cprob else []
+    if a.report:
+        if cprob:
+            log('PACER report: %s' % cprob)
+            return 3
+        phoned, pwhy = phoned_keys(str(env.get('PACER_TWIN_PATH') or '') or None)
+        log('PACER report: phones from %s' % pwhy)
+        report(leads, cache or {}, today, now_ts, phoned)
+        _log_status(quarter, idx, today, env)
+        return 0
+    wd_prob = ''
+    if cache and not cprob and not a.plan:
+        import paid_reads
+        with paid_reads._FileLock(cpath) as lk:
+            fresh, fprob = load_cache_strict(cpath) if lk.held else (None, 'locked')
+            gone = withdraw_reparsed(leads, fresh) if not fprob else []
+            if gone:
+                save_cache(cpath, fresh)
+                cache = fresh
+        if fprob:
+            wd_prob = fprob
+            log('PACER: could not re-check cached clears against the owner reading (%s) -- the new-filer '
+                'hits are not rewritten this run' % fprob)
+        elif gone:
+            log('PACER: %d earlier clear(s) withdrawn -- the owner now reads as not searchable (held)' % len(gone))
+    queue = plan(leads, cache or {}, today, now_ts, None, a.max_pages) if not cprob else []
     if bulk == 'off':
         queue = []
     elif bulk == 'md-near':
@@ -2033,9 +2341,14 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
         if not qs['ok']:
             log('PACER: %s -- no paid searches tonight' % qs['why'])
             do_pull, queue = False, []
+        elif quarter.bill and qs['cap'] > FREE_QUARTER_USD:
+            log('PACER: WARNING %s=%s and PACER_QUARTER_CAP $%.2f -- this quarter will be billed'
+                % (ENV_BILL_QUARTER, quarter.q, qs['cap']))
         elif qs['cap'] >= FREE_QUARTER_USD:
-            log('PACER: WARNING PACER_QUARTER_CAP $%.2f is at or above the $30 waiver -- this quarter will be billed'
-                % qs['cap'])
+            log('PACER: WARNING the quarter cap is the full $30 waiver -- a single manual PACER web search on top '
+                'of it bills the whole quarter')
+        if quarter.waiver_note:
+            log('PACER: ' + quarter.waiver_note)
         if do_pull:
             maxp, prob = _int_setting('PACER_NEWFILER_MAX_PAGES', DEFAULT_NF_MAX_PAGES, env, 1, 100)
             pull_cap = min((maxp or 0) * PAGE_USD, qs['remaining'], ms_left)
@@ -2171,7 +2484,8 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
             if pcl.creds and not out:
                 log('PACER: logout did not confirm (the token expires on its own)')
     if idx is not None and (idx.get('rows') or os.path.exists(hits_path)):
-        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name)
+        # a clear we could not re-check must not lose the hit that holds it: then keep the old hits too
+        hits = refresh_hits(leads, idx, hits_path, today, now_ts, env_name, keep_old=bool(wd_prob))
         log('PACER new filers: index %d rows; %d lead(s) match an owner on an open flsb case (blocked)%s'
             % (len(idx.get('rows') or {}), len(hits), (': ' + ', '.join(sorted(hits)[:20])) if hits else ''))
     elif iprob:
