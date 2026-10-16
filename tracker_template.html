@@ -16220,6 +16220,11 @@ function _subjLine(street, dt, td, lang){
    2026-08-29 body below, which is itself compliant (identity disclosure, STOP line, CAN-SPAM sig).
    Never a raw placeholder: assert_no_placeholders would fail the build first. */
 var _ALEXMAIL_EN = "__ALEXMAIL_EN__";
+// Email opt-out sentence, baked from outreach_copy._unsub() so every body below moves with it. An
+// unbaked placeholder (raw template in a test) falls back to the approved wording.
+var _OPTOUT_EN = "__OPTOUT_EN__", _OPTOUT_ES = "__OPTOUT_ES__";
+if(_OPTOUT_EN.indexOf('__OPTOUT')===0) _OPTOUT_EN = "If now's not a good time, just tell me and I won't reach out again.";
+if(_OPTOUT_ES.indexOf('__OPTOUT')===0) _OPTOUT_ES = "Si ahora no es buen momento, solo d\u00edgamelo y no lo vuelvo a contactar.";
 function _alexFill(t, v){
   t = String(t||'');
   if(!v.first) t = t.split('Hi \u0001FIRST\u0001,').join('Hi,');
@@ -16279,8 +16284,8 @@ function genEmail(r, quiet){
   // every email keeps it). outreach_email.py has always appended it (sig_en / sig_es); these bodies
   // did not, so the board's early, tax-deed, Spanish, follow and final emails went out without it.
   // bodyColdEN is Alejandro's baked template and already carries it after the SIG token.
-  const sigEN = sig + "\n\nIf now's not a good time, just tell me and I won't reach out again.";
-  const sigES = sig + "\n\nSi ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.";
+  const sigEN = sig + "\n\n" + _OPTOUT_EN;
+  const sigES = sig + "\n\n" + _OPTOUT_ES;
   /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
      tail replies.py needs; both are satisfiable and both are required. Built by _subjLine() above,
      which outreach_email.py mirrors line for line, so the manual composer and the unattended
@@ -16504,7 +16509,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'I\'m writing you once instead of once per property. Each one has its own way out — keep ' +
     'one, sell another, let a third go — and it all works best as one conversation.\n\n' +
     'If it\'d help, I can walk the numbers on any of them. No cost, no obligation — and if ' +
-    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\nIf now\'s not a good time, just tell me and I won\'t reach out again.' + '\n\n' +
+    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\n' + _OPTOUT_EN + '\n\n' +
     '';
   var bodyES = 'Hola ' + first + ',\n\n' +
     'Soy ' + sN + ', de Biscayne Solutions Group. No soy su prestamista, no soy del gobierno, y ' +
@@ -16515,7 +16520,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'Le escribo una sola vez y no por cada propiedad. Cada una tiene su propia salida — quedarse ' +
     'con una, vender otra, dejar ir una tercera — y todo se trabaja mejor en una sola conversación.\n\n' +
     'Si le sirve, puedo repasar los números de cualquiera de ellas. Sin costo, sin compromiso — ' +
-    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\nSi ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.' + '\n\n' +
+    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\n' + _OPTOUT_ES + '\n\n' +
     '';
   var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   try {

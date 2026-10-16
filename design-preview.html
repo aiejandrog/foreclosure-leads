@@ -2161,7 +2161,7 @@ body.compact .dg-v{font-size:14.5px}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-16T20:16","good":null,"rows":[],"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
+var S={"baked":"2026-10-16T20:21","good":null,"rows":[],"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
 function t(s){ if(!s) return null; var d=new Date(s); return isNaN(d.getTime())?null:d; }
 function hm(s){ var d=t(s); if(!d) return '?'; var h=d.getHours(), m=('0'+d.getMinutes()).slice(-2);
   var day=(d.toDateString()===new Date().toDateString())?'today':(d.getMonth()+1)+'/'+d.getDate();
@@ -16250,6 +16250,11 @@ function _subjLine(street, dt, td, lang){
    2026-08-29 body below, which is itself compliant (identity disclosure, STOP line, CAN-SPAM sig).
    Never a raw placeholder: assert_no_placeholders would fail the build first. */
 var _ALEXMAIL_EN = "Hi \u0001FIRST\u0001,\n\nI know this is a stressful time, and you're likely receiving a lot of mail and calls about your property so I'll be brief and direct\n\nYour home is scheduled for foreclosure auction on \u0001DATE\u0001.\nIf nothing changes before that date, the house is sold to the highest bidder and every choice you have right now goes with it.\nBut this does not have to happen.\nMy name is \u0001SIGNER\u0001 with the team at \u0001COMPANY\u0001. \u0001IDENT\u0001\nOur senior advisor has spent over 30 years in mortgages and foreclosure workouts, and he personally reviews your case. He has sat across from people in exactly your position and walked them out of it with their equity intact.\n\nWe specialize in Urgent Foreclosure Cases that are facing an auction in just a few days.\n\nI don't know if you already have a plan, but I want to offer you something completely free and without any obligation: a private phone call. Most take about five minutes; I block fifteen so you are never rushed.\n\nDuring that call, we will:\n\n  \u2022 Review your entire case and situation.\n  \u2022 Explain every option available to you (many of which you may not know exist)\n  \u2022 Give you a clear, honest path forward.\n\nThere are no tricks, no hidden fees, and no pressure.\n\nHere's what I need from you:\n\nPick a time that works for you at cal.com/bsgflorida/free-records-review, or simply reply with the best phone number and times to call you. You can also call me directly at \u0001PHONE\u0001 and I'll take your call personally.\n\nThere is still time to protect and save your home or equity, but the clock is ticking.\nPlease don't wait.\n\nReply now or call me today.\n\nWarm regards,\n\n\u0001SIG\u0001\n\nIf now's not a good time, just tell me and I won't reach out again.\n\n\n\n";
+// Email opt-out sentence, baked from outreach_copy._unsub() so every body below moves with it. An
+// unbaked placeholder (raw template in a test) falls back to the approved wording.
+var _OPTOUT_EN = "If now's not a good time, just tell me and I won't reach out again.", _OPTOUT_ES = "Si ahora no es buen momento, solo d\u00edgamelo y no lo vuelvo a contactar.";
+if(_OPTOUT_EN.indexOf('__OPTOUT')===0) _OPTOUT_EN = "If now's not a good time, just tell me and I won't reach out again.";
+if(_OPTOUT_ES.indexOf('__OPTOUT')===0) _OPTOUT_ES = "Si ahora no es buen momento, solo d\u00edgamelo y no lo vuelvo a contactar.";
 function _alexFill(t, v){
   t = String(t||'');
   if(!v.first) t = t.split('Hi \u0001FIRST\u0001,').join('Hi,');
@@ -16309,8 +16314,8 @@ function genEmail(r, quiet){
   // every email keeps it). outreach_email.py has always appended it (sig_en / sig_es); these bodies
   // did not, so the board's early, tax-deed, Spanish, follow and final emails went out without it.
   // bodyColdEN is Alejandro's baked template and already carries it after the SIG token.
-  const sigEN = sig + "\n\nIf now's not a good time, just tell me and I won't reach out again.";
-  const sigES = sig + "\n\nSi ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.";
+  const sigEN = sig + "\n\n" + _OPTOUT_EN;
+  const sigES = sig + "\n\n" + _OPTOUT_ES;
   /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
      tail replies.py needs; both are satisfiable and both are required. Built by _subjLine() above,
      which outreach_email.py mirrors line for line, so the manual composer and the unattended
@@ -16534,7 +16539,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'I\'m writing you once instead of once per property. Each one has its own way out — keep ' +
     'one, sell another, let a third go — and it all works best as one conversation.\n\n' +
     'If it\'d help, I can walk the numbers on any of them. No cost, no obligation — and if ' +
-    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\nIf now\'s not a good time, just tell me and I won\'t reach out again.' + '\n\n' +
+    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\n' + _OPTOUT_EN + '\n\n' +
     '';
   var bodyES = 'Hola ' + first + ',\n\n' +
     'Soy ' + sN + ', de Biscayne Solutions Group. No soy su prestamista, no soy del gobierno, y ' +
@@ -16545,7 +16550,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'Le escribo una sola vez y no por cada propiedad. Cada una tiene su propia salida — quedarse ' +
     'con una, vender otra, dejar ir una tercera — y todo se trabaja mejor en una sola conversación.\n\n' +
     'Si le sirve, puedo repasar los números de cualquiera de ellas. Sin costo, sin compromiso — ' +
-    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\nSi ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.' + '\n\n' +
+    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\n' + _OPTOUT_ES + '\n\n' +
     '';
   var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   try {
