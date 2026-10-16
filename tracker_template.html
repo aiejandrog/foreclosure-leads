@@ -13872,8 +13872,8 @@ function genMorningWorker(lane, autostart){
     // from the bridge greys the button; a slow or missing bridge leaves it live and the tap decides.
     // This never opens anything: the tap still runs textGate inside its own click.
     +     'var _ti=TBI; _tcheck(x.c, x.sms, x.pcs, function(ok, why, ans){'
-    +       'if(ok || !ans || !tbOn || TBI!==_ti) return;'
-    +       'var w=document.getElementById("tb-why"); if(w){ w.style.display="block"; w.textContent="This one will not open: "+why+". Skip it and go to the next person."; }'
+    +       'if(ok || !ans || !tbOn || TBI!==_ti || !TEXTQ[TBI] || TEXTQ[TBI].c!==x.c) return;'
+    +       'var w=document.getElementById("tb-why"); if(w){ w.style.display="block"; w.textContent="This one will not open: "+String(why).replace(/[.\\s]+$/,"")+". Skip it and go to the next person."; }'
     +       'var o=document.getElementById("tb-open"); if(o){ o.disabled=true; o.style.opacity=".45"; o.style.cursor="not-allowed"; }'
     +     '});'
     +   '}'

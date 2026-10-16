@@ -2161,7 +2161,7 @@ body.compact .dg-v{font-size:14.5px}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-16T17:00","good":null,"rows":[],"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
+var S={"baked":"2026-10-16T17:13","good":null,"rows":[],"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
 function t(s){ if(!s) return null; var d=new Date(s); return isNaN(d.getTime())?null:d; }
 function hm(s){ var d=t(s); if(!d) return '?'; var h=d.getHours(), m=('0'+d.getMinutes()).slice(-2);
   var day=(d.toDateString()===new Date().toDateString())?'today':(d.getMonth()+1)+'/'+d.getDate();
@@ -13902,8 +13902,8 @@ function genMorningWorker(lane, autostart){
     // from the bridge greys the button; a slow or missing bridge leaves it live and the tap decides.
     // This never opens anything: the tap still runs textGate inside its own click.
     +     'var _ti=TBI; _tcheck(x.c, x.sms, x.pcs, function(ok, why, ans){'
-    +       'if(ok || !ans || !tbOn || TBI!==_ti) return;'
-    +       'var w=document.getElementById("tb-why"); if(w){ w.style.display="block"; w.textContent="This one will not open: "+why+". Skip it and go to the next person."; }'
+    +       'if(ok || !ans || !tbOn || TBI!==_ti || !TEXTQ[TBI] || TEXTQ[TBI].c!==x.c) return;'
+    +       'var w=document.getElementById("tb-why"); if(w){ w.style.display="block"; w.textContent="This one will not open: "+String(why).replace(/[.\\s]+$/,"")+". Skip it and go to the next person."; }'
     +       'var o=document.getElementById("tb-open"); if(o){ o.disabled=true; o.style.opacity=".45"; o.style.cursor="not-allowed"; }'
     +     '});'
     +   '}'
