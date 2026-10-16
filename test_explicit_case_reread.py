@@ -51,6 +51,10 @@ class ExplicitCaseRereadTests(unittest.TestCase):
                         args += ['--case', case]
                     self.assertEqual(RD.main(args), 0)
                 self.assertEqual(reclaimed, [explicit])
+                # A one-case run writes its own summary and leaves the nightly one alone.
+                wrote, kept = ('_case_run', '_nightly') if explicit else ('_nightly', '_case_run')
+                self.assertTrue((Path(folder) / (wrote + '.json')).exists())
+                self.assertFalse((Path(folder) / (kept + '.json')).exists())
 
 
 if __name__ == '__main__':

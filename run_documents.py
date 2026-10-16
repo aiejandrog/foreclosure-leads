@@ -832,7 +832,9 @@ def main(argv=None):
           % (written, read_ok))
     if dossiers:
         summary = summarize(dossiers)
-        target = dossier_path(COUNTY, '_nightly')
+        # A one-case run (--case) is not a night: it must not replace the nightly coverage summary
+        # with a single case's numbers (it did, 2026-10-08, from an acceptance re-read).
+        target = dossier_path(COUNTY, '_case_run' if args.case else '_nightly')
         target.parent.mkdir(parents=True, exist_ok=True)
         DS._atomic_write_text(str(target), json.dumps(summary, indent=2) + '\n')
         print('  coverage: %(cases)d case(s), %(skipped_no_token)d skipped for no search token, '

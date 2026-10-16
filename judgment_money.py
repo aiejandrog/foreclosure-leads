@@ -624,6 +624,55 @@ def label_span(lines, labels):
     return first, text
 
 
+_LONE_AMOUNT_RE = re.compile(r'^\(?-?\$?\s*[\d,]+\.\d{2}\)?$')
+# A label line that already ENDS in a bare figure owns it. A figure inside parentheses at the end
+# ("(per diem: $197.00)") is part of the label, a rate, and does not.
+_TRAILING_AMOUNT_RE = re.compile(r'[\d,]+\.\d{2}\s*$')
+
+
+def _blank(line):
+    return not line.replace('\xa0', ' ').strip()
+
+
+def table_lines(text):
+    """The page's lines, with one split-row layout put back on one line.
+
+    Some judgment forms print each row as three text lines: the label, a lone "$", then the figure
+    ("Unpaid Principal Balance" / "$" / "913,098.51"), with non-breaking-space spacer lines around
+    the TOTAL. Neither the same-line reader nor column pairing can see that as a row, so the
+    2025-023462 judgment's printed TOTAL $1,061,518.12 produced no candidate at all (acceptance
+    replay 2026-10-09). Here, and only here: a line that is exactly "$", followed (past blank
+    lines) by a line that is only an amount, and preceded (past blank lines) by a line with letters
+    that does not already end in an amount, is folded onto that label line as "label $amount".
+    The spacer lines between them are dropped. Everything else is returned unchanged, so a page
+    without the lone "$" yields exactly text.splitlines().
+    """
+    lines = (text or '').splitlines()
+    if not any(line.replace('\xa0', ' ').strip() == '$' for line in lines):
+        return lines
+    out = []
+    i = 0
+    while i < len(lines):
+        if lines[i].replace('\xa0', ' ').strip() == '$':
+            j = i + 1
+            while j < len(lines) and _blank(lines[j]):
+                j += 1
+            k = len(out) - 1
+            while k >= 0 and _blank(out[k]):
+                k -= 1
+            if (j < len(lines) and _LONE_AMOUNT_RE.match(lines[j].replace('\xa0', ' ').strip())
+                    and k >= 0 and re.search(r'[A-Za-z]', out[k])
+                    and not _TRAILING_AMOUNT_RE.search(out[k].strip())):
+                figure = lines[j].replace('\xa0', ' ').strip().replace('$', '').strip()
+                del out[k + 1:]
+                out[k] = out[k].rstrip() + ' $' + figure
+                i = j + 1
+                continue
+        out.append(lines[i])
+        i += 1
+    return out
+
+
 def text_rows(reading, total_re):
     """Rows off every page read as text or OCR, in reading order, across pages.
 
@@ -640,7 +689,7 @@ def text_rows(reading, total_re):
             continue
         number = _page_no(page.get('page'))
         source = page.get('text_source')
-        lines = (page.get('text') or '').splitlines()
+        lines = table_lines(page.get('text'))
         column_lines = set()
         for labels, values in column_blocks(lines):
             column_lines.update(i for i, _ in values)
