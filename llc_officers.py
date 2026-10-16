@@ -8,8 +8,12 @@ manager's own house. This pulls, for every company-owned lead:
   - registered agent (name, address)                      -> formal/service-of-process contact
   - entity status (Active / INACT)                        -> a dissolved LLC still has its people
 
-Sunbiz 403s python-requests but serves native Windows curl (Schannel TLS fingerprint — the same
-trick broward_liens.py uses against Cloudflare). Results cached in llc_officers.json keyed by
+Fetching (2026-10-16): Sunbiz 403s python-requests, and since 2026-09-29 Cloudflare also challenges
+native Windows curl (it used to pass on its Schannel fingerprint). _curl now tries, in order:
+curl_cffi impersonating current Chrome (TLS/JA3 + HTTP/2 + headers), then Camoufox if it is
+installed (laptop only, see requirements.txt), and native curl only when curl_cffi is missing.
+Every tier that hands back a challenge page counts as a miss; all tiers missing is SunbizBlocked.
+Results cached in llc_officers.json keyed by
 case (entity-level dedupe inside); COMMITTED to the repo like sale_history_cache.json so the
 cloud early-publish carries it. Re-check an entity with --refresh.
 
@@ -51,22 +55,132 @@ def _is_blocked(html):
     return not (html or '').strip() or bool(_CHALLENGE.search(html))
 
 
+IMPERSONATE = os.environ.get('SUNBIZ_IMPERSONATE', 'chrome')   # curl_cffi target; 'chrome' = newest shipped
+FETCH_LOG = []          # (tier, outcome) per fetch this process, for the status file; no URLs, no names
+
+
+def _cffi_get(u):
+    """One GET through curl_cffi, or None when curl_cffi is not installed. No custom User-Agent:
+    curl_cffi sends the headers that match the TLS fingerprint it impersonates, and a hand-set UA
+    that disagrees with that fingerprint is itself a bot signal."""
+    try:
+        from curl_cffi import requests as cffi_requests
+    except ImportError:
+        return None
+    try:
+        r = cffi_requests.get(u, impersonate=IMPERSONATE, timeout=25, allow_redirects=True)
+    except Exception:
+        return ''
+    return r.text or ''
+
+
+def _native_curl_get(u):
+    r = subprocess.run([CURL, '-s', '-L', '--max-time', '25', '-A', UA,
+                        '-H', 'Accept: text/html,application/xhtml+xml', u],
+                       capture_output=True, text=True, encoding='utf-8', errors='replace')
+    return r.stdout or ''
+
+
+_CAMOUFOX = {'cm': None, 'browser': None, 'down': ''}   # one browser per process, opened on first need
+
+
+def _camoufox_close():
+    cm = _CAMOUFOX.get('cm')
+    _CAMOUFOX.update(cm=None, browser=None)
+    if cm is not None:
+        try:
+            cm.__exit__(None, None, None)
+        except Exception:
+            pass
+
+
+def camoufox_fetch(u, settle_ms=6000):
+    """GET a page in Camoufox and return its HTML, or None when Camoufox is unavailable here.
+
+    Same launch settings as records_liens.camoufox_session / tax_status (headless, geoip, humanize).
+    The browser is opened once and reused, because a lookup is two page loads and a run is many
+    lookups; launching per page would dominate the runtime. The import is local so the container,
+    GitHub Actions and any box without camoufox still import this module."""
+    if _CAMOUFOX['down']:
+        return None
+    if _CAMOUFOX['browser'] is None:
+        try:
+            from camoufox.sync_api import Camoufox
+        except Exception as e:
+            _CAMOUFOX['down'] = 'camoufox not installed (%s)' % type(e).__name__
+            return None
+        try:
+            cm = Camoufox(headless=True, geoip=True, humanize=True)
+            _CAMOUFOX.update(cm=cm, browser=cm.__enter__())
+            import atexit
+            atexit.register(_camoufox_close)
+        except Exception as e:
+            _CAMOUFOX['down'] = 'camoufox failed to launch: %s' % str(e)[:90]
+            return None
+    page = _CAMOUFOX['browser'].new_page()
+    try:
+        page.goto(u, wait_until='domcontentloaded', timeout=90000)
+        html = page.content()
+        if _is_blocked(html):
+            # the managed challenge solves itself in a browser Cloudflare accepts; give it time
+            page.wait_for_timeout(settle_ms)
+            html = page.content()
+        return html or ''
+    except Exception:
+        return ''
+    finally:
+        try:
+            page.close()
+        except Exception:
+            pass
+
+
 def _curl(u, tries=3, pause=3):
     """GET a Sunbiz page. Raises SunbizBlocked rather than hand back an empty or challenge body.
-    Retries a couple of times first: broward_liens saw Cloudflare challenge per request at a
-    coin-flip rate, and a retry rode through there."""
-    out = ''
-    for i in range(tries):
-        r = subprocess.run([CURL, '-s', '-L', '--max-time', '25', '-A', UA,
-                            '-H', 'Accept: text/html,application/xhtml+xml', u],
-                           capture_output=True, text=True, encoding='utf-8', errors='replace')
-        out = r.stdout or ''
-        if not _is_blocked(out):
-            return out
-        if i < tries - 1:
-            time.sleep(pause)
-    raise SunbizBlocked('%s after %d tries (%d bytes)' % (
-        'Cloudflare challenge page' if out.strip() else 'empty response', tries, len(out)))
+
+    Tier 1 is curl_cffi (or native curl when curl_cffi is not installed), retried `tries` times:
+    broward_liens saw Cloudflare challenge per request at a coin-flip rate, and a retry rode
+    through there. Tier 2 is one Camoufox load. Once Camoufox has answered in this process, later
+    fetches try it first so a blocked tier 1 does not cost every page its retries and pauses."""
+    state = {'out': '', 'tier1': 'curl_cffi', 'cf_tried': False}
+
+    def tier1():
+        for i in range(tries):
+            out = _cffi_get(u)
+            if out is None:                                  # curl_cffi missing on this box
+                state['tier1'] = 'curl'
+                out = _native_curl_get(u)
+            state['out'] = out or state['out']
+            if not _is_blocked(out):
+                FETCH_LOG.append((state['tier1'], 'ok'))
+                return out
+            if i < tries - 1:
+                time.sleep(pause)
+        FETCH_LOG.append((state['tier1'], 'blocked'))
+        return None
+
+    def tier2():
+        cf = camoufox_fetch(u)
+        if cf is None:                                       # not installed / failed to launch
+            return None
+        state['cf_tried'] = True
+        state['out'] = cf or state['out']
+        if not _is_blocked(cf):
+            FETCH_LOG.append(('camoufox', 'ok'))
+            return cf
+        FETCH_LOG.append(('camoufox', 'blocked'))
+        return None
+
+    camoufox_first = ('camoufox', 'ok') in FETCH_LOG
+    for step in ((tier2, tier1) if camoufox_first else (tier1, tier2)):
+        got = step()
+        if got is not None:
+            return got
+    out = state['out']
+    raise SunbizBlocked('%s after %d %s tries%s (%d bytes)' % (
+        'Cloudflare challenge page' if out.strip() else 'empty response', tries, state['tier1'],
+        ' and camoufox' if state['cf_tried'] else ' (camoufox: %s)' % (_CAMOUFOX['down'] or 'not tried'),
+        len(out)))
 
 
 SUFFIX_ONLY = re.compile(r'^(?:LLC|L\.?L\.?C\.?|INC|CORP|LP|LTD|TRUST|CO)\.?,?$', re.I)
@@ -320,13 +434,16 @@ def main():
     print(f'llc_officers: {fetched} Sunbiz lookups this run, {hits} new hits. '
           f'{withppl}/{len(cache)} cached LLC leads carry humans/RA.')
     try:
+        tiers = {}
+        for t, ok in FETCH_LOG:
+            tiers[t + '_' + ok] = tiers.get(t + '_' + ok, 0) + 1
         json.dump({'ts': time.strftime('%Y-%m-%dT%H:%M:%S'), 'fetched': fetched, 'hits': hits,
-                   'blocked': blocked}, open(STATUS, 'w', encoding='utf-8'), indent=1)
+                   'blocked': blocked, 'tiers': tiers}, open(STATUS, 'w', encoding='utf-8'), indent=1)
     except OSError:
         pass
     if blocked:
         print(f'llc_officers: SUNBIZ BLOCKED ({blocked}) -- run stopped, nothing cached as not-found. '
-              f'Officer enrichment is not running until Sunbiz answers curl again.')
+              f'Officer enrichment is not running until a fetch tier gets through again.')
         return 2
     return 0
 
