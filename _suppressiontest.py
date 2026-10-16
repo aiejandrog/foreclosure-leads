@@ -155,14 +155,20 @@ except Exception:
 _real_ident = [k for k in _real if str(k).startswith(('@', '#'))]
 if _real_ident:
     _ok = True
+    _hashed = 0
     for k in _real_ident:
         val = str(k)[1:].strip().lower()
+        # A '#' key with letters in it is a hash of a number; a hash cannot be turned back into the
+        # number, so it cannot be fed to the reader as a phone. It is counted, not tested.
+        if str(k).startswith('#') and re.search(r'[^0-9()+.\-\s]', val):
+            _hashed += 1
+            continue
         skip = ({'emails': [val], 'phones': []} if str(k).startswith('@')
                 else {'emails': [], 'phones': [val]})
         if not CR._identity_opted(skip, _real):
             _ok = False
     rec('REAL optouts.json: every identity key actually suppresses', _ok,
-        '%d identity key(s)' % len(_real_ident))
+        '%d identity key(s), %d hashed phone key(s) not invertible' % (len(_real_ident), _hashed))
 else:
     rec('REAL optouts.json: every identity key actually suppresses', True,
         'no identity keys in the ledger today')
