@@ -430,6 +430,14 @@ def _optout_set():
             emails.add(s.lstrip('@'))
         else:
             cases.add(s)
+            # An older phone key saved with punctuation or a leading 1 ('#(305) 555-0100') also
+            # stands as '#' + 10 digits, the form /text looks up. Hashed keys (letters) are skipped.
+            if s.startswith('#') and not re.search(r'[^0-9()+.\-\s]', s[1:]):
+                _d = re.sub(r'\D', '', s)
+                if len(_d) == 11 and _d[0] == '1':
+                    _d = _d[1:]
+                if _d:
+                    cases.add('#' + _d)
         # 2026-09-05 (desktop finding): a case-keyed opt-out can carry the person's email only in
         # its VALUE (Hendy: live address in the note text, never a key). Keys-only harvesting left
         # that person protected by case match alone — a second property or a re-scraped case id

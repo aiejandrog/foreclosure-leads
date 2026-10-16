@@ -134,18 +134,20 @@ def _identity_opted(skip, optouts):
         # function-level: foreclosure_leads imports the route modules, so top-level would be circular
         from foreclosure_leads import _addr_key as _ak
     except Exception:
-        return False
+        # Without the hash we can still match raw keys. Returning False here dropped every raw
+        # '@email' / '#digits' match too, so a failed import put opted-out owners on a door route.
+        _ak = None
     for e in (skip.get('emails') or []):
         e = str(e or '').strip().lower()
         # RAW key or HASHED key. optouts.json itself stores '@someone@gmail.com' verbatim;
         # only the board bake hashes them for publication. Matching hashed-only made this
         # whole function a no-op against the real ledger — verified against optouts.json,
         # not against a synthetic fixture that happened to use the shape I assumed.
-        if e and (('@' + e) in ident or ('@' + _ak(e)) in ident):
+        if e and (('@' + e) in ident or (_ak and ('@' + _ak(e)) in ident)):
             return True
     for p in (skip.get('phones') or []):
         n = _digits(p.get('number') or p.get('phone') or '') if isinstance(p, dict) else _digits(p)
-        if n and (('#' + n) in ident or ('#' + _ak(n)) in ident):
+        if n and (('#' + n) in ident or (_ak and ('#' + _ak(n)) in ident)):
             return True
     return False
 

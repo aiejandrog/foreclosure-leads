@@ -237,8 +237,26 @@ def notes_dnc_keys(path=None):
         if st in _DNC_STATUS or n.get('optout') or str(n.get('no') or '').lower() == 'hard':
             out.add(str(k).strip().lower())
             for p in (n.get('dntph') or []):
-                out.add('#' + str(p).strip())
+                # Same 10-digit form ledger_add writes, so a reader comparing '#digits' finds it.
+                out.add(_norm_phone_key('#' + str(p).strip()))
     return out
+
+
+def backfill_phone_keys(dry_run=False):
+    """Add the 10-digit '#' key next to every phone-shaped key written before ledger_add normalized
+    them ('#(305) 555-0100', '#13055550100'). Add-only: the old key stays, so nothing that matched
+    before stops matching. Hashed keys (letters) are left alone. Returns (added, already)."""
+    opt = _read_ledger_for_write(OPTOUTS)
+    notes = (opt.get('notes') if isinstance(opt, dict) else None) or {}
+    if not isinstance(notes, dict):
+        return [], []
+    want = sorted({_norm_phone_key(str(k).lower()) for k, v in notes.items()
+                   if v and str(k).startswith('#') and _norm_phone_key(str(k).lower()) != str(k)})
+    if not want:
+        return [], []
+    return ledger_add(want, 'digits-only copy of an older punctuated phone key. Covers ALL channels: '
+                            'no email, no call, no text, no door.', 'optout_sync.backfill_phone_keys',
+                      dry_run=dry_run)
 
 
 def ledger_from_notes(payload, src='call-mode notes push', dry_run=False):
@@ -315,6 +333,10 @@ def _main(a):
     _na, _nb = ledger_from_notes(_load(NOTES, {}), src='worker_notes.json nightly sweep', dry_run=a.dry_run)
     added += _na
     already += _nb
+
+    # Phone keys saved before ledger_add normalized them get their digits-only twin.
+    _pa, _ = backfill_phone_keys(dry_run=a.dry_run)
+    added += _pa
 
     # This process, not ledger_add, is what makes "nobody new opted out" a fresh ledger. A
     # /notes push never reaches here, so it cannot refresh a stale file by adding nothing.
