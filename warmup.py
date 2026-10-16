@@ -47,6 +47,9 @@ ERRLOG = P.out('warmup_errors.log')
 # every attempt and sends only what is still missing, so a retry can never double-send.
 RETRY_WAITS = (600, 1800)   # seconds before the 2nd and the 3rd attempt
 START_DATE = dt.date(2026, 9, 7)
+# Off switch that travels with git: the scheduled task may live on a machine nobody is logged into,
+# but every box pulls. Delete this file (or unset the env var) to turn warmup back on.
+OFF_FLAG = os.path.join(HERE, 'warmup.off')
 
 ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
 # Company-owned only. Mixed providers on purpose: Workspace, consumer Gmail.
@@ -134,6 +137,9 @@ def main():
         print('day %d of ramp, quota %d per alias' % (day, quota(day)))
         for k in sorted(log['days']):
             print(' ', k, {al: len(v) for al, v in log['days'][k].items()})
+        return 0
+    if os.path.exists(OFF_FLAG) or os.environ.get('DEALFLOW_WARMUP_OFF') == '1':
+        print('warmup is OFF (%s present or DEALFLOW_WARMUP_OFF=1): nothing sent' % os.path.basename(OFF_FLAG))
         return 0
     plan = []
     for alias in ALIASES:
