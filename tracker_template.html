@@ -13689,7 +13689,7 @@ function genMorningWorker(lane, autostart){
     +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
-    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||"", pcs:(r.pcs||[])});'
     +     'renderTextQ();'
     +   '}'
     /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
@@ -13791,9 +13791,9 @@ function genMorningWorker(lane, autostart){
        text per lead here, and _workerEligible already required 24h+ since the last touch. */
     +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
     +   'function textBatchStart(){'
-    +   'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
-    +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
-    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +   'if(TEXT_HOLD){ txFail("Text batch", TEXT_HOLD); return; }'
+    +   'if(!TEXTQ.length){ txFail("Text batch", "text queue is empty — leads join it during a run (phone-only with a textable number)"); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ txFail("Text batch", "⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET."); return; }'
     +     'if(SYNCWAIT){ cancelSyncWait(); addLog("skip","auto-run","stopped waiting for the opt-out sync because the text batch started — the email queue is untouched, press Start after the batch."); }'
     +     'textBatchPreview();'
     +   '}'
@@ -13826,8 +13826,8 @@ function genMorningWorker(lane, autostart){
     +     'if(cb) cb.onclick=function(){ addLog("skip","batch","text batch not started — nothing sent"); renderTextQ(); renderRunBar(); try{ render(); }catch(e){} };'
     +   '}'
     +   'function textBatchGo(){'
-    +     'if(TEXT_HOLD){ addLog("fail","batch",TEXT_HOLD,"warn"); return; }'
-    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'if(TEXT_HOLD){ txFail("Text batch", TEXT_HOLD); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ txFail("Text batch", "⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET."); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
     +   'var TGBUSY=false;'
@@ -13851,20 +13851,31 @@ function genMorningWorker(lane, autostart){
     +         'var bx=function(lbl,t){ return "<div style=\'font:700 10.5px/1 Segoe UI,Arial;letter-spacing:.12em;text-transform:uppercase;color:#5b6472;margin:8px 0 4px;text-align:left\'>"+lbl+"</div><div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:130px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(t)+"</div>"; };'
     +         'if(!body) return bx("Message","(message pre-filled in Messages)");'
     +         'return bx("English",en)+(es?bx("Espa&ntilde;ol",es):""); })()'
+    +       '+"<div id=\'tb-why\' role=\'alert\' style=\'display:none;margin-top:12px;background:#fdecec;color:#8a1c1c;border:1px solid #f1b4b4;border-radius:8px;padding:10px 12px;text-align:left;font:600 13px/1.45 Segoe UI,Arial\'></div>"'
     +       '+"<button id=\'tb-open\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#128241; Open Messages &mdash; pre-filled<span class=\'sub\'>press send there, then confirm</span></button>"'
     +       '+"<button id=\'tb-skip\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>&#9197; Skip this one<span class=\'sub\'>stays for tomorrow</span></button>"'
     +     '+"</div>";'
     +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
     +     'if(ob) ob.onclick=function(){'
-    +   'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
-    +       'textGate(x.c, x.sms, null, x.name, function(){'
-    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +   'if(TEXT_HOLD){ txFail(x.name, TEXT_HOLD); return; }'
+    +       'textGate(x.c, x.sms, x.pcs, x.name, function(){'
+    +         '_txClip(x.sms);'
+    +         'if(!openHere(x.sms)){ txFail(x.name, "Messages window blocked — check the popup blocker icon, then tap again"); return; }'
     +         'post("textopen",{qc:x.c});'
-    +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +         'addLog("textopen", x.name, "Messages opened pre-filled (the text is also on the clipboard) — press send there, then confirm");'
     +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
     +       '});'
     +     '};'
     +     'if(sb) sb.onclick=function(){ TBSKIP++; addLog("skip", x.name, "text skipped — stays for tomorrow"); TBI++; textBatchStep(); };'
+    // LOOK AHEAD. The same /text/check the tap will run, asked as the card paints, so a person the
+    // bridge refuses says so on the card instead of after a tap that opens nothing. Only an answer
+    // from the bridge greys the button; a slow or missing bridge leaves it live and the tap decides.
+    // This never opens anything: the tap still runs textGate inside its own click.
+    +     'var _ti=TBI; _tcheck(x.c, x.sms, x.pcs, function(ok, why, ans){'
+    +       'if(ok || !ans || !tbOn || TBI!==_ti) return;'
+    +       'var w=document.getElementById("tb-why"); if(w){ w.style.display="block"; w.textContent="This one will not open: "+why+". Skip it and go to the next person."; }'
+    +       'var o=document.getElementById("tb-open"); if(o){ o.disabled=true; o.style.opacity=".45"; o.style.cursor="not-allowed"; }'
+    +     '});'
     +   '}'
     +   'function textBatchDone(){'
     +     'tbOn=false;'
@@ -13888,14 +13899,47 @@ function genMorningWorker(lane, autostart){
     // anchor fallback still counts as a user tap.
     +   'function textGate(c, href, pcs, label, go){'
     +     'if(TGBUSY) return;'
-    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null, g0=(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:""); TGBUSY=true;'
-    +     'var fin=function(ok, why){ if(done) return; done=true; TGBUSY=false; if(t) clearTimeout(t); if(!ok) addLog("fail", label, "Not texted — "+why, "warn"); else if(g0!==(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:"")) addLog("fail", label, "Not texted — you moved to another lead while the check ran; tap again", "warn"); else go(); };'
+    +     'var g0=(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:""); TGBUSY=true;'
+    +     '_tcheck(c, href, pcs, function(ok, why){ TGBUSY=false; if(!ok) txFail(label, "Not texted — "+why); else if(g0!==(typeof i!=="undefined"?i:"")+"|"+(typeof TBI!=="undefined"?TBI:"")) txFail(label, "Not texted — you moved to another lead while the check ran; tap again"); else go(); });'
+    +   '}'
+    // The fetch itself, shared by the click gate above and the batch screen's look-ahead below.
+    // cb(ok, why, answered): answered is true only when the bridge itself said yes or no, so a slow
+    // or missing bridge is never shown as "this person is blocked".
+    +   'function _tcheck(c, href, pcs, cb){'
+    +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null;'
+    +     'var fin=function(ok, why, ans){ if(done) return; done=true; if(t) clearTimeout(t); cb(ok, why, !!ans); };'
     +     't=setTimeout(function(){ fin(false, "the bridge did not answer the do-not-contact check"); }, 3500);'
     +     'try{ fetch("http://127.0.0.1:8823/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
     +       '.then(function(rs){ return rs.json(); })'
-    +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check"); })'
+    +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check", true); })'
     +       '.catch(function(){ fin(false, "the bridge is not reachable"); }); }'
     +     'catch(e){ fin(false, "the bridge is not reachable"); }'
+    +   '}'
+    /* A REFUSED TEXT HAS TO SAY SO WHERE HE IS LOOKING (2026-10-16, "the text batch buttons dont work,
+       it doesnt send me to the phone link messages draft"). Every refusal on the text path (a hold,
+       the 8 AM-8 PM window, the cap, the do-not-contact / stay pre-flight) went to addLog only, and
+       the activity log sits below the queue panels, off the bottom of a laptop screen. The tap
+       changed nothing he could see, so a correct refusal read as a dead button. txFail keeps the log
+       line and also pins the reason to the bottom of the window until he taps it away. */
+    +   'function txNotice(msg){'
+    +     'try{'
+    +       'var n=document.getElementById("mwtxwhy");'
+    +       'if(!n){ n=document.createElement("div"); n.id="mwtxwhy"; n.setAttribute("role","alert");'
+    +         'n.style.cssText="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:calc(100% - 32px);max-width:640px;box-sizing:border-box;background:#fdecec;color:#8a1c1c;border:1px solid #f1b4b4;border-radius:10px;padding:12px 14px;font:600 13.5px/1.45 Segoe UI,Arial;box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:9999;cursor:pointer;text-align:left";'
+    +         'n.title="tap to close"; n.onclick=function(){ n.style.display="none"; }; document.body.appendChild(n); }'
+    +       'n.textContent=msg; n.style.display="block";'
+    +       'if(n._t) clearTimeout(n._t); n._t=setTimeout(function(){ n.style.display="none"; }, 20000);'
+    +     '}catch(e){}'
+    +   '}'
+    +   'function txFail(who, msg){ addLog("fail", who, msg, "warn"); txNotice((who?who+": ":"")+msg); }'
+    /* CLIPBOARD FIRST, same as Call Mode's composer (reproduced on DESKTOP-35NNMFL 2026-09-05): Phone
+       Link swallows an sms: activation while its own window is already open, so the composer can come
+       up blank or not at all. The body is on the clipboard on every open, so that costs a paste, not
+       the message. Fire-and-forget: a denied clipboard never blocks the open. */
+    +   'function _txClip(href){'
+    +     'try{ var m=/[?&]body=([^&]*)/.exec(String(href||"")); if(!m) return;'
+    +       'var b=decodeURIComponent(m[1].replace(/\\+/g," "));'
+    +       'if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(b).catch(function(){}); }catch(e){}'
     +   '}'
     +   'function openHere(url){'
     +     'if(!url) return false;'
@@ -14707,11 +14751,12 @@ function genMorningWorker(lane, autostart){
     +       'var xc=tb.getAttribute("data-qtext"), x=null;'
     +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
     +       'if(!x) return;'
-    +       'if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'
-    +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
-    +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
-    +       'textGate(x.c, x.sms, null, x.name, function(){'
-    +         'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +       'if(TEXT_HOLD){ txFail(x.name, TEXT_HOLD); return; }'
+    +       'var g=_wftsa(); if(!g.safe){ txFail(x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead."); return; }'
+    +       'if(sentToday()>=CAP.max){ txFail(x.name, "⛔ daily cap reached — keep calling instead."); return; }'
+    +       'textGate(x.c, x.sms, x.pcs, x.name, function(){'
+    +         '_txClip(x.sms);'
+    +         'if(!openHere(x.sms)){ txFail(x.name, "Messages window blocked — check the popup blocker icon, then tap again"); return; }'
     +         'post("textopen",{qc:x.c});'
     +         'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
     +         'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
@@ -14788,13 +14833,14 @@ function genMorningWorker(lane, autostart){
     // at ("switch tabs to send") — he never switched, and six leads were still logged as texted.
     // A text is an ATTEMPT until he says otherwise: no cap charge, no CRM touch, lead stays queued.
     +       'if(fn==="text"){'
-    +         'if(TEXT_HOLD){ addLog("fail", r.first||r.owner, TEXT_HOLD, "warn"); return; }'
-    +         'if(!r.smsHref){ addLog("fail", r.first||r.owner, "no textable number (DNC or landline) — call instead", "warn"); return; }'
+    +         'if(TEXT_HOLD){ txFail(r.first||r.owner, TEXT_HOLD); return; }'
+    +         'if(!r.smsHref){ txFail(r.first||r.owner, "no textable number (DNC or landline) — call instead"); return; }'
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
-    +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
+    +         'var _tf=_wftsa(); if(!_tf.safe){ txFail(r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET."); return; }'
     +         'textGate(r.c, r.smsHref, r.pcs, r.first||r.owner, function(){'
-    +           'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +           '_txClip(r.smsHref);'
+    +           'if(!openHere(r.smsHref)){ txFail(r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again"); return; }'
     +           'post("textopen",{qc:r.c});'
     +           'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
     +           'confirmSend(r, "text");'
