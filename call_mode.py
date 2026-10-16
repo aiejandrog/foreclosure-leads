@@ -677,8 +677,42 @@ WRONG_NUMBER_CARD = {
     },
 }
 
+# Someone who is NOT the owner denies the case and gets defensive (2026-10-16, field report: the
+# caller told the owner's husband about the court case, he said "no there isn't, we'll figure it
+# out" and hung up). Card 8 is the OWNER denying; this is a spouse or relative, and the word
+# "foreclosure" has usually already slipped (NEVER_SAY). So the card does not argue or repeat it: it
+# takes the heat out, leaves the number for the owner, and gets off the phone warm. Their denial is
+# not the owner's answer and not an opt-out; the next touch goes to the owner on another number.
+# Hard-coded for the same durability reason as NOT_INTERESTED_CARD. No {tokens} (esc(), not fillScript).
+FAMILY_DENIAL_CARD = {
+    'n': 17,
+    't': 'Spouse or Family Says "There\'s No Case"',
+    'say': "No, there isn't. We're not in anything. We'll figure it out.  [about to hang up]",
+    'reb': [
+        "Okay — then I'm glad I asked, and I'm sorry if that came out of nowhere. I'm not here to argue "
+        "with you about it at all. I just go by the paperwork that gets filed on a property, and "
+        "sometimes it's old, or it's already being handled. If that's the case here, that's great news.",
+        "The only thing I'd ask: could you let the owner know I called about the property? I'll leave my "
+        "number with you. If it's nothing, they can ignore it, no harm done. Thanks for picking up.",
+    ],
+    'one': "No problem, I'm not here to argue. Could you just let the owner know I called about the "
+           "property? If it's nothing, they can ignore it.",
+    'es': {
+        'say': 'No, no hay nada de eso. Nosotros estamos bien. Lo vamos a resolver.  [a punto de colgar]',
+        'reb': [
+            'Está bien — entonces qué bueno que pregunté, y disculpe la sorpresa. No le llamo '
+            'para discutir con usted para nada. Yo me guío por el papeleo que se registra sobre una '
+            'propiedad, y a veces es viejo, o ya lo están resolviendo. Si es así, qué buena noticia.',
+            'Lo único que le pido: ¿le puede avisar al dueño que llamé por la propiedad? Le dejo mi '
+            'número. Si no es nada, lo puede ignorar, sin problema. Gracias por contestar.',
+        ],
+        'one': 'No hay problema, no le llamo para discutir. ¿Le puede avisar al dueño que llamé por la '
+               'propiedad? Si no es nada, lo puede ignorar.',
+    },
+}
+
 # Cards that must ship on EVERY build regardless of the vault. Appended by objection_cards() below.
-_HARDCODED_CARDS = [NOT_INTERESTED_CARD, WRONG_NUMBER_CARD]
+_HARDCODED_CARDS = [NOT_INTERESTED_CARD, WRONG_NUMBER_CARD, FAMILY_DENIAL_CARD]
 
 
 def objection_cards():
