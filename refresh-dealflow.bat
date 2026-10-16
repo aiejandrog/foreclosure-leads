@@ -439,7 +439,7 @@ echo [3g2/5] Federal bankruptcy check - CourtListener, leads stay held without C
 rem  ADDED 2026-09-27. Primary provider for the stay gate. PACER is by hand only, see above. Parked until an
 rem  account exists. No token: exit 0, no network, a counts-only status, and the pipeline alert
 rem  fails. Cache and the override file live in DEALFLOW_DIR, not this repo. A failed pull does
-rem  not stop the 5:30 refresh; the next echo clears errorlevel the same way the PACER line does.
+rem  not stop the 5:30 refresh; the next echo clears errorlevel.
 python -u bk_lookup.py >> "%LOG%" 2>&1
 
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
