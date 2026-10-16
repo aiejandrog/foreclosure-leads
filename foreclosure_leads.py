@@ -2578,6 +2578,17 @@ def make_tracker(leads):
     except Exception as _sre:
         print('sale results: skipped (%s)' % str(_sre)[:100])
 
+    # RealForeclose Closed/Canceled status (rf_status.py -> rf_status.json, gitignored, all three
+    # counties). `rf` on a row whose case AND sale date match; `rfHold` for bankruptcy-cancelled,
+    # redeemed and dismissed/vacated sales. Add-only: it never releases anything. Never fatal.
+    try:
+        from rf_status import load_for_board as _rfload
+        _rfn = _rfload(slim, os.path.join(HERE, 'rf_status.json'))
+        if _rfn:
+            print(f'rf status: {_rfn} lead(s) carry a RealForeclose closed/canceled status')
+    except Exception as _rfe:
+        print('rf status: skipped (%s)' % str(_rfe)[:100])
+
     # bake code-enforcement liens (code_liens.py, free Miami-Dade CCVIOL ArcGIS, folio-keyed). A code
     # lien is a JUNIOR lien that never shows in the mortgage chain, so a lead reading "90% equity" can
     # be quietly underwater once the county's accrued fines attach. codeliens = [{case,st,stLabel,

@@ -1752,6 +1752,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
             continue
+        if d.get('rfHold'):                                  # RealForeclose: sale cancelled per bankruptcy, redeemed or dismissed (rf_status.py)
+            continue
         if _federal_held(case):
             continue
         if d.get('title_status') == 'transferred':          # ownership gate — they no longer own it
