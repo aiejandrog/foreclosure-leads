@@ -23,7 +23,7 @@ OUTPUT:
   Plus a single "Route the top 10" Google Maps deep-link at the top so he can
   drop-and-drive from his phone.
 """
-import json, os, math, html, datetime, sys
+import json, os, re, math, html, datetime, sys
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -125,7 +125,9 @@ def _identity_opted(skip, optouts):
     ident = {str(k) for k in (optouts or {}) if str(k)[:1] in ('@', '#')}
     # A phone key saved with punctuation ('#(305) 555-0100') or a country code ('#13055550100') also
     # matches the lead's 10-digit copy. Same reading Call Mode does (call_mode._identity_opted_fn).
-    ident |= {'#' + _digits(k[1:]) for k in ident if k[:1] == '#' and _digits(k[1:])}
+    # Only a phone-shaped body is rewritten; a hashed key (letters) has no number inside it to read.
+    ident |= {'#' + _digits(k[1:]) for k in ident
+              if k[:1] == '#' and not re.search(r'[^0-9()+.\-\s]', k[1:]) and _digits(k[1:])}
     if not ident or not skip:
         return False
     try:
