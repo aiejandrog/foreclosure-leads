@@ -250,8 +250,13 @@ def backfill_phone_keys(dry_run=False):
     notes = (opt.get('notes') if isinstance(opt, dict) else None) or {}
     if not isinstance(notes, dict):
         return [], []
-    want = sorted({_norm_phone_key(str(k).lower()) for k, v in notes.items()
-                   if v and str(k).startswith('#') and _norm_phone_key(str(k).lower()) != str(k)})
+    want = set()
+    for k, v in notes.items():
+        k = str(k).strip().lower()
+        n = _norm_phone_key(k) if (v and k.startswith('#')) else k
+        if n != k and n[1:].isdigit():
+            want.add(n)
+    want = sorted(want)
     if not want:
         return [], []
     return ledger_add(want, 'digits-only copy of an older punctuated phone key. Covers ALL channels: '
@@ -335,8 +340,8 @@ def _main(a):
     already += _nb
 
     # Phone keys saved before ledger_add normalized them get their digits-only twin.
+    # Not counted in `added`: these people were already suppressed under the old key.
     _pa, _ = backfill_phone_keys(dry_run=a.dry_run)
-    added += _pa
 
     # This process, not ledger_add, is what makes "nobody new opted out" a fresh ledger. A
     # /notes push never reaches here, so it cannot refresh a stale file by adding nothing.
@@ -347,6 +352,9 @@ def _main(a):
     print('  already ledgered : %d' % len(already))
     print('  %s: %d %s' % ('WOULD ledger' if a.dry_run else 'newly ledgered', len(added),
                            added or ''))
+    if _pa:
+        print('  %s: %d older phone key(s)' % ('WOULD add a 10-digit twin to' if a.dry_run
+                                              else 'added a 10-digit twin to', len(_pa)))
     if added and not a.dry_run:
         print('\n!! %d opt-out(s) were detected but NOT suppressed until this run. If any send went '
               'out to them in between, that is a real compliance event — check the Sent label.'

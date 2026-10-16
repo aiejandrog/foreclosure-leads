@@ -64,7 +64,7 @@ finally:
 # ---- backfill: an older punctuated key in the ledger gets its 10-digit twin; nothing is removed ----
 json.dump({'_dealflow_notes': 1, 'notes': {
     '#(305) 555-0177': {'status': 'DO NOT CONTACT'}, '#13055550188': {'status': 'DO NOT CONTACT'},
-    '#k3j9x2': {'status': 'DO NOT CONTACT'}, '#3055550199': {'status': 'DO NOT CONTACT'},
+    '#k3j9x2': {'status': 'DO NOT CONTACT'}, '#K4J9X2': {'status': 'DO NOT CONTACT'}, '#3055550199': {'status': 'DO NOT CONTACT'},
     '@x@y.com': {'status': 'DO NOT CONTACT'}, 'ZZ-CASE-2': {'status': 'DO NOT CONTACT'}}},
     open(OS.OPTOUTS, 'w', encoding='utf-8'))
 _before = set(json.load(open(OS.OPTOUTS, encoding='utf-8'))['notes'])
@@ -75,7 +75,8 @@ _ba, _ = OS.backfill_phone_keys()
 _after = set(json.load(open(OS.OPTOUTS, encoding='utf-8'))['notes'])
 rec('backfill adds exactly the two 10-digit twins', sorted(_ba) == ['#3055550177', '#3055550188'], str(_ba))
 rec('backfill keeps every old key', _before <= _after, str(sorted(_after - _before)))
-rec('backfill leaves a hashed key alone', '#k3j9x2' in _after and not any(k.startswith('#k3') and k != '#k3j9x2' for k in _after))
+rec('backfill leaves hashed keys alone, upper-case ones included',
+    '#k3j9x2' in _after and '#k4j9x2' not in _after, str(sorted(_after)))
 _ba2, _ = OS.backfill_phone_keys()
 rec('backfill second run adds nothing', _ba2 == [], str(_ba2))
 
