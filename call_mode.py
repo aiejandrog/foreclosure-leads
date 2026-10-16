@@ -700,7 +700,7 @@ FAMILY_DENIAL_CARD = {
     'es': {
         'say': 'No, no hay nada de eso. Nosotros estamos bien. Lo vamos a resolver.  [a punto de colgar]',
         'reb': [
-            'Está bien — entonces qué bueno que pregunté, y disculpe si le cayó de sorpresa. No le llamo '
+            'Está bien — entonces qué bueno que pregunté, y disculpe la sorpresa. No le llamo '
             'para discutir con usted para nada. Yo me guío por el papeleo que se registra sobre una '
             'propiedad, y a veces es viejo, o ya lo están resolviendo. Si es así, qué buena noticia.',
             'Lo único que le pido: ¿le puede avisar al dueño que llamé por la propiedad? Le dejo mi '
