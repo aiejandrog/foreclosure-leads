@@ -729,29 +729,45 @@ def _compose_single(r, snd, lang='en'):
     if early:
         # LP / no auction date. Without this branch the FC body rendered "a sale date of ." --
         # a blank where the date should be (the tracker grew this branch first; now mirrored).
+        # 2026-10-16 (Alejandro: "make it more urgent"): re-mirrored to genEmail's early body. The
+        # urgency is only what is true of every fresh Florida case: the sale is usually set 20-35
+        # days after a final judgment (s. 45.031(1)(a)), a served defendant generally has 20 days to
+        # respond (Fla. R. Civ. P. 1.140(a)), and every option takes weeks to set up.
         body_en = (
             f'Hi {first},\n\n{intro_en}\n\n'
             f'A foreclosure case was just filed against {addr}'
-            f'{" by " + plaintiff if plaintiff else ""}{case_tag_en}. No auction date yet -- '
-            f'which means right now you have the most options and the least pressure '
-            f"you'll ever have.\n\n"
-            f'Catch up the loan, rework it, sell on your terms, or fight the case -- they all '
-            f"work better with time on the clock. That's the whole reason for this note.\n\n"
-            f'If you want a straight rundown of where you stand, call or text me. No cost, '
-            f'no obligation.\n\n{sig_en}\n\n'
-            f''
+            f'{" by " + plaintiff if plaintiff else ""}{case_tag_en}. The clock on that case is '
+            f'already running.\n\n'
+            f'In Florida, once the court enters a final judgment, the auction is usually set just '
+            f'20 to 35 days later. After that, most of your choices are gone. Right now there is no '
+            f'auction date, and that is the strongest position you will be in.\n\n'
+            f"Catching the loan up, reworking it with the bank, selling on your own terms and keeping "
+            f"what's yours: each one takes weeks to set up, and each one gets harder every week the "
+            f'case moves. If you were served court papers, they carry a deadline to respond, usually '
+            f'20 days. An attorney can tell you exactly where yours stands.\n\n'
+            f'Our senior advisor, over 30 years in mortgages and foreclosure workouts, can go over '
+            f'your options with you this week. Five minutes, free, no fee ever. If nothing fits, we '
+            f'shake hands and part friends.\n\n'
+            f'Call or text me today.\n\n{sig_en}\n\n'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
             f'Se acaba de presentar un caso de ejecucion hipotecaria contra {addr}'
-            f'{" por parte de " + plaintiff if plaintiff else ""}{case_tag_es}. Todavia no hay '
-            f'fecha de subasta -- o sea que ahora mismo usted tiene mas opciones y menos '
-            f'presion que nunca.\n\n'
-            f'Ponerse al dia con el prestamo, ajustarlo, vender en sus terminos, o pelear el '
-            f'caso -- todo funciona mejor con tiempo en el reloj. Ese es el unico punto de '
-            f'esta nota.\n\n'
-            f'Si quiere un repaso directo de donde esta parado, llameme o mandeme un texto. '
-            f'Sin costo, sin compromiso.\n\n{sig_es}\n\n'
+            f'{" por parte de " + plaintiff if plaintiff else ""}{case_tag_es}. El reloj de ese caso '
+            f'ya esta corriendo.\n\n'
+            f'En Florida, cuando la corte dicta la sentencia final, la subasta normalmente se fija '
+            f'apenas de 20 a 35 dias despues. A partir de ahi, la mayoria de sus opciones se acaban. '
+            f'Ahora mismo no hay fecha de subasta, y esa es la posicion mas fuerte en la que va a '
+            f'estar.\n\n'
+            f'Ponerse al dia con el prestamo, ajustarlo con el banco, vender en sus terminos y '
+            f'quedarse con lo suyo: cada una toma semanas en prepararse, y cada una se pone mas '
+            f'dificil cada semana que el caso sigue adelante. Si a usted le entregaron documentos de la '
+            f'corte, traen un plazo para responder, normalmente 20 dias. Un abogado le puede decir '
+            f'exactamente donde esta el suyo.\n\n'
+            f'Nuestro asesor principal, con mas de 30 anos en hipotecas y casos de ejecucion, puede '
+            f'repasar sus opciones con usted esta semana. Cinco minutos, gratis, sin cobrarle nunca. '
+            f'Si nada le sirve, nos damos la mano y quedamos como amigos.\n\n'
+            f'Llameme o mandeme un texto hoy.\n\n{sig_es}\n\n'
         )
     elif td:
         body_en = (
