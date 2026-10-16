@@ -144,7 +144,7 @@ rec('_smsTplKey follows _textBodies order',
 # ---------------------------------------------------------------- 3-5. the worker screens
 WJS = worker_blob_js(TPL_SRC)
 fns = '\n'.join(extract(WJS, n) for n in
-                ('_esc2', 'textBatchStart', 'textBatchPreview', 'textBatchGo', 'textBatchStep'))
+                ('_esc2', 'textBatchStart', 'textBatchPreview', 'textBatchGo', 'textBatchStep', 'txNotice', 'txFail'))
 EN = S['cold']['en'].replace('[first name]', 'Ana').replace('[street]', '1 Example St')
 ES = S['cold']['es'].replace('[first name]', 'Ana').replace('[street]', '1 Example St')
 sms = 'sms:+15550100101?body=' + __import__('urllib.parse').parse.quote(EN + '\n\n' + ES)
@@ -160,6 +160,7 @@ function sentToday(){ return 3; } var CAP = {max: 50};
 var SAFE = true; function _wftsa(){ return {safe: SAFE, label: 'closed'}; }
 function openHere(u){ opened.push(u); return true; } function post(k, x){ posts.push(k); }
 function confirmSend(){} function textBatchDone(){ tbOn = false; }
+function _tcheck(){}
 var TEXT_HOLD = '', TBI = 0, TBSENT = 0, TBSKIP = 0, tbOn = false, SYNCWAIT = null; function cancelSyncWait(){}
 var TEXTTPL = """ + json.dumps(S) + r""";
 var TEXTQ = [
@@ -209,6 +210,46 @@ rec('the step shows the English block and the Spanish block separately',
     re.search(r'English</div><div[^>]*>[^<]*Ana', ST['html']) is not None
     and re.search(r'Espa&ntilde;ol</div><div[^>]*>Hola Ana', ST['html']) is not None, ST['html'][:900])
 rec('the step still waits for his tap before opening Messages', ST['opened'] == 0)
+
+# A REFUSED TEXT SAYS SO ON THE CARD (2026-10-16, "the text batch buttons dont work"). The bridge's
+# no used to reach only the activity log below the fold, so the tap looked dead.
+ref = node(r"""
+var els = {}, logs = [], opened = [];
+var main = { _h:'', set innerHTML(v){ this._h = v; els = {};
+  var re = /id='([^']+)'/g, m; while((m = re.exec(v))) els[m[1]] = {id:m[1], onclick:null, style:{}, textContent:''}; },
+  get innerHTML(){ return this._h; } };
+var document = { getElementById: function(id){ return els[id] || null; } };
+function addLog(k, who, t){ logs.push([k, who, t]); }
+function renderRunBar(){} function renderTextQ(){} function render(){}
+function sentToday(){ return 0; } var CAP = {max: 50}; function _wftsa(){ return {safe: true}; }
+function openHere(u){ opened.push(u); return true; } function post(){} function confirmSend(){} function textBatchDone(){ tbOn = false; }
+var ANSWER = null; function _tcheck(c, h, p, cb){ if(ANSWER) cb(ANSWER[0], ANSWER[1], ANSWER[2]); }
+var TEXT_HOLD = '', TBI = 0, TBSENT = 0, TBSKIP = 0, tbOn = true, SYNCWAIT = null, TEXTTPL = {};
+var TEXTQ = [{c:'2099-000001-CA-01', name:'Ana', phone:'5550100101', sms:'sms:+15550100101?body=x', tpl:'cold'}];
+""" + fns + r"""
+var R = {};
+ANSWER = [false, 'on the do-not-contact ledger', true]; textBatchStep();
+R.no = {why: els['tb-why'].textContent, shown: els['tb-why'].style.display, off: !!els['tb-open'].disabled};
+ANSWER = [false, 'the bridge is not reachable', false]; textBatchStep();
+R.down = {shown: els['tb-why'].style.display || '', off: !!els['tb-open'].disabled};
+ANSWER = [true, '', true]; textBatchStep();
+R.yes = {shown: els['tb-why'].style.display || '', off: !!els['tb-open'].disabled, opened: opened.length};
+logs = []; TEXT_HOLD = 'HOLD texting: fixture'; tbOn = false; textBatchStart();
+R.held = logs.slice(-1)[0];
+console.log(JSON.stringify(R));
+""")
+rec('a bridge "no" shows its reason on the batch card and greys Open Messages',
+    'do-not-contact' in ref['no']['why'] and ref['no']['shown'] == 'block' and ref['no']['off'] is True, ref['no'])
+rec('a slow or missing bridge leaves Open Messages live (the tap decides)',
+    ref['down']['shown'] == '' and ref['down']['off'] is False, ref['down'])
+rec('a bridge "yes" changes nothing and opens nothing by itself',
+    ref['yes']['shown'] == '' and ref['yes']['off'] is False and ref['yes']['opened'] == 0, ref['yes'])
+rec('a held Start still writes the reason to the log', ref['held'] and 'fixture' in ref['held'][2], ref['held'])
+GW = WJS[WJS.index('function textGate('):WJS.index('function openHere(')]
+rec('every text refusal goes through txFail, which also pins it on screen',
+    'txFail(label' in GW and 'function txFail' in GW and 'txNotice(' in GW, GW[:300])
+for site in ('_txClip(x.sms);', '_txClip(r.smsHref);'):
+    rec('the body goes to the clipboard before the composer opens (%s)' % site, site in WJS)
 
 QT = WJS[WJS.index('closest("[data-qtext]")'):]
 QT = QT[:QT.index('openHere(x.sms)')]

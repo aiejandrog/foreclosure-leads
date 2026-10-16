@@ -107,8 +107,8 @@ T('a failed /health puts the board back on the down reason',
 T('the worker starts held', SRC.includes('TEXT_HOLD=TEXT_HOLD_DOWN'));
 T('a failed worker probe holds texting', SRC.includes('TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold()'));
 T('the worker does not open sms: while held',
-  SRC.includes('if(TEXT_HOLD){ addLog("fail", r.first||r.owner, TEXT_HOLD, "warn"); return; }')
-  && SRC.includes('if(TEXT_HOLD){ addLog("fail", x.name, TEXT_HOLD, "warn"); return; }'));
+  SRC.includes('if(TEXT_HOLD){ txFail(r.first||r.owner, TEXT_HOLD); return; }')
+  && SRC.includes('if(TEXT_HOLD){ txFail(x.name, TEXT_HOLD); return; }'));
 
 console.log('\n== Call Mode: no poll holds unless the baked scan is still fresh ==');
 const CM = fs.readFileSync(path.join(__dirname, 'call_mode.py'), 'utf8');
