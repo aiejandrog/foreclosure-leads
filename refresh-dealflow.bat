@@ -521,6 +521,12 @@ rem  The [4/5] rebuild bakes it as row.sr. Display only, gates nothing; capped a
 rem  a clerk outage costs the chips, never the publish.
 python -u sale_results.py >> "%LOG%" 2>&1
 
+echo [3q2/5] RealForeclose Closed/Canceled status - cancelled, redeemed, dismissed, bankruptcy - all 3 counties, free...
+rem  rf_status.py reads the Closed/Canceled list for every upcoming sale date we hold and writes
+rem  rf_status.json - gitignored. The [4/5] rebuild bakes it as row.rf; Call Mode drops redeemed, dismissed
+rem  and bankruptcy-cancelled sales. Add-only, never fatal: a failed read costs the stamps, never the publish.
+python -u rf_status.py >> "%LOG%" 2>&1
+
 echo [3p/5] Live dockets (Miami-Dade OCS JSON API) - the FILINGS, shown inline on the board...
 rem  A "click Docket, land on the docket" LINK is impossible: MD retired /ocs/Search.aspx and their
 rem  SPA refuses to render a case from a URL (the case-number token mints but resolves empty);

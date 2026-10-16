@@ -755,3 +755,6 @@ logs/
 
 # _mailletterlinestest: mailed letters carry the MARS sentences and the opt-out line (offline).
 !_mailletterlinestest.py
+# rf_status.json: RealForeclose Closed/Canceled status per case (rf_status.py), rebuilt nightly.
+rf_status.json
+rf_status.json.tmp
