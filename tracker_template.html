@@ -2788,7 +2788,7 @@ try {
   // fcSender, which wins the merge below. Drop exactly those two old values so the business inbox
   // and the Doral mailbox reach every device; any other saved value is the operator's own.
   if (typeof saved.email === 'string' && /^\s*agonzalez0311707@gmail\.com\s*$/i.test(saved.email)) delete saved.email;
-  if (typeof saved.addr === 'string' && /^\s*231\s+NW\s+109(th)?\s+Ave\b/i.test(saved.addr)) delete saved.addr;
+  if (typeof saved.addr === 'string' && /^\s*231\s+N\.?\s*W\.?\s+109(th)?\s+Ave(nue)?\b/i.test(saved.addr)) delete saved.addr;
   for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
 } catch(e) {}
 // deal-model controls (persisted)
@@ -16504,7 +16504,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'I\'m writing you once instead of once per property. Each one has its own way out — keep ' +
     'one, sell another, let a third go — and it all works best as one conversation.\n\n' +
     'If it\'d help, I can walk the numbers on any of them. No cost, no obligation — and if ' +
-    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\n' +
+    'selling isn\'t your best move on a given property, I\'ll tell you that straight.\n\n' + sig + '\n\nIf now\'s not a good time, just tell me and I won\'t reach out again.' + '\n\n' +
     '';
   var bodyES = 'Hola ' + first + ',\n\n' +
     'Soy ' + sN + ', de Biscayne Solutions Group. No soy su prestamista, no soy del gobierno, y ' +
@@ -16515,7 +16515,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'Le escribo una sola vez y no por cada propiedad. Cada una tiene su propia salida — quedarse ' +
     'con una, vender otra, dejar ir una tercera — y todo se trabaja mejor en una sola conversación.\n\n' +
     'Si le sirve, puedo repasar los números de cualquiera de ellas. Sin costo, sin compromiso — ' +
-    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\n' +
+    'y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\nSi ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar.' + '\n\n' +
     '';
   var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   try {
