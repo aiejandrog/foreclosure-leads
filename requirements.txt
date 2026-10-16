@@ -2,7 +2,7 @@
 # Every scraper accepts either an env var (GOOGLE_STREET_VIEW_KEY, TRACERFY_API_KEY,
 # BATCHDATA_API_KEY) OR a gitignored *.key file — the GHA workflow supplies env vars.
 requests>=2.32
-curl-cffi>=0.7
+curl-cffi>=0.7         # llc_officers Sunbiz fetch (Chrome TLS impersonation), skiptrace_free
 playwright>=1.47
 beautifulsoup4>=4.12
 Pillow>=10.4

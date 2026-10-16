@@ -6,9 +6,9 @@ to print an " LLC" claim without it. See entity.py's docstring for why the gate 
 hand-edited tuple.
 
 Reuses `llc_officers` rather than re-implementing Sunbiz:
-  * `_curl` shells out to the curl binary with a browser UA. Sunbiz returns 403 to a plain urllib or
-    requests fetch -- that 403 is exactly why the 2026-08-23 verification was skipped and a false
-    entity claim shipped. Do not "simplify" this back to urllib.
+  * `_curl` fetches with a real-browser fingerprint (curl_cffi, then Camoufox; see llc_officers).
+    Sunbiz returns 403 to a plain urllib or requests fetch -- that 403 is exactly why the 2026-08-23
+    verification was skipped and a false entity claim shipped. Do not "simplify" this back to urllib.
   * `_lookup` refuses fuzzy neighbours by design. That guard is load-bearing here: BISCAYNE
     SOLUTIONS INC. (ACTIVE, P23000083487) and BISCAYNE GROUP, LLC both sit next to the name we want,
     and matching either would authorise a claim on a stranger's company.

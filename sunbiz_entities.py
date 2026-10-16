@@ -24,7 +24,6 @@ makes no requests. The network step is a public, free registry page; no key, no 
 """
 import json
 import re
-import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -58,19 +57,15 @@ def kind_of(name):
 
 
 def strict_fetch(url):
-    """curl that raises instead of returning '' when Sunbiz does not answer."""
+    """Fetch a Sunbiz page through llc_officers._curl (curl_cffi, then Camoufox) and raise instead
+    of returning '' or a challenge page when Sunbiz does not answer."""
     import llc_officers as LO
     try:
-        result = subprocess.run([LO.CURL, '-s', '-S', '-L', '--fail', '--max-time', '25', '-A', LO.UA,
-                                 '-H', 'Accept: text/html,application/xhtml+xml', url],
-                                capture_output=True, text=True, encoding='utf-8', errors='replace')
+        return LO._curl(url)
+    except LO.SunbizBlocked as exc:
+        raise SunbizUnreachable(str(exc))
     except OSError as exc:
-        raise SunbizUnreachable('curl not runnable: %s' % exc)
-    if result.returncode != 0 or not result.stdout.strip():
-        raise SunbizUnreachable('curl exit %s: %s' % (result.returncode, (result.stderr or '').strip()[:160]))
-    if LO._is_blocked(result.stdout):
-        raise SunbizUnreachable('Cloudflare challenge page (%d bytes)' % len(result.stdout))
-    return result.stdout
+        raise SunbizUnreachable('fetch not runnable: %s' % exc)
 
 
 def _key(name):
