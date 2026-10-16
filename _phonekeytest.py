@@ -19,7 +19,7 @@ for raw, want in [('#(305) 555-0100', '#3055550100'), ('#+1 305 555 0100', '#305
                   ('#13055550100', '#3055550100'), ('#305-555-0100', '#3055550100'),
                   ('#3055550100', '#3055550100'), ('@someone@example.com', '@someone@example.com'),
                   ('ZZ-CASE-1', 'ZZ-CASE-1'), ('#abcdef0123456789abcdef', '#abcdef0123456789abcdef'),
-                  ('#', '#')]:
+                  ('#', '#'), ('#k3j9x2a', '#k3j9x2a'), ('#3055550100 x12', '#3055550100 x12')]:
     got = OS._norm_phone_key(raw)
     rec('writer: %r -> %r' % (raw, want), got == want, got)
 

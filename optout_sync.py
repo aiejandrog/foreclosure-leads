@@ -113,7 +113,9 @@ def _norm_phone_key(k):
         return k
     body = k[1:].strip()
     d = re.sub(r'\D', '', body)
-    if not d or (re.fullmatch(r'[0-9a-f]{16,}', body) and not body.isdigit()):
+    # Only a phone-shaped body is rewritten: digits plus ( ) - . + and spaces. Letters mean a hashed
+    # key (base36) or an extension ('x12'); both are left exactly as they were.
+    if not d or re.search(r'[^0-9()+.\-\s]', body):
         return k
     if len(d) == 11 and d[0] == '1':
         d = d[1:]
