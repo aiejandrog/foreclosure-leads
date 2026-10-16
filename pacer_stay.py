@@ -204,6 +204,16 @@ FLSB_BUSINESS_DAYS = 250
 PARTY_ROWS_PER_CASE = 1.25
 PRESEND_KEEP_DAYS = 7                            # --bulk md-near leaves a week of pre-send accrual
 ENV_BULK = 'PACER_BULK'
+ENV_AUTO = 'DEALFLOW_PACER_AUTO'   # 1 re-enables the automatic paths (nightly pull, bulk, send-bridge pre-send). OFF.
+
+
+def auto_enabled(env=None):
+    """PACER is a by-hand tool since 2026-10-16 (Alejandro: it is for checking a client's bankruptcy
+    when one turns up, not a pipeline step). Nothing automatic searches, pulls or spends unless this
+    is set. --case, --plan, --status and --report still run. Existing clears keep expiring on their
+    own and existing active hits keep holding; nothing here releases a lead."""
+    env = os.environ if env is None else env
+    return str(env.get(ENV_AUTO) or '').strip().lower() in ('1', 'true', 'yes', 'on')
 ENV_PRESEND_DAILY_MAX = 'PACER_PRESEND_DAILY_MAX'
 
 PAGE_USD = 0.10
@@ -1877,6 +1887,10 @@ def presend_check(case, here=HERE, env=None, session=None, now=None, paid=None, 
     search LOOKUP ONLY: the verdict is returned and printed, never written to the PACER cache, so it cannot
     release anything at the send gate. A typed name cannot prove every owner on the case was searched."""
     out = {'status': '', 'verdict': '', 'why': '', 'cost': 0.0, 'pages': 0, 'recorded': True}
+    if not manual and not auto_enabled(os.environ if env is None else env):
+        out.update(status='off', why='automatic PACER lookups are removed (by-hand only: pacer_stay.py --case); '
+                                     'the refusal stands')
+        return out
     try:
         return _presend(case, here, os.environ if env is None else env, session, now, paid, manual, max_usd, out,
                         owner if manual else None)
@@ -2198,6 +2212,9 @@ def main(argv=None, session=None, here=HERE, env=None, now=None, paid=None):
     if a.owner and not a.case:
         log('PACER: --owner only works with --case -- nothing searched')
         return 3
+    if not (a.case or a.status or a.report or a.plan) and not auto_enabled(env):
+        log('PACER: automatic runs are removed (by-hand tool: --case, --plan, --status, --report) -- nothing searched, nothing spent')
+        return 0
     now_ts = time.time() if now is None else now
     today = dt.date.fromtimestamp(now_ts)
 

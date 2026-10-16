@@ -375,6 +375,15 @@ username/password, written on the laptop by Alejandro) or the PACER_* env vars. 
 searches Broward / Palm Beach leads that have a phone on the board twin, inside
 `PACER_QUARTER_CAP` (default $25, under the $30 quarterly waiver) and the $50/month paid-reads cap.
 
+**2026-10-16, at Alejandro's direction ("remove pacer completely"): PACER is a by-hand tool.** It is for
+checking whether a client's bankruptcy was filed, and filed correctly, not a pipeline step. The nightly
+`[3g/5]` step is gone from `refresh-dealflow.bat`, and `pacer_stay.py` does nothing automatic unless
+`DEALFLOW_PACER_AUTO=1` (default off): no nightly pull, no `--bulk`, no send-bridge pre-send search
+(`presend_check` returns `off` and the refusal stands). `pacer_stay.py --case C`, `--plan`, `--status`
+and `--report` still run. Nothing was released: existing clears keep expiring on their 14-day age and are
+not renewed, existing active hits and new-filer hits keep holding, and `bk_lookup.pacer_confirmed()` is
+unchanged.
+
 Miami-Dade keeps the #72 docket gate. This lookup only adds a hold there. A CourtListener
 clear does not lift a docket stay or a PACER active hit.
 
