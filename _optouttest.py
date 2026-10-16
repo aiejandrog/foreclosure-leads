@@ -12,7 +12,11 @@ JS = r"""() => {
   const o = {};
   o.ledger = Object.keys(SERVER_OPTOUTS || {});
   o.ledgerN = o.ledger.length;
-  const c = o.ledger[0];
+  // First ledger key whose lead is ON the board. ledger[0] is often an email-only or other case-less
+  // stop with no row here, which failed all seven lead checks below for a reason that had nothing
+  // to do with suppression (2026-10-16). With none on the board it falls back to ledger[0] and
+  // 'the opted-out lead is on the board' fails honestly.
+  const c = o.ledger.find(k => k.charAt(0) !== '@' && k.charAt(0) !== '#' && DATA.some(x => x.case === k)) || o.ledger[0];
   o.case = c;
   const n = notes[c] || {};
   o.status = n.status; o.optout = n.optout; o.hasLog = !!(n.optlog||[]).length;

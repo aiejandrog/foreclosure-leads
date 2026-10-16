@@ -33,6 +33,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -105,6 +106,22 @@ def _read_ledger_for_write(path):
         _refuse_unreadable_ledger(path, e)
 
 
+def _norm_phone_key(k):
+    """'#(305) 555-0100' / '#+1 305 555 0100' / '#13055550100' -> '#3055550100'. Any other key, and a
+    hashed '#' key (hex with letters), is returned unchanged."""
+    if not k.startswith('#'):
+        return k
+    body = k[1:].strip()
+    d = re.sub(r'\D', '', body)
+    # Only a phone-shaped body is rewritten: digits plus ( ) - . + and spaces. Letters mean a hashed
+    # key (base36) or an extension ('x12'); both are left exactly as they were.
+    if not d or re.search(r'[^0-9()+.\-\s]', body):
+        return k
+    if len(d) == 11 and d[0] == '1':
+        d = d[1:]
+    return '#' + d
+
+
 def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt=''):
     """THE ONE WRITER of optouts.json (2026-09-25). Add-only, atomic, envelope-preserving.
 
@@ -127,6 +144,10 @@ def ledger_add(keys, note, src, when=None, emails=(), dry_run=False, excerpt='')
     when = (str(when) if when else now)[:32]
     keys = [str(k).strip() for k in keys if k and str(k).strip()]
     keys = [k.lower() if (k.startswith('@') or k.startswith('#')) else k for k in keys]
+    # A phone key is digits only, in the 10-digit US form leads carry. A number typed as
+    # '(305) 555-0100' used to be stored as '#(305) 555-0100', which a reader comparing strings
+    # (the door planner) could never match. 2 of the 10 phone keys on 2026-10-16 were that shape.
+    keys = [_norm_phone_key(k) for k in keys]
     # Read BEFORE any write, including a dry run. A file we cannot parse is not an empty ledger.
     opt = _read_ledger_for_write(OPTOUTS)
     if opt is None:
