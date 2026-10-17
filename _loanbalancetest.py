@@ -33,11 +33,12 @@ chk(LB.months_between('2021-12-21', '2022-01-20') == 0 and LB.months_between('20
 chk(LB.months_between('12/21/2021', '2026-09-21') == 57, 'M/D/YYYY dates parse')
 
 # 3. no guessed rates
-chk(LB.estimate({'amt': 100000, 'd': '2001-03-01'}, as_of='2026-01-01', tab=TAB) is None,
-    'a month older than the table gets no estimate')
+_o = LB.estimate({'amt': 100000, 'd': '2001-03-01'}, as_of='2026-01-01', tab=TAB)
+chk(_o and _o['how'] == 'face' and _o['est'] == 100000, 'a month older than the table keeps its recorded amount')
 chk(LB.rate_for('2026-10-05', TAB) == 7.3, 'a month newer than the table uses the latest survey')
 chk(LB.estimate({'amt': 0, 'd': '2021-12-21'}, tab=TAB) is None, 'unpriced row: no estimate')
-chk(LB.estimate({'amt': 50000, 'd': ''}, tab=TAB) is None, 'undated row: no estimate')
+_u = LB.estimate({'amt': 50000, 'd': '0000-00-00'}, tab=TAB)
+chk(_u and _u['how'] == 'face' and _u['est'] == 50000, 'undated row keeps its recorded amount')
 
 # 4. not amortized: equity share, credit line; vendor balance wins
 h = LB.estimate({'amt': 29166, 'd': '2025-05-13', 'party': 'HOMETAP EQUITY PARTNERS LLC'}, as_of='2026-09-21', tab=TAB)
@@ -63,6 +64,19 @@ chk(lp['orliens'][0]['est'] == 170374 or abs(lp['orliens'][0]['est'] - 170374) <
     'LP stops amortizing at the filing date (9/30 -> 57 payments): %s' % lp['orliens'][0]['est'])
 chk(lp.get('eqest') and lp['eq'] == round((367000 - lp['debtEst']) / 367000 * 100, 1),
     'LP eq filled from the estimate and marked eqest (%s)' % lp.get('eq'))
+
+# 5b. a loan the table cannot price is counted at face, never left out of debtEst (review finding)
+old = {'st': 'LP', 'eqstate': 'priced', 'value': 400000, 'eq': None, 'filedDate': '2026-09-30',
+       'orliens': [{'d': '2004-05-01', 'amt': 200000, 'party': 'A', 'st': 'OPEN'},
+                   {'d': '2021-12-21', 'amt': 100000, 'party': 'B', 'st': 'OPEN'}]}
+LB.stamp_lead(old, as_of='2026-10-17', tab=TAB)
+chk(old['debtEst'] >= 200000 + 85000 and old['orliens'][0]['esth'] == 'face',
+    'pre-table loan counted at face in debtEst (%s)' % old.get('debtEst'))
+
+hoa = {'st': 'LP', 'mr': True, 'eqstate': 'priced', 'value': 300000, 'eq': None,
+       'orliens': [{'d': '2021-12-21', 'amt': 190000, 'party': 'X', 'st': 'OPEN'}]}
+LB.stamp_lead(hoa, as_of='2026-10-17', tab=TAB)
+chk('debtEst' not in hoa and hoa['eq'] is None, 'association LP row: surviving mortgages are not its debt')
 
 # 6. a foreclosure with a judgment gets per-loan estimates but no debtEst / eq change
 fc = {'st': 'FC', 'eqstate': 'priced', 'judg': 180000, 'value': 300000, 'eq': 40.0,

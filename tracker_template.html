@@ -2813,25 +2813,31 @@ function _dTyped(v){ return v != null && v !== ''; }
    docket; otherwise it is absent and we fall back to the as-entered amount. Every money surface
    should call _payoffOf() so the board can never show the frozen number in one place and the
    accrued one in another — that inconsistency is worse than either number alone. */
-function _payoffOf(r){
-  if(+((r||{}).payoff) > 0) return +r.payoff;
-  if(+((r||{}).judg) > 0) return +r.judg;
-  return _lpDebtEst(r);
-}
+function _payoffOf(r){ return (+((r||{}).payoff) > 0) ? +r.payoff : (+((r||{}).judg) || 0); }
 /* LIS PENDENS ESTIMATED DEBT (loan_balance.py, 2026-10-17). A fresh filing has no judgment, so the
    debt used to be "unknown" even when the recorded chain priced every open loan. debtEst is those
    loans amortized from their recording month at that month's Freddie Mac 30-year rate (the same
    estimate PropStream labels "Est. Balance"). An ESTIMATE: arrears and fees ride on top, and the
-   real note rate and term are not public. Only lis pendens rows carry it. */
-function _lpDebtEst(r){ return (r && r.st === 'LP' && +r.debtEst > 0) ? +r.debtEst : 0; }
-function _isLpEst(r){ return _lpDebtEst(r) > 0 && !(+r.payoff > 0) && !(+r.judg > 0); }
+   real note rate and term are not public. Only lis pendens rows carry it.
+   It is NOT a payoff or a judgment: _payoffOf stays the court figure, and only the equity readers
+   (_debtUnknown, _netEqOf, _ownerOwedOf, recompute) add this through _debtOf. Not used on an
+   association (mr) row, where the mortgages survive and are not what is being foreclosed, nor once
+   the operator has typed a senior or junior figure (that typed stack is the debt then). */
+function _lpDebtEst(r){
+  if(!r || r.st !== 'LP' || r.mr || !(+r.debtEst > 0) || +r.payoff > 0 || +r.judg > 0) return 0;
+  var nn = (typeof notes !== 'undefined' && notes && notes[r.case]) || {};
+  if(_dTyped(nn.slien) || _dTyped(nn.jlien)) return 0;
+  return +r.debtEst;
+}
+function _isLpEst(r){ return _lpDebtEst(r) > 0; }
+function _debtOf(r){ return _payoffOf(r) || _lpDebtEst(r); }
 function _isAccrued(r){ return !!((r||{}).jaccrued) && (+((r||{}).payoff) > 0); }
 /* DEBT UNKNOWN (2026-09-30). A foreclosure whose judgment is not posted (r.ju) and every lis pendens
    row (no judgment exists yet) have _payoffOf() == 0. That is an UNKNOWN debt, not $0 owed, and
    subtracting nothing made _netEqOf() return the whole house value: the row read "judgment not
    posted · 100% eq" and the 30%+ equity filter let it through. Tax deeds price off the opening bid
    and balloon rows off their own loan, so neither is this case. */
-function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_payoffOf(r) > 0); }
+function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_debtOf(r) > 0); }
 /* LIENS VERIFIED. equity_state.py stamps eqstate on every lead; only 'clear' and 'priced' are
    facts. 'unpriced' / 'none' / 'unchecked' mean liens the recorded search did not establish are
    counted as $0, so the equity shown is the MOST it can be: a ceiling, rendered with "≤". */
@@ -2905,7 +2911,7 @@ function recompute(){
        makes every downstream number (equity, cash, profit, verdict, call sheets) honest at once.
        Rows with no verified entry date have no `payoff` and fall back to the as-entered amount;
        `jaccrued` tells the UI which is which so it can label them instead of bluffing. */
-    const judg = _payoffOf(r);   // a lis pendens row's estimated loan balances when no court number exists
+    const judg = _debtOf(r);   // a lis pendens row's estimated loan balances when no court number exists
     // kimi: the value that drives the math. Florida's Save Our Homes cap suppresses the county
     // just/market value on long-held homesteads — 102 leads on this board have a comps-VERIFIED
     // ARV >=1.3x the capped county number (this one: capped $380k vs verified $579k), and every
@@ -7375,7 +7381,7 @@ function _ownerOwedOf(r){
   // disagreed about whether the lead even clears 30%. Same formula on both sides now.
   // TAX DEED is deliberately NOT the same quantity: the row prints a PROFIT MARGIN (capped ~20% by
   // the TD bid model) while this asks "does the owner have equity" — see the eq30 filter comment.
-  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : _payoffOf(r);
+  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : _debtOf(r);
   // FS 197.502(6)(c): on a HOMESTEAD tax deed the opening bid = delinquent taxes + HALF the
   // ASSESSED value on the tax roll. My first pass wrote `r.value / 2` — `r.value` is JV (just /
   // market) value; on any homestead with a Save Our Homes differential (which is most of them)
@@ -7440,7 +7446,7 @@ function _netEqOf(r){
   // board prints — reading the frozen figure overstated net equity by $3.58M across the board on the
   // day it was measured. _payoffOf falls back to r.judg when no verified entry date exists, so rows
   // without accrual are unaffected.
-  var stack = _payoffOf(r)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
+  var stack = _debtOf(r)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
   return Math.max(0, v - stack);
 }
 // The number _netEqOf() returns means two different things by sale type, so it must never wear one

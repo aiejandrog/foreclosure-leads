@@ -27,7 +27,7 @@ It is an ESTIMATE and is labelled as one everywhere it shows. What it cannot kno
 Rates come from `pmms_monthly.json` (tracked, public Freddie Mac data, monthly means of the weekly
 survey). `python loan_balance.py --refresh` re-reads Freddie Mac's PMMS_history.csv into
 DEALFLOW_DIR/pmms_monthly.json, which wins when it is newer. A recording month the table does not
-cover gets no estimate (never a guessed rate); a month after the table's last one uses the last.
+cover keeps its recorded amount (never a guessed rate); a month after the table's last one uses the last.
 """
 import json
 import os
@@ -152,7 +152,9 @@ def estimate(lien, as_of=None, stop=None, tab=None):
     `lien` is a chain row ({'d', 'amt', 'party', 'doc'?, 'bal'?}). `stop` is the date payments are
     taken to have stopped (the foreclosure's filing date for the loan being foreclosed).
     how: 'amort' (PMMS rate, 360 months), 'vendor' (BatchData's own current estimate),
-         'eqshare' / 'credit_line' (recorded figure kept, see the module docstring)."""
+         'eqshare' / 'credit_line' (recorded figure kept, see the module docstring),
+         'face' (no usable date, or a month the rate table does not cover: the recorded amount is
+         kept, never dropped -- dropping it would understate the debt)."""
     if not isinstance(lien, dict):
         return None
     try:
@@ -172,16 +174,17 @@ def estimate(lien, as_of=None, stop=None, tab=None):
         return {'est': int(round(amt)), 'rate': None, 'paid': None, 'how': 'eqshare'}
     if CREDIT_LINE_RE.search(str(lien.get('doc') or '')) or lien.get('heloc'):
         return {'est': int(round(amt)), 'rate': None, 'paid': None, 'how': 'credit_line'}
+    face = {'est': int(round(amt)), 'rate': None, 'paid': None, 'how': 'face'}
     rec = _parse(lien.get('d'))
     if not rec:
-        return None
+        return face
     end = _parse(as_of) or date.today()
     st = _parse(stop)
     if st and st < end:
         end = st
     rate = rate_for(rec, tab)
     if rate is None:
-        return None
+        return face
     paid = months_between(rec, end)
     return {'est': int(round(amortized(amt, rate, TERM_MONTHS, paid))),
             'rate': round(rate, 2), 'paid': paid, 'how': 'amort'}
@@ -221,8 +224,10 @@ def stamp_lead(d, as_of=None, tab=None):
         d['orest'] = tot
         d['orestface'] = face
         d['orestn'] = n
+        # not on an association (mr) row: there the mortgages survive the sale and are not the
+        # debt being foreclosed, so they are no stand-in for the missing judgment
         if (str(d.get('st') or '') == 'LP' and str(d.get('eqstate') or '') == 'priced'
-                and not (d.get('judg') or d.get('payoff'))):
+                and not d.get('mr') and not (d.get('judg') or d.get('payoff'))):
             d['debtEst'] = tot
             # lp_leads leaves `eq` None because no debt was known. Now an estimate is: Call Mode's
             # sort and -25 floor read `eq`, and eqfake (still True on every LP row) keeps it marked
