@@ -128,6 +128,13 @@ def _board_rows():
 def lane(rows=None, today=None, days=DAYS, min_year=MIN_YEAR):
     import sheets_crm as S
     rows = rows if rows is not None else _board_rows()
+    # Jesse CALLS from this list, so it asks the same federal hold Call Mode asks (2026-09-29).
+    # The row flags alone are only as good as whoever built the rows; a raw-file row carries none.
+    try:
+        import call_mode as _CM
+        _federal_held = _CM.federal_hold_fn()
+    except Exception:
+        _federal_held = lambda case: True
     notes = (_load('worker_notes.json', {}).get('notes') or {})
     st = _load('skiptrace_results.json', {})
     closed = S._closed_cases()
@@ -143,6 +150,8 @@ def lane(rows=None, today=None, days=DAYS, min_year=MIN_YEAR):
         if str(n.get('status') or '').strip().upper() in ('DEAD', 'DO NOT CONTACT'):
             continue
         if r.get('saleBkAct') or r.get('sale_bk_active') or r.get('cert') or r.get('sibclaimed'):
+            continue
+        if _federal_held(case):
             continue
         d = sale_date(r)
         k = dk.get(case) or r.get('dk') or {}

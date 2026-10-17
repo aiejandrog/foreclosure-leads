@@ -391,6 +391,10 @@ def _stamp_federal_holds(leads):
         import bk_lookup as _BKL
         for r in leads:
             _held, _why = _BKL.send_hold(_case(r), here=HERE)
+            if not _held:
+                # send_hold lets a Miami case through unless CourtListener blocks it, so a bad
+                # sale_history_cache.json (no docket stays merged above) held nothing. (2026-09-29)
+                _held, _why = _BKL.miami_stay_data_hold(_case(r), here=HERE)
             if _held:
                 r['sale_bk_active'] = True
                 r['saleBkAct'] = True
