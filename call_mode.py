@@ -3075,7 +3075,10 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
         # An LP row whose phones came from the owner's MAILING address (lp_leads mailTrace, no
         # confirmed property) is held on every path. Its extra phone fields must not let it beat
         # the auction row for the same case, which has a real address and sale date.
-        best = max(grp, key=lambda r: (not _unconfirmed(r), _full(r), -_d(r)))
+        # A CALENDARED row beats an undated one (a lis pendens copy of the same case): the sale date
+        # is the one fact that must survive, and LP rows now carry the lien-chain fields too, so
+        # completeness alone could pick the copy with no date (2026-10-17, loan_balance merge).
+        best = max(grp, key=lambda r: (not _unconfirmed(r), _d(r) < 9999, _full(r), -_d(r)))
         others = [r for r in grp if r is not best]
         collapsed += len(others)
         best['dupn'] = len(others)

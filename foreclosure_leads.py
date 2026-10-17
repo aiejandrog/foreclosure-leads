@@ -2349,6 +2349,19 @@ def make_tracker(leads):
             if os.path.exists(_lf):
                 try: xrl = json.load(open(_lf, encoding='utf-8'))
                 except Exception: xrl = {}
+            if _bn == 'lp_leads.json':
+                # The lis pendens file has no lp_liens.json sibling: broward_liens.py traces Broward
+                # filings INTO broward_liens.json (and palmbeach_liens.py its own), keyed by case.
+                # Looking for lp_liens.json dropped every Broward/PB fresh-filing chain at the merge
+                # (found 2026-10-17 while adding loan_balance estimates).
+                for _cf in ('broward_liens.json', 'palmbeach_liens.json'):
+                    _cp_ = os.path.join(HERE, _cf)
+                    if os.path.exists(_cp_):
+                        try:
+                            for _k, _v in json.load(open(_cp_, encoding='utf-8')).items():
+                                xrl.setdefault(_k, _v)
+                        except Exception:
+                            pass
             for _d in xl:
                 _h = xrl.get(_d.get('case', ''))
                 # BatchData fallback for the counties whose Official Records we can't scrape (Palm
@@ -2446,7 +2459,10 @@ def make_tracker(leads):
                         _db = 10 if (isinstance(_d.get('days'), int) and 0 <= _d['days'] <= 30) else 0
                         _d['score'] = (max(0, min(100, (10 if _d.get('hs') else 0) + _db)) if _d.get('value') else 0)
                         _d['tier'] = 'C'
-                    elif _h and _h.get('ftype') == 'MORTGAGE' and not _h.get('surv') and not _suspect_ratio:
+                    # A lis pendens row has no judgment, so "verified real senior equity" cannot be said of
+                    # it: its equity stays an estimate (eqfake) whatever the chain found.
+                    elif (_h and _h.get('ftype') == 'MORTGAGE' and not _h.get('surv') and not _suspect_ratio
+                          and _d.get('st') != 'LP'):
                         _d['mr'] = False; _d['eqfake'] = False                  # verified real senior equity
                         if (_d.get('ctype') or '').upper().startswith('HOA'): _d['ctype'] = 'Bank/Mortgage'
                         # Mirror the HOA-side downward re-tier — but UPWARD: the pipeline had ZEROED
@@ -2561,6 +2577,20 @@ def make_tracker(leads):
     except Exception as _dde:
         print('merge: dedupe SKIPPED (%s) — duplicate calendar rows may reach the board'
               % str(_dde)[:100])
+
+    # ESTIMATED CURRENT BALANCES (loan_balance.py, 2026-10-17). The chain carries recorded face
+    # amounts; a 2021 loan is not still owed at face. Each open priced mortgage gets an amortized
+    # estimate (PMMS rate for its recording month, 360 months) shown NEXT TO the recorded figure, and
+    # a lis pendens row with a fully priced chain gets `debtEst`, so its equity reads as an estimate
+    # instead of "unknown". Judgments and payoffs are untouched: where a court number exists it wins.
+    try:
+        import loan_balance as _LB
+        _lbn = sum(1 for _r in slim if _LB.stamp_lead(_r))
+        _lbd = sum(1 for _r in slim if _r.get('debtEst'))
+        print(f'loan balances: {_lbn} lead(s) carry estimated current balances, '
+              f'{_lbd} lis pendens row(s) get an estimated debt')
+    except Exception as _lbe:
+        print('loan balances: skipped (%s)' % str(_lbe)[:100])
 
     # LIVE DOCKET onto EVERY row that has one (gen_dockets.py -> dockets.json), whichever path the
     # row arrived by. Attaching it HERE rather than only in the Miami-Dade dict above is the whole

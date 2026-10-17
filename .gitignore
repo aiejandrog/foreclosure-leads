@@ -759,3 +759,5 @@ logs/
 # rf_status.json: RealForeclose Closed/Canceled status per case (rf_status.py), rebuilt nightly.
 rf_status.json
 rf_status.json.tmp
+# loan_balance.py: amortized estimates of open recorded mortgages (2026-10-17)
+!_loanbalancetest.py
