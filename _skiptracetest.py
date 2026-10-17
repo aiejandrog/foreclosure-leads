@@ -13,7 +13,8 @@ one. These checks pin the new contract:
 No network, no real key, no spend: requests.Session is replaced by a scripted fake, time.sleep is
 a no-op (so the 429 backoff test is instant), and the results file is a throwaway temp.
 """
-import json, os, pathlib, sys, tempfile, types
+import io, json, os, pathlib, sys, tempfile, types
+from datetime import date
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 import requests
 
@@ -65,14 +66,18 @@ def _lead(case):
             'mailing_address': '123 MAIN ST, MIAMI, FL 33101', 'county': 'MIAMI-DADE'}
 
 
-def run(leads, actions, argv, seed=None, ledger=None):
+def run(leads, actions, argv, seed=None, ledger=None, calls_today=None):
     """Run ST.main() against fakes. Returns (exit_code, results_dict, session).
     `ledger` shares one spend ledger across calls — that's how the 'the cap is per DAY, not per
-    run' property gets tested (two runs, one wallet)."""
+    run' property gets tested (two runs, one wallet). `calls_today` seeds the call counter
+    in the same temp directory as the results file. stdout from the run is on run.out."""
     d = pathlib.Path(tempfile.mkdtemp(prefix='sktest_'))
     tmp = d / 'skiptrace_results.json'
     if seed is not None:
         tmp.write_text(json.dumps(seed), encoding='utf-8')
+    if calls_today is not None:
+        (d / 'skiptrace_calls.json').write_text(
+            json.dumps({date.today().isoformat(): int(calls_today)}), encoding='utf-8')
     ST.RESULTS = str(tmp)
     bd_budget.LEDGER = str(ledger or (d / 'batchdata_spend.json'))   # never the real money ledger
     ST.load_all_leads = lambda: [dict(x) for x in leads]
@@ -96,12 +101,25 @@ def run(leads, actions, argv, seed=None, ledger=None):
         tracerfy_mcp.balance_soft = lambda *a, **k: None
     sys.argv = ['skiptrace.py'] + argv
     code = 0
+    buf = io.StringIO()
+
+    class _Tee:
+        def write(self, s):
+            old_out.write(s)
+            buf.write(s)
+        def flush(self):
+            old_out.flush()
+
+    old_out = sys.stdout
+    sys.stdout = _Tee()
     try:
         ST.main()
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else 1
     finally:
+        sys.stdout = old_out
         sys.argv = old_argv
+    run.out = buf.getvalue()
     res = json.loads(tmp.read_text(encoding='utf-8')) if tmp.exists() else {}
     return code, res, sess
 
@@ -341,6 +359,58 @@ rec('--county-first fills the rest of the limit from other counties, soonest fir
 rec('county names fold: Miami-Dade / MIAMI / miami dade are one key, Palm Beach two spellings one',
     ST._county_key('Miami-Dade') == ST._county_key('MIAMI') == ST._county_key('miami dade')
     and ST._county_key('PALM BEACH') == ST._county_key('palmbeach') != ST._county_key('BROWARD'))
+
+# 11 ─ call caps and the N-day floor. The dollar cap did not stop a morning of hits.
+_saved_run, _saved_day = ST.SKIPTRACE_RUN_CAP, ST.SKIPTRACE_DAY_CAP
+try:
+    ST.SKIPTRACE_RUN_CAP = 2
+    code, res, sess = run([_lead('C%d' % i) for i in range(5)],
+                          [FakeResp(200, PHONES)] * 5, ['--all', '--max-spend', '70'])
+    rec('run cap trims the queue and still exits 0',
+        code == 0 and sess.calls == 2 and len(res) == 2, 'exit %s calls %s' % (code, sess.calls))
+    rec('the cap line names the run and the day',
+        'skiptrace cap: run 0/2 calls, today 0/' in run.out and 'trimming 5 queued' in run.out,
+        run.out[-400:])
+
+    ST.SKIPTRACE_RUN_CAP = 40
+    code, res, sess = run([_lead('C1'), _lead('C2')], [FakeResp(200, PHONES)] * 2,
+                          ['--all'], calls_today=80)
+    rec('a full day cap calls nothing and exits 5',
+        code == 5 and sess.calls == 0, 'exit %s calls %s' % (code, sess.calls))
+    rec('the full-day line says nothing was called',
+        'skiptrace cap reached' in run.out and 'Nothing was called' in run.out, run.out[-400:])
+
+    today = date.today().isoformat()
+    code, res, sess = run([_lead('C1'), _lead('C2')], [FakeResp(200, PHONES)],
+                          ['--all', '--refresh'],
+                          seed={'C1': {'phones': [{'number': '3050000000'}],
+                                       'traced': today, 'source': 'batchdata'}})
+    rec('a trace from today is not re-called even with --refresh',
+        sess.calls == 1 and res.get('C1', {}).get('phones') == [{'number': '3050000000'}],
+        'calls %s' % sess.calls)
+
+    code, res, sess = run([_lead('C1'), _lead('C1')], [FakeResp(200, PHONES)], ['--all'])
+    rec('two rows for one case are one call', sess.calls == 1 and 'C1' in res, sess.calls)
+
+    blank = _lead('C0')
+    blank['Case #'] = ''
+    code, res, sess = run([blank, _lead('C2')], [FakeResp(200, PHONES)], ['--all'])
+    rec('a lead with no case number is not called',
+        sess.calls == 1 and 'C2' in res and 'no case number' in run.out, sess.calls)
+
+    code, res, sess = run([_lead('C1')], [FakeResp(400, {'message': 'bad address'})], ['--all'])
+    rec('a 400 is cached as a skip',
+        res.get('C1', {}).get('outcome') == 'skip' and res.get('C1', {}).get('phones') == [], res.get('C1'))
+    code, res2, sess2 = run([_lead('C1')], [FakeResp(200, PHONES)], ['--all'], seed=res)
+    rec('a cached skip is not called again the next run', sess2.calls == 0, sess2.calls)
+
+    code, res, sess = run([_lead('C1')], [requests.exceptions.Timeout('t')], ['--all'])
+    rec('a timeout is cached as an error',
+        code == 0 and res.get('C1', {}).get('outcome') == 'error'
+        and res.get('C1', {}).get('phones') == [], res.get('C1'))
+finally:
+    ST.SKIPTRACE_RUN_CAP = _saved_run
+    ST.SKIPTRACE_DAY_CAP = _saved_day
 
 total = len(ok) + len(bad)
 print(f'\n==== {len(ok)}/{total} skiptrace hardening checks passed ====')

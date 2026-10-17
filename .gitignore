@@ -171,6 +171,9 @@ diligence_server.log
 batchdata.key
 site.pass
 skiptrace_results.json
+# per-run / per-day Tracerfy call counter (skiptrace.py). Counts only, still not for the repo.
+skiptrace_calls.json
+skiptrace_calls.json.tmp
 # the write-then-replace temp of the same file (resimpli_sync.py, tracerfy_mcp.py): a crash between
 # the two steps must not leave homeowner phone numbers one `git add` from a public repo.
 # resimpli_sync.py names its temp per run, <file>.resimpli.<random>.tmp, so two runs never share one
@@ -543,6 +546,9 @@ quo_inbound_status.json.tmp
 # about ." and "My name is [YOUR NAME]") and BOTH succeeded at the SMTP layer, so no existing
 # check could see them. This suite is the only thing that can.
 !_mailguardtest.py
+# First-touch pause is shared, and a blank street is a skip. outreach_email.py used to send
+# without asking; this suite is what fails if that path comes back.
+!_pausemergetest.py
 
 # image filename salt — MUST be identical on both engines (laptop + cloud);
 # losing this orphans docs/img entirely, since names cannot be recomputed from folios
@@ -763,3 +769,5 @@ rf_status.json.tmp
 !_loanbalancetest.py
 # _browardorfeedtest: Broward Official Records daily-file lead list. Fake names and case numbers only.
 !_browardorfeedtest.py
+# _sigemailtest: signature contact line is the business inbox, never the retired Gmail (offline).
+!_sigemailtest.py

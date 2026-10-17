@@ -25,6 +25,25 @@ COMPANY = 'Biscayne Solutions Group'
 SIGNER = 'Alex Gonzalez'
 PHONE = '(786) 631-1823'
 
+# The contact line under the name on a homeowner email, a cadence follow-up, and a letterhead
+# that shows an email. Not the From address — that is senders.json and the login key. The
+# personal Gmail was the default until 2026-10-16. A blank, or that retired address still
+# sitting in sender.json or a frozen cadence queue, prints the business inbox. Any other
+# saved address is the operator's own and is left alone.
+SIGNATURE_EMAIL = 'alejandro@bsgflorida.com'
+_RETIRED_SIGNATURE_EMAIL = 'agonzalez0311707@gmail.com'
+
+
+def signature_email(raw=''):
+    """The address that belongs on the signature line.
+
+    Blank and the retired personal Gmail both become SIGNATURE_EMAIL. A different non-empty
+    value is returned unchanged."""
+    v = str(raw or '').strip()
+    if not v or v.lower() == _RETIRED_SIGNATURE_EMAIL:
+        return SIGNATURE_EMAIL
+    return v
+
 # THE PROMISE IS FIVE MINUTES. THE SLOT IS FIFTEEN. Both numbers are true and they must never
 # be stated as one number, because four surfaces say them out loud and they had already drifted:
 # email said 15 while the board's SMS and all three Call Mode scripts said 5. A homeowner who

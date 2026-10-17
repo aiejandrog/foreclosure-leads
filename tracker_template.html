@@ -8943,8 +8943,9 @@ function _docLog(caseId, key, lang){
 // _bsgHead() derives width from height so it always scales, never stretches. Rules are BORDERS,
 // not backgrounds, so they survive print without color-adjust.
 // The inbox that goes on paper a homeowner, servicer or opposing counsel receives (Jose,
-// 2026-08-08). Deliberately NOT sender.email — that stays the personal address the outreach
-// pipeline sends from, and the two must not be collapsed into one value.
+// 2026-08-08). Deliberately NOT sender.email — that is the signature contact on outreach
+// mail (alejandro@bsgflorida.com unless the operator saved a different address). This
+// client-paper inbox is a separate value. Do not collapse the two.
 // The company inbox, injected at build time from sender.json `client_email` -- it used to be this
 // literal in THREE files, which is three chances to change two of them. It still carries the OLD
 // company name: renaming it to a biscayne* address that does not exist yet would silently
