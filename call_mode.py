@@ -5605,15 +5605,28 @@ var CS_NOTE = 'DealFlow Call Mode daily stats. total_dials = logged outcomes + d
 /* THE SESSION STRIP — on every screen. "How many calls have I made, how many people have I been
    through" answered where he is looking, and the number MOVING on each logged outcome is the live
    proof the logging works. Today = from notes (survives reloads, includes what synced in);
-   session = _WORKED (this open page). Person keys ('@'/'#') are ledger rows, not leads — skipped. */
+   session = _WORKED (this open page). Person keys ('@'/'#') are ledger rows, not leads — skipped.
+   DIALS = dial taps, not dials[] rows (2026-10-17, "it's wrong about the amount I've dialed today").
+   A redial left three rows for two taps (the dial's 'pending', the 'redial', then the outcome, since
+   logOutcome only replaces a trailing 'pending'), and a 'pending' that logOutcome replaced comes back
+   when another device's older blob merges in (_mergeLead unions dials). Both counted twice. An
+   outcome row whose tsd is the tap time of a marker still in the list is that marker's outcome, so it
+   is not a second dial. */
+function _dialTaps(dl, td, me){
+  var mine = (dl||[]).filter(function(x){ return x && x.d===td && (!me || !x.by || x.by===me); });
+  var marks = {};
+  mine.forEach(function(x){ if((x.oc==='pending' || x.oc==='redial') && +x.tsu) marks[+x.tsu] = 1; });
+  return mine.filter(function(x){
+    return x.oc==='pending' || x.oc==='redial' || !(+x.tsd && marks[+x.tsd]);
+  }).length;
+}
 function sessStrip(){
   var me = caller(), dials = 0, cases = {}, appts = 0, td = today();
   Object.keys(notes||{}).forEach(function(c){
     if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
     var n = notes[c]||{}, hit = false;
-    (n.dials||[]).forEach(function(x){
-      if(x.d===td && (!me || !x.by || x.by===me)){ dials++; hit = true; }
-    });
+    var k = _dialTaps(n.dials, td, me);
+    if(k){ dials += k; hit = true; }
     (n.touches||[]).forEach(function(t){
       if(t.d===td && t.ch==='call' && (!me || !t.by || t.by===me)){
         hit = true;
