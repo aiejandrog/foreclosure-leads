@@ -37,6 +37,20 @@ import threading
 # Placeholders the templates fall back to when a field is missing. Fine on the board, never in a
 # message. Also catches any other SHOUTED bracket token, which is how every one of these is written.
 _PLACEHOLDER = re.compile(r'\[[A-Z][A-Z0-9 _/&.-]{2,}\]')
+# Title Case brackets the ALL-CAPS pattern misses: "[Your Name]", "[First Name]".
+_MIXED_PLACEHOLDER = re.compile(r'\[[A-Z][a-z]+(?:[ /-][A-Z][a-z]+)*\]')
+# safe_street's fallback landing in the subject: "Regarding your property at your property".
+_DEGENERATE_SUBJECT = re.compile(
+    r'(?:property at|propiedad en)\s+(?:your property|su propiedad)\s*$', re.I)
+# The same fallback used as the property itself. "about your property so I'll be brief"
+# does not match: the next word has to be the end of the phrase.
+_DEGENERATE_BODY = re.compile(
+    r'\b(?:about|sobre)\s+(?:your property|su propiedad)\s*[.\n]'
+    r'|\bagainst your property\b', re.I)
+_BARE_GREETING = re.compile(r'^(?:Hi|Hola),\s*$', re.I)
+_OUTREACH_SUBJECT = re.compile(
+    r'Regarding your property|Referente a su propiedad|Sale date|Fecha de subasta', re.I)
+_EMAIL_ADDR = re.compile(r'[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}', re.I)
 # An unrendered format slot: "{addr}", "%s", "$addr". A literal brace is otherwise vanishingly rare
 # in this copy, and a stray one is worth a human look either way.
 _FORMAT_SLOT = re.compile(r'\{[a-z_][a-z0-9_]*\}|%[sd]\b|\$\{?[a-z_]+\}?', re.I)
@@ -145,6 +159,34 @@ def safe_street(raw, fallback='your property'):
     return head if re.search(r'[A-Za-z0-9]', head) else s
 
 
+def merge_issues(subj='', body='', to=''):
+    """Holes check() did not name: a blank street that fell back to "your property", a
+    bare "Hi,", a Title Case placeholder, or more than one homeowner on To.
+
+    Empty means sendable. Legitimate prose ("about your property so I'll be brief") and a
+    bare greeting on a note whose subject is not an outreach subject are not holes.
+    """
+    bad = []
+    subj_s = str(subj or '')
+    body_s = str(body or '')
+    for label, text in (('subject', subj_s), ('body', body_s)):
+        for m in set(_MIXED_PLACEHOLDER.findall(text)):
+            bad.append('the %s still contains the placeholder %s' % (label, m))
+    if _DEGENERATE_SUBJECT.search(subj_s.strip()):
+        bad.append('the subject names the fallback "your property" instead of a street')
+    m = _DEGENERATE_BODY.search(body_s)
+    if m:
+        bad.append('the body names the fallback "your property" instead of a street near %r'
+                   % m.group(0).strip())
+    first = (body_s.splitlines() or [''])[0].strip()
+    if _BARE_GREETING.match(first) and _OUTREACH_SUBJECT.search(subj_s):
+        bad.append('the greeting is only %r on an outreach subject' % first)
+    addrs = _EMAIL_ADDR.findall(str(to or ''))
+    if len(addrs) > 1:
+        bad.append('the To line has %d recipients; one homeowner per message' % len(addrs))
+    return bad
+
+
 def check(subj='', body='', to='', unsub=None):
     """Every reason this message must not be sent, as a list of human sentences. Empty == sendable.
 
@@ -161,7 +203,7 @@ def check(subj='', body='', to='', unsub=None):
     A message satisfies the requirement through EITHER the header or a sentence in the body, and
     fails only when it carries neither — the state every message was in before 2026-09-17.
     """
-    bad = []
+    bad = merge_issues(subj, body, to)
     for label, text in (('subject', str(subj or '')), ('body', str(body or ''))):
         if not text.strip():
             bad.append('the %s is empty' % label)

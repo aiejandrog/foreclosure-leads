@@ -35,8 +35,9 @@ EXIT CODES (the whole point of the 2026-08-02 hardening — automation depends o
   3  aborted after 3 consecutive transient failures (timeout / 5xx / connection) — provider likely
      down. One bad lead does NOT abort; a systemic outage does.
   4  projected spend exceeds --max-spend. Nothing was called. Raise the ceiling or narrow the run.
-  5  the SHARED daily budget (bd_budget.py) ran out mid-run. Some leads were traced, the rest
-     resume tomorrow. Benign -- not a failure, and nothing was overspent.
+  5  the SHARED daily budget (bd_budget.py) ran out mid-run, or the per-run / per-day CALL
+     cap did (SKIPTRACE_RUN_CAP / SKIPTRACE_DAY_CAP). Some leads may have been traced; the
+     rest resume tomorrow. Benign -- not a failure, and nothing was overspent.
 """
 import glob as _glob
 import json, os, re, sys, time, argparse
@@ -50,6 +51,125 @@ import bd_budget                      # SHARED daily $ cap across every BatchDat
 # daily cap (runaway-loop backstop only) and every charge is attributed so the ledger can never
 # show an anonymous $9.50 again.
 TRACERFY_DAILY_CAP = float(os.environ.get('TRACERFY_DAILY_CAP', '25') or 25)
+
+# Call caps, separate from the dollar backstop. A $25 ceiling does not stop a morning of
+# hits: 70 hits is 350 credits and about $7. Defaults apply even when --limit is higher.
+# SKIPTRACE_DEDUPE_DAYS: a lead already traced (hit or miss) inside this window is not called
+# again, including under --refresh. retrace_queue.json still bypasses it.
+SKIPTRACE_RUN_CAP = int(os.environ.get('SKIPTRACE_RUN_CAP', '40') or 40)
+SKIPTRACE_DAY_CAP = int(os.environ.get('SKIPTRACE_DAY_CAP', '80') or 80)
+SKIPTRACE_DEDUPE_DAYS = int(os.environ.get('SKIPTRACE_DEDUPE_DAYS', '30') or 30)
+_RUN_CALLS = 0
+
+
+def _env_cap(name, default):
+    raw = (os.environ.get(name) or '').strip()
+    if not raw:
+        try:
+            return max(0, int(default))
+        except (TypeError, ValueError):
+            return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        try:
+            return max(0, int(default))
+        except (TypeError, ValueError):
+            return 0
+
+
+def _run_cap():
+    return _env_cap('SKIPTRACE_RUN_CAP', SKIPTRACE_RUN_CAP)
+
+
+def _day_cap():
+    return _env_cap('SKIPTRACE_DAY_CAP', SKIPTRACE_DAY_CAP)
+
+
+def _dedupe_days():
+    return _env_cap('SKIPTRACE_DEDUPE_DAYS', SKIPTRACE_DEDUPE_DAYS)
+
+
+def _calls_path():
+    return os.path.join(os.path.dirname(os.path.abspath(RESULTS)), 'skiptrace_calls.json')
+
+
+def _day_calls():
+    """Calls recorded today. A missing file is zero. An unreadable file is a full day
+    (fail closed) so a torn counter cannot restart the spend."""
+    path = _calls_path()
+    if not os.path.exists(path):
+        return 0
+    try:
+        raw = json.load(open(path, encoding='utf-8'))
+    except Exception:
+        return _day_cap()
+    if not isinstance(raw, dict):
+        return _day_cap()
+    try:
+        return max(0, int(raw.get(date.today().isoformat()) or 0))
+    except (TypeError, ValueError):
+        return _day_cap()
+
+
+def _bump_day():
+    path = _calls_path()
+    day = date.today().isoformat()
+    try:
+        raw = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
+    except Exception:
+        raise bd_budget.BudgetExhausted(
+            'skiptrace cap: the call counter is unreadable. Nothing further was called.')
+    if not isinstance(raw, dict):
+        raw = {}
+    raw[day] = int(raw.get(day) or 0) + 1
+    tmp = path + '.tmp'
+    json.dump(raw, open(tmp, 'w', encoding='utf-8'))
+    os.replace(tmp, path)
+
+
+def _note_call():
+    """Count one provider POST, including a 429 retry. Raises BudgetExhausted at the cap."""
+    global _RUN_CALLS
+    run_cap, day_cap = _run_cap(), _day_cap()
+    today_n = _day_calls()
+    if _RUN_CALLS >= run_cap or today_n >= day_cap:
+        raise bd_budget.BudgetExhausted(
+            'skiptrace cap reached: this run %d/%d calls, today %d/%d calls. '
+            'Nothing further was called.' % (_RUN_CALLS, run_cap, today_n, day_cap))
+    _RUN_CALLS += 1
+    _bump_day()
+
+
+def traced_within(entry, days=None):
+    """True when this cache row was written fewer than `days` days ago."""
+    if not isinstance(entry, dict):
+        return False
+    n = _dedupe_days() if days is None else int(days)
+    try:
+        age = (date.today() - date.fromisoformat(str(entry.get('traced') or ''))).days
+    except (ValueError, TypeError):
+        return False
+    return 0 <= age < n
+
+
+def _cache_entry(r, provider, phones, emails, outcome=''):
+    """One skiptrace_results.json row. `outcome` is set on a skip or a provider error
+    so the next run can tell a miss (phones []) from a call that never returned data."""
+    _ta = r.get('_trace_addr') or {}
+    row = {
+        'name': r.get('_trace_name') or (r.get('owners', '') or '').split(';')[0].strip(),
+        'entity': r.get('_trace_entity', ''),
+        'address': (', '.join(v for v in (_ta.get('street'), _ta.get('city'), _ta.get('zip')) if v)
+                    if _ta else (_mailaddr(r) or _propaddr(r))),
+        'county': r.get('county', 'MIAMI-DADE'),
+        'phones': phones, 'emails': emails,
+        'traced': date.today().isoformat(),
+        'source': provider,
+    }
+    if outcome:
+        row['outcome'] = outcome
+    return row
 
 def _tracerfy_spent_today():
     day = bd_budget._load().get(str(date.today()))
@@ -439,6 +559,8 @@ def trace_one(session, prov, key, lead, raw=False):
             bd_budget.require(p['cost'], script='skiptrace')
         else:
             _require_tracerfy(p['cost'])
+        # After the dollar gate, before the POST. A 429 retry is another call.
+        _note_call()
         try:
             r = session.post(p['url'], json=p['body'](addr), timeout=30, headers=headers)
         except requests.exceptions.RequestException as e:  # timeout, connection reset, DNS, etc.
@@ -489,6 +611,8 @@ def trace_one(session, prov, key, lead, raw=False):
         raise TraceSkip(f"{sc}: {msg[:120]}")
 
 def main():
+    global _RUN_CALLS
+    _RUN_CALLS = 0
     ap = argparse.ArgumentParser()
     ap.add_argument('--tier', default='A')
     ap.add_argument('--all', action='store_true')
@@ -573,12 +697,44 @@ def main():
         c = results.get(_case(r)) or {}
         return c.get('via') == 'mailTrace' and not _via(r)
 
-    todo = [r for r in picked if args.refresh or (_case(r) not in results)
-            or _stale_empty(_case(r)) or (_case(r) in retrace_cases) or _mail_only_cached(r)]
+    def _blocked_recent(r):
+        # A trace inside the window is not called again, --refresh included. The operator
+        # bad-number queue is the one bypass: that case was flagged by hand.
+        case = _case(r)
+        if case in retrace_cases:
+            return False
+        return traced_within(results.get(case))
+
+    _held_recent = sum(1 for r in picked if _blocked_recent(r))
+    todo = [r for r in picked if not _blocked_recent(r) and (
+            args.refresh or (_case(r) not in results)
+            or _stale_empty(_case(r)) or (_case(r) in retrace_cases) or _mail_only_cached(r))]
+    if _held_recent:
+        print(f"  {_held_recent} lead(s) traced within {_dedupe_days()} days — not called again"
+              + (" (retrace queue still bypasses that window)" if retrace_cases else ""))
     # A case listed both as an auction row (real address) and as a mailing-address LP row: search
     # the confirmed address only. Searching both pays twice and the LP result overwrites the other.
     _confirmed_cases = {_case(r) for r in picked if _confirmed_addr(r)}
     todo = [r for r in todo if not (_via(r) == 'mailTrace' and _case(r) in _confirmed_cases)]
+
+    # One case, one call. The filter runs once, so two rows for the same case both used to POST.
+    # A row with no case number was stored under the folio or `row{i}` and missed the cache
+    # next night, which is a paid loop. Skip it and say so.
+    _empty_case = 0
+    _seen_case = set()
+    _collapsed = []
+    for r in todo:
+        c = _case(r)
+        if not c:
+            _empty_case += 1
+            continue
+        if c in _seen_case:
+            continue
+        _seen_case.add(c)
+        _collapsed.append(r)
+    todo = _collapsed
+    if _empty_case:
+        print(f"  skipping {_empty_case} lead(s) with no case number")
 
     def _urgency(r):
         """Auction-dated leads first, soonest sale leading; then LP by freshest filing.
@@ -606,6 +762,16 @@ def main():
               + _urgency(r))
     if args.limit:
         todo = todo[:args.limit]
+    _queued = len(todo)
+    _room = min(_run_cap(), max(0, _day_cap() - _day_calls()))
+    print(f"skiptrace cap: run 0/{_run_cap()} calls, today {_day_calls()}/{_day_cap()} calls")
+    if _queued > _room:
+        print(f"skiptrace cap: trimming {_queued} queued leads to {_room} calls")
+        todo = todo[:_room]
+    if not args.dry_run and _queued and _room <= 0:
+        print('skiptrace cap reached: this run 0/%d calls, today %d/%d calls. '
+              'Nothing was called. (exit 5)' % (_run_cap(), _day_calls(), _day_cap()))
+        sys.exit(5)
     if first:
         print(f"  --county-first {args.county_first}: {sum(1 for r in todo if _county_key(r.get('county') or 'MIAMI-DADE') == first)}"
               f" of {len(todo)} to trace are in that county")
@@ -670,8 +836,14 @@ def main():
         # a case the provider errored on stays queued for the next night.
         if retrace_cases:
             _today = date.today().isoformat()
-            still = [x for x in _rq
-                     if str((results.get(str(x.get('c'))) or {}).get('traced', '')) != _today]
+            def _landed(entry):
+                if not isinstance(entry, dict):
+                    return False
+                if str(entry.get('traced') or '') != _today:
+                    return False
+                # A skip or a provider error did not replace the bad number. Leave it queued.
+                return entry.get('outcome') not in ('error', 'skip')
+            still = [x for x in _rq if not _landed(results.get(str(x.get('c'))))]
             if len(still) != len(_rq):
                 _tmp = _rq_path + '.tmp'
                 json.dump(still, open(_tmp, 'w', encoding='utf-8'), indent=1)
@@ -707,6 +879,9 @@ def main():
                 sys.exit(2)
             except TraceTransient as e:
                 strikes += 1
+                # Remember the attempt. The next night was re-paying for the same timeout,
+                # and a billed timeout is unconfirmed spend with no cache row.
+                results[case] = _cache_entry(r, provider, [], [], outcome='error')
                 print(f"  [{i}/{len(todo)}] {case}: transient {e}  (strike {strikes}/{MAX_STRIKES})")
                 if strikes >= MAX_STRIKES:
                     _save()
@@ -716,7 +891,9 @@ def main():
                 time.sleep(0.3)
                 continue
             except TraceSkip as e:
-                # bad address for THIS lead — skip it, don't count it against the provider
+                # bad address for THIS lead — skip it, don't count it against the provider.
+                # Cache the skip so tomorrow's run does not POST the same address again.
+                results[case] = _cache_entry(r, provider, [], [], outcome='skip')
                 print(f"  [{i}/{len(todo)}] {case}: skip ({e})")
                 time.sleep(0.3)
                 continue
@@ -732,15 +909,7 @@ def main():
 
             strikes = 0                                        # a success clears the transient streak
             done += 1
-            _ta = r.get('_trace_addr') or {}
-            results[case] = {
-                'name': r.get('_trace_name') or (r.get('owners', '') or '').split(';')[0].strip(),
-                'entity': r.get('_trace_entity', ''),          # the LLC, when the number belongs to its officer
-                'address': (', '.join(v for v in (_ta.get('street'), _ta.get('city'), _ta.get('zip')) if v)
-                            if _ta else (_mailaddr(r) or _propaddr(r))),
-                'county': r.get('county', 'MIAMI-DADE'),
-                'phones': phones, 'emails': emails, 'traced': f"{date.today():%Y-%m-%d}", 'source': provider,
-            }
+            results[case] = _cache_entry(r, provider, phones, emails)
             if _via(r) == 'mailTrace':
                 # unconfirmed property: keep the phones for a person, never an email anything
                 # automatic could first-touch, and mark the entry so no merge treats it as confirmed
