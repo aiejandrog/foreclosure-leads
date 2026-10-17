@@ -3702,16 +3702,70 @@ function fillScript(t, r){
 }
 
 var _NOTESBAD=false;   // true when this phone's saved notes could not be parsed (history is then unknown)
-function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}'); _NOTESBAD=false;}catch(e){notes={}; _NOTESBAD=true;}
+/* _LSLAST: the exact fcLeadNotes string this page last read or wrote. Anything else in storage was
+   written by another page on this origin (a second Call Mode tab, the other seat's page, the board).
+   _SAVEFAIL: when the last save was refused (0 = the last save landed). */
+var _LSLAST = null, _SAVEFAIL = 0;
+/* Once this page holds notes, a reload from storage MERGES rather than replaces: storage can be an
+   older page's snapshot (a tab still on a pre-fix build), and replacing would throw away calls this
+   page already absorbed. Empty memory (boot) or unreadable notes still read storage as is. */
+function loadNotes(){try{var _raw=localStorage.getItem(LS);
+  if(!_NOTESBAD && notes && Object.keys(notes).length && _raw){ JSON.parse(_raw); _absorbStored(_raw); _LSLAST=_raw; }
+  else { notes=JSON.parse(_raw||'{}'); _LSLAST=_raw; } _NOTESBAD=false;}catch(e){notes={}; _NOTESBAD=true;}
   /* A teammate's merge lands here, not through save() — see _FCGEN. Without this bump the lane
      counts would keep reporting the state from before the pull. */
   if(typeof _FCGEN === 'number') _FCGEN++;}
-function saveNotes(){try{localStorage.setItem(LS,JSON.stringify(notes));}catch(e){
+/* TWO-TAB CLOBBER, PHONE SIDE (2026-10-17, "I refreshed Call Mode and got back all the leads I
+   called"). `notes` is an in-memory snapshot and saveNotes() writes the WHOLE object. The board got
+   a storage listener for this on 2026-08-10; this page never did. So a second Call Mode tab (or the
+   other seat's page) opened earlier in the same browser kept its old snapshot, and its next save —
+   any logged outcome, or a team-sync pull that merged one teammate change — wrote that old snapshot
+   over every call logged since in the tab actually in use. Nothing showed until a reload read the
+   store back. Fix: before writing, fold in whatever another page put in storage, through the same
+   _mergeLead the team sync uses (unions; DO NOT CONTACT one-way). The no-policy fields are copied
+   off the wrapper's return value, where the wrapper puts them, so this path never drops a no. */
+function _absorbStored(raw){
+  if(!raw || raw === _LSLAST) return 0;
+  var other; try{ other = JSON.parse(raw) || {}; }catch(e){ return 0; }
+  var n = 0;
+  Object.keys(other).forEach(function(c){
+    if(!other[c] || typeof other[c] !== 'object') return;
+    if(!notes[c]){ notes[c] = other[c]; n++; return; }
+    var L = notes[c], R = other[c], res = _mergeLead(L, R), o = res && res[0];
+    if(!o) return;
+    /* No-policy fields by the wrapper's documented rule, computed here from both sides: the
+       wrapper compares against its [out, ch] return value, where these are always unset, so its
+       noAt/noWasLp/resurf come out as "remote wins". Hard wins forever, a soft fills an empty side,
+       the EARLIEST noAt, resurf = max. */
+    if(L.no === 'hard' || R.no === 'hard') o.no = 'hard';
+    else if(!o.no && (L.no === 'soft' || R.no === 'soft')) o.no = 'soft';
+    var _na = [L.noAt, R.noAt].filter(function(v){ return +v > 0; }).map(Number);
+    if(_na.length) o.noAt = Math.min.apply(null, _na);
+    if(o.noWasLp == null && R.noWasLp != null) o.noWasLp = R.noWasLp;
+    if((+R.resurf || 0) > (+o.resurf || 0)) o.resurf = R.resurf;
+    notes[c] = o; n++;
+  });
+  _LSLAST = raw;
+  if(n && typeof _FCGEN === 'number') _FCGEN++;
+  return n;
+}
+function saveNotes(){
+  try{ _absorbStored(localStorage.getItem(LS)); }catch(e){ logErr(e,'saveNotes absorb'); }
+  try{ var _s=JSON.stringify(notes); localStorage.setItem(LS,_s); _LSLAST=_s; _SAVEFAIL=0; }catch(e){
   /* A swallowed setItem failure (private mode, quota) lost every log while the UI kept stamping
-     green checks. Say it, loudly, and put it in the error chip. */
+     green checks. Say it, loudly, and put it in the error chip. The toast is gone in seconds, so
+     _SAVEFAIL also puts a line on the session strip until a save lands: what is logged now lives
+     only in this open page and a reload loses it. */
+  _SAVEFAIL = Date.now();
   logErr(e,'saveNotes');
   try{ toast('⚠ NOT SAVED — phone storage is full or blocked'); }catch(_e){}
 }}
+/* Another tab wrote: fold it in now, so this page never shows (or dials) a lead as untouched that
+   was just called next door. No save here — the merge is already in storage. */
+window.addEventListener('storage', function(ev){
+  if(!ev || ev.key !== LS || !ev.newValue) return;
+  try{ if(_absorbStored(ev.newValue)){ try{ teamRecheck(); }catch(_e){} } }catch(e){}
+});
 /* NAME BRIDGE for the extracted board code. The block below is lifted verbatim from
    tracker_template.html and calls the board's helper names — `save()`, `_nowTS()`, `_today()`. This
    page had its own `nowTS`/`today`, so without these aliases `_mergeLead` throws ReferenceError the
@@ -3921,6 +3975,12 @@ async function boot(){
   loadNotes();
   setInterval(_expireTick, 60*1000);       // release expiry while the page stays open
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _expireTick(); });
+  /* A phone freezes a background tab, and the storage events it missed are not replayed. Coming
+     back is the moment to read what other tabs wrote before anything here can save over it. */
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState !== 'visible') return;
+    try{ _absorbStored(localStorage.getItem(LS)); }catch(e){}
+  });
   /* Say whose page this is BEFORE the code prompt. Two seat pages look identical otherwise, and the
      one thing a caller must never be unsure about is which list is in front of him. */
   if(SEAT && SEAT.w){ try{ document.title='Call Mode · '+SEAT.w;
@@ -5639,7 +5699,10 @@ function sessStrip(){
     if(hit) cases[c] = 1;
   });
   var ppl = Object.keys(cases).length;
-  return '<div class="sess">TODAY: <b>'+dials+'</b> dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
+  return (_SAVEFAIL ? '<div class="sess" style="background:#5a1010;color:#fff"><b>NOT SAVED since '
+      + new Date(_SAVEFAIL).toLocaleTimeString() + '.</b> This phone refused to store your notes. Do not '
+      + 'reload this page: what you log now lives only in it.</div>' : '')
+    + '<div class="sess">TODAY: <b>'+dials+'</b> dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
     + (ppl===1?'person':'people') + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
     + ' &middot; this session: <b>'+_WORKED.length+'</b> worked</div>';
 }
