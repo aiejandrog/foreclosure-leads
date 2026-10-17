@@ -1003,6 +1003,18 @@ def _bake_alex_email(tpl, where='board'):
     except Exception as _e:
         print('!! %s: outreach_copy bake FAILED (%s) -- genEmail falls back to the 2026-08-29 '
               'cold body. Fix outreach_copy.py and rebuild.' % (where, _e))
+    # The email opt-out sentence, one source (outreach_copy._unsub): the board's early, tax-deed,
+    # Spanish, follow, final and portfolio bodies append it, so a UNSUB_URL switch or a reworded
+    # approved line moves them together with the cold template and outreach_email.py.
+    try:
+        import outreach_copy as _OC2
+        for _k, _lang in (('__OPTOUT_EN__', 'en'), ('__OPTOUT_ES__', 'es')):
+            tpl = tpl.replace('"%s"' % _k, json.dumps(_OC2._unsub(lang=_lang)).replace('<', '\\u003c')
+                                                                              .replace('>', '\\u003e')
+                                                                              .replace('&', '\\u0026'))
+    except Exception as _e:
+        print('!! %s: opt-out line bake FAILED (%s) -- board bodies fall back to the approved '
+              'wording baked into the template.' % (where, _e))
     return tpl.replace('"__ALEXMAIL_EN__"', js)
 
 def _encrypt_payload(plaintext, password):
