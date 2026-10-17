@@ -761,3 +761,5 @@ rf_status.json
 rf_status.json.tmp
 # loan_balance.py: amortized estimates of open recorded mortgages (2026-10-17)
 !_loanbalancetest.py
+# _browardorfeedtest: Broward Official Records daily-file lead list. Fake names and case numbers only.
+!_browardorfeedtest.py
