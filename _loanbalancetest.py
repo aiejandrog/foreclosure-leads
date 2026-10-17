@@ -77,6 +77,10 @@ hoa = {'st': 'LP', 'mr': True, 'eqstate': 'priced', 'value': 300000, 'eq': None,
        'orliens': [{'d': '2021-12-21', 'amt': 190000, 'party': 'X', 'st': 'OPEN'}]}
 LB.stamp_lead(hoa, as_of='2026-10-17', tab=TAB)
 chk('debtEst' not in hoa and hoa['eq'] is None, 'association LP row: surviving mortgages are not its debt')
+hj = {'st': 'LP', 'lpkind': 'HOA/JUNIOR', 'eqstate': 'priced', 'value': 300000, 'eq': None,
+      'orliens': [{'d': '2021-12-21', 'amt': 190000, 'party': 'X', 'st': 'OPEN'}]}
+LB.stamp_lead(hj, as_of='2026-10-17', tab=TAB)
+chk('debtEst' not in hj, 'HOA/JUNIOR lis pendens kind gets no estimated debt')
 
 # 6. a foreclosure with a judgment gets per-loan estimates but no debtEst / eq change
 fc = {'st': 'FC', 'eqstate': 'priced', 'judg': 180000, 'value': 300000, 'eq': 40.0,

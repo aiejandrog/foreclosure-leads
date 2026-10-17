@@ -227,7 +227,8 @@ def stamp_lead(d, as_of=None, tab=None):
         # not on an association (mr) row: there the mortgages survive the sale and are not the
         # debt being foreclosed, so they are no stand-in for the missing judgment
         if (str(d.get('st') or '') == 'LP' and str(d.get('eqstate') or '') == 'priced'
-                and not d.get('mr') and not (d.get('judg') or d.get('payoff'))):
+                and not d.get('mr') and 'HOA' not in str(d.get('lpkind') or '').upper()
+                and not (d.get('judg') or d.get('payoff'))):
             d['debtEst'] = tot
             # lp_leads leaves `eq` None because no debt was known. Now an estimate is: Call Mode's
             # sort and -25 floor read `eq`, and eqfake (still True on every LP row) keeps it marked

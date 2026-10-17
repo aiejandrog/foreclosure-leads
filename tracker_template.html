@@ -2821,10 +2821,11 @@ function _payoffOf(r){ return (+((r||{}).payoff) > 0) ? +r.payoff : (+((r||{}).j
    real note rate and term are not public. Only lis pendens rows carry it.
    It is NOT a payoff or a judgment: _payoffOf stays the court figure, and only the equity readers
    (_debtUnknown, _netEqOf, _ownerOwedOf, recompute) add this through _debtOf. Not used on an
-   association (mr) row, where the mortgages survive and are not what is being foreclosed, nor once
-   the operator has typed a senior or junior figure (that typed stack is the debt then). */
+   association (mr / HOA lpkind) row, where the mortgages survive and are not what is being
+   foreclosed, nor once the operator has typed a senior or junior figure: the row then reads "debt
+   unknown" again until a payoff is entered, which is the safe side. */
 function _lpDebtEst(r){
-  if(!r || r.st !== 'LP' || r.mr || !(+r.debtEst > 0) || +r.payoff > 0 || +r.judg > 0) return 0;
+  if(!r || r.st !== 'LP' || r.mr || /HOA/i.test(String(r.lpkind||'')) || !(+r.debtEst > 0) || +r.payoff > 0 || +r.judg > 0) return 0;
   var nn = (typeof notes !== 'undefined' && notes && notes[r.case]) || {};
   if(_dTyped(nn.slien) || _dTyped(nn.jlien)) return 0;
   return +r.debtEst;
