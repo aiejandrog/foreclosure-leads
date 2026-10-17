@@ -87,7 +87,9 @@ chk('sender.json.template email is the business inbox', tpl.get('email') == BUSI
 board = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
 chk('board default signature email is the business inbox',
     "email:'%s'" % BUSINESS in board)
-chk('board still drops a saved copy of the retired Gmail', RETIRED in board and 'delete saved.email' in board)
+# The heal regex escapes the dot, so the raw address is not a contiguous string in the file.
+chk('board still drops a saved copy of the retired Gmail',
+    'agonzalez0311707@gmail\\.com' in board and 'delete saved.email' in board)
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
