@@ -1,52 +1,46 @@
 {
  "alerts": [
   {
-   "at": "2026-10-16T21:14:46-04:00",
+   "at": "2026-10-17T08:20:59-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.1% (2 of 18 sent on 2026-10-12): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 11.1% (2 of 18 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-10-16T21:14:46-04:00",
+   "at": "2026-10-17T08:20:59-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-16 21:14): 1 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-16T21:14:46-04:00",
-   "key": "morning-sends",
-   "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 20, 20) and 52 leads were eligible, but 0 first-touch emails were sent."
-  },
-  {
-   "at": "2026-10-16T21:14:46-04:00",
+   "at": "2026-10-17T08:20:59-04:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid reads $69.96 of $50.00 (140%) this month. The monthly cap is spent."
   },
   {
-   "at": "2026-10-16T21:14:46-04:00",
+   "at": "2026-10-17T08:20:59-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
-   "text": "Tracerfy balance 341 credits, warn under 1500."
+   "text": "Tracerfy balance 216 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-16T21:14:46-04:00",
+ "published_at": "2026-10-17T08:20:59-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
-   "filings": 1691,
-   "holds": 462,
-   "leads_checked": 18,
+   "errors": 0,
+   "filings": 1757,
+   "holds": 466,
+   "leads_checked": 1,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.48,
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 100,
+   "reason": "budget",
+   "requests_used": 119,
    "truncated": 1
   },
   "bounce": {
@@ -101,9 +95,9 @@
     20,
     20
    ],
-   "date": "2026-10-16",
-   "eligible": 52,
-   "judged": true,
+   "date": "2026-10-17",
+   "eligible": 53,
+   "judged": false,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -113,12 +107,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-16",
+   "date": "2026-10-17",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1792149302,
+   "started_at": 1792235702,
    "state": "finished"
   },
   "paid_reads": {
@@ -160,7 +154,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 341
+   "credits": 216
   }
  },
  "version": 1
