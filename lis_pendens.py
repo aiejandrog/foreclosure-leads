@@ -15,6 +15,10 @@ RPMF-filtered (keep lender/bank plaintiffs; drop HOA, association, partition, di
 Run:
   python lis_pendens.py --probe            # discovery: confirm the API + dump raw record shape
   python lis_pendens.py --days 30          # sweep the last 30 days, enrich, write lis_pendens.json
+
+The Broward Official Records daily feed (broward_or_feed.py) is a separate lead
+list. It runs from this collector only when DEALFLOW_BROWARD_OR_FEED=1, and it
+is not merged into lis_pendens.json.
 """
 import argparse
 import datetime
@@ -341,6 +345,24 @@ def _repair_pb_cases(rows):
     return n
 
 
+def _maybe_broward_or_feed(env=None):
+    """Build the free Official Records lead list when DEALFLOW_BROWARD_OR_FEED is on.
+
+    Returns None on purpose. The list is written under DEALFLOW_DIR and must not
+    be appended to the sweep output: Broward outreach stays on today's rules,
+    and this file is unchanged when the flag is off (the default).
+    """
+    env = os.environ if env is None else env
+    # Checked before the import. The default (off) path must not load the feed
+    # module, so a problem in that file cannot stop the AcclaimWeb sweep.
+    flag = str(env.get('DEALFLOW_BROWARD_OR_FEED') or '').strip().lower()
+    if flag not in ('1', 'true', 'yes', 'on'):
+        return None
+    import broward_or_feed as feed
+    feed.run_safe(env)
+    return None
+
+
 def _merge_key(x):
     """(county, instrument-or-case) — the cross-county dedupe key. MD rows predate the county
     field, so absence means MIAMI-DADE; MD rows also predate `instrument`, so case/bookpage
@@ -385,6 +407,9 @@ def main():
         else:
             status['BROWARD'] = 'ok'
             out += bw
+        # Separate list. Off unless DEALFLOW_BROWARD_OR_FEED=1. Return value is
+        # None, so these rows cannot join `out` or the published board.
+        _maybe_broward_or_feed()
     if a.county in ('palm-beach', 'all'):
         from fl_lp import palmbeach as _pb
         pb = _pb.sweep(days=a.days)
