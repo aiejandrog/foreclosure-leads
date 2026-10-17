@@ -1,10 +1,10 @@
 {
-  "_comment": "Copy this to sender.json (gitignored) and fill it with JOSE'S tax-deed entity — this is who the letters come from. 'addr' MUST be a full return address ('LINE1, CITY, FL 33172') or --send is refused.",
+  "_comment": "Copy this to sender.json (gitignored) and fill it with JOSE'S tax-deed entity — this is who the letters come from. 'email' is the contact address printed in the signature of outreach emails, cadence follow-ups, and letterheads. It is not the From address (that is senders.json). A blank or the retired personal Gmail is printed as alejandro@bsgflorida.com. 'addr' MUST be a full return address ('LINE1, CITY, FL 33172') or --send is refused.",
   "name": "Jose [Last Name]",
   "title": "",
   "llc": "[Jose's LLC]",
   "phone": "(786) 000-0000",
-  "email": "",
+  "email": "alejandro@bsgflorida.com",
   "addr": "8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122",
   "web": ""
 }

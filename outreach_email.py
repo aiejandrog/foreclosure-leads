@@ -677,9 +677,18 @@ def _group_by_recipient(leads):
 
 # ---------------------------------------------------------------- composer
 def _sig(snd):
+    """CAN-SPAM block. The contact email is outreach_copy.signature_email: the business
+    inbox, unless the operator saved a different one. The retired personal Gmail is not a
+    saved choice; it prints as the business inbox. From address is untouched."""
+    snd = snd or {}
+    try:
+        from outreach_copy import signature_email as _signature_email
+        email = _signature_email(snd.get('email'))
+    except Exception:
+        email = 'alejandro@bsgflorida.com'
     parts = [snd.get('name'), snd.get('title'), snd.get('llc'),
              ('Phone: ' + snd['phone']) if snd.get('phone') else '',
-             ('Email: ' + snd['email']) if snd.get('email') else '',
+             ('Email: ' + email) if email else '',
              snd.get('addr'), snd.get('web')]
     return '\n'.join(x.strip() for x in parts if x and str(x).strip())
 

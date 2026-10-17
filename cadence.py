@@ -169,7 +169,13 @@ def steps(lead, sender):
     auc = lead.get('auction') or 'the scheduled date'
     sn = sender.get('name') or ''
     sp = sender.get('phone') or ''
-    se = sender.get('email') or ''
+    # Contact line only. A blank or the retired personal Gmail prints the business inbox.
+    # The From address is the lane map, not this line.
+    try:
+        from outreach_copy import signature_email as _signature_email
+        se = _signature_email(sender.get('email'))
+    except Exception:
+        se = 'alejandro@bsgflorida.com'
     sllc = safe_llc(sender.get('llc'))[0]
     sig = f"\n\n{sn}" + (f"\n{sllc}" if sllc else '') + (f"\n{sp}" if sp else '') + (f"\n{se}" if se else '')
     # ADDED 2026-08-22. All four touches shipped with a STOP line and NOTHING else — no

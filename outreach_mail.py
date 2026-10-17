@@ -40,6 +40,7 @@ import sys
 import disclaimer as D
 import bsg_brand
 import entity
+import outreach_copy as _OC
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOB_KEY_FILE = os.path.join(HERE, 'lob.key')
@@ -253,7 +254,12 @@ def _lh_header(snd, height_px=68):
                 f'white-space:nowrap">{e(llc)}</span>')
     bits = []
     for k in ('addr', 'phone', 'email', 'web'):
-        v = (snd.get(k) or '').strip()
+        # email is the signature contact, same rule as the outreach emails. A blank or the
+        # retired personal Gmail prints the business inbox. Not the From address.
+        if k == 'email':
+            v = _OC.signature_email(snd.get('email'))
+        else:
+            v = (snd.get(k) or '').strip()
         if v:
             bits.append('<span style="white-space:nowrap">' + e(v) + '</span>')
     lines = ['&nbsp;&middot;&nbsp;'.join(bits)] if bits else []
@@ -281,8 +287,14 @@ def _lh_sign(snd, lang='en'):
     tell they were produced by different code."""
     e = html.escape
     llc = _safe_llc(snd)
-    who = [str(snd[k]).strip() for k in ('name', 'title', 'phone', 'email')
-           if (snd.get(k) or '').strip()]
+    who = []
+    for k in ('name', 'title', 'phone', 'email'):
+        if k == 'email':
+            v = _OC.signature_email(snd.get('email'))
+        else:
+            v = str(snd.get(k) or '').strip()
+        if v:
+            who.append(v)
     # SIG TAG REMOVED (2026-09-08, Alejandro): the footer no longer carries
     # "Not a law firm. Not a HUD-approved housing counselor. Not a foreclosure-rescue company."
     # D.sig_tag() still exists in disclaimer.py and is now called by nothing — left in place so it
