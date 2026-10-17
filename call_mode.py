@@ -3706,7 +3706,12 @@ var _NOTESBAD=false;   // true when this phone's saved notes could not be parsed
    written by another page on this origin (a second Call Mode tab, the other seat's page, the board).
    _SAVEFAIL: when the last save was refused (0 = the last save landed). */
 var _LSLAST = null, _SAVEFAIL = 0;
-function loadNotes(){try{var _raw=localStorage.getItem(LS); notes=JSON.parse(_raw||'{}'); _LSLAST=_raw; _NOTESBAD=false;}catch(e){notes={}; _NOTESBAD=true;}
+/* Once this page holds notes, a reload from storage MERGES rather than replaces: storage can be an
+   older page's snapshot (a tab still on a pre-fix build), and replacing would throw away calls this
+   page already absorbed. Empty memory (boot) or unreadable notes still read storage as is. */
+function loadNotes(){try{var _raw=localStorage.getItem(LS);
+  if(!_NOTESBAD && notes && Object.keys(notes).length && _raw){ JSON.parse(_raw); _absorbStored(_raw); _LSLAST=_raw; }
+  else { notes=JSON.parse(_raw||'{}'); _LSLAST=_raw; } _NOTESBAD=false;}catch(e){notes={}; _NOTESBAD=true;}
   /* A teammate's merge lands here, not through save() — see _FCGEN. Without this bump the lane
      counts would keep reporting the state from before the pull. */
   if(typeof _FCGEN === 'number') _FCGEN++;}
@@ -3726,9 +3731,30 @@ function _absorbStored(raw){
   Object.keys(other).forEach(function(c){
     if(!other[c] || typeof other[c] !== 'object') return;
     if(!notes[c]){ notes[c] = other[c]; n++; return; }
-    var res = _mergeLead(notes[c], other[c]), o = res && res[0];
+    var L = notes[c], R = other[c], res = _mergeLead(L, R), o = res && res[0];
     if(!o) return;
-    ['no','noAt','noWasLp','resurf'].forEach(function(f){ if(res[f] != null) o[f] = res[f]; });
+    /* No-policy fields by the wrapper's documented rule, computed here from both sides: the
+       wrapper compares against its [out, ch] return value, where these are always unset, so its
+       noAt/noWasLp/resurf come out as "remote wins". Hard wins forever, a soft fills an empty side,
+       the EARLIEST noAt, resurf = max. */
+    if(L.no === 'hard' || R.no === 'hard') o.no = 'hard';
+    else if(!o.no && (L.no === 'soft' || R.no === 'soft')) o.no = 'soft';
+    var _na = [L.noAt, R.noAt].filter(function(v){ return +v > 0; }).map(Number);
+    if(_na.length) o.noAt = Math.min.apply(null, _na);
+    if(o.noWasLp == null && R.noWasLp != null) o.noWasLp = R.noWasLp;
+    if((+R.resurf || 0) > (+o.resurf || 0)) o.resurf = R.resurf;
+    /* The board's note rule appends "— (merged)" whenever the local note does not contain the
+       remote one, so a note one side extended (a callback line) came back as old + extended, and
+       every save between two pages doubled it. Keep whichever note already holds the other, and
+       undo the board's own old+merged+new form (its listener writes that back to storage). */
+    var ln = String(L.note || ''), rn = String(R.note || ''), _sep = '\n— (merged) ';
+    if(ln && rn && ln !== rn){
+      if(ln.indexOf(rn) >= 0) o.note = ln;
+      else if(rn.indexOf(ln) >= 0){
+        var _head = rn.slice(0, rn.length - ln.length - _sep.length);
+        o.note = (rn.slice(-(_sep.length + ln.length)) === _sep + ln && ln.indexOf(_head) >= 0) ? ln : rn;
+      }
+    }
     notes[c] = o; n++;
   });
   _LSLAST = raw;

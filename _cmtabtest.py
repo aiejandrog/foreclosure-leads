@@ -107,6 +107,36 @@ out.full = A.run("(typeof _SAVEFAIL !== 'undefined' && _SAVEFAIL > 0) + '|' + to
 full = false; A.run('save();');
 out.recovered = A.run("typeof _SAVEFAIL === 'undefined' ? 'none' : _SAVEFAIL") + '|' + ('Q1' in JSON.parse(store.fcLeadNotes));
 
+// 6. Notes do not double between two live tabs, nor against the board's "— (merged)" write-back.
+store.fcLeadNotes = JSON.stringify({N:{note:'Owner wants a cash offer, call after 5'}});
+A = tab('A', true); B = tab('B', true);
+for (let k = 0; k < 8; k++) {
+  (k % 2 ? B : A).run("notes.N.note += '\\nline " + k + "'; save();");
+}
+const n1 = JSON.parse(store.fcLeadNotes).N.note;
+out.note_len = n1.length + '|' + (n1.match(/Owner wants/g) || []).length + '|' + (n1.match(/line 7/g) || []).length;
+const boardForm = 'Owner X' + '\n— (merged) ' + 'Owner X\ncallback Fri';
+store.fcLeadNotes = JSON.stringify({N:{note:boardForm}});
+A = tab('A', false); A.run("notes.N.note = 'Owner X\\ncallback Fri'; _LSLAST = null; save();");
+out.board_form = JSON.parse(store.fcLeadNotes).N.note === 'Owner X\ncallback Fri';
+
+// 7. Earliest noAt wins and a larger local resurf is kept.
+store.fcLeadNotes = JSON.stringify({P:{no:'soft', noAt:500, resurf:1}});
+A = tab('A', false);
+A.run("notes.P.noAt = 50; notes.P.resurf = 3; _LSLAST = null; save();");
+s = JSON.parse(store.fcLeadNotes);
+out.noat = s.P.noAt + '|' + s.P.resurf + '|' + s.P.no;
+
+// 8. A pre-fix tab overwrites storage with an old snapshot; a later loadNotes (after a team pull
+//    with nothing new) keeps what this tab had absorbed instead of replacing it.
+store.fcLeadNotes = '{}';
+A = tab('A', true);
+A.run(dial('K1', '2026-10-16 20:00'));
+ls.setItem('fcLeadNotes', JSON.stringify({OLDONLY:{touches:[]}}));   // old build writes its snapshot
+A.run('loadNotes(); save();');
+s = JSON.parse(store.fcLeadNotes);
+out.reload = ('K1' in s) + '|' + ('OLDONLY' in s);
+
 console.log(JSON.stringify(out));
 """
 
@@ -129,6 +159,10 @@ rec('an open tab picks up the other tab\'s call before it saves', out.get('live'
 rec('one tab saving twice adds nothing', out.get('single') == '1|true', out.get('single'))
 rec('a refused save stays flagged until one lands', out.get('full') == 'true|1', out.get('full'))
 rec('the flag clears and the held call is written on the next good save', out.get('recovered') == '0|true', out.get('recovered'))
+rec('a note extended in one tab does not double across saves', out.get('note_len', '').endswith('|1|1'), out.get('note_len'))
+rec("the board's old+merged+new note collapses back to the new note", out.get('board_form') is True, out.get('board_form'))
+rec('earliest noAt and the larger resurf are kept; soft no stays', out.get('noat') == '50|3|soft', out.get('noat'))
+rec('loadNotes after an old snapshot lands keeps the absorbed calls', out.get('reload') == 'true|true', out.get('reload'))
 rec('session strip shows the NOT SAVED line', 'NOT SAVED since' in SRC and '(_SAVEFAIL ?' in SRC)
 
 print('\n%d failed' % len(fails))
