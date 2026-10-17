@@ -62,12 +62,15 @@ const ls = { getItem: k => (k in store ? store[k] : null),
     listeners.forEach(l => { if(l.who !== cur) l.fn({key:k, newValue:String(v), oldValue:old}); }); },
   removeItem: k => { delete store[k]; } };
 let cur = null;
-function tab(name, deliver){
+function tab(name, deliver, board){
   const ctx = { console, JSON, Object, Date, Math, String, Array, Set, Number, localStorage: ls,
     crypto: {}, TextEncoder, TextDecoder, setTimeout(){}, clearTimeout(){}, setInterval(){}, fetch: async () => { throw 0; },
     document: { addEventListener(){}, getElementById(){ return null; } } };
-  ctx.window = { addEventListener(t, fn){ if(t === 'storage' && deliver) listeners.push({who:name, fn}); } };
-  vm.createContext(ctx); cur = name; vm.runInContext(TABSRC, ctx); cur = null;
+  ctx.window = { addEventListener(t, fn){ if(t === 'storage' && deliver && !board) listeners.push({who:name, fn}); } };
+  vm.createContext(ctx); cur = name; vm.runInContext(TABSRC, ctx);
+  /* the board's own listener (tracker_template.html:16634): merge the incoming store, save if changed */
+  if(board) listeners.push({who:name, fn: ev => { cur = name; try { vm.runInContext('mergeNotes(JSON.parse(' + JSON.stringify(ev.newValue) + '))', ctx); } finally { cur = null; } }});
+  cur = null;
   return { ctx, run(js){ cur = name; try { return vm.runInContext(js, ctx); } finally { cur = null; } } };
 }
 const out = {};
@@ -120,6 +123,19 @@ store.fcLeadNotes = JSON.stringify({N:{note:boardForm}});
 A = tab('A', false); A.run("notes.N.note = 'Owner X\\ncallback Fri'; _LSLAST = null; save();");
 out.board_form = JSON.parse(store.fcLeadNotes).N.note === 'Owner X\ncallback Fri';
 
+// 6b. Call Mode + the board open together, each step one callback line on the same lead (was 3.5 MB).
+store.fcLeadNotes = JSON.stringify({N:{note:'Owner wants a cash offer, call after 5'}});
+A = tab('A', true); const Bd = tab('Board', true, true);
+for (let k = 0; k < 12; k++) A.run("notes.N.note += '\\ncallback set " + k + "'; save();");
+const nb = JSON.parse(store.fcLeadNotes).N.note;
+out.board_tab = nb.length + '|' + (nb.match(/Owner wants/g) || []).length + '|' + (nb.match(/callback set 11/g) || []).length;
+// 6c. Two frozen tabs append different lines to the same lead, alternating: grows by lines, not by doubling.
+store.fcLeadNotes = JSON.stringify({N:{note:'base'}});
+A = tab('A', false); B = tab('B', false);
+for (let k = 0; k < 12; k++) (k % 2 ? B : A).run("notes.N.note += '\\nl" + k + "'; save();");
+const nf = JSON.parse(store.fcLeadNotes).N.note;
+out.frozen_notes = nf.length + '|' + [0,1,2,3,4,5,6,7,8,9,10,11].every(k => nf.indexOf('l' + k) >= 0);
+
 // 7. Earliest noAt wins and a larger local resurf is kept.
 store.fcLeadNotes = JSON.stringify({P:{no:'soft', noAt:500, resurf:1}});
 A = tab('A', false);
@@ -160,6 +176,8 @@ rec('one tab saving twice adds nothing', out.get('single') == '1|true', out.get(
 rec('a refused save stays flagged until one lands', out.get('full') == 'true|1', out.get('full'))
 rec('the flag clears and the held call is written on the next good save', out.get('recovered') == '0|true', out.get('recovered'))
 rec('a note extended in one tab does not double across saves', out.get('note_len', '').endswith('|1|1'), out.get('note_len'))
+rec('with the board tab open the note stays linear (about 12 short lines)', int(out.get('board_tab','99999|').split('|')[0]) < 2000 and out.get('board_tab','').endswith('|1|1'), out.get('board_tab'))
+rec('two frozen tabs appending different lines lose no line and do not blow up', out.get('frozen_notes','').endswith('|true') and int(out.get('frozen_notes','99999|').split('|')[0]) < 600, out.get('frozen_notes'))
 rec("the board's old+merged+new note collapses back to the new note", out.get('board_form') is True, out.get('board_form'))
 rec('earliest noAt and the larger resurf are kept; soft no stays', out.get('noat') == '50|3|soft', out.get('noat'))
 rec('loadNotes after an old snapshot lands keeps the absorbed calls', out.get('reload') == 'true|true', out.get('reload'))

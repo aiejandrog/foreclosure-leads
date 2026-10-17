@@ -3743,18 +3743,6 @@ function _absorbStored(raw){
     if(_na.length) o.noAt = Math.min.apply(null, _na);
     if(o.noWasLp == null && R.noWasLp != null) o.noWasLp = R.noWasLp;
     if((+R.resurf || 0) > (+o.resurf || 0)) o.resurf = R.resurf;
-    /* The board's note rule appends "— (merged)" whenever the local note does not contain the
-       remote one, so a note one side extended (a callback line) came back as old + extended, and
-       every save between two pages doubled it. Keep whichever note already holds the other, and
-       undo the board's own old+merged+new form (its listener writes that back to storage). */
-    var ln = String(L.note || ''), rn = String(R.note || ''), _sep = '\n— (merged) ';
-    if(ln && rn && ln !== rn){
-      if(ln.indexOf(rn) >= 0) o.note = ln;
-      else if(rn.indexOf(ln) >= 0){
-        var _head = rn.slice(0, rn.length - ln.length - _sep.length);
-        o.note = (rn.slice(-(_sep.length + ln.length)) === _sep + ln && ln.indexOf(_head) >= 0) ? ln : rn;
-      }
-    }
     notes[c] = o; n++;
   });
   _LSLAST = raw;

@@ -17041,8 +17041,18 @@ function _mergeLead(local, remote){
   if(occWin !== locc){ out.occ = occWin; ch.deal = true; if(rtocc > ltocc) mdts.occ = rtocc; }
   if(Object.keys(mdts).length) out.dts = mdts;
   // free-text note: keep both, distinct
-  if(remote.note && remote.note !== (local.note||'') && (local.note||'').indexOf(remote.note) === -1){
-    out.note = local.note ? (local.note + '\n— (merged) ' + remote.note) : remote.note; ch.note = true;
+  /* Union by SEGMENT. The old rule appended "\n— (merged) " + remote whenever the local note did not
+     contain the remote one, so a note one side had merely EXTENDED (a callback line) came back as
+     old + sep + extended, and every round between two pages or devices re-wrapped it: 3.5 MB after 12
+     appends with the board and Call Mode open together (2026-10-17). Split both on the separator,
+     keep each distinct segment once, and drop a segment another segment already contains. Lossless:
+     every character of either note survives in some kept segment. */
+  if(remote.note && remote.note !== (local.note||'')){
+    const _sep = '\n— (merged) ', _ls = String(local.note||'').split(_sep), _rs = String(remote.note).split(_sep);
+    const _all = _ls.concat(_rs).filter(function(x, ix, a){ return x && a.indexOf(x) === ix; });
+    const _keep = _all.filter(function(x){ return !_all.some(function(y){ return y !== x && y.indexOf(x) !== -1; }); });
+    const _nn = _keep.join(_sep);
+    if(_nn !== (local.note||'')){ out.note = _nn; ch.note = true; }
   }
   return [out, ch];
 }
