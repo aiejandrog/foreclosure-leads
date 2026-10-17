@@ -698,17 +698,18 @@ def main():
         return c.get('via') == 'mailTrace' and not _via(r)
 
     def _blocked_recent(r):
-        # A trace inside the window is not called again, --refresh included. The operator
-        # bad-number queue is the one bypass: that case was flagged by hand.
+        # A trace inside the window is not called again, --refresh included. Two bypasses:
+        # the operator bad-number queue, and a mailTrace hit whose property address is now
+        # confirmed — that next search is a different address, not the same call again.
         case = _case(r)
-        if case in retrace_cases:
+        if case in retrace_cases or _mail_only_cached(r):
             return False
         return traced_within(results.get(case))
 
     _held_recent = sum(1 for r in picked if _blocked_recent(r))
-    todo = [r for r in picked if not _blocked_recent(r) and (
-            args.refresh or (_case(r) not in results)
-            or _stale_empty(_case(r)) or (_case(r) in retrace_cases) or _mail_only_cached(r))]
+    todo = [r for r in picked if args.refresh or (_case(r) not in results)
+            or _stale_empty(_case(r)) or (_case(r) in retrace_cases) or _mail_only_cached(r)]
+    todo = [r for r in todo if not _blocked_recent(r)]
     if _held_recent:
         print(f"  {_held_recent} lead(s) traced within {_dedupe_days()} days — not called again"
               + (" (retrace queue still bypasses that window)" if retrace_cases else ""))
