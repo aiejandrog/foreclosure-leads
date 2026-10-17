@@ -1199,14 +1199,38 @@ def _ft_restart_ceiling(health=None):
     return None
 
 
+def first_touch_paused(health=None):
+    """True when a first-touch email must not go out.
+
+    The decision is the message type, not the From domain or send-as alias. A warm-up
+    address and the corporate alias are the same kind of first touch.
+
+    Fail closed when the reading cannot be made: an exception from the bounce health,
+    None, or a dict that has no `ft_rule`. A missing bounce list is a real reading
+    (`ft_rule` `unmeasured`): this returns False and the slow-restart cap still applies.
+    An unreadable list and `ft_rule` `paused` both return True. Follow-ups are not this.
+    """
+    if health is None:
+        try:
+            health = _bounce_health()
+        except Exception:
+            return True
+    return _first_touch_bounce_paused(health)
+
+
 def _first_touch_bounce_paused(health):
     """True when a first touch must not go out. The trailing Wilson reading is not this.
 
-    Follow-ups still see `blocked`. A first touch is paused only by the post-cutoff rule
-    (or an unreadable bounce list, which refuses every send before this is consulted)."""
-    if not health or not health.get('ft_measured'):
-        return False
-    return bool(health.get('list_unreadable') or health.get('ft_rule') == 'paused')
+    Follow-ups still see `blocked`. A first touch is paused by the post-cutoff rule or
+    an unreadable bounce list. A health value that is not a reading (not a dict, or a
+    dict with no `ft_rule`) fails closed. A computed `unmeasured` reading — no bounce
+    list on disk — is not a pause: the slow-restart cap still applies.
+    """
+    if not isinstance(health, dict) or 'ft_rule' not in health:
+        return True
+    if health.get('list_unreadable') or health.get('ft_rule') == 'paused':
+        return True
+    return False
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
@@ -2382,14 +2406,28 @@ class Handler(BaseHTTPRequestHandler):
         # deliverability would be the wrong trade, and one message cannot move the rate.
         # An unreadable list is not that exemption: there is no list to check, so every send
         # holds, including meta.test.
-        _hb = _bounce_health()
+        # A throw while reading the pause is a hold too. Sending because the check crashed is
+        # how a first touch leaves during an outage of the one file that is supposed to stop it.
+        try:
+            _hb = _bounce_health()
+        except Exception as _bhe:
+            if meta.get('test'):
+                _hb = {'blocked': False, 'list_unreadable': False, 'ft_rule': 'unmeasured',
+                       'ft_measured': False}
+            else:
+                return self._json(403, {
+                    'ok': False, 'blocked': 'bounce_rate', 'skip': True,
+                    'err': ('BLOCKED: bounce pause could not be read (%s). Nothing was sent.'
+                            % str(_bhe)[:80])})
         if _hb.get('list_unreadable'):
             return self._json(200, {
                 'ok': False, 'blocked': 'bounce_rate',
                 'err': 'bounce list is UNREADABLE — refusing every send until '
                        'bounced_emails.json parses'})
         if not meta.get('test'):
-            # First touches follow the post-cutoff rule, not the pre-#83 Wilson reading.
+            # First touches follow the post-cutoff rule, not the pre-#83 Wilson reading,
+            # and not the From domain. A warm-up sender and a corporate send-as alias are
+            # the same message type: both hold here, before any From address is chosen.
             # Follow-ups stay on `blocked` below (proven lane / probe trickle), unchanged.
             # A ledger that exists but will not parse reads as zero sends. That would lift
             # every cap and the cohort, so a first touch holds before any of this.
@@ -2397,7 +2435,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(409, {
                     'ok': False, 'skip': True, 'first_touch_cap': True,
                     'err': 'first touch held: mail ledger unreadable'})
-            if _first_touch and _first_touch_bounce_paused(_hb):
+            if _first_touch and first_touch_paused(_hb):
                 return self._json(403, {
                     'ok': False, 'blocked': 'bounce_rate', 'skip': True,
                     'err': (
@@ -2608,6 +2646,21 @@ class Handler(BaseHTTPRequestHandler):
             _release_first_touch_slot(_ft_slot)      # nothing left: the slot is free again
             return self._json(401, {'ok': False, 'err': f'SMTP AUTH failed: {e}'})
         except Exception as e:
+            # A merge-field refusal is raised before SMTP. Nothing was accepted, so the claim
+            # and the first-touch slot are free, and this must not look like a maybe-sent:
+            # a 502 plus _mark_memory_only() froze the bridge on a message that never left.
+            try:
+                import mail_guard as _MGerr
+                _merge_refuse = isinstance(e, _MGerr.UnsendableError)
+            except Exception:
+                _merge_refuse = False
+            if _merge_refuse:
+                _release_recipients(_claimed)
+                _release_first_touch_slot(_ft_slot)
+                print('SEND SKIP [merge] %s — %s' % (to, str(e)[:200]), flush=True)
+                return self._json(451, {
+                    'ok': False, 'skip': True, 'blocked': 'merge_fields',
+                    'err': str(e)[:300]})
             # NOTE: the claim is deliberately NOT released on a generic send failure — the SMTP
             # exception can arrive after Gmail already accepted the message, and re-sending on a
             # maybe-delivered address is exactly the duplicate this guard exists to prevent. The

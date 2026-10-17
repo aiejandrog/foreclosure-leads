@@ -116,6 +116,40 @@ for name, subj, body in holes:
     rec(name, bool(G.check(subj, body, 'o@e.com')), (G.check(subj, body, 'o@e.com') or ['NOT CAUGHT'])[0])
 rec('a bad recipient is refused', bool(G.check('s', 'b', 'not-an-address')))
 
+# A blank street is composed as the fallback "your property" on purpose. The send is what
+# refuses it. A Title Case placeholder, a bare greeting on an outreach subject, and two
+# homeowners on one To line are the same class of hole.
+print('\nMERGE FIELDS')
+rec('blank street fallback in the subject',
+    bool(G.check('Regarding your property at your property',
+                 'Hi Jane, a note about 1 EXAMPLE AVE.', 'a@example.com')))
+rec('sale-date subject with the same fallback',
+    bool(G.check('Sale date 10/20/2026 - Regarding your property at your property',
+                 'Hi Jane, a note about 1 EXAMPLE AVE.', 'a@example.com')))
+rec('spanish fallback subject',
+    bool(G.check('Referente a su propiedad en su propiedad',
+                 'Hola Ana, una nota sobre 1 EXAMPLE AVE.', 'a@example.com')))
+rec('bare Hi, on an outreach subject',
+    bool(G.check('Regarding your property at 1 EXAMPLE AVE',
+                 'Hi,\n\nI wrote about 1 EXAMPLE AVE.', 'a@example.com')))
+rec('bare Hola, on an outreach subject',
+    bool(G.check('Fecha de subasta 10/20/2026 - Referente a su propiedad en 1 EXAMPLE AVE',
+                 'Hola,\n\nNota sobre 1 EXAMPLE AVE.', 'a@example.com')))
+rec('bare Hi, on a note that is not outreach still sends',
+    not G.check('quick note', 'Hi,\n\nAre you free Thursday?', 'a@example.com'))
+rec('about your property so I will be brief still sends',
+    not G.check('Regarding your property at 1 EXAMPLE AVE',
+                "Hi Jane, about your property so I'll be brief and direct.",
+                'a@example.com'))
+rec('Title Case placeholder',
+    bool(G.check('Subject here', 'My name is [Your Name].', 'a@example.com')))
+rec('two recipients on To',
+    bool(G.check('Subject here', 'Hi Jane, a note about 1 EXAMPLE AVE.',
+                 'a@example.com, b@example.com')))
+rec('a display-name comma is still one recipient',
+    not G.check('Subject here', 'Hi Jane, a note about 1 EXAMPLE AVE.',
+                'Doe, Jane <jane@example.com>'))
+
 # ---- 4. safe_addr never returns empty ----------------------------------------------------------
 print('\nsafe_addr / safe_street')
 for raw in ('', '   ', ',', ' , , ', ' - ', None, 0, [], '  ,  ,  '):

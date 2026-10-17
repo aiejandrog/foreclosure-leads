@@ -748,6 +748,19 @@ def _run(args):
                   + '; '.join(f'{_c}: {_w}' for _a, _c, _w in _vd[:1]) + ') — step stays due')
             continue
         _first = _pk not in _ev['last_mailed'] and next(_c for _a, _c, _w in _vd if _a == _pk) != 'replied'
+        # Shared with /send and outreach_email. Message type, not From domain. Fail closed
+        # when the pause cannot be read. This sits before the warm-up slot is reserved, so
+        # a paused first touch does not consume one. Follow-ups fall through.
+        if _first:
+            try:
+                _ft_paused = bool(_ss.first_touch_paused())
+            except Exception:
+                _ft_paused = True
+            if _ft_paused:
+                held += 1
+                print(f"  HELD step {step+1}/4 -> {s['email']}: first touch, bounce pause "
+                      f"(post-cutoff first-touch rule; follow-ups still send)")
+                continue
         _ft_slot = ''
         _ft_senders = _ss._first_touch_senders(_cfg) if _cfg else []
         if _first and _ft_senders:
@@ -788,9 +801,18 @@ def _run(args):
         if _LANES_OK:
             # Reuses the bridge's own sender: alias in From AND the envelope, Message-ID stamped
             # with the alias domain. from_addr=None reproduces the old login-From behaviour exactly.
-            with _MG.gated('cadence'):
-                mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
-                                     subj, body, from_addr=alias or None)
+            # UnsendableError is raised before SMTP. Continue without advancing the step, and
+            # release a reserved warm-up slot: nothing left. A generic SMTP error still aborts
+            # the way it always did — that one may already have been accepted.
+            try:
+                with _MG.gated('cadence'):
+                    mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
+                                         subj, body, from_addr=alias or None)
+            except _MG.UnsendableError as _ue:
+                _ss._release_first_touch_slot(_ft_slot)
+                print(f"  !! REFUSED {s['email']} — {_ue}. Step {step+1}/4 was NOT "
+                      f"consumed; it stays due. Fix the lead data or the template.")
+                continue
         else:
             # LEGACY FALLBACK -- reached only when `import send_server` failed at the top of this
             # file (carried over from #46, 2026-09-26). The lane path above goes through

@@ -1061,6 +1061,31 @@ def _write_preview(entries):
     open(PREVIEW_FILE, 'w', encoding='utf-8').write('\n'.join(parts))
 
 
+def hold_first_touches():
+    """A sentence when a first touch must not go out, else ''.
+
+    Every row this CLI queues is a cold first touch (a prior send is dropped in
+    `_eligible`). The pause is send_server.first_touch_paused: message type, not the
+    From domain. Fail closed when that reading cannot be made.
+    """
+    try:
+        import send_server as _SS
+        if _SS.first_touch_paused():
+            why = ''
+            try:
+                h = _SS._bounce_health() or {}
+                why = h.get('ft_why') or h.get('ft_rule') or ''
+            except Exception:
+                why = 'unreadable'
+            return ('first touches held: bounce pause (%s). '
+                    'This sender only queues first touches, so nothing goes out.'
+                    % (why or 'paused'))
+        return ''
+    except Exception as e:
+        return ('first touches held: bounce pause could not be read (%s). '
+                'Nothing goes out.' % str(e)[:80])
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
@@ -1173,8 +1198,19 @@ def main():
     print(f'\n  preview -> {PREVIEW_FILE}')
 
     # ---- send
+    # BEFORE any first touch, and before the lane alias is chosen for a send. The dry-run
+    # lane plan above only prints. A corporate send-as does not get past this: the pause
+    # is the message type. Fail closed lives in hold_first_touches().
+    _ft_hold = hold_first_touches()
+    if _ft_hold:
+        print('  !! %s' % _ft_hold)
     if not args.send:
+        if _ft_hold:
+            print('  --send would hold every first touch in this queue.')
         print('\nDRY RUN only. Re-run with --send to actually SMTP.')
+        return 0
+    if _ft_hold:
+        print('\n%d first touch(es) HELD before send. Nothing was sent.' % len(entries))
         return 0
 
     if not entries:
@@ -1202,10 +1238,15 @@ def main():
         _active = _SS._senders_active(user, _cfg)
     except Exception as _se:
         print(f'  (lane map unavailable: {str(_se)[:60]} — sending as the login)')
-    ok, fail = 0, 0
+    ok, fail, skipped = 0, 0, 0
     print(f'\nSending as {user}  (display: "{from_display or user}")'
           + ('  · lane map ON' if _active else '  · lane map OFF (login cannot send as the aliases)'))
     for i, e in enumerate(entries, 1):
+        _bad = _MG.merge_issues(e.get('subj') or '', e.get('body') or '', e.get('to') or '')
+        if _bad:
+            skipped += 1
+            print(f'  [{i:3}/{len(entries)}] SKIP merge -> {e["to"]}  {"; ".join(_bad)}')
+            continue
         lane = e.get('lane') or ''
         from_addr = None
         if _active:
@@ -1254,9 +1295,17 @@ def main():
                 'smtp_resp': str(resp),
                 'test_mode': bool(args.test_to),
                 'body_len': len(e['body']),
+                # What identifies a row from this CLI. Older rows have smtp_resp and a
+                # worker lane, and do not have login, wl, touch, or source.
+                'source': 'outreach_email',
+                'touch': 'first',
             })
             ok += 1
             print(f'  [{i:3}/{len(entries)}] SENT -> {e["to"]}  ({e["owner"][:30]})  id={mid.split("@")[0][:16]}')
+        except _MG.UnsendableError as ex:
+            skipped += 1
+            print(f'  [{i:3}/{len(entries)}] SKIP merge -> {e["to"]}  {ex}')
+            continue
         except Exception as ex:
             fail += 1
             _append_ledger({
@@ -1279,7 +1328,7 @@ def main():
         if i < len(entries):
             time.sleep(random.uniform(PACING_SEC_MIN, PACING_SEC_MAX))
 
-    print(f'\n== done: {ok} sent, {fail} failed ==')
+    print(f'\n== done: {ok} sent, {fail} failed, {skipped} skipped ==')
     return 0 if fail == 0 else 1
 
 
