@@ -26,6 +26,7 @@ _*.py
 !_textbatchtest.py
 !_textbatchtpltest.py
 !_bridgereloadtest.py
+!_bridgeauthtest.py
 !_calldetailtest.py
 !_callrankingtest.py
 !_voicemailtest.py
