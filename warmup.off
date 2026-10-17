@@ -1,0 +1,2 @@
+Warmup is paused (2026-10-16, Alex): mail to the owned inboxes was landing in spam and the warmup
+volume (30 identical messages a day, no replies) was feeding the problem. Delete this file to resume.
