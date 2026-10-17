@@ -8720,6 +8720,7 @@ function _profitPaths(r){
   var netEq = _ownerEqOf(r);
   var debt = val ? Math.max(0, val - netEq) : 0;
   var fresh = _filedYear(r) >= 2024;
+  var _est = _isLpEst(r) ? ' est.' : '';   // net equity built on estimated loan balances says so
   var fc = r.st !== 'TD';
   var intent = (notes[r.case]||{}).intent || '';
   // each path tagged with the owner-intent(s) it serves — used to float the matching plays up
@@ -8733,13 +8734,13 @@ function _profitPaths(r){
     add('Equity unknown — get the balance first', 'No judgment is posted, so what they owe is not known. Ask the owner for the loan balance or a payoff letter before picking a play. It could be anywhere from deep equity to underwater.', ['sell','walk','keep']);
   } else if(netEq >= 100000){
     var loan = Math.round(val * 0.65);
-    add('Hard-equity loan referral', '~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
+    add('Hard-equity loan referral', '~'+fmtK(netEq)+_est+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
     // quote the SAME quantity as the tier below (net equity), then the discount-buy spread on top —
     // quoting only `val*0.75 − debt` here meant a lead with MORE owner equity could display a
     // smaller number than the thin-equity tier directly under it ($100k equity → "spread $0").
-    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity. Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+_est+' net equity. Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
   } else if(netEq >= 25000){
-    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+_est+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
   } else {
     add('No-equity rescue — dignity play', 'Still money here: $1,800–$3,000 stop fee, or arrears-reinstatement (bank rolls the past-due back in → rent it at market). And the human lever: we buy them 60–90 days to move out with dignity + $500–800 movers, instead of the sheriff putting grandma’s things on the street. Practice reps live on exactly these.', ['sell','walk','keep']);
   }
@@ -10251,6 +10252,7 @@ function genAttyPacket(r){
       eqSpec = 'unknown <span class="mini">(no final judgment posted — the debt is not known — ATTORNEY TO VERIFY)</span>';
     } else if(isFinite(eqd) && eqd > 0){
       eqSpec = fmtMoney(eqd) + (isFinite(eqp) ? ' <span class="mini">(~'+Math.round(eqp)+'% of value)</span>' : '')
+             + (_isLpEst(r) ? ' <span class="mini">(ESTIMATED from recorded loans amortized to today, NOT a payoff, no judgment yet — ATTORNEY TO VERIFY)</span>' : '')
              + ' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
     } else if(isFinite(eqd)){
       eqSpec = '$0 <span class="mini">(debt stack meets or exceeds value — ATTORNEY TO VERIFY)</span>';
@@ -19106,10 +19108,11 @@ function lkReport(a){
   const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
       +'<div class="lkcgrid">'
         +'<label>List / market price $<input id="lklp" type="number" value="'+(_lkSeed||'')+'" oninput="lkCalc()"></label>'
-        +'<label>Total payoff (all mortgages+liens+HOA) $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
+        +'<label>Total payoff (all mortgages+liens+HOA)'+((lead&&_isLpEst(lead))?' <i>(est. loan balances, not a payoff)</i>':'')+' $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
         +'<label>Sale commission %<input id="lkcm" type="number" value="6" step="0.5" oninput="lkCalc()"></label>'
         +'<label>Closing costs %<input id="lkcc" type="number" value="2" step="0.5" oninput="lkCalc()"></label>'
       +'</div>'
+      +((lead&&_isLpEst(lead))?'<div class="lknote" style="color:var(--amber-ink)"><b>Estimated payoff.</b> No judgment is posted, so this is the recorded loans amortized to today. Hometap-type equity shares, credit lines and arrears are NOT reflected. Get a payoff letter before quoting the owner.</div>':'')
       +'<div class="lkph">A · If the owner just sells retail</div>'
       +'<div class="lkout">Owner walks with &asymp; <b id="lknet">&mdash;</b></div>'
       +'<div class="lknote" id="lknote1">The number that shows a seller they\'re stuck &mdash; the reason to deal.</div>'
