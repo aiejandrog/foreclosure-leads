@@ -9,8 +9,13 @@ code can consume later.
     {"case", "total_cents", "judgment_date", "verified_by": "judgment_money",
      "pages_read", "human_reviewed": false}
 
-A total is returned only when judgment_money.verify_text_total reproduces it to the cent
-from one contiguous run, and a single entry/order date is on the page.
+A total is returned only when three things are true together: the document's own
+heading is a final judgment of foreclosure, the case number printed on the page is
+the case this read is for, and judgment_money.verify_text_total reproduces the
+total to the cent from one contiguous run, with a single entry/order date on the
+page. A balanced table is not enough. A mortgage, lis pendens, order, or any other
+case returns reason 'unverified' and no amount. A satisfaction keeps its own
+verdict (void or not) and never yields an amount.
 
 A satisfaction voids that total only when the document is a satisfaction of this case's
 foreclosure judgment and the satisfaction is in full. A partial satisfaction does not void.
@@ -47,6 +52,33 @@ _DATE_RE = re.compile(
     r'(January|February|March|April|May|June|July|August|September|October|November|December)'
     r'\s+(\d{1,2}),\s+(\d{4})', re.I)
 
+# The document's own heading, one line. A balanced table does not decide this, and a
+# sentence that merely quotes one of these words does not either.
+_HEADING_RES = (
+    ('satisfaction', re.compile(
+        r'^[\W_]*(?:PARTIAL\s+)?(?:SATISFACTION\s+OF\b|RELEASE\s+OF\s+(?:THE\s+)?MORTGAGE\b)',
+        re.I)),
+    ('mortgage', re.compile(
+        r'^[\W_]*(?:THIS\s+)?(?:OPEN[- ]END\s+)?MORTGAGE(?:\s+DEED)?\b', re.I)),
+    ('lis_pendens', re.compile(r'^[\W_]*(?:NOTICE\s+OF\s+)?LIS\s+PENDENS\b', re.I)),
+    ('order', re.compile(
+        r'^[\W_]*ORDER\s+(?:GRANTING|DENYING|ON|SETTING|CANCELLING|CANCELING|VACATING|APPROVING)\b',
+        re.I)),
+    ('foreclosure_judgment', re.compile(
+        r'^[\W_]*(?:(?:AMENDED|CORRECTED|DEFAULT|CONSENT|AGREED|STIPULATED|SUMMARY|'
+        r'IN\s+REM|UNCONTESTED)\s+)*'
+        r'(?:FINAL\s+JUDGMENT\s+OF\s+(?:MORTGAGE\s+)?FORECLOSURE|'
+        r'JUDGMENT\s+OF\s+(?:MORTGAGE\s+)?FORECLOSURE|'
+        r'FORECLOSURE\s+JUDGMENT)\b', re.I)),
+)
+# Broward CACE-99-000123 and Palm Beach 502099CA000123XXXXMB, hyphens optional.
+# Miami-Dade numbers are not read here; that county has its own judgment path.
+_BROWARD_CASE_RE = re.compile(
+    r'\b(CACE|CONO|COCE|COWE|COSO)[\s\-–]*(\d{2})[\s\-–]*(\d{6})\b', re.I)
+_PB_CASE_RE = re.compile(
+    r'\b(50[-–]?\d{4}[-–]?(?:CA|CC)[-–]?[A-Z0-9](?:[-–]?[A-Z0-9]){5,22})\b', re.I)
+_PB_CANON_RE = re.compile(r'^50\d{4}(?:CA|CC)[A-Z0-9]{6,16}$')
+
 
 def _result(ok=False, void=False, reason='', record=None, instrument='', checked=False):
     return {
@@ -72,8 +104,68 @@ def _title(text, n=4):
     return '\n'.join(lines[:n])
 
 
+def _lines(text):
+    return [ln.strip() for ln in str(text or '').splitlines() if ln.strip()]
+
+
+def document_signal(text):
+    """The document's own first instrument heading, or ''.
+
+    'foreclosure_judgment' is the only signal that may carry an amount. A mortgage,
+    lis pendens, order, or satisfaction that merely contains a balanced table is not
+    that signal, and neither is a sentence that quotes the judgment.
+    """
+    for ln in _lines(text):
+        for kind, pattern in _HEADING_RES:
+            if pattern.match(ln):
+                return kind
+    return ''
+
+
 def _is_satisfaction_doc(text):
+    if document_signal(text) == 'satisfaction':
+        return True
+    # A satisfaction caption inside the first lines, even when the line does not
+    # open with the word. Existing callers depend on this.
     return bool(re.search(r'\bSATISFACTION\s+OF\b', _title(text), re.I))
+
+
+def canon_case(case):
+    """One comparable spelling, or '' when this is not a Broward or Palm Beach case number."""
+    raw = str(case or '')
+    match = _BROWARD_CASE_RE.search(raw)
+    if match:
+        return '%s-%s-%s' % (match.group(1).upper(), match.group(2), match.group(3))
+    match = _PB_CASE_RE.search(raw)
+    if match:
+        compact = re.sub(r'[^A-Z0-9]', '', match.group(1).upper())
+        if _PB_CANON_RE.match(compact):
+            return compact
+    return ''
+
+
+def cases_in_text(text):
+    """Case numbers printed in the text, Broward then Palm Beach, first occurrence order."""
+    found = []
+    for pattern in (_BROWARD_CASE_RE, _PB_CASE_RE):
+        for match in pattern.finditer(text or ''):
+            number = canon_case(match.group(0))
+            if number and number not in found:
+                found.append(number)
+    return found
+
+
+def case_matches(text, case):
+    """True only when `case` itself is printed on the document."""
+    want = _norm_case(canon_case(case) or case)
+    if len(want) < 8:
+        return False
+    return want in {_norm_case(number) for number in cases_in_text(text)}
+
+
+def proves_this_foreclosure_judgment(text, case):
+    """True when the heading is a foreclosure judgment and the case number matches."""
+    return document_signal(text) == 'foreclosure_judgment' and case_matches(text, case)
 
 
 def _case_in_text(text, case):
@@ -178,6 +270,10 @@ def read_judgment(pages, case):
     if _hoa_case(case) or (_HOA_BODY_RE.search(text) and not _FORECLOSURE_RE.search(text)):
         checked = _verified_total(pages) is not None
         return _result(reason='hoa_or_cono_judgment', instrument='hoa_judgment', checked=checked)
+    # A balanced table is not a judgment total. The heading has to be this case's
+    # final judgment of foreclosure before any amount is accepted.
+    if not proves_this_foreclosure_judgment(text, case):
+        return _result(reason='unverified')
     total = _verified_total(pages)
     if total is None:
         return _result(reason='total_not_reproduced', instrument='foreclosure_judgment')
