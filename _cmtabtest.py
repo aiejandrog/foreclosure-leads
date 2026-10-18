@@ -8,7 +8,7 @@ Mode tab (or the other seat's page) opened earlier kept an old snapshot, and its
 snapshot over everything logged since in the tab in use. A reload then showed it.
 
 Two pages are run under node against one shared localStorage, with the real _mergeLead extracted
-from the board and the page's own no-policy wrapper. No browser, no board data.
+from the board (which now carries the no-policy fields itself). No browser, no board data.
 """
 import io
 import json
@@ -40,7 +40,6 @@ def grab(start, end):
 
 
 PAGE = grab("var _NOTESBAD=false;", "/* NAME BRIDGE")
-WRAP = grab("(function(){\n  var _base = _mergeLead;", "/* ═")
 SYNC = call_mode.extract_sync_js(TPL)
 
 TAB = r"""
@@ -50,7 +49,7 @@ function save(){ _FCGEN++; saveNotes(); } function render(){} function recompute
 function syncFreshness(){} function syncStatus(){} function esc(s){ return String(s); }
 function toast(t){ toasts.push(t); } function logErr(e, w){ errs.push(w); }
 function teamRecheck(){ rechecks++; }
-""" + SYNC + '\n' + PAGE + '\n' + WRAP + r"""
+""" + SYNC + '\n' + PAGE + r"""
 loadNotes();
 """
 

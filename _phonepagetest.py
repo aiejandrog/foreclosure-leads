@@ -140,7 +140,7 @@ def main():
           const inQ = workerQ().indexOf(q) >= 0;
           retireFromWorkerQ(q);
           const goneQ = workerQ().indexOf(q) < 0;
-          notes[q] = _mergeLead(notes[q], {wq:'2026-08-01'});   // stale remote blob
+          notes[q] = _mergeLead(notes[q], {wq:'2026-08-01'})[0];   // stale remote blob
           const stillGone = workerQ().indexOf(q) < 0;
           delete notes[c]; delete notes[q];
           return {before3, tripped, marked, inQ, goneQ, stillGone};

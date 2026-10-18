@@ -3722,8 +3722,7 @@ function loadNotes(){try{var _raw=localStorage.getItem(LS);
    any logged outcome, or a team-sync pull that merged one teammate change — wrote that old snapshot
    over every call logged since in the tab actually in use. Nothing showed until a reload read the
    store back. Fix: before writing, fold in whatever another page put in storage, through the same
-   _mergeLead the team sync uses (unions; DO NOT CONTACT one-way). The no-policy fields are copied
-   off the wrapper's return value, where the wrapper puts them, so this path never drops a no. */
+   _mergeLead the team sync uses (unions; DO NOT CONTACT one-way; the no marks by its own rule). */
 function _absorbStored(raw){
   if(!raw || raw === _LSLAST) return 0;
   var other; try{ other = JSON.parse(raw) || {}; }catch(e){ return 0; }
@@ -3731,18 +3730,9 @@ function _absorbStored(raw){
   Object.keys(other).forEach(function(c){
     if(!other[c] || typeof other[c] !== 'object') return;
     if(!notes[c]){ notes[c] = other[c]; n++; return; }
-    var L = notes[c], R = other[c], res = _mergeLead(L, R), o = res && res[0];
+    /* _mergeLead carries the no-policy fields itself (2026-10-18), by the same rule a team pull uses. */
+    var res = _mergeLead(notes[c], other[c]), o = res && res[0];
     if(!o) return;
-    /* No-policy fields by the wrapper's documented rule, computed here from both sides: the
-       wrapper compares against its [out, ch] return value, where these are always unset, so its
-       noAt/noWasLp/resurf come out as "remote wins". Hard wins forever, a soft fills an empty side,
-       the EARLIEST noAt, resurf = max. */
-    if(L.no === 'hard' || R.no === 'hard') o.no = 'hard';
-    else if(!o.no && (L.no === 'soft' || R.no === 'soft')) o.no = 'soft';
-    var _na = [L.noAt, R.noAt].filter(function(v){ return +v > 0; }).map(Number);
-    if(_na.length) o.noAt = Math.min.apply(null, _na);
-    if(o.noWasLp == null && R.noWasLp != null) o.noWasLp = R.noWasLp;
-    if((+R.resurf || 0) > (+o.resurf || 0)) o.resurf = R.resurf;
     notes[c] = o; n++;
   });
   _LSLAST = raw;
@@ -3789,25 +3779,10 @@ function syncFreshness(){}
    silent failure this page exists to delete. The build fails loud if the anchors move.
    Storage key is the board's own `fcLeadNotes` on the same origin, so there is one store, not two. */
 __SYNCJS__
-/* NO-POLICY FIELDS ACROSS DEVICES (2026-09-25). The board's _mergeLead above copies only the
-   fields it names, so n.no / noAt / noWasLp / resurf written by logOutcome() were dropped on every
-   pull: a soft no logged on this phone reached the cousin's phone as a bare touch and his queue
-   re-served the person on the next calendar tick. Wrapping the extracted function (assignment, not
-   a second declaration -- _assert_no_dead_overrides would flag a redeclaration) keeps the board's
-   merge byte-identical and layers the four fields on top, in the suppressing direction only:
-   hard wins forever, a soft fills an empty side, the EARLIEST noAt wins, resurf = max. */
-(function(){
-  var _base = _mergeLead;
-  _mergeLead = function(local, remote){
-    var out = _base(local, remote); local = local || {}; remote = remote || {};
-    if(remote.no === 'hard' || local.no === 'hard'){ out.no = 'hard'; }
-    else if(remote.no === 'soft' && !local.no){ out.no = 'soft'; }
-    if(remote.noAt && (!out.noAt || +remote.noAt < +out.noAt)) out.noAt = remote.noAt;
-    if(remote.noWasLp != null && out.noWasLp == null) out.noWasLp = remote.noWasLp;
-    if((remote.resurf||0) > (out.resurf||0)) out.resurf = remote.resurf;
-    return out;
-  };
-})();
+/* NO-POLICY FIELDS ACROSS DEVICES. n.no / noAt / noWasLp / resurf are merged by the board's own
+   _mergeLead above (2026-10-18). The 09-25 wrapper that used to sit here wrote them onto the
+   [out, ch] array _mergeLead returns, never onto the note, so a teammate's soft no never reached this
+   phone. One rule, in the extracted bytes, for the board and both seats. */
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
 /* ══════ THE BOARD'S NINE FUNNEL LANES — also extracted VERBATIM, same rule ══════
    WARM / URGENT / CALL / WRITE / LETTER / DOOR / TRACE / WAITING / OUT. These are the counts
