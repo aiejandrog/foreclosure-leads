@@ -69,6 +69,12 @@ def _run(**kwargs):
     return stats, buf.getvalue()
 
 
+def _read(path, mode):
+    kwargs = {} if 'b' in mode else {'encoding': 'utf-8'}
+    with open(path, mode, **kwargs) as fh:
+        return fh.read()
+
+
 class SelectTests(unittest.TestCase):
     def test_daily_index_names_and_nothing_else(self):
         yes = (
@@ -230,9 +236,9 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(stats['failed'], 0)
         self.assertIn('downloaded 2, already 1, failed 0', text)
         self.assertNotIn('secret-token', text)
-        self.assertEqual(open(os.path.join(self.dest, '10-02-2026doc-ver.txt'), 'rb').read(), b'xxxx')
-        self.assertEqual(open(already, 'rb').read(), b'kept')
-        self.assertEqual(open(os.path.join(self.dest, '10-02-2026lnk-ver.txt'), 'rb').read(), b'abc')
+        self.assertEqual(_read(os.path.join(self.dest, '10-02-2026doc-ver.txt'), 'rb'), b'xxxx')
+        self.assertEqual(_read(already, 'rb'), b'kept')
+        self.assertEqual(_read(os.path.join(self.dest, '10-02-2026lnk-ver.txt'), 'rb'), b'abc')
         self.assertFalse(os.path.exists(os.path.join(self.dest, '10-02-2026img.zip')))
         got_names = [os.path.basename(remote) for remote, _local in holder['sftp'].got]
         self.assertEqual(got_names, ['10-02-2026doc-ver.txt', '10-02-2026lnk-ver.txt'])
@@ -262,7 +268,7 @@ class FetchTests(unittest.TestCase):
                             directory=self.dest, opener=holder['opener'])
         self.assertEqual(stats['downloaded'], 1)
         self.assertEqual(stats['failed'], 1)
-        self.assertEqual(open(changed, 'rb').read(), b'xxxx')
+        self.assertEqual(_read(changed, 'rb'), b'xxxx')
         self.assertFalse(os.path.exists(os.path.join(self.dest, '10-03-2026nme-ver.txt')))
         self.assertFalse(os.path.exists(os.path.join(self.dest, '10-03-2026nme-ver.txt.partial')))
 
@@ -421,7 +427,7 @@ class ConnectTests(unittest.TestCase):
 
 class WireTests(unittest.TestCase):
     def test_password_is_not_in_the_source(self):
-        src = open(os.path.join(HERE, 'broward_or_fetch.py'), encoding='utf-8').read()
+        src = _read(os.path.join(HERE, 'broward_or_fetch.py'), 'r')
         self.assertIn("USER = 'crpublic'", src)
         self.assertIn('BROWARD_SFTP_PASSWORD', src)
         for line in src.splitlines():
@@ -431,11 +437,11 @@ class WireTests(unittest.TestCase):
             self.assertNotIn(word, src)
 
     def test_requirements_install_paramiko(self):
-        req = open(os.path.join(HERE, 'requirements.txt'), encoding='utf-8').read()
+        req = _read(os.path.join(HERE, 'requirements.txt'), 'r')
         self.assertIn('paramiko', req)
 
     def test_refresh_runs_fetch_then_feed_after_the_scrape(self):
-        bat = open(os.path.join(HERE, 'refresh-dealflow.bat'), encoding='utf-8').read()
+        bat = _read(os.path.join(HERE, 'refresh-dealflow.bat'), 'r')
         i_scrape = bat.index('python -u stub_resolve.py')
         i_fetch = bat.index('python -u broward_or_fetch.py')
         i_feed = bat.index('python -u broward_or_feed.py')
