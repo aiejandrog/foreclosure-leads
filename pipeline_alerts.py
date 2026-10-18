@@ -388,6 +388,10 @@ def morning_kind(sig, now, th):
         return 'sent'
     if eligible <= 0:
         return 'nothing-eligible'
+    # The bridge refuses every first touch while the bounce pause is on, so 0 sent is the gate
+    # working. bounce-rate already alerts for the pause; this one stays for an unexplained 0.
+    if sig.get('paused') is True:
+        return 'paused'
     return 'nothing-sent'
 
 
@@ -1113,6 +1117,13 @@ def read_morning(now, th):
         if (entry.get('d') == day and entry.get('touch') == 'first' and entry.get('message_id')
                 and not entry.get('test_mode') and not entry.get('error')):
             sent += 1
+    # True/False only from a real bounce reading. A read that throws is None, not a pause, so
+    # an unexplained 0 still alerts here instead of hiding behind a check that failed.
+    paused = None
+    try:
+        paused = bool(S._first_touch_bounce_paused(S._bounce_health()))
+    except Exception:
+        paused = None
     eligible = None
     try:
         queue = S._first_touch_queue_health()
@@ -1126,6 +1137,7 @@ def read_morning(now, th):
         'scheduled': any(c > 0 for c in caps),
         'sent': sent,
         'eligible': eligible,
+        'paused': paused,
         'addresses': len(addrs),
         'caps': caps,
         'cap': max(caps) if caps else 0,
