@@ -606,6 +606,9 @@ deal_desk.json
 # no browser. Untracked, the check that a finished auction date is not logged as unproven
 # would live on one machine.
 !_auctionpagetest.py
+# _auctionracetest: the real pager hook JS run in Node against overlapping responses (a stale
+# refresh or a late retry answer landing after we asked for the next page). Fake site, case numbers only.
+!_auctionracetest.py
 
 # _seatcoveragetest: a seat page shipped its own half of the dial queue plus coverage cut against
 # the CREW list, so the other seat's rows were on neither list and just vanished off the page.
