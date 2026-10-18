@@ -162,7 +162,12 @@ EXTRACT_JS = """
     loading: (typeof isLoading !== 'undefined' && isLoading === 'Y'),
     booting: (typeof isPageReset !== 'undefined' && !!isPageReset),
     want: (typeof window.__dfWant === 'number') ? window.__dfWant : 0,
-    applied: (typeof window.__dfGot === 'number') ? window.__dfGot : 0
+    applied: (typeof window.__dfGot === 'number') ? window.__dfGot : 0,
+    // Area_W paints since the hook went in, and which one was our request's. A later
+    // paint (a stale refresh landing after ours) means the rows on screen are not ours.
+    paints: (typeof window.__dfPaint === 'number') ? window.__dfPaint : 0,
+    gotPaint: (typeof window.__dfGotPaint === 'number') ? window.__dfGotPaint : 0,
+    untracked: !!window.__dfUntracked
   });
 }
 """
@@ -266,6 +271,15 @@ PAGING_UNPROVEN = []      # auction dates whose traversal did not positively rea
 
 # Stop auction.js tickII from reloading the current waiting page on top of the page we
 # just asked for, and stamp LoadNewArea so we can tell THAT request's paint from a stale one.
+#
+# 2026-10-18 (Codex on #270): clearing the timer cannot cancel a refresh already in flight,
+# and the first hook stamped ANY Area_W paint after our request as ours. A late refresh, or
+# the late answer to one of our own retries, repaints rows already read; stamped, that read
+# as "the server repeated the page" and ended the date early. Now the stamp is tied to the
+# one XMLHttpRequest our loadArea call sent: a paint counts only while that request is the
+# one completing (readyState 4) and only once. Every Area_W paint is counted, so a stale
+# paint landing after ours un-confirms the screen. If loadArea sent no XHR, or more than
+# one, nothing is ever stamped and a repeat of the same rows stays unproven.
 ARM_PAGER_JS = """
 () => {
   try { clearTimeout(window.sysTimer); } catch (e) {}
@@ -274,9 +288,22 @@ ARM_PAGER_JS = """
   if (typeof LoadNewArea !== 'function') return false;
   const orig = LoadNewArea;
   window.LoadNewArea = function (area, data) {
+    let ours = false;
+    try {
+      const x = window.__dfXhr;
+      ours = area === 'W' && !!x && x.readyState === 4 && !window.__dfXhrUsed
+             && window.__dfArm === window.__dfWant;
+    } catch (e) {}
     const ret = orig.apply(this, arguments);
     try {
-      if (area === 'W' && window.__dfArm === window.__dfWant) window.__dfGot = window.__dfWant;
+      if (area === 'W') {
+        window.__dfPaint = (window.__dfPaint || 0) + 1;
+        if (ours) {
+          window.__dfXhrUsed = true;
+          window.__dfGot = window.__dfWant;
+          window.__dfGotPaint = window.__dfPaint;
+        }
+      }
     } catch (e) {}
     return ret;
   };
@@ -297,7 +324,21 @@ REQUEST_WAITING_PAGE_JS = """
   if (!pageNo || pageNo < 1) return 'fail';
   window.__dfWant = (window.__dfWant || 0) + 1;
   window.__dfArm = window.__dfWant;
-  loadArea('W', 0, 1, pageNo);
+  window.__dfXhr = null;
+  window.__dfXhrUsed = false;
+  // Catch the request this call sends. Nothing else runs inside this synchronous call
+  // (tickII is disabled), so an XHR sent here is ours and no one else's.
+  const proto = (typeof XMLHttpRequest !== 'undefined') ? XMLHttpRequest.prototype : null;
+  const send = proto ? proto.send : null;
+  const sent = [];
+  if (send) proto.send = function () { sent.push(this); return send.apply(this, arguments); };
+  try {
+    loadArea('W', 0, 1, pageNo);
+  } finally {
+    if (send) proto.send = send;
+  }
+  window.__dfUntracked = sent.length !== 1;
+  if (sent.length === 1) window.__dfXhr = sent[0];
   return 'ok';
 }
 """
@@ -340,17 +381,27 @@ def page_number(value):
 
 
 def _load_confirmed(state, before_want):
-    """True when the waiting-page request we just issued has painted."""
+    """True when the waiting-page request we just issued has painted, and nothing since.
+
+    `paints`/`gotPaint` are absent from a read that predates the counter; then only the
+    stamp is checked. When present, a paint after ours (a stale refresh landing late)
+    means the rows on screen are not our answer.
+    """
+    state = state or {}
     try:
-        want = int((state or {}).get('want') or 0)
-        applied = int((state or {}).get('applied') or 0)
+        want = int(state.get('want') or 0)
+        applied = int(state.get('applied') or 0)
         before = int(before_want or 0)
+        paints = state.get('paints')
+        got_paint = state.get('gotPaint')
+        if paints is not None and int(paints) != int(got_paint or 0):
+            return False
     except (TypeError, ValueError):
         return False
     return want > before and applied == want
 
 
-def classify_settled_page(prev_sig, state, before_want):
+def classify_settled_page(prev_sig, state, before_want, seen=(), require_confirm=False):
     """'advanced', 'last', or 'retry' for one settled read of the waiting grid.
 
     A different full row set is a new page, whether or not the first case is new.
@@ -359,6 +410,14 @@ def classify_settled_page(prev_sig, state, before_want):
     says "1 of N" then (PFS fills it from a later UPDATE poll), so a lagging
     cur < max must not overrule that paint. An unconfirmed same set is a swallowed
     request, unless the indicator has already caught up to cur >= max.
+
+    `seen` is every row set already read this date. A late refresh or a late answer to
+    an earlier request can paint one of those back; that is not a new page.
+
+    `require_confirm` (a numbered request): changed rows count only when they are that
+    request's own confirmed paint. Without it, a stale paint that merely differs from
+    the page on screen was accepted as the requested page (Codex on #273: page 3 paints,
+    a stale refresh overwrites it, and the stale rows are counted as page 3).
     """
     state = state or {}
     sig = page_row_signature(state.get('items'))
@@ -366,6 +425,8 @@ def classify_settled_page(prev_sig, state, before_want):
     mx = page_number(state.get('max'))
     confirmed = _load_confirmed(state, before_want)
     if sig and sig != prev_sig:
+        if sig in seen or (require_confirm and not confirmed):
+            return 'retry'
         return 'advanced'
     if confirmed and sig == prev_sig and prev_sig:
         return 'last'
@@ -427,6 +488,7 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
         state = quiet_state(lambda s: True)
     items = list(state.get('items') or [])
     sig = page_row_signature(items)
+    seen = {sig} if sig else set()
     pages = 1
     why = 'last page'
     try:
@@ -452,16 +514,16 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
                     decision = 'last'
                     break
                 state = quiet_state(lambda s, ps=sig: (
-                    page_row_signature(s.get('items')) != ps
+                    page_row_signature(s.get('items')) not in seen | {ps}
                     or (page_number(s.get('cur')) and page_number(s.get('max'))
                         and page_number(s.get('cur')) >= page_number(s.get('max')))))
             elif how == 'ok':
-                state = quiet_state(lambda s, bw=before_want, ps=sig: (
-                    _load_confirmed(s, bw) or page_row_signature(s.get('items')) != ps))
+                state = quiet_state(lambda s, bw=before_want: _load_confirmed(s, bw))
             else:
                 sleep(poll_s)
                 continue
-            decision = classify_settled_page(sig, state, before_want)
+            decision = classify_settled_page(sig, state, before_want, seen,
+                                             require_confirm=(how == 'ok'))
             if decision != 'retry':
                 break
         if decision == 'last':
@@ -470,6 +532,7 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
         if decision == 'advanced':
             items.extend(list(state.get('items') or []))
             sig = page_row_signature(state.get('items'))
+            seen.add(sig)
             pages += 1
             try:
                 before_want = int(state.get('want') or before_want)
@@ -483,6 +546,8 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
             continue
         why = ('unproven: Next was clickable but the grid never showed a new '
                'page of cases after retries')
+        if state.get('untracked'):
+            why += ' (the page request could not be matched to its response)'
         break
     else:
         why = f'cap: stopped after {MAX_PAGE_CLICKS} page clicks with more possibly left'

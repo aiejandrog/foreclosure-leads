@@ -16956,7 +16956,7 @@ const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.tou
 function _mergeLead(local, remote){
   local = local || {}; remote = remote || {};
   const out = Object.assign({}, local);
-  const ch = { optout:false, touches:0, status:false, deal:false, note:false, dials:false };
+  const ch = { optout:false, touches:0, status:false, deal:false, note:false, dials:false, no:false };
   // audit ledger: union every opt-out event from both devices (dedup by ts|act), so the ORIGINAL
   // "set" timestamp on the teammate's device is preserved as evidence, not just the local one.
   const _lseen = new Set(), _ol = [];
@@ -17065,16 +17065,56 @@ function _mergeLead(local, remote){
     const _nn = _keep.join(_sep);
     if(_nn !== (local.note||'')){ out.note = _nn; ch.note = true; }
   }
+  /* THE NO MARKS (2026-10-18, "fix the no sync"). n.no / noAt / noWasLp / resurf are the 09-02 no
+     policy: a hard no is permanent, a soft no is retired until its ONE event-driven resurface, and
+     resurf counts that resurface as spent. This function never named them, so Object.assign kept the
+     LOCAL side and a teammate's no was dropped on every pull. A hard no still arrived (it also sets
+     DO NOT CONTACT), but a soft no on a lead this phone already had as Contacted stayed on normal
+     cadence here, and a soft no the teammate already resurfaced could resurface a second time.
+     (Call Mode wrapped this function to fix it on 09-25, but the wrapper wrote onto the returned
+     [out, ch] array, so it never did anything.)
+     Rule, per side: a hard no wins forever. A soft no stands unless the merged dials show a
+     talked / appointment / callback logged AFTER both that side's noAt and the latest soft-no call
+     row -- Call Mode clears a soft no on exactly those outcomes, and without this a teammate's stale
+     copy would put back a no the homeowner has since talked their way out of. The notint rows count
+     because a repeat no (the second no on the resurface is the permanent one) keeps the first noAt.
+     Of the soft nos that stand, the LATEST noAt is kept with its own noWasLp: keeping the earliest
+     let a talk between two nos clear the later one. A soft no with no noAt cannot be dated, so it
+     wins and stands. resurf is the larger of them. */
+  const _NO_KEYS = ['no', 'noAt', 'noWasLp', 'resurf'];
+  const _lastOc = ocs => _dl.filter(v => ocs.indexOf(v.oc) >= 0 && +v.tsu > 0).reduce((m, v) => Math.max(m, +v.tsu), 0);
+  const _reengaged = _lastOc(['talked', 'appt', 'callback']), _lastNo = _lastOc(['notint']);
+  const _softStands = s => s.no === 'soft' && !(+s.noAt > 0 && _reengaged > Math.max(+s.noAt, _lastNo));
+  const _hard = [local, remote].filter(s => s.no === 'hard');
+  const _soft = [local, remote].filter(_softStands);
+  const _nb = {};
+  if(_hard.length){
+    _nb.no = 'hard';
+    const _ha = _hard.map(s => +s.noAt).filter(v => v > 0);
+    if(_ha.length) _nb.noAt = Math.min.apply(null, _ha);
+  } else if(_soft.length){
+    const _first = _soft.slice().sort((a, b) => (+b.noAt > 0 ? +b.noAt : Infinity) - (+a.noAt > 0 ? +a.noAt : Infinity))[0];
+    _nb.no = 'soft';
+    if(+_first.noAt > 0) _nb.noAt = +_first.noAt;
+    const _lp = (_first.noWasLp != null) ? _first.noWasLp : (_soft.filter(s => s.noWasLp != null)[0] || {}).noWasLp;
+    if(_lp != null) _nb.noWasLp = _lp;
+    _nb.resurf = Math.max.apply(null, _soft.map(s => +s.resurf || 0));
+  }
+  _NO_KEYS.forEach(k => {
+    if(_nb[k] == null){ if(k in out){ delete out[k]; ch.no = true; } }
+    else if(out[k] !== _nb[k]){ out[k] = _nb[k]; ch.no = true; }
+  });
   return [out, ch];
 }
 function mergeNotes(remoteNotes){
-  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, dials:0, violations:0 };
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, dials:0, nos:0, violations:0 };
   Object.keys(remoteNotes||{}).forEach(caseId => {
     const before = _dialedAfter(notes[caseId]).length;
     const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
     notes[caseId] = merged;
-    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note||ch.dials) sum.leads++;
+    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note||ch.dials||ch.no) sum.leads++;
     if(ch.dials) sum.dials++;
+    if(ch.no) sum.nos++;
     if(ch.optout) sum.optouts++;
     sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
     // a merged-in opt-out can retroactively turn a call you already logged into an after-opt-out contact
@@ -17083,7 +17123,7 @@ function mergeNotes(remoteNotes){
   try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
   // only persist/re-render when the merge actually changed something — otherwise the 45s auto-sync poll
   // triggers a needless save()->syncPushSoon()->push + full render on every empty pull (jank + churn).
-  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes || sum.dials;
+  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes || sum.dials || sum.nos;
   if(changed){ save(); try{ recompute(); }catch(e){} render(); }
   syncFreshness();
   return sum;
