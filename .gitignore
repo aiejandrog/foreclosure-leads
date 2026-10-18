@@ -294,6 +294,8 @@ worker_notes_snapshots/
 !_sendstaytest.py
 !_zstatustest.py
 !_skiptracetest.py
+# _skiptracequeuetest: nightly skiptrace drops stays, holds, closed cases, and DNC before the call cap.
+!_skiptracequeuetest.py
 !_phonepagetest.py
 !_autorunstoptest.py
 !_balloonlanetest.py

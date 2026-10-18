@@ -21,6 +21,14 @@ Usage:
   python skiptrace.py --limit 10          # cap how many you spend on this run
   python skiptrace.py --provider tracerfy # force a provider (default: auto-detect by key file)
   python skiptrace.py --raw               # print the raw API response (to confirm/adjust schema)
+  python skiptrace.py --all --report      # count queued leads each exclusion would drop; no provider call
+
+The nightly queue (--all) drops, BEFORE --limit and the 40/run and 80/day call caps, any lead
+the board and the outreach gates would not contact: a §362 stay, an outreach hold (Broward /
+Palm Beach via bk_lookup.send_hold, a broward_or_feed row marked outreach "held", a production
+PACER "unverifiable" from #206), a closed / dismissed / disposed case or one whose sale has
+passed or sold, and a Do Not Contact or opt-out (Call Mode marks via optout_sync.notes_dnc_keys,
+plus the opt-out ledger). Those modules are only read. One stdout line gives the counts.
 
 Compliance: providers filter TCPA-restricted numbers by default (we keep that). Still, dial MANUALLY,
 scrub against the federal DNC list, and never autodial/text these owners (FL FTSA + TCPA).
@@ -473,6 +481,421 @@ def select(leads, args, llcs=None):
         out.append(r)
     return out
 
+
+# Reasons a queued lead is not worth a Tracerfy credit. Order is the log line's order.
+# A lead can match more than one; it is dropped once.
+EXCLUSION_REASONS = ('bankruptcy_stay', 'outreach_held', 'closed', 'do_not_contact')
+_EXCLUSION_OVERRIDE = None   # tests pass a finished index here; production leaves this None
+_CLOSED_WITH_SALE = {'CLOSED', 'RECLOSED', 'PJREPINACT'}
+
+
+def _empty_index():
+    return {
+        'stay_cases': set(),
+        'lifted_cases': set(),
+        'outreach_cases': set(),
+        'dnc_cases': set(),
+        'dnc_unreadable': False,
+    }
+
+
+def _sale_days(lead, today=None):
+    """Days until the sale, or None when the row has no sale clock.
+
+    A parseable auction date wins over the baked `days` integer. outreach_email._days does
+    the same recompute: the integer is frozen at scrape time and will say a past sale is
+    still ahead. 9999 is the lis-pendens sentinel (no sale date), not a real countdown."""
+    import datetime as _dt
+    today = today or date.today()
+    for key in ('auction', 'AuctionDate'):
+        raw = str(lead.get(key) or '').strip()
+        if not raw:
+            continue
+        for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+            try:
+                sale = _dt.datetime.strptime(raw[:10], fmt).date()
+            except ValueError:
+                continue
+            return (sale - today).days
+    for key in ('days_to_auction', 'days'):
+        if lead.get(key) is None or lead.get(key) == '':
+            continue
+        try:
+            return int(lead.get(key))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _case_keys(case):
+    """Upper-case forms a stay or hold cache might be keyed by. No network."""
+    import stay_gate
+    raw = str(case or '').strip()
+    keys = set()
+    if raw:
+        keys.add(raw.upper())
+    try:
+        stem = stay_gate.case_stem(raw)
+        pk = stay_gate.pacer_key(raw)
+    except Exception:
+        stem = pk = ''
+    if stem:
+        keys.add(stem.upper())
+    if pk:
+        keys.add(pk.upper())
+    return keys
+
+
+def _row_stay(lead):
+    """The §362 flag the board and outreach_email._eligible read on the row itself.
+
+    saleBkAct / sale_bk_active, and not a lift (saleLift / sale_bk_lifted / sale_stay_lifted).
+    A cache lift is applied by the caller before this, the same way outreach stamps `sl`
+    onto saleLift and then refuses only `(saleBkAct or sale_bk_active) and not saleLift`."""
+    if lead.get('saleLift') or lead.get('sale_bk_lifted') or lead.get('sale_stay_lifted'):
+        return False
+    return bool(lead.get('saleBkAct') or lead.get('sale_bk_active'))
+
+
+def _row_outreach_held(lead):
+    """broward_or_feed marks every row outreach 'held' and source 'broward-or-feed'."""
+    if str(lead.get('outreach') or '').strip().lower() == 'held':
+        return True
+    return str(lead.get('source') or '').strip().lower() == 'broward-or-feed'
+
+
+def _is_closed(lead):
+    """Closed, dismissed, disposed, sale already passed, or sold.
+
+    CLOSED / RECLOSED / PJREPINACT on a lead that still has a future sale is final judgment,
+    which lp_status.py documents as a live foreclosure the board still works. DISMISSED and
+    DISPOSED are not: cadence drops a DISM* status and a lpDismissed row even with a date.
+    sibclaimed and a recorded certificate are the sold flags three_day and sheets_crm use."""
+    if lead.get('lpDismissed') or lead.get('lpClosed') or lead.get('sibclaimed'):
+        return True
+    if lead.get('title_status') == 'transferred':
+        return True
+    if lead.get('cert'):
+        return True
+    sr = lead.get('sr') if isinstance(lead.get('sr'), dict) else None
+    if sr and (sr.get('st') == 'sold' or sr.get('sale_outcome') == 'sold'):
+        return True
+    rf = lead.get('rf') if isinstance(lead.get('rf'), dict) else None
+    if rf and rf.get('st') == 'sold':
+        return True
+    status = str(lead.get('cstatus') or lead.get('case_status') or '').strip().upper()
+    if status.startswith('DISM') or status == 'DISPOSED' or status.startswith('DISPOSED'):
+        return True
+    days = _sale_days(lead)
+    future_sale = days is not None and 0 <= days < 9999
+    if status in _CLOSED_WITH_SALE or status.startswith('CLOSED'):
+        return not future_sale
+    if days is not None and days < 0:
+        return True
+    return False
+
+
+def _is_dnc(lead, index):
+    if index.get('dnc_unreadable'):
+        return True
+    bag = index.get('dnc_cases') or set()
+    case = _case(lead).strip().lower()
+    if case and case in bag:
+        return True
+    for em in lead.get('emails') or []:
+        addr = str(em or '').strip().lower()
+        if addr and (addr in bag or ('@' + addr) in bag):
+            return True
+    return False
+
+
+def exclusion_reasons(lead, index):
+    """Every exclusion this lead matches. Empty means it can still be contacted.
+
+    `index` is the read-only snapshot from exclusion_index(). Row flags are read here;
+    the index carries the cache, the ledger, and send_hold."""
+    index = index or _empty_index()
+    keys = _case_keys(_case(lead))
+    stay_cases = index.get('stay_cases') or set()
+    lifted = index.get('lifted_cases') or set()
+    if keys & stay_cases:
+        stay = True
+    elif keys & lifted:
+        stay = False
+    else:
+        stay = _row_stay(lead)
+    reasons = []
+    if stay:
+        reasons.append('bankruptcy_stay')
+    outreach = _row_outreach_held(lead) or bool(keys & (index.get('outreach_cases') or set()))
+    # bkWhy is the board's federal-hold sentence. On a §362 row it rides along with the
+    # stay flag; counted here only when the stay flag itself is not what is holding the lead.
+    if lead.get('bkWhy') and not stay:
+        outreach = True
+    if outreach:
+        reasons.append('outreach_held')
+    if _is_closed(lead):
+        reasons.append('closed')
+    if _is_dnc(lead, index):
+        reasons.append('do_not_contact')
+    return reasons
+
+
+def exclusion_summary(leads, index):
+    """Counts per reason (a lead in two groups increments both) plus unique dropped/kept."""
+    counts = {k: 0 for k in EXCLUSION_REASONS}
+    dropped = 0
+    for lead in leads:
+        reasons = exclusion_reasons(lead, index)
+        if not reasons:
+            continue
+        dropped += 1
+        for reason in reasons:
+            counts[reason] = counts.get(reason, 0) + 1
+    counts['queued'] = len(leads)
+    counts['dropped'] = dropped
+    counts['kept'] = len(leads) - dropped
+    return counts
+
+
+def exclusion_line(counts):
+    """One line. Counts only — no case numbers, names, or addresses."""
+    return ('skiptrace exclude: bankruptcy_stay=%d outreach_held=%d closed=%d '
+            'do_not_contact=%d kept=%d dropped=%d' % (
+                counts.get('bankruptcy_stay', 0), counts.get('outreach_held', 0),
+                counts.get('closed', 0), counts.get('do_not_contact', 0),
+                counts.get('kept', 0), counts.get('dropped', 0)))
+
+
+def _ledger_key_set(data):
+    """Lower-cased opt-out keys, same envelope outreach_email._load_optouts unwraps.
+    None when the parsed value is not a ledger."""
+    if isinstance(data, list):
+        return {str(x).strip().lower().lstrip('@') for x in data if str(x).strip()}
+    if not isinstance(data, dict):
+        return None
+    notes = data.get('notes') if isinstance(data.get('notes'), dict) else None
+    if notes is None:
+        notes = {k: v for k, v in data.items()
+                 if k not in ('_dealflow_notes', 'exported', 'device', 'notes')}
+    if not isinstance(notes, dict):
+        return None
+    return {str(k).strip().lower().lstrip('@') for k, v in notes.items() if v}
+
+
+def _remember_case(bag, case):
+    for key in _case_keys(case):
+        bag.add(key)
+
+
+def _stay_sets_from_cache(data):
+    """(active, lifted) case keys from a sale_history cache object. Uses stay_gate.entry_stay_active."""
+    import stay_gate
+    active, lifted = set(), set()
+    if not isinstance(data, dict):
+        return active, lifted
+    for key, ent in data.items():
+        if str(key).startswith('_') or not isinstance(ent, dict):
+            continue
+        if 'a' not in ent and 'sl' not in ent:
+            continue
+        dest = active if stay_gate.entry_stay_active(ent) else (lifted if ent.get('sl') else None)
+        if dest is None:
+            continue
+        dest.add(str(key).strip().upper())
+        try:
+            stem = stay_gate.case_stem(key)
+        except Exception:
+            stem = ''
+        if stem:
+            dest.add(stem.upper())
+    return active, lifted
+
+
+def _pacer_sets_from_index(by_key):
+    """(stay, outreach) from a pacer_stay by_key map.
+
+    Production 'active' is a bankruptcy stay (stay_gate.pacer_verdict). Production
+    'unverifiable' is the #206 hold (missing co-owner, old open case, dismissed-not-closed)
+    and stays an outreach hold even when the unchecked-lead waiver would otherwise release
+    a Broward / Palm Beach row CourtListener has not flagged."""
+    import stay_gate
+    stay, outreach = set(), set()
+    if not isinstance(by_key, dict):
+        return stay, outreach
+    for key, ent in by_key.items():
+        if not isinstance(ent, dict) or ent.get('env') != 'prod':
+            continue
+        up = str(key).strip().upper()
+        if not up:
+            continue
+        try:
+            code, _why = stay_gate.pacer_verdict(ent)
+        except Exception:
+            code = ''
+        if code == stay_gate.STAY_ACTIVE:
+            stay.add(up)
+        elif ent.get('verdict') == 'unverifiable' and ent.get('env') == 'prod':
+            outreach.add(up)
+    return stay, outreach
+
+
+def _fill_sale_cache(idx):
+    import stay_gate
+    path = os.path.join(os.path.dirname(os.path.abspath(stay_gate.__file__)),
+                        'sale_history_cache.json')
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+    except Exception:
+        return
+    active, lifted = _stay_sets_from_cache(data)
+    idx['stay_cases'] |= active
+    idx['lifted_cases'] |= lifted
+
+
+def _fill_pacer(idx):
+    import stay_gate
+    path = os.path.join(os.path.dirname(os.path.abspath(stay_gate.__file__)), stay_gate.PACER_NAME)
+    try:
+        loaded, err, exists = stay_gate._load_pacer(path)
+    except Exception:
+        return
+    if not exists:
+        return
+    if err or not loaded:
+        # A PACER file we cannot read hides #206 holds. Non-stem numbers have no docket
+        # stay to fall back on, so they stay held. Miami is unchanged (PACER is additive there).
+        idx['pacer_unreadable'] = True
+        return
+    by_key = loaded[0] if isinstance(loaded, (tuple, list)) and loaded else None
+    stay, outreach = _pacer_sets_from_index(by_key)
+    idx['stay_cases'] |= stay
+    idx['outreach_cases'] |= outreach
+
+
+def _fill_dnc(idx, leads):
+    """Do Not Contact from the opt-out ledger and Call Mode notes. Read-only.
+
+    optout_sync.notes_dnc_keys is the reader for a hand-set DNC / STOP / hard no.
+    An opt-out ledger or notes file that exists and will not parse blocks the queue
+    (the send gate's rule: an unreadable ledger is not an empty one)."""
+    import optout_sync
+    path = optout_sync.OPTOUTS
+    notes_path = optout_sync.NOTES
+    keys = set()
+    if path and os.path.exists(path):
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh)
+        except Exception:
+            idx['dnc_unreadable'] = True
+            return
+        parsed = _ledger_key_set(data)
+        if parsed is None:
+            idx['dnc_unreadable'] = True
+            return
+        keys |= parsed
+    if notes_path and os.path.exists(notes_path):
+        try:
+            with open(notes_path, encoding='utf-8') as fh:
+                raw = json.load(fh)
+        except Exception:
+            idx['dnc_unreadable'] = True
+            return
+        notes = raw.get('notes') if isinstance(raw, dict) else None
+        if isinstance(notes, dict):
+            for key, note in notes.items():
+                if isinstance(note, dict) and str(note.get('status') or '').strip().lower() == 'opted out':
+                    keys.add(str(key).strip().lower())
+    try:
+        for key in optout_sync.notes_dnc_keys():
+            text = str(key).strip().lower()
+            if text:
+                keys.add(text.lstrip('@'))
+    except Exception:
+        idx['dnc_unreadable'] = True
+        return
+    idx['dnc_cases'] |= keys
+    try:
+        import sibling_optout
+        phones = sibling_optout.ledger_phone_keys(path, keys)
+        sibs = sibling_optout.sibling_cases(leads or [], keys, _case, phone_keys=phones)
+        idx['dnc_cases'] |= {str(s).strip().lower() for s in sibs}
+    except Exception:
+        pass
+
+
+def _fill_send_holds(idx, cases):
+    """Broward / Palm Beach and other outreach holds, via bk_lookup.send_hold.
+
+    That is the helper email, letters, and the board stamp already use, including the
+    unchecked-lead waiver. A never-contact case is Do Not Contact, not a generic hold.
+    An unreadable never-contact list holds the queue (stay_gate raises; whitepages holds)."""
+    import bk_lookup
+    import stay_gate
+    seen = set()
+    for case in cases:
+        raw = str(case or '').strip()
+        if not raw:
+            continue
+        up = raw.upper()
+        if up in seen:
+            continue
+        seen.add(up)
+        try:
+            stem = stay_gate.case_stem(raw)
+            pk = stay_gate.pacer_key(raw)
+        except Exception:
+            _remember_case(idx['outreach_cases'], raw)
+            continue
+        if not stem and not pk:
+            continue
+        try:
+            never = stay_gate.never_contact(raw)
+        except Exception:
+            idx['dnc_unreadable'] = True
+            return
+        if never:
+            idx['dnc_cases'].add(raw.lower())
+            continue
+        if idx.get('pacer_unreadable') and not stem:
+            _remember_case(idx['outreach_cases'], raw)
+            continue
+        try:
+            held, why = bk_lookup.send_hold(raw)
+        except Exception:
+            _remember_case(idx['outreach_cases'], raw)
+            continue
+        if not held:
+            continue
+        why_s = why or ''
+        low = why_s.lower()
+        if ('§362' in why_s or 'active §362' in low
+                or low.startswith('active federal bankruptcy')):
+            _remember_case(idx['stay_cases'], raw)
+        else:
+            _remember_case(idx['outreach_cases'], raw)
+
+
+def _build_exclusion_index(queued, all_leads):
+    idx = _empty_index()
+    _fill_sale_cache(idx)
+    _fill_pacer(idx)
+    _fill_dnc(idx, all_leads)
+    if idx.get('dnc_unreadable'):
+        return idx
+    _fill_send_holds(idx, [_case(r) for r in queued])
+    return idx
+
+
+def exclusion_index(queued, all_leads=None):
+    """Read-only snapshot of the gates. Tests set _EXCLUSION_OVERRIDE to skip the files."""
+    if _EXCLUSION_OVERRIDE is not None:
+        return _EXCLUSION_OVERRIDE
+    return _build_exclusion_index(queued, queued if all_leads is None else all_leads)
+
+
 def _err_body(r):
     """Pull the provider's human message out of the response, JSON or text, for the operator."""
     try:
@@ -626,6 +1049,10 @@ def main():
                          '--all run buries fresh filings behind 800 auction leads and --limit cuts '
                          'them off before they are ever reached.')
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--report', action='store_true',
+                    help='print how many currently queued leads fall in each exclusion '
+                         '(bankruptcy stay, outreach hold, closed/sold, do not contact) '
+                         'and exit. No provider call and no results write.')
     ap.add_argument('--refresh', action='store_true')
     ap.add_argument('--raw', action='store_true')
     ap.add_argument('--provider', default='', help='tracerfy | batchdata (default: auto-detect by key file)')
@@ -737,6 +1164,19 @@ def main():
     if _empty_case:
         print(f"  skipping {_empty_case} lead(s) with no case number")
 
+    # Drop leads that cannot be contacted BEFORE --limit and the 40/run, 80/day caps.
+    # Otherwise the cap fills with stays, holds, and closed cases and a lead that can
+    # still be reached never gets a credit. The remaining queue is then sorted soonest
+    # sale first (county-first, when asked, still groups counties; inside a group the
+    # sale date leads).
+    _index = exclusion_index(todo, leads)
+    _ex = exclusion_summary(todo, _index)
+    print(exclusion_line(_ex))
+    if args.report:
+        print('skiptrace report: no provider call')
+        return
+    todo = [r for r in todo if not exclusion_reasons(r, _index)]
+
     def _urgency(r):
         """Auction-dated leads first, soonest sale leading; then LP by freshest filing.
 
@@ -748,10 +1188,8 @@ def main():
         changes — so this is free. Same defect and same fix as the DNC lane in tracerfy_mcp.py.
         LP rows carry days=9999 by design, so they must NOT be compared on days: they sort in their
         own bucket by filing recency, which is the entire edge on a fresh filing."""
-        try:
-            d = int(r.get('days_to_auction') if r.get('days_to_auction') is not None
-                    else r.get('days'))
-        except (TypeError, ValueError):
+        d = _sale_days(r)
+        if d is None:
             d = 9999
         if d < 9999:
             return (0, d, 0)

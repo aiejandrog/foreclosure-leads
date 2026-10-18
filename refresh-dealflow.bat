@@ -394,6 +394,10 @@ rem  this raises the throughput ceiling without removing the spend guard.
 rem  MIAMI FIRST 2026-09-27: the pilot order is Miami, then Broward, Palm Beach last. --county-first
 rem  spends the nightly limit on Miami-Dade leads before any other county, soonest sale first
 rem  inside each group. Order only - same leads, same caps, same cost per hit.
+rem  CONTACTABLE ONLY 2026-10-18: before --limit and the 40/run and 80/day call caps, skiptrace
+rem  drops a §362 stay, an outreach hold (Broward/Palm Beach, broward_or_feed, #206), a closed /
+rem  dismissed / disposed / passed / sold case, and a Do Not Contact or opt-out. One log line
+rem  has the counts. python skiptrace.py --all --report prints them and does not call Tracerfy.
 python -u skiptrace.py --all --limit 100 --county-first MIAMI-DADE >> "%LOG%" 2>&1
 rem  3-DAY lane (Jesse, 2026-09-16): sales within 3 business days with face equity and a 2024+ case get
 rem  their phones FIRST (the tier cap above spent on Tier A while 15 of 18 Tuesday leads had no phone),
