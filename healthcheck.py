@@ -488,11 +488,13 @@ def chk_shipped():
         ph = int(cov.get('phones') or 0)
         add('WARN' if ph / shipped < 0.35 else 'PASS', 'shipped board · dialable',
             '%d/%d carry a phone (%d%%)' % (ph, shipped, round(ph / shipped * 100)))
-        # A lead is valuable to work if ANY value source landed on it. Counting one field alone
-        # understates it -- the board itself falls back across these.
-        val = max(int(cov.get(k) or 0) for k in ('arv', 'rfval', 'zest'))
-        add('WARN' if val / shipped < 0.20 else 'PASS', 'shipped board · valued',
-            'best single value source covers %d/%d (%d%%)' % (val, shipped, round(val / shipped * 100)))
+        # A lead counts when ANY free value source landed: comps ARV, Redfin, Zestimate,
+        # or county just/market. Builds that publish `valued` (the union) are read that way.
+        # An older board has only the three single-source counters, and those stay on the
+        # max-of-one reading — reporting a union the page never measured would hide a gap.
+        import value_join as _vj
+        val, _vdetail = _vj.valued_detail(cov, shipped)
+        add('WARN' if val / shipped < 0.20 else 'PASS', 'shipped board · valued', _vdetail)
 
 
 def _index_file_texts(root, paths):
