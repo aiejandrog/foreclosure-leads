@@ -314,6 +314,25 @@ rec('the guard reads Spanish, not only English',
     bool(G._OPTOUT_SENTENCE.search(_OC._unsub(lang='es'))))
 
 
+# 2026-10-18: a placeholder in any case, in [ ] or < >. The Title Case pattern before this let
+# "[Your name]" and "<Your Name>" reach a homeowner. A URL, an address, a footnote number and a
+# date in brackets are not placeholders.
+_OPT = "\nIf now's not a good time, just tell me and I won't reach out again."
+for _tok in ('[Your Name]', '[YOUR NAME]', '[Your name]', '[your name]', "[Agent's Name]",
+             '[Agent\u2019s Name]', '[Your Phone #]', '<Your Name>', '<your name>', '[Su Nombre]'):
+    _bad = G.check('Regarding your property at 1 Main St', 'Hi Ana,\nMy name is %s.%s' % (_tok, _OPT),
+                   'a@example.com', unsub='<mailto:x@example.com>')
+    rec('placeholder %s is refused' % _tok, any(_tok in b for b in _bad), _bad)
+    rec('placeholder %s is named once' % _tok, sum(1 for b in _bad if _tok in b) == 1, _bad)
+    rec('merge_issues names %s on its own' % _tok,
+        any(_tok in b for b in G.merge_issues('Hello', 'My name is %s.' % _tok, 'a@example.com')))
+for _ok in ('<https://bsgflorida.com/optout>', '<alejandro@bsgflorida.com>', '[1]', '[2026-10-18]',
+            'Case No. CACE-26-016779'):
+    _bad = G.check('Regarding your property at 1 Main St', 'Hi Ana,\nSee %s.%s' % (_ok, _OPT),
+                   'a@example.com', unsub='<mailto:x@example.com>')
+    rec('%s is not a placeholder' % _ok, not _bad, _bad)
+
+
 print('\n%d passed, %d failed' % (len(PASS), len(FAIL)))
 for f in FAIL:
     print('  FAILED: ' + f)
