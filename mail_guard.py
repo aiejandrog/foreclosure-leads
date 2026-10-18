@@ -37,8 +37,11 @@ import threading
 # Placeholders the templates fall back to when a field is missing. Fine on the board, never in a
 # message. Also catches any other SHOUTED bracket token, which is how every one of these is written.
 _PLACEHOLDER = re.compile(r'\[[A-Z][A-Z0-9 _/&.-]{2,}\]')
-# Title Case brackets the ALL-CAPS pattern misses: "[Your Name]", "[First Name]".
-_MIXED_PLACEHOLDER = re.compile(r'\[[A-Z][a-z]+(?:[ /-][A-Z][a-z]+)*\]')
+# Every other bracketed template token, in any case and in square or angle brackets: "[Your Name]",
+# "[your name]", "[Agent's Name]", "[Your Phone #]", "<Your Name>". 2026-10-18: the Title Case
+# pattern this replaced let "[Your name]" and "<Your Name>" through. A URL or an address in angle
+# brackets ("<https://...>", "<me@x.com>") does not match: ':' and '@' are not in the token.
+_ANY_PLACEHOLDER = re.compile(r"\[[^\W\d_][\w '\u2019#&/.\-]{1,40}\]|<[^\W\d_][\w '\u2019#&/.\-]{1,40}>")
 # safe_street's fallback landing in the subject: "Regarding your property at your property".
 _DEGENERATE_SUBJECT = re.compile(
     r'(?:property at|propiedad en)\s+(?:your property|su propiedad)\s*$', re.I)
@@ -161,7 +164,7 @@ def safe_street(raw, fallback='your property'):
 
 def merge_issues(subj='', body='', to=''):
     """Holes check() did not name: a blank street that fell back to "your property", a
-    bare "Hi,", a Title Case placeholder, or more than one homeowner on To.
+    bare "Hi,", a placeholder in [ ] or < > in any case, or more than one homeowner on To.
 
     Empty means sendable. Legitimate prose ("about your property so I'll be brief") and a
     bare greeting on a note whose subject is not an outreach subject are not holes.
@@ -170,7 +173,7 @@ def merge_issues(subj='', body='', to=''):
     subj_s = str(subj or '')
     body_s = str(body or '')
     for label, text in (('subject', subj_s), ('body', body_s)):
-        for m in set(_MIXED_PLACEHOLDER.findall(text)):
+        for m in sorted(set(_ANY_PLACEHOLDER.findall(text))):
             bad.append('the %s still contains the placeholder %s' % (label, m))
     if _DEGENERATE_SUBJECT.search(subj_s.strip()):
         bad.append('the subject names the fallback "your property" instead of a street')
@@ -209,7 +212,9 @@ def check(subj='', body='', to='', unsub=None):
             bad.append('the %s is empty' % label)
             continue
         for m in set(_PLACEHOLDER.findall(text)):
-            bad.append('the %s still contains the placeholder %s' % (label, m))
+            why = 'the %s still contains the placeholder %s' % (label, m)
+            if why not in bad:      # merge_issues already named it
+                bad.append(why)
         for m in set(_FORMAT_SLOT.findall(text)):
             bad.append('the %s still contains the unrendered slot %s' % (label, m))
         m = _EMPTY_SLOT.search(text)
