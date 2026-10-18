@@ -159,10 +159,14 @@ EXTRACT_JS = """
     items: out,
     cur: String(cur).trim(),
     max: String(max).trim(),
-    loading: (typeof isLoading !== 'undefined' && isLoading === 'Y'),
+    loading: (typeof isLoading !== 'undefined' && isLoading === 'Y')
+      || ((window.__dfInflight || 0) > 0),
     booting: (typeof isPageReset !== 'undefined' && !!isPageReset),
     want: (typeof window.__dfWant === 'number') ? window.__dfWant : 0,
-    applied: (typeof window.__dfGot === 'number') ? window.__dfGot : 0
+    applied: (typeof window.__dfGot === 'number') ? window.__dfGot : 0,
+    applied_page: (typeof window.__dfGotPage === 'number') ? window.__dfGotPage : 0,
+    paint: (typeof window.__dfPaint === 'number') ? window.__dfPaint : 0,
+    got_paint: (typeof window.__dfGotPaint === 'number') ? window.__dfGotPaint : 0
   });
 }
 """
@@ -264,39 +268,101 @@ PAGE_POLL_S = 0.25
 PAGE_QUIET_READS = 2
 PAGING_UNPROVEN = []      # auction dates whose traversal did not positively reach the last page
 
-# Stop auction.js tickII from reloading the current waiting page on top of the page we
-# just asked for, and stamp LoadNewArea so we can tell THAT request's paint from a stale one.
+# Stop auction.js tickII from starting another reload of the current waiting page, and
+# stamp only the numbered request's own $.getJSON callback. A refresh that was already
+# in flight when we armed still calls LoadNewArea('W') later; stamping every such call
+# (the old `__dfArm === __dfWant` check) let that refresh repaint the current rows and
+# read as the last page. (Codex P1 on #270.)
 ARM_PAGER_JS = """
 () => {
   try { clearTimeout(window.sysTimer); } catch (e) {}
   window.tickII = function () {};
   if (window.__dfHooked) return typeof loadArea === 'function';
-  if (typeof LoadNewArea !== 'function') return false;
-  const orig = LoadNewArea;
+  if (typeof loadArea !== 'function' || typeof LoadNewArea !== 'function') return false;
+  const origLoad = loadArea;
+  const origNew = LoadNewArea;
+  window.__dfPaint = window.__dfPaint || 0;
+  window.__dfInflight = window.__dfInflight || 0;
   window.LoadNewArea = function (area, data) {
-    const ret = orig.apply(this, arguments);
-    try {
-      if (area === 'W' && window.__dfArm === window.__dfWant) window.__dfGot = window.__dfWant;
-    } catch (e) {}
+    const ret = origNew.apply(this, arguments);
+    if (area === 'W') window.__dfPaint = (window.__dfPaint || 0) + 1;
     return ret;
   };
+  // One $.getJSON replacement per loadArea call. loadArea invokes it synchronously,
+  // so the wrapper is back to the original before any other request can start, and
+  // only THIS callback can stamp the generation. A tickII callback already in flight
+  // closed over the original getJSON and cannot take the stamp.
+  window.loadArea = function (Area, pagedir, doRefresh, bypassPage) {
+    const token = (Area === 'W') ? (window.__dfToken || 0) : 0;
+    if (Area === 'W') window.__dfToken = 0;
+    const jq = window.jQuery;
+    const origGet = (jq && jq.getJSON) ? jq.getJSON : null;
+    if (Area !== 'W' || !origGet) return origLoad.apply(this, arguments);
+    window.__dfInflight = (window.__dfInflight || 0) + 1;
+    const want = token;
+    const pageNo = parseInt(bypassPage, 10) || 0;
+    let hooked = false;
+    let released = false;
+    const release = function () {
+      if (released) return;
+      released = true;
+      window.__dfInflight = Math.max(0, (window.__dfInflight || 1) - 1);
+    };
+    jq.getJSON = function (url, data, cb) {
+      hooked = true;
+      jq.getJSON = origGet;
+      if (typeof data === 'function') { cb = data; data = undefined; }
+      const req = origGet.call(jq, url, data, function () {
+        let ret;
+        const before = window.__dfPaint || 0;
+        try {
+          ret = cb && cb.apply(this, arguments);
+        } finally {
+          release();
+          // Stamp only when this callback's LoadNewArea is still the latest paint,
+          // and only when the call carried our one-shot token. A refresh that
+          // was already in flight closed over the original getJSON and cannot.
+          if (token && (window.__dfPaint || 0) > before) {
+            window.__dfGot = want;
+            window.__dfGotPage = pageNo;
+            window.__dfGotPaint = window.__dfPaint;
+          }
+        }
+        return ret;
+      });
+      // A failed LOAD never calls LoadNewArea, so it must not pin the counter.
+      // Success and fail do not both run; release() is one-shot either way.
+      if (req && typeof req.fail === 'function') req.fail(release);
+      return req;
+    };
+    try {
+      return origLoad.apply(this, arguments);
+    } finally {
+      jq.getJSON = origGet;
+      if (!hooked) release();
+    }
+  };
   window.__dfHooked = true;
-  return typeof loadArea === 'function';
+  return true;
 }
 """
 
 # The page-number box does this (keyPage -> loadArea(area, 0, 1, n)). PageDir=1, which is
 # what Next clicks, shares one session cursor with tickII's refresh and does not move on
 # the last page. bypassPage=n returns that page, and a number past the end repeats the last.
+# 'busy' means an Area_W load is still in flight — the caller waits and does not stamp a
+# generation that a stale callback could claim.
 REQUEST_WAITING_PAGE_JS = """
 (n) => {
   try { clearTimeout(window.sysTimer); } catch (e) {}
   window.tickII = function () {};
   if (typeof loadArea !== 'function') return 'no-fn';
+  if ((window.__dfInflight || 0) > 0) return 'busy';
+  if (typeof isLoading !== 'undefined' && isLoading === 'Y') return 'busy';
   const pageNo = parseInt(n, 10);
   if (!pageNo || pageNo < 1) return 'fail';
   window.__dfWant = (window.__dfWant || 0) + 1;
-  window.__dfArm = window.__dfWant;
+  window.__dfToken = window.__dfWant;
   loadArea('W', 0, 1, pageNo);
   return 'ok';
 }
@@ -339,37 +405,56 @@ def page_number(value):
     return n if n > 0 else None
 
 
-def _load_confirmed(state, before_want):
-    """True when the waiting-page request we just issued has painted."""
+def _load_confirmed(state, before_want, target=None):
+    """True when the numbered request's own callback painted, and nothing has since.
+
+    `applied` is that callback's generation. `applied_page` is the page number it
+    asked for. `got_paint` is the Area_W paint sequence at the end of the callback;
+    a later LoadNewArea (the in-flight tickII refresh) bumps `paint` and the stamp
+    no longer matches. A same-row echo counts only when `target` is that page.
+    """
+    state = state or {}
     try:
-        want = int((state or {}).get('want') or 0)
-        applied = int((state or {}).get('applied') or 0)
+        want = int(state.get('want') or 0)
+        applied = int(state.get('applied') or 0)
         before = int(before_want or 0)
+        paint = int(state.get('paint') or 0)
+        got_paint = int(state.get('got_paint') or 0)
     except (TypeError, ValueError):
         return False
-    return want > before and applied == want
+    if not (want > before and applied == want and paint > 0 and paint == got_paint):
+        return False
+    if target is not None and page_number(state.get('applied_page')) != int(target):
+        return False
+    return True
 
 
-def classify_settled_page(prev_sig, state, before_want):
+def classify_settled_page(prev_sig, state, before_want, target=None):
     """'advanced', 'last', or 'retry' for one settled read of the waiting grid.
 
     A different full row set is a new page, whether or not the first case is new.
-    A confirmed paint of the SAME set is the last page: the server repeats the last
-    page when the requested number is past the end. The pager indicator often still
-    says "1 of N" then (PFS fills it from a later UPDATE poll), so a lagging
-    cur < max must not overrule that paint. An unconfirmed same set is a swallowed
-    request, unless the indicator has already caught up to cur >= max.
+    The same set is the last page only when this read is the numbered request for
+    `target`: its own callback stamped `applied_page == target`, or the pager's
+    current page (`curPG`) is `target` and that is the last page. A tickII refresh
+    that repaints the rows already on screen must not qualify, even if it lands
+    after the generation was opened. With no `target` (the click fallback) the
+    caught-up indicator (`cur >= max`) is the proof.
     """
     state = state or {}
     sig = page_row_signature(state.get('items'))
     cur = page_number(state.get('cur'))
     mx = page_number(state.get('max'))
-    confirmed = _load_confirmed(state, before_want)
     if sig and sig != prev_sig:
         return 'advanced'
-    if confirmed and sig == prev_sig and prev_sig:
-        return 'last'
-    if cur and mx and cur >= mx and sig == prev_sig and prev_sig:
+    if not prev_sig or sig != prev_sig:
+        return 'retry'
+    if target is not None:
+        if _load_confirmed(state, before_want, target):
+            return 'last'
+        if cur and mx and cur == int(target) and cur >= mx:
+            return 'last'
+        return 'retry'
+    if _load_confirmed(state, before_want) or (cur and mx and cur >= mx):
         return 'last'
     return 'retry'
 
@@ -378,11 +463,13 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
                        attempts=None, polls=None, poll_s=None):
     """Walk Area_W. Returns (items, pages, why).
 
-    `read_grid()` -> {items, cur, max, loading, booting, want, applied}.
-    `request_page(n)` -> 'ok' (asked for waiting page n), 'no-fn' (no loadArea;
-    `click_next` is used instead), 'no-next' (nothing to click), or anything else
-    to retry. `arm()`, when given, runs once the first page has settled so the
-    site's refresh timer cannot paint the old page back over the new one.
+    `read_grid()` -> {items, cur, max, loading, booting, want, applied,
+    applied_page, paint, got_paint}. `request_page(n)` -> 'ok' (asked for waiting
+    page n), 'busy' (an Area_W load is still in flight; waited out, no generation
+    opened), 'no-fn' (no loadArea; `click_next` is used instead), 'no-next'
+    (nothing to click), or anything else to retry. `arm()`, when given, runs once
+    the first page has settled so the site's refresh timer cannot paint the old
+    page back over the new one.
 
     why is 'last page' (every page was read — the next request repeated it, the
     indicator says this is the last page, or there is no Next control),
@@ -444,6 +531,17 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
         decision = 'retry'
         for _attempt in range(max(1, attempts)):
             how = request_page(target)
+            if how == 'busy':
+                # A refresh that started before the pager was armed is still in
+                # flight. Drain it, then issue the numbered request on this
+                # same attempt. Still busy after that wait is a miss.
+                for _spin in range(polls):
+                    sleep(poll_s)
+                    how = request_page(target)
+                    if how != 'busy':
+                        break
+                if how == 'busy':
+                    continue
             if how == 'no-next':
                 decision = 'last'
                 break
@@ -456,12 +554,13 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
                     or (page_number(s.get('cur')) and page_number(s.get('max'))
                         and page_number(s.get('cur')) >= page_number(s.get('max')))))
             elif how == 'ok':
-                state = quiet_state(lambda s, bw=before_want, ps=sig: (
-                    _load_confirmed(s, bw) or page_row_signature(s.get('items')) != ps))
+                state = quiet_state(lambda s, bw=before_want, ps=sig, n=target: (
+                    _load_confirmed(s, bw, n) or page_row_signature(s.get('items')) != ps))
             else:
                 sleep(poll_s)
                 continue
-            decision = classify_settled_page(sig, state, before_want)
+            decision = classify_settled_page(
+                sig, state, before_want, target if how == 'ok' else None)
             if decision != 'retry':
                 break
         if decision == 'last':

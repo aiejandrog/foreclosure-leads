@@ -37,19 +37,29 @@ class FakeGrid:
     indicator='accurate' reports the page on screen. 'lag' stays on "1 of N" the way
     `#curPWA` does until a later UPDATE poll. 'blank' has not painted a number at all.
     `swallow` is how many requests are issued and then never paint. `delay` is how many
-    reads stay on the old rows (loading) before the paint lands.
+    reads stay on the old rows (loading) before the paint lands. `stale` is how many
+    numbered requests are answered first by an in-flight tickII refresh: that refresh
+    stamps the open generation with the page already on screen and holds that settled
+    frame for PAGE_QUIET_READS reads (long enough for the old "any confirmed same-row
+    paint is the last page" rule to stop), then the real page n paints.
     """
 
-    def __init__(self, pages, indicator='accurate', swallow=0, delay=0):
+    def __init__(self, pages, indicator='accurate', swallow=0, delay=0, stale=0):
         self.pages = pages
         self.indicator = indicator
         self.swallow = swallow
         self.delay = delay
+        self.stale = stale
         self.index = 0
         self.want = 0
         self.applied = 0
+        self.applied_page = 0
+        self.paint = 0
+        self.got_paint = 0
         self.loading = False
         self._pending = None
+        self._stale_hold = 0
+        self._stale_real = None
         self.requests = []
         self.clicks = 0
 
@@ -65,17 +75,35 @@ class FakeGrid:
             return '1', mx
         return str(self.index + 1), mx
 
+    def _claim(self, idx, page_no):
+        self.index = idx
+        self.paint += 1
+        self.applied = self.want
+        self.applied_page = page_no
+        self.got_paint = self.paint
+        self.loading = False
+
     def read(self):
-        if self._pending:
+        if self._stale_hold:
+            self._stale_hold -= 1
+            self.loading = False
+        elif self._stale_real:
+            idx, page_no = self._stale_real
+            self._stale_real = None
+            self._claim(idx, page_no)
+        elif self._pending:
             self._pending[1] -= 1
             if self._pending[1] <= 0:
-                self.index = self._pending[0]
-                self.applied = self._pending[2]
+                idx, page_no = self._pending[0], self._pending[2]
                 self._pending = None
-        self.loading = self._pending is not None
+                self._claim(idx, page_no)
+            else:
+                self.loading = True
         cur, mx = self._indicator()
         return {'items': self._rows(), 'cur': cur, 'max': mx, 'loading': self.loading,
-                'booting': False, 'want': self.want, 'applied': self.applied}
+                'booting': False, 'want': self.want, 'applied': self.applied,
+                'applied_page': self.applied_page, 'paint': self.paint,
+                'got_paint': self.got_paint}
 
     def request(self, n):
         self.requests.append(n)
@@ -83,14 +111,23 @@ class FakeGrid:
         if self.swallow > 0:
             self.swallow -= 1
             return 'ok'
-        idx = min(max(int(n), 1), len(self.pages)) - 1
-        if self.delay <= 0:
-            self.index = idx
-            self.applied = self.want
+        page_no = int(n)
+        idx = min(max(page_no, 1), len(self.pages)) - 1
+        if self.stale > 0:
+            self.stale -= 1
+            # The in-flight refresh repaints the page already on screen and
+            # claims this generation. Hold that settled frame long enough that
+            # a same-row "confirmed" read would be classified, then paint n.
+            self._claim(self.index, self.index + 1)
+            self._stale_hold = F.PAGE_QUIET_READS
+            self._stale_real = (idx, page_no)
             self.loading = False
+            return 'ok'
+        if self.delay <= 0:
+            self._claim(idx, page_no)
         else:
             self.loading = True
-            self._pending = [idx, self.delay, self.want]
+            self._pending = [idx, self.delay, page_no]
         return 'ok'
 
     def click(self):
@@ -121,10 +158,36 @@ class PagerTests(unittest.TestCase):
     def test_same_rows_after_a_confirmed_paint_are_the_last_page(self):
         # The 10/17 failure: Next was clickable, the first case did not change,
         # and that was recorded as unproven even though the day was fully read.
+        # Same rows are the last page only when the callback is for page n.
+        # The indicator here is still "1 of 3".
         prev = F.page_row_signature([{'Case #': '2099-000001-CA-01', 'AID': '1'}])
         state = {'items': [{'Case #': '2099-000001-CA-01', 'AID': '1'}],
-                 'cur': '1', 'max': '3', 'want': 2, 'applied': 2}
-        self.assertEqual(F.classify_settled_page(prev, state, 1), 'last')
+                 'cur': '1', 'max': '3', 'want': 2, 'applied': 2,
+                 'applied_page': 2, 'paint': 1, 'got_paint': 1}
+        self.assertEqual(F.classify_settled_page(prev, state, 1, target=2), 'last')
+
+    def test_a_stale_stamp_for_another_page_is_not_the_last_page(self):
+        # tickII's refresh claimed the open generation but painted the page
+        # already on screen. A later paint (paint != got_paint) is the same miss.
+        prev = F.page_row_signature([{'Case #': '2099-000001-CA-01', 'AID': '1'}])
+        stale = {'items': [{'Case #': '2099-000001-CA-01', 'AID': '1'}],
+                 'cur': '1', 'max': '3', 'want': 2, 'applied': 2,
+                 'applied_page': 1, 'paint': 1, 'got_paint': 1}
+        self.assertEqual(F.classify_settled_page(prev, stale, 1, target=2), 'retry')
+        later = dict(stale, applied_page=2, paint=2, got_paint=1)
+        self.assertEqual(F.classify_settled_page(prev, later, 1, target=2), 'retry')
+        # The old stamp shape (generation matches, no page number) is not page n.
+        bare = {'items': stale['items'], 'cur': '1', 'max': '3', 'want': 2, 'applied': 2}
+        self.assertEqual(F.classify_settled_page(prev, bare, 1, target=2), 'retry')
+
+    def test_same_rows_are_last_when_the_indicator_shows_page_n(self):
+        prev = F.page_row_signature([{'Case #': '2099-000001-CA-01', 'AID': '1'}])
+        state = {'items': [{'Case #': '2099-000001-CA-01', 'AID': '1'}],
+                 'cur': '2', 'max': '2', 'want': 1, 'applied': 0}
+        self.assertEqual(F.classify_settled_page(prev, state, 0, target=2), 'last')
+        # cur >= max for a different page does not prove the page we asked for.
+        other = dict(state, cur='1', max='1')
+        self.assertEqual(F.classify_settled_page(prev, other, 0, target=2), 'retry')
 
     def test_a_new_row_set_advances_even_when_the_first_case_repeats(self):
         prev = F.page_row_signature([
@@ -240,6 +303,18 @@ class PagerTests(unittest.TestCase):
         items, pages, why = walk(grid)
         self.assertEqual((why, pages, len(items)), ('last page', 1, 4))
         self.assertEqual(grid.requests, [])
+
+    def test_stale_area_refresh_does_not_end_a_multi_page_date(self):
+        # An in-flight tickII Area_W refresh paints the current rows and, under
+        # the old stamp, that settled frame is `last` (pages=1, the tail dropped).
+        # The hold is PAGE_QUIET_READS, so the walker sees it settled before page
+        # 2 arrives. It must wait for the page-2 callback and still prove the end.
+        grid = FakeGrid(DAY_17, indicator='lag', stale=1)
+        items, pages, why = walk(grid)
+        self.assertEqual(why, 'last page')
+        self.assertEqual(pages, 2)
+        self.assertEqual(case_list(items), cases(10, 1) + cases(7, 11))
+        self.assertEqual(grid.requests, [2, 3])
 
 
 class ScrapeDateTests(unittest.TestCase):
