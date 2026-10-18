@@ -238,7 +238,7 @@ rec("the halves are contiguous and cover the whole range", (lambda h: h and h[0]
 rec("the criteria count and the truncation test are the same number", PB.CRITERIA_COUNT == 200)
 
 # ================================================================================================
-print('\n9. AUCTION PAGINATION — structural only (the loop needs a live browser)')
+print('\n9. AUCTION PAGINATION — walk is _auctionpagetest.py; this is the source contract')
 rec("the page-click cap is no longer 25", F.MAX_PAGE_CLICKS > 25, F.MAX_PAGE_CLICKS)
 rec("a traversal that did not prove the last page is collected", hasattr(F, 'PAGING_UNPROVEN'))
 _src = open(os.path.join(HERE, 'foreclosure_leads.py'), encoding='utf-8').read()
