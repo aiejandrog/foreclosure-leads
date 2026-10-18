@@ -148,8 +148,22 @@ EXTRACT_JS = """
     rec.AID = item.getAttribute('aid') || '';
     out.push(rec);
   });
-  const max = document.getElementById('maxWA');
-  return JSON.stringify({items: out, maxPages: max ? (max.textContent || '').trim() : '1'});
+  // Current page is an <input id="curPWA"> — the number is value / curPG, not text.
+  // maxWA is filled later by PFS() from a different poll. Empty is unknown, not page 1
+  // (the old `|| '1'` made a not-yet-painted pager look like a one-page day).
+  const curEl = document.getElementById('curPWA');
+  const maxEl = document.getElementById('maxWA');
+  const cur = curEl ? (curEl.getAttribute('curPG') || curEl.value || '') : '';
+  const max = maxEl ? (maxEl.textContent || '') : '';
+  return JSON.stringify({
+    items: out,
+    cur: String(cur).trim(),
+    max: String(max).trim(),
+    loading: (typeof isLoading !== 'undefined' && isLoading === 'Y'),
+    booting: (typeof isPageReset !== 'undefined' && !!isPageReset),
+    want: (typeof window.__dfWant === 'number') ? window.__dfWant : 0,
+    applied: (typeof window.__dfGot === 'number') ? window.__dfGot : 0
+  });
 }
 """
 
@@ -236,6 +250,245 @@ def discover_dates(page, base=BASE, horizon_days=None):
           f"{[f'{d} [{st}]' for d, st in dates]}")
     return dates   # list of (date, saletype)
 
+# A page click is cheap; an undetected truncation is not. The old 25 was low enough to be
+# reachable on a heavy auction day, and hitting it was indistinguishable from finishing.
+MAX_PAGE_CLICKS = 60
+# One try plus two retries when the paint we asked for never lands. Past that the date is
+# unproven — it is not recorded as a finished last page.
+PAGE_ATTEMPTS = 3
+# 24 * 0.25s = 6s for one request to paint and sit still. The old loop slept 0.5s BEFORE
+# its first look and gave up at 8s, so a next page that painted and was then overwritten
+# by the site's own refresh was invisible.
+PAGE_POLLS = 24
+PAGE_POLL_S = 0.25
+PAGE_QUIET_READS = 2
+PAGING_UNPROVEN = []      # auction dates whose traversal did not positively reach the last page
+
+# Stop auction.js tickII from reloading the current waiting page on top of the page we
+# just asked for, and stamp LoadNewArea so we can tell THAT request's paint from a stale one.
+ARM_PAGER_JS = """
+() => {
+  try { clearTimeout(window.sysTimer); } catch (e) {}
+  window.tickII = function () {};
+  if (window.__dfHooked) return typeof loadArea === 'function';
+  if (typeof LoadNewArea !== 'function') return false;
+  const orig = LoadNewArea;
+  window.LoadNewArea = function (area, data) {
+    const ret = orig.apply(this, arguments);
+    try {
+      if (area === 'W' && window.__dfArm === window.__dfWant) window.__dfGot = window.__dfWant;
+    } catch (e) {}
+    return ret;
+  };
+  window.__dfHooked = true;
+  return typeof loadArea === 'function';
+}
+"""
+
+# The page-number box does this (keyPage -> loadArea(area, 0, 1, n)). PageDir=1, which is
+# what Next clicks, shares one session cursor with tickII's refresh and does not move on
+# the last page. bypassPage=n returns that page, and a number past the end repeats the last.
+REQUEST_WAITING_PAGE_JS = """
+(n) => {
+  try { clearTimeout(window.sysTimer); } catch (e) {}
+  window.tickII = function () {};
+  if (typeof loadArea !== 'function') return 'no-fn';
+  const pageNo = parseInt(n, 10);
+  if (!pageNo || pageNo < 1) return 'fail';
+  window.__dfWant = (window.__dfWant || 0) + 1;
+  window.__dfArm = window.__dfWant;
+  loadArea('W', 0, 1, pageNo);
+  return 'ok';
+}
+"""
+
+CLICK_NEXT_JS = """
+() => {
+  const b = document.querySelector('.Head_W .PageRight');
+  if (!b) return false;
+  b.click();
+  return true;
+}
+"""
+
+
+def page_row_signature(items):
+    """Ordered (case, aid) identity of one waiting-list page.
+
+    The whole set, not the first case. Two pages can share a first case, and the last
+    page's first case does not change when Next is asked for again — that is also what
+    a swallowed click looks like. Callers tell those apart with the paint generation.
+    """
+    sig = []
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        case = str(it.get('Case #') or '').strip()
+        aid = str(it.get('AID') or '').strip()
+        if case or aid:
+            sig.append((case, aid))
+    return tuple(sig)
+
+
+def page_number(value):
+    """Positive pager integer, or None when the pager has not painted a number."""
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _load_confirmed(state, before_want):
+    """True when the waiting-page request we just issued has painted."""
+    try:
+        want = int((state or {}).get('want') or 0)
+        applied = int((state or {}).get('applied') or 0)
+        before = int(before_want or 0)
+    except (TypeError, ValueError):
+        return False
+    return want > before and applied == want
+
+
+def classify_settled_page(prev_sig, state, before_want):
+    """'advanced', 'last', or 'retry' for one settled read of the waiting grid.
+
+    A different full row set is a new page, whether or not the first case is new.
+    A confirmed paint of the SAME set is the last page: the server repeats the last
+    page when the requested number is past the end. The pager indicator often still
+    says "1 of N" then (PFS fills it from a later UPDATE poll), so a lagging
+    cur < max must not overrule that paint. An unconfirmed same set is a swallowed
+    request, unless the indicator has already caught up to cur >= max.
+    """
+    state = state or {}
+    sig = page_row_signature(state.get('items'))
+    cur = page_number(state.get('cur'))
+    mx = page_number(state.get('max'))
+    confirmed = _load_confirmed(state, before_want)
+    if sig and sig != prev_sig:
+        return 'advanced'
+    if confirmed and sig == prev_sig and prev_sig:
+        return 'last'
+    if cur and mx and cur >= mx and sig == prev_sig and prev_sig:
+        return 'last'
+    return 'retry'
+
+
+def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None,
+                       attempts=None, polls=None, poll_s=None):
+    """Walk Area_W. Returns (items, pages, why).
+
+    `read_grid()` -> {items, cur, max, loading, booting, want, applied}.
+    `request_page(n)` -> 'ok' (asked for waiting page n), 'no-fn' (no loadArea;
+    `click_next` is used instead), 'no-next' (nothing to click), or anything else
+    to retry. `arm()`, when given, runs once the first page has settled so the
+    site's refresh timer cannot paint the old page back over the new one.
+
+    why is 'last page' (every page was read — the next request repeated it, the
+    indicator says this is the last page, or there is no Next control),
+    'unproven: ...' (Next could still be asked and no new row set painted), or
+    'cap: stopped after ...' (MAX_PAGE_CLICKS advances and the end was not proven).
+    """
+    attempts = PAGE_ATTEMPTS if attempts is None else attempts
+    polls = PAGE_POLLS if polls is None else polls
+    poll_s = PAGE_POLL_S if poll_s is None else poll_s
+    missing = object()
+
+    def read():
+        state = read_grid() or {}
+        return state if isinstance(state, dict) else {}
+
+    def quiet_state(accept):
+        last = {}
+        prev = missing
+        quiet = 0
+        for _ in range(polls):
+            last = read()
+            if last.get('loading') or last.get('booting') or not accept(last):
+                prev, quiet = missing, 0
+                sleep(poll_s)
+                continue
+            sig_now = page_row_signature(last.get('items'))
+            if sig_now == prev:
+                quiet += 1
+            else:
+                prev, quiet = sig_now, 1
+            if quiet >= PAGE_QUIET_READS:
+                return last
+            sleep(poll_s)
+        return last
+
+    state = quiet_state(lambda s: True)
+    if arm:
+        try:
+            arm()
+        except Exception:
+            pass
+        state = quiet_state(lambda s: True)
+    items = list(state.get('items') or [])
+    sig = page_row_signature(items)
+    pages = 1
+    why = 'last page'
+    try:
+        before_want = int(state.get('want') or 0)
+    except (TypeError, ValueError):
+        before_want = 0
+
+    for _ in range(MAX_PAGE_CLICKS):
+        cur = page_number(state.get('cur'))
+        mx = page_number(state.get('max'))
+        if cur and mx and cur >= mx and sig:
+            why = 'last page'
+            break
+        target = pages + 1
+        decision = 'retry'
+        for _attempt in range(max(1, attempts)):
+            how = request_page(target)
+            if how == 'no-next':
+                decision = 'last'
+                break
+            if how == 'no-fn':
+                if click_next is None or not click_next():
+                    decision = 'last'
+                    break
+                state = quiet_state(lambda s, ps=sig: (
+                    page_row_signature(s.get('items')) != ps
+                    or (page_number(s.get('cur')) and page_number(s.get('max'))
+                        and page_number(s.get('cur')) >= page_number(s.get('max')))))
+            elif how == 'ok':
+                state = quiet_state(lambda s, bw=before_want, ps=sig: (
+                    _load_confirmed(s, bw) or page_row_signature(s.get('items')) != ps))
+            else:
+                sleep(poll_s)
+                continue
+            decision = classify_settled_page(sig, state, before_want)
+            if decision != 'retry':
+                break
+        if decision == 'last':
+            why = 'last page'
+            break
+        if decision == 'advanced':
+            items.extend(list(state.get('items') or []))
+            sig = page_row_signature(state.get('items'))
+            pages += 1
+            try:
+                before_want = int(state.get('want') or before_want)
+            except (TypeError, ValueError):
+                pass
+            cur = page_number(state.get('cur'))
+            mx = page_number(state.get('max'))
+            if cur and mx and cur >= mx and sig:
+                why = 'last page'
+                break
+            continue
+        why = ('unproven: Next was clickable but the grid never showed a new '
+               'page of cases after retries')
+        break
+    else:
+        why = f'cap: stopped after {MAX_PAGE_CLICKS} page clicks with more possibly left'
+    return items, pages, why
+
+
 def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
     page.goto(f"{base}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={d}", timeout=45000)
     # tax-deed lists render slower; give them a longer settle window
@@ -246,40 +499,33 @@ def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
         if attempt == 1:
             return scrape_date(page, d, saletype, attempt=2, base=base)
         print(f"{d}: no waiting auctions rendered"); return []
-    data = json.loads(page.evaluate(EXTRACT_JS))
-    items = list(data['items'])
-    # pager text is unreliable headless — click Next until the first case stops changing
-    seen_firsts = {items[0].get('Case #','') if items else ''}
-    pages = 1
     # THREE WAYS THIS LOOP ENDS, and they used to be one (audit 2026-09-21, defect 9).
-    #   no Next button      -> the last page, positively proven. Fine.
-    #   clicked, no advance -> EITHER the last page OR the grid did not repaint inside 8s.
-    #   ran out of clicks   -> the 25-page cap, which proves nothing at all.
-    # All three did the same bare `break` and printed the same confident "N pending (pages=P)",
-    # so a day truncated by a slow repaint looked exactly like a day that was fully read.
-    # scrape_guard only catches a LARGE per-county collapse; losing the tail of one date is
-    # well inside its tolerance.
-    why = 'last page'
-    for _ in range(MAX_PAGE_CLICKS):
-        cur_first = data['items'][0].get('Case #', '') if data['items'] else ''
-        clicked = page.evaluate("() => { const b = document.querySelector('.Head_W .PageRight'); if (!b) return false; b.click(); return true; }")
-        if not clicked:
-            why = 'last page'
-            break
-        advanced = False
-        for _ in range(16):
-            time.sleep(0.5)
-            data = json.loads(page.evaluate(EXTRACT_JS))
-            first = data['items'][0].get('Case #', '') if data['items'] else ''
-            if first and first != cur_first and first not in seen_firsts:
-                seen_firsts.add(first)
-                items += data['items']; pages += 1; advanced = True
-                break
-        if not advanced:
-            why = 'unproven: Next was clickable but the grid never showed a new first case'
-            break
-    else:
-        why = f'cap: stopped after {MAX_PAGE_CLICKS} page clicks with more possibly left'
+    #   no Next / indicator at the last page / a confirmed repeat of the same rows
+    #                                           -> last page, positively proven.
+    #   asked, and no new row set after retries -> unproven. The tail may be missing.
+    #   ran out of clicks                       -> the page cap, which proves nothing.
+    # 2026-10-18: Next stays in the DOM on the last page and the server repeats that
+    # page's rows, so "first case unchanged" was the normal end of a finished date
+    # (11 of 34 dates on the 10/17 refresh). It is also what a swallowed paint looks
+    # like. walk_waiting_pages tells them apart. See that function.
+    def _read():
+        return json.loads(page.evaluate(EXTRACT_JS))
+
+    def _arm():
+        page.evaluate(ARM_PAGER_JS)
+
+    def _request(n):
+        try:
+            if not page.evaluate(ARM_PAGER_JS):
+                return 'no-fn'
+            return page.evaluate(REQUEST_WAITING_PAGE_JS, int(n))
+        except Exception:
+            return 'fail'
+
+    def _click():
+        return bool(page.evaluate(CLICK_NEXT_JS))
+
+    items, pages, why = walk_waiting_pages(_read, _request, time.sleep, click_next=_click, arm=_arm)
     if not why.startswith('last page'):
         PAGING_UNPROVEN.append(f'{d} [{saletype}] {pages}p/{len(items)} rows — {why}')
     for rec in items:
@@ -287,11 +533,6 @@ def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
         rec['sale_type'] = saletype
     print(f"{d} [{saletype}]: {len(items)} pending (pages={pages}, end={why})")
     return items
-
-# A page click is cheap; an undetected truncation is not. The old 25 was low enough to be
-# reachable on a heavy auction day, and hitting it was indistinguishable from finishing.
-MAX_PAGE_CLICKS = 60
-PAGING_UNPROVEN = []      # auction dates whose traversal did not positively reach the last page
 
 PROFILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'browser-profile')
 
