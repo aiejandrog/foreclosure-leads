@@ -215,6 +215,13 @@ rec('before the judge hour, a zero is not yet a miss',
 rec('an uncounted pool is unknown, not empty',
     PA.morning_kind(dict(base_m, eligible=None), NOW, TH) == 'unknown'
     and one({'morning_sends': dict(base_m, eligible=None)}, 'morning-sends') is None)
+rec('a first-touch bounce pause is not an unexplained zero',
+    PA.morning_kind(dict(base_m, paused=True), NOW, TH) == 'paused'
+    and one({'morning_sends': dict(base_m, paused=True)}, 'morning-sends') is None)
+rec('no pause, or a pause that could not be read, still alerts',
+    one({'morning_sends': dict(base_m, paused=False)}, 'morning-sends') is not None
+    and one({'morning_sends': dict(base_m, paused=None)}, 'morning-sends') is not None)
+rec('a pause does not hide a send', PA.morning_kind(dict(base_m, paused=True, sent=2), NOW, TH) == 'sent')
 
 cfg = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'senders.json'), encoding='utf-8'))
 addrs = S._first_touch_senders(cfg)

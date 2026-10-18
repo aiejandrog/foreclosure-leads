@@ -13386,7 +13386,7 @@ function genMorningWorker(lane, autostart){
     +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
-    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null)};'
+    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null), ft:(j.bounce_rule==="paused"), ftDead:+(j.bounce.day_dead||0), ftSent:+(j.bounce.day_sent||0), ftDay:String(j.bounce.day_date||"")};'
     +   'if(BOUNCE.blocked) render();'
     +   '}}).catch(function(){});}catch(e){}'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
@@ -14109,8 +14109,13 @@ function genMorningWorker(lane, autostart){
     +           'pause();'
     +   '} else if(x.status===403 && x.j.blocked && x.j.skip){'
     +     'bridgeUp(true);'
-    +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null))};'
-    +     'addLog("skip", r.first||r.owner, "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears.", "warn");'
+    +     'var _ob=x.j.bounce||{};'
+    +     'BOUNCE={blocked:true, rate:_ob.rate||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null)), ft:(!!x.j.first_touch_paused || !!(BOUNCE&&BOUNCE.ft)), ftDead:+(_ob.day_dead||(BOUNCE&&BOUNCE.ftDead)||0), ftSent:+(_ob.day_sent||(BOUNCE&&BOUNCE.ftSent)||0), ftDay:String(_ob.day_date||(BOUNCE&&BOUNCE.ftDay)||"")};'
+    // Three refusals share this shape. Say which one it was: a first-touch bounce pause is not a
+    // missing-evidence hold, and logging it as one sent the 10-18 diagnosis down the wrong road.
+    +     'addLog("skip", r.first||r.owner, (x.j.first_touch_paused ? "held — first emails are paused by the bounce rule. Stays queued; resumes when the pause lifts."'
+    +     '  : ("proven_pool" in x.j) ? "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears."'
+    +     '  : "held — "+String(x.j.err||"bounce check refused this send")+" Stays queued."), "warn");'
     +     'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
@@ -14594,6 +14599,9 @@ function genMorningWorker(lane, autostart){
     +     'if(BOUNCE && BOUNCE.blocked && !document.getElementById("mwbounceban")){'
     +     'var bb=document.createElement("div"); bb.id="mwbounceban";'
     +     'bb.style.cssText="position:sticky;top:0;z-index:99;background:#8a6d1c;color:#fff;font:700 13px/1.45 Arial;padding:9px 14px;border-radius:8px;margin:0 0 12px";'
+    // A first-touch pause (#226) is its own state: the trailing rate can sit well under the ceiling
+    // while one bad day pauses every first email, so the verified-only sentence would read wrong.
+    +   'if(BOUNCE.ft) bb.innerHTML="&#9993; FIRST EMAILS PAUSED — "+(BOUNCE.ftSent?(BOUNCE.ftDead+" of "+BOUNCE.ftSent+" first emails"+(BOUNCE.ftDay?" sent "+BOUNCE.ftDay:"")+" bounced. "):"")+"Every first email is held and stays queued until the pause lifts. Follow-ups to addresses that already accepted mail are not part of this pause. <b>Calls, texts and replies are unaffected.</b>"; else '
     +   'bb.innerHTML="&#9993; VERIFIED-ONLY MODE — trailing bounce rate "+(Math.round((BOUNCE.rate||0)*1000)/10)+"% is over the "+(Math.round((BOUNCE.ceiling||0.1)*100))+"% ceiling. Emails to addresses that already accepted mail STILL SEND"+(BOUNCE.pool!=null?" ("+BOUNCE.pool+" addresses sendable)":"")+"; new/unverified addresses are auto-held and stay queued. <b>Calls, texts and replies are unaffected.</b>";'
     +     'main.parentNode.insertBefore(bb, main);'
     +     '}'

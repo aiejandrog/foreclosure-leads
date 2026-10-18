@@ -2438,6 +2438,8 @@ class Handler(BaseHTTPRequestHandler):
             if _first_touch and first_touch_paused(_hb):
                 return self._json(403, {
                     'ok': False, 'blocked': 'bounce_rate', 'skip': True,
+                    # Tells the worker log this is the pause, not a verified-only hold.
+                    'first_touch_paused': True,
                     'err': (
                         'BLOCKED: post-cutoff first touches, %d of %d bounced (%.0f%%). '
                         'Rule: paused (%s). The ceiling is %.0f%% once %d have been sent, '
