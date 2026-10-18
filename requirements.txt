@@ -7,6 +7,7 @@ playwright>=1.47
 beautifulsoup4>=4.12
 Pillow>=10.4
 cryptography>=42
+paramiko>=3.4         # broward_or_fetch: SFTP to the county Official Records daily index
 
 # LOCAL ONLY — deliberately not installed by GitHub Actions.
 #   camoufox[geoip]
