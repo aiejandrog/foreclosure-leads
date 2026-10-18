@@ -9,9 +9,10 @@ retried page requests.
 
 This suite does not fake the hook. It runs the real ARM_PAGER_JS,
 REQUEST_WAITING_PAGE_JS, EXTRACT_JS and CLICK_NEXT_JS strings from
-foreclosure_leads.py inside Node, on a stand-in for auction.js: loadArea sends an
-XMLHttpRequest, its onreadystatechange calls the global LoadNewArea, and a fake
-clock decides when each response lands. scrape_date and walk_waiting_pages are
+foreclosure_leads.py inside Node, on a stand-in for auction.js: loadArea calls
+$.getJSON (a jQuery-3-shaped XHR transport) whose callback calls the global
+LoadNewArea, and a fake clock decides when each response lands. Every test also
+runs with a hand-written XHR loadArea (RawXhrTests). scrape_date and walk_waiting_pages are
 the real Python. Only the server, the DOM and the clock are fake.
 
 Case numbers only. No browser, no network. Needs `node` (CI installs it).
@@ -54,7 +55,7 @@ function el(attrs) {
 
 function setup(cfg) {
   S = {
-    pages: cfg.pages, indicator: cfg.indicator || 'lag', transport: cfg.transport || 'xhr',
+    pages: cfg.pages, indicator: cfg.indicator || 'lag', transport: cfg.transport || 'jquery',
     now: 0, timers: [], seq: 0, cursor: 0, shown: 0,
     latencies: (cfg.latencies || []).slice(), defaultLatency: cfg.default_latency || 300,
     log: [],
@@ -72,6 +73,19 @@ function setup(cfg) {
   function FakeXHR() { this.readyState = 0; this.responseText = ''; this._ls = []; }
   FakeXHR.prototype.open = function (m, url) { this._url = url; this.readyState = 1; };
   FakeXHR.prototype.addEventListener = function (t, fn) { if (t === 'readystatechange') this._ls.push(fn); };
+  // jQuery 3's xhr transport: onload is set before send, and getJSON's success callback
+  // runs synchronously inside it with the parsed body.
+  const jQuery = {
+    getJSON: function (url, data, cb) {
+      if (typeof data === 'function') { cb = data; data = undefined; }
+      const x = new FakeXHR();
+      const fails = [];
+      x.open('GET', url);
+      x.onload = function () { cb(JSON.parse(x.responseText)); };
+      x.send();
+      return {fail: function (fn) { fails.push(fn); return this; }};
+    },
+  };
   FakeXHR.prototype.send = function () {
     const q = /bypassPage=(\d+)/.exec(this._url); const n = q ? parseInt(q[1], 10) : 0;
     // The server answers from its session cursor at the moment the request reaches it.
@@ -80,19 +94,25 @@ function setup(cfg) {
     const lat = S.latencies.length && n > 0 ? S.latencies.shift() : (this._lat || S.defaultLatency);
     S.log.push({at: S.now, bypassPage: n, answers: S.cursor + 1, lands: S.now + lat});
     const x = this;
-    schedule(S.now + lat, () => {
+    this._timer = schedule(S.now + lat, () => {
       x.readyState = 4; x.status = 200; x.responseText = body;
       if (typeof x.onreadystatechange === 'function') x.onreadystatechange();
       x._ls.forEach((fn) => fn.call(x));
+      if (typeof x.onload === 'function') x.onload();
     });
   };
 
   ctx = {
-    document, XMLHttpRequest: FakeXHR, JSON, parseInt, String, Math,
+    document, XMLHttpRequest: FakeXHR, jQuery, JSON, parseInt, String, Math,
     setTimeout: (fn, ms) => schedule(S.now + (ms || 0), fn),
     clearTimeout: (id) => { S.timers = S.timers.filter((t) => t.id !== id); },
     __paint: (idx) => {
       S.shown = idx;
+      if (S.pf && !S.pf.moved && idx === S.pf.page) {
+        // Land the pre-arm refresh `delay` ms after this page first paints.
+        S.pf.moved = true;
+        S.timers.forEach((t) => { if (t.id === S.pf.timer) t.at = S.now + S.pf.delay; });
+      }
       area.items = S.pages[idx].map((c, i) => {
         const cell0 = el({textContent: 'Case #:'}); const cell1 = el({textContent: c});
         const tr = el({cells: [cell0, cell1]});
@@ -114,7 +134,7 @@ function setup(cfg) {
     var isLoading = 'N', isPageReset = false, sysTimer = null;
     function LoadNewArea(area, data) {
       isLoading = 'N';
-      if (area === 'W') __paint(JSON.parse(data).page);
+      if (area === 'W') __paint((typeof data === 'string' ? JSON.parse(data) : data).page);
     }
     function loadArea(area, PageDir, doReset, bypassPage) {
       isLoading = 'Y';
@@ -124,9 +144,14 @@ function setup(cfg) {
         setTimeout(function () { LoadNewArea(area, JSON.stringify({page: __clamp(n)})); }, 300);
         return;
       }
+      var url = '/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=' + area +
+                '&PageDir=' + PageDir + '&doR=' + doReset + '&bypassPage=' + bypassPage;
+      if (__transport === 'jquery') {
+        jQuery.getJSON(url, function (data) { LoadNewArea(area, data); });
+        return;
+      }
       var x = new XMLHttpRequest();
-      x.open('GET', '/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=' + area +
-             '&PageDir=' + PageDir + '&doR=' + doReset + '&bypassPage=' + bypassPage);
+      x.open('GET', url);
       x.onreadystatechange = function () { if (x.readyState === 4) LoadNewArea(area, x.responseText); };
       x.send();
     }
@@ -143,6 +168,9 @@ function setup(cfg) {
     // quiet wait already sits it out. preflight_loading=false is the case that wait misses.
     if (cfg.preflight_loading !== false) ctx.isLoading = 'Y';
     x.send();
+    if (cfg.preflight_after_page) {
+      S.pf = {timer: x._timer, page: cfg.preflight_after_page - 1, delay: cfg.preflight_delay || 50};
+    }
   }
 }
 
@@ -254,7 +282,10 @@ class OverlappingResponseTests(unittest.TestCase):
         for s in self.sites:
             s.close()
 
+    TRANSPORT = 'jquery'
+
     def site(self, **cfg):
+        cfg.setdefault('transport', self.TRANSPORT)
         s = Site(self.harness, **cfg)
         self.sites.append(s)
         F.time.sleep = s.sleep
@@ -305,6 +336,46 @@ class OverlappingResponseTests(unittest.TestCase):
         self.assertEqual(got, cases(10, 100) + cases(10, 110) + cases(2, 120), s.log())
         self.assertEqual(F.PAGING_UNPROVEN, [])
 
+    def test_four_pages_stale_refresh_overwrites_page_three(self):
+        # Codex on #273: page 2 is read, page 3 paints, then a refresh that left before
+        # arming lands and repaints page 1 before the walker looks. Those rows differ from
+        # page 2, so a check that accepted any changed rows counted page 1 as page 3 and
+        # moved on to page 4, dropping page 3. Changed rows must be page 3's own answer.
+        day = [cases(10, 300), cases(10, 310), cases(10, 320), cases(3, 330)]
+        s = self.site(pages=day, indicator='blank', preflight=10 ** 9, preflight_loading=False,
+                      preflight_after_page=3, preflight_delay=50)
+        got = self.scrape(s)
+        log = s.log()
+        self.assertEqual(got, cases(10, 300) + cases(10, 310) + cases(10, 320) + cases(3, 330), log)
+        self.assertEqual(F.PAGING_UNPROVEN, [])
+        # Page 3 was asked for again after its paint was overwritten.
+        self.assertGreaterEqual([e['bypassPage'] for e in log['log']].count(3), 2, log)
+
+    def test_four_pages_late_retry_answer_with_stale_refresh(self):
+        # Both at once: page 3's first request is slow enough to be retried, its late
+        # answer lands while page 4 is out, and the pre-arm refresh lands after page 2.
+        day = [cases(10, 400), cases(10, 410), cases(10, 420), cases(10, 430)]
+        s = self.site(pages=day, indicator='lag', preflight=10 ** 9, preflight_loading=False,
+                      preflight_after_page=2, preflight_delay=30,
+                      latencies=[200, 7000, 200, 2000, 200])
+        got = self.scrape(s)
+        self.assertEqual(got, cases(10, 400) + cases(10, 410) + cases(10, 420) + cases(10, 430),
+                         s.log())
+        self.assertEqual(F.PAGING_UNPROVEN, [])
+
+    def test_untracked_request_never_advances_on_changed_rows(self):
+        # With no request to tie a paint to, changed rows are not proof of the next page.
+        s = self.site(pages=DAY_22, indicator='blank', transport='timer')
+        old = F.PAGE_POLLS
+        F.PAGE_POLLS = 8
+        try:
+            got = self.scrape(s)
+        finally:
+            F.PAGE_POLLS = old
+        self.assertEqual(got, cases(10, 100))
+        self.assertEqual(len(F.PAGING_UNPROVEN), 1, F.PAGING_UNPROVEN)
+        self.assertIn('could not be matched', F.PAGING_UNPROVEN[0])
+
     # --- no regression on clean days ---
     def test_clean_days_still_prove_the_end(self):
         for pages, n in ((DAY_17, 17), (DAY_22, 22)):
@@ -334,6 +405,11 @@ class OverlappingResponseTests(unittest.TestCase):
         self.assertEqual(got, cases(4, 1))
         self.assertEqual(len(F.PAGING_UNPROVEN), 1, F.PAGING_UNPROVEN)
         self.assertIn('unproven:', F.PAGING_UNPROVEN[0])
+
+
+class RawXhrTests(OverlappingResponseTests):
+    """Same cases with loadArea sending its own XMLHttpRequest instead of $.getJSON."""
+    TRANSPORT = 'xhr'
 
 
 if __name__ == '__main__':

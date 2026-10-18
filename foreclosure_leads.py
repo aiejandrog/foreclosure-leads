@@ -401,7 +401,7 @@ def _load_confirmed(state, before_want):
     return want > before and applied == want
 
 
-def classify_settled_page(prev_sig, state, before_want, seen=()):
+def classify_settled_page(prev_sig, state, before_want, seen=(), require_confirm=False):
     """'advanced', 'last', or 'retry' for one settled read of the waiting grid.
 
     A different full row set is a new page, whether or not the first case is new.
@@ -413,6 +413,11 @@ def classify_settled_page(prev_sig, state, before_want, seen=()):
 
     `seen` is every row set already read this date. A late refresh or a late answer to
     an earlier request can paint one of those back; that is not a new page.
+
+    `require_confirm` (a numbered request): changed rows count only when they are that
+    request's own confirmed paint. Without it, a stale paint that merely differs from
+    the page on screen was accepted as the requested page (Codex on #273: page 3 paints,
+    a stale refresh overwrites it, and the stale rows are counted as page 3).
     """
     state = state or {}
     sig = page_row_signature(state.get('items'))
@@ -420,7 +425,9 @@ def classify_settled_page(prev_sig, state, before_want, seen=()):
     mx = page_number(state.get('max'))
     confirmed = _load_confirmed(state, before_want)
     if sig and sig != prev_sig:
-        return 'retry' if sig in seen else 'advanced'
+        if sig in seen or (require_confirm and not confirmed):
+            return 'retry'
+        return 'advanced'
     if confirmed and sig == prev_sig and prev_sig:
         return 'last'
     if cur and mx and cur >= mx and sig == prev_sig and prev_sig:
@@ -511,13 +518,12 @@ def walk_waiting_pages(read_grid, request_page, sleep, click_next=None, arm=None
                     or (page_number(s.get('cur')) and page_number(s.get('max'))
                         and page_number(s.get('cur')) >= page_number(s.get('max')))))
             elif how == 'ok':
-                state = quiet_state(lambda s, bw=before_want, ps=sig: (
-                    _load_confirmed(s, bw)
-                    or page_row_signature(s.get('items')) not in seen | {ps}))
+                state = quiet_state(lambda s, bw=before_want: _load_confirmed(s, bw))
             else:
                 sleep(poll_s)
                 continue
-            decision = classify_settled_page(sig, state, before_want, seen)
+            decision = classify_settled_page(sig, state, before_want, seen,
+                                             require_confirm=(how == 'ok'))
             if decision != 'retry':
                 break
         if decision == 'last':
