@@ -8,7 +8,7 @@ Mode tab (or the other seat's page) opened earlier kept an old snapshot, and its
 snapshot over everything logged since in the tab in use. A reload then showed it.
 
 Two pages are run under node against one shared localStorage, with the real _mergeLead extracted
-from the board and the page's own no-policy wrapper. No browser, no board data.
+from the board (which now carries the no-policy fields itself). No browser, no board data.
 """
 import io
 import json
@@ -40,7 +40,6 @@ def grab(start, end):
 
 
 PAGE = grab("var _NOTESBAD=false;", "/* NAME BRIDGE")
-WRAP = grab("(function(){\n  var _base = _mergeLead;", "/* ═")
 SYNC = call_mode.extract_sync_js(TPL)
 
 TAB = r"""
@@ -50,7 +49,7 @@ function save(){ _FCGEN++; saveNotes(); } function render(){} function recompute
 function syncFreshness(){} function syncStatus(){} function esc(s){ return String(s); }
 function toast(t){ toasts.push(t); } function logErr(e, w){ errs.push(w); }
 function teamRecheck(){ rechecks++; }
-""" + SYNC + '\n' + PAGE + '\n' + WRAP + r"""
+""" + SYNC + '\n' + PAGE + r"""
 loadNotes();
 """
 
@@ -136,7 +135,7 @@ for (let k = 0; k < 12; k++) (k % 2 ? B : A).run("notes.N.note += '\\nl" + k + "
 const nf = JSON.parse(store.fcLeadNotes).N.note;
 out.frozen_notes = nf.length + '|' + [0,1,2,3,4,5,6,7,8,9,10,11].every(k => nf.indexOf('l' + k) >= 0);
 
-// 7. Earliest noAt wins and a larger local resurf is kept.
+// 7. Latest noAt wins and a larger local resurf is kept.
 store.fcLeadNotes = JSON.stringify({P:{no:'soft', noAt:500, resurf:1}});
 A = tab('A', false);
 A.run("notes.P.noAt = 50; notes.P.resurf = 3; _LSLAST = null; save();");
@@ -179,7 +178,7 @@ rec('a note extended in one tab does not double across saves', out.get('note_len
 rec('with the board tab open the note stays linear (about 12 short lines)', int(out.get('board_tab','99999|').split('|')[0]) < 2000 and out.get('board_tab','').endswith('|1|1'), out.get('board_tab'))
 rec('two frozen tabs appending different lines lose no line and do not blow up', out.get('frozen_notes','').endswith('|true') and int(out.get('frozen_notes','99999|').split('|')[0]) < 600, out.get('frozen_notes'))
 rec("the board's old+merged+new note collapses back to the new note", out.get('board_form') is True, out.get('board_form'))
-rec('earliest noAt and the larger resurf are kept; soft no stays', out.get('noat') == '50|3|soft', out.get('noat'))
+rec('latest noAt and the larger resurf are kept; soft no stays', out.get('noat') == '500|3|soft', out.get('noat'))
 rec('loadNotes after an old snapshot lands keeps the absorbed calls', out.get('reload') == 'true|true', out.get('reload'))
 rec('session strip shows the NOT SAVED line', 'NOT SAVED since' in SRC and '(_SAVEFAIL ?' in SRC)
 
