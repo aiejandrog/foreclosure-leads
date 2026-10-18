@@ -769,5 +769,7 @@ rf_status.json.tmp
 !_loanbalancetest.py
 # _browardorfeedtest: Broward Official Records daily-file lead list. Fake names and case numbers only.
 !_browardorfeedtest.py
+# _browardorfetchtest: Broward Official Records SFTP fetch. Mocked session, no feed rows.
+!_browardorfetchtest.py
 # _sigemailtest: signature contact line is the business inbox, never the retired Gmail (offline).
 !_sigemailtest.py

@@ -215,6 +215,19 @@ rem  caches case-^>folio in stub_folios.json, and the scrape hooks keep it resol
 rem  --limit caps Broward clerk lookups (2Captcha, ~$0.003/case) per run.
 python -u stub_resolve.py --sweep --limit 25 >> "%LOG%" 2>&1
 
+echo [1e/5] Broward Official Records daily index - off unless DEALFLOW_BROWARD_OR_FEED=1...
+rem  Free SFTP on BCFTP.Broward.org as the public user crpublic. The password is
+rem  BROWARD_SFTP_PASSWORD, never this file. broward_or_fetch.py saves new daily
+rem  index files (doc / nme / lnk / lgl / rng) into DEALFLOW_BROWARD_OR_DIR and
+rem  skips the image zips. broward_or_feed.py then builds the held lead list
+rem  from that folder. Nothing here is merged into the board or outreach.
+rem  FAIL SOFT. A down server, a missing password, or a bad directory logs a
+rem  warning and this refresh continues.
+python -u broward_or_fetch.py >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! Broward OR fetch errored - refresh continues. See leads-run.log.>> "%LOG%"
+python -u broward_or_feed.py >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! Broward OR feed errored - refresh continues. See leads-run.log.>> "%LOG%"
+
 echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
 python -u gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python -u gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
