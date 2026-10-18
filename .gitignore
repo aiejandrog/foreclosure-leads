@@ -779,3 +779,5 @@ rf_status.json.tmp
 !_browardorfetchtest.py
 # _sigemailtest: signature contact line is the business inbox, never the retired Gmail (offline).
 !_sigemailtest.py
+# _valuejointest: free value-source join and the board's valued census. Case numbers and parcel ids only.
+!_valuejointest.py
