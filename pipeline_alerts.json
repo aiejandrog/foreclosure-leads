@@ -1,31 +1,37 @@
 {
  "alerts": [
   {
-   "at": "2026-10-18T07:53:23-04:00",
+   "at": "2026-10-18T09:31:33-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.1% (2 of 18 sent on 2026-10-12): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 11.1% (2 of 18 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-10-18T07:53:23-04:00",
+   "at": "2026-10-18T09:31:33-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-17 21:14): 1 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-18T07:53:23-04:00",
+   "at": "2026-10-18T09:31:33-04:00",
+   "key": "morning-sends",
+   "severity": "fail",
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 30, 30) and 53 leads were eligible, but 0 first-touch emails were sent."
+  },
+  {
+   "at": "2026-10-18T09:31:33-04:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid reads $69.96 of $50.00 (140%) this month. The monthly cap is spent."
   },
   {
-   "at": "2026-10-18T07:53:23-04:00",
+   "at": "2026-10-18T09:31:33-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 46 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-18T07:53:23-04:00",
+ "published_at": "2026-10-18T09:31:33-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -36,7 +42,7 @@
    "holds": 474,
    "leads_checked": 15,
    "provider": "courtlistener",
-   "pull_age_h": 0.47,
+   "pull_age_h": 2.11,
    "pull_ok": true,
    "readable": true,
    "reason": "budget",
@@ -97,7 +103,7 @@
    ],
    "date": "2026-10-18",
    "eligible": 53,
-   "judged": false,
+   "judged": true,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -109,7 +115,7 @@
   "optout_sync": {
    "date": "2026-10-18",
    "failed_steps": [],
-   "past_cutoff": false,
+   "past_cutoff": true,
    "readable": true,
    "run_ok": true,
    "started_at": 1792322103,
