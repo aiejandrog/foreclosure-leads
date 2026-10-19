@@ -236,6 +236,10 @@ echo [2c/5] Deep per-parcel tax links for Broward leads (county-taxes.net accoun
 python -u gen_tax_links.py --limit 60 >> "%LOG%" 2>&1
 
 echo [2d/5] Radius comps for Broward + Palm Beach leads (cadastral recent sales, new only)...
+rem  Letter-bearing Broward parcel ids are queried intact. Digit-stripping them misses the
+rem  FDOR centroid (514205AA0390 hits, 5142050390 does not). A miss is remembered 7 days in
+rem  comps_miss.json — case, reason, parcel ids only — so this cap is not spent on the same
+rem  unjoined rows every night. A repaired folio (new id) is tried again immediately.
 python -u comps.py --limit 80 >> "%LOG%" 2>&1
 
 echo [2a/5] Clerk Official Records daily file - off unless DEALFLOW_OR_DAILY=1...
