@@ -65,6 +65,12 @@ const ctx = {
   JSON, Math, Date, Object, Array, String, Number, Boolean, RegExp, Promise, Error, parseInt,
   parseFloat, isNaN, isFinite, encodeURIComponent, decodeURIComponent, Set, Map,
 };
+/* The shipped page registers window listeners at boot: 'storage' (two-tab notes, next to
+   saveNotes) and later 'error' / 'unhandledrejection'. b5a5e9f rebuilt the page with the
+   storage listener ABOVE `var QVIEW = 'untouched'`, so a window without addEventListener
+   throws there and the rest of the block never runs — QVIEW stays undefined and this
+   harness exits before a single assertion. Same no-op stub as _callwfpage_run.js. */
+ctx.addEventListener = function(){}; ctx.removeEventListener = function(){};
 ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;
 vm.createContext(ctx);
 
