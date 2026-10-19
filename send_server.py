@@ -1706,6 +1706,13 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
         if _post:
             msg['List-Unsubscribe-Post'] = _post
     msg.set_content(body)
+    # BSG design as a text/html part beside the text (email_html.py, 2026-10-19). Same words;
+    # outreach gates only, reply_send stays plain. A render failure sends the text part alone.
+    try:
+        import email_html as _EH
+        _EH.attach(msg, body, _MG.current_gate())
+    except Exception as _e:
+        print('[email_html] html part skipped: %s' % str(_e)[:120], flush=True)
     for path in (attach or []):
         p = os.path.abspath(os.path.expanduser(str(path)))
         if not os.path.isfile(p):

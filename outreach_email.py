@@ -974,7 +974,8 @@ def _unsub_url():
 
 
 def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
-    """Sends a text/plain email via Gmail SMTP over SSL. Raises on failure.
+    """Sends a text/plain email (plus email_html's HTML copy under an outreach gate) via Gmail SMTP
+    over SSL. Raises on failure.
     Returns (message_id, server_response).
 
     from_addr (2026-09-08): the lane alias for From: and the Message-ID domain — same contract as
@@ -1024,14 +1025,21 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     msg['Date'] = formatdate(localtime=True)
     # The opt-out Gmail and Outlook render as their OWN button at the top of the message, which is
     # both more visible than anything in the body and more trusted, because it is the mail client's
-    # UI rather than a link from a stranger. Costs two headers and no HTML, so the body stays
-    # text/plain. The mailto arm lands in the scanned mailbox where is_stop_text() already reads it.
+    # UI rather than a link from a stranger. Costs two headers and no HTML; the text part is
+    # what it rides on either way. The mailto arm lands in the scanned mailbox where is_stop_text() already reads it.
     if unsub:
         msg['List-Unsubscribe'] = unsub
         _post = _MG.one_click_post(_unsub_url())
         if _post:
             msg['List-Unsubscribe-Post'] = _post
     msg.set_content(body)
+    # BSG design as a text/html part beside the text (email_html.py, 2026-10-19). Same words;
+    # outreach gates only, reply_send stays plain. A render failure sends the text part alone.
+    try:
+        import email_html as _EH
+        _EH.attach(msg, body, _MG.current_gate())
+    except Exception as _e:
+        print('[email_html] html part skipped: %s' % str(_e)[:120], flush=True)
 
     ctx = ssl.create_default_context()
     with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=30) as s:
