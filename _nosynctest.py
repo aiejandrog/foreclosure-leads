@@ -134,7 +134,10 @@ out.none = r10;
 console.log(JSON.stringify(out));
 """ % (T1, T2, T3)
 
-p = subprocess.run(['node', '-e', 'const SYNC = ' + json.dumps(SYNC) + ';\n' + HARNESS],
+# Pass the script on stdin ("node -"), not via "-e": the SYNC block plus the harness
+# overflow Windows' CreateProcess command-line cap (WinError 206) when inlined as an arg.
+_SCRIPT = 'const SYNC = ' + json.dumps(SYNC) + ';\n' + HARNESS
+p = subprocess.run(['node', '-'], input=_SCRIPT,
                    capture_output=True, text=True, encoding='utf-8')
 if p.returncode != 0:
     rec('node harness ran', False, (p.stderr or p.stdout)[-1500:])
