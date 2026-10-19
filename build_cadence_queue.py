@@ -27,7 +27,9 @@ THREE THINGS THIS GETS RIGHT THAT A NAIVE EXPORT WOULD NOT
    a time, soonest-auction first, so the run rate stays inside that norm.
 
 4. cadence_skip.json. A case number in that tracked file is not enrolled, by hand or from the
-   task. cadence.py reads the same file again at send time, so a queue that already contains the
+   task. Matching goes through cadence.case_key (uppercase, no spaces or dashes, Palm Beach
+   division suffix dropped) so a dashed or suffixed form of the same case is the same hold.
+   cadence.py reads the same file again at send time, so a queue that already contains the
    case still does not mail it. Removing the line is the undo. A file that will not parse enrolls
    nobody and writes nothing.
 
@@ -79,14 +81,17 @@ def _suppressed():
 
 
 def collect(skip_cases=()):
-    """Leads that would enroll. skip_cases is a set of uppercased case numbers from cadence_skip.json.
+    """Leads that would enroll. skip_cases is a set of cadence.case_key values.
 
     A listed case is dropped before anything else about it is used, so it never reaches the
-    call-today print (that print carries phone numbers) and never lands in the queue."""
+    call-today print (that print carries phone numbers) and never lands in the queue.
+    The lead's own number is normalized the same way, so 50-2025-CA-009919 matches a list
+    entry of 502025CA009919XXXAMB."""
+    import cadence as _C
     leads = [r for r in OE._load_leads() if OE._tier(r) in {'A', 'B'}]
     ledger, optouts = OE._load_ledger(), OE._load_optouts()
     supp = _suppressed()
-    skip_cases = {str(c).strip().upper() for c in (skip_cases or ()) if str(c).strip()}
+    skip_cases = {_C.case_key(c) for c in (skip_cases or ()) if _C.case_key(c)}
 
     pool, dropped = [], {}
     for r in leads:
@@ -95,7 +100,7 @@ def collect(skip_cases=()):
             continue
         em = OE._primary_email(r)
         case = OE._case(r)
-        if case.strip().upper() in skip_cases:
+        if _C.case_key(case) in skip_cases:
             dropped['cadence skip list'] = dropped.get('cadence skip list', 0) + 1
             continue
         if not em:
