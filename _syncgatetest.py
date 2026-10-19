@@ -189,7 +189,7 @@ def call(port, path, payload=None):
         return 0, {'err': str(e)}
 
 
-LATER_GATES = [f for f in ('stay_gate.py',) if (HERE / f).exists()]
+LATER_GATES = [f for f in ('stay_gate.py', 'deliverability.py') if (HERE / f).exists()]
 work = pathlib.Path(tempfile.mkdtemp(prefix='syncbridge_', dir=str(T)))
 shutil.copy(HERE / 'send_server.py', work / 'send_server.py')
 shutil.copy(HERE / 'sync_gate.py', work / 'sync_gate.py')

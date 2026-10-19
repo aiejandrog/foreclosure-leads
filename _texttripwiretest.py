@@ -44,7 +44,7 @@ sk = socket.socket(); sk.bind(('127.0.0.1', 0)); port = sk.getsockname()[1]; sk.
 work = pathlib.Path(tempfile.mkdtemp(prefix='dftxt_'))
 proc = None
 try:
-    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py', 'text_hold.py'):
+    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'text_hold.py'):
         shutil.copy(HERE / f, work / f)
     (work / 'sync_status.json').write_text(json.dumps({
         'date': dt.date.today().isoformat(), 'state': 'finished', 'ok': True,

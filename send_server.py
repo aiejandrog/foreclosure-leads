@@ -302,6 +302,15 @@ def _first_touch_status(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     return out
 
 
+def _placement_paused(addr):
+    """True when deliverability.placement_hold() holds this sender. A failure to ask is a hold."""
+    try:
+        import deliverability as _DV
+        return bool(_DV.placement_hold(addr))
+    except Exception:
+        return True
+
+
 def _pick_first_touch_from(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     """Rotate: the sender with room under BOTH caps and the fewest first touches today (then fewest
     sends, then list order). ('' , status) when every sender is at a cap. Slots RESERVED by sends
@@ -329,6 +338,9 @@ def _pick_first_touch_from(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     room = []
     for i, x in enumerate(st):
         if x['first_touch_today'] >= x['first_touch_cap'] or x['sent_today'] >= x['alias_cap']:
+            continue
+        # A sender paused by the seed test is skipped, so the rotation moves to one that is not.
+        if _placement_paused(x['addr']):
             continue
         if ceiling is not None and x.get('domain_today', 0) >= int(ceiling):
             continue
@@ -1655,6 +1667,14 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
     _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
     _MG.require_gated(to_addr, bcc, login=user)
     sender = (from_addr or user).strip().lower()
+    # SEED-TEST PAUSE (2026-10-19, deliverability.py). A sender whose last placement probe landed in
+    # spam, went missing or failed DMARC is paused until a clean retest. Raised before SMTP as an
+    # UnsendableError subclass, so /send, cadence and the CLI release their claim and skip.
+    try:
+        import deliverability as _DV
+    except Exception as _dve:
+        raise _MG.UnsendableError('placement check unavailable (%s). The message was NOT sent.' % _dve)
+    _DV.require_clear(sender, subj, body, to=to_addr, bcc=bcc, login=user)
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
@@ -2663,6 +2683,15 @@ class Handler(BaseHTTPRequestHandler):
                 _merge_refuse = isinstance(e, _MGerr.UnsendableError)
             except Exception:
                 _merge_refuse = False
+            # The seed-test pause (deliverability.PlacementHold) is the same kind of refusal:
+            # raised before SMTP, so it is a skip with the claim released.
+            if _merge_refuse and type(e).__name__ == 'PlacementHold':
+                _release_recipients(_claimed)
+                _release_first_touch_slot(_ft_slot)
+                print('SEND SKIP [placement] %s — %s' % (to, str(e)[:200]), flush=True)
+                return self._json(451, {
+                    'ok': False, 'skip': True, 'blocked': 'placement',
+                    'err': str(e)[:300]})
             if _merge_refuse:
                 _release_recipients(_claimed)
                 _release_first_touch_slot(_ft_slot)
@@ -2787,7 +2816,7 @@ _RELOAD_COMPILE = ('send_server.py', 'text_hold.py', 'sync_gate.py')
 # imports all of them, so a broken dependency is caught while the old bridge (which may still hold
 # the old module in memory) is serving, not on the first send after the handover.
 _RELOAD_IMPORT = ('send_server', 'text_hold', 'sync_gate', 'stay_gate', 'optout_sync', 'pacer_stay',
-                  'outreach_copy', 'mail_guard', 'bk_lookup')
+                  'outreach_copy', 'mail_guard', 'bk_lookup', 'deliverability')
 # Requests being handled right now, counted on the server thread before the request thread starts
 # (see _BridgeServer). Not _INFLIGHT: that name is the per-address send dedupe set.
 _REQS_ACTIVE = 0
