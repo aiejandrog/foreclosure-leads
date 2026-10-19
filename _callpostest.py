@@ -53,7 +53,9 @@ def grab_var(prefix):
 
 
 FNS = ''.join(grab_fn(n) for n in ('_navPush', '_navSeek', '_posSave', '_posRestore', 'navBack', 'navNext', 'advance'))
-POSK = grab_var('var _POSK = ')
+POSK = grab_var('var _POSK = ') + grab_var('var _QV = ')
+rec('restore accepts only a known view, never a view-less older save',
+    "if(typeof s.v !== 'string' || _QV.indexOf(s.v) < 0) return false;" in SRC)
 rec('start() restores before its first paint',
     "try{ _posRestore(); }catch(e){ i=0; }" in SRC[SRC.find('function start('):SRC.find('function paintSync(')])
 lead_paint = SRC[SRC.find('function render(){'):SRC.find('function head(){')]
@@ -69,6 +71,7 @@ var STORE = {}, localStorage = {getItem:function(k){ return k in STORE ? STORE[k
 var location = {pathname:'/dealflow-board/call/index.html'};
 """ + POSK + r"""
 var _NAVB = [], _NAVF = [], notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null, QVIEW = 'untouched';
+var _QVBACK = null;
 function _qvRestore(){}
 var LANES = [{k:'soon'}, {k:'lp'}, {k:'worker'}];
 var DATA = {soon:['A','B','C','D','E','F'], lp:['L1','L2','L3'], worker:['W1']}, GONE = {};
@@ -77,7 +80,7 @@ function render(){ var P = pool(); if(i < P.length){ cur = P[i]; } _posSave(P, i
 function toast(){}
 """ + FNS + r"""
 function reload(defLane){   // what a page reload does: memory gone, storage kept, start() runs
-  _NAVB = []; _NAVF = []; cur = null; i = 0; lane = defLane || 'worker';
+  _NAVB = []; _NAVF = []; cur = null; i = 0; lane = defLane || 'worker'; QVIEW = 'untouched'; _QVBACK = null;
   _posRestore(); render(); return (i < pool().length ? cur.c : 'CLEAR') + '@' + lane;
 }
 var out = {};
@@ -108,6 +111,31 @@ lane = 'lp'; i = 1; render(); DATA.lp = []; out.empty = reload('soon');
 // junk in storage never throws past start()'s guard, and a missing key is a clean start
 STORE[_POSK] = '{not json'; out.junk = reload('soon');
 delete STORE[_POSK]; out.none = reload('soon');
+// HISTORY UNKNOWN (2026-10-19): a reload reopens the view he was working, at his place. start()
+// sets Untouched before restoring, and a saved place in any other view used to be refused.
+DATA.soon = ['A','B','C','D','E','F','G']; GONE = {}; _NAVB = []; _NAVF = [];
+lane = 'soon'; QVIEW = 'history_unknown'; i = 0; render(); navNext(); navNext(); navNext();   // on D
+out.hu = reload('soon'); out.hu_view = QVIEW;
+out.hu_back = (function(){ navBack(); return cur.c; })();
+// the lead on screen was dialled and left the view: the next one, still in that view
+i = pool().map(function(r){ return r.c; }).indexOf('D'); render(); GONE.D = 1;
+out.hu_gone = reload('soon'); out.hu_gone_view = QVIEW; GONE = {};
+// Reached out and Callbacks are sessions too
+QVIEW = 'retries'; i = 2; render(); out.retries = reload('soon'); out.retries_view = QVIEW;
+QVIEW = 'callbacks'; i = 1; render(); out.cb = reload('soon'); out.cb_view = QVIEW;
+// a one-off opened from the lookup is saved as the session it interrupted, not as a retry session
+QVIEW = 'history_unknown'; i = 3; render();                                                   // on D
+_QVBACK = {v:'history_unknown', l:'soon', c:'D'}; QVIEW = 'retries'; i = 5; render();          // one-off on F
+out.oneoff = reload('soon'); out.oneoff_view = QVIEW;
+// a save from an older build (no view) and an unknown view are never restored
+QVIEW = 'history_unknown'; i = 3; render();
+var S2 = JSON.parse(STORE[_POSK]); delete S2.v; STORE[_POSK] = JSON.stringify(S2);
+out.noview = reload('soon'); out.noview_view = QVIEW;
+S2 = JSON.parse(STORE[_POSK]); S2.v = 'mixed'; STORE[_POSK] = JSON.stringify(S2);
+out.badview = reload('soon'); out.badview_view = QVIEW;
+// that view emptied since: the default opens, in the default view
+DATA.lp = ['L1','L2','L3']; QVIEW = 'history_unknown'; i = 3; render(); DATA.soon = []; out.hu_empty = reload('lp'); out.hu_empty_view = QVIEW;
+DATA.soon = ['A','B','C','D','E','F','G'];
 // per page: Carlos's seat URL has its own key
 out.key = _POSK;
 out.notes = JSON.stringify(notes);
@@ -127,6 +155,15 @@ rec('a place from another day is ignored', res.get('stale') == 'A@soon', res)
 rec('an emptied lane falls back to the default', res.get('empty') == 'A@soon', res)
 rec('unreadable storage is a clean start', res.get('junk') == 'A@soon', res)
 rec('no stored place is a clean start', res.get('none') == 'A@soon', res)
+rec('History unknown: a reload returns to his place in that view', res.get('hu') == 'D@soon' and res.get('hu_view') == 'history_unknown', res)
+rec('History unknown: Back still works after the reload', res.get('hu_back') == 'C', res)
+rec('History unknown: a dialled lead that left the view gives way to the next', res.get('hu_gone') == 'E@soon' and res.get('hu_gone_view') == 'history_unknown', res)
+rec('Reached out is restored too', res.get('retries') == 'C@soon' and res.get('retries_view') == 'retries', res)
+rec('Callbacks is restored too', res.get('cb') == 'B@soon' and res.get('cb_view') == 'callbacks', res)
+rec('a one-off retry is saved as the session it interrupted', res.get('oneoff') == 'D@soon' and res.get('oneoff_view') == 'history_unknown', res)
+rec('an older save with no view is not restored', res.get('noview') == 'A@soon' and res.get('noview_view') == 'untouched', res)
+rec('an unknown view is not restored', res.get('badview') == 'A@soon' and res.get('badview_view') == 'untouched', res)
+rec('that view emptied since: default lane and view', res.get('hu_empty') == 'L1@lp' and res.get('hu_empty_view') == 'untouched', res)
 rec('key is per page, file and directory URL alike', res.get('key') == 'fcCallPos:/dealflow-board/call/', res)
 rec('no notes written', res.get('notes') == '{}', res)
 

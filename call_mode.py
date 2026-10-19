@@ -5184,10 +5184,13 @@ function _navSeek(stack, here){
 var _POSK = 'fcCallPos:' + (typeof location !== 'undefined' ? location.pathname.replace(/index\.html?$/i, '') : '');
 function _posSave(P, k){
   try{
-    var a = [];
+    var a = [], v = QVIEW, l = lane, c = (k < P.length && P[k]) ? P[k].c : null;
     for(var j = k + 1; j < P.length && a.length < 40; j++) a.push(P[j].c);
-    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:lane, v:QVIEW,
-      c:(k < P.length && P[k]) ? P[k].c : null, a:a, b:_NAVB.slice(-150), f:_NAVF.slice(-150)}));
+    /* A one-off (a retry opened on purpose from a board list or the lookup) is saved as the SESSION
+       it interrupted, so a reload lands back in that view and never turns into a retry session. */
+    if(_QVBACK){ v = _QVBACK.v; l = _QVBACK.l; c = _QVBACK.c || null; a = []; }
+    localStorage.setItem(_POSK, JSON.stringify({d:new Date().toDateString(), l:l, v:v,
+      c:c, a:a, b:_NAVB.slice(-150), f:_NAVF.slice(-150)}));
   }catch(e){}
 }
 function _posRestore(){
@@ -5196,14 +5199,20 @@ function _posRestore(){
   if(!s || typeof s !== 'object' || s.d !== new Date().toDateString()) return false;
   if(!LANES.some(function(L){ return L.k === s.l; })) return false;
   /* A position saved by an older build has no view and was taken in the old mixed queue. Never
-     restore that as the new default: it could reopen a retry. */
-  if(s.v !== QVIEW) return false;
+     restore that: it could reopen a retry. A KNOWN view is restored together with the place
+     (2026-10-19). This used to refuse any view other than the one start() had just set, which is
+     always Untouched, so a History unknown or Reached out session reopened on slot 0 of Untouched
+     at every reload and the tab he was working started again from its top. Alejandro, 10-19: "if
+     you were to refresh the page it sends you back to the beginning of the log where u started".
+     The view is a filter over pool(), nothing more: every gate still runs, and a lead he already
+     dialled has left this view on its own. */
+  if(typeof s.v !== 'string' || _QV.indexOf(s.v) < 0) return false;
   var ok = function(x){ return !!x && typeof x.c === 'string' && typeof x.l === 'string'; };
   _NAVB = (Array.isArray(s.b) ? s.b : []).filter(ok);
   _NAVF = (Array.isArray(s.f) ? s.f : []).filter(ok);
-  var was = lane; lane = s.l;
+  var was = lane, wasV = QVIEW; lane = s.l; QVIEW = s.v;
   var P = pool(), at = {}, k;
-  if(!P.length){ lane = was; pool(); return false; }   // that lane emptied since: open as usual
+  if(!P.length){ lane = was; QVIEW = wasV; pool(); return false; }   // that view emptied since: open as usual
   for(k = 0; k < P.length; k++) at[P[k].c] = k;
   var want = [s.c].concat(Array.isArray(s.a) ? s.a : []);
   for(k = 0; k < want.length; k++) if(want[k] && at[want[k]] !== undefined){ i = at[want[k]]; return true; }
@@ -7294,7 +7303,10 @@ function wire(){
     b.onclick=function(){ _QVBACK=null; QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
-    b.onclick=function(){ _QVBACK=null; lane=b.dataset.l; BLANE=null; i=0; render();
+    /* A lane tap during a one-off puts the SESSION's view back first (2026-10-19). It used to drop
+       _QVBACK and keep the one-off's view, which left him in a Reached out session he never chose;
+       a reload cured that only while restore refused every view but Untouched. */
+    b.onclick=function(){ if(_QVBACK){ QVIEW=_QVBACK.v; _QVBACK=null; } lane=b.dataset.l; BLANE=null; i=0; render();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
          leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
          done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
