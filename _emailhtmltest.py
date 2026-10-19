@@ -54,6 +54,7 @@ check('escapes markup in the body', '&lt;Ann&gt; &amp; Co' in h and '<Ann>' not 
 check('links the url with & escaped', 'href="https://example.com/a?b=1&amp;c=2"' in h)
 check('links the email', 'href="mailto:a.b@bsgflorida.com"' in h)
 check('links the phone', 'href="tel:+17866311823"' in h)
+check('a dashed case number is not a phone', 'tel:' not in EH.render('Case 13-2025-CA-012345-0000-01'))
 check('bullets become a list', '<ul' in h and h.count('<li') == 2)
 check('opt-out lines survive', html.escape(OC.OPTOUT_LINE_EN) in h and OC.OPTOUT_LINE_ES in html.unescape(h))
 check('wordmark when no logo', 'BISCAYNE SOLUTIONS GROUP' in EH.render('x', logo_url=''))

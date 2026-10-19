@@ -41,7 +41,7 @@ _FONT = 'Arial,Helvetica,sans-serif'
 
 _URL = re.compile(r'https?://[^\s<>"]+[^\s<>".,;:!?)]')
 _MAIL = re.compile(r'(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+')
-_PHONE = re.compile(r'\(?\b(\d{3})\)?[ .-]?(\d{3})[ .-](\d{4})\b')
+_PHONE = re.compile(r'(?<![\d-])\(?\b(\d{3})\)?[ .-]?(\d{3})[ .-](\d{4})\b(?![\d-])')
 _BULLET = re.compile(r'^\s*[•\-*]\s+')
 
 
