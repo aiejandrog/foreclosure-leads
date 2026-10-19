@@ -162,8 +162,9 @@ console.log('done');
 run('one-off open then Next restores view, lane and card (no false Queue clear)', FLOW)
 
 # the click handlers must cancel the restore
-rec('view and lane buttons cancel _QVBACK',
-    SRC.count("b.onclick=function(){ _QVBACK=null;") == 2)
+rec('view and lane buttons cancel _QVBACK (a lane tap puts the session view back first, 2026-10-19)',
+    SRC.count("b.onclick=function(){ _QVBACK=null;") == 1
+    and SRC.count("b.onclick=function(){ if(_QVBACK){ QVIEW=_QVBACK.v; _QVBACK=null; } lane=b.dataset.l;") == 1)
 
 # ---- finding 3: ledger audit ------------------------------------------------------------------
 td = tempfile.mkdtemp()

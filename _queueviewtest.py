@@ -146,7 +146,8 @@ rec('view filter runs after supReason, seat and claim filters, before ordering',
 rec('the view filter only removes rows (filter, no push into keep)', pool.count('keep.push') == 0)
 st = SRC[SRC.find('function start()'):SRC.find('\n}\n', SRC.find('function start()'))]
 rec('Q10 start() opens on Untouched across all lanes', "QVIEW = 'untouched'; lane = 'all';" in st)
-rec('Q10 a position saved without a view (the old mixed queue) is never restored', 'if(s.v !== QVIEW) return false;' in SRC)
+rec('Q10 a position saved without a view (the old mixed queue) is never restored',
+    "if(typeof s.v !== 'string' || _QV.indexOf(s.v) < 0) return false;" in SRC)
 allk = SRC[SRC.find("{k:'all',"):SRC.find("hide0:false}\n];", SRC.find("{k:'all',"))]
 rec('the all-lanes entry has no channel, so no email-lane exemption', "ch:'" not in allk, allk)
 rec('a lead opened on purpose is a one-off: the first move off it restores the view',
