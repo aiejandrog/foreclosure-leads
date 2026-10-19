@@ -126,14 +126,29 @@ def load_map(path):
     return cols
 
 
+_DIRECTIONAL = {'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'}
+_UNIT_WORDS = _UNIT | {'UNITS', 'APTS', 'STES'}
+_LETTER_UNIT = re.compile(r'^[A-Z]$')
+
+
 def split_unit(street):
-    """'842 NW 9TH ST APT 4' -> ('842 NW 9TH ST', '4'). No unit -> (street, '')."""
+    """'842 NW 9TH ST APT 4' -> ('842 NW 9TH ST', '4'). No unit -> (street, '').
+
+    Also splits a bare trailing unit after a street suffix ('777 SW 9 AVE 101', '2881 NE 33 CT 4C',
+    '5110 NESTING WAY C', 'POLO RD W 103') and 'PH-7'. A lone letter after a plain street name
+    ('187 SAXONY D') is NOT split: it cannot be told from the street's own name."""
     toks = str(street or '').split()
     for i, t in enumerate(toks):
-        if i > 0 and t in _UNIT:
+        if i > 0 and t in _UNIT_WORDS:
             return ' '.join(toks[:i]), ' '.join(toks[i + 1:])
-    if len(toks) >= 4 and toks[-2] in _UNIT_AFTER and _BARE_UNIT.match(toks[-1]):
-        return ' '.join(toks[:-1]), toks[-1]
+    if len(toks) >= 4:
+        last, prev = toks[-1], toks[-2]
+        if prev in _UNIT_AFTER and (_BARE_UNIT.match(last) or re.match(r'^PH-?\d+$', last)
+                                    or (_LETTER_UNIT.match(last) and last not in _DIRECTIONAL)):
+            return ' '.join(toks[:-1]), last
+        if (prev in _DIRECTIONAL and len(toks) >= 5 and toks[-3] in set(RL.SUFFIX.values())
+                and _BARE_UNIT.match(last)):
+            return ' '.join(toks[:-1]), last
     return ' '.join(toks), ''
 
 
