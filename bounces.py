@@ -142,20 +142,34 @@ def _scan_mailbox(user, pw, since, found):
         except Exception: pass
 
 
-def _record_scan(started, ok, boxes, failed, notices, hard, new, days):
-    """bounce_scan_status.json: what the follow-up gate (bounce_scan.py) trusts. Counts only.
-    A failed run keeps the last clean scan's time, so it never moves the gate forward."""
+def _record_scan(started, since, boxes, failed, notices, hard, new, days, listed=None, list_ok=True):
+    """bounce_scan_status.json: what the follow-up gate (bounce_scan.py) trusts.
+
+    Per MAILBOX, not per run: a scan of one inbox says nothing about another, so an --account run
+    moves only that inbox's record. A mailbox that failed, or any run whose list write failed,
+    records last_run_ok false (which holds every follow-up from it) and keeps its last clean time.
+    `listed` = every address on the list as written; stored as hashes so a send can prove the list
+    it read is not older than this record. Mailbox logins, dates and counts only."""
     import bounce_scan as BS
-    prev = {}
-    try:
-        prev = json.load(open(os.path.join(HERE, BS.STATUS), encoding='utf-8'))
-        prev = prev if isinstance(prev, dict) else {}
-    except Exception:
-        prev = {}
-    rec = {'started_utc': started, 'finished_utc': datetime.now(timezone.utc).isoformat(),
-           'ok': bool(ok), 'mailboxes': boxes, 'failed': failed, 'notices': notices,
-           'hard': hard, 'new': new, 'days': days,
-           'last_ok_started_utc': started if ok else prev.get('last_ok_started_utc')}
+    prev, _why = BS.read_status(HERE)
+    prev = prev or {'mailboxes': {}, 'list_hashes': []}
+    mbs = {k: dict(v or {}) for k, v in prev['mailboxes'].items()}
+    for user in list(boxes) + list(failed):
+        if '@' not in user:
+            continue
+        clean = list_ok and user in boxes
+        r = mbs.setdefault(user.strip().lower(), {})
+        r['last_run_started_utc'] = started
+        r['last_run_ok'] = clean
+        if clean:
+            r['last_ok_started_utc'] = started
+            r['last_ok_since'] = since.isoformat()
+    rec = {'version': BS.VERSION, 'started_utc': started,
+           'finished_utc': datetime.now(timezone.utc).isoformat(),
+           'ok': bool(list_ok and not failed), 'scanned': list(boxes), 'failed': list(failed),
+           'notices': notices, 'hard': hard, 'new': new, 'days': days, 'mailboxes': mbs,
+           'list_hashes': (sorted(BS.addr_hash(a) for a in listed) if listed is not None
+                           else prev.get('list_hashes') or [])}
     try:
         BS.write_status(HERE, rec)
     except Exception as e:
@@ -171,14 +185,15 @@ def main():
     a = ap.parse_args()
 
     started = datetime.now(timezone.utc).isoformat()
+    since_d = date.today() - timedelta(days=a.days)
     creds = _mailboxes(a.account)
     if not creds:
         print('NO GMAIL CREDENTIAL. Put user:app_password in gmail.key or set GMAIL_APP_PASSWORD.')
         if not a.dry_run:
-            _record_scan(started, False, [], ['no credential'], 0, 0, 0, a.days)
+            _record_scan(started, since_d, [], ['no credential'], 0, 0, 0, a.days)
         sys.exit(1)
 
-    since = (date.today() - timedelta(days=a.days)).strftime('%d-%b-%Y')
+    since = since_d.strftime('%d-%b-%Y')
     found, soft_only, notices, boxes, failed = {}, 0, 0, [], []
     for user, pw in creds:
         try:
@@ -200,8 +215,8 @@ def main():
         print('!! bounced_emails.json is unreadable (%s). Original left in place. Nothing written.'
               % type(e).__name__)
         if not a.dry_run:
-            _record_scan(started, False, boxes, failed + ['bounce list unreadable'], notices,
-                         len(found), 0, a.days)
+            _record_scan(started, since_d, boxes, failed, notices, len(found), 0, a.days,
+                         list_ok=False)
         return 1
 
     new = {k: v for k, v in found.items() if k not in prior}
@@ -219,7 +234,8 @@ def main():
     save_bounce_list(OUT, merged)
     print(f'-> {OUT} (gitignored)')
     # Recorded only AFTER the list is on disk: a clean status must never precede the bounces it covers.
-    _record_scan(started, not failed, boxes, failed, notices, len(found), len(new), a.days)
+    _record_scan(started, since_d, boxes, failed, notices, len(found), len(new), a.days,
+                 listed=merged)
     if failed:
         print('!! not a clean scan (%s); follow-ups to addresses mailed since the last clean scan '
               'stay held.' % ', '.join(failed))

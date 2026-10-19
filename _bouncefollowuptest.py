@@ -48,9 +48,9 @@ def iso(hours_ago):
     return (NOW - dt.timedelta(hours=hours_ago)).isoformat()
 
 
-def row(to, hours_ago, case='2099-000003-CA-01', mid=None, ts=True):
+def row(to, hours_ago, case='2099-000003-CA-01', mid=None, ts=True, login='box-a@example.org'):
     r = {'d': (NOW - dt.timedelta(hours=hours_ago)).date().isoformat(), 'ch': 'email',
-         'from': 'alejandro@bsgfl.com', 'to': to, 'bcc': '', 'case': case,
+         'from': 'alejandro@bsgfl.com', 'login': login, 'to': to, 'bcc': '', 'case': case,
          'message_id': mid or '<%s-%d@example.com>' % (to.split('@')[0], hours_ago)}
     if ts:
         r['ts_utc'] = iso(hours_ago)
@@ -71,36 +71,103 @@ print('-- bounce_scan.followup_hold')
 T = pathlib.Path(tempfile.mkdtemp(prefix='dfbf_'))
 U = T / 'unit'
 U.mkdir()
-status = lambda d, v: (d / BS.STATUS).write_text(v if isinstance(v, str) else json.dumps(v), encoding='utf-8')
+A, B_ = 'box-a@example.org', 'box-b@example.org'
+SINCE_OK = (NOW - dt.timedelta(days=14)).date().isoformat()
+
+
+def status(d, v):
+    (d / BS.STATUS).write_text(v if isinstance(v, str) else json.dumps(v), encoding='utf-8')
+
+
+def mb(ok_hours_ago, since=SINCE_OK, run_ok=True):
+    r = {'last_run_started_utc': iso(ok_hours_ago or 0), 'last_run_ok': run_ok, 'last_ok_since': since}
+    if ok_hours_ago is not None:
+        r['last_ok_started_utc'] = iso(ok_hours_ago)
+    return r
+
+
+def v2(boxes, listed=()):
+    return {'version': 2, 'ok': True, 'mailboxes': boxes,
+            'list_hashes': sorted(BS.addr_hash(x) for x in listed)}
+
+
+hold = lambda addr, rows, bounced=frozenset(): BS.followup_hold(addr, rows, str(U), bounced=set(bounced))
 L = [row('gone@example.com', 26)]
-rec('never-mailed address (a first touch) is not held', BS.followup_hold('new@example.com', L, str(U)) == '')
-rec('no status file: a follow-up is held', 'no bounce scan on record' in BS.followup_hold('gone@example.com', L, str(U)))
+rec('never-mailed address (a first touch) is not held', hold('new@example.com', L) == '')
+rec('no status file: a follow-up is held', 'no bounce scan on record' in hold('gone@example.com', L))
 status(U, '{torn')
-rec('unreadable status: held', 'unreadable' in BS.followup_hold('gone@example.com', L, str(U)))
-status(U, {'ok': False, 'last_ok_started_utc': None})
-rec('only failed scans on record: held', BS.followup_hold('gone@example.com', L, str(U)) != '')
-status(U, {'ok': True, 'last_ok_started_utc': iso(72)})
-rec('clean scan BEFORE the last email: held', 'has not covered' in BS.followup_hold('gone@example.com', L, str(U)))
-status(U, {'ok': True, 'last_ok_started_utc': iso(25)})
-rec('clean scan 1h after the email (inside the 2h settle): held',
-    BS.followup_hold('gone@example.com', L, str(U)) != '')
-status(U, {'ok': True, 'last_ok_started_utc': iso(20)})
-rec('clean scan 6h after the email: clear', BS.followup_hold('gone@example.com', L, str(U)) == '')
-rec('the LAST email counts, not the first',
-    BS.followup_hold('gone@example.com', L + [row('gone@example.com', 10)], str(U)) != '')
+rec('unreadable status: held', 'unreadable' in hold('gone@example.com', L))
+status(U, {'ok': True, 'last_ok_started_utc': iso(1)})
+rec('an older-format status (no per-mailbox record): held', 'version-2' in hold('gone@example.com', L))
+status(U, v2({A: mb(72)}))
+rec('clean scan BEFORE the last email: held', 'has not covered' in hold('gone@example.com', L))
+status(U, v2({A: mb(25)}))
+rec('clean scan 1h after the email (inside the 2h settle): held', hold('gone@example.com', L) != '')
+status(U, v2({A: mb(20)}))
+rec('clean scan 6h after the email, right mailbox, right dates: clear', hold('gone@example.com', L) == '')
+rec('the LAST email counts, not the first', hold('gone@example.com', L + [row('gone@example.com', 10)]) != '')
 rec('a Bcc counts as an email to that address',
-    BS.followup_hold('b@example.com', [dict(row('x@example.com', 10), bcc='a@example.com, B@example.com')], str(U)) != '')
+    hold('b@example.com', [dict(row('x@example.com', 10), bcc='a@example.com, B@example.com')]) != '')
 rec('rows without a message_id (never sent) do not count',
-    BS.followup_hold('gone@example.com', [dict(row('gone@example.com', 1), message_id='')], str(U)) == '')
+    hold('gone@example.com', [dict(row('gone@example.com', 1), message_id='')]) == '')
 rec('a row with no ts_utc counts as the end of its day',
     BS.last_mailed_utc([row('old@example.com', 30, ts=False)], 'old@example.com')
     == dt.datetime.combine((NOW - dt.timedelta(hours=30)).date() + dt.timedelta(days=1), dt.time(), dt.timezone.utc))
 os.environ['DEALFLOW_BOUNCE_SCAN_GATE'] = '0'
-rec('DEALFLOW_BOUNCE_SCAN_GATE=0 turns the hold off', BS.followup_hold('gone@example.com', L + [row('gone@example.com', 1)], str(U)) == '')
+rec('DEALFLOW_BOUNCE_SCAN_GATE=0 turns the hold off', hold('gone@example.com', L + [row('gone@example.com', 1)]) == '')
 del os.environ['DEALFLOW_BOUNCE_SCAN_GATE']
 os.environ['DEALFLOW_BOUNCE_SETTLE_H'] = '7'
-rec('DEALFLOW_BOUNCE_SETTLE_H widens the settle window', BS.followup_hold('gone@example.com', L, str(U)) != '')
+rec('DEALFLOW_BOUNCE_SETTLE_H widens the settle window', hold('gone@example.com', L) != '')
 del os.environ['DEALFLOW_BOUNCE_SETTLE_H']
+
+print('-- review gap 1: a clean scan of one mailbox never clears mail sent from another')
+LB = [row('gone@example.com', 26, login=B_)]
+status(U, v2({A: mb(20)}))
+rec('sent from mailbox B, only mailbox A scanned cleanly: held', B_ in hold('gone@example.com', LB), hold('gone@example.com', LB))
+status(U, v2({A: mb(20), B_: mb(20)}))
+rec('...once B has its own clean scan: clear', hold('gone@example.com', LB) == '')
+status(U, v2({A: mb(20)}))
+mix = [row('gone@example.com', 24 * 5, login=B_), row('gone@example.com', 26, login=A)]
+rec('B mailed it 5 days ago, A mailed it last; A scanned, B never: held', B_ in hold('gone@example.com', mix), hold('gone@example.com', mix))
+old_b = [row('gone@example.com', 24 * 60, login=B_), row('gone@example.com', 26, login=A)]
+rec('B mailed it 60 days ago (past the lookback), A mailed it last and is covered: clear', hold('gone@example.com', old_b) == '')
+nolog = [dict(row('gone@example.com', 26), login='', **{'from': ''})]
+status(U, v2({A: mb(20), B_: mb(None, run_ok=False)}))
+rec('a row naming no mailbox needs every mailbox on record clean: held', hold('gone@example.com', nolog) != '')
+status(U, v2({}))
+rec('...and with no mailbox on record at all: held', hold('gone@example.com', nolog) != '')
+alias = [dict(row('gone@example.com', 26), login='', **{'from': 'alias@example.net'})]
+status(U, v2({A: mb(20)}))
+rec('no login on the row: the From mailbox must be scanned: held', 'alias@example.net' in hold('gone@example.com', alias))
+
+print('-- review gap 2: the clean scan must cover the email\'s dates and still be current')
+status(U, v2({A: mb(20, since=(NOW - dt.timedelta(hours=26)).date().isoformat())}))
+rec('the scan searched only from the email\'s own day: held (a day of margin is required)',
+    'searched from' in hold('gone@example.com', L), hold('gone@example.com', L))
+status(U, v2({A: mb(20, since=NOW.date().isoformat())}))
+rec('the scan searched only from today, after the email: held', 'searched from' in hold('gone@example.com', L))
+status(U, v2({A: mb(20, run_ok=False)}))
+rec('a clean scan followed by a FAILED run of that mailbox: held', 'failed' in hold('gone@example.com', L), hold('gone@example.com', L))
+LOLD = [row('gone@example.com', 24 * 4)]
+status(U, v2({A: mb(24 * 2)}))
+rec('the covering clean scan is 48h old (over 36h): held', 'older than' in hold('gone@example.com', LOLD), hold('gone@example.com', LOLD))
+os.environ['DEALFLOW_BOUNCE_SCAN_MAX_AGE_H'] = '72'
+rec('...DEALFLOW_BOUNCE_SCAN_MAX_AGE_H=72 accepts it', hold('gone@example.com', LOLD) == '')
+del os.environ['DEALFLOW_BOUNCE_SCAN_MAX_AGE_H']
+status(U, v2({A: {'last_run_ok': True, 'last_ok_started_utc': iso(20)}}))
+rec('a clean scan with no recorded search start: held', 'search start' in hold('gone@example.com', L))
+
+print('-- review gap 3: an older bounce list never pairs with a newer scan record')
+status(U, v2({A: mb(20)}, listed=['gone@example.com', 'other@example.com']))
+rec('the list this send read lacks an address the scan wrote: held',
+    'older than the last scan' in hold('gone@example.com', L, {'other@example.com'}))
+rec('...the list it read has them all (and more since): clear',
+    hold('gone@example.com', L, {'gone@example.com', 'other@example.com', 'later@example.com'}) == '')
+(U / 'bounced_emails.json').write_text(json.dumps({'other@example.com': {}}), encoding='utf-8')
+rec('no list passed: the file on disk is read and checked the same way',
+    'older than' in BS.followup_hold('gone@example.com', L, str(U)))
+(U / 'bounced_emails.json').write_text('{torn', encoding='utf-8')
+rec('...an unreadable list on disk: held', 'unreadable' in BS.followup_hold('gone@example.com', L, str(U)))
 
 
 # ------------------------------------------------------------------ 2. bounces.py, fake IMAP
@@ -176,37 +243,64 @@ INBOX['alejandro@bsgflorida.com'] = [notice('Mail Delivery Subsystem <mailer-dae
 # the second mailbox's notice comes from postmaster@ (Microsoft style), which the old search skipped
 INBOX['second@example.org'] = [notice('postmaster@outlook.com', 'second@example.org', 'msdead@example.com',
                                       'Delivery has failed to these recipients: %s\n550 5.1.10 RESOLVER.ADR.RecipientNotFound')]
+M1, M2 = CREDS[0][0], CREDS[1][0]
 before = dt.datetime.now(dt.timezone.utc)
 rc, st, bl, out = run_bounces(BX, CREDS)
-rec('both mailboxes scanned', st.get('mailboxes') == [c[0] for c in CREDS] and not st.get('failed'), st)
+rec('both mailboxes scanned', st.get('scanned') == [M1, M2] and not st.get('failed'), st)
 rec('the first mailbox\'s mailer-daemon bounce is listed', 'gone@example.com' in bl, sorted(bl))
 rec('the SECOND mailbox\'s postmaster bounce is listed', 'msdead@example.com' in bl, sorted(bl))
-rec('clean scan: exit 0, ok, last_ok_started_utc set to this run\'s start',
-    rc == 0 and st.get('ok') is True and BS._parse(st.get('last_ok_started_utc')) >= before - dt.timedelta(seconds=1), (rc, st))
-rec('status carries counts and mailbox logins, no recipient address',
+m = st.get('mailboxes') or {}
+rec('clean scan: exit 0, version 2, a clean record per mailbox from this run\'s start',
+    rc == 0 and st.get('version') == 2 and set(m) == {M1, M2}
+    and all(r.get('last_run_ok') is True and BS._parse(r.get('last_ok_started_utc')) >= before - dt.timedelta(seconds=1)
+            for r in m.values()), (rc, st))
+rec('each mailbox records the date its search started from',
+    all(r.get('last_ok_since') == (TODAY - dt.timedelta(days=14)).isoformat() for r in m.values()), m)
+rec('list_hashes are exactly the hashed list as written',
+    st.get('list_hashes') == sorted(BS.addr_hash(x) for x in bl), (len(st.get('list_hashes') or []), sorted(bl)))
+rec('status carries no recipient address',
     'gone@' not in json.dumps(st) and 'msdead@' not in json.dumps(st) and st.get('hard') == 2, st)
-first_ok = st['last_ok_started_utc']
+first_ok = {k: v['last_ok_started_utc'] for k, v in m.items()}
 time.sleep(0.01)
-BROKEN.add('second@example.org')
-INBOX['alejandro@bsgflorida.com'].append(notice('mailer-daemon@googlemail.com', 'alejandro@bsgflorida.com',
-                                                'late@example.com', 'Address not found\n550 5.1.1 %s'))
+BROKEN.add(M2)
+INBOX[M1].append(notice('mailer-daemon@googlemail.com', M1, 'late@example.com', 'Address not found\n550 5.1.1 %s'))
 rc, st, bl, out = run_bounces(BX, CREDS)
+m = st.get('mailboxes') or {}
 rec('one mailbox fails: exit 2, not ok, failed named', rc == 2 and st.get('ok') is False
-    and st.get('failed') == ['second@example.org'], (rc, st))
-rec('...the last clean scan time does NOT move', st.get('last_ok_started_utc') == first_ok, st)
+    and st.get('failed') == [M2], (rc, st))
+rec('...that mailbox records a failed last run and keeps its old clean time',
+    m[M2].get('last_run_ok') is False and m[M2].get('last_ok_started_utc') == first_ok[M2], m[M2])
+rec('...the mailbox that worked moves forward', m[M1].get('last_run_ok') is True
+    and m[M1].get('last_ok_started_utc') != first_ok[M1], m[M1])
 rec('...the other mailbox\'s new bounce is still written', 'late@example.com' in bl and 'msdead@example.com' in bl, sorted(bl))
+status_dir = str(BX)
+rec('...so mail sent from the failed mailbox stays held after it',
+    BS.followup_hold('x@example.com', [row('x@example.com', 26, login=M2)], status_dir, bounced=set(bl)) != '')
 BROKEN.clear()
+keep = json.loads((BX / BS.STATUS).read_text(encoding='utf-8'))
 (BX / 'bounced_emails.json').write_text('{torn', encoding='utf-8')
 rc, st, bl_raw, out = run_bounces(BX, CREDS)
-rec('a torn bounce list: exit 1, not ok, last clean time unchanged',
-    rc == 1 and st.get('ok') is False and st.get('last_ok_started_utc') == first_ok, (rc, st))
+m = st.get('mailboxes') or {}
+rec('a torn bounce list: exit 1, not ok, every scanned mailbox records a failed run, clean times kept',
+    rc == 1 and st.get('ok') is False and all(m[k].get('last_run_ok') is False for k in (M1, M2))
+    and m[M1].get('last_ok_started_utc') == keep['mailboxes'][M1]['last_ok_started_utc'], (rc, st))
+rec('...and the list hashes are not replaced', st.get('list_hashes') == keep.get('list_hashes'))
 for p in BX.glob('bounced_emails.json*'):
     p.unlink()
-rc, st, bl, out = run_bounces(BX, CREDS, ['--account', 'second@example.org'])
-rec('--account scans only that mailbox', st.get('mailboxes') == ['second@example.org'] and sorted(bl) == ['msdead@example.com'], (st, sorted(bl)))
+for p in BX.glob(BS.STATUS):
+    p.unlink()
+rc, st, bl, out = run_bounces(BX, CREDS, ['--account', M2])
+rec('--account scans only that mailbox and records only that mailbox',
+    st.get('scanned') == [M2] and set(st.get('mailboxes') or {}) == {M2} and sorted(bl) == ['msdead@example.com'], (st, sorted(bl)))
+rec('gap 1 end to end: after a one-mailbox scan, mail sent from the other mailbox is still held',
+    M1 in BS.followup_hold('y@example.com', [row('y@example.com', 26, login=M1)], str(BX), bounced=set(bl)))
 before_dry = json.loads((BX / BS.STATUS).read_text(encoding='utf-8'))
 rc, st, bl, out = run_bounces(BX, CREDS, ['--dry-run'])
 rec('--dry-run writes no status', st == before_dry, st)
+INBOX.clear()
+rc, st, bl, out = run_bounces(BX, CREDS, ['--days', '1'])
+rec('gap 2 end to end: a --days 1 scan does not cover an email from 3 days ago',
+    'searched from' in BS.followup_hold('z@example.com', [row('z@example.com', 72, login=M1)], str(BX), bounced=set(bl)))
 
 
 # ------------------------------------------------------------------ 3. /send, the reported scenario
@@ -214,9 +308,12 @@ print('\n-- /send: first email bounced, follow-up due')
 CASE = '2099-000003-CA-01'
 CACHE = {CASE: {'a': False, 'bd': '', 'sl': '', 'b': 0, 'v': 5, 't': 0}}
 VERIFIED = {a: {'v': 'ok', 'why': 'zerobounce:valid', 'd': TODAY.isoformat()}
-            for a in ('gone@example.com', 'live@example.com')}
+            for a in ('gone@example.com', 'live@example.com', 'elsewhere@example.com')}
 FILLER = [row('fill%02d@example.com' % i, 24 * 3, case='2099-0001%02d-CA-01' % i) for i in range(40)]
-LEDGER = FILLER + [row('gone@example.com', 26), row('live@example.com', 26)]
+TL = 'tester@example.com'      # the bridge's login, the mailbox its bounces come back to
+LEDGER = [dict(r, login=TL) for r in FILLER] + [row('gone@example.com', 26, login=TL),
+                                                row('live@example.com', 26, login=TL),
+                                                row('elsewhere@example.com', 26, login='other-login@example.org')]
 W = T / 'srv'
 W.mkdir()
 for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py',
@@ -236,7 +333,7 @@ w('mail_sent.json', LEDGER)
 w('leads_final.json', [])
 w('skiptrace_results.json', {})
 # the last clean scan ran three days ago, before the first email: the 07:15 harvest missed since
-w(BS.STATUS, {'ok': True, 'last_ok_started_utc': iso(72)})
+w(BS.STATUS, v2({TL: mb(72)}))
 
 
 def free_port():
@@ -318,8 +415,17 @@ try:
     rec('bounces.py harvests it and records a clean scan', rc == 0 and 'gone@example.com' in bl and st.get('ok'), (rc, st))
     _, hj = call(port, '/health')
     rec('/health shows the last clean scan, no address',
-        (hj.get('bounce_scan') or {}).get('last_clean_utc') == st.get('last_ok_started_utc')
+        (hj.get('bounce_scan') or {}).get('last_clean_utc') == st['mailboxes'][TL]['last_ok_started_utc']
         and '@' not in json.dumps(hj.get('bounce_scan')), hj.get('bounce_scan'))
+    good_list = (W / 'bounced_emails.json').read_text(encoding='utf-8')
+    (W / 'bounced_emails.json').write_text('{}', encoding='utf-8')
+    st_, j = send('gone@example.com')
+    rec('gap 3 end to end: an OLDER bounce list beside the new scan record holds, never sends',
+        st_ == 451 and j.get('blocked') == 'bounce_scan_stale' and 'older than' in j.get('err', ''), (st_, j))
+    (W / 'bounced_emails.json').write_text(good_list, encoding='utf-8')
+    st_, j = send('elsewhere@example.com')
+    rec('gap 1 end to end: last mailed from a mailbox this scan never opened: held',
+        st_ == 451 and j.get('blocked') == 'bounce_scan_stale' and 'other-login' in j.get('err', ''), (st_, j))
     st_, j = send('gone@example.com')
     rec('after the scan the bounced address is refused as dead, never sent',
         st_ == 451 and (j.get('verdicts') or [{}])[0].get('verdict') == 'dead', (st_, j))
@@ -354,7 +460,7 @@ json.dump({'_dealflow_notes': 1, 'notes': {}}, open(CD.OPTOUTS, 'w'))
 json.dump({'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
            'started_at': 0, 'finished_at': 1, 'steps': []}, open(C / 'sync_status.json', 'w'))
 json.dump({}, open(C / 'bounced_emails.json', 'w'))
-json.dump({'ok': True, 'last_ok_started_utc': iso(72)}, open(C / BS.STATUS, 'w'))
+json.dump(v2({'box-a@example.org': mb(72)}), open(C / BS.STATUS, 'w'))
 
 
 def cadence_run():
@@ -391,7 +497,7 @@ rec('stale bounce scan: cadence does not send the follow-up', sent == [], (sent,
 rec('...the step stays due (not consumed)', s.get('step') == 1, s)
 rec('...and the run says why', 'follow-up held' in out, out[-400:])
 json.dump({'gone@example.com': {'first_seen': TODAY.isoformat(), 'reason': '550'}}, open(C / 'bounced_emails.json', 'w'))
-json.dump({'ok': True, 'last_ok_started_utc': iso(1)}, open(C / BS.STATUS, 'w'))
+json.dump(v2({'box-a@example.org': mb(1)}, listed=['gone@example.com']), open(C / BS.STATUS, 'w'))
 sent, out, st = cadence_run()
 rec('after the scan lists it, cadence suppresses the sequence', sent == []
     and st.get('2099-000031-CA-01', {}).get('status') == 'suppressed', (sent, st))
@@ -406,10 +512,10 @@ OE._primary_email = lambda r: 'gone2@example.com'
 import bk_lookup as _BKL
 _BKL.contact_blocked_reason = lambda c, here=None: (False, '')
 L2 = [row('gone2@example.com', 50, case='2099-000099-CA-01')]
-json.dump({'ok': True, 'last_ok_started_utc': iso(72)}, open(C / BS.STATUS, 'w'))
+json.dump(v2({'box-a@example.org': mb(72)}), open(C / BS.STATUS, 'w'))
 okk, why = OE._eligible(lead, L2, set(), 24)
 rec('stale scan: dropped with a follow-up-held reason', not okk and why.startswith('follow-up held'), (okk, why))
-json.dump({'ok': True, 'last_ok_started_utc': iso(1)}, open(C / BS.STATUS, 'w'))
+json.dump(v2({'box-a@example.org': mb(1)}), open(C / BS.STATUS, 'w'))
 okk, why = OE._eligible(lead, L2, set(), 24)
 rec('clean scan after the email: not dropped by this gate', not why.startswith('follow-up held'), (okk, why))
 

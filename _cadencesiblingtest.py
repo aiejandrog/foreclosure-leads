@@ -66,9 +66,8 @@ json.dump([], open(CD._ss.SENT_LEDGER, 'w'))
 json.dump({'_dealflow_notes': 1, 'notes': {}}, open(CD.OPTOUTS, 'w'))
 json.dump({'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
            'started_at': 0, 'finished_at': 1, 'steps': []}, open(os.path.join(ctmp, 'sync_status.json'), 'w'))
-# bounce list current for every send here (the follow-up hold is _bouncefollowuptest.py's subject)
-json.dump({'ok': True, 'last_ok_started_utc': '2099-01-01T00:00:00+00:00'},
-          open(os.path.join(ctmp, 'bounce_scan_status.json'), 'w'))
+# the follow-up bounce-scan hold is _bouncefollowuptest.py's subject, not this suite's
+os.environ['DEALFLOW_BOUNCE_SCAN_GATE'] = '0'
 
 
 def run(lead_rows, ledger):

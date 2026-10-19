@@ -764,7 +764,8 @@ def _run(args):
         # A follow-up waits until bounces.py has scanned cleanly since the last email to this
         # address (bounce_scan.py, 2026-10-19). Same check as /send. The step stays due.
         if not _first:
-            _fbh = _ss._followup_bounce_hold(_pk, next(_c for _a, _c, _w in _vd if _a == _pk))
+            _fbh = _ss._followup_bounce_hold(_pk, next(_c for _a, _c, _w in _vd if _a == _pk),
+                                             _ev.get('bounced'))
             if _fbh:
                 held += 1
                 print(f"  HELD step {step+1}/4 -> {s['email']}: {_fbh}")

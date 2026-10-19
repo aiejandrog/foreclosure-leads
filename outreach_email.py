@@ -645,7 +645,7 @@ def _eligible(r, ledger, optouts, min_hours):
     # refreshed since that email (bounce_scan.py, 2026-10-19). Fails closed.
     try:
         import bounce_scan as _BSC
-        if _BSC.followup_hold(em, ledger, HERE):
+        if _BSC.followup_hold(em, ledger, HERE, bounced=_load_bounced()):
             return False, 'follow-up held: bounce scan has not covered the last email'
     except Exception:
         return False, 'follow-up held: bounce-scan check unavailable'
