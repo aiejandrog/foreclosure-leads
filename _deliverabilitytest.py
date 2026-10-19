@@ -61,9 +61,17 @@ rec('status file lives under DEALFLOW_DIR, not the repo', STATUS.startswith(_TMP
 # ---------------------------------------------------------------- content score
 subj, body = DV.sample_first_touch()
 sc = DV.score_content(subj, body)
-rec('the current first-touch copy scores high', sc['level'] == 'high', sc['score'])
-rules = {i['rule'] for i in sc['issues']}
+# 2026-10-19: the first touch was rewritten against this scorer (18.8 high -> ok). Keep it there.
+rec('the current first-touch copy scores ok', sc['level'] == 'ok', (sc['score'], [i['detail'] for i in sc['issues']]))
+# The 08-28 copy's trigger lines, kept as a fixture so the content hold still has a high scorer to refuse.
+spam_subj = 'URGENT: Foreclosure sale 11/04/2026 - Regarding your property at 12 Oak St'
+spam_body = ('Hi Maria,\n\nThere is still time to protect and save your home, but the clock is ticking. '
+             'Please don\'t wait. I want to offer you something completely free and without any obligation. '
+             'There are no tricks, no hidden fees, and no pressure.\n\nReply now or call me today.\n'
+             'Reply now.\n\nAlejandro')
+rules = {i['rule'] for i in DV.score_content(spam_subj, spam_body)['issues']}
 rec('it names urgency and free triggers', {'urgency', 'free'} <= rules, rules)
+rec('the old copy\'s lines still score high', DV.score_content(spam_subj, spam_body)['level'] == 'high')
 calm = ('Hi Ana,\n\nI saw the case filed on 12 Oak St and wanted to ask whether you already have a '
         'plan for it. If you would like a second opinion from our senior advisor, reply with a good '
         'number and a time and I will call. Either way, I hope it works out.\n\nAlex\nBiscayne Solutions Group')
@@ -164,8 +172,10 @@ with MG.gated('send_server'):
         isinstance(raises(lambda: DV.require_clear(A, to='help@bsgflorida.com', bcc='x@example.com')), DV.PlacementHold))
 clear_status()
 os.environ['DEALFLOW_SPAM_HOLD_SCORE'] = '8'
-rec('content hold: the current template is refused at 8',
-    isinstance(raises(lambda: DV.require_clear(B, subj, body, to='o@example.com')), DV.PlacementHold))
+rec('content hold: a high-scoring body is refused at 8',
+    isinstance(raises(lambda: DV.require_clear(B, spam_subj, spam_body, to='o@example.com')), DV.PlacementHold))
+rec('content hold: the current template passes at 8',
+    raises(lambda: DV.require_clear(B, subj, body, to='o@example.com')) is None)
 rec('content hold: a plain note passes', raises(lambda: DV.require_clear(B, 'About 12 Oak St', calm, to='o@example.com')) is None)
 os.environ.pop('DEALFLOW_SPAM_HOLD_SCORE')
 rec('content score is advisory by default', raises(lambda: DV.require_clear(B, subj, body, to='o@example.com')) is None)

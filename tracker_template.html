@@ -16118,7 +16118,7 @@ function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
    IMAP on the substring SUBJ_TAG = 'Regarding your property at'. A prefix survives both. Anything
    appended AFTER the street becomes part of the captured address, matches no lead, and every reply
    from an address not already on file silently stops being attributed. */
-var SUBJECT_STYLE = 'measured';
+var SUBJECT_STYLE = 'plain';   // 2026-10-19: no date, no URGENT, no foreclosure word (spam). Same in outreach_email.py.
 /* ══════════ BALLOON / REFI LANE — investor email (vault: "Refi Lane — investor email + text", 2026-08-30) ══════════
    Audience inversion, stated once: everything the homeowner composer protects AGAINST is the target
    here. Work mailboxes are the RIGHT address for an LLC officer (the consumer allowlist is bypassed on
@@ -16239,6 +16239,8 @@ function _safeStreet(raw, fallback){
 }
 function _subjLine(street, dt, td, lang){
   var d = String(dt||'').trim(), tag;
+  if(String(SUBJECT_STYLE||'').toLowerCase() === 'plain')
+    return (lang === 'es' ? 'Referente a su propiedad en ' : 'Regarding your property at ') + String(street||'');
   var urgent = (String(SUBJECT_STYLE||'urgent').toLowerCase() !== 'measured');
   if(lang === 'es'){
     tag = d ? ((td?'Subasta de tax deed ':'Fecha de subasta ') + d + ' - ') : '';

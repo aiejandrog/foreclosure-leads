@@ -191,8 +191,8 @@ with sync_playwright() as p:
 
     # ---- Alejandro's copy is actually the copy that shipped -------------------------------------
     body = js['body']
-    for probe in ('Your home is scheduled for foreclosure auction on',
-                  'We specialize in Urgent Foreclosure Cases',
+    for probe in ('Your home is scheduled for auction on',
+                  'Our senior advisor has spent over 30 years',
                   # THE CALL LENGTH IS TWO NUMBERS NOW AND THIS PROBE MUST NOT CARRY ITS OWN COPY
                   # OF EITHER. It read '15-minute private phone consultation' and went red the day
                   # outreach_copy split the promise from the slot: CALL_MINUTES is what a guarded
@@ -202,8 +202,8 @@ with sync_playwright() as p:
                   # of the words — the exact thing this suite exists to make impossible. Build the
                   # sentence from the constants so the probe moves when Alejandro moves the copy.
                   'Most take about %s minutes; I block %s' % (OC.CALL_MINUTES, OC.SLOT_MINUTES),
-                  'There are no tricks, no hidden fees, and no pressure.',
-                  'Reply now or call me today.'):
+                  "If you're open to it, I'd like to set up a short phone call.",
+                  'reply with the best number and time to reach you'):
         rec('his copy present: %r' % probe[:48], probe in body)
     # SUBJECT_STYLE is a switch and this check hardcoded one side of it — `startswith('URGENT:')`,
     # while BOTH files have carried SUBJECT_STYLE='measured' since the bounce-rate change
@@ -213,7 +213,7 @@ with sync_playwright() as p:
     # calls for, on both sides. Flip SUBJECT_STYLE back to 'urgent' in both files and this check
     # starts demanding the URGENT prefix again, with no edit here.
     _style = pg.evaluate("()=>SUBJECT_STYLE")
-    _want_urgent = (str(_style).lower() != 'measured')
+    _want_urgent = (str(_style).lower() not in ('measured', 'plain'))
     rec('subject framing matches SUBJECT_STYLE=%r on BOTH paths' % _style,
         js['subj'].startswith('URGENT:') == _want_urgent
         and py['subj'].startswith('URGENT:') == _want_urgent,
