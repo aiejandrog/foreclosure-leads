@@ -52,8 +52,18 @@ bad = {k: PS.split_unit(k) for k, v in cases.items() if PS.split_unit(k) != v}
 rec('real board unit shapes split, look-alikes left alone', not bad, bad)
 rec('route numbers and plain streets are not split', PS.split_unit('100 STATE RD 826') == ('100 STATE RD 826', '') and PS.split_unit('2435 NW 168 ST') == ('2435 NW 168 ST', '') and PS.split_unit('100 PARK AVE N') == ('100 PARK AVE N', ''))
 rec('fips and apn written', '12086' in t and 'Miami-Dade' in t)
+held_cases = {'2099-000001-CA-01': (True, 'bankruptcy_hold'), '2099-000009-CA-01': (False, '')}
+l2, s2 = PS.build_all(rows, optouts, {'2099-000002-CA-01'}, deads, notes, 'T',
+                      never_contact=lambda c: c == '2099-000005-CA-01',
+                      send_hold=lambda c: held_cases.get(c, (True, 'gate_unevaluable:X')))
+rec('send scope drops held and unevaluable leads', [l.property_address for l in l2] == ['9 MAIN ST'] and s2['held'].get('bankruptcy_hold') == 1, s2['held'])
+rec('default send hold fails closed', PS.default_send_hold('not-a-case')[0] is True)
 try:
     PS.build_all(rows, {}, set(), {}, {}, 'T', county='NOPE', never_contact=lambda c: False); ok = False
 except PS.ExportError: ok = True
 rec('unknown county refused', ok)
+import propstream_copy as PC    # noqa: E402
+sheet = PC.build()
+rec('copy sheet: every text carries the EN and ES let-me-know lines', sheet.count("If now's not a good time, just let me know") == 4 and sheet.count('Si ahora no es buen momento, solo d') >= 4)
+rec('copy sheet: letter carries MARS and the EN+ES opt-out', 'not associated with the government' in sheet and 'lo vuelvo a contactar' in sheet)
 print('%d/%d' % (sum(R), len(R))); sys.exit(0 if all(R) else 1)
