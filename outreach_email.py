@@ -990,6 +990,12 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
     _MG.require_gated(to_addr, login=user)
     sender = (from_addr or user).strip().lower()
+    # Seed-test pause (deliverability.py): a sender whose probe landed in spam stops here.
+    try:
+        import deliverability as _DV
+    except Exception as _dve:
+        raise _MG.UnsendableError('placement check unavailable (%s). The message was NOT sent.' % _dve)
+    _DV.require_clear(sender, subj, body, to=to_addr, login=user)
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
