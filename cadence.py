@@ -306,6 +306,21 @@ def load_skip(path=None):
     return cases, ''
 
 
+def _bounce_addrs(raw):
+    """Lowercased addresses on a bounced_emails.json object or a legacy bare list.
+
+    The send-time sweep used to keep only dict keys. _bounce_send_block already treats a
+    list as a readable file, and an older bounce file is a list of addresses, so ignoring
+    it mailed every one of them. An unreadable file never reaches this: the caller holds."""
+    if isinstance(raw, dict):
+        keys = raw
+    elif isinstance(raw, list):
+        keys = raw
+    else:
+        return set()
+    return {str(k).strip().lower() for k in keys if str(k).strip()}
+
+
 def _ledger_send_block():
     """'' when optouts.json is present, parseable, and fresh enough to send against.
 
@@ -351,7 +366,7 @@ def _sync_send_block():
 
 
 def _bounce_send_block():
-    """'' when bounced_emails.json is missing or a dict.
+    """'' when bounced_emails.json is missing, a dict, or a legacy list of addresses.
 
     A file that exists and will not parse used to come back as an empty set, and the send
     loop then treated every address as not-bounced. Hold the run instead. A missing file is
@@ -557,8 +572,7 @@ def _run(args):
     # code until 2026-08-19 and a written STOP was followed by a fresh cold email. Call it, do not
     # re-implement it.
     _oo = _oe._load_optouts()
-    _sup = load_json(os.path.join(HERE, 'bounced_emails.json'), {})
-    _sup = {str(k).strip().lower() for k in _sup} if isinstance(_sup, dict) else set()
+    _sup = _bounce_addrs(load_json(os.path.join(HERE, 'bounced_emails.json'), {}))
     for c, s in list(active.items()):
         em = (s.get('email') or '').strip().lower()
         why = ('opt-out ledger' if (c.strip().lower() in _oo or em in _oo)
