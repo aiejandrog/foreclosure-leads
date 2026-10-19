@@ -13,9 +13,10 @@ How it works end to end:
      bounced_emails.json hard-suppression list the send bridge enforces.
   4. Before any of that, every run re-reads the opt-out ledger and drops anyone suppressed since
      the queue was exported. The queue is a snapshot; the ledger is the truth.
-  5. cadence_skip.json is a tracked list of case numbers to hold out of follow-ups. A listed case
-     is not enrolled and is not mailed, including a queue that was built before the line was added.
-     Removing that case's line is the whole undo. A file that will not parse holds every send.
+  5. cadence_skip.json is a tracked list of case numbers to hold out of follow-ups. Matching uses
+     case_key() (uppercase, no spaces or dashes, Palm Beach division suffix dropped). A listed
+     case is not enrolled and is not mailed, including a queue that was built before the line was
+     added. Removing that case's line is the whole undo. A file that will not parse holds every send.
 
 The company name in the signature comes from entity.display_llc() — the " LLC" suffix prints only
 on a strict ACTIVE Sunbiz match. Never sign with a raw sender.llc string; see safe_llc() below.
@@ -254,23 +255,27 @@ def load_json(path, default):
         return default
 
 
-def _bounce_addrs(raw):
-    """Lowercased addresses on a bounced_emails.json object or a legacy bare list.
+# Palm Beach UCN: county 50, four-digit year, CA or CC, six-digit sequence, then a
+# division suffix (XXXAMB, XXXXMB, XXXASB, ...) that is not part of the case identity.
+_PB_CORE = re.compile(r'(50\d{4}(?:CA|CC)\d{6})')
 
-    The send-time sweep used to keep only dict keys. _bounce_send_block already treats a
-    list as a readable file, and an older bounce file is a list of addresses, so ignoring
-    it mailed every one of them. An unreadable file never reaches this: the caller holds."""
-    if isinstance(raw, dict):
-        keys = raw
-    elif isinstance(raw, list):
-        keys = raw
-    else:
-        return set()
-    return {str(k).strip().lower() for k in keys if str(k).strip()}
+
+def case_key(case):
+    """One comparable form of a case number.
+
+    Uppercase, with spaces and dashes removed. A Palm Beach 50YYYYCA or 50YYYYCC
+    number also drops whatever follows the 6-digit sequence, so 502025CA009919,
+    502025CA009919XXXAMB and 50-2025-CA-009919 are one case. Miami
+    (2025-005697-CA-01 -> 2025005697CA01) and Broward (CACE-25-009495 ->
+    CACE25009495) keep the rest, so a different year, sequence, local suffix or
+    prefix stays a different case."""
+    s = re.sub(r'[\s\-]', '', str(case or '')).upper()
+    m = _PB_CORE.match(s)
+    return m.group(1) if m else s
 
 
 def load_skip(path=None):
-    """(cases, problem). cases is a set of uppercased case numbers.
+    """(cases, problem). cases is a set of case_key() values.
 
     A missing file skips nobody. A file that exists and will not parse, is not an object,
     or has a blank reason is a problem string: the caller holds every follow-up, because a
@@ -292,9 +297,9 @@ def load_skip(path=None):
     for k, v in d.items():
         if str(k).startswith('_'):
             continue
-        c = str(k).strip().upper()
+        c = case_key(k)
         if not c:
-            continue
+            return set(), 'cadence skip list entry has no case number'
         if not isinstance(v, str) or not v.strip():
             return set(), 'cadence skip list entry %s has no reason' % c
         cases.add(c)
@@ -513,7 +518,7 @@ def _run(args):
         c = lead.get('case')
         if not c:
             continue
-        if c not in state and (_skip_hold or str(c).strip().upper() in _skip_cases):
+        if c not in state and (_skip_hold or case_key(c) in _skip_cases):
             if not _skip_hold:
                 print('  SKIP (not enrolled) -> %s — cadence skip list' % c)
             continue
@@ -552,7 +557,8 @@ def _run(args):
     # code until 2026-08-19 and a written STOP was followed by a fresh cold email. Call it, do not
     # re-implement it.
     _oo = _oe._load_optouts()
-    _sup = _bounce_addrs(load_json(os.path.join(HERE, 'bounced_emails.json'), {}))
+    _sup = load_json(os.path.join(HERE, 'bounced_emails.json'), {})
+    _sup = {str(k).strip().lower() for k in _sup} if isinstance(_sup, dict) else set()
     for c, s in list(active.items()):
         em = (s.get('email') or '').strip().lower()
         why = ('opt-out ledger' if (c.strip().lower() in _oo or em in _oo)
@@ -756,7 +762,7 @@ def _run(args):
         # After the opt-out and diligence sweeps, so a real suppression still sticks. Status
         # stays active: the step is not consumed, and deleting the line lets the next run send.
         for c, s in list(active.items()):
-            if str(c).strip().upper() not in _skip_cases:
+            if case_key(c) not in _skip_cases:
                 continue
             active.pop(c, None)
             ev = 'not sent — cadence skip list'
