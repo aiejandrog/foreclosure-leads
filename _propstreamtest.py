@@ -13,7 +13,7 @@ def row(case, addr, owner, **kw):
          'pkey': owner.lower(), 'phones': ['3055550100'], 'emails': ['x@example.com'], 'days': 20}
     r.update(kw); return r
 
-rows = [row('2099-000001-CA-01', '1 MAIN ST, MIAMI, FL 33101', 'Ann Smith'),
+rows = [row('2099-000001-CA-01', '1 MAIN ST, MIAMI, FL 33101', 'Ann Smith', folio='01-2345-678-9000'),
         row('2099-000002-CA-01', '2 MAIN ST, MIAMI, FL 33101', 'Bob Jones'),
         row('2099-000003-CA-01', '3 MAIN ST, MIAMI, FL 33101', 'Cy Park'),
         row('2099-000004-CA-01', '4 MAIN ST, MIAMI, FL 33101', 'Di Lee'),
@@ -33,12 +33,15 @@ rec('no-phone lead is included', '9 MAIN ST' in addrs)
 rec('every hold counted', s['held'] == {'opted_out': 1, 'dead_ledger': 1, 'hard_no': 1, 'never_contact': 1,
     'no_address': 1, 'vacant_land': 1}, s['held'])
 rec('dupe dropped', s['dupes_dropped'] == 1)
+rec('apn carried', leads[0].folio == '0123456789000', leads[0].folio)
 rec('no phones or emails on any lead', all(not l.phones and not l.emails for l in leads))
 p = os.path.join(os.environ['DEALFLOW_DIR'], 'o.csv')
-EX.write_csv(leads, EX.load_map(PS.MAP_FILE), p)
+PS.write_csv(leads, PS.load_map(PS.MAP_FILE), p)
 t = open(p, encoding='utf-8').read()
 rec('csv has no phone or email data', '3055550100' not in t and 'example.com' not in t)
-rec('csv header starts with address columns', t.splitlines()[0].startswith('Address,City,State,Zip'))
+rec('header is PropStream template verbatim', t.splitlines()[0] == 'Address,Unit#,City,State,Zip,County,FIPS,APN#', t.splitlines()[0])
+rec('unit split off street', PS.split_unit('842 NW 9TH ST APT 4') == ('842 NW 9TH ST', '4') and PS.split_unit('1 MAIN ST') == ('1 MAIN ST', ''))
+rec('fips and apn written', '12086' in t and 'Miami-Dade' in t)
 try:
     PS.build_all(rows, {}, set(), {}, {}, 'T', county='NOPE', never_contact=lambda c: False); ok = False
 except PS.ExportError: ok = True

@@ -2,10 +2,11 @@
 """export_to_propstream — board leads as a CSV for PropStream's Import List.
 
 WHAT IT WRITES
-Property address, owner name, mailing address, county, case number, auction date, tags. NO phones
-and NO emails: PropStream matches on the address and skip-traces on its own side, and a number or
-address never leaves this repo's gates by accident. Headers come from propstream_map.json, which
-is a placeholder until it is compared with PropStream's own template (see that file's _note).
+PropStream's own Import List template, verbatim (supplied 2026-10-19): Address, Unit#, City,
+State, Zip, County, FIPS, APN#. Nothing else: no owner, no phones, no emails, no case data.
+PropStream matches on the address and skip-traces on its own side. Unit# is split off the street
+line; FIPS is the county code (Miami-Dade 12086, Broward 12011, Palm Beach 12099); APN# is the
+board's folio / parcel number. Headers live in propstream_map.json.
 
 WHICH LEADS
 Default (--scope all): every lead on the board EXCEPT the ones that must never be contacted again:
@@ -41,6 +42,8 @@ import resimpli_lead as RL
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAP_FILE = os.path.join(HERE, 'propstream_map.json')
 ExportError = EX.ExportError
+FIPS = {'MIAMIDADE': '12086', 'BROWARD': '12011', 'PALMBEACH': '12099'}
+_UNIT = set(RL.UNIT.values())
 
 
 def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, never_contact=None):
@@ -94,6 +97,7 @@ def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, ne
             hold('vacant_land')
             continue
         ld = RL.from_board_row(row, [], [], list_name=list_name)
+        ld.folio = re.sub(r'[^0-9A-Za-z]', '', str(row.get('folio') or '')).upper()
         if not ld.property_address:
             hold('no_address')
             continue
@@ -103,6 +107,48 @@ def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, ne
                    'dupes_dropped': dupes, 'rows_written': len(leads),
                    'written_without_zip': sum(1 for ld in leads if not ld.zip),
                    'written_with_mailing_address': sum(1 for ld in leads if ld.mailing_address)}
+
+
+def load_map(path):
+    """propstream_map.json -> columns. 'field' is a Lead field or one of unit/street/fips/apn."""
+    try:
+        cols = json.load(open(path, encoding='utf-8'))['columns']
+    except Exception as e:
+        raise ExportError('%s does not load (%s)' % (os.path.basename(path), e))
+    ok = set(RL.Lead.__dataclass_fields__) | {'unit', 'street', 'fips', 'apn'}
+    for c in cols:
+        if not c.get('header') or c.get('field') not in ok:
+            raise ExportError('bad column in %s: %r' % (os.path.basename(path), c))
+    return cols
+
+
+def split_unit(street):
+    """'842 NW 9TH ST APT 4' -> ('842 NW 9TH ST', '4'). No unit -> (street, '')."""
+    toks = str(street or '').split()
+    for i, t in enumerate(toks):
+        if i > 0 and t in _UNIT:
+            return ' '.join(toks[:i]), ' '.join(toks[i + 1:])
+    return ' '.join(toks), ''
+
+
+def propstream_row(ld, cols):
+    """One CSV row. Fields: unit, street, fips, apn are derived here; the rest are Lead fields."""
+    street, unit = split_unit(ld.property_address)
+    d = ld.to_dict()
+    d.update({'street': street, 'unit': unit, 'fips': FIPS.get(EX.norm_county(ld.county), ''),
+              'apn': getattr(ld, 'folio', ''), 'county': ld.county.title()})
+    return [EX._safe(EX._cell(d.get(c['field']))) for c in cols]
+
+
+def write_csv(leads, cols, path):
+    import csv
+    tmp = path + '.tmp'
+    with open(tmp, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow([c['header'] for c in cols])
+        for ld in leads:
+            w.writerow(propstream_row(ld, cols))
+    os.replace(tmp, path)
 
 
 def main(argv=None):
@@ -117,7 +163,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     today = datetime.date.today()
     try:
-        cols = EX.load_map(a.map)
+        cols = load_map(a.map)
         if a.scope == 'callable':
             holds = EX.preflight()
             if holds:
@@ -156,7 +202,7 @@ def main(argv=None):
     os.makedirs(out_dir, exist_ok=True)
     base = 'propstream_%s_%s' % (EX._slug(list_name), today.isoformat())
     csv_path = os.path.join(out_dir, base + '.csv')
-    EX.write_csv(leads, cols, csv_path)
+    write_csv(leads, cols, csv_path)
     with open(os.path.join(out_dir, base + '.summary.json'), 'w', encoding='utf-8') as f:
         json.dump(summary, f, indent=1)
     print('wrote %d row(s) -> %s' % (len(leads), csv_path))

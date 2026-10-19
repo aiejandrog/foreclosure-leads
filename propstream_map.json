@@ -1,16 +1,13 @@
 {
- "_note": "PLACEHOLDER HEADERS. PropStream's own Import List template is the authority: download it (My Properties > Import List) and replace each 'header' here with the template's exact text, in the template's order. Only the first five matter for matching (address, city, state, zip); the rest are optional. Fields come from resimpli_lead.Lead.",
+ "_note": "PropStream Import List template, verbatim header row (supplied by Alex 2026-10-19): Address,Unit#,City,State,Zip,County,FIPS,APN#. Fields: unit/street/fips/apn are derived in export_to_propstream.py; the rest are resimpli_lead.Lead fields.",
  "columns": [
-  {"header": "Address", "field": "property_address"},
+  {"header": "Address", "field": "street"},
+  {"header": "Unit#", "field": "unit"},
   {"header": "City", "field": "city"},
   {"header": "State", "field": "state"},
   {"header": "Zip", "field": "zip"},
-  {"header": "Owner First Name", "field": "owner_first"},
-  {"header": "Owner Last Name", "field": "owner_last"},
-  {"header": "Mailing Address", "field": "mailing_address"},
   {"header": "County", "field": "county"},
-  {"header": "Case Number", "field": "case_number"},
-  {"header": "Auction Date", "field": "auction_date"},
-  {"header": "Tags", "field": "tags", "join": ", "}
+  {"header": "FIPS", "field": "fips"},
+  {"header": "APN#", "field": "apn"}
  ]
 }
