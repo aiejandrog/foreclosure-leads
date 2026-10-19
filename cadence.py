@@ -761,6 +761,14 @@ def _run(args):
                 print(f"  HELD step {step+1}/4 -> {s['email']}: first touch, bounce pause "
                       f"(post-cutoff first-touch rule; follow-ups still send)")
                 continue
+        # A follow-up waits until bounces.py has scanned cleanly since the last email to this
+        # address (bounce_scan.py, 2026-10-19). Same check as /send. The step stays due.
+        if not _first:
+            _fbh = _ss._followup_bounce_hold(_pk, next(_c for _a, _c, _w in _vd if _a == _pk))
+            if _fbh:
+                held += 1
+                print(f"  HELD step {step+1}/4 -> {s['email']}: {_fbh}")
+                continue
         _ft_slot = ''
         _ft_senders = _ss._first_touch_senders(_cfg) if _cfg else []
         if _first and _ft_senders:

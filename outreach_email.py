@@ -641,6 +641,14 @@ def _eligible(r, ledger, optouts, min_hours):
         return False, 'opted out'
     if em.strip().lower() in _load_bounced():
         return False, 'hard-bounced previously (suppressed)'
+    # An address this ledger already mailed is a follow-up: the bounce list must have been
+    # refreshed since that email (bounce_scan.py, 2026-10-19). Fails closed.
+    try:
+        import bounce_scan as _BSC
+        if _BSC.followup_hold(em, ledger, HERE):
+            return False, 'follow-up held: bounce scan has not covered the last email'
+    except Exception:
+        return False, 'follow-up held: bounce-scan check unavailable'
     if _recently_emailed_hours(ledger, em, min_hours):
         return False, f'emailed within {min_hours}h'
     days = _days(r)

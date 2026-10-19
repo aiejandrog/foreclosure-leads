@@ -308,6 +308,9 @@ bd_budget.json
 bounced_emails.json
 bounced_emails.json.corrupt-*
 bounced_emails.json.tmp
+# when bounces.py last scanned cleanly (bounce_scan.py); mailbox logins and counts, never commit
+bounce_scan_status.json
+bounce_scan_status.json.tmp
 # same, forward-looking: verify_emails.py classifies every address on the board, so this file is a
 # complete roster of homeowner mailboxes. Never commit.
 verified_emails.json
@@ -751,6 +754,8 @@ logs/
 .env
 !_xchecktest.py
 !_cadencesiblingtest.py
+# _bouncefollowuptest: a follow-up waits for a clean bounce scan after the last email. example.com only.
+!_bouncefollowuptest.py
 !_texttripwiretest.py
 !_textprecheckstest.py
 !_outcomelearntest.py

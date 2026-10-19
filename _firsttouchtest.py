@@ -84,9 +84,13 @@ OPTOUTS = {'_dealflow_notes': True, 'notes': {'2099-000023-CA-01': {'status': 'D
 
 
 def seed(d):
-    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py',
+              'bounce_scan.py'):
         shutil.copy(HERE / f, d / f)
     w = lambda n, v: (d / n).write_text(json.dumps(v), encoding='utf-8')
+    # The bounce list is current for every send in this suite (the follow-up hold is
+    # _bouncefollowuptest.py's subject, not this one's).
+    w('bounce_scan_status.json', {'ok': True, 'last_ok_started_utc': '2099-01-01T00:00:00+00:00'})
     w('sync_status.json', {'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
                            'started_at': time.time() - 120, 'finished_at': time.time() - 60, 'steps': []})
     (d / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')

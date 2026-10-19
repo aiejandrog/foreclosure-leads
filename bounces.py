@@ -27,7 +27,7 @@ The board reads bounced_emails.json at build time (make_tracker) and strips thos
 bounced lead falls back to phone/door instead of burning another send.
 """
 import argparse, email, imaplib, json, os, re, sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from email.header import decode_header, make_header
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -94,37 +94,36 @@ def _failed_recipients(msg, text, sender_addr):
     return hits
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--days', type=int, default=14)
-    ap.add_argument('--account', default='')
-    ap.add_argument('--dry-run', action='store_true')
-    a = ap.parse_args()
+def _mailboxes(account):
+    """Every (user, password) to scan. --account or an env credential = that one mailbox.
 
-    cred = R.load_key(a.account or None)
-    if not cred or not cred[0] or not cred[1]:
-        print('NO GMAIL CREDENTIAL. Put user:app_password in gmail.key or set GMAIL_APP_PASSWORD.')
-        sys.exit(1)
-    user, pw = cred
+    2026-10-19: this used to open only the FIRST mailbox in replies._cred_map(). A box holding both
+    bsg_gmail.key and a gmail.key for a different login never read the second inbox's notices, so
+    a bounce that landed there never reached bounced_emails.json and a follow-up went out to it."""
+    if account or (os.environ.get('GMAIL_APP_PASSWORD') or '').strip():
+        c = R.load_key(account or None)
+        return [c] if c and c[0] and c[1] else []
+    return [(u, pw) for u, pw in R._cred_map().items() if u and pw]
 
+
+def _scan_mailbox(user, pw, since, found):
+    """Add this mailbox's hard bounces to found. Returns (notices, soft_only). Raises on IMAP failure."""
+    M = imaplib.IMAP4_SSL('imap.gmail.com')
+    soft_only = 0
     try:
-        M = imaplib.IMAP4_SSL('imap.gmail.com')
         M.login(user, pw)
-    except Exception as e:
-        print(f'IMAP login failed for {user}: {e}')
-        sys.exit(2)
-
-    since = (date.today() - timedelta(days=a.days)).strftime('%d-%b-%Y')
-    found, soft_only = {}, 0
-    try:
         M.select('"[Gmail]/All Mail"', readonly=True)
-        typ, data = M.search(None, f'(SINCE {since} FROM "mailer-daemon")')
+        # Gmail and most providers sign notices as mailer-daemon; Microsoft (outlook/hotmail/live)
+        # and some hosts send them as postmaster, which this search used to skip.
+        typ, data = M.search(None, f'(SINCE {since} OR FROM "mailer-daemon" FROM "postmaster")')
+        if typ != 'OK':
+            raise imaplib.IMAP4.error('search returned %s' % typ)
         ids = (data[0].split() if data and data[0] else [])
-        print(f'scanning {len(ids)} delivery notice(s) in the last {a.days} days as {user}')
+        print(f'scanning {len(ids)} delivery notice(s) since {since} as {user}')
         for i in ids:
             typ, raw = M.fetch(i, '(RFC822)')
-            if not raw or not raw[0]:
-                continue
+            if typ != 'OK' or not raw or not raw[0]:
+                raise imaplib.IMAP4.error('fetch returned %s' % typ)
             msg = email.message_from_bytes(raw[0][1])
             text = _body_text(msg)
             if not HARD.search(text):
@@ -137,9 +136,61 @@ def main():
                         'first_seen': str(date.today()),
                         'reason': (HARD.search(text).group(0) if HARD.search(text) else 'hard bounce'),
                     }
+        return len(ids), soft_only
     finally:
         try: M.logout()
         except Exception: pass
+
+
+def _record_scan(started, ok, boxes, failed, notices, hard, new, days):
+    """bounce_scan_status.json: what the follow-up gate (bounce_scan.py) trusts. Counts only.
+    A failed run keeps the last clean scan's time, so it never moves the gate forward."""
+    import bounce_scan as BS
+    prev = {}
+    try:
+        prev = json.load(open(os.path.join(HERE, BS.STATUS), encoding='utf-8'))
+        prev = prev if isinstance(prev, dict) else {}
+    except Exception:
+        prev = {}
+    rec = {'started_utc': started, 'finished_utc': datetime.now(timezone.utc).isoformat(),
+           'ok': bool(ok), 'mailboxes': boxes, 'failed': failed, 'notices': notices,
+           'hard': hard, 'new': new, 'days': days,
+           'last_ok_started_utc': started if ok else prev.get('last_ok_started_utc')}
+    try:
+        BS.write_status(HERE, rec)
+    except Exception as e:
+        print('!! could not write %s (%s); follow-ups stay held until a scan records'
+              % (BS.STATUS, type(e).__name__))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--days', type=int, default=14)
+    ap.add_argument('--account', default='')
+    ap.add_argument('--dry-run', action='store_true')
+    a = ap.parse_args()
+
+    started = datetime.now(timezone.utc).isoformat()
+    creds = _mailboxes(a.account)
+    if not creds:
+        print('NO GMAIL CREDENTIAL. Put user:app_password in gmail.key or set GMAIL_APP_PASSWORD.')
+        if not a.dry_run:
+            _record_scan(started, False, [], ['no credential'], 0, 0, 0, a.days)
+        sys.exit(1)
+
+    since = (date.today() - timedelta(days=a.days)).strftime('%d-%b-%Y')
+    found, soft_only, notices, boxes, failed = {}, 0, 0, [], []
+    for user, pw in creds:
+        try:
+            n, soft = _scan_mailbox(user, pw, since, found)
+            notices += n
+            soft_only += soft
+            boxes.append(user)
+        except Exception as e:
+            # Keep going: the other mailboxes' bounces are still real and still get written. The
+            # run is not clean, so the follow-up gate does not move past it.
+            print(f'IMAP failed for {user}: {type(e).__name__}: {str(e)[:120]}')
+            failed.append(user)
 
     try:
         prior = load_bounce_list(OUT)
@@ -148,6 +199,9 @@ def main():
         # the send-time block that reads this file. The backup sits beside the original.
         print('!! bounced_emails.json is unreadable (%s). Original left in place. Nothing written.'
               % type(e).__name__)
+        if not a.dry_run:
+            _record_scan(started, False, boxes, failed + ['bounce list unreadable'], notices,
+                         len(found), 0, a.days)
         return 1
 
     new = {k: v for k, v in found.items() if k not in prior}
@@ -164,10 +218,16 @@ def main():
 
     save_bounce_list(OUT, merged)
     print(f'-> {OUT} (gitignored)')
+    # Recorded only AFTER the list is on disk: a clean status must never precede the bounces it covers.
+    _record_scan(started, not failed, boxes, failed, notices, len(found), len(new), a.days)
+    if failed:
+        print('!! not a clean scan (%s); follow-ups to addresses mailed since the last clean scan '
+              'stay held.' % ', '.join(failed))
     if new:
         print('Rebuild the board so these stop being queued: '
               'python -c "import json,foreclosure_leads as F; '
               'F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
+    return 2 if failed else 0
 
 
 def load_bounce_list(path=None):
