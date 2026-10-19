@@ -413,6 +413,11 @@ rem   if exist whitepages.key python -u whitepages_lookup.py --all --limit 30 >>
 rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 
 :rebuild
+rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
+rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
+rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
+rem  After :rebuild so it runs with or without tracerfy.key.
+python -u phone_validate.py >> "%LOG%" 2>&1
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...
 python -u property_photos.py --zillow >> "%LOG%" 2>&1
 

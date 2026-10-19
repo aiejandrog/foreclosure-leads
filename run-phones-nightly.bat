@@ -55,6 +55,10 @@ python skiptrace.py --all --limit 6 --max-spend 1 >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
 rem 3-DAY lane first (three_day.py): phones for sales within 3 business days, then the morning list.
 python three_day.py --trace --max-spend 2 >> "%LOG%" 2>&1
+rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
+rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
+rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
+python -u phone_validate.py >> "%LOG%" 2>&1
 
 rem    FIXED 2026-08-07: a skiptrace failure used to `exit /b` here, so the board was never rebuilt
 rem    or pushed. That froze the ENTIRE refresh on an unrelated problem: on 08/07 BatchData returned
