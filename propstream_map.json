@@ -1,0 +1,16 @@
+{
+ "_note": "PLACEHOLDER HEADERS. PropStream's own Import List template is the authority: download it (My Properties > Import List) and replace each 'header' here with the template's exact text, in the template's order. Only the first five matter for matching (address, city, state, zip); the rest are optional. Fields come from resimpli_lead.Lead.",
+ "columns": [
+  {"header": "Address", "field": "property_address"},
+  {"header": "City", "field": "city"},
+  {"header": "State", "field": "state"},
+  {"header": "Zip", "field": "zip"},
+  {"header": "Owner First Name", "field": "owner_first"},
+  {"header": "Owner Last Name", "field": "owner_last"},
+  {"header": "Mailing Address", "field": "mailing_address"},
+  {"header": "County", "field": "county"},
+  {"header": "Case Number", "field": "case_number"},
+  {"header": "Auction Date", "field": "auction_date"},
+  {"header": "Tags", "field": "tags", "join": ", "}
+ ]
+}
