@@ -1,53 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-18T09:31:33-04:00",
+   "at": "2026-10-18T21:14:17-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.1% (2 of 18 sent on 2026-10-12): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 11.1% (2 of 18 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-10-18T09:31:33-04:00",
+   "at": "2026-10-18T21:14:17-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-17 21:14): 1 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness (checked 10-18 21:14): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-18T09:31:33-04:00",
-   "key": "morning-sends",
-   "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 30, 30) and 53 leads were eligible, but 0 first-touch emails were sent."
-  },
-  {
-   "at": "2026-10-18T09:31:33-04:00",
+   "at": "2026-10-18T21:14:17-04:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid reads $69.96 of $50.00 (140%) this month. The monthly cap is spent."
   },
   {
-   "at": "2026-10-18T09:31:33-04:00",
+   "at": "2026-10-18T21:14:17-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 46 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-18T09:31:33-04:00",
+ "published_at": "2026-10-18T21:14:17-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 2,
+   "errors": 7,
    "filings": 1760,
-   "holds": 474,
-   "leads_checked": 15,
+   "holds": 471,
+   "leads_checked": 17,
    "provider": "courtlistener",
-   "pull_age_h": 2.11,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 115,
-   "truncated": 0
+   "reason": "time_budget",
+   "requests_used": 97,
+   "truncated": 3
   },
   "bounce": {
    "ceiling": 0.1,
@@ -104,6 +98,7 @@
    "date": "2026-10-18",
    "eligible": 53,
    "judged": true,
+   "paused": true,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -128,7 +123,7 @@
    "spent": 69.9629
   },
   "readiness": {
-   "at": "2026-10-17T21:14:09-04:00",
+   "at": "2026-10-18T21:14:17-04:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
@@ -139,10 +134,8 @@
    ],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 1,
-   "failed_names": [
-    "DEALFLOW Morning Worker"
-   ],
+   "failed": 0,
+   "failed_names": [],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
