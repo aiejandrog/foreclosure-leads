@@ -44,6 +44,10 @@ MAP_FILE = os.path.join(HERE, 'propstream_map.json')
 ExportError = EX.ExportError
 FIPS = {'MIAMIDADE': '12086', 'BROWARD': '12011', 'PALMBEACH': '12099'}
 _UNIT = set(RL.UNIT.values())
+# a bare trailing number after one of these is a unit ("777 SW 9 AVE 101"). Roads and highways are
+# left out: a number after them is the route ("STATE RD 826"), not a unit.
+_UNIT_AFTER = set(RL.SUFFIX.values()) - {'RD', 'HWY', 'PKWY', 'TPKE', 'CSWY', 'EXPY', 'LOOP', 'PASS', 'PATH', 'RUN', 'ROW', 'WALK'}
+_BARE_UNIT = re.compile(r'^(?:\d{1,5}[A-Z]?|[A-Z]\d{1,5})$')
 
 
 def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, never_contact=None):
@@ -128,6 +132,8 @@ def split_unit(street):
     for i, t in enumerate(toks):
         if i > 0 and t in _UNIT:
             return ' '.join(toks[:i]), ' '.join(toks[i + 1:])
+    if len(toks) >= 4 and toks[-2] in _UNIT_AFTER and _BARE_UNIT.match(toks[-1]):
+        return ' '.join(toks[:-1]), toks[-1]
     return ' '.join(toks), ''
 
 

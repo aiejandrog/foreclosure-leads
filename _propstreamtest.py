@@ -41,6 +41,8 @@ t = open(p, encoding='utf-8').read()
 rec('csv has no phone or email data', '3055550100' not in t and 'example.com' not in t)
 rec('header is PropStream template verbatim', t.splitlines()[0] == 'Address,Unit#,City,State,Zip,County,FIPS,APN#', t.splitlines()[0])
 rec('unit split off street', PS.split_unit('842 NW 9TH ST APT 4') == ('842 NW 9TH ST', '4') and PS.split_unit('1 MAIN ST') == ('1 MAIN ST', ''))
+rec('bare unit after a suffix is split', PS.split_unit('777 SW 9 AVE 101') == ('777 SW 9 AVE', '101') and PS.split_unit('7825 NW 107 AVE 510') == ('7825 NW 107 AVE', '510'))
+rec('route numbers and plain streets are not split', PS.split_unit('100 STATE RD 826') == ('100 STATE RD 826', '') and PS.split_unit('2435 NW 168 ST') == ('2435 NW 168 ST', '') and PS.split_unit('100 PARK AVE N') == ('100 PARK AVE N', ''))
 rec('fips and apn written', '12086' in t and 'Miami-Dade' in t)
 try:
     PS.build_all(rows, {}, set(), {}, {}, 'T', county='NOPE', never_contact=lambda c: False); ok = False
