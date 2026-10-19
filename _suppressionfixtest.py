@@ -345,7 +345,7 @@ def bridge():
     work = pathlib.Path(tempfile.mkdtemp(prefix='dfsupsrv_'))
     proc = None
     try:
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py', 'text_hold.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'text_hold.py'):
             shutil.copy(HERE / f, work / f)
         today = datetime.date.today().isoformat()
         (work / 'sync_status.json').write_text(json.dumps({

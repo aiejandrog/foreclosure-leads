@@ -84,7 +84,7 @@ OPTOUTS = {'_dealflow_notes': True, 'notes': {'2099-000023-CA-01': {'status': 'D
 
 
 def seed(d):
-    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
+    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
         shutil.copy(HERE / f, d / f)
     w = lambda n, v: (d / n).write_text(json.dumps(v), encoding='utf-8')
     w('sync_status.json', {'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
@@ -136,7 +136,7 @@ rec('with the ZeroBounce switch off, zerobounce valid is held', S._recipient_ver
 S.FIRST_TOUCH_ADMIT_ZEROBOUNCE_VALID = True
 E = T / 'empty'
 E.mkdir()
-for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
+for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
     shutil.copy(HERE / f, E / f)
 S2 = load(E / 'send_server.py', 'send_server_ft_empty')
 rec('no verification files at all -> hold (never a pass by default)',

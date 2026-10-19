@@ -79,7 +79,7 @@ def server():
     work = pathlib.Path(tempfile.mkdtemp(prefix='dfsib_'))
     proc = None
     try:
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'sync_gate.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
             shutil.copy(HERE / f, work / f)
         (work / 'sync_status.json').write_text(json.dumps({
             'date': dt.date.today().isoformat(), 'state': 'finished', 'ok': True,
