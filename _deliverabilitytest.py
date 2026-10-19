@@ -382,6 +382,18 @@ except Exception as ex:
     ok = ex
 rec('a run covering every sender replaces it and keeps the torn copy', ok is True, ok)
 
+# a seed removed from the list stops holding; a non-dict row holds
+prev = {A: {'verdict': 'hold', 'per_seed': {'gone@gmail.com': {'reasons': ['spam at external seed gone@gmail.com']},
+                                            'seed1@gmail.com': 'junk'}}}
+v = DV.verdict_for([{'from': A, 'seed': 'seed1@gmail.com', 'folder': 'inbox'}], prev, 't', seeds=['seed1@gmail.com'])
+rec('a removed seed no longer holds; a clean retest of the rest lifts', v[A]['verdict'] == 'clear', v[A])
+v = DV.verdict_for([], prev, 't', seeds=['seed1@gmail.com', 'gone@gmail.com'])
+rec('an untested address keeps its row', v[A] is prev[A], v[A])
+v = DV.verdict_for([{'from': A, 'seed': 'x', 'folder': 'inbox'}], prev, 't', seeds=['seed1@gmail.com', 'x'])
+rec('a non-dict per-seed result holds, does not crash', v[A]['verdict'] == 'hold', v[A])
+put_status({A: 'hold'})
+rec('a non-dict row holds', 'not readable' in DV.placement_hold(A), DV.placement_hold(A))
+
 # dry run sends nothing
 SENT.clear()
 out = []

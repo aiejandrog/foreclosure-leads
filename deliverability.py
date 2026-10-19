@@ -457,6 +457,8 @@ def _placement_hold(addr, path=None, now=None):
     if st is None:
         return 'placement hold: no seed test has run and one is required' if required else ''
     row = st['by_from'].get(a)
+    if row is not None and not isinstance(row, dict):
+        return 'placement hold: the status row for %s is not readable' % a
     if not isinstance(row, dict):
         return ('placement hold: %s has never been seed-tested and a test is required' % a) if required else ''
     if row.get('verdict') == 'hold':
@@ -678,16 +680,21 @@ def _seed_reasons(r):
     return out
 
 
-def verdict_for(results, prev_by_from=None, ts=''):
+def verdict_for(results, prev_by_from=None, ts='', seeds=None):
     """Per From address -> {'verdict', 'reasons', 'per_seed', 'ts'}.
 
     Kept PER SEED. A seed this run did not reach (send or IMAP error) keeps its last result, so a
     pause from an external seed cannot be lifted by a retest that only reached our own mailbox.
-    A sender is clear only when every seed it has a result for landed fine."""
+    A sender is clear only when every seed it has a result for landed fine. `seeds` (the seeds
+    configured now): a result from a seed that was removed from the list is dropped, so it cannot
+    hold a sender forever with no way to retest it."""
     by = {}
+    keep = set(seeds) if seeds is not None else None
     for a, row in (prev_by_from or {}).items():
         if isinstance(row, dict) and isinstance(row.get('per_seed'), dict):
-            by[a] = {'per_seed': dict(row['per_seed'])}
+            ps = {k: (v if isinstance(v, dict) else {'reasons': ['unreadable result for seed %s' % k]})
+                  for k, v in row['per_seed'].items() if keep is None or k in keep}
+            by[a] = {'per_seed': ps}
     for r in results:
         if r.get('folder') == 'error':
             continue
@@ -711,7 +718,7 @@ class TornStatus(RuntimeError):
     pass
 
 
-def write_status(results, wait_s, path=None, now=None, all_froms=None):
+def write_status(results, wait_s, path=None, now=None, all_froms=None, seeds=None):
     """Merge this run into placement_status.json. Addresses not tested this run keep their row.
 
     An unreadable status holds every sender. It is replaced only by a run that tested every
@@ -732,7 +739,7 @@ def write_status(results, wait_s, path=None, now=None, all_froms=None):
             os.replace(path, path + '.torn-' + now.strftime('%Y%m%d%H%M%S'))
         except Exception:
             pass
-    by_from = verdict_for(results, (prev or {}).get('by_from') if not err else None, ts)
+    by_from = verdict_for(results, (prev or {}).get('by_from') if not err else None, ts, seeds)
     st = {'ts': ts, 'wait_s': wait_s, 'by_from': by_from,
           # Addresses only, no message content: seeds are company or test mailboxes.
           'last_run': [{k: r.get(k) for k in ('from', 'seed', 'internal', 'folder')}
@@ -832,7 +839,7 @@ def run_placement(send=False, wait=180, froms=None, smtp=None, imap=None, out=pr
     for r in pending:
         r['folder'] = 'error' if r.get('imap_err') else 'missing'
     try:
-        st = write_status(sent, wait, all_froms=sending_addresses())
+        st = write_status(sent, wait, all_froms=sending_addresses(), seeds=[x['addr'] for x in seeds])
     except TornStatus as e:
         out('STATUS NOT WRITTEN: %s' % e)
         return 1
