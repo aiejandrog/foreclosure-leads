@@ -140,6 +140,10 @@ calls = []
 PV.time.sleep = lambda s: None
 st = PV.run(numbers=['3055550100'], creds=CREDS, opener=fake_err(429, calls))
 rec('every retried request is counted', abs(st['usd'] - 0.007 * len(calls)) < 1e-9, (st, len(calls)))
+reset()
+calls = []
+st = PV.run(numbers=['3055550100'], creds=CREDS, opener=fake_err(429, calls), max_spend=0.014)
+rec('a retry past the run cap is not sent', len(calls) == 2 and st['usd'] <= 0.014 + 1e-9, (st, len(calls)))
 c = PV.load_cache()
 c['numbers'][PV.phone_key('3055550121')] = {'ls': 'unreachable', 'ts': int(time.time()) - 4 * 86400}
 c['numbers'][PV.phone_key('3055550122')] = {'ls': 'active', 'ts': int(time.time()) - 4 * 86400}

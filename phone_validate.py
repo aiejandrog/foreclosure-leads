@@ -428,10 +428,16 @@ def run(numbers=None, max_spend=None, with_type=False, dry_run=False, opener=Non
             print('phone_validate: %s' % st['stopped'])
             return st
         def _charge_retry():
+            # A retry is a new paid request: the same two caps apply before it goes out.
             cc = load_cache(cpath)
-            if cc is not None:
-                cc['spend'][today()] = round(spent_today(cc) + unit, 4)
-                save_cache(cc, cpath)
+            if cc is None:
+                raise StopRun('cache became unreadable')
+            if spent_today(cc) + unit > cap + 1e-9:
+                raise StopRun('daily cap $%.2f reached' % cap)
+            if max_spend is not None and st['usd'] + unit > max_spend + 1e-9:
+                raise StopRun('run cap $%.3f reached' % max_spend)
+            cc['spend'][today()] = round(spent_today(cc) + unit, 4)
+            save_cache(cc, cpath)
             st['usd'] = round(st['usd'] + unit, 4)
 
         for d in due:
