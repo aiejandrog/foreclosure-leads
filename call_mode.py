@@ -1771,6 +1771,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
     # CourtListener cache once for this build. A Miami lead with no docket clear stays callable
     # unless the cache flags it (federal_hold's own rule). Fails closed: see federal_hold_fn.
     _federal_held = federal_hold_fn()
+    # LINE STATUS (phone_validate.py, Twilio Lookup). A number the network says is not assigned to
+    # anyone is a guaranteed ring-out; one whose handset is off right now is dialled last. No cache,
+    # an unreadable cache or a never-checked number changes nothing.
+    try:
+        import phone_validate as _PV
+        _lsv = _PV.verdicts()
+    except Exception:
+        _PV, _lsv = None, {}
+    _dead_dropped = 0
 
     for d in slim:
         case = d.get('case') or ''
@@ -1834,6 +1843,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             if (phsrc[oi] if oi < len(phsrc) else '') in ('ag', 'xl'):
                 _notowner_dropped += 1
                 continue
+            if _lsv and _PV.line_status(p, _lsv) == _PV.DEAD:
+                _dead_dropped += 1
+                continue
             dg = _digits(p)
             if len(dg) == 10:
                 pairs.append((oi, dg))
@@ -1883,6 +1895,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
             order = [bk] + [k for k in order if k != bk]
+        if _lsv:
+            # stable: the ranked order stands among the reachable numbers; unreachable go last
+            order.sort(key=lambda k: 1 if _PV.line_status(keep[k], _lsv) == _PV.UNREACHABLE else 0)
         eq, _eq_lien = _call_equity_parts(d)
 
         def _n(key):
@@ -2174,6 +2189,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # skip trace that simply returned less.
         print('call mode: %d number(s) kept out of the dial queue — the lead\'s own listing agent, '
               'or a number sitting on three or more different owners' % _notowner_dropped)
+    if _dead_dropped:
+        print('call mode: %d number(s) kept out of the dial queue — the phone network says they are '
+              'not connected (phone_validate.py)' % _dead_dropped)
     if _ident_dropped:
         # Say it out loud. A suppression that removes people silently is indistinguishable from a
         # queue that was always this size, and this one drops leads that LOOK perfectly callable.
