@@ -26,6 +26,11 @@ THREE THINGS THIS GETS RIGHT THAT A NAIVE EXPORT WOULD NOT
    and bypass the 50/day ceiling outreach_email enforces deliberately. `next` is spread PER_DAY at
    a time, soonest-auction first, so the run rate stays inside that norm.
 
+4. cadence_skip.json. A case number in that tracked file is not enrolled, by hand or from the
+   task. cadence.py reads the same file again at send time, so a queue that already contains the
+   case still does not mail it. Removing the line is the undo. A file that will not parse enrolls
+   nobody and writes nothing.
+
 Writes nothing but cadence_queue.json. Sending still requires `python cadence.py` WITHOUT --dry-run.
 
 Run:  python build_cadence_queue.py            # write the queue
@@ -47,7 +52,9 @@ _DGQ = _DG.Tally()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
+SKIP = os.path.join(HERE, 'cadence_skip.json')
 PER_DAY = 25            # matches the spirit of outreach_email's 50/day cap, halved for follow-ups
+URGENT_DAYS = 3
 
 
 def _suppressed():
@@ -71,10 +78,15 @@ def _suppressed():
     return out
 
 
-def collect():
+def collect(skip_cases=()):
+    """Leads that would enroll. skip_cases is a set of uppercased case numbers from cadence_skip.json.
+
+    A listed case is dropped before anything else about it is used, so it never reaches the
+    call-today print (that print carries phone numbers) and never lands in the queue."""
     leads = [r for r in OE._load_leads() if OE._tier(r) in {'A', 'B'}]
     ledger, optouts = OE._load_ledger(), OE._load_optouts()
     supp = _suppressed()
+    skip_cases = {str(c).strip().upper() for c in (skip_cases or ()) if str(c).strip()}
 
     pool, dropped = [], {}
     for r in leads:
@@ -83,6 +95,9 @@ def collect():
             continue
         em = OE._primary_email(r)
         case = OE._case(r)
+        if case.strip().upper() in skip_cases:
+            dropped['cadence skip list'] = dropped.get('cadence skip list', 0) + 1
+            continue
         if not em:
             dropped['no email'] = dropped.get('no email', 0) + 1
             continue
@@ -128,85 +143,96 @@ def sale_key(r):
     return (1, 9999, 99, 99)
 
 
-ap = argparse.ArgumentParser()
-ap.add_argument('--show', action='store_true', help='print the plan, write nothing')
-ap.add_argument('--per-day', type=int, default=PER_DAY)
-a = ap.parse_args()
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--show', action='store_true', help='print the plan, write nothing')
+    ap.add_argument('--per-day', type=int, default=PER_DAY)
+    a = ap.parse_args(argv)
 
-pool, dropped = collect()
-pool.sort(key=lambda t: sale_key(t[0]))
+    import cadence as C
+    skip_cases, skip_problem = C.load_skip(SKIP)
+    if skip_problem:
+        print('HOLD - %s. Queue not written; nothing enrolled.' % skip_problem)
+        return 2
 
-# A 4-touch sequence spans 7 days. Enrolling an owner whose auction is 2 days out means touches 3
-# and 4 arrive AFTER the house is sold, and touch 2 lands the day before — an email that reads as
-# careless at the worst possible moment. These go to the phone instead; every one of them has a
-# number on file, which is the whole reason the call list exists.
-URGENT_DAYS = 3
-urgent, sequenceable = [], []
-for r, em in pool:
-    s = OE._sale_date(r) or ''
-    try:
-        n = (date(*[int(x) for x in (s.split('/')[2], s.split('/')[0], s.split('/')[1])]) - date.today()).days
-    except Exception:
-        n = 999
-    (urgent if n <= URGENT_DAYS else sequenceable).append((r, em, n))
+    pool, dropped = collect(skip_cases)
+    pool.sort(key=lambda t: sale_key(t[0]))
 
-if urgent:
-    st = {}
-    p_st = os.path.join(HERE, 'skiptrace_results.json')
-    if os.path.exists(p_st):
-        st = json.load(open(p_st, encoding='utf-8'))
-    print('CALL TODAY — auction within %d days, too close to email (%d):' % (URGENT_DAYS, len(urgent)))
-    for r, em, n in urgent:
-        raw = (st.get(OE._case(r)) or {}).get('phones') or []
-        # skiptrace stores phones as dicts ({number, rank, ...}) on some providers and bare strings
-        # on others — normalise rather than assuming either shape.
-        phones = [str(p.get('number') or p.get('phone') or '') if isinstance(p, dict) else str(p)
-                  for p in raw]
-        phones = [p for p in phones if p]
-        print('   %-22s %-22s sale %s (%dd)  %s'
-              % (OE._case(r)[:22], (OE._owner_name(r) or '')[:22], OE._sale_date(r), n,
-                 ', '.join(phones[:2]) if phones else 'NO PHONE'))
+    # A 4-touch sequence spans 7 days. Enrolling an owner whose auction is 2 days out means touches 3
+    # and 4 arrive AFTER the house is sold, and touch 2 lands the day before — an email that reads as
+    # careless at the worst possible moment. These go to the phone instead; every one of them has a
+    # number on file, which is the whole reason the call list exists.
+    urgent, sequenceable = [], []
+    for r, em in pool:
+        s = OE._sale_date(r) or ''
+        try:
+            n = (date(*[int(x) for x in (s.split('/')[2], s.split('/')[0], s.split('/')[1])]) - date.today()).days
+        except Exception:
+            n = 999
+        (urgent if n <= URGENT_DAYS else sequenceable).append((r, em, n))
+
+    if urgent:
+        st = {}
+        p_st = os.path.join(HERE, 'skiptrace_results.json')
+        if os.path.exists(p_st):
+            st = json.load(open(p_st, encoding='utf-8'))
+        print('CALL TODAY — auction within %d days, too close to email (%d):' % (URGENT_DAYS, len(urgent)))
+        for r, em, n in urgent:
+            raw = (st.get(OE._case(r)) or {}).get('phones') or []
+            # skiptrace stores phones as dicts ({number, rank, ...}) on some providers and bare strings
+            # on others — normalise rather than assuming either shape.
+            phones = [str(p.get('number') or p.get('phone') or '') if isinstance(p, dict) else str(p)
+                      for p in raw]
+            phones = [p for p in phones if p]
+            print('   %-22s %-22s sale %s (%dd)  %s'
+                  % (OE._case(r)[:22], (OE._owner_name(r) or '')[:22], OE._sale_date(r), n,
+                     ', '.join(phones[:2]) if phones else 'NO PHONE'))
+        print()
+
+    pool = [(r, em) for r, em, n in sequenceable]
+    start = date.today() + timedelta(days=1)     # never same-day; gives a chance to review the queue
+    queue = []
+    for i, (r, em) in enumerate(pool):
+        queue.append({
+            'case': OE._case(r),
+            'owner': OE._owner_name(r) or (r.get('owners') or ''),
+            'addr': r.get('Address') or r.get('addr') or '',
+            'email': em,
+            'auction': OE._sale_date(r) or '',
+            'step': 1,                                    # touch #1 already went out via the worker
+            'next': str(start + timedelta(days=i // max(1, a.per_day))),
+        })
+
+    snd = {}
+    p = os.path.join(HERE, 'sender.json')
+    if os.path.exists(p):
+        raw = json.load(open(p, encoding='utf-8'))
+        snd = {k: v for k, v in raw.items() if not k.startswith('_')}
+
+    print('worker-emailed, never replied : %d' % (len(urgent) + len(sequenceable) + sum(dropped.values())))
+    for k, v in sorted(dropped.items(), key=lambda kv: -kv[1]):
+        print('   dropped %-30s %d' % (k, v))
+    print('   routed to CALL (auction <=%dd)  %d' % (URGENT_DAYS, len(urgent)))
+    print('ENROLLING                     : %d  at step 1 of 4' % len(queue))
     print()
+    by_day = {}
+    for q in queue:
+        by_day[q['next']] = by_day.get(q['next'], 0) + 1
+    for d in sorted(by_day):
+        print('   %s   %d owner(s)' % (d, by_day[d]))
+    print()
+    print('  soonest auctions in the queue:')
+    for q in queue[:6]:
+        print('     %-22s %-24s %-28s sale %s' % (q['case'][:22], (q['owner'] or '')[:24], q['email'][:28], q['auction']))
 
-pool = [(r, em) for r, em, n in sequenceable]
-start = date.today() + timedelta(days=1)     # never same-day; gives a chance to review the queue
-queue = []
-for i, (r, em) in enumerate(pool):
-    queue.append({
-        'case': OE._case(r),
-        'owner': OE._owner_name(r) or (r.get('owners') or ''),
-        'addr': r.get('Address') or r.get('addr') or '',
-        'email': em,
-        'auction': OE._sale_date(r) or '',
-        'step': 1,                                    # touch #1 already went out via the worker
-        'next': str(start + timedelta(days=i // max(1, a.per_day))),
-    })
+    if a.show:
+        print('\n--show: nothing written.')
+    else:
+        json.dump({'sender': snd, 'queue': queue}, open(QUEUE, 'w', encoding='utf-8'), indent=1)
+        print('\nwrote %s (%d entries)' % (QUEUE, len(queue)))
+        print('INERT until someone runs `python cadence.py` WITHOUT --dry-run.')
+    return 0
 
-snd = {}
-p = os.path.join(HERE, 'sender.json')
-if os.path.exists(p):
-    raw = json.load(open(p, encoding='utf-8'))
-    snd = {k: v for k, v in raw.items() if not k.startswith('_')}
 
-print('worker-emailed, never replied : %d' % (len(urgent) + len(sequenceable) + sum(dropped.values())))
-for k, v in sorted(dropped.items(), key=lambda kv: -kv[1]):
-    print('   dropped %-30s %d' % (k, v))
-print('   routed to CALL (auction <=%dd)  %d' % (URGENT_DAYS, len(urgent)))
-print('ENROLLING                     : %d  at step 1 of 4' % len(queue))
-print()
-by_day = {}
-for q in queue:
-    by_day[q['next']] = by_day.get(q['next'], 0) + 1
-for d in sorted(by_day):
-    print('   %s   %d owner(s)' % (d, by_day[d]))
-print()
-print('  soonest auctions in the queue:')
-for q in queue[:6]:
-    print('     %-22s %-24s %-28s sale %s' % (q['case'][:22], (q['owner'] or '')[:24], q['email'][:28], q['auction']))
-
-if a.show:
-    print('\n--show: nothing written.')
-else:
-    json.dump({'sender': snd, 'queue': queue}, open(QUEUE, 'w', encoding='utf-8'), indent=1)
-    print('\nwrote %s (%d entries)' % (QUEUE, len(queue)))
-    print('INERT until someone runs `python cadence.py` WITHOUT --dry-run.')
+if __name__ == '__main__':
+    sys.exit(main())
