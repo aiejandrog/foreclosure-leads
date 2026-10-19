@@ -1,47 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-18T21:14:17-04:00",
+   "at": "2026-10-19T07:58:51-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.1% (2 of 18 sent on 2026-10-12): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 11.1% (2 of 18 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-10-18T21:14:17-04:00",
+   "at": "2026-10-19T07:58:51-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-18 21:14): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-18T21:14:17-04:00",
+   "at": "2026-10-19T07:58:51-04:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid reads $69.96 of $50.00 (140%) this month. The monthly cap is spent."
   },
   {
-   "at": "2026-10-18T21:14:17-04:00",
+   "at": "2026-10-19T07:58:51-04:00",
    "key": "tracerfy-credits",
    "severity": "warn",
    "text": "Tracerfy balance 46 credits, warn under 1500."
   }
  ],
- "published_at": "2026-10-18T21:14:17-04:00",
+ "published_at": "2026-10-19T07:58:51-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 7,
-   "filings": 1760,
-   "holds": 471,
-   "leads_checked": 17,
+   "errors": 2,
+   "filings": 1762,
+   "holds": 488,
+   "leads_checked": 32,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.49,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 97,
-   "truncated": 3
+   "requests_used": 101,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -95,9 +95,9 @@
     30,
     30
    ],
-   "date": "2026-10-18",
+   "date": "2026-10-19",
    "eligible": 53,
-   "judged": true,
+   "judged": false,
    "paused": true,
    "readable": true,
    "scheduled": true,
@@ -108,12 +108,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-18",
+   "date": "2026-10-19",
    "failed_steps": [],
-   "past_cutoff": true,
+   "past_cutoff": false,
    "readable": true,
    "run_ok": true,
-   "started_at": 1792322103,
+   "started_at": 1792408503,
    "state": "finished"
   },
   "paid_reads": {
