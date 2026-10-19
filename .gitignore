@@ -782,3 +782,5 @@ rf_status.json.tmp
 !_browardorfetchtest.py
 # _sigemailtest: signature contact line is the business inbox, never the retired Gmail (offline).
 !_sigemailtest.py
+# _cadenceskiptest: cadence_skip.json holds follow-ups by case number until the line is removed. Synthetic cases only.
+!_cadenceskiptest.py
