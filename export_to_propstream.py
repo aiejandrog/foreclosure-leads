@@ -18,8 +18,13 @@ Default (--scope all): every lead on the board EXCEPT the ones that must never b
   Bankruptcy-stay holds (Broward / Palm Beach awaiting a federal check) are NOT applied in this
   scope, because uploading an address contacts nobody. Do not send, call or text from PropStream
   to those leads: PropStream's dialer and mailers sit outside this repo's gates.
---scope callable: the exact Call Mode gates of export_to_resimpli (stay, bankruptcy, diligence,
-  equity floor, send-hold preflight). Use it when the PropStream list will be worked, not traced.
+--scope send: for leads PropStream will MAIL or TEXT. The default gates PLUS the bankruptcy / stay
+  check the send bridge and reply_send.py use (stay_gate.check and bk_lookup.send_hold: Miami docket
+  stay, Broward / Palm Beach federal check, never_contact, PACER), and the whole file is refused
+  unless the opt-out ledger is readable, fresh and synced today (the same preflight as /send). Any
+  gate that cannot be evaluated holds the lead. No phone needed.
+--scope callable: the exact Call Mode gates of export_to_resimpli (needs a dialable number, adds
+  diligence and the equity floor). Use it when the PropStream list will be CALLED.
 
 Output goes to <DEALFLOW_DIR>/exports/ (outside the repo, per CLAUDE.md). Counts-only summary
 JSON beside it.
@@ -50,8 +55,22 @@ _UNIT_AFTER = set(RL.SUFFIX.values()) - {'RD', 'HWY', 'PKWY', 'TPKE', 'CSWY', 'E
 _BARE_UNIT = re.compile(r'^(?:\d{1,5}[A-Z]?|[A-Z]\d{1,5})$')
 
 
-def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, never_contact=None):
-    """-> (leads, summary). Suppression-only gates; see module docstring."""
+def default_send_hold(case):
+    """(held, why). Fails closed: a gate that cannot be evaluated holds the lead."""
+    try:
+        v = EX.default_stay_check(case)
+        if not v.get('ok'):
+            return True, 'stay_gate:%s' % (v.get('code') or 'unknown')
+        import bk_lookup
+        held, _why = bk_lookup.send_hold(case)
+        return (True, 'bankruptcy_hold') if held else (False, '')
+    except Exception as e:
+        return True, 'gate_unevaluable:%s' % type(e).__name__
+
+
+def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, never_contact=None,
+              send_hold=None):
+    """-> (leads, summary). Suppression gates, plus send_hold(case) -> (held, why) when given."""
     if never_contact is None:
         import stay_gate
         never_contact = stay_gate.never_contact
@@ -100,6 +119,11 @@ def build_all(rows, optouts, opt_cases, deads, notes, list_name, county=None, ne
         if row.get('vac'):
             hold('vacant_land')
             continue
+        if send_hold is not None:
+            sh, why = send_hold(case)
+            if sh:
+                hold(why or 'send_hold')
+                continue
         ld = RL.from_board_row(row, [], [], list_name=list_name)
         ld.folio = re.sub(r'[^0-9A-Za-z]', '', str(row.get('folio') or '')).upper()
         if not ld.property_address:
@@ -174,7 +198,7 @@ def write_csv(leads, cols, path):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--scope', choices=('all', 'callable'), default='all')
+    ap.add_argument('--scope', choices=('all', 'send', 'callable'), default='all')
     ap.add_argument('--list-name', default='')
     ap.add_argument('--county', default='', help='MIAMI-DADE, BROWARD or PALM BEACH (default: all)')
     ap.add_argument('--out-dir', default='')
@@ -191,7 +215,7 @@ def main(argv=None):
     today = datetime.date.today()
     try:
         cols = load_map(a.map)
-        if a.scope == 'callable':
+        if a.scope in ('callable', 'send'):
             holds = EX.preflight()
             if holds:
                 print('EXPORT HELD — nothing written:')
