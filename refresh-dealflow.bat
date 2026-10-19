@@ -403,10 +403,6 @@ rem  3-DAY lane (Jesse, 2026-09-16): sales within 3 business days with face equi
 rem  their phones FIRST (the tier cap above spent on Tier A while 15 of 18 Tuesday leads had no phone),
 rem  and the morning list lands in %USERPROFILE%\DEALFLOW\3DAY-<date>.md for Jesse.
 python -u three_day.py --trace --max-spend 3 >> "%LOG%" 2>&1
-rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
-rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
-rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
-python -u phone_validate.py >> "%LOG%" 2>&1
 
 rem [3a-2] Whitepages Pro - DISABLED 2026-08-16 by Alejandro's call. The plan quota has been
 rem exhausted since 08-08 (nine straight nights of first-call 429s, zero results, last success
@@ -417,6 +413,11 @@ rem   if exist whitepages.key python -u whitepages_lookup.py --all --limit 30 >>
 rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 
 :rebuild
+rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
+rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
+rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
+rem  After :rebuild so it runs with or without tracerfy.key.
+python -u phone_validate.py >> "%LOG%" 2>&1
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...
 python -u property_photos.py --zillow >> "%LOG%" 2>&1
 

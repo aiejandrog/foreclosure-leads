@@ -123,6 +123,29 @@ c['numbers'][PV.phone_key('3055550112')] = {'ls': 'active', 'ts': int(time.time(
 due = PV.candidates(c, sources=['3055550111', '3055550112', '3055550113', '305555011'])
 rec('never-checked first, then stale, fresh and malformed skipped', due == ['3055550113', '3055550111'], due)
 
+def fake_err(code, calls):
+    def _open(req, timeout=None):
+        calls.append(req.full_url)
+        raise urllib.error.HTTPError(req.full_url, code, 'x', {}, None)
+    return _open
+
+
+reset()
+calls = []
+st = PV.run(numbers=nums, creds=CREDS, opener=fake_err(404, calls))
+PV._VERDICTS['mtime'] = None
+rec('a 404 stops the run and marks nothing disconnected', len(calls) == 1 and PV.verdicts() == {}, (st, PV.verdicts()))
+reset()
+calls = []
+PV.time.sleep = lambda s: None
+st = PV.run(numbers=['3055550100'], creds=CREDS, opener=fake_err(429, calls))
+rec('every retried request is counted', abs(st['usd'] - 0.007 * len(calls)) < 1e-9, (st, len(calls)))
+c = PV.load_cache()
+c['numbers'][PV.phone_key('3055550121')] = {'ls': 'unreachable', 'ts': int(time.time()) - 4 * 86400}
+c['numbers'][PV.phone_key('3055550122')] = {'ls': 'active', 'ts': int(time.time()) - 4 * 86400}
+due = PV.candidates(c, sources=['3055550121', '3055550122'])
+rec('an unreachable number is rechecked after 3 days, an active one is not', due == ['3055550121'], due)
+
 print('\nCALL MODE')
 
 

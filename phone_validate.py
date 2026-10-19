@@ -40,6 +40,7 @@ Status file DEALFLOW_DIR/phone_validate_status.json carries counts and dollars o
     python phone_validate.py                 # nightly: check what is due, inside the caps
     python phone_validate.py --dry-run       # how many would be checked and what it would cost
     python phone_validate.py --stats         # what the cache knows, no network
+    python phone_validate.py --check         # prove twilio.key with a free request
     python phone_validate.py --number 3055550100   # one number (still capped and cached)
 
 Tests: _phonevalidatetest.py (no network, no key).
@@ -48,6 +49,7 @@ import argparse
 import base64
 import datetime as dt
 import hashlib
+import http.client
 import json
 import os
 import sys
@@ -66,6 +68,10 @@ BASE = 'https://lookups.twilio.com/v2/PhoneNumbers/'
 # The verdicts Call Mode acts on. Everything else (active, reachable, unknown, an error) is no change.
 DEAD = 'inactive'
 UNREACHABLE = 'unreachable'
+# "Handset off right now" is a moment, not a fact about the number, and the nightly check runs at
+# dawn when phones are off. Rechecked after this many days so one dawn check cannot bury a good
+# mobile at the end of its card for two months.
+UNREACHABLE_AGE_DAYS = 3
 
 
 def _float_env(name, default):
@@ -254,7 +260,8 @@ def candidates(c, now=None, sources=None):
         e = c['numbers'].get(phone_key(d))
         if not isinstance(e, dict) or not e.get('ts'):
             fresh.append(d)
-        elif now - float(e.get('ts') or 0) > max_age:
+        elif now - float(e.get('ts') or 0) > (UNREACHABLE_AGE_DAYS * 86400 if e.get('ls') == UNREACHABLE
+                                               else max_age):
             stale.append(d)
     return fresh + stale
 
@@ -281,7 +288,7 @@ def load_key(path=None):
     return lines[0], lines[1]
 
 
-def lookup(number10, creds, with_type=False, opener=None, retries=3):
+def lookup(number10, creds, with_type=False, opener=None, retries=3, on_retry=None):
     """-> dict parsed from Twilio. Raises AuthError on 401/403, StopRun on a request Twilio refuses
     for the whole account (400 on the Fields, i.e. Line Status not enabled)."""
     fields = 'line_status' + (',line_type_intelligence' if with_type else '')
@@ -298,15 +305,21 @@ def lookup(number10, creds, with_type=False, opener=None, retries=3):
             if e.code in (401, 403):
                 raise AuthError('Twilio refused the credentials (HTTP %d)' % e.code)
             if e.code == 404:
-                return {'valid': False}
+                # v2 answers a bad number with 200 and valid:false; a 404 is OUR request being
+                # wrong. Recording it as dead would empty the queue one night at a time.
+                raise StopRun('Twilio HTTP 404 (request path wrong?) - nothing recorded')
             if e.code == 429 and attempt < retries:
+                if on_retry:
+                    on_retry()
                 time.sleep(2 ** attempt)
                 continue
             if e.code == 400:
                 raise StopRun('Twilio HTTP 400 on Fields=%s (is Line Status enabled on this account?)' % fields)
             raise StopRun('Twilio HTTP %d' % e.code)
-        except (urllib.error.URLError, OSError, ValueError) as e:
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
             if attempt < retries:
+                if on_retry:
+                    on_retry()                       # the failed try may still have billed
                 time.sleep(2 ** attempt)
                 continue
             raise StopRun('network: %s' % e.__class__.__name__)
@@ -341,16 +354,25 @@ class _Lock:
             if os.path.exists(self.path) and time.time() - os.path.getmtime(self.path) > 7200:
                 os.remove(self.path)
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
             os.close(fd)
             self.held = True
         except OSError:
             self.held = False
         return self
 
+    def touch(self):
+        """A live run refreshes the lock each number, so only a dead run is ever taken over."""
+        try:
+            os.utime(self.path, None)
+        except OSError:
+            pass
+
     def __exit__(self, *a):
         if self.held:
             try:
-                os.remove(self.path)
+                if open(self.path).read().strip() == str(os.getpid()):   # never remove a taker's lock
+                    os.remove(self.path)
             except OSError:
                 pass
 
@@ -405,7 +427,15 @@ def run(numbers=None, max_spend=None, with_type=False, dry_run=False, opener=Non
             st['stopped'] = 'another run holds the lock'
             print('phone_validate: %s' % st['stopped'])
             return st
+        def _charge_retry():
+            cc = load_cache(cpath)
+            if cc is not None:
+                cc['spend'][today()] = round(spent_today(cc) + unit, 4)
+                save_cache(cc, cpath)
+            st['usd'] = round(st['usd'] + unit, 4)
+
         for d in due:
+            lk.touch()
             c = load_cache(cpath)                    # re-read: the day total is the shared counter
             if c is None:
                 st['stopped'] = 'cache became unreadable'
@@ -422,7 +452,7 @@ def run(numbers=None, max_spend=None, with_type=False, dry_run=False, opener=Non
             save_cache(c, cpath)
             st['usd'] = round(st['usd'] + unit, 4)
             try:
-                resp = lookup(d, creds, with_type=with_type, opener=opener)
+                resp = lookup(d, creds, with_type=with_type, opener=opener, on_retry=_charge_retry)
             except AuthError as e:
                 st['stopped'] = str(e)
                 break
@@ -443,6 +473,28 @@ def run(numbers=None, max_spend=None, with_type=False, dry_run=False, opener=Non
              (' - stopped: ' + st['stopped']) if st['stopped'] else ''))
     _write_status(st)
     return st
+
+
+def check_key():
+    """Free request (no Fields: formatting and validation only, $0 on Twilio's price list) against
+    Twilio's own example number, so a new key can be proven without spending. -> exit code."""
+    creds = load_key()
+    if not creds:
+        print('phone_validate: no %s' % key_path())
+        return 1
+    tok = base64.b64encode(('%s:%s' % creds).encode()).decode()
+    req = urllib.request.Request(BASE + '%2B15017122661', headers={'Authorization': 'Basic ' + tok})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            ok = 'phone_number' in json.loads(r.read().decode('utf-8') or '{}')
+    except urllib.error.HTTPError as e:
+        print('phone_validate: key check FAILED, Twilio HTTP %d' % e.code)
+        return 2
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print('phone_validate: key check could not reach Twilio (%s)' % e.__class__.__name__)
+        return 1
+    print('phone_validate: key OK' if ok else 'phone_validate: unexpected answer from Twilio')
+    return 0 if ok else 1
 
 
 def stats():
@@ -470,8 +522,11 @@ def main(argv=None):
     ap.add_argument('--with-type', action='store_true', help='also buy line type ($0.008 more)')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--stats', action='store_true')
+    ap.add_argument('--check', action='store_true', help='prove the key with a free request')
     ap.add_argument('--number', action='append', default=None, help='check this number (repeatable)')
     a = ap.parse_args(argv)
+    if a.check:
+        return check_key()
     if a.stats:
         stats()
         return 0
