@@ -42,6 +42,14 @@ rec('csv has no phone or email data', '3055550100' not in t and 'example.com' no
 rec('header is PropStream template verbatim', t.splitlines()[0] == 'Address,Unit#,City,State,Zip,County,FIPS,APN#', t.splitlines()[0])
 rec('unit split off street', PS.split_unit('842 NW 9TH ST APT 4') == ('842 NW 9TH ST', '4') and PS.split_unit('1 MAIN ST') == ('1 MAIN ST', ''))
 rec('bare unit after a suffix is split', PS.split_unit('777 SW 9 AVE 101') == ('777 SW 9 AVE', '101') and PS.split_unit('7825 NW 107 AVE 510') == ('7825 NW 107 AVE', '510'))
+cases = {'3301 NE 1 AVE PH-7': ('3301 NE 1 AVE', 'PH-7'), '8848 NW 5 AVE UNITS 1': ('8848 NW 5 AVE', '1'),
+         '2881 NE 33 CT 4C': ('2881 NE 33 CT', '4C'), '5110 NESTING WAY C': ('5110 NESTING WAY', 'C'),
+         '13380 POLO RD W 103': ('13380 POLO RD W', '103'), '2751 N PALM AIRE DR 102': ('2751 N PALM AIRE DR', '102'),
+         '14701 CUMBERLAND DR 208A': ('14701 CUMBERLAND DR', '208A'), '187 SAXONY D': ('187 SAXONY D', ''),
+         '100 PARK AVE N': ('100 PARK AVE N', ''), '5361 GODFREY RD': ('5361 GODFREY RD', ''),
+         '16539 BOTANIKO DR N': ('16539 BOTANIKO DR N', ''), '8410 STANIEL CAY': ('8410 STANIEL CAY', '')}
+bad = {k: PS.split_unit(k) for k, v in cases.items() if PS.split_unit(k) != v}
+rec('real board unit shapes split, look-alikes left alone', not bad, bad)
 rec('route numbers and plain streets are not split', PS.split_unit('100 STATE RD 826') == ('100 STATE RD 826', '') and PS.split_unit('2435 NW 168 ST') == ('2435 NW 168 ST', '') and PS.split_unit('100 PARK AVE N') == ('100 PARK AVE N', ''))
 rec('fips and apn written', '12086' in t and 'Miami-Dade' in t)
 try:
