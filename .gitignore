@@ -782,3 +782,5 @@ rf_status.json.tmp
 !_browardorfetchtest.py
 # _sigemailtest: signature contact line is the business inbox, never the retired Gmail (offline).
 !_sigemailtest.py
+# _bouncelisttest: cadence reads a legacy bounced_emails.json list at send time. example.com only.
+!_bouncelisttest.py
