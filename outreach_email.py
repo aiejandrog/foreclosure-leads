@@ -64,7 +64,7 @@ PACING_SEC_MIN = 2.0
 PACING_SEC_MAX = 3.5
 
 # ---------------------------------------------------------------------------------------------
-# SUBJECT_STYLE — 'urgent' | 'measured'. Alejandro's call, one word, in BOTH files.
+# SUBJECT_STYLE — 'urgent' | 'measured' | 'plain'. Alejandro's call, one word, in BOTH files.
 #
 # 'urgent'   (default, his 2026-08-28 framing):
 #            URGENT: Foreclosure sale 09/22/2026 - Regarding your property at 12535 SW 33 ST
@@ -85,7 +85,10 @@ PACING_SEC_MAX = 3.5
 # IMAP on the substring SUBJ_TAG = 'Regarding your property at'. Prefixes survive both. Anything
 # appended AFTER the street silently kills reply attribution for every owner who writes back from
 # an address we do not already have on file.
-SUBJECT_STYLE = 'measured'
+# 'plain' (2026-10-19, Alejandro: "change it so it doesnt shove it into spam and change subject"):
+#            Regarding your property at 12535 SW 33 ST
+#            No date, no URGENT, no foreclosure/tax-deed words. The sale date is in the body.
+SUBJECT_STYLE = 'plain'
 
 # ALEJANDRO'S COPY. outreach_copy.py is the one source of the words; this module renders the
 # template it bakes, and tracker_template.html's genEmail() renders the SAME baked template with
@@ -112,6 +115,8 @@ def _subject(street, sale_date='', td=False, lang='en'):
     if _OC is not None:
         return _OC.outreach_subject(street, sale_date, td, lang, SUBJECT_STYLE)
     d = str(sale_date or '').strip()
+    if SUBJECT_STYLE == 'plain':
+        return ('Referente a su propiedad en ' if lang == 'es' else 'Regarding your property at ') + street
     urgent = (SUBJECT_STYLE != 'measured')
     if lang == 'es':
         tag = ((('Subasta de tax deed ' if td else 'Fecha de subasta ') + d + ' - ') if d else '')

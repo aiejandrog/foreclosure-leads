@@ -181,17 +181,19 @@ def _sig_lines(sig_block, signer, company, phone):
 # EMAIL — Alejandro's long form, verbatim
 # ---------------------------------------------------------------------------------------------
 def email_subject(sale_date=None, short=False):
-    ds = _short_date(sale_date) if short else _fmt_date(sale_date)
-    # SWAP 3 (approved 2026-08-30). URGENT dropped. Bounce rate was pulled from 28-33% to 16.9%
-    # while the measured subject was shipping, URGENT is a known spam-filter trigger, and it is
-    # the rescue-scam silhouette. The sale date carries the urgency on its own.
-    if not ds:
-        return 'Foreclosure Sale of Your Home'
-    if short:
-        return 'Foreclosure sale %s - your home' % ds
-    return 'Foreclosure sale %s - your home' % ds
+    # 2026-10-19 (Alejandro: "change it so it doesnt shove it into spam and change subject").
+    # No date, no "foreclosure": the subject is read first and weighs most with a spam filter.
+    # Same shape as the live subject, outreach_subject(style='plain'), minus the street.
+    return 'Regarding your property'
 
 
+# SPAM REWRITE (2026-10-19, Alejandro). deliverability.score_content() put the 08-28 body at 18.8
+# (high is 8): "reply now" x2, "completely free", "no tricks, no hidden fees, and no pressure",
+# "the clock is ticking", "please don't wait", "protect and save", "Urgent Foreclosure Cases",
+# "without any obligation". Those lines are gone. What stays, on purpose: the sale date (it is the
+# reason for the email and it is true), the FS 45.032-correct consequence sentence (SWAP 2), the
+# identity disclosure, the senior-advisor sentence (SWAP 1), the call-length promise, the booking
+# link and phone, and the approved opt-out line. No new claim was added.
 def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY,
                identity=None, sig_block=None):
     ds = _fmt_date(sale_date) or '[DATE]'
@@ -199,61 +201,36 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
     return '\n'.join([
         'Hi %s,' % (first or '[First Name]'),
         '',
-        "I know this is a stressful time, and you're likely receiving a lot of mail and calls "
-        "about your property so I'll be brief and direct",
+        "You're probably getting a lot of mail and calls about your property, so I'll keep this short.",
         '',
-        "Your home is scheduled for foreclosure auction on %s." % ds,
-        # SWAP 2 (approved 2026-08-30). Was: "...you will lose any equity you have and could be
-        # forcefully evicted shortly after." That is not a scare tactic, it is FALSE: surplus
-        # above the judgment belongs to the former owner under FS 45.032, and the drill pack
-        # already teaches reps to tell them that. Telling a consumer the opposite, in writing,
-        # about their own money, is the claim that turns an aggressive email into a deceptive
-        # one. Same dread, all of it true.
+        "Your home is scheduled for auction on %s." % ds,
+        # SWAP 2 (approved 2026-08-30): surplus above the judgment belongs to the former owner
+        # under FS 45.032, so never say the equity is lost. This sentence is the true version.
         "If nothing changes before that date, the house is sold to the highest bidder and "
-        "every choice you have right now goes with it.",
-        "But this does not have to happen.",
-        # Was the literal "Alex". The function already takes `signer`, so the body ignored it and no
-        # sender but Alex could ever introduce themselves correctly -- and because the SIGNATURE is
-        # built from sender.json, the shipped email said "My name is Alex" over "Alejandro Gonzalez".
-        # Two names, one email, on a message whose whole job is proving we are not a mass mailer.
-        ("My name is %s with the team at %s." % (_first_of(signer), company))
+        "the choices you have right now go with it. It doesn't have to go that way.",
+        '',
+        ("My name is %s with %s." % (_first_of(signer), company))
         + ((' ' + ident) if ident else ''),
-        # SWAP 1 (approved 2026-08-30). Was: "For over 30 years, our team has helped thousands
-        # of Florida homeowners just like you stop foreclosures..." Three problems in one
-        # sentence: "stop foreclosures" is near-verbatim the FS 501.1377 trigger ("stop, prevent
-        # or reverse"); "thousands" is a quantified performance claim with nothing behind it
-        # (FDUTPA); and "our team, 30 years" put the experience on a company filed 8/24/2026.
-        # Same weight, said about the person who actually earned it.
-        "Our senior advisor has spent over 30 years in mortgages and foreclosure workouts, and "
-        "he personally reviews your case. He has sat across from people in exactly your "
-        "position and walked them out of it with their equity intact.",
+        # SWAP 1 (approved 2026-08-30): the experience belongs to the person who earned it, and
+        # no "stop foreclosures" (the FS 501.1377 trigger) or "thousands" claim.
+        "Our senior advisor has spent over 30 years in mortgages and foreclosure workouts, and he "
+        "personally reviews each case. He has sat across from people in your position and "
+        "walked them through it with their equity intact.",
         '',
-        "We specialize in Urgent Foreclosure Cases that are facing an auction in just a few days.",
+        "If you're open to it, I'd like to set up a short phone call. Most take about %s minutes; "
+        "I block %s so you are never rushed. It costs you nothing, and you decide what happens "
+        "next." % (CALL_MINUTES, SLOT_MINUTES),
         '',
-        "I don't know if you already have a plan, but I want to offer you something completely free "
-        "and without any obligation: a private phone call. Most take about %s minutes; I block %s "
-        "so you are never rushed." % (CALL_MINUTES, SLOT_MINUTES),
+        "On that call we'll:",
         '',
-        "During that call, we will:",
+        "  • Go over your case and where things stand.",
+        "  • Walk through the options you have, including some you may not have heard of.",
+        "  • Give you a clear, honest read on the way forward.",
         '',
-        "  • Review your entire case and situation.",
-        "  • Explain every option available to you (many of which you may not know exist)",
-        "  • Give you a clear, honest path forward.",
+        "You can pick a time at %s, reply with the best number and time to reach you, or call me "
+        "directly at %s." % (BOOKING_URL, phone),
         '',
-        "There are no tricks, no hidden fees, and no pressure.",
-        '',
-        "Here's what I need from you:",
-        '',
-        "Pick a time that works for you at %s, or simply reply with the best phone number and "
-        "times to call you. You can also call me directly at %s and I'll take your call "
-        "personally." % (BOOKING_URL, phone),
-        '',
-        "There is still time to protect and save your home or equity, but the clock is ticking.",
-        "Please don't wait.",
-        '',
-        "Reply now or call me today.",
-        '',
-        "Warm regards,",
+        "Best regards,",
         '',
     ] + _sig_lines(sig_block, signer, company, phone) + [
         '',
@@ -272,35 +249,29 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
     return '\n'.join([
         'Hi %s,' % (first or '[First Name]'),
         '',
-        "Your home is scheduled for foreclosure auction on %s." % ds,
-        # SWAP 2, short body. Same false equity claim, compressed.
+        "Your home is scheduled for auction on %s." % ds,
+        # SWAP 2, short body.
         "If nothing changes before that date, the house is sold to the highest bidder and "
-        "every choice you have right now goes with it.",
-        "But this doesn't have to happen.",
+        "the choices you have right now go with it. It doesn't have to go that way.",
         '',
         ("I'm %s with %s." % (_first_of(signer), company)) + ((' ' + ident) if ident else '') +
-        # SWAP 1, short body. Same three defects, plus an em dash.
-        " Our senior advisor has over 30 years in mortgages and foreclosure workouts and he "
-        "personally reviews your case, including cases only days from auction.",
+        # SWAP 1, short body.
+        " Our senior advisor has over 30 years in mortgages and foreclosure workouts and he personally "
+        "reviews each case, including ones only days from auction.",
         '',
-        "I don't know if you already have a plan, but I'm offering you a free, no-obligation "
-        "phone call. Most take about %s minutes; I block %s so you are never rushed. No tricks. "
-        "No fees. No pressure." % (CALL_MINUTES, SLOT_MINUTES),
+        "If you're open to a short call, most take about %s minutes; I block %s so you are never "
+        "rushed. It costs you nothing." % (CALL_MINUTES, SLOT_MINUTES),
         '',
-        "On that call, I'll:",
+        "On that call I'll:",
         '',
-        "  • Review your entire situation",
-        "  • Lay out every option you have (including ones you haven't heard of)",
-        "  • Give you a clear, honest path forward",
+        "  • Go over where things stand",
+        "  • Walk through the options you have",
+        "  • Give you a clear, honest read on the way forward",
         '',
-        "Here's all I need from you:",
-        "Book a time at %s, reply with your phone number and best time to call, or call me "
-        "directly at %s." % (BOOKING_URL, phone),
+        "Book a time at %s, reply with your number and a good time to call, or call me directly "
+        "at %s." % (BOOKING_URL, phone),
         '',
-        "There is still time to save your home or your equity, but not much.",
-        "Reply now or call today.",
-        '',
-        "Warm regards,",
+        "Best regards,",
     ] + _sig_lines(sig_block, signer, company, phone) + [
         '',
         _unsub(),
@@ -401,6 +372,10 @@ def outreach_subject(street, sale_date='', td=False, lang='en', style='measured'
     also what mail_sent.json, the Proof Sheet and replies.py read back.
     """
     d = str(sale_date or '').strip()
+    # 'plain' (2026-10-19, Alejandro, against spam filtering): no date, no URGENT, no "foreclosure"
+    # or "tax deed" -- just the tail replies.py anchors on. The sale date is in the body.
+    if str(style or '').lower() == 'plain':
+        return (SUBJ_TAG_ES if lang == 'es' else SUBJ_TAG_EN) + ' ' + str(street or '')
     urgent = (str(style or 'urgent').lower() != 'measured')
     if lang == 'es':
         tag = ((('Subasta de tax deed ' if td else 'Fecha de subasta ') + d + ' - ') if d else '')
