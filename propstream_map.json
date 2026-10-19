@@ -1,0 +1,13 @@
+{
+ "_note": "PropStream Import List template, verbatim header row (supplied by Alex 2026-10-19): Address,Unit#,City,State,Zip,County,FIPS,APN#. Fields: unit/street/fips/apn are derived in export_to_propstream.py; the rest are resimpli_lead.Lead fields.",
+ "columns": [
+  {"header": "Address", "field": "street"},
+  {"header": "Unit#", "field": "unit"},
+  {"header": "City", "field": "city"},
+  {"header": "State", "field": "state"},
+  {"header": "Zip", "field": "zip"},
+  {"header": "County", "field": "county"},
+  {"header": "FIPS", "field": "fips"},
+  {"header": "APN#", "field": "apn"}
+ ]
+}
