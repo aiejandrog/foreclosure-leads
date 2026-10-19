@@ -159,6 +159,12 @@ def main(argv=None):
     ap.add_argument('--out-dir', default='')
     ap.add_argument('--twin', default='')
     ap.add_argument('--map', default=MAP_FILE)
+    ap.add_argument('--limit', type=int, default=0,
+                    help='write only the first N leads (soonest auction first), complete rows only '
+                         '(zip, city and APN present). For a capped PropStream plan.')
+    ap.add_argument('--skip', type=int, default=0,
+                    help='with --limit: skip the first N of that same ordering, so a second run does '
+                         'not repeat the first batch')
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args(argv)
     today = datetime.date.today()
@@ -185,6 +191,11 @@ def main(argv=None):
         else:
             leads, summary = build_all(rows, optouts, opt_cases, deads, notes, list_name,
                                        county=a.county or None)
+        if a.limit:
+            full = [ld for ld in leads if ld.zip and ld.city and getattr(ld, 'folio', '')]
+            summary['complete_rows_available'] = len(full)
+            leads = full[a.skip:a.skip + a.limit]
+            summary['rows_written'] = len(leads)
     except ExportError as e:
         print('EXPORT FAILED — nothing written: %s' % e)
         return 2
@@ -200,7 +211,8 @@ def main(argv=None):
     import paths as P
     out_dir = a.out_dir or P.out('exports')
     os.makedirs(out_dir, exist_ok=True)
-    base = 'propstream_%s_%s' % (EX._slug(list_name), today.isoformat())
+    base = 'propstream_%s_%s%s' % (EX._slug(list_name), today.isoformat(),
+                                   ('_first%d_skip%d' % (a.limit, a.skip)) if a.limit else '')
     csv_path = os.path.join(out_dir, base + '.csv')
     write_csv(leads, cols, csv_path)
     with open(os.path.join(out_dir, base + '.summary.json'), 'w', encoding='utf-8') as f:
