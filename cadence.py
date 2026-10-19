@@ -13,6 +13,10 @@ How it works end to end:
      bounced_emails.json hard-suppression list the send bridge enforces.
   4. Before any of that, every run re-reads the opt-out ledger and drops anyone suppressed since
      the queue was exported. The queue is a snapshot; the ledger is the truth.
+  5. cadence_skip.json is a tracked list of case numbers to hold out of follow-ups. Matching uses
+     case_key() (uppercase, no spaces or dashes, Palm Beach division suffix dropped). A listed
+     case is not enrolled and is not mailed, including a queue that was built before the line was
+     added. Removing that case's line is the whole undo. A file that will not parse holds every send.
 
 The company name in the signature comes from entity.display_llc() — the " LLC" suffix prints only
 on a strict ACTIVE Sunbiz match. Never sign with a raw sender.llc string; see safe_llc() below.
@@ -33,6 +37,9 @@ import sibling_optout as _sibling_optout
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
 STATE = os.path.join(HERE, 'cadence_state.json')
+# Case numbers only, each with a reason. Tracked on purpose: deleting a line is the undo,
+# and both this file and build_cadence_queue.py read it. Not a homeowner record.
+SKIP = os.path.join(HERE, 'cadence_skip.json')
 # Prefer the company login, exactly as send_server.py:72 does (added 2026-09-18). This constant is
 # why the 2026-09-07 lane wiring below was only half a fix: the lane MAP came from senders.json,
 # but the LOGIN still came from whatever gmail.key happened to hold. If gmail.key ever points back
@@ -248,6 +255,57 @@ def load_json(path, default):
         return default
 
 
+# Palm Beach UCN: county 50, four-digit year, CA or CC, six-digit sequence, then a
+# division suffix (XXXAMB, XXXXMB, XXXASB, ...) that is not part of the case identity.
+_PB_CORE = re.compile(r'(50\d{4}(?:CA|CC)\d{6})')
+
+
+def case_key(case):
+    """One comparable form of a case number.
+
+    Uppercase, with spaces and dashes removed. A Palm Beach 50YYYYCA or 50YYYYCC
+    number also drops whatever follows the 6-digit sequence, so 502025CA009919,
+    502025CA009919XXXAMB and 50-2025-CA-009919 are one case. Miami
+    (2025-005697-CA-01 -> 2025005697CA01) and Broward (CACE-25-009495 ->
+    CACE25009495) keep the rest, so a different year, sequence, local suffix or
+    prefix stays a different case."""
+    s = re.sub(r'[\s\-]', '', str(case or '')).upper()
+    m = _PB_CORE.match(s)
+    return m.group(1) if m else s
+
+
+def load_skip(path=None):
+    """(cases, problem). cases is a set of case_key() values.
+
+    A missing file skips nobody. A file that exists and will not parse, is not an object,
+    or has a blank reason is a problem string: the caller holds every follow-up, because a
+    listed case must not go out on the strength of a list we could not read. A trailing
+    comma is ignored so deleting one line — the undo — still parses. Keys starting with
+    '_' are notes, not cases."""
+    path = SKIP if path is None else path
+    if not path or not os.path.exists(path):
+        return set(), ''
+    try:
+        with open(path, encoding='utf-8') as fh:
+            raw = fh.read()
+        d = json.loads(re.sub(r',\s*([}\]])', r'\1', raw))
+    except Exception as e:
+        return set(), 'cadence skip list is UNREADABLE (%s)' % type(e).__name__
+    if not isinstance(d, dict):
+        return set(), 'cadence skip list is UNREADABLE (not an object)'
+    cases = set()
+    for k, v in d.items():
+        if str(k).startswith('_'):
+            continue
+        c = case_key(k)
+        if not c:
+            return set(), 'cadence skip list entry has no case number'
+        if not isinstance(v, str) or not v.strip():
+            return set(), 'cadence skip list entry %s has no reason' % c
+        cases.add(c)
+    return cases, ''
+
+
 def _ledger_send_block():
     """'' when optouts.json is present, parseable, and fresh enough to send against.
 
@@ -440,6 +498,10 @@ def _run(args):
         return 1
     sender = payload.get('sender') or {}
     queue = payload['queue']
+    # Re-read every run, including a hand-started `python cadence.py` and a queue that already
+    # exists. A listed case is not enrolled and is not mailed. Removing its line is the undo.
+    # An unreadable list holds every due step: we cannot tell who is on it.
+    _skip_cases, _skip_hold = load_skip()
     # Surface the entity gate's verdict in the run log. This is a scheduled job -- if the warning
     # is only a return value nobody reads it, and "why is my company name missing its LLC" becomes
     # a mystery instead of a one-line answer sitting in cadence-run.log.
@@ -455,6 +517,10 @@ def _run(args):
     for lead in queue:
         c = lead.get('case')
         if not c:
+            continue
+        if c not in state and (_skip_hold or case_key(c) in _skip_cases):
+            if not _skip_hold:
+                print('  SKIP (not enrolled) -> %s — cadence skip list' % c)
             continue
         if c not in state:
             state[c] = {'step': lead.get('step', 0), 'next': lead.get('next') or str(today),
@@ -690,6 +756,21 @@ def _run(args):
         _bounce_hold = _bounce_send_block()
         if _bounce_hold:
             print('  HELD every due step — %s. Nothing sent; steps stay due.' % _bounce_hold)
+    if _skip_hold:
+        print('  HELD every due step — %s. Nothing sent; steps stay due.' % _skip_hold)
+    elif _skip_cases:
+        # After the opt-out and diligence sweeps, so a real suppression still sticks. Status
+        # stays active: the step is not consumed, and deleting the line lets the next run send.
+        for c, s in list(active.items()):
+            if case_key(c) not in _skip_cases:
+                continue
+            active.pop(c, None)
+            ev = 'not sent — cadence skip list'
+            log = s.setdefault('log', [])
+            if not any(isinstance(x, dict) and x.get('d') == str(today) and x.get('ev') == ev
+                       for x in log):
+                log.append({'d': str(today), 'ev': ev})
+            print('  SKIP (not sent) -> %s — cadence skip list' % c)
     sent = 0
     capped = {}
     ctx = ssl.create_default_context()
@@ -730,7 +811,7 @@ def _run(args):
         if step >= 4:
             s['status'] = 'completed'
             continue
-        if _compliance_hold or _ledger_hold or _sync_hold or _bounce_hold:
+        if _compliance_hold or _ledger_hold or _sync_hold or _bounce_hold or _skip_hold:
             held += 1
             continue
         subj, body = steps(s, sender)[step]
