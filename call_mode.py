@@ -7303,7 +7303,10 @@ function wire(){
     b.onclick=function(){ _QVBACK=null; QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
-    b.onclick=function(){ _QVBACK=null; lane=b.dataset.l; BLANE=null; i=0; render();
+    /* A lane tap during a one-off puts the SESSION's view back first (2026-10-19). It used to drop
+       _QVBACK and keep the one-off's view, which left him in a Reached out session he never chose;
+       a reload cured that only while restore refused every view but Untouched. */
+    b.onclick=function(){ if(_QVBACK){ QVIEW=_QVBACK.v; _QVBACK=null; } lane=b.dataset.l; BLANE=null; i=0; render();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
          leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
          done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
