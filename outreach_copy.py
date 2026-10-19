@@ -213,7 +213,7 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         + ((' ' + ident) if ident else ''),
         # SWAP 1 (approved 2026-08-30): the experience belongs to the person who earned it, and
         # no "stop foreclosures" (the FS 501.1377 trigger) or "thousands" claim.
-        "Our senior advisor has spent over 30 years in mortgages and loan workouts, and he "
+        "Our senior advisor has spent over 30 years in mortgages and foreclosure workouts, and he "
         "personally reviews each case. He has sat across from people in your position and "
         "walked them through it with their equity intact.",
         '',
@@ -256,7 +256,7 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         '',
         ("I'm %s with %s." % (_first_of(signer), company)) + ((' ' + ident) if ident else '') +
         # SWAP 1, short body.
-        " Our senior advisor has over 30 years in mortgages and loan workouts and he personally "
+        " Our senior advisor has over 30 years in mortgages and foreclosure workouts and he personally "
         "reviews each case, including ones only days from auction.",
         '',
         "If you're open to a short call, most take about %s minutes; I block %s so you are never "
