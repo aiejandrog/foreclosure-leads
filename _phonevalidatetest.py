@@ -170,6 +170,14 @@ PV._queue_numbers = lambda: ([], [])
 due = PV.candidates(PV.load_cache())
 rec('queue unreadable under default scope: nothing is due', due == [], due)
 PV._queue_numbers, PV._board_numbers, PV._skiptrace_numbers = _q, _b, _s
+c = PV.load_cache()
+c['numbers'][PV.phone_key('3055550141')] = {'ls': 'inactive', 'ts': int(time.time()) - 61 * 86400}
+c['numbers'][PV.phone_key('3055550142')] = {'ls': 'inactive', 'ts': int(time.time()) - 5 * 86400}
+json.dump(c, open(CACHE, 'w'))
+PV._VERDICTS['mtime'] = None
+rec('a disconnected verdict past 60 days stops dropping the number, so the queue rechecks it',
+    PV.line_status('3055550141') == '' and PV.line_status('3055550142') == 'inactive', PV.verdicts())
+reset()
 
 print('\nCALL MODE')
 

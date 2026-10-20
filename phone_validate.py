@@ -28,8 +28,8 @@ the Call Mode dial queue, in queue order: the numbers someone is actually about 
 the wider set was 13,477 numbers (~$94), most of them on leads nobody will call, and Alejandro chose
 queue only. If the queue cannot be built, nothing is checked. TWILIO_VALIDATE_SCOPE=all adds, after
 the queue:
-  2. every other number on the board twin
-  3. numbers in skiptrace_results.json that have not reached the board yet
+  - every other number on the board twin
+  - numbers in skiptrace_results.json that have not reached the board yet
 DNC-flagged numbers are never looked up: they are never dialled, so there is nothing to learn.
 
 CREDENTIALS. DEALFLOW_DIR/twilio.key (or TWILIO_KEY_FILE): Account SID on line 1, Auth Token on
@@ -163,16 +163,21 @@ _VERDICTS = {'mtime': None, 'map': {}}
 
 def verdicts():
     """{phone_key: line status} from the cache, memoized on its mtime. Missing or unreadable cache
-    -> {} (no number is dropped on evidence nobody has). Used by call_mode.call_rows."""
+    -> {} (no number is dropped on evidence nobody has). Used by call_mode.call_rows.
+    An `inactive` verdict older than TWILIO_VALIDATE_MAX_AGE_DAYS is left out, so the number goes
+    back into the Call Mode queue and, being in the queue and stale, is checked again: a number
+    that was reconnected is not kept out for good."""
     path = cache_path()
     try:
-        m = os.path.getmtime(path)
+        m = (os.path.getmtime(path), today())
     except OSError:
         return {}
     if _VERDICTS['mtime'] != m:
         c = load_cache(path) or {'numbers': {}}
+        old = time.time() - max_age_days() * 86400
         _VERDICTS['map'] = {k: v.get('ls') for k, v in c['numbers'].items()
-                            if isinstance(v, dict) and v.get('ls')}
+                            if isinstance(v, dict) and v.get('ls')
+                            and not (v.get('ls') == DEAD and float(v.get('ts') or 0) < old)}
         _VERDICTS['mtime'] = m
     return _VERDICTS['map']
 
@@ -210,7 +215,8 @@ def _queue_numbers():
         slim = CR.board_rows()
         rows, _ = CM.call_rows(slim, optouts=CR._optouts(), deads=CR._deads(), cap=10 ** 6)
     except BaseException as e:                       # SystemExit from board_rows included
-        print('phone_validate: Call Mode queue unreadable (%s); falling back to the board' % e.__class__.__name__)
+        print('phone_validate: Call Mode queue unreadable (%s)%s' % (
+            e.__class__.__name__, '; nothing checked' if scope() == 'queue' else '; falling back to the board'))
         return [], []
     out = []
     for r in rows:
