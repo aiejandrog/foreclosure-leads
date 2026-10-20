@@ -1680,6 +1680,9 @@ def _seat_links(r):
     return keys
 
 
+HL_MAX = 6
+
+
 def _seat_by_household(rows):
     """ONE HOUSEHOLD, ONE SEAT (2026-10-15). The seat bucket is a hash of the CASE number, so a person
     with two cases (an HOA case and a bank case, an auction row and an LP row, two properties), two
@@ -1728,6 +1731,17 @@ def _seat_by_household(rows):
             if r.get('sb') != sb:
                 moved += 1
             r['sb'] = sb
+        # HOUSEHOLD LINKS FOR THE QUEUE VIEW (2026-10-20). pcs only links cases of one PERSON KEY, so
+        # the same human under another key (a co-owner, a spouse on the other case, the same phone on
+        # a second filing) still opened as Untouched after he had already called them: "I am tired of
+        # getting repeats show up as new calling prospects". The page reads `hl` in _viewOf only, so a
+        # call on any linked row files this one under Reached out. Order and view only: no cooldown,
+        # no hold. A group bigger than HL_MAX is a chain of shared numbers, not one household.
+        if len(g) <= HL_MAX:
+            for r in g:
+                r['hl'] = sorted(str(x['c']) for x in g if x is not r and x.get('c') != r.get('c'))
+                if not r['hl']:
+                    r.pop('hl')
     return moved
 
 
@@ -4785,7 +4799,7 @@ function _viewOf(r){
   if(_CBDUE[r.c]) return 'callbacks';
   if(_replyOpen(r)) return 'replies';
   if(_contactTier(r) > 0) return 'retries';
-  var sib = r.pcs || [];
+  var sib = (r.pcs || []).concat(r.hl || []);       /* same person key, then same household (hl) */
   for(var k = 0; k < sib.length; k++){ if(sib[k] !== r.c && lastCall(notes[sib[k]])) return 'retries'; }
   return _histWhy() ? 'history_unknown' : 'untouched';
 }

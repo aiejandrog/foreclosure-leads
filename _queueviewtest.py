@@ -63,7 +63,7 @@ var notes = {
 };
 var R = function(c, extra){ var o = {c:c}; for(var k in (extra||{})) o[k] = extra[k]; return o; };
 var rows = {fresh:R('FRESH'), called:R('CALLED'), emailed:R('EMAILED'), reply:R('REPLY'),
-  sib:R('SIBCALL', {pcs:['SIB2']}), ledger:R('LEDG', {le:1758000000000}), pending:R('PENDING'), inbound:R('INBOUND')};
+  sib:R('SIBCALL', {pcs:['SIB2']}), hh:R('HHROW', {hl:['SIB2']}), hhcold:R('HHCOLD', {hl:['FRESH']}), ledger:R('LEDG', {le:1758000000000}), pending:R('PENDING'), inbound:R('INBOUND')};
 function views(){ var o = {}; for(var k in rows) o[k] = _viewOf(rows[k]); return o; }
 var out = {};
 out.base = views();
@@ -105,6 +105,8 @@ rec('a pending (abandoned) dial leaves Untouched and never returns to it', b.get
 rec('Q07 an unanswered inbound reply goes to Replies', b.get('reply') == 'replies', b)
 rec('an inbound-only touch is not our outreach: still untouched', b.get('inbound') == 'untouched', b)
 rec('a sibling case that was called makes the row a retry (conservative)', b.get('sib') == 'retries', b)
+rec('a called row in the same household (hl: shared phone or address) makes the row a retry', b.get('hh') == 'retries', b)
+rec('a household link to an uncalled row leaves the row untouched', b.get('hhcold') == 'untouched', b)
 n = res.get('noledger', {})
 rec('Q03 unreadable server ledger: uncontacted rows are History unknown, no verified zero',
     n.get('fresh') == 'history_unknown' and n.get('inbound') == 'history_unknown', n)
