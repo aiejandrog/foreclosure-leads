@@ -150,6 +150,27 @@ c['numbers'][PV.phone_key('3055550122')] = {'ls': 'active', 'ts': int(time.time(
 due = PV.candidates(c, sources=['3055550121', '3055550122'])
 rec('an unreachable number is rechecked after 3 days, an active one is not', due == ['3055550121'], due)
 
+print('\nSCOPE')
+_q, _b, _s = PV._queue_numbers, PV._board_numbers, PV._skiptrace_numbers
+PV._queue_numbers = lambda: (['3055550131'], [{'phones': ['3055550132']}])
+PV._board_numbers = lambda slim: ['3055550132']
+PV._skiptrace_numbers = lambda: ['3055550133']
+reset()
+os.environ.pop('TWILIO_VALIDATE_SCOPE', None)
+due = PV.candidates(PV.load_cache())
+rec('default scope checks only the Call Mode queue', due == ['3055550131'], due)
+os.environ['TWILIO_VALIDATE_SCOPE'] = 'all'
+due = PV.candidates(PV.load_cache())
+rec('scope all adds the board and skip trace after the queue',
+    due == ['3055550131', '3055550132', '3055550133'], due)
+os.environ['TWILIO_VALIDATE_SCOPE'] = 'everything'
+rec('an unknown scope reads as queue', PV.scope() == 'queue')
+os.environ.pop('TWILIO_VALIDATE_SCOPE', None)
+PV._queue_numbers = lambda: ([], [])
+due = PV.candidates(PV.load_cache())
+rec('queue unreadable under default scope: nothing is due', due == [], due)
+PV._queue_numbers, PV._board_numbers, PV._skiptrace_numbers = _q, _b, _s
+
 print('\nCALL MODE')
 
 
