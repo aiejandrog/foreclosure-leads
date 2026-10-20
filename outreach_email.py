@@ -32,6 +32,11 @@ inbox eats the reputation damage if it's flapped). Counted from mail_sent.json f
 UTC date; --send stops when the cap is hit even mid-batch.
 
 PACING: a 2-3s jitter between sends looks less bursty than fire-hosing 50 in a minute.
+
+This CLI queues cold first touches. A queued row whose subject is Re:/Fwd:/Fw:, or whose
+step is 1 or later, is a follow-up and does not leave unless DEALFLOW_FOLLOWUPS_ON is
+exactly 1. Unset, that row is printed as "<case> <step>" and skipped. Any other value
+refuses it and the process exits 2. --test-to is the operator inbox and is not gated.
 """
 import argparse
 import datetime
@@ -1250,6 +1255,7 @@ def main():
     # then everything leaves as the login exactly as before, and the line below says so.
     # Per-alias warm-up caps come from the ledger through _alias_sent_today, which re-reads the
     # file each call, and _append_ledger writes after every send — so the count is live.
+    _SS = None
     _cfg, _active = {}, False
     try:
         import send_server as _SS
@@ -1258,9 +1264,38 @@ def main():
     except Exception as _se:
         print(f'  (lane map unavailable: {str(_se)[:60]} — sending as the login)')
     ok, fail, skipped = 0, 0, 0
+    _fu_bad, _fu_why = False, ''
     print(f'\nSending as {user}  (display: "{from_display or user}")'
           + ('  · lane map ON' if _active else '  · lane map OFF (login cannot send as the aliases)'))
     for i, e in enumerate(entries, 1):
+        # A cold row is a first touch and is not gated here. A Re:/Fwd:/Fw: subject,
+        # or a step of 1 or later, is a follow-up. Off: print the case and the step
+        # and do not send. Anything other than exactly 1 fails closed.
+        _subj = e.get('subj') or ''
+        _step = e.get('step')
+        if _SS is None:
+            _looks = bool(re.match(r'(?i)^\s*(re|fwd|fw)\s*:', str(_subj)))
+            if not _looks and _step is not None and str(_step).strip() != '':
+                try:
+                    _looks = int(_step) >= 1
+                except (TypeError, ValueError):
+                    _looks = True
+            _fu = ('bad', 'send_server unavailable') if _looks and not args.test_to else None
+        else:
+            _fu = _SS.followup_block(True, _subj, bool(args.test_to), _step)
+        if _fu:
+            _mode, _why = _fu
+            if _SS is not None:
+                _meta = {'step': _step} if _step is not None and str(_step).strip() != '' else {}
+                _line = _SS.followup_list_line(
+                    e.get('case'), _SS.followup_step_number(_meta, 1))
+            else:
+                _line = '- 2'
+            print(_line)
+            if _mode == 'bad':
+                _fu_bad, _fu_why = True, _why
+            skipped += 1
+            continue
         _bad = _MG.merge_issues(e.get('subj') or '', e.get('body') or '', e.get('to') or '')
         if _bad:
             skipped += 1
@@ -1348,6 +1383,9 @@ def main():
             time.sleep(random.uniform(PACING_SEC_MIN, PACING_SEC_MAX))
 
     print(f'\n== done: {ok} sent, {fail} failed, {skipped} skipped ==')
+    if _fu_bad:
+        print('  FOLLOW-UPS REFUSED — %s. Follow-ups were not sent.' % _fu_why)
+        return 2
     return 0 if fail == 0 else 1
 
 

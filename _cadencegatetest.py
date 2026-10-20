@@ -16,6 +16,8 @@ import io
 import json
 import os
 import shutil
+# Follow-up sends are off unless this is exactly 1. This fixture expects one to leave.
+os.environ['DEALFLOW_FOLLOWUPS_ON'] = '1'
 import sys
 import tempfile
 import threading

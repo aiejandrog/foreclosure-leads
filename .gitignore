@@ -785,3 +785,5 @@ rf_status.json.tmp
 !_sigemailtest.py
 # _phonevalidatetest: Twilio line status cap, cache privacy and Call Mode drop. Invented 555 numbers, no network.
 !_phonevalidatetest.py
+# _followupswitchtest: DEALFLOW_FOLLOWUPS_ON gates follow-up email. Fake cases and example.com only.
+!_followupswitchtest.py

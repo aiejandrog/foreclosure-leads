@@ -28,6 +28,11 @@ ENDPOINTS:
                       sale_history_cache.json affirmatively shows is NOT under an active §362 stay:
                       451 {"blocked": "stay_active" | "stay_no_case" | "stay_case_unresolvable" |
                       "stay_unverified", "skip": true}, or 503 {"blocked": "stay_data_unavailable"}.
+                      A follow-up (the address was already mailed, or the subject is Re:/Fwd:/Fw:)
+                      is refused unless DEALFLOW_FOLLOWUPS_ON is exactly 1. Unset, the response is
+                      200 {"blocked": "followups_off", "dry_run": true} and nothing is written.
+                      Any other value is 503 {"blocked": "followups_bad"}. First touches are not
+                      gated by that switch. meta.test is not a follow-up.
     POST /notes    -> the tracker's full localStorage state {_dealflow_notes, device, notes,
                       workerLog, sentArchive}. Written atomically to worker_notes.json plus a
                       daily snapshot in worker_notes_snapshots/. This is how call dispositions,
@@ -70,6 +75,128 @@ STAY_CACHE_FILE = os.path.join(HERE, 'sale_history_cache.json')
 REFUSAL_LOG = os.path.join(HERE, 'send_refusals.jsonl')
 
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+# A threaded subject is a follow-up even when delivery evidence still calls the address new.
+_THREADED_SUBJ = re.compile(r'(?i)^\s*(re|fwd|fw)\s*:')
+
+
+def followups_status(env=None):
+    """('on', '') | ('off', '') | ('bad', why) for DEALFLOW_FOLLOWUPS_ON.
+
+    The key being absent is off: the caller lists the case and the step and
+    sends nothing. The value must be exactly the characters 1 — no stripping,
+    so '1 ' and 'true' are not on. Any other value, or an environment that
+    cannot be read, is fail-closed. First-touch mail does not consult this.
+    """
+    if env is None:
+        env = os.environ
+    try:
+        present = 'DEALFLOW_FOLLOWUPS_ON' in env
+        raw = env.get('DEALFLOW_FOLLOWUPS_ON') if present else None
+    except Exception as e:
+        return 'bad', 'DEALFLOW_FOLLOWUPS_ON unreadable (%s)' % type(e).__name__
+    if not present:
+        return 'off', ''
+    if raw == '1':
+        return 'on', ''
+    shown = repr(raw)
+    if '@' in shown:
+        shown = "'(redacted)'"
+    elif len(shown) > 40:
+        shown = shown[:37] + '...'
+    return 'bad', 'DEALFLOW_FOLLOWUPS_ON is %s, not exactly 1' % shown
+
+
+def threaded_subject(subject):
+    return bool(_THREADED_SUBJ.match(str(subject or '')))
+
+
+def followup_due(step, first_touch, subject=''):
+    """True when this message is a follow-up the switch has to allow.
+
+    A cadence step of 1 or later is always a follow-up, even if the address
+    still looks like a first touch. A Re:/Fwd:/Fw: subject is a follow-up
+    even on step 0. An unreadable step is treated as a follow-up. A cold
+    first touch is not.
+    """
+    if threaded_subject(subject):
+        return True
+    if step is not None and str(step).strip() != '':
+        try:
+            return int(step) >= 1
+        except (TypeError, ValueError):
+            return True
+    return not bool(first_touch)
+
+
+def followup_block(first_touch, subject='', is_test=False, step=None):
+    """None when the send may proceed. ('off'|'bad', why) when it must not.
+
+    meta.test and outreach --test-to stay exempt: that mail goes to the operator.
+    """
+    if is_test:
+        return None
+    if not followup_due(step, first_touch, subject):
+        return None
+    mode, why = followups_status()
+    if mode == 'on':
+        return None
+    return mode, why
+
+
+def followup_list_line(case, step_number):
+    """One dry-run line: a case number and a 1-based step. No address."""
+    c = str(case or '').strip()
+    if (not c) or ('@' in c) or any(ch.isspace() for ch in c):
+        c = '-'
+    try:
+        n = int(step_number)
+    except (TypeError, ValueError):
+        n = 0
+    if n < 1:
+        n = 2
+    return '%s %s' % (c, n)
+
+
+def followup_step_number(meta=None, prior_sends=None):
+    """1-based step for a dry-run line when the caller has no cadence index.
+
+    An explicit numeric meta.step is the 0-based cadence index. With no
+    step, prior ledger sends for the case plus one, and never below 2:
+    a gated follow-up is at least the second note.
+    """
+    meta = meta if isinstance(meta, dict) else {}
+    raw = meta.get('step')
+    if raw is not None and str(raw).strip() != '':
+        try:
+            n = int(raw)
+            return n + 1 if n >= 0 else 2
+        except (TypeError, ValueError):
+            return 2
+    try:
+        n = int(prior_sends or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return max(2, n + 1)
+
+
+def _followup_prior_sends(case):
+    """How many real email rows the ledger already has for this case. Counts only."""
+    want = str(case or '').strip()
+    if not want:
+        return 0
+    n = 0
+    try:
+        rows = _load_ledger()
+    except Exception:
+        return 0
+    for row in rows:
+        if str(row.get('case') or '').strip() != want:
+            continue
+        if row.get('message_id'):
+            n += 1
+    return n
+
+
 _LEDGER_LOCK = threading.Lock()
 _NOTES_LOCK = threading.Lock()
 
@@ -2664,6 +2791,29 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(409, {
                     'ok': False, 'skip': True, 'first_touch_cap': True,
                     'err': 'first touch held: no warm-up sender configured during slow restart'})
+
+        # ---- FOLLOW-UPS SWITCH ---------------------------------------------------------------
+        # After the 24h claim, immediately before SMTP. A first touch (never mailed, and
+        # not a Re:/Fwd:/Fw: subject) does not consult this. Unset is a dry run: case and
+        # step on stdout, no ledger row, claim released. Any value other than exactly 1,
+        # or an environment that cannot be read, refuses the same way and says so.
+        _blk = followup_block(_first_touch, subj, _is_test, None)
+        if _blk:
+            _release_recipients(_claimed)
+            _release_first_touch_slot(_ft_slot)
+            _mode, _why = _blk
+            _case = str((meta or {}).get('c') or '').strip()
+            _line = followup_list_line(
+                _case, followup_step_number(meta, _followup_prior_sends(_case)))
+            print(_line, flush=True)
+            self.log_message('follow-up %s %s', 'off' if _mode == 'off' else 'refused', _line)
+            if _mode == 'off':
+                return self._json(200, {
+                    'ok': False, 'blocked': 'followups_off', 'dry_run': True, 'skip': False,
+                    'err': 'follow-ups are off (DEALFLOW_FOLLOWUPS_ON is not set). Nothing sent.'})
+            return self._json(503, {
+                'ok': False, 'blocked': 'followups_bad', 'skip': False,
+                'err': 'follow-ups refused: %s. Nothing sent.' % _why})
 
         # ---- send ----
         try:
