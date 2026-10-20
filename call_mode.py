@@ -1737,9 +1737,9 @@ def _seat_by_household(rows):
         # getting repeats show up as new calling prospects". The page reads `hl` in _viewOf only, so a
         # call on any linked row files this one under Reached out. Order and view only: no cooldown,
         # no hold. A group bigger than HL_MAX is a chain of shared numbers, not one household.
-        if len(g) <= HL_MAX:
+        if len({str(x['c']) for x in g}) <= HL_MAX:        # distinct cases: calendar copies count once
             for r in g:
-                r['hl'] = sorted(str(x['c']) for x in g if x is not r and x.get('c') != r.get('c'))
+                r['hl'] = sorted({str(x['c']) for x in g if x.get('c') != r.get('c')})
                 if not r['hl']:
                     r.pop('hl')
     return moved

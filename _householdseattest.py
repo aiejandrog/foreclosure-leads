@@ -64,6 +64,9 @@ ok('hl' not in rows[2], 'an unlinked row carries no hl')
 big = [row('2026-%06d-CA-01' % (900 + i), pk='Q%d' % i, p=['3055550888']) for i in range(CM.HL_MAX + 1)]
 CM._seat_by_household(big)
 ok(all('hl' not in r for r in big), 'a group past HL_MAX (a chain of shared numbers) gets no hl')
+dup = [row(a, pk='P1', p=['3055550101']), row(a, pk='P1', p=['3055550101']), row(b, pk='P2', p=['3055550101'])]
+CM._seat_by_household(dup)
+ok(dup[2].get('hl') == [a] and dup[0].get('hl') == [b], 'a case listed twice (two sale dates) appears once in hl and never lists itself')
 
 rows = [{'sb': 3, 'pk': 'P1'}, row(a, pk='P1')]
 CM._seat_by_household(rows)
