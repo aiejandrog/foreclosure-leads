@@ -164,20 +164,20 @@ _VERDICTS = {'mtime': None, 'map': {}}
 def verdicts():
     """{phone_key: line status} from the cache, memoized on its mtime. Missing or unreadable cache
     -> {} (no number is dropped on evidence nobody has). Used by call_mode.call_rows.
-    An `inactive` verdict older than TWILIO_VALIDATE_MAX_AGE_DAYS is left out, so the number goes
-    back into the Call Mode queue and, being in the queue and stale, is checked again: a number
-    that was reconnected is not kept out for good."""
+    While _queue_numbers() builds the queue to check, this returns {} so a disconnected number
+    stays in that list and can be rechecked once stale; Call Mode itself keeps dropping it until
+    a newer answer replaces the verdict."""
+    if _VERDICTS.get('raw'):
+        return {}
     path = cache_path()
     try:
-        m = (os.path.getmtime(path), today())
+        m = os.path.getmtime(path)
     except OSError:
         return {}
     if _VERDICTS['mtime'] != m:
         c = load_cache(path) or {'numbers': {}}
-        old = time.time() - max_age_days() * 86400
         _VERDICTS['map'] = {k: v.get('ls') for k, v in c['numbers'].items()
-                            if isinstance(v, dict) and v.get('ls')
-                            and not (v.get('ls') == DEAD and float(v.get('ts') or 0) < old)}
+                            if isinstance(v, dict) and v.get('ls')}
         _VERDICTS['mtime'] = m
     return _VERDICTS['map']
 
@@ -208,12 +208,18 @@ def unit_price(with_type):
 # ---- which numbers ---------------------------------------------------------------------------
 
 def _queue_numbers():
-    """Call Mode's dial queue, in queue order. Empty if the board twin cannot be read."""
+    """Call Mode's dial queue, in queue order. Empty if the board twin cannot be read. Built with
+    line-status verdicts switched off, so a number already marked disconnected (and a lead whose
+    only numbers are) stays in the list and is rechecked once its verdict is stale."""
     try:
         import callmode_repeats as CR
         import call_mode as CM
         slim = CR.board_rows()
-        rows, _ = CM.call_rows(slim, optouts=CR._optouts(), deads=CR._deads(), cap=10 ** 6)
+        _VERDICTS['raw'] = True
+        try:
+            rows, _ = CM.call_rows(slim, optouts=CR._optouts(), deads=CR._deads(), cap=10 ** 6)
+        finally:
+            _VERDICTS['raw'] = False
     except BaseException as e:                       # SystemExit from board_rows included
         print('phone_validate: Call Mode queue unreadable (%s)%s' % (
             e.__class__.__name__, '; nothing checked' if scope() == 'queue' else '; falling back to the board'))
