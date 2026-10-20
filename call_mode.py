@@ -1680,6 +1680,61 @@ def _seat_links(r):
     return keys
 
 
+HL_MAX = 6
+
+
+def _household_links(slim, rows):
+    """HOUSEHOLD LINKS FOR THE QUEUE VIEW (2026-10-20). Stamps r['hl'] on each dial row: the OTHER
+    board cases that share one of its phone numbers or its street line + ZIP. pcs only links cases of
+    one PERSON KEY, so the same human under another key (a co-owner, a spouse on the other filing, the
+    same phone on a fresh lis pendens after the old sale passed) opened as Untouched after he had
+    already called them: "I am tired of getting repeats show up as new calling prospects". The page
+    reads hl in _viewOf only, so a call on any linked case files this row under Reached out. Order
+    and view only: no cooldown, no hold.
+
+    Built from the WHOLE board (slim), not just the dial rows, so a case that has left the queue
+    (sale passed, number dropped) still counts: its notes are still on the phone. Direct links only,
+    never transitive. A street line on 3+ person keys is a building, and a number on more than HL_MAX
+    cases is an office; neither links. DNC and not-the-owner numbers do not link."""
+    idx, line_pks = {}, {}
+    for d in slim:
+        case = d.get('case')
+        if not case:
+            continue
+        dnc, src = d.get('phdnc') or [], d.get('phsrc') or []
+        ph = [p for i, p in enumerate(d.get('phones') or [])
+              if not (dnc[i] if i < len(dnc) else False) and (src[i] if i < len(src) else '') not in ('ag', 'xl')]
+        zm = re.search(r'(\d{5})\s*$', d.get('addr') or '')
+        pk = d.get('pkey') or ('C' + case)
+        for k in _seat_links({'a': d.get('addr'), 'z': zm.group(1) if zm else None, 'p': ph}):
+            idx.setdefault(k, set()).add(case)
+            if k.startswith('a:'):
+                line_pks.setdefault(k, set()).add(pk)
+    n = 0
+    for r in rows:
+        own = str(r.get('c') or '')
+        if not own:
+            continue
+        hl = set()
+        for k in _seat_links(r):
+            if k.startswith('k:'):
+                continue                                     # same person key: pcs already has it
+            if k.startswith('a:') and len(line_pks.get(k, ())) > 2:
+                continue
+            cs = idx.get(k, set())
+            if k.startswith('p:') and len(cs) > HL_MAX:
+                continue
+            hl |= cs
+        hl.discard(own)
+        hl -= set(r.get('pcs') or [])
+        if hl and len(hl) <= HL_MAX:
+            r['hl'] = sorted(hl)
+            n += 1
+        else:
+            r.pop('hl', None)
+    return n
+
+
 def _seat_by_household(rows):
     """ONE HOUSEHOLD, ONE SEAT (2026-10-15). The seat bucket is a hash of the CASE number, so a person
     with two cases (an HOA case and a bank case, an auction row and an LP row, two properties), two
@@ -2120,6 +2175,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             row['sb'] = _h % 12
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
     _seat_by_household(out)
+    _household_links(slim, out)
     # HIGHEST-CONVERTING FIRST (2026-08-19, his words: "I don't want clients whose auction date is
     # today or two-three days out. I need the highest converting leads.") The old key was
     # soonest-sale-first, which opened every session on the exact leads nothing can save — a sale
@@ -4785,7 +4841,7 @@ function _viewOf(r){
   if(_CBDUE[r.c]) return 'callbacks';
   if(_replyOpen(r)) return 'replies';
   if(_contactTier(r) > 0) return 'retries';
-  var sib = r.pcs || [];
+  var sib = (r.pcs || []).concat(r.hl || []);       /* same person key, then same household (hl) */
   for(var k = 0; k < sib.length; k++){ if(sib[k] !== r.c && lastCall(notes[sib[k]])) return 'retries'; }
   return _histWhy() ? 'history_unknown' : 'untouched';
 }
