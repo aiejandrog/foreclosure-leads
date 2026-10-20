@@ -23,10 +23,13 @@ BEFORE the call, so the ledger runs high, never low. TWILIO_VALIDATE_DAILY_CAP (
 the calendar day across every run on this machine; --max-spend caps one run. At $0.007 a $2 day is
 285 numbers.
 
-WHICH NUMBERS, in this order, each checked at most once per TWILIO_VALIDATE_MAX_AGE_DAYS (60):
-  1. the Call Mode dial queue, in queue order (the numbers he is actually about to dial)
-  2. every other number on the board twin
-  3. numbers in skiptrace_results.json that have not reached the board yet
+WHICH NUMBERS, each checked at most once per TWILIO_VALIDATE_MAX_AGE_DAYS (60). By default only
+the Call Mode dial queue, in queue order: the numbers someone is actually about to dial. On 10-20
+the wider set was 13,477 numbers (~$94), most of them on leads nobody will call, and Alejandro chose
+queue only. If the queue cannot be built, nothing is checked. TWILIO_VALIDATE_SCOPE=all adds, after
+the queue:
+  - every other number on the board twin
+  - numbers in skiptrace_results.json that have not reached the board yet
 DNC-flagged numbers are never looked up: they are never dialled, so there is nothing to learn.
 
 CREDENTIALS. DEALFLOW_DIR/twilio.key (or TWILIO_KEY_FILE): Account SID on line 1, Auth Token on
@@ -93,6 +96,11 @@ def max_age_days():
         return 60
 
 
+def scope():
+    """'queue' (default) or 'all'. Anything else reads as 'queue', the cheaper one."""
+    return 'all' if (os.environ.get('TWILIO_VALIDATE_SCOPE') or '').strip().lower() == 'all' else 'queue'
+
+
 def cache_path():
     return os.environ.get('TWILIO_VALIDATE_CACHE') or os.path.join(P.DEALFLOW_DIR, 'phone_validation.json')
 
@@ -155,7 +163,12 @@ _VERDICTS = {'mtime': None, 'map': {}}
 
 def verdicts():
     """{phone_key: line status} from the cache, memoized on its mtime. Missing or unreadable cache
-    -> {} (no number is dropped on evidence nobody has). Used by call_mode.call_rows."""
+    -> {} (no number is dropped on evidence nobody has). Used by call_mode.call_rows.
+    While _queue_numbers() builds the queue to check, this returns {} so a disconnected number
+    stays in that list and can be rechecked once stale; Call Mode itself keeps dropping it until
+    a newer answer replaces the verdict."""
+    if _VERDICTS.get('raw'):
+        return {}
     path = cache_path()
     try:
         m = os.path.getmtime(path)
@@ -195,14 +208,21 @@ def unit_price(with_type):
 # ---- which numbers ---------------------------------------------------------------------------
 
 def _queue_numbers():
-    """Call Mode's dial queue, in queue order. Empty if the board twin cannot be read."""
+    """Call Mode's dial queue, in queue order. Empty if the board twin cannot be read. Built with
+    line-status verdicts switched off, so a number already marked disconnected (and a lead whose
+    only numbers are) stays in the list and is rechecked once its verdict is stale."""
     try:
         import callmode_repeats as CR
         import call_mode as CM
         slim = CR.board_rows()
-        rows, _ = CM.call_rows(slim, optouts=CR._optouts(), deads=CR._deads(), cap=10 ** 6)
+        _VERDICTS['raw'] = True
+        try:
+            rows, _ = CM.call_rows(slim, optouts=CR._optouts(), deads=CR._deads(), cap=10 ** 6)
+        finally:
+            _VERDICTS['raw'] = False
     except BaseException as e:                       # SystemExit from board_rows included
-        print('phone_validate: Call Mode queue unreadable (%s); falling back to the board' % e.__class__.__name__)
+        print('phone_validate: Call Mode queue unreadable (%s)%s' % (
+            e.__class__.__name__, '; nothing checked' if scope() == 'queue' else '; falling back to the board'))
         return [], []
     out = []
     for r in rows:
@@ -239,17 +259,21 @@ def _skiptrace_numbers():
 
 def candidates(c, now=None, sources=None):
     """-> ordered list of 10-digit numbers that are due: never checked first, then stale, each
-    group in source order (queue, board, skip trace). `sources` is for the tests."""
+    group in source order (queue, then board and skip trace under scope 'all'). `sources` is for
+    the tests."""
     now = now or time.time()
     if sources is None:
         q, slim = _queue_numbers()
-        if not slim:
-            try:
-                import callmode_repeats as CR
-                slim = CR.board_rows()
-            except BaseException:
-                slim = []
-        sources = q + _board_numbers(slim) + _skiptrace_numbers()
+        if scope() == 'queue':
+            sources = q
+        else:
+            if not slim:
+                try:
+                    import callmode_repeats as CR
+                    slim = CR.board_rows()
+                except BaseException:
+                    slim = []
+            sources = q + _board_numbers(slim) + _skiptrace_numbers()
     max_age = max_age_days() * 86400
     seen, fresh, stale = set(), [], []
     for n in sources:
@@ -407,6 +431,7 @@ def run(numbers=None, max_spend=None, with_type=False, dry_run=False, opener=Non
     left_day = max(0.0, cap - spent_today(c))
     budget = left_day if max_spend is None else min(left_day, max(0.0, max_spend))
     affordable = int(budget / unit + 1e-9)
+    print('phone_validate: scope %s' % (scope() if numbers is None else 'given numbers'))
     print('phone_validate: %d number(s) due, $%.3f each, $%.2f left today of $%.2f -> %d affordable'
           % (len(due), unit, left_day, cap, min(affordable, len(due))))
     if dry_run:
