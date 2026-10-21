@@ -395,6 +395,60 @@ def morning_kind(sig, now, th):
     return 'nothing-sent'
 
 
+_SLUG = re.compile(r'^[a-z0-9_]{1,30}$')
+
+
+def _top(counts, n=3):
+    items = sorted(((str(k), int(v)) for k, v in (counts or {}).items() if _SLUG.match(str(k))),
+                   key=lambda kv: (-kv[1], kv[0]))[:n]
+    return ', '.join('%s x%d' % kv for kv in items)
+
+
+def worker_run_why(run):
+    """One sentence on what the unattended 8 AM run did, from the worker flight recorder
+    (worker_runs.jsonl via read_worker_run). Counts and fixed codes only. '' when there is no
+    record to speak from (older code, or nothing ever reached the bridge), so a missing recorder
+    never invents a cause.
+
+    Added 2026-10-21 so nobody has to run worker_runs.py by hand after a zero-send morning."""
+    if not isinstance(run, dict) or not run.get('readable'):
+        return ''
+    ev = run.get('ev') or {}
+    if not run.get('rows'):
+        return ('Run record: nothing recorded today. Either the bridge or board predates the recorder, '
+                'or the 8 AM page never reached the bridge.')
+    if ev.get('blocked_not_armed'):
+        return 'Run record: the 8 AM page opened on a Chrome profile that is not the armed runner, so it stayed manual.'
+    if ev.get('blocked_already_ran_today') and not ev.get('autostart_run'):
+        return 'Run record: the page saw an auto-run already marked for today and stayed manual.'
+    if ev.get('blocked_stale_board'):
+        age = run.get('board_age_days')
+        return 'Run record: the 8 AM page refused to auto-send because its board build was %s day(s) old.' % (
+            int(age) if isinstance(age, int) and not isinstance(age, bool) else '1 or more')
+    if ev.get('task_open') and not ev.get('worker_loaded'):
+        return ('Run record: the board asked for the worker window but it never loaded '
+                '(a blocked popup is the usual cause).')
+    skipped = _top(run.get('skipped'))
+    if skipped and not ev.get('autostart_run'):
+        return 'Run record: auto-start was skipped (%s).' % skipped
+    if ev.get('worker_loaded') and not (ev.get('autostart_run') or ev.get('run_start')):
+        return 'Run record: the worker opened but no run started (countdown cancelled or tab closed early).'
+    bits = []
+    refused = _top(run.get('refused'))
+    if refused:
+        bits.append('the bridge refused sends (%s)' % refused)
+    noemail = _top(run.get('no_email'))
+    if noemail:
+        bits.append('leads without an email card (%s)' % noemail)
+    if ev.get('run_paused'):
+        bits.append('the run paused itself')
+    if ev.get('send_error'):
+        bits.append('%d sends got no answer from the bridge' % int(ev['send_error']))
+    if bits:
+        return 'Run record: the run started and ' + '; '.join(bits) + '.'
+    return 'Run record: the run started (%d queued at start) and no refusal was recorded.' % int(run.get('queued') or 0)
+
+
 def morning_alert(sig, now, th, at):
     if morning_kind(sig, now, th) != 'nothing-sent':
         return None
@@ -405,9 +459,12 @@ def morning_alert(sig, now, th, at):
         eligible = int(sig['eligible'])
     except (TypeError, ValueError):
         return None
-    return _alert('morning-sends', 'fail',
-                  'Morning Worker was scheduled (%d addresses, per-address cap %s) and %d leads were eligible, but 0 first-touch emails were sent.'
-                  % (naddr, cap_txt, eligible), at)
+    text = ('Morning Worker was scheduled (%d addresses, per-address cap %s) and %d leads were eligible, but 0 first-touch emails were sent.'
+            % (naddr, cap_txt, eligible))
+    why = worker_run_why(sig.get('worker_run'))
+    if why:
+        text += ' ' + why
+    return _alert('morning-sends', 'fail', text, at)
 
 
 def readiness_alert(sig, now, th, at):
@@ -1100,6 +1157,50 @@ def read_optout(now, th):
     }
 
 
+def read_worker_run(day, path=None):
+    """Summarise today's rows of worker_runs.jsonl (the Morning Worker flight recorder, written by
+    send_server /runlog) into counts and fixed codes. Never a name, case or address: the bridge
+    already refuses to store one. {'readable': False} when the file cannot be read."""
+    path = path or os.path.join(HERE, 'worker_runs.jsonl')
+    out = {'readable': True, 'rows': 0, 'ev': {}, 'skipped': {}, 'refused': {}, 'no_email': {},
+           'board_age_days': None, 'queued': 0}
+    if not os.path.exists(path):
+        return out
+    try:
+        lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
+    except OSError:
+        return {'readable': False}
+    for line in lines:
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(r, dict) or str(r.get('ts_local') or '')[:10] != day:
+            continue
+        ev = str(r.get('ev') or '')
+        x = r.get('x') if isinstance(r.get('x'), dict) else {}
+        out['rows'] += 1
+        out['ev'][ev] = out['ev'].get(ev, 0) + 1
+
+        def bump(bucket, key):
+            key = re.sub(r'[^a-z0-9_]', '', str(key or '').lower())[:30]
+            if key:
+                out[bucket][key] = out[bucket].get(key, 0) + 1
+        if ev == 'autostart_skipped':
+            bump('skipped', x.get('why'))
+        elif ev == 'send_answer' and not x.get('ok'):
+            bump('refused', x.get('blocked') or ('http_%s' % x.get('status')))
+        elif ev == 'no_email':
+            bump('no_email', x.get('why'))
+        elif ev in ('blocked_stale_board', 'task_open') and isinstance(x.get('built_age_days'), int) \
+                and not isinstance(x.get('built_age_days'), bool):
+            out['board_age_days'] = x['built_age_days']
+        elif ev in ('autostart_run', 'run_start', 'worker_loaded') and isinstance(x.get('queued'), int) \
+                and not isinstance(x.get('queued'), bool):
+            out['queued'] = max(out['queued'], x['queued'])
+    return out
+
+
 def read_morning(now, th):
     import send_server as S
     cfg = S._load_senders()
@@ -1142,6 +1243,7 @@ def read_morning(now, th):
         'caps': caps,
         'cap': max(caps) if caps else 0,
         'judged': now.hour >= th['send_hour'],
+        'worker_run': _try(lambda: read_worker_run(day), {'readable': False}),
     }
 
 

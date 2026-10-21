@@ -223,6 +223,43 @@ rec('no pause, or a pause that could not be read, still alerts',
     and one({'morning_sends': dict(base_m, paused=None)}, 'morning-sends') is not None)
 rec('a pause does not hide a send', PA.morning_kind(dict(base_m, paused=True, sent=2), NOW, TH) == 'sent')
 
+print('-- morning worker: the run record names the cause (worker_runs.jsonl) --')
+import tempfile
+def run_rows(*evs):
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'worker_runs.jsonl')
+    with open(p, 'w', encoding='utf-8') as f:
+        for ev, x in evs:
+            f.write(json.dumps({'ts_local': '2026-09-27 08:00:10', 'ev': ev, 'x': x}) + '\n')
+        f.write(json.dumps({'ts_local': '2026-09-26 08:00:10', 'ev': 'blocked_not_armed', 'x': {}}) + '\n')
+        f.write('torn line\n')
+    return PA.read_worker_run('2026-09-27', p)
+def why_of(*evs): return PA.worker_run_why(run_rows(*evs))
+def alert_with(run):
+    return one({'morning_sends': dict(base_m, worker_run=run)}, 'morning-sends')
+rec('only today\'s rows count and a torn line is skipped',
+    run_rows(('task_open', {'built_age_days': 0}))['rows'] == 1)
+rec('no run record leaves the alert text unchanged',
+    (a := one({'morning_sends': base_m}, 'morning-sends')) and 'Run record' not in a['text'])
+rec('an empty record says nothing was recorded', 'nothing recorded' in why_of() or
+    'nothing recorded' in PA.worker_run_why({'readable': True, 'rows': 0, 'ev': {}}))
+rec('unarmed profile', 'not the armed runner' in why_of(('task_open', {}), ('blocked_not_armed', {})))
+rec('stale board names its age', '3 day(s) old' in why_of(('task_open', {'built_age_days': 3}), ('blocked_stale_board', {'built_age_days': 3})))
+rec('already ran today', 'already marked for today' in why_of(('task_open', {}), ('blocked_already_ran_today', {})))
+rec('window never loaded is the popup case', 'never loaded' in why_of(('task_open', {}), ('open_requested', {'lane': 'urgent'})))
+rec('empty queue is named', 'empty_queue' in why_of(('task_open', {}), ('worker_loaded', {'queued': 0}), ('autostart_skipped', {'why': 'empty_queue'})))
+rec('bridge refusals are tallied by code', 'placement x2' in why_of(
+    ('task_open', {}), ('worker_loaded', {'queued': 5}), ('autostart_run', {'queued': 5}),
+    ('send_answer', {'status': 451, 'ok': False, 'blocked': 'placement'}),
+    ('send_answer', {'status': 451, 'ok': False, 'blocked': 'placement'})))
+rec('leads without an email card are tallied', 'fth x1' in why_of(
+    ('task_open', {}), ('worker_loaded', {'queued': 5}), ('autostart_run', {'queued': 5}), ('no_email', {'why': 'fth'})))
+rec('a started run with no refusal says so', 'no refusal was recorded' in why_of(
+    ('task_open', {}), ('worker_loaded', {'queued': 7}), ('autostart_run', {'queued': 7})))
+rec('the alert carries the cause and stays clean',
+    (a := alert_with(run_rows(('task_open', {}), ('blocked_not_armed', {})))) and 'armed runner' in a['text'] and clean(a['text']))
+rec('an unreadable record never invents a cause', PA.worker_run_why({'readable': False}) == '' and PA.worker_run_why(None) == '')
+rec('a hostile code is dropped, not published', 'x1' not in PA._top({'../etc/passwd': 1}) and PA._top({'ok_code': 2}) == 'ok_code x2')
+
 cfg = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'senders.json'), encoding='utf-8'))
 addrs = S._first_touch_senders(cfg)
 rec('repo ramp: two warm-up addresses', len(addrs) == 2)
