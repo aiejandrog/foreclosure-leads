@@ -6870,7 +6870,30 @@ function screenOutcome(){
          screen is now impossible: on any error the buttons come back, the error is toasted, and
          the details land in the error log (top bar) for a screenshot. */
       try{
+      var _reen = function(){ Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); };
       var o=OUTCOMES.filter(function(z){return z.k===b.dataset.oc;})[0];
+      /* WRONG NUMBER WHILE THE LEAD STILL HAS OTHER NUMBERS (2026-10-21, Alejandro: "every time we
+         call it just skips the lead to another prospect"). 'wrong' is the WHOLE-LEAD verdict -- it
+         writes n.wrongown, which hides the lead everywhere (board, worker, cadence). Skip trace
+         returns several numbers per person and some are recycled lines, so the stranger on line 1
+         does not prove lines 2-4 are wrong too. Ask which one he means. "Only this number" is the
+         existing badnum path (this number marked bad, lead stays, next number offered); "every
+         number" is today's wrong path, unchanged. Nothing here writes a new kind of mark. */
+      if(o.k==='wrong'){
+        var _others = otherLivePh(r, phIdx);
+        if(_others > 0){ wrongChoice(r, d, _others, function(k){ finish(OUTCOMES.filter(function(z){return z.k===k;})[0], true); }); return; }
+      }
+      finish(o, false);
+      }catch(err){
+        _reen();
+        logErr(err, 'outcome:'+(b.dataset.oc||''));
+        toast('Error logging that — buttons re-enabled, try again');
+      }
+    };
+  });
+  /* chosen = he already picked "only this number" on the wrong-number chooser, which is the
+     deliberate second tap the badnum confirm exists to force. */
+  function finish(o, chosen){
       /* 2026-09-04: the voicemail script moved to the sheet ("IF NO ANSWER", renderSheet) so it is on
          screen DURING the call, when he reads it into the machine, not gated behind a post-call
          "Done reading" wall. "Left voicemail" now logs and advances exactly like No answer: no wall,
@@ -6883,7 +6906,7 @@ function screenOutcome(){
          control had no confirmation and fired 61 times in one day -- 20 inside a single minute --
          killing a live number whose owner texted in that evening asking to sell (badnum_audit.py).
          Nobody establishes a number is dead in three seconds, so make the tap deliberate. */
-      if(o.k==='badnum' && !confirm('Mark ' + fmt(d) + ' as a dead number?\n\nIt stops being dialled on this phone and on the board. Their other numbers are unaffected.')){
+      if(o.k==='badnum' && !chosen && !confirm('Mark ' + fmt(d) + ' as a dead number?\n\nIt stops being dialled on this phone and on the board. Their other numbers are unaffected.')){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
       var _fresh = logOutcome(r,o,d);
@@ -6914,14 +6937,46 @@ function screenOutcome(){
       /* go() runs IMMEDIATELY now. The 650ms hold showed a screen of disabled buttons between every
          outcome and the next action — pure dead time, times a hundred dials a day. The toast (now
          z-60, above the sheet) is the confirmation, and it overlaps the next screen harmlessly. */
-      }catch(err){
-        Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;});
-        logErr(err, 'outcome:'+(b.dataset.oc||''));
-        toast('Error logging that — buttons re-enabled, try again');
-      }
+  }
+  wireLang($('app'));
+}
+/* An EARLIER live number not dialled today, or -1. The wrap only reaches numbers he skipped past,
+   never one already rung this session (no answer on 1 and 2 must not loop back to 1). */
+function untriedEarlierPh(r, ix){
+  var p = r.p||[], bad = badSet(r), t = today(), rung = {};
+  (((notes[r.c]||{}).dials)||[]).forEach(function(x){ if(x && x.d === t) rung[String(x.ph4||'')] = 1; });
+  for(var k = 0; k < ix && k < p.length; k++){
+    var dg = String(p[k]).replace(/\D/g,'');
+    if(!bad[dg] && !rung[dg.slice(-4)]) return k;
+  }
+  return -1;
+}
+/* How many of this lead's numbers, other than the one just dialled, are not marked bad. */
+function otherLivePh(r, ix){
+  var p = r.p||[], bad = badSet(r), n = 0;
+  for(var k = 0; k < p.length; k++){
+    if(k !== ix && !bad[String(p[k]).replace(/\D/g,'')]) n++;
+  }
+  return n;
+}
+/* The wrong-number chooser. Replaces the outcome buttons in place; Back repaints the outcome screen
+   with nothing logged. Each choice calls pick('badnum'|'wrong') exactly once. */
+function wrongChoice(r, d, others, pick){
+  var box = document.querySelector('.oc'); if(!box) return pick('wrong');
+  window._tapShieldUntil = Date.now() + 400;      // the swap lands under his finger
+  box.innerHTML = '<div class="nc" style="margin-top:9px">Wrong person on <b>' + fmt(d) + '</b>. This lead has <b>'
+    + others + ' other number' + (others===1?'':'s') + '</b> on file.</div>'
+    + '<button data-wc="badnum">Only this number is wrong &mdash; try their next one</button>'
+    + '<button class="warn" data-wc="wrong">Wrong owner on every number &mdash; drop this lead</button>'
+    + '<button data-wc="back">&lsaquo; Back</button>';
+  Array.prototype.forEach.call(box.querySelectorAll('button'), function(x){
+    x.onclick = function(){
+      Array.prototype.forEach.call(box.querySelectorAll('button'), function(y){ y.disabled = true; });
+      if(x.dataset.wc === 'back'){ screenOutcome(); return; }
+      try{ pick(x.dataset.wc); }
+      catch(err){ logErr(err, 'outcome:wrong-choice'); toast('Error logging that, try again'); screenOutcome(); }
     };
   });
-  wireLang($('app'));
 }
 /* MAKE THE CONFIRM TRUE. The do-not-contact dialog promises "this closes every channel, permanently,
    on every device" — and the code behind it wrote optout+status to ONE case and nothing else.
@@ -6979,6 +7034,10 @@ function afterCall(r, o, nextC){
   // The next LIVE number, computed after logOutcome has recorded any badnum mark — so the number he
   // just declared dead is never the one offered next. -1 = nothing dialable left on this lead.
   var _nextPh = nextLivePh(r, phIdx + 1);
+  /* Wrap to an earlier live number when he started mid-list (screenLead lands on the first LIVE
+     number, and a resurfaced lead can open on number 3). Never offer the number just dialled. */
+  if(_nextPh < 0) _nextPh = untriedEarlierPh(r, phIdx);
+  var _nphTop = (o.k==='badnum'||o.k==='gate') && _nextPh >= 0;
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field
@@ -7058,6 +7117,12 @@ function afterCall(r, o, nextC){
     + '<div class="addr" style="font-size:17px">Logged: '+esc(o.t)+'</div>'
     + '<div class="own">'+esc(firstName(r)||r.o||'')+' &middot; '+fmt(num)+'</div>'
     + sessStrip()
+    /* A DEAD OR WRONG LINE PUTS THE NEXT NUMBER FIRST (2026-10-21). Measured on the laptop: of 34
+       bad/wrong-number leads in 14 days, 30 still had a number never dialled (138 numbers), and on
+       0 of them was another number dialled after the bad tap -- the button sat at the bottom,
+       under texts and callbacks that do not apply to a dead line, and "Next lead" won every time. */
+    + (_nphTop ? '<button id="nph" class="big" style="margin-top:12px">&#128222; Call their next number: '
+        + fmt(r.p[_nextPh]) + ' (' + (_nextPh + 1) + ' of ' + r.p.length + ')</button>' : '')
     + book
     + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
     + '<div class="afterlab">Call them back</div>'
@@ -7070,7 +7135,7 @@ function afterCall(r, o, nextC){
        so the text offer above is never skipped past. Only shown when a number is actually left. */
     /* Skips numbers marked bad (here or on the worker card) rather than counting blindly upward —
        offering a dead line as "their next number" is the whole reason badnum exists. */
-    + ((miss && _nextPh >= 0)
+    + ((miss && _nextPh >= 0 && !_nphTop)
         ? '<button id="nph" class="ghost" style="margin-top:14px">&#128222; Try their next number ('
           + (_nextPh + 1) + ' of ' + r.p.length + ')</button>'
         : '')
