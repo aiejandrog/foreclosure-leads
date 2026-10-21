@@ -31,6 +31,7 @@ Run:    python badnum_wp_compare.py                          # compare what is c
 """
 import argparse
 import collections
+import math
 import datetime as dt
 import json
 import os
@@ -78,7 +79,7 @@ def bad_dials(notes, days=None, today=None):
     for case, n in (notes or {}).items():
         if not isinstance(n, dict):
             continue
-        dials = [d for d in (n.get('dials') or []) if isinstance(d, dict)]
+        dials = [d for d in (n.get('dials') or []) if isinstance(d, dict) and isinstance(d.get('oc'), (str, type(None)))]
         bad = []
         for d in dials:
             if d.get('oc') not in BADNUM:
@@ -165,7 +166,7 @@ def compare(bad, leads, cache, skiptrace, opt):
         for s in bad_source(lead, b['bad4']):
             src[s] += 1
         if b['convo']:
-            t['  of those, later reached on another number'] += 1
+            t['  of those, a conversation is also logged on the lead'] += 1
         if lead is None:
             t['lead no longer in any lead file'] += 1
             continue
@@ -178,7 +179,7 @@ def compare(bad, leads, cache, skiptrace, opt):
         if held or opted or company:
             mail['held / opted out / company owner'] += 1
         elif not _eq_verified(lead):
-            mail['equity not verified (not clear/priced, or 0%)'] += 1
+            mail['equity not verified (not clear/priced, or no/0% figure)'] += 1
         elif not str(lead.get('mail') or lead.get('mailing_address') or '').strip():
             mail['verified equity, no tax-roll mailing address'] += 1
         else:
@@ -195,7 +196,7 @@ def compare(bad, leads, cache, skiptrace, opt):
             elif company:
                 t['not looked up: company owner (WP is person-only)'] += 1
             elif b['convo']:
-                t['not looked up: already reached on another number'] += 1
+                t['not looked up: a conversation is already logged (no spend)'] += 1
             else:
                 t['not looked up: eligible to buy'] += 1
                 todo.append(lead)
@@ -224,6 +225,15 @@ def compare(bad, leads, cache, skiptrace, opt):
                 t['  WP had 2+ new numbers'] += 1
     return {'totals': dict(t), 'bad_number_source': dict(src), 'outcomes': dict(oc),
             'mail_lane': dict(mail), 'optouts_readable': opt is not None}, todo
+
+
+PROVIDER_TAGS = ('AUTH ERROR', 'RATE LIMIT', 'BUDGET', 'HTTP ', 'network error', 'unparseable')
+
+
+def _provider_log(msg):
+    """WL._log replacement for --lookup: provider/budget lines only, never the per-lead ok/miss line."""
+    if any(t in str(msg) for t in PROVIDER_TAGS):
+        print(str(msg).strip(), flush=True)
 
 
 def _todo_order(todo):
@@ -272,13 +282,15 @@ def main(argv=None):
                     help='required with --lookup: dollar cap for this run')
     ap.add_argument('--limit', type=int, default=60, help='most leads to look up in one run')
     a = ap.parse_args(argv)
-    if a.lookup and (a.max_spend is None or a.max_spend <= 0):
-        print('--lookup needs an explicit --max-spend (dollars). Nothing bought.')
+    if a.lookup and (a.max_spend is None or not math.isfinite(a.max_spend) or a.max_spend <= 0):
+        print('--lookup needs an explicit, finite --max-spend (dollars). Nothing bought.')
         return 2
 
     import whitepages_lookup as WL
     wn = _load(os.path.join(HERE, 'worker_notes.json'), {})
-    bad = bad_dials(wn.get('notes') or {}, a.days)
+    wn = wn if isinstance(wn, dict) else {}
+    notes = wn.get('notes') if isinstance(wn.get('notes'), dict) else {}
+    bad = bad_dials(notes, a.days)
     if not bad:
         print('no bad/wrong-number dials in worker_notes.json%s' % (' in that window' if a.days else ''))
         return 0
@@ -289,11 +301,17 @@ def main(argv=None):
     res, todo = compare(bad, leads, cache, skiptrace, opt)
     todo = _todo_order(todo)[:max(0, a.limit)]
 
-    if a.lookup and todo:
+    if a.lookup and todo and opt is None:
+        print('optouts.json unreadable: not buying lookups for leads that may have opted out.')
+    elif a.lookup and todo:
         WL._run['max'] = float(a.max_spend)
         print('buying: %d lead(s), run cap $%.2f, today $%.2f spent of $%.2f (WP_DAILY_CAP)'
               % (len(todo), WL._run['max'], WL.wp_spent_today(), WL.WP_DAILY_CAP), flush=True)
-        key = WL._load_key()             # exits on a missing key; a 401/403 exits on the first request
+        key = WL._load_key()             # exits on a missing key
+        # enrich_one logs case ids and street addresses through WL._log; only provider and budget
+        # lines reach the console, so this output stays pasteable. A 401/403 calls os._exit, so its
+        # line has to be printed as it happens, not collected for later.
+        WL._log = _provider_log
         for lead in todo:
             if WL._stop_run.is_set():
                 print('stopped early: %s' % (WL._stop_why['why'] or 'stop requested'))

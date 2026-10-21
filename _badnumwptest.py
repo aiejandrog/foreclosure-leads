@@ -73,14 +73,14 @@ check('WP repeats dead number (T-1 and T-3)', t['  WP lists the number we found 
 check('WP new owner number', t["  WP had a NEW number graded the owner's"], 1)
 check('new owner numbers counted', t['    new owner-graded numbers'], 2)
 check('WP same numbers only', t['  WP had only numbers we already had'], 1)
-check('reached lead not bought', t['not looked up: already reached on another number'], 1)
+check('reached lead not bought', t['not looked up: a conversation is already logged (no spend)'], 1)
 check('company not bought', t['not looked up: company owner (WP is person-only)'], 1)
 check('nothing eligible to buy', [WL._lead_key(r) for r in todo], [])
 check('source of bad numbers', res['bad_number_source'], {'tr': 3, 'bd': 1, 'not on board': 1})
 m = res['mail_lane']
 check('mailable = verified equity + mail address', m['MAILABLE: verified equity + mailing address'], 2)
 check('absentee counted', m['  of those, mailing address differs from the property'], 1)
-check('unverified equity not mailable', m['equity not verified (not clear/priced, or 0%)'], 1)
+check('unverified equity not mailable', m['equity not verified (not clear/priced, or no/0% figure)'], 1)
 
 # opted-out lead is neither bought nor counted mailable
 res2, todo2 = B.compare(bad, B.load_leads(), {}, {}, {'T-1'})
@@ -92,6 +92,16 @@ check('eligible to buy without cache', [WL._lead_key(r) for r in B._todo_order(t
 with contextlib.redirect_stdout(io.StringIO()) as out:
     rc = B.main(['--lookup'])
 check('lookup without --max-spend refused', rc, 2)
+with contextlib.redirect_stdout(io.StringIO()):
+    rc = B.main(['--lookup', '--max-spend', 'inf'])
+check('infinite --max-spend refused', rc, 2)
+check('odd oc shapes ignored', sorted(B.bad_dials({'X': {'dials': [{'oc': ['badnum']}, {'oc': {'a': 1}}]}, 'Y': [1]}, today=TODAY)), [])
+
+with contextlib.redirect_stdout(io.StringIO()) as out:
+    B._provider_log('  ok   T-1  1 TEST ST -> Property: 1 owner(s)')
+    B._provider_log('  AUTH ERROR (403) - key rejected. Stopping.')
+check('per-lead log line dropped, auth line kept', out.getvalue().count('T-1'), 0)
+check('auth line kept', 'AUTH ERROR' in out.getvalue(), True)
 
 blob = json.dumps(res) + B.render(dict(res, generated='x', notes_received_utc=None, window_days=None),
                                   todo, {'price': 0.22, 'worst': 0})
