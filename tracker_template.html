@@ -13481,6 +13481,10 @@ function genMorningWorker(lane, autostart){
     // 'sent' gets its own glyph so a DELIVERED line is visually distinct from an ATTEMPT at a
     // glance — that distinction is the whole point of the rewrite.
     +   'var ICON={callq:"&#9742;",callout:"&#128222;",call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",textopen:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
+    // FLIGHT RECORDER (2026-10-21): one fire-and-forget line per run event to the bridge's
+    // worker_runs.jsonl, so an unattended morning that sends nothing can say why after this tab is
+    // gone. Counts and codes only. It never blocks, never throws, and nothing reads it to decide.
+    +   'function runlog(ev, x){ try{ fetch("http://127.0.0.1:8823/runlog", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
     +     'if(LOG.length>1000) LOG=LOG.slice(-1000);'
@@ -14030,6 +14034,7 @@ function genMorningWorker(lane, autostart){
     +       'var whyMap={replied:"owner already replied — this is a live conversation, not a template",'
     +                   'done:"3 emails already sent — the last one promised no more, honoring that",'
     +                   'fth:"no address the send bridge will accept yet (no verification or reply on record)"};'
+    +       'runlog("no_email", {why:String(r.mailWhy||"none"), lane:lane});'
     +       'addLog("skip", r.first||r.owner, "no email to send ("+(whyMap[r.mailWhy]||"no reachable mailbox for this lead")+")", "warn");'
     +       'advance();'
     +       'return;'
@@ -14069,6 +14074,7 @@ function genMorningWorker(lane, autostart){
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
     +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'runlog("send_answer", {status:x.status, ok:!!(x.j&&x.j.ok), blocked:String((x.j&&x.j.blocked)||""), skip:!!(x.j&&x.j.skip), ft_paused:!!(x.j&&x.j.first_touch_paused), lane:lane});'
     +         'if(_seq===SENDSEQ) sending=false;'
     +         'var _mv=_live();'
     +         'if(x.j.blocked==="optout_stale" && x.j.hold==="sync" && auto && !SYNCWAIT && SYNCTRY<SYNC_MAX){'
@@ -14138,6 +14144,7 @@ function genMorningWorker(lane, autostart){
     +       '})'
     +       '.catch(function(err){'
     +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'runlog("send_error", {lane:lane});'
     +         'if(_seq===SENDSEQ) sending=false;'
     +         'bridgeUp(false);'
     // AUTO-RUN: never open a Gmail composer or wait on a confirm click — that is precisely the
@@ -14446,7 +14453,7 @@ function genMorningWorker(lane, autostart){
        gate's own comment claimed `auto` is cleared by "stop/lane-switch/queue-end"; queue-end was
        the one that was not true. Surfaced by driving the loop under node (_autorunstoptest 3a):
        six leads out of six delivered and `auto` still set. */
-    +     'if(auto && i>=Q.length){ auto=false; autoAll=false; }'
+    +     'if(auto && i>=Q.length){ runlog("run_end", {lane:lane, delivered:STATS.sent||0, skipped:STATS.skip||0, attempts:STATS.email||0}); auto=false; autoAll=false; }'
     +     'render();'
     +   '}'
     +   'function hopNextLane(){'
@@ -14527,6 +14534,7 @@ function genMorningWorker(lane, autostart){
     +     'if(i>=Q.length){ addLog("fail","auto-run","nothing left to work in "+LMETA[lane].t+" — pick a lane with leads in it.","warn"); return; }'
     +     'if(sentToday()>=CAP.max){ addLog("fail","auto-run","⛔ daily send cap already reached — auto-run NOT started. Keep calling; calls are not capped.","warn"); return; }'
     +     'autoAll=!!all; auto=true;'
+    +     'runlog("run_start", {src:String(src||"button"), all:!!all, lane:lane, queued:Q.length});'
     +     'if(autoAll){ addLog("open","ALL LANES","▶▶ auto-run ALL started ("+(src||"button")+") — "+LMETA[lane].t+" first, then the rest: "+LANE_ORDER.map(function(k){return LMETA[k].t+" ("+laneCount(k)+")";}).join(" → ")+"."); }'
     +     'else { addLog("open", (Q[i]&&(Q[i].first||Q[i].owner))||"", "auto-run started ("+(src||"button")+") — "+LMETA[lane].t+" ONLY, "+Math.max(0,Q.length-i)+" leads queued"); }'
     +     'renderRunBar();'
@@ -14550,6 +14558,7 @@ function genMorningWorker(lane, autostart){
        `i` is preserved, so Start resumes from the lead the run stopped on rather than the top. */
     +   'function stopRun(src){'
     +     'var wasAuto=!!(auto||autoAll), wasBatch=!!tbOn, wasStarting=!!ASTIMER;'
+    +     'runlog("run_stopped", {src:String(src||"stop"), was_auto:wasAuto, was_countdown:wasStarting, delivered:STATS.sent||0});'
     +     'auto=false; autoAll=false; awaitingReturn=false; tbOn=false;'
     +     'var wasWaiting=!!SYNCWAIT; cancelSyncWait();'
     +     'clearInterval(tick); tick=null;'
@@ -14568,7 +14577,7 @@ function genMorningWorker(lane, autostart){
     // pause() is stop's quiet sibling: the run halted itself (cap, SMTP auth, bridge offline) and
     // the caller has already written the sentence explaining why. Clear the pending next-lead timer
     // for the same reason stopRun does, or the 700ms hop restarts the run the caller just stopped.
-    +   'function pause(){ auto=false; autoAll=false; if(nextStep){ clearTimeout(nextStep); nextStep=null; } render(); }'
+    +   'function pause(){ if(auto) runlog("run_paused", {lane:lane, lead:i+1, of:Q.length, delivered:STATS.sent||0, skipped:STATS.skip||0}); auto=false; autoAll=false; if(nextStep){ clearTimeout(nextStep); nextStep=null; } render(); }'
     +   'function runOne(){'
     // STOP IS AUTHORITATIVE. advance() and hopNextLane() schedule the next lead on a timer; if the
     // operator stops inside that window the timer still fires, so the loop has to re-check here
@@ -14918,11 +14927,14 @@ function genMorningWorker(lane, autostart){
            FTSA problem. Refuse outside the safe window and say so.
          - cap + empty-queue check, so it never starts work it cannot finish.
        The 50/day cap, opt-out ledger and per-lead cooldown all still apply inside the run. */
+    +   'runlog("worker_loaded", {autostart:AUTOSTART, lane:lane, queued:Q.length, lanes:LANE_ORDER.map(function(k){ return k+":"+laneCount(k); }).join(","), hour:new Date().getHours()});'
+    +   'if(AUTOSTART && !Q.length) runlog("autostart_skipped", {why:"empty_queue", lane:lane});'
     +   'if(AUTOSTART && Q.length){'
     +     '(function(){'
     +       'var g=_wftsa();'
-    +       'if(!g.safe){ addLog("fail","auto-start","⏰ "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
-    +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
+    +       'if(!g.safe){ runlog("autostart_skipped", {why:"hours", hour:g.hour}); addLog("fail","auto-start","⏰ "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
+    +       'if(sentToday()>=CAP.max){ runlog("autostart_skipped", {why:"daily_cap", sent:sentToday()}); addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
+    +       'runlog("autostart_countdown", {lane:lane, queued:Q.length});'
     +       'var left=20, box=document.createElement("div");'
     +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
     +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — all lanes from "+lane.toUpperCase()+", "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).reduce(function(n,k){return n+laneCount(k);},0)+" leads queued. Emails will send automatically.</div>"'
@@ -14942,8 +14954,9 @@ function genMorningWorker(lane, autostart){
     // a bridge that is down at 8am does not just fail quietly — it opens a real Gmail composer
     // and a "did it send?" prompt for every single queued lead, unattended, all morning. That is
     // the exact failure the operator told us to stop producing.
-    +           'if(BRIDGE_HOLD){ addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
+    +           'if(BRIDGE_HOLD){ runlog("autostart_skipped", {why:"bridge_hold", hold:String(BRIDGE_HOLD).slice(0,60)}); addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
     +           'if(BRIDGE_OK!==true){'
+    +             'runlog("autostart_skipped", {why:"bridge_not_confirmed"});'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
@@ -14951,6 +14964,7 @@ function genMorningWorker(lane, autostart){
     // here would be two loops on the same lead, the 2026-08-13 duplicate-send shape.
     +           'if(auto || SYNCWAIT){ renderRunBar(); return; }'
     +           'auto=true; autoAll=true; addLog("open","auto-start","▶ auto-run ALL lanes started automatically (8am scheduler) — "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).map(function(k){return k.toUpperCase()+" ("+laneCount(k)+")";}).join(" → "));'
+    +           'runlog("autostart_run", {lane:lane, queued:Q.length, lanes:LANE_ORDER.map(function(k){ return k+":"+laneCount(k); }).join(",")});'
     +           'renderRunBar(); runOne(); }'
     +       '},1000);'
     // Cancel goes through stopRun so the unattended start and a hand-pressed Stop leave exactly the
@@ -19615,7 +19629,13 @@ async function boot(){
        1. strip the hash the moment it is consumed, so a refresh cannot replay it;
        2. a per-DAY key, so even a fresh tab opened at the same URL will not auto-send twice.
      A human can always still press "Start auto-run" — this only governs the unattended path. */
+  /* FLIGHT RECORDER, main-tab half (2026-10-21): the worker tab records what happens inside it; this
+     records what the board decided before it opened one (armed or not, already ran, stale, popup).
+     The 8 AM key is written BEFORE the stale check, so "key present" never proved a run began.
+     Counts and codes only; fire-and-forget; nothing reads it to decide. */
+  function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
   if(/worker=morning/.test(location.hash||'')){
+    try{ _runlog('task_open', {built_age_days:(typeof _boardAgeDays==='function')?_boardAgeDays():null, rows:(DATA||[]).length, hour:new Date().getHours()}); }catch(e){}
     // LOCAL day: the UTC key minted a FRESH day at 8 PM ET, so a worker tab opened in the
     // evening could auto-send a second time on the same local day — the exact replay this
     // per-day key exists to prevent. (2026-08-26)
@@ -19633,6 +19653,7 @@ async function boot(){
     var _armed = false;
     try { _armed = localStorage.getItem('fcArmedRunner') === 'true'; } catch(e){}
     if(!_armed){
+      _runlog('blocked_not_armed', {});
       setTimeout(function(){ try{
         openMorningWorker('urgent', false);
         if(typeof _shareToast === 'function')
@@ -19640,6 +19661,7 @@ async function boot(){
       }catch(e){} }, 500);
       try { console.info('[dealflow] #worker=morning ignored for auto-send — fcArmedRunner not set on this device.'); } catch(e){}
     } else if(_already){
+      _runlog('blocked_already_ran_today', {});
       // Opened again the same day: show the worker, but never auto-send. Say why, out loud.
       setTimeout(function(){ try{ openMorningWorker('urgent', false); }catch(e){} }, 500);
       try { console.info('[dealflow] auto-run already ran today — worker opened in MANUAL mode.'); } catch(e){}
@@ -19652,6 +19674,7 @@ async function boot(){
         try{
           var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
           var _stale = (_age != null && _age >= 1);
+          try{ var _alane = _autoRunLane(); _runlog(_stale ? 'blocked_stale_board' : 'open_requested', {lane:_alane, built_age_days:_age, queue:(typeof _workerQueue==='function')?_workerQueue(_alane).length:null}); }catch(e){}
           openMorningWorker(_autoRunLane(), !_stale);
           if(_stale && typeof _shareToast === 'function')
             _shareToast('AUTO-RUN BLOCKED: board data is ' + _age + ' day(s) old. Reload the board (or run the refresh), then start the worker by hand.');

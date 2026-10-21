@@ -38,7 +38,7 @@ function fetch(){requests++; return Promise.resolve({status:reply.status,json:()
 function setTimeout(fn){timers.push(fn); return timers.length;}
 function clearTimeout(id){ if(id) timers[id-1]=null; } function render(){} function renderBridge(){} function renderRunBar(){}
 function paintTextHold(){}
-function addLog(k,n,s){logs.push(k);} function post(k){marks.push(k);}
+function addLog(k,n,s){logs.push(k);} function runlog(){} var STATS={}; function post(k){marks.push(k);}
 function advance(){i++;} function bridgeUp(ok){BRIDGE_OK=ok;} function _cacheLive(){}
 function sendInFlight(){return sending;} function sentToday(){return 0;}
 function runOne(){runs++;}
