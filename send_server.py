@@ -1944,6 +1944,42 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {'ok': False, 'err': str(e)[:120]})
         return self._json(200, {'ok': True})
 
+    def _handle_runlog(self):
+        """POST /runlog {ev, x} - flight recorder for the Morning Worker's unattended run (2026-10-21).
+
+        On 10-21 the 8 AM run opened, was armed, and sent nothing, and nothing recorded why: the
+        worker's log lives in a tab that closes, and this bridge only logs restarts. This keeps one
+        line per run event (task opened, armed or not, board age, queue size per lane, each /send
+        answer's refusal code, how the run ended) in worker_runs.jsonl. It writes nothing else and
+        decides nothing: no send, hold or suppression path reads it. COUNTS AND CODES ONLY: the
+        event name is a short slug, and every value is a number, bool, or a string cut to 80
+        characters, so a case number, name or address has no field to ride in."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        if ln <= 0 or ln > 20_000:
+            return self._json(400, {'ok': False, 'err': 'missing or oversized body'})
+        try:
+            d = json.loads(self.rfile.read(ln).decode('utf-8'))
+        except Exception:
+            return self._json(400, {'ok': False, 'err': 'bad json'})
+        ev = re.sub(r'[^a-z0-9_]', '', str(d.get('ev') or '').lower())[:40]
+        if not ev:
+            return self._json(400, {'ok': False, 'err': 'ev required'})
+        x = {}
+        raw = d.get('x')
+        for k, v in (list(raw.items())[:20] if isinstance(raw, dict) else []):
+            k = re.sub(r'[^a-z0-9_]', '', str(k).lower())[:30]
+            if k and (v is None or isinstance(v, (bool, int, float, str))):
+                x[k] = v[:80] if isinstance(v, str) else v
+        rec = {'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+               'ts_local': dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'ev': ev, 'x': x}
+        try:
+            with _NOTES_LOCK:
+                with open(os.path.join(HERE, 'worker_runs.jsonl'), 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+        except Exception as e:
+            return self._json(500, {'ok': False, 'err': str(e)[:120]})
+        return self._json(200, {'ok': True})
+
     def _handle_text_check(self):
         """POST /text/check {case, to, pcs?, portfolio?} — the pre-flight every Text button asks BEFORE
         it opens an sms: composer (2026-10-09, Alex chose "Check first").
@@ -2206,6 +2242,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_marks_consumed()
         if self.path.startswith('/mark'):
             return self._handle_mark()
+        if self.path.startswith('/runlog'):
+            return self._handle_runlog()
         if self.path.startswith('/retrace'):
             return self._handle_retrace()
         if self.path.startswith('/text/check'):       # BEFORE /text — startswith('/text') shadows it

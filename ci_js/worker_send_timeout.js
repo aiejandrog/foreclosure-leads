@@ -36,7 +36,7 @@ const LEAD = {first: 'FAKE', owner: 'FAKE OWNER', c: 'FAKE-2099-000001', mailSub
         mailTo: 'homeowner@fake.invalid', mailBcc: '', portfolio: []};
 const env = {
   BRIDGE_HOLD: '', auto: true, lane: 'urgent', Q: [LEAD], i: 0,
-  addLog: (k, who, msg) => log.push(k + ': ' + msg), pause: () => { paused++; env.auto = false; },
+  runlog: () => {}, addLog: (k, who, msg) => log.push(k + ': ' + msg), pause: () => { paused++; env.auto = false; },
   advance: () => log.push('advance'), post: (k) => posted.push(k), bridgeUp: () => {}, renderBridge: () => {},
   _cacheLive: () => {}, openHere: () => { composer++; return true; }, confirmSend: () => {}, render: () => {},
 };

@@ -69,6 +69,7 @@ var auto=false, autoAll=false, awaitingReturn=false, tbOn=false, tick=null, heal
     BRIDGE_OK=true, BRIDGE_HOLD="", CAP={max:50}, i=0, lane="urgent",
     LANES={urgent:[{first:"A"},{first:"B"}], active:[{first:"C"}]}, Q=LANES.urgent, LMETA={urgent:{t:"Urgent"},active:{t:"Active"}};
 function addLog(k,w,m){ logs.push(k+"|"+m); }
+function runlog(){} var STATS={};
 function render(){} function renderRunBar(){} function renderBridge(){} function bridgeUp(){}
 function probeBridge(){ probes++; } function runOne(){ runs++; }
 function sentToday(){ return sent; } function sendInFlight(){ return false; }

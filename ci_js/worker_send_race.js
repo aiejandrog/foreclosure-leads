@@ -58,6 +58,7 @@ function scenario(lateMs, startAgainMs, noAbort, manualAt) {
     function probeBridge(){} function hopNextLane(){ return false; } function sentToday(){ return 0; }
     function _pendWatch(){} function _markBuf(){} function openHere(){ __logs.push('COMPOSER'); return true; } function confirmSend(){}
     function addLog(k, who, msg){ __logs.push(Date.now()+' '+k+': '+who+': '+msg); }
+    function runlog(){} var STATS={};
     function attempt(r){ return doSend(r); }
   `;
   const run = new Function('__Q', '__marks', '__logs', 'fetch', 'AbortController', 'setTimeout', 'clearTimeout', 'clearInterval', 'Date',

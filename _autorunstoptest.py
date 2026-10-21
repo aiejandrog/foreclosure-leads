@@ -290,6 +290,7 @@ function esc(s){ return String(s==null?"":s); }
 function sentToday(){ return (STATS.sent||0)+(STATS.text||0); }
 function addLog(kind, who, text, cls){ logs.push({a:kind, who:who||"", detail:text||"", warn:cls==="warn"}); }
 function renderLog(){}
+function runlog(){}
 function renderCap(){}
 function renderCallQ(){}
 function renderTextQ(){}
