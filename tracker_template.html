@@ -13541,7 +13541,7 @@ function genMorningWorker(lane, autostart){
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
     +   'var TEXT_HOLD_DOWN="Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.";'
-    +   'var BRIDGE_OK=null, BRIDGE_HOLD="", TEXT_HOLD=TEXT_HOLD_DOWN;'
+    +   'var BRIDGE_OK=null, BRIDGE_HOLD="", BRIDGE_WHY="", TEXT_HOLD=TEXT_HOLD_DOWN;'
     +   'function paintTextHold(){ var h=document.getElementById("mwtexthold"); if(!h) return; if(TEXT_HOLD){ h.style.display="block"; h.textContent=TEXT_HOLD; } else { h.style.display="none"; h.textContent=""; } }'
     +   'function renderBridge(){'
     +     'var b=document.getElementById("mwbridge"); if(!b) return;'
@@ -13562,8 +13562,8 @@ function genMorningWorker(lane, autostart){
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
     +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
-    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold===false)?"":((j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):TEXT_HOLD_DOWN); paintTextHold(); bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
-    +       '.catch(function(){ if(to) clearTimeout(to); TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold(); bridgeUp(false); });'
+    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold===false)?"":((j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):TEXT_HOLD_DOWN); paintTextHold(); BRIDGE_WHY=(j&&j.ready)?"":"not_ready"; bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
+    +       '.catch(function(e){ if(to) clearTimeout(to); BRIDGE_WHY=(e&&e.name==="AbortError")?"timeout":"down"; TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold(); bridgeUp(false); });'
     +   '}'
     +   'function renderCap(){'
     +     'var n=sentToday(), left=Math.max(0,CAP.max-n), blocked=n>=CAP.max, warn=n>=CAP.warnAt;'
@@ -14954,9 +14954,18 @@ function genMorningWorker(lane, autostart){
     // a bridge that is down at 8am does not just fail quietly — it opens a real Gmail composer
     // and a "did it send?" prompt for every single queued lead, unattended, all morning. That is
     // the exact failure the operator told us to stop producing.
+    +           'var _bt=0;'
+    // ONE 1.5s /health probe at tab load was the whole check. On 2026-10-21 it failed at 08:00 with
+    // the 07:45 task having exited 0, and nothing could say whether the bridge was down, slow or
+    // had no mail login. Give a bridge that is still coming up ~15s (5 re-probes, 3s apart) before
+    // giving up, under ASTIMER so the run bar's Cancel/Stop still reaches this wait, and record
+    // which failure it was.
+    +           '(function go(){'
+    +           'ASTIMER=null;'
+    +           'if(BRIDGE_OK!==true && !BRIDGE_HOLD && _bt<5){ _bt++; probeBridge(); ASTIMER=setTimeout(go,3000); renderRunBar(); return; }'
     +           'if(BRIDGE_HOLD){ runlog("autostart_skipped", {why:"bridge_hold", hold:String(BRIDGE_HOLD).slice(0,60)}); addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
     +           'if(BRIDGE_OK!==true){'
-    +             'runlog("autostart_skipped", {why:"bridge_not_confirmed"});'
+    +             'runlog("autostart_skipped", {why:"bridge_not_confirmed", cause:BRIDGE_WHY||"unknown", probes:_bt+1});'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
@@ -14965,7 +14974,7 @@ function genMorningWorker(lane, autostart){
     +           'if(auto || SYNCWAIT){ renderRunBar(); return; }'
     +           'auto=true; autoAll=true; addLog("open","auto-start","▶ auto-run ALL lanes started automatically (8am scheduler) — "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).map(function(k){return k.toUpperCase()+" ("+laneCount(k)+")";}).join(" → "));'
     +           'runlog("autostart_run", {lane:lane, queued:Q.length, lanes:LANE_ORDER.map(function(k){ return k+":"+laneCount(k); }).join(",")});'
-    +           'renderRunBar(); runOne(); }'
+    +           'renderRunBar(); runOne(); })(); }'
     +       '},1000);'
     // Cancel goes through stopRun so the unattended start and a hand-pressed Stop leave exactly the
     // same state behind -- one path, one set of cleared timers, one log line.

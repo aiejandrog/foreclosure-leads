@@ -1187,7 +1187,10 @@ def read_worker_run(day, path=None):
             if key:
                 out[bucket][key] = out[bucket].get(key, 0) + 1
         if ev == 'autostart_skipped':
-            bump('skipped', x.get('why'))
+            why = str(x.get('why') or '')
+            if why == 'bridge_not_confirmed' and x.get('cause'):
+                why += '_' + str(x['cause'])          # down / timeout / not_ready: the cause on 10-21 was unknown
+            bump('skipped', why)
         elif ev == 'send_answer' and not x.get('ok'):
             bump('refused', x.get('blocked') or ('http_%s' % x.get('status')))
         elif ev == 'no_email':

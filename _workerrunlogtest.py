@@ -70,5 +70,17 @@ for ev in ('worker_loaded', 'autostart_skipped', 'autostart_run', 'run_start', '
     check('board records ' + ev, ("'" + ev + "'") in t or ('"' + ev + '"') in t, ev)
 check('worker_runs.jsonl is gitignored', 'worker_runs.jsonl' in open(os.path.join(HERE, '.gitignore')).read())
 
+# 2026-10-21: the 8 AM bridge check was one 1.5s probe and said nothing about why it failed.
+check('auto-start re-probes the bridge before giving up', 'function go(){' in t and 'probeBridge(); ASTIMER=setTimeout(go,3000)' in t)
+check('auto-start records why the bridge was not confirmed', 'cause:BRIDGE_WHY' in t and 'probes:_bt+1' in t)
+check('probe distinguishes timeout, down and not ready',
+      all(w in t for w in ('"timeout"', '"down"', '"not_ready"')))
+bt = tempfile.mkdtemp()
+S._boot_log('bridge starting, pid 1, credential ok', folder=bt)
+S._boot_log('bridge stopped, pid 1', folder=bt)
+lg = open(os.path.join(bt, 'send_server.log'), encoding='utf-8').read().splitlines()
+check('bridge writes boot and stop lines to send_server.log',
+      len(lg) == 2 and '[boot] bridge starting' in lg[0] and '[boot] bridge stopped' in lg[1], lg)
+
 print('\nFAILED: %s' % FAILS if FAILS else '\nall passed')
 sys.exit(1 if FAILS else 0)
