@@ -1,85 +1,79 @@
 {
  "alerts": [
   {
-   "at": "2026-10-19T09:31:22-04:00",
-   "key": "bounce-rate",
-   "severity": "fail",
-   "text": "First-touch bounce 11.1% (2 of 18 sent on 2026-10-12): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 11.1% (2 of 18 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
-  },
-  {
-   "at": "2026-10-19T09:31:22-04:00",
+   "at": "2026-10-20T21:15:06-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-18 21:14): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness (checked 10-20 21:15): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-10-19T09:31:22-04:00",
-   "key": "paid-reads-cap",
+   "at": "2026-10-20T21:15:06-04:00",
+   "key": "morning-sends",
    "severity": "fail",
-   "text": "Paid reads $69.96 of $50.00 (140%) this month. The monthly cap is spent."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 30, 30) and 51 leads were eligible, but 0 first-touch emails were sent."
   },
   {
-   "at": "2026-10-19T09:31:22-04:00",
+   "at": "2026-10-20T21:15:06-04:00",
    "key": "tracerfy-credits",
-   "severity": "warn",
-   "text": "Tracerfy balance 46 credits, warn under 1500."
+   "severity": "fail",
+   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-19T09:31:22-04:00",
+ "published_at": "2026-10-20T21:15:06-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 2,
-   "filings": 1762,
-   "holds": 488,
-   "leads_checked": 32,
+   "errors": 0,
+   "filings": 1823,
+   "holds": 518,
+   "leads_checked": 29,
    "provider": "courtlistener",
-   "pull_age_h": 2.03,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 101,
-   "truncated": 1
+   "requests_used": 91,
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
-   "day_blocked": true,
+   "day_blocked": false,
    "day_ceiling": 0.05,
-   "day_date": "2026-10-12",
-   "day_dead": 2,
+   "day_date": "",
+   "day_dead": 0,
    "day_min": 20,
-   "day_rate": 0.1111111111111111,
-   "day_sent": 18,
-   "dead": 2,
+   "day_rate": 0.0,
+   "day_sent": 0,
+   "dead": 0,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
-   "ft_dead": 2,
+   "ft_dead": 0,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.1111111111111111,
+   "ft_rate": 0.0,
    "ft_restart_cap": 10,
-   "ft_rule": "paused",
-   "ft_sent": 18,
-   "ft_why": "hard_bounces",
+   "ft_rule": "slow_restart",
+   "ft_sent": 0,
+   "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.006970221164761907,
-   "mailed": 79,
-   "post_dead": 2,
-   "post_lb": 0.006970221164761907,
-   "post_mailed": 79,
-   "post_rate": 0.02531645569620253,
+   "lb": 0.0,
+   "mailed": 69,
+   "post_dead": 0,
+   "post_lb": 0.0,
+   "post_mailed": 69,
+   "post_rate": 0.0,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.02531645569620253,
+   "rate": 0.0,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 15.91871
+   "usd": 15.192
   },
   "clerk_bk": {
    "readable": false
@@ -95,10 +89,10 @@
     30,
     30
    ],
-   "date": "2026-10-19",
-   "eligible": 53,
+   "date": "2026-10-20",
+   "eligible": 51,
    "judged": true,
-   "paused": true,
+   "paused": false,
    "readable": true,
    "scheduled": true,
    "sent": 0
@@ -108,22 +102,22 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-19",
+   "date": "2026-10-20",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1792408503,
+   "started_at": 1792494903,
    "state": "finished"
   },
   "paid_reads": {
-   "cap": 50.0,
+   "cap": 100000.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 69.9629
+   "spent": 71.5541
   },
   "readiness": {
-   "at": "2026-10-18T21:14:17-04:00",
+   "at": "2026-10-20T21:15:06-04:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
@@ -153,7 +147,7 @@
    "stale": false
   },
   "tracerfy": {
-   "credits": 46
+   "credits": 1
   }
  },
  "version": 1
