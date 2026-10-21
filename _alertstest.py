@@ -253,6 +253,11 @@ rec('bridge refusals are tallied by code', 'placement x2' in why_of(
     ('send_answer', {'status': 451, 'ok': False, 'blocked': 'placement'})))
 rec('leads without an email card are tallied', 'fth x1' in why_of(
     ('task_open', {}), ('worker_loaded', {'queued': 5}), ('autostart_run', {'queued': 5}), ('no_email', {'why': 'fth'})))
+rec('a bridge that was not confirmed names how it failed', 'bridge_not_confirmed_down' in why_of(
+    ('task_open', {}), ('worker_loaded', {'queued': 5}),
+    ('autostart_skipped', {'why': 'bridge_not_confirmed', 'cause': 'down', 'probes': 6})))
+rec('an older not-confirmed row without a cause still reads', 'bridge_not_confirmed' in why_of(
+    ('task_open', {}), ('worker_loaded', {'queued': 5}), ('autostart_skipped', {'why': 'bridge_not_confirmed'})))
 rec('a started run with no refusal says so', 'no refusal was recorded' in why_of(
     ('task_open', {}), ('worker_loaded', {'queued': 7}), ('autostart_run', {'queued': 7})))
 rec('the alert carries the cause and stays clean',

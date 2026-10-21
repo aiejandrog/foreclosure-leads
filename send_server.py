@@ -2966,6 +2966,17 @@ def _reload_log(msg, folder=HERE):
         pass
 
 
+def _boot_log(msg, folder=HERE):
+    """One line per bridge start/stop in send_server.log. The log only ever recorded reloads, so a
+    bridge that launched at 07:45 and was gone by 08:00 (2026-10-21) left nothing to find."""
+    line = '%s  [boot] %s\n' % (dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg)
+    try:
+        with open(os.path.join(folder, 'send_server.log'), 'a', encoding='utf-8') as fh:
+            fh.write(line)
+    except Exception:
+        pass
+
+
 def _reload_blocker(now=None):
     """Why a restart must wait right now, or '' when nothing in memory would be lost."""
     now = time.time() if now is None else now
@@ -3123,6 +3134,7 @@ def main():
     # Idempotent start — see _already_running(). Exit 0, not an error: a duplicate launch means the
     # bridge is up, which is the desired end state.
     if _already_running(args.host, args.port):
+        _boot_log('launch skipped, a healthy bridge already owns %s:%s' % (args.host, args.port))
         print(f'  a healthy bridge already owns {args.host}:{args.port} — leaving it alone.')
         return
 
@@ -3143,10 +3155,16 @@ def main():
 
     if os.environ.get('DEALFLOW_BRIDGE_RESPAWNED') == '1':
         _reload_log('new bridge serving, pid %d' % os.getpid())
+    else:
+        _boot_log('bridge starting, pid %d, credential %s' % (os.getpid(), 'ok' if pw else 'MISSING'))
     boot = {'head': None}
     bad = set()
     while True:
-        srv = _BridgeServer((args.host, args.port), Handler)
+        try:
+            srv = _BridgeServer((args.host, args.port), Handler)
+        except Exception as e:
+            _boot_log('could not bind %s:%s: %s' % (args.host, args.port, str(e)[:120]))
+            raise
         state = {'reload': None}
         if RELOAD_POLL_S > 0:
             threading.Thread(target=_code_watch, args=(srv, state, boot, frozenset(bad)),
@@ -3158,6 +3176,7 @@ def main():
             srv.shutdown()
         new = state.get('reload')
         if not new:
+            _boot_log('bridge stopped, pid %d' % os.getpid())
             break
         while _REQS_ACTIVE > 0:                  # no time limit: never exit in the middle of a send
             time.sleep(0.2)
