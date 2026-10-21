@@ -6940,6 +6940,17 @@ function screenOutcome(){
   }
   wireLang($('app'));
 }
+/* An EARLIER live number not dialled today, or -1. The wrap only reaches numbers he skipped past,
+   never one already rung this session (no answer on 1 and 2 must not loop back to 1). */
+function untriedEarlierPh(r, ix){
+  var p = r.p||[], bad = badSet(r), t = today(), rung = {};
+  (((notes[r.c]||{}).dials)||[]).forEach(function(x){ if(x && x.d === t) rung[String(x.ph4||'')] = 1; });
+  for(var k = 0; k < ix && k < p.length; k++){
+    var dg = String(p[k]).replace(/\D/g,'');
+    if(!bad[dg] && !rung[dg.slice(-4)]) return k;
+  }
+  return -1;
+}
 /* How many of this lead's numbers, other than the one just dialled, are not marked bad. */
 function otherLivePh(r, ix){
   var p = r.p||[], bad = badSet(r), n = 0;
@@ -6952,6 +6963,7 @@ function otherLivePh(r, ix){
    with nothing logged. Each choice calls pick('badnum'|'wrong') exactly once. */
 function wrongChoice(r, d, others, pick){
   var box = document.querySelector('.oc'); if(!box) return pick('wrong');
+  window._tapShieldUntil = Date.now() + 400;      // the swap lands under his finger
   box.innerHTML = '<div class="nc" style="margin-top:9px">Wrong person on <b>' + fmt(d) + '</b>. This lead has <b>'
     + others + ' other number' + (others===1?'':'s') + '</b> on file.</div>'
     + '<button data-wc="badnum">Only this number is wrong &mdash; try their next one</button>'
@@ -7024,7 +7036,7 @@ function afterCall(r, o, nextC){
   var _nextPh = nextLivePh(r, phIdx + 1);
   /* Wrap to an earlier live number when he started mid-list (screenLead lands on the first LIVE
      number, and a resurfaced lead can open on number 3). Never offer the number just dialled. */
-  if(_nextPh < 0){ _nextPh = nextLivePh(r, 0); if(_nextPh === phIdx) _nextPh = -1; }
+  if(_nextPh < 0) _nextPh = untriedEarlierPh(r, phIdx);
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field

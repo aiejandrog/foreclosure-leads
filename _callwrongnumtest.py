@@ -60,21 +60,22 @@ rec('logOutcome wrong still writes wrongown',
     "else if(o.k==='wrong'){ n.wrongown=n.wrongown||today(); n.status=n.status||'Wrong number'; }" in lo)
 rec('logOutcome badnum still writes badph', 'n.badph.push(_bd)' in lo)
 ac = SRC[SRC.find('function afterCall('):SRC.find('function afterCall(') + 2500]
-rec('after-call wraps to an earlier live number, never the one just dialled',
-    'if(_nextPh < 0){ _nextPh = nextLivePh(r, 0); if(_nextPh === phIdx) _nextPh = -1; }' in ac)
+rec('after-call wraps to an earlier number not rung today',
+    'if(_nextPh < 0) _nextPh = untriedEarlierPh(r, phIdx);' in ac)
 rec('badnum lands on the after-call panel (the next-number button lives there)',
     "miss = (o.k==='noanswer'||o.k==='voicemail'||o.k==='badnum'||o.k==='gate')" in ac)
 
 # ---- behaviour under node -------------------------------------------------------------------------
-FNS = ''.join(grab_fn(n) for n in ('badSet', 'nextLivePh', 'otherLivePh', 'wrongChoice'))
+FNS = ''.join(grab_fn(n) for n in ('badSet', 'nextLivePh', 'untriedEarlierPh', 'otherLivePh', 'wrongChoice'))
 HARNESS = FNS + r"""
 var notes = {}, painted = 0, toasts = [];
+function today(){ return '2026-10-21'; }
 function fmt(x){ return String(x); }
 function toast(t){ toasts.push(t); }
 function logErr(){}
 function screenOutcome(){ painted++; }
 function mkBtn(wc){ return {dataset:{wc:wc}, disabled:false, onclick:null}; }
-var BOX = null;
+var BOX = null, window = {};
 var document = {querySelector: function(sel){ return sel === '.oc' ? BOX : null; }};
 function mkBox(){
   var b = {innerHTML:'', _btns:null};
@@ -98,7 +99,12 @@ out.others_single = otherLivePh({c:'S', p:['3055550199']}, 0);
 notes.A = {badph:['(305) 555-0101']};          // formatted mark still matches by digits
 out.others_fmt = otherLivePh(R, 1);
 notes = {};
-out.wrap = (function(){ notes.A = {badph:['3055550103']}; var n = nextLivePh(R, 3); if(n<0){ n = nextLivePh(R, 0); if(n===2) n=-1; } return n; })();
+notes.A = {dials:[{d:'2026-10-21', ph4:'0102', oc:'noanswer'}]};
+out.wrap = untriedEarlierPh(R, 2);                 // opened on 3, 2 rung today -> 1
+notes.A = {dials:[{d:'2026-10-21', ph4:'0101'}, {d:'2026-10-21', ph4:'0102'}]};
+out.wrap_none = untriedEarlierPh(R, 2);            // 1 and 2 both rung today -> no loop back
+notes.A = {dials:[{d:'2026-10-20', ph4:'0101'}], badph:['3055550102']};
+out.wrap_yday = untriedEarlierPh(R, 2);            // rung yesterday counts as untried today
 notes = {};
 
 function run(choice){
@@ -123,7 +129,9 @@ rec('one marked bad: one other', o.get('others_one_bad') == 1, o)
 rec('all others bad: zero, so wrong logs as before', o.get('others_none') == 0, o)
 rec('single-number lead: zero, so wrong logs as before', o.get('others_single') == 0, o)
 rec('bad marks compare by digits', o.get('others_fmt') == 1, o)
-rec('wrap finds an earlier live number', o.get('wrap') == 0, o)
+rec('wrap finds an earlier number not rung today', o.get('wrap') == 0, o)
+rec('wrap never loops back to a number rung today', o.get('wrap_none') == -1, o)
+rec('wrap skips bad, takes a number rung only yesterday', o.get('wrap_yday') == 0, o)
 pt = o.get('pick_this') or {}
 rec('"only this number" picks badnum, once', pt.get('got') == ['badnum'] and pt.get('painted') == 0, pt)
 rec('chooser says how many other numbers', '2 other numbers' in (pt.get('html') or ''), pt.get('html'))
