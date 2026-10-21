@@ -62,6 +62,10 @@ rec('logOutcome badnum still writes badph', 'n.badph.push(_bd)' in lo)
 ac = SRC[SRC.find('function afterCall('):SRC.find('function afterCall(') + 2500]
 rec('after-call wraps to an earlier number not rung today',
     'if(_nextPh < 0) _nextPh = untriedEarlierPh(r, phIdx);' in ac)
+rec('bad number / not the owner put the next number FIRST on the panel',
+    "var _nphTop = (o.k==='badnum'||o.k==='gate') && _nextPh >= 0;" in ac
+    and "+ (_nphTop ? '<button id=\"nph\" class=\"big\"" in SRC
+    and "(miss && _nextPh >= 0 && !_nphTop)" in SRC)
 rec('badnum lands on the after-call panel (the next-number button lives there)',
     "miss = (o.k==='noanswer'||o.k==='voicemail'||o.k==='badnum'||o.k==='gate')" in ac)
 

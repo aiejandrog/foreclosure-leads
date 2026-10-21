@@ -7037,6 +7037,7 @@ function afterCall(r, o, nextC){
   /* Wrap to an earlier live number when he started mid-list (screenLead lands on the first LIVE
      number, and a resurfaced lead can open on number 3). Never offer the number just dialled. */
   if(_nextPh < 0) _nextPh = untriedEarlierPh(r, phIdx);
+  var _nphTop = (o.k==='badnum'||o.k==='gate') && _nextPh >= 0;
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field
@@ -7116,6 +7117,12 @@ function afterCall(r, o, nextC){
     + '<div class="addr" style="font-size:17px">Logged: '+esc(o.t)+'</div>'
     + '<div class="own">'+esc(firstName(r)||r.o||'')+' &middot; '+fmt(num)+'</div>'
     + sessStrip()
+    /* A DEAD OR WRONG LINE PUTS THE NEXT NUMBER FIRST (2026-10-21). Measured on the laptop: of 34
+       bad/wrong-number leads in 14 days, 30 still had a number never dialled (138 numbers), and on
+       0 of them was another number dialled after the bad tap -- the button sat at the bottom,
+       under texts and callbacks that do not apply to a dead line, and "Next lead" won every time. */
+    + (_nphTop ? '<button id="nph" class="big" style="margin-top:12px">&#128222; Call their next number: '
+        + fmt(r.p[_nextPh]) + ' (' + (_nextPh + 1) + ' of ' + r.p.length + ')</button>' : '')
     + book
     + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
     + '<div class="afterlab">Call them back</div>'
@@ -7128,7 +7135,7 @@ function afterCall(r, o, nextC){
        so the text offer above is never skipped past. Only shown when a number is actually left. */
     /* Skips numbers marked bad (here or on the worker card) rather than counting blindly upward —
        offering a dead line as "their next number" is the whole reason badnum exists. */
-    + ((miss && _nextPh >= 0)
+    + ((miss && _nextPh >= 0 && !_nphTop)
         ? '<button id="nph" class="ghost" style="margin-top:14px">&#128222; Try their next number ('
           + (_nextPh + 1) + ' of ' + r.p.length + ')</button>'
         : '')
