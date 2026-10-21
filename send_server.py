@@ -1373,6 +1373,38 @@ def _deliverability_evidence():
             'proven': _proven_deliverable()}
 
 
+def _followup_bounce_hold(addr, verdict='', bounced=None):
+    """'' when a follow-up to addr may rely on bounced_emails.json, else why it is held.
+
+    2026-10-19: follow-ups reached two addresses whose first emails had already hard-bounced. The
+    list is only as fresh as the last bounces.py run, and nothing checked that it had run since the
+    previous email. See bounce_scan.py. An address the owner wrote to us from is live by definition,
+    so a reply is never held here. A check that cannot run holds (fail closed). `bounced` is the
+    list this send's verdict already read, so the check and the verdict see the same file."""
+    if verdict == 'replied':
+        return ''
+    try:
+        import bounce_scan as _BS
+        return _BS.followup_hold(addr, _load_ledger(), HERE, bounced=bounced)
+    except Exception as e:
+        return 'follow-up held: the bounce-scan check could not run (%s)' % type(e).__name__
+
+
+def _bounce_scan_health():
+    """/health: when the last clean bounce scan started, and whether the last run was clean."""
+    try:
+        import bounce_scan as _BS
+        t, why = _BS.last_clean_scan(HERE)
+        st = _load_json_quiet(_BS.STATUS, {})
+        mbs = st.get('mailboxes') if isinstance(st.get('mailboxes'), dict) else {}
+        return {'gate_on': _BS.gate_on(), 'last_clean_utc': t.isoformat() if t else None,
+                'last_run_ok': st.get('ok'), 'mailboxes': len(mbs),
+                'failed_mailboxes': sum(1 for v in mbs.values() if (v or {}).get('last_run_ok') is not True),
+                'why': why}
+    except Exception as e:
+        return {'gate_on': True, 'last_clean_utc': None, 'why': 'unavailable (%s)' % type(e).__name__}
+
+
 def _recipient_verdict(addr, ev):
     """(code, why) for one address. code in GATE_PASS = may be mailed."""
     a = (addr or '').strip().lower()
@@ -1847,6 +1879,9 @@ class Handler(BaseHTTPRequestHandler):
                 # Counts only, never an address.
                 'first_touch_held_unverified': _ft.get('held_unverified'),
                 'first_touch_gate': _ft,
+                # Follow-ups wait for a clean bounces.py scan after the last email (bounce_scan.py).
+                # A scan that keeps failing holds every follow-up, so the time shows here.
+                'bounce_scan': _bounce_scan_health(),
                 # which warm-up addresses first touches rotate across, and today's use vs caps
                 # (senders.json first_touch). The main domain rests from first touches.
                 'first_touch_from': {'active': bool(_first_touch_senders(_load_senders()))
@@ -2448,6 +2483,21 @@ class Handler(BaseHTTPRequestHandler):
             # first touch = this address has never been mailed. An owner who wrote to us from an
             # address we never mailed is a conversation, not a first touch.
             _first_touch = _pick not in _ev['last_mailed'] and _gate['verdict'] != 'replied'
+            # FOLLOW-UP vs A STALE BOUNCE LIST (2026-10-19). The verdict above read
+            # bounced_emails.json; this asks whether that list has been refreshed since the last
+            # email to this address. First touches are not touched here (the pause is separate).
+            if not _first_touch:
+                _fbh = _followup_bounce_hold(_pick, _gate['verdict'], _ev['bounced'])
+                if _fbh:
+                    _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                                  'd': dt.date.today().isoformat(), 'gate': 'bounce_scan',
+                                  'code': 'bounce_scan_stale',
+                                  'case': str((meta or {}).get('c') or '')[:40],
+                                  'wl': str((meta or {}).get('wl') or '')})
+                    self.log_message('SEND HELD [bounce_scan] case=%s — %s',
+                                     str((meta or {}).get('c') or '-')[:40], _fbh)
+                    return self._json(451, {'ok': False, 'skip': True, 'hold': 'bounce_scan',
+                                            'blocked': 'bounce_scan_stale', 'err': _fbh})
 
         # ---- daily cap ----
         rcpt = _recipients_today()

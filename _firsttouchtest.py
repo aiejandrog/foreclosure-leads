@@ -19,6 +19,7 @@ The bounces were not harvested until 09-24, five days later. So:
 import datetime as dt
 import importlib.util
 import json
+import os
 import pathlib
 import shutil
 import socket
@@ -33,6 +34,9 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 HERE = pathlib.Path(__file__).resolve().parent
 ok, bad = [], []
 TODAY = dt.date.today()
+# The follow-up bounce-scan hold is _bouncefollowuptest.py's subject, not this suite's. Off here
+# (inherited by the bridge subprocesses) so these follow-ups test only what they name.
+os.environ['DEALFLOW_BOUNCE_SCAN_GATE'] = '0'
 
 
 def rec(n, cond, d=''):
@@ -84,7 +88,8 @@ OPTOUTS = {'_dealflow_notes': True, 'notes': {'2099-000023-CA-01': {'status': 'D
 
 
 def seed(d):
-    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+    for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py',
+              'bounce_scan.py'):
         shutil.copy(HERE / f, d / f)
     w = lambda n, v: (d / n).write_text(json.dumps(v), encoding='utf-8')
     w('sync_status.json', {'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
