@@ -223,15 +223,16 @@ def main():
 
     t_start = time.time()
     opened = []                             # (open_time, case, form, street, unit, url, city)
-    for r in pick:
+    for n, r in enumerate(pick, 1):
         addr = WL._lead_addr(r)
         street, city, _ = WL._split_addr(addr)
         forms, unit = candidates(street, city, addr)
         for form, url in forms.items():
-            opened.append((time.time(), WL._lead_key(r), form, street, unit, url, city))
+            opened.append((time.time(), (n, WL._lead_key(r)), form, street, unit, url, city))
             webbrowser.open(url)
             time.sleep(a.gap)
-        print('  ...%s: %d link(s) opened' % (WL._lead_key(r)[-4:], len(forms)), flush=True)
+        # lead number, not case tail: every Miami case ends "-CA-01"
+        print('  lead #%d: %d link(s) opened' % (n, len(forms)), flush=True)
     print('waiting %ds for the browser to write its history...' % a.settle, flush=True)
     time.sleep(a.settle)
     visits = _visits_since(t_start - 2)
@@ -245,7 +246,7 @@ def main():
         kind = 'condo' if unit else 'house'
         table.setdefault((kind, form), {}).setdefault(verdict, 0)
         table[(kind, form)][verdict] += 1
-        detail.append({'case': case, 'kind': kind, 'form': form, 'opened': url, 'landed': final[1],
+        detail.append({'lead': case[0], 'case': case[1], 'kind': kind, 'form': form, 'opened': url, 'landed': final[1],
                        'title': final[2], 'verdict': verdict, 'visits': len(mine)})
 
     cols = ['unit', 'building', 'house', 'other', 'blocked', 'none']
@@ -256,9 +257,9 @@ def main():
     letter = {'unit': 'u', 'building': 'b', 'house': 'h', 'other': 'o', 'blocked': 'x', 'none': '-'}
     by = {}
     for d in detail:
-        by.setdefault(d['case'], []).append('%s:%s' % (d['form'].split()[0], letter[d['verdict']]))
-    for case, v in by.items():
-        print('  ...%s  %s' % (case[-4:], '  '.join(v)))
+        by.setdefault(d['lead'], []).append('%s:%s' % (d['form'].split()[0], letter[d['verdict']]))
+    for n, v in by.items():
+        print('  #%-3d %s' % (n, '  '.join(v)))
     try:
         import paths as P
         dest = P.out('wp_linkprobe.json')
