@@ -250,7 +250,13 @@ def _run(todo, save_text=None, save_html=None, refresh=False):
                 print('  ...%s: %d owner(s), %d resident(s), %d phone(s)' % (case[-4:], ow, res, ph), flush=True)
                 scraped += 1
             else:
-                print('  ...%s: no owners/residents parsed' % case[-4:], flush=True)
+                why = ''
+                low = (text or '').lower()
+                if text and re.search(r'\b(log in|sign in)\b', low) and not re.search(r'sign out|log out|my account', low):
+                    why = ' (page looks SIGNED OUT: run --login again and finish signing in)'
+                elif text and re.search(r'verify you are human|captcha|unusual traffic|access denied', low):
+                    why = ' (page shows a bot check: solve it in the window, or wait and retry)'
+                print('  ...%s: no owners/residents parsed%s' % (case[-4:], why), flush=True)
                 miss += 1
             _save_cache(cache)
             if idx < len(todo) - 1:
