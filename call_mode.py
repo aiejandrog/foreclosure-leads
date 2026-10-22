@@ -1952,10 +1952,14 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # household, then name-only matches, so after the first dial a household member could come
         # up ahead of a Whitepages owner mobile and a trace landline ahead of both. phrank already
         # says which is which (phone_rank scores hh/nm below the owner's own numbers); this only
-        # reads it. Stable, so numbers with the same label keep their order.
+        # reads it. WHOSE NUMBER comes before the label: a household mobile can score 'ok' while
+        # the owner's own VOIP landline scores 'last resort', and the owner still comes first
+        # (same rule as phone_rank.rank's role order). Stable, so equal numbers keep their order.
         _tier = {'C': 0, 'O': 1, 'L': 2, 'N': 3}
-        order.sort(key=lambda k: _tier.get(
-            (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1))
+        _role = {'hh': 1, 'nm': 2}
+        order.sort(key=lambda k: (
+            _role.get(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
+            _tier.get((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1)))
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
             order = [bk] + [k for k in order if k != bk]

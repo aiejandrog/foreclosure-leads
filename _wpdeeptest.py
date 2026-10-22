@@ -123,6 +123,18 @@ else:
         p.index('3055550204') < p.index('3055550202'), p)
     chk('call: same label keeps merge order (trace before household)',
         p.index('3055550202') < p.index('3055550203'), p)
+lead2 = dict(lead, case='2099-000778-CA-01', pkey='C2099-000778-CA-01',
+             phones=['3055550301', '3055550302', '3055550303'],
+             phtype=['landline', 'mobile', 'landline'], phsrc=['st', 'hh', 'st'],
+             phrank=['ok', 'ok', 'last resort'])
+rows2, _n2 = CM.call_rows([lead2], max_days=60)
+if rows2:
+    p2 = rows2[0]['p']
+    chk("call: the owner's 'last resort' still comes before a household member's 'ok'",
+        p2.index('3055550303') < p2.index('3055550302'), p2)
+else:
+    chk('call_rows ships the second fixture lead', False, 'no rows')
+if rows:
     chk("call: 'ps' stays aligned with 'p'", rows[0].get('ps') is None or
         rows[0]['ps'][p.index('3055550203')] == 'hh', rows[0].get('ps'))
 
