@@ -239,7 +239,44 @@ def addr_why(text, street):
     lines = [l.strip() for l in str(text or '').split('\n')
              if re.search(r'(^|\D)%s(\D|$)' % re.escape(house), l) and len(l) < 160]
     why = 'house number never on the page' if not lines else 'house number found; street word or unit differs'
-    return why, _shape(street), sorted(set(_shape(l) for l in lines))[:4]
+    # What the page says it IS: its own title lines, masked the same way.
+    heads = [l.strip() for l in str(text or '').split('\n')
+             if re.search(r'Property Details for|Looking for who (owns|lives at)|FAQs about|Who lives at', l, re.I)
+             and len(l) < 200]
+    # The address the page is about: its title, else its first short "<number> <words>" line.
+    addr_lines = [l.strip() for l in str(text or '').split('\n')
+                  if re.match(r'^\s*\d{1,6}\s+[A-Za-z]', l) and len(l.strip()) < 70
+                  and not re.search(r'\b(bed|bath|sq|built|sold|acre|results?|properties)\b', l, re.I)]
+    page_addr = heads[0] if heads else (addr_lines[0] if addr_lines else '')
+    return why, _shape(street), sorted(set(_shape(l) for l in lines))[:4] + \
+        ['(title) ' + _shape(h) for h in heads[:3]] + \
+        (['(page is about) ' + _shape(page_addr), '(vs lead) ' + _part_diff(street, page_addr)]
+         if page_addr else ['(page names no address)'])
+
+
+def _part_diff(street, line):
+    """Which part of the lead address the page's title line differs in: house / street / unit.
+    Says same / DIFFERENT / missing per part, no values, so it can be pasted."""
+    def toks(t):
+        t = re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
+        return re.sub(r'[^a-z0-9]', ' ', t).split()
+    def unit(t):
+        u = _UNIT_RE.search(t or '')
+        return re.sub(r'[^a-z0-9]', '', u.group(1).lower()) if u else ''     # 3-B == 3B == 3 B
+    lt = toks(_UNIT_RE.sub(' ', street or ''))
+    lunit, punit = unit(street), unit(line)
+    pt = toks(_UNIT_RE.sub(' ', line or ''))       # a unit number is not the house or the street
+    # The page's house number is the first number on its address, not any number on the line.
+    phouse = next((t for t in pt if t.isdigit()), '')
+    house = 'same' if lt and lt[0] == phouse else 'DIFFERENT'
+    name = next((t for t in lt[1:] if t not in _DIRS and t not in _DIR_WORDS), '')
+    st = 'same' if name and name in pt else 'DIFFERENT'
+    unit = ('same' if lunit == punit else 'DIFFERENT') if (lunit or punit) else 'none'
+    if lunit and not punit:
+        unit = 'lead has a unit, page has none'
+    elif punit and not lunit:
+        unit = 'page has a unit, lead has none'
+    return 'house %s, street %s, unit %s' % (house, st, unit)
 
 
 def _lead_street(lead):
@@ -584,6 +621,8 @@ def assist(todo, refresh=False, wait_s=None):
             same = page_matches_address(text, parts[0]) and not _CITY_LIST_RE.search(text)
             if same and _PAGE_MARK.search(text):
                 _keep_page(case, text)      # only this lead's own Whitepages page replaces its copy
+            elif _PAGE_MARK.search(text):
+                _keep_page(case, text, rejected=True)   # kept apart, for --addr-check only
             people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
                 why = _why_empty(text) if same or not _PAGE_MARK.search(text) or _CITY_LIST_RE.search(text) \
@@ -620,11 +659,19 @@ def _pages_dir():
     return d
 
 
-def _keep_page(case, text):
+def _keep_page(case, text, rejected=False):
     """Every copied page is kept under DEALFLOW_DIR/wpweb_pages so a parse can be re-run or
     calibrated later without opening the site again. Homeowner data: never the repo."""
     try:
-        open(os.path.join(_pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt'), 'w',
+        d = _pages_dir()
+        if rejected:                # a page that was NOT this lead's house: never read as its data
+            d = os.path.join(d, 'rejected')
+            os.makedirs(d, exist_ok=True)
+        else:                       # the lead's own page is in: its old wrong-property copy is moot
+            stale = os.path.join(d, 'rejected', re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt')
+            if os.path.exists(stale):
+                os.remove(stale)
+        open(os.path.join(d, re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt'), 'w',
              encoding='utf-8').write(text)
     except Exception:
         pass
@@ -827,6 +874,12 @@ def _select(args):
                 continue
             out.append(by[c])
         return out
+    if getattr(args, 'retry_misses', False):
+        # Only the leads that came up "not this house" / city list: to see why (--addr-check after).
+        att = _attempts()
+        pool = [r for r in _WL.pick_callable(leads, cache, 100000, skip)
+                if att.get(_WL._lead_key(r)) and not _WL._cache_looked(cache.get(_WL._lead_key(r)))]
+        return pool[:MAX_LEADS]
     if getattr(args, 'compare', 0):
         # MEASUREMENT BATCH: leads that already carry skip-trace numbers, so each scraped lead can be
         # lined up against what the board has. Same eligibility gates as pick_callable; soonest sale
@@ -856,6 +909,8 @@ def main(argv=None):
                     help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
     ap.add_argument('--structure', metavar='CASE_OR_FILE',
                     help='print a copied page\'s owners/residents layout with names/numbers masked (safe to paste)')
+    ap.add_argument('--retry-misses', action='store_true',
+                    help='with --assist: reopen only the leads that came up "not this house"')
     ap.add_argument('--addr-check', action='store_true',
                     help='for every kept page, say why its address did or did not match (masked shapes)')
     ap.add_argument('--reparse', action='store_true',
@@ -871,17 +926,21 @@ def main(argv=None):
         return reparse()
     if a.addr_check:
         leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
-        d = _pages_dir()
-        for f in sorted(x for x in os.listdir(d) if x.endswith('.txt')):
-            lead = leads.get(f[:-4])
-            if lead is None:
-                print('...%s: lead not in the lead files' % f[-8:-4])
+        for d, tag in ((_pages_dir(), ''), (os.path.join(_pages_dir(), 'rejected'), ' [rejected copy]')):
+            if not os.path.isdir(d):
                 continue
-            why, ls, ps = addr_why(open(os.path.join(d, f), encoding='utf-8', errors='replace').read(),
-                                   _lead_street(lead))
-            print('...%s: %s | lead: %s' % (f[-8:-4], why, ls))
-            for p in ps:
-                print('        page: %s' % p)
+            for f in sorted(x for x in os.listdir(d) if x.endswith('.txt')):
+                lead = leads.get(f[:-4])
+                if lead is None:
+                    print('...%s:%s lead not in the lead files' % (f[-8:-4], tag))
+                    continue
+                why, ls, ps = addr_why(open(os.path.join(d, f), encoding='utf-8', errors='replace').read(),
+                                       _lead_street(lead))
+                if tag and why == 'match':
+                    continue
+                print('...%s:%s %s | lead: %s' % (f[-8:-4], tag, why, ls))
+                for p in ps:
+                    print('        page: %s' % p)
         return 0
     if a.structure == 'clip':
         # Wait for the NEXT copy of a Whitepages page: whatever is on the clipboard now (often the
@@ -912,6 +971,10 @@ def main(argv=None):
             print('--from-file needs exactly one --case')
             return 2
         return ingest_file(a.case[0], a.from_file, refresh=a.refresh)
+    if a.retry_misses and not (a.assist or a.plan):
+        # These are the leads the two-misses rule stopped offering: never hand them to the automated run.
+        print('--retry-misses needs --assist (or --plan)')
+        return 2
     todo = _select(a)
     if a.assist and not a.plan:
         print('%d lead(s) selected for hand-assisted copy' % len(todo))
