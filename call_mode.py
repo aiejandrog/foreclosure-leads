@@ -1799,8 +1799,8 @@ def _wp_phone_kinds(d):
     household, but Whitepages often files the deed owner under "Resident" (CACE-25-019745, 10-22:
     the defendant was listed as a resident, a relative as "Owner"). A resident entry whose name
     clears the same owner bar the bake uses for parcel owners (wp_contacts.grade_property_owner)
-    reads 'o' here. The bake's own tag (phsrc 'hh') is not changed: call_rows keeps those numbers
-    in the household role, because that tag also decides who may be texted."""
+    reads 'o' here. The bake's own tag (phsrc 'hh') is not changed: it still decides who may be
+    texted. Call-only ranking may use the independently matched identity."""
     allp = d.get('wpAllPhones')
     if not isinstance(allp, list) or not allp:
         return None
@@ -1826,6 +1826,20 @@ def _wp_phone_kinds(d):
         if n not in out or rank[kind] < rank[out[n]]:
             out[n] = kind
     return out
+
+
+def _wp_resident_owner_numbers(d):
+    """Accepted property residents whose full name clears the existing deed-owner bar.
+
+    Call-only evidence. Never rewrites phsrc or grants messaging/contact eligibility.
+    A bare property phone or a shared surname is not enough to override a household label.
+    """
+    import wp_contacts
+    owner = d.get('owners') or d.get('oname') or ''
+    return {_ph10(e.get('n') or '') for e in (d.get('wpAllPhones') or [])
+            if isinstance(e, dict) and e.get('resident') and e.get('source', 'property') == 'property'
+            and owner and e.get('owner')
+            and wp_contacts.grade_property_owner(owner, e['owner']) == 'wp'}
 
 
 def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
@@ -2019,11 +2033,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # the owner-name bar) can. 'o' = Whitepages lists it as the owner's, 'h' = as someone else
         # at the address, 'n' = on a name-only match, '-' = not on the Whitepages record.
         _wpk = _wp_phone_kinds(d)
+        _resident_owner = _wp_resident_owner_numbers(d) if _wpk is not None else set()
         _pw = [_wpk.get(keep[k], '-') if _wpk is not None else '' for k in range(len(keep))]
         for k in range(len(keep)):
-            # the bake's household / name-only tag wins on the card: one story per number
+            # A household tag cannot erase an independently matched deed-owner identity. Keep
+            # the source tag itself intact: it remains conservative for messaging permissions.
             _sk = phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else ''
-            if _sk in ('hh', 'nm') and _pw[k] == 'o':
+            if _pw[k] == 'o' and (_sk == 'nm' or (_sk == 'hh' and keep[k] not in _resident_owner)):
                 _pw[k] = 'h' if _sk == 'hh' else 'n'
 
         _pht = d.get('phtype') or []
@@ -2035,11 +2051,22 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             # rates a landline with a carrier on file 'ok', so the rank alone does not catch it.
             return (_pw[k] == 'o'
                     and 'land' not in str((_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '') or '').lower()
-                    and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
-                    and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
-                    not in ('L', 'N'))
+                    and ((phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
+                         or keep[k] in _resident_owner)
+                    and ((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
+                         not in ('L', 'N')
+                         # The bake ranks household phones without carrier data: its -30 household
+                         # penalty alone labels an otherwise usable mobile "last resort". An
+                         # independent owner-name match supersedes that role inference for calls.
+                         # Unknown types/landlines do not get this exception; eligibility still
+                         # removed DNC, agent, shared-office and dead lines before this point.
+                         or (keep[k] in _resident_owner and _pw[k] == 'o'
+                             and 'mob' in str(_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '').lower()
+                             and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') == 'hh'
+                             and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') == 'L')))
         order.sort(key=lambda k: (
-            _role.get(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
+            0 if keep[k] in _resident_owner else _role.get(
+                phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
             0 if _wp_first(k) else 1,
             _tier.get((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1)))
         if isinstance(best, int) and best in keep_oi:
@@ -3722,6 +3749,7 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    which is the overwhelming majority and the case that needs no words at all. */
 function _phSrcNote(r, i){
   var s = (r.ps||[])[i] || '';
+  if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
   if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
   if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
   return '';
@@ -3773,7 +3801,7 @@ function _numList(r){
       + '<b style="'+(isBad?'text-decoration:line-through':'')+'">'+(k+1)+'. '+fmt(dg)+'</b>'
       + (on ? '<span class="chip hot">on the button</span>' : '')
       + _wpChip(r, k)
-      + (s==='hh' ? '<span class="chip bad">not the owner &middot; household</span>' : '')
+      + (s==='hh' && String(r.pw||'').charAt(k)!=='o' ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
