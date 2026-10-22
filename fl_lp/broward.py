@@ -98,7 +98,9 @@ def sweep(days=30):
             j = json.loads(grid)
         except Exception:
             print('BROWARD: grid parse failed on page %d' % page, file=sys.stderr)
-            return out if out else None
+            # A partial grid must not be reported as a completed county sweep.
+            # The caller retains prior rows and records None as a failed refresh.
+            return None
         rows = j.get('data') or []
         for r in rows:
             plaintiff = (r.get('DirectName') or '').strip()
