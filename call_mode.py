@@ -1945,7 +1945,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
                 # is a legal decision, not a display one. Agent / shared-office numbers stay fully
                 # off this page (they belong on the board). Read-only: this reads the DNC verdict
                 # produced elsewhere, it does not produce one.
-                _dn10 = _digits(p)
+                _dn10 = _ph10(p)
                 if len(_dn10) == 10 and _psrc not in ('ag', 'xl'):
                     dnc_show.append({'n': _dn10, 's': _psrc,
                                      't': (phtype[oi] if oi < len(phtype) else '')})
@@ -3782,7 +3782,7 @@ function _numList(r){
   return h + _dncRows(r) + '</div>';
 }
 function _wireNumList(){
-  var b = document.querySelectorAll('#app .numrow');
+  var b = document.querySelectorAll('#app button.numrow');
   for(var j=0;j<b.length;j++){ b[j].onclick = function(){
     if(this.disabled) return;
     var k = +this.getAttribute('data-k');

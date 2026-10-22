@@ -241,5 +241,56 @@ rec('structure masks names, numbers and emails', 'Romero' not in st and '200-100
     and 'example.com' not in st and 'NAME(3)' in st and '(999) 999-9999' in st and 'Owner' in st, st[:300])
 rec('assist keeps each copied page outside the repo', os.path.exists(os.path.join(td, 'wpweb_pages', 'E-0.txt')))
 
+print('\nREVIEW FIXES (10-22): trailing numbers, other addresses, accents, overwrite, reparse')
+TAIL = PAGE + "\nAssessor's Parcel Number (APN) 3040210010010\nNeed help? Call 1-844-555-0199\n(800) 555-0100\n"
+tp2 = {p['name']: [x['number'] for x in p['phones']] for p in W.parse_people_text(TAIL)}
+rec('a parcel number / help line after the last person is not their phone',
+    tp2.get('Tomas Nunez') == ['9542003003'], tp2.get('Tomas Nunez'))
+ACC = ('Owners & Residents\nJohn Smith\nOwner\nJosé García Muñoz\n, age 40\nResident\n'
+       'Cell Phone\n(305) 200-4004\n')
+pa = {p['name']: [x['number'] for x in p['phones']] for p in W.parse_people_text(ACC)}
+rec('an accented name is parsed as its own person', pa == {'José García Muñoz': ['3052004004']}, pa)
+rec('and masked by --structure', 'José' not in W.structure(ACC) and 'Muñoz' not in W.structure(ACC), W.structure(ACC))
+rec('page for the lead address matches', W.page_matches_address(PAGE, '1723 CANAL DR'))
+rec('9 CT on the lead matches 9th Ct on the page', W.page_matches_address('Home\n1 NW 9th Ct Apt 2\n', '1 NW 9 CT #2'))
+rec('page for another house is refused', not W.page_matches_address(PAGE, '1725 CANAL DR'))
+rec('page for another street is refused', not W.page_matches_address(PAGE, '1723 PALM DR'))
+rec('a condo needs its own unit', W.page_matches_address(EMPTY, '1 NW 1ST CT APT 2')
+    and not W.page_matches_address(EMPTY, '1 NW 1ST CT APT 3'))
+# assist: a copied page for a different address is skipped, not cached as this lead
+W.time = _Clock()
+OTHER = PAGE.replace('1723 Canal Dr', '1725 Canal Dr')
+seq[:] = ['old', OTHER, OTHER]
+WL.CACHE = os.path.join(td, 'wp3.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'F-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+rec('assist refuses a page for a different address', W.assist(list(leads), wait_s=5) == 0
+    and not os.path.exists(WL.CACHE) or 'F-0' not in _j.load(open(WL.CACHE, encoding='utf-8')))
+# --from-file never replaces an existing lookup without --refresh
+WL.CACHE = os.path.join(td, 'wp4.json')
+W.CACHE = WL.CACHE
+_j.dump({'F-0': {'result': {'apn': 'API'}, '_http': 200, '_ts': 1}}, open(WL.CACHE, 'w'))
+open(os.path.join(td, 'p.txt'), 'w', encoding='utf-8').write(PAGE)
+rec('--from-file keeps an API entry', W.ingest_file('F-0', os.path.join(td, 'p.txt')) == 1
+    and _j.load(open(WL.CACHE))['F-0']['result']['apn'] == 'API')
+# --reparse rebuilds kept pages and drops what fails; API entries untouched
+leads[:] = [{'case': c, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}
+            for c in ('G-0', 'G-1', 'G-2')]
+W._keep_page('G-0', TAIL)
+W._keep_page('G-1', OTHER)
+_j.dump({'G-0': {'result': {}, '_src': 'wpweb-hand', '_http': 200, '_ts': 5},
+         'G-1': {'result': {}, '_src': 'wpweb-hand', '_http': 200, '_ts': 5},
+         'G-2': {'result': {}, '_src': 'wpweb-hand', '_http': 200, '_ts': 5},
+         'API-1': {'result': {'apn': 'x'}, '_http': 200, '_ts': 1}}, open(WL.CACHE, 'w'))
+W.reparse()
+c5 = _j.load(open(WL.CACHE, encoding='utf-8'))
+g0 = c5.get('G-0', {}).get('result', {})
+nums = [x['number'] for p in (g0.get('residents') or []) + ((g0.get('ownership_info') or {}).get('person_owners') or [])
+        for x in p['phones']]
+rec('reparse rebuilds a kept page with the fixed parser', '8445550199' not in nums and '3040210010' not in nums
+    and '9542003003' in nums and c5['G-0']['_ts'] == 5, nums)
+rec('reparse drops a wrong-address page and one with no kept copy', 'G-1' not in c5 and 'G-2' not in c5, list(c5))
+rec('reparse never touches an API entry', c5.get('API-1', {}).get('result') == {'apn': 'x'})
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

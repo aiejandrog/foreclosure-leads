@@ -35,6 +35,7 @@ that already carries a real lookup is skipped unless --refresh.
     python wp_web.py --compare 25                    # leads that already have skip-trace numbers
     python wp_web.py --case CACE-25-019745          # one named lead
     python wp_web.py --case C --from-file page.txt   # no browser: a page you copied by hand
+    python wp_web.py --reparse                       # re-read every kept page with the current parser
     python wp_web.py --compare 25 --assist           # NO automation: opens each page in YOUR browser,
                                                      # you Ctrl+A / Ctrl+C on it, it caches and moves on
     python wp_web.py --case C --save-text out.txt    # capture the visible text for calibration
@@ -67,10 +68,14 @@ CHANNEL = os.environ.get('WP_WEB_CHANNEL', 'chrome').strip() or None
 _BLOCK_RE = re.compile(r'temporarily restricted|access (is )?denied|unusual traffic|verify you are human|captcha', re.I)
 
 _LABELS = {'cell phone': 'mobile', 'mobile': 'mobile', 'landline': 'landline',
-           'phone': '', 'email address': 'email', 'email': 'email'}
+           'phone': 'phone', 'email address': 'email', 'email': 'email'}
 _ROLE = {'owner': 'owner', 'resident': 'resident', 'owners & residents': None}
-_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z .''\-]+$")
+# Letters in any script (José, Muñoz), so an accented name is parsed AND masked by --structure.
+_NAME_RE = re.compile(r"^[^\W\d_](?:[^\W\d_]|[ .'\u2019\-])+$")
 _PHONE_RE = re.compile(r'\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}')
+# A phone VALUE line is the number and nothing else. A parcel number or a help-line sentence after
+# the last person must never become that person's phone.
+_PHONE_LINE_RE = re.compile(r'^(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}$')
 _EMAIL_RE = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
 
 
@@ -133,13 +138,13 @@ def parse_people_text(text):
                     seen.add(m.group(0).lower())
                     emails.append(m.group(0))
                 continue
-            m = _PHONE_RE.search(l)
-            if m:
-                d = _digits(m.group(0))
+            # Only directly under a phone label, and only a line that is just a number.
+            if label in ('mobile', 'landline', 'phone') and _PHONE_LINE_RE.match(l):
+                d = _digits(l)
                 if len(d) == 10 and d not in seen:
                     seen.add(d)
                     phones.append({'number': d, 'type': label if label in ('mobile', 'landline') else ''})
-                label = ''
+            label = ''
         people.append({'name': name, 'role': lines[ri].lower(), 'age': age,
                        'phones': phones, 'emails': emails})
     # keep only people who have a name AND at least one contact point
@@ -153,6 +158,41 @@ def page_apn(text):
     """The parcel number the address page prints ("... Assessor's Parcel Number (APN) 74-43-...")."""
     m = _APN_RE.search(text or '')
     return m.group(1).strip() if m else ''
+
+
+_DIRS = {'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw', 'north', 'south', 'east', 'west'}
+_UNIT_RE = re.compile(r'\b(?:apt|unit|ste|suite|#)\s*#?\s*([0-9A-Za-z\-]+)', re.I)
+
+
+def page_matches_address(text, street):
+    """True when the copied page is about the lead's own street address: one line carries the
+    house number, the first street-name word and, for a unit, the unit number. A page for another
+    house (a wrong URL hit, or a late copy of the previous lead's page) is refused, so its people
+    are never cached as this lead's household."""
+    def norm(t):            # "9th" and "9" are the same street; case never matters
+        return re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
+    toks = norm(re.sub(r'[^A-Za-z0-9# ]', ' ', str(street or ''))).split()
+    if not toks or not toks[0].isdigit():
+        return False
+    house = toks[0]
+    name = next((t for t in toks[1:] if t.lower() not in _DIRS), '')
+    m = _UNIT_RE.search(street or '')
+    unit = m.group(1).lower() if m else ''
+    for l in str(text or '').split('\n'):
+        low = ' ' + norm(re.sub(r'[^a-z0-9#]', ' ', l.lower())) + ' '
+        if (' %s ' % house.lower()) not in low:
+            continue
+        if name and (' %s ' % name.lower()) not in low:
+            continue
+        if unit and (' %s ' % unit) not in low:
+            continue
+        return True
+    return False
+
+
+def _lead_street(lead):
+    parts = _WL._split_addr(_WL._lead_addr(lead))
+    return parts[0] if parts else ''
 
 
 def to_cache_entry(people, address, page_text=''):
@@ -216,7 +256,7 @@ def _scrape_one(page, lead):
     except Exception:
         pass
     text = page.inner_text('body')
-    people = parse_people_text(text)
+    people = parse_people_text(text) if page_matches_address(text, street) else []
     addr = WL._lead_addr(lead)
     return (to_cache_entry(people, addr, page_text=text) if people else None), text
 
@@ -409,9 +449,11 @@ def assist(todo, refresh=False, wait_s=None):
                 skipped += 1
                 continue
             _keep_page(case, text)
-            people = parse_people_text(text) if _PAGE_MARK.search(text) else []
+            same = page_matches_address(text, parts[0])
+            people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
-                why = _why_empty(text)
+                why = _why_empty(text) if same or not _PAGE_MARK.search(text) else \
+                    'the copied page is for a different address'
                 reasons[why] = reasons.get(why, 0) + 1
                 print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
                 skipped += 1
@@ -479,7 +521,7 @@ def _parcel(entry, lead):
     return C.wp_parcel_verdict(apn, _WL._lead_folio(lead)) if apn else 'no APN on page'
 
 
-def ingest_file(case, path):
+def ingest_file(case, path, refresh=False):
     """No browser at all: parse the visible text of an address page that Alejandro copied from his
     own browser (Ctrl+A, Ctrl+C, saved to a text file) and cache it for `case`. The fallback when the
     site blocks the automated session, and the way to calibrate the parser on a real page."""
@@ -491,14 +533,21 @@ def ingest_file(case, path):
     if why:
         print('...%s: %s, not caching' % (case[-4:], why))
         return 1
+    cache = _load_cache()
+    if not refresh and _WL._cache_looked(cache.get(case)):
+        print('...%s: already looked up, not replacing it (use --refresh)' % case[-4:])
+        return 1
     text = open(path, encoding='utf-8', errors='replace').read()
+    if not page_matches_address(text, _lead_street(leads[case])):
+        print('...%s: that page is for a different address, not caching' % case[-4:])
+        return 1
     people = parse_people_text(text)
     if not people:
         print('...%s: no owners/residents parsed from %s' % (case[-4:], path))
         return 1
+    _keep_page(case, text)
     entry = to_cache_entry(people, _WL._lead_addr(leads[case]), page_text=text)
     entry['_src'] = 'wpweb-file'
-    cache = _load_cache()
     old = cache.get(case) or {}
     for k in ('_person', '_prop_id'):
         if old.get(k) is not None:
@@ -507,6 +556,54 @@ def ingest_file(case, path):
     _save_cache(cache)
     ow, res, ph = _counts(entry)
     print('...%s: %d owner(s), %d resident(s), %d phone(s) cached' % (case[-4:], ow, res, ph))
+    return 0
+
+
+def reparse():
+    """Re-read every page this tool cached (entries marked _src wpweb*) from the copies kept in
+    DEALFLOW_DIR/wpweb_pages with the CURRENT parser and address check. An entry whose page fails
+    the check, parses to nobody, or has no kept copy is removed (the lead reads "not looked up"
+    again). Pro API entries are never touched. Counts only."""
+    leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
+    cache = _load_cache()
+    kept = rebuilt = dropped = 0
+    why = {}
+    for case in [c for c, e in cache.items() if str((e or {}).get('_src', '')).startswith('wpweb')]:
+        old = cache[case]
+        f = os.path.join(_pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt')
+        lead = leads.get(case)
+        reason = ''
+        if not os.path.exists(f):
+            reason = 'no kept copy of the page'
+        elif lead is None:
+            reason = 'lead no longer on the board'
+        else:
+            text = open(f, encoding='utf-8', errors='replace').read()
+            if not page_matches_address(text, _lead_street(lead)):
+                reason = 'page is for a different address'
+            else:
+                people = parse_people_text(text)
+                if not people:
+                    reason = 'no person with a phone or email'
+                else:
+                    entry = to_cache_entry(people, _WL._lead_addr(lead), page_text=text)
+                    entry['_src'] = old.get('_src')
+                    for k in ('_person', '_prop_id', '_ts'):
+                        if old.get(k) is not None:
+                            entry[k] = old[k]
+                    if _counts(entry) == _counts(old) and entry['result'] == old.get('result'):
+                        kept += 1
+                    else:
+                        rebuilt += 1
+                    cache[case] = entry
+                    continue
+        del cache[case]
+        dropped += 1
+        why[reason] = why.get(reason, 0) + 1
+    _save_cache(cache)
+    print('re-read %d page(s): %d unchanged, %d rebuilt, %d removed' % (kept + rebuilt + dropped, kept, rebuilt, dropped))
+    for k, v in sorted(why.items(), key=lambda x: -x[1]):
+        print('  removed, %s: %d' % (k, v))
     return 0
 
 
@@ -553,6 +650,8 @@ def main(argv=None):
                     help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
     ap.add_argument('--structure', metavar='CASE_OR_FILE',
                     help='print a copied page\'s owners/residents layout with names/numbers masked (safe to paste)')
+    ap.add_argument('--reparse', action='store_true',
+                    help='re-read every page this tool cached with the current parser; no browser')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
     ap.add_argument('--save-html', metavar='FILE', help='write one lead\'s page HTML (calibration)')
     a = ap.parse_args(argv)
@@ -560,6 +659,8 @@ def main(argv=None):
     if a.login:
         _login()
         return 0
+    if a.reparse:
+        return reparse()
     if a.structure == 'clip':
         # Wait for the NEXT copy of a Whitepages page: whatever is on the clipboard now (often the
         # command just pasted to run this) is ignored.
@@ -588,7 +689,7 @@ def main(argv=None):
         if not a.case or len(a.case) != 1:
             print('--from-file needs exactly one --case')
             return 2
-        return ingest_file(a.case[0], a.from_file)
+        return ingest_file(a.case[0], a.from_file, refresh=a.refresh)
     todo = _select(a)
     if a.assist and not a.plan:
         print('%d lead(s) selected for hand-assisted copy' % len(todo))
