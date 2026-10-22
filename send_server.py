@@ -2449,6 +2449,51 @@ class Handler(BaseHTTPRequestHandler):
             # address we never mailed is a conversation, not a first touch.
             _first_touch = _pick not in _ev['last_mailed'] and _gate['verdict'] != 'replied'
 
+            # ---- ASSERTED-EVIDENCE TRICKLE (operator decision 2026-10-22: cap it at 10/day) -----
+            # A first touch admitted on 'zerobounce_valid' has NO observed evidence behind it: a paid
+            # API said the mailbox exists, and that is all. This file already measures that class at a
+            # 56% false-valid rate on this list (63 of 113 hard-bounced, 2026-08-26), and _cls() calls
+            # it "PROBE-eligible, not proven". PROBE_DAILY_CAP exists to pace exactly this.
+            #
+            # THE BUG THIS CLOSES. The only code that consulted the quota lived inside
+            # `if _hb['blocked'] and not _ft_exempt:` — so the trickle was read only while the
+            # breaker was engaged, and skipped entirely whenever the trailing rate looked clean or a
+            # warm-up sender made the first touch exempt. The pacing was therefore absent in exactly
+            # the state that precedes a bad day. Measured on 2026-10-21: 43 sends, 42 of them to
+            # addresses this system had never mailed, 0 booked to the probe lane, 5 hard bounces
+            # ("Address not found") — an 11.6% first-touch bounce rate on three brand-new domains.
+            #
+            # Observed evidence is unaffected: 'delivered' and 'replied' never reach this branch, so
+            # follow-ups and re-engagement keep running at the normal caps. Only never-mailed
+            # addresses riding a paid verdict are metered. The send is booked to the EXISTING probe
+            # lane so _probe_quota_left() counts it without a second counter to drift.
+            if _first_touch and _gate.get('verdict') == 'zerobounce_valid':
+                _probe_left = _probe_quota_left()
+                if _probe_left <= 0:
+                    _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                                  'd': dt.date.today().isoformat(), 'gate': 'asserted_quota',
+                                  'code': 'probe_quota_exhausted',
+                                  'case': str((meta or {}).get('c') or '')[:40],
+                                  'cap': PROBE_DAILY_CAP,
+                                  'wl': str((meta or {}).get('wl') or '')})
+                    self.log_message('SEND HELD [asserted quota] case=%s — %d/%d used today',
+                                     str((meta or {}).get('c') or '-')[:40],
+                                     PROBE_DAILY_CAP, PROBE_DAILY_CAP)
+                    # 451 + skip, like the deliverability hold: the worker advances to the next lead.
+                    # A 403 would trip its bounce-breaker branch and pause the whole run, which this
+                    # is not — the list is fine, today's verification trickle is simply spent.
+                    return self._json(451, {
+                        'ok': False, 'skip': True, 'hold': 'asserted_quota',
+                        'blocked': 'probe_quota_exhausted',
+                        'probe_cap': PROBE_DAILY_CAP, 'probe_quota_left': 0,
+                        'err': ('HELD — today\'s %d unverified first touches are used up. This '
+                                'address has only a ZeroBounce valid behind it (no delivery or '
+                                'reply ever observed), so it is paced as a probe. Nothing was sent '
+                                'and no verification credit was spent; it is first in line '
+                                'tomorrow.' % PROBE_DAILY_CAP)})
+                # Book it to the probe lane so the ledger row counts itself against the same quota.
+                meta['lane'] = meta.get('lane') or 'probe'
+
         # ---- daily cap ----
         rcpt = _recipients_today()
         if rcpt >= self.recipient_cap:
