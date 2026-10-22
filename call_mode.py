@@ -1484,7 +1484,7 @@ def extract_text_js(tracker_src):
     for tone in ("'urgent'", "'t3'", "'followup'"):
         if tone not in block:
             raise CallModeError('call_mode: tone %s has no body in the extracted text block' % tone)
-    for need in ('Hola', 'Hi', 'Biscayne Solutions Group'):
+    for need in ('hola', 'hi', 'biscayne solutions group'):   # lower case since 2026-10-22
         if need not in block:
             raise CallModeError('call_mode: the extracted text block has no %r — the Spanish and '
                                 'English bodies must both come across (Alejandro texts both).'
@@ -1799,8 +1799,8 @@ def _wp_phone_kinds(d):
     household, but Whitepages often files the deed owner under "Resident" (CACE-25-019745, 10-22:
     the defendant was listed as a resident, a relative as "Owner"). A resident entry whose name
     clears the same owner bar the bake uses for parcel owners (wp_contacts.grade_property_owner)
-    reads 'o' here. The bake's own tag (phsrc 'hh') is not changed: call_rows keeps those numbers
-    in the household role, because that tag also decides who may be texted."""
+    reads 'o' here. The bake's own tag (phsrc 'hh') is not changed: it still decides who may be
+    texted. Call-only ranking may use the independently matched identity."""
     allp = d.get('wpAllPhones')
     if not isinstance(allp, list) or not allp:
         return None
@@ -1826,6 +1826,20 @@ def _wp_phone_kinds(d):
         if n not in out or rank[kind] < rank[out[n]]:
             out[n] = kind
     return out
+
+
+def _wp_resident_owner_numbers(d):
+    """Accepted property residents whose full name clears the existing deed-owner bar.
+
+    Call-only evidence. Never rewrites phsrc or grants messaging/contact eligibility.
+    A bare property phone or a shared surname is not enough to override a household label.
+    """
+    import wp_contacts
+    owner = d.get('owners') or d.get('oname') or ''
+    return {_ph10(e.get('n') or '') for e in (d.get('wpAllPhones') or [])
+            if isinstance(e, dict) and e.get('resident') and e.get('source', 'property') == 'property'
+            and owner and e.get('owner')
+            and wp_contacts.grade_property_owner(owner, e['owner']) == 'wp'}
 
 
 def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=None):
@@ -2040,11 +2054,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
         # the owner-name bar) can. 'o' = Whitepages lists it as the owner's, 'h' = as someone else
         # at the address, 'n' = on a name-only match, '-' = not on the Whitepages record.
         _wpk = _wp_phone_kinds(d)
+        _resident_owner = _wp_resident_owner_numbers(d) if _wpk is not None else set()
         _pw = [_wpk.get(keep[k], '-') if _wpk is not None else '' for k in range(len(keep))]
         for k in range(len(keep)):
-            # the bake's household / name-only tag wins on the card: one story per number
+            # A household tag cannot erase an independently matched deed-owner identity. Keep
+            # the source tag itself intact: it remains conservative for messaging permissions.
             _sk = phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else ''
-            if _sk in ('hh', 'nm') and _pw[k] == 'o':
+            if _pw[k] == 'o' and (_sk == 'nm' or (_sk == 'hh' and keep[k] not in _resident_owner)):
                 _pw[k] = 'h' if _sk == 'hh' else 'n'
 
         _pht = d.get('phtype') or []
@@ -2056,11 +2072,22 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # rates a landline with a carrier on file 'ok', so the rank alone does not catch it.
             return (_pw[k] == 'o'
                     and 'land' not in str((_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '') or '').lower()
-                    and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
-                    and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
-                    not in ('L', 'N'))
+                    and ((phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
+                         or keep[k] in _resident_owner)
+                    and ((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
+                         not in ('L', 'N')
+                         # The bake ranks household phones without carrier data: its -30 household
+                         # penalty alone labels an otherwise usable mobile "last resort". An
+                         # independent owner-name match supersedes that role inference for calls.
+                         # Unknown types/landlines do not get this exception; eligibility still
+                         # removed DNC, agent, shared-office and dead lines before this point.
+                         or (keep[k] in _resident_owner and _pw[k] == 'o'
+                             and 'mob' in str(_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '').lower()
+                             and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') == 'hh'
+                             and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') == 'L')))
         order.sort(key=lambda k: (
-            _role.get(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
+            0 if keep[k] in _resident_owner else _role.get(
+                phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
             0 if _wp_first(k) else 1,
             _tier.get((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1)))
         if isinstance(best, int) and best in keep_oi:
@@ -3773,6 +3800,7 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    which is the overwhelming majority and the case that needs no words at all. */
 function _phSrcNote(r, i){
   var s = (r.ps||[])[i] || '';
+  if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
   if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
   if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
   return '';
@@ -3824,7 +3852,7 @@ function _numList(r){
       + '<b style="'+(isBad?'text-decoration:line-through':'')+'">'+(k+1)+'. '+fmt(dg)+'</b>'
       + (on ? '<span class="chip hot">on the button</span>' : '')
       + _wpChip(r, k)
-      + (s==='hh' ? '<span class="chip bad">not the owner &middot; household</span>' : '')
+      + (s==='hh' && String(r.pw||'').charAt(k)!=='o' ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
@@ -6926,38 +6954,49 @@ __TEXTTPLJS__
    read-back close at SMS size. Run through fillScript -- SENDER is an OBJECT, a raw `+ SENDER +`
    renders "[object Object]". The opt-out sentence is longer than the old STOP line, so a filled
    body can run past two GSM segments. ES pending a language path. */
+/* 2026-10-22 (Alejandro: "lowercaps unbothered", "human asf", Spanish "like how i text"): every
+   ladder and situational text below is lower case, with no ¿ / ¡ and no accent marks (ñ stays).
+   _lcNames lower-cases {first} and {sender} before fillScript runs, so a capitals record cannot
+   shout inside a casual text; the street keeps its casing. */
 var TEXT_T = {
-  cold:   'Hi{first}, it is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
-        + 'This might be off base so tell me if it is. I work with a few owners going through the same '
-        + 'court filing you have, and there is one part of it almost nobody gets told. Can I ask you '
+  cold:   'hi{first}, it\'s {sender} with biscayne solutions group. just tried calling about {st1}. '
+        + 'might be off base so tell me if it is. i work with a few owners going through the same '
+        + 'court filing you have, and there\'s one part of it almost nobody gets told. can i ask you '
         + 'something about it?',
-  follow: 'Hi{first}, {sender} again about {st1}. Not trying to crowd you. If you already have a plan '
-        + 'you trust, honestly ignore me and I hope it works out. If you are not fully sure it will, '
-        + 'that is the part I would want a second set of eyes on for you. Worth a quick look?',
-  final:  'Hi{first}, last one from me, {sender} with Biscayne Solutions Group about {st1}. I really do '
-        + 'hope your plan lands on time. If anything slips before the sale date, one quick call with '
-        + 'our senior advisor lays out what still works. Either way, keep my number in your phone.'
+  follow: 'hi{first}, {sender} again about {st1}. not trying to crowd you. if you already have a plan '
+        + 'you trust, honestly ignore me and i hope it works out. if you\'re not fully sure it will, '
+        + 'that\'s the part i\'d want a second set of eyes on for you. worth a quick look?',
+  final:  'hi{first}, last one from me, {sender} with biscayne solutions group about {st1}. i really do '
+        + 'hope your plan lands on time. if anything slips before the sale date, one quick call with '
+        + 'our senior advisor lays out what still works. either way, keep my number in your phone.'
 };
 /* ES ladder (2026-09-05) — his first client was a Spanish speaker; Miami runs bilingual. Usted
    register throughout, same NEPQ voice, no dashes, no confirm-CTA. Picked by the fcLang toggle
    (the same EN|ES chips as the call script). */
 var TEXT_T_ES = {
-  cold:   'Hola{first}, le habla {sender} de Biscayne Solutions Group. Acabo de intentar llamarle por '
-        + '{st1}. Puede que esté equivocado, y si es así dígame. Trabajo con varios dueños que van por '
-        + 'el mismo proceso en la corte, y hay una parte que a casi nadie le explican. ¿Le puedo hacer '
+  cold:   'hola{first}, soy {sender} de biscayne solutions group. acabo de intentar llamarle por '
+        + '{st1}. puede que este equivocado, y si es asi digame. trabajo con varios dueños que van por '
+        + 'el mismo proceso en la corte, y hay una parte que a casi nadie le explican. le puedo hacer '
         + 'una pregunta sobre eso?',
-  follow: 'Hola{first}, {sender} otra vez por {st1}. No quiero presionarlo. Si ya tiene un plan en el '
-        + 'que confía, ignóreme y ojalá le funcione. Si no está cien por ciento seguro de que llega a '
-        + 'tiempo, esa es la parte que yo quisiera revisarle. ¿Vale la pena una mirada rápida?',
-  final:  'Hola{first}, último mensaje mío, {sender} de Biscayne Solutions Group por {st1}. De verdad '
-        + 'espero que su plan salga a tiempo. Si algo se atrasa antes de la fecha de subasta, una '
-        + 'llamada rápida con nuestro asesor principal le muestra lo que todavía funciona. De '
-        + 'cualquier forma, guarde mi número.'
+  follow: 'hola{first}, {sender} otra vez por {st1}. no quiero presionarlo. si ya tiene un plan en el '
+        + 'que confia, ignoreme y ojala le funcione. si no esta cien por ciento seguro de que llega a '
+        + 'tiempo, esa es la parte que yo quisiera revisarle. vale la pena una mirada rapida?',
+  final:  'hola{first}, ultimo mensaje mio, {sender} de biscayne solutions group por {st1}. de verdad '
+        + 'espero que su plan salga a tiempo. si algo se atrasa antes de la fecha de subasta, una '
+        + 'llamada rapida con nuestro asesor principal le muestra lo que todavia funciona. de '
+        + 'cualquier forma, guarde mi numero.'
 };
-var TEXT_OPTOUT = {en:" If now's not a good time, just let me know and I won't text you again.",
-                   es:' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'};
+var TEXT_OPTOUT = {en:" if now's not a good time, just let me know and i won't text you again.",
+                   es:' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'};
 Object.keys(TEXT_T).forEach(function(k){ if(TEXT_T[k].indexOf("won't text you again") < 0) TEXT_T[k] += TEXT_OPTOUT.en; });
 Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('vuelvo a escribir') < 0) TEXT_T_ES[k] += TEXT_OPTOUT.es; });
+/* {first} and {sender} in lower case, resolved the way fillScript resolves them (balloon rows
+   introduce the advisor), so fillScript finds nothing left to fill for either. */
+function _lcNames(t, r){
+  var f = String(firstName(r) || '').trim().toLowerCase();
+  var s = String(((r && r.st==='BAL' && SENDER.bsigner) ? SENDER.bsigner : (SENDER.name || '')) || '').toLowerCase();
+  return String(t || '').split('{first}').join(f ? ' ' + f : '').split('{sender}').join(s);
+}
 /* 2026-10-13 (Alejandro: "i want call mode to send this out what morning worker does for texts").
    Every homeowner text from this page is now the Morning Worker's own message, the same bytes the
    text batch sends: boardTextBody, English then Spanish. TEXT_T / TEXT_T_ES above survive only for
@@ -6965,7 +7004,7 @@ Object.keys(TEXT_T_ES).forEach(function(k){ if(TEXT_T_ES[k].indexOf('vuelvo a es
 function textBody(r, stage){
   if(!(r && r.st === 'BAL')) return boardTextBody(r);
   var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
-  return fillScript(T[stage] || T.cold, r);
+  return fillScript(_lcNames(T[stage] || T.cold, r), r);
 }
 /* ── SITUATIONAL TEXTS (2026-09-05) — sequences beyond the cold ladder ──────────────────────────
    Appointment confirm/remind/no-show, post-conversation, callback-promised, and the self-serve
@@ -6975,41 +7014,41 @@ function textBody(r, stage){
    "five minutes" is the advisor consult. {book} is the Cal.com link with their info prefilled. */
 var TEXT_SIT = {
   apptconfirm:{ t:'Confirm appt',
-    en:'Hi{first}, it is {sender} with Biscayne Solutions Group. Good talking with you. You are set, '
-      +'our senior advisor will call you at this number. If your mortgage paperwork is nearby when he '
-      +'calls, even better. Anything changes, text me here.',
-    es:'Hola{first}, le habla {sender} de Biscayne Solutions Group. Un gusto hablar con usted. Ya '
-      +'quedó, nuestro asesor principal lo llamará a este número. Si tiene su papeleo de la hipoteca '
-      +'a la mano cuando llame, mejor. Cualquier cambio, escríbame aquí.'},
+    en:'hi{first}, it\'s {sender} with biscayne solutions group. good talking with you. you\'re set, '
+      +'our senior advisor will call you at this number. if your mortgage paperwork is nearby when he '
+      +'calls, even better. anything changes, just text me here.',
+    es:'hola{first}, soy {sender} de biscayne solutions group. un gusto hablar con usted. ya '
+      +'quedo, nuestro asesor principal lo va a llamar a este numero. si tiene el papeleo de la hipoteca '
+      +'a la mano cuando llame, mejor. cualquier cambio, escribame aqui.'},
   booklink:{ t:'Send booking link',
-    en:'Hi{first}, {sender} here. Easiest way, pick the time yourself and our senior advisor calls '
-      +'you right at it: {book} Takes 20 seconds and your info is already filled in.',
-    es:'Hola{first}, soy {sender}. Lo más fácil, escoja usted la hora y nuestro asesor principal lo '
-      +'llama justo a esa hora: {book} Toma 20 segundos y sus datos ya van puestos.'},
+    en:'hi{first}, {sender} here. easiest way, pick the time yourself and our senior advisor calls '
+      +'you right at it: {book} takes 20 seconds and your info is already filled in.',
+    es:'hola{first}, soy {sender}. lo mas facil, escoja usted la hora y nuestro asesor principal lo '
+      +'llama justo a esa hora: {book} toma 20 segundos y sus datos ya van puestos.'},
   apptremind:{ t:'Appt reminder',
-    en:'Hi{first}, {sender} here. Quick reminder on your call with our senior advisor. He set that '
-      +'time aside just for your case on {st1}. If the time stopped working, tell me and we move it, '
+    en:'hi{first}, {sender} here. quick reminder on your call with our senior advisor. he set that '
+      +'time aside just for your case on {st1}. if the time stopped working, tell me and we move it, '
       +'no problem.',
-    es:'Hola{first}, soy {sender}. Un recordatorio de su llamada con nuestro asesor principal. Apartó '
-      +'ese tiempo solo para su caso de {st1}. Si la hora ya no le sirve, dígame y la movemos sin '
+    es:'hola{first}, soy {sender}. un recordatorio de su llamada con nuestro asesor principal. aparto '
+      +'ese tiempo solo para su caso de {st1}. si la hora ya no le sirve, digame y la movemos sin '
       +'problema.'},
   noshow:{ t:'Missed appt',
-    en:'Hi{first}, {sender} with Biscayne Solutions Group. We missed you for the advisor call. No '
-      +'worries at all, life happens. He has openings today and tomorrow. Which works better for you?',
-    es:'Hola{first}, {sender} de Biscayne Solutions Group. No pudimos conectarlo con el asesor. No se '
-      +'preocupe, pasa. Tiene espacio hoy y mañana. ¿Cuál le queda mejor?'},
+    en:'hi{first}, {sender} with biscayne solutions group. we missed you for the advisor call. no '
+      +'worries at all, life happens. he has openings today and tomorrow. which works better for you?',
+    es:'hola{first}, {sender} de biscayne solutions group. no pudimos conectarlo con el asesor. no se '
+      +'preocupe, pasa. tiene espacio hoy y mañana. cual le queda mejor?'},
   aftertalk:{ t:'After the talk',
-    en:'Hi{first}, {sender} here. Appreciated you being straight with me today. One thing to keep in '
-      +'mind, the balance keeps growing every time that date moves. Whenever you want the real '
-      +'numbers, five minutes with our senior advisor gets them. I am here.',
-    es:'Hola{first}, soy {sender}. Le agradezco lo directo que fue hoy. Solo tenga presente que el '
-      +'saldo sigue creciendo cada vez que esa fecha se mueve. Cuando quiera los números reales, '
-      +'cinco minutos con nuestro asesor principal y los tiene. Aquí estoy.'},
+    en:'hi{first}, {sender} here. appreciated you being straight with me today. one thing to keep in '
+      +'mind, the balance keeps growing every time that date moves. whenever you want the real '
+      +'numbers, five minutes with our senior advisor gets them. i\'m here.',
+    es:'hola{first}, soy {sender}. le agradezco lo directo que fue hoy. solo tenga presente que el '
+      +'saldo sigue creciendo cada vez que esa fecha se mueve. cuando quiera los numeros reales, '
+      +'cinco minutos con nuestro asesor principal y los tiene. aqui estoy.'},
   cbtext:{ t:'Callback promised',
-    en:'Hi{first}, {sender} with Biscayne Solutions Group. You asked me to reach back out about '
-      +'{st1}, so this is me keeping my word. What time works for you today?',
-    es:'Hola{first}, {sender} de Biscayne Solutions Group. Me pidió que lo contactara de nuevo sobre '
-      +'{st1}, y aquí estoy cumpliendo. ¿A qué hora le queda bien hoy?'}
+    en:'hi{first}, {sender} with biscayne solutions group. you asked me to reach back out about '
+      +'{st1}, so this is me keeping my word. what time works for you today?',
+    es:'hola{first}, {sender} de biscayne solutions group. me pidio que lo contactara de nuevo sobre '
+      +'{st1}, y aqui estoy cumpliendo. a que hora le queda bien hoy?'}
 };
 /* The prefilled Cal.com link, SMS-sized: name + the number he actually dialled. The full notes
    payload (address, case, sale date) stays on HIS book-it button — a homeowner does not need their
@@ -7021,7 +7060,7 @@ function bookUrl(r){
 function sitBody(r, key){
   var s = TEXT_SIT[key]; if(!s) return '';
   var raw = (lang()==='es' && s.es) ? s.es : s.en;
-  return fillScript(raw.split('{book}').join(bookUrl(r)), r);
+  return fillScript(_lcNames(raw, r).split('{book}').join(bookUrl(r)), r);
 }
 /* ── THE BOARD'S BATCH SCRIPT, on the phone (2026-09-18, Alejandro) ─────────────────────────────
    Same words the Morning Worker's text batch sends, because they are the same bytes: _textBodies is

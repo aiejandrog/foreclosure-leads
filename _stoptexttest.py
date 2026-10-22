@@ -95,8 +95,10 @@ T('mail_guard sees the EN line as the body opt-out',
 T('mail_guard sees the ES line as the body opt-out',
   not MG.check('Asunto', 'Carta.\n\n' + OC.OPTOUT_LINE_ES, 'a@b.com', unsub=''))
 _sms = OC.sms('Maria')
-_EN = "If now's not a good time, just let me know and I won't text you again."
-_ES = 'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+# 2026-10-22: the outbound line is lower case and "digamelo" unaccented ("lowercaps unbothered").
+# The capitalised, accented forms stay in the keyword table below: the detector must strip both.
+_EN = "if now's not a good time, just let me know and i won't text you again."
+_ES = 'si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
 T('outreach_copy.sms carries the new EN and ES lines',
   _sms.endswith(_EN + ' ' + _ES) and 'Reply STOP' not in _sms, _sms[-160:])
 T('the text line alone is not a stop', R.is_stop_text(_EN) is False and R.is_stop_text(_ES) is False)

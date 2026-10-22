@@ -74,9 +74,9 @@ T('expired ordinary cooldown does NOT suppress (proves the test can go red)', !f
 
 console.log('\n== source-level: outbound texts use the attorney line, not Reply STOP ==');
 T('Call Mode opt-out is the new EN sentence',
-  SRC.indexOf("If now's not a good time, just let me know and I won't text you again.") >= 0);
+  SRC.indexOf("if now's not a good time, just let me know and i won't text you again.") >= 0);
 T('Call Mode opt-out is the new ES sentence',
-  SRC.indexOf('Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.') >= 0);
+  SRC.indexOf('si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.') >= 0);
 T('Call Mode does not tell them to reply STOP', SRC.indexOf('Reply STOP to opt out.') < 0);
 
 console.log('\n================================');
