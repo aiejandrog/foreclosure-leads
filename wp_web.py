@@ -32,6 +32,7 @@ that already carries a real lookup is skipped unless --refresh.
     python wp_web.py --login                       # open the browser, sign in by hand, press Enter
     python wp_web.py --plan                         # which leads it would scrape, no browser
     python wp_web.py --pick-callable 15             # scrape up to 15 board leads, human-paced
+    python wp_web.py --compare 25                    # leads that already have skip-trace numbers
     python wp_web.py --case CACE-25-019745          # one named lead
     python wp_web.py --case C --save-text out.txt    # capture the visible text for calibration
     python wp_web.py --pick-callable 15 --refresh    # re-scrape even cached leads
@@ -293,6 +294,14 @@ def _select(args):
                 continue
             out.append(by[c])
         return out
+    if getattr(args, 'compare', 0):
+        # MEASUREMENT BATCH: leads that already carry skip-trace numbers, so each scraped lead can be
+        # lined up against what the board has. Same eligibility gates as pick_callable; soonest sale
+        # first (pick_callable sorts fewest-phones-first, the opposite of what a comparison wants).
+        pool = _WL.pick_callable(leads, cache, 100000, skip)
+        pool = [r for r in pool if _WL._lead_phone_count(r, skip) > 0]
+        pool.sort(key=lambda r: (_WL._days_to_sale(r), _WL._lead_key(r)))
+        return pool[:min(args.compare, MAX_LEADS)]
     n = args.pick_callable or MAX_LEADS
     return _WL.pick_callable(leads, cache, min(n, MAX_LEADS), skip)
 
@@ -302,6 +311,8 @@ def main(argv=None):
     ap.add_argument('--login', action='store_true', help='open the browser to sign in by hand')
     ap.add_argument('--case', action='append', help='lead id (repeatable)')
     ap.add_argument('--pick-callable', type=int, default=0, metavar='N', help='scrape up to N board leads')
+    ap.add_argument('--compare', type=int, default=0, metavar='N',
+                    help='scrape up to N board leads that already have skip-trace numbers (measurement)')
     ap.add_argument('--plan', action='store_true', help='list the leads it would scrape; no browser')
     ap.add_argument('--refresh', action='store_true', help='re-scrape even cached leads')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')

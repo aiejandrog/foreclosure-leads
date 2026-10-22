@@ -157,6 +157,10 @@ WL.load_skiptrace = lambda: {}
 sel = W._select(type('A', (), {'case': None, 'pick_callable': 15})())
 rec('company owner not selected', all(WL._lead_key(r) != 'B-1' for r in sel), [WL._lead_key(r) for r in sel])
 rec('per-run cap honoured', len(sel) <= 15)
+leads.append({'case': 'C-1', 'owners': 'DOE JANE', 'addr': '7 OAK ST, MIAMI, FL 33101', 'auction': '11/02/2026', 'days': 11})
+WL.load_skiptrace = lambda: {'C-1': {'phones': [{'number': '3055550100'}]}}
+cm = W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5})())
+rec('--compare takes only leads that already have trace numbers', [WL._lead_key(r) for r in cm] == ['C-1'], [WL._lead_key(r) for r in cm])
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
