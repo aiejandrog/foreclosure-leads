@@ -264,8 +264,11 @@ _ST._EXCLUSION_OVERRIDE = None
 # `:phones`, where no path ever runs it.
 _bat = [ln.strip() for ln in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                'refresh-dealflow.bat'), encoding='utf-8')]
+# held (commented) until Alex picks; the placement still matters for the day it is switched on
 _wl = next((i for i, ln in enumerate(_bat) if 'whitepages_lookup.py --pick-callable' in ln
-            and not ln.lower().startswith('rem')), None)
+            and ln.lower().lstrip('rem ').startswith('if exist')), None)
+rec('refresh-dealflow.bat: the nightly Whitepages line is HELD (commented) until Alex picks',
+    _wl is not None and _bat[_wl].lower().startswith('rem'))
 _rb = _bat.index(':rebuild') if ':rebuild' in _bat else None
 rec('refresh-dealflow.bat: the Whitepages line exists and comes after the :rebuild label',
     _wl is not None and _rb is not None and _wl > _rb, (_wl, _rb))
