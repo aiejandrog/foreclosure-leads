@@ -294,7 +294,7 @@ def _or_attempt(R, solve, url):
     refused or 2Captcha failed (token no), a county refusal (http 4xx/5xx), a county answer with no
     result (qs no), or a results read that failed (qs yes, read failed).
     """
-    info = {'token': False, 'http': None, 'qs': None, 'read': None, 'answer': ''}
+    info = {'token': False, 'http': None, 'qs': None, 'read': None, 'valid': None, 'answer': ''}
     tok = solve(R.TS_SITE_KEY, R.OR_BASE)
     if not tok:
         info['answer'] = 'no token (paid cap refused or solver failed)'
@@ -317,6 +317,7 @@ def _or_attempt(R, solve, url):
         info['answer'] = 'answer was not an object'
         return None, info
     info['qs'] = bool(j.get('qs'))
+    info['valid'] = j.get('isValidSearch') if isinstance(j.get('isValidSearch'), bool) else None
     # A bool, number or null is shown as itself: isValidSearch true vs false is the whole question
     # for a lender that never gets a result handle. Anything else is reduced to its type name.
     info['answer'] = str({k: (str(v)[:60] if k.lower() in ('message', 'msg', 'error', 'errors')
@@ -344,7 +345,7 @@ def lp_sweep(days=30, tries=3):
     print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
     MD_LAST.clear()
     MD_LAST.update({'window': [d_from, d_to], 'searched': 0, 'retrieved': 0,
-                    'split_searches': 0, 'no_qs': {}, 'attempts': {}, 'doctype': MD_LP_DOCTYPE})
+                    'split_searches': 0, 'no_qs': {}, 'attempts': {}, 'no_match': [], 'doctype': MD_LP_DOCTYPE})
     del SWEEP_CAPPED[:]
 
     def search(name, lo, hi):
@@ -353,6 +354,7 @@ def lp_sweep(days=30, tries=3):
                + '&dateRangeFrom=' + urllib.parse.quote(lo) + '&dateRangeTo=' + urllib.parse.quote(hi)
                + '&documentType=' + urllib.parse.quote(MD_LP_DOCTYPE)
                + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+        answers = []
         for _ in range(tries):
             recs, info = _or_attempt(R, solve_turnstile, url)
             tried = MD_LAST['attempts'].setdefault(name, [])
@@ -362,7 +364,19 @@ def lp_sweep(days=30, tries=3):
                 return recs
             if info['qs'] is False:
                 MD_LAST['no_qs'].setdefault(name, info['answer'])
+                answers.append(info)
                 time.sleep(1)
+        # The Clerk answers {isValidSearch: false, qs: null} to a name with nothing on file: a
+        # made-up name gets the same answer (laptop probe, 2026-10-22), and RUSHMORE, MTGLQ and
+        # 21ST MORTGAGE got it on every try, typed or not, over 30 and 365 days, with a good token and
+        # HTTP 200. Every try answering that way is a window with no matches, not a failure. One
+        # bad solve is not enough: a bad token gives the same False (records_liens), so it takes
+        # all of this lender's tries. Named in the coverage record so a rejected name can be seen.
+        if (tries and len(answers) == tries
+                and all(a['token'] and a['http'] == 200 and a['valid'] is False for a in answers)):
+            if name not in MD_LAST['no_match']:
+                MD_LAST['no_match'].append(name)
+            return []
         return None
 
     def window(name, lo, hi, depth):
@@ -517,7 +531,7 @@ def coverage_entry(status, info, prev=None, now=None):
          'kept': info.get('kept', 0),
          'pages': info.get('pages', 0),
          'failures': [str(f)[:120] for f in (info.get('failures') or [])][:20]}
-    for k in ('searched', 'blocked', 'capped', 'split_searches', 'no_qs', 'attempts'):
+    for k in ('searched', 'blocked', 'capped', 'split_searches', 'no_qs', 'attempts', 'no_match'):
         if k in info:
             e[k] = info[k]
     e['last_complete'] = now if status == 'ok' else (prev or {}).get('last_complete')
@@ -689,6 +703,7 @@ def main():
             'blocked': len(SWEEP_BLOCKED), 'capped': list(SWEEP_CAPPED), 'failures': fails,
             'split_searches': MD_LAST.get('split_searches', 0),
             'no_qs': dict(MD_LAST.get('no_qs') or {}),
+            'no_match': list(MD_LAST.get('no_match') or []),
             # per-try detail for the lenders that never got through: labels only, no token or record
             'attempts': {n: list((MD_LAST.get('attempts') or {}).get(n) or []) for n in SWEEP_BLOCKED}}
     if a.county in ('broward', 'all'):

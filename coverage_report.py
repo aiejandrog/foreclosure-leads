@@ -127,6 +127,9 @@ def sweep_lines(status, now):
             lines.append(f"              plaintiffs searched {e.get('searched')}, not searched {e.get('blocked', 0)}, "
                          f"at the record cap {len(e.get('capped') or [])}")
         lines.append(f"              scope: {e.get('scope', '?')}")
+        if e.get('no_match'):
+            lines.append(f"              answered 'no match' on every try (nothing on file, or a name the Clerk "
+                         f"does not know): {', '.join(sorted(e['no_match']))}")
         for name, tries in sorted((e.get('attempts') or {}).items()):
             lines.append(f"              not searched: {name}: "
                          + ('; '.join(_try_text(t) for t in tries) if tries else 'never tried (paid cap or run stopped)'))
