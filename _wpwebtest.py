@@ -347,5 +347,13 @@ rec('"West Ave" lead matches "1234 W Avenue"', W.page_matches_address('1234 W Av
 rec('--addr-check masks a surname that is a street word', 'Lane' not in W._shape('Jane Lane, 54, owner of 1234 West Ave')
     and 'West' not in W._shape('Jane Lane, 54, owner of 1234 West Ave'))
 
+W.time = _Clock()
+seq[:] = ['old', OTHER, ADDR + '\r\n', 'not a page', PAGE, PAGE]
+WL.CACHE = os.path.join(td, 'wp9.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'M-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+rec('the address echoed back with CR/LF, or a stray copy, is not taken as the page',
+    W.assist(list(leads), wait_s=10) == 1 and 'M-0' in _j.load(open(WL.CACHE, encoding='utf-8')))
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

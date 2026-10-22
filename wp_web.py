@@ -511,8 +511,10 @@ def assist(todo, refresh=False, wait_s=None):
             while time.time() - t0 < wait_s:
                 time.sleep(1.0)
                 cur = _clipboard_text()
-                if not cur or cur == base:
+                if not cur or cur.strip() == (base or '').strip():
                     continue
+                if hinted and not _PAGE_MARK.search(cur):
+                    continue                # e.g. the address pasted into the search box, re-copied
                 text = cur
                 if hinted or not _PAGE_MARK.search(cur) or page_matches_address(cur, parts[0]):
                     break
@@ -533,8 +535,8 @@ def assist(todo, refresh=False, wait_s=None):
                 skipped += 1
                 continue
             same = page_matches_address(text, parts[0])
-            if same or not _PAGE_MARK.search(text):
-                _keep_page(case, text)                      # never keep another house's page
+            if same and _PAGE_MARK.search(text):
+                _keep_page(case, text)      # only this lead's own Whitepages page replaces its copy
             people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
                 why = _why_empty(text) if same or not _PAGE_MARK.search(text) else \
