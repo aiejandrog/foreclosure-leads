@@ -56,6 +56,12 @@ class PaginationTests(unittest.TestCase):
         self.assertEqual(rows, [])
         self.assertEqual(broward.LAST['status'], 'partial')
 
+    def test_a_repeated_page_is_not_progress(self):
+        rows = sweep_with([page(400, 700), page(400, 700)])
+        self.assertEqual(broward.LAST['status'], 'partial')
+        self.assertEqual(broward.LAST['retrieved'], 400)
+        self.assertTrue(any('repeated' in f for f in broward.LAST['failures']))
+
     def test_verified_empty_window_is_ok(self):
         self.assertEqual(sweep_with([page(0, 0)]), [])
         self.assertEqual(broward.LAST['status'], 'ok')

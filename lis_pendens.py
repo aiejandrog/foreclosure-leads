@@ -436,11 +436,16 @@ def _merge_key(x):
 def write_status(a, status, info, new_rows, failed, partial, now=None):
     """lp_sweep_status.json: the run's verdict plus a per-county coverage record. Counts only."""
     now = now or datetime.datetime.now().isoformat(timespec='seconds')
-    prev = _prev_coverage()
-    coverage = dict(prev)                 # a county not swept tonight keeps its last record
-    for c, st in status.items():
-        if not c.endswith('_blocked_plaintiffs'):
-            coverage[c] = coverage_entry(st, info.get(c), prev.get(c), now)
+    try:
+        prev = _prev_coverage()
+        coverage = dict(prev)             # a county not swept tonight keeps its last record
+        for c, st in status.items():
+            if not c.endswith('_blocked_plaintiffs'):
+                old = prev.get(c)
+                coverage[c] = coverage_entry(st, info.get(c), old if isinstance(old, dict) else None, now)
+    except Exception as e:                # a status file must never stop the merge
+        print(f'coverage record not built: {e}')
+        coverage = {}
     try:
         with open(STATUS_FILE, 'w', encoding='utf-8') as f:
             json.dump({'ran': now, 'days': a.days, 'requested': a.county, 'counties': status,
@@ -449,7 +454,9 @@ def write_status(a, status, info, new_rows, failed, partial, now=None):
     except Exception as e:
         print(f'sweep status not written: {e}')
     for c in partial:
-        cv = coverage[c]
+        cv = coverage.get(c)
+        if not cv:
+            continue
         tot = cv['reported_total'] if cv['reported_total'] is not None else '?'
         print(f'{c}: PARTIAL — {cv["retrieved"]} of {tot} source rows read; '
               + '; '.join(cv['failures'][:3]))
@@ -548,7 +555,7 @@ def main():
         print('\nsweep ran, no new filings in the window.'
               + (f' FAILED: {", ".join(failed)}' if failed else '')
               + (f' PARTIAL: {", ".join(partial)}' if partial else ''))
-        sys.exit(EXIT_PARTIAL if (failed or partial) else 0)
+        sys.exit(EXIT_PARTIAL if failed else 0)
     # MERGE, never overwrite (2026-08-11). The sweep only sees its own date window; the file
     # holds every filing being worked. Overwriting made a 30-day sweep silently delete every
     # older LP lead — the resolved, valued, on-the-board ones included. Union by the same
@@ -575,7 +582,11 @@ def main():
     if partial:
         print(f'\nINCOMPLETE WINDOW: {", ".join(partial)} ran but did not read the whole window. '
               f'Their rows merged; lp_sweep_status.json says what is missing.')
-    if failed or partial:
+    # The exit code stays about counties that did not run. A partial county is named in the status
+    # file, the coverage record and run_report, not here: Miami can be partial most nights (a big
+    # lender at the record cap), and a standing exit 4 would set the refresh's RUNEXIT to 7 every
+    # night, and an earlier code wins there, so it would hide a later 5 (mirror not published).
+    if failed:
         sys.exit(EXIT_PARTIAL)
 
 

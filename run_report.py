@@ -186,7 +186,7 @@ def main():
     lines += [
         f"  health : {hstatus or 'NOT RUN'}",
         f"  LP     : " + ('did not run' if lp_ran is None else
-                          ('ran ' + str(lp_ran)[:16] + (' — FAILED: ' + ', '.join(lp_failed) if lp_failed else ''))),
+                          ('ran ' + str(lp_ran)[:16] + (' — INCOMPLETE: ' + ', '.join(lp_failed) if lp_failed else ''))),
         f"  git    : {gitlast or 'n/a'}" + ('   (local commit today)' if commit_today else '   (no local commit today)'),
         "  note   : the line above is this machine's own git log. It does not show whether anything",
         "           reached origin or whether the live site republished — publish_verify does that.",

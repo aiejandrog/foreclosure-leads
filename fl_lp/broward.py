@@ -107,6 +107,7 @@ def sweep(days=30):
         LAST['failures'].append('search rejected (ShowError)')
         return None
     out, page, raw, total = [], 1, 0, None
+    seen = set()                                  # distinct instruments: a repeated page is not progress
     while True:
         grid = B._curl(B.BASE + '/Search/GridResults', post=[
             ('page', str(page)), ('size', '400'), ('sort', ''), ('group', ''), ('filter', '')])
@@ -121,6 +122,7 @@ def sweep(days=30):
         rows = j.get('data') or []
         LAST['pages'] = page
         raw += len(rows)
+        seen.update(str(r.get('InstrumentNumber') or '') + '|' + str(r.get('BookPage') or '') for r in rows)
         if total is None:
             try:
                 total = int(j.get('total'))
@@ -159,9 +161,11 @@ def sweep(days=30):
         page += 1
         time.sleep(0.6)
     LAST['reported_total'] = total
-    LAST['retrieved'] = raw
+    LAST['retrieved'] = len(seen)
     # Complete only when the source told us how many it matched and we read that many.
-    complete = total is not None and raw >= total and not LAST['failures']
+    if raw > len(seen):
+        LAST['failures'].append('%d repeated grid rows (a page came back twice?)' % (raw - len(seen)))
+    complete = total is not None and len(seen) >= total and not LAST['failures']
     if total is None:
         LAST['failures'].append('grid did not report a total')
     LAST['status'] = 'ok' if complete else 'partial'

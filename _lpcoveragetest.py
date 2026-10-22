@@ -114,6 +114,12 @@ class StatusFile(unittest.TestCase):
         self.assertIsNone(cov['MIAMI-DADE']['last_complete'])
         self.assertEqual(cov['MIAMI-DADE']['capped'], ['US BANK'])
 
+    def test_a_damaged_prior_record_does_not_stop_the_sweep(self):
+        with open(self.path, 'w', encoding='utf-8') as f:
+            json.dump({'coverage': {'BROWARD': 'not a dict'}}, f)
+        cov = self.write({'BROWARD': 'ok'}, {}, '2026-10-21T05:30:00')
+        self.assertEqual(cov['BROWARD']['status'], 'ok')
+
     def test_run_report_reads_partial_as_not_healthy(self):
         self.write({'BROWARD': 'partial', 'MIAMI-DADE': 'ok'}, {}, '2026-10-21T05:30:00')
         with mock.patch.object(RR, 'HERE', self.tmp):
