@@ -222,7 +222,7 @@ def main():
                                                       n_links, round(n_links * a.gap / 60) + 1), flush=True)
 
     t_start = time.time()
-    opened = []                             # (open_time, case, form, street, unit, url, city)
+    opened = []                             # (open_time, (lead #, case), form, street, unit, url, city)
     for n, r in enumerate(pick, 1):
         addr = WL._lead_addr(r)
         street, city, _ = WL._split_addr(addr)
