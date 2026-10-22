@@ -14,7 +14,11 @@ CLOSING = {
 # Observable message concepts, rather than a duplicate of every sentence.
 CONCEPTS = {
     'property_note': ("I'm writing about", 'Le escribo sobre'),
-    'no_date': ('does not list an auction date', 'no indica una fecha de subasta'),
+    'no_date': ("doesn't show a sale date", 'no muestra fecha de subasta'),
+    # 2026-10-22 no-date rewrite: the filed case, the true pressure, and the keep-or-sell ask.
+    'case_filed': ('a case filed at the courthouse', 'un caso abierto en la corte'),
+    'shrink': ('options shrink every week', 'quedan menos opciones'),
+    'keep_sell': ('keep the house, or open to selling', 'quedarse con la casa o está pensando en venderla'),
     'record_date': ('Our record lists', 'Nuestro registro indica'),
     'tax_sale': ('tax-deed', 'tax deed'),
     'stale': ('may be out of date', 'puede estar desactualizado'),
@@ -70,7 +74,10 @@ def check_matrix(rows):
             need = {'call', 'reply'}
             if stage == 'cold':
                 need |= {'property_note', 'stale', 'advisor'}
-                need |= {'no_date', 'handled'} if kind == 'early' else {'record_date', 'county_check'}
+                if kind == 'early':
+                    need = (need - {'property_note'}) | {'case_filed', 'no_date', 'shrink', 'keep_sell'}
+                else:
+                    need |= {'record_date', 'county_check'}
                 if kind == 'tax': need.add('tax_sale')
                 if kind == 'dated': need.add('handled')
             elif stage == 'follow': need |= {'follow', 'handled'}

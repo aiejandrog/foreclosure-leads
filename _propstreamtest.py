@@ -64,6 +64,6 @@ except PS.ExportError: ok = True
 rec('unknown county refused', ok)
 import propstream_copy as PC    # noqa: E402
 sheet = PC.build()
-rec('copy sheet: every text carries the EN and ES let-me-know lines', sheet.count("If now's not a good time, just let me know") == 4 and sheet.count('Si ahora no es buen momento, solo d') >= 4)
+rec('copy sheet: every text carries the EN and ES let-me-know lines', sheet.count("if now's not a good time, just let me know") == 4 and sheet.count('si ahora no es buen momento, solo d') >= 4)
 rec('copy sheet: letter carries MARS and the EN+ES opt-out', 'not associated with the government' in sheet and 'lo vuelvo a contactar' in sheet)
 print('%d/%d' % (sum(R), len(R))); sys.exit(0 if all(R) else 1)

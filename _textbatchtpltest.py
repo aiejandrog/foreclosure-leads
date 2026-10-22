@@ -129,13 +129,13 @@ rec('a template for every _textBodies branch',
 rec('every template is the exact _textBodies output', all(out['same'].values()), out['same'])
 for k, v in S.items():
     rec('%s: English has the placeholders and the EN let-me-know line' % k,
-        '[first name]' in v['en'] and "If now's not a good time, just let me know and I won't text you again." in v['en'],
+        '[first name]' in v['en'] and "if now's not a good time, just let me know and i won't text you again." in v['en'],
         v['en'])
     rec('%s: Spanish has the ES let-me-know line' % k,
-        'Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.' in v['es'], v['es'])
+        'si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.' in v['es'], v['es'])
     rec('%s: no "Reply STOP" in either language' % k,
         'reply stop' not in (v['en'] + v['es']).lower() and 'responda stop' not in (v['en'] + v['es']).lower())
-    rec('%s: the sender name is filled in' % k, 'Test Sender' in v['en'] and 'Test Sender' in v['es'])
+    rec('%s: the sender name is filled in' % k, 'test sender' in v['en'] and 'test sender' in v['es'])
 K = out['keys']
 rec('_smsTplKey follows _textBodies order',
     K == {'urgent/CC': 'urgent', 't3/LP': 't3', 'followup/LP': 'followup', 'cold/TD': 'td',
@@ -208,7 +208,7 @@ rec('Start sending runs the batch from the first lead',
     ST['tbOn'] is True and ST['TBI'] == 0 and 'Text batch &middot; 1 of 4' in ST['html'], ST['html'][:300])
 rec('the step shows the English block and the Spanish block separately',
     re.search(r'English</div><div[^>]*>[^<]*Ana', ST['html']) is not None
-    and re.search(r'Espa&ntilde;ol</div><div[^>]*>Hola Ana', ST['html']) is not None, ST['html'][:900])
+    and re.search(r'Espa&ntilde;ol</div><div[^>]*>hola Ana', ST['html']) is not None, ST['html'][:900])
 rec('the step still waits for his tap before opening Messages', ST['opened'] == 0)
 
 # A REFUSED TEXT SAYS SO ON THE CARD (2026-10-16, "the text batch buttons dont work"). The bridge's
