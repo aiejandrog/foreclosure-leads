@@ -260,13 +260,15 @@ def _part_diff(street, line):
     def toks(t):
         t = re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
         return re.sub(r'[^a-z0-9]', ' ', t).split()
+    def unit(t):
+        u = _UNIT_RE.search(t or '')
+        return re.sub(r'[^a-z0-9]', '', u.group(1).lower()) if u else ''     # 3-B == 3B == 3 B
     lt = toks(_UNIT_RE.sub(' ', street or ''))
-    m = _UNIT_RE.search(street or '')
-    lunit = m.group(1).lower().replace('-', ' ').strip() if m else ''
-    pm = _UNIT_RE.search(line or '')
-    punit = pm.group(1).lower().replace('-', ' ').strip() if pm else ''
-    pt = toks(line)
-    house = 'same' if lt and lt[0] in pt else 'DIFFERENT'
+    lunit, punit = unit(street), unit(line)
+    pt = toks(_UNIT_RE.sub(' ', line or ''))       # a unit number is not the house or the street
+    # The page's house number is the first number on its address, not any number on the line.
+    phouse = next((t for t in pt if t.isdigit()), '')
+    house = 'same' if lt and lt[0] == phouse else 'DIFFERENT'
     name = next((t for t in lt[1:] if t not in _DIRS and t not in _DIR_WORDS), '')
     st = 'same' if name and name in pt else 'DIFFERENT'
     unit = ('same' if lunit == punit else 'DIFFERENT') if (lunit or punit) else 'none'
@@ -665,6 +667,10 @@ def _keep_page(case, text, rejected=False):
         if rejected:                # a page that was NOT this lead's house: never read as its data
             d = os.path.join(d, 'rejected')
             os.makedirs(d, exist_ok=True)
+        else:                       # the lead's own page is in: its old wrong-property copy is moot
+            stale = os.path.join(d, 'rejected', re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt')
+            if os.path.exists(stale):
+                os.remove(stale)
         open(os.path.join(d, re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt'), 'w',
              encoding='utf-8').write(text)
     except Exception:
@@ -965,6 +971,10 @@ def main(argv=None):
             print('--from-file needs exactly one --case')
             return 2
         return ingest_file(a.case[0], a.from_file, refresh=a.refresh)
+    if a.retry_misses and not (a.assist or a.plan):
+        # These are the leads the two-misses rule stopped offering: never hand them to the automated run.
+        print('--retry-misses needs --assist (or --plan)')
+        return 2
     todo = _select(a)
     if a.assist and not a.plan:
         print('%d lead(s) selected for hand-assisted copy' % len(todo))
