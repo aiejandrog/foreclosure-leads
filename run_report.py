@@ -103,7 +103,10 @@ def _lp_sweep():
     """The structured outcome lis_pendens.py now writes. (None, []) when it never ran."""
     try:
         d = json.load(open(os.path.join(HERE, 'lp_sweep_status.json'), encoding='utf-8'))
-        return d.get('ran'), [c for c in (d.get('failed') or [])]
+        # A county that ran over less than its window is named too, marked, so the verdict is
+        # DEGRADED rather than HEALTHY (2026-10-22: lis_pendens now writes 'partial').
+        return d.get('ran'), ([c for c in (d.get('failed') or [])]
+                              + ['%s (partial)' % c for c in (d.get('partial') or [])])
     except Exception:
         return None, []
 
@@ -150,7 +153,7 @@ def verdict_of(total, hstatus, lp_ran, lp_failed, critical=None):
     if hstatus.upper() not in ('OK', 'PASS', 'HEALTHY'):
         return 'DEGRADED', f'healthcheck says {hstatus}'
     if lp_failed:
-        return 'DEGRADED', 'LP sweep did not run for ' + ', '.join(lp_failed)
+        return 'DEGRADED', 'LP sweep did not run, or did not finish its window, for ' + ', '.join(lp_failed)
     if lp_ran is None:
         return 'DEGRADED', 'no LP sweep outcome on file'
     return 'HEALTHY', ''

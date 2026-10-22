@@ -33,6 +33,10 @@ CODE_CACHE = os.path.join(HERE, 'broward_doctypes.json')
 FALLBACK_LP_CODE = '158'                       # observed at discovery, 2026-08-11
 SESSION_RETRY_WAITS = (30, 90)                 # seconds between session attempts (3 tries total)
 
+# What the last sweep() actually covered, for lis_pendens.main's per-county coverage record.
+# sweep() still returns rows or None; this says whether the rows are the whole window.
+LAST = {}
+
 
 def _lp_code(sess):
     """Discover the Lis Pendens doctype code off the live form; cache; fall back to cache."""
@@ -63,8 +67,17 @@ def _date(js):
 
 def sweep(days=30):
     """-> list of canonical LP rows (county='BROWARD'), or None when the portal blocked us.
-    None vs [] matters: an empty week is data, a blocked session is not."""
+    None vs [] matters: an empty week is data, a blocked session is not.
+
+    A later grid page that fails returns the rows already read, and LAST says the window is
+    partial (2026-10-22). #324 made that case return None so it stopped reading as a complete
+    sweep, which was right, but it also threw away page 1's real filings until the next good night.
+    lis_pendens merges add-only with existing rows winning, so keeping them costs nothing; the
+    status, not the row list, is what has to say the window was not read to the end."""
     from lis_pendens import LENDER_RE, HOA_RE
+    LAST.clear()
+    LAST.update({'status': 'failed', 'window': [], 'reported_total': None, 'retrieved': 0,
+                 'pages': 0, 'failures': []})
     # Cloudflare challenges AcclaimWeb at a coin-flip rate (broward_liens._curl), and a start
     # that lands on a bad stretch used to drop the whole county for the night: on 2026-09-28 the
     # one attempt got no session and Broward, the largest county, kept yesterday's rows. Each
@@ -78,10 +91,12 @@ def sweep(days=30):
         time.sleep(wait)
     if not sess:
         print('BROWARD: no session (Cloudflare) — sweep skipped, not empty', file=sys.stderr)
+        LAST['failures'].append('no session')
         return None
     code = _lp_code(sess)
     d_to = datetime.date.today().strftime('%m/%d/%Y')
     d_from = (datetime.date.today() - datetime.timedelta(days=days)).strftime('%m/%d/%Y')
+    LAST['window'] = [_iso(d_from), _iso(d_to)]
     resp = B._curl(B.BASE + '/Search/SearchTypeDocType?Length=9', post=[
         ('DocTypes', code), ('DocTypesDisplay-input', 'LIS PENDENS (LP)'),
         ('DocTypesDisplay', 'LIS PENDENS (LP)'),
@@ -89,8 +104,9 @@ def sweep(days=30):
         ('RecordDateFrom', d_from), ('RecordDateTo', d_to), ('DateRangeList', ' ')])
     if 'ShowError' in resp:
         print('BROWARD: search rejected (ShowError) — doctype code may have moved', file=sys.stderr)
+        LAST['failures'].append('search rejected (ShowError)')
         return None
-    out, page = [], 1
+    out, page, raw, total = [], 1, 0, None
     while True:
         grid = B._curl(B.BASE + '/Search/GridResults', post=[
             ('page', str(page)), ('size', '400'), ('sort', ''), ('group', ''), ('filter', '')])
@@ -98,10 +114,18 @@ def sweep(days=30):
             j = json.loads(grid)
         except Exception:
             print('BROWARD: grid parse failed on page %d' % page, file=sys.stderr)
-            # A partial grid must not be reported as a completed county sweep.
-            # The caller retains prior rows and records None as a failed refresh.
-            return None
+            LAST['failures'].append('grid parse failed on page %d' % page)
+            if page == 1:
+                return None                           # nothing was read: a failed sweep
+            break                                     # pages before this one are real rows
         rows = j.get('data') or []
+        LAST['pages'] = page
+        raw += len(rows)
+        if total is None:
+            try:
+                total = int(j.get('total'))
+            except (TypeError, ValueError):
+                total = None
         for r in rows:
             plaintiff = (r.get('DirectName') or '').strip()
             owner = (r.get('IndirectName') or '').strip()
@@ -126,13 +150,30 @@ def sweep(days=30):
                 'instrument': str(r.get('InstrumentNumber') or '').strip(),
                 'parcel': str(r.get('ParcelNumber') or '').strip(),
             })
-        total = int(j.get('total') or 0)
-        if page * 400 >= total or not rows:
+        if not rows:
+            if total is not None and raw < total:
+                LAST['failures'].append('page %d came back empty at %d of %d rows' % (page, raw, total))
+            break
+        if total is None or page * 400 >= total:
             break
         page += 1
         time.sleep(0.6)
-    print('BROWARD: %s..%s -> %d homeowner LP filings' % (d_from, d_to, len(out)))
+    LAST['reported_total'] = total
+    LAST['retrieved'] = raw
+    # Complete only when the source told us how many it matched and we read that many.
+    complete = total is not None and raw >= total and not LAST['failures']
+    if total is None:
+        LAST['failures'].append('grid did not report a total')
+    LAST['status'] = 'ok' if complete else 'partial'
+    print('BROWARD: %s..%s -> %d homeowner LP filings (%d of %s grid rows%s)'
+          % (d_from, d_to, len(out), raw, total if total is not None else '?',
+             '' if complete else ', PARTIAL'))
     return out
+
+
+def _iso(mdy):
+    m, d, y = mdy.split('/')
+    return '%s-%s-%s' % (y, m, d)
 
 
 if __name__ == '__main__':
