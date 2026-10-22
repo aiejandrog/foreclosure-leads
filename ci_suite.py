@@ -47,7 +47,9 @@ SKIP = {
     '_hangertest.py': CODES, '_phonepagetest.py': CODES,
     '_suppressiontest.py': CODES + ' (17 of its 19 checks do pass in CI; the board/worker gate needs site.codes)',
     '_attachtest.py': LEDGER, '_ledgerwritetest.py': LEDGER, '_sendbridgetest.py': LEDGER,
-    '_digesttest.py': FEED, '_dupetest.py': FEED,
+    # _dupetest.py now runs in CI: its 18 dedupe/cap/lane checks are synthetic, and the two live-feed
+    # halves skip themselves when the gitignored twin is absent (the _wpapntest.py split).
+    '_digesttest.py': FEED,
     # --- machine ---
     '_lktest.py': WINDOWS,
 }

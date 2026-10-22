@@ -44,6 +44,10 @@ import call_mode  # noqa: E402
 FAIL, PASS = [], []
 
 
+class _Skip(Exception):
+    """The live twin is not on this machine: skip that half, never record it as a failure."""
+
+
 def rec(name, ok, detail=''):
     (PASS if ok else FAIL).append(name)
     print(('  ok   ' if ok else '  FAIL ') + name + (('  — ' + str(detail)[:140]) if detail else ''))
@@ -126,10 +130,20 @@ rec('a duplicate does not eat a slot under the cap',
 rec('the qualifying total counts people, not postings', total == 30, total)
 
 # ---- 5. and it holds on the real feed ------------------------------------------------------------
+# The twin is gitignored live data. Where it is absent (CI, a fresh clone) this half is SKIPPED and
+# the synthetic checks above decide the suite; where it exists, an unreadable one is still a failure.
+# Same split as _wpapntest.py. Before this, a missing twin recorded a FAILURE, which is the only
+# reason the whole suite sat in ci_suite.SKIP while 18 of its checks never needed the laptop at all.
 print('\nREAL FEED')
+import collections  # noqa: E402
+import paths  # noqa: E402
+
+_twin_missing = not os.path.exists(paths.TWIN)
+if _twin_missing:
+    print('skip live feed (%s not on this machine)' % os.path.basename(paths.TWIN))
 try:
-    import collections
-    import paths
+    if _twin_missing:
+        raise _Skip()
     src = open(paths.TWIN, encoding='utf-8', errors='replace').read()
     m = (re.search(r'(?:const|let|var)\s+RAW\s*=\s*(\[.*?\]);\n', src, re.S)
          or re.search(r'(?:const|let|var)\s+DATA\s*=\s*(\[.*?\]);\n', src, re.S))
@@ -145,6 +159,8 @@ try:
             r.get('case') for r in raw if r.get('case')).items() if v > 1])
         rec('the feed itself still carries the duplicates (we fix them, we do not hide them)',
             src_dupes > 0, '%d duplicated case(s) upstream' % src_dupes)
+except _Skip:
+    pass
 except Exception as e:
     rec('real feed check', False, repr(e))
 
@@ -207,8 +223,9 @@ try:
         and next(r for r in dd if r['case'] == 'SPLIT').get('folio') == '484215052740')
     rec('nothing is lost — every case still present', len(dd) == 2 and ncol == 1, '%d rows' % len(dd))
 
-    # and on the real feed
-    import paths
+    # and on the real feed — skipped, not failed, when the gitignored twin is absent
+    if _twin_missing:
+        raise _Skip()
     src2 = open(paths.TWIN, encoding='utf-8', errors='replace').read()
     m2 = re.search(r'(?:const|let|var)\s+RAW\s*=\s*(\[.*?\]);\n', src2, re.S)
     if m2:
@@ -223,6 +240,8 @@ try:
             {r.get('case') for r in raw2 if r.get('case')}
             == {r.get('case') for r in after_rows if r.get('case')},
             '%d rows -> %d, %d collapsed' % (len(raw2), len(after_rows), ncol2))
+except _Skip:
+    pass
 except Exception as e:
     rec('board lane check', False, repr(e))
 
