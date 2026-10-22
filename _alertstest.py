@@ -284,6 +284,8 @@ rec('a start after 8 says the bridge came up late', 'after the 8 AM run' in PA.b
     '16:40:00  [boot] bridge starting, pid 1, credential ok')))
 rec('a reload hand-over counts as a start, never as proof it was up', 'a start at 07:50' in PA.bridge_boot_why(boot_of(
     '07:45:01  [boot] bridge starting, pid 1, credential ok', '07:50:02  [reload] new bridge serving, pid 2')))
+rec('a skipped second launch reads as answering, not as a start', 'already answering' in PA.bridge_boot_why(boot_of(
+    '07:45:01  [boot] launch skipped, a healthy bridge already owns 127.0.0.1:8823')))
 rec('no boot line today invents nothing (a bridge from yesterday may still be up)', PA.bridge_boot_why(boot_of()) == '')
 rec('an unreadable or missing log invents nothing',
     PA.bridge_boot_why({'readable': False}) == '' and PA.bridge_boot_why(None) == ''

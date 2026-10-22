@@ -471,10 +471,14 @@ def bridge_boot_why(boot, day_hhmm='08:00'):
     if code == 'stopped':
         return 'Bridge log: the bridge stopped at %s and was not restarted before the 8 AM run.' % t
     if code == 'bind_fail':
-        return 'Bridge log: the bridge could not open its port at %s (something else held it).' % t
+        return 'Bridge log: the bridge could not open its port at %s.' % t
     if code == 'start_nocred':
         return 'Bridge log: the bridge started at %s without its mail login, so it could not send.' % t
-    if code in ('start_ok', 'skipped'):
+    if code == 'skipped':
+        # "launch skipped, a healthy bridge already owns the port": this one IS proof it answered then
+        return ('Bridge log: at %s a second launch found the bridge already answering; nothing logged a '
+                'stop after that.' % t)
+    if code == 'start_ok':
         # A clean stop logs a line; a killed or crashed process logs nothing. So "started, no stop
         # after it" is all this file can prove, and a run record that is empty at the same time
         # means the bridge was not answering anyway: say both, never "it was up".
