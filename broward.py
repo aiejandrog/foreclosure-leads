@@ -50,7 +50,13 @@ def to_slim(items):
     today = date.today()
     slim = []
     for r in items:
-        folio = re.sub(r'\D', '', r.get('Folio', '') or '')
+        # RAW, letters included — see the same change in county_leads.to_slim. This is the Broward
+        # path specifically, so it is the one that matters: a condo folio ('484210HC0120') came out
+        # of re.sub(r'\D','') as '4842100120', a different parcel that exists, so the cadastral
+        # lookup below and wp_contacts.wp_parcel_verdict were both asked about the wrong property
+        # (#326). fl_cadastral.enrich takes raw and falls back to digits itself (fl_cadastral.py:87).
+        folio = re.sub(r'[^0-9A-Za-z]', '', str(r.get('Folio', '') or '')).upper()
+        folio_d = re.sub(r'\D', '', folio)     # digits-only copy for readers that need digits
         judg = F.money(r.get('Final Judgment Amount', ''))
         addr = F._clean_addr(r.get('Address', ''))
         # enrich: owner + value from the statewide cadastral (by Broward folio)
@@ -77,9 +83,11 @@ def to_slim(items):
         score = 0
         if val: score = max(0, min(100, round(eqp) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0)))
         tier = 'A' if (val and eqp >= 40 and 0 <= days <= 45) else ('B' if val and eqp >= 15 else 'C')
-        z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
+        # Both URLs keep the digits-only folio so they stay byte-identical to before this change;
+        # whether county-taxes also accepts the lettered folio is a question for that site, not #326.
+        z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio_d) + ' FL') + '_rb/'
         pa = ('https://web.bcpa.net/BcpaClient/#/Record-Search') if folio else ''
-        tax = ('https://broward.county-taxes.com/public/real_estate/parcels/' + folio) if folio else ''
+        tax = ('https://broward.county-taxes.com/public/real_estate/parcels/' + folio_d) if folio_d else ''
         auc = (BASE + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') +
                ('#AITEM_' + r['AID'] if r.get('AID') else ''))
         pt = [t for t in re.sub(r'\s*&.*$', '', owner).split() if len(t.strip('.')) > 1]

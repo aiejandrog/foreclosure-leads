@@ -209,7 +209,17 @@ def to_slim(county, cfg, base, items):
     today = date.today()
     slim = []
     for r in items:
-        folio = re.sub(r'\D', '', r.get('Folio', '') or '')
+        # RAW, letters included. A Broward CONDO folio carries letters ('484214AD1600') and the
+        # letters are part of the parcel id: re.sub(r'\D','') on '484210HC0120' does not blank it,
+        # it returns '4842100120' — a DIFFERENT, perfectly plausible folio. Everything downstream
+        # then asks the county about a parcel that is not this lead's. fl_cadastral.enrich already
+        # queries raw-then-digits for exactly this reason (fl_cadastral.py:87, '4/4 condo folios
+        # MISS digits-only, 4/4 HIT raw'), and wp_contacts.wp_parcel_verdict compares apn to folio
+        # with only separators dropped (wp_contacts.py:300) — so a digit-stripped folio made every
+        # lettered-apn record grade 'mismatch'/'unverified' (#326). Separators are still dropped and
+        # case folded, so a numeric folio is byte-identical to before.
+        folio = re.sub(r'[^0-9A-Za-z]', '', str(r.get('Folio', '') or '')).upper()
+        folio_d = re.sub(r'\D', '', folio)     # digits-only copy for readers that need digits
         if not folio:
             # STUB HOOK: a case stub_resolve has already tied to a parcel (defendant-name ->
             # appraiser roll, corroborated). Kept raw — Broward condo folios carry letters.
@@ -218,6 +228,7 @@ def to_slim(county, cfg, base, items):
                 folio = stub_resolve.folio_for(r.get('Case #', '')) or ''
             except Exception:
                 pass
+            folio_d = re.sub(r'\D', '', folio)   # the stub hook can replace folio; keep the pair in step
         judg = F.money(r.get('Final Judgment Amount', ''))
         # TRUE type from the auction plaintiff (bank-charter guard wins first); the case-number prefix is
         # only the fallback when the auction gives no plaintiff. The recorded-chain plaintiff later overrides
@@ -317,8 +328,12 @@ def to_slim(county, cfg, base, items):
             # TAX DEED: the opening bid (certs + fees) and certificate number are the deal inputs —
             # map them so the TD branch of the deal model (winbid off obid) and the row's Certificate #
             # both work for BW/PB just like Miami-Dade. FC leads have neither and stay 0/''.
-            'st': st, 'obid': obid_val, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
-            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': links['people'], 'peopleaddr': links['peopleaddr'], 'cyberbg': links['cyberbg'], 'cyberbgaddr': links['cyberbgaddr'],
+            # The two county URLs keep the DIGITS-ONLY folio, byte-identical to what they got before
+            # this change. Whether bcpa.net / county-taxes also accept the lettered folio is a
+            # question about those sites, answerable only against them, and not what #326 is about —
+            # so this does not quietly change a working link. `folio` itself is now raw.
+            'st': st, 'obid': obid_val, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio_d) if folio_d else '',
+            'tax': cfg['tax'](folio_d) if folio_d else '', 'auc': auc, 'people': links['people'], 'peopleaddr': links['peopleaddr'], 'cyberbg': links['cyberbg'], 'cyberbgaddr': links['cyberbgaddr'],
             # A TAX DEED IS NOT A BANK FORECLOSURE. This read 'Bank/Mortgage' for every Broward and
             # Palm Beach tax deed — 140 rows whose card told the operator the wrong kind of case,
             # and which no ctype-based tax-deed test could ever catch.
