@@ -458,6 +458,10 @@ _lp = [
     (_LP.classify(_U + 'x', 'Whitepages', _S, '205C', _U + 'x'), 'none'),
     (_LP.classify(_U + '2929-NW-123rd-Ter/Miami-FL/Id', '', '2929 NW 123 TER', ''), 'house'),
     (_LP.classify(_U + '2929-NW-124th-Ter/Miami-FL/Id', '', '2929 NW 123 TER', ''), 'other'),
+    (_LP.classify(_U + '842-SW-9th-St/Miami-FL/Id', '', '842 NW 9 ST', ''), 'other'),
+    (_LP.classify(_U + '842-NW-9th-St/Hialeah-FL/Id', '', '842 NW 9 ST', '', '', 'MIAMI'), 'other'),
+    (_LP.classify(_U + '842-NW-9th-St/Miami-Gardens-FL/Id', '', '842 NW 9 ST', '', '', 'MIAMI'), 'house'),
+    (_LP.classify(_U + 'x', '842 SW 9th St, Miami, FL 33130', '842 NW 9 ST', '', _U + 'x', 'MIAMI'), 'other'),
 ]
 rec('link probe: whole-unit match, no ZIP/street/substring false hits, bot check, no-redirect',
     all(g == w for g, w in _lp), _lp)

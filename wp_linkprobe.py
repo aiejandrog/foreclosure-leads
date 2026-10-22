@@ -101,7 +101,7 @@ def _visits_since(t0):
     """Every (unix_time, url, title) any Chromium profile recorded at or after t0."""
     rows = []
     for f in _history_files():
-        if os.path.getmtime(f) < t0 - 60:
+        if max(os.path.getmtime(x) for x in (f, f + '-wal', f + '-journal') if os.path.exists(x)) < t0 - 60:
             continue
         tmp = os.path.join(tempfile.mkdtemp(), 'History')
         try:
@@ -152,19 +152,25 @@ def _addr_part(url, title, opened):
     seg = [x for x in path.split('/') if x]
     redirected = not (opened and path.rstrip('/').lower() == urllib.parse.urlparse(opened).path.rstrip('/').lower())
     if redirected and len(seg) >= 2 and seg[0] == 'address':
-        return _toks(seg[1])
-    line = (title or '').split(',')[0].split('|')[0]
-    return _toks(line) if re.match(r'\s*\d', line) else None
+        return _toks(seg[1]), (_toks(seg[2].rsplit('-', 1)[0]) if len(seg) >= 3 else [])
+    line = (title or '').split('|')[0]
+    parts = line.split(',')
+    if not re.match(r'\s*\d', parts[0]):
+        return None
+    return _toks(parts[0]), (_toks(parts[1]) if len(parts) > 1 else [])
 
 
-def classify(url, title, street, unit, opened=''):
+def classify(url, title, street, unit, opened='', city=''):
     if not url:
         return 'none'
     if _BLOCK.search(title or '') and not re.match(r'\s*\d', title or ''):
         return 'blocked'
-    got = _addr_part(url, title, opened)
-    if got is None:
+    part = _addr_part(url, title, opened)
+    if part is None:
         return 'other' if _LIST.search(title or '') else 'none'
+    got, got_city = part
+    if city and got_city and not set(got_city) & set(_toks(city)):
+        return 'other'                                     # same street line, another city (Miami ~ Miami Gardens passes)
     want = _toks(re.sub(r'(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*\S+', ' ', street, flags=re.I))
     u = ''.join(_toks(unit))
     if unit and want and want[-1] == u:
@@ -175,9 +181,11 @@ def classify(url, title, street, unit, opened=''):
     for t in want[1:]:                                     # take our street out, one token at a time
         if t in rest:
             rest.remove(t)
-        elif t not in W._DIRS and t not in W._SUFFIXES:
-            return 'other'                                 # a different street name
-    rest = [t for t in rest if t not in _LABELS and t not in W._DIRS and t not in W._SUFFIXES]
+        elif t not in W._SUFFIXES:
+            return 'other'                                 # a different street name or quadrant (NW vs SW)
+    if any(t in W._DIRS for t in rest):
+        return 'other'                                     # a quadrant we do not have
+    rest = [t for t in rest if t not in _LABELS and t not in W._SUFFIXES]
     if not unit:
         return 'house' if not rest else 'other'
     if not rest:
@@ -214,13 +222,13 @@ def main():
                                                       n_links, round(n_links * a.gap / 60) + 1), flush=True)
 
     t_start = time.time()
-    opened = []                             # (open_time, case, form, street, unit, url)
+    opened = []                             # (open_time, case, form, street, unit, url, city)
     for r in pick:
         addr = WL._lead_addr(r)
         street, city, _ = WL._split_addr(addr)
         forms, unit = candidates(street, city, addr)
         for form, url in forms.items():
-            opened.append((time.time(), WL._lead_key(r), form, street, unit, url))
+            opened.append((time.time(), WL._lead_key(r), form, street, unit, url, city))
             webbrowser.open(url)
             time.sleep(a.gap)
         print('  ...%s: %d link(s) opened' % (WL._lead_key(r)[-4:], len(forms)), flush=True)
@@ -229,11 +237,11 @@ def main():
     visits = _visits_since(t_start - 2)
 
     table, detail = {}, []
-    for i, (t, case, form, street, unit, url) in enumerate(opened):
+    for i, (t, case, form, street, unit, url, city) in enumerate(opened):
         t_next = opened[i + 1][0] if i + 1 < len(opened) else t + a.gap
         mine = [v for v in visits if t <= v[0] < t_next]
         final = mine[-1] if mine else (0, '', '')
-        verdict = classify(final[1], final[2], street, unit, url)
+        verdict = classify(final[1], final[2], street, unit, url, city)
         kind = 'condo' if unit else 'house'
         table.setdefault((kind, form), {}).setdefault(verdict, 0)
         table[(kind, form)][verdict] += 1
