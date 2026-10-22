@@ -414,5 +414,126 @@ W._note_attempt('S-1')
 ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 0, 'refresh': False, 'retry_misses': True})())]
 rec('--retry-misses reopens only leads that missed', ks == ['S-1'], ks)
 
+print('\nOWNER-NAME SEARCH (no page for the address)')
+rec('name url is First-Last / City-FL',
+    W._name_url({'owners': 'ROMERO, MARISOL A', 'addr': ADDR}) == W.BASE + '/name/Marisol-Romero/Coral-Springs-FL',
+    W._name_url({'owners': 'ROMERO, MARISOL A', 'addr': ADDR}))
+rec('no name url for an entity owner', W._name_url({'owners': 'ACME HOLDINGS LLC', 'addr': ADDR}) == '')
+# Invented person page: the owner, her numbers, her address, then relatives WITH numbers that must
+# not be read as hers, and a toll-free help line.
+PERSON = """Marisol A Romero, Age 54
+Lives in Coral Springs, FL
+Phone Numbers
+(954) 555-0101
+Mobile
+(954) 555-0102 Landline
+(844) 555-0000
+Current Address
+1723 Canal Dr, Coral Springs, FL 33071
+Email
+mromero@example.com
+Possible Relatives
+Daniel Romero, Age 30
+(954) 555-0199
+"""
+r1, why1 = W.parse_person_page(PERSON, 'ROMERO, MARISOL', '1723 CANAL DR')
+nums = [p['number'] for p in (r1 or {}).get('phones', [])]
+rec('person page: the owner\'s two numbers, typed', nums == ['9545550101', '9545550102']
+    and [p['type'] for p in r1['phones']] == ['mobile', 'landline'], (nums, why1))
+rec('a relative\'s number below the relatives heading is not hers', '9545550199' not in nums)
+rec('the email is hers', (r1 or {}).get('emails') == ['mromero@example.com'], r1)
+rec('the record grades wp: owner placed at our address',
+    C.grade_person_record('ROMERO, MARISOL', ADDR, r1) == 'wp', r1)
+r2, why2 = W.parse_person_page(PERSON.replace('1723 Canal Dr', '88 Palm Way'), 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a namesake page without our address is refused', r2 is None and 'address' in why2, why2)
+r3, why3 = W.parse_person_page(PERSON.replace('Marisol A Romero', 'Marta Lopez'), 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a page whose names do not clear the owner bar is refused', r3 is None and 'owner bar' in why3, why3)
+LIST = 'People Search Results\n' + '\n'.join('Marisol Romero%s, Age %d\nCoral Springs, FL\n(954) 555-01%02d\n1723 Canal Dr' % (
+    ' X' * i, 30 + i, i) for i in range(8))
+r4, why4 = W.parse_person_page(LIST, 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a copied results list is refused, not parsed', r4 is None and 'results list' in why4, why4)
+ROW = "Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal Dr\nJorge Diaz, Age 61\n(954) 555-0177\n"
+r5, _ = W.parse_person_page(ROW, 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('the next person row (name + age) ends her block',
+    r5 and [p['number'] for p in r5['phones']] == ['9545550101'], r5)
+r6, why6 = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\nLives in Hialeah, FL\n"
+                                "Jorge Diaz, Age 61\n1723 Canal Dr\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('our address on someone else\'s row does not place her at the house', r6 is None and 'address' in why6, why6)
+r7, why7 = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\nPast Addresses\n1723 Canal Dr\n",
+                                'ROMERO, MARISOL', '1723 CANAL DR')
+rec('our address under past addresses does not count', r7 is None and 'address' in why7, why7)
+r8, why8 = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\n1723 SW Canal Dr\n",
+                                'ROMERO, MARISOL', '1723 NE CANAL DR')
+rec('same number and street word in another quadrant is not our house', r8 is None, why8)
+r9, why9 = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal Dr\n"
+                                "Marisol Romero, Age 71\n(954) 555-0188\n9 Oak St\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('two namesakes with ages (a short results list) is refused', r9 is None and 'results list' in why9, why9)
+r10, _ = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal Dr\nFamily\nMaria Garcia\n(305) 555-4444\n",
+                              'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a family member with no age is not in her block', r10 and [p['number'] for p in r10['phones']] == ['9545550101'], r10)
+r11, _ = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal Dr\nMaria Garcia\n(305) 555-4444\n",
+                              'ROMERO, MARISOL', '1723 CANAL DR')
+rec('any later name line ends her block', r11 and [p['number'] for p in r11['phones']] == ['9545550101'], r11)
+rec('the stored address is the page\'s own line', r11 and r11['current_addresses'][0]['full_address'] == '1723 Canal Dr', r11)
+HEAD_ = "Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal Dr\n"
+for label, tail in (('"Jane Smith, 52" row', "Jane Smith, 52\n(305) 555-0002\n"),
+                    ('"JANE DOE 52" row', "JANE DOE 52\n(305) 555-0002\n"),
+                    ('"Relationships" heading', "Relationships\nJane Doe (Spouse)\n(305) 555-0002\n"),
+                    ('a bare first name', "Jane\n(305) 555-0002\n"),
+                    ('a number labelled with another name', "(305) 555-0002 - Mobile - Jane Doe\n")):
+    rr, _ = W.parse_person_page(HEAD_ + tail, 'ROMERO, MARISOL', '1723 CANAL DR')
+    rec('a relative after %s is not hers' % label, rr and [p['number'] for p in rr['phones']] == ['9545550101'], rr)
+rr, why_ = W.parse_person_page("Marisol Romero\nCoral Springs, FL\nAge 54\n1723 Canal Dr\n(954) 555-0101\n"
+                               "Marisol Romero\nHialeah, FL\nAge 30\n(954) 555-0110\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('two namesakes with the age two lines down is refused', rr is None, rr)
+rr, _ = W.parse_person_page("Marisol Romero in Coral Springs\nPeter Jones and Marisol Romero are listed\n"
+                            "1723 Canal Dr\n(954) 555-0111\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a block that turns into another person\'s text is not hers', rr is None, rr)
+for label, page in (('as someone else\'s relative', "Jane Doe, Age 52\nLives in Coral Springs, FL\nRelatives\n"
+                     "Marisol Romero, Age 54\n(305) 555-0020\n1723 Canal Dr\n"),
+                    ('in a people-also-viewed footer', "Jane Doe, Age 52\n1723 Canal Dr\nPeople also viewed\n"
+                     "Marisol Romero, Age 54\n(305) 555-0022\n1723 Canal Dr\n")):
+    rr, _ = W.parse_person_page(page, 'ROMERO, MARISOL', '1723 CANAL DR')
+    rec('the owner listed %s is refused' % label, rr is None, rr)
+for label, tail in (('a bulleted name', "\u2022 Jane Doe\n(305) 555-0023\n"), ('a numbered name', "1. Jane Doe\n(305) 555-0024\n"), ('a numbered name, no dot', "1 Jane Doe\n(305) 555-0026\n"),
+                    ('"Robert Doe II"', "Robert Doe II\n(305) 555-0002\n"), ('"JANE DOE JR"', "JANE DOE JR\n(305) 555-0004\n"),
+                    ('"TONY NG"', "TONY NG\n(305) 555-0005\n"),
+                    ('"Lives in ... with" a stranger', "Lives in Miami, FL with Jane Doe, 52\n(305) 555-0006\n"),
+                    ('"Lived at ... Related to"', "Lived at 9 NW 1 Ave \u00b7 Related to Jane Doe\n(305) 555-0007\n"),
+                    ('a name made of label words', "Home Carrier\n(305) 555-0008\n"),
+                    ('an accented name with a bare age', "\u00cd\u00f1igo N\u00fa\u00f1ez, 40\n(305) 555-0025\n")):
+    rr, _ = W.parse_person_page(HEAD_ + tail, 'ROMERO, MARISOL', '1723 CANAL DR')
+    rec('a relative after %s is not hers' % label, rr and [p['number'] for p in rr['phones']] == ['9545550101'], rr)
+rr, _ = W.parse_person_page("Marisol Romero\n(954) 555-0101\n1723 Canal Dr\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('an owner name with no age (not a profile) is refused', rr is None, rr)
+rr, _ = W.parse_person_page(HEAD_ + "(954) 555-0103 - Wireless - T-Mobile USA\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a number with only a type and carrier is still hers', rr and len(rr['phones']) == 2 and rr['phones'][1]['type'] == 'mobile', rr)
+rec('--by-name refuses the automated run', W.main(['--by-name', '3']) == 2 and W.main(['--by-name', '0']) == 2)
+WL.CACHE = os.path.join(td, 'wp_name.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'N-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13 + i}
+            for i in range(3)] + [{'case': 'N-9', 'owners': 'ACME LLC', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+W._note_attempt('N-1')
+W._note_attempt('N-9')
+W._note_attempt(W._NAME_MISS + 'N-2'); W._note_attempt('N-2'); W._note_attempt(W._NAME_MISS + 'N-2')
+ks = [WL._lead_key(r) for r in W._name_candidates(leads, {}, {})]
+rec('by-name picks only leads whose address path missed, person owners, not tried out', ks == ['N-1'], ks)
+ks = [WL._lead_key(r) for r in W._name_candidates(leads, {'N-1': {'_person': [{'name': 'x', 'response': []}]}}, {})]
+rec('a lead already name-searched is not reopened', ks == [], ks)
+import webbrowser as _wb
+_wb.open = lambda *a, **k: True
+W._set_clipboard = lambda t: True
+W._clipboard_text = lambda: PERSON
+n_ok = W.assist_name([leads[1]], wait_s=3)
+c5 = _j.load(open(WL.CACHE, encoding='utf-8'))
+pr = (c5.get('N-1') or {}).get('_person') or []
+rec('assist_name caches a Person-layer record the bake grades wp', n_ok == 1 and len(pr) == 1
+    and C.grade_person_record('ROMERO, MARISOL', ADDR, pr[0]['response'][0]) == 'wp', c5.get('N-1'))
+rec('the copied person page is kept outside the repo, under name/',
+    os.path.exists(os.path.join(td, 'wpweb_pages', 'name', 'N-1.txt')))
+ms = W.name_structure(PERSON)
+rec('the masked layout carries no name, street, city or number',
+    not any(t in ms for t in ('Marisol', 'Romero', 'Canal', 'Coral', '954', 'mromero')), ms)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
