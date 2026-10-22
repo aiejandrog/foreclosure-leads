@@ -289,7 +289,7 @@ nums = [x['number'] for p in (g0.get('residents') or []) + ((g0.get('ownership_i
         for x in p['phones']]
 rec('reparse rebuilds a kept page with the fixed parser', '8445550199' not in nums and '3040210010' not in nums
     and '9542003003' in nums and c5['G-0']['_ts'] == 5, nums)
-rec('reparse drops a wrong-address page and one with no kept copy', 'G-1' not in c5 and 'G-2' not in c5, list(c5))
+rec('reparse drops a wrong-address page, leaves one with no kept copy', 'G-1' not in c5 and 'G-2' in c5, list(c5))
 rec('reparse never touches an API entry', c5.get('API-1', {}).get('result') == {'apn': 'x'})
 
 # a lead whose kept page is its own address with nobody on it is not offered again
@@ -303,6 +303,91 @@ ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_call
 rec('--compare skips a lead whose copied page had nobody on it', ks == ['H-1'], ks)
 ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5, 'refresh': True})())]
 rec('--refresh offers it again', 'H-0' in ks, ks)
+
+rec('a # unit on the lead must match: #14 page vs #12 lead refused',
+    not W.page_matches_address('123 Main St #14, Miami', '123 MAIN ST #12'))
+rec('#12 lead matches an Apt 12 page', W.page_matches_address('123 Main St Apt 12', '123 MAIN ST #12'))
+rec('Apt 12 lead matches a #12 page', W.page_matches_address('123 Main St #12', '123 MAIN ST APT 12'))
+rec('Northwest 5th Street matches NW 5th St', W.page_matches_address('100 NW 5th St', '100 NORTHWEST 5TH STREET'))
+# reparse keeps a paid Person layer and refuses to run on empty lead files
+leads[:] = [{'case': 'J-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+W._keep_page('J-0', OTHER)
+_j.dump({'J-0': {'result': {}, '_src': 'wpweb-hand', '_person': {'x': 1}, '_http': 200, '_ts': 5}}, open(WL.CACHE, 'w'))
+W.reparse()
+c7 = _j.load(open(WL.CACHE, encoding='utf-8'))
+rec('reparse keeps a paid Person layer when it drops the page half',
+    c7.get('J-0', {}).get('_person') == {'x': 1} and 'result' not in c7['J-0'], c7.get('J-0'))
+_ll = WL.load_all_leads
+WL.load_all_leads = lambda: []
+rec('reparse refuses when the lead files read empty', W.reparse() == 1 and 'J-0' in _j.load(open(WL.CACHE, encoding='utf-8')))
+WL.load_all_leads = _ll
+
+rec('"West Ave" lead refuses an "Alton Ave" page', not W.page_matches_address('1234 Alton Ave', '1234 WEST AVE'))
+rec('"West Ave" lead matches a "West Ave" page', W.page_matches_address('1234 West Ave', '1234 WEST AVE'))
+SIGNEDOUT = '1723 Canal Dr\nCoral Springs, FL 33071\nOwners & Residents\nMarisol Romero\nResident\nCell Phone\nSign in to view\n'
+leads[:] = [{'case': 'K-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+WL.load_skiptrace = lambda: {'K-0': {'phones': [{'number': '3055550100'}]}}
+W._keep_page('K-0', SIGNEDOUT)
+rec('a signed-out copy (people, no phones) does not hide the lead', not W._known_empty(leads[0]))
+
+# a page for another address gets one retry with the lead's address on the clipboard
+W.time = _Clock()
+put = []
+W._set_clipboard = lambda a: put.append(a) or True
+seq[:] = ['old', OTHER, ADDR, PAGE, PAGE]
+WL.CACHE = os.path.join(td, 'wp8.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'L-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+n8 = W.assist(list(leads), wait_s=10)
+rec('wrong page -> address on clipboard -> the right page is cached', n8 == 1 and put == [ADDR]
+    and 'L-0' in _j.load(open(WL.CACHE, encoding='utf-8')), (n8, put))
+
+rec('"West Ave" lead refuses a "W 41st St" page', not W.page_matches_address('1234 W 41st St, Miami Beach', '1234 WEST AVE'))
+rec('"West Ave" lead matches "1234 W Avenue"', W.page_matches_address('1234 W Avenue', '1234 WEST AVE'))
+rec('--addr-check masks a surname that is a street word', 'Lane' not in W._shape('Jane Lane, 54, owner of 1234 West Ave')
+    and 'West' not in W._shape('Jane Lane, 54, owner of 1234 West Ave'))
+
+W.time = _Clock()
+seq[:] = ['old', OTHER, ADDR + '\r\n', 'not a page', PAGE, PAGE]
+WL.CACHE = os.path.join(td, 'wp9.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'M-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+rec('the address echoed back with CR/LF, or a stray copy, is not taken as the page',
+    W.assist(list(leads), wait_s=10) == 1 and 'M-0' in _j.load(open(WL.CACHE, encoding='utf-8')))
+
+CITY = ('People SearchReverse PhoneReverse Address\nSunrise, FL Property Records\n4,687 of 23,435 results\n'
+        'Search property records in Sunrise, FL to see who lives at or owns each home\n'
+        '[1723 Canal Dr](https://www.whitepages.com/address/1723-Canal-Dr/Sunrise-FL/Abc)\n')
+rec('the city property list is named as such', W._why_empty(CITY) == "Whitepages showed the city's property list, not the house", W._why_empty(CITY))
+W.time = _Clock()
+put[:] = []
+seq[:] = ['old', CITY, ADDR, PAGE, PAGE]
+WL.CACHE = os.path.join(td, 'wp10.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == [ADDR])
+rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105') == '8600 NW 34th Pl Apt B105'
+    and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
+    == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
+
+rec('State Road 7 keeps its number, not a unit', W._wp_street('4500 N STATE ROAD 7') == '4500 N State Road 7', W._wp_street('4500 N STATE ROAD 7'))
+rec('US Highway 1 is not "1st"', W._wp_street('1234 US HIGHWAY 1') == '1234 US Highway 1', W._wp_street('1234 US HIGHWAY 1'))
+rec('a State Rd page without the 7 is refused', not W.page_matches_address('4500 N State Rd, Lauderdale Lakes', '4500 N STATE ROAD 7'))
+rec('a State Road 7 page matches', W.page_matches_address('4500 N State Road 7, Lauderdale Lakes', '4500 N STATE ROAD 7'))
+rec('a house page with a search-records link is not the city list',
+    W._why_empty(PAGE + '\nSearch property records in Coral Springs, FL\n') != "Whitepages showed the city's property list, not the house")
+
+# selection skips cached leads and leads with two misses this week
+leads[:] = [{'case': 'P-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR.replace('1723', str(1800 + i)),
+             'auction': '11/04/2026', 'days': 13 + i} for i in range(3)]
+WL.load_skiptrace = lambda: {'P-%d' % i: {'phones': [{'number': '305555010%d' % i}]} for i in range(3)}
+WL.CACHE = os.path.join(td, 'wp11.json')
+W.CACHE = WL.CACHE
+_j.dump({'P-0': {'result': {}, '_src': 'wpweb-hand', '_http': 200, '_ts': 1}}, open(WL.CACHE, 'w'))
+W._note_attempt('P-1')
+W._note_attempt('P-1')
+ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5, 'refresh': False})())]
+rec('a run opens only fresh leads (not cached, not tried twice)', ks == ['P-2'], ks)
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

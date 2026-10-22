@@ -161,7 +161,18 @@ def page_apn(text):
 
 
 _DIRS = {'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw', 'north', 'south', 'east', 'west'}
-_UNIT_RE = re.compile(r'\b(?:apt|unit|ste|suite|#)\s*#?\s*([0-9A-Za-z\-]+)', re.I)
+_UNIT_RE = re.compile(r'(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)', re.I)
+_SUFFIXES = {'st', 'ave', 'ct', 'ter', 'dr', 'rd', 'ln', 'pl', 'blvd', 'way', 'cir', 'pkwy', 'hwy',
+             'trl', 'street', 'avenue', 'court', 'terrace', 'drive', 'road', 'lane', 'place', 'circle'}
+_SUFFIX_SAME = {'st': {'street'}, 'street': {'st'}, 'ave': {'avenue', 'av'}, 'avenue': {'ave', 'av'},
+                'ct': {'court'}, 'court': {'ct'}, 'ter': {'terrace'}, 'terrace': {'ter'},
+                'dr': {'drive'}, 'drive': {'dr'}, 'rd': {'road'}, 'road': {'rd'}, 'ln': {'lane'},
+                'lane': {'ln'}, 'pl': {'place'}, 'place': {'pl'}, 'cir': {'circle'}, 'circle': {'cir'}}
+# A number after one of these is the road's own number ("State Road 7", "US Highway 1"): never an
+# ordinal, never a unit, and it has to be on the page too.
+_ROUTE_WORDS = {'road', 'rd', 'highway', 'hwy', 'sr', 'us', 'route', 'rte', 'cr'}
+_DIR_WORDS = {'northwest': 'nw', 'northeast': 'ne', 'southwest': 'sw', 'southeast': 'se',
+              'north': 'n', 'south': 's', 'east': 'e', 'west': 'w'}
 
 
 def page_matches_address(text, street):
@@ -170,24 +181,65 @@ def page_matches_address(text, street):
     house (a wrong URL hit, or a late copy of the previous lead's page) is refused, so its people
     are never cached as this lead's household."""
     def norm(t):            # "9th" and "9" are the same street; case never matters
-        return re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
-    toks = norm(re.sub(r'[^A-Za-z0-9# ]', ' ', str(street or ''))).split()
+        t = re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
+        return re.sub(r'\b(%s)\b' % '|'.join(_DIR_WORDS), lambda m: _DIR_WORDS[m.group(1)], t)
+    toks = norm(re.sub(r'[^A-Za-z0-9 ]', ' ', _UNIT_RE.sub(' ', str(street or '')))).split()
     if not toks or not toks[0].isdigit():
         return False
     house = toks[0]
     name = next((t for t in toks[1:] if t.lower() not in _DIRS), '')
+    suffix = ''
+    if name in _SUFFIXES:
+        # "1234 West Ave": the street's name IS the direction word; compare it AND the suffix.
+        d = next((t for t in reversed(toks[1:toks.index(name)]) if t in _DIRS), '')
+        if d:
+            name, suffix = d, name
     m = _UNIT_RE.search(street or '')
-    unit = m.group(1).lower() if m else ''
+    unit = m.group(1).lower().replace('-', ' ').strip() if m else ''
+    route = next((t for i, t in enumerate(toks) if i > 1 and t.isdigit() and toks[i - 1] in _ROUTE_WORDS), '')
     for l in str(text or '').split('\n'):
-        low = ' ' + norm(re.sub(r'[^a-z0-9#]', ' ', l.lower())) + ' '
+        low = ' ' + norm(re.sub(r'[^a-z0-9]', ' ', l.lower())) + ' '
         if (' %s ' % house.lower()) not in low:
             continue
         if name and (' %s ' % name.lower()) not in low:
             continue
+        if suffix and not ({suffix} | _SUFFIX_SAME.get(suffix, set())) & set(low.split()):
+            continue
         if unit and (' %s ' % unit) not in low:
+            continue
+        if route and (' %s ' % route) not in low.replace(' %s ' % house.lower(), ' ', 1):
             continue
         return True
     return False
+
+
+# Only short abbreviations survive masking: a full word (Lane, West, Court) can be a surname.
+_KEEP_WORDS = {'apt', 'unit', 'ste', 'bldg', 'st', 'ave', 'ct', 'ter', 'rd', 'ln', 'pl',
+               'blvd', 'cir', 'pkwy', 'hwy', 'trl', 'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'}
+
+
+def _shape(t):
+    """An address with every number as 9s and every street-name word as W: safe to paste."""
+    out = []
+    for w in re.findall(r'[A-Za-z]+|\d+|[^A-Za-z\d\s]', str(t or '')):
+        out.append(re.sub(r'\d', '9', w) if w[0].isdigit() else
+                   (w if w.lower() in _KEEP_WORDS or not w.isalpha() else 'W'))
+    return ' '.join(out)
+
+
+def addr_why(text, street):
+    """Why page_matches_address refused, plus masked shapes of the lead street and the page's
+    address-looking lines. Counts and shapes only."""
+    if page_matches_address(text, street):
+        return 'match', _shape(street), []
+    toks = re.sub(r'[^A-Za-z0-9 ]', ' ', _UNIT_RE.sub(' ', str(street or ''))).split()
+    if not toks or not toks[0].isdigit():
+        return 'lead street has no house number', _shape(street), []
+    house = toks[0]
+    lines = [l.strip() for l in str(text or '').split('\n')
+             if re.search(r'(^|\D)%s(\D|$)' % re.escape(house), l) and len(l) < 160]
+    why = 'house number never on the page' if not lines else 'house number found; street word or unit differs'
+    return why, _shape(street), sorted(set(_shape(l) for l in lines))[:4]
 
 
 def _lead_street(lead):
@@ -232,6 +284,40 @@ def _counts(entry):
 
 # ---- the browser half (laptop only; import guarded so --plan needs no Playwright) -----------------
 
+def _ordinal(n):
+    n = int(n)
+    suf = 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+    return '%d%s' % (n, suf)
+
+
+def _wp_street(street):
+    """Our street as Whitepages writes it in its own links (10-22, from real result pages):
+    "2929 NW 123 TER" -> "2929 NW 123rd Ter", "8600 NW 34 PL #B105" -> "8600 NW 34th Pl Apt B105",
+    "9999 NE 99 AVE 999" (bare trailing unit) -> "... Ave Apt 999". A link in our own spelling
+    (no ordinal) falls through to the city's property list instead of the house."""
+    m = _UNIT_RE.search(street or '')
+    unit = m.group(1) if m else ''
+    base = _UNIT_RE.sub(' ', str(street or ''))
+    toks = re.sub(r'[^A-Za-z0-9 ]', ' ', base).split()
+    if (not unit and len(toks) >= 3 and toks[-1].isdigit() and toks[-2].lower() in _SUFFIXES
+            and toks[-2].lower() not in _ROUTE_WORDS):
+        unit = toks.pop()                       # "... AVE 999": a unit with no label
+    out = []
+    for i, t in enumerate(toks):
+        low = t.lower()
+        if i > 0 and t.isdigit() and toks[i - 1].lower() in _ROUTE_WORDS:
+            out.append(t)                       # State Road 7, US Highway 1
+        elif i > 0 and t.isdigit():
+            out.append(_ordinal(t))             # street names are numbered: 34 -> 34th
+        elif (low in _DIRS and len(low) <= 2) or low in ('us', 'sr', 'cr'):
+            out.append(t.upper())
+        else:
+            out.append(t[:1].upper() + t[1:].lower())
+    if unit:
+        out += ['Apt', unit.upper()]
+    return ' '.join(out)
+
+
 def _addr_query(street, city, state):
     """whitepages.com address URL: /address/<house-street>/<City>-<ST>. UNVERIFIED from here (the
     site is unreachable from the build environment); if it lands on a search page instead of the
@@ -239,7 +325,7 @@ def _addr_query(street, city, state):
     import urllib.parse
     def slug(t):
         return '-'.join(re.sub(r"[^A-Za-z0-9 ]", ' ', t).split())
-    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(street)),
+    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(_wp_street(street))),
                                  urllib.parse.quote('%s-%s' % (slug(city), state)))
 
 
@@ -321,7 +407,7 @@ def _run(todo, save_text=None, save_html=None, refresh=False):
                 for k in ('_person', '_prop_id'):           # keep any API layer already present
                     if old.get(k) is not None:
                         entry[k] = old[k]
-                cache[case] = entry
+                cache = _put(case, entry, cache)
                 ow, res, ph = _counts(entry)
                 print('  ...%s: %d owner(s), %d resident(s), %d phone(s)' % (case[-4:], ow, res, ph), flush=True)
                 scraped += 1
@@ -334,7 +420,6 @@ def _run(todo, save_text=None, save_html=None, refresh=False):
                     why = ' (page shows a bot check: solve it in the window, or wait and retry)'
                 print('  ...%s: no owners/residents parsed%s' % (case[-4:], why), flush=True)
                 miss += 1
-            _save_cache(cache)
             if idx < len(todo) - 1:
                 time.sleep(THROTTLE_S + random.uniform(0, 6))
         ctx.close()
@@ -409,7 +494,23 @@ def _clipboard_text():
 # A copied whitepages.com address page carries these; anything else copied is read as "skip".
 _PAGE_MARK = re.compile(r'Owners\s*&\s*Residents|Reverse Address|Property Details for|'
                         r'who (owns|lives at) .{0,80}\d{5}', re.I)
+# The city's property list (where a link Whitepages cannot resolve lands), not one house.
+_CITY_LIST_RE = re.compile(r'Property Records\s*\n\s*[\d,]+ of [\d,]+ results', re.I)
 ASSIST_WAIT_S = float(os.environ.get('WP_WEB_ASSIST_WAIT_S', '240'))
+
+
+_EMPTY_NOBODY = 'Whitepages has no one on file at this address'
+_EMPTY_NO_PERSON = 'Whitepages lists no person owner or resident here (business-owned or vacant?)'
+
+
+def _set_clipboard(t):
+    """Put text on the Windows clipboard (clip.exe). False anywhere else or on failure."""
+    try:
+        import subprocess
+        subprocess.run(['clip'], input=str(t).encode('utf-16-le'), check=True, timeout=10)
+        return True
+    except Exception:
+        return False
 
 
 def _why_empty(text):
@@ -417,11 +518,13 @@ def _why_empty(text):
     if _BLOCK_RE.search(text or ''):
         return 'the page is a block / verification page'
     if re.search(r'no people living at this property|no one currently lives at', text or '', re.I):
-        return 'Whitepages has no one on file at this address'
+        return _EMPTY_NOBODY
+    if _CITY_LIST_RE.search(text or ''):
+        return "Whitepages showed the city's property list, not the house"
     if not _PAGE_MARK.search(text or ''):
         return 'that was not a Whitepages address page'
     if not re.search(r'^\s*(owner|resident)\s*$', text or '', re.I | re.M):
-        return 'Whitepages lists no person owner or resident here (business-owned or vacant?)'
+        return _EMPTY_NO_PERSON
     return 'people listed but no phone or email showing (not signed in, or hidden on the page)'
 
 
@@ -448,24 +551,45 @@ def assist(todo, refresh=False, wait_s=None):
             base = _clipboard_text()
             webbrowser.open(_addr_query(*parts))
             print('[%d/%d] ...%s: page opened, waiting for your copy...' % (n, len(todo), case[-4:]), flush=True)
-            text, t0 = '', time.time()
+            text, t0, hinted = '', time.time(), False
             while time.time() - t0 < wait_s:
                 time.sleep(1.0)
                 cur = _clipboard_text()
-                if cur and cur != base:
-                    text = cur
+                if not cur or cur.strip() == (base or '').strip():
+                    continue
+                if hinted and not _PAGE_MARK.search(cur):
+                    continue                # e.g. the address pasted into the search box, re-copied
+                text = cur
+                if hinted or not _PAGE_MARK.search(cur) or (
+                        page_matches_address(cur, parts[0]) and not _CITY_LIST_RE.search(cur)):
+                    break
+                # Whitepages sent the address URL to some other property. Give one more try for this
+                # lead: put its address on the clipboard (never printed, the terminal gets pasted
+                # into chat) so it can be pasted into the site's own search box.
+                hinted = True
+                addr = _WL._lead_addr(lead)
+                if _set_clipboard(addr):
+                    base = addr
+                    print('  ...%s: that page is not this house. This lead\'s address is now on '
+                          'your clipboard: paste it into the Whitepages search box, open the property, '
+                          'then Ctrl+A, Ctrl+C.' % case[-4:], flush=True)
+                else:
                     break
             if not text:
                 print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
+                _note_attempt(case)
                 skipped += 1
                 continue
-            _keep_page(case, text)
-            same = page_matches_address(text, parts[0])
+            same = page_matches_address(text, parts[0]) and not _CITY_LIST_RE.search(text)
+            if same and _PAGE_MARK.search(text):
+                _keep_page(case, text)      # only this lead's own Whitepages page replaces its copy
             people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
-                why = _why_empty(text) if same or not _PAGE_MARK.search(text) else \
-                    'the copied page is for a different address'
+                why = _why_empty(text) if same or not _PAGE_MARK.search(text) or _CITY_LIST_RE.search(text) \
+                    else 'the copied page is for a different address'
                 reasons[why] = reasons.get(why, 0) + 1
+                if why not in (_EMPTY_NOBODY, _EMPTY_NO_PERSON):
+                    _note_attempt(case)
                 print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
                 skipped += 1
                 continue
@@ -562,8 +686,7 @@ def ingest_file(case, path, refresh=False):
     for k in ('_person', '_prop_id'):
         if old.get(k) is not None:
             entry[k] = old[k]
-    cache[case] = entry
-    _save_cache(cache)
+    _put(case, entry, cache)
     ow, res, ph = _counts(entry)
     print('...%s: %d owner(s), %d resident(s), %d phone(s) cached' % (case[-4:], ow, res, ph))
     return 0
@@ -573,20 +696,26 @@ def reparse():
     """Re-read every page this tool cached (entries marked _src wpweb*) from the copies kept in
     DEALFLOW_DIR/wpweb_pages with the CURRENT parser and address check. An entry whose page fails
     the check, parses to nobody, or has no kept copy is removed (the lead reads "not looked up"
-    again). Pro API entries are never touched. Counts only."""
+    again). Pro API entries are never touched, and an entry that also carries a paid Person layer
+    (`_person` / `_prop_id`) keeps it: only the page half is dropped. An entry with no kept page, or
+    whose lead is not in the lead files, is left as it is and counted. Counts only."""
     leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
+    if not leads:
+        print('the lead files read as empty; not touching the cache')
+        return 1
     cache = _load_cache()
-    kept = rebuilt = dropped = 0
+    kept = rebuilt = dropped = left = 0
     why = {}
     for case in [c for c, e in cache.items() if str((e or {}).get('_src', '')).startswith('wpweb')]:
         old = cache[case]
         f = os.path.join(_pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt')
         lead = leads.get(case)
         reason = ''
-        if not os.path.exists(f):
-            reason = 'no kept copy of the page'
-        elif lead is None:
-            reason = 'lead no longer on the board'
+        if not os.path.exists(f) or lead is None:
+            k = 'no kept copy of the page' if not os.path.exists(f) else 'lead not in the lead files'
+            why['left as is, ' + k] = why.get('left as is, ' + k, 0) + 1
+            left += 1
+            continue
         else:
             text = open(f, encoding='utf-8', errors='replace').read()
             if not page_matches_address(text, _lead_street(lead)):
@@ -607,14 +736,61 @@ def reparse():
                         rebuilt += 1
                     cache[case] = entry
                     continue
-        del cache[case]
+        paid = {k: old[k] for k in ('_person', '_prop_id') if old.get(k) is not None}
+        if paid:
+            cache[case] = dict(paid, _ts=old.get('_ts'))   # keep what was paid for, drop the page half
+        else:
+            del cache[case]
         dropped += 1
-        why[reason] = why.get(reason, 0) + 1
+        why['removed, ' + reason] = why.get('removed, ' + reason, 0) + 1
     _save_cache(cache)
-    print('re-read %d page(s): %d unchanged, %d rebuilt, %d removed' % (kept + rebuilt + dropped, kept, rebuilt, dropped))
+    print('re-read %d page(s): %d unchanged, %d rebuilt, %d removed; %d left as is'
+          % (kept + rebuilt + dropped, kept, rebuilt, dropped, left))
     for k, v in sorted(why.items(), key=lambda x: -x[1]):
-        print('  removed, %s: %d' % (k, v))
+        print('  %s: %d' % (k, v))
     return 0
+
+
+ATTEMPT_DAYS = 7
+
+
+def _attempts_path():
+    return os.path.join(_pages_dir(), '_attempts.json')
+
+
+def _attempts():
+    import json
+    try:
+        return json.load(open(_attempts_path(), encoding='utf-8')) or {}
+    except Exception:
+        return {}
+
+
+def _note_attempt(case):
+    """A copy that gave nothing usable for this lead (wrong house, city list, not a page, timeout)."""
+    import json
+    a = _attempts()
+    now = time.time()
+    a[case] = [t for t in a.get(case, []) if now - t < ATTEMPT_DAYS * 86400] + [now]
+    try:
+        json.dump(a, open(_attempts_path(), 'w', encoding='utf-8'))
+    except Exception:
+        pass
+
+
+def _tried_out(case, att):
+    """Two misses in the last week: stop offering it (Whitepages has no page for that address)."""
+    now = time.time()
+    return len([t for t in att.get(case, []) if now - t < ATTEMPT_DAYS * 86400]) >= 2
+
+
+def _fresh(pool, cache, refresh):
+    """Leads a run should open: not already cached, not a known-empty page, not tried out."""
+    if refresh:
+        return pool
+    att = _attempts()
+    return [r for r in pool if not _WL._cache_looked(cache.get(_WL._lead_key(r)))
+            and not _known_empty(r) and not _tried_out(_WL._lead_key(r), att)]
 
 
 def _known_empty(lead):
@@ -628,7 +804,9 @@ def _known_empty(lead):
         text = open(f, encoding='utf-8', errors='replace').read()
     except Exception:
         return False
-    return (bool(_PAGE_MARK.search(text)) and not _BLOCK_RE.search(text)
+    # Only a page that lists NO ONE. A signed-out page still lists people (no phones showing) and
+    # must stay selectable, or the lead would vanish from every later run.
+    return (_why_empty(text) in (_EMPTY_NOBODY, _EMPTY_NO_PERSON)
             and page_matches_address(text, _lead_street(lead)) and not parse_people_text(text))
 
 
@@ -654,14 +832,11 @@ def _select(args):
         # first (pick_callable sorts fewest-phones-first, the opposite of what a comparison wants).
         pool = _WL.pick_callable(leads, cache, 100000, skip)
         pool = [r for r in pool if _WL._lead_phone_count(r, skip) > 0]
-        if not getattr(args, 'refresh', False):
-            pool = [r for r in pool if not _known_empty(r)]
+        pool = _fresh(pool, cache, getattr(args, 'refresh', False))
         pool.sort(key=lambda r: (_WL._days_to_sale(r), _WL._lead_key(r)))
         return pool[:min(args.compare, MAX_LEADS)]
     n = args.pick_callable or MAX_LEADS
-    pool = _WL.pick_callable(leads, cache, 100000, skip)
-    if not getattr(args, 'refresh', False):
-        pool = [r for r in pool if not _known_empty(r)]
+    pool = _fresh(_WL.pick_callable(leads, cache, 100000, skip), cache, getattr(args, 'refresh', False))
     return pool[:min(n, MAX_LEADS)]
 
 
@@ -680,6 +855,8 @@ def main(argv=None):
                     help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
     ap.add_argument('--structure', metavar='CASE_OR_FILE',
                     help='print a copied page\'s owners/residents layout with names/numbers masked (safe to paste)')
+    ap.add_argument('--addr-check', action='store_true',
+                    help='for every kept page, say why its address did or did not match (masked shapes)')
     ap.add_argument('--reparse', action='store_true',
                     help='re-read every page this tool cached with the current parser; no browser')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
@@ -691,6 +868,20 @@ def main(argv=None):
         return 0
     if a.reparse:
         return reparse()
+    if a.addr_check:
+        leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
+        d = _pages_dir()
+        for f in sorted(x for x in os.listdir(d) if x.endswith('.txt')):
+            lead = leads.get(f[:-4])
+            if lead is None:
+                print('...%s: lead not in the lead files' % f[-8:-4])
+                continue
+            why, ls, ps = addr_why(open(os.path.join(d, f), encoding='utf-8', errors='replace').read(),
+                                   _lead_street(lead))
+            print('...%s: %s | lead: %s' % (f[-8:-4], why, ls))
+            for p in ps:
+                print('        page: %s' % p)
+        return 0
     if a.structure == 'clip':
         # Wait for the NEXT copy of a Whitepages page: whatever is on the clipboard now (often the
         # command just pasted to run this) is ignored.
