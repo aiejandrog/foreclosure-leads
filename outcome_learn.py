@@ -12,6 +12,10 @@ the dial day, so a rescheduled sale or a re-ranked phone list moves past dials b
 Nothing here changes queue order. When a bucket has enough conversations to trust, the ordering
 change is a separate, reviewed step.
 
+Pending/redial rows are attempt markers, not proof of missing outcomes. Call Mode can retain a
+redial marker alongside its outcome, linked by outcome.tsd == marker.tsu. Report linked and
+unlinked markers separately; legacy rows without timing cannot prove whether an outcome is missing.
+
 Reads:   worker_notes.json (repo root), P.TWIN (plaintext board), *_leads.json as a fallback for
          leads that have since dropped off the board (sold / aged out).
 Writes:  P.out('outcome_learn.json') -- counts only, no names, numbers, addresses or case ids.
@@ -35,6 +39,31 @@ HUMAN = CONVO | {'notint', 'dnc', 'gate'}        # someone picked up (gate = not
 NO_PICKUP = {'noanswer', 'voicemail'}
 BADNUM = {'badnum', 'wrong'}
 MIN_TRUST = 20    # a bucket needs this many dials before its rate means anything
+ATTEMPT_MARKERS = {'pending', 'redial'}
+
+
+def marker_counts(dials):
+    """Counts only. Match explicit timing within one case, day, phone suffix and caller.
+
+    Never infer a match just because another outcome exists later that day: it could belong to
+    another number or caller. Unlinked means no explicit link, not a verified missed disposition.
+    """
+    rows = [d for d in dials if isinstance(d, dict)]
+    linked = set()
+    for d in rows:
+        if d.get('oc') and d['oc'] not in ATTEMPT_MARKERS and d.get('tsd'):
+            linked.add((str(d['tsd']), d.get('d'), str(d.get('ph4') or ''), d.get('by') or ''))
+    counts = collections.Counter()
+    for d in rows:
+        if d.get('oc') not in ATTEMPT_MARKERS:
+            continue
+        counts['attempt markers'] += 1
+        key = (str(d.get('tsu')), d.get('d'), str(d.get('ph4') or ''), d.get('by') or '')
+        if d.get('tsu') and key in linked:
+            counts['markers linked to outcomes'] += 1
+        else:
+            counts['unlinked attempt markers'] += 1
+    return counts
 
 
 def _load(path, default):
@@ -157,15 +186,18 @@ def compute(days=None, today=None):
     for case, n in notes.items():
         if not isinstance(n, dict):
             continue
-        for d in n.get('dials') or []:
+        dials = n.get('dials') or []
+        window = []
+        for d in dials:
             if not isinstance(d, dict):
                 continue
-            oc = d.get('oc') or ''
             day = _date(d.get('d'), '%Y-%m-%d')
-            if cut and (not day or day < cut):
-                continue
-            if oc in ('pending', 'redial'):   # attempt markers; the real outcome is its own row
-                tot['pending (no outcome tapped)'] += 1
+            if not cut or (day and day >= cut):
+                window.append(d)
+        tot.update(marker_counts(window))
+        for d in window:
+            oc = d.get('oc') or ''
+            if oc in ATTEMPT_MARKERS:   # linked/unlinked counts above; never an extra outcome
                 continue
             oc_all[oc or 'blank'] += 1
             leads_dialed.add(case)
@@ -194,9 +226,12 @@ def render(res):
     out = []
     t = res['totals']
     out.append('OUTCOME LEARN  %s  (worker_notes received %s)' % (res['generated'], res['notes_received_utc'] or 'unknown'))
-    out.append('dials %d | leads dialed %d | leads with a conversation %d | pending, no outcome tapped %d'
-               % (t.get('dials', 0), t.get('leads dialed', 0), t.get('leads with a conversation', 0),
-                  t.get('pending (no outcome tapped)', 0)))
+    out.append('logged outcome rows %d | leads with logged outcomes %d | leads with a conversation %d'
+               % (t.get('dials', 0), t.get('leads dialed', 0), t.get('leads with a conversation', 0)))
+    out.append('attempt markers %d | linked to outcomes %d | unlinked %d'
+               % (t.get('attempt markers', 0), t.get('markers linked to outcomes', 0),
+                  t.get('unlinked attempt markers', 0)))
+    out.append('Unlinked markers are not confirmed missing outcomes; legacy rows may lack timing links.')
     out.append('outcomes: ' + ', '.join('%s %d' % kv for kv in sorted(res['outcomes'].items(), key=lambda x: -x[1])))
     convos = sum(v for k, v in res['outcomes'].items() if k in CONVO)
     if convos < MIN_TRUST:

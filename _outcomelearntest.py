@@ -43,7 +43,9 @@ def check(name, got, want):
 r = OL.compute(today=TODAY)
 bs = r['by_signal']
 check('dials exclude pending and redial', r['totals']['dials'], 4)
-check('pending + redial counted', r['totals']['pending (no outcome tapped)'], 2)
+check('pending + redial counted as markers', r['totals']['attempt markers'], 2)
+check('legacy markers have no explicit link', r['totals']['unlinked attempt markers'], 2)
+check('misleading missing-outcome key removed', 'pending (no outcome tapped)' in r['totals'], False)
 check('leads with convo', r['totals']['leads with a conversation'], 2)
 check('miami convo', bs['county']['MIAMI-DADE']['convo'], 1)
 check('gone lead bucket', bs['county']['lead gone']['dials'], 1)
@@ -54,11 +56,33 @@ check('no sale date is its own bucket', OL.sale_band({'auction': ''}, TODAY), 'n
 check('equity is a percent band', bs['equity %']['30-60%']['convo'], 1)
 w = OL.compute(days=1, today=TODAY)
 check('window', w['totals']['dials'], 2)
-check('pending honours window', w['totals'].get('pending (no outcome tapped)', 0), 0)
+check('markers honour window', w['totals'].get('attempt markers', 0), 0)
 blob = json.dumps(r)
 for leak in ('T-1', 'T-2', '3055550001', '0002'):
     if leak in blob:
         fails.append('output carries %r' % leak)
+
+# Call Mode retains redial, then logs an outcome with tsd pointing to that marker's tsu.
+marker = {'d': '2026-10-11', 'ph4': '0003', 'oc': 'redial', 'by': 'Carlos', 'tsu': 1000}
+outcome = dict(marker, oc='talked', tsu=2000, tsd=1000)
+check('explicit redial link', dict(OL.marker_counts([marker, outcome])),
+      {'attempt markers': 1, 'markers linked to outcomes': 1})
+for field, value in [('d', '2026-10-10'), ('ph4', '0001'), ('by', 'Alex'), ('tsd', 999)]:
+    other = dict(outcome, **{field: value})
+    check('do not match different ' + field, OL.marker_counts([marker, other])['unlinked attempt markers'], 1)
+check('later legacy outcome is not a proven match',
+      OL.marker_counts([marker, {k: v for k, v in outcome.items() if k != 'tsd'}])['unlinked attempt markers'], 1)
+check('malformed dial ignored', dict(OL.marker_counts([None, 'bad'])), {})
+notes['notes']['T-2']['dials'] = [marker, outcome]
+linked = OL.compute(today=TODAY)
+check('linked outcome counted once', linked['totals']['dials'], 4)
+check('compute reconciles redial marker', linked['totals']['markers linked to outcomes'], 1)
+check('legacy markers remain unlinked', linked['totals']['unlinked attempt markers'], 2)
+check('console explains uncertainty', 'not confirmed missing outcomes' in OL.render(linked), True)
+check('console distinguishes logged outcomes', 'logged outcome rows 4' in OL.render(linked), True)
+for leak in ('T-2', '0003', '1000', '2000'):
+    if leak in json.dumps(linked):
+        fails.append('reconciled output carries %r' % leak)
 
 # leads_final.json holds unslimmed Miami-Dade rows keyed 'Case #' / 'AuctionDate'
 d = tempfile.mkdtemp()
