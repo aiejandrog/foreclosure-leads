@@ -193,7 +193,7 @@ AUCTION_HORIZON_DAYS = int(os.environ.get('DEALFLOW_AUCTION_HORIZON_DAYS', '120'
 # exactly the code that never gets a test. See phone_src.py for the reasoning behind each tag.
 from phone_src import (MAX_PHONES, SHARED_PHONE_MIN_OWNERS, PHSRC_TRACE, PHSRC_WP,
                        PHSRC_HOUSEHOLD, PHSRC_NAME, PHSRC_AGENT, PHSRC_SHARED, PHSRC_NOT_OWNER,
-                       tag_shared_numbers, tag_listing_agents, propagate_dnc)   # noqa: F401
+                       tag_shared_numbers, tag_listing_agents, propagate_dnc, fit_phones)   # noqa: F401
 from sale_pick import newest_sale
 
 
@@ -670,6 +670,10 @@ def _valid_folio(s):
     doomed PA lookup or build a broken Appraiser/Tax deep-link. Returns the 13-digit folio or ''."""
     f = re.sub(r'\D', '', s or '')
     return f if len(f) == 13 else ''
+
+# wp_parcel_verdict lives in wp_contacts (no Playwright) so whitepages_lookup can apply it at lookup
+# time too; re-exported here for the bake and _wpapntest.
+from wp_contacts import wp_parcel_verdict  # noqa: E402,F401
 
 # The appraiser fields enrich() writes. When a night's appraiser call fails these are carried from
 # the last good read of the same folio (_carry_enrichment) instead of shipping blank.
@@ -3208,7 +3212,7 @@ def make_tracker(leads):
     if os.path.exists(_wpf) or _wp_ids:
         try:
             _wp = json.load(open(_wpf, encoding='utf-8')) if os.path.exists(_wpf) else {}
-            _wn = _wpn = _wpe = _wid = _wrel = 0
+            _wn = _wpn = _wpe = _wid = _wrel = _wpm = 0
             try:
                 import wp_contacts as _WPC
             except Exception as _wpce:
@@ -3251,15 +3255,46 @@ def make_tracker(leads):
                 _hit = _wp.get(_case)
                 if not _hit: continue
                 _res = (_hit.get('result') or {})
+                # APN GATE (2026-10-21). The case key is correct, but the cached record is only the
+                # right HOUSE when its parcel matches this lead's folio. A cross-check of all current
+                # joins found half the records resolved to a DIFFERENT parcel — same house number,
+                # wrong street — because the address fed to Whitepages at lookup time was garbled, and
+                # WP faithfully returned a real record for the wrong property. Its owners/phones are
+                # strangers; baking them is wrong-party contact (TCPA/FTSA). So before trusting any
+                # owner/phone/email/deep-link from this record, the WP result.apn must equal the lead's
+                # folio (digits only). A record we cannot tie to a parcel (lead folio missing/junk like
+                # the "Property Appraiser" scrape artifact) is NOT trusted for phones either — skiptrace
+                # already covers these leads by case, so suppressing an unverifiable WP record costs no
+                # coverage. One seam: fail here and nothing downstream bakes.
+                _pv = wp_parcel_verdict(_res.get('apn'), _r.get('folio'))
+                _lown, _laddr = (_r.get('owners') or _r.get('oname') or ''), (_r.get('addr') or '')
+                # The gate refuses the PROPERTY half of the record. The Person half (`_person`) was
+                # searched on the owner's NAME, never on the garbled address, and every Person record
+                # is graded against our owner below (namesakes dropped, 'wp' only when it places the
+                # owner at OUR address), so it does not inherit the wrong parcel and still bakes.
+                _prop_ok = _pv == 'ok'
+                if not _prop_ok:
+                    _r['wpKey'] = _pv          # 'mismatch' = a different parcel; 'unverified' = no folio to check
+                    if _r.pop('wpPropId', None) is not None: _wid -= 1  # the deep-link id is the wrong property's too
+                    _wpm += 1
                 _oi = (_res.get('ownership_info') or {})
-                _po = _oi.get('person_owners') or []
+                # 'ok' -> every person owner (graded below). 'mismatch' -> none. 'unverified' (no folio
+                # on our side) -> only an owner whose name clears the owner bar on a record whose
+                # property street is our lead's street (wp_contacts.parcel_owners).
+                _po = (_WPC.parcel_owners(_pv, _lown, _laddr, _res) if _WPC
+                       else (_oi.get('person_owners') or [] if _prop_ok else []))
+                if _pv == 'unverified' and _po:
+                    # owner + street matched: the deep-link is this house's after all
+                    _pid2 = _wp_norm_id(((_hit or {}).get('_prop_id') or _wp_ids.get(_case) or ''))
+                    if _pid2 and not _r.get('wpPropId'):
+                        _r['wpPropId'] = _pid2
+                        _wid += 1
                 _pc, _ = _prop_city_state(_r)
                 _owns = [_wp_own(o, _pc) for o in _po]
                 # WHO IS THE OWNER (wp_contacts). A person Whitepages lists on the parcel is tagged
                 # the owner's only when the name clears the same bar ownership_gate uses to decide
                 # the defendant still owns the house, tightened to two shared name tokens. Anyone
                 # else on the parcel is household, not the homeowner.
-                _lown, _laddr = (_r.get('owners') or _r.get('oname') or ''), (_r.get('addr') or '')
                 for _o in _owns:
                     _o['notOwner'] = (_WPC.grade_property_owner(_lown, _o['name']) != 'wp') if _WPC else False
                 _person_recs = _hit.get('_person') or []
@@ -3267,7 +3302,7 @@ def make_tracker(leads):
                 # still bake phones from the Person layer. Bare _prop_id stamps without a lookup
                 # are not a miss; skip quietly so we don't mark Marisela-style id-only rows 'none'.
                 if not _owns and not any((p.get('response') or []) for p in _person_recs):
-                    if _hit.get('result') is not None or _hit.get('_http') == 404:
+                    if _prop_ok and (_hit.get('result') is not None or _hit.get('_http') == 404):
                         _r['wpKey'] = 'none'
                     continue
                 # dedup phones + emails across owners; mobile first, absentee-owner phones tagged
@@ -3290,7 +3325,7 @@ def make_tracker(leads):
                 # resident:true — the play is "is <owner> home?", not "hi <owner>". Ranked after the
                 # owners so an owner's own mobile always leads.
                 _residents = []
-                for _rz in (_res.get('residents') or []):
+                for _rz in ((_res.get('residents') or []) if _prop_ok else []):
                     _rr = _wp_own(_rz, _pc)
                     if not (_rr['phones'] or _rr['emails']): continue
                     _rr['resident'] = True
@@ -3349,7 +3384,8 @@ def make_tracker(leads):
                 _r['wpAllPhones'] = _all_ph
                 _r['wpAllEmails'] = _all_em
                 _r['wpPersonRecs'] = len(_person_recs)
-                _r['wpKey'] = 'ok' if (_owns or _all_ph) else 'none'
+                if _prop_ok or _owns or _all_ph:
+                    _r['wpKey'] = 'ok' if (_owns or _all_ph) else 'none'
                 # merge WP phones into the lead's existing `phones` array — dedupe against skiptrace
                 # numbers so we don't double-list, cap at 8 total to keep the row readable
                 _cur = set()
@@ -3387,11 +3423,24 @@ def make_tracker(leads):
                         # same opening line, and not ahead of the owner.
                         _ps.append(PHSRC_HOUSEHOLD if p.get('resident')
                                    else (PHSRC_NAME if p.get('source') == 'person' else PHSRC_WP))
-                    _r['phones'] = _ph[:MAX_PHONES]
-                    _r['phtype'] = _pt[:MAX_PHONES]
-                    _r['phdnc']  = _pd[:MAX_PHONES]
-                    _r['phsrc']  = _ps[:MAX_PHONES]
-                    _wpn += len(_new)
+                    # FIT, DON'T TRUNCATE. `[:MAX_PHONES]` cut the tail, and the tail was always
+                    # Whitepages: half the paid-for numbers, owner numbers included, never reached
+                    # a dial (phone_src.fit_phones has the counts and the keep order).
+                    _ent = [{'n': _ph[i], 'type': _pt[i], 'dnc': bool(_pd[i]), 'src': _ps[i]}
+                            for i in range(len(_ph))]
+                    _fit = fit_phones(_ent)
+                    _r['phones'] = [e['n'] for e in _fit]
+                    _r['phtype'] = [e['type'] for e in _fit]
+                    _r['phdnc']  = [e['dnc'] for e in _fit]
+                    _r['phsrc']  = [e['src'] for e in _fit]
+                    _cur_after = set(_r['phones'])
+                    # count what actually landed on the row; this log said "+52 phones" for numbers
+                    # the cut had already thrown away
+                    _wpn += sum(1 for p in _new if p['n'] in _cur_after)
+                    if len(_ph) != len(_fit):
+                        # anything that was on the row before this merge and is now gone
+                        _r['phrank'] = []
+                        _r['phbest'] = None
                 if _all_em:
                     _cur_em = set((e or '').lower() for e in (_r.get('emails') or []))
                     _add_em = [e for e in _all_em if e.lower() not in _cur_em]
@@ -3402,6 +3451,8 @@ def make_tracker(leads):
                 _wn += 1
             if _wn:
                 print(f"WhitepagesPro: enriched {_wn} leads (+{_wpn} phones, +{_wpe} emails, absentee-owner flags set)")
+            if _wpm:
+                print(f"Whitepages APN gate: {_wpm} record(s) did not match the lead folio; their property owners/residents were not baked (name-graded Person records still are)")
             if _wid:
                 print(f"Whitepages property deep-links: {_wid} leads with wpPropId")
             if _wrel:
