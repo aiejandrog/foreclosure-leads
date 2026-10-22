@@ -1946,7 +1946,14 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         best = d.get('phbest')
         # Put the ranked-best number first; the phone never re-ranks. `best` is a position in
         # `phones`, so translate it through keep_oi rather than using it as a keep index.
-        order = list(range(len(keep)))
+        # THE REST FOLLOW THE RANK TOO (2026-10-22). Only `best` used to move; every other number
+        # kept the order the merges appended it in (skip trace, then Whitepages owner, then
+        # household / namesake), so "Try their next number" rang a skip-trace landline ahead of the
+        # owner's second mobile or a deed-verified Whitepages number. The label tier is the
+        # ranker's own verdict; ties keep the original position, which the ranker also scores.
+        _tier = {'CALL FIRST': 0, 'ok': 1, 'last resort': 2}
+        order = sorted(range(len(keep)), key=lambda k: (
+            _tier.get(rank[keep_oi[k]] if keep_oi[k] < len(rank) else '', 1), k))
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
             order = [bk] + [k for k in order if k != bk]

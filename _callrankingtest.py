@@ -138,5 +138,25 @@ finally:
     os.environ.pop('CALLMODE_MOBILE_FIRST', None)
 rec('CALLMODE_MOBILE_FIRST=0 restores the equity order', ids3 == ['LAND-60', 'MOB-30'], ids3)
 
+print('\nINSIDE A LEAD: EVERY NUMBER FOLLOWS THE RANK, NOT JUST THE FIRST')
+# The shape the build hands over: skip-trace numbers first, Whitepages owner numbers appended, then a
+# household member; phrank from the ranking pass, phbest the top one.
+_ph = ['9545550001', '9545550002', '9545550003', '9545550004', '9545550005']
+ids, by = order([lead('MULTI', 20, phones=_ph,
+                      phtype=['landline', 'landline', 'mobile', 'mobile', 'mobile'],
+                      phsrc=['st', 'st', 'st', 'wp', 'hh'],
+                      phrank=['last resort', 'last resort', 'CALL FIRST', 'CALL FIRST', 'last resort'],
+                      phbest=2)])
+p = by['MULTI']['p']
+rec('the ranked-best number still dials first', p[0] == '9545550003', p)
+rec("the owner's other CALL FIRST number (a Whitepages mobile) is next, ahead of trace landlines",
+    p[1] == '9545550004', p)
+rec('last-resort numbers keep their original order behind it (trace before household)',
+    p[2:] == ['9545550001', '9545550002', '9545550005'], p)
+rec('rank labels travel with their numbers', by['MULTI']['r'] == ['C', 'C', 'L', 'L', 'L'], by['MULTI']['r'])
+rec('the household tag travels with its number', by['MULTI']['ps'][p.index('9545550005')] == 'hh', by['MULTI'].get('ps'))
+ids, by = order([lead('UNRANKED', 20, phones=['9545550011', '9545550012'])])
+rec('a lead with no rank keeps the merge order', by['UNRANKED']['p'] == ['9545550011', '9545550012'], by['UNRANKED']['p'])
+
 print('\n==== %d FAIL(S) ====' % len(FAIL) if FAIL else '\n==== all %d Call Mode ranking checks passed ====' % len(PASS))
 sys.exit(1 if FAIL else 0)
