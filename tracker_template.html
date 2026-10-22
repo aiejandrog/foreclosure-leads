@@ -13003,6 +13003,10 @@ function _autoRunLane(){
 }
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
+function _workerLookupUrl(r){
+  // Reuse the parcel detail link already verified and baked by the Whitepages merge.
+  return (r.wpPropId ? _wpPropUrl(r) : '') || _wpAddrUrl(r) || r.peopleaddr || r.people || _wpNameUrl(r) || '';
+}
 function _workerCard(r){
   var f = _docFields(r); var days = _saleDays(r); var chip = (r.st==='BAL' && r.bal) ? _balloonChip(r.bal.days) : _urgencyChip(days);
   var phList = _workerPhones(r);
@@ -13028,7 +13032,7 @@ function _workerCard(r){
     // needs nothing but the fields every lead already carries, so fall through to the reverse-
     // ADDRESS page (household landline, residents, relatives) and then the NAME page.
     phones: phList, emails: emList,
-    wpUrl: r.peopleaddr || r.people || _wpAddrUrl(r) || _wpNameUrl(r) || '',
+    wpUrl: _workerLookupUrl(r),
     // SMS BAKED PER CARD, for exactly the reason the Gmail URL is (see below). The old text step
     // posted to the board and the BOARD opened a modal — so the composer appeared on a tab the
     // operator was not looking at, the log literally said "switch tabs to send", and he never
