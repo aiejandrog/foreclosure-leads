@@ -237,7 +237,25 @@ class MiamiCap(unittest.TestCase):
         self.assertEqual(tries[0]['http'], 200)
         self.assertEqual(tries[0]['qs'], False)
         self.assertIn('No records', tries[0]['answer'])
-        self.assertNotIn('tok', str([t['answer'] for t in tries]).replace('token', ''))
+        import json as _json
+        dumped = _json.dumps(LP.coverage_entry('partial', {'attempts': LP.MD_LAST['attempts']}, None))
+        self.assertNotIn('"tok"', dumped, 'the captcha token never reaches the status record')
+        self.assertIn('attempts', dumped)
+
+    def test_a_failed_results_read_is_described(self):
+        self.run_sweep({'BIG': 40}, broken_reads=True)
+        reads = [t['read'] for tries in LP.MD_LAST['attempts'].values() for t in tries]
+        self.assertIn(False, reads)
+
+    def test_an_exception_is_recorded_by_type_only(self):
+        def boom(*a, **k):
+            raise RuntimeError('secret-token SOMEONE PRIVATE')
+        R = SimpleNamespace(OR_BASE='x', TS_SITE_KEY='k', S=SimpleNamespace(post=boom))
+        _, t = LP._or_attempt(R, lambda *a: 'tok', 'https://example.invalid/')
+        self.assertEqual(t['answer'], 'request failed: RuntimeError')
+        R.S = SimpleNamespace(post=lambda *a, **k: SimpleNamespace(status_code=503, json=lambda: 1 / 0))
+        _, t = LP._or_attempt(R, lambda *a: 'tok', 'https://example.invalid/')
+        self.assertEqual((t['http'], t['answer']), (503, 'answer was not JSON'))
 
     def test_a_refused_solve_reads_as_no_token(self):
         self.run_sweep({'SMALL': 2}, budget=0)

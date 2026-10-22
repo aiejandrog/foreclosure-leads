@@ -101,6 +101,8 @@ def age_days(ts, now):
 
 
 def _try_text(t):
+    if not isinstance(t, dict):
+        return '?'
     yn = lambda v: '-' if v is None else ('yes' if v else 'no')
     return 'token %s http %s qs %s read %s (%s)' % (yn(t.get('token')), t.get('http'), yn(t.get('qs')),
                                                     yn(t.get('read')), str(t.get('answer') or '')[:80])
