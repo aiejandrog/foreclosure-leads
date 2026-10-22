@@ -274,5 +274,19 @@ _want = ['https://www.whitepages.com/address/%s/MIAMI-FL' % '-'.join(_W._wp_stre
 rec('card Whitepages address link spells streets like wp_web (the house, not the city list)',
     _got == _want, (_got, _want, _p2.stderr[-300:]))
 
+# The Whitepages search-box stem, same rule as wp_web._search_stem.
+_js5 = os.path.join(_T, 'stem.js')
+_a5 = _pg.index('function _wpStem(')
+open(_js5, 'w', encoding='utf-8').write(_pg[_a5:_pg.index('\n}\n', _a5) + 3] + """
+console.log(JSON.stringify(['4809 NW 45 AVE', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
+  '4500 N STATE ROAD 7', '1234 US HIGHWAY 1', '1723 CANAL DR'].map(_wpStem)));
+""")
+_p5 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js5], capture_output=True, text=True, timeout=60)
+_g5 = json.loads(_p5.stdout or 'null') if _p5.returncode == 0 else None
+_w5 = [_W._search_stem(x) for x in ('4809 NW 45 AVE', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
+                                    '4500 N STATE ROAD 7', '1234 US HIGHWAY 1', '1723 CANAL DR')]
+rec('card "Copy for Whitepages search" stem matches wp_web', _g5 == _w5 and _g5[0] == '4809 NW 45', (_g5, _w5, _p5.stderr[-300:]))
+rec('the copy button is wired, never dials, writes no note', 'wpcopy' in _pg and "querySelectorAll('.wpcopy')" in _pg)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

@@ -381,6 +381,23 @@ def _wp_street(street):
     return ' '.join(out)
 
 
+def _search_stem(street):
+    """What to type into Whitepages' own Reverse Address box: house number, direction and street
+    name, no suffix, no unit, numbers as written ("4809 NW 45 AVE" -> "4809 NW 45"). The full
+    address often matches nothing; the stem brings up the autocomplete list and the right entry
+    is picked from it (Alex, 10-22, 4809 NW 45th Ave Tamarac and others)."""
+    base = _UNIT_RE.sub(' ', str(street or ''))
+    toks = re.sub(r'[^A-Za-z0-9 ]', ' ', base).split()
+    out = []
+    for i, t in enumerate(toks):
+        low = t.lower()
+        if i > 0 and low in _SUFFIXES and low not in _ROUTE_WORDS:
+            break
+        out.append(t.upper() if ((low in _DIRS and len(low) <= 2) or low in ('us', 'sr', 'cr')) else
+                   t if t.isdigit() else t[:1].upper() + t[1:].lower())
+    return ' '.join(out)
+
+
 def _addr_query(street, city, state):
     """whitepages.com address URL: /address/<house-street>/<City>-<ST>. UNVERIFIED from here (the
     site is unreachable from the build environment); if it lands on a search page instead of the
@@ -632,12 +649,13 @@ def assist(todo, refresh=False, wait_s=None):
                 # lead: put its address on the clipboard (never printed, the terminal gets pasted
                 # into chat) so it can be pasted into the site's own search box.
                 hinted = True
-                addr = _WL._lead_addr(lead)
+                addr = _search_stem(parts[0])
                 if _set_clipboard(addr):
                     base = addr
-                    print('  ...%s: that page is not this house. This lead\'s address is now on '
-                          'your clipboard: paste it into the Whitepages search box, open the property, '
-                          'then Ctrl+A, Ctrl+C.' % case[-4:], flush=True)
+                    print('  ...%s: that page is not this house. The start of this lead\'s address is '
+                          'now on your clipboard: paste it into the Whitepages Reverse Address box, pick '
+                          'this house (and unit) from the list that drops down, then Ctrl+A, Ctrl+C.'
+                          % case[-4:], flush=True)
                 else:
                     break
             if not text:

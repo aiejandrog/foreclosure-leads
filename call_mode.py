@@ -6596,13 +6596,36 @@ function fileLinks(r){
   if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);
   return L;
 }
+/* What to type into Whitepages' own Reverse Address box: house, direction, street name, no suffix,
+   no unit ("4809 NW 45 AVE" -> "4809 NW 45"). The full address often matches nothing; this stem
+   brings up the drop-down and the right house (and unit) is picked from it — how Alex finds the
+   ones the link misses (10-22). Same rule as wp_web._search_stem. */
+function _wpStem(street){
+  var SUF = {st:1, ave:1, ct:1, ter:1, dr:1, rd:1, ln:1, pl:1, blvd:1, way:1, cir:1, pkwy:1, hwy:1, trl:1,
+             street:1, avenue:1, court:1, terrace:1, drive:1, road:1, lane:1, place:1, circle:1};
+  var ROUTE = {road:1, rd:1, highway:1, hwy:1, sr:1, us:1, route:1, rte:1, cr:1};
+  var DIR = {n:1, s:1, e:1, w:1, ne:1, nw:1, se:1, sw:1};
+  var s = String(street || '').replace(/(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*[0-9A-Za-z\-]+/i, ' ');
+  var t = s.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean), out = [];
+  for(var i=0;i<t.length;i++){
+    var lo = t[i].toLowerCase();
+    if(i > 0 && SUF[lo] && !ROUTE[lo]) break;
+    out.push((DIR[lo] || lo==='us' || lo==='sr' || lo==='cr') ? t[i].toUpperCase()
+             : /^\d+$/.test(t[i]) ? t[i] : t[i].charAt(0).toUpperCase() + t[i].slice(1).toLowerCase());
+  }
+  return out.join(' ');
+}
 function fileBand(r){
   var L = fileLinks(r);
   if(!L.length) return '';
+  var stem = _wpStem(String(r.a || '').split(',')[0]);
   return '<div class="band"><div class="bl">HIS FILE</div><div class="flinks">'
     + L.map(function(x){
         return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>';
       }).join('')
+    + (stem ? '<a href="#" class="wpcopy" data-q="' + esc(stem) + '" title="Copies &quot;' + esc(stem)
+        + '&quot; for the Whitepages Reverse Address box: paste, then pick the house from the drop-down">'
+        + '&#128203; Copy for Whitepages search</a>' : '')
     + '</div>'
     + briefButtons(r)
     + '<div class="fcase">case ' + esc(r.c || '') + (r.fo ? ' &middot; folio ' + esc(r.fo) : '')
@@ -6666,6 +6689,17 @@ function briefButtons(r){
     + '<a href="#" class="briefcopy">&#128203; Copy brief</a></div>';
 }
 function wireBrief(root, r){
+  Array.prototype.forEach.call(root.querySelectorAll('.wpcopy'), function(b){
+    b.onclick = function(ev){
+      if(ev) ev.preventDefault();
+      var q = b.getAttribute('data-q') || '', done = function(){ toast('Copied "' + q + '": paste it in Whitepages, pick the house from the list'); };
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(q).then(done, function(){ prompt('Copy this:', q); }); }
+        else prompt('Copy this:', q);
+      }catch(e){ prompt('Copy this:', q); }
+      return false;
+    };
+  });
   var mark = function(){
     var n = notes[r.c] = notes[r.c] || {status:'',note:''};
     n.doclog = n.doclog || [];

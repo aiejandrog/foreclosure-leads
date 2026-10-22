@@ -416,7 +416,7 @@ WL.CACHE = os.path.join(td, 'wp8.json')
 W.CACHE = WL.CACHE
 leads[:] = [{'case': 'L-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
 n8 = W.assist(list(leads), wait_s=10)
-rec('wrong page -> address on clipboard -> the right page is cached', n8 == 1 and put == [ADDR]
+rec('wrong page -> address on clipboard -> the right page is cached', n8 == 1 and put == ['1723 Canal']
     and 'L-0' in _j.load(open(WL.CACHE, encoding='utf-8')), (n8, put))
 
 rec('"West Ave" lead refuses a "W 41st St" page', not W.page_matches_address('1234 W 41st St, Miami Beach', '1234 WEST AVE'))
@@ -442,7 +442,7 @@ seq[:] = ['old', CITY, ADDR, PAGE, PAGE]
 WL.CACHE = os.path.join(td, 'wp10.json')
 W.CACHE = WL.CACHE
 leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
-rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == [ADDR])
+rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == ['1723 Canal'])
 import wp_linkprobe as _LP  # noqa: E402
 _S = '2634 SE 19 CT #205C'
 _U = 'https://www.whitepages.com/address/'
@@ -466,6 +466,10 @@ _lp = [
 rec('link probe: whole-unit match, no ZIP/street/substring false hits, bot check, no-redirect',
     all(g == w for g, w in _lp), _lp)
 rec('link probe: a bare "205-C" after the suffix is a unit', _LP._street_unit('123 MAIN ST 205-C') == ('123 Main St', '205-C'))
+rec('search-box stem: house, direction, street, no suffix or unit',
+    [W._search_stem(x) for x in ('4809 NW 45 AVE', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
+                                  '4500 N STATE ROAD 7', '1234 US HIGHWAY 1')]
+    == ['4809 NW 45', '2634 SE 19', '10442 Sunrise Lakes', '4500 N State Road 7', '1234 US Highway 1'])
 rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105') == '8600 NW 34th Pl Apt B105'
     and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
     == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
