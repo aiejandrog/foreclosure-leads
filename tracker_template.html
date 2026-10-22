@@ -13595,6 +13595,7 @@ function genMorningWorker(lane, autostart){
     +   'function setLane(k){'
     +     'if(!LANES[k] || k===lane) return;'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
+    +     'if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
     +     'cancelSyncWait(); auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
     +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){'
     +       'el.classList.toggle("on", el.dataset.lane===k);'
@@ -14093,13 +14094,13 @@ function genMorningWorker(lane, autostart){
     // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
     +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;}), qc:qc});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
-    +           'if(_mv) setTimeout(function(){ advance(); }, 900);'
+    +           'if(_mv) advance(1600);'
     +         '} else if(x.status===409 && x.j.skip){'
     +           'bridgeUp(true);'
     // The bridge says WHY it deferred (24h dedupe, or the per-alias warm-up cap in senders.json);
     // show its sentence rather than guessing, so a capped lane never reads as a duplicate.
     +           'addLog("skip", r.first||r.owner, String(x.j.err||"already emailed inside 24h — deferred"), "warn");'
-    +           'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc}); if(_mv) advance(1400);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
     // This is the single most authoritative moment the true count exists — the server just used it
@@ -14122,7 +14123,7 @@ function genMorningWorker(lane, autostart){
     +     'addLog("skip", r.first||r.owner, (x.j.first_touch_paused ? "held — first emails are paused by the bounce rule. Stays queued; resumes when the pause lifts."'
     +     '  : ("proven_pool" in x.j) ? "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears."'
     +     '  : "held — "+String(x.j.err||"bounce check refused this send")+" Stays queued."), "warn");'
-    +     'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +     'post("skip", {qc:qc}); if(_mv) advance(1400);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
@@ -14139,7 +14140,7 @@ function genMorningWorker(lane, autostart){
     // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
     +           'post("skip", {qc:qc, why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
-    +           'if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +           'if(_mv) advance(1400);'
     +         '}'
     +       '})'
     +       '.catch(function(err){'
@@ -14442,9 +14443,18 @@ function genMorningWorker(lane, autostart){
     +   '}'
     +   'window.addEventListener("focus", onBack);'
     +   'document.addEventListener("visibilitychange", function(){ if(!document.hidden) onBack(); });'
-    +   'function advance(){'
+    // ms: the wait before the next lead, 700 by default. doSend passes its own (1600 after a delivery,
+    // 1400 after a skip: the old answer-then-advance delay plus this 700) and calls advance() the
+    // moment the answer lands. It used to wait on a bare setTimeout(advance) that no one tracked:
+    // a lane switch inside that window advanced the NEW lane past its lead 1, and clearing it on
+    // Stop left `i` on the lead just emailed, so Start re-sent it and the 409 logged a false skip.
+    // Moving `i` now and waiting in nextStep (which Stop, pause and runOne's !auto check own)
+    // closes both. _autorunnavtest.py (2026-10-22, supersedes #318).
+    +   'function advance(ms){'
     +     'i++;'
-    +     'if(auto && i<Q.length){ nextStep=setTimeout(runOne, 700); return; }'
+    // Paint the lead `i` now points at before waiting, so the card's buttons (which read Q[i]) never
+    // sit under the previous lead's name while the run waits.
+    +     'if(auto && i<Q.length){ render(); if(nextStep) clearTimeout(nextStep); nextStep=setTimeout(runOne, ms||700); return; }'
     +     'if(auto && autoAll && i>=Q.length && hopNextLane()) return;'
     /* THE RUN IS OVER, SO SAY SO. `auto` was set by Start and cleared by a lane switch, by pause()
        and by the cap card -- but NOT by reaching the end of the queue. So after a lane finished
@@ -14523,7 +14533,7 @@ function genMorningWorker(lane, autostart){
        is not confirmed up, refuse to start and say how to fix it. */
     +   'function startRun(all, src){'
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
-    +     'cancelSyncWait(); SYNCTRY=0;'
+    +     'cancelSyncWait(); SYNCTRY=0; if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
     +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight — its outcome is not known yet, so nothing else sends until it answers and is recorded on its own lead. If the bridge is gone, restart send_server.py and reload this tab.","warn"); return; }'
     +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
