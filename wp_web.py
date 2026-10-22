@@ -278,6 +278,37 @@ def _counts(entry):
 
 # ---- the browser half (laptop only; import guarded so --plan needs no Playwright) -----------------
 
+def _ordinal(n):
+    n = int(n)
+    suf = 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+    return '%d%s' % (n, suf)
+
+
+def _wp_street(street):
+    """Our street as Whitepages writes it in its own links (10-22, from real result pages):
+    "2929 NW 123 TER" -> "2929 NW 123rd Ter", "8600 NW 34 PL #B105" -> "8600 NW 34th Pl Apt B105",
+    "9999 NE 99 AVE 999" (bare trailing unit) -> "... Ave Apt 999". A link in our own spelling
+    (no ordinal) falls through to the city's property list instead of the house."""
+    m = _UNIT_RE.search(street or '')
+    unit = m.group(1) if m else ''
+    base = _UNIT_RE.sub(' ', str(street or ''))
+    toks = re.sub(r'[^A-Za-z0-9 ]', ' ', base).split()
+    if not unit and len(toks) >= 3 and toks[-1].isdigit() and toks[-2].lower() in _SUFFIXES:
+        unit = toks.pop()                       # "... AVE 999": a unit with no label
+    out = []
+    for i, t in enumerate(toks):
+        low = t.lower()
+        if i > 0 and t.isdigit():
+            out.append(_ordinal(t))             # street names are numbered: 34 -> 34th
+        elif low in _DIRS and len(low) <= 2:
+            out.append(t.upper())
+        else:
+            out.append(t[:1].upper() + t[1:].lower())
+    if unit:
+        out += ['Apt', unit.upper()]
+    return ' '.join(out)
+
+
 def _addr_query(street, city, state):
     """whitepages.com address URL: /address/<house-street>/<City>-<ST>. UNVERIFIED from here (the
     site is unreachable from the build environment); if it lands on a search page instead of the
@@ -285,7 +316,7 @@ def _addr_query(street, city, state):
     import urllib.parse
     def slug(t):
         return '-'.join(re.sub(r"[^A-Za-z0-9 ]", ' ', t).split())
-    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(street)),
+    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(_wp_street(street))),
                                  urllib.parse.quote('%s-%s' % (slug(city), state)))
 
 
@@ -454,6 +485,8 @@ def _clipboard_text():
 # A copied whitepages.com address page carries these; anything else copied is read as "skip".
 _PAGE_MARK = re.compile(r'Owners\s*&\s*Residents|Reverse Address|Property Details for|'
                         r'who (owns|lives at) .{0,80}\d{5}', re.I)
+# The city's property list (where a link Whitepages cannot resolve lands), not one house.
+_CITY_LIST_RE = re.compile(r'Property Records\s*\n?\s*[\d,]+ of [\d,]+ results|Search property records in ', re.I)
 ASSIST_WAIT_S = float(os.environ.get('WP_WEB_ASSIST_WAIT_S', '240'))
 
 
@@ -477,6 +510,8 @@ def _why_empty(text):
         return 'the page is a block / verification page'
     if re.search(r'no people living at this property|no one currently lives at', text or '', re.I):
         return _EMPTY_NOBODY
+    if _CITY_LIST_RE.search(text or ''):
+        return "Whitepages showed the city's property list, not the house"
     if not _PAGE_MARK.search(text or ''):
         return 'that was not a Whitepages address page'
     if not re.search(r'^\s*(owner|resident)\s*$', text or '', re.I | re.M):
@@ -516,7 +551,8 @@ def assist(todo, refresh=False, wait_s=None):
                 if hinted and not _PAGE_MARK.search(cur):
                     continue                # e.g. the address pasted into the search box, re-copied
                 text = cur
-                if hinted or not _PAGE_MARK.search(cur) or page_matches_address(cur, parts[0]):
+                if hinted or not _PAGE_MARK.search(cur) or (
+                        page_matches_address(cur, parts[0]) and not _CITY_LIST_RE.search(cur)):
                     break
                 # Whitepages sent the address URL to some other property. Give one more try for this
                 # lead: put its address on the clipboard (never printed, the terminal gets pasted
@@ -525,7 +561,7 @@ def assist(todo, refresh=False, wait_s=None):
                 addr = _WL._lead_addr(lead)
                 if _set_clipboard(addr):
                     base = addr
-                    print('  ...%s: that page is for another address. This lead\'s address is now on '
+                    print('  ...%s: that page is not this house. This lead\'s address is now on '
                           'your clipboard: paste it into the Whitepages search box, open the property, '
                           'then Ctrl+A, Ctrl+C.' % case[-4:], flush=True)
                 else:
@@ -534,13 +570,13 @@ def assist(todo, refresh=False, wait_s=None):
                 print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
                 skipped += 1
                 continue
-            same = page_matches_address(text, parts[0])
+            same = page_matches_address(text, parts[0]) and not _CITY_LIST_RE.search(text)
             if same and _PAGE_MARK.search(text):
                 _keep_page(case, text)      # only this lead's own Whitepages page replaces its copy
             people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
-                why = _why_empty(text) if same or not _PAGE_MARK.search(text) else \
-                    'the copied page is for a different address'
+                why = _why_empty(text) if same or not _PAGE_MARK.search(text) or _CITY_LIST_RE.search(text) \
+                    else 'the copied page is for a different address'
                 reasons[why] = reasons.get(why, 0) + 1
                 print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
                 skipped += 1

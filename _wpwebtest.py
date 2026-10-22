@@ -355,5 +355,20 @@ leads[:] = [{'case': 'M-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction'
 rec('the address echoed back with CR/LF, or a stray copy, is not taken as the page',
     W.assist(list(leads), wait_s=10) == 1 and 'M-0' in _j.load(open(WL.CACHE, encoding='utf-8')))
 
+CITY = ('People SearchReverse PhoneReverse Address\nSunrise, FL Property Records\n4,687 of 23,435 results\n'
+        'Search property records in Sunrise, FL to see who lives at or owns each home\n'
+        '[1723 Canal Dr](https://www.whitepages.com/address/1723-Canal-Dr/Sunrise-FL/Abc)\n')
+rec('the city property list is named as such', W._why_empty(CITY) == "Whitepages showed the city's property list, not the house", W._why_empty(CITY))
+W.time = _Clock()
+put[:] = []
+seq[:] = ['old', CITY, ADDR, PAGE, PAGE]
+WL.CACHE = os.path.join(td, 'wp10.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == [ADDR])
+rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105') == '8600 NW 34th Pl Apt B105'
+    and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
+    == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
