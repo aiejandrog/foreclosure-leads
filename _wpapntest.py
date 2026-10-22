@@ -46,14 +46,13 @@ rec('a one-digit-off apn is a mismatch, not ok',
 # --- integration: the live cache must not bake a wrong-parcel record ----------------------------
 # Every current lead whose WP record claims a parcel that disagrees with the lead folio must be
 # refused. Clean matches must pass. This is the exact split the 2026-10-21 cross-check found.
-# Both files are gitignored homeowner data, so CI and a fresh clone have neither: that is a SKIP,
-# not a failure (main went red on exactly this, run 721). A file that exists and will not parse
-# is still a failure.
+# Both inputs are gitignored live data. Where neither exists (CI, a fresh clone) the integration half
+# is skipped and the unit checks above still decide; where they exist, an unreadable one is a failure.
 _wpf = os.path.join(HERE, 'whitepages_lookup.json')
 _lff = os.path.join(HERE, 'leads_final.json')
 wp = lf = None
-if not (os.path.exists(_wpf) and os.path.exists(_lff)):
-    print('skip live cache check: whitepages_lookup.json / leads_final.json not on this machine')
+if not (os.path.exists(_wpf) or os.path.exists(_lff)):
+    print('skip live cache + leads (whitepages_lookup.json / leads_final.json not on this machine)')
 else:
     try:
         wp = json.load(io.open(_wpf, encoding='utf-8'))
@@ -85,9 +84,8 @@ if wp is not None:
     n_bad = sum(1 for v in verdicts.values() if v in ('mismatch', 'unverified'))
     rec('live join produced a verdict for every joined case', len(verdicts) == len(joined),
         f'{len(verdicts)}/{len(joined)}')
-    # Informational, not a pass condition: a re-lookup with the right address legitimately takes
-    # this to zero, and a test that fails when the data gets better gets deleted.
-    print(f'  info: ok={n_ok} suppressed={n_bad}')
+    rec('the gate suppresses at least one wrong-parcel/unverifiable record (the bug it was built for)',
+        n_bad >= 1, f'ok={n_ok} suppressed={n_bad}')
     # No record that passes may have an apn that disagrees with a present folio.
     leaks = [c for c, v in verdicts.items()
              if v == 'ok'
