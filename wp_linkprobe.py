@@ -44,7 +44,11 @@ def _slug(t):
 
 
 def _street_unit(street):
-    """(street without the unit, unit) using wp_web's own unit rules."""
+    """(street without the unit, unit) using wp_web's own unit rules, plus a bare trailing
+    "205-C" / "205C" after a street suffix, which those rules read as a number."""
+    m = re.search(r'\b([A-Za-z]+)\s+(\d+-?[A-Za-z])$', street.strip())
+    if m and m.group(1).lower() in W._SUFFIXES and not re.search(r'(?:\b(?:apt|unit|ste|suite)\b|#)', street, re.I):
+        street = street.strip()[:m.start(2)] + '#' + m.group(2)
     apt = W._wp_street(street)
     m = re.search(r'\sApt\s(\S+)$', apt)
     if not m:
@@ -136,42 +140,49 @@ def _toks(t):
     return re.findall(r'[a-z0-9]+', t)
 
 
+_LABELS = ('apt', 'unit', 'ste', 'suite', 'no')
+
+
+def _addr_part(url, title, opened):
+    """The landed address as tokens: Whitepages' own slug when it redirected, else the title up to
+    its first comma ("2634 SE 19th Ct Apt 205C, Homestead, FL 33035" -> the street line only, so a
+    ZIP or city can never pass for a unit). None when the page kept our URL and its title says
+    nothing (our own guess is not evidence)."""
+    path = urllib.parse.urlparse(url).path
+    seg = [x for x in path.split('/') if x]
+    redirected = not (opened and path.rstrip('/').lower() == urllib.parse.urlparse(opened).path.rstrip('/').lower())
+    if redirected and len(seg) >= 2 and seg[0] == 'address':
+        return _toks(seg[1])
+    line = (title or '').split(',')[0].split('|')[0]
+    return _toks(line) if re.match(r'\s*\d', line) else None
+
+
 def classify(url, title, street, unit, opened=''):
     if not url:
         return 'none'
-    path = urllib.parse.urlparse(url).path
-    if opened and path.rstrip('/').lower() == urllib.parse.urlparse(opened).path.rstrip('/').lower():
-        # No redirect: the URL is our own guess, so only the page title says where we are.
-        if not re.search(r'\d', title):
-            return 'none'
-        path = ''
-    text = path + ' ' + title
-    if _BLOCK.search(title) and not re.search(r'\d', title):
+    if _BLOCK.search(title or '') and not re.match(r'\s*\d', title or ''):
         return 'blocked'
-    if _LIST.search(title) and not re.match(r'\s*\d', title):
-        return 'other'
+    got = _addr_part(url, title, opened)
+    if got is None:
+        return 'other' if _LIST.search(title or '') else 'none'
     want = _toks(re.sub(r'(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*\S+', ' ', street, flags=re.I))
-    if unit and want and want[-1] == ''.join(_toks(unit)):
-        want = want[:-1]                                   # "... AVE 999": bare trailing unit
-    got = _toks(text)
-    house = want[0] if want else ''
-    name = [t for t in want[1:] if t not in W._DIRS and t not in W._SUFFIXES]
-    if not house or house not in got or not all(t in got for t in name):
-        return 'other'
-    if not unit:
-        return 'house'
     u = ''.join(_toks(unit))
-    joined = ''.join(got[got.index(house) + 1:])
-    if u and u in joined:
-        return 'unit'
-    # The slug is "<house>-<street>[-<unit>]": anything left after our street is some other unit.
-    seg = [x for x in path.split('/') if x]
-    slug = _toks(seg[1]) if len(seg) >= 2 and seg[0] == 'address' else []
-    if slug[:1] == [house]:
-        rest = [t for t in slug if t not in want and t not in ('apt', 'unit', 'ste', 'suite')]
-        if rest:
-            return 'other'                                 # same building, a different unit
-    return 'building'
+    if unit and want and want[-1] == u:
+        want = want[:-1]                                   # "... AVE 999": bare trailing unit
+    if not want or got[:1] != want[:1]:
+        return 'other'                                     # another house number (or a list)
+    rest = list(got[1:])
+    for t in want[1:]:                                     # take our street out, one token at a time
+        if t in rest:
+            rest.remove(t)
+        elif t not in W._DIRS and t not in W._SUFFIXES:
+            return 'other'                                 # a different street name
+    rest = [t for t in rest if t not in _LABELS and t not in W._DIRS and t not in W._SUFFIXES]
+    if not unit:
+        return 'house' if not rest else 'other'
+    if not rest:
+        return 'building'
+    return 'unit' if ''.join(rest) == u else 'other'      # exactly our unit, else another unit
 
 
 def main():
@@ -219,7 +230,7 @@ def main():
 
     table, detail = {}, []
     for i, (t, case, form, street, unit, url) in enumerate(opened):
-        t_next = opened[i + 1][0] if i + 1 < len(opened) else time.time()
+        t_next = opened[i + 1][0] if i + 1 < len(opened) else t + a.gap
         mine = [v for v in visits if t <= v[0] < t_next]
         final = mine[-1] if mine else (0, '', '')
         verdict = classify(final[1], final[2], street, unit, url)
