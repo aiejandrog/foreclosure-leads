@@ -228,6 +228,14 @@ def normalize(rec, lender=''):
 
 
 SWEEP_BLOCKED = []        # Miami-Dade plaintiff names whose fetch never got through this run
+# Plaintiff names whose search came back with OR_RESULT_CAP or more records. The Miami-Dade Official
+# Records search returns at most 500 records, the OLDEST first (records_liens.camoufox_qs, measured on
+# owner searches). These name searches carry no document type, so a big lender's 30-day window holds its
+# mortgages, assignments and satisfactions too; at the cap the newest filings in the window are the
+# ones missing. Counted here so the sweep reports itself partial instead of complete.
+SWEEP_CAPPED = []
+OR_RESULT_CAP = 500
+MD_LAST = {}              # what the last lp_sweep covered, for main()'s coverage record
 
 
 def lp_sweep(days=30, tries=3):
@@ -243,6 +251,9 @@ def lp_sweep(days=30, tries=3):
     solve_turnstile = paid_reads.guarded(_solve, 'lis_pendens')
     d_from, d_to = _win(days)
     print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
+    MD_LAST.clear()
+    MD_LAST.update({'window': [d_from, d_to], 'searched': 0, 'retrieved': 0})
+    del SWEEP_CAPPED[:]
     out = {}
     for i, name in enumerate(PLAINTIFFS, 1):
         if not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]:
@@ -273,6 +284,12 @@ def lp_sweep(days=30, tries=3):
         if recs is None:
             SWEEP_BLOCKED.append(name)
             print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} (blocked)'); continue
+        MD_LAST['searched'] += 1
+        MD_LAST['retrieved'] += len(recs)
+        if len(recs) >= OR_RESULT_CAP:
+            SWEEP_CAPPED.append(name)
+            print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} hit the {OR_RESULT_CAP}-record cap: '
+                  f'the newest filings in this window may be missing')
         lp = [r for r in recs if 'LIS' in (r.get('doC_TYPE') or '').upper()
               and 'CANCEL' not in (r.get('doC_TYPE') or '').upper()]
         kept = 0
@@ -294,15 +311,60 @@ EXIT_PARTIAL = 4
 
 
 def sweep_verdict(status):
-    """{county: 'ok'|'failed'} -> (counties that ran, counties that failed).
+    """{county: 'ok'|'partial'|'failed'} -> (counties that ran, counties that failed).
 
     An empty list from a sweep that RAN is a verified-empty window and counts as ok; None from a
     blocked sweep is a failure. Collapsing the two is what let a fully blocked morning exit 0
-    (audit 2026-09-21, defect 6).
+    (audit 2026-09-21, defect 6). A 'partial' county ran and its rows merge, so it is in the first
+    list; partial_counties() names it separately so it is never read as complete.
     """
     counties = {k: v for k, v in (status or {}).items() if not k.endswith('_blocked_plaintiffs')}
-    return (sorted(k for k, v in counties.items() if v == 'ok'),
+    return (sorted(k for k, v in counties.items() if v in ('ok', 'partial')),
             sorted(k for k, v in counties.items() if v == 'failed'))
+
+
+def partial_counties(status):
+    """Counties that ran but did not read their whole window."""
+    return sorted(k for k, v in (status or {}).items()
+                  if not k.endswith('_blocked_plaintiffs') and v == 'partial')
+
+
+STATUS_FILE = os.path.join(HERE, 'lp_sweep_status.json')
+
+
+def coverage_entry(status, info, prev=None, now=None):
+    """One county's completeness record for lp_sweep_status.json (2026-10-22).
+
+    "The sweep ran" and "the sweep read the whole window" are different facts, and only the second
+    makes the rows a complete count. This keeps both: the window asked for, what the source said it
+    matched (None when it gives no total, which is Miami-Dade's plaintiff search), what was pulled,
+    what failed, and when the county last had a complete read. `last_complete` carries forward from
+    the previous status file, so a run of partial nights shows how long it has been.
+    """
+    now = now or datetime.datetime.now().isoformat(timespec='seconds')
+    info = info or {}
+    e = {'status': status,
+         'scope': info.get('scope', 'whole document type'),
+         'window': list(info.get('window') or []),
+         'reported_total': info.get('reported_total'),
+         'retrieved': info.get('retrieved', 0),
+         'kept': info.get('kept', 0),
+         'pages': info.get('pages', 0),
+         'failures': [str(f)[:120] for f in (info.get('failures') or [])][:20]}
+    for k in ('searched', 'blocked', 'capped'):
+        if k in info:
+            e[k] = info[k]
+    e['last_complete'] = now if status == 'ok' else (prev or {}).get('last_complete')
+    return e
+
+
+def _prev_coverage():
+    try:
+        with open(STATUS_FILE, encoding='utf-8') as f:
+            c = json.load(f).get('coverage') or {}
+        return c if isinstance(c, dict) else {}
+    except Exception:
+        return {}
 
 
 # PALM BEACH CASE NUMBERS (2026-10-15). Landmark's grid sometimes returns the literal word "CASE" in
@@ -371,6 +433,36 @@ def _merge_key(x):
             x.get('instrument') or x.get('case') or x.get('bookpage') or str(x.get('parties'))[:50])
 
 
+def write_status(a, status, info, new_rows, failed, partial, now=None):
+    """lp_sweep_status.json: the run's verdict plus a per-county coverage record. Counts only."""
+    now = now or datetime.datetime.now().isoformat(timespec='seconds')
+    try:
+        prev = _prev_coverage()
+        coverage = dict(prev)             # a county not swept tonight keeps its last record
+        for c, st in status.items():
+            if not c.endswith('_blocked_plaintiffs'):
+                old = prev.get(c)
+                coverage[c] = coverage_entry(st, info.get(c), old if isinstance(old, dict) else None, now)
+    except Exception as e:                # a status file must never stop the merge
+        print(f'coverage record not built: {e}')
+        coverage = {}
+    try:
+        with open(STATUS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'ran': now, 'days': a.days, 'requested': a.county, 'counties': status,
+                       'new_rows': new_rows, 'failed': failed, 'partial': partial,
+                       'coverage': coverage}, f, indent=1)
+    except Exception as e:
+        print(f'sweep status not written: {e}')
+    for c in partial:
+        cv = coverage.get(c)
+        if not cv:
+            continue
+        tot = cv['reported_total'] if cv['reported_total'] is not None else '?'
+        print(f'{c}: PARTIAL — {cv["retrieved"]} of {tot} source rows read; '
+              + '; '.join(cv['failures'][:3]))
+    return coverage
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe)')
@@ -390,14 +482,32 @@ def main():
     # ran is a verified-empty window and stays ok; None means blocked.
     out = []
     status = {}
+    info = {}
     if a.county in ('miami-dade', 'all'):
         md = lp_sweep(days=a.days) or []
         out += md
         # MD has no single blocked signal: it sweeps a list of plaintiffs. All of them refused
-        # and nothing found = we learned nothing, whatever the empty list looks like.
-        status['MIAMI-DADE'] = ('failed' if (SWEEP_BLOCKED and not md) else 'ok')
+        # and nothing found = we learned nothing, whatever the empty list looks like. Some refused,
+        # or some at the record cap = it ran, but over less than the window (2026-10-22).
+        if SWEEP_BLOCKED and not md:
+            status['MIAMI-DADE'] = 'failed'
+        elif SWEEP_BLOCKED or SWEEP_CAPPED:
+            status['MIAMI-DADE'] = 'partial'
+        else:
+            status['MIAMI-DADE'] = 'ok'
         if SWEEP_BLOCKED:
             status['MIAMI-DADE_blocked_plaintiffs'] = len(SWEEP_BLOCKED)
+        fails = []
+        if SWEEP_BLOCKED:
+            fails.append('%d plaintiff name(s) not searched' % len(SWEEP_BLOCKED))
+        if SWEEP_CAPPED:
+            fails.append('%d plaintiff search(es) at the %d-record cap' % (len(SWEEP_CAPPED), OR_RESULT_CAP))
+        info['MIAMI-DADE'] = {
+            'scope': 'listed plaintiffs only (%d names)' % len(PLAINTIFFS),
+            'window': list(MD_LAST.get('window') or _win(a.days)),
+            'reported_total': None, 'retrieved': MD_LAST.get('retrieved', 0), 'kept': len(md),
+            'pages': MD_LAST.get('searched', 0), 'searched': MD_LAST.get('searched', 0),
+            'blocked': len(SWEEP_BLOCKED), 'capped': list(SWEEP_CAPPED), 'failures': fails}
     if a.county in ('broward', 'all'):
         from fl_lp import broward as _bw
         bw = _bw.sweep(days=a.days)
@@ -405,8 +515,9 @@ def main():
             status['BROWARD'] = 'failed'
             print('BROWARD sweep blocked — other counties (if any) still merge.')
         else:
-            status['BROWARD'] = 'ok'
+            status['BROWARD'] = _bw.LAST.get('status') or 'partial'
             out += bw
+        info['BROWARD'] = dict(_bw.LAST, kept=len(bw or []))
         # Separate list. Off unless DEALFLOW_BROWARD_OR_FEED=1. Return value is
         # None, so these rows cannot join `out` or the published board.
         _maybe_broward_or_feed()
@@ -417,17 +528,13 @@ def main():
             status['PALM BEACH'] = 'failed'
             print('PALM BEACH sweep blocked/portal down — other counties (if any) still merge.')
         else:
-            status['PALM BEACH'] = 'ok'
+            status['PALM BEACH'] = _pb.LAST.get('status') or 'partial'
             out += pb
+        info['PALM BEACH'] = dict(_pb.LAST, kept=len(pb or []))
 
     ran, failed = sweep_verdict(status)
-    try:
-        json.dump({'ran': datetime.datetime.now().isoformat(timespec='seconds'),
-                   'days': a.days, 'requested': a.county, 'counties': status,
-                   'new_rows': len(out), 'failed': failed},
-                  open(os.path.join(HERE, 'lp_sweep_status.json'), 'w', encoding='utf-8'), indent=1)
-    except Exception as e:
-        print(f'sweep status not written: {e}')
+    partial = partial_counties(status)
+    write_status(a, status, info, len(out), failed, partial)
 
     if not ran:
         # nothing got through anywhere. The existing file is untouched and still valid data --
@@ -446,7 +553,8 @@ def main():
         if repaired:
             json.dump(prev, open(OUT, 'w', encoding='utf-8'), indent=1)
         print('\nsweep ran, no new filings in the window.'
-              + (f' FAILED: {", ".join(failed)}' if failed else ''))
+              + (f' FAILED: {", ".join(failed)}' if failed else '')
+              + (f' PARTIAL: {", ".join(partial)}' if partial else ''))
         sys.exit(EXIT_PARTIAL if failed else 0)
     # MERGE, never overwrite (2026-08-11). The sweep only sees its own date window; the file
     # holds every filing being worked. Overwriting made a 30-day sweep silently delete every
@@ -471,6 +579,14 @@ def main():
     if failed:
         print(f'\nPARTIAL SWEEP: {", ".join(failed)} did not run. The rows above are from '
               f'{", ".join(ran)} only; the missing counties keep whatever was already on file.')
+    if partial:
+        print(f'\nINCOMPLETE WINDOW: {", ".join(partial)} ran but did not read the whole window. '
+              f'Their rows merged; lp_sweep_status.json says what is missing.')
+    # The exit code stays about counties that did not run. A partial county is named in the status
+    # file, the coverage record and run_report, not here: Miami can be partial most nights (a big
+    # lender at the record cap), and a standing exit 4 would set the refresh's RUNEXIT to 7 every
+    # night, and an earlier code wins there, so it would hide a later 5 (mirror not published).
+    if failed:
         sys.exit(EXIT_PARTIAL)
 
 

@@ -70,6 +70,16 @@ CRITERIA_COUNT = 200
 PAGE = 250
 MAX_SPLIT_DEPTH = 3        # 30 days -> at worst 8 sub-windows; each one costs a captcha
 
+# What the last sweep() covered, for lis_pendens.main's per-county coverage record (2026-10-22).
+# `windows` holds one entry per date window whose rows were kept: the total Landmark declared for
+# it, the rows pulled, and whether those match. `failures` names what was not read.
+LAST = {}
+
+
+def _iso(mdy):
+    m, d, y = mdy.split('/')
+    return '%s-%s-%s' % (y, m, d)
+
 
 def _gsr_total(res):
     """How many records Landmark says the search matched, or None if it did not say.
@@ -93,7 +103,7 @@ def _gsr_total(res):
     return None
 
 
-def _page_all(get, total=None, page=PAGE, limit=40):
+def _page_all(get, total=None, page=PAGE, limit=40, on_total=None):
     """Pull the whole grid, not just its first window.
 
     `get(length, start)` is palmbeach_liens.get_search_results. Stops when the declared total is
@@ -111,6 +121,8 @@ def _page_all(get, total=None, page=PAGE, limit=40):
         batch = _gsr_rows(res)
         if total is None:
             total = _gsr_total(res)
+            if on_total is not None:
+                on_total(total)
         if not batch:
             break
         rows += batch
@@ -249,7 +261,9 @@ def _sweep_window(d_from, d_to, depth=0):
         body = P.search(_doctype_payload(d_from, d_to), token=tok)
         if body is None:
             continue                            # transient rejection — same query, fresh token
-        rows, complete = _page_all(P.get_search_results)
+        declared = {}
+        rows, complete = _page_all(P.get_search_results,
+                                   on_total=lambda v: declared.__setitem__('v', v))
         if not rows:
             continue
         truncated = (not complete) or len(rows) >= CRITERIA_COUNT
@@ -260,12 +274,17 @@ def _sweep_window(d_from, d_to, depth=0):
                       % (d_from, d_to, len(rows)))
                 out = []
                 ran = False
+                missed = []
                 for lo, hi in halves:
                     part = _sweep_window(lo, hi, depth + 1)
                     if part is not None:
                         ran = True
                         out += part
+                    else:
+                        missed.append('%s..%s' % (lo, hi))
                 if ran:
+                    # One half read and one did not: the rows are real, the window is not whole.
+                    LAST.setdefault('failures', []).extend('window %s did not run' % m for m in missed)
                     return out
         docs = P.gsr_rows_to_docs(rows)
         out = _rows_to_canonical(docs)
@@ -275,7 +294,11 @@ def _sweep_window(d_from, d_to, depth=0):
         print('PALM BEACH: %s..%s doctype=%s -> %d raw / %d parsed / %d homeowner LP%s'
               % (d_from, d_to, LP_DOCTYPE_ID, len(rows), len(docs), len(out),
                  '  [PARTIAL — source has more than this window returned]' if truncated else ''))
+        LAST.setdefault('windows', []).append({
+            'from': _iso(d_from), 'to': _iso(d_to), 'total': declared.get('v'),
+            'retrieved': len(rows), 'complete': not truncated})
         if truncated:
+            LAST.setdefault('failures', []).append('window %s..%s truncated at %d rows' % (d_from, d_to, len(rows)))
             print('PALM BEACH: %s..%s is INCOMPLETE — %d rows pulled, source reports more and the '
                   'window cannot be narrowed further.' % (d_from, d_to, len(rows)), file=sys.stderr)
         return out
@@ -283,7 +306,10 @@ def _sweep_window(d_from, d_to, depth=0):
 
 
 def sweep(days=30, deep=False):
-    """-> canonical rows, or None when the portal is down/blocked (None != empty)."""
+    """-> canonical rows, or None when the portal is down/blocked (None != empty).
+    LAST says whether the rows cover the whole window ('ok') or only part of it ('partial')."""
+    LAST.clear()
+    LAST.update({'status': 'failed', 'window': [], 'windows': [], 'failures': []})
     ok = False
     for i in range(4):
         ok = P.start_session()
@@ -293,8 +319,10 @@ def sweep(days=30, deep=False):
     if not ok:
         print('PALM BEACH: no Landmark session (portal 500/blocked) — sweep skipped',
               file=sys.stderr)
+        LAST['failures'].append('no session')
         return None
     d_from, d_to = _win(days)
+    LAST['window'] = [_iso(d_from), _iso(d_to)]
 
     # ---- one-token DOCTYPE sweep -------------------------------------------------------------
     # Retry the SAME search rather than cycling vocabularies: the first search after start_session()
@@ -303,6 +331,7 @@ def sweep(days=30, deep=False):
     # captcha per attempt on values that were never going to work anyway.
     got = _sweep_window(d_from, d_to, depth=0)
     if got is not None:
+        _summarize()
         return got
     if not deep:
         print('PALM BEACH: one-token sweep rejected; rerun with --deep for the plaintiff sweep '
@@ -327,7 +356,23 @@ def sweep(days=30, deep=False):
                 out.append(r)
         time.sleep(0.6)
     print('PALM BEACH deep sweep: %d homeowner LP' % len(out))
+    # A plaintiff-list sweep can only be complete over the names on the list.
+    LAST['failures'].append('doctype sweep rejected; plaintiff-list fallback only')
+    LAST['status'] = 'partial'
     return out
+
+
+def _summarize():
+    """Fold the per-window records into the county totals lis_pendens.main writes."""
+    w = LAST.get('windows') or []
+    totals = [x['total'] for x in w]
+    LAST['reported_total'] = sum(totals) if w and all(t is not None for t in totals) else None
+    LAST['retrieved'] = sum(x['retrieved'] for x in w)
+    LAST['pages'] = len(w)
+    if LAST['reported_total'] is None and w:
+        LAST['failures'].append('a window did not report a total')
+    LAST['status'] = ('ok' if w and all(x['complete'] for x in w) and not LAST['failures']
+                      else 'partial')
 
 
 if __name__ == '__main__':
