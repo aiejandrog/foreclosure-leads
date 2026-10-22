@@ -671,6 +671,30 @@ def _valid_folio(s):
     f = re.sub(r'\D', '', s or '')
     return f if len(f) == 13 else ''
 
+def wp_parcel_verdict(apn, folio):
+    """Does a cached Whitepages property record belong to THIS lead's parcel?
+
+    The WP cache is keyed by case number, which is correct, but a 2026-10-21 cross-check found
+    half the joined records resolved to a DIFFERENT parcel (same house number, wrong street) because
+    the address fed to Whitepages at lookup time was garbled. Verify the record's assessor parcel
+    (apn) against the lead's folio before trusting its owners/phones for dialing.
+
+      'ok'         -> apn matches folio (or there is no property parcel to check, e.g. a person-only
+                      record) -> safe to bake; name-grading (wp_contacts) still applies downstream.
+      'mismatch'   -> apn present and differs from folio -> record is for a different property; its
+                      phones are strangers (wrong-party contact / TCPA-FTSA). Do not bake.
+      'unverified' -> apn present but the lead has no usable folio (missing or the 'Property Appraiser'
+                      scrape artifact) -> cannot tie the record to this lead. Do not bake; skiptrace
+                      already covers these leads by case, so no dialable coverage is lost.
+    """
+    a = re.sub(r'\D', '', str(apn or ''))
+    f = re.sub(r'\D', '', str(folio or ''))
+    if not a:
+        return 'ok'            # no parcel claim on the record (person-only) — nothing to contradict
+    if not f:
+        return 'unverified'    # record claims a parcel; lead has none to check it against
+    return 'ok' if a == f else 'mismatch'
+
 # The appraiser fields enrich() writes. When a night's appraiser call fails these are carried from
 # the last good read of the same folio (_carry_enrichment) instead of shipping blank.
 ENRICH_FIELDS = ('owners', 'mailing_address', 'market_value', 'dor_desc', 'beds', 'baths',
@@ -3208,7 +3232,7 @@ def make_tracker(leads):
     if os.path.exists(_wpf) or _wp_ids:
         try:
             _wp = json.load(open(_wpf, encoding='utf-8')) if os.path.exists(_wpf) else {}
-            _wn = _wpn = _wpe = _wid = _wrel = 0
+            _wn = _wpn = _wpe = _wid = _wrel = _wpm = 0
             try:
                 import wp_contacts as _WPC
             except Exception as _wpce:
@@ -3251,6 +3275,30 @@ def make_tracker(leads):
                 _hit = _wp.get(_case)
                 if not _hit: continue
                 _res = (_hit.get('result') or {})
+                # APN GATE (2026-10-21). The case key is correct, but the cached record is only the
+                # right HOUSE when its parcel matches this lead's folio. A cross-check of all current
+                # joins found half the records resolved to a DIFFERENT parcel — same house number,
+                # wrong street — because the address fed to Whitepages at lookup time was garbled, and
+                # WP faithfully returned a real record for the wrong property. Its owners/phones are
+                # strangers; baking them is wrong-party contact (TCPA/FTSA). So before trusting any
+                # owner/phone/email/deep-link from this record, the WP result.apn must equal the lead's
+                # folio (digits only). A record we cannot tie to a parcel (lead folio missing/junk like
+                # the "Property Appraiser" scrape artifact) is NOT trusted for phones either — skiptrace
+                # already covers these leads by case, so suppressing an unverifiable WP record costs no
+                # coverage. One seam: fail here and nothing downstream bakes.
+                _pv = wp_parcel_verdict(_res.get('apn'), _r.get('folio'))
+                if _pv == 'mismatch':
+                    _r['wpKey'] = 'mismatch'   # record is for a different parcel — do not dial
+                    if _r.pop('wpPropId', None) is not None: _wid -= 1  # the deep-link id is the wrong property's too
+                    _wpm += 1
+                    continue
+                if _pv == 'unverified':
+                    # a property record we cannot tie to this lead's parcel (folio missing/junk like
+                    # the "Property Appraiser" scrape artifact). skiptrace already covers these by case.
+                    _r['wpKey'] = 'unverified'
+                    if _r.pop('wpPropId', None) is not None: _wid -= 1
+                    _wpm += 1
+                    continue
                 _oi = (_res.get('ownership_info') or {})
                 _po = _oi.get('person_owners') or []
                 _pc, _ = _prop_city_state(_r)
@@ -3402,6 +3450,8 @@ def make_tracker(leads):
                 _wn += 1
             if _wn:
                 print(f"WhitepagesPro: enriched {_wn} leads (+{_wpn} phones, +{_wpe} emails, absentee-owner flags set)")
+            if _wpm:
+                print(f"Whitepages APN gate: suppressed {_wpm} record(s) whose parcel did not match the lead folio (wrong-property/unverifiable)")
             if _wid:
                 print(f"Whitepages property deep-links: {_wid} leads with wpPropId")
             if _wrel:
