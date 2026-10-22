@@ -155,6 +155,11 @@ rec('last-resort numbers keep their original order behind it (trace before house
     p[2:] == ['9545550001', '9545550002', '9545550005'], p)
 rec('rank labels travel with their numbers', by['MULTI']['r'] == ['C', 'C', 'L', 'L', 'L'], by['MULTI']['r'])
 rec('the household tag travels with its number', by['MULTI']['ps'][p.index('9545550005')] == 'hh', by['MULTI'].get('ps'))
+ids, by = order([lead('ROLE', 20, phones=['9545550021', '9545550022', '9545550023'],
+                      phtype=['mobile', 'landline', 'mobile'], phsrc=['hh', 'wp', 'nm'],
+                      phrank=['ok', 'last resort', 'ok'], phbest=1)])
+rec("a household / namesake number labelled 'ok' never rings before the owner's own 'last resort' one",
+    by['ROLE']['p'] == ['9545550022', '9545550021', '9545550023'], by['ROLE']['p'])
 ids, by = order([lead('UNRANKED', 20, phones=['9545550011', '9545550012'])])
 rec('a lead with no rank keeps the merge order', by['UNRANKED']['p'] == ['9545550011', '9545550012'], by['UNRANKED']['p'])
 

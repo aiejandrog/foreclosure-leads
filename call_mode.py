@@ -1951,8 +1951,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # household / namesake), so "Try their next number" rang a skip-trace landline ahead of the
         # owner's second mobile or a deed-verified Whitepages number. The label tier is the
         # ranker's own verdict; ties keep the original position, which the ranker also scores.
+        # WHOSE number comes before the label: a household member's or a namesake's number never
+        # rings ahead of one of the owner's own, whatever its line type scored (phone_rank's role
+        # rule, so the page and the ranker cannot disagree).
         _tier = {'CALL FIRST': 0, 'ok': 1, 'last resort': 2}
+        _role = {'hh': 1, 'nm': 2}
         order = sorted(range(len(keep)), key=lambda k: (
+            _role.get(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
             _tier.get(rank[keep_oi[k]] if keep_oi[k] < len(rank) else '', 1), k))
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
