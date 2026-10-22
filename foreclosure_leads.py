@@ -3317,10 +3317,13 @@ def make_tracker(leads):
                     for _o in _owns:
                         _o['notOwner'] = (_WPC.grade_property_owner(_lown, _o['name']) != 'wp') if _WPC else False
                     _person_recs = _hit.get('_person') or []
+                    _resident_recs = [p for p in (_res.get('residents') or []) if isinstance(p, dict)] if _prop_ok else []
+                    _has_person = any(isinstance(p, dict) and (p.get('response') or []) for p in _person_recs)
+                    _resident_only = not _owns and not _has_person
                     # Person-only cache rows (LP/upcoming with no address) have no property owners —
                     # still bake phones from the Person layer. Bare _prop_id stamps without a lookup
                     # are not a miss; skip quietly so we don't mark Marisela-style id-only rows 'none'.
-                    if not _owns and not any(isinstance(p, dict) and (p.get('response') or []) for p in _person_recs):
+                    if not _owns and not _resident_recs and not _has_person:
                         if _prop_ok and (_hit.get('result') is not None or _hit.get('_http') == 404):
                             _r['wpKey'] = 'none'
                         continue
@@ -3344,7 +3347,7 @@ def make_tracker(leads):
                     # resident:true — the play is "is <owner> home?", not "hi <owner>". Ranked after the
                     # owners so an owner's own mobile always leads.
                     _residents = []
-                    for _rz in ((_res.get('residents') or []) if _prop_ok else []):
+                    for _rz in _resident_recs:
                         _rr = _wp_own(_rz, _pc)
                         if not (_rr['phones'] or _rr['emails']): continue
                         _rr['resident'] = True
@@ -3354,7 +3357,9 @@ def make_tracker(leads):
                             _seen_ph.add(_p['n'])
                             _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _rr['name'],
                                             'absentee': _rr['absentee'], 'resident': True})
-                        for _e in _rr['emails']:
+                        # Previously skipped resident-only records contribute phone evidence only.
+                        # Do not turn this fix into an expansion of email recipients.
+                        for _e in ([] if _resident_only else _rr['emails']):
                             if _e.lower() in _seen_em: continue
                             _seen_em.add(_e.lower()); _all_em.append(_e)
                     # Person Search layer (whitepages_lookup.py --deep / auto-fallback when Property was thin):
