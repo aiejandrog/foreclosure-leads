@@ -1,4 +1,5 @@
 """Real Chromium + shipped templates, isolated fake data and blocked external network."""
+import datetime as dt
 import functools
 import http.server
 import json
@@ -64,6 +65,7 @@ class OperationsUI(unittest.TestCase):
         with self.context.expect_page() as popup:
             self.page.evaluate("openMorningWorker('urgent')")
         w = popup.value
+        w.clock.install(time=dt.datetime.now(dt.timezone.utc).replace(hour=16, minute=0, second=0))
         print('WORKER QUEUES:', self.page.evaluate("DATA.map(r=>({c:r.case, days:_saleDays(r), eligible:_workerEligible(r), reach:_workerReach(r)}))"))
         w.locator('#mw-call').wait_for()
         return w
@@ -104,9 +106,11 @@ class OperationsUI(unittest.TestCase):
             document.body.appendChild(box); window.__choice=[];
             wrongChoice(ROWS[0], ROWS[0].p[0], 1, x => window.__choice.push(x));
         }""")
+        self.page.wait_for_timeout(450)  # honor the production tap shield
         self.page.locator('[data-wc="badnum"]').click()
         self.assertEqual(self.page.evaluate('__choice'), ['badnum'])
         self.page.evaluate("wrongChoice(ROWS[0], ROWS[0].p[0], 1, x => window.__choice.push(x))")
+        self.page.wait_for_timeout(450)
         self.page.locator('[data-wc="wrong"]').click()
         self.assertEqual(self.page.evaluate('__choice'), ['badnum', 'wrong'])
         self.assertEqual(self.errors, [])

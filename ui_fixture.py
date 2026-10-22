@@ -12,7 +12,7 @@ FIXTURE_CODE = 'synthetic-ui-only'
 
 def leads():
     out = []
-    for i, days in enumerate((10, 15, 45, 60, None), 1):
+    for i, days in enumerate((2, 5, 20, 40, None), 1):
         date = (dt.date.today() + dt.timedelta(days=days)).strftime('%m/%d/%Y') if days else ''
         out.append(dict(case=f'SYNTHETIC-UI-{i}', owners=f'SYNTHETIC PERSON {i}',
                         oname='Synthetic', addr=f'{i} Example Street, Example City, FL',
@@ -28,7 +28,7 @@ def build(directory):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     rows = leads()
-    tpl = F.subst_build_facts((ROOT / 'tracker_template.html').read_text(), 'synthetic UI fixture')
+    tpl = F.subst_build_facts((ROOT / 'tracker_template.html').read_text(), dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
     replacements = {'__DATA__': F._esc_json(rows), '__MOTIONJS__': F._motion_js(),
                     '__OPTOUTS__': '[]', '__REPLIES__': '{}', '__MAILLOG__': '{}',
                     '__MAILTO__': '{}', '__TEXTLOG__': '{}', '__TEXTPERSON__': '{}',
@@ -47,6 +47,7 @@ def build(directory):
                   lp=int(r['lp']), eq=75, v=400000, j=100000, county='MIAMI-DADE') for r in rows]
     payload = F._encrypt_multi(json.dumps(calls), [('Synthetic', FIXTURE_CODE)])
     page = C.build_html(calls, len(calls), payload, dt.date.today().isoformat(),
-                        'synthetic', 'synthetic')
+                        'synthetic', 'synthetic',
+                        funnel_js=C.extract_funnel_js(tpl), text_js=C.extract_text_js(tpl))
     (directory / 'call.html').write_text(page, encoding='utf-8')
     return directory / 'board.html', directory / 'call.html'
