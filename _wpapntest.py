@@ -46,12 +46,20 @@ rec('a one-digit-off apn is a mismatch, not ok',
 # --- integration: the live cache must not bake a wrong-parcel record ----------------------------
 # Every current lead whose WP record claims a parcel that disagrees with the lead folio must be
 # refused. Clean matches must pass. This is the exact split the 2026-10-21 cross-check found.
-try:
-    wp = json.load(io.open(os.path.join(HERE, 'whitepages_lookup.json'), encoding='utf-8'))
-    lf = json.load(io.open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8'))
-except Exception as e:
-    rec('live cache + leads load', False, e)
-    wp = lf = None
+# Both inputs are gitignored live data. Where neither exists (CI, a fresh clone) the integration half
+# is skipped and the unit checks above still decide; where they exist, an unreadable one is a failure.
+_wpf = os.path.join(HERE, 'whitepages_lookup.json')
+_lff = os.path.join(HERE, 'leads_final.json')
+wp = lf = None
+if not (os.path.exists(_wpf) and os.path.exists(_lff)):
+    print('skip live cache + leads (whitepages_lookup.json / leads_final.json not on this machine)')
+else:
+    try:
+        wp = json.load(io.open(_wpf, encoding='utf-8'))
+        lf = json.load(io.open(_lff, encoding='utf-8'))
+    except Exception as e:
+        rec('live cache + leads load', False, e)
+        wp = lf = None
 
 if wp is not None:
     folio_by_case = {}
