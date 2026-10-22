@@ -370,5 +370,12 @@ rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105'
     and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
     == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
 
+rec('State Road 7 keeps its number, not a unit', W._wp_street('4500 N STATE ROAD 7') == '4500 N State Road 7', W._wp_street('4500 N STATE ROAD 7'))
+rec('US Highway 1 is not "1st"', W._wp_street('1234 US HIGHWAY 1') == '1234 US Highway 1', W._wp_street('1234 US HIGHWAY 1'))
+rec('a State Rd page without the 7 is refused', not W.page_matches_address('4500 N State Rd, Lauderdale Lakes', '4500 N STATE ROAD 7'))
+rec('a State Road 7 page matches', W.page_matches_address('4500 N State Road 7, Lauderdale Lakes', '4500 N STATE ROAD 7'))
+rec('a house page with a search-records link is not the city list',
+    W._why_empty(PAGE + '\nSearch property records in Coral Springs, FL\n') != "Whitepages showed the city's property list, not the house")
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

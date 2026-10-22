@@ -168,6 +168,9 @@ _SUFFIX_SAME = {'st': {'street'}, 'street': {'st'}, 'ave': {'avenue', 'av'}, 'av
                 'ct': {'court'}, 'court': {'ct'}, 'ter': {'terrace'}, 'terrace': {'ter'},
                 'dr': {'drive'}, 'drive': {'dr'}, 'rd': {'road'}, 'road': {'rd'}, 'ln': {'lane'},
                 'lane': {'ln'}, 'pl': {'place'}, 'place': {'pl'}, 'cir': {'circle'}, 'circle': {'cir'}}
+# A number after one of these is the road's own number ("State Road 7", "US Highway 1"): never an
+# ordinal, never a unit, and it has to be on the page too.
+_ROUTE_WORDS = {'road', 'rd', 'highway', 'hwy', 'sr', 'us', 'route', 'rte', 'cr'}
 _DIR_WORDS = {'northwest': 'nw', 'northeast': 'ne', 'southwest': 'sw', 'southeast': 'se',
               'north': 'n', 'south': 's', 'east': 'e', 'west': 'w'}
 
@@ -193,6 +196,7 @@ def page_matches_address(text, street):
             name, suffix = d, name
     m = _UNIT_RE.search(street or '')
     unit = m.group(1).lower().replace('-', ' ').strip() if m else ''
+    route = next((t for i, t in enumerate(toks) if i > 1 and t.isdigit() and toks[i - 1] in _ROUTE_WORDS), '')
     for l in str(text or '').split('\n'):
         low = ' ' + norm(re.sub(r'[^a-z0-9]', ' ', l.lower())) + ' '
         if (' %s ' % house.lower()) not in low:
@@ -202,6 +206,8 @@ def page_matches_address(text, street):
         if suffix and not ({suffix} | _SUFFIX_SAME.get(suffix, set())) & set(low.split()):
             continue
         if unit and (' %s ' % unit) not in low:
+            continue
+        if route and (' %s ' % route) not in low.replace(' %s ' % house.lower(), ' ', 1):
             continue
         return True
     return False
@@ -293,14 +299,17 @@ def _wp_street(street):
     unit = m.group(1) if m else ''
     base = _UNIT_RE.sub(' ', str(street or ''))
     toks = re.sub(r'[^A-Za-z0-9 ]', ' ', base).split()
-    if not unit and len(toks) >= 3 and toks[-1].isdigit() and toks[-2].lower() in _SUFFIXES:
+    if (not unit and len(toks) >= 3 and toks[-1].isdigit() and toks[-2].lower() in _SUFFIXES
+            and toks[-2].lower() not in _ROUTE_WORDS):
         unit = toks.pop()                       # "... AVE 999": a unit with no label
     out = []
     for i, t in enumerate(toks):
         low = t.lower()
-        if i > 0 and t.isdigit():
+        if i > 0 and t.isdigit() and toks[i - 1].lower() in _ROUTE_WORDS:
+            out.append(t)                       # State Road 7, US Highway 1
+        elif i > 0 and t.isdigit():
             out.append(_ordinal(t))             # street names are numbered: 34 -> 34th
-        elif low in _DIRS and len(low) <= 2:
+        elif (low in _DIRS and len(low) <= 2) or low in ('us', 'sr', 'cr'):
             out.append(t.upper())
         else:
             out.append(t[:1].upper() + t[1:].lower())
@@ -486,7 +495,7 @@ def _clipboard_text():
 _PAGE_MARK = re.compile(r'Owners\s*&\s*Residents|Reverse Address|Property Details for|'
                         r'who (owns|lives at) .{0,80}\d{5}', re.I)
 # The city's property list (where a link Whitepages cannot resolve lands), not one house.
-_CITY_LIST_RE = re.compile(r'Property Records\s*\n?\s*[\d,]+ of [\d,]+ results|Search property records in ', re.I)
+_CITY_LIST_RE = re.compile(r'Property Records\s*\n\s*[\d,]+ of [\d,]+ results', re.I)
 ASSIST_WAIT_S = float(os.environ.get('WP_WEB_ASSIST_WAIT_S', '240'))
 
 
