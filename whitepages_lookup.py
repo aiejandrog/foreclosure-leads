@@ -645,6 +645,20 @@ def pick_callable(leads, cache, n, skiptrace=None, max_days=None):
             held += 1
             continue
         out.append(r)
+    # The same gates skiptrace applies before it spends (10-18): a §362 stay from the docket cache
+    # or PACER, an outreach hold (Broward / Palm Beach send_hold), a closed case, and Do Not Contact
+    # / opt-out from the ledger and Call Mode notes. Read only. If they cannot be read, nothing is
+    # bought: an unreadable gate is not an open one.
+    if out:
+        try:
+            import skiptrace as _ST
+            _idx = _ST.exclusion_index(out, leads)
+            kept = [r for r in out if not _ST.exclusion_reasons(r, _idx)]
+        except Exception as e:
+            _log(f'  --pick-callable: contact gates unreadable ({str(e)[:80]}); buying nothing')
+            kept = []
+        held += len(out) - len(kept)
+        out = kept
     out.sort(key=lambda r: (_days_to_sale(r) // 7, min(_lead_phone_count(r, skiptrace), 5),
                             _days_to_sale(r), _lead_key(r)))
     _log(f'  --pick-callable: {len(out)} eligible (sale within {max_days}d or undated), '

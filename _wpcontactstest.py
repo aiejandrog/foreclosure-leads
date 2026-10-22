@@ -225,6 +225,8 @@ rec('--pick-miami skips held leads and companies',
     ], {}, 5)] == ['2025-333333-CA-01'])
 
 # ------------------------------------------------------------------ 7. nightly deep-search picker
+import skiptrace as _ST                              # noqa: E402
+_ST._EXCLUSION_OVERRIDE = _ST._empty_index()        # no files: every lead passes the shared gates
 _pool = [
     {'Case #': '2025-000201-CA-01', 'Address': '1 A ST, Miami', 'owners': 'DOE, JOHN', 'days': 3},   # never-contact
     {'Case #': '2025-222222-CA-01', 'Address': '2 B ST, Miami', 'owners': 'ACME HOLDINGS LLC', 'days': 3},
@@ -246,6 +248,30 @@ rec('--pick-callable: same week of sale -> the lead with fewer phones first',
     _picked.index('2025-444444-CA-01') < _picked.index('2025-555555-CA-01'), _picked)
 rec('--pick-callable: an undated lis pendens comes after every dated sale', _picked[-1] == '2025-888888-CA-01', _picked)
 rec('--pick-callable: n caps the list', len(L.pick_callable(_pool, {}, 2, _st)) == 2)
+_dnc = _ST._empty_index()
+_dnc['dnc_cases'] = {'2025-444444-ca-01'}
+_ST._EXCLUSION_OVERRIDE = _dnc
+rec('--pick-callable: an opted-out / Do Not Contact lead is not bought (skiptrace gates)',
+    '2025-444444-CA-01' not in [L._lead_key(r) for r in L.pick_callable(_pool, {}, 10, _st)])
+_bad = _ST._empty_index()
+_bad['dnc_unreadable'] = True
+_ST._EXCLUSION_OVERRIDE = _bad
+rec('--pick-callable: an unreadable opt-out ledger buys nothing', L.pick_callable(_pool, {}, 10, _st) == [])
+_ST._EXCLUSION_OVERRIDE = None
+
+# the nightly line must sit where the batch can reach it: after the :rebuild label, which both the
+# tracerfy and no-tracerfy paths arrive at. On 10-22 it first landed between `goto :rebuild` and
+# `:phones`, where no path ever runs it.
+_bat = [ln.strip() for ln in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                               'refresh-dealflow.bat'), encoding='utf-8')]
+_wl = next((i for i, ln in enumerate(_bat) if 'whitepages_lookup.py --pick-callable' in ln
+            and not ln.lower().startswith('rem')), None)
+_rb = _bat.index(':rebuild') if ':rebuild' in _bat else None
+rec('refresh-dealflow.bat: the Whitepages line exists and comes after the :rebuild label',
+    _wl is not None and _rb is not None and _wl > _rb, (_wl, _rb))
+rec('refresh-dealflow.bat: no label or goto between :rebuild and the Whitepages line',
+    _wl is not None and _rb is not None
+    and not any(ln.startswith(':') or ln.lower().startswith('goto') for ln in _bat[_rb + 1:_wl]))
 
 shutil.rmtree(TMP, ignore_errors=True)
 print('\n%d failure(s)' % len(fails))

@@ -378,16 +378,6 @@ rem problem would silently fail over to the $0.15/hit provider we left. Tracerfy
 echo     no phone key present - skipping phones ^(names + People links still publish^).>> "%LOG%"
 echo     (no phone key - names/People links only)
 goto :rebuild
-rem [3a-2] Whitepages Pro deep search - RE-ENABLED 2026-10-22 at Alejandro's word (plan renewed).
-rem  Disabled 08-16 when the plan quota ran out. Now: 4 leads a night that are about to be called
-rem  (sale within 60 days, fewest phones first, no contact hold, never Person-searched), each with
-rem  Property + the owner's Person record (relatives, more phones): at most 8 calls, about $1.76.
-rem  --max-spend 2 caps the run and WP_DAILY_CAP ($5 default) caps the day. Relatives stay call-only
-rem  on the board; they never reach Call Mode. No whitepages.key = skipped. A 403 exits 2 and the
-rem  refresh carries on with the cached results. Sits after :rebuild so it runs with or
-rem  without tracerfy.key, and before the board is built so tonight's numbers bake in. Full-sweep cost: python whitepages_lookup.py --estimate
-if exist whitepages.key python -u whitepages_lookup.py --pick-callable 4 --relatives --max-spend 2 >> "%LOG%" 2>&1
-rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 
 :phones
 rem  --all = every human owner + (via the code) every resolved LLC officer, not just Tier A.
@@ -416,6 +406,16 @@ python -u three_day.py --trace --max-spend 3 >> "%LOG%" 2>&1
 
 
 :rebuild
+rem [3a-2] Whitepages Pro deep search - RE-ENABLED 2026-10-22 at Alejandro's word (plan renewed).
+rem  Disabled 08-16 when the plan quota ran out. Now: 4 leads a night that are about to be called
+rem  (sale within 60 days, fewest phones first, no contact hold, never Person-searched), each with
+rem  Property + the owner's Person record (relatives, more phones): at most 8 calls, about $1.76.
+rem  --max-spend 2 caps the run and WP_DAILY_CAP ($5 default) caps the day. Relatives stay call-only
+rem  on the board; they never reach Call Mode. No whitepages.key = skipped. A 403 exits 2 and the
+rem  refresh carries on with the cached results. Sits after :rebuild so it runs with or
+rem  without tracerfy.key, and before the board is built so tonight's numbers bake in. Full-sweep cost: python whitepages_lookup.py --estimate
+if exist whitepages.key python -u whitepages_lookup.py --pick-callable 4 --relatives --max-spend 2 >> "%LOG%" 2>&1
+rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
 rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
 rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
