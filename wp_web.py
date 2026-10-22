@@ -759,8 +759,13 @@ def parse_person_page(text, lead_owners, street):
             return False
         if re.match(r"^[^\W\d_][^\W\d_ .'\-]*(?:[ .'\-]+[^\W\d_]+)*,?\s+[A-Z]{2}(\s+\d{5}(-\d{4})?)?$", l):
             return True                 # Miami, FL 33101
-        if re.match(r'^(lives|lived|living)\s+(in|at)\b', l, re.I) or re.match(r'^\d{1,6}\s+\S', l):
+        if re.match(r'^(lives|lived|living)\s+(in|at)\b', l, re.I):
             return True
+        if re.match(r'^\d{1,6}\s+\S', l):
+            # an address only when it reads as one (a street suffix, or a numbered street):
+            # "1 Jane Doe" is a numbered list row, not a house
+            key = C._street_key(l.split(',')[0])
+            return bool(key and (key[3] or re.search(r'\d', key[2])))
         if re.match(r'^(age\s*:?\s*\d{1,3}|\d{1,3}\s+years?\s+old)$', l, re.I):
             return True
         rest = _EMAIL_RE.sub(' ', _PHONE_RE.sub(' ', l))
