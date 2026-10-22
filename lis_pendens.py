@@ -317,7 +317,10 @@ def _or_attempt(R, solve, url):
         info['answer'] = 'answer was not an object'
         return None, info
     info['qs'] = bool(j.get('qs'))
+    # A bool, number or null is shown as itself: isValidSearch true vs false is the whole question
+    # for a lender that never gets a result handle. Anything else is reduced to its type name.
     info['answer'] = str({k: (str(v)[:60] if k.lower() in ('message', 'msg', 'error', 'errors')
+                              else v if v is None or isinstance(v, (bool, int, float))
                               else type(v).__name__) for k, v in j.items()})[:160]
     if not info['qs']:
         return None, info
@@ -629,6 +632,9 @@ def write_status(a, status, info, new_rows, failed, partial, now=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe)')
+    ap.add_argument('--probe-types', metavar='A,B',
+                    help='with --probe-doctype: document types to try, comma-separated; an empty item '
+                         'is the untyped search (e.g. "LIS PENDENS - LIS,")')
     ap.add_argument('--probe-doctype', metavar='NAME',
                     help='one paid name search with documentType=LIS PENDENS; prints counts only')
     ap.add_argument('--days', type=int, default=30)
@@ -641,7 +647,11 @@ def main():
     if a.probe:
         probe(); return
     if a.probe_doctype:
-        probe_doctype(a.probe_doctype, a.days); return
+        if a.probe_types is not None:
+            probe_doctype(a.probe_doctype, a.days, tuple(t.strip() for t in a.probe_types.split(',')))
+        else:
+            probe_doctype(a.probe_doctype, a.days)
+        return
     # PER-COUNTY VERDICT (audit 2026-09-21, defect 6). "Found nothing" and "never got through"
     # are opposite facts and this script used to return 0 for both, so a morning where every
     # captcha was refused reported a clean sweep and the wrapper carried on over yesterday's

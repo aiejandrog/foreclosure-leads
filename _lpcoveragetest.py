@@ -256,6 +256,11 @@ class MiamiCap(unittest.TestCase):
         R.S = SimpleNamespace(post=lambda *a, **k: SimpleNamespace(status_code=503, json=lambda: 1 / 0))
         _, t = LP._or_attempt(R, lambda *a: 'tok', 'https://example.invalid/')
         self.assertEqual((t['http'], t['answer']), (503, 'answer was not JSON'))
+        R.S = SimpleNamespace(post=lambda *a, **k: SimpleNamespace(
+            status_code=200, json=lambda: {'isValidSearch': False, 'qs': None, 'rows': ['x']}))
+        _, t = LP._or_attempt(R, lambda *a: 'tok', 'https://example.invalid/')
+        self.assertIn("'isValidSearch': False", t['answer'], 'a flag is shown as its value')
+        self.assertIn("'rows': 'list'", t['answer'], 'anything else stays a type name')
 
     def test_a_refused_solve_reads_as_no_token(self):
         self.run_sweep({'SMALL': 2}, budget=0)
