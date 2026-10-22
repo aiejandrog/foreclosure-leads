@@ -553,8 +553,18 @@ def main(argv=None):
         _login()
         return 0
     if a.structure == 'clip':
-        print(structure(_clipboard_text()))
-        return 0
+        # Wait for the NEXT copy of a Whitepages page: whatever is on the clipboard now (often the
+        # command just pasted to run this) is ignored.
+        base, t0 = _clipboard_text(), time.time()
+        print('waiting: now go to the Whitepages page in Chrome, click it, Ctrl+A, Ctrl+C ...', flush=True)
+        while time.time() - t0 < ASSIST_WAIT_S:
+            time.sleep(1.0)
+            cur = _clipboard_text()
+            if cur and cur != base and _PAGE_MARK.search(cur):
+                print(structure(cur))
+                return 0
+        print('no Whitepages page copied in %ds' % ASSIST_WAIT_S)
+        return 1
     if a.structure:
         f = a.structure if os.path.exists(a.structure) else os.path.join(
             _pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', a.structure) + '.txt')
