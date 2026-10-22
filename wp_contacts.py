@@ -80,17 +80,63 @@ def name_grade(lead_owners, wp_name):
     return best
 
 
+_DIRS = {'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW', 'NORTH', 'SOUTH', 'EAST', 'WEST',
+         'NORTHEAST', 'NORTHWEST', 'SOUTHEAST', 'SOUTHWEST'}
+_DIR_ABBR = {'NORTH': 'N', 'SOUTH': 'S', 'EAST': 'E', 'WEST': 'W', 'NORTHEAST': 'NE',
+             'NORTHWEST': 'NW', 'SOUTHEAST': 'SE', 'SOUTHWEST': 'SW'}
+_SUFFIX = {'ST': 'ST', 'STREET': 'ST', 'AVE': 'AVE', 'AV': 'AVE', 'AVENUE': 'AVE', 'CT': 'CT',
+           'COURT': 'CT', 'RD': 'RD', 'ROAD': 'RD', 'DR': 'DR', 'DRIVE': 'DR', 'TER': 'TER',
+           'TERR': 'TER', 'TERRACE': 'TER', 'PL': 'PL', 'PLACE': 'PL', 'LN': 'LN', 'LANE': 'LN',
+           'BLVD': 'BLVD', 'BOULEVARD': 'BLVD', 'WAY': 'WAY', 'CIR': 'CIR', 'CIRCLE': 'CIR',
+           'HWY': 'HWY', 'HIGHWAY': 'HWY', 'PKWY': 'PKWY', 'PARKWAY': 'PKWY', 'TRL': 'TRL',
+           'TRAIL': 'TRL', 'CV': 'CV', 'COVE': 'CV', 'PATH': 'PATH', 'LOOP': 'LOOP', 'ROW': 'ROW'}
+
+
 def _street_key(addr):
-    """(house number, first street-name word) or None. 'SW 8TH ST' and '8TH ST' compare equal on
-    the number + first non-directional word, which is what both sources agree on."""
+    """(house number, directionals, street name, suffix) or None.
+
+    Every part counts. Miami-Dade numbers its streets, so '123 SW 8 ST', '123 NW 8th Ave' and
+    '123 NE 8th Ct' share a house number and a street number and are three different houses; a
+    key of house number + first word called them one, which let a same-name owner on the wrong
+    street grade as the owner at our address. Ordinals are normalised ('8 ST' == '8th St'), and
+    long forms are abbreviated ('Street' == 'ST', 'Southwest' == 'SW'). Unit numbers are ignored."""
     s = re.sub(r'[^A-Z0-9 ]', ' ', str(addr or '').upper())
     words = s.split()
     if not words or not words[0].isdigit():
         return None
-    rest = [w for w in words[1:] if w not in ('N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW')]
-    if not rest:
+    house, rest = words[0], words[1:]
+    dirs, name, suffix = [], [], ''
+    for w in rest:
+        if w in ('APT', 'UNIT', 'STE', 'SUITE', '#'):
+            break
+        if suffix:
+            if w in _DIRS:                                  # post-directional: '123 8 ST SW'
+                dirs.append(_DIR_ABBR.get(w, w))
+            break
+        if w in _DIRS and not name:
+            dirs.append(_DIR_ABBR.get(w, w))
+        elif w in _SUFFIX and name:
+            suffix = _SUFFIX[w]
+        else:
+            name.append(re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', w))
+    if not name:
         return None
-    return words[0], rest[0]
+    return house, ' '.join(sorted(dirs)), ' '.join(name), suffix
+
+
+def same_street(a, b):
+    """Two addresses name the same house: same house number and street name, and the same
+    directionals and suffix wherever BOTH carry them. One source dropping 'SW' or 'ST' is common;
+    two different ones ('NW 8 AVE' vs 'NE 8 CT') are different houses."""
+    ka, kb = _street_key(a), _street_key(b)
+    if not ka or not kb:
+        return False
+    if ka[0] != kb[0] or ka[2] != kb[2]:
+        return False
+    for i in (1, 3):                                       # directionals, suffix
+        if ka[i] and kb[i] and ka[i] != kb[i]:
+            return False
+    return True
 
 
 def _addr_strings(rec):
@@ -103,17 +149,25 @@ def _addr_strings(rec):
             if isinstance(a, str):
                 out.append(a)
             elif isinstance(a, dict):
-                out.append(a.get('street_line_1') or a.get('street') or a.get('address')
-                           or a.get('full_address') or a.get('line1') or '')
+                # Whitepages' own address dicts carry `street` as the street NAME only (no house
+                # number) next to `line1` / `full_address` (seen on every cached /property record,
+                # 2026-10-22). Reading `street` first made _street_key fail on every such address,
+                # so no Person record could ever be placed at the property. Full lines first, and
+                # house + street rebuilt when only the parts are there.
+                for kk in ('street_line_1', 'line1', 'full_address', 'address'):
+                    if a.get(kk):
+                        out.append(str(a.get(kk)))
+                if a.get('house') and a.get('street'):
+                    out.append('%s %s' % (a.get('house'), a.get('street')))
     return [a for a in out if a]
 
 
 def at_property(rec, lead_addr):
     """True when a Person record places this person at the lead's street address."""
-    want = _street_key(str(lead_addr or '').split(',')[0])
-    if not want:
+    want = str(lead_addr or '').split(',')[0]
+    if not _street_key(want):
         return False
-    return any(_street_key(a.split(',')[0]) == want for a in _addr_strings(rec))
+    return any(same_street(a.split(',')[0], want) for a in _addr_strings(rec))
 
 
 def grade_person_record(lead_owners, lead_addr, rec):
@@ -192,3 +246,58 @@ def relatives_allowed(lead, never_contact=None):
         except Exception:
             return False                              # unreadable never-contact list: fail closed
     return True
+
+
+def _prop_street(result):
+    pa = (result or {}).get('property_address')
+    if isinstance(pa, dict):
+        pa = (pa.get('line1') or pa.get('street_line_1') or pa.get('full_address')
+              or ('%s %s' % (pa.get('house') or '', pa.get('street') or '')).strip())
+    return str(pa or '').split(',')[0]
+
+
+def parcel_owners(verdict, lead_owners, lead_addr, result):
+    """Which person_owners of a Whitepages /property result may be baked, given the APN verdict
+    (foreclosure_leads.wp_parcel_verdict).
+
+      'ok'         -> all of them; grade_property_owner then splits owner ('wp') from household.
+      'mismatch'   -> none. The record is a different parcel; everyone on it is a stranger.
+      'unverified' -> the lead has no folio to check against. Only a person whose name clears the
+                      owner bar, on a record whose property street (house number + street name)
+                      is our lead's street. That is the evidence a Person record needs for 'wp'.
+                      Non-owner names are not baked, because 'household' only means something
+                      when we know it is the right house."""
+    owners = ((result or {}).get('ownership_info') or {}).get('person_owners') or []
+    if verdict == 'ok':
+        return list(owners)
+    if verdict != 'unverified':
+        return []
+    if not same_street(_prop_street(result), str(lead_addr or '').split(',')[0]):
+        return []
+    return [o for o in owners if grade_property_owner(lead_owners, o.get('name')) == 'wp']
+
+
+def wp_parcel_verdict(apn, folio):
+    """Does a cached Whitepages property record belong to THIS lead's parcel?
+
+    The WP cache is keyed by case number, which is correct, but a 2026-10-21 cross-check found
+    half the joined records resolved to a DIFFERENT parcel (same house number, wrong street) because
+    the address fed to Whitepages at lookup time was garbled. Verify the record's assessor parcel
+    (apn) against the lead's folio before trusting its owners/phones for dialing.
+
+      'ok'         -> apn matches folio (or there is no property parcel to check, e.g. a person-only
+                      record) -> safe to bake; name-grading (wp_contacts) still applies downstream.
+      'mismatch'   -> apn present and differs from folio -> record is for a different property; its
+                      phones are strangers (wrong-party contact / TCPA-FTSA). Do not bake.
+      'unverified' -> apn present but the lead has no usable folio (missing or the 'Property Appraiser'
+                      scrape artifact) -> cannot tie the record to this lead by parcel. Only
+                      parcel_owners()' owner-bar-plus-street rescue bakes from it.
+    Either way the Person half of the record (searched by name, graded per record) still bakes.
+    """
+    a = re.sub(r'\D', '', str(apn or ''))
+    f = re.sub(r'\D', '', str(folio or ''))
+    if not a:
+        return 'ok'            # no parcel claim on the record (person-only) — nothing to contradict
+    if not f:
+        return 'unverified'    # record claims a parcel; lead has none to check it against
+    return 'ok' if a == f else 'mismatch'
