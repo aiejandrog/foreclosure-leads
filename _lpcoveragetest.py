@@ -133,10 +133,11 @@ class FakeClerk:
     """A Miami-Dade OR search over synthetic lenders: `per_day[name]` records a day, one in ten a
     lis pendens, returned oldest first and cut at the 500-record cap like the real search."""
 
-    def __init__(self, per_day, no_qs=(), broken_reads=False):
+    def __init__(self, per_day, no_qs=(), broken_reads=False, invalid=()):
         import urllib.parse as U
         self.U, self.per_day, self.no_qs, self.posts = U, per_day, set(no_qs), []
         self.broken_reads = broken_reads
+        self.invalid = set(invalid)
 
     def post(self, url, **k):
         q = self.U.parse_qs(self.U.urlsplit(url).query)
@@ -144,6 +145,8 @@ class FakeClerk:
         self.posts.append((name, lo, hi))
         self.doctypes = getattr(self, 'doctypes', []) + [q.get('documentType', [''])[0]]
         body = {'message': 'No records'} if name in self.no_qs else {'qs': '|'.join((name, lo, hi))}
+        if name in self.invalid:
+            body = {'isValidSearch': False, 'qs': None}
         return SimpleNamespace(json=lambda: body, status_code=200)
 
     def records_by_qs(self, qs):
@@ -163,8 +166,8 @@ class FakeClerk:
 
 
 class MiamiCap(unittest.TestCase):
-    def run_sweep(self, per_day, budget=10 ** 6, no_qs=(), broken_reads=False):
-        clerk = FakeClerk(per_day, no_qs, broken_reads)
+    def run_sweep(self, per_day, budget=10 ** 6, no_qs=(), broken_reads=False, invalid=()):
+        clerk = FakeClerk(per_day, no_qs, broken_reads, invalid)
         R = SimpleNamespace(OR_BASE='https://example.invalid/', TS_SITE_KEY='k',
                             S=SimpleNamespace(post=clerk.post), records_by_qs=clerk.records_by_qs)
         left = {'n': budget}
@@ -279,6 +282,31 @@ class MiamiCap(unittest.TestCase):
         text = '\n'.join(lines)
         self.assertIn('GONE: token yes http 200 qs no read -', text)
         self.assertIn('LATE: never tried', text)
+
+    def test_a_lender_the_clerk_calls_not_valid_on_every_try_is_no_match_not_blocked(self):
+        rows, clerk = self.run_sweep({'QUIET': 0, 'SMALL': 2}, invalid={'QUIET'})
+        self.assertEqual(LP.SWEEP_BLOCKED, [])
+        self.assertEqual(LP.MD_LAST['no_match'], ['QUIET'])
+        self.assertEqual(sum(1 for p in clerk.posts if p[0] == 'QUIET'), 3, 'all three tries were made')
+        self.assertTrue(rows or LP.MD_LAST['retrieved'] >= 0)
+        cov = LP.coverage_entry('ok', {'no_match': LP.MD_LAST['no_match']}, None)
+        self.assertEqual(cov['no_match'], ['QUIET'])
+
+    def test_one_not_valid_answer_among_good_tries_is_still_blocked(self):
+        # a bad solve gives the same False; only every try agreeing counts as no match
+        clerk = FakeClerk({'FLAKY': 0}, invalid={'FLAKY'})
+        answers = iter([{'isValidSearch': False, 'qs': None}, {'qs': None}, {'isValidSearch': False, 'qs': None}])
+        clerk_post = lambda url, **k: SimpleNamespace(json=lambda: next(answers), status_code=200)
+        R = SimpleNamespace(OR_BASE='https://example.invalid/', TS_SITE_KEY='k',
+                            S=SimpleNamespace(post=clerk_post), records_by_qs=clerk.records_by_qs)
+        PR = SimpleNamespace(guarded=lambda f, n: (lambda *a, **k: 'tok'), allow=lambda *a: (True, ''), SOLVE_USD=0.0033)
+        CS = SimpleNamespace(solve_turnstile=lambda *a: 'tok')
+        with mock.patch.dict('sys.modules', {'records_liens': R, 'paid_reads': PR, 'captcha_solver': CS}), \
+                mock.patch.object(LP, 'PLAINTIFFS', ['FLAKY']), mock.patch.object(LP.time, 'sleep', lambda _: None):
+            LP.SWEEP_BLOCKED[:] = []
+            LP.lp_sweep(days=30)
+        self.assertEqual(LP.SWEEP_BLOCKED, ['FLAKY'])
+        self.assertEqual(LP.MD_LAST['no_match'], [])
 
     def test_split_halves_cover_the_window_exactly(self):
         lo, hi = LP._split_iso('2026-09-22', '2026-10-22')
