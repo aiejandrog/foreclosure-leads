@@ -4,7 +4,8 @@ Layer 1: /v2/property (address → all owners + residents + typed phones + email
 Layer 2: /v2/person   (owner name → aliases, address history, relatives, LinkedIn, is_dead flag,
                        and — most importantly — MORE phones that Property missed because Person
                        Search draws from a broader dataset). Fires automatically when Property
-                       returned fewer than THIN_PHONES phones for the top owner, or on --deep.
+                       found no person owner (or only a different parcel's), on --relatives, or on
+                       --deep. --upgrade adds it to cached leads with fewer than THIN_PHONES.
 
 Rich sample (Velima 11410 NE 13 Ave): Property gave 12 phones on Jacob (absentee TX co-owner) +
 2 on Velima. Person Search adds address history + relatives + LinkedIn, and typically 3-8 more
@@ -140,6 +141,13 @@ def _lead_addr(r):
     return (r.get('Address') or r.get('addr') or r.get('mail') or r.get('mailing_address') or '').strip()
 def _lead_owners(r): return r.get('owners') or r.get('owner') or r.get('oname') or ''
 def _lead_county(r): return (r.get('county') or r.get('County') or '').strip().upper()
+def _lead_folio(r):  return (r.get('folio') or r.get('Folio') or '').strip()
+
+
+def _parcel_verdict(lead, prop):
+    """wp_contacts.wp_parcel_verdict for a /property response against this lead's folio."""
+    import wp_contacts
+    return wp_contacts.wp_parcel_verdict(((prop or {}).get('result') or {}).get('apn'), _lead_folio(lead))
 
 
 def _county_city(r):
@@ -370,12 +378,19 @@ def _run_person_layer(lead, city, prop, entry, key, deep, force=False, relatives
     Person record. It searches ONE name, the property owner who clears wp_contacts' owner bar
     against our lead (else the lead's own first owner), so the extra cost is one call per lead."""
     ow_ct = len(((prop.get('result') or {}).get('ownership_info') or {}).get('person_owners') or [])
+    # A /property record for a DIFFERENT parcel (APN != our folio; the lookup address was garbled)
+    # names strangers. Searching their names paid for a stranger's phones and relatives, and its
+    # "found owners" also suppressed the Person fallback that runs when Property finds nobody. So a
+    # mismatched record counts as no owners, and the search uses our lead's own owner name.
+    wrong_parcel = _parcel_verdict(lead, prop) == 'mismatch'
+    if wrong_parcel:
+        ow_ct = 0
     should_run = force or deep or relatives or (ow_ct == 0)
     person_records = list(entry.get('_person') or [])
     person_added_phones = 0
     if not should_run:
         return person_records, 0, False
-    names = _owner_names_from_property(prop)
+    names = [] if wrong_parcel else _owner_names_from_property(prop)
     if relatives and not deep:
         import wp_contacts
         names = [n for n in names if wp_contacts.name_grade(_lead_owners(lead), n) == 'owner'][:1]
@@ -478,6 +493,11 @@ def enrich_one(lead, key, deep, cache, relatives=False):
     entry['result'] = prop.get('result')
     entry['_http']  = prop.get('_http', 200)
     entry['_ts']    = int(time.time())
+    if _parcel_verdict(lead, prop) == 'mismatch':
+        # Kept in the cache (it was paid for, and the bake refuses it by APN). Counts only.
+        _log(f'  note {case:24s} Property record is a different parcel (APN != folio); '
+             f'its owners are ignored, Person search uses our owner name')
+        ow_ct = 0
 
     # Layer 2: Person (auto on Property MISS / --deep). Skip re-search when Property already
     # returned owners — same phones, wastes trial quota (verified 2026-07-24).
@@ -655,7 +675,8 @@ def build_todo(leads, cache, args, skiptrace=None):
             if case not in by: continue
             if entry.get('_person'): continue                        # already has Person layer
             ph = _count_phones_on_property(entry)
-            if ph >= THIN_PHONES: continue                           # already good coverage
+            wrong = _parcel_verdict(by[case], entry) == 'mismatch'   # its phones are a stranger's
+            if ph >= THIN_PHONES and not wrong: continue             # already good coverage
             todo.append(by[case])
         return todo
     if args.all:
