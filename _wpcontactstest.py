@@ -297,6 +297,11 @@ rec('likely owner refuses: owner already, short piece, other first name, entity,
     and not W.likely_owner('ONOJOBI HOLDINGS LLC', 'Gina Onojobi')
     and not W.likely_owner('MCKNIGHT-ADEONOJOBI,GINA', '')
     and not W.likely_owner('', 'Gina Onojobi'))
+rec('likely owner: a shared middle name is not a surname piece',
+    not W.likely_owner('GARCIA, MARIA ISABEL', 'MARIA ISABEL LOPEZ')
+    and not W.likely_owner('SMITH, MARY ELIZABETH', 'Mary Elizabeth Jones')
+    and not W.likely_owner('GARCIA MARIA ISABEL', 'Maria Isabel Lopez')
+    and W.likely_owner('ADEONOJOBI GINA MARIE', 'Gina Onojobi'))
 rec('likely owner never changes the owner bar or the property tag',
     W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi') == 'kin'
     and W.grade_property_owner('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi') == 'hh')

@@ -88,17 +88,24 @@ def _name_pieces(s):
 
 
 def _readings(name):
-    """[(given name, {other pieces})]. 'LAST, FIRST ...' reads one way; a comma-less name may be
-    FIRST ... LAST or the county roll's LAST FIRST ..., so both ends are tried as the given name."""
+    """[(given name, {surname pieces})]. Middle names are never surname pieces, so "MARIA ISABEL
+    LOPEZ" does not read as an ISABEL relative. 'LAST, FIRST ...' reads one way; a comma-less name
+    may be FIRST ... LAST or the county roll's LAST FIRST ..., so both are tried. A hyphenated
+    surname gives one piece per part."""
     s = str(name or '').upper()
     if ',' in s:
         last, first = s.split(',', 1)
         ft, lt = _name_pieces(first), _name_pieces(last)
-        return [(ft[0], set(lt) | set(ft[1:]))] if ft and lt else []
-    t = _name_pieces(s)
-    if len(t) < 2:
+        return [(ft[0], set(lt))] if ft and lt else []
+    words = [w for w in s.split() if _name_pieces(w)]
+    if len(words) < 2:
         return []
-    return [(t[0], set(t[1:])), (t[-1], set(t[:-1]))]
+    out = []
+    for given, sur in ((words[0], words[-1]), (words[1], words[0])):
+        g = _name_pieces(given)
+        if g and _name_pieces(sur):
+            out.append((g[0], set(_name_pieces(sur))))
+    return out
 
 
 def likely_owner(lead_owners, wp_name):
