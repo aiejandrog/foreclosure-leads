@@ -3513,7 +3513,8 @@ def make_tracker(leads):
             if not _ph:
                 continue
             _rank, _best = _r.get('phrank') or [], _r.get('phbest')
-            if len(_rank) >= len(_ph) and _best is not None:
+            if (len(_rank) >= len(_ph) and _best is not None
+                    and not any(s in ('hh', 'nm') for s in (_r.get('phsrc') or []))):
                 continue                      # already ranked, and the labels cover every number
             _fx += 1
             try:
