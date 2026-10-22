@@ -2717,7 +2717,7 @@ def make_tracker(leads):
                 # (implied effective rate: p25 1.30%, median/p75 2.10%). Clearly an ESTIMATE off the
                 # roll — the per-parcel tax link on the row is still the number to trust before wiring.
                 if not (_d.get('etax') or 0):
-                    _tv = float(_d.get('value') or 0) or 0
+                    _tv = _money(_d.get('value'))
                     if _tv:
                         _d['etax'] = round(_tv * (0.013 if _d.get('hs') else 0.021))
                         _d['etaxest'] = True          # flag it so the UI can never pass it off as billed
