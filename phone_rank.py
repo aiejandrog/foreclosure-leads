@@ -115,11 +115,16 @@ def rank(phones):
     scored = []
     for i, p in enumerate(phones or []):
         s, label, why = score_phone(p, i)
-        rec = {'number': (p or {}).get('number'), 'type': (p or {}).get('type'),
-               'carrier': (p or {}).get('carrier'), 'score': s, 'label': label, 'why': why}
-        scored.append(rec)
-    blocked = [r for r in scored if r['score'] <= BLOCKED]
-    ok = sorted([r for r in scored if r['score'] > BLOCKED], key=lambda r: -r['score'])
+        p = p if isinstance(p, dict) else {}
+        rec = {'number': p.get('number'), 'type': p.get('type'),
+               'carrier': p.get('carrier'), 'score': s, 'label': label, 'why': why}
+        # Role outranks carrier and provider position. A fixed 30-point household penalty
+        # cannot guarantee owner-first: a VOIP owner landline still loses to a household mobile.
+        role = {'hh': 1, 'nm': 2, 'ag': 3, 'xl': 3}.get(str(p.get('src') or '').strip().lower(), 0)
+        scored.append((role, rec))
+    blocked = [r for _, r in scored if r['score'] <= BLOCKED]
+    ok = [r for _, r in sorted((x for x in scored if x[1]['score'] > BLOCKED),
+                               key=lambda x: (x[0], -x[1]['score']))]
     return ok, blocked
 
 
