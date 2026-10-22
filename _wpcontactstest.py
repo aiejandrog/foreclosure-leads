@@ -276,6 +276,16 @@ rec('refresh-dealflow.bat: no label or goto between :rebuild and the Whitepages 
     _wl is not None and _rb is not None
     and not any(ln.startswith(':') or ln.lower().startswith('goto') for ln in _bat[_rb + 1:_wl]))
 
+# "LAST,FIRST" with no space after the comma (the Broward roll's form) and a hyphenated surname:
+# the comma used to be deleted, gluing "ADEONOJOBIGINA", so the owner never cleared the bar (10-22).
+rec('roll "LAST-LAST,FIRST" (no space) clears the owner bar',
+    W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Gina Mcknight') == 'owner'
+    and W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Mcknight-Adeonojobi') == 'owner'
+    and W.name_grade('SMITH,JOHN', 'John Smith') == 'owner')
+rec('a shortened surname is still only kin, a stranger still no',
+    W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi') == 'kin'
+    and W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Z Victor') == 'no')
+
 shutil.rmtree(TMP, ignore_errors=True)
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

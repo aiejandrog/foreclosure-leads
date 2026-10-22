@@ -129,6 +129,48 @@ r = row(lead('RES-DNC', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner
              phdnc=[False, False, False, True]))
 rec('verified resident-owner DNC stays display only', D not in r['p'] and r['dn'][0][0] == D)
 
+print('\nWHITEPAGES NAMES A DIFFERENT OWNER (10-22 SHAPE, INVENTED NAMES)')
+# Our roll / court owner is ORLANDO; Whitepages labels MAYLEN the owner and someone else a resident.
+wo_owners = [{'name': 'Maylen Perez Diaz', 'notOwner': True, 'phones': [{'n': D, 'type': 'mobile'}]}]
+wo_all = [{'n': D, 'resident': True, 'source': 'property', 'owner': 'Maylen Perez Diaz'},
+          {'n': A, 'resident': True, 'source': 'property', 'owner': 'Ana Rivera'}]
+r = row(lead('WO', owners='MARTINEZ, ORLANDO', wpOwners=wo_owners, wpAllPhones=wo_all))
+rec('the Whitepages owner name ships', r.get('wo') == ['Maylen Perez Diaz'], r.get('wo'))
+rec('her number is marked w, not household', r['pw'][r['p'].index(D)] == 'w', r.get('pw'))
+rec('a plain resident stays h', r['pw'][r['p'].index(A)] == 'h', r.get('pw'))
+rec('the household tag that governs texting is unchanged', r['ps'][r['p'].index(D)] == 'hh', r.get('ps'))
+co = wo_owners + [{'name': 'Orlando Martinez', 'notOwner': False, 'phones': [{'n': C}]}]
+r = row(lead('WO-CO', owners='MARTINEZ, ORLANDO', wpOwners=co, wpAllPhones=wo_all + [{'n': C, 'source': 'property'}]))
+rec('Whitepages listing our owner too is not a disagreement', r.get('wo') is None and 'w' not in r['pw'], (r.get('wo'), r['pw']))
+r = row(lead('WO-NONE', owners='MARTINEZ, ORLANDO', wpAllPhones=wo_all))
+rec('no Whitepages owners: nothing flagged', r.get('wo') is None and 'w' not in r['pw'], (r.get('wo'), r['pw']))
+
+_pg2 = call_mode._PAGE
+
+
+def _fn(name):
+    a = _pg2.index('function %s(' % name)
+    return _pg2[a:_pg2.index('\n}\n', a) + 3]
+
+
+_nn = _pg2.index('var _NOTNAME')
+_js2 = os.path.join(_T, 'wo.js')
+open(_js2, 'w', encoding='utf-8').write(
+    _pg2[_nn:_pg2.index(';', _pg2.index(']', _nn)) + 1] + '\n'
+    + ''.join(_fn(n) for n in ('esc', 'has', 'firstName', '_wpChip', '_phSrcNote')) + """
+var r = {on: 'Orlando Martinez', o: 'MARTINEZ, ORLANDO', f: '', wo: ['Maylen Perez Diaz'], pw: 'hw', ps: ['', 'hh']};
+var r0 = {on: 'Orlando Martinez', o: 'MARTINEZ, ORLANDO', f: '', pw: 'h', ps: ['']};
+console.log(JSON.stringify([firstName(r), firstName(r0), _wpChip(r, 1), _phSrcNote(r, 1), _phSrcNote(r, 0)]));
+""")
+_p4 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js2], capture_output=True, text=True, timeout=60)
+_o4 = json.loads(_p4.stdout or 'null') if _p4.returncode == 0 else None
+rec('card: no greeting by name when Whitepages names a different owner', bool(_o4) and _o4[0] == '' and _o4[1] == 'Orlando',
+    (_o4, _p4.stderr[-300:]))
+rec('card: her number says Whitepages owner, verify', bool(_o4) and 'listed OWNER Maylen Perez Diaz' in _o4[2] and 'verify' in _o4[2], _o4)
+rec('card: dialing her number says who Whitepages says she is', bool(_o4) and 'Maylen Perez Diaz' in _o4[3]
+    and 'Orlando Martinez' in _o4[3] and 'whether they own the house' in _o4[3], _o4)
+rec('card: the warn bar names both', 'Whitepages lists a different owner' in _pg2 and 'r.wo.join' in _pg2)
+
 print('\nDNC / AGENT NUMBERS STAY OUT')
 r = row(lead('DNC', wpAllPhones=[{'n': B, 'source': 'property'}], phdnc=[False, True, False, False],
              phsrc=['st', 'st', 'ag', 'hh']))

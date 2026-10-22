@@ -443,6 +443,29 @@ WL.CACHE = os.path.join(td, 'wp10.json')
 W.CACHE = WL.CACHE
 leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
 rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == [ADDR])
+import wp_linkprobe as _LP  # noqa: E402
+_S = '2634 SE 19 CT #205C'
+_U = 'https://www.whitepages.com/address/'
+_lp = [
+    (_LP.classify(_U + '2634-SE-19th-Ct-205th-C/HOMESTEAD-FL/Id', '', _S, '205C'), 'unit'),
+    (_LP.classify(_U + '2634-SE-19th-Ct/Homestead-FL', '2634 SE 19th Ct, Homestead, FL 33035', _S, '205C',
+                  _U + '2634-SE-19th-Ct-205th-C/HOMESTEAD-FL'), 'building'),
+    (_LP.classify(_U + '2634-SE-19th-Ct-Apt-2051/X-FL/Id', '', _S, '205C'), 'other'),
+    (_LP.classify(_U + '123-NW-1st-St/Miami-FL/Id', '123 NW 1st St, Miami, FL 33125', '123 NW 1 ST #5', '5'), 'building'),
+    (_LP.classify(_U + '123-NW-1st-St-Apt-205/Miami-FL/Id', '', '123 NW 1 ST #5', '5'), 'other'),
+    (_LP.classify(_U + '123-NW-1st-St-Apt-1/Miami-FL/Id', '', '123 NW 1 ST #1', '1'), 'unit'),
+    (_LP.classify(_U + 'x', 'Just a moment...', _S, '205C', _U + 'x'), 'blocked'),
+    (_LP.classify(_U + 'x', 'Whitepages', _S, '205C', _U + 'x'), 'none'),
+    (_LP.classify(_U + '2929-NW-123rd-Ter/Miami-FL/Id', '', '2929 NW 123 TER', ''), 'house'),
+    (_LP.classify(_U + '2929-NW-124th-Ter/Miami-FL/Id', '', '2929 NW 123 TER', ''), 'other'),
+    (_LP.classify(_U + '842-SW-9th-St/Miami-FL/Id', '', '842 NW 9 ST', ''), 'other'),
+    (_LP.classify(_U + '842-NW-9th-St/Hialeah-FL/Id', '', '842 NW 9 ST', '', '', 'MIAMI'), 'other'),
+    (_LP.classify(_U + '842-NW-9th-St/Miami-Gardens-FL/Id', '', '842 NW 9 ST', '', '', 'MIAMI'), 'house'),
+    (_LP.classify(_U + 'x', '842 SW 9th St, Miami, FL 33130', '842 NW 9 ST', '', _U + 'x', 'MIAMI'), 'other'),
+]
+rec('link probe: whole-unit match, no ZIP/street/substring false hits, bot check, no-redirect',
+    all(g == w for g, w in _lp), _lp)
+rec('link probe: a bare "205-C" after the suffix is a unit', _LP._street_unit('123 MAIN ST 205-C') == ('123 Main St', '205-C'))
 rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105') == '8600 NW 34th Pl Apt B105'
     and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
     == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
