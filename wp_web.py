@@ -164,6 +164,10 @@ _DIRS = {'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw', 'north', 'south', 'east', '
 _UNIT_RE = re.compile(r'(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)', re.I)
 _SUFFIXES = {'st', 'ave', 'ct', 'ter', 'dr', 'rd', 'ln', 'pl', 'blvd', 'way', 'cir', 'pkwy', 'hwy',
              'trl', 'street', 'avenue', 'court', 'terrace', 'drive', 'road', 'lane', 'place', 'circle'}
+_SUFFIX_SAME = {'st': {'street'}, 'street': {'st'}, 'ave': {'avenue', 'av'}, 'avenue': {'ave', 'av'},
+                'ct': {'court'}, 'court': {'ct'}, 'ter': {'terrace'}, 'terrace': {'ter'},
+                'dr': {'drive'}, 'drive': {'dr'}, 'rd': {'road'}, 'road': {'rd'}, 'ln': {'lane'},
+                'lane': {'ln'}, 'pl': {'place'}, 'place': {'pl'}, 'cir': {'circle'}, 'circle': {'cir'}}
 _DIR_WORDS = {'northwest': 'nw', 'northeast': 'ne', 'southwest': 'sw', 'southeast': 'se',
               'north': 'n', 'south': 's', 'east': 'e', 'west': 'w'}
 
@@ -181,9 +185,12 @@ def page_matches_address(text, street):
         return False
     house = toks[0]
     name = next((t for t in toks[1:] if t.lower() not in _DIRS), '')
+    suffix = ''
     if name in _SUFFIXES:
-        # "1234 West Ave": the street's name IS the direction word; compare it, not just "ave".
-        name = next((t for t in reversed(toks[1:toks.index(name)]) if t in _DIRS), name)
+        # "1234 West Ave": the street's name IS the direction word; compare it AND the suffix.
+        d = next((t for t in reversed(toks[1:toks.index(name)]) if t in _DIRS), '')
+        if d:
+            name, suffix = d, name
     m = _UNIT_RE.search(street or '')
     unit = m.group(1).lower().replace('-', ' ').strip() if m else ''
     for l in str(text or '').split('\n'):
@@ -192,15 +199,17 @@ def page_matches_address(text, street):
             continue
         if name and (' %s ' % name.lower()) not in low:
             continue
+        if suffix and not ({suffix} | _SUFFIX_SAME.get(suffix, set())) & set(low.split()):
+            continue
         if unit and (' %s ' % unit) not in low:
             continue
         return True
     return False
 
 
-_KEEP_WORDS = {'apt', 'unit', 'ste', 'suite', 'bldg', 'st', 'ave', 'ct', 'ter', 'dr', 'rd', 'ln', 'pl',
-               'blvd', 'way', 'cir', 'pkwy', 'hwy', 'trl', 'street', 'avenue', 'court', 'terrace',
-               'drive', 'road', 'lane', 'place', 'circle'} | _DIRS | set(_DIR_WORDS)
+# Only short abbreviations survive masking: a full word (Lane, West, Court) can be a surname.
+_KEEP_WORDS = {'apt', 'unit', 'ste', 'bldg', 'st', 'ave', 'ct', 'ter', 'rd', 'ln', 'pl',
+               'blvd', 'cir', 'pkwy', 'hwy', 'trl', 'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'}
 
 
 def _shape(t):
@@ -452,6 +461,16 @@ _EMPTY_NOBODY = 'Whitepages has no one on file at this address'
 _EMPTY_NO_PERSON = 'Whitepages lists no person owner or resident here (business-owned or vacant?)'
 
 
+def _set_clipboard(t):
+    """Put text on the Windows clipboard (clip.exe). False anywhere else or on failure."""
+    try:
+        import subprocess
+        subprocess.run(['clip'], input=str(t).encode('utf-16-le'), check=True, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
 def _why_empty(text):
     """One line on why a copied address page gave no person, counts only."""
     if _BLOCK_RE.search(text or ''):
@@ -488,19 +507,34 @@ def assist(todo, refresh=False, wait_s=None):
             base = _clipboard_text()
             webbrowser.open(_addr_query(*parts))
             print('[%d/%d] ...%s: page opened, waiting for your copy...' % (n, len(todo), case[-4:]), flush=True)
-            text, t0 = '', time.time()
+            text, t0, hinted = '', time.time(), False
             while time.time() - t0 < wait_s:
                 time.sleep(1.0)
                 cur = _clipboard_text()
-                if cur and cur != base:
-                    text = cur
+                if not cur or cur == base:
+                    continue
+                text = cur
+                if hinted or not _PAGE_MARK.search(cur) or page_matches_address(cur, parts[0]):
+                    break
+                # Whitepages sent the address URL to some other property. Give one more try for this
+                # lead: put its address on the clipboard (never printed, the terminal gets pasted
+                # into chat) so it can be pasted into the site's own search box.
+                hinted = True
+                addr = _WL._lead_addr(lead)
+                if _set_clipboard(addr):
+                    base = addr
+                    print('  ...%s: that page is for another address. This lead\'s address is now on '
+                          'your clipboard: paste it into the Whitepages search box, open the property, '
+                          'then Ctrl+A, Ctrl+C.' % case[-4:], flush=True)
+                else:
                     break
             if not text:
                 print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
                 skipped += 1
                 continue
-            _keep_page(case, text)
             same = page_matches_address(text, parts[0])
+            if same or not _PAGE_MARK.search(text):
+                _keep_page(case, text)                      # never keep another house's page
             people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
                 why = _why_empty(text) if same or not _PAGE_MARK.search(text) else \

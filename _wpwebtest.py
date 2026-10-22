@@ -330,5 +330,22 @@ WL.load_skiptrace = lambda: {'K-0': {'phones': [{'number': '3055550100'}]}}
 W._keep_page('K-0', SIGNEDOUT)
 rec('a signed-out copy (people, no phones) does not hide the lead', not W._known_empty(leads[0]))
 
+# a page for another address gets one retry with the lead's address on the clipboard
+W.time = _Clock()
+put = []
+W._set_clipboard = lambda a: put.append(a) or True
+seq[:] = ['old', OTHER, ADDR, PAGE, PAGE]
+WL.CACHE = os.path.join(td, 'wp8.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'L-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+n8 = W.assist(list(leads), wait_s=10)
+rec('wrong page -> address on clipboard -> the right page is cached', n8 == 1 and put == [ADDR]
+    and 'L-0' in _j.load(open(WL.CACHE, encoding='utf-8')), (n8, put))
+
+rec('"West Ave" lead refuses a "W 41st St" page', not W.page_matches_address('1234 W 41st St, Miami Beach', '1234 WEST AVE'))
+rec('"West Ave" lead matches "1234 W Avenue"', W.page_matches_address('1234 W Avenue', '1234 WEST AVE'))
+rec('--addr-check masks a surname that is a street word', 'Lane' not in W._shape('Jane Lane, 54, owner of 1234 West Ave')
+    and 'West' not in W._shape('Jane Lane, 54, owner of 1234 West Ave'))
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
