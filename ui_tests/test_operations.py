@@ -35,6 +35,7 @@ class OperationsUI(unittest.TestCase):
 
     def setUp(self):
         self.context = self.browser.new_context(service_workers='block')
+        self.context.set_default_timeout(8000)
         self.errors = []
         self.context.on('page', lambda page: page.on('pageerror', lambda e: self.errors.append(str(e))))
         def isolate(route):
@@ -51,6 +52,10 @@ class OperationsUI(unittest.TestCase):
         self.page = self.context.new_page()
 
     def tearDown(self):
+        print('PAGE ERRORS:', self.errors)
+        for p in self.context.pages:
+            if not p.is_closed():
+                print('PAGE', p.url, p.locator('body').inner_text()[:1600])
         self.context.close()
 
     def worker(self):
@@ -59,6 +64,7 @@ class OperationsUI(unittest.TestCase):
         with self.context.expect_page() as popup:
             self.page.evaluate("openMorningWorker('urgent')")
         w = popup.value
+        print('WORKER QUEUES:', self.page.evaluate("DATA.map(r=>({c:r.case, days:_saleDays(r), eligible:_workerEligible(r), reach:_workerReach(r)}))"))
         w.locator('#mw-call').wait_for()
         return w
 
