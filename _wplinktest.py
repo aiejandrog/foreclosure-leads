@@ -162,8 +162,35 @@ rec('Call Sheet still URL-encodes recqs (the half that was always right)',
 
 # --------------------------------------------------------- 4. the worker tab's Lookup step is live
 rec('worker card Lookup falls back to Whitepages when there is no TPS URL',
-    'wpUrl: r.peopleaddr || r.people || _wpAddrUrl(r) || _wpNameUrl(r)' in TPL_SRC,
+    'wpUrl: _workerLookupUrl(r)' in TPL_SRC,
     'anchor: _workerCard')
+
+# Exercise the actual card bake, not just a source substring: the Lookup button consumes wpUrl.
+worker = node(WP_JS + '\n' + extract(TPL_SRC, '_workerLookupUrl') + '\n' + extract(TPL_SRC, '_workerCard') + r'''
+function _ownerName(n){return n;}
+function _docFields(){return {ownerFirst:'Test'};}
+function _saleDays(){return 20;}
+function _urgencyChip(){return '';}
+function _workerPhones(){return [];}
+function _replyWaiting(){return null;}
+function _cardMail(){return {};}
+function _wlogContacted(){return null;}
+const base={case:'TEST', addr:'123 Example St, Miami, FL 33135', owners:'TEST PERSON',
+            peopleaddr:'https://example.invalid/free-search'};
+console.log(JSON.stringify({
+  detail:_workerCard(Object.assign({},base,{wpPropId:'pro-test'})).wpUrl,
+  address:_workerCard(base).wpUrl,
+  fallback:_workerCard({case:'EMPTY',people:'https://example.invalid/free-search'}).wpUrl,
+  empty:_workerCard({case:'EMPTY'}).wpUrl
+}));
+''')
+rec('worker card uses existing WP parcel detail id over generic search',
+    worker['detail'] == 'https://property.whitepages.com/property/pro-test#owner', worker['detail'])
+rec('worker without parcel id uses WP reverse address',
+    worker['address'] == 'https://www.whitepages.com/address/123-Example-St/Miami-FL', worker['address'])
+rec('worker without an address retains free-search fallback',
+    worker['fallback'] == 'https://example.invalid/free-search', worker['fallback'])
+rec('worker with no lookup evidence has no fabricated link', worker['empty'] == '', worker['empty'])
 
 # --------------------------------------- 5. Call Mode HIS FILE carries the SAME Whitepages shapes
 FILE_JS = extract(CM_SRC, 'fileLinks')
