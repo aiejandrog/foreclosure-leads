@@ -449,6 +449,40 @@ def worker_run_why(run):
     return 'Run record: the run started (%d queued at start) and no refusal was recorded.' % int(run.get('queued') or 0)
 
 
+def bridge_boot_why(boot, day_hhmm='08:00'):
+    """What send_server.log's [boot] lines say about the bridge at the 8 AM run, or ''.
+
+    The flight recorder reaches the bridge over HTTP, so on the morning the bridge is DOWN (10-21's
+    shape) the worker cannot record anything and the run record reads "nothing recorded". The
+    bridge's own boot log (#301) is written to disk and survives that. Counts, times and fixed
+    codes only. Silent when there is no line to speak from: a bridge started on an earlier day and
+    still running leaves no line today, and that must not read as "not running"."""
+    if not isinstance(boot, dict) or not boot.get('readable'):
+        return ''
+    ev = [e for e in (boot.get('events') or []) if isinstance(e, (list, tuple)) and len(e) == 2]
+    before = [e for e in ev if str(e[0]) <= day_hhmm + ':59']
+    if not before:
+        later = [e for e in ev if e[1] in ('start_ok', 'start_nocred')]
+        if later:
+            return 'Bridge log: the bridge first started today at %s, after the 8 AM run.' % str(later[0][0])[:5]
+        return ''
+    t, code = before[-1]
+    t = str(t)[:5]
+    if code == 'stopped':
+        return 'Bridge log: the bridge stopped at %s and was not restarted before the 8 AM run.' % t
+    if code == 'bind_fail':
+        return 'Bridge log: the bridge could not open its port at %s (something else held it).' % t
+    if code == 'start_nocred':
+        return 'Bridge log: the bridge started at %s without its mail login, so it could not send.' % t
+    if code in ('start_ok', 'skipped'):
+        # A clean stop logs a line; a killed or crashed process logs nothing. So "started, no stop
+        # after it" is all this file can prove, and a run record that is empty at the same time
+        # means the bridge was not answering anyway: say both, never "it was up".
+        return ('Bridge log: last event before 8 AM was a start at %s, with no logged stop after it. '
+                'If the run record is empty too, the bridge died without logging (killed or crashed).' % t)
+    return ''
+
+
 def morning_alert(sig, now, th, at):
     if morning_kind(sig, now, th) != 'nothing-sent':
         return None
@@ -464,6 +498,9 @@ def morning_alert(sig, now, th, at):
     why = worker_run_why(sig.get('worker_run'))
     if why:
         text += ' ' + why
+    bwhy = bridge_boot_why(sig.get('bridge_boot'))
+    if bwhy:
+        text += ' ' + bwhy
     return _alert('morning-sends', 'fail', text, at)
 
 
@@ -1204,6 +1241,32 @@ def read_worker_run(day, path=None):
     return out
 
 
+_BOOT_CODES = (('bridge starting', 'credential ok', 'start_ok'), ('bridge starting', 'credential MISSING', 'start_nocred'),
+               ('launch skipped', '', 'skipped'), ('could not bind', '', 'bind_fail'),
+               ('bridge stopped', '', 'stopped'), ('new bridge serving', '', 'start_ok'))
+
+
+def read_bridge_boot(day, path=None):
+    """Today's bridge start/stop lines from send_server.log ([boot], and the [reload] hand-over),
+    as [(HH:MM:SS, code)]. Fixed codes only: the free text (pid, port, bind error) is dropped."""
+    path = path or os.path.join(HERE, 'send_server.log')
+    out = {'readable': True, 'events': []}
+    if not os.path.exists(path):
+        return out
+    try:
+        lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
+    except OSError:
+        return {'readable': False}
+    for line in lines:
+        if not line.startswith(day) or ('[boot]' not in line and '[reload]' not in line):
+            continue
+        for a, b, code in _BOOT_CODES:
+            if a in line and b in line:
+                out['events'].append((line[11:19], code))
+                break
+    return out
+
+
 def read_morning(now, th):
     import send_server as S
     cfg = S._load_senders()
@@ -1247,6 +1310,7 @@ def read_morning(now, th):
         'cap': max(caps) if caps else 0,
         'judged': now.hour >= th['send_hour'],
         'worker_run': _try(lambda: read_worker_run(day), {'readable': False}),
+        'bridge_boot': _try(lambda: read_bridge_boot(day), {'readable': False}),
     }
 
 
