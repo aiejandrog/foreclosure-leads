@@ -1,5 +1,8 @@
 """All nine bilingual genEmail pairs: meaning, callback ask, and immutable closing."""
 import copy
+import re
+from pathlib import Path
+import outreach_copy as OC
 import unittest
 import disclaimer
 from email_variant_audit import variants
@@ -26,6 +29,34 @@ CONCEPTS = {
 }
 
 
+def approved_english():
+    return OC.fill(OC.email_body_template(), first='Synthetic', date='12/31/2099',
+                   signer='Synthetic Advisor', phone='305-555-0100', company='Example Company',
+                   sig='Synthetic Advisor\nExample Company\nPhone: 305-555-0100\n1 Example Street',
+                   ident=disclaimer.identity('en', as_html=False))
+
+
+def paragraphs(body):
+    return [p.strip() for p in re.split(r'\n\s*\n', body.strip()) if p.strip()]
+
+
+def check_dated(rows):
+    by = {r['lang']: r for r in rows if (r['kind'], r['stage']) == ('dated', 'cold')}
+    assert set(by) == {'en', 'es'}, 'missing dated EN/ES counterpart'
+    for lang in ('en', 'es'):
+        assert by[lang]['body'].rstrip().endswith(CLOSING[lang]), 'altered opt-out closing'
+        assert by[lang]['body'].count(CLOSING[lang]) == 1, 'duplicate closing'
+        assert disclaimer.identity(lang, as_html=False) in by[lang]['body'], 'missing sender disclosure'
+    assert by['en']['body'] == approved_english(), 'dated English differs from rendered _ALEXMAIL_EN'
+    assert len(paragraphs(by['es']['body'])) == len(paragraphs(by['en']['body'])), 'dated paragraph count differs'
+    es = by['es']['body']
+    for text in ('12/31/2099', 'Synthetic Advisor', 'Example Company', '305-555-0100',
+                 OC.BOOKING_URL, 'cinco minutos', 'quince', 'más de 30 años',
+                 'mejor postor', 'capital en la propiedad intacto',
+                 'mejor número y horario', 'llamarme directamente'):
+        assert text in es, 'dated Spanish omitted a fact or ask: '+text
+
+
 def check_matrix(rows):
     expected = {(kind, stage, lang) for kind in ('early', 'tax', 'dated')
                 for stage in ('cold', 'follow', 'final') for lang in ('en', 'es')}
@@ -33,6 +64,9 @@ def check_matrix(rows):
     assert len(rows) == len(by) == 18 and set(by) == expected, 'missing/duplicate EN or ES variant'
     for kind in ('early', 'tax', 'dated'):
         for stage in ('cold', 'follow', 'final'):
+            if (kind, stage) == ('dated', 'cold'):
+                check_dated(rows)
+                continue
             need = {'call', 'reply'}
             if stage == 'cold':
                 need |= {'property_note', 'stale', 'advisor'}
@@ -82,10 +116,20 @@ class EmailVariantTests(unittest.TestCase):
                     with self.assertRaisesRegex(AssertionError, 'altered opt-out closing'):
                         check_matrix(rows)
 
+    def test_dated_english_is_the_exact_approved_rendering(self):
+        dated = next(r for r in self.rows if (r['kind'], r['stage'], r['lang']) == ('dated', 'cold', 'en'))
+        self.assertEqual(dated['body'], approved_english())
+
+    def test_dated_spanish_paragraphs_and_signature(self):
+        check_dated(self.rows)
+        source = Path(__file__).with_name('tracker_template.html').read_text()
+        block = source.split('  const bodyES = td', 1)[1].split(';\n', 1)[0]
+        self.assertRegex(block, r'\$\{sigES\}\\n\\n`$')
+
     def test_spanish_meaning_drift_is_rejected(self):
         rows = copy.deepcopy(self.rows)
         for row in rows:
-            if (row['kind'], row['stage'], row['lang']) == ('dated', 'cold', 'es'):
+            if (row['kind'], row['stage'], row['lang']) == ('early', 'cold', 'es'):
                 row['body'] = row['body'].replace('puede estar desactualizado', 'dato confirmado')
         with self.assertRaisesRegex(AssertionError, 'concepts'):
             check_matrix(rows)

@@ -16365,7 +16365,7 @@ function genEmail(r, quiet){
   // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
   // every email keeps it). outreach_email.py has always appended it (sig_en / sig_es); these bodies
   // did not, so the board's early, tax-deed, Spanish, follow and final emails went out without it.
-  // Every variant ends in sigEN/sigES, including the matching dated pair.
+  // bodyColdEN is Alejandro's baked template and already carries it after the SIG token.
   const sigEN = sig + "\n\n" + _OPTOUT_EN;
   const sigES = sig + "\n\n" + _OPTOUT_ES;
   /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
@@ -16417,14 +16417,28 @@ function genEmail(r, quiet){
   const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro no indica una fecha de subasta y puede estar desactualizado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo. Si el asunto ya está resuelto, no necesita responder.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
   const bodyEN = td
     ? `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record lists a tax-deed sale date of ${dt} and may be out of date; please check the current status with the county.\n\nIf you would like to discuss the property with our senior advisor, let me know.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`
-    : `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record lists an auction date of ${dt} and may be out of date; please check the current status with the county.\n\nIf you would like to discuss the property with our senior advisor, let me know. If the matter is already handled, there is no need to reply.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
+    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
   const bodyES = td
     ? `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro indica una subasta de tax deed para el ${dt} y puede estar desactualizado; confirme el estado actual con el condado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`
-    : `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro indica una subasta para el ${dt} y puede estar desactualizado; confirme el estado actual con el condado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo. Si el asunto ya está resuelto, no necesita responder.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
-  // Draft #332: compose the dated board email from the matching EN/ES pair above.
-  // The separately baked English-only template remains available elsewhere; it must not
-  // override this pair, or editing bodyEN would leave the rendered English unchanged.
-  const bodyColdEN = bodyEN;
+    : `Hola${first?' '+first:''},\n\nProbablemente esté recibiendo mucha correspondencia y muchas llamadas sobre su propiedad, así que seré breve.\n\nSu casa está programada para subastarse el ${dt}.\nSi nada cambia antes de esa fecha, la casa se vende al mejor postor y las opciones que tiene ahora desaparecen con ella. No tiene por qué ser así.\n\nMi nombre es ${sN}, de ${sL}. __IDENT_ES__\nNuestro asesor principal lleva más de 30 años trabajando en hipotecas y soluciones para casos de ejecución hipotecaria, y revisa personalmente cada caso. Se ha sentado frente a personas en su situación y las ha acompañado en el proceso, manteniendo su capital en la propiedad intacto.\n\nSi está dispuesto, me gustaría coordinar una breve llamada telefónica. La mayoría dura unos cinco minutos; reservo quince para que nunca se sienta apurado. No le cuesta nada, y usted decide qué pasa después.\n\nEn esa llamada:\n\n  • Revisaremos su caso y en qué situación se encuentra.\n  • Repasaremos las opciones que tiene, incluidas algunas que quizás no conozca.\n  • Le daremos una evaluación clara y honesta de cómo seguir adelante.\n\nPuede elegir un horario en cal.com/bsgflorida/free-records-review, responder con el mejor número y horario para contactarlo, o llamarme directamente al ${sP}.\n\nSaludos cordiales,\n\n${sigES}\n\n`;
+  /* ---- ALEJANDRO'S COPY — ENGLISH COLD BODY ----------------------------------------------------
+     He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME template
+     string outreach_email.py renders (baked above from outreach_copy.email_body_template()), so
+     the button an operator clicks and the unattended nightly send cannot say different things to
+     the same homeowner.
+     Scope is deliberate and mirrors outreach_email.py exactly:
+       * English, first touch, foreclosure sale WITH a date -> his copy
+       * early stage (LP, no date) -> unchanged; his copy opens on the auction date and would
+         render a blank there, which reads as a mail-merge failure
+       * tax deed -> unchanged; his copy says "foreclosure auction" and drops the back-taxes /
+         surplus paths that are the only true options on a TD
+       * follow / final and ALL Spanish -> unchanged (his copy is English only)
+     ident is the build-time __IDENT_EN__ substitution; sig is the CAN-SPAM block (physical mailing
+     address) that his three-line sign-off cannot carry on its own. */
+  const bodyColdEN = (!td && _ALEXMAIL_EN)
+    ? _alexFill(_ALEXMAIL_EN, {first:first, date:dt, signer:sN, phone:sP,
+                               company:sL, sig:sig, ident:_IDENT_EN})
+    : bodyEN;
   // Follow/final are type-agnostic and do not invent a current case status or deadline.
   // FOLLOW-UPS CARRY THE DISCLOSURE TOO. outreach_email.py puts intro (name + company +
   // identity) at the top of ALL THREE stage bodies — cold and both follow-ups. This pair had
