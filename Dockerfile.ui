@@ -1,0 +1,8 @@
+FROM python:3.13-bookworm
+WORKDIR /app
+COPY requirements.txt /tmp/requirements.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    && python -m playwright install --with-deps chromium
+ENV PYTHONDONTWRITEBYTECODE=1
+# Mount a clean checkout read-only at /app; never bake caches or credentials into this image.
+CMD ["python", "-m", "unittest", "discover", "-s", "ui_tests", "-v"]
