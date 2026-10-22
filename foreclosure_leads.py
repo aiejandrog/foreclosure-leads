@@ -3445,7 +3445,14 @@ def make_tracker(leads):
                         # FIT, DON'T TRUNCATE. `[:MAX_PHONES]` cut the tail, and the tail was always
                         # Whitepages: half the paid-for numbers, owner numbers included, never reached
                         # a dial (phone_src.fit_phones has the counts and the keep order).
-                        _ent = [{'n': _ph[i], 'type': _pt[i], 'dnc': bool(_pd[i]), 'src': _ps[i]}
+                        # An independently named deed owner filed as a resident must not lose
+                        # their phone to the trace's tail just because its permissions stay hh.
+                        # This marker is used only for retention; phsrc itself is never upgraded.
+                        _wp_named = {p['n'] for p in _all_ph
+                                     if p.get('resident') and p.get('source', 'property') == 'property'
+                                     and _WPC and _WPC.grade_property_owner(_lown, p.get('owner') or '') == 'wp'}
+                        _ent = [{'n': _ph[i], 'type': _pt[i], 'dnc': bool(_pd[i]), 'src': _ps[i],
+                                 'wp_owner': _ph[i] in _wp_named}
                                 for i in range(len(_ph))]
                         _fit = fit_phones(_ent)
                         _r['phones'] = [e['n'] for e in _fit]

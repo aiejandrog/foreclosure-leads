@@ -210,11 +210,17 @@ def fit_phones(entries, cap=None):
 
     wp_seen = []
 
+    def retention_source(e):
+        src = str(e.get('src') or PHSRC_TRACE)
+        # Only the bake sets this after the existing deed-owner name check. It changes which
+        # evidence survives the cap, never the source/permissions on the returned entry.
+        return PHSRC_WP if src == PHSRC_HOUSEHOLD and e.get('wp_owner') is True else src
+
     def tier(i):
         e = entries[i]
         if e.get('dnc'):
             return 9
-        src = str(e.get('src') or PHSRC_TRACE)
+        src = retention_source(e)
         if src == PHSRC_WP:
             if i not in wp_seen:
                 wp_seen.append(i)
@@ -222,7 +228,7 @@ def fit_phones(entries, cap=None):
         return _KEEP_TIER.get(src, 4)
     # rank wp entries in merge order so "the first WP_OVER_TRACE" means the provider's first
     for i, e in enumerate(entries):
-        if str(e.get('src') or '') == PHSRC_WP and not e.get('dnc'):
+        if retention_source(e) == PHSRC_WP and not e.get('dnc'):
             wp_seen.append(i)
     keep = sorted(range(len(entries)), key=lambda i: (tier(i), i))[:cap]
     return [entries[i] for i in sorted(keep)]
