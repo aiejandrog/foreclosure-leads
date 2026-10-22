@@ -1786,14 +1786,28 @@ def _seat_by_household(rows):
     return moved
 
 
+def _wp_other_owners(d):
+    """Names Whitepages labels OWNER on this parcel when NONE of them clears our owner bar
+    (2026-10-22: Whitepages said Maylen owns it, the card greeted Orlando and showed her numbers as
+    "household"). Our name comes from the county roll or the court file and stays the legal owner;
+    this only makes the disagreement visible. A Whitepages owner list that includes ours (a co-owner
+    alongside) is not a disagreement. The bake sets notOwner after the parcel gate, so a different
+    parcel's owners never reach here."""
+    owns = [o for o in (d.get('wpOwners') or []) if isinstance(o, dict) and str(o.get('name') or '').strip()]
+    if not owns or not all(o.get('notOwner') for o in owns):
+        return []
+    return [str(o['name']).strip()[:34] for o in owns][:2]
+
+
 def _wp_phone_kinds(d):
     """{10-digit number: 'o'|'h'|'n'} from the lead's baked Whitepages numbers, or None when the
     lead carries no Whitepages record at all (never looked up, or nothing survived the parcel gate).
 
     'o' the deed owner's own number (a Property owner who clears the owner bar, or a Person record
         that places the owner at this address); 'h' a resident or a non-owner on the parcel;
-        'n' a Person record matched on the name only. A number listed more than one way keeps the
-        strongest. Read-only: this labels and orders numbers already on the row, it adds none.
+        'n' a Person record matched on the name only; 'w' a number of the person Whitepages labels the
+        OWNER when that is not our owner (_wp_other_owners). A number listed more than one way keeps
+        the strongest. Read-only: this labels and orders numbers already on the row, it adds none.
 
     A RESIDENT WITH THE OWNER'S NAME IS THE OWNER. The bake marks every Whitepages resident as
     household, but Whitepages often files the deed owner under "Resident" (CACE-25-019745, 10-22:
@@ -1809,8 +1823,13 @@ def _wp_phone_kinds(d):
     except Exception:
         _W = None
     lown = d.get('owners') or d.get('oname') or ''
-    rank = {'o': 0, 'h': 1, 'n': 2}
+    rank = {'o': 0, 'w': 1, 'h': 2, 'n': 3}
     out = {}
+    wnum = set()
+    if _wp_other_owners(d):
+        for o in d.get('wpOwners') or []:
+            for p in (o.get('phones') or []) if isinstance(o, dict) else []:
+                wnum.add(_ph10((p.get('n') if isinstance(p, dict) else p) or ''))
     for e in allp:
         if not isinstance(e, dict):
             continue
@@ -1821,6 +1840,8 @@ def _wp_phone_kinds(d):
         if e.get('resident'):
             kind = 'o' if (_W and lown and e.get('owner')
                            and _W.grade_property_owner(lown, e.get('owner')) == 'wp') else 'h'
+            if kind == 'h' and src == 'property' and n in wnum:
+                kind = 'w'
         else:
             kind = 'n' if src == 'person' else 'o'
         if n not in out or rank[kind] < rank[out[n]]:
@@ -2271,6 +2292,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             'z': (re.search(r'(\d{5})\s*$', (d.get('addr') or '')).group(1)
                   if re.search(r'(\d{5})\s*$', (d.get('addr') or '')) else None),
             'po': _s('paOwner', 34) if d.get('ownerMismatch') else None,
+            # WHITEPAGES NAMES A DIFFERENT OWNER (_wp_other_owners). Same treatment as `po`: the card
+            # says so, shows whose numbers are whose, and the opener asks for the owner of the street
+            # instead of greeting either name. Nothing about who may be texted changes.
+            'wo': _wp_other_owners(d) or None,
             # MISCALCULATED DEAL (8/17 masterclass): actively listed/pending with the sale ≤21 days
             # out — the realtor-flip lane. Ship the agent's contact so the CALL can go to the
             # gatekeeper (drill card 12) instead of dying at a shielded owner.
@@ -3801,6 +3826,7 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
 function _phSrcNote(r, i){
   var s = (r.ps||[])[i] || '';
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
+  if(String(r.pw||'').charAt(i)==='w') return 'Whitepages lists this number\u2019s person (' + esc((r.wo||[]).join(' / ')) + ') as the OWNER; our record says ' + esc(r.on||'someone else') + '. Ask who you are speaking with and whether they own the house before you mention the filing.';
   if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
   if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
   return '';
@@ -3816,6 +3842,7 @@ function _wpChip(r, k){
   if(r.pw == null) return '';
   var w = String(r.pw).charAt(k);
   if(w==='o') return '<span class="chip ok">&#10003; Whitepages: owner</span>';
+  if(w==='w') return '<span class="chip bad">Whitepages: listed OWNER ' + esc((r.wo||[]).join(' / ')) + ' &middot; not our owner, verify</span>';
   if(w==='h') return '<span class="chip">Whitepages: someone else at the address</span>';
   if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
   return '<span class="chip" style="opacity:.7">not on Whitepages</span>';
@@ -3852,7 +3879,7 @@ function _numList(r){
       + '<b style="'+(isBad?'text-decoration:line-through':'')+'">'+(k+1)+'. '+fmt(dg)+'</b>'
       + (on ? '<span class="chip hot">on the button</span>' : '')
       + _wpChip(r, k)
-      + (s==='hh' && String(r.pw||'').charAt(k)!=='o' ? '<span class="chip bad">not the owner &middot; household</span>' : '')
+      + (s==='hh' && 'ow'.indexOf(String(r.pw||'').charAt(k)||'x')<0 ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
@@ -3964,6 +3991,7 @@ function firstName(r){
   }
   if(has(r,'C')) return '';                 // company / trust owner
   if(r.po) return '';                       // roll owner changed — the card says do not use this name
+  if(r.wo && r.wo.length) return '';        // Whitepages names a different owner: verify before naming anyone
   /* Prefer `on` (owner_clean), which the pipeline has ALREADY flipped from the county roll's
      "LAST,FIRST" to "First Last". Reading r.o directly took the token before the comma — the
      surname — on 32% of leads. Fall back to r.o only when `on` is absent, and strip anything before
@@ -6657,6 +6685,7 @@ function screenLead(){
   if(has(r,'W')) wc += '<span class="chip">elder signal</span>';
   if(wc) who += '<div class="chips">'+wc+'</div>';
   if(r.po) who += '<div class="warnbar">Roll owner is now <b>'+esc(r.po)+'</b> &mdash; do NOT open with the name above. Ask who you are speaking with.</div>';
+  if(r.wo && r.wo.length) who += '<div class="warnbar">Whitepages lists a different owner: <b>'+esc(r.wo.join(' / '))+'</b>. Our county / court record says <b>'+esc(r.on||r.o||'the name above')+'</b>. Verify who owns it: ask for the owner of the house, not a name.</div>';
   /* BANKRUPTCY NOT CHECKED (2026-10-13). This lead is on the list only because the attorney approved
      contacting unchecked Broward / Palm Beach homeowners. His condition is the first question. */
   if(r.bq) who += _bqBar();
