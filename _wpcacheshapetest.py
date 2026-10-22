@@ -49,6 +49,14 @@ def bake(extra=None):
 
 
 class CacheShapeTests(unittest.TestCase):
+    def test_a_null_owner_is_not_a_verified_owner(self):
+        rows, log = bake({'SYNTHETIC-0': {'result': {'apn': '9999999999991',
+                                                     'ownership_info': {'person_owners': [None]}}}})
+        self.assertNotIn('merge skipped', log)
+        self.assertNotEqual(rows[0].get('wpKey'), 'ok')
+        self.assertFalse(rows[0].get('wpOwners'))
+        self.assertEqual(rows[1]['phones'], ['3055550102'])
+
     def test_a_record_that_still_throws_skips_only_its_own_lead(self):
         # ownership_info as a string raises inside the merge; before the per-lead guard that
         # one record dropped Whitepages from every lead after it.

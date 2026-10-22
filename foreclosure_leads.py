@@ -3307,7 +3307,8 @@ def make_tracker(leads):
                             _r['wpPropId'] = _pid2
                             _wid += 1
                     _pc, _ = _prop_city_state(_r)
-                    _owns = [_wp_own(o, _pc) for o in _po]
+                    # a null owner entry is no owner: a blank one would mark the lead WP-verified
+                    _owns = [_wp_own(o, _pc) for o in _po if isinstance(o, dict)]
                     # WHO IS THE OWNER (wp_contacts). A person Whitepages lists on the parcel is tagged
                     # the owner's only when the name clears the same bar ownership_gate uses to decide
                     # the defendant still owns the house, tightened to two shared name tokens. Anyone
