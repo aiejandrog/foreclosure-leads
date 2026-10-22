@@ -150,6 +150,8 @@ def main():
     if not todo:
         print('nothing to trace.')
         return
+    # The estimate is one charge per lead. A 429 retry can bill again; skiptrace's dollar caps
+    # and run/day call caps still bound that.
     if len(todo) * cost > a.max_spend:
         print('ABORT: ~$%.2f is over --max-spend $%.2f. Nothing was traced.' % (len(todo) * cost, a.max_spend))
         sys.exit(4)
@@ -161,17 +163,25 @@ def main():
     import requests
     ST._RUN_CALLS = 0
     s = requests.Session()
-    got = done = 0
+    got = done = strikes = 0
     try:
         for lead in todo:
             try:
                 phones, _emails = ST.trace_one(s, provider, key, lead)
                 contacts[lead['case']] = entry(lead, phones, provider)
                 done += 1
+                strikes = 0
                 got += 1 if contacts[lead['case']]['phones'] else 0
             except ST.TraceSkip as e:
                 contacts[lead['case']] = entry(lead, [], provider, outcome='skip')
                 print('  skip %s: %s' % (lead['case'], str(e)[:80]))
+            except ST.TraceTransient as e:
+                # same rule as skiptrace.py: one timeout is one lead, three in a row is an outage
+                strikes += 1
+                print('  provider error on %s: %s' % (lead['case'], str(e)[:80]))
+                if strikes >= 3:
+                    raise
+                continue
             save(contacts)
     except ST.bd_budget.BudgetExhausted as e:
         print('stopped at a cap: %s' % str(e)[:160])
@@ -179,7 +189,7 @@ def main():
         print('provider refused: %s' % str(e)[:160])
         sys.exit(2)
     except ST.TraceTransient as e:
-        print('provider error: %s' % str(e)[:160])
+        print('provider looks down after 3 errors in a row: %s' % str(e)[:160])
         sys.exit(3)
     finally:
         print('balloon contacts: %d traced, %d with a phone. Rebuild with python balloon_leads.py.' % (done, got))

@@ -85,6 +85,11 @@ def _maturity(origin_iso):
 
 
 def _contacts_for(h, case, contacts):
+    # A hit tied to a foreclosure case gets no looked-up contact. Its stay, opt-out and
+    # never-contact gates key on that case, and the BAL id hashes owner/lender/origin/amount
+    # only, so the same mortgage seen in the countywide sweep shares this id.
+    if str(h.get('case') or '').strip():
+        return {}
     return contacts.get(case) or contacts.get(h.get('owner') or '') or {}
 
 

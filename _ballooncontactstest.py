@@ -67,6 +67,41 @@ class EndToEnd(unittest.TestCase):
         # before: with no contacts file the lane ships the row with no number
         self.assertEqual(BL.rows(hits=[h], contacts={})[0]['phones'], [])
 
+    def test_a_foreclosure_case_row_never_inherits_a_sweep_rows_phone(self):
+        # same mortgage seen twice: in the book (with a case) and in the countywide sweep
+        sweep = hit('KAPPA SYN LLC')
+        book = dict(sweep, case='CACE-25-000001')
+        self.assertEqual(BL._case_id(sweep), BL._case_id(book))
+        picked, _ = BC.select([sweep, book], {}, ST.parse_addr)
+        e = BC.entry(picked[0], [{'number': '3055550122', 'type': 'Mobile', 'dnc': False}], 'tracerfy')
+        contacts = {picked[0]['case']: e, 'KAPPA SYN LLC': e}
+        rows = BL.rows(hits=[sweep, book], contacts=contacts)
+        self.assertEqual(sorted(len(r['phones']) for r in rows), [0, 1])
+
+    def test_one_transient_error_does_not_end_the_run(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'balloon_contacts.json')
+            hits = [hit('LAMBDA SYN LLC'), hit('MU SYN LLC', agent='ROE, RICHARD')]
+            fake_hb = mock.Mock(candidates=mock.Mock(return_value=hits))
+            def answers():
+                yield ST.TraceTransient('timeout')
+                yield ([{'number': '3055550133', 'type': 'Mobile', 'dnc': False}], [])
+            it = answers()
+            def fake(*a, **k):
+                v = next(it)
+                if isinstance(v, Exception):
+                    raise v
+                return v
+            with mock.patch.object(BC, 'OUT', out), \
+                    mock.patch.dict('sys.modules', {'hardmoney_balloon': fake_hb}), \
+                    mock.patch.object(ST, 'load_key', return_value='k'), \
+                    mock.patch.object(ST, 'pick_provider', return_value='tracerfy'), \
+                    mock.patch.object(ST, 'trace_one', side_effect=fake), \
+                    mock.patch('sys.argv', ['balloon_contacts.py', '--trace']):
+                BC.main()
+            got = json.load(open(out, encoding='utf-8'))
+            self.assertEqual(len(got), 1)   # the errored lead is not recorded, so it retries next run
+
     def test_dry_run_calls_no_provider_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, 'balloon_contacts.json')
