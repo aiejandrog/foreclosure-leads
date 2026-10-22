@@ -110,8 +110,7 @@ class OperationsUI(unittest.TestCase):
         self.page.locator('#dial').wait_for()
         self.assertEqual(re.sub(r'\D', '', self.page.locator('#dial').inner_text()), '3055550101')
         self.page.evaluate("""() => {
-            const box = document.createElement('div'); box.className='oc';
-            document.body.appendChild(box); window.__choice=[];
+            screenOutcome(); window.__choice=[];
             wrongChoice(ROWS[0], ROWS[0].p[0], 1, x => window.__choice.push(x));
         }""")
         self.page.wait_for_timeout(450)  # honor the production tap shield
