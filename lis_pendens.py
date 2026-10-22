@@ -251,6 +251,12 @@ def _env_int(name, default):
 
 
 MD_MAX_SPLIT = _env_int('DEALFLOW_LP_MAX_SPLIT', 4)
+# THE NAME SEARCH TAKES A DOCUMENT TYPE (probe on the laptop, 2026-10-22): WELLS FARGO over 30 days
+# with documentType='LIS PENDENS - LIS' returned 9 records, all 9 lis pendens, where the same search
+# with no type hit the 500 cap on mortgages and satisfactions and kept 8. Asking for the type keeps a
+# lender's window far under the cap, so the split above becomes the rare fallback, not the nightly
+# path. DEALFLOW_LP_MD_DOCTYPE='' puts the untyped search back.
+MD_LP_DOCTYPE = os.environ.get('DEALFLOW_LP_MD_DOCTYPE', 'LIS PENDENS - LIS')
 # A per-run ceiling on split searches, separate from the monthly paid-reads cap (which Alejandro
 # lifted on 10-19, so it no longer bounds a night). 60 searches is about $0.20 at the ledger's price;
 # a lender the ceiling stops is reported partial, like one the monthly cap stops.
@@ -291,14 +297,15 @@ def lp_sweep(days=30, tries=3):
     print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
     MD_LAST.clear()
     MD_LAST.update({'window': [d_from, d_to], 'searched': 0, 'retrieved': 0,
-                    'split_searches': 0, 'no_qs': {}})
+                    'split_searches': 0, 'no_qs': {}, 'doctype': MD_LP_DOCTYPE})
     del SWEEP_CAPPED[:]
 
     def search(name, lo, hi):
         """One name search over [lo, hi] -> its records, or None when it never got through."""
         url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
                + '&dateRangeFrom=' + urllib.parse.quote(lo) + '&dateRangeTo=' + urllib.parse.quote(hi)
-               + '&documentType=&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+               + '&documentType=' + urllib.parse.quote(MD_LP_DOCTYPE)
+               + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
         for _ in range(tries):
             tok = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
             if not tok:
@@ -645,7 +652,8 @@ def main():
             fails.append('%d plaintiff search(es) not read to the end (%d-record cap)'
                          % (len(SWEEP_CAPPED), OR_RESULT_CAP))
         info['MIAMI-DADE'] = {
-            'scope': 'listed plaintiffs only (%d names)' % len(PLAINTIFFS),
+            'scope': 'listed plaintiffs only (%d names), document type %r'
+                     % (len(PLAINTIFFS), MD_LP_DOCTYPE or 'any'),
             'window': list(MD_LAST.get('window') or _win(a.days)),
             'reported_total': None, 'retrieved': MD_LAST.get('retrieved', 0), 'kept': len(md),
             'pages': MD_LAST.get('searched', 0), 'searched': MD_LAST.get('searched', 0),

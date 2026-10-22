@@ -142,6 +142,7 @@ class FakeClerk:
         q = self.U.parse_qs(self.U.urlsplit(url).query)
         name, lo, hi = q['partyName'][0], q['dateRangeFrom'][0], q['dateRangeTo'][0]
         self.posts.append((name, lo, hi))
+        self.doctypes = getattr(self, 'doctypes', []) + [q.get('documentType', [''])[0]]
         body = {'message': 'No records'} if name in self.no_qs else {'qs': '|'.join((name, lo, hi))}
         return SimpleNamespace(json=lambda: body)
 
@@ -195,6 +196,13 @@ class MiamiCap(unittest.TestCase):
         self.assertGreater(LP.MD_LAST['split_searches'], 0)
         self.assertEqual(LP.MD_LAST['retrieved'], 31 * 40 + 31 * 2, 'overlapping windows counted once')
         self.assertEqual(sum(1 for p in clerk.posts if p[0] == 'SMALL'), 1, 'an uncapped lender is searched once')
+
+    def test_the_search_asks_for_lis_pendens_by_default(self):
+        _, clerk = self.run_sweep({'SMALL': 2})
+        self.assertEqual(clerk.doctypes, ['LIS PENDENS - LIS'])
+        with mock.patch.object(LP, 'MD_LP_DOCTYPE', ''):
+            _, clerk = self.run_sweep({'SMALL': 2})
+        self.assertEqual(clerk.doctypes, [''])
 
     def test_still_capped_at_full_depth_is_reported(self):
         self.run_sweep({'HUGE': 400})
