@@ -47,7 +47,7 @@ about six lookups a day); it now has its own, the same way Tracerfy got one.
 
 Who a number belongs to (owner / household / name-only / relative) is decided in wp_contacts.py.
 """
-import argparse, glob as _glob, json, os, re, sys, time, threading, urllib.parse, urllib.request, urllib.error
+import argparse, glob as _glob, json, math, os, re, sys, time, threading, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE  = os.path.dirname(os.path.abspath(__file__))
@@ -619,12 +619,47 @@ def pick_miami(leads, cache, n):
     return out[:n]
 
 
+PICK_MAX_DAYS = int(os.environ.get('WP_PICK_MAX_DAYS', '60'))
+
+
+def pick_callable(leads, cache, n, skiptrace=None, max_days=None):
+    """The n leads the nightly deep search should spend on, any county: person-owned, a property
+    address, no contact hold, never Person-searched, a sale inside max_days (or a lis pendens with
+    no sale yet, after every dated one). Fewest known phones first inside the same week of sale,
+    then soonest sale: the lead with two dead numbers gains more from a deep file than the one
+    with ten. Jesse's method (owner, the household, relatives) on the leads that are about to be
+    called, inside --max-spend and WP_DAILY_CAP."""
+    max_days = PICK_MAX_DAYS if max_days is None else max_days
+    skiptrace = skiptrace if skiptrace is not None else {}
+    out, held = [], 0
+    for r in leads:
+        k = _lead_key(r)
+        if not k or not _split_addr(_lead_addr(r)) or _is_company_owner(_lead_owners(r)):
+            continue
+        if (cache.get(k) or {}).get('_person'):
+            continue
+        d = _days_to_sale(r)
+        if d < 0 or (d != 9999 and d > max_days):
+            continue
+        if contact_hold(r):
+            held += 1
+            continue
+        out.append(r)
+    out.sort(key=lambda r: (_days_to_sale(r) // 7, min(_lead_phone_count(r, skiptrace), 5),
+                            _days_to_sale(r), _lead_key(r)))
+    _log(f'  --pick-callable: {len(out)} eligible (sale within {max_days}d or undated), '
+         f'{held} skipped for a contact hold; taking {min(n, len(out))}')
+    return out[:n]
+
+
 def build_todo(leads, cache, args, skiptrace=None):
     """Return the (deduped, skip-LLC when applicable) work list, respecting --tier / --refresh / --upgrade."""
     skiptrace = skiptrace if skiptrace is not None else {}
     todo = []
     if getattr(args, 'pick_miami', 0):
         return pick_miami(leads, cache, args.pick_miami)
+    if getattr(args, 'pick_callable', 0):
+        return pick_callable(leads, cache, args.pick_callable, skiptrace)
     if args.case:
         by = {_lead_key(r): r for r in leads}
         out = []
@@ -764,6 +799,11 @@ def main():
     ap.add_argument('--case', action='append', help='lead by ID (repeatable)')
     ap.add_argument('--pick-miami', type=int, default=0, metavar='N',
                     help='the N soonest-sale Miami-Dade person-owned leads with no contact hold')
+    ap.add_argument('--pick-callable', type=int, default=0, metavar='N',
+                    help='the N leads about to be called (any county, sale within WP_PICK_MAX_DAYS, '
+                         'fewest phones first) with no contact hold and no Person search yet')
+    ap.add_argument('--estimate', action='store_true',
+                    help='print what a full --pick-callable --relatives sweep would cost, $0')
     ap.add_argument('--relatives', action='store_true',
                     help="also run Person Search on the matched owner to get relatives (+1 call/lead)")
     ap.add_argument('--max-spend', type=float, default=None, metavar='USD',
@@ -807,7 +847,8 @@ def main():
         _save_cache(cache)
         print(f'stamped {stamped} wp_prop_id(s) into cache (Marisela preserved)', flush=True)
     if args.ensure_prop_ids and not (args.gap or args.all or args.upgrade or args.case or args.stats
-                                     or args.pick_miami or args.report or args.schema):
+                                     or args.pick_miami or args.pick_callable or args.estimate
+                                     or args.report or args.schema):
         return
 
     if args.stats:
@@ -845,6 +886,15 @@ def main():
         print(f'--gap remaining: {gap_zero + gap_never} ({gap_zero} zero-phone, {gap_never} never-looked w/ phones)')
         return
 
+    if args.estimate:
+        elig = pick_callable(leads, cache, 10 ** 9, skiptrace)
+        uncached = sum(1 for r in elig if not (cache.get(_lead_key(r)) or {}).get('result'))
+        calls = len(elig) + uncached                    # one Person call each + Property where not cached
+        print(f'full deep sweep: {len(elig)} lead(s), {uncached} need a Property call too -> up to '
+              f'{calls} calls = ${calls * WP_EST_COST:.2f} at ${WP_EST_COST:.2f}/query '
+              f'(price from 2026-08-15, check it against the plan). At the ${WP_DAILY_CAP:.2f} day cap: '
+              f'{math.ceil(calls * WP_EST_COST / WP_DAILY_CAP) if WP_DAILY_CAP > 0 else "n/a"} day(s).')
+        return
     if args.report:
         report(leads, cache, args.case or [])
         return
@@ -855,7 +905,7 @@ def main():
     if args.max_spend is not None:
         _run['max'] = float(args.max_spend)
     todo = build_todo(leads, cache, args, skiptrace=skiptrace)
-    if not args.case and not args.pick_miami:
+    if not args.case and not args.pick_miami and not args.pick_callable:
         _before = len(todo)
         todo = [r for r in todo if not contact_hold(r)]
         if len(todo) != _before:
@@ -901,7 +951,7 @@ def main():
     print(f'cache -> whitepages_lookup.json ({len(cache)} entries)')
     print(f'spend: {_run["calls"]} billed request(s) = ${_run["spent"]:.2f} this run · '
           f'${wp_spent_today():.2f} today')
-    if args.relatives or args.case or args.pick_miami:
+    if args.relatives or args.case or args.pick_miami or args.pick_callable:
         report(leads, cache, [_lead_key(r) for r in todo])
     if _stop_run.is_set():
         print('RESUME: python whitepages_lookup.py --gap --limit 25')
