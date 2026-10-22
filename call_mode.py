@@ -811,6 +811,35 @@ REALTOR_EN = ("Honestly, selling it is a smart move, and you know that market, s
 REALTOR_ES = ("La verdad, venderla es una buena jugada, y usted conoce ese mercado, así que no le voy a tirar un "
               "número. Una pregunta, eso sí... cuando dice venderla pronto, ¿quiere decir bajo contrato, o ya "
               "cerrada?")
+# "I'M ALREADY SELLING IT" (2026-10-22 field call, Davie: the owner said she was already selling and it
+# was finalized; the script only had "realtor / selling it myself", which asks under contract vs closed
+# and then pushes on). Selling to a buyer is a different call. If it is signed, we do NOT try to pull
+# them out of that contract: we become the backup and get the closing date. If it is not signed, three
+# questions (who with, what they need to walk away with, what is owed), then a second number to compare.
+# "Better" may only mean cash, as-is, no commissions, their timeline, before any sale. No number before
+# equity is verified, no fee, never "stop the sale", no buy-back or rent-back.
+SELLING_EN = ("Got it, good that you've got a plan. Can I ask... is it signed with a buyer already, or still "
+              "being worked out?")
+SELLING_ES = ("Entiendo, qué bueno que ya tiene un plan. ¿Le puedo preguntar... ya firmó con un comprador, o "
+              "todavía lo están arreglando?")
+SELLSIGNED_EN = ("Then finish it, I won't get in the way of that. Just so you have a backup... if anything falls "
+                 "through before closing, would it be okay if I checked back? When is it set to close?")
+SELLSIGNED_ES = ("Entonces termínelo, no me voy a meter en eso. Nada más para que tenga un respaldo... si algo se "
+                 "cae antes del cierre, ¿le parece bien si lo vuelvo a llamar? ¿Para cuándo está el cierre?")
+SELLOPEN_EN = [
+    "Who are you working with on it, an agent, or a buyer who reached out to you?",
+    "What do you need to walk away with for this to work for you?",
+    "Do you know roughly what's left on the mortgage?",
+    "Would a second number to compare hurt? Our senior advisor can lay it out in 10 minutes, free, no "
+    "obligation.",
+]
+SELLOPEN_ES = [
+    "¿Con quién lo está haciendo, un agente, o un comprador que lo contactó?",
+    "¿Con cuánto necesita quedarse para que esto le funcione?",
+    "¿Sabe más o menos cuánto queda de la hipoteca?",
+    "¿Le haría daño tener otro número para comparar? Nuestro asesor principal se lo explica en 10 minutos, "
+    "gratis, sin compromiso.",
+]
 # "WE ALREADY GOT IT REINSTATED" (2026-09-30 field call: the owner said the loan was reinstated, the
 # script had no button for it, and the call went down a rabbit hole into "not interested"). Be glad
 # with them, never probe the deal or doubt it, and ask the ONE question that is ours to ask: a
@@ -862,7 +891,7 @@ def _flow():
          'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
                 ['What do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
-                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
+                ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
                 ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
                 ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'nots'},
@@ -879,7 +908,7 @@ def _flow():
          'listen': 'They will test you here. Whatever they say, do not get defensive.',
          'br': [['Okay / sure', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
-                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
+                ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
                 ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
                 ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'frame'},
@@ -888,7 +917,7 @@ def _flow():
          'tone': 'Humble, one breath, zero pitch. Answer it and hand it back.',
          'listen': 'A skeptic asked. Answer, then stop.',
          'br': [['Okay, go ahead', 'frame'], ['Are you an investor?', 'investor'],
-                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'], ['I\'m good, it\'s handled', 'obj:1']],
+                ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'], ['I\'m good, it\'s handled', 'obj:1']],
          'ret': 'frame'},
         {'id': 'defusebuy', 'k': 'KILL THE BUYING FEAR',
          'en': DEFUSE_BUY_EN, 'es': DEFUSE_BUY_ES,
@@ -914,6 +943,31 @@ def _flow():
          'br': [['"Closed" in a month (tight)', 'obj:13'], ['"Under contract", plenty of time', 'q2'],
                 ["It's handled, don't worry", 'obj:13'], ['Not interested', 'obj:15']],
          'ret': 'q2'},
+        {'id': 'selling', 'k': '"I\'M ALREADY SELLING IT" — signed or not?',
+         'en': SELLING_EN, 'es': SELLING_ES,
+         'tone': "Back their plan, no pushback. One question, then silence. You are the backup, not the competition.",
+         'listen': "Signed with a buyer, or still being worked out? That answer decides everything after it.",
+         'br': [['Signed / under contract / finalized', 'sellsigned'], ['Not signed yet / still working it out', 'sellopen'],
+                ['Selling it myself / with a realtor', 'realtor'], ['Not interested', 'obj:15'],
+                ["Don't call me again", 'end:dnc']],
+         'ret': 'q2'},
+        {'id': 'sellsigned', 'k': 'SIGNED — be the backup, get the closing date',
+         'en': SELLSIGNED_EN, 'es': SELLSIGNED_ES,
+         'tone': "Glad for them. Do NOT try to pull them out of a signed contract, do not doubt the buyer, no number. "
+                 "Get the closing date, thank them, leave.",
+         'listen': "Write the closing date in the note and set the follow-up a few days before it.",
+         'br': [['Gave me the closing date / okay to check back', 'end:talked'], ['Not interested', 'end:notint'],
+                ["Don't call me again", 'end:dnc']],
+         'ret': 'sellsigned'},
+        {'id': 'sellopen', 'k': 'NOT SIGNED — three questions, then a second number',
+         'rail': {'en': SELLOPEN_EN, 'es': SELLOPEN_ES},
+         'tone': "Curious, slow, one at a time, in order. 'Better' only means cash, as-is, no commissions, their "
+                 "timeline, before any sale. NO number until equity is verified. Never 'stop the sale', no fee, no "
+                 "bankruptcy talk, no buy-back or rent-back.",
+         'listen': "Write down who they're selling with, what they need to net, and what's owed. Then ask for a time.",
+         'br': [['Open to a second number', 'q6'], ['Just send me something', 'sendinfo'],
+                ["No, I'm happy with it", 'f15'], ["Don't call me again", 'end:dnc']],
+         'ret': 'q6'},
         {'id': 'reinstated', 'k': '"WE ALREADY REINSTATED" — be glad, one question',
          'en': REINSTATED_EN, 'es': REINSTATED_ES,
          'tone': "Genuinely glad for them. Don't ask how, what it cost, or who did it, and don't doubt it. "
@@ -929,12 +983,12 @@ def _flow():
          'listen': 'Their "yeah, that\'d help" is the first micro-yes.',
          'br': [['Sure / that\'d help', 'q1'], ['What kind of options? (do NOT present — ask)', 'q1'],
                 ['I\'ve got it handled', 'obj:1'], ['We already reinstated', 'reinstated'], ['Are you an investor?', 'investor'],
-                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15']],
+                ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15']],
          'ret': 'q1'},
         {'id': 'q1', 'k': '1 · ' + q1[0], 'en': q1[2], 'es': q1[3],
          'tone': 'Curious. Open question. ' + q1[1],
          'listen': 'Their answer picks the program. Do not fill the silence.',
-         'br': [['Keep the house', 'q2'], ['Sell / get out / start fresh', 'q2'], ["Selling it myself / I'm a realtor", 'realtor'], ['I don\'t know', 'probe'],
+         'br': [['Keep the house', 'q2'], ['Sell / get out / start fresh', 'q2'], ['Already selling it / finalized', 'selling'], ["Selling it myself / I'm a realtor", 'realtor'], ['I don\'t know', 'probe'],
                 ['It\'s handled / bank / mod', 'obj:1'], ['My lawyer\'s on it', 'obj:2']],
          'ret': 'q2'},
         {'id': 'probe', 'k': 'THEY WENT VAGUE — echo it back',
@@ -959,7 +1013,7 @@ def _flow():
          'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
          'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
          'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
-                ['Already filed bankruptcy', 'end:dnc'], ['Planning to file bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
+                ['Already filed bankruptcy', 'end:dnc'], ['Planning to file bankruptcy', 'obj:6'], ['Already selling it / finalized', 'selling'], ["Listing it / I'm a realtor", 'realtor'], ['Reinstated it already', 'reinstated'],
                 ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
          'ret': 'q5'},
         {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],
