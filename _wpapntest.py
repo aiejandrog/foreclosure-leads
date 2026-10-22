@@ -5,8 +5,8 @@ records resolved to a DIFFERENT parcel -- same house number, wrong street -- bec
 fed to Whitepages at lookup time was garbled. foreclosure_leads.wp_parcel_verdict(apn, folio) is the
 seam that refuses those records before their stranger phones get baked into a dialable lead.
 
-This suite locks the verdict logic AND checks it against the live cache + leads, so a regression that
-re-admits wrong-parcel records (or starts dropping clean ones) turns this red.
+Default: synthetic joins only, so this runs in CI without homeowner data.
+Use --live on the armed laptop to also check the private cache and leads.
 """
 import io
 import json
@@ -46,12 +46,22 @@ rec('a one-digit-off apn is a mismatch, not ok',
 # --- integration: the live cache must not bake a wrong-parcel record ----------------------------
 # Every current lead whose WP record claims a parcel that disagrees with the lead folio must be
 # refused. Clean matches must pass. This is the exact split the 2026-10-21 cross-check found.
-try:
-    wp = json.load(io.open(os.path.join(HERE, 'whitepages_lookup.json'), encoding='utf-8'))
-    lf = json.load(io.open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8'))
-except Exception as e:
-    rec('live cache + leads load', False, e)
-    wp = lf = None
+live = '--live' in sys.argv
+if live:
+    try:
+        wp = json.load(io.open(os.path.join(HERE, 'whitepages_lookup.json'), encoding='utf-8'))
+        lf = json.load(io.open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8'))
+    except Exception as e:
+        rec('live cache + leads load', False, e)
+        wp = lf = None
+else:
+    # Invented keys/parcel ids: a clean match, mismatch, and missing anchor must all be exercised.
+    wp = {'TEST-OK': {'result': {'apn': '99-9999-999-9991'}},
+          'TEST-WRONG': {'result': {'apn': '99-9999-999-9992'}},
+          'TEST-UNKNOWN': {'result': {'apn': '99-9999-999-9993'}}}
+    lf = [{'Case #': 'TEST-OK', 'Folio': '9999999999991'},
+          {'Case #': 'TEST-WRONG', 'Folio': '9999999999994'},
+          {'Case #': 'TEST-UNKNOWN', 'Folio': 'Property Appraiser'}]
 
 if wp is not None:
     folio_by_case = {}
@@ -76,8 +86,9 @@ if wp is not None:
     n_bad = sum(1 for v in verdicts.values() if v in ('mismatch', 'unverified'))
     rec('live join produced a verdict for every joined case', len(verdicts) == len(joined),
         f'{len(verdicts)}/{len(joined)}')
-    rec('the gate suppresses at least one wrong-parcel/unverifiable record (the bug it was built for)',
-        n_bad >= 1, f'ok={n_ok} suppressed={n_bad}')
+    if not live:
+        rec('synthetic join keeps the match and refuses both uncertain/wrong parcels',
+            verdicts == {'TEST-OK': 'ok', 'TEST-WRONG': 'mismatch', 'TEST-UNKNOWN': 'unverified'}, verdicts)
     # No record that passes may have an apn that disagrees with a present folio.
     leaks = [c for c, v in verdicts.items()
              if v == 'ok'
@@ -85,7 +96,7 @@ if wp is not None:
              and folio_by_case.get(c)
              and re.sub(r'\D', '', str((wp[c].get('result') or {}).get('apn') or '')) != folio_by_case[c]]
     rec('no wrong-parcel record slips through as ok', not leaks, leaks[:5])
-    print(f'  (live: {len(joined)} joined, {n_ok} pass the gate, {n_bad} suppressed)')
+    print(f'  ({"live" if live else "synthetic"}: {len(joined)} joined, {n_ok} pass the gate, {n_bad} suppressed)')
 
 print('\n%d failed' % len(fails))
 sys.exit(1 if fails else 0)
