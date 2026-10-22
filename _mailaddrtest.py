@@ -2,7 +2,7 @@
 
 Offline: the BCPA search and the cadastral call are faked. Pins that the mailing address is stored
 beside (never instead of) the site address, that a homestead row and a no-homestead row both carry it,
-that the backfill only touches Broward rows with a plain numeric folio, is bounded, and leaves a row
+that the backfill touches Broward rows with a folio (condo letters included), is bounded, and leaves a row
 the roll cannot return without the key so it is retried.
 """
 import os
@@ -65,20 +65,26 @@ def fake(parcel_id=None, **k):
 
 
 BR.FC.enrich = fake
+# a condo folio is asked by its exact lettered PARCEL_ID (never FC.enrich's digits-only fallback)
+BR.FC._q = lambda where, n=1: (calls.append(where.split("'")[1]),
+                               [{'PARCEL_ID': where.split("'")[1], 'OWN': 1}])[1]
+BR.FC._norm = lambda a: {'mail_addr': 'PO BOX 1 DAVIE FL 33314'}
 prev = {
     'A': {'county': 'BROWARD', 'folio': '111'},                        # fill
     'B': {'county': 'BROWARD', 'folio': '222', 'mailAddr': 'X'},       # already has it
     'C': {'county': 'BROWARD', 'folio': '333'},                        # roll returns nothing
-    'D': {'county': 'BROWARD', 'folio': '494134CB0170'},               # condo folio: skipped
+    'D': {'county': 'BROWARD', 'folio': '494134CB0170'},               # condo folio: raw lookup works (2026-10-22)
     'E': {'county': 'MIAMI-DADE', 'folio': '444'},                     # not Broward
     'F': {'county': 'BROWARD', 'folio': ''},                           # no folio
     'G': 'junk',
 }
 n = BR.backfill_mail(prev, cap=50, pause=0)
-chk('backfill filled exactly the one eligible row', n == 1 and prev['A'].get('mailAddr') == 'PO BOX 1 DAVIE FL 33314')
+chk('backfill filled the two eligible rows, condo included', n == 2 and prev['A'].get('mailAddr') == 'PO BOX 1 DAVIE FL 33314'
+    and prev['D'].get('mailAddr') == 'PO BOX 1 DAVIE FL 33314')
 chk('existing mailAddr not overwritten', prev['B']['mailAddr'] == 'X')
 chk('unreturnable row left without the key (retried next run)', 'mailAddr' not in prev['C'])
-chk('condo, non-Broward, no-folio and junk rows never queried', sorted(calls) == ['111', '333'])
+chk('non-Broward, no-folio and junk rows never queried; the condo is asked with its letters',
+    sorted(calls) == ['111', '333', '494134CB0170'])
 
 calls[:] = []
 many = {'K%d' % i: {'county': 'BROWARD', 'folio': str(1000 + i)} for i in range(10)}

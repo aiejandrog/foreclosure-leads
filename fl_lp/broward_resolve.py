@@ -15,8 +15,11 @@ surname is how you knock on the wrong Garcia. So:
     the county says owns-and-lives-at that parcel is the person being foreclosed -> 'high'
     (outreach-usable, value attached). No homestead corroboration -> 'medium' (advisory only,
     lp_leads renders it "verify before contact" and no outreach path consumes it).
-  * condo-format folios (letters in the id) can't cross-check against the cadastral (its
-    PARCEL_ID join strips non-digits) -> capped at 'medium' regardless.
+  * condo-format folios (letters in the id) get the same cross-check. This file used to cap them
+    at 'medium' because the cadastral lookup stripped the letters; fl_cadastral.enrich asks for the
+    raw folio first since 2026-08-12 (4/4 condo folios hit raw, 0/4 digits-only), so the cap only
+    kept every homesteaded condo owner out of 'high'. recheck_condos() regrades rows resolved
+    under the old cap.
 
 Writes into lp_addresses.json (merge by case) in the exact shape lp_leads.build() consumes.
 
@@ -109,9 +112,22 @@ def _mail_of(cad):
     return ' '.join(str((cad or {}).get('mail_addr') or '').split())
 
 
+def _roll(folio):
+    """The cadastral row for one Broward folio, or None. A lettered (condo) folio is asked by its exact
+    PARCEL_ID and accepted only on an exact echo, as lp_values._fetch_cad does: FC.enrich falls back
+    to the digits alone with no county filter, and that can return a different parcel whose homestead
+    would then grade this one 'high'. Plain folios keep FC.enrich."""
+    raw = str(folio or '').strip().upper()
+    if not re.search(r'[A-Z]', raw):
+        return FC.enrich(parcel_id=raw)
+    hits = [h for h in (FC._q("PARCEL_ID='%s'" % raw.replace("'", "''"), 2) or [])
+            if str(h.get('PARCEL_ID') or '').strip().upper() == raw]
+    return FC._norm(hits[0]) if len(hits) == 1 else None
+
+
 def backfill_mail(prev, cap=200, pause=0.4, budget_s=180, max_fails=5):
-    """Add `mailAddr` to rows resolved before it was stored. Plain-numeric folios only (the roll's
-    PARCEL_ID join strips letters, same limit as the homestead cross-check). Free, and bounded three
+    """Add `mailAddr` to rows resolved before it was stored. Condo folios too: fl_cadastral asks for
+    the exact lettered id through _roll (2026-10-22; this used to skip them). Free, and bounded three
     ways so a slow or down roll cannot stall the lp_refresh chain behind it: `cap` counts every
     ATTEMPT (not just fills), `budget_s` is a wall-clock limit, and `max_fails` consecutive misses
     stop the run. A row the roll cannot return is left without the key and retried next run.
@@ -124,11 +140,11 @@ def backfill_mail(prev, cap=200, pause=0.4, budget_s=180, max_fails=5):
         if not isinstance(v, dict) or 'mailAddr' in v or (v.get('county') or '').upper() != 'BROWARD':
             continue
         folio = str(v.get('folio') or '').strip()
-        if not folio or re.search(r'[A-Za-z]', folio):
+        if not folio:
             continue
         tried += 1
         try:
-            cad = FC.enrich(parcel_id=folio)
+            cad = _roll(folio)
         except Exception:
             cad = None
         time.sleep(pause)
@@ -183,31 +199,74 @@ def resolve_row(rec):
     row = {'folio': folio, 'addr': a1, 'city': city, 'zip': zc,
            'paOwner': (h.get('ownerName1') or '').strip(), 'candidates': [],
            'ownerMismatch': False}
-    condo = bool(re.search(r'[A-Z]', folio))
     ev = 'BCPA: exactly one parcel carries every token of %r' % owner
-    if not condo:
-        cad = None
-        try:
-            cad = FC.enrich(parcel_id=folio)
-        except Exception:
-            pass
-        if cad:
-            row['value'] = int(cad.get('market_value') or 0)
-            row['hs'] = bool(cad.get('homestead'))
-            if _mail_of(cad):
-                row['mailAddr'] = _mail_of(cad)
-            if row['hs']:
-                row['confidence'] = 'high'
-                row['rung'] = 'bcpa-name'
-                row['evidence'] = ev + ' + cadastral shows HOMESTEAD there (owner lives at the parcel)'
-                row['needsHuman'] = False
-                return row
-            ev += ' + cadastral corroborates the parcel (no homestead — absentee or 2nd home)'
+    cad = None
+    try:
+        cad = _roll(folio)
+    except Exception:
+        pass
+    return _grade(row, cad, folio, ev)
+
+
+def _grade(row, cad, folio, ev):
+    """The cadastral cross-check on one BCPA parcel, condo folios included (_roll asks for the exact
+    lettered id). HOMESTEAD there -> 'high'; anything else -> 'medium'."""
+    if cad:
+        row['value'] = int(cad.get('market_value') or 0)
+        row['hs'] = bool(cad.get('homestead'))
+        if _mail_of(cad):
+            row['mailAddr'] = _mail_of(cad)
+        if row['hs']:
+            row['confidence'] = 'high'
+            row['rung'] = 'bcpa-name'
+            row['evidence'] = ev + ' + cadastral shows HOMESTEAD there (owner lives at the parcel)'
+            row['needsHuman'] = False
+            return row
+        ev += ' + cadastral corroborates the parcel (no homestead — absentee or 2nd home)'
+    elif re.search(r'[A-Z]', folio):
+        ev += '; condo folio not on the cadastral roll'
     row['confidence'] = 'medium'
     row['rung'] = 'bcpa-name'
-    row['evidence'] = ev + ('; condo folio — no cadastral cross-check possible' if condo else '')
+    row['evidence'] = ev
     row['needsHuman'] = True
     return row
+
+
+_OLD_CAP = '; condo folio — no cadastral cross-check possible'
+
+
+def recheck_condos(prev, cap=200, pause=0.4, budget_s=180, max_fails=5):
+    """Regrade Broward rows resolved under the old condo cap: one BCPA parcel, a lettered folio,
+    'medium', and the old cap's evidence line. Same cross-check as a new row, so a homesteaded
+    condo becomes 'high' and any other answer stays 'medium' with the roll's evidence. Free (the
+    state roll), bounded like backfill_mail; a row the roll cannot return keeps its old line and
+    is retried next run. Never touches a row a person or another rung set. Returns rows raised."""
+    up = tried = fails = 0
+    t0 = time.time()
+    for case, v in prev.items():
+        if tried >= cap or fails >= max_fails or time.time() - t0 > budget_s:
+            break
+        if (not isinstance(v, dict) or (v.get('county') or '').upper() != 'BROWARD'
+                or v.get('confidence') != 'medium' or v.get('rung') != 'bcpa-name'
+                or not str(v.get('evidence') or '').endswith(_OLD_CAP)):
+            continue
+        folio = str(v.get('folio') or '').strip().upper()
+        if not re.search(r'[A-Z]', folio):
+            continue
+        tried += 1
+        try:
+            cad = _roll(folio)
+        except Exception:
+            cad = None
+        time.sleep(pause)
+        if not cad:
+            fails += 1
+            continue
+        fails = 0
+        _grade(v, cad, folio, str(v['evidence'])[:-len(_OLD_CAP)])
+        if v['confidence'] == 'high':
+            up += 1
+    return up
 
 
 def main():
@@ -239,6 +298,9 @@ def main():
             json.dump(prev, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
             os.replace(tmp, OUT)
         time.sleep(0.45)
+    raised = recheck_condos(prev)
+    if raised:
+        print('condo rows regraded to high (homestead on the roll): %d' % raised)
     filled = backfill_mail(prev)
     if filled:
         print('mailing address added to %d earlier row(s)' % filled)
