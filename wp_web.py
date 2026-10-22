@@ -404,6 +404,7 @@ def assist(todo, refresh=False, wait_s=None):
                 print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
                 skipped += 1
                 continue
+            _keep_page(case, text)
             people = parse_people_text(text) if _PAGE_MARK.search(text) else []
             if not people:
                 print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], _why_empty(text), len(text)), flush=True)
@@ -425,6 +426,42 @@ def assist(todo, refresh=False, wait_s=None):
         print('\nstopped.')
     print('cached %d lead(s), skipped %d. cache: %s' % (ok, skipped, CACHE))
     return ok
+
+
+def _pages_dir():
+    import paths as P
+    d = os.path.join(P.DEALFLOW_DIR, 'wpweb_pages')     # outside the repo and outside OneDrive
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _keep_page(case, text):
+    """Every copied page is kept under DEALFLOW_DIR/wpweb_pages so a parse can be re-run or
+    calibrated later without opening the site again. Homeowner data: never the repo."""
+    try:
+        open(os.path.join(_pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt'), 'w',
+             encoding='utf-8').write(text)
+    except Exception:
+        pass
+
+
+def structure(text):
+    """The owners/residents part of a copied page with every name, number and email masked, so its
+    LAYOUT can be pasted into chat. Names become NAME(n), digits 9, emails EMAIL."""
+    lines = [l.strip() for l in str(text or '').replace('\r', '').split('\n')]
+    starts = [i for i, l in enumerate(lines) if re.match(r'owners\s*&\s*residents$', l, re.I)]
+    i0 = starts[-1] if starts else 0
+    out = []
+    for l in lines[i0:i0 + 120]:
+        if re.match(r'(whitepages property intel|property financials for)', l, re.I):
+            break
+        m = l
+        m = re.sub(r'\S+@\S+', 'EMAIL', m)
+        m = re.sub(r'\d', '9', m)
+        if _is_name(l):
+            m = 'NAME(%d)' % len(l.split())
+        out.append(m)
+    return '\n'.join(out)
 
 
 def _parcel(entry, lead):
@@ -506,12 +543,28 @@ def main(argv=None):
                     help='hand-assisted, NO automation: opens each page in your own browser; Ctrl+A, Ctrl+C on it')
     ap.add_argument('--from-file', metavar='FILE',
                     help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
+    ap.add_argument('--structure', metavar='CASE_OR_FILE',
+                    help='print a copied page\'s owners/residents layout with names/numbers masked (safe to paste)')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
     ap.add_argument('--save-html', metavar='FILE', help='write one lead\'s page HTML (calibration)')
     a = ap.parse_args(argv)
 
     if a.login:
         _login()
+        return 0
+    if a.structure == 'clip':
+        print(structure(_clipboard_text()))
+        return 0
+    if a.structure:
+        f = a.structure if os.path.exists(a.structure) else os.path.join(
+            _pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', a.structure) + '.txt')
+        if not os.path.exists(f):
+            hits = [x for x in os.listdir(_pages_dir()) if x[:-4].endswith(a.structure)]
+            f = os.path.join(_pages_dir(), hits[0]) if len(hits) == 1 else f
+        if not os.path.exists(f):
+            print('no saved page for %s' % a.structure)
+            return 1
+        print(structure(open(f, encoding='utf-8', errors='replace').read()))
         return 0
     if a.from_file:
         if not a.case or len(a.case) != 1:

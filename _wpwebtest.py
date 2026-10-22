@@ -164,6 +164,8 @@ rec('--compare takes only leads that already have trace numbers', [WL._lead_key(
 
 print('\nINGEST A HAND-COPIED PAGE (no browser)')
 td = tempfile.mkdtemp()
+import paths as _P  # noqa: E402
+_P.DEALFLOW_DIR = td
 WL.CACHE = os.path.join(td, 'wp.json')
 W.CACHE = WL.CACHE
 leads.append({'case': 'D-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/03/2026', 'days': 12})
@@ -228,6 +230,11 @@ rec('the parcel gate then reads it (same digits = ok)',
 rec('and a different folio = mismatch', _C.wp_parcel_verdict(e2['result']['apn'], '74434327270040041') == 'mismatch')
 rec('no APN on the page: no apn key', 'apn' not in W.to_cache_entry(people, ADDR, page_text=PAGE)['result'])
 rec('not-a-page copy explained', W._why_empty('hello') == 'that was not a Whitepages address page')
+
+st = W.structure(PAGE)
+rec('structure masks names, numbers and emails', 'Romero' not in st and '200-1001' not in st
+    and 'example.com' not in st and 'NAME(3)' in st and '(999) 999-9999' in st and 'Owner' in st, st[:300])
+rec('assist keeps each copied page outside the repo', os.path.exists(os.path.join(td, 'wpweb_pages', 'E-0.txt')))
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
