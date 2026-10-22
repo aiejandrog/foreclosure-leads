@@ -3953,7 +3953,12 @@ const _OUTCOME_STATES = ['Offer made','Under contract','Assigned','CLOSED','Lost
 // positions AT OR BEYOND that rung, so a CLOSED deal still counts as a contact and a contract.
 function _funnelStats(){
   const s = {attempts:0, contacts:0, appointments:0, offers:0, contracts:0, closes:0, revenue:0};
-  const CONTACTED = ['Called - talked','Door - spoke','Appointment','Offer made','Under contract','Assigned','CLOSED'];
+  // Call Mode writes its own status words ('Contacted' on Talked, 'Callback', 'Not interested' on a
+  // soft no). Each one means a human answered, so each is a contact. Without them every
+  // conversation logged from the phone counted as worked-but-never-reached (2026-10-22: the KPI read
+  // "210 worked, 0 reached" while the call log held 32 conversations).
+  const CONTACTED = ['Called - talked','Contacted','Callback','Not interested','Door - spoke','Appointment',
+                     'Offer made','Under contract','Assigned','CLOSED'];
   const APPT      = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
   const OFFER     = ['Offer made','Under contract','Assigned','CLOSED'];
   const CONTRACT  = ['Under contract','Assigned','CLOSED'];
@@ -4238,7 +4243,7 @@ function _funnelStage(r){
   if((d != null && d < 0) || _aucPassed(r)) return 'out';
 
   // ---- someone actually talked to us. Nothing outranks that, not even a closer auction.
-  if(ts.some(function(t){ return /spoke|talked|callback|interested/i.test(t.out||''); })) return 'warm';
+  if(ts.some(function(t){ return /spoke|talked|callback|interested|appointment/i.test(t.out||''); })) return 'warm';
 
   var has = function(ch){ return ts.some(function(t){ return t.ch === ch; }); };
   var reachablePhone = (r.phones||[]).length > 0;
