@@ -414,5 +414,74 @@ W._note_attempt('S-1')
 ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 0, 'refresh': False, 'retry_misses': True})())]
 rec('--retry-misses reopens only leads that missed', ks == ['S-1'], ks)
 
+print('\nOWNER-NAME SEARCH (no page for the address)')
+rec('name url is First-Last / City-FL',
+    W._name_url({'owners': 'ROMERO, MARISOL A', 'addr': ADDR}) == W.BASE + '/name/Marisol-Romero/Coral-Springs-FL',
+    W._name_url({'owners': 'ROMERO, MARISOL A', 'addr': ADDR}))
+rec('no name url for an entity owner', W._name_url({'owners': 'ACME HOLDINGS LLC', 'addr': ADDR}) == '')
+# Invented person page: the owner, her numbers, her address, then relatives WITH numbers that must
+# not be read as hers, and a toll-free help line.
+PERSON = """Marisol A Romero, Age 54
+Lives in Coral Springs, FL
+Phone Numbers
+(954) 555-0101
+Mobile
+(954) 555-0102 Landline
+Customer support (844) 555-0000
+Current Address
+1723 Canal Dr, Coral Springs, FL 33071
+Email
+mromero@example.com
+Possible Relatives
+Daniel Romero, Age 30
+(954) 555-0199
+"""
+r1, why1 = W.parse_person_page(PERSON, 'ROMERO, MARISOL', '1723 CANAL DR')
+nums = [p['number'] for p in (r1 or {}).get('phones', [])]
+rec('person page: the owner\'s two numbers, typed', nums == ['9545550101', '9545550102']
+    and [p['type'] for p in r1['phones']] == ['mobile', 'landline'], (nums, why1))
+rec('a relative\'s number below the relatives heading is not hers', '9545550199' not in nums)
+rec('the email is hers', (r1 or {}).get('emails') == ['mromero@example.com'], r1)
+rec('the record grades wp: owner placed at our address',
+    C.grade_person_record('ROMERO, MARISOL', ADDR, r1) == 'wp', r1)
+r2, why2 = W.parse_person_page(PERSON.replace('1723 Canal Dr', '88 Palm Way'), 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a namesake page without our address is refused', r2 is None and 'address' in why2, why2)
+r3, why3 = W.parse_person_page(PERSON.replace('Marisol A Romero', 'Marta Lopez'), 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a page whose names do not clear the owner bar is refused', r3 is None and 'owner bar' in why3, why3)
+LIST = 'People Search Results\n' + '\n'.join('Marisol Romero%s, Age %d\nCoral Springs, FL\n(954) 555-01%02d\n1723 Canal Dr' % (
+    ' X' * i, 30 + i, i) for i in range(8))
+r4, why4 = W.parse_person_page(LIST, 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a copied results list is refused, not parsed', r4 is None and 'results list' in why4, why4)
+ROW = "Marisol Romero, Age 54\n(954) 555-0101\nJorge Diaz, Age 61\n(954) 555-0177\n1723 Canal Dr\n"
+r5, _ = W.parse_person_page(ROW, 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('the next person row (name + age) ends her block',
+    r5 and [p['number'] for p in r5['phones']] == ['9545550101'], r5)
+rec('--by-name refuses the automated run', W.main(['--by-name', '3']) == 2)
+WL.CACHE = os.path.join(td, 'wp_name.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'N-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13 + i}
+            for i in range(3)] + [{'case': 'N-9', 'owners': 'ACME LLC', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+W._note_attempt('N-1')
+W._note_attempt('N-9')
+W._note_attempt(W._NAME_MISS + 'N-2'); W._note_attempt('N-2'); W._note_attempt(W._NAME_MISS + 'N-2')
+ks = [WL._lead_key(r) for r in W._name_candidates(leads, {}, {})]
+rec('by-name picks only leads whose address path missed, person owners, not tried out', ks == ['N-1'], ks)
+ks = [WL._lead_key(r) for r in W._name_candidates(leads, {'N-1': {'_person': [{'name': 'x', 'response': []}]}}, {})]
+rec('a lead already name-searched is not reopened', ks == [], ks)
+import webbrowser as _wb
+_wb.open = lambda *a, **k: True
+W._set_clipboard = lambda t: True
+W._clipboard_text = lambda: PERSON
+n_ok = W.assist_name([leads[1]], wait_s=3)
+c5 = _j.load(open(WL.CACHE, encoding='utf-8'))
+pr = (c5.get('N-1') or {}).get('_person') or []
+rec('assist_name caches a Person-layer record the bake grades wp', n_ok == 1 and len(pr) == 1
+    and C.grade_person_record('ROMERO, MARISOL', ADDR, pr[0]['response'][0]) == 'wp', c5.get('N-1'))
+rec('the copied person page is kept outside the repo, under name/',
+    os.path.exists(os.path.join(td, 'wpweb_pages', 'name', 'N-1.txt')))
+ms = W.name_structure(PERSON)
+rec('the masked layout carries no name, street, city or number',
+    not any(t in ms for t in ('Marisol', 'Romero', 'Canal', 'Coral', '954', 'mromero')), ms)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
