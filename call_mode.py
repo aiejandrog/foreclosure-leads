@@ -2281,6 +2281,19 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # _wp_phone_kinds). Absent when the lead has no Whitepages record, so the card can say
             # "not checked" instead of implying Whitepages looked and found nothing.
             'pw': ''.join(_pw[k] for k in order) if _wpk is not None else None,
+            # WHERE EACH NUMBER CAME FROM, same index as `p`, one character each (2026-10-22, Alejandro:
+            # "no source at all on the 10 numbers"): 't' skip trace (phsrc 'st', or untagged, which
+            # phone_src treats as the trace), 'w' Whitepages owner record, 'h' Whitepages household,
+            # 'n' Whitepages name-only match. Display only: `ps` above still drives the script.
+            'sx': ''.join({'wp': 'w', 'hh': 'h', 'nm': 'n'}.get(
+                phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 't') for k in order),
+            # TWILIO LINE CHECK per number, same index as `p`: 'a' active when last checked,
+            # 'u' unreachable when last checked (handset off; sorted last above), '-' never checked.
+            # Disconnected numbers never get here (dropped above). None when nothing on the lead
+            # was checked, so the card can say "line not checked" instead of a row of dashes.
+            'lv': (lambda s: s if s.strip('-') else None)(''.join(
+                ({'active': 'a', 'reachable': 'a', _PV.UNREACHABLE: 'u'}.get(_PV.line_status(keep[k], _lsv), '-')
+                 if _lsv else '-') for k in order)),
             # LINE TYPE per number, one character each: 'm' mobile, 'l' landline, '-' unknown.
             'pt': (lambda _t: (lambda s: s if s.strip('-') else None)(''.join(
                 ('m' if 'mob' in str(_t[keep_oi[k]] or '').lower() else
@@ -3935,6 +3948,30 @@ function _wpChip(r, k){
   if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
   return '<span class="chip" style="opacity:.7">not on Whitepages</span>';
 }
+/* WHERE THE NUMBER CAME FROM and WHETHER THE LINE WAS CHECKED (2026-10-22). r.sx / r.lv are built in
+   call_rows. Absent on a page baked before this shipped, so both chips render nothing there. */
+/* CLOSED IS NOT DEAD ON AN AUCTION LEAD (2026-10-22). Florida closes a foreclosure at FINAL
+   JUDGMENT and the sale comes after it, so most leads with a sale date read CLOSED at the clerk (180
+   of 220 when the board measured it). Only a lis pendens or a lead with no sale date can mean the
+   case actually ended. True only for a calendared, not-yet-passed sale. */
+function _closedWithSale(r, st){
+  return /closed/i.test(String(st||'')) && !r.lp && !r.xf && r.x && typeof r.d==='number' && r.d>=0 && r.d<9999;
+}
+function _srcChip(r, k){
+  var c = String(r.sx||'').charAt(k);
+  if(c==='t') return '<span class="chip">skip trace</span>';
+  if(c==='w') return '<span class="chip">from Whitepages</span>';
+  if(c==='h') return '<span class="chip">from Whitepages &middot; household</span>';
+  if(c==='n') return '<span class="chip">from Whitepages &middot; name match</span>';
+  return '';
+}
+function _lineChip(r, k){
+  if(r.lv == null) return r.sx ? '<span class="chip" style="opacity:.7">line not checked</span>' : '';
+  var c = String(r.lv).charAt(k);
+  if(c==='a') return '<span class="chip ok">line active (Twilio)</span>';
+  if(c==='u') return '<span class="chip">unreachable at last check</span>';
+  return '<span class="chip" style="opacity:.7">line not checked</span>';
+}
 function _dncRows(r){
   var h = '', dn = r.dn||[];
   for(var q=0;q<dn.length;q++){
@@ -3958,6 +3995,10 @@ function _numList(r){
     + ((r.dn||[]).length ? ' (' + (r.dn||[]).length + ' do-not-call)' : '')
     + (r.pw==null ? ' &middot; <span class="nc">Whitepages not checked for this lead</span>'
                   : ' &middot; ' + nwp + ' confirmed the owner’s by Whitepages') + '</div>';
+  var nst = String(r.sx||'').split('').filter(function(c){ return c==='t'; }).length;
+  var nla = String(r.lv||'').split('').filter(function(c){ return c==='a'; }).length;
+  if(r.sx) h += '<div class="nc" style="margin:0 0 4px;font-size:12px">' + nst + ' of ' + p.length + ' from the skip trace &middot; '
+    + (r.lv==null ? 'no line on this lead checked with Twilio yet' : nla + ' line-checked active by Twilio') + '</div>';
   for(var k=0;k<p.length;k++){
     var dg = String(p[k]).replace(/\D/g,''), isBad = !!bad[dg], on = (k===phIdx);
     var t = (r.pt||'').charAt(k), s = (r.ps||[])[k]||'', n = cnt[dg.slice(-4)]||0;
@@ -3966,7 +4007,9 @@ function _numList(r){
       + 'background:'+(on?'#1d3a2a':'transparent')+';border:1px solid '+(on?'#2e7d32':'#2a3f6b')+';color:inherit;font:inherit'+(isBad?';opacity:.5':'')+'">'
       + '<b style="'+(isBad?'text-decoration:line-through':'')+'">'+(k+1)+'. '+fmt(dg)+'</b>'
       + (on ? '<span class="chip hot">on the button</span>' : '')
+      + _srcChip(r, k)
       + _wpChip(r, k)
+      + _lineChip(r, k)
       + (s==='hh' && 'ow'.indexOf(String(r.pw||'').charAt(k)||'x')<0 ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
@@ -6845,7 +6888,7 @@ function screenLead(){
   if(r.sw==='owner') clock += '<span class="chip">owner fights</span>';
   if(r.bk)           clock += '<span class="chip bad">'+r.bk+' bankruptcy filing'+(r.bk>1?'s':'')+'</span>';
   if(r.sl)           clock += '<span class="chip hot">stay LIFTED '+esc(r.sl)+'</span>';
-  if(r.cs)           clock += '<span class="chip">case '+esc(r.cs)+'</span>';
+  if(r.cs)           clock += '<span class="chip">case '+esc(r.cs)+(_closedWithSale(r, r.cs) ? ' &middot; normal: judgment entered, sale still set' : '')+'</span>';
   if(r.sr){ var _sm=function(i){var m=String(i||'').match(/^\d{4}-(\d{2})-(\d{2})$/);return m?m[1]+'/'+m[2]:'';};
     var _sl={held:'SOLD '+_sm(r.sr.d), cancelled:'sale CANCELLED '+_sm(r.sr.d), reset:'sale MOVED to '+_sm(r.sr.nd)+(r.sr.was?' (was '+_sm(r.sr.was)+')':''),
              vacated:'sale SET ASIDE', redeemed:'REDEEMED after sale', at_risk:'sale AT RISK', unknown:'result not on docket yet', unread:'result UNREAD, sale passed'}[r.sr.st]||'';
@@ -6899,6 +6942,7 @@ function screenLead(){
     + kv('Plaintiff', r.pl ? esc(r.pl) : '<span class="nc">not resolved</span>', 1)
     + kv('Type', r.ft ? esc(r.ft) : '<span class="nc">unknown</span>', 1)
     + (r.dk ? kv('Court status', '<b>' + esc(r.dk.s || '?') + '</b>'
+        + (_closedWithSale(r, r.dk.s) ? ' <span class="nc">(normal before a sale: Florida closes the case at final judgment)</span>' : '')
         + (r.dk.t ? ' &middot; ' + esc(r.dk.t) : '')
         + (r.dk.f ? ' &middot; filed ' + esc(r.dk.f) : ''), 1) : '')
     /* Jesse's first question on a 3-day lead: does the owner have a lawyer? The docket parties say. */
