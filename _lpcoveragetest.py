@@ -342,6 +342,34 @@ class Report(unittest.TestCase):
         lines = CR.sweep_lines({'coverage': {'MIAMI-DADE': {'status': 'partial'}}}, now)
         self.assertTrue(any('NONE ON RECORD' in x for x in lines))
 
+    def test_audit_all_lp_counts_missing_by_kind_and_writes_nothing(self):
+        def rec(case, p1, p2='JANE DOE', typ='LIS PENDENS - LIS'):
+            return {'casE_NUM': case, 'firsT_PARTY': p1, 'seconD_PARTY': p2, 'doC_TYPE': typ,
+                    'reC_DATE': '10/1/2026 12:00:00 AM', 'reC_BOOKPAGE': 'B' + case}
+        day = [rec('2026-1', 'WELLS FARGO BANK NA'), rec('2026-1', 'WELLS FARGO BANK NA'),   # per-party dup
+               rec('2026-2', 'LAKEVIEW LOAN SERVICING'), rec('2026-3', 'SUNSET HOMEOWNERS ASSOCIATION'),
+               rec('2026-4', 'WELLS FARGO BANK NA', typ='CANCEL LIS PENDENS')]
+        calls = []
+        def fake(lo, hi):
+            calls.append((lo, hi))
+            return day if len(calls) == 1 else (None if len(calls) == 2 else [])
+        with mock.patch('builtins.print'):
+            out = LP.audit_all_lp(days=3, held_rows=[{'case': '2026-1'}], search_fn=fake)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(out['unique'], 3)
+        self.assertEqual(out['held'], 1)
+        self.assertEqual(out['missing'], 2)
+        self.assertEqual(out['missing_by_kind'], {'BANK-1st': 1, 'HOA/JUNIOR': 1})
+        self.assertEqual(len(out['failed']), 1)
+        self.assertEqual(out['capped'], [])
+
+    def test_audit_all_lp_flags_a_capped_day(self):
+        recs = [{'casE_NUM': '2026-%d' % i, 'firsT_PARTY': 'A BANK', 'seconD_PARTY': 'X', 'doC_TYPE': 'LIS PENDENS - LIS'}
+                for i in range(LP.OR_RESULT_CAP)]
+        with mock.patch('builtins.print'):
+            out = LP.audit_all_lp(days=1, held_rows=[], search_fn=lambda lo, hi: recs)
+        self.assertEqual(len(out['capped']), 1)
+
     def test_report_runs_read_only_on_this_checkout(self):
         with mock.patch('builtins.print'):
             self.assertEqual(CR.main([]), 0)

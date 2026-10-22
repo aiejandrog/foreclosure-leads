@@ -485,6 +485,88 @@ def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS'))
             return
 
 
+def audit_all_lp(days=14, window_days=1, held_rows=None, search_fn=None):
+    """Read-only: how much of Miami-Dade's lis pendens does the lender list miss? (2026-10-22)
+
+    One blank-name, document-typed search per window (a day by default), deduped by case number,
+    book/page, then compared with the cases already in lis_pendens.json. Prints and returns counts and
+    lender (business) names only, never an owner, an address or a record. Writes nothing. A window at
+    the 500-record cap is reported as capped: its count is a floor. One paid solve per window, under
+    the same paid_reads cap; a refused or failed window is listed, never counted as empty.
+    """
+    import collections
+    import urllib.parse
+    if search_fn is None:
+        from captcha_solver import solve_turnstile as _solve
+        import paid_reads
+        import records_liens as R
+        solve = paid_reads.guarded(_solve, 'lis_pendens')
+
+        def search_fn(lo, hi):
+            url = (R.OR_BASE + 'api/home/standardsearch?partyName=&dateRangeFrom=' + urllib.parse.quote(lo)
+                   + '&dateRangeTo=' + urllib.parse.quote(hi) + '&documentType=' + urllib.parse.quote(MD_LP_DOCTYPE)
+                   + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+            for _ in range(3):
+                recs, info = _or_attempt(R, solve, url)
+                if recs is not None:
+                    return recs
+                if info['valid'] is False and info['token'] and info['http'] == 200:
+                    return []
+            return None
+    if held_rows is None:
+        try:
+            held_rows = json.load(open(OUT, encoding='utf-8'))
+        except Exception:
+            held_rows = []
+    held = {str(r.get('case') or '').strip() for r in held_rows if isinstance(r, dict) and r.get('case')}
+    held_bp = {str(r.get('bookpage') or '').strip() for r in held_rows if isinstance(r, dict) and r.get('bookpage')}
+    today = datetime.date.today()
+    uniq, capped, failed, per_day = {}, [], [], {}
+    d = today - datetime.timedelta(days=days)
+    while d < today:
+        hi = min(d + datetime.timedelta(days=window_days - 1), today)
+        lo_s, hi_s = d.isoformat(), hi.isoformat()
+        d = hi + datetime.timedelta(days=1)
+        recs = search_fn(lo_s, hi_s)
+        if recs is None:
+            failed.append(lo_s)
+            print(f'  {lo_s}: not read (blocked or refused)')
+            continue
+        if len(recs) >= OR_RESULT_CAP:
+            capped.append(lo_s)
+        n_new = 0
+        for r in _lp_rows(recs):
+            n = normalize(r)
+            key = n['case'] or n['bookpage']
+            if not key or key in uniq:
+                continue
+            n['held'] = (n['case'] in held) or (n['bookpage'] in held_bp and bool(n['bookpage']))
+            n['day'] = lo_s
+            uniq[key] = n
+            n_new += 1
+        per_day[lo_s] = [len(recs), n_new, sum(1 for v in uniq.values() if v['day'] == lo_s and v['held'])]
+        print(f'  {lo_s}: {len(recs)} rows -> {n_new} filings, {per_day[lo_s][2]} already held'
+              + (' (CAPPED: floor)' if lo_s in capped else ''))
+    rows = list(uniq.values())
+    missing = [r for r in rows if not r['held']]
+    mk = collections.Counter(r['kind'] for r in missing)
+    tk = collections.Counter(r['kind'] for r in rows)
+    top = collections.Counter(r['plaintiff'] for r in missing if r['kind'] == 'BANK-1st')
+    print(f'\nAUDIT {days}d: {len(rows)} unique filings; {len(rows) - len(missing)} already held, '
+          f'{len(missing)} not held')
+    print(f'  all by kind: {dict(tk)}')
+    print(f'  NOT held by kind: {dict(mk)}')
+    if top:
+        print('  top bank-first plaintiffs not held (business names): '
+              + '; '.join(f'{k} x{v}' for k, v in top.most_common(12)))
+    if capped:
+        print(f'  capped days (counts are a floor): {len(capped)}')
+    if failed:
+        print(f'  days not read: {failed}')
+    return {'unique': len(rows), 'held': len(rows) - len(missing), 'missing': len(missing),
+            'missing_by_kind': dict(mk), 'by_kind': dict(tk), 'capped': capped, 'failed': failed}
+
+
 # A PARTIAL sweep is not a failure of the run, but it is not a success either: some counties
 # produced and some did not. lp_refresh treats 4 as benign-and-continue (its `ok` tuple) so the
 # board still rebuilds, while run_report and the status file can say which lane is missing.
@@ -654,6 +736,9 @@ def main():
     ap.add_argument('--probe-doctype', metavar='NAME',
                     help='one paid name search with documentType=LIS PENDENS; prints counts only; '
                          'NAME "*" leaves the party name blank')
+    ap.add_argument('--audit-all-lp', action='store_true',
+                    help='read-only: one blank-name Miami LP search per day over --days, compared with '
+                         'lis_pendens.json; counts only, writes nothing, ~1 paid solve per day')
     ap.add_argument('--days', type=int, default=30)
     ap.add_argument('--county', default='all',
                     choices=['miami-dade', 'broward', 'palm-beach', 'all'],
@@ -663,6 +748,8 @@ def main():
     a = ap.parse_args()
     if a.probe:
         probe(); return
+    if a.audit_all_lp:
+        audit_all_lp(a.days); return
     if a.probe_doctype:
         if a.probe_types is not None:
             probe_doctype(a.probe_doctype, a.days, tuple(t.strip() for t in a.probe_types.split(',')))
