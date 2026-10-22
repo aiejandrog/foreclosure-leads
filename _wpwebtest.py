@@ -475,6 +475,22 @@ r11, _ = W.parse_person_page("Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal
                               'ROMERO, MARISOL', '1723 CANAL DR')
 rec('any later name line ends her block', r11 and [p['number'] for p in r11['phones']] == ['9545550101'], r11)
 rec('the stored address is the page\'s own line', r11 and r11['current_addresses'][0]['full_address'] == '1723 Canal Dr', r11)
+HEAD_ = "Marisol Romero, Age 54\n(954) 555-0101\n1723 Canal Dr\n"
+for label, tail in (('"Jane Smith, 52" row', "Jane Smith, 52\n(305) 555-0002\n"),
+                    ('"JANE DOE 52" row', "JANE DOE 52\n(305) 555-0002\n"),
+                    ('"Relationships" heading', "Relationships\nJane Doe (Spouse)\n(305) 555-0002\n"),
+                    ('a bare first name', "Jane\n(305) 555-0002\n"),
+                    ('a number labelled with another name', "(305) 555-0002 - Mobile - Jane Doe\n")):
+    rr, _ = W.parse_person_page(HEAD_ + tail, 'ROMERO, MARISOL', '1723 CANAL DR')
+    rec('a relative after %s is not hers' % label, rr and [p['number'] for p in rr['phones']] == ['9545550101'], rr)
+rr, why_ = W.parse_person_page("Marisol Romero\nCoral Springs, FL\nAge 54\n1723 Canal Dr\n(954) 555-0101\n"
+                               "Marisol Romero\nHialeah, FL\nAge 30\n(954) 555-0110\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('two namesakes with the age two lines down is refused', rr is None, rr)
+rr, _ = W.parse_person_page("Marisol Romero in Coral Springs\nPeter Jones and Marisol Romero are listed\n"
+                            "1723 Canal Dr\n(954) 555-0111\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a block that turns into another person\'s text is not hers', rr is None, rr)
+rr, _ = W.parse_person_page(HEAD_ + "(954) 555-0103 - Wireless - T-Mobile USA\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('a number with only a type and carrier is still hers', rr and len(rr['phones']) == 2 and rr['phones'][1]['type'] == 'mobile', rr)
 rec('--by-name refuses the automated run', W.main(['--by-name', '3']) == 2 and W.main(['--by-name', '0']) == 2)
 WL.CACHE = os.path.join(td, 'wp_name.json')
 W.CACHE = WL.CACHE

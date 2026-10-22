@@ -673,13 +673,17 @@ def assist(todo, refresh=False, wait_s=None):
 # cannot reach the site): run 3 first and paste the counts plus `--structure` of one before a batch.
 
 _NAME_TOLL_FREE = {'800', '833', '844', '855', '866', '877', '888'}
-_PERSON_STOP_RE = re.compile(r'^(possible\s+|known\s+|other\s+)?(relatives?|associates?|neighbou?rs?|related people|'
+_PERSON_STOP_RE = re.compile(r'^(possible\s+|known\s+|other\s+)?(relat\w*|associat\w*|neighbou?rs?|'
                              r'people (also|you may)|household( members?)?|other people|similar people|family|'
                              r'spouse|parents?|children|siblings?|roommates?|co-?residents?)\b', re.I)
 _PAST_RE = re.compile(r'^(past|previous|prior|former|old)\s+(addresses|address|locations?)|^address history', re.I)
 _AGE_RE = re.compile(r'(^|,)\s*age\s*:?\s*\d{1,3}\b|\b\d{1,3}\s+years? old\b', re.I)
 _LIST_RE = re.compile(r'\b[\d,]+\s+(results|people|matches|records)\s+(found|for|named)\b|'
                       r'people search results|results for\s+["“]?[A-Za-z]', re.I)
+_PHONE_WORDS = {'mobile', 'cell', 'cellular', 'wireless', 'landline', 'voip', 'phone', 'primary', 'current',
+                'home', 'work', 'line', 'type', 't', 'verizon', 'at', 'att', 'sprint', 'metro', 'pcs', 'metropcs',
+                'cricket', 'boost', 'tracfone', 'us', 'usa', 'comcast', 'bandwidth', 'spectrum', 'charter', 'llc',
+                'inc', 'by', 'carrier', 'valid', 'connected'}
 _NAME_MISS = 'n:'          # name-search misses share _attempts.json, under their own key
 
 
@@ -742,11 +746,25 @@ def parse_person_page(text, lead_owners, street):
     lines = [l for l in lines if l]
     def name_of(l):
         return re.split(r',\s*age\b|\s+age\s*:?\s*\d|\s+in\s+[A-Z][a-z]+', l, flags=re.I)[0].strip()
-    def aged(k):
-        return bool(_AGE_RE.search(lines[k]) or (k + 1 < len(lines) and _AGE_RE.search(lines[k + 1])))
+    def aged(k):                        # an age on the name line or either of the next two
+        return any(_AGE_RE.search(lines[x]) for x in range(k, min(k + 3, len(lines))))
     def is_person(l):
         nm = name_of(l)
-        return _is_name(nm) and not all(w.lower() in _LAYOUT_WORDS for w in re.findall(r'[A-Za-z]+', nm))
+        return _is_name(nm) and len(nm.split()) <= 5 and not all(w.lower() in _LAYOUT_WORDS for w in re.findall(r'[A-Za-z]+', nm))
+    def ends_block(l):
+        """Any line that starts with someone's name (a bare first name, "Jane Smith, 52", "JANE DOE 52",
+        "Jane Doe (Spouse)"), other than a layout heading or a "City, ST" line."""
+        if _PERSON_STOP_RE.match(l) or is_person(l):
+            return True
+        if re.match(r"^[A-Za-z][A-Za-z .'\-]*,?\s+[A-Z]{2}(\s+\d{5}(-\d{4})?)?$", l):
+            return False                # Miami, FL 33101
+        lead = re.match(r"^([^\W\d_][^\d,(\u2022\u00b7|:]*)", l)
+        words = re.findall(r'[A-Za-z]+', lead.group(1)) if lead else []
+        # Capitalised like a name ("Jane", "JANE DOE"); "Customer support ..." is page text, not a person
+        # (the first two words decide: "Peter Jones and John Smith are listed" starts with a person)
+        head = words[:2]
+        return (bool(head) and (len(words) <= 4 or len(head) == 2) and all(w[0].isupper() for w in head)
+                and not all(w.lower() in _LAYOUT_WORDS for w in head))
     if _LIST_RE.search(raw) or sum(1 for k, l in enumerate(lines) if is_person(l) and aged(k)) > 6:
         return None, 'that is the results list: open the person who lives at the house, then copy'
     owners = [k for k, l in enumerate(lines) if is_person(l) and C.name_grade(lead_owners, name_of(l)) == 'owner']
@@ -757,7 +775,8 @@ def parse_person_page(text, lead_owners, street):
     owner_i = owners[0]
     end = len(lines)
     for k in range(owner_i + 1, len(lines)):
-        if _PERSON_STOP_RE.match(lines[k]) or is_person(lines[k]):
+        l = lines[k]
+        if ends_block(l):               # a second owner-name line too: a namesake or an alias, not read
             end = k
             break
     phones, emails, seen, addr, past = [], [], set(), '', False
@@ -776,7 +795,9 @@ def parse_person_page(text, lead_owners, street):
             if len(d) != 10 or d in seen or d[:3] in _NAME_TOLL_FREE:
                 continue
             # only a line that is the number, maybe with a type or carrier: not a sentence
-            if len(re.findall(r'[A-Za-z]{2,}', _PHONE_RE.sub(' ', l))) > 4:
+            # only a line that is the number plus at most a type / carrier word: never a line that
+            # also carries a name ("(305) 555-0007 - Mobile - Jane Doe")
+            if any(w.lower() not in _PHONE_WORDS for w in re.findall(r'[A-Za-z]+', _PHONE_RE.sub(' ', l))):
                 continue
             seen.add(d)
             nxt = lines[k + 1] if k + 1 < len(lines) and not _PHONE_RE.search(lines[k + 1]) else ''
@@ -923,9 +944,9 @@ _LAYOUT_WORDS = _KEEP_WORDS | {
     'phone', 'phones', 'number', 'numbers', 'mobile', 'cell', 'wireless', 'landline', 'voip', 'email',
     'emails', 'address', 'addresses', 'current', 'past', 'previous', 'relatives', 'relative',
     'associates', 'associate', 'age', 'lives', 'lived', 'in', 'at', 'also', 'known', 'as', 'aka',
-    'owner', 'resident', 'view', 'details', 'more', 'see', 'all', 'report', 'background', 'people',
-    'person', 'results', 'result', 'born', 'years', 'old', 'possible', 'family', 'members', 'member',
-    'neighbors', 'household', 'primary', 'home', 'work', 'fl', 'show', 'free', 'premium', 'full'}
+    'owner', 'resident', 'details', 'report', 'background', 'people',
+    'person', 'results', 'result', 'born', 'years', 'possible', 'family', 'members', 'member',
+    'neighbors', 'household', 'primary', 'fl'}
 
 
 def name_structure(text, max_lines=150):
