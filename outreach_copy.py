@@ -97,8 +97,10 @@ OPTOUT_LINE_ES = 'Si ahora no es buen momento, solo dígamelo y no lo vuelvo a c
 # it is not a good time, which is_stop_text() already treats as a permanent opt-out, and the
 # detector strips THESE sentences before matching so quoting them back is not itself a stop.
 # Same words as call_mode.TEXT_OPTOUT and the board's stopEN/stopES. Inbound STOP keywords stay.
-SMS_OPTOUT_EN = " If now's not a good time, just let me know and I won't text you again."
-SMS_OPTOUT_ES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.'
+# 2026-10-22 (Alejandro: texts "lowercaps unbothered", Spanish without the accents): lower case,
+# "digamelo" without its accent. Same words; replies._OUR_OPTOUT_LINE matches either form.
+SMS_OPTOUT_EN = " if now's not a good time, just let me know and i won't text you again."
+SMS_OPTOUT_ES = ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
 
 
 def _unsub(url=None, lang='en'):
@@ -391,13 +393,15 @@ def outreach_subject(street, sale_date='', td=False, lang='en', style='measured'
 # SMS — same offer, compressed. The opt-out sentences are the attorney lines, both languages.
 # ---------------------------------------------------------------------------------------------
 def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
+    # 2026-10-22: lower case and unbothered, like every other text ("lowercaps unbothered").
     ds = _short_date(sale_date)
-    who = ('%s, ' % first) if first else ''
-    when = ('Your home is scheduled for foreclosure auction %s' % ds if ds
-            else 'Your home is scheduled for foreclosure auction')
-    return ("%sI'm %s with %s. %s. Free %s-minute call, no obligation - I'll lay out every option you "
-            "have. Call/text %s.%s"
-            % (who, signer, company, when, CALL_MINUTES_N, phone, SMS_OPTOUT_EN + SMS_OPTOUT_ES))
+    who = ('hi %s, ' % first.lower()) if first else 'hi, '
+    when = ('saw your home is set for a court sale on %s' % ds.lower() if ds
+            else 'saw your home is set for a court sale')
+    return ("%sit's %s with %s. %s. you still have options, and a free %s-minute call with our "
+            "senior advisor lays them all out. call or text me at %s.%s"
+            % (who, signer.lower(), company.lower(), when, CALL_MINUTES_N, phone,
+               SMS_OPTOUT_EN + SMS_OPTOUT_ES))
 
 
 # ---------------------------------------------------------------------------------------------

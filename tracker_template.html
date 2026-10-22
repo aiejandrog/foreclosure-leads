@@ -6433,21 +6433,31 @@ function _textBodies(o){
       return t.toLowerCase().replace(/(^|['\-])([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
     }).join(' ');
   };
-  const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
+  /* 2026-10-22 (Alejandro: "lower caps non bothered is how i want our texts to be scripted and sent
+     out and templated", then "leave all of these ¿ and the weird shit in spanish make it like how i
+     text", "or english", "lowercaps unbothered", "human asf"). Every text is written the way a person
+     types on a phone: all lower case, no ¿ or ¡, no accent marks in the Spanish (ñ stays, "años"
+     without it is a different word). The owner's first name and the sender's name are lower-cased
+     here too, so a capitals record ("HILL") cannot shout in the middle of a casual text. The street
+     keeps _streetCase's casing so the address still reads as an address. */
+  const sN = String(o.sender || '').toLowerCase(), first = String(o.first || '').toLowerCase(), tone = o.tone || 'cold';
   const stEN = _streetCase(o.stEN) || 'your property', stES = _streetCase(o.stES) || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
   /* Opt-out on every batch text (2026-09-26, attorney: not the carrier-keyword instruction). The owner is
      told to say it is not a good time; inbound STOP / PARE / "not a good time" still opt out.
-     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
-  const stopEN = " If now's not a good time, just let me know and I won't text you again.";
-  const stopES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.';
-  const hi = 'Hi'+(first?' '+first:''), hola = 'Hola'+(first?' '+first:'');
+     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN, lower-cased on 2026-10-22
+     (and "dígamelo" without its accent): the attorney's words are unchanged, and
+     replies._OUR_OPTOUT_LINE matches either casing and either spelling, so an owner quoting it back
+     is still not a stop. */
+  const stopEN = " if now's not a good time, just let me know and i won't text you again.";
+  const stopES = ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.';
+  const hi = 'hi'+(first?' '+first:''), hola = 'hola'+(first?' '+first:'');
   /* The real days to the sale, when the caller knows them and it is a sale (never a just-filed case).
      "about" because a sale can be reset after the nightly read. Empty when unknown: the body then
      says the date is set without counting. */
   const d = (!lp && typeof o.days === 'number' && o.days >= 0 && o.days <= 365) ? Math.floor(o.days) : -1;
   const inEN = d === 0 ? 'today' : d === 1 ? 'tomorrow' : d > 1 ? 'in about '+d+' days' : '';
-  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' días' : '';
+  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' dias' : '';
   let en, es;
   /* 2026-10-13 rewrite (Alejandro: the old bodies read "robotic, super scripted", then "i dont like
      ... if you have a plan keep it, just get to the point like be urgent"). Written the way a person
@@ -6458,64 +6468,65 @@ function _textBodies(o){
      deceptive to a homeowner in distress. Unchanged rules: sender and company first, the attorney's
      let-me-know line last, the first question is keep or sell (#57), no sale number, no fee claim
      beyond "free" on the advisor call, no em dashes, and the word "foreclosure" stays out (a text
-     can be read by someone not on title). */
+     can be read by someone not on title). 2026-10-22: same facts, lower case, shorter, and the
+     just-filed body is his own sample, word for word. */
   if(tone==='urgent'){
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. The court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
-       + " After the sale, most options are gone. Our senior advisor can go over what's still possible"
-       + ' with you for free, today if you want. Are you hoping to keep the house, or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. La subasta de '+stES+' es '+(inES||'muy pronto')+'.'
-       + ' Después de la subasta, casi todas las opciones se acaban. Nuestro asesor principal le explica'
-       + ' gratis lo que todavía se puede hacer, hoy mismo si quiere. ¿Quiere quedarse con la casa o está'
+    en = hi+", it's "+sN+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
+       + " after the sale most options are gone. our senior advisor can go over what's still possible"
+       + ' with you for free, today if you want. are you hoping to keep the house, or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+'.'
+       + ' despues de la subasta casi todas las opciones se acaban. nuestro asesor principal le explica'
+       + ' gratis lo que todavia se puede hacer, hoy mismo si quiere. quiere quedarse con la casa o esta'
        + ' pensando en venderla?'+stopES;
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
        ever weakened, delete this body in the same commit. */
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. This is my last text about '+stEN+'.'
-       + (inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
-               : ' Every week that passes, fewer options are left.')
-       + ' If you want to talk, save my number. The call with our senior advisor is free.'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Este es mi último mensaje sobre '+stES+'.'
-       + (inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
-               : ' Cada semana que pasa quedan menos opciones.')
-       + ' Si quiere hablar, guarde mi número. La llamada con nuestro asesor principal es gratis.'+stopES;
+    en = hi+", it's "+sN+' with biscayne solutions group. this is my last text about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+', and once it happens most options are gone.'
+               : ' every week that goes by, fewer options are left.')
+       + ' if you ever want to talk, save my number. the call with our senior advisor is free.'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. este es mi ultimo mensaje sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+', y despues casi todas las opciones se acaban.'
+               : ' cada semana que pasa quedan menos opciones.')
+       + ' si algun dia quiere hablar, guarde mi numero. la llamada con nuestro asesor principal es gratis.'+stopES;
   } else if(tone==='followup'){
-    en = hi+', '+sN+' again from Biscayne Solutions Group about '+stEN+'.'
-       + (inEN ? ' The sale is '+inEN+', and every week takes options off the table.'
-               : ' Every week this goes on takes options off the table.')
-       + ' A call with our senior advisor is free and takes 5 minutes. Want me to set it up today?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Le escribo otra vez sobre '+stES+'.'
-       + (inES ? ' La subasta es '+inES+', y cada semana quedan menos opciones.'
-               : ' Cada semana que pasa quedan menos opciones.')
-       + ' Hablar con nuestro asesor principal es gratis y toma 5 minutos. ¿Se lo coordino hoy?'+stopES;
+    en = hi+', '+sN+' again from biscayne solutions group about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+', and the options shrink every week.'
+               : ' the options shrink every week this goes on.')
+       + ' a call with our senior advisor is free and takes 5 minutes. want me to set it up today?'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group, le escribo otra vez sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+', y cada semana quedan menos opciones.'
+               : ' cada semana que pasa quedan menos opciones.')
+       + ' hablar con nuestro asesor principal es gratis y toma 5 minutos. se lo coordino hoy?'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
-    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " Two things many owners don't hear: paying the back taxes stops it, and if it sells for"
-       + " more than what's owed, the extra money is yours. Want me to walk you through it?"+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
-       + ' Dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por más de lo que'
-       + ' se debe, lo extra es suyo. ¿Quiere que se lo explique?'+stopES;
+    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " two things most owners don't hear: paying the back taxes stops it, and if it sells for"
+       + " more than what's owed, the extra money is yours. want me to walk you through it?"+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
+       + ' dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por mas de lo que'
+       + ' se debe, lo extra es suyo. quiere que se lo explique?'+stopES;
   } else if(lp){
     // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. I saw a case was just filed at the courthouse'
-       + ' on '+stEN+'. Right now you have the most options, and they shrink every week the case moves.'
-       + ' Our senior advisor can walk you through them for free. Are you hoping to keep the house, or'
+    en = hi+", it's "+sN+' with biscayne solutions group. i saw a case was just filed at the courthouse'
+       + ' on '+stEN+'. right now you have the most options, and they shrink every week the case moves.'
+       + ' our senior advisor can walk you through them for free. are you hoping to keep the house, or'
        + ' open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Vi que acaban de abrir un caso en la corte'
-       + ' sobre '+stES+'. Ahora es cuando más opciones tiene, y cada semana que avanza el caso quedan'
-       + ' menos. Nuestro asesor principal se las explica gratis. ¿Quiere quedarse con la casa o está'
+    es = hola+', soy '+sN+' de biscayne solutions group. vi que acaban de abrir un caso en la corte'
+       + ' sobre '+stES+'. ahora es cuando mas opciones tiene, y cada semana que avanza el caso quedan'
+       + ' menos. nuestro asesor principal se las explica gratis. quiere quedarse con la casa o esta'
        + ' pensando en venderla?'+stopES;
   } else {
-    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " We're not a lender. Every week that passes takes options off the table. Our senior advisor"
-       + " (30+ years) can go over what's still open with you for free. Are you hoping to keep the house,"
-       + ' or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
-       + ' No somos prestamistas. Cada semana que pasa quedan menos opciones. Nuestro asesor principal'
-       + ' (más de 30 años) le explica gratis las opciones que todavía tiene. ¿Quiere quedarse con la'
-       + ' casa o está pensando en venderla?'+stopES;
+    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " we're not a lender. you still have options, but they shrink every week. our senior advisor"
+       + " has 30+ years doing this and can go over them with you for free. are you hoping to keep the"
+       + ' house, or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
+       + ' no somos prestamistas. todavia tiene opciones, pero cada semana quedan menos. nuestro asesor'
+       + ' principal tiene mas de 30 años en esto y se las explica gratis. quiere quedarse con la casa'
+       + ' o esta pensando en venderla?'+stopES;
   }
   return {en: en, es: es};
 }
@@ -16436,8 +16447,12 @@ function genEmail(r, quiet){
   const introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. __IDENT_ES__`;
   // Draft bilingual proposal: same facts, uncertainty and callback ask in both languages.
   // Keep the language-specific signature as the final content of every variant.
-  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record does not list an auction date, and it may be out of date.\n\nIf you would like to discuss the property with our senior advisor, let me know. If the matter is already handled, there is no need to reply.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
-  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro no indica una fecha de subasta y puede estar desactualizado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo. Si el asunto ya está resuelto, no necesita responder.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
+  /* 2026-10-22 (Alejandro, on the old body: "where the fuck is the urgency here ... i sense no call
+     to action"). Same facts, now said plainly: a case is filed, no sale date shows yet, and the
+     options shrink every week the case moves. That is the only pressure, and it is true; there is
+     no deadline here to invent. One ask: keep or sell, then call, text or reply with a time. */
+  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI saw there's a case filed at the courthouse on ${street}${caseTagEN}. Our record doesn't show a sale date yet (it may be out of date). That means you still have time to choose, but the options shrink every week the case moves.\n\nOn a short free call with our senior advisor, over 30 years in mortgages and foreclosure workouts, you'll find out exactly which ones are still open to you. Are you hoping to keep the house, or open to selling?\n\nCall or text me at ${sP}, or reply with a time that works for you today or tomorrow.\n\n${sigEN}\n\n`;
+  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nVi que hay un caso abierto en la corte sobre ${street}${caseTagES}. Nuestro registro todavía no muestra fecha de subasta (puede estar desactualizado). Eso quiere decir que todavía tiene tiempo para decidir, pero cada semana que avanza el caso quedan menos opciones.\n\nEn una llamada corta y gratis con nuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución hipotecaria, sabrá exactamente cuáles opciones todavía tiene. ¿Quiere quedarse con la casa o está pensando en venderla?\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga hoy o mañana.\n\n${sigES}\n\n`;
   const bodyEN = td
     ? `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record lists a tax-deed sale date of ${dt} and may be out of date; please check the current status with the county.\n\nIf you would like to discuss the property with our senior advisor, let me know.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`
     : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
