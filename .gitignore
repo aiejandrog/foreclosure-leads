@@ -792,3 +792,5 @@ rf_status.json.tmp
 !_phonevalidatetest.py
 # _ledgergatetest: the send ledger records WHICH evidence admitted each send (gate code). Static + pure checks, no server, no SMTP.
 !_ledgergatetest.py
+# _assertedquotatest: a first touch on a paid ZeroBounce valid is paced at PROBE_DAILY_CAP whatever the breaker says. AST + pure checks, no server, no SMTP.
+!_assertedquotatest.py
