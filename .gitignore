@@ -395,6 +395,9 @@ badnum_quarantine.json
 # officers with home/agent addresses. See v13->v14 note in refresh.yml.
 hardmoney_enriched.json
 llc_officers.json
+# balloon_contacts.py: officer names + skiptraced phones for the balloon lane.
+balloon_contacts.json
+balloon_contacts.json.tmp
 llc_officers_status.json
 judgment_dates_misses.json
 # pb_judgment_import.py writes this next to a hand-saved PDF. It carries the case id from that file.

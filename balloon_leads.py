@@ -16,8 +16,8 @@ an ADDRESS (Sunbiz officer, BCPA site). A phone or an email comes from exactly o
                               "dnc":false,"type":"Mobile"}], "emails":["j@firm.com"],
                               "name":"First Last", "title":"Manager", "src":"getleads|tracerfy"} }
 
-That file is written by the enrichment run (GetLeads decision-maker lookup on the LLC name, or a
-Tracerfy skiptrace on the officer) — a PAID step that is the operator's call, never automatic here.
+That file is written by balloon_contacts.py (2026-10-22: a skiptrace of the Sunbiz officer at the
+officer's address, countywide rows only; GetLeads on the LLC name was never built) — a PAID step that is the operator's call, never automatic here.
 Rows without a phone still ship to the board (the address and the human are useful) but Call Mode
 drops them (no number to dial) and the worker skips them (no mailbox). So the lane's size on the
 phone is EXACTLY the size of balloon_contacts.json. The build log says so out loud.
@@ -85,6 +85,11 @@ def _maturity(origin_iso):
 
 
 def _contacts_for(h, case, contacts):
+    # A hit tied to a foreclosure case gets no looked-up contact. Its stay, opt-out and
+    # never-contact gates key on that case, and the BAL id hashes owner/lender/origin/amount
+    # only, so the same mortgage seen in the countywide sweep shares this id.
+    if str(h.get('case') or '').strip():
+        return {}
     return contacts.get(case) or contacts.get(h.get('owner') or '') or {}
 
 
