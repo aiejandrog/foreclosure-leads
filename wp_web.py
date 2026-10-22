@@ -684,6 +684,8 @@ _PHONE_WORDS = {'mobile', 'cell', 'cellular', 'wireless', 'landline', 'voip', 'p
                 'home', 'work', 'line', 'type', 't', 'verizon', 'at', 'att', 'sprint', 'metro', 'pcs', 'metropcs',
                 'cricket', 'boost', 'tracfone', 'us', 'usa', 'comcast', 'bandwidth', 'spectrum', 'charter', 'llc',
                 'inc', 'by', 'carrier', 'valid', 'connected'}
+_US_STATES = ('AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|'
+              'NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY')
 _NAME_MISS = 'n:'          # name-search misses share _attempts.json, under their own key
 
 
@@ -751,26 +753,42 @@ def parse_person_page(text, lead_owners, street):
     def is_person(l):
         nm = name_of(l)
         return _is_name(nm) and len(nm.split()) <= 5 and not all(w.lower() in _LAYOUT_WORDS for w in re.findall(r'[A-Za-z]+', nm))
+    def city_line(t):                   # "Miami, FL" / "Coral Springs, FL 33071": a real state, after a comma
+        return bool(re.match(r"^[^\W\d_][^\W\d_ .'\-]*(?:[ .'\-]+[^\W\d_]+)*,\s*(%s)(\s+\d{5}(-\d{4})?)?$"
+                             % _US_STATES, t.strip()))
+    def addr_line(t):                   # "1723 Canal Dr[, City, ST ZIP]" and nothing else
+        parts = [x.strip() for x in t.split(',')]
+        if not re.match(r'^\d{1,6}\s+\S', parts[0]):
+            return False
+        key = C._street_key(parts[0])
+        if not (key and (key[3] or re.search(r'\d', key[2]))):
+            return False                # "1 Jane Doe" is a numbered list row, not a house
+        # nothing after the street but a post-directional or a unit ("... Ave · Related to Jane Doe")
+        tail = re.split(r'\b(?:%s)\b' % '|'.join(sorted(C._SUFFIX, key=len, reverse=True)),
+                        parts[0].upper(), maxsplit=1)
+        if len(tail) == 2 and not re.match(r'^\s*((N|S|E|W|NE|NW|SE|SW)\b\s*)?((APT|UNIT|STE|SUITE|#)\s*#?\s*[A-Z0-9\-]+)?\s*$',
+                                            tail[1]):
+            return False
+        return len(parts) == 1 or city_line(', '.join(parts[1:])) or (
+            len(parts) == 2 and re.match(r'^[^\W\d_][^\W\d_ .\'-]*$', parts[1]))
     def stays(l):
         """The owner's block runs only over lines that cannot be another person: layout words, a
-        phone line, an email, a house-number address, "City, ST ZIP", an age, "Lives in ...".
+        phone line, an email, an address, "City, ST ZIP", an age, "Lives in <city or address>".
         Anything else (a name, bulleted, numbered, accented, with or without an age) ends it."""
         if _PERSON_STOP_RE.match(l):
             return False
-        if re.match(r"^[^\W\d_][^\W\d_ .'\-]*(?:[ .'\-]+[^\W\d_]+)*,?\s+[A-Z]{2}(\s+\d{5}(-\d{4})?)?$", l):
-            return True                 # Miami, FL 33101
-        if re.match(r'^(lives|lived|living)\s+(in|at)\b', l, re.I):
+        if city_line(l) or addr_line(l):
             return True
-        if re.match(r'^\d{1,6}\s+\S', l):
-            # an address only when it reads as one (a street suffix, or a numbered street):
-            # "1 Jane Doe" is a numbered list row, not a house
-            key = C._street_key(l.split(',')[0])
-            return bool(key and (key[3] or re.search(r'\d', key[2])))
+        m = re.match(r'^(lives|lived|living)\s+(in|at)\s+(.+)$', l, re.I)
+        if m:
+            return city_line(m.group(3)) or addr_line(m.group(3))
         if re.match(r'^(age\s*:?\s*\d{1,3}|\d{1,3}\s+years?\s+old)$', l, re.I):
             return True
         rest = _EMAIL_RE.sub(' ', _PHONE_RE.sub(' ', l))
         words = re.findall(r'[^\W\d_]+', rest)
-        return all(w.lower() in _LAYOUT_WORDS or w.lower() in _PHONE_WORDS for w in words)
+        phone = bool(_PHONE_RE.search(l))       # type / carrier words only next to a number
+        return all((w.lower() in _LAYOUT_WORDS and w.lower() not in _KEEP_WORDS)
+                   or (phone and w.lower() in _PHONE_WORDS) for w in words)
     if _LIST_RE.search(raw) or sum(1 for k, l in enumerate(lines) if is_person(l) and aged(k)) > 6:
         return None, 'that is the results list: open the person who lives at the house, then copy'
     owners = [k for k, l in enumerate(lines) if is_person(l) and C.name_grade(lead_owners, name_of(l)) == 'owner']

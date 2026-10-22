@@ -496,6 +496,11 @@ for label, page in (('as someone else\'s relative', "Jane Doe, Age 52\nLives in 
     rr, _ = W.parse_person_page(page, 'ROMERO, MARISOL', '1723 CANAL DR')
     rec('the owner listed %s is refused' % label, rr is None, rr)
 for label, tail in (('a bulleted name', "\u2022 Jane Doe\n(305) 555-0023\n"), ('a numbered name', "1. Jane Doe\n(305) 555-0024\n"), ('a numbered name, no dot', "1 Jane Doe\n(305) 555-0026\n"),
+                    ('"Robert Doe II"', "Robert Doe II\n(305) 555-0002\n"), ('"JANE DOE JR"', "JANE DOE JR\n(305) 555-0004\n"),
+                    ('"TONY NG"', "TONY NG\n(305) 555-0005\n"),
+                    ('"Lives in ... with" a stranger', "Lives in Miami, FL with Jane Doe, 52\n(305) 555-0006\n"),
+                    ('"Lived at ... Related to"', "Lived at 9 NW 1 Ave \u00b7 Related to Jane Doe\n(305) 555-0007\n"),
+                    ('a name made of label words', "Home Carrier\n(305) 555-0008\n"),
                     ('an accented name with a bare age', "\u00cd\u00f1igo N\u00fa\u00f1ez, 40\n(305) 555-0025\n")):
     rr, _ = W.parse_person_page(HEAD_ + tail, 'ROMERO, MARISOL', '1723 CANAL DR')
     rec('a relative after %s is not hers' % label, rr and [p['number'] for p in rr['phones']] == ['9545550101'], rr)
