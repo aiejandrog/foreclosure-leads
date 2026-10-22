@@ -296,11 +296,23 @@ def wp_parcel_verdict(apn, folio):
                       scrape artifact) -> cannot tie the record to this lead by parcel. Only
                       parcel_owners()' owner-bar-plus-street rescue bakes from it.
     Either way the Person half of the record (searched by name, graded per record) still bakes.
+
+    Letters are part of the parcel (a condo unit can be the only difference between two parcels
+    in one building), so only separators are dropped and case is folded. A side with no digit at
+    all ('unknown', the 'Property Appraiser' artifact) is not a parcel number. When only ONE side
+    carries letters and the digits agree, that is 'unverified', not 'mismatch': Broward folios lose
+    their condo letters on our side when the appraiser lookup fails (county_leads, broward.py), and
+    a WP apn can carry a text prefix. Neither proves a different parcel, and a 'mismatch' there
+    would throw away the owner and pay for a Person search.
     """
-    a = re.sub(r'\D', '', str(apn or ''))
-    f = re.sub(r'\D', '', str(folio or ''))
+    a = re.sub(r'[^A-Z0-9]', '', str(apn or '').upper())
+    f = re.sub(r'[^A-Z0-9]', '', str(folio or '').upper())
     if not a:
         return 'ok'            # no parcel claim on the record (person-only) — nothing to contradict
-    if not f:
-        return 'unverified'    # record claims a parcel; lead has none to check it against
-    return 'ok' if a == f else 'mismatch'
+    if not re.search(r'\d', a) or not re.search(r'\d', f):
+        return 'unverified'    # a parcel claim we cannot read, or no folio to check it against
+    if a == f:
+        return 'ok'
+    if a.isdigit() != f.isdigit() and re.sub(r'\D', '', a) == re.sub(r'\D', '', f):
+        return 'unverified'    # letters on one side only, same digits: cannot tell
+    return 'mismatch'

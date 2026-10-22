@@ -3279,7 +3279,8 @@ def make_tracker(leads):
                     # WP faithfully returned a real record for the wrong property. Its owners/phones are
                     # strangers; baking them is wrong-party contact (TCPA/FTSA). So before trusting any
                     # owner/phone/email/deep-link from this record, the WP result.apn must equal the lead's
-                    # folio (digits only). A record we cannot tie to a parcel (lead folio missing/junk like
+                    # folio (wp_contacts.wp_parcel_verdict: separators dropped, condo letters kept).
+                    # A record we cannot tie to a parcel (lead folio missing/junk like
                     # the "Property Appraiser" scrape artifact) is NOT trusted for phones either — skiptrace
                     # already covers these leads by case, so suppressing an unverifiable WP record costs no
                     # coverage. One seam: fail here and nothing downstream bakes.
@@ -3291,7 +3292,7 @@ def make_tracker(leads):
                     # owner at OUR address), so it does not inherit the wrong parcel and still bakes.
                     _prop_ok = _pv == 'ok'
                     if not _prop_ok:
-                        _r['wpKey'] = _pv          # 'mismatch' = a different parcel; 'unverified' = no folio to check
+                        _r['wpKey'] = _pv          # 'mismatch' = a different parcel; 'unverified' = parcel cannot be checked
                         if _r.pop('wpPropId', None) is not None: _wid -= 1  # the deep-link id is the wrong property's too
                         _wpm += 1
                     _oi = (_res.get('ownership_info') or {})
