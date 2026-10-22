@@ -48,6 +48,8 @@ def build(directory):
     payload = F._encrypt_multi(json.dumps(calls), [('Synthetic', FIXTURE_CODE)])
     page = C.build_html(calls, len(calls), payload, dt.date.today().isoformat(),
                         'synthetic', 'synthetic',
-                        funnel_js=C.extract_funnel_js(tpl), text_js=C.extract_text_js(tpl))
+                        funnel_js=C.extract_funnel_js(tpl), text_js=C.extract_text_js(tpl),
+                        histcov=json.dumps({'ledgers_ok': True, 'why': '', 'capped': False,
+                                            'total': 5, 'shipped': 5}))
     (directory / 'call.html').write_text(page, encoding='utf-8')
     return directory / 'board.html', directory / 'call.html'

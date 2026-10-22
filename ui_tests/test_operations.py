@@ -106,6 +106,8 @@ class OperationsUI(unittest.TestCase):
         self.page.locator('#code').fill(FIXTURE_CODE)
         self.page.locator('#go').click()
         self.page.wait_for_function('ROWS && ROWS.length === 5')
+        self.page.locator('#dial').wait_for()
+        self.assertIn('3055550101', self.page.locator('#dial').get_attribute('href'))
         self.page.evaluate("""() => {
             const box = document.createElement('div'); box.className='oc';
             document.body.appendChild(box); window.__choice=[];
