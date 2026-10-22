@@ -443,6 +443,30 @@ WL.CACHE = os.path.join(td, 'wp10.json')
 W.CACHE = WL.CACHE
 leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
 rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == [ADDR])
+# a condo: the wrong-unit copy opens Whitepages' other unit spelling AND puts the address on the clipboard
+UADDR = '1723 CANAL DR #205C, CORAL SPRINGS, FL 33071'
+UPAGE = PAGE.replace('1723 Canal Dr\n', '1723 Canal Dr Apt 205C\n', 1)
+UOTHER = PAGE.replace('1723 Canal Dr\n', '1723 Canal Dr Apt 301A\n', 1)
+for tag, polls, want in (('right unit from the other spelling', [UOTHER, UADDR, UPAGE, UPAGE], 1),
+                         ('other spelling lands on the same wrong unit', [UOTHER, UADDR, UOTHER, UOTHER], 0),
+                         ('other spelling 404s, then nothing', [UOTHER, UADDR, 'Page not found', 'Page not found'], 0)):
+    W.time = _Clock()
+    put[:] = []
+    opened[:] = []
+    seq[:] = ['old'] + polls
+    WL.CACHE = os.path.join(td, 'wpu.json')
+    W.CACHE = WL.CACHE
+    if os.path.exists(WL.CACHE):
+        os.remove(WL.CACHE)
+    leads[:] = [{'case': 'U-0', 'owners': 'ROMERO, MARISOL', 'addr': UADDR, 'auction': '11/04/2026', 'days': 13}]
+    _att = W._note_attempt
+    noted = []
+    W._note_attempt = lambda c: noted.append(c)
+    got = W.assist(list(leads), wait_s=10)
+    W._note_attempt = _att
+    rec('condo: ' + tag, got == want and put == [UADDR] and len(opened) == 2
+        and opened[1].endswith('/1723-Canal-Dr-205th-C/CORAL-SPRINGS-FL')
+        and (want == 1 or noted == ['U-0']), (got, put, opened, noted))
 rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105') == '8600 NW 34th Pl Apt B105'
     and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
     == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))

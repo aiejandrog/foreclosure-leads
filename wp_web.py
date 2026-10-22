@@ -632,7 +632,7 @@ def assist(todo, refresh=False, wait_s=None):
             base = _clipboard_text()
             webbrowser.open(_addr_query(*parts))
             print('[%d/%d] ...%s: page opened, waiting for your copy...' % (n, len(todo), case[-4:]), flush=True)
-            text, t0, hinted, tried_bare = '', time.time(), False, False
+            text, t0, hinted = '', time.time(), False
             while time.time() - t0 < wait_s:
                 time.sleep(1.0)
                 cur = _clipboard_text()
@@ -644,25 +644,24 @@ def assist(todo, refresh=False, wait_s=None):
                 if hinted or not _PAGE_MARK.search(cur) or (
                         page_matches_address(cur, parts[0]) and not _CITY_LIST_RE.search(cur)):
                     break
-                if not tried_bare and _has_unit(parts[0]):
-                    # Condo links come in two spellings ("...-Apt-205C" and "...-205th-C"). Open the
-                    # other one before falling back to the search box. The wrong copy stays in `text`,
-                    # so a timeout here still records it as a wrong-house miss.
-                    tried_bare, base, t0 = True, cur, time.time()
-                    webbrowser.open(_addr_query(*parts, style='bare'))
-                    print('  ...%s: that page is not this unit. Opened Whitepages\' other unit '
-                          'spelling: Ctrl+A, Ctrl+C again.' % case[-4:], flush=True)
-                    continue
                 # Whitepages sent the address URL to some other property. Give one more try for this
                 # lead: put its address on the clipboard (never printed, the terminal gets pasted
-                # into chat) so it can be pasted into the site's own search box.
-                hinted = True
+                # into chat) so it can be pasted into the site's own search box. A condo also gets
+                # Whitepages' other unit spelling ("...-Apt-205C" vs "...-205th-C") opened in the
+                # same step, so either route lands on the unit; the wrong copy stays in `text` and a
+                # timeout still records it as a wrong-house miss.
+                hinted, unit = True, _has_unit(parts[0])
                 addr = _WL._lead_addr(lead)
                 if _set_clipboard(addr):
-                    base = addr
-                    print('  ...%s: that page is not this house. This lead\'s address is now on '
-                          'your clipboard: paste it into the Whitepages search box, open the property, '
-                          'then Ctrl+A, Ctrl+C.' % case[-4:], flush=True)
+                    base, t0 = addr, time.time()
+                    if unit:
+                        webbrowser.open(_addr_query(*parts, style='bare'))
+                    print('  ...%s: that page is not this %s.%s This lead\'s address is now on your '
+                          'clipboard: %spaste it into the Whitepages search box, open the property, '
+                          'then Ctrl+A, Ctrl+C.' % (case[-4:], 'unit' if unit else 'house',
+                          ' Opened Whitepages\' other unit spelling in a new tab.' if unit else '',
+                          'if that tab is this unit, Ctrl+A, Ctrl+C there; otherwise ' if unit else ''),
+                          flush=True)
                 else:
                     break
             if not text:
