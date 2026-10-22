@@ -34,6 +34,7 @@ that already carries a real lookup is skipped unless --refresh.
     python wp_web.py --pick-callable 15             # scrape up to 15 board leads, human-paced
     python wp_web.py --compare 25                    # leads that already have skip-trace numbers
     python wp_web.py --case CACE-25-019745          # one named lead
+    python wp_web.py --case C --from-file page.txt   # no browser: a page you copied by hand
     python wp_web.py --case C --save-text out.txt    # capture the visible text for calibration
     python wp_web.py --pick-callable 15 --refresh    # re-scrape even cached leads
 
@@ -58,6 +59,10 @@ PROFILE = os.path.join(HERE, os.environ.get('WP_WEB_PROFILE', 'browser-profile')
 BASE = os.environ.get('WP_WEB_BASE', 'https://www.whitepages.com').rstrip('/')
 MAX_LEADS = int(os.environ.get('WP_WEB_MAX_LEADS', '15'))
 THROTTLE_S = float(os.environ.get('WP_WEB_THROTTLE_S', '9.0'))
+# The browser the persistent profile runs in. 'chrome' = the real installed Google Chrome (what
+# Alejandro browses with); '' = Playwright's bundled Chromium. Same profile either way.
+CHANNEL = os.environ.get('WP_WEB_CHANNEL', 'chrome').strip() or None
+_BLOCK_RE = re.compile(r'temporarily restricted|access (is )?denied|unusual traffic|verify you are human|captcha', re.I)
 
 _LABELS = {'cell phone': 'mobile', 'mobile': 'mobile', 'landline': 'landline',
            'phone': '', 'email address': 'email', 'email': 'email'}
@@ -197,7 +202,7 @@ def _scrape_one(page, lead):
 def _login():
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        ctx = p.chromium.launch_persistent_context(PROFILE, headless=False,
+        ctx = p.chromium.launch_persistent_context(PROFILE, headless=False, channel=CHANNEL,
                                                     viewport={'width': 1280, 'height': 920})
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(BASE + '/dashboard', wait_until='domcontentloaded')
@@ -220,7 +225,7 @@ def _run(todo, save_text=None, save_html=None, refresh=False):
     cache = _load_cache()
     scraped = miss = 0
     with sync_playwright() as p:
-        ctx = p.chromium.launch_persistent_context(PROFILE, headless=False,
+        ctx = p.chromium.launch_persistent_context(PROFILE, headless=False, channel=CHANNEL,
                                                     viewport={'width': 1280, 'height': 920})
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         for idx, lead in enumerate(todo):
@@ -232,8 +237,17 @@ def _run(todo, save_text=None, save_html=None, refresh=False):
                 entry, text = _scrape_one(page, lead)
             except Exception as e:
                 print('  ...%s: error %s' % (case[-4:], e.__class__.__name__), flush=True)
-                miss += 1
                 entry, text = None, ''
+            if text and _BLOCK_RE.search(text) and not entry:
+                # The site is refusing this session. Do NOT retry or push on: more requests while
+                # blocked is what turns a pause into a ban. Stop the run and say how to continue.
+                print('  ...%s: whitepages.com is blocking this session ("%s"). Stopping the run; '
+                      'nothing was changed. Wait, then try again, or use --from-file with a page you '
+                      'copied yourself.' % (case[-4:], _BLOCK_RE.search(text).group(0)), flush=True)
+                if save_text:
+                    open(save_text, 'w', encoding='utf-8').write(text)
+                miss += 1
+                break
             if save_text and text:
                 open(save_text, 'w', encoding='utf-8').write(text)
                 print('  wrote visible text to %s (%d chars)' % (save_text, len(text)))
@@ -284,6 +298,37 @@ def _save_cache(cache):
     _WL._save_cache(cache)
 
 
+def ingest_file(case, path):
+    """No browser at all: parse the visible text of an address page that Alejandro copied from his
+    own browser (Ctrl+A, Ctrl+C, saved to a text file) and cache it for `case`. The fallback when the
+    site blocks the automated session, and the way to calibrate the parser on a real page."""
+    leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
+    if case not in leads:
+        print('case %s not on the board' % case[-6:])
+        return 1
+    why = _WL.contact_hold(leads[case])
+    if why:
+        print('...%s: %s, not caching' % (case[-4:], why))
+        return 1
+    text = open(path, encoding='utf-8', errors='replace').read()
+    people = parse_people_text(text)
+    if not people:
+        print('...%s: no owners/residents parsed from %s' % (case[-4:], path))
+        return 1
+    entry = to_cache_entry(people, _WL._lead_addr(leads[case]))
+    entry['_src'] = 'wpweb-file'
+    cache = _load_cache()
+    old = cache.get(case) or {}
+    for k in ('_person', '_prop_id'):
+        if old.get(k) is not None:
+            entry[k] = old[k]
+    cache[case] = entry
+    _save_cache(cache)
+    ow, res, ph = _counts(entry)
+    print('...%s: %d owner(s), %d resident(s), %d phone(s) cached' % (case[-4:], ow, res, ph))
+    return 0
+
+
 def _select(args):
     leads = _WL.load_all_leads()
     cache = _load_cache()
@@ -321,6 +366,8 @@ def main(argv=None):
                     help='scrape up to N board leads that already have skip-trace numbers (measurement)')
     ap.add_argument('--plan', action='store_true', help='list the leads it would scrape; no browser')
     ap.add_argument('--refresh', action='store_true', help='re-scrape even cached leads')
+    ap.add_argument('--from-file', metavar='FILE',
+                    help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
     ap.add_argument('--save-html', metavar='FILE', help='write one lead\'s page HTML (calibration)')
     a = ap.parse_args(argv)
@@ -328,6 +375,11 @@ def main(argv=None):
     if a.login:
         _login()
         return 0
+    if a.from_file:
+        if not a.case or len(a.case) != 1:
+            print('--from-file needs exactly one --case')
+            return 2
+        return ingest_file(a.case[0], a.from_file)
     todo = _select(a)
     print('%d lead(s) selected (cap %d/run, ~%.0fs+jitter between leads)' % (len(todo), MAX_LEADS, THROTTLE_S))
     for r in todo:

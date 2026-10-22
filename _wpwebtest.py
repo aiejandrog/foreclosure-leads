@@ -162,5 +162,20 @@ WL.load_skiptrace = lambda: {'C-1': {'phones': [{'number': '3055550100'}]}}
 cm = W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5})())
 rec('--compare takes only leads that already have trace numbers', [WL._lead_key(r) for r in cm] == ['C-1'], [WL._lead_key(r) for r in cm])
 
+print('\nINGEST A HAND-COPIED PAGE (no browser)')
+td = tempfile.mkdtemp()
+WL.CACHE = os.path.join(td, 'wp.json')
+W.CACHE = WL.CACHE
+leads.append({'case': 'D-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/03/2026', 'days': 12})
+open(os.path.join(td, 'p.txt'), 'w', encoding='utf-8').write(PAGE)
+rc = W.ingest_file('D-1', os.path.join(td, 'p.txt'))
+import json as _j  # noqa: E402
+c = _j.load(open(WL.CACHE, encoding='utf-8'))
+rec('ingest wrote a cache entry', rc == 0 and c.get('D-1', {}).get('_src') == 'wpweb-file', c.keys())
+rec('block page is recognised', bool(W._BLOCK_RE.search('Access is temporarily restricted')))
+rec('a normal page is not mistaken for a block', not W._BLOCK_RE.search(PAGE))
+open(os.path.join(td, 'e.txt'), 'w').write('Access is temporarily restricted')
+rec('a block page ingests nothing', W.ingest_file('D-1', os.path.join(td, 'e.txt')) == 1)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
