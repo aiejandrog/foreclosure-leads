@@ -82,6 +82,10 @@ r = row(lead('WPL', wpAllPhones=wpA, phrank=['last resort', 'call first', 'ok', 
 rec('phbest keeps the button', r['p'][0] == B, r['p'])
 rec('it is still marked confirmed', r['pw'][r['p'].index(A)] == 'o', r.get('pw'))
 
+r = row(lead('WPLOK', wpAllPhones=wpA))
+rec('a confirmed landline ranked ok does not take the button from a mobile', r['p'][0] == B, r['p'])
+rec('so the lead is not flagged landline-first', r.get('_ll', 0) == 0, r.get('_ll'))
+
 print('\nWHITEPAGES CANNOT PROMOTE A HOUSEHOLD OR NAME-ONLY NUMBER')
 wpD = [{'n': D, 'type': 'mobile', 'resident': False, 'source': 'property'}]
 r = row(lead('WPHH', wpAllPhones=wpD))

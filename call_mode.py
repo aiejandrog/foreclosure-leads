@@ -2013,11 +2013,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             if _sk in ('hh', 'nm') and _pw[k] == 'o':
                 _pw[k] = 'h' if _sk == 'hh' else 'n'
 
+        _pht = d.get('phtype') or []
+
         def _wp_first(k):
-            # An owner-role number Whitepages confirms is the owner's, unless phone_rank already
-            # called it a last resort (a confirmed landline does not jump an unconfirmed mobile:
-            # landlines connected 0 of 26 when measured, #207).
+            # An owner-role number Whitepages confirms is the owner's, unless it is a landline or
+            # phone_rank already called it a last resort. A confirmed landline does not jump an
+            # unconfirmed mobile: landlines connected 0 of 26 when measured (#207), and phone_rank
+            # rates a landline with a carrier on file 'ok', so the rank alone does not catch it.
             return (_pw[k] == 'o'
+                    and 'land' not in str((_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '') or '').lower()
                     and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
                     and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
                     not in ('L', 'N'))
