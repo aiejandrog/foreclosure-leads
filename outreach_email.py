@@ -240,9 +240,8 @@ def _lane_of(r):
     so a category leaves from the same alias whether the browser worker or this sender mails it.
       no sale date        -> early   (fresh filing)
       sale in 0-7 days    -> urgent
-      sale in 8-45 days   -> active
-      sale beyond 45 days -> active  (the worker never emails these; here they are still a cold
-                                     sale-date lead, and the corporate alias is the cold lane)
+      sale in 8 days or more -> active  (the worker's ACTIVE lane has had no 45-day ceiling
+                                        since 2026-10-22; see _workerlanetest.py)
     Balloon rows never reach this sender (excluded by file in _load_leads), so no 'balloon' here.
     'replied' is a state, not a schedule — _eligible already drops replied owners entirely."""
     if not _sale_date(r):
