@@ -236,6 +236,44 @@ SWEEP_BLOCKED = []        # Miami-Dade plaintiff names whose fetch never got thr
 SWEEP_CAPPED = []
 OR_RESULT_CAP = 500
 MD_LAST = {}              # what the last lp_sweep covered, for main()'s coverage record
+# SPLITTING A CAPPED SEARCH (2026-10-22, Alejandro: "yes lets go"). The laptop log of 10-21 showed
+# WELLS FARGO, JPMORGAN CHASE, CITIBANK and BANK OF AMERICA at exactly 500 records on both runs: the
+# search kept their oldest 500 documents of the 30 days and dropped the rest, newest filings included.
+# A capped search is now re-run over the two halves of its date window, and again, down to
+# MD_MAX_SPLIT levels (30 days -> about two-day windows), the way fl_lp.palmbeach narrows Landmark.
+# Each sub-search is one more paid solve under the same paid_reads cap, and a refused solve stops
+# the split there: that lender is then reported partial, never complete.
+def _env_int(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+MD_MAX_SPLIT = _env_int('DEALFLOW_LP_MAX_SPLIT', 4)
+# A per-run ceiling on split searches, separate from the monthly paid-reads cap (which Alejandro
+# lifted on 10-19, so it no longer bounds a night). 60 searches is about $0.20 at the ledger's price;
+# a lender the ceiling stops is reported partial, like one the monthly cap stops.
+MD_MAX_SPLIT_SEARCHES = _env_int('DEALFLOW_LP_MAX_SPLIT_SEARCHES', 60)
+
+
+def _split_iso(d_from, d_to):
+    """('YYYY-MM-DD', 'YYYY-MM-DD') -> its two halves, or None when it is a single day."""
+    try:
+        a = datetime.date.fromisoformat(d_from)
+        b = datetime.date.fromisoformat(d_to)
+    except (TypeError, ValueError):
+        return None
+    if a >= b:
+        return None
+    mid = a + datetime.timedelta(days=(b - a).days // 2)
+    return ((a.isoformat(), mid.isoformat()),
+            ((mid + datetime.timedelta(days=1)).isoformat(), b.isoformat()))
+
+
+def _lp_rows(recs):
+    return [r for r in recs if 'LIS' in (r.get('doC_TYPE') or '').upper()
+            and 'CANCEL' not in (r.get('doC_TYPE') or '').upper()]
 
 
 def lp_sweep(days=30, tries=3):
@@ -252,21 +290,15 @@ def lp_sweep(days=30, tries=3):
     d_from, d_to = _win(days)
     print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
     MD_LAST.clear()
-    MD_LAST.update({'window': [d_from, d_to], 'searched': 0, 'retrieved': 0})
+    MD_LAST.update({'window': [d_from, d_to], 'searched': 0, 'retrieved': 0,
+                    'split_searches': 0, 'no_qs': {}})
     del SWEEP_CAPPED[:]
-    out = {}
-    for i, name in enumerate(PLAINTIFFS, 1):
-        if not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]:
-            # FAIL CLOSED, and say so: the names not searched count as blocked, so main() reports
-            # Miami-Dade failed/partial instead of a clean sweep over a window it never looked at.
-            SWEEP_BLOCKED.extend(PLAINTIFFS[i - 1:])
-            print(f'  monthly paid-reads cap: {len(PLAINTIFFS) - i + 1} plaintiff name(s) not searched '
-                  f'this run (Miami-Dade sweep stops here; the rest resume when the cap allows)')
-            break
+
+    def search(name, lo, hi):
+        """One name search over [lo, hi] -> its records, or None when it never got through."""
         url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
-               + '&dateRangeFrom=' + urllib.parse.quote(d_from) + '&dateRangeTo=' + urllib.parse.quote(d_to)
+               + '&dateRangeFrom=' + urllib.parse.quote(lo) + '&dateRangeTo=' + urllib.parse.quote(hi)
                + '&documentType=&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
-        recs = None
         for _ in range(tries):
             tok = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
             if not tok:
@@ -277,30 +309,135 @@ def lp_sweep(days=30, tries=3):
                              data='', timeout=35).json()
             except Exception:
                 continue
+            if not isinstance(j, dict):
+                continue
             if j.get('qs'):
-                recs = R.records_by_qs(j['qs']) or []
-                break
+                recs = R.records_by_qs(j['qs'])
+                if recs is None:                   # the results read failed: not an empty window
+                    continue
+                return recs
+            # Answered without a result handle. Keep what kind of answer it was (its keys and any
+            # message, never records) so a lender that "blocks" every night can be told apart from
+            # one the county simply has nothing for.
+            if name not in MD_LAST['no_qs']:
+                MD_LAST['no_qs'][name] = str({k: (str(v)[:60] if k.lower() in ('message', 'msg', 'error')
+                                                  else type(v).__name__) for k, v in j.items()})[:160]
             time.sleep(1)
+        return None
+
+    def window(name, lo, hi, depth):
+        """-> (records, complete). Splits a capped window; None when the top window never ran."""
+        recs = search(name, lo, hi)
+        if recs is None:
+            return None, False
+        if len(recs) < OR_RESULT_CAP:
+            return recs, True
+        halves = _split_iso(lo, hi) if depth < MD_MAX_SPLIT else None
+        if not halves:
+            return recs, False                     # capped, and cannot be narrowed further
+        got, complete = list(recs), True           # the capped page is real rows: keep it too
+        for a, b in halves:
+            if (MD_LAST['split_searches'] >= MD_MAX_SPLIT_SEARCHES
+                    or not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]):
+                complete = False
+                break
+            MD_LAST['split_searches'] += 1
+            part, ok = window(name, a, b, depth + 1)
+            if part is None:
+                complete = False
+                continue
+            got += part
+            complete = complete and ok
+        return got, complete
+
+    out = {}
+    for i, name in enumerate(PLAINTIFFS, 1):
+        if not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]:
+            # FAIL CLOSED, and say so: the names not searched count as blocked, so main() reports
+            # Miami-Dade failed/partial instead of a clean sweep over a window it never looked at.
+            SWEEP_BLOCKED.extend(PLAINTIFFS[i - 1:])
+            print(f'  monthly paid-reads cap: {len(PLAINTIFFS) - i + 1} plaintiff name(s) not searched '
+                  f'this run (Miami-Dade sweep stops here; the rest resume when the cap allows)')
+            break
+        before = MD_LAST['split_searches']
+        recs, complete = window(name, d_from, d_to, 0)
         if recs is None:
             SWEEP_BLOCKED.append(name)
             print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} (blocked)'); continue
+        # the capped page and the narrower windows overlap: count each record once
+        recs = list({json.dumps(r, sort_keys=True, default=str): r for r in recs}.values())
         MD_LAST['searched'] += 1
         MD_LAST['retrieved'] += len(recs)
-        if len(recs) >= OR_RESULT_CAP:
+        splits = MD_LAST['split_searches'] - before
+        if not complete:
             SWEEP_CAPPED.append(name)
-            print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} hit the {OR_RESULT_CAP}-record cap: '
-                  f'the newest filings in this window may be missing')
-        lp = [r for r in recs if 'LIS' in (r.get('doC_TYPE') or '').upper()
-              and 'CANCEL' not in (r.get('doC_TYPE') or '').upper()]
+            print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} NOT READ TO THE END: still at the '
+                  f'{OR_RESULT_CAP}-record cap or a narrower window did not run '
+                  f'({splits} split search(es)); the newest filings may be missing')
         kept = 0
-        for r in lp:
+        for r in _lp_rows(recs):
             n = normalize(r, name)
             if not n['owner']:                     # both parties lenders = assignment/subrogation noise
                 continue
             out.setdefault(n['case'] or n['bookpage'] or n['parties'][:50], n)
             kept += 1
-        print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} {len(recs)} recs -> {kept} homeowner LP')
+        print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} {len(recs)} recs -> {kept} homeowner LP'
+              + (f' ({splits} split search(es))' if splits else ''))
     return list(out.values())
+
+
+def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS')):
+    """Does the name search honour a document type? (2026-10-22, decision card: "probe doctype too")
+
+    If it does, a lender's search returns only its lis pendens and the 500-record cap stops mattering,
+    with no split searches. One paid solve per spelling tried (two at most, three tries each), under
+    the same paid_reads cap. Prints counts and document types only, never a party name.
+    """
+    import collections
+    import urllib.parse
+    from captcha_solver import solve_turnstile as _solve
+    import paid_reads
+    import records_liens as R
+    solve = paid_reads.guarded(_solve, 'lis_pendens')
+    d_from, d_to = _win(days)
+    for dt in doc_types:
+        url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
+               + '&dateRangeFrom=' + urllib.parse.quote(d_from) + '&dateRangeTo=' + urllib.parse.quote(d_to)
+               + '&documentType=' + urllib.parse.quote(dt)
+               + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+        recs, note = None, 'no token'
+        for _ in range(3):
+            tok = solve(R.TS_SITE_KEY, R.OR_BASE)
+            if not tok:
+                continue
+            try:
+                j = R.S.post(url, headers={'x-recaptcha-token': tok,
+                                           'content-type': 'application/json; charset=utf-8'},
+                             data='', timeout=35).json()
+            except Exception as e:
+                note = 'request failed: %s' % str(e)[:60]
+                continue
+            if not isinstance(j, dict):
+                note = 'answer was not an object'
+                continue
+            if j.get('qs'):
+                recs = R.records_by_qs(j['qs'])
+                if recs is not None:
+                    break
+                note = 'results read failed'
+                continue
+            note = 'answered without a result: keys %s' % sorted(j)[:6]
+        if recs is None:
+            print(f'documentType={dt!r}: no result ({note})')
+            continue
+        kinds = collections.Counter((r.get('doC_TYPE') or '?').strip() for r in recs)
+        lp = sum(v for k, v in kinds.items() if 'LIS' in k.upper())
+        print(f'documentType={dt!r}: {len(recs)} records, {lp} lis pendens; types {dict(kinds.most_common(6))}')
+        print('  FILTER WORKS' if recs and lp == len(recs) else
+              '  filter ignored (other document types came back)' if recs else
+              '  empty: inconclusive')
+        if recs and lp == len(recs):
+            return
 
 
 # A PARTIAL sweep is not a failure of the run, but it is not a success either: some counties
@@ -351,7 +488,7 @@ def coverage_entry(status, info, prev=None, now=None):
          'kept': info.get('kept', 0),
          'pages': info.get('pages', 0),
          'failures': [str(f)[:120] for f in (info.get('failures') or [])][:20]}
-    for k in ('searched', 'blocked', 'capped'):
+    for k in ('searched', 'blocked', 'capped', 'split_searches', 'no_qs'):
         if k in info:
             e[k] = info[k]
     e['last_complete'] = now if status == 'ok' else (prev or {}).get('last_complete')
@@ -466,6 +603,8 @@ def write_status(a, status, info, new_rows, failed, partial, now=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe)')
+    ap.add_argument('--probe-doctype', metavar='NAME',
+                    help='one paid name search with documentType=LIS PENDENS; prints counts only')
     ap.add_argument('--days', type=int, default=30)
     ap.add_argument('--county', default='all',
                     choices=['miami-dade', 'broward', 'palm-beach', 'all'],
@@ -475,6 +614,8 @@ def main():
     a = ap.parse_args()
     if a.probe:
         probe(); return
+    if a.probe_doctype:
+        probe_doctype(a.probe_doctype, a.days); return
     # PER-COUNTY VERDICT (audit 2026-09-21, defect 6). "Found nothing" and "never got through"
     # are opposite facts and this script used to return 0 for both, so a morning where every
     # captcha was refused reported a clean sweep and the wrapper carried on over yesterday's
@@ -501,13 +642,16 @@ def main():
         if SWEEP_BLOCKED:
             fails.append('%d plaintiff name(s) not searched' % len(SWEEP_BLOCKED))
         if SWEEP_CAPPED:
-            fails.append('%d plaintiff search(es) at the %d-record cap' % (len(SWEEP_CAPPED), OR_RESULT_CAP))
+            fails.append('%d plaintiff search(es) not read to the end (%d-record cap)'
+                         % (len(SWEEP_CAPPED), OR_RESULT_CAP))
         info['MIAMI-DADE'] = {
             'scope': 'listed plaintiffs only (%d names)' % len(PLAINTIFFS),
             'window': list(MD_LAST.get('window') or _win(a.days)),
             'reported_total': None, 'retrieved': MD_LAST.get('retrieved', 0), 'kept': len(md),
             'pages': MD_LAST.get('searched', 0), 'searched': MD_LAST.get('searched', 0),
-            'blocked': len(SWEEP_BLOCKED), 'capped': list(SWEEP_CAPPED), 'failures': fails}
+            'blocked': len(SWEEP_BLOCKED), 'capped': list(SWEEP_CAPPED), 'failures': fails,
+            'split_searches': MD_LAST.get('split_searches', 0),
+            'no_qs': dict(MD_LAST.get('no_qs') or {})}
     if a.county in ('broward', 'all'):
         from fl_lp import broward as _bw
         bw = _bw.sweep(days=a.days)

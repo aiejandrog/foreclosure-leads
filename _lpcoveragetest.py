@@ -129,22 +129,105 @@ class StatusFile(unittest.TestCase):
         self.assertEqual(state, 'DEGRADED')
 
 
+class FakeClerk:
+    """A Miami-Dade OR search over synthetic lenders: `per_day[name]` records a day, one in ten a
+    lis pendens, returned oldest first and cut at the 500-record cap like the real search."""
+
+    def __init__(self, per_day, no_qs=(), broken_reads=False):
+        import urllib.parse as U
+        self.U, self.per_day, self.no_qs, self.posts = U, per_day, set(no_qs), []
+        self.broken_reads = broken_reads
+
+    def post(self, url, **k):
+        q = self.U.parse_qs(self.U.urlsplit(url).query)
+        name, lo, hi = q['partyName'][0], q['dateRangeFrom'][0], q['dateRangeTo'][0]
+        self.posts.append((name, lo, hi))
+        body = {'message': 'No records'} if name in self.no_qs else {'qs': '|'.join((name, lo, hi))}
+        return SimpleNamespace(json=lambda: body)
+
+    def records_by_qs(self, qs):
+        name, lo, hi = qs.split('|')
+        if self.broken_reads and (lo, hi) != LP._win(30):
+            return None                        # the GET for a narrower window failed
+        d, end, out = datetime.date.fromisoformat(lo), datetime.date.fromisoformat(hi), []
+        while d <= end:
+            for n in range(self.per_day.get(name, 0)):
+                lp = n % 10 == 0
+                out.append({'doC_TYPE': 'LIS PENDENS - LIS' if lp else 'MORTGAGE',
+                            'casE_NUM': '%s-%s-%d' % (name[:3], d.isoformat(), n),
+                            'firsT_PARTY': name + ' BANK', 'seconD_PARTY': 'SYNTHETIC OWNER %d' % n,
+                            'reC_DATE': d.strftime('%m/%d/%Y')})
+            d += datetime.timedelta(days=1)
+        return out[:LP.OR_RESULT_CAP]
+
+
 class MiamiCap(unittest.TestCase):
-    def test_a_search_at_the_record_cap_is_counted(self):
-        recs = [{'doC_TYPE': 'MORTGAGE'}] * LP.OR_RESULT_CAP
+    def run_sweep(self, per_day, budget=10 ** 6, no_qs=(), broken_reads=False):
+        clerk = FakeClerk(per_day, no_qs, broken_reads)
         R = SimpleNamespace(OR_BASE='https://example.invalid/', TS_SITE_KEY='k',
-                            S=SimpleNamespace(post=lambda *a, **k: SimpleNamespace(json=lambda: {'qs': 'q'})),
-                            records_by_qs=lambda qs: recs)
-        PR = SimpleNamespace(guarded=lambda f, name: (lambda *a, **k: 'tok'),
-                             allow=lambda *a: (True, ''), SOLVE_USD=0.0033)
+                            S=SimpleNamespace(post=clerk.post), records_by_qs=clerk.records_by_qs)
+        left = {'n': budget}
+
+        def allow(*a):
+            return (left['n'] > 0, '')
+
+        def guarded(f, name):
+            def solve(*a, **k):
+                if left['n'] <= 0:
+                    return None
+                left['n'] -= 1
+                return 'tok'
+            return solve
+        PR = SimpleNamespace(guarded=guarded, allow=allow, SOLVE_USD=0.0033)
         CS = SimpleNamespace(solve_turnstile=lambda *a: 'tok')
         with mock.patch.dict('sys.modules', {'records_liens': R, 'paid_reads': PR, 'captcha_solver': CS}), \
-                mock.patch.object(LP, 'PLAINTIFFS', ['BIG LENDER', 'SMALL LENDER']):
+                mock.patch.object(LP, 'PLAINTIFFS', sorted(per_day)), mock.patch.object(LP.time, 'sleep', lambda _: None):
             LP.SWEEP_BLOCKED[:] = []
-            LP.lp_sweep(days=30)
-        self.assertEqual(LP.SWEEP_CAPPED, ['BIG LENDER', 'SMALL LENDER'])
-        self.assertEqual(LP.MD_LAST['searched'], 2)
-        self.assertEqual(LP.MD_LAST['retrieved'], 2 * LP.OR_RESULT_CAP)
+            rows = LP.lp_sweep(days=30)
+        return rows, clerk
+
+    def test_a_capped_lender_is_split_until_every_window_is_whole(self):
+        rows, clerk = self.run_sweep({'BIG': 40, 'SMALL': 2})
+        self.assertEqual(LP.SWEEP_CAPPED, [])
+        self.assertEqual(LP.SWEEP_BLOCKED, [])
+        big = [r for r in rows if r['case'].startswith('BIG')]
+        self.assertEqual(len(big), 31 * 4, 'every lis pendens in the 31 days, newest included')
+        self.assertGreater(LP.MD_LAST['split_searches'], 0)
+        self.assertEqual(LP.MD_LAST['retrieved'], 31 * 40 + 31 * 2, 'overlapping windows counted once')
+        self.assertEqual(sum(1 for p in clerk.posts if p[0] == 'SMALL'), 1, 'an uncapped lender is searched once')
+
+    def test_still_capped_at_full_depth_is_reported(self):
+        self.run_sweep({'HUGE': 400})
+        self.assertEqual(LP.SWEEP_CAPPED, ['HUGE'])
+
+    def test_a_split_stopped_by_the_paid_cap_is_partial(self):
+        rows, _ = self.run_sweep({'BIG': 40}, budget=2)
+        self.assertEqual(LP.SWEEP_CAPPED, ['BIG'])
+        self.assertTrue(rows, 'the rows that were read are kept')
+
+    def test_a_failed_results_read_is_not_an_empty_window(self):
+        rows, _ = self.run_sweep({'BIG': 40}, broken_reads=True)
+        self.assertEqual(LP.SWEEP_CAPPED, ['BIG'], 'halves that were never read cannot be complete')
+        self.assertTrue(rows, 'the capped page is still kept')
+
+    def test_the_per_run_split_ceiling_stops_and_reports(self):
+        with mock.patch.object(LP, 'MD_MAX_SPLIT_SEARCHES', 1):
+            self.run_sweep({'BIG': 40})
+        self.assertEqual(LP.SWEEP_CAPPED, ['BIG'])
+        self.assertLessEqual(LP.MD_LAST['split_searches'], 1)
+
+    def test_a_no_result_answer_is_recorded(self):
+        self.run_sweep({'GONE': 0}, no_qs={'GONE'})
+        self.assertEqual(LP.SWEEP_BLOCKED, ['GONE'])
+        self.assertIn('No records', LP.MD_LAST['no_qs']['GONE'])
+
+    def test_split_halves_cover_the_window_exactly(self):
+        lo, hi = LP._split_iso('2026-09-22', '2026-10-22')
+        self.assertEqual(lo[0], '2026-09-22')
+        self.assertEqual(hi[1], '2026-10-22')
+        self.assertEqual(datetime.date.fromisoformat(hi[0]) - datetime.date.fromisoformat(lo[1]),
+                         datetime.timedelta(days=1))
+        self.assertIsNone(LP._split_iso('2026-10-22', '2026-10-22'))
 
 
 class Report(unittest.TestCase):
