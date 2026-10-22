@@ -177,5 +177,26 @@ rec('a normal page is not mistaken for a block', not W._BLOCK_RE.search(PAGE))
 open(os.path.join(td, 'e.txt'), 'w').write('Access is temporarily restricted')
 rec('a block page ingests nothing', W.ingest_file('D-1', os.path.join(td, 'e.txt')) == 1)
 
+print('\nHAND-ASSISTED MODE (no browser automation)')
+import builtins  # noqa: E402
+opened = []
+import webbrowser  # noqa: E402
+webbrowser.open = lambda u, *a, **k: opened.append(u)
+clips = [PAGE, 'Access is temporarily restricted', PAGE]
+W._clipboard_text = lambda: clips.pop(0)
+answers = iter(['', '', 's', 'q'])
+builtins_input = builtins.input
+builtins.input = lambda *a, **k: next(answers)
+WL.CACHE = os.path.join(td, 'wp2.json')
+W.CACHE = WL.CACHE
+leads[:] = [{'case': 'E-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13 + i}
+            for i in range(4)]
+n_ok = W.assist(list(leads))
+builtins.input = builtins_input
+c2 = _j.load(open(WL.CACHE, encoding='utf-8')) if os.path.exists(WL.CACHE) else {}
+rec('assist cached the good page, refused the block page, honoured skip and quit',
+    n_ok == 1 and list(c2) == ['E-0'] and c2['E-0']['_src'] == 'wpweb-hand', (n_ok, list(c2)))
+rec('each lead opened in the default browser, nothing else driven', len(opened) >= 3 and all(u.startswith('https://www.whitepages.com/address/') for u in opened), opened[:2])
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

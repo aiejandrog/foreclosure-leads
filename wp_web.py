@@ -35,6 +35,8 @@ that already carries a real lookup is skipped unless --refresh.
     python wp_web.py --compare 25                    # leads that already have skip-trace numbers
     python wp_web.py --case CACE-25-019745          # one named lead
     python wp_web.py --case C --from-file page.txt   # no browser: a page you copied by hand
+    python wp_web.py --compare 25 --assist           # NO automation: opens each page in YOUR browser,
+                                                     # you Ctrl+A / Ctrl+C, press Enter, it caches
     python wp_web.py --case C --save-text out.txt    # capture the visible text for calibration
     python wp_web.py --pick-callable 15 --refresh    # re-scrape even cached leads
 
@@ -176,9 +178,14 @@ def _counts(entry):
 # ---- the browser half (laptop only; import guarded so --plan needs no Playwright) -----------------
 
 def _addr_query(street, city, state):
+    """whitepages.com address URL: /address/<house-street>/<City>-<ST>. UNVERIFIED from here (the
+    site is unreachable from the build environment); if it lands on a search page instead of the
+    address page, change this one function. Hand-assisted mode still works from any page you copy."""
     import urllib.parse
-    return '%s/address/%s' % (BASE, urllib.parse.quote('-'.join(
-        ('%s-%s-%s' % (street, city, state)).split())))
+    def slug(t):
+        return '-'.join(re.sub(r"[^A-Za-z0-9 ]", ' ', t).split())
+    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(street)),
+                                 urllib.parse.quote('%s-%s' % (slug(city), state)))
 
 
 def _scrape_one(page, lead):
@@ -298,6 +305,70 @@ def _save_cache(cache):
     _WL._save_cache(cache)
 
 
+def _clipboard_text():
+    """The Windows clipboard as text (PowerShell Get-Clipboard); '' if it cannot be read."""
+    import subprocess
+    try:
+        out = subprocess.run(['powershell', '-NoProfile', '-Command',
+                              '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw'],
+                             capture_output=True, timeout=20)
+        return out.stdout.decode('utf-8', 'replace')
+    except Exception:
+        return ''
+
+
+def assist(todo, refresh=False):
+    """HUMAN-IN-THE-LOOP, no automation. For each lead: open its address page in Alejandro's own
+    default browser (already signed in, nothing driving it); he presses Ctrl+A, Ctrl+C on the page
+    and Enter here; the copied text is parsed into the cache. The site sees an ordinary person on an
+    ordinary browser, so there is no bot check to fail. About 15 seconds a lead.
+    Answers: Enter = take the clipboard, s = skip this lead, q = quit."""
+    import webbrowser
+    cache = _load_cache()
+    ok = skipped = 0
+    for n, lead in enumerate(todo, 1):
+        case = _WL._lead_key(lead)
+        parts = _WL._split_addr(_WL._lead_addr(lead))
+        if not parts or (not refresh and _WL._cache_looked(cache.get(case))):
+            continue
+        webbrowser.open(_addr_query(*parts))
+        try:
+            ans = input('[%d/%d] ...%s: page opened. Ctrl+A, Ctrl+C on it, then Enter here '
+                        '(s = skip, q = quit) -> ' % (n, len(todo), case[-4:])).strip().lower()
+        except EOFError:
+            break
+        if ans == 'q':
+            break
+        if ans == 's':
+            skipped += 1
+            continue
+        text = _clipboard_text()
+        if _BLOCK_RE.search(text or '') and not parse_people_text(text):
+            print('  ...%s: the copied page is a block / verification page, not the address page'
+                  % case[-4:])
+            skipped += 1
+            continue
+        people = parse_people_text(text)
+        if not people:
+            print('  ...%s: nothing parsed from the clipboard (copy the whole page: Ctrl+A, Ctrl+C)'
+                  % case[-4:])
+            skipped += 1
+            continue
+        entry = to_cache_entry(people, _WL._lead_addr(lead))
+        entry['_src'] = 'wpweb-hand'
+        old = cache.get(case) or {}
+        for k in ('_person', '_prop_id'):
+            if old.get(k) is not None:
+                entry[k] = old[k]
+        cache[case] = entry
+        _save_cache(cache)
+        o, r, ph = _counts(entry)
+        print('  ...%s: %d owner(s), %d resident(s), %d phone(s) cached' % (case[-4:], o, r, ph), flush=True)
+        ok += 1
+    print('cached %d lead(s), skipped %d. cache: %s' % (ok, skipped, CACHE))
+    return ok
+
+
 def ingest_file(case, path):
     """No browser at all: parse the visible text of an address page that Alejandro copied from his
     own browser (Ctrl+A, Ctrl+C, saved to a text file) and cache it for `case`. The fallback when the
@@ -366,6 +437,8 @@ def main(argv=None):
                     help='scrape up to N board leads that already have skip-trace numbers (measurement)')
     ap.add_argument('--plan', action='store_true', help='list the leads it would scrape; no browser')
     ap.add_argument('--refresh', action='store_true', help='re-scrape even cached leads')
+    ap.add_argument('--assist', action='store_true',
+                    help='hand-assisted, NO automation: opens each page in your own browser, you copy it, Enter')
     ap.add_argument('--from-file', metavar='FILE',
                     help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
@@ -381,6 +454,11 @@ def main(argv=None):
             return 2
         return ingest_file(a.case[0], a.from_file)
     todo = _select(a)
+    if a.assist and not a.plan:
+        print('%d lead(s) selected for hand-assisted copy' % len(todo))
+        if todo:
+            assist(todo, refresh=a.refresh)
+        return 0
     print('%d lead(s) selected (cap %d/run, ~%.0fs+jitter between leads)' % (len(todo), MAX_LEADS, THROTTLE_S))
     for r in todo:
         print('  %s  %s' % (_WL._lead_key(r)[-6:], 'has address' if _WL._split_addr(_WL._lead_addr(r)) else 'NO ADDRESS'))
