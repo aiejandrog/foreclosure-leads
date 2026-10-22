@@ -2599,7 +2599,7 @@ def make_tracker(leads):
             # answered/texted. Landlines to distressed owners are near-dead; the UI mutes them + drops
             # WhatsApp on them. phtype rides along so the call sheet can label/style each line.
             def _pk(p):
-                mob = (p.get('type') or '').lower().startswith('mob')
+                mob = str(p.get('type') or '').lower().startswith('mob')
                 return (1 if p.get('dnc') else 0, 0 if mob else 1)
             _phs = sorted([p for p in hit['phones'] if p.get('number')], key=_pk)[:MAX_PHONES]
             d['phones'] = [p.get('number') for p in _phs]
@@ -3251,7 +3251,10 @@ def make_tracker(leads):
                 absentee = bool(state and state != 'FL') or bool(city and prop_city and city != prop_city)
                 phs = []
                 for p in (o.get('phones') or []):
-                    n = ''.join(c for c in (p.get('number') or '') if c.isdigit())
+                    if isinstance(p, (str, int)): p = {'number': p}
+                    if not isinstance(p, dict): continue
+                    if not isinstance(p.get('number'), (str, int)): continue
+                    n = ''.join(c for c in str(p.get('number') or '') if c.isdigit())
                     if len(n) == 11 and n.startswith('1'): n = n[1:]
                     if len(n) != 10: continue
                     phs.append({'n': n, 'type': (p.get('type') or '').lower()})
@@ -3366,12 +3369,15 @@ def make_tracker(leads):
                         if _grade is None:
                             continue
                         for _p in (_rec.get('phones') or []):
-                            _n = ''.join(c for c in (_p.get('number') or '') if c.isdigit())
+                            if isinstance(_p, (str, int)): _p = {'number': _p}
+                            if not isinstance(_p, dict): continue
+                            if not isinstance(_p.get('number'), (str, int)): continue
+                            _n = ''.join(c for c in str(_p.get('number') or '') if c.isdigit())
                             if len(_n) == 11 and _n.startswith('1'): _n = _n[1:]
                             if len(_n) != 10: continue
                             if _n in _seen_ph: continue
                             _seen_ph.add(_n)
-                            _pt = (_p.get('type') or '').lower()
+                            _pt = str(_p.get('type') or '').lower()
                             _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False,
                                                    'source': 'person-verified' if _grade == 'wp' else 'person'})
                         for _e in (_rec.get('emails') or []):
