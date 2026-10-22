@@ -232,5 +232,18 @@ _want = ['https://www.whitepages.com/address/%s/MIAMI-FL' % '-'.join(_W._wp_stre
 rec('card Whitepages address link spells streets like wp_web (the house, not the city list)',
     _got == _want, (_got, _want, _p2.stderr[-300:]))
 
+# Condo units: the second spelling ("205th-C") as its own link, only when there is a unit.
+open(_js, 'w', encoding='utf-8').write(_pg[_a:_b] + """
+var streets = ['2634 SE 19 CT #205C', '2634 SE 19 CT APT 205-C', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999', '2929 NW 123 TER'];
+console.log(JSON.stringify(streets.map(function(s){ var L = fileLinks({a: s + ', HOMESTEAD, FL 33033', o: 'X Y', ct: 'MI', fo: ''});
+  return (L.filter(function(x){ return x[0] === 'Whitepages unit (alt)'; })[0] || ['', ''])[1]; })));
+""")
+_p3 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js], capture_output=True, text=True, timeout=60)
+_got3 = json.loads(_p3.stdout or 'null') if _p3.returncode == 0 else None
+_want3 = ['https://www.whitepages.com/address/%s/HOMESTEAD-FL' % '-'.join(_W._wp_street(x, 'bare').split())
+          for x in ('2634 SE 19 CT #205C', '2634 SE 19 CT APT 205-C', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999')] + ['']
+rec('card condo alt link matches wp_web bare spelling; none without a unit', _got3 == _want3, (_got3, _want3, _p3.stderr[-300:]))
+rec('the alt link for Alex\'s real condo URL shape', bool(_got3) and _got3[0].endswith('/2634-SE-19th-Ct-205th-C/HOMESTEAD-FL'), _got3)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

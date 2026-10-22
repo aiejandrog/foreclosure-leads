@@ -353,11 +353,23 @@ def _ordinal(n):
     return '%d%s' % (n, suf)
 
 
-def _wp_street(street):
+def _wp_unit_bare(unit):
+    """A unit the way some Whitepages condo links write it, no "Apt" and the number ordinalized
+    (seen 10-22: ".../2634-SE-19th-Ct-205th-C/HOMESTEAD-FL/<id>"): "205C"/"205-C" -> "205th C",
+    "205" -> "205th". A letter-first unit ("B105") has no number to ordinalize and stays as is."""
+    m = re.match(r'^(\d+)-?([A-Za-z]?)$', unit or '')
+    if not m:
+        return (unit or '').upper()
+    return _ordinal(m.group(1)) + (' ' + m.group(2).upper() if m.group(2) else '')
+
+
+def _wp_street(street, style='apt'):
     """Our street as Whitepages writes it in its own links (10-22, from real result pages):
     "2929 NW 123 TER" -> "2929 NW 123rd Ter", "8600 NW 34 PL #B105" -> "8600 NW 34th Pl Apt B105",
     "9999 NE 99 AVE 999" (bare trailing unit) -> "... Ave Apt 999". A link in our own spelling
-    (no ordinal) falls through to the city's property list instead of the house."""
+    (no ordinal) falls through to the city's property list instead of the house.
+    style='bare' is Whitepages' other condo spelling: "2634 SE 19 CT #205C" -> "2634 SE 19th Ct 205th C".
+    Both shapes exist on the site; which one a building uses is not knowable from here."""
     m = _UNIT_RE.search(street or '')
     unit = m.group(1) if m else ''
     base = _UNIT_RE.sub(' ', str(street or ''))
@@ -377,18 +389,22 @@ def _wp_street(street):
         else:
             out.append(t[:1].upper() + t[1:].lower())
     if unit:
-        out += ['Apt', unit.upper()]
+        out += [_wp_unit_bare(unit)] if style == 'bare' else ['Apt', unit.upper()]
     return ' '.join(out)
 
 
-def _addr_query(street, city, state):
+def _has_unit(street):
+    return _wp_street(street) != _wp_street(street, 'bare')
+
+
+def _addr_query(street, city, state, style='apt'):
     """whitepages.com address URL: /address/<house-street>/<City>-<ST>. UNVERIFIED from here (the
     site is unreachable from the build environment); if it lands on a search page instead of the
     address page, change this one function. Hand-assisted mode still works from any page you copy."""
     import urllib.parse
     def slug(t):
         return '-'.join(re.sub(r"[^A-Za-z0-9 ]", ' ', t).split())
-    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(_wp_street(street))),
+    return '%s/address/%s/%s' % (BASE, urllib.parse.quote(slug(_wp_street(street, style))),
                                  urllib.parse.quote('%s-%s' % (slug(city), state)))
 
 
@@ -616,7 +632,7 @@ def assist(todo, refresh=False, wait_s=None):
             base = _clipboard_text()
             webbrowser.open(_addr_query(*parts))
             print('[%d/%d] ...%s: page opened, waiting for your copy...' % (n, len(todo), case[-4:]), flush=True)
-            text, t0, hinted = '', time.time(), False
+            text, t0, hinted, tried_bare = '', time.time(), False, False
             while time.time() - t0 < wait_s:
                 time.sleep(1.0)
                 cur = _clipboard_text()
@@ -628,6 +644,15 @@ def assist(todo, refresh=False, wait_s=None):
                 if hinted or not _PAGE_MARK.search(cur) or (
                         page_matches_address(cur, parts[0]) and not _CITY_LIST_RE.search(cur)):
                     break
+                if not tried_bare and _has_unit(parts[0]):
+                    # Condo links come in two spellings ("...-Apt-205C" and "...-205th-C"). Open the
+                    # other one before falling back to the search box. The wrong copy stays in `text`,
+                    # so a timeout here still records it as a wrong-house miss.
+                    tried_bare, base, t0 = True, cur, time.time()
+                    webbrowser.open(_addr_query(*parts, style='bare'))
+                    print('  ...%s: that page is not this unit. Opened Whitepages\' other unit '
+                          'spelling: Ctrl+A, Ctrl+C again.' % case[-4:], flush=True)
+                    continue
                 # Whitepages sent the address URL to some other property. Give one more try for this
                 # lead: put its address on the clipboard (never printed, the terminal gets pasted
                 # into chat) so it can be pasted into the site's own search box.

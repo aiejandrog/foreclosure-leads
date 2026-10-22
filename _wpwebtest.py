@@ -447,6 +447,13 @@ rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105'
     and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
     == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
 
+rec('condo bare spelling matches Whitepages (205th C)', W._wp_street('2634 SE 19 CT #205C', 'bare') == '2634 SE 19th Ct 205th C'
+    and W._wp_street('2634 SE 19 CT APT 205-C', 'bare') == '2634 SE 19th Ct 205th C'
+    and W._wp_street('8600 NW 34 PL #B105', 'bare') == '8600 NW 34th Pl B105'
+    and W._wp_street('9999 NE 99 AVE 999', 'bare') == '9999 NE 99th Ave 999th', W._wp_street('2634 SE 19 CT #205C', 'bare'))
+rec('bare URL = Alex\'s real condo link minus the property id',
+    W._addr_query('2634 SE 19 CT #205C', 'HOMESTEAD', 'FL', 'bare').endswith('/address/2634-SE-19th-Ct-205th-C/HOMESTEAD-FL'))
+rec('no unit: no second spelling', not W._has_unit('2929 NW 123 TER') and W._has_unit('8600 NW 34 PL #B105'))
 rec('State Road 7 keeps its number, not a unit', W._wp_street('4500 N STATE ROAD 7') == '4500 N State Road 7', W._wp_street('4500 N STATE ROAD 7'))
 rec('US Highway 1 is not "1st"', W._wp_street('1234 US HIGHWAY 1') == '1234 US Highway 1', W._wp_street('1234 US HIGHWAY 1'))
 rec('a State Rd page without the 7 is refused', not W.page_matches_address('4500 N State Rd, Lauderdale Lakes', '4500 N STATE ROAD 7'))

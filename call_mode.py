@@ -6303,7 +6303,7 @@ function fileLinks(r){
      more long strings per lead. The /property/{id} deep-link is deliberately NOT here: the id is
      per-lead, so it would be exactly the per-row string this band exists to avoid. */
   var wpSlug = function(s){ return String(s || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().replace(/\s+/g, '-'); };
-  var wpStreet = function(street){
+  var wpStreet = function(street, bare){
     /* Whitepages spells its own links "2929 NW 123rd Ter Apt B105"; ours ("2929 NW 123 TER #B105")
        lands on the city's property list instead of the house. Same rules as wp_web._wp_street. */
     var SUF = {st:1, ave:1, ct:1, ter:1, dr:1, rd:1, ln:1, pl:1, blvd:1, way:1, cir:1, pkwy:1, hwy:1, trl:1,
@@ -6324,13 +6324,20 @@ function fileLinks(r){
       if(DIR[lo] || lo === 'us' || lo === 'sr' || lo === 'cr') return w.toUpperCase();
       return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
     });
-    if(unit) out.push('Apt', unit.toUpperCase());
+    if(unit && bare){  /* Whitepages' other condo spelling, "205C" -> "205th C" (wp_web._wp_unit_bare) */
+      var bm = unit.match(/^(\d+)-?([A-Za-z]?)$/);
+      out.push(bm ? ord(bm[1]) + (bm[2] ? ' ' + bm[2].toUpperCase() : '') : unit.toUpperCase());
+    } else if(unit) out.push('Apt', unit.toUpperCase());
     return out.join(' ');
   };
   var ap = String(r.a || '').split(',');
   var wpCity = ap.length >= 2 ? wpSlug(ap[1]) : '';
   if(ap[0] && wpCity)
     L.push(['Whitepages addr', 'https://www.whitepages.com/address/' + wpSlug(wpStreet(ap[0])) + '/' + wpCity + '-FL']);
+  /* Condos: Whitepages writes some units "Apt-205C" and others "205th-C". Which one a building uses
+     is not knowable from here, so a unit gets both links. */
+  if(ap[0] && wpCity && wpStreet(ap[0], 1) !== wpStreet(ap[0]))
+    L.push(['Whitepages unit (alt)', 'https://www.whitepages.com/address/' + wpSlug(wpStreet(ap[0], 1)) + '/' + wpCity + '-FL']);
   if(nm && wpSlug(nm))
     L.push(['Whitepages', 'https://www.whitepages.com/name/' + wpSlug(nm) + '/' + (wpCity ? wpCity + '-FL' : 'FL')]);
   if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);
