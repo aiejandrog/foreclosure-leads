@@ -161,7 +161,9 @@ def page_apn(text):
 
 
 _DIRS = {'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw', 'north', 'south', 'east', 'west'}
-_UNIT_RE = re.compile(r'\b(?:apt|unit|ste|suite|#)\s*#?\s*([0-9A-Za-z\-]+)', re.I)
+_UNIT_RE = re.compile(r'(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)', re.I)
+_DIR_WORDS = {'northwest': 'nw', 'northeast': 'ne', 'southwest': 'sw', 'southeast': 'se',
+              'north': 'n', 'south': 's', 'east': 'e', 'west': 'w'}
 
 
 def page_matches_address(text, street):
@@ -170,16 +172,17 @@ def page_matches_address(text, street):
     house (a wrong URL hit, or a late copy of the previous lead's page) is refused, so its people
     are never cached as this lead's household."""
     def norm(t):            # "9th" and "9" are the same street; case never matters
-        return re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
-    toks = norm(re.sub(r'[^A-Za-z0-9# ]', ' ', str(street or ''))).split()
+        t = re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1', t.lower())
+        return re.sub(r'\b(%s)\b' % '|'.join(_DIR_WORDS), lambda m: _DIR_WORDS[m.group(1)], t)
+    toks = norm(re.sub(r'[^A-Za-z0-9 ]', ' ', _UNIT_RE.sub(' ', str(street or '')))).split()
     if not toks or not toks[0].isdigit():
         return False
     house = toks[0]
     name = next((t for t in toks[1:] if t.lower() not in _DIRS), '')
     m = _UNIT_RE.search(street or '')
-    unit = m.group(1).lower() if m else ''
+    unit = m.group(1).lower().replace('-', ' ').strip() if m else ''
     for l in str(text or '').split('\n'):
-        low = ' ' + norm(re.sub(r'[^a-z0-9#]', ' ', l.lower())) + ' '
+        low = ' ' + norm(re.sub(r'[^a-z0-9]', ' ', l.lower())) + ' '
         if (' %s ' % house.lower()) not in low:
             continue
         if name and (' %s ' % name.lower()) not in low:
@@ -573,20 +576,26 @@ def reparse():
     """Re-read every page this tool cached (entries marked _src wpweb*) from the copies kept in
     DEALFLOW_DIR/wpweb_pages with the CURRENT parser and address check. An entry whose page fails
     the check, parses to nobody, or has no kept copy is removed (the lead reads "not looked up"
-    again). Pro API entries are never touched. Counts only."""
+    again). Pro API entries are never touched, and an entry that also carries a paid Person layer
+    (`_person` / `_prop_id`) keeps it: only the page half is dropped. An entry with no kept page, or
+    whose lead is not in the lead files, is left as it is and counted. Counts only."""
     leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
+    if not leads:
+        print('the lead files read as empty; not touching the cache')
+        return 1
     cache = _load_cache()
-    kept = rebuilt = dropped = 0
+    kept = rebuilt = dropped = left = 0
     why = {}
     for case in [c for c, e in cache.items() if str((e or {}).get('_src', '')).startswith('wpweb')]:
         old = cache[case]
         f = os.path.join(_pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', case) + '.txt')
         lead = leads.get(case)
         reason = ''
-        if not os.path.exists(f):
-            reason = 'no kept copy of the page'
-        elif lead is None:
-            reason = 'lead no longer on the board'
+        if not os.path.exists(f) or lead is None:
+            k = 'no kept copy of the page' if not os.path.exists(f) else 'lead not in the lead files'
+            why['left as is, ' + k] = why.get('left as is, ' + k, 0) + 1
+            left += 1
+            continue
         else:
             text = open(f, encoding='utf-8', errors='replace').read()
             if not page_matches_address(text, _lead_street(lead)):
@@ -607,13 +616,18 @@ def reparse():
                         rebuilt += 1
                     cache[case] = entry
                     continue
-        del cache[case]
+        paid = {k: old[k] for k in ('_person', '_prop_id') if old.get(k) is not None}
+        if paid:
+            cache[case] = dict(paid, _ts=old.get('_ts'))   # keep what was paid for, drop the page half
+        else:
+            del cache[case]
         dropped += 1
-        why[reason] = why.get(reason, 0) + 1
+        why['removed, ' + reason] = why.get('removed, ' + reason, 0) + 1
     _save_cache(cache)
-    print('re-read %d page(s): %d unchanged, %d rebuilt, %d removed' % (kept + rebuilt + dropped, kept, rebuilt, dropped))
+    print('re-read %d page(s): %d unchanged, %d rebuilt, %d removed; %d left as is'
+          % (kept + rebuilt + dropped, kept, rebuilt, dropped, left))
     for k, v in sorted(why.items(), key=lambda x: -x[1]):
-        print('  removed, %s: %d' % (k, v))
+        print('  %s: %d' % (k, v))
     return 0
 
 
