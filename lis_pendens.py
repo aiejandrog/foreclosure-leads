@@ -485,6 +485,70 @@ def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS'))
             return
 
 
+def _whole_day_search():
+    """-> search(lo, hi) -> records, [] (the Clerk's 'nothing on file' on every try) or None (never got
+    through). Blank party name, typed LIS PENDENS: the whole-Miami feed, one paid solve per window."""
+    import urllib.parse
+    from captcha_solver import solve_turnstile as _solve
+    import paid_reads
+    import records_liens as R
+    solve = paid_reads.guarded(_solve, 'lis_pendens')
+
+    def search(lo, hi):
+        url = (R.OR_BASE + 'api/home/standardsearch?partyName=&dateRangeFrom=' + urllib.parse.quote(lo)
+               + '&dateRangeTo=' + urllib.parse.quote(hi) + '&documentType=' + urllib.parse.quote(MD_LP_DOCTYPE)
+               + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+        answers = []
+        for _ in range(3):
+            recs, info = _or_attempt(R, solve, url)
+            if recs is not None:
+                return recs
+            if info['qs'] is False:
+                answers.append(info)
+        # same rule as the lender search: only every try answering "not valid" is an empty window
+        if len(answers) == 3 and all(a['token'] and a['http'] == 200 and a['valid'] is False for a in answers):
+            return []
+        return None
+    return search
+
+
+MD_WHOLE = os.environ.get('DEALFLOW_LP_MD_WHOLE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+MD_WHOLE_DAYS = _env_int('DEALFLOW_LP_MD_WHOLE_DAYS', 5)
+MD_WHOLE_KINDS = os.environ.get('DEALFLOW_LP_MD_WHOLE_KINDS', 'BANK-1st').strip()   # 'all' adds HOA/JUNIOR + OTHER/PRIVATE
+
+
+def whole_miami_sweep(days=None, kinds=None, search_fn=None):
+    """Whole-Miami lis pendens, one day window per paid solve -> (rows, info). OFF unless
+    DEALFLOW_LP_MD_WHOLE=1 (a recurring paid read, Alex's call). Catches the filings no listed lender
+    names (2026-10-22 audit: the lender list held 59 of 88 bank-first filings in 14 days). Rows are
+    deduped by case, need a non-lender party like the lender sweep's, and are cut to `kinds`
+    ('all' keeps HOA/JUNIOR and OTHER/PRIVATE). A capped or unread day is reported, never counted empty."""
+    days = MD_WHOLE_DAYS if days is None else days
+    kinds = MD_WHOLE_KINDS if kinds is None else kinds
+    keep = None if kinds.lower() == 'all' else {k.strip() for k in kinds.split(',') if k.strip()}
+    search_fn = search_fn or _whole_day_search()
+    today = datetime.date.today()
+    out, capped, failed, solves = {}, [], [], 0
+    for i in range(days, 0, -1):
+        d = (today - datetime.timedelta(days=i)).isoformat()
+        solves += 1
+        recs = search_fn(d, d)
+        if recs is None:
+            failed.append(d)
+            continue
+        if len(recs) >= OR_RESULT_CAP:
+            capped.append(d)
+        for r in _lp_rows(recs):
+            n = normalize(r)
+            if not n['owner'] or (keep is not None and n['kind'] not in keep):
+                continue
+            out.setdefault(n['case'] or n['bookpage'] or n['parties'][:50], n)
+    info = {'days': days, 'kinds': kinds, 'windows': solves, 'capped': capped, 'failed': failed}
+    print(f'  whole-Miami sweep: {len(out)} filing(s) over {days} day window(s) ({kinds}); '
+          f'{len(failed)} not read, {len(capped)} capped')
+    return list(out.values()), info
+
+
 def audit_all_lp(days=14, window_days=1, held_rows=None, search_fn=None):
     """Read-only: how much of Miami-Dade's lis pendens does the lender list miss? (2026-10-22)
 
@@ -497,22 +561,7 @@ def audit_all_lp(days=14, window_days=1, held_rows=None, search_fn=None):
     import collections
     import urllib.parse
     if search_fn is None:
-        from captcha_solver import solve_turnstile as _solve
-        import paid_reads
-        import records_liens as R
-        solve = paid_reads.guarded(_solve, 'lis_pendens')
-
-        def search_fn(lo, hi):
-            url = (R.OR_BASE + 'api/home/standardsearch?partyName=&dateRangeFrom=' + urllib.parse.quote(lo)
-                   + '&dateRangeTo=' + urllib.parse.quote(hi) + '&documentType=' + urllib.parse.quote(MD_LP_DOCTYPE)
-                   + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
-            for _ in range(3):
-                recs, info = _or_attempt(R, solve, url)
-                if recs is not None:
-                    return recs
-                if info['valid'] is False and info['token'] and info['http'] == 200:
-                    return []
-            return None
+        search_fn = _whole_day_search()
     if held_rows is None:
         try:
             held_rows = json.load(open(OUT, encoding='utf-8'))
@@ -766,6 +815,12 @@ def main():
     info = {}
     if a.county in ('miami-dade', 'all'):
         md = lp_sweep(days=a.days) or []
+        if MD_WHOLE:
+            whole, wi = whole_miami_sweep()
+            have = {r.get('case') for r in md if r.get('case')}
+            md = md + [r for r in whole if r.get('case') not in have]
+            if wi['failed'] or wi['capped']:
+                SWEEP_CAPPED.append('whole-miami:%d day(s) not read to the end' % (len(wi['failed']) + len(wi['capped'])))
         out += md
         # MD has no single blocked signal: it sweeps a list of plaintiffs. All of them refused
         # and nothing found = we learned nothing, whatever the empty list looks like. Some refused,
