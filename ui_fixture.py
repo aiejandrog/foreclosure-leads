@@ -45,7 +45,7 @@ def build(directory):
     calls = [dict(c=r['case'], o=r['owners'], on='Synthetic', a=r['addr'],
                   p=r['phones'], r=['M', 'L'], x=r['auction'], d=r['days'],
                   lp=int(r['lp']), eq=75, v=400000, j=100000, county='MIAMI-DADE') for r in rows]
-    payload = F._encrypt_payload(json.dumps(calls), FIXTURE_CODE)
+    payload = F._encrypt_multi(json.dumps(calls), [('Synthetic', FIXTURE_CODE)])
     page = C.build_html(calls, len(calls), payload, dt.date.today().isoformat(),
                         'synthetic', 'synthetic')
     (directory / 'call.html').write_text(page, encoding='utf-8')
