@@ -112,7 +112,7 @@ rec('bake: plaintext board strips wpRelatives',
     "if k not in ('phones', 'phdnc', 'phsrc', 'emails', 'wpRelatives')" in FL)
 rec('bake: relatives are assigned only to r.wpRelatives',
     FL.count("_r['wpRelatives'] = _rels") == 1 and not re.search(r"_ph\.append\([^)]*_rels", FL))
-rec('bake: namesake Person records are skipped', 'if _grade is None:\n                            continue' in FL)
+rec('bake: namesake Person records are skipped', bool(re.search(r'if _grade is None:\s*\n\s*continue', FL)))
 rec('bake: held leads lose relatives after every hold is set',
     FL.index('relatives gate: stripped') > FL.index('\n    _bk_held, _bk_degraded = stamp_federal_bk(slim)'))
 
