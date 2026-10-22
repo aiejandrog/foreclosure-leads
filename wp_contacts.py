@@ -80,18 +80,63 @@ def name_grade(lead_owners, wp_name):
     return best
 
 
+_DIRS = {'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW', 'NORTH', 'SOUTH', 'EAST', 'WEST',
+         'NORTHEAST', 'NORTHWEST', 'SOUTHEAST', 'SOUTHWEST'}
+_DIR_ABBR = {'NORTH': 'N', 'SOUTH': 'S', 'EAST': 'E', 'WEST': 'W', 'NORTHEAST': 'NE',
+             'NORTHWEST': 'NW', 'SOUTHEAST': 'SE', 'SOUTHWEST': 'SW'}
+_SUFFIX = {'ST': 'ST', 'STREET': 'ST', 'AVE': 'AVE', 'AV': 'AVE', 'AVENUE': 'AVE', 'CT': 'CT',
+           'COURT': 'CT', 'RD': 'RD', 'ROAD': 'RD', 'DR': 'DR', 'DRIVE': 'DR', 'TER': 'TER',
+           'TERR': 'TER', 'TERRACE': 'TER', 'PL': 'PL', 'PLACE': 'PL', 'LN': 'LN', 'LANE': 'LN',
+           'BLVD': 'BLVD', 'BOULEVARD': 'BLVD', 'WAY': 'WAY', 'CIR': 'CIR', 'CIRCLE': 'CIR',
+           'HWY': 'HWY', 'HIGHWAY': 'HWY', 'PKWY': 'PKWY', 'PARKWAY': 'PKWY', 'TRL': 'TRL',
+           'TRAIL': 'TRL', 'CV': 'CV', 'COVE': 'CV', 'PATH': 'PATH', 'LOOP': 'LOOP', 'ROW': 'ROW'}
+
+
 def _street_key(addr):
-    """(house number, first street-name word) or None. 'SW 8TH ST' and '8TH ST' compare equal on
-    the number + first non-directional word, which is what both sources agree on."""
+    """(house number, directionals, street name, suffix) or None.
+
+    Every part counts. Miami-Dade numbers its streets, so '123 SW 8 ST', '123 NW 8th Ave' and
+    '123 NE 8th Ct' share a house number and a street number and are three different houses; a
+    key of house number + first word called them one, which let a same-name owner on the wrong
+    street grade as the owner at our address. Ordinals are normalised ('8 ST' == '8th St'), and
+    long forms are abbreviated ('Street' == 'ST', 'Southwest' == 'SW'). Unit numbers are ignored."""
     s = re.sub(r'[^A-Z0-9 ]', ' ', str(addr or '').upper())
     words = s.split()
     if not words or not words[0].isdigit():
         return None
-    rest = [w for w in words[1:] if w not in ('N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW')]
-    if not rest:
+    house, rest = words[0], words[1:]
+    dirs, name, suffix = [], [], ''
+    for w in rest:
+        if w in ('APT', 'UNIT', 'STE', 'SUITE', '#'):
+            break
+        if suffix:
+            if w in _DIRS:                                  # post-directional: '123 8 ST SW'
+                dirs.append(_DIR_ABBR.get(w, w))
+            break
+        if w in _DIRS and not name:
+            dirs.append(_DIR_ABBR.get(w, w))
+        elif w in _SUFFIX and name:
+            suffix = _SUFFIX[w]
+        else:
+            name.append(re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', w))
+    if not name:
         return None
-    # The county writes 'SW 8 ST', Whitepages writes 'SW 8th St': same street.
-    return words[0], re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', rest[0])
+    return house, ' '.join(sorted(dirs)), ' '.join(name), suffix
+
+
+def same_street(a, b):
+    """Two addresses name the same house: same house number and street name, and the same
+    directionals and suffix wherever BOTH carry them. One source dropping 'SW' or 'ST' is common;
+    two different ones ('NW 8 AVE' vs 'NE 8 CT') are different houses."""
+    ka, kb = _street_key(a), _street_key(b)
+    if not ka or not kb:
+        return False
+    if ka[0] != kb[0] or ka[2] != kb[2]:
+        return False
+    for i in (1, 3):                                       # directionals, suffix
+        if ka[i] and kb[i] and ka[i] != kb[i]:
+            return False
+    return True
 
 
 def _addr_strings(rec):
@@ -119,10 +164,10 @@ def _addr_strings(rec):
 
 def at_property(rec, lead_addr):
     """True when a Person record places this person at the lead's street address."""
-    want = _street_key(str(lead_addr or '').split(',')[0])
-    if not want:
+    want = str(lead_addr or '').split(',')[0]
+    if not _street_key(want):
         return False
-    return any(_street_key(a.split(',')[0]) == want for a in _addr_strings(rec))
+    return any(same_street(a.split(',')[0], want) for a in _addr_strings(rec))
 
 
 def grade_person_record(lead_owners, lead_addr, rec):
@@ -227,8 +272,7 @@ def parcel_owners(verdict, lead_owners, lead_addr, result):
         return list(owners)
     if verdict != 'unverified':
         return []
-    want = _street_key(str(lead_addr or '').split(',')[0])
-    if not want or _street_key(_prop_street(result)) != want:
+    if not same_street(_prop_street(result), str(lead_addr or '').split(',')[0]):
         return []
     return [o for o in owners if grade_property_owner(lead_owners, o.get('name')) == 'wp']
 

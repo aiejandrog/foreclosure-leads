@@ -189,6 +189,10 @@ def propagate_dnc(leads, extra=()):
 # and 14-day bad-number taps run about 25%. An owner number Whitepages ties to the deed by name
 # outranks the trace's tail; a household member or a name-only match does not.
 _KEEP_TIER = {PHSRC_WP: 0, PHSRC_TRACE: 1, PHSRC_HOUSEHOLD: 2, PHSRC_NAME: 3}
+# Whitepages owner numbers that may outrank the skip trace. One Whitepages owner can carry a dozen
+# numbers, and those carry no DNC check of their own ('not flagged' is not 'scrubbed'), so past
+# this many they rank after the trace instead of emptying it.
+WP_OVER_TRACE = int(os.environ.get('DEALFLOW_WP_OVER_TRACE', '4'))
 
 
 def fit_phones(entries, cap=None):
@@ -198,15 +202,27 @@ def fit_phones(entries, cap=None):
     first (they cannot be dialled, and propagate_dnc carries the flag from the skip-trace file
     regardless), then name-only, then household, then the skip trace's tail. Owner numbers
     ('wp') go last. Within a tier the later entry goes first, because providers return their best
-    match first. The survivors keep their merge order, so nothing that fits is reordered."""
+    match first. Only the first WP_OVER_TRACE owner numbers outrank the trace. The survivors keep
+    their merge order, so nothing that fits is reordered."""
     cap = MAX_PHONES if cap is None else cap
     if len(entries) <= cap:
         return list(entries)
+
+    wp_seen = []
 
     def tier(i):
         e = entries[i]
         if e.get('dnc'):
             return 9
-        return _KEEP_TIER.get(str(e.get('src') or PHSRC_TRACE), 4)
+        src = str(e.get('src') or PHSRC_TRACE)
+        if src == PHSRC_WP:
+            if i not in wp_seen:
+                wp_seen.append(i)
+            return 0 if wp_seen.index(i) < WP_OVER_TRACE else 1.5
+        return _KEEP_TIER.get(src, 4)
+    # rank wp entries in merge order so "the first WP_OVER_TRACE" means the provider's first
+    for i, e in enumerate(entries):
+        if str(e.get('src') or '') == PHSRC_WP and not e.get('dnc'):
+            wp_seen.append(i)
     keep = sorted(range(len(entries)), key=lambda i: (tier(i), i))[:cap]
     return [entries[i] for i in sorted(keep)]

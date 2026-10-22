@@ -57,6 +57,10 @@ chk('fit: a DNC-flagged number is the first to go', ent(0)['n'] not in [e['n'] f
 chk('fit: under the cap nothing changes', PS.fit_phones(ten_st[:4] + wp2, cap=10) == ten_st[:4] + wp2)
 out = PS.fit_phones([ent(i, 'wp') for i in range(12)], cap=10)
 chk('fit: all-owner overflow still cuts the tail', [e['n'] for e in out] == [ent(i)['n'] for i in range(10)])
+big_wp = [ent(40 + i, 'wp') for i in range(12)]
+out = [e['n'] for e in PS.fit_phones(ten_st[:6] + big_wp, cap=10)]
+chk('fit: one Whitepages owner with 12 numbers cannot empty the skip trace',
+    all(e['n'] in out for e in ten_st[:6]) and sum(1 for e in big_wp if e['n'] in out) == 4, out)
 
 # --- 2. parcel_owners -----------------------------------------------------------------------------
 import wp_contacts as W  # noqa: E402
@@ -81,7 +85,13 @@ chk('verdict: apn digits vs folio digits', W.wp_parcel_verdict('01-0000-000-0001
 
 # --- 3. address reading ---------------------------------------------------------------------------
 chk("street: '8 ST' == '8th St'", W._street_key('123 SW 8 ST') == W._street_key('123 SW 8th St'))
-chk('street: different house number differs', W._street_key('123 SW 8 ST') != W._street_key('125 SW 8 ST'))
+chk('street: different house number differs', not W.same_street('123 SW 8 ST', '125 SW 8 ST'))
+chk("street: '8 ST' == '8th Street' == 'Southwest 8th St'", W.same_street('123 SW 8 ST', '123 Southwest 8th Street'))
+for _a, _b in (('123 SW 8 ST', '123 NW 8th Ave'), ('123 NW 8 AVE', '123 NE 8th Ct'), ('123 SW 8 ST', '123 SW 8th Ave')):
+    chk('street: %s is not %s (same house and street number, other street)' % (_a, _b), not W.same_street(_a, _b))
+chk('grade: a same-name owner on NW 8th Ave is NOT placed at our SW 8 ST',
+    W.grade_person_record('GARCIA, JOSE', '123 SW 8 ST, Miami, FL',
+                          {'name': 'Jose A Garcia', 'current_addresses': [{'line1': '123 NW 8th Ave'}]}) == 'nm')
 person_rec = {'name': 'Jane M Doe',
               'current_addresses': [{'house': '123', 'street': '8th', 'line1': '123 SW 8th St',
                                      'city': 'Miami'}]}

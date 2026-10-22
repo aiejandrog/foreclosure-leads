@@ -3283,6 +3283,12 @@ def make_tracker(leads):
                 # property street is our lead's street (wp_contacts.parcel_owners).
                 _po = (_WPC.parcel_owners(_pv, _lown, _laddr, _res) if _WPC
                        else (_oi.get('person_owners') or [] if _prop_ok else []))
+                if _pv == 'unverified' and _po:
+                    # owner + street matched: the deep-link is this house's after all
+                    _pid2 = _wp_norm_id(((_hit or {}).get('_prop_id') or _wp_ids.get(_case) or ''))
+                    if _pid2 and not _r.get('wpPropId'):
+                        _r['wpPropId'] = _pid2
+                        _wid += 1
                 _pc, _ = _prop_city_state(_r)
                 _owns = [_wp_own(o, _pc) for o in _po]
                 # WHO IS THE OWNER (wp_contacts). A person Whitepages lists on the parcel is tagged
