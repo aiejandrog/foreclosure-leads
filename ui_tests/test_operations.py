@@ -74,26 +74,31 @@ class OperationsUI(unittest.TestCase):
         w = self.worker()
         self.assertTrue(w.locator('#mw-call').is_visible())
         self.assertTrue(w.locator('#mw-auto').is_visible())
-        before = w.locator('.mwname').inner_text()
+        before = w.locator('#mwprog').inner_text()
         w.locator('#mw-skip').click()
-        self.assertNotEqual(w.locator('.mwname').inner_text(), before)
+        self.assertNotEqual(w.locator('#mwprog').inner_text(), before)
         w.locator('.mwlane[data-lane="active"]').click()
         self.assertIn('on', w.locator('.mwlane[data-lane="active"]').get_attribute('class'))
         w.locator('.mwlane[data-lane="early"]').click()
         self.assertTrue(w.locator('#mw-call').is_visible())
         self.assertEqual(self.errors, [])
 
-    def test_worker_start_stop_and_call_outcomes(self):
+    def test_worker_call_outcomes(self):
         w = self.worker()
         w.locator('#mw-call').click()
         self.assertGreater(w.locator('.mwoc').count(), 0)
-        # Start/Stop uses production handlers, while transport is blocked by the context.
-        w.evaluate('render()')
-        w.locator('#mw-auto').click()
-        w.locator('#mw-stop').click()
-        self.assertFalse(w.evaluate('auto'))
+        w.locator('.mwoc[data-oc="noanswer"]').click()
+        self.assertEqual(self.errors, [])
+
+    def test_worker_start_stop(self):
+        w = self.worker()
+        start = w.locator('#mwrunbar button[data-run="lane"]')
+        self.assertTrue(start.is_enabled())
+        start.click()
+        w.locator('#mwrunbar button[data-run="stop"]').click()
+        self.assertNotIn(' on', w.locator('#mwrunbar').get_attribute('class'))
         w.locator('.mwlane[data-lane="active"]').click()
-        self.assertFalse(w.evaluate('auto'))
+        self.assertNotIn(' on', w.locator('#mwrunbar').get_attribute('class'))
         self.assertEqual(self.errors, [])
 
     def test_call_mode_unlock_and_wrong_number_choices(self):
