@@ -673,8 +673,10 @@ def assist(todo, refresh=False, wait_s=None):
 # cannot reach the site): run 3 first and paste the counts plus `--structure` of one before a batch.
 
 _NAME_TOLL_FREE = {'800', '833', '844', '855', '866', '877', '888'}
-_PERSON_STOP_RE = re.compile(r'^(possible\s+)?(relatives?|associates?|neighbou?rs?|related people|'
-                             r'people (also|you may)|household members?|other people|similar people)\b', re.I)
+_PERSON_STOP_RE = re.compile(r'^(possible\s+|known\s+|other\s+)?(relatives?|associates?|neighbou?rs?|related people|'
+                             r'people (also|you may)|household( members?)?|other people|similar people|family|'
+                             r'spouse|parents?|children|siblings?|roommates?|co-?residents?)\b', re.I)
+_PAST_RE = re.compile(r'^(past|previous|prior|former|old)\s+(addresses|address|locations?)|^address history', re.I)
 _AGE_RE = re.compile(r'(^|,)\s*age\s*:?\s*\d{1,3}\b|\b\d{1,3}\s+years? old\b', re.I)
 _LIST_RE = re.compile(r'\b[\d,]+\s+(results|people|matches|records)\s+(found|for|named)\b|'
                       r'people search results|results for\s+["“]?[A-Za-z]', re.I)
@@ -726,58 +728,71 @@ def parse_person_page(text, lead_owners, street):
     """A copied whitepages.com PERSON page -> (record or None, reason).
 
     record = {name, phones:[{number,type}], emails, current_addresses:[{full_address}]}, the shape
-    wp_contacts grades. See the block comment above for what is accepted."""
+    wp_contacts grades. Everything is read from the OWNER'S BLOCK only: from the one name line that
+    clears the owner bar down to the next person's name line (aged or not) or a relatives / family
+    / associates heading. The address stored is the page's own address line, not ours, so
+    wp_contacts.at_property (house, directionals, street, suffix) grades it; a line under a past /
+    previous addresses heading does not count. Two owner-bar names with ages (a list of
+    namesakes) is refused, as is anything that reads as a results list."""
     import wp_contacts as C
     raw = str(text or '')
     if _BLOCK_RE.search(raw):
         return None, 'the page is a block / verification page'
     lines = [l.strip() for l in raw.replace('\r', '').split('\n')]
     lines = [l for l in lines if l]
-    if _LIST_RE.search(raw) or sum(1 for i, l in enumerate(lines) if _is_name(l) and (
-            _AGE_RE.search(l) or (i + 1 < len(lines) and _AGE_RE.search(lines[i + 1])))) > 6:
-        return None, 'that is the results list: open the person who lives at the house, then copy'
     def name_of(l):
-        return re.split(r',\s*age\b|\s+age\s*\d|\s+in\s+[A-Z][a-z]+', l, flags=re.I)[0].strip()
-    owner_i = next((i for i, l in enumerate(lines)
-                    if _is_name(name_of(l)) and C.name_grade(lead_owners, name_of(l)) == 'owner'), None)
-    if owner_i is None:
-        return None, 'no name on the page clears the owner bar (a namesake, or not a person page)'
-    if not page_matches_address(raw, street):
-        return None, "the page does not name this lead's address (a namesake, or the owner moved on)"
-    end = len(lines)
-    for j in range(owner_i + 1, len(lines)):
-        l = lines[j]
-        if _PERSON_STOP_RE.match(l):
-            end = j
-            break
+        return re.split(r',\s*age\b|\s+age\s*:?\s*\d|\s+in\s+[A-Z][a-z]+', l, flags=re.I)[0].strip()
+    def aged(k):
+        return bool(_AGE_RE.search(lines[k]) or (k + 1 < len(lines) and _AGE_RE.search(lines[k + 1])))
+    def is_person(l):
         nm = name_of(l)
-        aged = _AGE_RE.search(l) or (j + 1 < len(lines) and _AGE_RE.search(lines[j + 1]))
-        if _is_name(nm) and aged and C.name_grade(lead_owners, nm) != 'owner':
-            end = j                     # the next person's row
+        return _is_name(nm) and not all(w.lower() in _LAYOUT_WORDS for w in re.findall(r'[A-Za-z]+', nm))
+    if _LIST_RE.search(raw) or sum(1 for k, l in enumerate(lines) if is_person(l) and aged(k)) > 6:
+        return None, 'that is the results list: open the person who lives at the house, then copy'
+    owners = [k for k, l in enumerate(lines) if is_person(l) and C.name_grade(lead_owners, name_of(l)) == 'owner']
+    if not owners:
+        return None, 'no name on the page clears the owner bar (a namesake, or not a person page)'
+    if sum(1 for k in owners if aged(k)) > 1:
+        return None, 'that is the results list: open the person who lives at the house, then copy'
+    owner_i = owners[0]
+    end = len(lines)
+    for k in range(owner_i + 1, len(lines)):
+        if _PERSON_STOP_RE.match(lines[k]) or is_person(lines[k]):
+            end = k
             break
-    phones, emails, seen = [], [], set()
-    for j in range(owner_i, end):
-        l = lines[j]
+    phones, emails, seen, addr, past = [], [], set(), '', False
+    for k in range(owner_i, end):
+        l = lines[k]
+        if _PAST_RE.match(l):
+            past = True
+        elif re.match(r'^(current|present)\s+address', l, re.I):
+            past = False
+        if not addr and not past and re.match(r'^\d{1,6}\s+\S', l) and len(l) < 90:
+            line1 = l.split(',')[0]
+            if C.same_street(line1, street) and page_matches_address(l, street):
+                addr = l
         for m in _PHONE_RE.finditer(l):
             d = _digits(m.group(0))
             if len(d) != 10 or d in seen or d[:3] in _NAME_TOLL_FREE:
                 continue
-            # only a line that is the number, maybe with a type word: not a sentence that mentions one
+            # only a line that is the number, maybe with a type or carrier: not a sentence
             if len(re.findall(r'[A-Za-z]{2,}', _PHONE_RE.sub(' ', l))) > 4:
                 continue
             seen.add(d)
-            nxt = lines[j + 1] if j + 1 < len(lines) and not _PHONE_RE.search(lines[j + 1]) else ''
-            prv = lines[j - 1] if j and not _PHONE_RE.search(lines[j - 1]) else ''
+            nxt = lines[k + 1] if k + 1 < len(lines) and not _PHONE_RE.search(lines[k + 1]) else ''
+            prv = lines[k - 1] if k and not _PHONE_RE.search(lines[k - 1]) else ''
             phones.append({'number': d, 'type': _phone_type(l, nxt, prv)})
         for m in _EMAIL_RE.finditer(l):
             e = m.group(0).strip('.,;')
             if e.lower() not in seen and not e.lower().endswith('@whitepages.com'):
                 seen.add(e.lower())
                 emails.append(e)
+    if not addr:
+        return None, "the owner's part of the page does not name this lead's address as current"
     if not phones and not emails:
         return None, 'the owner is on the page but no phone or email shows in their part of it'
     return {'name': name_of(lines[owner_i]), 'phones': phones, 'emails': emails,
-            'current_addresses': [{'full_address': street}]}, ''
+            'current_addresses': [{'full_address': addr}]}, ''
 
 
 def _name_candidates(leads, cache, skip):
@@ -1141,7 +1156,7 @@ def main(argv=None):
                     help='print a copied page\'s owners/residents layout with names/numbers masked (safe to paste)')
     ap.add_argument('--retry-misses', action='store_true',
                     help='with --assist: reopen only the leads that came up "not this house"')
-    ap.add_argument('--by-name', type=int, nargs='?', const=MAX_LEADS, default=0, metavar='N',
+    ap.add_argument('--by-name', type=int, nargs='?', const=MAX_LEADS, default=None, metavar='N',
                     help='with --assist: search the OWNER\'S NAME for up to N leads whose address page '
                          'Whitepages does not have (or names, with --case)')
     ap.add_argument('--name-structure', action='store_true',
@@ -1220,7 +1235,7 @@ def main(argv=None):
             print('=== ...%s (%s) ===' % (os.path.basename(f)[-8:-4], kind))
             print(name_structure(open(f, encoding='utf-8', errors='replace').read()))
         return 0
-    if a.by_name:
+    if a.by_name is not None:
         if not (a.assist or a.plan):
             print('--by-name needs --assist (or --plan)')     # hand-assisted only, never automated
             return 2
