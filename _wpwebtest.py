@@ -177,26 +177,57 @@ rec('a normal page is not mistaken for a block', not W._BLOCK_RE.search(PAGE))
 open(os.path.join(td, 'e.txt'), 'w').write('Access is temporarily restricted')
 rec('a block page ingests nothing', W.ingest_file('D-1', os.path.join(td, 'e.txt')) == 1)
 
-print('\nHAND-ASSISTED MODE (no browser automation)')
-import builtins  # noqa: E402
+print('\nHAND-ASSISTED MODE (no browser automation, watches the clipboard)')
 opened = []
 import webbrowser  # noqa: E402
 webbrowser.open = lambda u, *a, **k: opened.append(u)
-clips = [PAGE, 'Access is temporarily restricted', PAGE]
-W._clipboard_text = lambda: clips.pop(0)
-answers = iter(['', '', 's', 'q'])
-builtins_input = builtins.input
-builtins.input = lambda *a, **k: next(answers)
+
+
+class _Clock:
+    t = 0.0
+
+    def time(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+W.time = _Clock()
+# per lead: the baseline read, then what each 1s poll sees
+seq = ['old', PAGE,                                   # E-0: copied the page -> cached
+       PAGE, 'Access is temporarily restricted',      # E-1: copied a block page -> skipped
+       'Access is temporarily restricted', 'hello',   # E-2: copied something else -> skipped
+       'hello']                                       # E-3: never copies -> times out, skipped
+W._clipboard_text = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
 WL.CACHE = os.path.join(td, 'wp2.json')
 W.CACHE = WL.CACHE
 leads[:] = [{'case': 'E-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13 + i}
             for i in range(4)]
-n_ok = W.assist(list(leads))
-builtins.input = builtins_input
+n_ok = W.assist(list(leads), wait_s=5)
 c2 = _j.load(open(WL.CACHE, encoding='utf-8')) if os.path.exists(WL.CACHE) else {}
-rec('assist cached the good page, refused the block page, honoured skip and quit',
+rec('assist cached only the real page (block, other text and timeout skipped)',
     n_ok == 1 and list(c2) == ['E-0'] and c2['E-0']['_src'] == 'wpweb-hand', (n_ok, list(c2)))
-rec('each lead opened in the default browser, nothing else driven', len(opened) >= 3 and all(u.startswith('https://www.whitepages.com/address/') for u in opened), opened[:2])
+rec('every lead opened in the default browser, nothing driven', len(opened) == 4
+    and all(u.startswith('https://www.whitepages.com/address/') for u in opened), opened[:2])
+rec('nothing is read from the terminal', 'input(' not in open(os.path.join(HERE, 'wp_web.py'), encoding='utf-8').read().split('def assist(')[1].split('def _parcel(')[0])
+
+print('\nREAL-PAGE SHAPES (10-22, numbers and names masked)')
+COMPANY = ('Overview\nOwners & Residents\nProperty Financials\nOwners, Residents & Occupancy Status\n'
+           'Occupancy Status\nVacant\nOwners & Residents\nLegal Way Usa\nWhitepages Property Intel\n'
+           "Property Details for 1 Main St Apt 2\n... identified by Assessor's Parcel Number (APN) "
+           '74-43-43-27-27-004-0040. Built in 1980')
+rec('a business-owned page parses no people', W.parse_people_text(COMPANY) == [])
+rec('and says why', 'no person owner or resident' in W._why_empty(COMPANY), W._why_empty(COMPANY))
+rec('APN read off the page', W.page_apn(COMPANY) == '74-43-43-27-27-004-0040', W.page_apn(COMPANY))
+e2 = W.to_cache_entry(people, ADDR, page_text=COMPANY)
+rec('APN carried into the cache entry', e2['result'].get('apn') == '74-43-43-27-27-004-0040')
+import wp_contacts as _C  # noqa: E402
+rec('the parcel gate then reads it (same digits = ok)',
+    _C.wp_parcel_verdict(e2['result']['apn'], '74434327270040040') == 'ok')
+rec('and a different folio = mismatch', _C.wp_parcel_verdict(e2['result']['apn'], '74434327270040041') == 'mismatch')
+rec('no APN on the page: no apn key', 'apn' not in W.to_cache_entry(people, ADDR, page_text=PAGE)['result'])
+rec('not-a-page copy explained', W._why_empty('hello') == 'that was not a Whitepages address page')
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

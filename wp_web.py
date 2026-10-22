@@ -36,7 +36,7 @@ that already carries a real lookup is skipped unless --refresh.
     python wp_web.py --case CACE-25-019745          # one named lead
     python wp_web.py --case C --from-file page.txt   # no browser: a page you copied by hand
     python wp_web.py --compare 25 --assist           # NO automation: opens each page in YOUR browser,
-                                                     # you Ctrl+A / Ctrl+C, press Enter, it caches
+                                                     # you Ctrl+A / Ctrl+C on it, it caches and moves on
     python wp_web.py --case C --save-text out.txt    # capture the visible text for calibration
     python wp_web.py --pick-callable 15 --refresh    # re-scrape even cached leads
 
@@ -146,14 +146,23 @@ def parse_people_text(text):
     return [p for p in people if p['name'] and (p['phones'] or p['emails'])]
 
 
-def to_cache_entry(people, address):
+_APN_RE = re.compile(r"Assessor'?s Parcel Number\s*\(APN\)\s*([0-9A-Za-z]+(?:-[0-9A-Za-z]+)*)", re.I)
+
+
+def page_apn(text):
+    """The parcel number the address page prints ("... Assessor's Parcel Number (APN) 74-43-...")."""
+    m = _APN_RE.search(text or '')
+    return m.group(1).strip() if m else ''
+
+
+def to_cache_entry(people, address, page_text=''):
     """people (parse_people_text) + the searched address string -> a whitepages_lookup.json entry.
 
     Owners land in ownership_info.person_owners, residents in residents, the same two lists the Pro
     API /property response fills, so wp_contacts.lead_contacts / parcel_owners and the bake grade a
-    scraped record exactly like an API one. No `apn` key is set: wp_parcel_verdict treats an absent
-    apn as 'ok' (no parcel claim to contradict), and the owner-name bar still decides owner vs
-    household, so a wrong-address page cannot turn a stranger into the owner."""
+    scraped record exactly like an API one. The page's APN, when printed, goes in `apn` so the
+    bake's parcel gate applies; without one, wp_parcel_verdict reads 'ok' and the owner-name bar
+    still decides owner vs household, so a wrong-address page cannot turn a stranger into the owner."""
     def rec(p):
         return {'name': p['name'],
                 'phones': [dict(x) for x in p['phones']],
@@ -161,9 +170,15 @@ def to_cache_entry(people, address):
                 'current_addresses': [{'full_address': address}] if address else []}
     owners = [rec(p) for p in people if p['role'] == 'owner']
     residents = [rec(p) for p in people if p['role'] != 'owner']
-    return {'result': {'property_address': {'full_address': address},
+    res = {'property_address': {'full_address': address}}
+    apn = page_apn(page_text)
+    if apn:
+        # The page names its parcel. Carrying it lets the bake's APN gate (wp_parcel_verdict) drop
+        # the property half if Whitepages resolved a different house than our lead's folio.
+        res['apn'] = apn
+    return {'result': dict(res, **{
                        'ownership_info': {'person_owners': owners},
-                       'residents': residents},
+                       'residents': residents}),
             '_http': 200, '_ts': int(time.time()), '_src': 'wpweb'}
 
 
@@ -203,7 +218,7 @@ def _scrape_one(page, lead):
     text = page.inner_text('body')
     people = parse_people_text(text)
     addr = WL._lead_addr(lead)
-    return (to_cache_entry(people, addr) if people else None), text
+    return (to_cache_entry(people, addr, page_text=text) if people else None), text
 
 
 def _login():
@@ -306,7 +321,30 @@ def _save_cache(cache):
 
 
 def _clipboard_text():
-    """The Windows clipboard as text (PowerShell Get-Clipboard); '' if it cannot be read."""
+    """The Windows clipboard as text, '' when empty or unreadable. Win32 API through ctypes (no
+    process per read, so it can be polled); PowerShell Get-Clipboard as the fallback."""
+    if os.name == 'nt':
+        try:
+            import ctypes
+            u, k = ctypes.windll.user32, ctypes.windll.kernel32
+            u.GetClipboardData.restype = ctypes.c_void_p
+            k.GlobalLock.restype = ctypes.c_void_p
+            k.GlobalLock.argtypes = [ctypes.c_void_p]
+            k.GlobalUnlock.argtypes = [ctypes.c_void_p]
+            if u.OpenClipboard(None):
+                try:
+                    h = u.GetClipboardData(13)            # CF_UNICODETEXT
+                    if not h:
+                        return ''
+                    ptr = k.GlobalLock(h)
+                    try:
+                        return ctypes.wstring_at(ptr) if ptr else ''
+                    finally:
+                        k.GlobalUnlock(h)
+                finally:
+                    u.CloseClipboard()
+        except Exception:
+            pass
     import subprocess
     try:
         out = subprocess.run(['powershell', '-NoProfile', '-Command',
@@ -317,56 +355,83 @@ def _clipboard_text():
         return ''
 
 
-def assist(todo, refresh=False):
-    """HUMAN-IN-THE-LOOP, no automation. For each lead: open its address page in Alejandro's own
-    default browser (already signed in, nothing driving it); he presses Ctrl+A, Ctrl+C on the page
-    and Enter here; the copied text is parsed into the cache. The site sees an ordinary person on an
-    ordinary browser, so there is no bot check to fail. About 15 seconds a lead.
-    Answers: Enter = take the clipboard, s = skip this lead, q = quit."""
+# A copied whitepages.com address page carries these; anything else copied is read as "skip".
+_PAGE_MARK = re.compile(r'Owners\s*&\s*Residents|Reverse Address|Property Details for', re.I)
+ASSIST_WAIT_S = float(os.environ.get('WP_WEB_ASSIST_WAIT_S', '240'))
+
+
+def _why_empty(text):
+    """One line on why a copied address page gave no person, counts only."""
+    if _BLOCK_RE.search(text or ''):
+        return 'the page is a block / verification page'
+    if not _PAGE_MARK.search(text or ''):
+        return 'that was not a Whitepages address page'
+    if not re.search(r'^\s*(owner|resident)\s*$', text or '', re.I | re.M):
+        return 'Whitepages lists no person owner or resident here (business-owned or vacant?)'
+    return 'people listed but no phone or email showing (not signed in, or hidden on the page)'
+
+
+def assist(todo, refresh=False, wait_s=None):
+    """HUMAN-IN-THE-LOOP, no automation. For each lead it opens the address page in Alejandro's own
+    default browser (already signed in, nothing driving it) and WATCHES THE CLIPBOARD. He presses
+    Ctrl+A, Ctrl+C on the page and that is all: the copy is detected, parsed and cached, and the next
+    page opens. Nothing is typed or pasted into this window (a paste here feeds the terminal, not
+    the script). Copying anything that is not a Whitepages address page skips the lead; Ctrl+C in
+    THIS window stops the run. The site sees an ordinary person on an ordinary browser."""
     import webbrowser
+    wait_s = ASSIST_WAIT_S if wait_s is None else wait_s
     cache = _load_cache()
     ok = skipped = 0
-    for n, lead in enumerate(todo, 1):
-        case = _WL._lead_key(lead)
-        parts = _WL._split_addr(_WL._lead_addr(lead))
-        if not parts or (not refresh and _WL._cache_looked(cache.get(case))):
-            continue
-        webbrowser.open(_addr_query(*parts))
-        try:
-            ans = input('[%d/%d] ...%s: page opened. Ctrl+A, Ctrl+C on it, then Enter here '
-                        '(s = skip, q = quit) -> ' % (n, len(todo), case[-4:])).strip().lower()
-        except EOFError:
-            break
-        if ans == 'q':
-            break
-        if ans == 's':
-            skipped += 1
-            continue
-        text = _clipboard_text()
-        if _BLOCK_RE.search(text or '') and not parse_people_text(text):
-            print('  ...%s: the copied page is a block / verification page, not the address page'
-                  % case[-4:])
-            skipped += 1
-            continue
-        people = parse_people_text(text)
-        if not people:
-            print('  ...%s: nothing parsed from the clipboard (copy the whole page: Ctrl+A, Ctrl+C)'
-                  % case[-4:])
-            skipped += 1
-            continue
-        entry = to_cache_entry(people, _WL._lead_addr(lead))
-        entry['_src'] = 'wpweb-hand'
-        old = cache.get(case) or {}
-        for k in ('_person', '_prop_id'):
-            if old.get(k) is not None:
-                entry[k] = old[k]
-        cache[case] = entry
-        _save_cache(cache)
-        o, r, ph = _counts(entry)
-        print('  ...%s: %d owner(s), %d resident(s), %d phone(s) cached' % (case[-4:], o, r, ph), flush=True)
-        ok += 1
+    print('For each page: click it, Ctrl+A, Ctrl+C. Do not paste anything here. '
+          'Ctrl+C in THIS window stops.', flush=True)
+    try:
+        for n, lead in enumerate(todo, 1):
+            case = _WL._lead_key(lead)
+            parts = _WL._split_addr(_WL._lead_addr(lead))
+            if not parts or (not refresh and _WL._cache_looked(cache.get(case))):
+                continue
+            base = _clipboard_text()
+            webbrowser.open(_addr_query(*parts))
+            print('[%d/%d] ...%s: page opened, waiting for your copy...' % (n, len(todo), case[-4:]), flush=True)
+            text, t0 = '', time.time()
+            while time.time() - t0 < wait_s:
+                time.sleep(1.0)
+                cur = _clipboard_text()
+                if cur and cur != base:
+                    text = cur
+                    break
+            if not text:
+                print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
+                skipped += 1
+                continue
+            people = parse_people_text(text) if _PAGE_MARK.search(text) else []
+            if not people:
+                print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], _why_empty(text), len(text)), flush=True)
+                skipped += 1
+                continue
+            entry = to_cache_entry(people, _WL._lead_addr(lead), page_text=text)
+            entry['_src'] = 'wpweb-hand'
+            old = cache.get(case) or {}
+            for k in ('_person', '_prop_id'):
+                if old.get(k) is not None:
+                    entry[k] = old[k]
+            cache[case] = entry
+            _save_cache(cache)
+            o, r, ph = _counts(entry)
+            print('  ...%s: %d owner(s), %d resident(s), %d phone(s) cached; parcel %s'
+                  % (case[-4:], o, r, ph, _parcel(entry, lead)), flush=True)
+            ok += 1
+    except KeyboardInterrupt:
+        print('\nstopped.')
     print('cached %d lead(s), skipped %d. cache: %s' % (ok, skipped, CACHE))
     return ok
+
+
+def _parcel(entry, lead):
+    """The APN gate's verdict for a cached page against this lead's folio (wp_contacts)."""
+    import wp_contacts as C
+    apn = ((entry or {}).get('result') or {}).get('apn')
+    return C.wp_parcel_verdict(apn, _WL._lead_folio(lead)) if apn else 'no APN on page'
 
 
 def ingest_file(case, path):
@@ -386,7 +451,7 @@ def ingest_file(case, path):
     if not people:
         print('...%s: no owners/residents parsed from %s' % (case[-4:], path))
         return 1
-    entry = to_cache_entry(people, _WL._lead_addr(leads[case]))
+    entry = to_cache_entry(people, _WL._lead_addr(leads[case]), page_text=text)
     entry['_src'] = 'wpweb-file'
     cache = _load_cache()
     old = cache.get(case) or {}
@@ -438,7 +503,7 @@ def main(argv=None):
     ap.add_argument('--plan', action='store_true', help='list the leads it would scrape; no browser')
     ap.add_argument('--refresh', action='store_true', help='re-scrape even cached leads')
     ap.add_argument('--assist', action='store_true',
-                    help='hand-assisted, NO automation: opens each page in your own browser, you copy it, Enter')
+                    help='hand-assisted, NO automation: opens each page in your own browser; Ctrl+A, Ctrl+C on it')
     ap.add_argument('--from-file', metavar='FILE',
                     help='with ONE --case: cache a page you copied by hand (Ctrl+A, Ctrl+C into a .txt); no browser')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
