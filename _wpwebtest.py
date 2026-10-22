@@ -427,7 +427,7 @@ Phone Numbers
 (954) 555-0101
 Mobile
 (954) 555-0102 Landline
-Customer support (844) 555-0000
+(844) 555-0000
 Current Address
 1723 Canal Dr, Coral Springs, FL 33071
 Email
@@ -489,6 +489,18 @@ rec('two namesakes with the age two lines down is refused', rr is None, rr)
 rr, _ = W.parse_person_page("Marisol Romero in Coral Springs\nPeter Jones and Marisol Romero are listed\n"
                             "1723 Canal Dr\n(954) 555-0111\n", 'ROMERO, MARISOL', '1723 CANAL DR')
 rec('a block that turns into another person\'s text is not hers', rr is None, rr)
+for label, page in (('as someone else\'s relative', "Jane Doe, Age 52\nLives in Coral Springs, FL\nRelatives\n"
+                     "Marisol Romero, Age 54\n(305) 555-0020\n1723 Canal Dr\n"),
+                    ('in a people-also-viewed footer', "Jane Doe, Age 52\n1723 Canal Dr\nPeople also viewed\n"
+                     "Marisol Romero, Age 54\n(305) 555-0022\n1723 Canal Dr\n")):
+    rr, _ = W.parse_person_page(page, 'ROMERO, MARISOL', '1723 CANAL DR')
+    rec('the owner listed %s is refused' % label, rr is None, rr)
+for label, tail in (('a bulleted name', "\u2022 Jane Doe\n(305) 555-0023\n"), ('a numbered name', "1. Jane Doe\n(305) 555-0024\n"),
+                    ('an accented name with a bare age', "\u00cd\u00f1igo N\u00fa\u00f1ez, 40\n(305) 555-0025\n")):
+    rr, _ = W.parse_person_page(HEAD_ + tail, 'ROMERO, MARISOL', '1723 CANAL DR')
+    rec('a relative after %s is not hers' % label, rr and [p['number'] for p in rr['phones']] == ['9545550101'], rr)
+rr, _ = W.parse_person_page("Marisol Romero\n(954) 555-0101\n1723 Canal Dr\n", 'ROMERO, MARISOL', '1723 CANAL DR')
+rec('an owner name with no age (not a profile) is refused', rr is None, rr)
 rr, _ = W.parse_person_page(HEAD_ + "(954) 555-0103 - Wireless - T-Mobile USA\n", 'ROMERO, MARISOL', '1723 CANAL DR')
 rec('a number with only a type and carrier is still hers', rr and len(rr['phones']) == 2 and rr['phones'][1]['type'] == 'mobile', rr)
 rec('--by-name refuses the automated run', W.main(['--by-name', '3']) == 2 and W.main(['--by-name', '0']) == 2)

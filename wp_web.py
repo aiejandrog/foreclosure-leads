@@ -751,20 +751,21 @@ def parse_person_page(text, lead_owners, street):
     def is_person(l):
         nm = name_of(l)
         return _is_name(nm) and len(nm.split()) <= 5 and not all(w.lower() in _LAYOUT_WORDS for w in re.findall(r'[A-Za-z]+', nm))
-    def ends_block(l):
-        """Any line that starts with someone's name (a bare first name, "Jane Smith, 52", "JANE DOE 52",
-        "Jane Doe (Spouse)"), other than a layout heading or a "City, ST" line."""
-        if _PERSON_STOP_RE.match(l) or is_person(l):
+    def stays(l):
+        """The owner's block runs only over lines that cannot be another person: layout words, a
+        phone line, an email, a house-number address, "City, ST ZIP", an age, "Lives in ...".
+        Anything else (a name, bulleted, numbered, accented, with or without an age) ends it."""
+        if _PERSON_STOP_RE.match(l):
+            return False
+        if re.match(r"^[^\W\d_][^\W\d_ .'\-]*(?:[ .'\-]+[^\W\d_]+)*,?\s+[A-Z]{2}(\s+\d{5}(-\d{4})?)?$", l):
+            return True                 # Miami, FL 33101
+        if re.match(r'^(lives|lived|living)\s+(in|at)\b', l, re.I) or re.match(r'^\d{1,6}\s+\S', l):
             return True
-        if re.match(r"^[A-Za-z][A-Za-z .'\-]*,?\s+[A-Z]{2}(\s+\d{5}(-\d{4})?)?$", l):
-            return False                # Miami, FL 33101
-        lead = re.match(r"^([^\W\d_][^\d,(\u2022\u00b7|:]*)", l)
-        words = re.findall(r'[A-Za-z]+', lead.group(1)) if lead else []
-        # Capitalised like a name ("Jane", "JANE DOE"); "Customer support ..." is page text, not a person
-        # (the first two words decide: "Peter Jones and John Smith are listed" starts with a person)
-        head = words[:2]
-        return (bool(head) and (len(words) <= 4 or len(head) == 2) and all(w[0].isupper() for w in head)
-                and not all(w.lower() in _LAYOUT_WORDS for w in head))
+        if re.match(r'^(age\s*:?\s*\d{1,3}|\d{1,3}\s+years?\s+old)$', l, re.I):
+            return True
+        rest = _EMAIL_RE.sub(' ', _PHONE_RE.sub(' ', l))
+        words = re.findall(r'[^\W\d_]+', rest)
+        return all(w.lower() in _LAYOUT_WORDS or w.lower() in _PHONE_WORDS for w in words)
     if _LIST_RE.search(raw) or sum(1 for k, l in enumerate(lines) if is_person(l) and aged(k)) > 6:
         return None, 'that is the results list: open the person who lives at the house, then copy'
     owners = [k for k, l in enumerate(lines) if is_person(l) and C.name_grade(lead_owners, name_of(l)) == 'owner']
@@ -773,10 +774,15 @@ def parse_person_page(text, lead_owners, street):
     if sum(1 for k in owners if aged(k)) > 1:
         return None, 'that is the results list: open the person who lives at the house, then copy'
     owner_i = owners[0]
+    if not aged(owner_i):
+        return None, "the owner's name has no age beside it: not their own profile, open the person"
+    # The owner listed UNDER someone else (as their relative, or in "people also viewed"): a heading
+    # or another aged person above the owner's line means this is not the owner's page.
+    if any(_PERSON_STOP_RE.match(lines[k]) or (is_person(lines[k]) and aged(k)) for k in range(owner_i)):
+        return None, "the owner appears on someone else's page: open the owner's own profile"
     end = len(lines)
     for k in range(owner_i + 1, len(lines)):
-        l = lines[k]
-        if ends_block(l):               # a second owner-name line too: a namesake or an alias, not read
+        if not stays(lines[k]):         # a second owner-name line too: a namesake or an alias, not read
             end = k
             break
     phones, emails, seen, addr, past = [], [], set(), '', False
