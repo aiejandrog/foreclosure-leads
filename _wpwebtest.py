@@ -112,6 +112,43 @@ rec('no number leaks between people (count)',
     sum(len(p['phones']) for p in people) == 5, [(p['name'], len(p['phones'])) for p in people])
 rec('occupation line is not a name', 'Broker at M5' not in by)
 
+print('\nPUBLIC SUMMARY WITH UNDISCLOSED ROLES')
+# Manual copy of the public summary layout, fabricated contacts only. The role link is NOT
+# evidence of ownership. Decade ages must not become part of the person's name.
+summary = '''Owners, Residents & Occupancy Status
+Synthetic Alpha Person, age 40s
+Owner or Resident?View Role
+Cell Phone
+(305) 555-0101
+Landline
+(305) 555-0102
+Email Address
+alpha@example.com
+Synthetic Beta Person, age 30s
+Owner or Resident?
+View Role
+Cell Phone
+(305) 555-0103
+Landline
+—
+Email Address
+beta@example.com
+'''
+summary_people = W.parse_people_text(summary)
+rec('public summary imports both people', len(summary_people) == 2, summary_people)
+rec('public summary preserves names without decade ages',
+    [p['name'] for p in summary_people] == ['Synthetic Alpha Person', 'Synthetic Beta Person'])
+rec('a hidden role is unknown, never owner',
+    len(summary_people) == 2 and all(p['role'] == 'unknown' for p in summary_people))
+rec('summary phone numbers stay with their person',
+    [[p['number'] for p in person['phones']] for person in summary_people]
+    == [['3055550101', '3055550102'], ['3055550103']])
+summary_entry = W.to_cache_entry(summary_people, ADDR)
+rec('unknown roles never enter person_owners',
+    summary_entry['result']['ownership_info']['person_owners'] == [])
+rec('unknown roles use the conservative household path',
+    len(summary_entry['result']['residents']) == 2)
+
 print('\nCACHE SHAPE')
 entry = W.to_cache_entry(people, ADDR)
 rec('http 200', entry['_http'] == 200)
