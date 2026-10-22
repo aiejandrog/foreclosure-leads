@@ -787,3 +787,5 @@ rf_status.json.tmp
 !_sigemailtest.py
 # _phonevalidatetest: Twilio line status cap, cache privacy and Call Mode drop. Invented 555 numbers, no network.
 !_phonevalidatetest.py
+# _cadenceonetouchtest: one cadence note per owner per run, and the day 0/2/4/7 gap. example.com only.
+!_cadenceonetouchtest.py
