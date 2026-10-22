@@ -25,7 +25,7 @@ script is the attorney's call, not this module's.
 import re
 
 try:
-    from ownership_gate import owner_relation, _tokens, _surnames, _is_placeholder, _is_entity
+    from ownership_gate import owner_relation, _tokens, _surnames, _is_placeholder, _is_entity, _STOP
 except Exception:                                    # pragma: no cover - ownership_gate is in-repo
     raise
 
@@ -78,6 +78,54 @@ def name_grade(lead_owners, wp_name):
         elif rel == 'unsure':
             best = 'kin'
     return best
+
+
+LIKELY_SURNAME_MIN = 5
+
+
+def _name_pieces(s):
+    return [w for w in re.split(r'[^A-Z]+', str(s or '').upper()) if len(w) > 1 and w not in _STOP]
+
+
+def _readings(name):
+    """[(given name, {other pieces})]. 'LAST, FIRST ...' reads one way; a comma-less name may be
+    FIRST ... LAST or the county roll's LAST FIRST ..., so both ends are tried as the given name."""
+    s = str(name or '').upper()
+    if ',' in s:
+        last, first = s.split(',', 1)
+        ft, lt = _name_pieces(first), _name_pieces(last)
+        return [(ft[0], set(lt) | set(ft[1:]))] if ft and lt else []
+    t = _name_pieces(s)
+    if len(t) < 2:
+        return []
+    return [(t[0], set(t[1:])), (t[-1], set(t[:-1]))]
+
+
+def likely_owner(lead_owners, wp_name):
+    """True when wp_name misses the owner bar but is probably our owner (2026-10-22, Alejandro):
+    the given name matches exactly and one surname piece of 5+ letters sits inside one of ours, or
+    ours inside theirs. Whitepages "Gina Onojobi" vs the roll's "MCKNIGHT-ADEONOJOBI, GINA".
+
+    CALL-ONLY. It labels a number "likely owner" in Call Mode and nothing else: the bake's phsrc
+    stays 'hh', so the board, the worker and the send bridge never text it, and Call Mode holds its
+    text button until a call on that number reached a person."""
+    wp_name = str(wp_name or '').strip()
+    if _is_placeholder(wp_name) or _is_entity(wp_name) or name_grade(lead_owners, wp_name) == 'owner':
+        return False
+    theirs = _readings(wp_name)
+    for own in re.split(r';|&|/|\bAND\b', str(lead_owners or '').upper()):
+        if _is_placeholder(own) or _is_entity(own):
+            continue
+        for g1, rest1 in _readings(own):
+            for g2, rest2 in theirs:
+                if g1 != g2:
+                    continue
+                for a in rest1:
+                    for b in rest2:
+                        short, long_ = (a, b) if len(a) <= len(b) else (b, a)
+                        if len(short) >= LIKELY_SURNAME_MIN and short in long_:
+                            return True
+    return False
 
 
 _DIRS = {'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW', 'NORTH', 'SOUTH', 'EAST', 'WEST',

@@ -286,6 +286,21 @@ rec('a shortened surname is still only kin, a stranger still no',
     W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi') == 'kin'
     and W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Z Victor') == 'no')
 
+rec('likely owner: same first name + a 5+ letter surname piece inside ours (10-22)',
+    W.likely_owner('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi')
+    and W.likely_owner('MCKNIGHT-ADEONOJOBI, GINA', 'Gina Onojobi')
+    and W.likely_owner('PEREZ, ANA & ROSARIOGOMEZ, LUIS', 'Luis Rosario'))
+rec('likely owner refuses: owner already, short piece, other first name, entity, empty',
+    not W.likely_owner('MCKNIGHT-ADEONOJOBI,GINA', 'Gina Mcknight')
+    and not W.likely_owner('MCKNIGHT-ADEONOJOBI,GINA', 'Gina Jobi')
+    and not W.likely_owner('MCKNIGHT-ADEONOJOBI,GINA', 'Tina Onojobi')
+    and not W.likely_owner('ONOJOBI HOLDINGS LLC', 'Gina Onojobi')
+    and not W.likely_owner('MCKNIGHT-ADEONOJOBI,GINA', '')
+    and not W.likely_owner('', 'Gina Onojobi'))
+rec('likely owner never changes the owner bar or the property tag',
+    W.name_grade('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi') == 'kin'
+    and W.grade_property_owner('MCKNIGHT-ADEONOJOBI,GINA', 'Gina L Onojobi') == 'hh')
+
 shutil.rmtree(TMP, ignore_errors=True)
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
