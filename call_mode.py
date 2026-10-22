@@ -793,6 +793,27 @@ GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fác
            "Es el {phone}, y es sobre la propiedad en {st1}.")
 
 
+# THEIR PHONE'S AI ANSWERED (2026-10-22, Alejandro: "make it something unique hook as a pattern
+# interrupt"). iPhone "Ask Reason for Calling" (iOS 26) and Pixel Call Screen answer an unknown number,
+# ask the caller's name and reason, and show the owner a TRANSCRIPT. The owner never hears the voice,
+# so the line is a one-line text read in a few seconds. Talking to the phone itself is the interrupt:
+# no robocall does that, and "real person, not a robocall" is literally true because he reads it live.
+# Never "foreclosure" here (NEVER_SAY): the transcript can sit on a lock screen anyone can read. Live
+# voice only -- an AI or recorded voice answering their screener is an artificial-voice call (TCPA).
+SCREEN_EN = "Hey phone, tell {first} it's {sender}. Real person, not a robocall. It's about the house on {st1}. I'll wait."
+SCREEN_ES = "Oiga teléfono, dígale a {first} que es {sender}. Persona real, no es una grabación. Es sobre la casa en {st1}. Aquí espero."
+SCREEN_AEN = "Hey phone, tell the owner of {st1} it's {sender}. Real person, not a robocall. I'll wait."
+SCREEN_AES = "Oiga teléfono, dígale al dueño de {st1} que es {sender}. Persona real, no es una grabación. Aquí espero."
+# Second or third try: same voice, now it admits it is back, and hands them an easy no.
+SCREEN2_EN = "Hey phone, it's {sender} again for {first}. Still a real person. Ten seconds about {st1}, or {first} can tell me no and I'm gone."
+SCREEN2_ES = "Oiga teléfono, otra vez {sender} para {first}. Sigo siendo persona real. Diez segunditos sobre {st1}, o me dice que no y no molesto más."
+SCREEN2_AEN = "Hey phone, it's {sender} again for the owner of {st1}. Still a real person. Ten seconds, or tell me no and I'm gone."
+SCREEN2_AES = "Oiga teléfono, otra vez {sender} para el dueño de {st1}. Sigo siendo persona real. Diez segunditos, o me dice que no y no molesto más."
+SCREEN_TONE = ("Smile, a little amused -- you are talking to their phone. Slow and clear, it is being "
+               "typed out. Then go quiet and stay on the line.")
+SCREEN_LISTEN = ("They read your words as text, they do not hear you. Silence is fine; iPhone waits about "
+                 "30 seconds before it offers a message.")
+
 # "ARE YOU AN INVESTOR?" (2026-09-16 field debrief, 9107 NW 182 TER). Answered "we specialize in
 # pre-foreclosures" -> a realtor-owner heard a wholesaler and hung up. The honest line is the script's
 # own: "not calling to buy your house". NEVER claim BSG is not an investor (it does flip / cash-for-keys).
@@ -843,6 +864,7 @@ def _flow():
          'listen': 'Wait. Let them answer. Do not fill the gap.',
          'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
+                ['Their phone\'s AI answered (asks name + reason)', 'screen'],
                 ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         # "Who's asking?" is not a yes: a spouse or a tenant asks it too, and the next line says
@@ -1025,6 +1047,18 @@ def _flow():
          'listen': 'Get a time or leave the number. Nothing else.',
          'br': [['Got a callback time', 'end:callback'], ['Left my number', 'end:gate'], ['Hung up', 'end:gate']],
          'ret': 'gate'},
+        {'id': 'screen', 'k': 'THEIR PHONE\'S AI ANSWERED — the pattern interrupt',
+         'en': SCREEN_EN, 'es': SCREEN_ES, 'aen': SCREEN_AEN, 'aes': SCREEN_AES,
+         'tone': SCREEN_TONE, 'listen': SCREEN_LISTEN,
+         'br': [['They picked up', 'greet'], ['It asked me to leave a message', 'vm'],
+                ['Declined / hung up', 'end:noanswer'], ['This is my 2nd or 3rd try', 'screen2']],
+         'ret': 'screen'},
+        {'id': 'screen2', 'k': 'THEIR PHONE\'S AI AGAIN — 2nd or 3rd try',
+         'en': SCREEN2_EN, 'es': SCREEN2_ES, 'aen': SCREEN2_AEN, 'aes': SCREEN2_AES,
+         'tone': SCREEN_TONE, 'listen': SCREEN_LISTEN,
+         'br': [['They picked up', 'greet'], ['It asked me to leave a message', 'vm'],
+                ['Declined / hung up', 'end:noanswer']],
+         'ret': 'screen2'},
         {'id': 'vm', 'k': 'VOICEMAIL — read it live',
          'en': VOICEMAIL_EN, 'es': VOICEMAIL_ES,
          'tone': VM_TONE_EN,
@@ -8237,9 +8271,11 @@ function renderGuided(r, S, named, warm){
   var en=s.en, esl=s.es, br=s.br, tone=s.tone, listen=s.listen;
   if(s.id==='greet'){
     if(warm){ en=S.op.wen; esl=S.op.wes; tone='Energy UP on the name — you KNOW this person. Then hand it to them and wait.';
-              br=[['Glad to hear from me','frame'],['Not a good time','busy'],['Voicemail','vm']]; }
+              br=[['Glad to hear from me','frame'],['Not a good time','busy'],['Their phone\'s AI answered','screen2'],['Voicemail','vm']]; }
     else if(!named){ en=s.aen||en; esl=s.aes||esl; }
   }
+  /* Any other step with an anonymous variant (the screener lines): no name on the row, no {first}. */
+  else if(!named && s.aen){ en=s.aen; esl=s.aes||esl; }
   b+='<div class="ltag">'+esc(s.k||s.id)+'</div>';
   if(s.id==='vm') b+=_vmWarnHtml();
   if(s.id==='greet' && named && !warm){ var sn=secondName(r); if(sn) b+='<div class="noes">Co-owner on the card: <b>'+esc(sn)+'</b> &mdash; if that is who picked up, use their name.</div>'; }
