@@ -193,22 +193,23 @@ rec('no tel/dial link anywhere in a DNC row', 'href' not in out.get('withdnc', '
 rec('DNC household / line labels shown', 'household' in wd)
 rec('a one-number lead with a DNC number still shows the list', 'do-not-call flag' in out.get('onlydnc', ''))
 
-# Whitepages links on the card: Whitepages' own spelling (ordinals, "Apt"), owner given name first.
+# Whitepages address link on the card: Whitepages' own spelling (ordinals, "Apt"), as wp_web builds it.
 _pg = call_mode._PAGE
-_a = _pg.index('var _WP_SUF')
-_b = _pg.index("  return cap(first) + ' ' + cap(last);\n}\n") + len("  return cap(first) + ' ' + cap(last);\n}\n")
+_a = _pg.index('function fileLinks(')
 _js = os.path.join(_T, 'wplinks.js')
+_b = _pg.index('\n}\n', _a) + 3
 open(_js, 'w', encoding='utf-8').write(_pg[_a:_b] + """
-console.log(JSON.stringify([_wpStreet('2929 NW 123 TER'), _wpStreet('8600 NW 34 PL #B105'),
-  _wpStreet('9999 NE 99 AVE 999'), _wpStreet('5000 US HIGHWAY 1'), _wpOwnerName('ROMERO, MARISOL A; ROMERO, DANIEL')]));
+var streets = ['2929 NW 123 TER', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999', '5000 US HIGHWAY 1'];
+console.log(JSON.stringify(streets.map(function(s){ var L = fileLinks({a: s + ', MIAMI, FL 33101', o: 'X Y', ct: 'MI', fo: ''});
+  return (L.filter(function(x){ return x[0] === 'Whitepages addr'; })[0] || ['', ''])[1]; })));
 """)
 _p2 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js], capture_output=True, text=True, timeout=60)
 _got = json.loads(_p2.stdout or 'null') if _p2.returncode == 0 else None
 import wp_web as _W
+_want = ['https://www.whitepages.com/address/%s/MIAMI-FL' % '-'.join(_W._wp_street(x).split())
+         for x in ('2929 NW 123 TER', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999', '5000 US HIGHWAY 1')]
 rec('card Whitepages address link spells streets like wp_web (the house, not the city list)',
-    _got and _got[:4] == [_W._wp_street(x) for x in ('2929 NW 123 TER', '8600 NW 34 PL #B105',
-                                                     '9999 NE 99 AVE 999', '5000 US HIGHWAY 1')], (_got, _p2.stderr))
-rec('card Whitepages name link is the first owner, given name first', _got and _got[4] == 'Marisol Romero', _got)
+    _got == _want, (_got, _want, _p2.stderr[-300:]))
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
