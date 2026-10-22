@@ -6207,6 +6207,43 @@ function screenLookup(prefill){
   if(prefill){ $('lkq').value = prefill; run(); }
   try{ $('lkq').focus(); }catch(e){}
 }
+/* Whitepages spells its own links "2929 NW 123rd Ter Apt B105"; our "2929 NW 123 TER #B105" lands
+   on the city's property list instead of the house (wp_web._wp_street, 10-22, same rules). */
+var _WP_SUF = {st:1, ave:1, ct:1, ter:1, dr:1, rd:1, ln:1, pl:1, blvd:1, way:1, cir:1, pkwy:1, hwy:1, trl:1,
+               street:1, avenue:1, court:1, terrace:1, drive:1, road:1, lane:1, place:1, circle:1};
+var _WP_ROUTE = {road:1, rd:1, highway:1, hwy:1, sr:1, us:1, route:1, rte:1, cr:1};
+var _WP_DIR = {n:1, s:1, e:1, w:1, ne:1, nw:1, se:1, sw:1};
+function _wpOrd(n){ n = parseInt(n, 10); var m = n % 100, d = n % 10;
+  return n + ((m >= 10 && m <= 20) ? 'th' : (d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th')); }
+function _wpStreet(street){
+  var s = String(street || ''), unit = '';
+  var um = s.match(/(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)/i);
+  if(um){ unit = um[1]; s = s.replace(um[0], ' '); }
+  var t = s.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if(!unit && t.length >= 3 && /^\d+$/.test(t[t.length-1]) && _WP_SUF[t[t.length-2].toLowerCase()]
+     && !_WP_ROUTE[t[t.length-2].toLowerCase()]) unit = t.pop();
+  var out = t.map(function(w, i){
+    var lo = w.toLowerCase();
+    if(i > 0 && /^\d+$/.test(w)) return _WP_ROUTE[t[i-1].toLowerCase()] ? w : _wpOrd(w);
+    if(_WP_DIR[lo] || lo === 'us' || lo === 'sr' || lo === 'cr') return w.toUpperCase();
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+  if(unit) out.push('Apt', unit.toUpperCase());
+  return out.join(' ');
+}
+/* "ROMERO, MARISOL A; ROMERO, DANIEL" -> "Marisol Romero": the first owner, given name first, as
+   Whitepages' name search expects it. */
+function _wpOwnerName(o){
+  var c = String(o || '').split(/[;&]/)[0].trim();
+  if(!c) return '';
+  var first, last;
+  if(c.indexOf(',') >= 0){ last = c.split(',')[0].trim(); first = (c.split(',')[1] || '').trim().split(/\s+/)[0] || ''; }
+  else { var w = c.split(/\s+/); if(w.length < 2) return ''; first = w[0]; last = w[w.length-1]; }
+  if(!first || !last) return '';
+  var cap = function(x){ return x.toLowerCase().replace(/(^|[\s\-'])([a-z])/g, function(m, a, b){ return a + b.toUpperCase(); }); };
+  return cap(first) + ' ' + cap(last);
+}
+
 /* ===== HIS FILE — the research links, built on the page ==========================================
    Call Mode shipped with ZERO links to a lead's records: standing on a call you had to leave the
    page and hunt the county sites by hand (2026-08-18 field report: "I have to struggle to find
@@ -6214,6 +6251,7 @@ function screenLookup(prefill){
    five long strings per lead — 400 rows x ~450 chars of URL is ~180 KB on a page that has to open
    on a phone at a door. Deep docket links can't be derived (the MD clerk uses an opaque token), so
    those go to the county's case-search page, which is one paste away. */
+
 function fileLinks(r){
   // alphanumeric — Broward parcel ids contain letters (494213BA0140)
   var fo = String(r.fo || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
@@ -6277,9 +6315,10 @@ function fileLinks(r){
   var ap = String(r.a || '').split(',');
   var wpCity = ap.length >= 2 ? wpSlug(ap[1]) : '';
   if(ap[0] && wpCity)
-    L.push(['Whitepages addr', 'https://www.whitepages.com/address/' + wpSlug(ap[0]) + '/' + wpCity + '-FL']);
-  if(nm && wpSlug(nm))
-    L.push(['Whitepages', 'https://www.whitepages.com/name/' + wpSlug(nm) + '/' + (wpCity ? wpCity + '-FL' : 'FL')]);
+    L.push(['Whitepages addr', 'https://www.whitepages.com/address/' + wpSlug(_wpStreet(ap[0])) + '/' + wpCity + '-FL']);
+  var wpNm = _wpOwnerName(r.o);
+  if(wpNm)
+    L.push(['Whitepages', 'https://www.whitepages.com/name/' + wpSlug(wpNm) + '/' + (wpCity ? wpCity + '-FL' : 'FL')]);
   if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);
   return L;
 }
