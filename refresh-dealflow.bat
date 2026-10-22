@@ -404,15 +404,18 @@ rem  their phones FIRST (the tier cap above spent on Tier A while 15 of 18 Tuesd
 rem  and the morning list lands in %USERPROFILE%\DEALFLOW\3DAY-<date>.md for Jesse.
 python -u three_day.py --trace --max-spend 3 >> "%LOG%" 2>&1
 
-rem [3a-2] Whitepages Pro - DISABLED 2026-08-16 by Alejandro's call. The plan quota has been
-rem exhausted since 08-08 (nine straight nights of first-call 429s, zero results, last success
-rem 08-07 09:51) while still consuming a slot of the shared daily budget. Real cost when live was
-rem $0.22/call, not the $0.10 this comment used to claim. Cached results still bake into the board.
-rem To RE-ENABLE after renewing the plan, restore this line:
-rem   if exist whitepages.key python -u whitepages_lookup.py --all --limit 30 >> "%LOG%" 2>&1
-rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 
 :rebuild
+rem [3a-2] Whitepages Pro deep search - RE-ENABLED 2026-10-22 at Alejandro's word (plan renewed).
+rem  Disabled 08-16 when the plan quota ran out. Now: 4 leads a night that are about to be called
+rem  (sale within 60 days, fewest phones first, no contact hold, never Person-searched), each with
+rem  Property + the owner's Person record (relatives, more phones): at most 8 calls, about $1.76.
+rem  --max-spend 2 caps the run and WP_DAILY_CAP ($5 default) caps the day. Relatives stay call-only
+rem  on the board; they never reach Call Mode. No whitepages.key = skipped. A 403 exits 2 and the
+rem  refresh carries on with the cached results. Sits after :rebuild so it runs with or
+rem  without tracerfy.key, and before the board is built so tonight's numbers bake in. Full-sweep cost: python whitepages_lookup.py --estimate
+if exist whitepages.key python -u whitepages_lookup.py --pick-callable 4 --relatives --max-spend 2 >> "%LOG%" 2>&1
+rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
 rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
 rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
