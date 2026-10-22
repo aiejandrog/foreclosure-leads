@@ -8,6 +8,11 @@ import sys
 import tempfile
 import threading
 import unittest
+# cp1252 is the default stdout encoding on the laptop and the pages carry non-latin1
+# text (checkmarks, middots, a curly apostrophe), so the debug prints below raised
+# UnicodeEncodeError in tearDown and turned 4 PASSING tests into 4 errors. Same repo
+# idiom as _resimplisynctest.py.
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from playwright.sync_api import sync_playwright

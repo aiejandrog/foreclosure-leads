@@ -28,7 +28,12 @@ def build(directory):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     rows = leads()
-    tpl = F.subst_build_facts((ROOT / 'tracker_template.html').read_text(), dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
+    # encoding='utf-8' is load-bearing on Windows: the template carries byte 0x8d, which cp1252
+    # (the default locale encoding here) cannot decode, so read_text() raised UnicodeDecodeError
+    # and the WHOLE harness — every ui_tests suite — could not even reach setUpClass on the laptop.
+    # It passes in CI only because Linux defaults to UTF-8.
+    tpl = F.subst_build_facts((ROOT / 'tracker_template.html').read_text(encoding='utf-8'),
+                              dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
     replacements = {'__DATA__': F._esc_json(rows), '__MOTIONJS__': F._motion_js(),
                     '__OPTOUTS__': '[]', '__REPLIES__': '{}', '__MAILLOG__': '{}',
                     '__MAILTO__': '{}', '__TEXTLOG__': '{}', '__TEXTPERSON__': '{}',
@@ -42,9 +47,15 @@ def build(directory):
     F.assert_no_placeholders(tpl, 'synthetic-ui.html')
     (directory / 'board.html').write_text(tpl, encoding='utf-8')
     # Already-slim synthetic rows test the renderer, not production eligibility decisions.
+    # `dn` is the display-only do-not-call field the card renders struck through and never dials
+    # (call_mode._dncRows). Two per lead, invented 555 numbers, so a UI test has something to assert
+    # against; `p` is unchanged, so the dial list and every existing expectation stay as they were.
+    # pt/ps/pw are the parallel type / source / Whitepages strings the number rows read.
     calls = [dict(c=r['case'], o=r['owners'], on='Synthetic', a=r['addr'],
                   p=r['phones'], r=['M', 'L'], x=r['auction'], d=r['days'],
-                  lp=int(r['lp']), eq=75, v=400000, j=100000, county='MIAMI-DADE') for r in rows]
+                  lp=int(r['lp']), eq=75, v=400000, j=100000, county='MIAMI-DADE',
+                  pt='ml', ps=['', ''], pw='o-',
+                  dn=[['3055550901', 'h', 'm'], ['3055550902', 'o', 'l']]) for r in rows]
     payload = F._encrypt_multi(json.dumps(calls), [('Synthetic', FIXTURE_CODE)])
     page = C.build_html(calls, len(calls), payload, dt.date.today().isoformat(),
                         'synthetic', 'synthetic',
