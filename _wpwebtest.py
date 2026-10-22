@@ -292,5 +292,17 @@ rec('reparse rebuilds a kept page with the fixed parser', '8445550199' not in nu
 rec('reparse drops a wrong-address page and one with no kept copy', 'G-1' not in c5 and 'G-2' not in c5, list(c5))
 rec('reparse never touches an API entry', c5.get('API-1', {}).get('result') == {'apn': 'x'})
 
+# a lead whose kept page is its own address with nobody on it is not offered again
+leads[:] = [{'case': 'H-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13},
+            {'case': 'H-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 14}]
+WL.load_skiptrace = lambda: {'H-0': {'phones': [{'number': '3055550100'}]}, 'H-1': {'phones': [{'number': '3055550101'}]}}
+WL.CACHE = os.path.join(td, 'wp6.json')
+W.CACHE = WL.CACHE
+W._keep_page('H-0', '1723 Canal Dr\nCoral Springs, FL 33071\nOwners & Residents\nLegal Way Usa\n')
+ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5, 'refresh': False})())]
+rec('--compare skips a lead whose copied page had nobody on it', ks == ['H-1'], ks)
+ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5, 'refresh': True})())]
+rec('--refresh offers it again', 'H-0' in ks, ks)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

@@ -360,6 +360,17 @@ def _save_cache(cache):
     _WL._save_cache(cache)
 
 
+def _put(case, entry, cache):
+    """Write one entry onto the cache file AS IT IS NOW, not onto the copy loaded when the run
+    started, so a lookup another process saved meanwhile is not erased by this run's save. An
+    unreadable file falls back to the run's own copy rather than to an empty one."""
+    fresh = _load_cache() if os.path.exists(CACHE) else {}
+    base = fresh if (fresh or not os.path.exists(CACHE)) else cache
+    base[case] = entry
+    _save_cache(base)
+    return base
+
+
 def _clipboard_text():
     """The Windows clipboard as text, '' when empty or unreadable. Win32 API through ctypes (no
     process per read, so it can be polled); PowerShell Get-Clipboard as the fallback."""
@@ -464,8 +475,7 @@ def assist(todo, refresh=False, wait_s=None):
             for k in ('_person', '_prop_id'):
                 if old.get(k) is not None:
                     entry[k] = old[k]
-            cache[case] = entry
-            _save_cache(cache)
+            cache = _put(case, entry, cache)
             o, r, ph = _counts(entry)
             print('  ...%s: %d owner(s), %d resident(s), %d phone(s) cached; parcel %s'
                   % (case[-4:], o, r, ph, _parcel(entry, lead)), flush=True)
@@ -607,6 +617,21 @@ def reparse():
     return 0
 
 
+def _known_empty(lead):
+    """True when a page already copied for this lead is its own address page and lists nobody with
+    a phone or email (business-owned, vacant, nobody on file). Re-opening it would only cost another
+    copy, so selection leaves it out unless --refresh."""
+    f = os.path.join(_pages_dir(), re.sub(r'[^A-Za-z0-9-]', '_', _WL._lead_key(lead)) + '.txt')
+    if not os.path.exists(f):
+        return False
+    try:
+        text = open(f, encoding='utf-8', errors='replace').read()
+    except Exception:
+        return False
+    return (bool(_PAGE_MARK.search(text)) and not _BLOCK_RE.search(text)
+            and page_matches_address(text, _lead_street(lead)) and not parse_people_text(text))
+
+
 def _select(args):
     leads = _WL.load_all_leads()
     cache = _load_cache()
@@ -629,10 +654,15 @@ def _select(args):
         # first (pick_callable sorts fewest-phones-first, the opposite of what a comparison wants).
         pool = _WL.pick_callable(leads, cache, 100000, skip)
         pool = [r for r in pool if _WL._lead_phone_count(r, skip) > 0]
+        if not getattr(args, 'refresh', False):
+            pool = [r for r in pool if not _known_empty(r)]
         pool.sort(key=lambda r: (_WL._days_to_sale(r), _WL._lead_key(r)))
         return pool[:min(args.compare, MAX_LEADS)]
     n = args.pick_callable or MAX_LEADS
-    return _WL.pick_callable(leads, cache, min(n, MAX_LEADS), skip)
+    pool = _WL.pick_callable(leads, cache, 100000, skip)
+    if not getattr(args, 'refresh', False):
+        pool = [r for r in pool if not _known_empty(r)]
+    return pool[:min(n, MAX_LEADS)]
 
 
 def main(argv=None):
