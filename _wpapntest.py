@@ -46,12 +46,21 @@ rec('a one-digit-off apn is a mismatch, not ok',
 # --- integration: the live cache must not bake a wrong-parcel record ----------------------------
 # Every current lead whose WP record claims a parcel that disagrees with the lead folio must be
 # refused. Clean matches must pass. This is the exact split the 2026-10-21 cross-check found.
-try:
-    wp = json.load(io.open(os.path.join(HERE, 'whitepages_lookup.json'), encoding='utf-8'))
-    lf = json.load(io.open(os.path.join(HERE, 'leads_final.json'), encoding='utf-8'))
-except Exception as e:
-    rec('live cache + leads load', False, e)
-    wp = lf = None
+# Both files are gitignored homeowner data: they exist on the laptop and never on a clean clone or
+# the GitHub runner. Absent -> say so and run the unit checks only (a missing input is not a
+# regression; CI went red on main for exactly that on 2026-10-22). Present but unreadable -> fail.
+_WPF = os.path.join(HERE, 'whitepages_lookup.json')
+_LFF = os.path.join(HERE, 'leads_final.json')
+wp = lf = None
+if not (os.path.exists(_WPF) and os.path.exists(_LFF)):
+    print('skip live cache check: whitepages_lookup.json / leads_final.json not on this machine')
+else:
+    try:
+        wp = json.load(io.open(_WPF, encoding='utf-8'))
+        lf = json.load(io.open(_LFF, encoding='utf-8'))
+    except Exception as e:
+        rec('live cache + leads load', False, e)
+        wp = lf = None
 
 if wp is not None:
     folio_by_case = {}
