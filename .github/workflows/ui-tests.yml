@@ -17,3 +17,7 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
       - run: python -m unittest discover -s ui_tests -v
+      - name: Build reproducible browser container
+        run: docker build -f Dockerfile.ui -t dealflow-ui .
+      - name: Run UI suite in isolated container
+        run: docker run --rm --network none -v "$PWD:/app:ro" dealflow-ui

@@ -13,3 +13,12 @@ python -m unittest discover -s ui_tests -v
 The browser context blocks service workers and intercepts all network traffic, including popups. Only GETs for the two localhost fixture pages reach the server. Health responses are fake; writes and external requests receive a synthetic refusal. No production eligibility or suppression function is replaced.
 
 The CI browser job is separate from `ci_suite.py` so the fast source tests continue without a browser. It covers board load, Worker buttons, Skip, lane switching, call outcomes, Start/Stop, Call Mode decryption and the wrong-number chooser. The existing `_callmodetest.py` and `_workerui.py` remain legacy real-board acceptance suites; this isolated suite covers their core flows without relying on private laptop state. Other legacy suites need individual migration rather than blanket removal from the CI skip list.
+
+## Container
+
+```sh
+docker build -f Dockerfile.ui -t dealflow-ui .
+docker run --rm --network none -v "$PWD:/app:ro" dealflow-ui
+```
+
+Use a clean checkout for the mount. The image copies only `requirements.txt`, never source caches or keys. Runtime networking is disabled; loopback remains available for the temporary fixture server. Browser-context interception additionally refuses every write and external request. The fixture clock places Worker controls within daytime; production hours checks remain unchanged. Call Mode verifies the displayed first number without assuming the real clock permits a dial.
