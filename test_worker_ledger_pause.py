@@ -75,7 +75,9 @@ console.log(JSON.stringify({auto,autoAll,i,marks,logs,requests,timers:timers.fil
     def test_success_still_records_sent(self):
         out = self.run_js("reply.j={ok:true,message_id:'fixture',sent_today:1}; doSend(lead);")
         self.assertEqual(out['marks'], ['sent'])
-        self.assertEqual(out['timers'], 1)
+        # the answer moves the run on at once (advance(1600) waits in nextStep); it used to be a
+        # bare setTimeout(advance) that a lane switch or Stop could not see (_autorunnavtest.py)
+        self.assertEqual(out['i'], 5)
 
     def test_known_hold_prevents_a_second_request(self):
         out = self.run_js("BRIDGE_HOLD='stale'; doSend(lead);")
