@@ -122,7 +122,10 @@ class EmailVariantTests(unittest.TestCase):
 
     def test_dated_spanish_paragraphs_and_signature(self):
         check_dated(self.rows)
-        source = Path(__file__).with_name('tracker_template.html').read_text()
+        # encoding='utf-8': cp1252 is the default on Windows and cannot decode byte 0x8d in the
+        # template, so this check -- the one guarding the Spanish dated email's ${sigES} ending --
+        # errored out on the laptop and only ever ran in CI.
+        source = Path(__file__).with_name('tracker_template.html').read_text(encoding='utf-8')
         block = source.split('  const bodyES = td', 1)[1].split(';\n', 1)[0]
         self.assertRegex(block, r'\$\{sigES\}\\n\\n`$')
 

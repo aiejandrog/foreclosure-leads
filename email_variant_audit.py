@@ -10,7 +10,12 @@ ROOT = Path(__file__).resolve().parent
 
 
 def variants(template=None):
-    source = (Path(template) if template else ROOT / 'tracker_template.html').read_text()
+    # encoding='utf-8' both times below is load-bearing on Windows, where the default locale
+    # encoding is cp1252. tracker_template.html carries byte 0x8d, which cp1252 cannot decode, so
+    # read_text() raised UnicodeDecodeError and this module could not render a single variant --
+    # _emailvariantstest.py reported "Ran 0 tests / FAILED (errors=1)" on the laptop while passing
+    # in CI, where Linux defaults to UTF-8.
+    source = (Path(template) if template else ROOT / 'tracker_template.html').read_text(encoding='utf-8')
     for lang in ('en', 'es'):
         source = source.replace('__IDENT_' + lang.upper() + '__', disclaimer.identity(lang, as_html=False))
     source = F._bake_alex_email(source, 'synthetic email audit')
@@ -46,7 +51,13 @@ for(const kind of ['early','tax','dated'])for(const stage of ['cold','follow','f
 }
 console.log(JSON.stringify(out));
 '''
-    proc = subprocess.run(['node', '-e', js], input=json.dumps({'source':source}), check=True, capture_output=True, text=True)
+    # text=True without encoding= decodes Node's stdout with the locale encoding. Node always emits
+    # UTF-8, so on cp1252 the two bytes of 'í' (C3 AD) came back as the two characters 'Ã­' and
+    # EVERY Spanish body failed the exact-opt-out assertion ("altered opt-out closing") even though
+    # the template was byte-for-byte correct. The opt-out line is the one string in this file that
+    # must survive unchanged, so a silent transcoding of it is the worst failure this module has.
+    proc = subprocess.run(['node', '-e', js], input=json.dumps({'source': source}), check=True,
+                          capture_output=True, text=True, encoding='utf-8')
     out = json.loads(proc.stdout)
     for row in out:
         row['content_score'] = score_content(row['subject'], row['body'])
