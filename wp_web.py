@@ -382,20 +382,13 @@ def _wp_street(street):
 
 
 def _search_stem(street):
-    """What to type into Whitepages' own Reverse Address box: house number, direction and street
-    name, no suffix, no unit, numbers as written ("4809 NW 45 AVE" -> "4809 NW 45"). The full
-    address often matches nothing; the stem brings up the autocomplete list and the right entry
-    is picked from it (Alex, 10-22, 4809 NW 45th Ave Tamarac and others)."""
-    base = _UNIT_RE.sub(' ', str(street or ''))
-    toks = re.sub(r'[^A-Za-z0-9 ]', ' ', base).split()
-    out = []
-    for i, t in enumerate(toks):
-        low = t.lower()
-        if i > 0 and low in _SUFFIXES and low not in _ROUTE_WORDS:
-            break
-        out.append(t.upper() if ((low in _DIRS and len(low) <= 2) or low in ('us', 'sr', 'cr')) else
-                   t if t.isdigit() else t[:1].upper() + t[1:].lower())
-    return ' '.join(out)
+    """What to type into Whitepages' own Reverse Address box: our street in Whitepages' spelling,
+    ordinal and suffix included, no unit ("4809 NW 45 AVE" -> "4809 NW 45th Ave", "920 N 70 TER"
+    -> "920 N 70th Ter"). Our county spelling ("70 TER") often matches nothing; Whitepages' own
+    spelling brings up the drop-down and the right house (and unit) is picked from it (Alex, 10-22,
+    Tamarac and Hollywood leads)."""
+    m = re.search(r'\sApt\s\S+$', _wp_street(street))
+    return _wp_street(street)[:m.start()] if m else _wp_street(street)
 
 
 def _addr_query(street, city, state):

@@ -278,14 +278,14 @@ rec('card Whitepages address link spells streets like wp_web (the house, not the
 _js5 = os.path.join(_T, 'stem.js')
 _a5 = _pg.index('function _wpStem(')
 open(_js5, 'w', encoding='utf-8').write(_pg[_a5:_pg.index('\n}\n', _a5) + 3] + """
-console.log(JSON.stringify(['4809 NW 45 AVE', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
+console.log(JSON.stringify(['4809 NW 45 AVE', '920 N 70 TER', '9999 NE 99 AVE 999', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
   '4500 N STATE ROAD 7', '1234 US HIGHWAY 1', '1723 CANAL DR'].map(_wpStem)));
 """)
 _p5 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js5], capture_output=True, text=True, timeout=60)
 _g5 = json.loads(_p5.stdout or 'null') if _p5.returncode == 0 else None
-_w5 = [_W._search_stem(x) for x in ('4809 NW 45 AVE', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
+_w5 = [_W._search_stem(x) for x in ('4809 NW 45 AVE', '920 N 70 TER', '9999 NE 99 AVE 999', '2634 SE 19 CT #205C', '10442 SUNRISE LAKES BLVD 105',
                                     '4500 N STATE ROAD 7', '1234 US HIGHWAY 1', '1723 CANAL DR')]
-rec('card "Copy for Whitepages search" stem matches wp_web', _g5 == _w5 and _g5[0] == '4809 NW 45', (_g5, _w5, _p5.stderr[-300:]))
+rec('card "Copy for Whitepages search" stem matches wp_web', _g5 == _w5 and _g5[0] == '4809 NW 45th Ave' and _g5 == _w5, (_g5, _w5, _p5.stderr[-300:]))
 rec('the copy button is wired, never dials, writes no note', 'wpcopy' in _pg and "querySelectorAll('.wpcopy')" in _pg)
 
 print('\n%d failure(s)' % len(fails))
