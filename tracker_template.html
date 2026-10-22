@@ -14093,13 +14093,13 @@ function genMorningWorker(lane, autostart){
     // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
     +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;}), qc:qc});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
-    +           'if(_mv) setTimeout(function(){ advance(); }, 900);'
+    +           'if(_mv) nextStep=setTimeout(function(){ if(_live()){ nextStep=null; advance(); } }, 900);'
     +         '} else if(x.status===409 && x.j.skip){'
     +           'bridgeUp(true);'
     // The bridge says WHY it deferred (24h dedupe, or the per-alias warm-up cap in senders.json);
     // show its sentence rather than guessing, so a capped lane never reads as a duplicate.
     +           'addLog("skip", r.first||r.owner, String(x.j.err||"already emailed inside 24h — deferred"), "warn");'
-    +           'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc}); if(_mv) nextStep=setTimeout(function(){ if(_live()){ nextStep=null; advance(); } }, 700);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
     // This is the single most authoritative moment the true count exists — the server just used it
@@ -14122,7 +14122,7 @@ function genMorningWorker(lane, autostart){
     +     'addLog("skip", r.first||r.owner, (x.j.first_touch_paused ? "held — first emails are paused by the bounce rule. Stays queued; resumes when the pause lifts."'
     +     '  : ("proven_pool" in x.j) ? "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears."'
     +     '  : "held — "+String(x.j.err||"bounce check refused this send")+" Stays queued."), "warn");'
-    +     'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +     'post("skip", {qc:qc}); if(_mv) nextStep=setTimeout(function(){ if(_live()){ nextStep=null; advance(); } }, 700);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
@@ -14139,7 +14139,7 @@ function genMorningWorker(lane, autostart){
     // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
     +           'post("skip", {qc:qc, why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
-    +           'if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +           'if(_mv) nextStep=setTimeout(function(){ if(_live()){ nextStep=null; advance(); } }, 700);'
     +         '}'
     +       '})'
     +       '.catch(function(err){'
