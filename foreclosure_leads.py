@@ -687,11 +687,12 @@ def wp_parcel_verdict(apn, folio):
                       scrape artifact) -> cannot tie the record to this lead. Do not bake; skiptrace
                       already covers these leads by case, so no dialable coverage is lost.
     """
-    a = re.sub(r'\D', '', str(apn or ''))
-    f = re.sub(r'\D', '', str(folio or ''))
+    # Condo parcel letters identify the unit: strip separators, never letters.
+    a = re.sub(r'[^A-Z0-9]', '', str(apn or '').upper())
+    f = re.sub(r'[^A-Z0-9]', '', str(folio or '').upper())
     if not a:
         return 'ok'            # no parcel claim on the record (person-only) — nothing to contradict
-    if not f:
+    if not re.search(r'\d', a) or not re.search(r'\d', f):
         return 'unverified'    # record claims a parcel; lead has none to check it against
     return 'ok' if a == f else 'mismatch'
 
