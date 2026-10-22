@@ -144,7 +144,7 @@ class FakeClerk:
         self.posts.append((name, lo, hi))
         self.doctypes = getattr(self, 'doctypes', []) + [q.get('documentType', [''])[0]]
         body = {'message': 'No records'} if name in self.no_qs else {'qs': '|'.join((name, lo, hi))}
-        return SimpleNamespace(json=lambda: body)
+        return SimpleNamespace(json=lambda: body, status_code=200)
 
     def records_by_qs(self, qs):
         name, lo, hi = qs.split('|')
@@ -228,6 +228,34 @@ class MiamiCap(unittest.TestCase):
         self.run_sweep({'GONE': 0}, no_qs={'GONE'})
         self.assertEqual(LP.SWEEP_BLOCKED, ['GONE'])
         self.assertIn('No records', LP.MD_LAST['no_qs']['GONE'])
+
+    def test_each_try_for_a_blocked_lender_is_described_without_a_token(self):
+        self.run_sweep({'GONE': 0}, no_qs={'GONE'})
+        tries = LP.MD_LAST['attempts']['GONE']
+        self.assertEqual(len(tries), 3)
+        self.assertEqual(tries[0]['token'], True)
+        self.assertEqual(tries[0]['http'], 200)
+        self.assertEqual(tries[0]['qs'], False)
+        self.assertIn('No records', tries[0]['answer'])
+        self.assertNotIn('tok', str([t['answer'] for t in tries]).replace('token', ''))
+
+    def test_a_refused_solve_reads_as_no_token(self):
+        self.run_sweep({'SMALL': 2}, budget=0)
+        self.assertEqual(LP.SWEEP_BLOCKED, ['SMALL'])
+        self.assertNotIn('SMALL', LP.MD_LAST['attempts'], 'stopped before trying: the report says never tried')
+        R = SimpleNamespace(OR_BASE='x', TS_SITE_KEY='k', S=None)
+        recs, t = LP._or_attempt(R, lambda *a: None, 'https://example.invalid/')
+        self.assertIsNone(recs)
+        self.assertEqual((t['token'], t['http'], t['qs']), (False, None, None))
+
+    def test_report_prints_the_tries(self):
+        now = datetime.datetime(2026, 10, 22, 8, 0)
+        lines = CR.sweep_lines({'coverage': {'MIAMI-DADE': {'status': 'partial', 'attempts': {
+            'GONE': [{'token': True, 'http': 200, 'qs': False, 'read': None, 'answer': "{'message': 'No records'}"}],
+            'LATE': []}}}}, now)
+        text = '\n'.join(lines)
+        self.assertIn('GONE: token yes http 200 qs no read -', text)
+        self.assertIn('LATE: never tried', text)
 
     def test_split_halves_cover_the_window_exactly(self):
         lo, hi = LP._split_iso('2026-09-22', '2026-10-22')

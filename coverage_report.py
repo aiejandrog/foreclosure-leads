@@ -100,6 +100,12 @@ def age_days(ts, now):
         return None
 
 
+def _try_text(t):
+    yn = lambda v: '-' if v is None else ('yes' if v else 'no')
+    return 'token %s http %s qs %s read %s (%s)' % (yn(t.get('token')), t.get('http'), yn(t.get('qs')),
+                                                    yn(t.get('read')), str(t.get('answer') or '')[:80])
+
+
 def sweep_lines(status, now):
     """Question 1, one block per county."""
     cov = (status or {}).get('coverage') or {}
@@ -119,6 +125,9 @@ def sweep_lines(status, now):
             lines.append(f"              plaintiffs searched {e.get('searched')}, not searched {e.get('blocked', 0)}, "
                          f"at the record cap {len(e.get('capped') or [])}")
         lines.append(f"              scope: {e.get('scope', '?')}")
+        for name, tries in sorted((e.get('attempts') or {}).items()):
+            lines.append(f"              not searched: {name}: "
+                         + ('; '.join(_try_text(t) for t in tries) if tries else 'never tried (paid cap or run stopped)'))
         for f in (e.get('failures') or [])[:5]:
             lines.append(f"              failure: {f}")
         if lc is None:
