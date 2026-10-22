@@ -72,6 +72,14 @@ _BLOCK_RE = re.compile(r'temporarily restricted|access (is )?denied|unusual traf
 _LABELS = {'cell phone': 'mobile', 'mobile': 'mobile', 'landline': 'landline',
            'phone': 'phone', 'email address': 'email', 'email': 'email'}
 _ROLE = {'owner': 'owner', 'resident': 'resident', 'owners & residents': None}
+_SUMMARY_ROLE_RE = re.compile(r'^owner\s+or\s+resident\?\s*(?:view\s*role)?\s*(?:svg)?$', re.I)
+
+
+def _role_kind(line):
+    if _SUMMARY_ROLE_RE.fullmatch(line):
+        return 'unknown'  # the public link does not disclose this person's role
+    return _ROLE.get(line.lower())
+
 # Letters in any script (José, Muñoz), so an accented name is parsed AND masked by --structure.
 _NAME_RE = re.compile(r"^[^\W\d_](?:[^\W\d_]|[ .'\u2019\-])+$")
 _PHONE_RE = re.compile(r'\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}')
@@ -97,25 +105,41 @@ def _is_name(line):
 def parse_people_text(text):
     """Visible page text -> [{name, role, age, phones:[{number,type}], emails:[...]}].
 
-    Segments on the role lines ("Owner" / "Resident"): each person's name is the nearest name-like
-    line above its role, and its phones/emails are the label-and-value pairs between that role line
+    Segments on role lines, including the public "Owner or Resident? View Role" link (unknown,
+    never assumed to be owner). Prefer the name attached to age metadata over intervening
+    occupation text; otherwise use the nearest name-like line above its role. Phones/emails are
+    the label-and-value pairs between that role line
     and the next. Works on the pasted layout; see CALIBRATION in the module docstring."""
-    lines = [l.strip() for l in str(text or '').replace('\r', '').split('\n')]
-    lines = [l for l in lines if l != '']
-    roles = [i for i, l in enumerate(lines) if l.lower() in ('owner', 'resident')]
+    lines = []
+    for raw in str(text or '').replace('\r', '').split('\n'):
+        line = raw.strip()
+        if not line:
+            continue
+        # The summary puts age decades on the name line; the expanded page uses a separate line.
+        age = re.fullmatch(r'(.+?),\s*age\s+(\d{1,3})(?:s)?', line, re.I)
+        if age and _is_name(age.group(1)):
+            lines.extend((age.group(1), ', age ' + age.group(2)))
+        else:
+            lines.append(line)
+    roles = [i for i, l in enumerate(lines) if _role_kind(l)]
     people = []
     for n, ri in enumerate(roles):
         name = ''
-        for j in range(ri - 1, max(-1, ri - 6), -1):
-            if _is_name(lines[j]):
-                name = lines[j]
-                break
         age = None
-        if 0 <= ri - 1 < len(lines):
-            m = re.match(r',?\s*age\s+(\d{1,3})', lines[ri - 1], re.I) or \
-                (re.match(r',?\s*age\s+(\d{1,3})', lines[ri - 2], re.I) if ri - 2 >= 0 else None)
-            if m:
-                age = int(m.group(1))
+        start = max(roles[n - 1] + 1 if n else 0, ri - 6)
+        # A job title can be all letters too. In the public summary the person's age is attached
+        # to their name, followed by an optional occupation, so use that explicit anchor first.
+        # Never search across the preceding person's role boundary.
+        for j in range(ri - 1, start, -1):
+            m = re.fullmatch(r',?\s*age\s+(\d{1,3})(?:s)?', lines[j], re.I)
+            if m and _is_name(lines[j - 1]):
+                name, age = lines[j - 1], int(m.group(1))
+                break
+        if not name:
+            for j in range(ri - 1, start - 1, -1):
+                if _is_name(lines[j]):
+                    name = lines[j]
+                    break
         end = roles[n + 1] if n + 1 < len(roles) else len(lines)
         # back up `end` so the next person's name line is not read as this person's value
         if end < len(lines):
@@ -147,7 +171,7 @@ def parse_people_text(text):
                     seen.add(d)
                     phones.append({'number': d, 'type': label if label in ('mobile', 'landline') else ''})
             label = ''
-        people.append({'name': name, 'role': lines[ri].lower(), 'age': age,
+        people.append({'name': name, 'role': _role_kind(lines[ri]), 'age': age,
                        'phones': phones, 'emails': emails})
     # keep only people who have a name AND at least one contact point
     return [p for p in people if p['name'] and (p['phones'] or p['emails'])]
