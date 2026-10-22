@@ -111,7 +111,7 @@ rec('whitepages_lookup: the cache re-stamp normalizes too',
 
 # ---------------------------------------------------- 2. the board's Whitepages URL builders (JS)
 WP_JS = '\n'.join(extract(TPL_SRC, n) for n in
-                  ('_wpSlug', '_wpCity', '_wpCleanAddr', '_wpNameUrl', '_wpAddrUrl', '_wpPropUrl'))
+                  ('_wpSlug', '_wpCity', '_wpCleanAddr', '_wpStreet', '_wpNameUrl', '_wpAddrUrl', '_wpPropUrl'))
 # Fixture only. The name, case and address are INVENTED (same convention as build_preview.py) --
 # no homeowner from the real book appears in a committed file.
 LEAD = {'case': '2099-000000-CA-01', 'addr': '842 NW 9TH ST, MIAMI, FL 33136',
@@ -127,7 +127,7 @@ out = node(
       ' noAddr:_wpAddrUrl({addr:"MULTIPLE PARCELS - SEE CASE"})}));')
 
 rec('_wpAddrUrl: reverse-ADDRESS page for the property',
-    out['addr'] == 'https://www.whitepages.com/address/842-NW-9TH-ST/MIAMI-FL', out['addr'])
+    out['addr'] == 'https://www.whitepages.com/address/842-NW-9th-St/MIAMI-FL', out['addr'])
 rec('_wpNameUrl: NAME page in the property city',
     out['name'] == 'https://www.whitepages.com/name/ROBERT-A-JOHNSON/MIAMI-FL', out['name'])
 rec('_wpPropUrl: a normalized id gives the real /property/{id} page',

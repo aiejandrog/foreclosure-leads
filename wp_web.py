@@ -38,6 +38,8 @@ that already carries a real lookup is skipped unless --refresh.
     python wp_web.py --reparse                       # re-read every kept page with the current parser
     python wp_web.py --compare 25 --assist           # NO automation: opens each page in YOUR browser,
                                                      # you Ctrl+A / Ctrl+C on it, it caches and moves on
+    python wp_web.py --by-name 15 --assist          # leads with no address page: search the OWNER'S
+                                                     # NAME, you open the person at the house and copy
     python wp_web.py --case C --save-text out.txt    # capture the visible text for calibration
     python wp_web.py --pick-callable 15 --refresh    # re-scrape even cached leads
 
@@ -104,8 +106,9 @@ def parse_people_text(text):
     """Visible page text -> [{name, role, age, phones:[{number,type}], emails:[...]}].
 
     Segments on role lines, including the public "Owner or Resident? View Role" link (unknown,
-    never assumed to be owner). Each person's name is the nearest name-like
-    line above its role, and its phones/emails are the label-and-value pairs between that role line
+    never assumed to be owner). Prefer the name attached to age metadata over intervening
+    occupation text; otherwise use the nearest name-like line above its role. Phones/emails are
+    the label-and-value pairs between that role line
     and the next. Works on the pasted layout; see CALIBRATION in the module docstring."""
     lines = []
     for raw in str(text or '').replace('\r', '').split('\n'):
@@ -122,16 +125,21 @@ def parse_people_text(text):
     people = []
     for n, ri in enumerate(roles):
         name = ''
-        for j in range(ri - 1, max(-1, ri - 6), -1):
-            if _is_name(lines[j]):
-                name = lines[j]
-                break
         age = None
-        if 0 <= ri - 1 < len(lines):
-            m = re.match(r',?\s*age\s+(\d{1,3})', lines[ri - 1], re.I) or \
-                (re.match(r',?\s*age\s+(\d{1,3})', lines[ri - 2], re.I) if ri - 2 >= 0 else None)
-            if m:
-                age = int(m.group(1))
+        start = max(roles[n - 1] + 1 if n else 0, ri - 6)
+        # A job title can be all letters too. In the public summary the person's age is attached
+        # to their name, followed by an optional occupation, so use that explicit anchor first.
+        # Never search across the preceding person's role boundary.
+        for j in range(ri - 1, start, -1):
+            m = re.fullmatch(r',?\s*age\s+(\d{1,3})(?:s)?', lines[j], re.I)
+            if m and _is_name(lines[j - 1]):
+                name, age = lines[j - 1], int(m.group(1))
+                break
+        if not name:
+            for j in range(ri - 1, start - 1, -1):
+                if _is_name(lines[j]):
+                    name = lines[j]
+                    break
         end = roles[n + 1] if n + 1 < len(roles) else len(lines)
         # back up `end` so the next person's name line is not read as this person's value
         if end < len(lines):
@@ -670,6 +678,273 @@ def assist(todo, refresh=False, wait_s=None):
     return ok
 
 
+# ---- owner-name search: the fallback when Whitepages has no page for the address -----------------
+#
+# 10-22: every "not this house" miss was Whitepages sending the address (link AND its own search box)
+# to a neighbouring property, because it has no page for that exact address. Alejandro: "go on build
+# it". So for those leads the search runs on the OWNER'S NAME instead: the name results open in his
+# own browser, he opens the person who lives at the house, Ctrl+A, Ctrl+C. Nothing is automated.
+#
+# What is accepted from a copied person page, and why it cannot hand us a stranger's numbers:
+#   - a name line on it must clear wp_contacts' owner bar against the lead's owners (namesakes out);
+#   - the page must name the lead's own street address (house number, street, unit) somewhere;
+#   - phones are read only from that owner's block: from the owner's name line down to the next
+#     person row (a name with an age) or a relatives / associates heading, never the whole page;
+#   - a copied results LIST (many people) is refused, not parsed.
+# It is cached as a Person-layer record (`_person`), the same shape the Pro API's Person Search
+# writes, so wp_contacts.grade_person_record grades it the same way: 'wp' only because the record
+# places the owner at our address. NOT YET CALIBRATED against a real person page (this environment
+# cannot reach the site): run 3 first and paste the counts plus `--structure` of one before a batch.
+
+_NAME_TOLL_FREE = {'800', '833', '844', '855', '866', '877', '888'}
+_PERSON_STOP_RE = re.compile(r'^(possible\s+|known\s+|other\s+)?(relat\w*|associat\w*|neighbou?rs?|'
+                             r'people (also|you may)|household( members?)?|other people|similar people|family|'
+                             r'spouse|parents?|children|siblings?|roommates?|co-?residents?)\b', re.I)
+_PAST_RE = re.compile(r'^(past|previous|prior|former|old)\s+(addresses|address|locations?)|^address history', re.I)
+_AGE_RE = re.compile(r'(^|,)\s*age\s*:?\s*\d{1,3}\b|\b\d{1,3}\s+years? old\b', re.I)
+_LIST_RE = re.compile(r'\b[\d,]+\s+(results|people|matches|records)\s+(found|for|named)\b|'
+                      r'people search results|results for\s+["“]?[A-Za-z]', re.I)
+_PHONE_WORDS = {'mobile', 'cell', 'cellular', 'wireless', 'landline', 'voip', 'phone', 'primary', 'current',
+                'home', 'work', 'line', 'type', 't', 'verizon', 'at', 'att', 'sprint', 'metro', 'pcs', 'metropcs',
+                'cricket', 'boost', 'tracfone', 'us', 'usa', 'comcast', 'bandwidth', 'spectrum', 'charter', 'llc',
+                'inc', 'by', 'carrier', 'valid', 'connected'}
+_US_STATES = ('AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|'
+              'NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY')
+_NAME_MISS = 'n:'          # name-search misses share _attempts.json, under their own key
+
+
+def _name_query(lead):
+    """(given name, surname) for the URL, from the lead's first person owner ('LAST, FIRST M').
+    None for an entity owner or a blank name."""
+    for chunk in (_WL._lead_owners(lead) or '').split(';'):
+        chunk = chunk.strip()
+        if not chunk or _WL.COMPANY_RE.search(chunk):
+            continue
+        if ',' in chunk:
+            last, _, first = chunk.partition(',')
+            first = first.split()[0] if first.split() else ''
+        else:
+            t = chunk.split()
+            first, last = (t[0], t[-1]) if len(t) >= 2 else ('', '')
+        first, last = first.strip(), last.strip()
+        if first and last:
+            return first, last
+    return None
+
+
+def _name_url(lead):
+    """https://www.whitepages.com/name/First-Last/City-FL (Whitepages' public name-search path)."""
+    q = _name_query(lead)
+    parts = _WL._split_addr(_WL._lead_addr(lead))
+    if not q or not parts:
+        return ''
+    def slug(t):
+        return '-'.join(w.capitalize() for w in re.sub(r"[^A-Za-z0-9' ]", ' ', t).split())
+    return '%s/name/%s/%s-FL' % (BASE, slug('%s %s' % q), slug(parts[1]))
+
+
+def _phone_type(*lines):
+    """The type on the number's own line, else on the first neighbouring line that names one."""
+    for t in lines:
+        t = str(t or '').lower()
+        if re.search(r'\b(mobile|cell|wireless)\b', t):
+            return 'mobile'
+        if re.search(r'\blandline\b', t):
+            return 'landline'
+    return ''
+
+
+def parse_person_page(text, lead_owners, street):
+    """A copied whitepages.com PERSON page -> (record or None, reason).
+
+    record = {name, phones:[{number,type}], emails, current_addresses:[{full_address}]}, the shape
+    wp_contacts grades. Everything is read from the OWNER'S BLOCK only: from the one name line that
+    clears the owner bar down to the next person's name line (aged or not) or a relatives / family
+    / associates heading. The address stored is the page's own address line, not ours, so
+    wp_contacts.at_property (house, directionals, street, suffix) grades it; a line under a past /
+    previous addresses heading does not count. Two owner-bar names with ages (a list of
+    namesakes) is refused, as is anything that reads as a results list."""
+    import wp_contacts as C
+    raw = str(text or '')
+    if _BLOCK_RE.search(raw):
+        return None, 'the page is a block / verification page'
+    lines = [l.strip() for l in raw.replace('\r', '').split('\n')]
+    lines = [l for l in lines if l]
+    def name_of(l):
+        return re.split(r',\s*age\b|\s+age\s*:?\s*\d|\s+in\s+[A-Z][a-z]+', l, flags=re.I)[0].strip()
+    def aged(k):                        # an age on the name line or either of the next two
+        return any(_AGE_RE.search(lines[x]) for x in range(k, min(k + 3, len(lines))))
+    def is_person(l):
+        nm = name_of(l)
+        return _is_name(nm) and len(nm.split()) <= 5 and not all(w.lower() in _LAYOUT_WORDS for w in re.findall(r'[A-Za-z]+', nm))
+    def city_line(t):                   # "Miami, FL" / "Coral Springs, FL 33071": a real state, after a comma
+        return bool(re.match(r"^[^\W\d_][^\W\d_ .'\-]*(?:[ .'\-]+[^\W\d_]+)*,\s*(%s)(\s+\d{5}(-\d{4})?)?$"
+                             % _US_STATES, t.strip()))
+    def addr_line(t):                   # "1723 Canal Dr[, City, ST ZIP]" and nothing else
+        parts = [x.strip() for x in t.split(',')]
+        if not re.match(r'^\d{1,6}\s+\S', parts[0]):
+            return False
+        key = C._street_key(parts[0])
+        if not (key and (key[3] or re.search(r'\d', key[2]))):
+            return False                # "1 Jane Doe" is a numbered list row, not a house
+        # nothing after the street but a post-directional or a unit ("... Ave · Related to Jane Doe")
+        tail = re.split(r'\b(?:%s)\b' % '|'.join(sorted(C._SUFFIX, key=len, reverse=True)),
+                        parts[0].upper(), maxsplit=1)
+        if len(tail) == 2 and not re.match(r'^\s*((N|S|E|W|NE|NW|SE|SW)\b\s*)?((APT|UNIT|STE|SUITE|#)\s*#?\s*[A-Z0-9\-]+)?\s*$',
+                                            tail[1]):
+            return False
+        return len(parts) == 1 or city_line(', '.join(parts[1:])) or (
+            len(parts) == 2 and re.match(r'^[^\W\d_][^\W\d_ .\'-]*$', parts[1]))
+    def stays(l):
+        """The owner's block runs only over lines that cannot be another person: layout words, a
+        phone line, an email, an address, "City, ST ZIP", an age, "Lives in <city or address>".
+        Anything else (a name, bulleted, numbered, accented, with or without an age) ends it."""
+        if _PERSON_STOP_RE.match(l):
+            return False
+        if city_line(l) or addr_line(l):
+            return True
+        m = re.match(r'^(lives|lived|living)\s+(in|at)\s+(.+)$', l, re.I)
+        if m:
+            return city_line(m.group(3)) or addr_line(m.group(3))
+        if re.match(r'^(age\s*:?\s*\d{1,3}|\d{1,3}\s+years?\s+old)$', l, re.I):
+            return True
+        rest = _EMAIL_RE.sub(' ', _PHONE_RE.sub(' ', l))
+        words = re.findall(r'[^\W\d_]+', rest)
+        phone = bool(_PHONE_RE.search(l))       # type / carrier words only next to a number
+        return all((w.lower() in _LAYOUT_WORDS and w.lower() not in _KEEP_WORDS)
+                   or (phone and w.lower() in _PHONE_WORDS) for w in words)
+    if _LIST_RE.search(raw) or sum(1 for k, l in enumerate(lines) if is_person(l) and aged(k)) > 6:
+        return None, 'that is the results list: open the person who lives at the house, then copy'
+    owners = [k for k, l in enumerate(lines) if is_person(l) and C.name_grade(lead_owners, name_of(l)) == 'owner']
+    if not owners:
+        return None, 'no name on the page clears the owner bar (a namesake, or not a person page)'
+    if sum(1 for k in owners if aged(k)) > 1:
+        return None, 'that is the results list: open the person who lives at the house, then copy'
+    owner_i = owners[0]
+    if not aged(owner_i):
+        return None, "the owner's name has no age beside it: not their own profile, open the person"
+    # The owner listed UNDER someone else (as their relative, or in "people also viewed"): a heading
+    # or another aged person above the owner's line means this is not the owner's page.
+    if any(_PERSON_STOP_RE.match(lines[k]) or (is_person(lines[k]) and aged(k)) for k in range(owner_i)):
+        return None, "the owner appears on someone else's page: open the owner's own profile"
+    end = len(lines)
+    for k in range(owner_i + 1, len(lines)):
+        if not stays(lines[k]):         # a second owner-name line too: a namesake or an alias, not read
+            end = k
+            break
+    phones, emails, seen, addr, past = [], [], set(), '', False
+    for k in range(owner_i, end):
+        l = lines[k]
+        if _PAST_RE.match(l):
+            past = True
+        elif re.match(r'^(current|present)\s+address', l, re.I):
+            past = False
+        if not addr and not past and re.match(r'^\d{1,6}\s+\S', l) and len(l) < 90:
+            line1 = l.split(',')[0]
+            if C.same_street(line1, street) and page_matches_address(l, street):
+                addr = l
+        for m in _PHONE_RE.finditer(l):
+            d = _digits(m.group(0))
+            if len(d) != 10 or d in seen or d[:3] in _NAME_TOLL_FREE:
+                continue
+            # only a line that is the number, maybe with a type or carrier: not a sentence
+            # only a line that is the number plus at most a type / carrier word: never a line that
+            # also carries a name ("(305) 555-0007 - Mobile - Jane Doe")
+            if any(w.lower() not in _PHONE_WORDS for w in re.findall(r'[A-Za-z]+', _PHONE_RE.sub(' ', l))):
+                continue
+            seen.add(d)
+            nxt = lines[k + 1] if k + 1 < len(lines) and not _PHONE_RE.search(lines[k + 1]) else ''
+            prv = lines[k - 1] if k and not _PHONE_RE.search(lines[k - 1]) else ''
+            phones.append({'number': d, 'type': _phone_type(l, nxt, prv)})
+        for m in _EMAIL_RE.finditer(l):
+            e = m.group(0).strip('.,;')
+            if e.lower() not in seen and not e.lower().endswith('@whitepages.com'):
+                seen.add(e.lower())
+                emails.append(e)
+    if not addr:
+        return None, "the owner's part of the page does not name this lead's address as current"
+    if not phones and not emails:
+        return None, 'the owner is on the page but no phone or email shows in their part of it'
+    return {'name': name_of(lines[owner_i]), 'phones': phones, 'emails': emails,
+            'current_addresses': [{'full_address': addr}]}, ''
+
+
+def _name_candidates(leads, cache, skip):
+    """Callable leads whose ADDRESS path failed (a recorded miss, or the house page lists nobody),
+    not yet name-searched, not out of name tries."""
+    att = _attempts()
+    out = []
+    for r in _WL.pick_callable(leads, cache, 100000, skip):     # already skips leads with `_person`
+        k = _WL._lead_key(r)
+        if not _name_url(r) or _tried_out(_NAME_MISS + k, att):
+            continue
+        if att.get(k) or _known_empty(r):
+            out.append(r)
+    return out
+
+
+def assist_name(todo, wait_s=None):
+    """The address path's assist, on the owner's NAME (see the block comment above)."""
+    import webbrowser
+    wait_s = ASSIST_WAIT_S if wait_s is None else wait_s
+    cache = _load_cache()
+    ok = skipped = 0
+    reasons = {}
+    print('For each lead: the owner-name results open. Ctrl+F then Ctrl+V jumps to the house number '
+          '(it is on your clipboard). Open THAT person, then Ctrl+A, Ctrl+C. Ctrl+C here stops.', flush=True)
+    try:
+        for n, lead in enumerate(todo, 1):
+            case = _WL._lead_key(lead)
+            street = _lead_street(lead)
+            url = _name_url(lead)
+            if not url or not street or (cache.get(case) or {}).get('_person'):
+                continue
+            house = (re.match(r'\s*(\d+)', street) or [None, ''])[1]
+            base = house if house and _set_clipboard(house) else _clipboard_text()
+            webbrowser.open(url)
+            print('[%d/%d] ...%s: owner-name results opened, waiting for your copy...'
+                  % (n, len(todo), case[-4:]), flush=True)
+            text, t0 = '', time.time()
+            while time.time() - t0 < wait_s:
+                time.sleep(1.0)
+                cur = _clipboard_text()
+                if cur and cur.strip() != (base or '').strip() and len(cur) > 200:
+                    text = cur
+                    break
+            if not text:
+                print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
+                skipped += 1
+                continue
+            rec, why = parse_person_page(text, _WL._lead_owners(lead), street)
+            _keep_page(case, text, kind='name' if rec else 'name-rejected')
+            if not rec:
+                reasons[why] = reasons.get(why, 0) + 1
+                if not why.startswith('that is the results list'):
+                    _note_attempt(_NAME_MISS + case)
+                print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
+                skipped += 1
+                continue
+            fresh = _load_cache()
+            entry = dict(fresh.get(case) or cache.get(case) or {})
+            q = _name_query(lead)
+            entry['_person'] = list(entry.get('_person') or []) + [
+                {'name': '%s %s' % q, 'response': [rec], '_ts': int(time.time()), '_src': 'wpweb-name'}]
+            entry.setdefault('_ts', int(time.time()))
+            entry.setdefault('_src', 'wpweb-name')
+            cache = _put(case, entry, cache)
+            import wp_contacts as C
+            print('  ...%s: owner found at the house: %d phone(s), %d email(s) cached (grade %s)'
+                  % (case[-4:], len(rec['phones']), len(rec['emails']),
+                     C.grade_person_record(_WL._lead_owners(lead), _WL._lead_addr(lead), rec)), flush=True)
+            ok += 1
+    except KeyboardInterrupt:
+        print('\nstopped.')
+    print('cached %d lead(s) by owner name, skipped %d. cache: %s' % (ok, skipped, CACHE))
+    for k, v in sorted(reasons.items(), key=lambda x: -x[1]):
+        print('  skipped, %s: %d' % (k, v))
+    return ok
+
+
 def _pages_dir():
     import paths as P
     d = os.path.join(P.DEALFLOW_DIR, 'wpweb_pages')     # outside the repo and outside OneDrive
@@ -677,12 +952,16 @@ def _pages_dir():
     return d
 
 
-def _keep_page(case, text, rejected=False):
+def _keep_page(case, text, rejected=False, kind=''):
     """Every copied page is kept under DEALFLOW_DIR/wpweb_pages so a parse can be re-run or
-    calibrated later without opening the site again. Homeowner data: never the repo."""
+    calibrated later without opening the site again. Homeowner data: never the repo. Owner-name
+    pages (kind 'name' / 'name-rejected') go in their own subfolders, never read as address pages."""
     try:
         d = _pages_dir()
-        if rejected:                # a page that was NOT this lead's house: never read as its data
+        if kind:
+            d = os.path.join(d, kind)
+            os.makedirs(d, exist_ok=True)
+        elif rejected:                # a page that was NOT this lead's house: never read as its data
             d = os.path.join(d, 'rejected')
             os.makedirs(d, exist_ok=True)
         else:                       # the lead's own page is in: its old wrong-property copy is moot
@@ -711,6 +990,28 @@ def structure(text):
         if _is_name(l):
             m = 'NAME(%d)' % len(l.split())
         out.append(m)
+    return '\n'.join(out)
+
+
+_LAYOUT_WORDS = _KEEP_WORDS | {
+    'phone', 'phones', 'number', 'numbers', 'mobile', 'cell', 'wireless', 'landline', 'voip', 'email',
+    'emails', 'address', 'addresses', 'current', 'past', 'previous', 'relatives', 'relative',
+    'associates', 'associate', 'age', 'lives', 'lived', 'in', 'at', 'also', 'known', 'as', 'aka',
+    'owner', 'resident', 'details', 'report', 'background', 'people',
+    'person', 'results', 'result', 'born', 'years', 'possible', 'family', 'members', 'member',
+    'neighbors', 'household', 'primary', 'fl'}
+
+
+def name_structure(text, max_lines=150):
+    """A copied PERSON page with every word outside a fixed layout vocabulary as W and every digit
+    as 9 (names, streets, cities, numbers, emails all masked), so its layout can be pasted."""
+    out = []
+    for l in [l.strip() for l in str(text or '').replace('\r', '').split('\n') if l.strip()][:max_lines]:
+        l = re.sub(r'\S+@\S+', 'EMAIL', l)
+        toks = re.findall(r'[A-Za-z]+|\d+|[^A-Za-z\d\s]', l)
+        out.append(' '.join(re.sub(r'\d', '9', w) if w[0].isdigit() else
+                            (w if not w.isalpha() or w.lower() in _LAYOUT_WORDS or w == 'EMAIL' else 'W')
+                            for w in toks))
     return '\n'.join(out)
 
 
@@ -929,6 +1230,11 @@ def main(argv=None):
                     help='print a copied page\'s owners/residents layout with names/numbers masked (safe to paste)')
     ap.add_argument('--retry-misses', action='store_true',
                     help='with --assist: reopen only the leads that came up "not this house"')
+    ap.add_argument('--by-name', type=int, nargs='?', const=MAX_LEADS, default=None, metavar='N',
+                    help='with --assist: search the OWNER\'S NAME for up to N leads whose address page '
+                         'Whitepages does not have (or names, with --case)')
+    ap.add_argument('--name-structure', action='store_true',
+                    help='print the masked layout of the last 2 owner-name pages copied (safe to paste)')
     ap.add_argument('--addr-check', action='store_true',
                     help='for every kept page, say why its address did or did not match (masked shapes)')
     ap.add_argument('--reparse', action='store_true',
@@ -989,6 +1295,33 @@ def main(argv=None):
             print('--from-file needs exactly one --case')
             return 2
         return ingest_file(a.case[0], a.from_file, refresh=a.refresh)
+    if a.name_structure:
+        pages = []
+        for kind in ('name', 'name-rejected'):
+            d = os.path.join(_pages_dir(), kind)
+            if os.path.isdir(d):
+                pages += [(os.path.getmtime(os.path.join(d, f)), kind, os.path.join(d, f))
+                          for f in os.listdir(d) if f.endswith('.txt')]
+        if not pages:
+            print('no owner-name page copied yet')
+            return 1
+        for _, kind, f in sorted(pages)[-2:]:
+            print('=== ...%s (%s) ===' % (os.path.basename(f)[-8:-4], kind))
+            print(name_structure(open(f, encoding='utf-8', errors='replace').read()))
+        return 0
+    if a.by_name is not None:
+        if not (a.assist or a.plan):
+            print('--by-name needs --assist (or --plan)')     # hand-assisted only, never automated
+            return 2
+        if a.case:
+            todo = [r for r in _select(a) if _name_url(r)]
+        else:
+            todo = _name_candidates(_WL.load_all_leads(), _load_cache(), _WL.load_skiptrace())[:min(a.by_name, MAX_LEADS)]
+        print('%d lead(s) selected for owner-name search' % len(todo))
+        if a.plan or not todo:
+            return 0
+        assist_name(todo)
+        return 0
     if a.retry_misses and not (a.assist or a.plan):
         # These are the leads the two-misses rule stopped offering: never hand them to the automated run.
         print('--retry-misses needs --assist (or --plan)')
