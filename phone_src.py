@@ -179,3 +179,34 @@ def propagate_dnc(leads, extra=()):
             r['phbest'] = None
             hits += 1
     return hits, len(nums)
+
+
+# WHICH NUMBERS SURVIVE WHEN A LEAD HAS MORE THAN MAX_PHONES. Lower = kept first.
+# The Whitepages merge used to append its numbers after the skip trace's and cut the tail, so on
+# a lead the trace had already filled the cut fell entirely on Whitepages. Measured on the 59
+# cached Whitepages records (2026-10-22, counts only): 588 new numbers, 294 cut, 73 of them the
+# deed owner's own. Meanwhile the trace's weakest numbers (the tail of a ten-number list) stayed,
+# and 14-day bad-number taps run about 25%. An owner number Whitepages ties to the deed by name
+# outranks the trace's tail; a household member or a name-only match does not.
+_KEEP_TIER = {PHSRC_WP: 0, PHSRC_TRACE: 1, PHSRC_HOUSEHOLD: 2, PHSRC_NAME: 3}
+
+
+def fit_phones(entries, cap=None):
+    """entries: [{'n','type','dnc','src'}] in the order they were merged -> the ones that fit.
+
+    Keeps at most `cap` (default MAX_PHONES). When it has to drop, it drops DNC-flagged numbers
+    first (they cannot be dialled, and propagate_dnc carries the flag from the skip-trace file
+    regardless), then name-only, then household, then the skip trace's tail. Owner numbers
+    ('wp') go last. Within a tier the later entry goes first, because providers return their best
+    match first. The survivors keep their merge order, so nothing that fits is reordered."""
+    cap = MAX_PHONES if cap is None else cap
+    if len(entries) <= cap:
+        return list(entries)
+
+    def tier(i):
+        e = entries[i]
+        if e.get('dnc'):
+            return 9
+        return _KEEP_TIER.get(str(e.get('src') or PHSRC_TRACE), 4)
+    keep = sorted(range(len(entries)), key=lambda i: (tier(i), i))[:cap]
+    return [entries[i] for i in sorted(keep)]

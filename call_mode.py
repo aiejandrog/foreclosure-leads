@@ -1947,6 +1947,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # Put the ranked-best number first; the phone never re-ranks. `best` is a position in
         # `phones`, so translate it through keep_oi rather than using it as a keep index.
         order = list(range(len(keep)))
+        # THEN THE REST BY RANK, not by merge order. `p` is also the order "Call their next number"
+        # walks. Merge order puts every skip-trace number first, then Whitepages' owners, then the
+        # household, then name-only matches, so after the first dial a household member could come
+        # up ahead of a Whitepages owner mobile and a trace landline ahead of both. phrank already
+        # says which is which (phone_rank scores hh/nm below the owner's own numbers); this only
+        # reads it. Stable, so numbers with the same label keep their order.
+        _tier = {'C': 0, 'O': 1, 'L': 2, 'N': 3}
+        order.sort(key=lambda k: _tier.get(
+            (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1))
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
             order = [bk] + [k for k in order if k != bk]
