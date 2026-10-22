@@ -243,9 +243,15 @@ def addr_why(text, street):
     heads = [l.strip() for l in str(text or '').split('\n')
              if re.search(r'Property Details for|Looking for who (owns|lives at)|FAQs about|Who lives at', l, re.I)
              and len(l) < 200]
+    # The address the page is about: its title, else its first short "<number> <words>" line.
+    addr_lines = [l.strip() for l in str(text or '').split('\n')
+                  if re.match(r'^\s*\d{1,6}\s+[A-Za-z]', l) and len(l.strip()) < 70
+                  and not re.search(r'\b(bed|bath|sq|built|sold|acre|results?|properties)\b', l, re.I)]
+    page_addr = heads[0] if heads else (addr_lines[0] if addr_lines else '')
     return why, _shape(street), sorted(set(_shape(l) for l in lines))[:4] + \
         ['(title) ' + _shape(h) for h in heads[:3]] + \
-        ['(vs title) ' + _part_diff(street, h) for h in heads[:1]]
+        (['(page is about) ' + _shape(page_addr), '(vs lead) ' + _part_diff(street, page_addr)]
+         if page_addr else ['(page names no address)'])
 
 
 def _part_diff(street, line):
