@@ -389,5 +389,20 @@ W._note_attempt('P-1')
 ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5, 'refresh': False})())]
 rec('a run opens only fresh leads (not cached, not tried twice)', ks == ['P-2'], ks)
 
+T = 'Home\nProperty Details for 100 NW 5th St Apt 2\n'
+rec('--addr-check says which part differs, no values', W._part_diff('100 NW 5 ST APT 3', 'Property Details for 100 NW 5th St Apt 2')
+    == 'house same, street same, unit DIFFERENT', W._part_diff('100 NW 5 ST APT 3', 'Property Details for 100 NW 5th St Apt 2'))
+rec('lead unit with no unit on the page', W._part_diff('100 NW 5 ST #3', 'Property Details for 100 NW 5th St').endswith('lead has a unit, page has none'))
+W._keep_page('R-0', T, rejected=True)
+rec('a rejected copy is kept apart, never as the lead page', os.path.exists(os.path.join(td, 'wpweb_pages', 'rejected', 'R-0.txt'))
+    and not os.path.exists(os.path.join(td, 'wpweb_pages', 'R-0.txt')))
+
+leads[:] = [{'case': 'S-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR.replace('1723', str(1900 + i)),
+             'auction': '11/04/2026', 'days': 13 + i} for i in range(2)]
+WL.load_skiptrace = lambda: {}
+W._note_attempt('S-1')
+ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 0, 'refresh': False, 'retry_misses': True})())]
+rec('--retry-misses reopens only leads that missed', ks == ['S-1'], ks)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
