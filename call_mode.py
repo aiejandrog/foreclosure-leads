@@ -830,14 +830,14 @@ SELLOPEN_EN = [
     "Who are you working with on it, an agent, or a buyer who reached out to you?",
     "What do you need to walk away with for this to work for you?",
     "Do you know roughly what's left on the mortgage?",
-    "Would a second number to compare hurt? Our senior advisor can lay it out in 10 minutes, free, no "
+    "Would a second number to compare hurt? Our senior advisor can lay it out in five minutes, free, no "
     "obligation.",
 ]
 SELLOPEN_ES = [
     "¿Con quién lo está haciendo, un agente, o un comprador que lo contactó?",
     "¿Con cuánto necesita quedarse para que esto le funcione?",
     "¿Sabe más o menos cuánto queda de la hipoteca?",
-    "¿Le haría daño tener otro número para comparar? Nuestro asesor principal se lo explica en 10 minutos, "
+    "¿Le haría daño tener otro número para comparar? Nuestro asesor principal se lo explica en cinco minutos, "
     "gratis, sin compromiso.",
 ]
 # "WE ALREADY GOT IT REINSTATED" (2026-09-30 field call: the owner said the loan was reinstated, the
@@ -923,7 +923,7 @@ def _flow():
          'en': DEFUSE_BUY_EN, 'es': DEFUSE_BUY_ES,
          'tone': 'Flat and fast, then a beat. Kill the fear — never argue it.',
          'listen': 'Let it land.',
-         'br': [['Okay... so what is it?', 'frame'], ["I'm a realtor / selling it myself", 'realtor'],
+         'br': [['Okay... so what is it?', 'frame'], ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'],
                 ['Still not interested', 'obj:15']],
          'ret': 'frame'},
         {'id': 'investor', 'k': '"ARE YOU AN INVESTOR?" — the honest answer',
@@ -931,7 +931,7 @@ def _flow():
          'tone': "Calm and unbothered: it's a fair question, not an accusation. Say the true line, 'I'm not calling "
                  "to buy your house.' NEVER claim we're not investors, and never say 'we specialize in pre-foreclosures'.",
          'listen': 'If they relax, set the frame. If they keep probing, stay honest and short. Never dodge.',
-         'br': [['Okay, what is it?', 'frame'], ["I'm a realtor / selling it myself", 'realtor'],
+         'br': [['Okay, what is it?', 'frame'], ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'],
                 ['Still not interested', 'obj:15'], ["Don't call me again", 'end:dnc']],
          'ret': 'frame'},
         {'id': 'realtor', 'k': "I'M A REALTOR / SELLING IT MYSELF — insure the plan",
