@@ -356,7 +356,8 @@ def _clipboard_text():
 
 
 # A copied whitepages.com address page carries these; anything else copied is read as "skip".
-_PAGE_MARK = re.compile(r'Owners\s*&\s*Residents|Reverse Address|Property Details for', re.I)
+_PAGE_MARK = re.compile(r'Owners\s*&\s*Residents|Reverse Address|Property Details for|'
+                        r'who (owns|lives at) .{0,80}\d{5}', re.I)
 ASSIST_WAIT_S = float(os.environ.get('WP_WEB_ASSIST_WAIT_S', '240'))
 
 
@@ -364,6 +365,8 @@ def _why_empty(text):
     """One line on why a copied address page gave no person, counts only."""
     if _BLOCK_RE.search(text or ''):
         return 'the page is a block / verification page'
+    if re.search(r'no people living at this property|no one currently lives at', text or '', re.I):
+        return 'Whitepages has no one on file at this address'
     if not _PAGE_MARK.search(text or ''):
         return 'that was not a Whitepages address page'
     if not re.search(r'^\s*(owner|resident)\s*$', text or '', re.I | re.M):
@@ -382,6 +385,7 @@ def assist(todo, refresh=False, wait_s=None):
     wait_s = ASSIST_WAIT_S if wait_s is None else wait_s
     cache = _load_cache()
     ok = skipped = 0
+    reasons = {}
     print('For each page: click it, Ctrl+A, Ctrl+C. Do not paste anything here. '
           'Ctrl+C in THIS window stops.', flush=True)
     try:
@@ -407,7 +411,9 @@ def assist(todo, refresh=False, wait_s=None):
             _keep_page(case, text)
             people = parse_people_text(text) if _PAGE_MARK.search(text) else []
             if not people:
-                print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], _why_empty(text), len(text)), flush=True)
+                why = _why_empty(text)
+                reasons[why] = reasons.get(why, 0) + 1
+                print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
                 skipped += 1
                 continue
             entry = to_cache_entry(people, _WL._lead_addr(lead), page_text=text)
@@ -425,6 +431,8 @@ def assist(todo, refresh=False, wait_s=None):
     except KeyboardInterrupt:
         print('\nstopped.')
     print('cached %d lead(s), skipped %d. cache: %s' % (ok, skipped, CACHE))
+    for k, v in sorted(reasons.items(), key=lambda x: -x[1]):
+        print('  skipped, %s: %d' % (k, v))
     return ok
 
 

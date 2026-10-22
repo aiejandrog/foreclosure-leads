@@ -229,6 +229,11 @@ rec('the parcel gate then reads it (same digits = ok)',
     _C.wp_parcel_verdict(e2['result']['apn'], '74434327270040040') == 'ok')
 rec('and a different folio = mismatch', _C.wp_parcel_verdict(e2['result']['apn'], '74434327270040041') == 'mismatch')
 rec('no APN on the page: no apn key', 'apn' not in W.to_cache_entry(people, ADDR, page_text=PAGE)['result'])
+EMPTY = ('Home\n1 NW 1st Ct Apt 2\nMargate, FL 33063\nLooking for who owns 1 NW 1st Ct Apt 2 Margate, FL 33063 '
+         'and how to contact them?\nLooking for who lives at 1 NW 1st Ct Apt 2 Margate, FL 33063? There are no '
+         'people living at this property.\nResidents\nNo one currently lives at 1 NW 1st Ct Apt 2, according to public records.')
+rec('the empty-address layout counts as a Whitepages page', bool(W._PAGE_MARK.search(EMPTY)))
+rec('and says no one is on file', W._why_empty(EMPTY) == 'Whitepages has no one on file at this address', W._why_empty(EMPTY))
 rec('not-a-page copy explained', W._why_empty('hello') == 'that was not a Whitepages address page')
 
 st = W.structure(PAGE)
