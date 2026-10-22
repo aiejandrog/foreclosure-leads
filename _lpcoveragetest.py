@@ -142,8 +142,9 @@ class FakeClerk:
         q = self.U.parse_qs(self.U.urlsplit(url).query)
         name, lo, hi = q['partyName'][0], q['dateRangeFrom'][0], q['dateRangeTo'][0]
         self.posts.append((name, lo, hi))
+        self.doctypes = getattr(self, 'doctypes', []) + [q.get('documentType', [''])[0]]
         body = {'message': 'No records'} if name in self.no_qs else {'qs': '|'.join((name, lo, hi))}
-        return SimpleNamespace(json=lambda: body)
+        return SimpleNamespace(json=lambda: body, status_code=200)
 
     def records_by_qs(self, qs):
         name, lo, hi = qs.split('|')
@@ -196,6 +197,13 @@ class MiamiCap(unittest.TestCase):
         self.assertEqual(LP.MD_LAST['retrieved'], 31 * 40 + 31 * 2, 'overlapping windows counted once')
         self.assertEqual(sum(1 for p in clerk.posts if p[0] == 'SMALL'), 1, 'an uncapped lender is searched once')
 
+    def test_the_search_asks_for_lis_pendens_by_default(self):
+        _, clerk = self.run_sweep({'SMALL': 2})
+        self.assertEqual(clerk.doctypes, ['LIS PENDENS - LIS'])
+        with mock.patch.object(LP, 'MD_LP_DOCTYPE', ''):
+            _, clerk = self.run_sweep({'SMALL': 2})
+        self.assertEqual(clerk.doctypes, [''])
+
     def test_still_capped_at_full_depth_is_reported(self):
         self.run_sweep({'HUGE': 400})
         self.assertEqual(LP.SWEEP_CAPPED, ['HUGE'])
@@ -220,6 +228,52 @@ class MiamiCap(unittest.TestCase):
         self.run_sweep({'GONE': 0}, no_qs={'GONE'})
         self.assertEqual(LP.SWEEP_BLOCKED, ['GONE'])
         self.assertIn('No records', LP.MD_LAST['no_qs']['GONE'])
+
+    def test_each_try_for_a_blocked_lender_is_described_without_a_token(self):
+        self.run_sweep({'GONE': 0}, no_qs={'GONE'})
+        tries = LP.MD_LAST['attempts']['GONE']
+        self.assertEqual(len(tries), 3)
+        self.assertEqual(tries[0]['token'], True)
+        self.assertEqual(tries[0]['http'], 200)
+        self.assertEqual(tries[0]['qs'], False)
+        self.assertIn('No records', tries[0]['answer'])
+        import json as _json
+        dumped = _json.dumps(LP.coverage_entry('partial', {'attempts': LP.MD_LAST['attempts']}, None))
+        self.assertNotIn('"tok"', dumped, 'the captcha token never reaches the status record')
+        self.assertIn('attempts', dumped)
+
+    def test_a_failed_results_read_is_described(self):
+        self.run_sweep({'BIG': 40}, broken_reads=True)
+        reads = [t['read'] for tries in LP.MD_LAST['attempts'].values() for t in tries]
+        self.assertIn(False, reads)
+
+    def test_an_exception_is_recorded_by_type_only(self):
+        def boom(*a, **k):
+            raise RuntimeError('secret-token SOMEONE PRIVATE')
+        R = SimpleNamespace(OR_BASE='x', TS_SITE_KEY='k', S=SimpleNamespace(post=boom))
+        _, t = LP._or_attempt(R, lambda *a: 'tok', 'https://example.invalid/')
+        self.assertEqual(t['answer'], 'request failed: RuntimeError')
+        R.S = SimpleNamespace(post=lambda *a, **k: SimpleNamespace(status_code=503, json=lambda: 1 / 0))
+        _, t = LP._or_attempt(R, lambda *a: 'tok', 'https://example.invalid/')
+        self.assertEqual((t['http'], t['answer']), (503, 'answer was not JSON'))
+
+    def test_a_refused_solve_reads_as_no_token(self):
+        self.run_sweep({'SMALL': 2}, budget=0)
+        self.assertEqual(LP.SWEEP_BLOCKED, ['SMALL'])
+        self.assertNotIn('SMALL', LP.MD_LAST['attempts'], 'stopped before trying: the report says never tried')
+        R = SimpleNamespace(OR_BASE='x', TS_SITE_KEY='k', S=None)
+        recs, t = LP._or_attempt(R, lambda *a: None, 'https://example.invalid/')
+        self.assertIsNone(recs)
+        self.assertEqual((t['token'], t['http'], t['qs']), (False, None, None))
+
+    def test_report_prints_the_tries(self):
+        now = datetime.datetime(2026, 10, 22, 8, 0)
+        lines = CR.sweep_lines({'coverage': {'MIAMI-DADE': {'status': 'partial', 'attempts': {
+            'GONE': [{'token': True, 'http': 200, 'qs': False, 'read': None, 'answer': "{'message': 'No records'}"}],
+            'LATE': []}}}}, now)
+        text = '\n'.join(lines)
+        self.assertIn('GONE: token yes http 200 qs no read -', text)
+        self.assertIn('LATE: never tried', text)
 
     def test_split_halves_cover_the_window_exactly(self):
         lo, hi = LP._split_iso('2026-09-22', '2026-10-22')

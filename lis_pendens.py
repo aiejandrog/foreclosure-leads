@@ -251,6 +251,12 @@ def _env_int(name, default):
 
 
 MD_MAX_SPLIT = _env_int('DEALFLOW_LP_MAX_SPLIT', 4)
+# THE NAME SEARCH TAKES A DOCUMENT TYPE (probe on the laptop, 2026-10-22): WELLS FARGO over 30 days
+# with documentType='LIS PENDENS - LIS' returned 9 records, all 9 lis pendens, where the same search
+# with no type hit the 500 cap on mortgages and satisfactions and kept 8. Asking for the type keeps a
+# lender's window far under the cap, so the split above becomes the rare fallback, not the nightly
+# path. DEALFLOW_LP_MD_DOCTYPE='' puts the untyped search back.
+MD_LP_DOCTYPE = os.environ.get('DEALFLOW_LP_MD_DOCTYPE', 'LIS PENDENS - LIS').strip()
 # A per-run ceiling on split searches, separate from the monthly paid-reads cap (which Alejandro
 # lifted on 10-19, so it no longer bounds a night). 60 searches is about $0.20 at the ledger's price;
 # a lender the ceiling stops is reported partial, like one the monthly cap stops.
@@ -276,6 +282,50 @@ def _lp_rows(recs):
             and 'CANCEL' not in (r.get('doC_TYPE') or '').upper()]
 
 
+ATTEMPTS_KEPT = 6          # per lender, in the coverage record
+
+
+def _or_attempt(R, solve, url):
+    """One Official Records search try -> (records or None, what happened).
+
+    What happened is labels and counts only, never a token, key or record: token yes/no, the HTTP
+    status, whether the answer carried a result handle (qs), and the answer's keys plus any
+    message/error text. It is what tells a lender that "blocks" every night apart: a solve the cap
+    refused or 2Captcha failed (token no), a county refusal (http 4xx/5xx), a county answer with no
+    result (qs no), or a results read that failed (qs yes, read failed).
+    """
+    info = {'token': False, 'http': None, 'qs': None, 'read': None, 'answer': ''}
+    tok = solve(R.TS_SITE_KEY, R.OR_BASE)
+    if not tok:
+        info['answer'] = 'no token (paid cap refused or solver failed)'
+        return None, info
+    info['token'] = True
+    try:
+        resp = R.S.post(url, headers={'x-recaptcha-token': tok,
+                                      'content-type': 'application/json; charset=utf-8'},
+                        data='', timeout=35)
+    except Exception as e:
+        info['answer'] = 'request failed: %s' % type(e).__name__
+        return None, info
+    info['http'] = getattr(resp, 'status_code', None)
+    try:
+        j = resp.json()
+    except Exception:
+        info['answer'] = 'answer was not JSON'
+        return None, info
+    if not isinstance(j, dict):
+        info['answer'] = 'answer was not an object'
+        return None, info
+    info['qs'] = bool(j.get('qs'))
+    info['answer'] = str({k: (str(v)[:60] if k.lower() in ('message', 'msg', 'error', 'errors')
+                              else type(v).__name__) for k, v in j.items()})[:160]
+    if not info['qs']:
+        return None, info
+    recs = R.records_by_qs(j['qs'])
+    info['read'] = recs is not None
+    return recs, info
+
+
 def lp_sweep(days=30, tries=3):
     """Fresh LIS PENDENS from Miami-Dade Official Records WITHOUT the walled docket sweep: name-search
     each major foreclosure plaintiff over an ISO date window and keep the LIS PENDENS docs, unioned +
@@ -291,38 +341,25 @@ def lp_sweep(days=30, tries=3):
     print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
     MD_LAST.clear()
     MD_LAST.update({'window': [d_from, d_to], 'searched': 0, 'retrieved': 0,
-                    'split_searches': 0, 'no_qs': {}})
+                    'split_searches': 0, 'no_qs': {}, 'attempts': {}, 'doctype': MD_LP_DOCTYPE})
     del SWEEP_CAPPED[:]
 
     def search(name, lo, hi):
         """One name search over [lo, hi] -> its records, or None when it never got through."""
         url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
                + '&dateRangeFrom=' + urllib.parse.quote(lo) + '&dateRangeTo=' + urllib.parse.quote(hi)
-               + '&documentType=&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+               + '&documentType=' + urllib.parse.quote(MD_LP_DOCTYPE)
+               + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
         for _ in range(tries):
-            tok = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
-            if not tok:
-                continue
-            try:
-                j = R.S.post(url, headers={'x-recaptcha-token': tok,
-                                           'content-type': 'application/json; charset=utf-8'},
-                             data='', timeout=35).json()
-            except Exception:
-                continue
-            if not isinstance(j, dict):
-                continue
-            if j.get('qs'):
-                recs = R.records_by_qs(j['qs'])
-                if recs is None:                   # the results read failed: not an empty window
-                    continue
+            recs, info = _or_attempt(R, solve_turnstile, url)
+            tried = MD_LAST['attempts'].setdefault(name, [])
+            if len(tried) < ATTEMPTS_KEPT:
+                tried.append(info)
+            if recs is not None:
                 return recs
-            # Answered without a result handle. Keep what kind of answer it was (its keys and any
-            # message, never records) so a lender that "blocks" every night can be told apart from
-            # one the county simply has nothing for.
-            if name not in MD_LAST['no_qs']:
-                MD_LAST['no_qs'][name] = str({k: (str(v)[:60] if k.lower() in ('message', 'msg', 'error')
-                                                  else type(v).__name__) for k, v in j.items()})[:160]
-            time.sleep(1)
+            if info['qs'] is False:
+                MD_LAST['no_qs'].setdefault(name, info['answer'])
+                time.sleep(1)
         return None
 
     def window(name, lo, hi, depth):
@@ -386,6 +423,10 @@ def lp_sweep(days=30, tries=3):
     return list(out.values())
 
 
+def _yn(v):
+    return '-' if v is None else ('yes' if v else 'no')
+
+
 def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS')):
     """Does the name search honour a document type? (2026-10-22, decision card: "probe doctype too")
 
@@ -405,30 +446,15 @@ def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS'))
                + '&dateRangeFrom=' + urllib.parse.quote(d_from) + '&dateRangeTo=' + urllib.parse.quote(d_to)
                + '&documentType=' + urllib.parse.quote(dt)
                + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
-        recs, note = None, 'no token'
+        recs = None
         for _ in range(3):
-            tok = solve(R.TS_SITE_KEY, R.OR_BASE)
-            if not tok:
-                continue
-            try:
-                j = R.S.post(url, headers={'x-recaptcha-token': tok,
-                                           'content-type': 'application/json; charset=utf-8'},
-                             data='', timeout=35).json()
-            except Exception as e:
-                note = 'request failed: %s' % str(e)[:60]
-                continue
-            if not isinstance(j, dict):
-                note = 'answer was not an object'
-                continue
-            if j.get('qs'):
-                recs = R.records_by_qs(j['qs'])
-                if recs is not None:
-                    break
-                note = 'results read failed'
-                continue
-            note = 'answered without a result: keys %s' % sorted(j)[:6]
+            recs, info = _or_attempt(R, solve, url)
+            print('  try: token %s, http %s, qs %s, read %s, answer %s'
+                  % (_yn(info['token']), info['http'], _yn(info['qs']), _yn(info['read']), info['answer']))
+            if recs is not None:
+                break
         if recs is None:
-            print(f'documentType={dt!r}: no result ({note})')
+            print(f'documentType={dt!r}: no result after 3 tries')
             continue
         kinds = collections.Counter((r.get('doC_TYPE') or '?').strip() for r in recs)
         lp = sum(v for k, v in kinds.items() if 'LIS' in k.upper())
@@ -488,7 +514,7 @@ def coverage_entry(status, info, prev=None, now=None):
          'kept': info.get('kept', 0),
          'pages': info.get('pages', 0),
          'failures': [str(f)[:120] for f in (info.get('failures') or [])][:20]}
-    for k in ('searched', 'blocked', 'capped', 'split_searches', 'no_qs'):
+    for k in ('searched', 'blocked', 'capped', 'split_searches', 'no_qs', 'attempts'):
         if k in info:
             e[k] = info[k]
     e['last_complete'] = now if status == 'ok' else (prev or {}).get('last_complete')
@@ -645,13 +671,16 @@ def main():
             fails.append('%d plaintiff search(es) not read to the end (%d-record cap)'
                          % (len(SWEEP_CAPPED), OR_RESULT_CAP))
         info['MIAMI-DADE'] = {
-            'scope': 'listed plaintiffs only (%d names)' % len(PLAINTIFFS),
+            'scope': 'listed plaintiffs only (%d names), document type %r'
+                     % (len(PLAINTIFFS), MD_LP_DOCTYPE or 'any'),
             'window': list(MD_LAST.get('window') or _win(a.days)),
             'reported_total': None, 'retrieved': MD_LAST.get('retrieved', 0), 'kept': len(md),
             'pages': MD_LAST.get('searched', 0), 'searched': MD_LAST.get('searched', 0),
             'blocked': len(SWEEP_BLOCKED), 'capped': list(SWEEP_CAPPED), 'failures': fails,
             'split_searches': MD_LAST.get('split_searches', 0),
-            'no_qs': dict(MD_LAST.get('no_qs') or {})}
+            'no_qs': dict(MD_LAST.get('no_qs') or {}),
+            # per-try detail for the lenders that never got through: labels only, no token or record
+            'attempts': {n: list((MD_LAST.get('attempts') or {}).get(n) or []) for n in SWEEP_BLOCKED}}
     if a.county in ('broward', 'all'):
         from fl_lp import broward as _bw
         bw = _bw.sweep(days=a.days)
