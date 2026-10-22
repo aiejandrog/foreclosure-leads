@@ -13136,7 +13136,7 @@ var _LK_PLACEHOLDER = 'lookup-placeholder@invalid';
 function _workerLookupRows(){
   var out = [];
   DATA.forEach(function(r){
-    if(!r || !r.case) return;
+    if(!r || !r.case || r.rfHold) return;
     if((r.phones||[]).length || (r.emails||[]).length) return;
     if(String((notes[r.case]||{}).phone||'').replace(/\D/g,'').length >= 10) return;
     if(!_workerEligible(Object.assign({}, r, {emails:[_LK_PLACEHOLDER]}))) return;

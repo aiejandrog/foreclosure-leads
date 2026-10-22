@@ -90,6 +90,13 @@ except Exception as e:
     sync_playwright = None
     print('SKIP browser half (playwright not importable: %s)' % e)
 if sync_playwright:
+    try:                                  # CI's suites job has the package but no browser binary
+        with sync_playwright() as _p:
+            _p.chromium.launch(executable_path=os.environ.get('PW_CHROMIUM') or None).close()
+    except Exception as e:
+        sync_playwright = None
+        print('SKIP browser half (Chromium will not launch: %s)' % str(e).splitlines()[0][:200])
+if sync_playwright:
     tpl = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
     html = call_mode.build_html([], 0, {'ct': 'x', 'k': 'y'}, 'built', 'sig', 'bsig',
                                 sync_js=call_mode.extract_sync_js(tpl), funnel_js=call_mode.extract_funnel_js(tpl),
@@ -123,6 +130,8 @@ if sync_playwright:
           o.blane = BLANE; o.cur = cur && cur.c;
           o.left = lkRows().length;
           o.card = document.getElementById('app').innerHTML.indexOf('5550199') >= 0;
+          o.td = lkAsDial({c: 'T-1', st: 'TD', lk: 1}, '3055550100').st === 'TD'
+                 && lkAsDial({c: 'F-1', st: 'FC', lk: 1}, '3055550100').st === undefined;
           return o;
         }""", [byc[NOPH['case']], byc[LP['case']]])
         b.close()
@@ -136,6 +145,7 @@ if sync_playwright:
     rec('the card opens on that lead', out.get('blane') is None and out.get('cur') == NOPH['case'], out)
     rec('the card shows the typed number', out.get('card'), out)
     rec('the lead leaves the lookup list', out.get('left') == 0, out.get('left'))
+    rec('a tax deed keeps st=TD on its dial row (tax-deed text), other kinds do not ship st', out.get('td'), out)
 
 print('\nMORNING WORKER: FIND A NUMBER PANEL (Chromium)')
 if sync_playwright:
@@ -148,8 +158,9 @@ if sync_playwright:
         r.update(kw)
         return r
     W_OK, W_HELD, W_STAY, W_TYPED, W_DNC = 'WK-OK-1', 'WK-HELD-1', 'WK-STAY-1', 'WK-TYPED-1', 'WK-DNC-1'
+    W_RF = 'WK-RFHOLD-1'
     board = BL.build_html(fake + [nc(W_OK), nc(W_HELD, ddhold=True), nc(W_STAY, saleBkAct=True),
-                                  nc(W_TYPED), nc(W_DNC)], empty)
+                                  nc(W_TYPED), nc(W_DNC), nc(W_RF, rfHold=True)], empty)
     bpath = os.path.join(_T, 'board.html')
     open(bpath, 'w', encoding='utf-8').write(board)
     with sync_playwright() as p:
@@ -175,6 +186,7 @@ if sync_playwright:
     rec('an eligible no-contact lead is on the worker list', W_OK in w['listed'], w['listed'])
     rec('diligence-held, stayed and do-not-contact leads are not',
         not ({W_HELD, W_STAY, W_DNC} & set(w['listed'])), w['listed'])
+    rec('a federal-release hold (rfHold) lead is not listed', W_RF not in w['listed'], w['listed'])
     rec('a lead with a typed number leaves the list', W_TYPED not in w['listed'], w['listed'])
     rec('the worker document carries the panel with Whitepages links', w['panel'] and w['wp'], w)
     rec('the placeholder address never reaches the worker document', not w['placeholder'])

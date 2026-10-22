@@ -5756,7 +5756,9 @@ function lkAsDial(r, num){
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
   ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
-  if(o.st !== 'BAL') delete o.st;
+  // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
+  // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
+  if(o.st !== 'BAL' && o.st !== 'TD') delete o.st;
   return o;
 }
 function lkRows(){
