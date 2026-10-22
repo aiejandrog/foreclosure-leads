@@ -4232,8 +4232,9 @@ def make_tracker(leads):
             _cm_cap = int(os.environ.get('CALLMODE_CAP', '') or 0)
         except ValueError:
             _cm_cap = 0
+        _cm_lk = []        # every gate passed, no number yet: the page's "Find a number" list
         _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads,
-                                      cap=_cm_cap if _cm_cap > 0 else 10 ** 6)
+                                      cap=_cm_cap if _cm_cap > 0 else 10 ** 6, lookup=_cm_lk)
         # Server-confirmed emails and texts (mail_sent.json / text_sent.json) onto the dial rows, so a
         # lead cadence already mailed stops sorting as never-contacted on the phone. Order and the
         # "already contacted" bar only; Call Mode's hiding rules do not read these fields.
@@ -4249,7 +4250,7 @@ def make_tracker(leads):
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
-            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all, audit=_cm_audit)
+            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all, audit=_cm_audit, lookup=_cm_lk)
         if _cm_rows:
             print('call mode: %d dialable lead(s) of %d qualifying -> docs/call/  (%s)'
                   % (_cm_rows, _cm_total, 'encrypted' if codes else 'STUB — no site.codes'))
@@ -4263,7 +4264,7 @@ def make_tracker(leads):
                 _sr, _st = call_mode.make_callmode(
                     slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
                     optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
-                    seat=_seat, subdir=_seat[2], rows=_cm_all, audit=_cm_audit)
+                    seat=_seat, subdir=_seat[2], rows=_cm_all, audit=_cm_audit, lookup=_cm_lk)
                 if _sr:
                     print('call mode/%s: %d dialable lead(s) of %d qualifying -> docs/call/%s/'
                           % (_seat[2].lower(), _sr, _st, _seat[2].lower()))

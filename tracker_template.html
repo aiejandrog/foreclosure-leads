@@ -13111,6 +13111,58 @@ function _workerCard(r){
     repPhone: rw ? rw.phone : ''
   };
 }
+/* FIND A NUMBER on the Morning Worker (2026-10-22, Alejandro: "all leads even ones with no phone
+   numbers scraped throw them in morning worker and call mode because then i can use whitepage to
+   verify the number"). A lead with no phone and no email has nothing the worker can send, so it
+   never enters a lane; this lists the ones that pass every OTHER worker gate, so they can be looked
+   up. The gate is _workerEligible itself, asked about a copy of the row that carries a placeholder
+   address (never used, never shown, never sent to) so only its "reachable at all" test is answered
+   for it: opt-outs, stays, diligence holds, passed sales, cooldowns and the no policy all still
+   decide. A number already typed into the lead's phone box (n.phone) takes it off this list. The
+   number is entered on the board row or in Call Mode's own Find-a-number list, where the call
+   is made. */
+var _LK_PLACEHOLDER = 'lookup-placeholder@invalid';
+function _workerLookupRows(){
+  var out = [];
+  DATA.forEach(function(r){
+    if(!r || !r.case) return;
+    if((r.phones||[]).length || (r.emails||[]).length) return;
+    if(String((notes[r.case]||{}).phone||'').replace(/\D/g,'').length >= 10) return;
+    if(!_workerEligible(Object.assign({}, r, {emails:[_LK_PLACEHOLDER]}))) return;
+    out.push(r);
+  });
+  out.sort(function(a, b){
+    var da = _saleDays(a), db = _saleDays(b);
+    da = (da == null) ? 99999 : da; db = (db == null) ? 99999 : db;
+    return (da - db) || (_filedMs(b) - _filedMs(a));
+  });
+  return out;
+}
+function _workerLookupHtml(){
+  var rows = _workerLookupRows();
+  if(!rows.length) return '';
+  var CAP = 150;
+  var items = rows.slice(0, CAP).map(function(r){
+    var d = _saleDays(r);
+    var clock = (d == null) ? 'no sale date' : (d < 0 ? 'sale passed' : 'sale in ' + d + 'd');
+    var wa = _wpAddrUrl(r), wn = _wpNameUrl(r);
+    return '<div style="padding:8px 14px;border-bottom:1px solid #eef0f5">'
+      + '<b>' + esc(r.owners || r.oname || r.case) + '</b>'
+      + '<div style="font-size:12.5px;color:#5b6472">' + esc(r.addr || 'address unresolved') + ' &middot; ' + clock + '</div>'
+      + '<div style="margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;font:700 12.5px Segoe UI,Arial">'
+      + (wa ? '<a href="' + esc(wa) + '" target="_blank" rel="noopener">Whitepages address</a>' : '')
+      + (wn ? '<a href="' + esc(wn) + '" target="_blank" rel="noopener">Whitepages name</a>' : '')
+      + '</div></div>';
+  }).join('');
+  return '<div style="background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
+    + '<div class="mwloghead" style="background:#3a2a06;color:#F6E9C8"><span>&#128269; Find a number &mdash; no phone, no email</span>'
+    + '<span class="mwlogstats">' + rows.length + '</span></div>'
+    + '<div style="padding:8px 14px;border-bottom:1px solid #eef0f5;font-size:12.5px;color:#5b6472">Look the owner up on Whitepages, '
+    + 'then type the number in Call Mode under <b>Find a number</b> (or in the lead\'s phone box on the board). '
+    + '<a href="__BOARDURL__call/" target="_blank" rel="noopener">Open Call Mode</a>'
+    + (rows.length > CAP ? ' &middot; showing the ' + CAP + ' soonest sales of ' + rows.length : '') + '</div>'
+    + '<div style="max-height:320px;overflow-y:auto">' + items + '</div></div>';
+}
 function genMorningWorker(lane, autostart){
   // Default to the REPLIED lane whenever anyone is waiting — replies open the day, period.
   // No lane asked for: the first lane that has someone workable in it, so the worker never opens
@@ -13404,6 +13456,7 @@ function genMorningWorker(lane, autostart){
     +     '<div class="mwloghead" style="background:#0B2A17;color:#CFF3DC"><span>&#9742; Call these &mdash; phone only, no email</span><span style="display:flex;gap:8px;align-items:center"><button id="mwcopycallq" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:inherit;border-radius:6px;padding:3px 9px;font:700 11px Arial;cursor:pointer">&#10697; Copy list</button><span class="mwlogstats" id="mwcallqn"></span></span></div>'
     +     '<div id="mwcallqlist" style="max-height:320px;overflow-y:auto"></div>'
     +   '</div>'
+    +   (function(){ try{ return _workerLookupHtml(); }catch(e){ return ''; } })()
     +   '<div class="mwlogwrap">'
     +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span style="display:flex;gap:8px;align-items:center"><button id="mwcopylog" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:inherit;border-radius:6px;padding:3px 9px;font:700 11px Arial;cursor:pointer">&#10697; Copy day</button><span class="mwlogstats" id="mwlogstats"></span></span></div>'
     +     '<div class="mwlog" id="mwlog"></div>'

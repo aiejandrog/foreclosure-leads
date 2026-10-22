@@ -1828,8 +1828,16 @@ def _wp_phone_kinds(d):
     return out
 
 
-def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
+def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=None):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
+
+    lookup : optional list. When given, every lead that passes EVERY gate below except having a
+             dialable number is appended to it as {'c', 'sb', 'pk', 'bq', 'bu'} (2026-10-22,
+             Alejandro: "all leads even ones with no phone numbers ... so I can use Whitepages to
+             verify the number"). A lead whose numbers were dropped for a do-not-call flag is NOT
+             one of them: the owner's own number is on the list, and finding another number for
+             the same person is not a way around that. make_callmode marks these on the coverage
+             rows (lk) so the page can offer a Whitepages lookup and a typed number.
 
     Everything is decided HERE, at build time, so the phone does no filtering — it only renders.
     """
@@ -1959,7 +1967,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             dg = _digits(p)
             if len(dg) == 10:
                 pairs.append((oi, dg))
-        if not pairs:
+        need_lookup = (not pairs) and n_dnc == 0 and lookup is not None
+        if not pairs and not need_lookup:
             continue
         keep = [p for _, p in pairs]
         keep_oi = [oi for oi, _ in pairs]                  # keep[k] came from phones[keep_oi[k]]
@@ -1996,6 +2005,18 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         if d.get('vac'):
             continue
         if re.search(r'timeshare|parcel not linked', str(d.get('warn') or ''), re.I):
+            continue
+        if need_lookup:
+            # Every gate above passed; only the number is missing. Not a dial row (no `p`).
+            lookup.append({'c': case, 'sb': _seat_bucket(case), 'pk': d.get('pkey') or ('C' + case),
+                           'bq': 1 if d.get('bkAsk') else None, 'bu': d.get('bkUntil') or None,
+                           'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
+                           'xf': 1 if (not is_lp and not d.get('auction')
+                                       and (d.get('filedDate') or d.get('filed'))) else None,
+                           'd': days, 'lp': 1 if is_lp else None, 'z': (re.search(r'(\d{5})\s*$', (d.get('addr') or '')).group(1)
+                                  if re.search(r'(\d{5})\s*$', (d.get('addr') or '')) else None),
+                           'pl': (str(d.get('plaintiff') or '').strip()[:46] or None),
+                           'pcs': (_groups.get(d.get('pkey') or '') if len(_groups.get(d.get('pkey') or '') or []) > 1 else None)})
             continue
         rank = d.get('phrank') or []
         best = d.get('phbest')
@@ -2785,6 +2806,28 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
     return out, suppressed
 
 
+def mark_lookup(cov, lookup, crew_sb=None):
+    """Stamp the coverage rows of call_rows' `lookup` leads (every gate passed, no number) with
+    lk=1 plus what a dial row needs once a number is typed in on the page: seat bucket, person key,
+    bankruptcy ask-first, release expiry, sale clock. The seat bucket follows the household: a lead
+    whose person key already has a dial row takes that row's bucket, so one person stays on one
+    phone. A row the build marked opted out (`oo`) is never marked. Returns the number marked."""
+    by = {x['c']: x for x in (lookup or ()) if x.get('c')}
+    crew_sb = crew_sb or {}
+    n = 0
+    for r in cov or ():
+        x = by.get(r.get('c'))
+        if not x or r.get('oo') or r.get('sibclaimed') or r.get('saleBkAct') or r.get('lpDismissed'):
+            continue
+        r['lk'] = 1
+        r['sb'] = crew_sb.get(x.get('pk'), x['sb'])
+        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs'):
+            if x.get(k) not in (None, '', []):
+                r[k] = x[k]
+        n += 1
+    return n
+
+
 def _identity_opted_fn(slim, optouts):
     """call_rows' identity-ledger test, lifted to a standalone closure so coverage_rows can reuse
     the SAME reader instead of growing a second one. Returns a predicate; a no-op when the ledger
@@ -3296,7 +3339,7 @@ def seat_rows(rows, n, i):
 
 
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
-                  textperson=None, seat=None, subdir='', rows=None, audit=None):
+                  textperson=None, seat=None, subdir='', rows=None, audit=None, lookup=None):
     """Write docs/call/<subdir>/index.html. `encrypt` is foreclosure_leads._encrypt_multi and
     `guard` is its _js_guard — both INJECTED rather than re-implemented, so the crypto and the
     parse check can never drift from the board's.
@@ -3305,6 +3348,8 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     subdir : '' -> docs/call/, 'carlos' -> docs/call/carlos/.
     rows   : optional (rows, total) from ONE shared call_rows() call, so two seat pages and the
              call sheet are cut from the identical list and can never disagree on a gate.
+    lookup : the `lookup` list that same call_rows() call filled. Absent with `rows`, nothing is
+             marked for lookup; absent with rows=None, it is computed here.
 
     The guard runs BEFORE the write. A page whose script fails to parse still loads — it just loads
     with every button dead, which is the precise fail-silent shape this whole effort exists to
@@ -3331,7 +3376,8 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
               'until a build runs with access codes present.' % _where)
         return 0, 0
     if rows is None:
-        rows, total = call_rows(slim, optouts, deads)
+        lookup = [] if lookup is None else lookup
+        rows, total = call_rows(slim, optouts, deads, lookup=lookup)
         # Rows built here were never stamped, so the audit used for HISTCOV must stamp them too.
         if audit is None:
             audit = ledger_audit(slim=slim)
@@ -3343,6 +3389,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         if audit is None:
             audit = ledger_audit()
     _shipped_all = len(rows)         # crew-wide shipped count, BEFORE the seat split
+    _crew_sb = {r.get('pk'): r.get('sb') for r in rows if r.get('pk') and isinstance(r.get('sb'), int)}
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
@@ -3377,6 +3424,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # counts on a handset describe the whole business. See coverage_rows for what is deliberately
     # absent from them, and the cut note above for why it is this page's list and not the crew's.
     _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
+    _n_lk = mark_lookup(_cov, lookup, _crew_sb)
     # EVERY LEAD, OR SAY WHICH ONES ARE MISSING. The whole promise of the board lanes on the phone
     # is that they count the same book the board counts; a lead that falls out of BOTH the dial
     # queue and the coverage set makes a lane read low, and a lane reading low is indistinguishable
@@ -3395,6 +3443,9 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # SAY THE PAYLOAD SIZE OUT LOUD, every build. This page exists to open on cell data at a door
     # (~100 KB was the founding budget) and coverage roughly doubles it. A number in the log is what
     # makes the next person's addition to these rows a decision rather than an accident.
+    if _n_lk:
+        print('call mode: %d lead(s) pass every gate but have no number yet: on the page under '
+              '"Find a number" (Whitepages lookup, type the number to call)' % _n_lk)
     print('call mode: %d dialable row(s) + %d coverage row(s) = %d leads on the phone, %.0f KB '
           'before encryption (board lanes now count the whole book, not just the dial queue)%s'
           % (len(rows), len(_cov), len(rows) + len(_cov), len(_plain) / 1024.0,
@@ -5513,6 +5564,8 @@ var SCREEN='lead';
 var _lastAfter=null;
 function render(){
   if(SCREEN!=='lead'){ return; }   // never stomp an interactive screen — advance() repaints fresh
+  /* a number saved on a Find-a-number lead (here, on the board, or by a teammate's sync) */
+  try{ promoteLookups(); }catch(e){ logErr(e, 'promoteLookups'); }
   /* BOARD-LANE VIEW. Sits in front of the dial queue rather than filtering it: these lanes cover
      leads with no phone at all, which pool() cannot express and must not be taught to. */
   if(BLANE){ $('app').innerHTML = boardList(); wire(); return; }
@@ -5578,7 +5631,9 @@ function head(){
   var _qh = (typeof textingHeld === 'function' && textingHeld())
     ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the do-not-contact list is stale.')+'</div>')
     : '';
-  return _qh + '<div class="top"><div class="lane">'+laneBtns+'</div>'
+  var _lkN = lkRows().length;
+  var _lkBtn = _lkN ? '<button data-lk="1" class="' + (BLANE === '__lk' ? 'on' : '') + '">&#128269; Find a number &middot; ' + _lkN + '</button>' : '';
+  return _qh + '<div class="top"><div class="lane">'+laneBtns+_lkBtn+'</div>'
     + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
@@ -5656,7 +5711,94 @@ function propertyLabel(r){
 function ownerLabel(r){
   return r.o || r.on || 'Owner name unresolved — check the case record';
 }
+/* ══════════════ FIND A NUMBER (2026-10-22, Alejandro) ══════════════
+   "all leads even ones with no phone numbers scraped throw them in ... call mode because then i
+   can use whitepage to verify the number". The build marks lk on the coverage row of every lead
+   that passed EVERY dial-queue gate (opt-outs, stays, diligence, equity floor, sale window) and is
+   missing only a number; a lead whose own numbers are do-not-call is never marked. This list shows
+   those leads for THIS seat with the Whitepages links. A number typed here is saved to the lead's
+   note (n.phone, the same field the board's phone box writes) and the lead becomes an ordinary
+   dial row with that one number, so the card, the outcome screen, the cooldowns and
+   hardSuppressed() all apply to it exactly as to a traced number. Nothing here dials a lead the
+   build held: an unmarked coverage row is never offered. */
+var LKDONE = {};
+function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length === 11 && d.charAt(0) === '1') d = d.slice(1); return d.length === 10 ? d : ''; }
+function lkAsDial(r, num){
+  var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
+           p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st'].forEach(function(k){
+    if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
+  if(o.st !== 'BAL') delete o.st;
+  return o;
+}
+function lkRows(){
+  return (COV || []).filter(function(r){
+    if(!r || !r.lk || LKDONE[r.c] || !_seatMine(r) || _clmOwner(r.c)) return false;
+    return !hardSuppressed(lkAsDial(r, ''));
+  });
+}
+/* A number already saved on the lead (this phone, the board, or a teammate's sync) makes it a
+   dial row on load, so a lookup done yesterday is not done again today. */
+function promoteLookups(){
+  var n = 0;
+  (COV || []).forEach(function(r){
+    if(!r || !r.lk || LKDONE[r.c]) return;
+    var num = _lkDigits((notes[r.c] || {}).phone);
+    if(!num) return;
+    if(ROWS.some(function(x){ return x.c === r.c; })){ LKDONE[r.c] = 1; return; }
+    var row = lkAsDial(r, num);
+    if(hardSuppressed(row)) return;
+    ROWS.push(row); LKDONE[r.c] = 1; n++;
+  });
+  if(n){ ROWS = _dropExpired(ROWS); }
+  return n;
+}
+function lookupList(){
+  var rows = lkRows();
+  var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + rows.length + '</b>'
+            + '<div class="sub">These leads passed every check and have no number yet. Look the owner up '
+            + 'on Whitepages, type the number you trust, and it becomes a normal lead you can call.</div></div>';
+  if(!rows.length) return head() + head_ + '<div class="card">Nothing to look up right now.</div><div class="sheetpad"></div>';
+  var CAP = 200, shown = rows.slice(0, CAP);
+  var body = shown.map(function(r){
+    var bv = _bView(r);
+    var clock = (!bv.auction) ? 'no sale date'
+              : (bv.days == null || bv.days >= NO_SALE) ? esc(bv.auction)
+              : (bv.days < 0 ? 'sale passed' : 'sale in ' + bv.days + 'd');
+    var eq = (typeof r.e === 'number') ? (r.e + '% equity') : 'equity not checked';
+    var links = fileLinks({fo:r.fo, ct:r.ct, o:(r.o || r.on || ''), a:(r.a || ''), c:r.c, z:r.z}).filter(function(x){
+      return /Whitepages|People search/.test(x[0]); });
+    return '<div class="card"><b>' + esc(ownerLabel(r)) + '</b>'
+         + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
+         + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
+         + (r.bq ? '<div class="sub" style="color:var(--gold)">Bankruptcy not checked. Ask first: Have you filed for bankruptcy?</div>' : '')
+         + '<div class="flinks" style="margin-top:8px">' + links.map(function(x){
+             return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('') + '</div>'
+         + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="tel" '
+         + 'inputmode="tel" placeholder="Number you found" style="flex:1;min-width:0">'
+         + '<button class="lkadd" data-c="' + esc(r.c) + '">Save &amp; call</button></div></div>';
+  }).join('');
+  var more = rows.length > CAP ? '<div class="card"><b>' + (rows.length - CAP) + ' more.</b><div class="sub">'
+    + 'Showing the first ' + CAP + '. Save numbers on these and the rest move up.</div></div>' : '';
+  return head() + head_ + body + more + '<div class="sheetpad"></div>';
+}
+function lkSave(c, raw){
+  var r = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
+  if(!r){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
+  var num = _lkDigits(raw);
+  if(!num){ toast('Type a 10-digit number', {bad:true}); return; }
+  var row = lkAsDial(r, num), why = hardSuppressed(row);
+  if(why){ toast('Not saved: ' + why, {bad:true}); return; }
+  var n = notes[c] || (notes[c] = {});
+  n.phone = num;
+  saveNotes(); try{ queueSync(); }catch(e){}
+  if(!ROWS.some(function(x){ return x.c === c; })) ROWS.push(row);
+  LKDONE[c] = 1;
+  BLANE = null;
+  _openCase(c);
+}
 function boardList(){
+  if(BLANE === '__lk') return lookupList();
   var k = BLANE, F = FUNNEL[k] || {t:k, ic:'', d:''}, rows = funnelRows(k);
   var head_ = '<div class="card"><b>' + F.ic + ' ' + esc(F.t) + ' &middot; ' + rows.length + '</b>'
             + '<div class="sub">' + esc(F.d) + '</div></div>';
@@ -7671,32 +7813,43 @@ function wire(){
      this lead is not in, so "next" would land somewhere unrelated. Find its lane first, then seek.
      Rows with no phone carry no data-open at all, so there is nothing here to tap. */
   Array.prototype.forEach.call(document.querySelectorAll('[data-open]'), function(el){
-    el.onclick=function(){
-      var c = el.getAttribute('data-open'), lane0 = lane;
-      for(var q=0;q<LANES.length;q++){
-        var L=LANES[q]; var hit=-1;
-        if(!ROWS.some(function(r){ return r.c===c && L.pred(r); })) continue;
-        lane=L.k; BLANE=null;
-        /* Opening a specific lead lands in whichever view holds it, so a retry opened ON PURPOSE
-           from a board list or the lookup is not refused by the Untouched default. */
-        var _qvWas = QVIEW, _laneWas = lane0, _cardWas = (cur && cur.c) || null;
-        try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
-        var P=pool();
-        for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
-        if(hit>=0){ if(!_QVBACK && (QVIEW !== _qvWas || lane !== _laneWas)) _QVBACK = {v:_qvWas, l:_laneWas, c:_cardWas}; i=hit; render(); return; }
-        QVIEW = _qvWas; lane = _laneWas;
-      }
-      /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
-         seat. Say which rather than doing nothing when tapped. */
-      toast(_clmOwner(c) ? 'A teammate is on this lead right now'
-                         : 'Not in a dial lane right now \u2014 suppressed, or on the other phone');
-    };
+    el.onclick=function(){ _openCase(el.getAttribute('data-open')); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-lk]'), function(b){
+    b.onclick=function(){ BLANE = (BLANE === '__lk') ? null : '__lk'; i=0; render(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('button.lkadd'), function(b){
+    b.onclick=function(){ var c = b.getAttribute('data-c');
+      var inp = document.querySelector('input.lknum[data-c="' + c.replace(/"/g, '') + '"]');
+      lkSave(c, inp ? inp.value : ''); };
   });
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
   if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };
   var cl = $('cstatslink');
   if(cl) cl.onclick = function(e){ e.preventDefault(); _csDays = 1; screenCallStats(); };
+}
+/* Open one lead's card in the dial lane that holds it (a board-lane row, or a lead just given a
+   number on the Find-a-number list). */
+function _openCase(c){
+  var lane0 = lane;
+  for(var q=0;q<LANES.length;q++){
+    var L=LANES[q]; var hit=-1;
+    if(!ROWS.some(function(r){ return r.c===c && L.pred(r); })) continue;
+    lane=L.k; BLANE=null;
+    /* Opening a specific lead lands in whichever view holds it, so a retry opened ON PURPOSE
+       from a board list or the lookup is not refused by the Untouched default. */
+    var _qvWas = QVIEW, _laneWas = lane0, _cardWas = (cur && cur.c) || null;
+    try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
+    var P=pool();
+    for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
+    if(hit>=0){ if(!_QVBACK && (QVIEW !== _qvWas || lane !== _laneWas)) _QVBACK = {v:_qvWas, l:_laneWas, c:_cardWas}; i=hit; render(); return; }
+    QVIEW = _qvWas; lane = _laneWas;
+  }
+  /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
+     seat. Say which rather than doing nothing when tapped. */
+  toast(_clmOwner(c) ? 'A teammate is on this lead right now'
+                     : 'Not in a dial lane right now \u2014 suppressed, or on the other phone');
 }
 /* Stale-cache heal. iPhone Safari is the named worst offender and a phone quietly serving last
    week's list is the failure most likely to go unnoticed. Never auto-reload once an outcome has

@@ -8,6 +8,7 @@ _*.py
 # that fail loudly when a change breaks something: keep them.
 !_cstest.py
 !_workerlanetest.py
+!_lookuplanetest.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
