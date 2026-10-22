@@ -263,6 +263,38 @@ rec('a started run with no refusal says so', 'no refusal was recorded' in why_of
 rec('the alert carries the cause and stays clean',
     (a := alert_with(run_rows(('task_open', {}), ('blocked_not_armed', {})))) and 'armed runner' in a['text'] and clean(a['text']))
 rec('an unreadable record never invents a cause', PA.worker_run_why({'readable': False}) == '' and PA.worker_run_why(None) == '')
+print('-- morning worker: the bridge boot log speaks when the run record cannot --')
+def boot_of(*lines):
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'send_server.log')
+    with open(p, 'w', encoding='utf-8') as f:
+        f.write('2026-09-26 07:45:01  [boot] bridge starting, pid 11, credential ok\n')
+        for ln in lines:
+            f.write('2026-09-27 ' + ln + '\n')
+        f.write('2026-09-27 07:50:00  [mail] unrelated line\n')
+    return PA.read_bridge_boot('2026-09-27', p)
+rec('only today\'s boot lines count, free text is reduced to a code',
+    boot_of('07:45:01  [boot] bridge starting, pid 26320, credential ok')['events'] == [('07:45:01', 'start_ok')])
+rec('a bridge that stopped before 8 says so', 'stopped at 07:46' in PA.bridge_boot_why(boot_of(
+    '07:45:01  [boot] bridge starting, pid 1, credential ok', '07:46:10  [boot] bridge stopped, pid 1')))
+rec('a missing mail login is named', 'without its mail login' in PA.bridge_boot_why(boot_of(
+    '07:45:01  [boot] bridge starting, pid 1, credential MISSING')))
+rec('a port that would not open is named', 'could not open its port' in PA.bridge_boot_why(boot_of(
+    '07:45:01  [boot] could not bind 127.0.0.1:8823: [Errno 98] Address already in use')))
+rec('a start after 8 says the bridge came up late', 'after the 8 AM run' in PA.bridge_boot_why(boot_of(
+    '16:40:00  [boot] bridge starting, pid 1, credential ok')))
+rec('a reload hand-over counts as a start, never as proof it was up', 'a start at 07:50' in PA.bridge_boot_why(boot_of(
+    '07:45:01  [boot] bridge starting, pid 1, credential ok', '07:50:02  [reload] new bridge serving, pid 2')))
+rec('a skipped second launch reads as answering, not as a start', 'already answering' in PA.bridge_boot_why(boot_of(
+    '07:45:01  [boot] launch skipped, a healthy bridge already owns 127.0.0.1:8823')))
+rec('no boot line today invents nothing (a bridge from yesterday may still be up)', PA.bridge_boot_why(boot_of()) == '')
+rec('an unreadable or missing log invents nothing',
+    PA.bridge_boot_why({'readable': False}) == '' and PA.bridge_boot_why(None) == ''
+    and PA.read_bridge_boot('2026-09-27', os.path.join(tempfile.mkdtemp(), 'nope.log')) == {'readable': True, 'events': []})
+rec('the morning alert carries the bridge line and stays clean',
+    (a := one({'morning_sends': dict(base_m, worker_run={'readable': True, 'rows': 0, 'ev': {}},
+                                     bridge_boot=boot_of('07:45:01  [boot] bridge starting, pid 1, credential ok',
+                                                         '07:46:10  [boot] bridge stopped, pid 1'))}, 'morning-sends'))
+    and 'nothing recorded' in a['text'] and 'stopped at 07:46' in a['text'] and clean(a['text']) and 'pid' not in a['text'])
 rec('a hostile code is dropped, not published', 'x1' not in PA._top({'../etc/passwd': 1}) and PA._top({'ok_code': 2}) == 'ok_code x2')
 
 cfg = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'senders.json'), encoding='utf-8'))
