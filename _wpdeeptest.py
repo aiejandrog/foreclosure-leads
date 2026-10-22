@@ -82,6 +82,14 @@ chk('parcel: unverified, lead has no street -> nobody',
 chk('verdict: apn digits vs folio digits', W.wp_parcel_verdict('01-0000-000-0001', '0100000000001') == 'ok'
     and W.wp_parcel_verdict('01-0000-000-0001', '0100000000002') == 'mismatch'
     and W.wp_parcel_verdict('01-0000-000-0001', '') == 'unverified')
+chk('verdict: condo unit letters are part of the parcel (#312)',
+    W.wp_parcel_verdict('49-41-23-AB-0010', '49-41-23-AC-0010') == 'mismatch'
+    and W.wp_parcel_verdict('49-41-23-ab-0010', '494123AB0010') == 'ok'
+    and W.wp_parcel_verdict('494123A0010', '4941230010') == 'mismatch')
+chk('verdict: a parcel side with no digit is unverified, a record with no parcel stays person-only',
+    W.wp_parcel_verdict('unknown', '494123A0010') == 'unverified'
+    and W.wp_parcel_verdict('494123A0010', 'Property Appraiser') == 'unverified'
+    and W.wp_parcel_verdict('', '') == 'ok' and W.wp_parcel_verdict(None, '3040180010860') == 'ok')
 
 # --- 3. address reading ---------------------------------------------------------------------------
 chk("street: '8 ST' == '8th St'", W._street_key('123 SW 8 ST') == W._street_key('123 SW 8th St'))
