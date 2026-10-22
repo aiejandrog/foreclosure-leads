@@ -2750,6 +2750,11 @@ class Handler(BaseHTTPRequestHandler):
                 'case': meta.get('c') or '',
                 'error': str(e)[:200],
                 'test_mode': bool(meta.get('test')),
+                # Same field as the success row. An errored row counts toward no quota (every
+                # counter requires message_id and no error), but SMTP can fail AFTER Gmail accepted
+                # the message, so this row may describe a delivered email — worth knowing which
+                # evidence let it out.
+                'gate': (_gate or {}).get('verdict') or '',
             })
             return self._json(502, {'ok': False, 'err': f'send failed: {e}'})
 
@@ -2785,6 +2790,16 @@ class Handler(BaseHTTPRequestHandler):
                 # 'proven' = passed the breaker on acceptance evidence; 'probe' = one of
                 # today's quota of unknown-address verification sends. Absent on normal sends.
                 'lane': meta.get('lane') or '',
+                # WHICH EVIDENCE ADMITTED THIS SEND (_recipient_verdict's code for the address
+                # actually mailed): 'delivered' / 'replied' = OBSERVED acceptance; 'zerobounce_valid'
+                # = a paid API assertion and nothing more. Empty on a meta.test send, which skips the
+                # gate. Recorded because the ledger had no way to tell those apart after the fact:
+                # reconstructing the 2026-10-21 wave (43 sends, 42 to never-mailed addresses, 5
+                # hard bounces) needed first-send dates per address to infer what the gate had done,
+                # and inference is not a basis for metering. `gate_dropped` is how many of the
+                # owner's other addresses the one-address-per-person rule discarded.
+                'gate': (_gate or {}).get('verdict') or '',
+                'gate_dropped': int((_gate or {}).get('dropped') or 0),
                 'wl': str(meta.get('wl') or ''),          # worker lane the send came from
                 # 'first' = a first touch from a warm-up sender; _first_touch_sent_today meters it
                 'touch': meta.get('touch') or '',
