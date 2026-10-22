@@ -348,7 +348,7 @@ rec('a leftover unattributed send still turns ledgers_ok off', hc5['ledgers_ok']
 rec('both seat pages bake HISTCOV from the same audit that stamped the rows',
     "histcov=history_coverage(total, _shipped_all, audit))" in SRC
     and io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'),
-                encoding='utf-8').read().count('rows=_cm_all, audit=_cm_audit)') == 2)
+                encoding='utf-8').read().count('rows=_cm_all, audit=_cm_audit') == 2)
 rec('both build sites pass the lead list',
     'audit = ledger_audit(slim=slim)' in SRC and 'ledger_audit(slim=slim)' in io.open(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), 'foreclosure_leads.py'), encoding='utf-8').read())

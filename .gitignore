@@ -7,6 +7,8 @@ _*.py
 # board's behaviour lived on exactly one laptop and died with a fresh clone. These are the files
 # that fail loudly when a change breaks something: keep them.
 !_cstest.py
+!_workerlanetest.py
+!_lookuplanetest.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
