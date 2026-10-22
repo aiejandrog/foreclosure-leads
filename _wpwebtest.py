@@ -377,5 +377,17 @@ rec('a State Road 7 page matches', W.page_matches_address('4500 N State Road 7, 
 rec('a house page with a search-records link is not the city list',
     W._why_empty(PAGE + '\nSearch property records in Coral Springs, FL\n') != "Whitepages showed the city's property list, not the house")
 
+# selection skips cached leads and leads with two misses this week
+leads[:] = [{'case': 'P-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR.replace('1723', str(1800 + i)),
+             'auction': '11/04/2026', 'days': 13 + i} for i in range(3)]
+WL.load_skiptrace = lambda: {'P-%d' % i: {'phones': [{'number': '305555010%d' % i}]} for i in range(3)}
+WL.CACHE = os.path.join(td, 'wp11.json')
+W.CACHE = WL.CACHE
+_j.dump({'P-0': {'result': {}, '_src': 'wpweb-hand', '_http': 200, '_ts': 1}}, open(WL.CACHE, 'w'))
+W._note_attempt('P-1')
+W._note_attempt('P-1')
+ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5, 'refresh': False})())]
+rec('a run opens only fresh leads (not cached, not tried twice)', ks == ['P-2'], ks)
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

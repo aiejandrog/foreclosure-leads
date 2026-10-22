@@ -577,6 +577,7 @@ def assist(todo, refresh=False, wait_s=None):
                     break
             if not text:
                 print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
+                _note_attempt(case)
                 skipped += 1
                 continue
             same = page_matches_address(text, parts[0]) and not _CITY_LIST_RE.search(text)
@@ -587,6 +588,8 @@ def assist(todo, refresh=False, wait_s=None):
                 why = _why_empty(text) if same or not _PAGE_MARK.search(text) or _CITY_LIST_RE.search(text) \
                     else 'the copied page is for a different address'
                 reasons[why] = reasons.get(why, 0) + 1
+                if why not in (_EMPTY_NOBODY, _EMPTY_NO_PERSON):
+                    _note_attempt(case)
                 print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
                 skipped += 1
                 continue
@@ -748,6 +751,48 @@ def reparse():
     return 0
 
 
+ATTEMPT_DAYS = 7
+
+
+def _attempts_path():
+    return os.path.join(_pages_dir(), '_attempts.json')
+
+
+def _attempts():
+    import json
+    try:
+        return json.load(open(_attempts_path(), encoding='utf-8')) or {}
+    except Exception:
+        return {}
+
+
+def _note_attempt(case):
+    """A copy that gave nothing usable for this lead (wrong house, city list, not a page, timeout)."""
+    import json
+    a = _attempts()
+    now = time.time()
+    a[case] = [t for t in a.get(case, []) if now - t < ATTEMPT_DAYS * 86400] + [now]
+    try:
+        json.dump(a, open(_attempts_path(), 'w', encoding='utf-8'))
+    except Exception:
+        pass
+
+
+def _tried_out(case, att):
+    """Two misses in the last week: stop offering it (Whitepages has no page for that address)."""
+    now = time.time()
+    return len([t for t in att.get(case, []) if now - t < ATTEMPT_DAYS * 86400]) >= 2
+
+
+def _fresh(pool, cache, refresh):
+    """Leads a run should open: not already cached, not a known-empty page, not tried out."""
+    if refresh:
+        return pool
+    att = _attempts()
+    return [r for r in pool if not _WL._cache_looked(cache.get(_WL._lead_key(r)))
+            and not _known_empty(r) and not _tried_out(_WL._lead_key(r), att)]
+
+
 def _known_empty(lead):
     """True when a page already copied for this lead is its own address page and lists nobody with
     a phone or email (business-owned, vacant, nobody on file). Re-opening it would only cost another
@@ -787,14 +832,11 @@ def _select(args):
         # first (pick_callable sorts fewest-phones-first, the opposite of what a comparison wants).
         pool = _WL.pick_callable(leads, cache, 100000, skip)
         pool = [r for r in pool if _WL._lead_phone_count(r, skip) > 0]
-        if not getattr(args, 'refresh', False):
-            pool = [r for r in pool if not _known_empty(r)]
+        pool = _fresh(pool, cache, getattr(args, 'refresh', False))
         pool.sort(key=lambda r: (_WL._days_to_sale(r), _WL._lead_key(r)))
         return pool[:min(args.compare, MAX_LEADS)]
     n = args.pick_callable or MAX_LEADS
-    pool = _WL.pick_callable(leads, cache, 100000, skip)
-    if not getattr(args, 'refresh', False):
-        pool = [r for r in pool if not _known_empty(r)]
+    pool = _fresh(_WL.pick_callable(leads, cache, 100000, skip), cache, getattr(args, 'refresh', False))
     return pool[:min(n, MAX_LEADS)]
 
 
@@ -829,7 +871,7 @@ def main(argv=None):
     if a.addr_check:
         leads = {_WL._lead_key(r): r for r in _WL.load_all_leads()}
         d = _pages_dir()
-        for f in sorted(os.listdir(d)):
+        for f in sorted(x for x in os.listdir(d) if x.endswith('.txt')):
             lead = leads.get(f[:-4])
             if lead is None:
                 print('...%s: lead not in the lead files' % f[-8:-4])
