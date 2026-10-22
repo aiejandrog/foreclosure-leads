@@ -3,6 +3,7 @@ import datetime as dt
 import functools
 import http.server
 import json
+import re
 import sys
 import tempfile
 import threading
@@ -107,7 +108,7 @@ class OperationsUI(unittest.TestCase):
         self.page.locator('#go').click()
         self.page.wait_for_function('ROWS && ROWS.length === 5')
         self.page.locator('#dial').wait_for()
-        self.assertIn('3055550101', self.page.locator('#dial').get_attribute('href'))
+        self.assertEqual(re.sub(r'\D', '', self.page.locator('#dial').inner_text()), '3055550101')
         self.page.evaluate("""() => {
             const box = document.createElement('div'); box.className='oc';
             document.body.appendChild(box); window.__choice=[];
