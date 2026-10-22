@@ -322,5 +322,13 @@ WL.load_all_leads = lambda: []
 rec('reparse refuses when the lead files read empty', W.reparse() == 1 and 'J-0' in _j.load(open(WL.CACHE, encoding='utf-8')))
 WL.load_all_leads = _ll
 
+rec('"West Ave" lead refuses an "Alton Ave" page', not W.page_matches_address('1234 Alton Ave', '1234 WEST AVE'))
+rec('"West Ave" lead matches a "West Ave" page', W.page_matches_address('1234 West Ave', '1234 WEST AVE'))
+SIGNEDOUT = '1723 Canal Dr\nCoral Springs, FL 33071\nOwners & Residents\nMarisol Romero\nResident\nCell Phone\nSign in to view\n'
+leads[:] = [{'case': 'K-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+WL.load_skiptrace = lambda: {'K-0': {'phones': [{'number': '3055550100'}]}}
+W._keep_page('K-0', SIGNEDOUT)
+rec('a signed-out copy (people, no phones) does not hide the lead', not W._known_empty(leads[0]))
+
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)
