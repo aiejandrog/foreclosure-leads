@@ -499,6 +499,8 @@ _CITY_LIST_RE = re.compile(r'Property Records\s*\n\s*[\d,]+ of [\d,]+ results', 
 ASSIST_WAIT_S = float(os.environ.get('WP_WEB_ASSIST_WAIT_S', '240'))
 
 
+_WRONG_HOUSE = 'the copied page is for a different address'
+_CITY_LIST = "Whitepages showed the city's property list, not the house"
 _EMPTY_NOBODY = 'Whitepages has no one on file at this address'
 _EMPTY_NO_PERSON = 'Whitepages lists no person owner or resident here (business-owned or vacant?)'
 
@@ -520,7 +522,7 @@ def _why_empty(text):
     if re.search(r'no people living at this property|no one currently lives at', text or '', re.I):
         return _EMPTY_NOBODY
     if _CITY_LIST_RE.search(text or ''):
-        return "Whitepages showed the city's property list, not the house"
+        return _CITY_LIST
     if not _PAGE_MARK.search(text or ''):
         return 'that was not a Whitepages address page'
     if not re.search(r'^\s*(owner|resident)\s*$', text or '', re.I | re.M):
@@ -577,7 +579,6 @@ def assist(todo, refresh=False, wait_s=None):
                     break
             if not text:
                 print('  ...%s: nothing copied in %ds, skipped' % (case[-4:], wait_s), flush=True)
-                _note_attempt(case)
                 skipped += 1
                 continue
             same = page_matches_address(text, parts[0]) and not _CITY_LIST_RE.search(text)
@@ -586,10 +587,10 @@ def assist(todo, refresh=False, wait_s=None):
             people = parse_people_text(text) if same and _PAGE_MARK.search(text) else []
             if not people:
                 why = _why_empty(text) if same or not _PAGE_MARK.search(text) or _CITY_LIST_RE.search(text) \
-                    else 'the copied page is for a different address'
+                    else _WRONG_HOUSE
                 reasons[why] = reasons.get(why, 0) + 1
-                if why not in (_EMPTY_NOBODY, _EMPTY_NO_PERSON):
-                    _note_attempt(case)
+                if why in (_WRONG_HOUSE, _CITY_LIST):
+                    _note_attempt(case)     # only "Whitepages has no page for it" counts as a miss
                 print('  ...%s: skipped: %s (%d chars copied)' % (case[-4:], why, len(text)), flush=True)
                 skipped += 1
                 continue
