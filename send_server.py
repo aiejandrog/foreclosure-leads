@@ -2641,7 +2641,10 @@ class Handler(BaseHTTPRequestHandler):
                                 f"the rate clears or after API verification: "
                                 f"python bounces.py && python verify_emails.py && rebuild."),
                         'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
-                meta['lane'] = 'proven'
+                # Keep 'probe' when the probe lane (or the asserted-evidence trickle above) chose it:
+                # _probe_quota_left() counts ledger rows with lane == 'probe', so overwriting it here
+                # meant a probe sent while the breaker was engaged never spent the quota.
+                meta['lane'] = meta.get('lane') or 'proven'
 
         # ---- 24h per-recipient dedupe + in-flight claim (unless test flag set) ----
         # Covers `to` AND every BCC, and reserves them atomically so a concurrent request cannot

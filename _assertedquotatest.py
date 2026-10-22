@@ -93,6 +93,13 @@ rec('the metering is reached even when the breaker is CLEAR',
 rec('the breaker-engaged proven/probe lane is left in place',
     SRC.count('_probe_quota_left()') >= 3, SRC.count('_probe_quota_left()'))
 
+# a probe chosen while the breaker is engaged must stay booked as 'probe', or it never spends the
+# quota: the breaker block used to end with an unconditional `meta['lane'] = 'proven'`
+_lane_sets = [ast.unparse(n) for n in ast.walk(TREE)
+              if isinstance(n, ast.Assign) and any("meta['lane']" == ast.unparse(t) for t in n.targets)]
+rec("no assignment overwrites a 'probe' lane with 'proven'",
+    "meta['lane'] = 'proven'" not in _lane_sets and any("'proven'" in a for a in _lane_sets), _lane_sets)
+
 # ---- 2. the class being metered is the asserted one ----------------------------------------
 def ev(bounced=(), ver=None, replied=(), proven=(), last_mailed=None):
     return {'bounced': set(bounced), 'ver': dict(ver or {}), 'replied': set(replied),
