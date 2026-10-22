@@ -119,9 +119,12 @@ resident_owner = [res[-1]]
 r = row(lead('RES-ONLY', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner))
 rec('a verified resident-owner mobile beats the stale skiptrace best',
     r['p'][0] == D and r['pw'][0] == 'o', (r['p'], r.get('pw')))
-r = row(lead('RES-LAST', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner,
-             phrank=['ok', 'call first', 'ok', 'last resort']))
-rec('a resident-owner last-resort number is not promoted', r['p'][0] == B)
+import phone_rank
+household_label = phone_rank.score_phone({'number': D, 'type': 'mobile', 'src': 'hh'}, 3)[1]
+r = row(lead('RES-HOUSEHOLD-RANK', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner,
+             phrank=['ok', 'call first', 'ok', household_label]))
+rec('the household score penalty cannot hide an independently matched owner mobile',
+    household_label == 'last resort' and r['p'][0] == D)
 r = row(lead('RES-DNC', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner,
              phdnc=[False, False, False, True]))
 rec('verified resident-owner DNC stays display only', D not in r['p'] and r['dn'][0][0] == D)

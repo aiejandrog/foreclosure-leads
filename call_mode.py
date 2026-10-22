@@ -2053,8 +2053,17 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
                     and 'land' not in str((_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '') or '').lower()
                     and ((phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
                          or keep[k] in _resident_owner)
-                    and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
-                    not in ('L', 'N'))
+                    and ((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
+                         not in ('L', 'N')
+                         # The bake ranks household phones without carrier data: its -30 household
+                         # penalty alone labels an otherwise usable mobile "last resort". An
+                         # independent owner-name match supersedes that role inference for calls.
+                         # Unknown types/landlines do not get this exception; eligibility still
+                         # removed DNC, agent, shared-office and dead lines before this point.
+                         or (keep[k] in _resident_owner and _pw[k] == 'o'
+                             and 'mob' in str(_pht[keep_oi[k]] if keep_oi[k] < len(_pht) else '').lower()
+                             and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') == 'hh'
+                             and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') == 'L')))
         order.sort(key=lambda k: (
             0 if keep[k] in _resident_owner else _role.get(
                 phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
