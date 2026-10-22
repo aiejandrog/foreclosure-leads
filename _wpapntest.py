@@ -51,7 +51,7 @@ rec('a one-digit-off apn is a mismatch, not ok',
 _wpf = os.path.join(HERE, 'whitepages_lookup.json')
 _lff = os.path.join(HERE, 'leads_final.json')
 wp = lf = None
-if not (os.path.exists(_wpf) and os.path.exists(_lff)):
+if not (os.path.exists(_wpf) or os.path.exists(_lff)):
     print('skip live cache + leads (whitepages_lookup.json / leads_final.json not on this machine)')
 else:
     try:
