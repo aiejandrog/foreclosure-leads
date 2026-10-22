@@ -100,7 +100,10 @@ _ENTITY = re.compile(r'\b(LLC|L\.L\.C|INC|CORP|LP|LLP|PLLC|LTD|TRUST|HOLDINGS|PR
 
 def _norm_words(name):
     """Uppercase word list with surname particles glued to the following token."""
-    s = re.sub(r"[',.]", '', str(name or '').upper())
+    # A comma separates names ("MCKNIGHT-ADEONOJOBI,GINA", the Broward roll writes no space after
+    # it): dropping it glued the surname to the given name ("ADEONOJOBIGINA"), so the owner never
+    # cleared the two-token bar and her own Whitepages numbers read as household (10-22).
+    s = re.sub(r"['.]", '', str(name or '').upper()).replace(',', ' ')
     s = re.sub(r'[^A-Z ]', ' ', s)
     words = s.split()
     out, i = [], 0
