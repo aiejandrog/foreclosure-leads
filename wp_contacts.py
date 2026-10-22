@@ -201,7 +201,7 @@ def extract_relatives(lead_owners, lead_addr, person_records, owner_numbers=()):
     A number already on the lead in any role is left where it is (it is not re-labelled as a
     relative's), and a relative who is also an owner on the lead is skipped."""
     have = {_last10(n) for n in owner_numbers if _last10(n)}
-    out, seen_names = [], set()
+    out, by_name = [], {}
     for pr in person_records or []:
         for rec in (pr.get('response') or []):
             if grade_person_record(lead_owners, lead_addr, rec) is None:
@@ -212,21 +212,24 @@ def extract_relatives(lead_owners, lead_addr, person_records, owner_numbers=()):
                     if not isinstance(rel, dict):
                         continue
                     nm = str(rel.get('name') or '').strip()
-                    if not nm or nm.upper() in seen_names:
+                    if not nm:
                         continue
                     if name_grade(lead_owners, nm) == 'owner':
                         continue
-                    phs = []
+                    entry = by_name.get(nm.upper())
+                    if entry is None:
+                        entry = {'name': nm,
+                                 'rel': str(rel.get('relation') or rel.get('type') or '').lower()[:30],
+                                 'of': of, 'phones': []}
+                        by_name[nm.upper()] = entry
+                        out.append(entry)
+                    elif not entry['rel']:
+                        entry['rel'] = str(rel.get('relation') or rel.get('type') or '').lower()[:30]
                     for p in _phones_of(rel):
-                        if p['n'] in have:
+                        if p['n'] in have or len(entry['phones']) >= MAX_PHONES_PER_RELATIVE:
                             continue
                         have.add(p['n'])
-                        phs.append(p)
-                    seen_names.add(nm.upper())
-                    out.append({'name': nm,
-                                'rel': str(rel.get('relation') or rel.get('type') or '').lower()[:30],
-                                'of': of,
-                                'phones': phs[:MAX_PHONES_PER_RELATIVE]})
+                        entry['phones'].append(p)
     # relatives with a number first; name-only entries still help a human search by hand
     out.sort(key=lambda r: 0 if r['phones'] else 1)
     return out[:MAX_RELATIVES]
