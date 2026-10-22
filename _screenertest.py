@@ -56,6 +56,7 @@ i = SRC.find('function renderGuided(')
 j = SRC.find('\n}\n', i)
 fn = SRC[i:j + 2]
 chk(i > 0 and 'else if(!named && s.aen)' in fn, 'renderGuided swaps aen on non-greet steps')
+chk("['Their phone\\'s AI answered','screen2']" in fn, 'warm callers can still reach the screener (2nd-try line)')
 js = r'''
 var out=[];
 function esc(t){return String(t);}
@@ -71,6 +72,7 @@ var es=false, OUTCOMES=[], _g={on:true,step:'screen',stack:[],ret:null};
 var S={flow:FLOW, op:{}};
 out.push(renderGuided({f:'Maria'}, S, true, false));
 out.push(renderGuided({f:''}, S, false, false));
+_g.step='greet'; out.push(renderGuided({f:'Maria'}, S, true, true));
 console.log(JSON.stringify(out));
 '''
 js = 'var FLOW=' + json.dumps(CM.FLOW, ensure_ascii=False) + ';\n' + js
@@ -82,6 +84,7 @@ try:
     chk(res is not None, 'renderer runs under node' + ('' if res else ' | ' + p.stderr[:600]))
     if res:
         chk("tell Maria it's Alejandro" in res[0], 'named row: "tell Maria it\'s Alejandro"')
+        chk('[Their phone\'s AI answered]' in res[2], 'warm greet renders the screener button')
         chk('tell the owner of 1 Oak St' in res[1] and 'tell  it' not in res[1], 'no-name row: "the owner of" line, no blank name')
 finally:
     os.unlink(fh.name)

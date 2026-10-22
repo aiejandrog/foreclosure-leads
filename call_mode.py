@@ -8116,7 +8116,7 @@ function renderGuided(r, S, named, warm){
   var en=s.en, esl=s.es, br=s.br, tone=s.tone, listen=s.listen;
   if(s.id==='greet'){
     if(warm){ en=S.op.wen; esl=S.op.wes; tone='Energy UP on the name — you KNOW this person. Then hand it to them and wait.';
-              br=[['Glad to hear from me','frame'],['Not a good time','busy'],['Voicemail','vm']]; }
+              br=[['Glad to hear from me','frame'],['Not a good time','busy'],['Their phone\'s AI answered','screen2'],['Voicemail','vm']]; }
     else if(!named){ en=s.aen||en; esl=s.aes||esl; }
   }
   /* Any other step with an anonymous variant (the screener lines): no name on the row, no {first}. */
