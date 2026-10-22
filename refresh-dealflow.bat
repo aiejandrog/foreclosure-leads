@@ -414,7 +414,9 @@ rem  --max-spend 2 caps the run and WP_DAILY_CAP ($5 default) caps the day. Rela
 rem  on the board; they never reach Call Mode. No whitepages.key = skipped. A 403 exits 2 and the
 rem  refresh carries on with the cached results. Sits after :rebuild so it runs with or
 rem  without tracerfy.key, and before the board is built so tonight's numbers bake in. Full-sweep cost: python whitepages_lookup.py --estimate
-if exist whitepages.key python -u whitepages_lookup.py --pick-callable 4 --relatives --max-spend 2 >> "%LOG%" 2>&1
+rem  HELD 2026-10-22 until Alejandro picks nightly-with-relatives / owners-only / manual on the decision
+rem  card: recurring spend needs his word. To turn it on, remove "rem " from the next line.
+rem if exist whitepages.key python -u whitepages_lookup.py --pick-callable 4 --relatives --max-spend 2 >> "%LOG%" 2>&1
 rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
 rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
