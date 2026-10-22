@@ -458,6 +458,8 @@ def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS'))
     import records_liens as R
     solve = paid_reads.guarded(_solve, 'lis_pendens')
     d_from, d_to = _win(days)
+    if name.strip() == '*':
+        name = ''                  # "*" = no party name: does the typed search work without a lender?
     for dt in doc_types:
         url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
                + '&dateRangeFrom=' + urllib.parse.quote(d_from) + '&dateRangeTo=' + urllib.parse.quote(d_to)
@@ -650,7 +652,8 @@ def main():
                     help='with --probe-doctype: document types to try, comma-separated; an empty item '
                          'is the untyped search (e.g. "LIS PENDENS - LIS,")')
     ap.add_argument('--probe-doctype', metavar='NAME',
-                    help='one paid name search with documentType=LIS PENDENS; prints counts only')
+                    help='one paid name search with documentType=LIS PENDENS; prints counts only; '
+                         'NAME "*" leaves the party name blank')
     ap.add_argument('--days', type=int, default=30)
     ap.add_argument('--county', default='all',
                     choices=['miami-dade', 'broward', 'palm-beach', 'all'],
