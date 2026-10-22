@@ -26,6 +26,7 @@ Reads:  worker_notes.json (dials[].oc in badnum/wrong), the board twin (P.TWIN),
 Writes: P.out('badnum_wp_compare.json'), counts only. --lookup also writes whitepages_lookup.json
         through whitepages_lookup.enrich_one, the same path every other lookup uses.
 Run:    python badnum_wp_compare.py                          # compare what is cached, $0
+        python badnum_wp_compare.py --all                    # EVERY WP-looked-up lead, our numbers vs WP, $0
         python badnum_wp_compare.py --days 14                # only bad numbers logged in 14 days
         python badnum_wp_compare.py --lookup --max-spend 5   # buy up to $5 of lookups, then compare
 """
@@ -227,6 +228,139 @@ def compare(bad, leads, cache, skiptrace, opt):
             'mail_lane': dict(mail), 'optouts_readable': opt is not None}, todo
 
 
+# ---- ALL LEADS: how many of our numbers does Whitepages agree with? (2026-10-22) ----------------
+# Alejandro, 10-22: "how much of the numbers actually match?" The bad-number compare above only
+# looks at leads that already failed. This one takes every lead with a Whitepages lookup on file and
+# lines up the numbers the skip trace gave us against the numbers Whitepages lists for the same
+# lead, graded the way make_tracker bakes them (parcel gate first, then the owner-name bar).
+
+WP_TAGS = ('wp', 'hh', 'nm')         # phsrc tags that came FROM Whitepages, not from the skip trace
+
+
+def trace_numbers(lead, skip):
+    """The skip trace's numbers for a lead: the trace cache, plus every number on the row that the
+    Whitepages merge did not add. The board twin's row already carries Whitepages' numbers, so
+    without the phsrc filter Whitepages would be compared against itself."""
+    out = _nums((skip or {}).get('phones'))
+    phs = (lead or {}).get('phones') or []
+    src = (lead or {}).get('phsrc') or []
+    for i, p in enumerate(phs):
+        if str(src[i] if i < len(src) else '') in WP_TAGS:
+            continue
+        n = _last10(p.get('number') if isinstance(p, dict) else p)
+        if n:
+            out.add(n)
+    return out
+
+
+def wp_sets(lead, entry):
+    """(verdict, {'owner','household','name_only'}) for one cached entry, as the bake grades it:
+    a /property record for a different parcel contributes nothing from its property half, an
+    unverifiable parcel only an owner on our street, residents only from a matching parcel. One
+    difference from the bake, the same one Call Mode's card makes: a resident whose name clears
+    the owner bar counts as the owner (the bake calls every resident household)."""
+    import wp_contacts as W
+    import whitepages_lookup as WL
+    owners, addr = WL._lead_owners(lead), WL._lead_addr(lead)
+    res = (entry or {}).get('result') or {}
+    verdict = W.wp_parcel_verdict(res.get('apn'), WL._lead_folio(lead)) if res else 'ok'
+    out = {'owner': set(), 'household': set(), 'name_only': set()}
+    for o in W.parcel_owners(verdict, owners, addr, res) if res else []:
+        if not isinstance(o, dict):
+            continue
+        tag = W.grade_property_owner(owners, o.get('name'))
+        for p in W._phones_of(o):
+            (out['owner'] if tag == 'wp' else out['household']).add(p['n'])
+    if verdict == 'ok':
+        for o in (res.get('residents') or []):
+            if isinstance(o, dict):
+                # Whitepages often files the deed owner under Resident; the name bar decides
+                tag = W.grade_property_owner(owners, o.get('name'))
+                for p in W._phones_of(o):
+                    (out['owner'] if tag == 'wp' else out['household']).add(p['n'])
+    for pr in ((entry or {}).get('_person') or []):
+        if not isinstance(pr, dict):
+            continue
+        for rec in (pr.get('response') or []):
+            if not isinstance(rec, dict):
+                continue
+            g = W.grade_person_record(owners, addr, rec)
+            if g is None:
+                continue
+            (out['owner'] if g == 'wp' else out['name_only']).update(p['n'] for p in W._phones_of(rec))
+    out['household'] -= out['owner']
+    out['name_only'] -= out['owner'] | out['household']
+    return verdict, out
+
+
+def match_all(leads, cache, skiptrace, bad=None):
+    """Counts only. `bad` is bad_dials() output, to say whether Whitepages-confirmed numbers die too."""
+    import whitepages_lookup as WL
+    t = collections.Counter()
+    bad = bad or {}
+    for case, entry in (cache or {}).items():
+        if not WL._cache_looked(entry):
+            continue
+        lead = leads.get(case)
+        if lead is None:
+            t['WP lookup on file, lead no longer in any lead file'] += 1
+            continue
+        t['leads with a Whitepages lookup on file'] += 1
+        verdict, wp = wp_sets(lead, entry)
+        if verdict != 'ok':
+            t['  WP property record is %s for this parcel' % verdict] += 1
+        wp_any = wp['owner'] | wp['household'] | wp['name_only']
+        ours = trace_numbers(lead, skiptrace.get(case))
+        if not wp_any:
+            t['  WP gave no usable number (after the parcel gate and name bar)'] += 1
+        if not ours:
+            t['  we have no skip-trace number for it'] += 1
+        if not (wp_any and ours):
+            continue
+        t['COMPARABLE: both WP and the skip trace have numbers'] += 1
+        t['  our numbers on these leads'] += len(ours)
+        t['    WP lists it as the OWNER\'s (match)'] += len(ours & wp['owner'])
+        t['    WP lists it for someone else at the address'] += len(ours & wp['household'])
+        t['    WP lists it on a name-only match'] += len(ours & wp['name_only'])
+        t['    not on Whitepages at all (unconfirmed)'] += len(ours - wp_any)
+        t['  WP numbers on these leads'] += len(wp_any)
+        t['    WP owner numbers we did not have (new)'] += len(wp['owner'] - ours)
+        t['    WP household / name-only numbers we did not have'] += len((wp['household'] | wp['name_only']) - ours)
+        if ours & wp['owner']:
+            t['  leads where 1+ of our numbers is WP-confirmed the owner\'s'] += 1
+        elif wp['owner']:
+            t['  leads where WP has owner numbers and NONE of ours is one'] += 1
+        if not (ours & wp_any):
+            t['  leads with zero overlap'] += 1
+        b4 = (bad.get(case) or {}).get('bad4') or set()
+        for p4 in b4:
+            hit = [n for n in ours if n.endswith(p4)]
+            if not hit:
+                continue
+            t['  numbers tapped bad/wrong in Call Mode'] += 1
+            if any(n in wp['owner'] for n in hit):
+                t['    of those, WP had listed it as the owner\'s'] += 1
+    return dict(t)
+
+
+def render_all(t, generated):
+    out = ['ALL LEADS: OUR NUMBERS vs WHITEPAGES  %s  (counts only, $0)' % generated]
+    for k, v in t.items():
+        out.append('  %-66s %5d' % (k, v))
+    ours = t.get('  our numbers on these leads', 0)
+    m = t.get("    WP lists it as the OWNER's (match)", 0)
+    looked = t.get('COMPARABLE: both WP and the skip trace have numbers', 0)
+    out.append('')
+    if ours:
+        out.append('READ: %d of %d of our numbers (%.0f%%) on %d comparable leads are the owner\'s per Whitepages.'
+                   % (m, ours, 100.0 * m / ours, looked))
+    if looked < 100:
+        out.append('      %d comparable lead(s): a rough floor, not a rate for the whole board.' % looked)
+    out.append('      "Not on Whitepages" means unconfirmed, not wrong. A match is not a working number')
+    out.append('      until it is dialed; the bad-tap line says whether confirmed numbers die too.')
+    return '\n'.join(out)
+
+
 PROVIDER_TAGS = ('AUTH ERROR', 'RATE LIMIT', 'BUDGET', 'HTTP ', 'network error', 'unparseable')
 
 
@@ -281,7 +415,26 @@ def main(argv=None):
     ap.add_argument('--max-spend', type=float, default=None, metavar='USD',
                     help='required with --lookup: dollar cap for this run')
     ap.add_argument('--limit', type=int, default=60, help='most leads to look up in one run')
+    ap.add_argument('--all', action='store_true',
+                    help='every lead with a Whitepages lookup on file: our numbers vs Whitepages ($0)')
     a = ap.parse_args(argv)
+    if a.all:
+        if a.lookup:
+            print('--all compares what is cached and buys nothing; drop --lookup.')
+            return 2
+        import whitepages_lookup as WL
+        wn = _load(os.path.join(HERE, 'worker_notes.json'), {})
+        wn = wn if isinstance(wn, dict) else {}
+        notes = wn.get('notes') if isinstance(wn.get('notes'), dict) else {}
+        t = match_all(load_leads(), _load(WL.CACHE, {}), WL.load_skiptrace(), bad_dials(notes, a.days))
+        gen = dt.datetime.now().isoformat(timespec='seconds')
+        print(render_all(t, gen))
+        try:
+            with open(P.out('wp_match_all.json'), 'w', encoding='utf-8') as f:
+                json.dump({'generated': gen, 'totals': t}, f, indent=1)
+        except Exception as e:
+            print('could not write wp_match_all.json: %s' % e.__class__.__name__)
+        return 0
     if a.lookup and (a.max_spend is None or not math.isfinite(a.max_spend) or a.max_spend <= 0):
         print('--lookup needs an explicit, finite --max-spend (dollars). Nothing bought.')
         return 2

@@ -1786,6 +1786,48 @@ def _seat_by_household(rows):
     return moved
 
 
+def _wp_phone_kinds(d):
+    """{10-digit number: 'o'|'h'|'n'} from the lead's baked Whitepages numbers, or None when the
+    lead carries no Whitepages record at all (never looked up, or nothing survived the parcel gate).
+
+    'o' the deed owner's own number (a Property owner who clears the owner bar, or a Person record
+        that places the owner at this address); 'h' a resident or a non-owner on the parcel;
+        'n' a Person record matched on the name only. A number listed more than one way keeps the
+        strongest. Read-only: this labels and orders numbers already on the row, it adds none.
+
+    A RESIDENT WITH THE OWNER'S NAME IS THE OWNER. The bake marks every Whitepages resident as
+    household, but Whitepages often files the deed owner under "Resident" (CACE-25-019745, 10-22:
+    the defendant was listed as a resident, a relative as "Owner"). A resident entry whose name
+    clears the same owner bar the bake uses for parcel owners (wp_contacts.grade_property_owner)
+    reads 'o' here. The bake's own tag (phsrc 'hh') is not changed: call_rows keeps those numbers
+    in the household role, because that tag also decides who may be texted."""
+    allp = d.get('wpAllPhones')
+    if not isinstance(allp, list) or not allp:
+        return None
+    try:
+        import wp_contacts as _W
+    except Exception:
+        _W = None
+    lown = d.get('owners') or d.get('oname') or ''
+    rank = {'o': 0, 'h': 1, 'n': 2}
+    out = {}
+    for e in allp:
+        if not isinstance(e, dict):
+            continue
+        n = _ph10(e.get('n') or '')
+        if len(n) != 10:
+            continue
+        src = str(e.get('source') or 'property')
+        if e.get('resident'):
+            kind = 'o' if (_W and lown and e.get('owner')
+                           and _W.grade_property_owner(lown, e.get('owner')) == 'wp') else 'h'
+        else:
+            kind = 'n' if src == 'person' else 'o'
+        if n not in out or rank[kind] < rank[out[n]]:
+            out[n] = kind
+    return out
+
+
 def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
@@ -1957,12 +1999,41 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # (same rule as phone_rank.rank's role order). Stable, so equal numbers keep their order.
         _tier = {'C': 0, 'O': 1, 'L': 2, 'N': 3}
         _role = {'hh': 1, 'nm': 2}
+        # WHAT WHITEPAGES SAYS ABOUT EACH NUMBER (2026-10-22, Alejandro: "the one that aligns with
+        # Whitepages shows up on the front"). The skip trace and Whitepages often return the SAME
+        # number; the merge keeps the trace's copy and its 'st' tag, so phsrc alone cannot say the
+        # deed owner's Whitepages record lists it too. wpAllPhones (baked after the parcel gate and
+        # the owner-name bar) can. 'o' = Whitepages lists it as the owner's, 'h' = as someone else
+        # at the address, 'n' = on a name-only match, '-' = not on the Whitepages record.
+        _wpk = _wp_phone_kinds(d)
+        _pw = [_wpk.get(keep[k], '-') if _wpk is not None else '' for k in range(len(keep))]
+        for k in range(len(keep)):
+            # the bake's household / name-only tag wins on the card: one story per number
+            _sk = phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else ''
+            if _sk in ('hh', 'nm') and _pw[k] == 'o':
+                _pw[k] = 'h' if _sk == 'hh' else 'n'
+
+        def _wp_first(k):
+            # An owner-role number Whitepages confirms is the owner's, unless phone_rank already
+            # called it a last resort (a confirmed landline does not jump an unconfirmed mobile:
+            # landlines connected 0 of 26 when measured, #207).
+            return (_pw[k] == 'o'
+                    and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') not in ('hh', 'nm')
+                    and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '')
+                    not in ('L', 'N'))
         order.sort(key=lambda k: (
             _role.get(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
+            0 if _wp_first(k) else 1,
             _tier.get((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1)))
         if isinstance(best, int) and best in keep_oi:
             bk = keep_oi.index(best)
-            order = [bk] + [k for k in order if k != bk]
+            lead_wp = [k for k in order if _wp_first(k)]
+            if not lead_wp or bk in lead_wp:
+                order = [bk] + [k for k in order if k != bk]
+            else:
+                # the ranked-best number goes first after the Whitepages-confirmed owner numbers
+                rest = [k for k in order if k != bk and k not in lead_wp]
+                order = lead_wp + [bk] + rest
         if _lsv:
             # stable: the ranked order stands among the reachable numbers; unreachable go last
             order.sort(key=lambda k: 1 if _PV.line_status(keep[k], _lsv) == _PV.UNREACHABLE else 0)
@@ -2032,6 +2103,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
             'ps': ([(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc)
                      and phsrc[keep_oi[k]] in ('hh', 'nm') else '') for k in order]
                    if any(x in ('hh', 'nm') for x in phsrc) else None),
+            # WHITEPAGES PER NUMBER, same index as `p`, one character each ('o','h','n','-'; see
+            # _wp_phone_kinds). Absent when the lead has no Whitepages record, so the card can say
+            # "not checked" instead of implying Whitepages looked and found nothing.
+            'pw': ''.join(_pw[k] for k in order) if _wpk is not None else None,
+            # LINE TYPE per number, one character each: 'm' mobile, 'l' landline, '-' unknown.
+            'pt': (lambda _t: (lambda s: s if s.strip('-') else None)(''.join(
+                ('m' if 'mob' in str(_t[keep_oi[k]] or '').lower() else
+                 'l' if 'land' in str(_t[keep_oi[k]] or '').lower() else '-')
+                if keep_oi[k] < len(_t) else '-' for k in order)))(d.get('phtype') or []),
             'k': withheld,
             # EMAIL COUNT, never the addresses. The board's funnel splits WRITE from TRACE on
             # whether a lead is reachable by email at all, so the phone needs the fact and not the
@@ -3620,6 +3700,55 @@ function _phSrcNote(r, i){
   if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
   if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
   return '';
+}
+/* EVERY NUMBER ON ONE CARD (2026-10-22, Alejandro: "it just shows me one number"). The big button
+   dials ONE number; this list shows all of them before he dials, each with what Whitepages says
+   about it, its line type and how often it has been rung. Tapping a row does NOT dial: it makes
+   that number the big button's number, so every dial still goes through the one handler that logs
+   the attempt and opens the outcome screen. A number marked bad cannot be picked.
+   r.pw: per number 'o' Whitepages lists it as the owner's, 'h' as someone else at the address,
+   'n' on a name-only match, '-' not on the Whitepages record; absent = Whitepages not checked. */
+function _wpChip(r, k){
+  if(r.pw == null) return '';
+  var w = String(r.pw).charAt(k);
+  if(w==='o') return '<span class="chip ok">&#10003; Whitepages: owner</span>';
+  if(w==='h') return '<span class="chip">Whitepages: someone else at the address</span>';
+  if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
+  return '<span class="chip" style="opacity:.7">not on Whitepages</span>';
+}
+function _numList(r){
+  var p = r.p||[]; if(p.length < 2) return '';
+  var bad = badSet(r), cnt = {};
+  (((notes[r.c]||{}).dials)||[]).forEach(function(x){ if(x && x.ph4) cnt[String(x.ph4)] = (cnt[String(x.ph4)]||0) + 1; });
+  var nwp = 0; for(var j=0;j<p.length;j++){ if(r.pw!=null && String(r.pw).charAt(j)==='o') nwp++; }
+  var h = '<div class="numlist" style="margin:8px 0 4px">'
+    + '<div class="ltag" style="margin:0 0 4px">ALL ' + p.length + ' NUMBERS'
+    + (r.pw==null ? ' &middot; <span class="nc">Whitepages not checked for this lead</span>'
+                  : ' &middot; ' + nwp + ' confirmed the owner’s by Whitepages') + '</div>';
+  for(var k=0;k<p.length;k++){
+    var dg = String(p[k]).replace(/\D/g,''), isBad = !!bad[dg], on = (k===phIdx);
+    var t = (r.pt||'').charAt(k), s = (r.ps||[])[k]||'', n = cnt[dg.slice(-4)]||0;
+    h += '<button class="numrow" data-k="'+k+'"'+(isBad?' disabled':'')
+      + ' style="display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;width:100%;text-align:left;margin:3px 0;padding:7px 9px;border-radius:8px;'
+      + 'background:'+(on?'#1d3a2a':'transparent')+';border:1px solid '+(on?'#2e7d32':'#2a3f6b')+';color:inherit;font:inherit'+(isBad?';opacity:.5':'')+'">'
+      + '<b style="'+(isBad?'text-decoration:line-through':'')+'">'+(k+1)+'. '+fmt(dg)+'</b>'
+      + (on ? '<span class="chip hot">on the button</span>' : '')
+      + _wpChip(r, k)
+      + (s==='hh' ? '<span class="chip bad">not the owner &middot; household</span>' : '')
+      + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
+      + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
+      + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
+      + '</button>';
+  }
+  return h + '</div>';
+}
+function _wireNumList(){
+  var b = document.querySelectorAll('#app .numrow');
+  for(var j=0;j<b.length;j++){ b[j].onclick = function(){
+    if(this.disabled) return;
+    var k = +this.getAttribute('data-k');
+    if(cur && k>=0 && k<(cur.p||[]).length && k!==phIdx){ phIdx = k; screenLead(); }
+  }; }
 }
 /* WHICH LINE THE CALL GOES OUT ON (2026-09-01). 'gv' routes every dial through the Google Voice
    app so the call originates from (786) 490-7825 — the DIALING line — instead of the phone's own
@@ -6458,12 +6587,14 @@ function screenLead(){
        on these two it is "is <owner> home?" instead. */
     +     (_phSrcNote(r, phIdx) ? '<br><b>'+_phSrcNote(r, phIdx)+'</b>' : '')
     +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
+    +   _numList(r)
     +   _navRow()
     + '</div>'
     + '<div class="sub">'+(i+1)+' of '+pool().length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
     + '<div class="sheetpad"></div>';
   // Render the outcome screen SYNCHRONOUSLY on tap and let the tel: navigation proceed. iOS
   // backgrounds the tab the instant the dialer opens; painting after would never happen.
+  _wireNumList();
   $('dial').addEventListener('click', function(){
     // A dial IS work in progress. `touched` used to be set only on the first LOGGED outcome, so a
     // deploy landing during the first call of a session made freshCheck location.reload() the page
