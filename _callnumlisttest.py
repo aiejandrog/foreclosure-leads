@@ -111,7 +111,20 @@ res = [{'n': C, 'resident': True, 'source': 'property', 'owner': 'Maria Elena Ga
 r = row(lead('RES', owners='GARCIA, MARIA ELENA', wpAllPhones=res))
 rec('the owner listed as a resident is confirmed and leads', r['p'][0] == C and r['pw'][0] == 'o', (r['p'], r.get('pw')))
 rec('a relative with the surname only stays h', r['pw'][r['p'].index(A)] == 'h', r.get('pw'))
-rec('a bake hh number stays h and last, whatever the name', r['p'][-1] == D and r['pw'][-1] == 'h', (r['p'], r.get('pw')))
+rec('the named deed owner keeps owner confirmation despite the old household tag',
+    r['pw'][r['p'].index(D)] == 'o', (r['p'], r.get('pw')))
+rec('the original household source is retained for contact permissions',
+    r['ps'][r['p'].index(D)] == 'hh', r.get('ps'))
+resident_owner = [res[-1]]
+r = row(lead('RES-ONLY', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner))
+rec('a verified resident-owner mobile beats the stale skiptrace best',
+    r['p'][0] == D and r['pw'][0] == 'o', (r['p'], r.get('pw')))
+r = row(lead('RES-LAST', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner,
+             phrank=['ok', 'call first', 'ok', 'last resort']))
+rec('a resident-owner last-resort number is not promoted', r['p'][0] == B)
+r = row(lead('RES-DNC', owners='GARCIA, MARIA ELENA', wpAllPhones=resident_owner,
+             phdnc=[False, False, False, True]))
+rec('verified resident-owner DNC stays display only', D not in r['p'] and r['dn'][0][0] == D)
 
 print('\nDNC / AGENT NUMBERS STAY OUT')
 r = row(lead('DNC', wpAllPhones=[{'n': B, 'source': 'property'}], phdnc=[False, True, False, False],
@@ -150,7 +163,7 @@ pick = SRC[SRC.find('function _wireNumList('):SRC.find('/* WHICH LINE THE CALL G
 for bad in ('saveNotes', 'queueSync', 'dials.push', 'logOutcome', 'tel:', 'dialHref'):
     rec('picking a number never touches ' + bad, bad not in pick)
 
-FNS = ''.join(grab_fn(n) for n in ('esc', 'fmt', 'badSet', '_wpChip', '_dncRows', '_numList'))
+FNS = ''.join(grab_fn(n) for n in ('esc', 'fmt', 'badSet', '_phSrcNote', '_wpChip', '_dncRows', '_numList'))
 HARNESS = FNS + r"""
 var phIdx = 1, notes = {X: {badph: ['3055550104'], dials: [{ph4: '0101', oc: 'noans'}, {ph4: '0101', oc: 'vm'}]}};
 var r = {c: 'X', p: ['3055550103', '3055550101', '3055550102', '3055550104'], pw: 'o--h', pt: 'mlmm', ps: ['', '', '', 'hh']};
@@ -159,7 +172,9 @@ var withdnc = _numList({c: 'W', p: ['3055550101', '3055550102'], dn: [['30555501
 var onlydnc = _numList({c: 'V', p: ['3055550101'], dn: [['3055550199', 'o', 'l']]});
 var none = _numList({c: 'Y', p: ['3055550101', '3055550102']});
 var one = _numList({c: 'Z', p: ['3055550101']});
-console.log(JSON.stringify({h: h, none: none, one: one, withdnc: withdnc, onlydnc: onlydnc}));
+var ownerHH = {c:'R', p:['3055550101','3055550102'], pw:'o-', ps:['hh',''], pt:'mm'};
+console.log(JSON.stringify({h: h, none: none, one: one, withdnc: withdnc, onlydnc: onlydnc,
+  ownerHH:_numList(ownerHH), ownerNote:_phSrcNote(ownerHH,0)}));
 """
 fd, path = tempfile.mkstemp(suffix='.js')
 os.close(fd)
@@ -184,6 +199,9 @@ rec('dial history counted by last four', 'rung 2&times;' in h)
 rec('no Whitepages record says not checked', 'Whitepages not checked for this lead' in out['none']
     and 'not on Whitepages' not in out['none'])
 rec('a one-number lead gets no list', out['one'] == '')
+rec('a verified resident-owner card does not contradict its owner chip',
+    'Whitepages: owner' in out.get('ownerHH', '')
+    and 'not the owner' not in out.get('ownerHH', '') and out.get('ownerNote') == '')
 
 wd = out.get('withdnc', '')
 rec('DNC number is listed, struck through and labeled', '(305) 555-0199' in wd and 'do-not-call flag' in wd and 'line-through' in wd)
