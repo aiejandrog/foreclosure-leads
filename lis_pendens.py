@@ -243,7 +243,18 @@ MD_LAST = {}              # what the last lp_sweep covered, for main()'s coverag
 # MD_MAX_SPLIT levels (30 days -> about two-day windows), the way fl_lp.palmbeach narrows Landmark.
 # Each sub-search is one more paid solve under the same paid_reads cap, and a refused solve stops
 # the split there: that lender is then reported partial, never complete.
-MD_MAX_SPLIT = int(os.environ.get('DEALFLOW_LP_MAX_SPLIT', '4'))
+def _env_int(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+MD_MAX_SPLIT = _env_int('DEALFLOW_LP_MAX_SPLIT', 4)
+# A per-run ceiling on split searches, separate from the monthly paid-reads cap (which Alejandro
+# lifted on 10-19, so it no longer bounds a night). 60 searches is about $0.20 at the ledger's price;
+# a lender the ceiling stops is reported partial, like one the monthly cap stops.
+MD_MAX_SPLIT_SEARCHES = _env_int('DEALFLOW_LP_MAX_SPLIT_SEARCHES', 60)
 
 
 def _split_iso(d_from, d_to):
@@ -298,12 +309,17 @@ def lp_sweep(days=30, tries=3):
                              data='', timeout=35).json()
             except Exception:
                 continue
+            if not isinstance(j, dict):
+                continue
             if j.get('qs'):
-                return R.records_by_qs(j['qs']) or []
+                recs = R.records_by_qs(j['qs'])
+                if recs is None:                   # the results read failed: not an empty window
+                    continue
+                return recs
             # Answered without a result handle. Keep what kind of answer it was (its keys and any
             # message, never records) so a lender that "blocks" every night can be told apart from
             # one the county simply has nothing for.
-            if isinstance(j, dict):
+            if name not in MD_LAST['no_qs']:
                 MD_LAST['no_qs'][name] = str({k: (str(v)[:60] if k.lower() in ('message', 'msg', 'error')
                                                   else type(v).__name__) for k, v in j.items()})[:160]
             time.sleep(1)
@@ -321,7 +337,8 @@ def lp_sweep(days=30, tries=3):
             return recs, False                     # capped, and cannot be narrowed further
         got, complete = list(recs), True           # the capped page is real rows: keep it too
         for a, b in halves:
-            if not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]:
+            if (MD_LAST['split_searches'] >= MD_MAX_SPLIT_SEARCHES
+                    or not paid_reads.allow(paid_reads.SOLVE_USD, 'lis_pendens')[0]):
                 complete = False
                 break
             MD_LAST['split_searches'] += 1
@@ -400,9 +417,15 @@ def probe_doctype(name, days=30, doc_types=('LIS PENDENS - LIS', 'LIS PENDENS'))
             except Exception as e:
                 note = 'request failed: %s' % str(e)[:60]
                 continue
+            if not isinstance(j, dict):
+                note = 'answer was not an object'
+                continue
             if j.get('qs'):
-                recs = R.records_by_qs(j['qs']) or []
-                break
+                recs = R.records_by_qs(j['qs'])
+                if recs is not None:
+                    break
+                note = 'results read failed'
+                continue
             note = 'answered without a result: keys %s' % sorted(j)[:6]
         if recs is None:
             print(f'documentType={dt!r}: no result ({note})')
@@ -465,7 +488,7 @@ def coverage_entry(status, info, prev=None, now=None):
          'kept': info.get('kept', 0),
          'pages': info.get('pages', 0),
          'failures': [str(f)[:120] for f in (info.get('failures') or [])][:20]}
-    for k in ('searched', 'blocked', 'capped', 'split_searches'):
+    for k in ('searched', 'blocked', 'capped', 'split_searches', 'no_qs'):
         if k in info:
             e[k] = info[k]
     e['last_complete'] = now if status == 'ok' else (prev or {}).get('last_complete')
@@ -627,7 +650,8 @@ def main():
             'reported_total': None, 'retrieved': MD_LAST.get('retrieved', 0), 'kept': len(md),
             'pages': MD_LAST.get('searched', 0), 'searched': MD_LAST.get('searched', 0),
             'blocked': len(SWEEP_BLOCKED), 'capped': list(SWEEP_CAPPED), 'failures': fails,
-            'split_searches': MD_LAST.get('split_searches', 0)}
+            'split_searches': MD_LAST.get('split_searches', 0),
+            'no_qs': dict(MD_LAST.get('no_qs') or {})}
     if a.county in ('broward', 'all'):
         from fl_lp import broward as _bw
         bw = _bw.sweep(days=a.days)

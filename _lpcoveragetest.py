@@ -133,9 +133,10 @@ class FakeClerk:
     """A Miami-Dade OR search over synthetic lenders: `per_day[name]` records a day, one in ten a
     lis pendens, returned oldest first and cut at the 500-record cap like the real search."""
 
-    def __init__(self, per_day, no_qs=()):
+    def __init__(self, per_day, no_qs=(), broken_reads=False):
         import urllib.parse as U
         self.U, self.per_day, self.no_qs, self.posts = U, per_day, set(no_qs), []
+        self.broken_reads = broken_reads
 
     def post(self, url, **k):
         q = self.U.parse_qs(self.U.urlsplit(url).query)
@@ -146,6 +147,8 @@ class FakeClerk:
 
     def records_by_qs(self, qs):
         name, lo, hi = qs.split('|')
+        if self.broken_reads and (lo, hi) != LP._win(30):
+            return None                        # the GET for a narrower window failed
         d, end, out = datetime.date.fromisoformat(lo), datetime.date.fromisoformat(hi), []
         while d <= end:
             for n in range(self.per_day.get(name, 0)):
@@ -159,8 +162,8 @@ class FakeClerk:
 
 
 class MiamiCap(unittest.TestCase):
-    def run_sweep(self, per_day, budget=10 ** 6, no_qs=()):
-        clerk = FakeClerk(per_day, no_qs)
+    def run_sweep(self, per_day, budget=10 ** 6, no_qs=(), broken_reads=False):
+        clerk = FakeClerk(per_day, no_qs, broken_reads)
         R = SimpleNamespace(OR_BASE='https://example.invalid/', TS_SITE_KEY='k',
                             S=SimpleNamespace(post=clerk.post), records_by_qs=clerk.records_by_qs)
         left = {'n': budget}
@@ -201,6 +204,17 @@ class MiamiCap(unittest.TestCase):
         rows, _ = self.run_sweep({'BIG': 40}, budget=2)
         self.assertEqual(LP.SWEEP_CAPPED, ['BIG'])
         self.assertTrue(rows, 'the rows that were read are kept')
+
+    def test_a_failed_results_read_is_not_an_empty_window(self):
+        rows, _ = self.run_sweep({'BIG': 40}, broken_reads=True)
+        self.assertEqual(LP.SWEEP_CAPPED, ['BIG'], 'halves that were never read cannot be complete')
+        self.assertTrue(rows, 'the capped page is still kept')
+
+    def test_the_per_run_split_ceiling_stops_and_reports(self):
+        with mock.patch.object(LP, 'MD_MAX_SPLIT_SEARCHES', 1):
+            self.run_sweep({'BIG': 40})
+        self.assertEqual(LP.SWEEP_CAPPED, ['BIG'])
+        self.assertLessEqual(LP.MD_LAST['split_searches'], 1)
 
     def test_a_no_result_answer_is_recorded(self):
         self.run_sweep({'GONE': 0}, no_qs={'GONE'})
