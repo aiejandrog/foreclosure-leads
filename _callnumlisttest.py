@@ -121,6 +121,19 @@ rec('an agent number is still dropped', C not in r['p'], r['p'])
 rec('pw/pt stay aligned after drops', len(r['pw']) == len(r['p']) == len(r['pt']), r)
 
 
+print('\nDNC NUMBERS ARE VISIBLE ON THE CARD AND NEVER DIALABLE')
+r = row(lead('SHOWDNC', phdnc=[False, True, False, False], phsrc=['st', 'st', 'st', 'hh']))
+rec('the DNC number is not in the dial list', B not in r['p'], r['p'])
+rec('it ships in dn, with whose and line type', r.get('dn') == [[B, 'o', 'm']], r.get('dn'))
+rec('withheld count unchanged', r.get('k') == 1, r.get('k'))
+rec('p/pw/pt/r still aligned', len(r['p']) == len(r['r']) == len(r['pt']))
+r = row(lead('SHOWAG', phdnc=[False, True, False, False], phsrc=['st', 'ag', 'st', 'hh']))
+rec('an agent number that is also DNC stays off the page', 'dn' not in r, r.get('dn'))
+r = row(lead('HHDNC', phdnc=[False, False, False, True], phsrc=['st', 'st', 'st', 'hh']))
+rec('a household DNC number is labeled household', r.get('dn') == [[D, 'h', 'm']], r.get('dn'))
+r = row(lead('NODNC'))
+rec('no DNC number: no dn key', 'dn' not in r)
+
 print('\nTHE CARD')
 
 
@@ -137,14 +150,16 @@ pick = SRC[SRC.find('function _wireNumList('):SRC.find('/* WHICH LINE THE CALL G
 for bad in ('saveNotes', 'queueSync', 'dials.push', 'logOutcome', 'tel:', 'dialHref'):
     rec('picking a number never touches ' + bad, bad not in pick)
 
-FNS = ''.join(grab_fn(n) for n in ('esc', 'fmt', 'badSet', '_wpChip', '_numList'))
+FNS = ''.join(grab_fn(n) for n in ('esc', 'fmt', 'badSet', '_wpChip', '_dncRows', '_numList'))
 HARNESS = FNS + r"""
 var phIdx = 1, notes = {X: {badph: ['3055550104'], dials: [{ph4: '0101', oc: 'noans'}, {ph4: '0101', oc: 'vm'}]}};
 var r = {c: 'X', p: ['3055550103', '3055550101', '3055550102', '3055550104'], pw: 'o--h', pt: 'mlmm', ps: ['', '', '', 'hh']};
 var h = _numList(r);
+var withdnc = _numList({c: 'W', p: ['3055550101', '3055550102'], dn: [['3055550199', 'h', 'm']]});
+var onlydnc = _numList({c: 'V', p: ['3055550101'], dn: [['3055550199', 'o', 'l']]});
 var none = _numList({c: 'Y', p: ['3055550101', '3055550102']});
 var one = _numList({c: 'Z', p: ['3055550101']});
-console.log(JSON.stringify({h: h, none: none, one: one}));
+console.log(JSON.stringify({h: h, none: none, one: one, withdnc: withdnc, onlydnc: onlydnc}));
 """
 fd, path = tempfile.mkstemp(suffix='.js')
 os.close(fd)
@@ -169,6 +184,14 @@ rec('dial history counted by last four', 'rung 2&times;' in h)
 rec('no Whitepages record says not checked', 'Whitepages not checked for this lead' in out['none']
     and 'not on Whitepages' not in out['none'])
 rec('a one-number lead gets no list', out['one'] == '')
+
+wd = out.get('withdnc', '')
+rec('DNC number is listed, struck through and labeled', '(305) 555-0199' in wd and 'do-not-call flag' in wd and 'line-through' in wd)
+rec('the header counts it', 'ALL 3 NUMBERS (1 do-not-call)' in wd, wd[:200])
+rec('a DNC row is not a button and carries no data-k', wd.count('data-k=') == 2 and wd.count('<button') == 2, wd)
+rec('no tel/dial link anywhere in a DNC row', 'href' not in out.get('withdnc', '') and 'tel:' not in wd)
+rec('DNC household / line labels shown', 'household' in wd)
+rec('a one-number lead with a DNC number still shows the list', 'do-not-call flag' in out.get('onlydnc', ''))
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

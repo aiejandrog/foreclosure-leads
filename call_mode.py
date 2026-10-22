@@ -1931,13 +1931,26 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
         # the reason those numbers were kept — and phone_rank has already scored them below the
         # owner's own, so they never lead the queue.
         phsrc = (d.get('phsrc') or [])
+        phtype = (d.get('phtype') or [])
         pairs = []
         n_dnc = 0
+        dnc_show = []                  # DNC numbers surfaced on the card, DISPLAY ONLY, never dialable
         for oi, p in enumerate(phones):
+            _psrc = phsrc[oi] if oi < len(phsrc) else ''
             if (phdnc[oi] if oi < len(phdnc) else False) or _ph10(p) in _dnc_any:
                 n_dnc += 1
-                continue                                   # DNC numbers are dropped, never flagged
-            if (phsrc[oi] if oi < len(phsrc) else '') in ('ag', 'xl'):
+                # 2026-10-22, Alejandro: show these on the card so he sees every number a lead
+                # carries. They are NOT dialable — not in `keep`, so they never reach the dial
+                # button, the next-number walk, a text, or any send path; lifting the DNC block
+                # is a legal decision, not a display one. Agent / shared-office numbers stay fully
+                # off this page (they belong on the board). Read-only: this reads the DNC verdict
+                # produced elsewhere, it does not produce one.
+                _dn10 = _digits(p)
+                if len(_dn10) == 10 and _psrc not in ('ag', 'xl'):
+                    dnc_show.append({'n': _dn10, 's': _psrc,
+                                     't': (phtype[oi] if oi < len(phtype) else '')})
+                continue                                   # DNC numbers are never dialed
+            if _psrc in ('ag', 'xl'):
                 _notowner_dropped += 1
                 continue
             if _lsv and _PV.line_status(p, _lsv) == _PV.DEAD:
@@ -2116,6 +2129,14 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400):
                 ('m' if 'mob' in str(_t[keep_oi[k]] or '').lower() else
                  'l' if 'land' in str(_t[keep_oi[k]] or '').lower() else '-')
                 if keep_oi[k] < len(_t) else '-' for k in order)))(d.get('phtype') or []),
+            # DO-NOT-CALL numbers, shown on the card and nowhere else (2026-10-22, Alejandro: "I need
+            # to see all the numbers"). [digits, whose, line] — whose is 'o' owner/'h' household/
+            # 'n' name-only, line is 'm'/'l'/'-'. Never in `p`, so no dial button, next-number walk,
+            # text, redial or send path can reach one; the card renders them struck through and
+            # inert. Lifting the DNC block is the attorney's call, not this field's.
+            'dn': ([[x['n'], 'h' if x['s'] == 'hh' else ('n' if x['s'] == 'nm' else 'o'),
+                     'm' if 'mob' in str(x['t']).lower() else ('l' if 'land' in str(x['t']).lower() else '-')]
+                    for x in dnc_show] or None),
             'k': withheld,
             # EMAIL COUNT, never the addresses. The board's funnel splits WRITE from TRACE on
             # whether a lead is reachable by email at all, so the phone needs the fact and not the
@@ -3720,13 +3741,27 @@ function _wpChip(r, k){
   if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
   return '<span class="chip" style="opacity:.7">not on Whitepages</span>';
 }
+function _dncRows(r){
+  var h = '', dn = r.dn||[];
+  for(var q=0;q<dn.length;q++){
+    var x = dn[q];
+    h += '<div class="numrow dncrow" style="display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin:3px 0;padding:7px 9px;border-radius:8px;border:1px dashed #5a2a2a;opacity:.75">'
+      + '<b style="text-decoration:line-through">'+fmt(String(x[0]))+'</b>'
+      + '<span class="chip bad">do-not-call flag &middot; not dialable</span>'
+      + (x[1]==='h' ? '<span class="chip">household</span>' : (x[1]==='n' ? '<span class="chip">name only</span>' : ''))
+      + (x[2]==='m' ? '<span class="chip">mobile</span>' : (x[2]==='l' ? '<span class="chip">landline</span>' : ''))
+      + '</div>';
+  }
+  return h;
+}
 function _numList(r){
-  var p = r.p||[]; if(p.length < 2) return '';
+  var p = r.p||[]; if(p.length < 2 && !(r.dn||[]).length) return '';
   var bad = badSet(r), cnt = {};
   (((notes[r.c]||{}).dials)||[]).forEach(function(x){ if(x && x.ph4) cnt[String(x.ph4)] = (cnt[String(x.ph4)]||0) + 1; });
   var nwp = 0; for(var j=0;j<p.length;j++){ if(r.pw!=null && String(r.pw).charAt(j)==='o') nwp++; }
   var h = '<div class="numlist" style="margin:8px 0 4px">'
-    + '<div class="ltag" style="margin:0 0 4px">ALL ' + p.length + ' NUMBERS'
+    + '<div class="ltag" style="margin:0 0 4px">ALL ' + (p.length + (r.dn||[]).length) + ' NUMBERS'
+    + ((r.dn||[]).length ? ' (' + (r.dn||[]).length + ' do-not-call)' : '')
     + (r.pw==null ? ' &middot; <span class="nc">Whitepages not checked for this lead</span>'
                   : ' &middot; ' + nwp + ' confirmed the owner’s by Whitepages') + '</div>';
   for(var k=0;k<p.length;k++){
@@ -3744,7 +3779,7 @@ function _numList(r){
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
       + '</button>';
   }
-  return h + '</div>';
+  return h + _dncRows(r) + '</div>';
 }
 function _wireNumList(){
   var b = document.querySelectorAll('#app .numrow');
