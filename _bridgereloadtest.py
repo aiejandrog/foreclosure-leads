@@ -181,6 +181,21 @@ def wait(pred, t=40):
     return None
 
 
+def pid_in_namespace(status, fallback):
+    """/proc may expose host PIDs while the bridge's getpid() is namespaced."""
+    for line in status.splitlines():
+        if line.startswith('NSpid:'):
+            fields = line.split()[1:]
+            if fields and all(p.isdigit() for p in fields):
+                return int(fields[-1])
+    return fallback
+
+
+rec('nested /proc PID maps to the bridge namespace', pid_in_namespace('NSpid:\t1234\t56\n', 1234) == 56)
+rec('native /proc PID stays unchanged', pid_in_namespace('NSpid:\t1234\n', 1234) == 1234)
+rec('missing NSpid keeps the original PID', pid_in_namespace('Pid:\t1234\n', 1234) == 1234)
+
+
 def listeners(port):
     """pids listening on port (Linux /proc only; None elsewhere)."""
     if not os.path.isdir('/proc/net'):
@@ -203,7 +218,8 @@ def listeners(port):
                 except OSError:
                     continue
                 if tgt.startswith('socket:[') and tgt[8:-1] in inodes:
-                    pids.add(int(pid))
+                    with open('/proc/%s/status' % pid) as status:
+                        pids.add(pid_in_namespace(status.read(), int(pid)))
         except OSError:
             pass
     return pids
