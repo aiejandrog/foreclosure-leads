@@ -1884,6 +1884,15 @@ def _wp_other_owners(d):
     owns = [o for o in (d.get('wpOwners') or []) if isinstance(o, dict) and str(o.get('name') or '').strip()]
     if not owns or not all(o.get('notOwner') for o in owns):
         return []
+    # A listed owner who is LIKELY ours (first name + a 5+ letter surname piece) is not a
+    # disagreement: the card labels that number "likely owner" instead (_wp_phone_kinds 'l').
+    lown = d.get('owners') or d.get('oname') or ''
+    try:
+        import wp_contacts as _W
+        if lown and any(_W.likely_owner(lown, o['name']) for o in owns):
+            return []
+    except Exception:
+        pass
     return [str(o['name']).strip()[:34] for o in owns][:2]
 
 
@@ -1894,8 +1903,10 @@ def _wp_phone_kinds(d):
     'o' the deed owner's own number (a Property owner who clears the owner bar, or a Person record
         that places the owner at this address); 'h' a resident or a non-owner on the parcel;
         'n' a Person record matched on the name only; 'w' a number of the person Whitepages labels the
-        OWNER when that is not our owner (_wp_other_owners). A number listed more than one way keeps
-        the strongest. Read-only: this labels and orders numbers already on the row, it adds none.
+        OWNER when that is not our owner (_wp_other_owners); 'l' LIKELY our owner
+        (wp_contacts.likely_owner: same first name, a 5+ letter surname piece inside ours; 2026-10-22,
+        Alejandro: "calls yes, but no texting them until a call confirms it's them"). A number
+        listed more than one way keeps the strongest. Read-only: this labels and orders numbers already on the row, it adds none.
 
     A RESIDENT WITH THE OWNER'S NAME IS THE OWNER. The bake marks every Whitepages resident as
     household, but Whitepages often files the deed owner under "Resident" (CACE-25-019745, 10-22:
@@ -1911,7 +1922,7 @@ def _wp_phone_kinds(d):
     except Exception:
         _W = None
     lown = d.get('owners') or d.get('oname') or ''
-    rank = {'o': 0, 'w': 1, 'h': 2, 'n': 3}
+    rank = {'o': 0, 'l': 1, 'w': 2, 'h': 3, 'n': 4}
     out = {}
     wnum = set()
     if _wp_other_owners(d):
@@ -1928,7 +1939,9 @@ def _wp_phone_kinds(d):
         if e.get('resident'):
             kind = 'o' if (_W and lown and e.get('owner')
                            and _W.grade_property_owner(lown, e.get('owner')) == 'wp') else 'h'
-            if kind == 'h' and src == 'property' and n in wnum:
+            if kind == 'h' and _W and lown and e.get('owner') and _W.likely_owner(lown, e.get('owner')):
+                kind = 'l'
+            elif kind == 'h' and src == 'property' and n in wnum:
                 kind = 'w'
         else:
             kind = 'n' if src == 'person' else 'o'
@@ -2195,7 +2208,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
                              and (phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '') == 'hh'
                              and (rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') == 'L')))
         order.sort(key=lambda k: (
-            0 if keep[k] in _resident_owner else _role.get(
+            0 if (keep[k] in _resident_owner or _pw[k] == 'l') else _role.get(
                 phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 0),
             0 if _wp_first(k) else 1,
             _tier.get((rank[keep_oi[k]][:1].upper() if keep_oi[k] < len(rank) and rank[keep_oi[k]] else ''), 1)))
@@ -2277,7 +2290,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             'ps': ([(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc)
                      and phsrc[keep_oi[k]] in ('hh', 'nm') else '') for k in order]
                    if any(x in ('hh', 'nm') for x in phsrc) else None),
-            # WHITEPAGES PER NUMBER, same index as `p`, one character each ('o','h','n','-'; see
+            # WHITEPAGES PER NUMBER, same index as `p`, one character each ('o','l','w','h','n','-'; see
             # _wp_phone_kinds). Absent when the lead has no Whitepages record, so the card can say
             # "not checked" instead of implying Whitepages looked and found nothing.
             'pw': ''.join(_pw[k] for k in order) if _wpk is not None else None,
@@ -3914,6 +3927,7 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
 function _phSrcNote(r, i){
   var s = (r.ps||[])[i] || '';
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
+  if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. No text to this number until a call reaches them.';
   if(String(r.pw||'').charAt(i)==='w') return 'Whitepages lists this number\u2019s person (' + esc((r.wo||[]).join(' / ')) + ') as the OWNER; our record says ' + esc(r.on||'someone else') + '. Ask who you are speaking with and whether they own the house before you mention the filing.';
   if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
   if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
@@ -3930,6 +3944,7 @@ function _wpChip(r, k){
   if(r.pw == null) return '';
   var w = String(r.pw).charAt(k);
   if(w==='o') return '<span class="chip ok">&#10003; Whitepages: owner</span>';
+  if(w==='l') return '<span class="chip ok">Whitepages: likely owner &middot; confirm on the call, no text yet</span>';
   if(w==='w') return '<span class="chip bad">Whitepages: listed OWNER ' + esc((r.wo||[]).join(' / ')) + ' &middot; not our owner, verify</span>';
   if(w==='h') return '<span class="chip">Whitepages: someone else at the address</span>';
   if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
@@ -3967,7 +3982,7 @@ function _numList(r){
       + '<b style="'+(isBad?'text-decoration:line-through':'')+'">'+(k+1)+'. '+fmt(dg)+'</b>'
       + (on ? '<span class="chip hot">on the button</span>' : '')
       + _wpChip(r, k)
-      + (s==='hh' && 'ow'.indexOf(String(r.pw||'').charAt(k)||'x')<0 ? '<span class="chip bad">not the owner &middot; household</span>' : '')
+      + (s==='hh' && 'owl'.indexOf(String(r.pw||'').charAt(k)||'x')<0 ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
@@ -7618,6 +7633,12 @@ function afterCall(r, o, nextC){
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
+  /* LIKELY OWNER, NOT CONFIRMED (2026-10-22, Alejandro: "calls yes, but no texting them until a call
+     confirms it's them"). A Whitepages likely-owner number gets a text only after a call on it
+     reached a person (talked, appointment, callback, not interested); no answer, voicemail and the
+     rest stay call-only. */
+  else if(String(r.pw||'').charAt(phIdx)==='l' && !sitKeys.length)
+                            txt = '<div class="nc">Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.</div>';
   else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
   else if(sitKeys.length){
     _chips = '<div>' + sitKeys.map(function(k, ix){
