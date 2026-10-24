@@ -3204,7 +3204,7 @@ def _mail_llc_json():
 
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js='', text_js='', histcov='null', mail_js=''):
+               seat=None, funnel_js='', text_js='', histcov='null', mail_js='', subdir=''):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -3216,7 +3216,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     for _ph, _want in (('__SYNCJS__', 1), ('__FUNNELJS__', 1), ('__TEXTTPLJS__', 1),
                        ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
-                       ('__BOOKURL__', 1),
+                       ('__BOOKURL__', 1), ('__DFNAV__', 1), ('__DFNAVCSS__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1),
@@ -3260,7 +3260,12 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         # consent ask is not optional and it has to be ON the screen he reads from, not in a doc.
         'rec': (_QREC_LINE if _call_recording() else None),
     }
+    import dealflow_nav as _nav
+    _depth = 2 if subdir else 1
+    _nav_html = _nav.strip('carlos' if subdir else 'call', _depth)
     return _PAGE.replace('__SYNCJS__', sync_js) \
+                .replace('__DFNAV__', json.dumps(_nav_html)) \
+                .replace('__DFNAVCSS__', _nav.CSS_DARK) \
                 .replace('__FUNNELJS__', funnel_js) \
                 .replace('__TEXTTPLJS__', text_js) \
                 .replace('__MAILJS__', mail_js) \
@@ -3723,7 +3728,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, text_js)
     _assert_no_dead_overrides(_PAGE, mail_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
-                      seat=seat, funnel_js=funnel_js, text_js=text_js, mail_js=mail_js,
+                      seat=seat, funnel_js=funnel_js, text_js=text_js, mail_js=mail_js, subdir=subdir,
                       histcov=history_coverage(total, _shipped_all, audit))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
@@ -3772,11 +3777,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system
    full-width centered .supn line. As a flex ROW with space-between that only looked right while
    there were two or three lane buttons: at eight the buttons ate the width and squeezed "Carlos —
    seat 2 of 2" into a 60px column of single words. */
+/* The page strip shared with the board and the Morning Worker (dealflow_nav.py). */
+__DFNAVCSS__
 .top{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:10px}
-.navrow{display:flex;gap:6px;flex-wrap:wrap}
-.navrow a,.navrow .here{display:inline-flex;align-items:center;min-height:38px;padding:0 13px;border-radius:999px;
-  font-size:12.5px;font-weight:700;text-decoration:none;border:1px solid #2a3f6b;background:#132244;color:var(--ink)}
-.navrow .here{background:var(--gold);color:#0b1730;border-color:var(--gold)}
 .lane{display:flex;flex-wrap:wrap;gap:6px}
 /* flex-basis 0 + wrap = equal-width buttons that reflow onto as many rows as the labels need,
    never a horizontal scroll and never a 3-line-tall button. */
@@ -4037,6 +4040,10 @@ __REFRESHSTATUS__
 <script>
 var ENC=__PAYLOAD__, OUTCOMES=__OUTCOMES__, BUILT="__BUILT__", SIG="__SIG__", BSIG="__BSIG__";
 var BOOKURL="__BOOKURL__";
+/* The page strip: Board / Call Mode / Carlos / Worker / Balloon Book / Playbook, this page marked.
+   Baked by dealflow_nav.strip() with RELATIVE links, so it resolves on the mirror, on the Desktop
+   twin and from a local file alike, and no absolute board address lives in this page. */
+var DFNAV=__DFNAV__;
 /* Person-keyed send counts from the server ledger. Authoritative across DEVICES and across cases
    that never shipped to this phone — without it a fresh phone reads every owner as never-texted and
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
@@ -5910,24 +5917,6 @@ function render(){
    board's control cluster leads with and the Morning Worker opens with. The board is the parent
    folder of this page on Pages (docs/call/ or docs/call/<seat>/ under docs/); on a file:// twin
    there is no board beside it, so the link is omitted rather than pointed at a 404. */
-function boardHref(){
-  try{
-    if(location.protocol !== 'http:' && location.protocol !== 'https:') return '';
-    var m = /^(.*)\/call\/(?:[a-z0-9-]+\/)?(?:index\.html)?$/.exec(location.pathname);
-    return m ? (m[1] + '/') : '';
-  }catch(e){ return ''; }
-}
-function navRow(){
-  var b = boardHref();
-  var seat = (SEAT && SEAT.w) ? ' &middot; ' + esc(SEAT.w) : '';
-  return '<div class="navrow">'
-    + (b ? '<a href="' + esc(b) + '">&#8592; Board</a>' : '')
-    + '<span class="here">&#128222; Call Mode' + seat + '</span>'
-    /* #worker=open, NOT #worker=morning: that hash is the Task Scheduler's auto-send deep link, and on
-       the armed runner a nav tap would have started the unattended run. =open is manual-only. */
-    + (b ? '<a href="' + esc(b) + '#worker=open">&#9728; Morning Worker</a>' : '')
-    + '</div>';
-}
 function head(){
   /* Every button counts with the SAME predicate pool() filters with — a count derived a second way
      is a count that drifts. Zero-count lanes are hidden (except Sale soon / Fresh filings, which
@@ -5955,7 +5944,7 @@ function head(){
     : '';
   var _lkN = lkRows().length;
   var _lkBtn = _lkN ? '<button data-lk="1" class="' + (BLANE === '__lk' ? 'on' : '') + '">&#128269; Find a number &middot; ' + _lkN + '</button>' : '';
-  return _qh + '<div class="top">' + navRow() + '<div class="lane">'+laneBtns+_lkBtn+'</div>'
+  return DFNAV + _qh + '<div class="top"><div class="lane">'+laneBtns+_lkBtn+'</div>'
     + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
