@@ -3589,6 +3589,8 @@ function _contactLineHtml(r, ph, opts){
       ? ' <span class="cttag" title="Whitepages places this person at the address but the deed does not name them — spouse, adult child, tenant. Ask for the owner by name; do not greet them as the owner.">household</span>'
       : src==='nm'
         ? ' <span class="cttag" title="Matched on the owner\'s NAME only, not the property address. A namesake in the same city looks identical here — confirm the address before saying anything about the case.">name match</span>'
+      : src==='wpm'
+        ? ' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card. Not checked against the do-not-call registry; confirm you are speaking with the owner before you mention the filing.">Whitepages, pasted</span>'
         : '';
   // DNC numbers stay dialable (manual single dial about their own foreclosure); Text/WA stay off.
   const call = '<a class="ctact ctact-call" href="'+esc(_telNum(digits))+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
@@ -3663,6 +3665,14 @@ function _contactBlockHtml(r){
     }));
   });
   if(String(nn.phone||'').replace(/\D/g,'').length >= 10) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
+  // Numbers pasted from whitepages.com on a Call Mode card (notes.wpm, call_mode.py pasteCall).
+  // The first one also fills nn.phone above, so only the others are added here.
+  (nn.wpm||[]).forEach(function(w){
+    var wd = String(w||'').replace(/\D/g,'');
+    if(wd.length !== 10 || wd === String(nn.phone||'').replace(/\D/g,'').slice(-10)) return;
+    if((r.phones||[]).some(function(ph){ return String(ph||'').replace(/\D/g,'').slice(-10) === wd; })) return;
+    lines.push(_contactLineHtml(r, wd, { dnc:false, mobile:true, src:'wpm' }));
+  });
   if(lines.length) h += '<div class="csphones">'+lines.join('')+'</div>';
   else h += '<div class="csmut">No phone yet — use Find a number below, then Text.</div>';
   h += _messagesBarHtml(r);
@@ -17157,6 +17167,12 @@ function _mergeLead(local, remote){
   if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
+  // numbers pasted from Whitepages on a Call Mode card: union, so a paste on either phone survives
+  if((local.wpm||[]).length || (remote.wpm||[]).length){
+    const _w = [];
+    (local.wpm||[]).concat(remote.wpm||[]).forEach(x => { const d = String(x||'').replace(/\D/g,''); if(d.length===10 && _w.indexOf(d)<0) _w.push(d); });
+    out.wpm = _w;
+  }
   // verified-lien / deal numbers: LATEST-WRITE-WINS by per-field timestamp (notes[c].dts). Falls back
   // to prefer-larger only for pre-Round-B legacy data (which keeps the conservative default).
   const ldts = local.dts||{}, rdts = remote.dts||{}, mdts = Object.assign({}, ldts);

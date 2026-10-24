@@ -3776,6 +3776,10 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 .sess{font-size:12.5px;color:var(--mut);background:#131f38;border:1px solid #2a3f6b;border-radius:9px;
   padding:7px 10px;margin:8px 0;text-align:center}
 .sess b{color:#F4E5A7}
+.sess{position:relative;overflow:hidden;cursor:pointer}
+.sess .sessbar{position:absolute;left:0;top:0;height:3px;width:100%;background:#1a2a4a}
+.sess .sessbar i{display:block;height:100%;background:var(--gold);transition:width .5s}
+.sess .goal{color:var(--mut)}
 /* Situational-text chips on the after-call panel */
 .txch{display:inline-block;margin:3px 5px 3px 0;padding:8px 12px;border:1px solid #2a3f6b;
   border-radius:16px;background:#0e1626;color:var(--ink);font-size:12.5px;min-height:34px}
@@ -3856,6 +3860,19 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
   margin:8px 0;font-size:16px;line-height:1.5}
 .say.es{border-left-color:#3a5286;color:#cddcf5}
 .ltag{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin-top:10px}
+/* paste-a-number-and-call block on every lead card (pasteBlock / pasteCall) */
+.pastecall{margin:12px 0 4px;padding:10px 11px;border-radius:12px;border:1px dashed #2a3f6b;background:#0f1d3a}
+.pastecall .pcrow{display:flex;gap:6px}
+.pastecall input{flex:1;min-width:0;min-height:46px;border-radius:10px;border:1px solid #2a3f6b;background:#132244;
+  color:var(--ink);font:600 17px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;padding:0 12px;letter-spacing:.04em}
+.pastecall input:focus{outline:none;border-color:var(--gold)}
+.pastecall .pcclip{min-height:46px;padding:0 14px;border-radius:10px;border:1px solid #2a3f6b;background:#132244;
+  color:var(--ink);font:700 13px system-ui,sans-serif}
+.pastecall .pcgo{display:block;width:100%;min-height:50px;margin-top:8px;border-radius:12px;border:0;
+  background:var(--ok);color:#fff;font:800 16px system-ui,sans-serif}
+.pastecall .pcgo:disabled{opacity:.4}
+.pastecall .pcnote{font-size:11.5px;line-height:1.4;color:var(--mut);margin-top:6px}
+.pastecall .pcnote.bad{color:#ff9d94}
 .ltag.es{color:#8fa9d8}
 .cioc{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:10px 0}
 .cioc button{min-height:44px;border-radius:8px;border:1px solid #2a3f6b;background:#132244;color:var(--mut);
@@ -3926,6 +3943,7 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    which is the overwhelming majority and the case that needs no words at all. */
 function _phSrcNote(r, i){
   var s = (r.ps||[])[i] || '';
+  if(s==='wpm') return 'You pasted this number from Whitepages. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. Pasted numbers are not checked against the do-not-call registry.';
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
   if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. No text to this number until a call reaches them.';
   if(String(r.pw||'').charAt(i)==='w') return 'Whitepages lists this number\u2019s person (' + esc((r.wo||[]).join(' / ')) + ') as the OWNER; our record says ' + esc(r.on||'someone else') + '. Ask who you are speaking with and whether they own the house before you mention the filing.';
@@ -3984,6 +4002,7 @@ function _numList(r){
       + _wpChip(r, k)
       + (s==='hh' && 'owl'.indexOf(String(r.pw||'').charAt(k)||'x')<0 ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
+      + (s==='wpm' ? '<span class="chip">pasted from Whitepages</span>' : '')
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
       + '</button>';
@@ -5725,6 +5744,7 @@ function render(){
   if(SCREEN!=='lead'){ return; }   // never stomp an interactive screen — advance() repaints fresh
   /* a number saved on a Find-a-number lead (here, on the board, or by a teammate's sync) */
   try{ promoteLookups(); }catch(e){ logErr(e, 'promoteLookups'); }
+  try{ applyPasted(); }catch(e){ logErr(e, 'applyPasted'); }
   /* BOARD-LANE VIEW. Sits in front of the dial queue rather than filtering it: these lanes cover
      leads with no phone at all, which pool() cannot express and must not be taught to. */
   if(BLANE){ $('app').innerHTML = boardList(); wire(); return; }
@@ -5909,6 +5929,7 @@ function promoteLookups(){
     if(ROWS.some(function(x){ return x.c === r.c; })){ LKDONE[r.c] = 1; return; }
     var row = lkAsDial(r, num);
     if(hardSuppressed(row)) return;
+    if(wpmNums(r.c).indexOf(num) >= 0) row.ps = ['wpm'];
     ROWS.push(row); LKDONE[r.c] = 1; n++;
   });
   if(n){ ROWS = _dropExpired(ROWS); }
@@ -5952,11 +5973,99 @@ function lkSave(c, raw){
   if(why){ toast('Not saved: ' + why, {bad:true}); return; }
   var n = notes[c] || (notes[c] = {});
   n.phone = num;
+  n.wpm = n.wpm || []; if(n.wpm.indexOf(num) < 0) n.wpm.push(num);
+  row.ps = ['wpm'];
   saveNotes(); try{ queueSync(); }catch(e){}
   if(!ROWS.some(function(x){ return x.c === c; })) ROWS.push(row);
   LKDONE[c] = 1;
   BLANE = null;
   _openCase(c);
+  /* SAVE & CALL means call: the card is open on that number, so tap its dial button for him. The
+     same handler logs the attempt and opens the outcome screen; outside 8-8 it only arms. */
+  if(cur && cur.c === c && SCREEN === 'lead'){ var _d = $('dial'); if(_d) _d.click(); }
+}
+/* ══════════════ PASTE A NUMBER AND CALL (2026-10-24, Alejandro) ══════════════
+   "a input for us to put the phone number copied from the whitepages and paste it and act as a
+   regular call button and transitions over to the outcome page where we log everything". On every
+   lead card. The number is checked, added to this lead's numbers (tagged 'wpm'), saved to the
+   lead's note (notes.wpm, and notes.phone when that is empty, the board's phone box) and synced;
+   then the card's own dial button is tapped, so the dial is logged, the cooldown and team claim
+   are set and the outcome screen opens exactly as for a traced number.
+   NOT LOOSENED: a number on this lead's do-not-call list, a number marked bad, and anything
+   hardSuppressed() refuses (person opt-out, stay, never-contact) is refused here too. A pasted
+   number is NOT checked against the do-not-call registry; that is open with the attorney, and the
+   card says so next to the box. */
+function wpmNums(c){
+  var out = [];
+  (((notes[c]||{}).wpm)||[]).forEach(function(x){ var d = _lkDigits(x); if(d && out.indexOf(d) < 0) out.push(d); });
+  return out;
+}
+function _addNum(r, num){
+  var p = r.p = r.p || [];
+  for(var k=0;k<p.length;k++){ if(String(p[k]).replace(/\D/g,'').slice(-10) === num) return k; }
+  r.r = r.r || []; r.ps = r.ps || [];
+  while(r.r.length < p.length) r.r.push('');
+  while(r.ps.length < p.length) r.ps.push('');
+  p.push(num); r.r.push(''); r.ps.push('wpm');
+  return p.length - 1;
+}
+/* Pasted numbers saved on this phone, the board or a teammate's phone ride along on their lead. */
+function applyPasted(){
+  ROWS.forEach(function(r){ wpmNums(r.c).forEach(function(num){
+    if(!pasteCheck(r, num).why) _addNum(r, num); }); });
+}
+function pasteCheck(r, raw){
+  var num = _lkDigits(raw);
+  if(!num) return {why:'Paste a 10-digit US number'};
+  if((r.dn||[]).some(function(x){ return String((x||[])[0]||'').replace(/\D/g,'').slice(-10) === num; }))
+    return {num:num, why:'That number is on the do-not-call list for this lead. It cannot be dialed from here.'};
+  if(badSet(r)[num]) return {num:num, why:'You marked that number bad on this lead.'};
+  var probe = {}; for(var k in r){ if(Object.prototype.hasOwnProperty.call(r, k)) probe[k] = r[k]; }
+  probe.p = [num]; probe.r = [''];
+  var h = hardSuppressed(probe);
+  if(h) return {num:num, why:'Not dialed: ' + h};
+  return {num:num, why:''};
+}
+function pasteBlock(r){
+  return '<div class="pastecall">'
+    + '<div class="ltag" style="margin:0 0 6px">FOUND ANOTHER NUMBER ON WHITEPAGES?</div>'
+    + '<div class="pcrow"><input id="pcnum" type="tel" inputmode="tel" autocomplete="off" '
+    +   'placeholder="Paste the number here" aria-label="Phone number from Whitepages">'
+    + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="pcclip" class="pcclip">Paste</button>' : '')
+    + '</div>'
+    + '<button type="button" id="pcgo" class="pcgo" disabled>Call this number</button>'
+    + '<div class="pcnote" id="pcwhy">Saved on this lead and logged like any call. Pasted numbers are not checked against the do-not-call registry.</div>'
+    + '</div>';
+}
+function _wirePaste(r){
+  var inp = $('pcnum'), go = $('pcgo'), why = $('pcwhy'), clip = $('pcclip');
+  if(!inp || !go) return;
+  var base = why ? why.innerHTML : '';
+  function upd(){
+    var v = pasteCheck(r, inp.value);
+    go.disabled = !v.num || !!v.why;
+    go.textContent = v.num ? 'Call ' + fmt(v.num) : 'Call this number';
+    if(why){ why.innerHTML = (v.num && v.why) ? '<b>' + esc(v.why) + '</b>' : base; why.className = 'pcnote' + (v.num && v.why ? ' bad' : ''); }
+  }
+  inp.addEventListener('input', upd);
+  inp.addEventListener('paste', function(){ setTimeout(upd, 0); });
+  inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' && !go.disabled){ ev.preventDefault(); go.click(); } });
+  if(clip) clip.onclick = function(){
+    navigator.clipboard.readText().then(function(t){ inp.value = t || ''; upd(); })
+      .catch(function(){ inp.focus(); toast('Long-press the box and choose Paste'); });
+  };
+  go.onclick = function(){ pasteCall(r, inp.value); };
+}
+function pasteCall(r, raw){
+  var v = pasteCheck(r, raw);
+  if(!v.num || v.why){ toast(v.why || 'Paste a 10-digit US number', {bad:true}); return; }
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+  n.wpm = n.wpm || []; if(n.wpm.indexOf(v.num) < 0) n.wpm.push(v.num);
+  if(!_lkDigits(n.phone)) n.phone = v.num;
+  saveNotes(); try{ queueSync(); }catch(e){}
+  phIdx = _addNum(r, v.num);
+  screenLead();
+  var a = $('dial'); if(a) a.click();
 }
 function boardList(){
   if(BLANE === '__lk') return lookupList();
@@ -6226,7 +6335,8 @@ function _dialTaps(dl, td, me){
   }).length;
 }
 function sessStrip(){
-  var me = caller(), dials = 0, cases = {}, appts = 0, td = today();
+  var me = caller(), dials = 0, cases = {}, appts = 0, convs = 0, td = today();
+  var goal = dialGoal(), st = dayStats();
   Object.keys(notes||{}).forEach(function(c){
     if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
     var n = notes[c]||{}, hit = false;
@@ -6236,6 +6346,7 @@ function sessStrip(){
       if(t.d===td && t.ch==='call' && (!me || !t.by || t.by===me)){
         hit = true;
         if(/APPOINTMENT/i.test(t.out||'')) appts++;
+        if(/talked|appointment|callback/i.test(t.out||'')) convs++;
       }
     });
     if(hit) cases[c] = 1;
@@ -6244,9 +6355,66 @@ function sessStrip(){
   return (_SAVEFAIL ? '<div class="sess" style="background:#5a1010;color:#fff"><b>NOT SAVED since '
       + new Date(_SAVEFAIL).toLocaleTimeString() + '.</b> This phone refused to store your notes. Do not '
       + 'reload this page: what you log now lives only in it.</div>' : '')
-    + '<div class="sess">TODAY: <b>'+dials+'</b> dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
-    + (ppl===1?'person':'people') + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
-    + ' &middot; this session: <b>'+_WORKED.length+'</b> worked</div>';
+    + '<div class="sess" id="sess" title="Tap to set today\'s dial goal">'
+    + '<div class="sessbar"><i style="width:'+Math.round(Math.min(1, dials/goal)*100)+'%"></i></div>'
+    + 'TODAY: <b>'+dials+'</b>'+(goal?'<span class="goal"> / '+goal+'</span>':'')+' dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
+    + (ppl===1?'person':'people') + (convs?(' &middot; <b>'+convs+'</b> conv'+(convs===1?'':'s')):'')
+    + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
+    + ' &middot; this session: <b>'+_WORKED.length+'</b> worked'
+    + (st.streak>1?' &middot; <b>'+st.streak+'</b>-day streak':'')
+    + (st.best && st.best.n>dials?' &middot; best day '+st.best.n:(st.best && dials>=st.best.n && dials>0 && st.best.d!==td?' &middot; <b>new best day</b>':''))
+    + '</div>';
+}
+/* ══════════════ KEEP CALLING (2026-10-24, Alejandro: "engaging call mode for the callers") ══════════════
+   What makes a caller place the next dial is seeing the count move, a goal in reach and the streak
+   at stake. Everything here is read from the same notes the queue reads (dials and touches by this
+   caller), so it can never say more than was logged. Counts only; nothing new is written except
+   the goal, on this phone. */
+var DIAL_GOAL_DEFAULT = 30;
+function dialGoal(){ var g = 0; try{ g = parseInt(localStorage.getItem('fcDialGoal')||'',10); }catch(e){} return (g>0 && g<1000) ? g : DIAL_GOAL_DEFAULT; }
+function setDialGoal(){
+  var v = prompt('Dials you want to make today?', String(dialGoal()));
+  if(v==null) return;
+  var g = parseInt(String(v).replace(/\D/g,''),10);
+  if(!(g>0 && g<1000)){ toast('A number from 1 to 999', {bad:true}); return; }
+  try{ localStorage.setItem('fcDialGoal', String(g)); }catch(e){}
+  toast('Goal: '+g+' dials today'); render();
+}
+/* Per day, this caller: dials and real conversations (talked / callback / appointment). */
+function dayStats(){
+  var me = caller(), by = {};
+  function day(d){ return by[d] || (by[d] = {n:0, c:0}); }
+  Object.keys(notes||{}).forEach(function(c){
+    if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
+    var n = notes[c]||{};
+    (n.dials||[]).forEach(function(x){ if(x && x.d && (!me || !x.by || x.by===me)) day(x.d).n++; });
+    (n.touches||[]).forEach(function(t){
+      if(t && t.d && t.ch==='call' && (!me || !t.by || t.by===me) && /talked|appointment|callback/i.test(t.out||'')) day(t.d).c++;
+    });
+  });
+  var td = today(), best = null, streak = 0;
+  Object.keys(by).forEach(function(d){ if(d!==td && (!best || by[d].n>best.n)) best = {d:d, n:by[d].n}; });
+  var cur = new Date(); if(!(by[td]||{}).n) cur.setDate(cur.getDate()-1);
+  for(var k=0;k<400;k++){
+    var key = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+    if(!(by[key]||{}).n) break;
+    streak++; cur.setDate(cur.getDate()-1);
+  }
+  return {by:by, today:by[td]||{n:0,c:0}, best:best, streak:streak};
+}
+/* The line after a logged outcome: what this dial just did for the day. Milestones get a longer,
+   louder toast and a short buzz where the phone allows one. */
+function cheer(o){
+  var st = dayStats(), n = st.today.n, c = st.today.c, goal = dialGoal(), msg = '', big = false;
+  if(o && o.k==='appt'){ msg = 'APPOINTMENT SET. That is the whole job.'; big = true; }
+  else if(o && (o.k==='talked'||o.k==='callback') && c===1){ msg = 'First real conversation today.'; big = true; }
+  else if(n===goal){ msg = 'GOAL: '+goal+' dials today.'+(st.streak>1?' '+st.streak+' days in a row.':''); big = true; }
+  else if(n>goal && st.best && n===st.best.n+1){ msg = 'New best day: '+n+' dials.'; big = true; }
+  else if(n>0 && n%10===0 && n<goal){ msg = n+' down, '+(goal-n)+' to go.'; }
+  else if(n<goal){ msg = n+' of '+goal+(c?' &middot; '+c+' conv'+(c===1?'':'s'):''); }
+  else { msg = n+' dials &middot; past goal'; }
+  if(big){ try{ if(navigator.vibrate) navigator.vibrate([40,60,40]); }catch(e){} }
+  return {msg: msg.replace(/&middot;/g,'\u00b7'), big: big};
 }
 
 /* ===== THE CALL REGISTRY =========================================================================
@@ -6996,11 +7164,13 @@ function screenLead(){
     +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
     +   _numList(r)
     +   _navRow()
+    +   pasteBlock(r)
     + '</div>'
     + '<div class="sub">'+(i+1)+' of '+pool().length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
     + '<div class="sheetpad"></div>';
   // Render the outcome screen SYNCHRONOUSLY on tap and let the tel: navigation proceed. iOS
   // backgrounds the tab the instant the dialer opens; painting after would never happen.
+  _wirePaste(r);
   _wireNumList();
   $('dial').addEventListener('click', function(){
     // A dial IS work in progress. `touched` used to be set only on the first LOGGED outcome, so a
@@ -7472,7 +7642,8 @@ function screenOutcome(){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
       var _fresh = logOutcome(r,o,d);
-      var _okmsg = _fresh ? ('✓ '+o.t+' — logged') : ('✓ dial counted — '+o.t+' already logged today');
+      var _ch = cheer(o);
+      var _okmsg = (_fresh ? ('✓ '+o.t+' — logged') : ('✓ dial counted — '+o.t+' already logged today')) + ' · ' + _ch.msg;
       /* The shield arms INSIDE go() — at the actual screen swap — not at outcome-tap time. On the
          voicemail path the swap happens seconds later (the Done-reading button), and arming early
          both missed that swap and ate legitimate taps on the just-painted voicemail block. */
@@ -7480,7 +7651,7 @@ function screenOutcome(){
       if(o.k==='dnc'||o.k==='wrong'||o.k==='notint'){
         /* An outcome that ENDS the relationship gets no follow-up offer — showing a Text button
            after someone says do-not-contact is how a compliance breach happens by muscle memory. */
-        go = function(){ _shield(); toast(_okmsg); advance(r.c,nextC); };
+        go = function(){ _shield(); toast(_okmsg, {ms:_ch.big?3200:1800}); advance(r.c,nextC); };
       } else {
         /* EVERY other outcome — including NO ANSWER and VOICEMAIL — lands on the after-call panel,
            which is where the follow-up text lives.
@@ -7490,7 +7661,7 @@ function screenOutcome(){
            follow-up text was effectively unreachable — the one moment a text matters most (they
            just saw a missed call from you) was the one moment the button never appeared.
            Cycling numbers is not lost: afterCall now carries a "try the next number" button. */
-        go = function(){ _shield(); toast(_okmsg); afterCall(r,o,nextC); };
+        go = function(){ _shield(); toast(_okmsg, {ms:_ch.big?3200:1800}); afterCall(r,o,nextC); };
       }
       // 2026-09-04: voicemail no longer gates behind a post-call "Done reading" wall. The script now
       // lives in the sheet ("IF NO ANSWER"), on screen DURING the call, so "Left voicemail" advances
@@ -8046,6 +8217,9 @@ function wire(){
   if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };
   var cl = $('cstatslink');
   if(cl) cl.onclick = function(e){ e.preventDefault(); _csDays = 1; screenCallStats(); };
+  // the session strip: tap to set today's dial goal (dialGoal / setDialGoal)
+  var ss = $('sess');
+  if(ss) ss.onclick = function(e){ e.preventDefault(); setDialGoal(); };
 }
 /* Open one lead's card in the dial lane that holds it (a board-lane row, or a lead just given a
    number on the Find-a-number list). */

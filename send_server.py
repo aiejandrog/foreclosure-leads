@@ -1784,6 +1784,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_marks_get()
         if self.path.startswith('/pid'):          # cheap liveness for a reloading predecessor
             return self._json(200, {'ok': True, 'pid': os.getpid()})
+        if self.path.startswith('/refresh'):
+            # Where the running refresh-dealflow.bat is (refresh_progress.py): step, times, estimate.
+            # Read-only, step labels and counts only - never log text. The board, Call Mode and the
+            # Morning Worker poll it to show a live progress strip on this machine.
+            try:
+                import refresh_progress
+                return self._json(200, refresh_progress.public())
+            except Exception as e:
+                return self._json(200, {'ok': False, 'err': str(e)[:120]})
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
             _bh = _bounce_health()
