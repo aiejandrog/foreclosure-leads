@@ -8,6 +8,7 @@ tpl = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
 html = call_mode.build_html([], 0, {'ct': 'x', 'k': 'y'}, 'built', 'sig', 'bsig',
                             sync_js=call_mode.extract_sync_js(tpl), funnel_js=call_mode.extract_funnel_js(tpl),
                             text_js=call_mode.extract_text_js(tpl),
+                            mail_js=call_mode.bake_mail_js(call_mode.extract_mail_js(tpl), "test"),
                             histcov='{"ledgers_ok": true, "why": "", "capped": false, "total": 4, "shipped": 4}')
 fd, path = tempfile.mkstemp(suffix='.html')
 os.close(fd)

@@ -8,7 +8,12 @@
  *     'wpm', puts it on the dial button, and the dial logs a pending dial with that number's ph4
  *     and opens the outcome screen -- the same path as a traced number;
  *   - a number pasted on another device (notes.wpm from a sync) rides along on the next render;
- *   - the board's mergeNotes unions wpm from both sides.
+ *   - the board's mergeNotes unions wpm from both sides;
+ *   - paste an EMAIL in the same box (2026-10-24): mailCheck refuses an opted-out person, the investor
+ *     lane, a reply on file, a closed three-email ladder and a cold email under the bridge's bounce
+ *     pause; composeMail renders the board's own bodies (first touch / early / tax deed / follow /
+ *     final, EN and ES) with no token left; the email screen hands off to the mail app or Gmail and
+ *     writes one ch:'email' touch + notes.wpe only after the operator confirms it sent.
  */
 const fs = require('fs');
 const vm = require('vm');
@@ -100,7 +105,7 @@ ctx.cur = A; ctx.i = 0; ctx.phIdx = 0;
 let painted = true;
 try { ctx.screenLead(); } catch (e) { painted = false; console.log('  [screenLead threw: ' + String(e).slice(0, 200) + ']'); }
 T('the lead card paints', painted && /class="card"/.test(app()));
-T('the card opens with the shared nav: Board / Call Mode / Morning Worker', /class="navrow"/.test(app()) && /href="\/">&#8592; Board/.test(app()) && /#worker=morning/.test(app()), (app().match(/<div class="navrow">.*?<\/div>/) || [''])[0]);
+T('the card opens with the shared nav: Board / Call Mode / Morning Worker', /class="navrow"/.test(app()) && /href="\/">&#8592; Board/.test(app()) && /#worker=open/.test(app()) && !/#worker=morning/.test(app()), (app().match(/<div class="navrow">.*?<\/div>/) || [''])[0]);
 T('it carries the paste box and its Call button', /id="pcnum"/.test(app()) && /id="pcgo"/.test(app()));
 T('the box says pasted numbers are not registry-checked', /not checked against the do-not-call registry/.test(app()));
 const dialHref = () => ((app().match(/<a class="dial" href="([^"]*)"/) || [])[1] || '');
@@ -154,6 +159,78 @@ if (typeof ctx.mergeNotes === 'function') {
   try { ctx.mergeNotes({ 'CASE-M': { status: '', note: '', wpm: ['3055550022', '3055550011'] } }); } catch (e) { console.log('  [mergeNotes threw: ' + String(e).slice(0, 160) + ']'); }
   const w = (ctx.notes['CASE-M'] || {}).wpm || [];
   T('mergeNotes unions pasted numbers from both devices', w.length === 2 && w.indexOf('3055550011') >= 0 && w.indexOf('3055550022') >= 0, JSON.stringify(w));
+}
+
+console.log('\n== paste an email: the board\'s email from the card, no bridge ==');
+T('the email block baked into the page', ctx.MAIL_OK === true && typeof ctx._mailBodies === 'function' && typeof ctx._subjLine === 'function');
+T('no build-time slot was left unfilled', !/"__ALEXMAIL_EN__"|"__OPTOUT_EN__"|__IDENT_EN__|__IDENT_ES__/.test(html));
+ctx.notes = {}; store.fcSender = JSON.stringify({ name: 'Alejandro Gonzalez', llc: 'Biscayne Solutions Group', phone: '(786) 631-1823', addr: '123 Main St, Miami, FL 33101' });
+ctx.cur = A; ctx.phIdx = 0; ctx.screenLead();
+T('the paste box now takes a number or an email', /NUMBER OR EMAIL ON WHITEPAGES/.test(app()) && /or email\. Pasted numbers are not checked/.test(app()));
+T('_mailAddr trims and lower-cases a pasted address and refuses junk', ctx._mailAddr('  Foo.Bar@Example.COM ') === 'foo.bar@example.com' && ctx._mailAddr('305-555-0001') === '' && ctx._mailAddr('nobody@') === '');
+let mc = ctx.mailCheck(A, 'owner@example.com');
+T('a fresh lead with a good address composes a first touch', !mc.why && mc.stage === 'cold', JSON.stringify(mc));
+ctx.notes['CASE-S'] = { status: 'DO NOT CONTACT', note: '' };
+mc = ctx.mailCheck(S, 'owner@example.com');
+T('an opted-out person is refused', /opted out/.test(mc.why), mc.why);
+mc = ctx.mailCheck(Object.assign({}, A, { st: 'BAL' }), 'owner@example.com');
+T('the investor lane is refused (its email lives on the board)', /Investor lane/.test(mc.why), mc.why);
+ctx.notes['CASE-B'] = { status: '', note: '', touches: [{ d: '2026-10-01', ch: 'email', out: 'THEY REPLIED (inbound)' }] };
+mc = ctx.mailCheck(B, 'owner@example.com');
+T('a lead who replied is refused: answer them, no template', /already replied/.test(mc.why), mc.why);
+ctx.notes['CASE-B'] = { status: '', note: '', touches: [1, 2, 3].map(i => ({ d: '2026-10-0' + i, ch: 'email', out: 'Email sent' })) };
+T('three sends close the ladder', /Three emails/.test(ctx.mailCheck(B, 'owner@example.com').why));
+ctx.notes['CASE-B'] = {};
+T('confirmed bridge sends baked on the row seed the stage', ctx.mailStageCM(Object.assign({}, B, { ln: 2 })) === 'final' && ctx.mailStageCM(Object.assign({}, B, { ln: 3 })) === 'done');
+const pauseWas = ctx.MAIL_PAUSE; ctx.MAIL_PAUSE = { rule: 'paused', why: 'rate 11.9%' };
+mc = ctx.mailCheck(A, 'owner@example.com');
+T('the bridge\'s first-touch bounce pause holds a cold email from the card', /First emails are paused/.test(mc.why) && /11\.9/.test(mc.why), mc.why);
+T('the pause does not hold a follow-up', !ctx.mailCheck(Object.assign({}, A, { ln: 1 }), 'owner@example.com').why);
+ctx.MAIL_PAUSE = pauseWas;
+
+let M = ctx.composeMail(A, 'owner@example.com', 'en');
+T('first touch, sale date: the plain subject the board and the nightly sender use', M.subj === 'Regarding your property at 1 TEST ST', M.subj);
+T('the body is Alejandro\'s cold copy with the date, the case number, the identity line and the sign-off', /Hi Test,/.test(M.body) && /auction on 10\/01\/2026/.test(M.body) && /I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney\./.test(M.body) && /Alejandro Gonzalez\nBiscayne Solutions Group\nPhone: \(786\) 631-1823\n123 Main St/.test(M.body), M.body.slice(0, 300));
+T('the approved opt-out line closes it', /If now's not a good time, just tell me and I won't reach out again\./.test(M.body));
+T('no token or placeholder survives into the body', !/\u0001|__[A-Z_]+__|\$\{/.test(M.body));
+M = ctx.composeMail(A, 'owner@example.com', 'es');
+T('Spanish: the Spanish subject, greeting, identity and opt-out line', M.subj === 'Referente a su propiedad en 1 TEST ST' && /^Hola Test,/.test(M.body) && /No soy su prestamista/.test(M.body) && /Si ahora no es buen momento, solo dígamelo y no lo vuelvo a contactar\./.test(M.body), M.body.slice(0, 200));
+M = ctx.composeMail(Object.assign({}, A, { lp: 1, x: '09/01/2026' }), 'owner@example.com', 'en');
+T('a fresh filing with no sale date gets the early body, never a blank date', M.early && /case filed at the courthouse on 1 TEST ST \(Case No\. CASE-A\)/.test(M.body) && !/auction on /.test(M.body), M.body.slice(0, 200));
+M = ctx.composeMail(Object.assign({}, A, { td: 1 }), 'owner@example.com', 'en');
+T('a tax deed gets the tax-deed body', /tax-deed sale date of 10\/01\/2026/.test(M.body) && /Certificate\/Case No\. CASE-A/.test(M.body), M.body.slice(0, 200));
+M = ctx.composeMail(Object.assign({}, A, { ln: 1 }), 'owner@example.com', 'en');
+T('the second email threads under the first and is the follow-up', M.stage === 'follow' && M.subj === 'Re: Regarding your property at 1 TEST ST' && /following up on my earlier note about 1 TEST ST/.test(M.body), M.subj);
+M = ctx.composeMail(Object.assign({}, A, { pl: 'A VERY LONG PLAINTIFF NAME THAT WAS CUT AT FORTY-SIX' }), 'owner@example.com', 'en');
+T('a plaintiff name the row cut short is left out rather than sent cut', !/A VERY LONG PLAINTIFF/.test(M.body));
+
+console.log('\n== the email screen logs only after you confirm ==');
+ctx.notes = {}; ctx.cur = A; ctx.phIdx = 0;
+ctx.screenMail(A, 'Owner@Example.com');
+T('the screen shows To, Subject, the body and both handoffs', ctx.SCREEN === 'mail' && /owner@example\.com/.test(app()) && /Regarding your property at 1 TEST ST/.test(app()) && /href="mailto:owner@example\.com\?subject=Regarding%20your%20property/.test(app()) && /mail\.google\.com\/mail\/\?view=cm/.test(app()), app().slice(0, 200));
+T('nothing is written on the lead by opening the screen', !ctx.notes['CASE-A']);
+documentStub.getElementById('mlgm').click();
+T('tapping a handoff asks whether it went', documentStub.getElementById('mlconf').style.display === 'block' && documentStub.getElementById('mlsend').style.display === 'none');
+documentStub.getElementById('mln').click();
+T('"did not send" writes nothing', !ctx.notes['CASE-A'] && documentStub.getElementById('mlsend').style.display === 'block');
+documentStub.getElementById('mlapp').click();
+documentStub.getElementById('mly').click();
+let na = ctx.notes['CASE-A'] || {};
+T('confirming logs one ch:email touch with the stage and the handoff, by this caller', (na.touches || []).length === 1 && na.touches[0].ch === 'email' && /Email sent — first touch \(mail app, address pasted from Whitepages\)/.test(na.touches[0].out) && na.touches[0].to === 'owner@example.com' && na.touches[0].by === 'Alejandro', JSON.stringify(na.touches));
+T('the address is saved on the lead as a pasted Whitepages email', JSON.stringify(na.wpe) === '["owner@example.com"]', JSON.stringify(na.wpe));
+T('it comes back to the card', ctx.SCREEN === 'lead' && /class="card"/.test(app()));
+T('the card now offers that address again, as the follow-up', /class="pcem" data-em="owner@example\.com"/.test(app()) && /follow-up #2/.test(app()), (app().match(/<div class="pcsaved">.*?<\/div>/) || [''])[0]);
+T('the stage moved to follow-up', ctx.mailStageCM(A) === 'follow');
+T('the strip counts the email', /<b>1<\/b> email/.test(ctx.sessStrip()), ctx.sessStrip());
+let am = ctx._afterMail(A);
+T('the after-call screen gets an Email button for it', /id="aem" class="ghost" data-em="owner@example\.com"/.test(am) && /follow-up #2/.test(am), am);
+ctx.notes['CASE-A'].touches.push({ d: '2026-10-02', ch: 'email', out: 'Email sent' }, { d: '2026-10-03', ch: 'email', out: 'Email sent' });
+T('a closed ladder removes the after-call button and says why on the card', ctx._afterMail(A) === '' && /Three emails already went/.test(ctx._wpeList(A)));
+if (typeof ctx.mergeNotes === 'function') {
+  ctx.notes['CASE-M'] = { status: '', note: '', wpe: ['a@example.com'] };
+  try { ctx.mergeNotes({ 'CASE-M': { status: '', note: '', wpe: ['B@Example.com', 'a@example.com'] } }); } catch (e) { console.log('  [mergeNotes threw: ' + String(e).slice(0, 160) + ']'); }
+  const we = (ctx.notes['CASE-M'] || {}).wpe || [];
+  T('mergeNotes unions pasted emails from both devices', we.length === 2 && we.indexOf('a@example.com') >= 0 && we.indexOf('b@example.com') >= 0, JSON.stringify(we));
 }
 
 console.log('\n== keep calling: goal, streak, feedback ==');

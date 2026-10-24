@@ -318,7 +318,12 @@ if(S.earlier && lvl!=='bad') msg+=' &middot; '+hm(S.earlier.at).replace(/^today 
 var BAKED={lvl:lvl, msg:msg};
 paint(lvl, msg, null);
 if(!live || !W || !W.fetch) return;
-function reloadLink(){ return ' <a href="#" onclick="location.reload();return false" style="color:inherit;font-weight:800">Reload</a>'; }
+/* The Morning Worker is a blob: document whose URL is revoked a minute after it opens, so a reload
+   there loads an error page and loses a run in progress. Only the page itself may offer Reload. */
+function reloadLink(){
+  if(W !== window || String(W.location && W.location.protocol) === 'blob:') return ' &middot; reload the board tab when this run is done';
+  return ' <a href="#" onclick="location.reload();return false" style="color:inherit;font-weight:800">Reload</a>';
+}
 function show(j){
   if(!j || !j.ok){ paint(BAKED.lvl, BAKED.msg, null); return; }
   var baked=t(S.baked), st=t(j.started), en=t(j.ended);

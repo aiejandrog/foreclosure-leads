@@ -3576,7 +3576,9 @@ function _contactLineHtml(r, ph, opts){
   // or a listing agent discloses this homeowner's foreclosure to a third party who never asked.
   // Call stays live on all of them (reaching the owner through the household is the whole point
   // of keeping these numbers); only the written, owner-addressed message is withheld.
-  const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0;
+  // 'wpm' (pasted from whitepages.com on a Call Mode card) is call-only too, until a call on it
+  // reaches a person: same rule as a Whitepages likely-owner number (Alejandro, 2026-10-22).
+  const _srcOwner = ['hh','nm','ag','xl','wpm'].indexOf(String(opts.src||'')) < 0;
   const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
@@ -3672,10 +3674,12 @@ function _contactBlockHtml(r){
   if(String(nn.phone||'').replace(/\D/g,'').length >= 10) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
   // Numbers pasted from whitepages.com on a Call Mode card (notes.wpm, call_mode.py pasteCall).
   // The first one also fills nn.phone above, so only the others are added here.
+  // A number Call Mode marked bad stays off the card here as well.
   (nn.wpm||[]).forEach(function(w){
     var wd = String(w||'').replace(/\D/g,'');
     if(wd.length !== 10 || wd === String(nn.phone||'').replace(/\D/g,'').slice(-10)) return;
     if((r.phones||[]).some(function(ph){ return String(ph||'').replace(/\D/g,'').slice(-10) === wd; })) return;
+    if((nn.badph||[]).some(function(b){ return String(b||'').replace(/\D/g,'').slice(-10) === wd; })) return;
     lines.push(_contactLineHtml(r, wd, { dnc:false, mobile:true, src:'wpm' }));
   });
   if(lines.length) h += '<div class="csphones">'+lines.join('')+'</div>';
@@ -3684,6 +3688,10 @@ function _contactBlockHtml(r){
   if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
   if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
+  // Shown, never fed to the worker's auto-send list: that list is the traced `emails` and stays so.
+  const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0);
+  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card">Whitepages, pasted</span></span></div>';
   h += _csPeople(r);
   return h;
 }
@@ -16443,6 +16451,63 @@ function _alexFill(t, v){
   return t;
 }
 
+/* ---- ONE EMAIL COMPOSE, TWO SURFACES (2026-10-24) -----------------------------------------
+   Every email body the board can write lives in _mailBodies(), a PURE function: plain values in,
+   bodies out, no DOM, no notes, no sender global. call_mode.extract_mail_js() lifts this block
+   verbatim into Call Mode, where an operator pastes an address off whitepages.com and sends the
+   same first touch the Morning Worker sends. A copy there would be the fourth copy of these words
+   to drift (08-22, 08-28, 08-29); one block read by two pages cannot.
+   v: first, street, addr, dt, td, caseTagEN, caseTagES, plaintiff, sN, sL, sP, sig (CAN-SPAM block). */
+/* CAN-SPAM signature block from the sender fields (blank fields skipped). */
+function _mailSig(s){
+  s = s || {};
+  return [s.name, s.title, s.llc, (s.phone?'Phone: '+s.phone:''), (s.email?'Email: '+s.email:''), s.addr, s.web]
+    .filter(function(x){ return x && String(x).trim(); }).join('\n');
+}
+/* Which body a stage gets: 'replied' composes the follow body (a manual send should still be short
+   and threaded, never the cold pitch); 'done' composes the final body. Both are manual-only paths. */
+function _mailPick(B, stage, early, lang){
+  var en = (lang !== 'es');
+  if(stage==='final' || stage==='done') return en ? B.bodyFinalEN : B.bodyFinalES;
+  if(stage==='follow' || stage==='replied') return en ? B.bodyFollowEN : B.bodyFollowES;
+  if(early) return en ? B.bodyEarlyEN : B.bodyEarlyES;
+  return en ? B.bodyColdEN : B.bodyES;
+}
+function _mailBodies(v){
+  var first = v.first || '', street = v.street || '', addr = v.addr || '', dt = v.dt || '', td = !!v.td;
+  // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
+  // site, a concrete credibility signal, included wherever the tool actually has one, never fabricated.
+  var caseNo = String(v.caseNo || '').trim(), plaintiff = v.plaintiff || '';
+  var caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
+  var caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
+  var sN = v.sN || '', sL = v.sL || '', sP = v.sP || '', sig = v.sig || '';
+  // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
+  // every email keeps it). bodyColdEN is Alejandro's baked template and carries it after the SIG token.
+  var sigEN = sig + "\n\n" + _OPTOUT_EN;
+  var sigES = sig + "\n\n" + _OPTOUT_ES;
+  var _IDENT_EN = `__IDENT_EN__`;
+  var introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. ${_IDENT_EN}`;
+  var introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. __IDENT_ES__`;
+  var bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI saw there's a case filed at the courthouse on ${street}${caseTagEN}. Our record doesn't show a sale date yet (it may be out of date). That means you still have time to choose, but the options shrink every week the case moves.\n\nOn a short free call with our senior advisor, over 30 years in mortgages and foreclosure workouts, you'll find out exactly which ones are still open to you. Are you hoping to keep the house, or open to selling?\n\nCall or text me at ${sP}, or reply with a time that works for you today or tomorrow.\n\n${sigEN}\n\n`;
+  var bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nVi que hay un caso abierto en la corte sobre ${street}${caseTagES}. Nuestro registro todavía no muestra fecha de subasta (puede estar desactualizado). Eso quiere decir que todavía tiene tiempo para decidir, pero cada semana que avanza el caso quedan menos opciones.\n\nEn una llamada corta y gratis con nuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución hipotecaria, sabrá exactamente cuáles opciones todavía tiene. ¿Quiere quedarse con la casa o está pensando en venderla?\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga hoy o mañana.\n\n${sigES}\n\n`;
+  var bodyEN = td
+    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record lists a tax-deed sale date of ${dt} and may be out of date; please check the current status with the county.\n\nIf you would like to discuss the property with our senior advisor, let me know.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`
+    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
+  var bodyES = td
+    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro indica una subasta de tax deed para el ${dt} y puede estar desactualizado; confirme el estado actual con el condado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`
+    : `Hola${first?' '+first:''},\n\nProbablemente esté recibiendo mucha correspondencia y muchas llamadas sobre su propiedad, así que seré breve.\n\nSu casa está programada para subastarse el ${dt}.\nSi nada cambia antes de esa fecha, la casa se vende al mejor postor y las opciones que tiene ahora desaparecen con ella. No tiene por qué ser así.\n\nMi nombre es ${sN}, de ${sL}. __IDENT_ES__\nNuestro asesor principal lleva más de 30 años trabajando en hipotecas y soluciones para casos de ejecución hipotecaria, y revisa personalmente cada caso. Se ha sentado frente a personas en su situación y las ha acompañado en el proceso, manteniendo su capital en la propiedad intacto.\n\nSi está dispuesto, me gustaría coordinar una breve llamada telefónica. La mayoría dura unos cinco minutos; reservo quince para que nunca se sienta apurado. No le cuesta nada, y usted decide qué pasa después.\n\nEn esa llamada:\n\n  • Revisaremos su caso y en qué situación se encuentra.\n  • Repasaremos las opciones que tiene, incluidas algunas que quizás no conozca.\n  • Le daremos una evaluación clara y honesta de cómo seguir adelante.\n\nPuede elegir un horario en cal.com/bsgflorida/free-records-review, responder con el mejor número y horario para contactarlo, o llamarme directamente al ${sP}.\n\nSaludos cordiales,\n\n${sigES}\n\n`;
+  var bodyColdEN = (!td && _ALEXMAIL_EN)
+    ? _alexFill(_ALEXMAIL_EN, {first:first, date:dt, signer:sN, phone:sP,
+                               company:sL, sig:sig, ident:_IDENT_EN})
+    : bodyEN;
+  var bodyFollowEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm following up on my earlier note about ${street}. If you would like to discuss the property, let me know. If the matter is already handled, there is no need to reply.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
+  var bodyFollowES = `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo para dar seguimiento a mi mensaje sobre ${street}. Si desea conversar sobre la propiedad, dígamelo. Si el asunto ya está resuelto, no necesita responder.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
+  var bodyFinalEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nThis is my last note about ${street}. If you would like to discuss the property, you can contact me. I won't send another follow-up after this note.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
+  var bodyFinalES = `Hola${first?' '+first:''},\n\n${introES}\n\nEsta es mi última nota sobre ${street}. Si desea conversar sobre la propiedad, puede comunicarse conmigo. No enviaré otro mensaje de seguimiento después de esta nota.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
+  return {introEN:introEN, introES:introES, sigEN:sigEN, sigES:sigES,
+          bodyEarlyEN:bodyEarlyEN, bodyEarlyES:bodyEarlyES, bodyEN:bodyEN, bodyES:bodyES, bodyColdEN:bodyColdEN,
+          bodyFollowEN:bodyFollowEN, bodyFollowES:bodyFollowES, bodyFinalEN:bodyFinalEN, bodyFinalES:bodyFinalES};
+}
 function genEmail(r, quiet){
   // BALLOON ROWS ARE A DIFFERENT AUDIENCE. An LLC investor with a maturing hard-money note gets the
   // Refi Lane pitch, not the homeowner letter — see genBalloonEmail. Branch before anything below
@@ -16465,9 +16530,7 @@ function genEmail(r, quiet){
   const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
   // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
   // site — a concrete credibility signal — included wherever the tool actually has one, never fabricated.
-  const caseNo = (r.case||'').trim();
-  const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
-  const caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
+  const caseNo = (r.case||'').trim();   // the case tag itself is built in _mailBodies
   /* REACH EVERY ADDRESS ON FILE — BUT VIA BCC.
      Why all of them: skiptrace returns several addresses per lead and only one is usually live.
      One owner replied from a dotted variant of the address we mailed (first.last@ vs firstlast@)
@@ -16487,13 +16550,12 @@ function genEmail(r, quiet){
   const to = emails[0] || '';
   const bcc = emails.slice(1).join(', ');
   // professional signature block (blank fields skipped)
-  const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
-  // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
-  // every email keeps it). outreach_email.py has always appended it (sig_en / sig_es); these bodies
-  // did not, so the board's early, tax-deed, Spanish, follow and final emails went out without it.
-  // bodyColdEN is Alejandro's baked template and already carries it after the SIG token.
-  const sigEN = sig + "\n\n" + _OPTOUT_EN;
-  const sigES = sig + "\n\n" + _OPTOUT_ES;
+  const sig = _mailSig({name:sN, title:sT, llc:sL, phone:sP, email:sE, addr:sA, web:sW});
+  // Bodies, intro and signed-off signatures come from _mailBodies() above, the one block Call Mode
+  // shares. Nothing below composes a sentence of its own.
+  const _MB = _mailBodies({first:first, street:street, addr:addr, dt:dt, td:td, caseNo:caseNo,
+                           plaintiff:plaintiff, sN:sN, sL:sL, sP:sP, sig:sig});
+  const sigEN = _MB.sigEN, sigES = _MB.sigES, introEN = _MB.introEN, introES = _MB.introES;
   /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
      tail replies.py needs; both are satisfiable and both are required. Built by _subjLine() above,
      which outreach_email.py mirrors line for line, so the manual composer and the unattended
@@ -16534,23 +16596,12 @@ function genEmail(r, quiet){
   // Hoisted to its own const so Alejandro's baked body can be filled with the SAME build-time
   // substitution instead of hand-typing the sentence a second time. Change disclaimer.identity()
   // and every one of these moves together, including the automated sender.
-  const _IDENT_EN = `__IDENT_EN__`;
-  const introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. ${_IDENT_EN}`;
-  const introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. __IDENT_ES__`;
   // Draft bilingual proposal: same facts, uncertainty and callback ask in both languages.
   // Keep the language-specific signature as the final content of every variant.
   /* 2026-10-22 (Alejandro, on the old body: "where the fuck is the urgency here ... i sense no call
      to action"). Same facts, now said plainly: a case is filed, no sale date shows yet, and the
      options shrink every week the case moves. That is the only pressure, and it is true; there is
      no deadline here to invent. One ask: keep or sell, then call, text or reply with a time. */
-  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI saw there's a case filed at the courthouse on ${street}${caseTagEN}. Our record doesn't show a sale date yet (it may be out of date). That means you still have time to choose, but the options shrink every week the case moves.\n\nOn a short free call with our senior advisor, over 30 years in mortgages and foreclosure workouts, you'll find out exactly which ones are still open to you. Are you hoping to keep the house, or open to selling?\n\nCall or text me at ${sP}, or reply with a time that works for you today or tomorrow.\n\n${sigEN}\n\n`;
-  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nVi que hay un caso abierto en la corte sobre ${street}${caseTagES}. Nuestro registro todavía no muestra fecha de subasta (puede estar desactualizado). Eso quiere decir que todavía tiene tiempo para decidir, pero cada semana que avanza el caso quedan menos opciones.\n\nEn una llamada corta y gratis con nuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución hipotecaria, sabrá exactamente cuáles opciones todavía tiene. ¿Quiere quedarse con la casa o está pensando en venderla?\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga hoy o mañana.\n\n${sigES}\n\n`;
-  const bodyEN = td
-    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record lists a tax-deed sale date of ${dt} and may be out of date; please check the current status with the county.\n\nIf you would like to discuss the property with our senior advisor, let me know.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`
-    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
-  const bodyES = td
-    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro indica una subasta de tax deed para el ${dt} y puede estar desactualizado; confirme el estado actual con el condado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`
-    : `Hola${first?' '+first:''},\n\nProbablemente esté recibiendo mucha correspondencia y muchas llamadas sobre su propiedad, así que seré breve.\n\nSu casa está programada para subastarse el ${dt}.\nSi nada cambia antes de esa fecha, la casa se vende al mejor postor y las opciones que tiene ahora desaparecen con ella. No tiene por qué ser así.\n\nMi nombre es ${sN}, de ${sL}. __IDENT_ES__\nNuestro asesor principal lleva más de 30 años trabajando en hipotecas y soluciones para casos de ejecución hipotecaria, y revisa personalmente cada caso. Se ha sentado frente a personas en su situación y las ha acompañado en el proceso, manteniendo su capital en la propiedad intacto.\n\nSi está dispuesto, me gustaría coordinar una breve llamada telefónica. La mayoría dura unos cinco minutos; reservo quince para que nunca se sienta apurado. No le cuesta nada, y usted decide qué pasa después.\n\nEn esa llamada:\n\n  • Revisaremos su caso y en qué situación se encuentra.\n  • Repasaremos las opciones que tiene, incluidas algunas que quizás no conozca.\n  • Le daremos una evaluación clara y honesta de cómo seguir adelante.\n\nPuede elegir un horario en cal.com/bsgflorida/free-records-review, responder con el mejor número y horario para contactarlo, o llamarme directamente al ${sP}.\n\nSaludos cordiales,\n\n${sigES}\n\n`;
   /* ---- ALEJANDRO'S COPY — ENGLISH COLD BODY ----------------------------------------------------
      He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME template
      string outreach_email.py renders (baked above from outreach_copy.email_body_template()), so
@@ -16565,10 +16616,6 @@ function genEmail(r, quiet){
        * follow / final and ALL Spanish -> unchanged (his copy is English only)
      ident is the build-time __IDENT_EN__ substitution; sig is the CAN-SPAM block (physical mailing
      address) that his three-line sign-off cannot carry on its own. */
-  const bodyColdEN = (!td && _ALEXMAIL_EN)
-    ? _alexFill(_ALEXMAIL_EN, {first:first, date:dt, signer:sN, phone:sP,
-                               company:sL, sig:sig, ident:_IDENT_EN})
-    : bodyEN;
   // Follow/final are type-agnostic and do not invent a current case status or deadline.
   // FOLLOW-UPS CARRY THE DISCLOSURE TOO. outreach_email.py puts intro (name + company +
   // identity) at the top of ALL THREE stage bodies — cold and both follow-ups. This pair had
@@ -16576,21 +16623,12 @@ function genEmail(r, quiet){
   // surface reaching a homeowner with no statement of who is writing or who they are not.
   // Email also gets read out of order, forwarded, or never delivered, so 'they saw it in the
   // first one' is not a safe assumption.
-  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm following up on my earlier note about ${street}. If you would like to discuss the property, let me know. If the matter is already handled, there is no need to reply.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
-  const bodyFollowES = `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo para dar seguimiento a mi mensaje sobre ${street}. Si desea conversar sobre la propiedad, dígamelo. Si el asunto ya está resuelto, no necesita responder.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
-  const bodyFinalEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nThis is my last note about ${street}. If you would like to discuss the property, you can contact me. I won't send another follow-up after this note.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
-  const bodyFinalES = `Hola${first?' '+first:''},\n\n${introES}\n\nEsta es mi última nota sobre ${street}. Si desea conversar sobre la propiedad, puede comunicarse conmigo. No enviaré otro mensaje de seguimiento después de esta nota.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
   // 'replied' composes the follow body (a manual send should still be short + threaded, never the
   // cold pitch); 'done' composes the final body. Both are manual-only paths — _cardMail blanks them.
   const isFinal  = (stage==='final' || stage==='done');
   const isFollow = (stage==='follow' || stage==='replied');
-  const D = isFinal
-    ? {en:{subj:reSubjEN, body:bodyFinalEN},  es:{subj:reSubjES, body:bodyFinalES}}
-    : isFollow
-    ? {en:{subj:reSubjEN, body:bodyFollowEN}, es:{subj:reSubjES, body:bodyFollowES}}
-    : early
-    ? {en:{subj:subjEN, body:bodyEarlyEN}, es:{subj:subjES, body:bodyEarlyES}}
-    : {en:{subj:subjEN, body:bodyColdEN},  es:{subj:subjES, body:bodyES}};
+  const D = {en:{subj:(isFinal||isFollow)?reSubjEN:subjEN, body:_mailPick(_MB, stage, early, 'en')},
+             es:{subj:(isFinal||isFollow)?reSubjES:subjES, body:_mailPick(_MB, stage, early, 'es')}};
   // SENT-CONTENT CAPTURE. Alejandro: "I need to see the results of what's sending. What is the
   // input?" Stash the EXACT composed subject+body on a global the moment it is built, so the
   // worker's log can archive the real text rather than a summary. Reading it from here instead
@@ -17195,6 +17233,12 @@ function _mergeLead(local, remote){
     const _w = [];
     (local.wpm||[]).concat(remote.wpm||[]).forEach(x => { const d = String(x||'').replace(/\D/g,''); if(d.length===10 && _w.indexOf(d)<0) _w.push(d); });
     out.wpm = _w;
+  }
+  // emails pasted from Whitepages on a Call Mode card (notes.wpe): union, same reason
+  if((local.wpe||[]).length || (remote.wpe||[]).length){
+    const _e = [];
+    (local.wpe||[]).concat(remote.wpe||[]).forEach(x => { const a = String(x||'').trim().toLowerCase(); if(a.indexOf('@')>0 && _e.indexOf(a)<0) _e.push(a); });
+    out.wpe = _e;
   }
   // verified-lien / deal numbers: LATEST-WRITE-WINS by per-field timestamp (notes[c].dts). Falls back
   // to prefer-larger only for pre-Round-B legacy data (which keeps the conservative default).
@@ -19781,6 +19825,12 @@ async function boot(){
      The 8 AM key is written BEFORE the stale check, so "key present" never proved a run began.
      Counts and codes only; fire-and-forget; nothing reads it to decide. */
   function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
+  // #worker=open (Call Mode's nav link, 2026-10-24): show the worker in MANUAL mode and nothing
+  // else. Never routed through the =morning branch below, which is the scheduler's auto-send path.
+  if(/worker=open/.test(location.hash||'')){
+    try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+    setTimeout(function(){ try{ openMorningWorker('urgent', false); }catch(e){} }, 500);
+  }
   if(/worker=morning/.test(location.hash||'')){
     try{ _runlog('task_open', {built_age_days:(typeof _boardAgeDays==='function')?_boardAgeDays():null, rows:(DATA||[]).length, hour:new Date().getHours()}); }catch(e){}
     // LOCAL day: the UTC key minted a FRESH day at 8 PM ET, so a worker tab opened in the

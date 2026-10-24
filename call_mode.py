@@ -2637,6 +2637,11 @@ def stamp_ledger(rows, mail_log=None, text_log=None):
                   if c and (text_log.get(c) or {}).get('n')] or [0])
         if le:
             r['le'] = le
+            # confirmed server sends, summed over the person's cases: the card's email stage starts
+            # from this count, so a lead cadence already emailed does not get a second first touch
+            ln = sum(int((mail_log.get(c) or {}).get('n') or 0) for c in cs if c)
+            if ln:
+                r['ln'] = ln
         if lt:
             r['lt'] = lt
         if le or lt:
@@ -3106,8 +3111,100 @@ def _read_module(name):
     return src
 
 
+_MAIL_START = 'function _safeAddr(raw, fallback){'
+_MAIL_END = 'function genEmail(r, quiet){'
+
+
+def extract_mail_js(tracker_src):
+    """Pull the board's EMAIL COMPOSE block verbatim out of the template (2026-10-24).
+
+    What comes across, all pure: _safeAddr / _safeStreet (never-empty address, mirrors
+    mail_guard.safe_addr), _subjLine (+ SUBJECT_STYLE), _alexFill, _mailSig, _mailPick and
+    _mailBodies, plus the three build-time slots the board fills: "__ALEXMAIL_EN__" (Alejandro's
+    cold body from outreach_copy.email_body_template), "__OPTOUT_EN__"/"__OPTOUT_ES__"
+    (outreach_copy._unsub) and `__IDENT_EN__`/__IDENT_ES__ (disclaimer.identity). bake_mail_js()
+    fills them with the same calls foreclosure_leads.py makes for the board.
+
+    Why extracted and not copied: this is the email a homeowner gets from the Morning Worker and
+    from the nightly sender. Call Mode lets an operator paste an address off whitepages.com and
+    send that same first touch from the card; a copy here would be the fourth copy of these words
+    to drift (08-22, 08-28, 08-29). Presence is asserted by name, same lesson as the other three
+    extractors, and every name the block calls must resolve.
+    """
+    m = re.search(r"^var SUBJECT_STYLE = '[a-z]+';", tracker_src, re.M)
+    if not m:
+        raise CallModeError('call_mode: `var SUBJECT_STYLE = ...;` not found in tracker_template.html; '
+                            '_subjLine reads it, so the email block cannot ship without it')
+    block = _region(tracker_src, _MAIL_START, _MAIL_END, 'mailBodies')
+    for need in ('function _safeAddr', 'function _safeStreet', 'function _subjLine', 'function _alexFill',
+                 'function _mailSig', 'function _mailPick', 'function _mailBodies',
+                 'var _ALEXMAIL_EN = "__ALEXMAIL_EN__";',
+                 'var _OPTOUT_EN = "__OPTOUT_EN__", _OPTOUT_ES = "__OPTOUT_ES__";',
+                 '`__IDENT_EN__`', '__IDENT_ES__',
+                 'bodyEarlyEN', 'bodyEarlyES', 'bodyColdEN', 'bodyES', 'bodyFollowEN', 'bodyFollowES',
+                 'bodyFinalEN', 'bodyFinalES', 'return {introEN:introEN'):
+        if need not in block:
+            raise CallModeError(
+                'call_mode: the extracted email block is missing %r. The phone composes a homeowner '
+                'email from this block; shipping it incomplete would put a different email in front '
+                'of the homeowner than the one the board sends.' % need)
+    out = m.group(0) + '\n' + block
+    unresolved = [n for n in free_identifiers(out, _PAGE_PROVIDES)]
+    if unresolved:
+        raise CallModeError(
+            'call_mode: the extracted email block calls %d name(s) the phone page does not define: %s'
+            % (len(unresolved), ', '.join(unresolved)))
+    return out
+
+
+def bake_mail_js(block, where='call mode'):
+    """Fill the block's build-time slots with the SAME calls the board bake makes
+    (foreclosure_leads._bake_alex_email, disclaimer.identity through _esc_js).
+
+    Returns '' when the identity sentence cannot be baked: the page then hides the paste-an-email
+    box (MAIL_OK false) rather than ship a body with a literal placeholder where the disclosure
+    goes. A failed cold-body bake is not fatal: _bake_alex_email already degrades to the
+    2026-08-29 body, which is itself compliant, and says so on the console."""
+    if not block:
+        return ''
+    try:
+        import foreclosure_leads as _FL
+        out = _FL._bake_alex_email(block, where)
+        out = out.replace('__IDENT_EN__', _FL._esc_js(_D.identity('en', as_html=False)))
+        out = out.replace('__IDENT_ES__', _FL._esc_js(_D.identity('es', as_html=False)))
+    except Exception as _e:
+        print('!! %s: email block bake FAILED (%s) -- the page ships without the paste-an-email box.'
+              % (where, _e))
+        return ''
+    if '__IDENT_EN__' in out or '__IDENT_ES__' in out:
+        print('!! %s: identity sentence did not bake -- the page ships without the paste-an-email box.' % where)
+        return ''
+    return out
+
+
+def _mail_pause_json():
+    """The bridge's first-touch bounce rule at build time, counts-free: {rule, why}. 'paused' holds a
+    cold email from the card the way it holds one at /send; follow-ups are not first touches."""
+    try:
+        import send_server as _SS
+        h = _SS._bounce_health() or {}
+        return json.dumps({'rule': str(h.get('ft_rule') or 'unmeasured')[:24], 'why': str(h.get('ft_why') or '')[:80]})
+    except Exception:
+        return json.dumps({'rule': 'unknown', 'why': ''})
+
+
+def _mail_llc_json():
+    """entity.display_llc(): the company name AS IT MAY LEGALLY BE SHOWN, or '' (the board's
+    SENDER_DEFAULTS.llc is baked the same way). Never a raw entity claim."""
+    try:
+        import entity as _entity
+        return json.dumps(str(_entity.display_llc()[0] or ''))
+    except Exception:
+        return json.dumps('')
+
+
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js='', text_js='', histcov='null'):
+               seat=None, funnel_js='', text_js='', histcov='null', mail_js=''):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -3122,7 +3219,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
-                       ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1)):
+                       ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1),
+                       ('__MAILJS__', 1), ('__MAILPAUSE__', 1), ('__MAILLLC__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -3165,6 +3263,9 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     return _PAGE.replace('__SYNCJS__', sync_js) \
                 .replace('__FUNNELJS__', funnel_js) \
                 .replace('__TEXTTPLJS__', text_js) \
+                .replace('__MAILJS__', mail_js) \
+                .replace('__MAILPAUSE__', _mail_pause_json()) \
+                .replace('__MAILLLC__', _mail_llc_json()) \
                 .replace('__SCRIPT__', json.dumps(script, ensure_ascii=False)) \
                 .replace('__OUTCOMES__', oc)                 .replace('__BOOKURL__', BOOKING_URL) \
                 .replace('__PAYLOAD__', json.dumps(enc_payload)) \
@@ -3616,11 +3717,13 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     sync_js = extract_sync_js(_tracker_src)
     funnel_js = extract_funnel_js(_tracker_src)
     text_js = extract_text_js(_tracker_src)
+    mail_js = bake_mail_js(extract_mail_js(_tracker_src), 'call mode ' + _where)
     _assert_no_dead_overrides(_PAGE, sync_js)
     _assert_no_dead_overrides(_PAGE, funnel_js)
     _assert_no_dead_overrides(_PAGE, text_js)
+    _assert_no_dead_overrides(_PAGE, mail_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
-                      seat=seat, funnel_js=funnel_js, text_js=text_js,
+                      seat=seat, funnel_js=funnel_js, text_js=text_js, mail_js=mail_js,
                       histcov=history_coverage(total, _shipped_all, audit))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
@@ -3877,6 +3980,19 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 .pastecall .pcgo:disabled{opacity:.4}
 .pastecall .pcnote{font-size:11.5px;line-height:1.4;color:var(--mut);margin-top:6px}
 .pastecall .pcnote.bad{color:#ff9d94}
+.pastecall .pcgo.mail{background:#1F6FEB}
+.pastecall .pcsaved{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.pastecall .pcem{min-height:46px;border-radius:10px;border:1px solid #2a3f6b;background:#132244;color:var(--ink);
+  font:700 14px system-ui,sans-serif;text-align:left;padding:0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mailcard .mailk{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);font-weight:700;margin:12px 0 4px}
+.mailcard .mailv{font-size:15px;word-break:break-all}
+.mailcard .mailbody{white-space:pre-wrap;word-break:break-word;font:14px/1.5 system-ui,sans-serif;background:#0f1d3a;
+  border:1px solid #2a3f6b;border-radius:12px;padding:12px 13px;margin:0;max-height:48vh;overflow:auto;color:var(--ink)}
+.mailcard .pcgo{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;margin-top:10px;border-radius:12px;
+  border:0;background:#1F6FEB;color:#fff;font:800 16px system-ui,sans-serif;text-decoration:none}
+.mailcard .pcgo.alt{background:#132244;border:1px solid #2a3f6b;color:var(--ink)}
+.mailcard .pcnote{font-size:11.5px;line-height:1.4;color:var(--mut);margin-top:6px}
+.mailcard .pcnote.bad{color:#ff9d94}
 .ltag.es{color:#8fa9d8}
 .cioc{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:10px 0}
 .cioc button{min-height:44px;border-radius:8px;border:1px solid #2a3f6b;background:#132244;color:var(--mut);
@@ -3970,6 +4086,7 @@ function _wpChip(r, k){
   if(w==='w') return '<span class="chip bad">Whitepages: listed OWNER ' + esc((r.wo||[]).join(' / ')) + ' &middot; not our owner, verify</span>';
   if(w==='h') return '<span class="chip">Whitepages: someone else at the address</span>';
   if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
+  if(k >= String(r.pw).length) return '';     // a number added after the bake (pasted): no verdict
   return '<span class="chip" style="opacity:.7">not on Whitepages</span>';
 }
 function _dncRows(r){
@@ -5806,7 +5923,9 @@ function navRow(){
   return '<div class="navrow">'
     + (b ? '<a href="' + esc(b) + '">&#8592; Board</a>' : '')
     + '<span class="here">&#128222; Call Mode' + seat + '</span>'
-    + (b ? '<a href="' + esc(b) + '#worker=morning">&#9728; Morning Worker</a>' : '')
+    /* #worker=open, NOT #worker=morning: that hash is the Task Scheduler's auto-send deep link, and on
+       the armed runner a nav tap would have started the unattended run. =open is manual-only. */
+    + (b ? '<a href="' + esc(b) + '#worker=open">&#9728; Morning Worker</a>' : '')
     + '</div>';
 }
 function head(){
@@ -6050,27 +6169,186 @@ function pasteCheck(r, raw){
   if(h) return {num:num, why:'Not dialed: ' + h};
   return {num:num, why:''};
 }
+/* ---- EMAIL FROM THE CARD, NO BRIDGE (2026-10-24, Alejandro: "whitepages has emails too that we can
+   input copy and paste ... go straight templated to emails to go straight out like morning worker and
+   i dont want to have a bridge"). The address goes in the same box as a number; the card composes the
+   board's email for this lead's stage (the block above, one copy), opens the mail app or Gmail with
+   it filled in, and logs one ch:'email' touch once the operator confirms it went. The board's
+   _mailHist reads that touch, so the stage advances on both surfaces; `ln` (confirmed bridge sends)
+   seeds the count so a lead cadence already emailed does not get a second first touch.
+   NOT LOOSENED: hardSuppressed() (person opt-out, hard no, wrong number, dead), a reply on file, the
+   closed three-email ladder, the bridge's first-touch bounce pause and the investor lane all refuse.
+   The address itself is the operator's: a pasted address is not domain-filtered the way the
+   worker's auto-send list is, same as the board's "use by hand if you know it is good". */
+var MAIL_OK = (typeof _mailBodies === 'function' && typeof _subjLine === 'function' && typeof _mailPick === 'function');
+var _MAIL = null;
+function _mailAddr(raw){
+  var m = String(raw||'').trim().toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/);
+  return m ? m[0] : '';
+}
+function wpeAddrs(c){
+  var out = [];
+  (((notes[c]||{}).wpe)||[]).forEach(function(x){ var a = _mailAddr(x); if(a && out.indexOf(a) < 0) out.push(a); });
+  return out;
+}
+/* The signature fields the board keeps in localStorage.fcSender (same origin), on top of this page's
+   SENDER; the company falls back to the baked legal display name. Same heals as SENDER above. */
+function _mailSender(){
+  var s = {name:SENDER.name, phone:SENDER.phone, llc:MAIL_LLC||'', title:'', email:'', addr:'', web:''};
+  try{
+    var v = JSON.parse(localStorage.getItem('fcSender')||'{}');
+    ['llc','title','email','addr','web'].forEach(function(k){ if(typeof v[k]==='string' && v[k].trim()) s[k] = v[k].trim(); });
+  }catch(e){}
+  if(/^\s*miami\s+solutions\s+group/i.test(s.llc)) s.llc = MAIL_LLC||'';
+  return s;
+}
+/* cold | follow | final | done | replied, the board's _mailStage read from this page's notes plus the
+   confirmed bridge count baked on the row. max(), never sum(): a send logged here is also in the
+   next bake, so adding the two would retire a lead a stage early. */
+function mailHistCM(r){
+  var sends = 0, replied = false;
+  [r.c].concat(r.pcs||[]).forEach(function(c){
+    (((notes[c]||{}).touches)||[]).forEach(function(t){
+      if((t.ch||'') !== 'email') return;
+      if(/replied/i.test(t.out||'')){ replied = true; return; }
+      sends++;
+    });
+  });
+  if((r.ln||0) > sends) sends = r.ln;
+  return {sends:sends, replied:replied};
+}
+function mailStageCM(r){
+  var H = mailHistCM(r);
+  if(H.replied) return 'replied';
+  if(H.sends >= 3) return 'done';
+  if(H.sends === 2) return 'final';
+  if(H.sends === 1) return 'follow';
+  return 'cold';
+}
+function mailCheck(r, raw){
+  var addr = _mailAddr(raw);
+  if(!addr) return {why:'Paste a full email address'};
+  if(!MAIL_OK) return {addr:addr, why:'The email templates did not bake into this page. Use the board\'s Email button.'};
+  if(r.st === 'BAL') return {addr:addr, why:'Investor lane: the balloon email lives on the board. Use its Email button.'};
+  var h = hardSuppressed(r);
+  if(h) return {addr:addr, why:'Not emailed: ' + h};
+  var st = mailStageCM(r);
+  if(st === 'replied') return {addr:addr, why:'They already replied by email. Answer them in your inbox, not with a template.'};
+  if(st === 'done') return {addr:addr, why:'Three emails already went to this person and the last one promised no more. Call only.'};
+  if(st === 'cold' && MAIL_PAUSE && MAIL_PAUSE.rule === 'paused')
+    return {addr:addr, why:'First emails are paused (bounce rate' + (MAIL_PAUSE.why ? ': ' + MAIL_PAUSE.why : '') + '). Follow-ups still go; a first email waits.'};
+  return {addr:addr, why:'', stage:st};
+}
+/* The email for this lead, this stage, this language: the board's block, the board's values. */
+function composeMail(r, addr, lg){
+  var s = _mailSender(), bv = _bView(r), stage = mailStageCM(r);
+  var dt = bv.auction || '', td = !!r.td, early = !td && !dt;
+  var street = _safeStreet(r.a), full = _safeAddr(r.a);
+  var pl = String(r.pl||'').trim();
+  var B = _mailBodies({first:firstName(r), street:street, addr:full, dt:dt, td:td, caseNo:r.c,
+                       plaintiff:(pl.length < 46 ? pl : ''),   /* r.pl is cut at 46; a cut name is no name */
+                       sN:s.name, sL:s.llc, sP:s.phone, sig:_mailSig(s)});
+  var subj = _subjLine(street, dt, td, lg === 'es' ? 'es' : 'en');
+  if(stage !== 'cold') subj = 'Re: ' + subj;   /* threads under the first email, same as the board */
+  return {to:addr, subj:subj, body:_mailPick(B, stage, early, lg), stage:stage, early:early, lang:lg};
+}
+function _mailtoHref(M){ return 'mailto:' + M.to + '?subject=' + encodeURIComponent(M.subj) + '&body=' + encodeURIComponent(M.body); }
+function _gmailHref(M){ return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(M.to) + '&su=' + encodeURIComponent(M.subj) + '&body=' + encodeURIComponent(M.body); }
+function _stageWord(st){
+  return st==='cold' ? 'first touch' : st==='follow' ? 'follow-up #2' : st==='final' ? 'final note #3'
+       : st==='replied' ? 'they replied' : 'ladder closed';
+}
+/* One ch:'email' touch, written only after the operator says it went. The address is saved on the
+   lead (notes.wpe) so the board shows it and the next visit offers it again. */
+function mailLog(r, M, how){
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+  n.wpe = n.wpe || []; if(n.wpe.indexOf(M.to) < 0) n.wpe.push(M.to);
+  n.touches = n.touches || [];
+  n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'email',
+                  out:'Email sent — ' + _stageWord(M.stage) + ' (' + how + ', address pasted from Whitepages)',
+                  to:M.to, by:caller()});
+  saveNotes(); try{ queueSync(); }catch(e){}
+}
+function screenMail(r, raw){
+  var v = mailCheck(r, raw);
+  if(v.why){ toast(v.why, {bad:true}); return; }
+  SCREEN = 'mail'; _MAIL = [r, v.addr];
+  document.getElementById('sheet').classList.add('hid');
+  var M = composeMail(r, v.addr, lang()), s = _mailSender();
+  $('app').innerHTML = '<div class="card mailcard">'
+    + '<div class="ltag" style="display:flex;justify-content:space-between;align-items:center">EMAIL &middot; ' + esc(_stageWord(M.stage).toUpperCase()) + langChips() + '</div>'
+    + '<div class="mailk">To</div><div class="mailv">' + esc(M.to) + ' <span class="chip">pasted from Whitepages</span></div>'
+    + '<div class="mailk">Subject</div><div class="mailv"><b>' + esc(M.subj) + '</b></div>'
+    + '<div class="mailk">Message</div><pre class="mailbody">' + esc(M.body) + '</pre>'
+    + (s.addr ? '' : '<div class="pcnote bad">No mailing address in your signature. Set it on the board under Sender so the email carries one (CAN-SPAM).</div>')
+    + '<div id="mlsend">'
+    +   '<a id="mlapp" class="pcgo" href="' + esc(_mailtoHref(M)) + '">&#9993; Send from your mail app</a>'
+    +   '<a id="mlgm" class="pcgo alt" target="_blank" rel="noopener" href="' + esc(_gmailHref(M)) + '">Send from Gmail</a>'
+    +   '<div class="pcnote">Opens with everything filled in; you press Send there. Then come back and confirm, so the lead shows it.</div>'
+    + '</div>'
+    + '<div id="mlconf" style="display:none">'
+    +   '<button type="button" id="mly" class="pcgo">Yes, it sent &mdash; log it</button>'
+    +   '<button type="button" id="mln" class="ghost" style="margin-top:8px">It did not send</button>'
+    + '</div>'
+    + '<button type="button" id="mlback" class="ghost" style="margin-top:12px">&#8592; Back to the card</button>'
+    + '</div><div class="sheetpad"></div>';
+  wireLang();
+  var how = '';
+  function opened(h){ how = h; $('mlsend').style.display = 'none'; $('mlconf').style.display = 'block'; }
+  $('mlapp').addEventListener('click', function(){ opened('mail app'); });
+  $('mlgm').addEventListener('click', function(){ opened('Gmail'); });
+  $('mly').onclick = function(){ mailLog(r, M, how || 'mail app'); toast('Email logged on this lead'); screenLead(); };
+  $('mln').onclick = function(){ $('mlconf').style.display = 'none'; $('mlsend').style.display = 'block'; };
+  $('mlback').onclick = function(){ screenLead(); };
+}
+/* Addresses already pasted on this lead (here, the board or a teammate's phone): one tap each. */
+function _wpeList(r){
+  if(!MAIL_OK) return '';
+  var A = wpeAddrs(r.c);
+  if(!A.length) return '';
+  return '<div class="pcsaved">' + A.map(function(a){
+    var v = mailCheck(r, a);
+    return v.why
+      ? '<div class="pcnote bad">&#9993; ' + esc(a) + ' &mdash; ' + esc(v.why) + '</div>'
+      : '<button type="button" class="pcem" data-em="' + esc(a) + '">&#9993; Email ' + esc(a) + ' &middot; ' + esc(_stageWord(v.stage)) + '</button>';
+  }).join('') + '</div>';
+}
 function pasteBlock(r){
+  var em = MAIL_OK;
   return '<div class="pastecall">'
-    + '<div class="ltag" style="margin:0 0 6px">FOUND ANOTHER NUMBER ON WHITEPAGES?</div>'
-    + '<div class="pcrow"><input id="pcnum" type="tel" inputmode="tel" autocomplete="off" '
-    +   'placeholder="Paste the number here" aria-label="Phone number from Whitepages">'
+    + '<div class="ltag" style="margin:0 0 6px">' + (em ? 'FOUND A NUMBER OR EMAIL ON WHITEPAGES?' : 'FOUND ANOTHER NUMBER ON WHITEPAGES?') + '</div>'
+    + '<div class="pcrow"><input id="pcnum" type="text" inputmode="' + (em ? 'email' : 'tel') + '" autocomplete="off" autocapitalize="off" spellcheck="false" '
+    +   'placeholder="' + (em ? 'Paste the number or email here' : 'Paste the number here') + '" aria-label="' + (em ? 'Phone number or email from Whitepages' : 'Phone number from Whitepages') + '">'
     + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="pcclip" class="pcclip">Paste</button>' : '')
     + '</div>'
     + '<button type="button" id="pcgo" class="pcgo" disabled>Call this number</button>'
-    + '<div class="pcnote" id="pcwhy">Saved on this lead and logged like any call. Pasted numbers are not checked against the do-not-call registry.</div>'
+    + '<div class="pcnote" id="pcwhy">Saved on this lead and logged like any call' + (em ? ' or email' : '') + '. Pasted numbers are not checked against the do-not-call registry.</div>'
+    + _wpeList(r)
     + '</div>';
 }
 function _wirePaste(r){
   var inp = $('pcnum'), go = $('pcgo'), why = $('pcwhy'), clip = $('pcclip');
   if(!inp || !go) return;
   var base = why ? why.innerHTML : '';
+  function isMail(){ return MAIL_OK && String(inp.value||'').indexOf('@') >= 0; }
   function upd(){
+    if(isMail()){
+      var e = mailCheck(r, inp.value);
+      go.disabled = !e.addr || !!e.why;
+      go.textContent = e.addr ? '\u2709 Email ' + e.addr : 'Email this address';
+      go.className = 'pcgo mail';
+      if(why){ why.innerHTML = (e.addr && e.why) ? '<b>' + esc(e.why) + '</b>' : base; why.className = 'pcnote' + (e.addr && e.why ? ' bad' : ''); }
+      return;
+    }
     var v = pasteCheck(r, inp.value);
     go.disabled = !v.num || !!v.why;
     go.textContent = v.num ? 'Call ' + fmt(v.num) : 'Call this number';
+    go.className = 'pcgo';
     if(why){ why.innerHTML = (v.num && v.why) ? '<b>' + esc(v.why) + '</b>' : base; why.className = 'pcnote' + (v.num && v.why ? ' bad' : ''); }
   }
+  Array.prototype.forEach.call(document.querySelectorAll('.pcem'), function(b){
+    b.onclick = function(){ screenMail(r, b.getAttribute('data-em')); };
+  });
   inp.addEventListener('input', upd);
   inp.addEventListener('paste', function(){ setTimeout(upd, 0); });
   inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' && !go.disabled){ ev.preventDefault(); go.click(); } });
@@ -6078,7 +6356,7 @@ function _wirePaste(r){
     navigator.clipboard.readText().then(function(t){ inp.value = t || ''; upd(); })
       .catch(function(){ inp.focus(); toast('Long-press the box and choose Paste'); });
   };
-  go.onclick = function(){ pasteCall(r, inp.value); };
+  go.onclick = function(){ if(isMail()) screenMail(r, inp.value); else pasteCall(r, inp.value); };
 }
 function pasteCall(r, raw){
   var v = pasteCheck(r, raw);
@@ -6359,7 +6637,7 @@ function _dialTaps(dl, td, me){
   }).length;
 }
 function sessStrip(){
-  var me = caller(), dials = 0, cases = {}, appts = 0, convs = 0, td = today();
+  var me = caller(), dials = 0, cases = {}, appts = 0, convs = 0, mails = 0, td = today();
   var goal = dialGoal(), st = dayStats();
   Object.keys(notes||{}).forEach(function(c){
     if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
@@ -6372,6 +6650,7 @@ function sessStrip(){
         if(/APPOINTMENT/i.test(t.out||'')) appts++;
         if(/talked|appointment|callback/i.test(t.out||'')) convs++;
       }
+      if(t.d===td && t.ch==='email' && (!me || !t.by || t.by===me) && !/replied/i.test(t.out||'')){ hit = true; mails++; }
     });
     if(hit) cases[c] = 1;
   });
@@ -6384,6 +6663,7 @@ function sessStrip(){
     + 'TODAY: <b>'+dials+'</b>'+(goal?'<span class="goal"> / '+goal+'</span>':'')+' dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
     + (ppl===1?'person':'people') + (convs?(' &middot; <b>'+convs+'</b> conv'+(convs===1?'':'s')):'')
     + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
+    + (mails?(' &middot; <b>'+mails+'</b> email'+(mails===1?'':'s')):'')
     + ' &middot; this session: <b>'+_WORKED.length+'</b> worked'
     + (st.streak>1?' &middot; <b>'+st.streak+'</b>-day streak':'')
     + (st.best && st.best.n>dials?' &middot; best day '+st.best.n:(st.best && dials>=st.best.n && dials>0 && st.best.d!==td?' &middot; <b>new best day</b>':''))
@@ -6411,7 +6691,11 @@ function dayStats(){
   Object.keys(notes||{}).forEach(function(c){
     if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
     var n = notes[c]||{};
-    (n.dials||[]).forEach(function(x){ if(x && x.d && (!me || !x.by || x.by===me)) day(x.d).n++; });
+    /* Counted the way the strip counts (_dialTaps): an outcome row that replaced a pending dial is
+       one dial, not two, so the goal and the strip never disagree. */
+    var days = {};
+    (n.dials||[]).forEach(function(x){ if(x && x.d) days[x.d] = 1; });
+    Object.keys(days).forEach(function(d){ day(d).n += _dialTaps(n.dials, d, me); });
     (n.touches||[]).forEach(function(t){
       if(t && t.d && t.ch==='call' && (!me || !t.by || t.by===me) && /talked|appointment|callback/i.test(t.out||'')) day(t.d).c++;
     });
@@ -7303,6 +7587,12 @@ function textStage(r){
    which is true only on this screen — but the BATCH script is now the board's own bytes rather than
    a copy of them. See call_mode.extract_text_js. */
 __TEXTTPLJS__
+/* ---- EMAIL BODIES: the board's own compose block (call_mode.extract_mail_js), baked with the same
+   words the Morning Worker and the nightly sender use. Empty when the bake failed; MAIL_OK is then
+   false and the card shows no email box. Composed on this page, handed to the mail app: no bridge. */
+__MAILJS__
+var MAIL_PAUSE = __MAILPAUSE__;   /* the bridge's first-touch bounce rule at build time: {rule, why} */
+var MAIL_LLC = __MAILLLC__;       /* entity.display_llc(): the company name as it may legally be shown */
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
 
 /* Bodies are the board's t1/t2/t3 shapes. Compliance rides along: identify, one ask, opt-out on
@@ -7780,6 +8070,18 @@ function stopEverywhere(r, digits){
 /* The 20 seconds after a call is where the follow-up is either captured or lost forever. This is the
    screen that exists because he dials from the phone, writes the number on paper, and never comes
    back to the laptop to log it. Everything here writes to the SAME notes the board reads. */
+/* The after-call Email button: the first pasted address this lead may still be emailed at. Nothing
+   when none is saved or every one is refused (the card itself says why). */
+function _afterMail(r){
+  if(!MAIL_OK) return '';
+  var A = wpeAddrs(r.c);
+  for(var k=0;k<A.length;k++){
+    var v = mailCheck(r, A[k]);
+    if(!v.why) return '<div class="afterlab">Email them</div>'
+      + '<button type="button" id="aem" class="ghost" data-em="' + esc(A[k]) + '">&#9993; ' + esc(A[k]) + ' &middot; ' + esc(_stageWord(v.stage)) + '</button>';
+  }
+  return '';
+}
 function afterCall(r, o, nextC){
   try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */
   SCREEN='after';
@@ -7834,6 +8136,11 @@ function afterCall(r, o, nextC){
      rest stay call-only. */
   else if(String(r.pw||'').charAt(phIdx)==='l' && !sitKeys.length)
                             txt = '<div class="nc">Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.</div>';
+  /* A number PASTED from whitepages.com (ps 'wpm') follows the same rule: the operator read it off a
+     page, nobody has confirmed whose phone it is, and it was never registry-checked. Call only
+     until a call on it reaches a person. */
+  else if(String((r.ps||[])[phIdx]||'')==='wpm' && !sitKeys.length)
+                            txt = '<div class="nc">Pasted from Whitepages, not confirmed yet. No text until a call reaches them.</div>';
   else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
   else if(sitKeys.length){
     _chips = '<div>' + sitKeys.map(function(k, ix){
@@ -7887,6 +8194,7 @@ function afterCall(r, o, nextC){
     + (_nphTop ? '<button id="nph" class="big" style="margin-top:12px">&#128222; Call their next number: '
         + fmt(r.p[_nextPh]) + ' (' + (_nextPh + 1) + ' of ' + r.p.length + ')</button>' : '')
     + book
+    + _afterMail(r)
     + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
     + '<div class="afterlab">Call them back</div>'
     + '<div class="cbrow">'
@@ -7906,6 +8214,7 @@ function afterCall(r, o, nextC){
     + '</div><div class="sheetpad"></div>';
   var go = function(){ advance(r.c, nextC); };
   $('nx').onclick = go;
+  if($('aem')) $('aem').onclick = function(){ screenMail(r, $('aem').getAttribute('data-em')); };
   if($('nph')) $('nph').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
     phIdx = _nextPh; toast('Next number'); screenLead();
@@ -8502,6 +8811,7 @@ function setLang(v){
      left the old body on screen would send the wrong language. Rebuilt from its own saved args;
      repainting resets the chip selection to the default, which is the safe direction. */
   else if(SCREEN==='after' && _lastAfter){ afterCall(_lastAfter[0], _lastAfter[1], _lastAfter[2]); }
+  else if(SCREEN==='mail' && _MAIL){ screenMail(_MAIL[0], _MAIL[1]); }
   if(cur) renderSheet(cur);
 }
 function langChips(){
