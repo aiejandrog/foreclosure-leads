@@ -1,53 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-24T11:30:30-04:00",
-   "key": "bk-lookup",
-   "severity": "fail",
-   "text": "Federal bankruptcy pull is 36h old (limit 36h)."
-  },
-  {
-   "at": "2026-10-24T11:30:30-04:00",
+   "at": "2026-10-24T15:44:41-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.9% (5 of 42 sent on 2026-10-21), over the 5% daily ceiling (minimum sample 20). Post-cutoff first touches: 11.9% (5 of 42 bounced). Rule: paused (day_rate). First-touch sends are paused."
   },
   {
-   "at": "2026-10-24T11:30:30-04:00",
+   "at": "2026-10-24T15:44:41-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "healthcheck FAIL stages: RULE: ARV-comp coverage, lead data freshness."
+   "text": "healthcheck FAIL stages: RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-10-24T11:30:30-04:00",
+   "at": "2026-10-24T15:44:41-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 38h ago."
+   "text": "Laptop readiness (checked 10-24 11:42): battery 18% (under 50%); send server port 8823 is not listening; 3 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Sheets CRM, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-24T11:30:30-04:00",
+   "at": "2026-10-24T15:44:41-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-24T11:30:30-04:00",
+ "published_at": "2026-10-24T15:44:41-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 0,
-   "filings": 1963,
-   "holds": 532,
-   "leads_checked": 0,
+   "errors": 1,
+   "filings": 2054,
+   "holds": 538,
+   "leads_checked": 19,
    "provider": "courtlistener",
-   "pull_age_h": 36.22,
+   "pull_age_h": 0.7,
    "pull_ok": true,
    "readable": true,
-   "reason": "ok",
-   "requests_used": 44,
-   "truncated": 0
+   "reason": "time_budget",
+   "requests_used": 73,
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -85,7 +79,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 13.28883
+   "usd": 12.69688
   },
   "clerk_bk": {
    "readable": false
@@ -93,8 +87,7 @@
   "health_fails": {
    "fresh": true,
    "names": [
-    "RULE: ARV-comp coverage",
-    "lead data freshness"
+    "RULE: ARV-comp coverage"
    ]
   },
   "morning_sends": {
@@ -142,22 +135,22 @@
    "cap": 100000.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 75.6299
+   "spent": 76.904
   },
   "readiness": {
-   "at": "2026-10-22T21:22:09-04:00",
+   "at": "2026-10-24T11:42:17-04:00",
    "battery_present": true,
-   "degraded": 1,
-   "degraded_codes": [
-    7
-   ],
-   "degraded_names": [
-    "DEALFLOW Refresh"
-   ],
+   "degraded": 0,
+   "degraded_codes": [],
+   "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 0,
-   "failed_names": [],
+   "failed": 3,
+   "failed_names": [
+    "DEALFLOW Morning Worker",
+    "DealFlow Sheets CRM",
+    "DealflowSendServerDaily"
+   ],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
@@ -165,8 +158,8 @@
     "DealFlow Replies"
    ],
    "on_ac": true,
-   "pct": 79,
-   "port_open": true,
+   "pct": 18,
+   "port_open": false,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
