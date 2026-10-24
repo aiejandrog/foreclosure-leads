@@ -1,41 +1,53 @@
 {
  "alerts": [
   {
-   "at": "2026-10-22T09:51:39-04:00",
+   "at": "2026-10-24T11:30:30-04:00",
+   "key": "bk-lookup",
+   "severity": "fail",
+   "text": "Federal bankruptcy pull is 36h old (limit 36h)."
+  },
+  {
+   "at": "2026-10-24T11:30:30-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.9% (5 of 42 sent on 2026-10-21), over the 5% daily ceiling (minimum sample 20). Post-cutoff first touches: 11.9% (5 of 42 bounced). Rule: paused (day_rate). First-touch sends are paused."
   },
   {
-   "at": "2026-10-22T09:51:39-04:00",
-   "key": "laptop-readiness",
+   "at": "2026-10-24T11:30:30-04:00",
+   "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-21 21:14): 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "healthcheck FAIL stages: RULE: ARV-comp coverage, lead data freshness."
   },
   {
-   "at": "2026-10-22T09:51:39-04:00",
+   "at": "2026-10-24T11:30:30-04:00",
+   "key": "laptop-readiness",
+   "severity": "fail",
+   "text": "Evening readiness check last ran 38h ago."
+  },
+  {
+   "at": "2026-10-24T11:30:30-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-22T09:51:39-04:00",
+ "published_at": "2026-10-24T11:30:30-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 3,
+   "errors": 0,
    "filings": 1963,
-   "holds": 530,
-   "leads_checked": 16,
+   "holds": 532,
+   "leads_checked": 0,
    "provider": "courtlistener",
-   "pull_age_h": 0.53,
+   "pull_age_h": 36.22,
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 89,
-   "truncated": 1
+   "reason": "ok",
+   "requests_used": 44,
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
@@ -58,29 +70,32 @@
    "ft_why": "day_rate",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.019569172065837196,
-   "mailed": 110,
+   "lb": 0.0273344618147294,
+   "mailed": 79,
    "post_dead": 5,
-   "post_lb": 0.019569172065837196,
-   "post_mailed": 110,
-   "post_rate": 0.045454545454545456,
+   "post_lb": 0.0273344618147294,
+   "post_mailed": 79,
+   "post_rate": 0.06329113924050633,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.045454545454545456,
+   "rate": 0.06329113924050633,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 13.8361
+   "usd": 13.28883
   },
   "clerk_bk": {
    "readable": false
   },
   "health_fails": {
    "fresh": true,
-   "names": []
+   "names": [
+    "RULE: ARV-comp coverage",
+    "lead data freshness"
+   ]
   },
   "morning_sends": {
    "addresses": 2,
@@ -93,7 +108,7 @@
     30,
     30
    ],
-   "date": "2026-10-22",
+   "date": "2026-10-24",
    "eligible": 47,
    "judged": true,
    "paused": true,
@@ -101,26 +116,12 @@
    "scheduled": true,
    "sent": 0,
    "worker_run": {
-    "board_age_days": 0,
-    "ev": {
-     "autostart_countdown": 1,
-     "autostart_run": 1,
-     "no_email": 6,
-     "open_requested": 1,
-     "run_end": 1,
-     "send_answer": 1,
-     "task_open": 1,
-     "worker_loaded": 1
-    },
-    "no_email": {
-     "none": 6
-    },
-    "queued": 14,
+    "ev": {},
+    "no_email": {},
+    "queued": 0,
     "readable": true,
-    "refused": {
-     "merge_fields": 1
-    },
-    "rows": 13,
+    "refused": {},
+    "rows": 0,
     "skipped": {}
    }
   },
@@ -129,22 +130,22 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-22",
+   "date": "2026-10-24",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1792667702,
+   "started_at": 1792855665,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 100000.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 74.4659
+   "spent": 75.6299
   },
   "readiness": {
-   "at": "2026-10-21T21:14:12-04:00",
+   "at": "2026-10-22T21:22:09-04:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
