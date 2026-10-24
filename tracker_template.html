@@ -1865,6 +1865,10 @@ body.compact .kpi{padding:11px 14px}
 body.compact .dg{padding:8px 14px}
 body.compact .dg-v{font-size:14.5px}
 
+/* ONE NAV ON EVERY SURFACE (2026-10-24). The three surfaces lead the control cluster in the same
+   order on every device: Call Mode, Call Mode · Carlos, Morning Worker. Call Mode and the Morning
+   Worker open with the same trio at their top (call_mode.navRow, the worker's .mwnav). */
+#callmodebtn{order:-3}#callmodebtn2{order:-3}#workerbtn{order:-3}
 /* ============================== RESPONSIVE ============================== */
 @media(max-width:860px){
   header{padding:12px 13px 10px;position:static}
@@ -1909,6 +1913,7 @@ body.compact .dg-v{font-size:14.5px}
      phone was exactly backwards (2026-08-18: the button shipped, then vanished under 430px with
      the rest of the cluster). order:-2 puts it ahead of Filters and Plan today, because at a door
      or in the car the first thing he wants is the dialer, not a filter. */
+  .controls.mcol > #workerbtn{display:inline-flex !important;order:-2;min-height:46px;padding:11px 16px;touch-action:manipulation}
   .controls.mcol > #callmodebtn,
   .controls.mcol > #callmodebtn2{display:inline-flex !important;order:-2;
     min-height:46px;padding:11px 16px;touch-action:manipulation;
@@ -13388,8 +13393,23 @@ function genMorningWorker(lane, autostart){
     +   '.mwblocked{background:#fff5f4;border:2px solid #8a1c1c;border-radius:12px;padding:26px 24px;text-align:center}'
     +   '.mwblocked h2{margin:0 0 9px;font:800 21px "Segoe UI",Arial,sans-serif;color:#8a1c1c}'
     +   '.mwblocked p{color:#5b6472;font-size:13.5px;line-height:1.6;margin:8px 0}'
+    +   '.mwnav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}'
+    +   '.mwnav a,.mwnav .here{display:inline-flex;align-items:center;min-height:38px;padding:0 13px;border-radius:999px;'
+    +     'font:700 12.5px "Segoe UI",Arial,sans-serif;text-decoration:none;border:1px solid #e2e6ee;background:#fff;color:#0B1730}'
+    +   '.mwnav .here{background:#0B1730;color:#F4E5A7;border-color:#0B1730}'
+    +   '#mwrfs{border-radius:8px;margin:0 0 10px}'
     + '</style>'
     + '<div class="mw">'
+    // ONE NAV ON EVERY SURFACE (2026-10-24): Board / Call Mode / Morning Worker, same order, same
+    // words, on the board, on Call Mode and here, so nothing is "somewhere else" on the phone.
+    +   '<div class="mwnav">'
+    +     '<a href="#" data-mwnav="board">&#8592; Board</a>'
+    +     '<a href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener">&#128222; Call Mode</a>'
+    +     '<span class="here">&#9728; Morning Worker</span>'
+    +   '</div>'
+    // the live refresh line: same script as the board's status line (refresh_status.py), painted
+    // from the opener's copy so this window never carries a second version of it
+    +   '<div id="mwrfs" style="display:none"></div>'
     +   '<div class="mwtop">'
     +     '<h1 class="mwtitle">Morning outreach worker'
     +       '<span class="sub">' + esc(laneMeta.ic + ' ' + laneMeta.t) + ' · ' + esc(laneMeta.d)
@@ -13660,6 +13680,9 @@ function genMorningWorker(lane, autostart){
     // renderRunBar too: the Start buttons are disabled until the bridge is confirmed up, so the
     // bar has to change the moment the probe answers or it offers a button that refuses to run.
     +   'function bridgeUp(ok){ if(BRIDGE_OK!==ok){ BRIDGE_OK=ok; renderBridge(); renderRunBar(); } }'
+    // live refresh line + the Board link (focus the board tab that opened this window)
+    +   'try{ var _rf=window.opener&&window.opener.__dfRfs; if(_rf) _rf(window.opener.__dfRfsS, document.getElementById("mwrfs"), true); }catch(e){}'
+    +   'try{ var _bn=document.querySelector("[data-mwnav=board]"); if(_bn) _bn.onclick=function(ev){ ev.preventDefault(); try{ if(window.opener && !window.opener.closed){ window.opener.focus(); return; } }catch(_e){} if(document.referrer) location.href=document.referrer; }; }catch(e){}'
     +   'function probeBridge(){'
     +     'var ac = (typeof AbortController!=="undefined") ? new AbortController() : null;'
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'

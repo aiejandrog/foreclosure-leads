@@ -61,7 +61,7 @@ const ctx = {
     setItem: (k, v) => { store[k] = String(v); },
     removeItem: k => { delete store[k]; },
   },
-  location: { hash: '', href: 'https://example.test/call/', search: '', pathname: '/call/index.html', reload(){} },
+  location: { hash: '', href: 'https://example.test/call/', protocol: 'https:', search: '', pathname: '/call/index.html', reload(){} },
   navigator: { userAgent: 'harness', clipboard: { writeText: async () => {} } },
   history: { replaceState(){} },
   alert(){}, confirm(){ return false; }, prompt(){ return null; },
@@ -100,6 +100,7 @@ ctx.cur = A; ctx.i = 0; ctx.phIdx = 0;
 let painted = true;
 try { ctx.screenLead(); } catch (e) { painted = false; console.log('  [screenLead threw: ' + String(e).slice(0, 200) + ']'); }
 T('the lead card paints', painted && /class="card"/.test(app()));
+T('the card opens with the shared nav: Board / Call Mode / Morning Worker', /class="navrow"/.test(app()) && /href="\/">&#8592; Board/.test(app()) && /#worker=morning/.test(app()), (app().match(/<div class="navrow">.*?<\/div>/) || [''])[0]);
 T('it carries the paste box and its Call button', /id="pcnum"/.test(app()) && /id="pcgo"/.test(app()));
 T('the box says pasted numbers are not registry-checked', /not checked against the do-not-call registry/.test(app()));
 const dialHref = () => ((app().match(/<a class="dial" href="([^"]*)"/) || [])[1] || '');

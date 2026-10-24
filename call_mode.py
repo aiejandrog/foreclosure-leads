@@ -3670,6 +3670,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system
    there were two or three lane buttons: at eight the buttons ate the width and squeezed "Carlos —
    seat 2 of 2" into a 60px column of single words. */
 .top{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:10px}
+.navrow{display:flex;gap:6px;flex-wrap:wrap}
+.navrow a,.navrow .here{display:inline-flex;align-items:center;min-height:38px;padding:0 13px;border-radius:999px;
+  font-size:12.5px;font-weight:700;text-decoration:none;border:1px solid #2a3f6b;background:#132244;color:var(--ink)}
+.navrow .here{background:var(--gold);color:#0b1730;border-color:var(--gold)}
 .lane{display:flex;flex-wrap:wrap;gap:6px}
 /* flex-basis 0 + wrap = equal-width buttons that reflow onto as many rows as the labels need,
    never a horizontal scroll and never a 3-line-tall button. */
@@ -5785,6 +5789,26 @@ function render(){
   _clmTake(cur.c);
   screenLead();
 }
+/* ONE NAV ON EVERY SURFACE (2026-10-24): Board / Call Mode / Morning Worker, the same trio the
+   board's control cluster leads with and the Morning Worker opens with. The board is the parent
+   folder of this page on Pages (docs/call/ or docs/call/<seat>/ under docs/); on a file:// twin
+   there is no board beside it, so the link is omitted rather than pointed at a 404. */
+function boardHref(){
+  try{
+    if(location.protocol !== 'http:' && location.protocol !== 'https:') return '';
+    var m = /^(.*)\/call\/(?:[a-z0-9-]+\/)?(?:index\.html)?$/.exec(location.pathname);
+    return m ? (m[1] + '/') : '';
+  }catch(e){ return ''; }
+}
+function navRow(){
+  var b = boardHref();
+  var seat = (SEAT && SEAT.w) ? ' &middot; ' + esc(SEAT.w) : '';
+  return '<div class="navrow">'
+    + (b ? '<a href="' + esc(b) + '">&#8592; Board</a>' : '')
+    + '<span class="here">&#128222; Call Mode' + seat + '</span>'
+    + (b ? '<a href="' + esc(b) + '#worker=morning">&#9728; Morning Worker</a>' : '')
+    + '</div>';
+}
 function head(){
   /* Every button counts with the SAME predicate pool() filters with — a count derived a second way
      is a count that drifts. Zero-count lanes are hidden (except Sale soon / Fresh filings, which
@@ -5812,7 +5836,7 @@ function head(){
     : '';
   var _lkN = lkRows().length;
   var _lkBtn = _lkN ? '<button data-lk="1" class="' + (BLANE === '__lk' ? 'on' : '') + '">&#128269; Find a number &middot; ' + _lkN + '</button>' : '';
-  return _qh + '<div class="top"><div class="lane">'+laneBtns+_lkBtn+'</div>'
+  return _qh + '<div class="top">' + navRow() + '<div class="lane">'+laneBtns+_lkBtn+'</div>'
     + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
