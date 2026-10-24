@@ -13531,7 +13531,9 @@ function genMorningWorker(lane, autostart){
     // The page strip (dealflow_nav.ITEMS order). This worker is a blob: tab of its own, so every
     // target is absolute (_boardUrlAbs / _callModeUrlAbs); anchors, not window.open, one tab each.
     +   '<nav class="dfnav mwnav" aria-label="DealFlow pages">'
-    +     '<a class="dfn" href="' + esc(_boardUrlAbs()) + '" target="_blank" rel="noopener">Board</a>'
+    // Board: go back to the tab that opened this worker when it is still there (no second board tab,
+    // no second access-gate pass); the href is the fallback for a worker opened on its own.
+    +     '<a class="dfn" href="' + esc(_boardUrlAbs()) + '" target="_blank" rel="noopener" onclick="try{if(window.opener&&!window.opener.closed){window.opener.focus();return false;}}catch(e){}">Board</a>'
     +     '<a class="dfn" href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener">Call Mode</a>'
     +     '<a class="dfn" href="' + esc(_callModeUrlAbs('carlos')) + '" target="_blank" rel="noopener">Carlos</a>'
     +     '<a class="dfn on" href="#" aria-current="page" onclick="return false">Worker</a>'
