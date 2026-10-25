@@ -166,6 +166,14 @@ except Exception as e:                                             # pragma: no 
     sync_playwright = None
     rec('playwright available', False, e)
 
+if sync_playwright:                    # the module can be installed with no browser (a bare CI runner)
+    try:
+        with sync_playwright() as _p:
+            _p.chromium.launch().close()
+    except Exception as e:
+        print('  (skipped: no Chromium on this machine -- %s)' % str(e).splitlines()[0][:90])
+        sync_playwright = None
+
 SEAL = {'sender': {'name': 'Test Operator', 'phone': '(305) 555-0100', 'email': 'ops@example.com',
                    'addr': '1 Test Plaza, Testville, FL 33000', 'title': 'Acquisitions'},
         'advisor': 'advisor@example.org',
