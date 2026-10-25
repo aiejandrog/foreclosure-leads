@@ -12,8 +12,9 @@
  *   - paste an EMAIL in the same box (2026-10-24): mailCheck refuses an opted-out person, the investor
  *     lane, a reply on file, a closed three-email ladder and a cold email under the bridge's bounce
  *     pause; composeMail renders the board's own bodies (first touch / early / tax deed / follow /
- *     final, EN and ES) with no token left; the email screen hands off to the mail app or Gmail and
- *     writes one ch:'email' touch + notes.wpe only after the operator confirms it sent.
+ *     final, EN and ES) with no token left; the email screen posts that message to the send bridge
+ *     and writes one ch:'email' touch + notes.wpe only when the bridge answers ok. A refusal, an
+ *     unreadable answer, or a bridge that cannot be reached writes nothing and opens no mail app.
  */
 const fs = require('fs');
 const vm = require('vm');
@@ -166,7 +167,7 @@ T('the email block baked into the page', ctx.MAIL_OK === true && typeof ctx._mai
 T('no build-time slot was left unfilled', !/"__ALEXMAIL_EN__"|"__OPTOUT_EN__"|__IDENT_EN__|__IDENT_ES__/.test(html));
 ctx.notes = {}; store.fcSender = JSON.stringify({ name: 'Alejandro Gonzalez', llc: 'Biscayne Solutions Group', phone: '(786) 631-1823', addr: '123 Main St, Miami, FL 33101' });
 ctx.cur = A; ctx.phIdx = 0; ctx.screenLead();
-T('the paste box now takes a number or an email', /NUMBER OR EMAIL ON WHITEPAGES/.test(app()) && /or email\. Pasted numbers are not checked/.test(app()));
+T('the paste box now takes a number or an email', /NUMBER OR EMAIL ON WHITEPAGES/.test(app()) && /laptop send bridge/.test(app()) && /not checked against the do-not-call registry/.test(app()));
 T('_mailAddr trims and lower-cases a pasted address and refuses junk', ctx._mailAddr('  Foo.Bar@Example.COM ') === 'foo.bar@example.com' && ctx._mailAddr('305-555-0001') === '' && ctx._mailAddr('nobody@') === '');
 let mc = ctx.mailCheck(A, 'owner@example.com');
 T('a fresh lead with a good address composes a first touch', !mc.why && mc.stage === 'cold', JSON.stringify(mc));
@@ -204,19 +205,76 @@ T('the second email threads under the first and is the follow-up', M.stage === '
 M = ctx.composeMail(Object.assign({}, A, { pl: 'A VERY LONG PLAINTIFF NAME THAT WAS CUT AT FORTY-SIX' }), 'owner@example.com', 'en');
 T('a plaintiff name the row cut short is left out rather than sent cut', !/A VERY LONG PLAINTIFF/.test(M.body));
 
-console.log('\n== the email screen logs only after you confirm ==');
+console.log('\n== the email screen sends only through the bridge ==');
+(async function () {
 ctx.notes = {}; ctx.cur = A; ctx.phIdx = 0;
 ctx.screenMail(A, 'Owner@Example.com');
-T('the screen shows To, Subject, the body and both handoffs', ctx.SCREEN === 'mail' && /owner@example\.com/.test(app()) && /Regarding your property at 1 TEST ST/.test(app()) && /href="mailto:owner@example\.com\?subject=Regarding%20your%20property/.test(app()) && /mail\.google\.com\/mail\/\?view=cm/.test(app()), app().slice(0, 200));
+const painted = app();
+T('the screen shows To, Subject and the body, and no mail-app handoff', ctx.SCREEN === 'mail' && /owner@example\.com/.test(painted) && /Regarding your property at 1 TEST ST/.test(painted) && /id="mlgo"/.test(painted) && !/mailto:/i.test(painted) && !/mail\.google\.com/i.test(painted), painted.slice(0, 240));
+T('the screen names the company send and the bridge checks', /bsgfl\.com/.test(painted) && /biscaynesolutionsgroup\.com/.test(painted) && /bsgflorida\.com/.test(painted) && /pipeline already verified/.test(painted));
 T('nothing is written on the lead by opening the screen', !ctx.notes['CASE-A']);
-documentStub.getElementById('mlgm').click();
-T('tapping a handoff asks whether it went', documentStub.getElementById('mlconf').style.display === 'block' && documentStub.getElementById('mlsend').style.display === 'none');
-documentStub.getElementById('mln').click();
-T('"did not send" writes nothing', !ctx.notes['CASE-A'] && documentStub.getElementById('mlsend').style.display === 'block');
-documentStub.getElementById('mlapp').click();
-documentStub.getElementById('mly').click();
+
+function whyBox(){ return (documentStub.getElementById('mlwhy').textContent || ''); }
+async function tap(){
+  documentStub.getElementById('mlgo').click();
+  await ctx._mailSendP;
+}
+const posts = [];
+function reply(status, body){
+  return function(url, opt){
+    let parsed = {};
+    try { parsed = JSON.parse((opt && opt.body) || '{}'); } catch (e) { parsed = { bad: true }; }
+    posts.push({ url, body: parsed });
+    return Promise.resolve({
+      status, ok: status >= 200 && status < 300,
+      json: function(){ return Promise.resolve(body); },
+    });
+  };
+}
+
+ctx.fetch = function(){ return Promise.reject(new Error('offline')); };
+await tap();
+T('a bridge the page cannot reach writes nothing and opens no mail app', !ctx.notes['CASE-A'] && /send bridge on the laptop did not answer/.test(whyBox()) && !/mailto:/i.test(app()), whyBox());
+
+ctx.fetch = function(){
+  posts.push({ url: 'unreadable' });
+  return Promise.resolve({ status: 200, ok: true, json: function(){ return Promise.reject(new Error('no')); } });
+};
+await tap();
+T('an unreadable bridge answer writes nothing', !ctx.notes['CASE-A'] && /could not read/.test(whyBox()), whyBox());
+
+const refusals = [
+  [451, { ok:false, blocked:'unverified_first_touch', err:'HELD — no address for this owner has delivery evidence' }, /delivery evidence/],
+  [403, { ok:false, blocked:'bounce_rate', first_touch_paused:true, err:'BLOCKED: post-cutoff first touches are paused' }, /first touches are paused/],
+  [409, { ok:false, skip:true, first_touch_cap:true, err:'first touch held: no warm-up sender configured during slow restart' }, /slow restart/],
+  [429, { ok:false, err:'daily cap reached (10/10)' }, /daily cap reached/],
+  [451, { ok:false, blocked:'stay_unverified', err:'send refused — bankruptcy-stay status unknown' }, /bankruptcy-stay status unknown/],
+  [200, { ok:false, blocked:'optout_stale', err:'DO-NOT-CONTACT ledger is MISSING' }, /DO-NOT-CONTACT ledger is MISSING/],
+  [403, { ok:false, blocked:'bounce_rate', skip:true, err:'BLOCKED: this address hard-bounced before' }, /hard-bounced before/],
+];
+for (const [status, body, re] of refusals) {
+  ctx.fetch = reply(status, body);
+  await tap();
+  T('bridge refusal is shown and writes nothing: ' + (body.blocked || body.err), !ctx.notes['CASE-A'] && re.test(whyBox()) && !/mailto:/i.test(app()), whyBox());
+}
+T('every refusal went to the send bridge as this case and this address', posts.filter(p => p.url !== 'unreadable').every(p => p.url === 'http://127.0.0.1:8823/send' && p.body.to === 'owner@example.com' && p.body.meta && p.body.meta.c === 'CASE-A' && p.body.meta.test !== true), JSON.stringify(posts.map(p => p.url)));
+
+let held = 0;
+ctx.fetch = function(){
+  held++;
+  return new Promise(function(){});
+};
+documentStub.getElementById('mlgo').click();
+documentStub.getElementById('mlgo').click();
+T('a second tap while the bridge is working does not send twice', held === 1, String(held));
+
+ctx.screenMail(A, 'owner@example.com');
+ctx.fetch = reply(200, { ok:true, to:'owner@example.com', message_id:'<id@example.test>' });
+await tap();
+const sent = posts[posts.length - 1];
+T('a bridge ok posts the composed subject and body for this case', sent && sent.body.subj === 'Regarding your property at 1 TEST ST' && /Hi Test,/.test(sent.body.body) && sent.body.meta.c === 'CASE-A' && Array.isArray(sent.body.meta.pcs) && !sent.body.bcc, sent && sent.body.subj);
 let na = ctx.notes['CASE-A'] || {};
-T('confirming logs one ch:email touch with the stage and the handoff, by this caller', (na.touches || []).length === 1 && na.touches[0].ch === 'email' && /Email sent — first touch \(mail app, address pasted from Whitepages\)/.test(na.touches[0].out) && na.touches[0].to === 'owner@example.com' && na.touches[0].by === 'Alejandro', JSON.stringify(na.touches));
+T('a bridge ok logs one ch:email touch, by this caller, from the company mail', (na.touches || []).length === 1 && na.touches[0].ch === 'email' && /Email sent — first touch \(company mail, address pasted from Whitepages\)/.test(na.touches[0].out) && na.touches[0].to === 'owner@example.com' && na.touches[0].by === 'Alejandro', JSON.stringify(na.touches));
 T('the address is saved on the lead as a pasted Whitepages email', JSON.stringify(na.wpe) === '["owner@example.com"]', JSON.stringify(na.wpe));
 T('it comes back to the card', ctx.SCREEN === 'lead' && /class="card"/.test(app()));
 T('the card now offers that address again, as the follow-up', /class="pcem" data-em="owner@example\.com"/.test(app()) && /follow-up #2/.test(app()), (app().match(/<div class="pcsaved">.*?<\/div>/) || [''])[0]);
@@ -275,3 +333,4 @@ T('strip with a 1-day streak prints no streak, and names yesterday as the day to
 console.log('\n================================');
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
+})().catch(function(e){ console.error(e); process.exit(1); });

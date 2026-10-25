@@ -3793,9 +3793,10 @@ function _contactBlockHtml(r){
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
   if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
   // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
-  // Shown, never fed to the worker's auto-send list: that list is the traced `emails` and stays so.
+  // Shown as text, never as a mailto link and never fed to the worker's auto-send list.
+  // Sending one is Call Mode's POST /send. A mailto here would leave from this browser's account.
   const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0);
-  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card">Whitepages, pasted</span></span></div>';
+  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(esc).join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card. Sending it is the Call Mode bridge send.">Whitepages, pasted</span></span></div>';
   h += _csPeople(r);
   return h;
 }

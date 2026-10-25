@@ -1,10 +1,13 @@
 """Builds the Call Mode page from SOURCE and runs _callpaste_run.js against it (paste a Whitepages number and call it)."""
-import os, subprocess, sys, tempfile
+import os, re, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import call_mode  # noqa: E402
 
 tpl = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
+_wpe = re.search(r"const _wpe = \(nn\.wpe\|\|\[\]\).*?Whitepages, pasted", tpl, re.S)
+if not _wpe or 'mailto:' in _wpe.group(0):
+    sys.exit('board pasted-email row must show the address as text, not a mailto link')
 html = call_mode.build_html([], 0, {'ct': 'x', 'k': 'y'}, 'built', 'sig', 'bsig',
                             sync_js=call_mode.extract_sync_js(tpl), funnel_js=call_mode.extract_funnel_js(tpl),
                             text_js=call_mode.extract_text_js(tpl),
