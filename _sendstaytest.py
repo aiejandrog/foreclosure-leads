@@ -22,6 +22,7 @@ board is a snapshot. The bridge now decides stay status itself from sale_history
 """
 import json
 import os
+os.environ.setdefault('DEALFLOW_ADVISOR_EMAILS', 'advisor@example.org')   # the advisor is local config now, not a literal
 import pathlib
 import shutil
 import socket
@@ -287,17 +288,23 @@ def parity():
 
 
 def advisor_parity():
-    """The one address a meta.test send may reach is the same in all three places."""
+    """The one address a meta.test send may reach is the same in all three places: the bridge, Call
+    Mode, and what the board seals into its payload for Brief Jesse. All three now read ONE local file
+    (footprint.py) -- none of them may carry the address as a literal."""
     print('-- meta.test recipients')
-    import re as _re
-    def grab(path, pat):
-        m = _re.search(pat, (HERE / path).read_text(encoding='utf-8'))
-        return set(_re.findall(r"'([^']+@[^']+)'", m.group(1))) if m else None
-    ss = grab('send_server.py', r"ADVISOR_EMAILS = frozenset\(\{([^}]*)\}\)")
-    cm = grab('call_mode.py', r"ADVISOR_EMAILS = \{([^}]*)\}")
-    tt = grab('tracker_template.html', r"var _JESSE = ('[^']+')")
-    rec('send_server.ADVISOR_EMAILS == call_mode.ADVISOR_EMAILS == board _JESSE',
-        bool(ss) and ss == cm == tt, {'send_server': ss, 'call_mode': cm, 'board': tt})
+    import footprint as _fp
+    import send_server as _ss
+    import call_mode as _cm
+    want = set(_fp.advisor_emails())
+    rec('send_server.ADVISOR_EMAILS == call_mode.ADVISOR_EMAILS == footprint.advisor_emails()',
+        bool(want) and set(_ss.ADVISOR_EMAILS) == set(_cm.ADVISOR_EMAILS) == want,
+        {'send_server': set(_ss.ADVISOR_EMAILS), 'call_mode': set(_cm.ADVISOR_EMAILS), 'footprint': want})
+    board = (HERE / 'tracker_template.html').read_text(encoding='utf-8')
+    rec('the board takes the advisor from the sealed payload, never a literal',
+        'var _JESSE = __ADVISOR_EMAIL__;' in board and _fp.sealed_side().get('advisor') in want)
+    rec('no advisor address literal in the bridge, Call Mode or the board',
+        not any(a in (HERE / f).read_text(encoding='utf-8').lower()
+                for f in ('send_server.py', 'call_mode.py', 'tracker_template.html') for a in want))
 
 
 # ------------------------------------------------------------------------------ live server
@@ -333,7 +340,7 @@ def server():
     proc = None
     try:
         # The bridge imports stay_gate and mail_guard from its own folder, exactly as in the repo.
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'footprint.py'):
             shutil.copy(HERE / f, work / f)
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
@@ -450,7 +457,7 @@ def server():
         rec('stem: bare stem vs -CA-01 cache key -> refused', st == 451 and j.get('blocked') == 'stay_active',
             {'st': st, 'j': j})
 
-        st, j = send('2099-000001-CA-01', test=True, to='celusa13@gmail.com')
+        st, j = send('2099-000001-CA-01', test=True, to='advisor@example.org')
         rec('meta.test (advisor/operator 1:1, never an owner) is not stay-gated', st == 200, {'st': st, 'j': j})
         st, j = send('2099-000001-CA-01', test=True, to='tester@example.com')
         rec('meta.test to the sending login itself is not stay-gated', st == 200, {'st': st, 'j': j})
@@ -459,12 +466,12 @@ def server():
         st, j = send('2099-000001-CA-01', test=True)
         rec('meta.test on a send to an owner of a STAYED case is refused (451 test_not_operator)',
             st == 451 and j.get('blocked') == 'test_not_operator', {'st': st, 'j': j})
-        st, j = send('2099-000001-CA-01', test=True, to='celusa13@gmail.com', bcc='owner-x@example.com')
+        st, j = send('2099-000001-CA-01', test=True, to='advisor@example.org', bcc='owner-x@example.com')
         # (the advisor was mailed just above, so the bridge's follow-up trim would drop this BCC;
         # the test-flag check reads the BCC as offered, so it refuses regardless)
         rec('...and an owner in BCC behind the advisor is refused the same way',
             st == 451 and j.get('blocked') == 'test_not_operator', {'st': st, 'j': j})
-        st, j = send('2099-000001-CA-01', test=True, to='CelUSA13@Gmail.com ')
+        st, j = send('2099-000001-CA-01', test=True, to='Advisor@Example.ORG ')
         rec('advisor match ignores case and spaces', st == 200, {'st': st, 'j': j})
         st, j = call(port, '/send', {'to': 'owner-y@example.com', 'subj': 'S', 'body': 'B', 'meta': ['test']})
         rec('a meta that is not an object is refused 400, not a crash', st == 400, {'st': st, 'j': j})
@@ -525,7 +532,7 @@ def no_warmup_hold():
     work = pathlib.Path(tempfile.mkdtemp(prefix='dfstayhold_'))
     proc = None
     try:
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'footprint.py'):
             shutil.copy(HERE / f, work / f)
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')

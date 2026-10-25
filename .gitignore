@@ -363,7 +363,7 @@ BSG_*.pdf
 BSG_*.csv
 Acosta_*.html
 Acosta_*.pdf
-Tradervert_*.pdf
+/*.pdf
 *_Call_List_*.pdf
 *_Call_List_*.html
 *_Position_Report_*
@@ -800,3 +800,13 @@ rf_status.json.tmp
 !_assertedquotatest.py
 # _navtest: dealflow_nav strip on the board header, Call Mode and the Morning Worker. Static checks, no network.
 !_navtest.py
+
+# footprint.local.json — the one local file that names the people/addresses the build must keep OUT of
+# every published page (advisor address, retired defaults, deny list). Real values live here and
+# nowhere else. See footprint.py.
+footprint.local.json
+
+# personal-identifier guard: must survive a clone. The failure it prevents is silent (a real address
+# in a comment, a personal mailbox in a regex) and ships to a public repo, so a laptop whose copy of
+# this suite was lost is a laptop that stops noticing.
+!_footprinttest.py

@@ -48,6 +48,11 @@ ERRLOG = P.out('warmup_errors.log')
 RETRY_WAITS = (600, 1800)   # seconds before the 2nd and the 3rd attempt
 START_DATE = dt.date(2026, 9, 7)
 
+try:
+    import footprint as _footprint
+except ImportError:   # a sandbox that stages a fixed module list (tests do): no config means NO advisor
+    _footprint = None
+
 ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
 # Company-owned only. Mixed providers on purpose: Workspace, consumer Gmail.
 # jesse@ and carlos@ were DELETED from Workspace on 2026-09-07 to save seats. A warm-up send to a
@@ -55,12 +60,14 @@ ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
 # avoid — so they are gone from this list. Add an address here only after it receives mail.
 RECIPIENTS = [
     'alejandro@bsgflorida.com', 'help@bsgflorida.com',
+    # Consumer-mailbox peers (provider diversity) come from the untracked footprint.local.json
+    # (warmup_peers), never from this file -- a personal address does not belong in tracked code.
     # biscaynesolutionsgroup@gmail.com REMOVED 2026-09-13: it is a dead account ("Address not
     # found" — the switcher shows it Session expired). It was hard-bouncing ~1 of every 4 warm-up
     # sends off biscaynesolutionsgroup.com and bsgfl.com, i.e. souring the exact domains this file
     # warms. Same reason jesse@/carlos@ were pulled (see note above). Re-add only if it receives.
-    'agonzalez0311707@gmail.com',
 ]
+RECIPIENTS += (_footprint.warmup_peers() if _footprint else [])
 SENDER_NAME = 'Alejandro Gonzalez'
 
 SUBJECTS = [

@@ -2248,7 +2248,7 @@ details.more .morepanel>button svg{width:14px;height:14px}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-24T21:40","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-10-25T14:49","good":null,"rows":[],"last":null,"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -2932,10 +2932,10 @@ function _workQueue(){
 // the first name is hard-coded here; llc/phone/email/addr are blank ON PURPOSE so the tracker
 // bans a mailing until Jose fills them in via Filters & setup. See the incomplete-sender banner
 // wired below (looks for the same 4 required fields and warns if any are still missing).
-// Entity is Biscayne Solutions Group (the joint foreclosure-side entity — distinct from
-// Alejandro's personal Tradervert). BSG has two managing members; either can sign for the company.
+// Entity is Biscayne Solutions Group (the joint foreclosure-side entity, separate from any entity
+// an individual holds). BSG has two managing members; either can sign for the company.
 // Do NOT surface ownership percentages in any generated doc; do NOT put BSG on an initial purchase
-// contract's buyer line — buyer is "Alejandro Gonzalez and/or assigns" per the wholesale convention,
+// contract's buyer line — buyer is "<principal's name> and/or assigns" per the wholesale convention,
 // and BSG only appears on the separate Assignment and on documents where the entity itself is the
 // counterparty (deed grantee, TPA representative, cash-for-keys, servicer cover).
 // Kept in sync with sender.json (gitignored) so the board, the headless email sender and Lob mail all
@@ -2950,40 +2950,62 @@ function _workQueue(){
 // True only when entity_check.py has a strict, exact, ACTIVE Sunbiz match for the configured
 // company. Injected at build time -- the board is JS and cannot ask Python at runtime.
 const ENTITY_VERIFIED = false;
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'', phone:'(786) 631-1823',
-                         addr:'8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122', title:'Acquisitions',
-                         email:'alejandro@bsgflorida.com', web:'', partner:''};
+// SENDER IDENTITY IS NOT IN THIS FILE (2026-10-25). This page is published to a public repo, so the
+// operator's name, phone, email and address are never literals here. They live in the local,
+// untracked sender.json; the build seals them INSIDE the encrypted payload (side.sender) and
+// _applyPayload() merges them in the moment a code opens the page. What ships in the clear is blank,
+// which every "is the sender set up?" check below already treats as missing. The two tokens are
+// filled by foreclosure_leads.subst_build_facts(); the local Desktop twin (never published) gets the
+// real values written straight in by footprint.twin_identity().
+const SENDER_DEFAULTS = Object.assign({llc:'', web:'', partner:''}, {"name": "", "phone": "", "email": "", "addr": "", "title": ""});
+const _SENDER_PH = Object.assign({}, SENDER_DEFAULTS);   // a saved value equal to a default is "unset"
+let SENDER_RETIRED = {"email": [], "addr": []};                  // sealed: old defaults to heal off devices
 let sender = Object.assign({}, SENDER_DEFAULTS);
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
 // blanks clobber the defaults, so a real generated email went out showing [YOUR NAME]/[YOUR COMPANY]/
 // [YOUR PHONE] even though defaults were set. Only merge saved values that actually have content; the old
 // auto-injected "Jose" is treated as unset so the current identity wins.
-try {
-  const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
-  if (saved.name === 'Jose') delete saved.name;
-  // A COMPANY name saved into `name` is always wrong — the letter and every email open with
-  // "My name is {name}", so it rendered "My name is Biscayne Solutions Group". Devices that saved the
-  // company there before this build get healed back to the person default instead of staying broken.
-  if (typeof saved.name === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
-  // IDENTITY NORMALIZER (2026-08-23). Two jobs at once, and both are needed:
-  //   1. RENAME. Carlos's and Jose's devices hold an fcSender saved under 'Miami Solutions Group'.
-  //      A saved non-empty value wins the merge below, so without this they keep printing the OLD
-  //      company on their paper forever while every other surface says Biscayne.
-  //   2. TRUTH-GATE HEAL. A device that saved the suffixed company string during the few hours
-  //      the un-gated build was live must drop the suffix again -- Sunbiz cannot substantiate the
-  //      entity yet, and a stale localStorage value would keep asserting it on that one operator's
-  //      documents long after every other surface stopped.
-  // Both collapse to: any recognised company string becomes the current build-time display value.
-  if (typeof saved.llc === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = SENDER_DEFAULTS.llc;
-  // 2026-10-16 (Alejandro): retired contact block. The personal Gmail and the 109th Ave address
-  // were the defaults until today, and a device that ever saved Sender setup holds them in
-  // fcSender, which wins the merge below. Drop exactly those two old values so the business inbox
-  // and the Doral mailbox reach every device; any other saved value is the operator's own.
-  if (typeof saved.email === 'string' && /^\s*agonzalez0311707@gmail\.com\s*$/i.test(saved.email)) delete saved.email;
-  if (typeof saved.addr === 'string' && /^\s*231\s+N\.?\s*W\.?\s+109(th)?\s+Ave(nue)?\b/i.test(saved.addr)) delete saved.addr;
-  for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
-} catch(e) {}
+// Runs at load (blank defaults, so a LOCKED page is inert) and again on unlock, once the sealed real
+// defaults and retired values have arrived. Updates `sender` IN PLACE: other code holds the object.
+function _senderRetired(kind, v){
+  const list = (SENDER_RETIRED && SENDER_RETIRED[kind]) || [];
+  const norm = x => String(x||'').toLowerCase().replace(/[^a-z0-9@]+/g, ' ').trim();
+  const x = norm(v);
+  return !!x && list.some(r => { const y = norm(r); return y && (kind === 'email' ? x === y : x.indexOf(y) === 0); });
+}
+function _rebuildSender(){
+  const next = Object.assign({}, SENDER_DEFAULTS);
+  try {
+    const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
+    if (saved.name === 'Jose') delete saved.name;
+    // A COMPANY name saved into `name` is always wrong — the letter and every email open with
+    // "My name is {name}", so it rendered "My name is Biscayne Solutions Group". Devices that saved the
+    // company there before this build get healed back to the person default instead of staying broken.
+    if (typeof saved.name === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
+    // IDENTITY NORMALIZER (2026-08-23). Two jobs at once, and both are needed:
+    //   1. RENAME. Carlos's and Jose's devices hold an fcSender saved under 'Miami Solutions Group'.
+    //      A saved non-empty value wins the merge below, so without this they keep printing the OLD
+    //      company on their paper forever while every other surface says Biscayne.
+    //   2. TRUTH-GATE HEAL. A device that saved the suffixed company string during the few hours
+    //      the un-gated build was live must drop the suffix again -- Sunbiz cannot substantiate the
+    //      entity yet, and a stale localStorage value would keep asserting it on that one operator's
+    //      documents long after every other surface stopped.
+    // Both collapse to: any recognised company string becomes the current build-time display value.
+    if (typeof saved.llc === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = SENDER_DEFAULTS.llc;
+    // RETIRED CONTACT BLOCK (2026-10-16, rewritten 2026-10-25). A device that ever saved Sender setup
+    // holds the old default email/address in fcSender, which wins the merge below. The old values are
+    // NOT written here -- naming them in a published page was itself the leak. The build seals them
+    // (side.retired) from the untracked footprint.local.json; this drops exactly those, and any other
+    // saved value is the operator's own.
+    if (typeof saved.email === 'string' && _senderRetired('email', saved.email)) delete saved.email;
+    if (typeof saved.addr === 'string' && _senderRetired('addr', saved.addr)) delete saved.addr;
+    for (const k in saved) { if (saved[k] !== '' && saved[k] != null && saved[k] !== _SENDER_PH[k]) next[k] = saved[k]; }
+  } catch(e) {}
+  Object.keys(sender).forEach(k => { delete sender[k]; });
+  Object.assign(sender, next);
+}
+_rebuildSender();
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
 const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
@@ -3695,7 +3717,7 @@ function _optedOutIdentities(){
   return _OOP;
 }
 /* PERSON-LEVEL OPT-OUT — matches RAW or HASHED identity keys.
-   The server ledger no longer publishes '@someone@gmail.com' as a notes key: that put real
+   The server ledger no longer publishes '@someone@example.com' as a notes key: that put real
    addresses in a public page. It now publishes '@'+_addrKey(email) (and '#'+_addrKey(digits)), so
    this has to hash the lead's own contacts before comparing. RAW keys are still honoured because a
    device can create one locally when an operator opts someone out by hand, and because a browser
@@ -4989,7 +5011,9 @@ function _csPlay(r){ const p=r&&r._play; if(!p) return '';
    row. One click emails Jesse the whole file through the local bridge; bridge down -> Gmail opens
    pre-filled instead. Recipient HARDCODED — this can never email an owner. NOT logged as a touch
    (briefing your own advisor is not contact with the lead); doclog only. */
-var _JESSE = 'celusa13@gmail.com';
+// The advisor's address is NOT in this file: the build seals it (side.advisor) from the untracked
+// footprint.local.json and _applyPayload() sets it on unlock. Blank means "not set on this build".
+var _JESSE = "";
 function _advisorBrief(r){
   var money = function(v){ v = +v || 0;
     return v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : '$' + Math.round(v).toLocaleString(); };
@@ -5057,10 +5081,12 @@ function briefJesse(caseId){
   var subj = (r.addr || r.case) + ' — live call brief';
   var mailtoFallback = function(){
     var a = document.createElement('a');
-    a.href = 'mailto:' + _JESSE + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body.slice(0, 1500));
+    a.href = 'mailto:' + (_JESSE || '') + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body.slice(0, 1500));
     a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    if(typeof _shareToast === 'function') _shareToast('Bridge down — Gmail opened pre-filled, hit Send');
+    if(typeof _shareToast === 'function') _shareToast(_JESSE ? 'Bridge down — Gmail opened pre-filled, hit Send'
+      : 'Advisor address not set on this build — Gmail opened pre-filled, pick the recipient');
   };
+  if(!_JESSE){ mailtoFallback(); return; }
   fetch('http://127.0.0.1:8823/send', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({to: _JESSE, subj: subj, body: body,
@@ -5082,7 +5108,7 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
     + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — door folder + office forms + deed cards. Forms print directly; the quit claim deed is locked pending attorney review.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
-    + '<button type="button" class="csactbtn csact-field" onclick="briefJesse(\''+caseEsc+'\')" title="BRIEF JESSE — one click, mid-call. Emails Jesse (celusa13@gmail.com) everything he always asks: plaintiff, bank vs HOA, owed + accrual, equity, sale date, staller count, surviving liens, listing + agent, case + folio + links. Sends through the local bridge; if the bridge is down it opens Gmail pre-filled instead. Recipient is hardcoded — this can never email an owner.">⚡ Brief Jesse <span class="csactsub">live call</span></button>'
+    + '<button type="button" class="csactbtn csact-field" onclick="briefJesse(\''+caseEsc+'\')" title="BRIEF JESSE — one click, mid-call. Emails Jesse everything he always asks: plaintiff, bank vs HOA, owed + accrual, equity, sale date, staller count, surviving liens, listing + agent, case + folio + links. Sends through the local bridge; if the bridge is down it opens Gmail pre-filled instead. Recipient is hardcoded — this can never email an owner.">⚡ Brief Jesse <span class="csactsub">live call</span></button>'
     + (function(){ var rep=_isReplied(r);
         return '<button type="button" class="csactbtn'+(rep?' csact-save on':'')+'" onclick="_markReplied(\''+caseEsc+'\',event)" '
           + 'title="Flag that this owner WROTE BACK. A reply is the warmest signal on the board — it jumps them to the top of the Reply inbox, ahead of every score and tier. Works with no setup; replies.py fills this in automatically once gmail.key holds a real App Password.">'
@@ -6353,7 +6379,7 @@ function textablePhones(r){
   return out;
 }
 /* Greeting name for a text. Returns '' when there is no usable HUMAN first name — every template
-   below reads correctly without one ("Hi, Alejandro Gonzalez here..."). Two bugs this closes:
+   below reads correctly without one ("Hi, <Name> here..."). Two bugs this closes:
    it used to hand back the literal 'there', which is fine in English and renders "Hola there" in
    Spanish; and it took the first token of a COMPANY name, so an LLC-owned parcel opened with
    "Hi TOWERS," which tells the reader in three words that this is a blast. */
@@ -9204,7 +9230,7 @@ function _docLog(caseId, key, lang){
 // not backgrounds, so they survive print without color-adjust.
 // The inbox that goes on paper a homeowner, servicer or opposing counsel receives (Jose,
 // 2026-08-08). Deliberately NOT sender.email — that is the signature contact on outreach
-// mail (alejandro@bsgflorida.com unless the operator saved a different address). This
+// mail (the sender.json email unless the operator saved a different address). This
 // client-paper inbox is a separate value. Do not collapse the two.
 // The company inbox, injected at build time from sender.json `client_email` -- it used to be this
 // literal in THREE files, which is three chances to change two of them. It still carries the OLD
@@ -12612,7 +12638,7 @@ function genProofSheet(scope){
     +   '</div>'
     +   ((typeof REPLIES === 'undefined' || !REPLIES || !Object.keys(REPLIES).length)
           ? '<div class="pfnote"><b>Reply tracking is not live yet.</b> Every send below reads "awaiting reply" because nothing is checking the inbox. '
-            + 'To turn it on: create <code>gmail.key</code> in the repo (one line, <code>you@gmail.com:APP_PASSWORD</code> from a Google App Password) '
+            + 'To turn it on: create <code>gmail.key</code> in the repo (one line, <code>you@example.com:APP_PASSWORD</code> from a Google App Password) '
             + 'and run <code>python replies.py</code>. It never guesses a reply it has not actually seen.</div>'
           : '')
     +   '<div class="pfsec">What was sent — verbatim</div>'
@@ -19363,7 +19389,7 @@ function lkM(n){ n=+n||0; return (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocale
 function lkD(s){ s=String(s||''); return /^\d{8}$/.test(s) ? s.slice(4,6)+'/'+s.slice(6,8)+'/'+s.slice(0,4) : (s||'—'); }
 function lkFF(f){ f=String(f||'').replace(/\D/g,''); return f.length===13 ? f.slice(0,2)+'-'+f.slice(2,6)+'-'+f.slice(6,9)+'-'+f.slice(9) : f; }
 // normalize a human-typed address to Miami-Dade's terse format: 109TH->109, APT/UNIT/# dropped,
-// AVENUE->AVE, NORTHWEST->NW, etc. ("231 NW 109th Ave Apt 215" -> "231 NW 109 AVE 215")
+// AVENUE->AVE, NORTHWEST->NW, etc. ("100 NW 1st Ave Apt 2" -> "100 NW 1 AVE 2")
 function lkNorm(s){ return String(s||'').toUpperCase()
   .replace(/[.,]/g,' ')
   .replace(/\b(?:APT|APARTMENT|UNIT|STE|SUITE)\b|#/g,' ')
@@ -19859,6 +19885,15 @@ function _applyPayload(pl){
     Object.keys(dw).forEach(c => { if(SERVER_DEADS && SERVER_DEADS[c]) SERVER_DEADS[c].why = dw[c]; });
     if(Object.keys(dw).length) _applyServerDeadNotes();   // the reason only exists now — seed the note
   }catch(e){ /* a merge failure must never cost the unlock — the board still opens, text-free */ }
+  // OPERATOR IDENTITY, SEALED (2026-10-25): the real sender defaults, the advisor's address and the
+  // retired values to heal arrive here, never in the page's plaintext. Its own try: a bad identity
+  // block must cost the identity, not the lead data above or the rows below.
+  try{
+    if(side.sender && typeof side.sender === 'object'){ Object.assign(SENDER_DEFAULTS, side.sender); Object.assign(_SENDER_PH, side.sender); }
+    if(typeof side.advisor === 'string' && side.advisor) _JESSE = side.advisor;
+    if(side.retired && typeof side.retired === 'object') SENDER_RETIRED = side.retired;
+    if(side.sender || side.retired){ _rebuildSender(); if(typeof _senderBanner === 'function') _senderBanner(); }
+  }catch(e){}
   return _expireReleases((pl && pl.rows) || []);
 }
 function _greetWord(){

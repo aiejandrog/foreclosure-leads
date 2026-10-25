@@ -38,6 +38,8 @@ import subprocess
 import sys
 import time
 
+import footprint as _footprint
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, 'docs')
 # WHERE THE SITE CLONE IS, and why this is a list (2026-09-18)
@@ -73,8 +75,27 @@ SITE_DOCS = os.path.join(SITE, 'docs')
 KEEP = {'.nojekyll'}          # lives only in the site repo; never mirrored away
 
 
-def _run(args, cwd, check=True):
-    p = subprocess.run(args, cwd=cwd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+# THE SITE REPO IS PUBLIC, AND EVERY COMMIT IN IT SHOWS ITS AUTHOR AND COMMITTER EMAIL. This machine's
+# git identity is the operator's personal mailbox -- so a plain `git commit` here printed it into the
+# history of a public repo, on every publish, forever. Site commits are pinned to a GitHub noreply
+# address instead (override: DEALFLOW_SITE_GIT_NAME / DEALFLOW_SITE_GIT_EMAIL). The engine repo is
+# private and keeps the machine's own identity.
+SITE_GIT_NAME = os.environ.get('DEALFLOW_SITE_GIT_NAME') or 'BSG Site Publisher'
+SITE_GIT_EMAIL = (os.environ.get('DEALFLOW_SITE_GIT_EMAIL')
+                  or '137718925+aiejandrog@users.noreply.github.com')
+
+
+def _site_env():
+    env = dict(os.environ)
+    for who in ('AUTHOR', 'COMMITTER'):
+        env['GIT_%s_NAME' % who] = SITE_GIT_NAME
+        env['GIT_%s_EMAIL' % who] = SITE_GIT_EMAIL
+    return env
+
+
+def _run(args, cwd, check=True, env=None):
+    p = subprocess.run(args, cwd=cwd, capture_output=True, text=True, encoding='utf-8', errors='replace',
+                       env=env)
     if check and p.returncode:
         raise SystemExit('publish_site: %s failed (%d)\n%s%s' % (' '.join(args), p.returncode, p.stdout, p.stderr))
     return p
@@ -106,6 +127,14 @@ def guard():
             raise SystemExit('publish_site: %s carries %d phone-shaped number(s) outside the encrypted '
                              'payload (e.g. %s) — refusing to publish.'
                              % (os.path.relpath(p, HERE), len(hits), hits[0]))
+        # A personal mailbox, or any value from the untracked footprint.local.json, in a page that is
+        # about to become public. The build already refuses to WRITE such a page; this catches one that
+        # was built before the rule existed and never rebuilt (a stale docs/ is exactly how it ships).
+        bad = _footprint.problems(plain)
+        if bad:
+            raise SystemExit('publish_site: %s carries personal identifier(s) outside the encrypted '
+                             'payload (%s) — refusing to publish. Rebuild with current code (footprint.py).'
+                             % (os.path.relpath(p, HERE), '; '.join(bad[:4])))
     return True
 
 
@@ -180,7 +209,8 @@ def main():
     if not _run(['git', 'diff', '--staged', '--quiet'], SITE, check=False).returncode:
         print('publish_site: no staged change — nothing to push')
         return 0
-    _run(['git', 'commit', '-m', 'site: publish (auto)'], SITE)
+    _run(['git', '-c', 'user.name=' + SITE_GIT_NAME, '-c', 'user.email=' + SITE_GIT_EMAIL,
+          'commit', '-m', 'site: publish (auto)'], SITE, env=_site_env())
     for attempt in (1, 2):
         if not _run(['git', 'push', 'origin', 'main'], SITE, check=False).returncode:
             print('publish_site: pushed')

@@ -30,6 +30,8 @@ import json
 import os
 import re
 
+import footprint as _footprint
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Copied verbatim from tracker_template.html CALL_OUTCOMES. Keep byte-identical: k, label, cooldown
@@ -479,6 +481,15 @@ def _call_recording():
         return bool(snd.get('record_calls') or snd.get('quo_record'))
     except Exception:
         return False
+
+
+def _sealed_identity():
+    """The identity that rides INSIDE the encrypted payload (never the page's plaintext): the
+    speaker's name and number, the balloon signer, and the advisor's address for Brief Jesse."""
+    ident = _footprint.private_identity()
+    out = {'name': ident.get('name', ''), 'phone': ident.get('phone', ''),
+           'bsigner': _balloon_signer(), 'advisor': _footprint.advisor_email()}
+    return {k: v for k, v in out.items() if v}
 
 
 def _balloon_signer():
@@ -2705,12 +2716,12 @@ def _address_index(slim):
 
 # Our own recipients for meta.test sends (Brief Jesse: tracker_template.html _JESSE).
 # Keep equal to send_server.ADVISOR_EMAILS, which gates who a test send may reach.
-ADVISOR_EMAILS = {'celusa13@gmail.com'}
+ADVISOR_EMAILS = set(_footprint.advisor_emails())   # local config only; empty = nobody (fail closed)
 
 
 def _is_operator(e):
     """True when an email row went only to the advisor or to the sending account itself."""
-    own = set(ADVISOR_EMAILS)
+    own = set(ADVISOR_EMAILS) | _footprint.advisor_emails()
     for k in ('login', 'from'):
         v = str(e.get(k) or '').strip().lower()
         if v:
@@ -3281,7 +3292,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__TOTAL__', str(total)) \
                 .replace('__VMEN__', json.dumps(VOICEMAIL_EN)) \
                 .replace('__VMES__', json.dumps(VOICEMAIL_ES)) \
-                .replace('__BSIGNER__', json.dumps(_balloon_signer())) \
+                .replace('__BSIGNER__', '""') \
                 .replace('__SEAT__', json.dumps({'n': seat[0], 'i': seat[1], 'w': str(seat[2] or '')[:18]}
                                                 if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
@@ -3331,7 +3342,7 @@ def _tp_slim(tp):
 def phone_index(slim, hold=None):
     """EVERY lead that has a phone -> the minimum needed to answer "who just texted me?".
 
-    WHY THIS IS NOT JUST THE DIALABLE 400 (2026-08-19): a lead texted 305-801-1800 and there was no
+    WHY THIS IS NOT JUST THE DIALABLE 400 (2026-08-19): a lead texted 305-555-0100 and there was no
     way to identify her. Measured on the live payload, only 1,202 of the 3,638 numbers we hold sit on
     the call page — so 67% of possible texters were unresolvable no matter how long he scrolled. The
     morning worker emails and texts far more people than the 400 it will dial, and any of them can
@@ -3340,8 +3351,8 @@ def phone_index(slim, hold=None):
     Shape is deliberately two tables, not a fat map: several numbers share one lead, so
       t: [[owner, street, case, days, equity, folio, countyCode, holdReason, otherCases], ...]
          (each lead once; otherCases = the same person's other cases, or None)
-      d: {"3058011800": <index into t>, ...}
-      h: {"3058011800": <reason>, ...}   (only numbers held while their `t` row is not; see below)
+      d: {"3055550100": <index into t>, ...}
+      h: {"3055550100": <reason>, ...}   (only numbers held while their `t` row is not; see below)
     Naive one-record-per-number was 253KB; this is materially smaller and the page has to open on a
     phone at a door. Rides INSIDE the encrypted payload — these are phone numbers and the repo is
     public.
@@ -3698,7 +3709,8 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
             'lanes on the phone would under-count the book: %s%s\n'
             '  A new gate in call_rows drops leads; coverage_rows has to pick them up.'
             % (len(_lost), ', '.join(_lost[:8]), ' ...' if len(_lost) > 8 else ''))
-    _plain = json.dumps({'r': rows, 'b': _cov, 'x': phone_index(slim, lookup_hold_fn(slim, optouts, deads))})
+    _plain = json.dumps({'r': rows, 'b': _cov, 'x': phone_index(slim, lookup_hold_fn(slim, optouts, deads)),
+                         's': _sealed_identity()})
     # SAY THE PAYLOAD SIZE OUT LOUD, every build. This page exists to open on cell data at a door
     # (~100 KB was the founding budget) and coverage roughly doubles it. A number in the log is what
     # makes the next person's addition to these rows a decision rather than an accident.
@@ -3751,6 +3763,8 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     if _leak:
         raise CallModeError('call_mode: %d plaintext 10-digit number(s) outside the encrypted payload'
                          % len(_leak))
+    # No personal mailbox, advisor address or retired value anywhere in what is published (footprint.py).
+    _footprint.assert_clean(_body, 'docs/call/' + (subdir + '/' if subdir else ''), exc=CallModeError)
     open(dest, 'w', encoding='utf-8').write(html)
     return len(rows), total
 
@@ -4145,40 +4159,17 @@ function _wireNumList(){
     if(cur && k>=0 && k<(cur.p||[]).length && k!==phIdx){ phIdx = k; screenLead(); }
   }; }
 }
-/* WHICH LINE THE CALL GOES OUT ON (2026-09-01). 'gv' routes every dial through the Google Voice
-   app so the call originates from (786) 490-7825 — the DIALING line — instead of the phone's own
-   carrier line, (786) 631-1823. That split is deliberate and load-bearing: 631-1823 is the number
-   printed on the site, the cards and every letter, and 25-50 cold dials a day is exactly the
-   traffic pattern that gets a number tagged "Spam Likely" by the carriers. If the GV line gets
-   burned, Google swaps it for $10 and nothing printed changes; if the PUBLISHED line got burned,
-   every card already handed out would be dialing a poisoned number. Set to 'tel' to fall back to
-   the plain dialer (one character, next build).
-   The GV deep link opens the Voice app on a phone that has it installed and signed into the
-   agonzalez account; the number after nc, is the DESTINATION — Voice supplies the caller id.
-   SWITCHED TO 'tel' 2026-09-01, SAME DAY, for Quo (786) 502-9550 — and the reasoning moved, not
-   died. Quo (OpenPhone rebranded) registers as the PHONE'S default calling app, so a plain tel:
-   link routes through Quo natively and the call originates from the Quo line. That beats a
-   per-vendor deep link three ways: no URL scheme to break when a vendor renames itself (Quo just
-   did), the outcome-logging page never navigates away (tel: opens the dialer OVER the page), and
-   swapping dialing vendors becomes a SETTING ON THE PHONE instead of a build. The spam-split
-   architecture is unchanged: published line (786) 631-1823 stays clean; the dialing line eats the
-   volume risk. Requires: Quo app installed + set as the phone's default calling app — without
-   that, tel: falls back to the carrier dialer and dials expose the published line, so CHECK THE
-   DEFAULT-APP SETTING before a dial session. Set 'gv' to route via Google Voice deep links.
-   SWITCHED BACK TO 'gv' 2026-09-06: Quo dropped (Alejandro: "no more quo", back to 631-1823 as the
-   one published number). With no Quo default calling app a plain tel: link goes straight to the
-   carrier dialer -- the PUBLISHED line -- which is the exact failure this split exists to prevent.
-   'gv' keeps every cold dial on the Voice line: whichever GV number the signed-in Voice account
-   holds ((305) 999-5960 BSG Main Line on the Workspace account, or the personal (786) 490-7825) --
-   either way NOT the printed number. CHECK WHICH ACCOUNT THE VOICE APP IS SIGNED INTO before a dial
-   session; /u/0/ in the deep link means "first signed-in account" in a browser. Letters reverted to
-   631-1823 the same day (outreach_mail.py).
-   BACK TO 'tel' 2026-09-07, Alejandro's call: "change it to phone link ill get another phone
-   eventually when its right". tel: on the desktop routes to Windows Phone Link, which dials from
-   his cell -- the PUBLISHED line (786) 631-1823. The spam-split warning above was stated and he
-   accepted the risk until a business phone exists; do not flip this back without him. When that
-   phone arrives, the clean move is: keep 'tel' and make the NEW phone the one Phone Link is
-   paired with (or set 'gv' again), so the printed number never carries the cold-dial volume. */
+/* WHICH LINE THE CALL GOES OUT ON. 'tel' hands the number to the phone's own calling app, so the
+   call leaves from whatever line that app is set to. 'gv' deep-links the Google Voice app instead,
+   so a cold-dial campaign (25-50 a day is exactly the pattern carriers tag "Spam Likely") burns a
+   disposable Voice number and never the published one printed on the site, the cards and every
+   letter. The history of which lines were tried when -- and the numbers -- is in MACHINE-HANDOFF.md,
+   not here: this comment ships in the published page.
+   Current choice is 'tel' (the operator's call, 2026-09-07): on the desktop it routes to Phone Link,
+   which dials from the cell, i.e. the published line. The spam-split trade-off was stated and
+   accepted until a separate business phone exists; do not flip this without him. When that phone
+   arrives, keep 'tel' and pair the NEW phone with Phone Link (or set 'gv'), so the printed number
+   never carries the cold-dial volume. */
 var DIALER='tel';
 function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
@@ -4192,14 +4183,31 @@ function nowTS(){return new Date().toLocaleString();}
    Two heals copied from the board because both were real: a company name saved into `name` renders
    "this is Biscayne Solutions Group with Biscayne Solutions Group", and the legacy auto-injected "Jose"
    must not win over the real identity. Empty saved values must never clobber the default. */
-var SENDER = {name:'Alejandro Gonzalez', phone:'(786) 631-1823', bsigner:__BSIGNER__};   /* bsigner: sender.json balloon_signer, investor lane only */
+/* The operator's name and number are NOT literals on this page (2026-10-25): it is published, and they
+   were readable in its source. They ride inside the encrypted payload (p.s) from the untracked
+   sender.json and land here on unlock via _applySealedSender(). bsigner is sender.json
+   balloon_signer, investor lane only -- sealed the same way. Blank until then, which fillScript and
+   every {sender}/{phone} token already treat as "not set". */
+var SENDER = {name:'', phone:'', bsigner:__BSIGNER__};
 var _SENDER_DEF = {name: SENDER.name, phone: SENDER.phone};   /* before any saved override (_vmVoiceWrong) */
+var _SENDER_SAVED = {};
 try{
   var _sv = JSON.parse(localStorage.getItem('fcSender')||'{}');
   if(_sv.name === 'Jose') delete _sv.name;
   if(typeof _sv.name === 'string' && /^\s*miami\s+solutions\s+group\b/i.test(_sv.name)) delete _sv.name;
-  ['name','phone'].forEach(function(k){ if(_sv[k]) SENDER[k] = _sv[k]; });
+  ['name','phone'].forEach(function(k){ if(_sv[k]){ _SENDER_SAVED[k] = _sv[k]; SENDER[k] = _sv[k]; } });
 }catch(e){}
+/* Sealed defaults arrive AFTER the saved override was read, so the order is replayed: defaults first,
+   then whatever this phone saved on top, exactly as it was when the literals were here. */
+function _applySealedSender(sl){
+  if(!sl || typeof sl !== 'object') return;
+  if(sl.name) SENDER.name = sl.name;
+  if(sl.phone) SENDER.phone = sl.phone;
+  if(sl.bsigner) SENDER.bsigner = sl.bsigner;
+  _SENDER_DEF = {name: sl.name || '', phone: sl.phone || ''};
+  ['name','phone'].forEach(function(k){ if(_SENDER_SAVED[k]) SENDER[k] = _SENDER_SAVED[k]; });
+  if(sl.advisor) JESSE = sl.advisor;
+}
 
 /* True when this is a named seat page whose caller is not the name the scripts will speak, OR whose
    callback number is still the default owner's while the seat is someone else. The board's
@@ -4580,7 +4588,9 @@ async function boot(){
     /* `b` is the coverage set (2026-09-17). Absent on an older decrypted copy sitting in this
        device's cache, in which case the board lanes count only the dial queue and say so, rather
        than quietly reporting a book two thirds the size of the one on the laptop. */
-    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; ROWS=_dropExpired(ROWS); return ROWS; };
+    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; ROWS=_dropExpired(ROWS);
+    try{ _applySealedSender(p.s); }catch(e){}   /* identity is sealed in the payload, never in the page */
+    return ROWS; };
   var saved=null; try{saved=localStorage.getItem('fcPw');}catch(e){}
   if(saved){ var r=await unwrap(saved); if(take(r)){ return start(); } }
   $('go').onclick=async function(){
@@ -6854,7 +6864,7 @@ function screenLookup(prefill){
   $('app').innerHTML = '<div class="card">'
     + '<div class="addr" style="font-size:18px">&#128269; Who texted me?</div>'
     + '<div class="mut" style="font-size:12.5px;margin-top:4px">Paste the number, or just the last 4 digits.</div>'
-    + '<input id="lkq" inputmode="tel" autocomplete="off" placeholder="305-801-1800  or  1800" '
+    + '<input id="lkq" inputmode="tel" autocomplete="off" placeholder="305-555-0100  or  0100" '
     +   'style="width:100%;margin-top:12px;padding:14px;border-radius:12px;border:1px solid #2a3f6b;'
     +   'background:#0f1d3a;color:var(--ink);font-size:17px;-webkit-user-select:text;user-select:text">'
     + '<div id="lkout" style="margin-top:14px"></div>'
@@ -7122,7 +7132,7 @@ function fileBand(r){
    is ALREADY on the row; this assembles them IN JESSE'S ORDER and hands them off. mailto: keeps a
    human on the send button (a page can't verify delivery, so it must not pretend to send).
    Recipient is HARDCODED — this can never mail an owner. */
-var JESSE = 'celusa13@gmail.com';
+var JESSE = '';   /* the advisor's address is not on this page: sealed (p.s.advisor), set by _applySealedSender */
 function advisorBrief(r){
   var L = [];
   var money = function(v){ v = +v || 0;
@@ -7195,7 +7205,8 @@ function wireBrief(root, r){
     b.onclick = function(ev){
       ev.preventDefault();
       var body = advisorBrief(r);
-      var url = 'mailto:' + JESSE + '?subject=' + encodeURIComponent((r.a || r.c || 'lead') + ' — live call brief')
+      if(!JESSE) toast('Advisor address not set on this build - pick the recipient');
+      var url = 'mailto:' + (JESSE || '') + '?subject=' + encodeURIComponent((r.a || r.c || 'lead') + ' — live call brief')
               + '&body=' + encodeURIComponent(body);
       var a = document.createElement('a');
       a.href = url; a.style.display = 'none';

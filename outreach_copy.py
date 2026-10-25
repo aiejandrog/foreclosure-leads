@@ -26,21 +26,25 @@ SIGNER = 'Alex Gonzalez'
 PHONE = '(786) 631-1823'
 
 # The contact line under the name on a homeowner email, a cadence follow-up, and a letterhead
-# that shows an email. Not the From address — that is senders.json and the login key. The
-# personal Gmail was the default until 2026-10-16. A blank, or that retired address still
-# sitting in sender.json or a frozen cadence queue, prints the business inbox. Any other
+# that shows an email. Not the From address — that is senders.json and the login key. A
+# personal mailbox was the default until 2026-10-16. A blank, or that retired address still
+# sitting in sender.json or a frozen cadence queue, prints the business inbox. The retired value
+# lives in the untracked footprint.local.json (retired_emails), never in this file. Any other
 # saved address is the operator's own and is left alone.
 SIGNATURE_EMAIL = 'alejandro@bsgflorida.com'
-_RETIRED_SIGNATURE_EMAIL = 'agonzalez0311707@gmail.com'
+try:
+    import footprint as _footprint
+except ImportError:   # a sandbox that stages a fixed module list (tests do): no config means NO advisor
+    _footprint = None
 
 
 def signature_email(raw=''):
     """The address that belongs on the signature line.
 
-    Blank and the retired personal Gmail both become SIGNATURE_EMAIL. A different non-empty
+    Blank and any retired default (footprint.local.json) both become SIGNATURE_EMAIL. A different non-empty
     value is returned unchanged."""
     v = str(raw or '').strip()
-    if not v or v.lower() == _RETIRED_SIGNATURE_EMAIL:
+    if not v or v.lower() in (_footprint.retired()['email'] if _footprint else ()):
         return SIGNATURE_EMAIL
     return v
 

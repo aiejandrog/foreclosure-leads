@@ -164,6 +164,7 @@ if (typeof ctx.mergeNotes === 'function') {
 console.log('\n== paste an email: the board\'s email from the card, no bridge ==');
 T('the email block baked into the page', ctx.MAIL_OK === true && typeof ctx._mailBodies === 'function' && typeof ctx._subjLine === 'function');
 T('no build-time slot was left unfilled', !/"__ALEXMAIL_EN__"|"__OPTOUT_EN__"|__IDENT_EN__|__IDENT_ES__/.test(html));
+ctx._applySealedSender({ name: 'Alejandro Gonzalez', phone: '(786) 631-1823' });   // what a real unlock does with payload.s
 ctx.notes = {}; store.fcSender = JSON.stringify({ name: 'Alejandro Gonzalez', llc: 'Biscayne Solutions Group', phone: '(786) 631-1823', addr: '123 Main St, Miami, FL 33101' });
 ctx.cur = A; ctx.phIdx = 0; ctx.screenLead();
 T('the paste box now takes a number or an email', /NUMBER OR EMAIL ON WHITEPAGES/.test(app()) && /or email\. Pasted numbers are not checked/.test(app()));

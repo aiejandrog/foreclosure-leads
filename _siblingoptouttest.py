@@ -10,6 +10,7 @@ them refuses the send. It can only add a refusal. Also pins the morning planner'
 (a shared email or number puts the other case under the same opt-out) and its institution guard.
 """
 import json, os, pathlib, shutil, socket, subprocess, sys, tempfile, time, urllib.request, urllib.error
+os.environ.setdefault('DEALFLOW_ADVISOR_EMAILS', 'advisor@example.org')   # the advisor is local config now, not a literal
 import datetime as dt
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -79,7 +80,7 @@ def server():
     work = pathlib.Path(tempfile.mkdtemp(prefix='dfsib_'))
     proc = None
     try:
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'footprint.py'):
             shutil.copy(HERE / f, work / f)
         (work / 'sync_status.json').write_text(json.dumps({
             'date': dt.date.today().isoformat(), 'state': 'finished', 'ok': True,
@@ -160,7 +161,7 @@ def server():
         st, j = send('2099-000001-CA-01', test=True)
         rec('meta.test cannot carry an owner past the ledgered-case check', j.get('blocked') == 'test_not_operator', (st, j))
         rec('...and neither reached SMTP', len(smtp_calls()) == before, smtp_calls())
-        st, j = send('2099-000008-CA-01', to='celusa13@gmail.com', test=True, pcs=['2099-000001-CA-01'])
+        st, j = send('2099-000008-CA-01', to='advisor@example.org', test=True, pcs=['2099-000001-CA-01'])
         rec('advisor test sends (meta.test) skip the sibling check like the case check', j.get('ok') is True, (st, j))
     finally:
         if proc:

@@ -74,8 +74,8 @@ until the entity exists:</p>
 &mdash; "Miami Solutions Group LLC" &mdash; is registered to another Florida company
 (L22000200556), so every generator stripped the "LLC" rather than claim an entity we did not own.
 The company is now <b>Biscayne Solutions Group</b>, filed as a NEW LLC rather than a DBA under
-Tradervert (a DBA gives zero liability separation, so a complaint would reach the entity holding
-the CDL income). <b>Sunbiz does not yet show it</b> &mdash; new filings lag the public index by
+the operator's personal entity (a DBA gives zero liability separation, so a complaint would reach
+the entity holding his other income). <b>Sunbiz does not yet show it</b> &mdash; new filings lag the public index by
 about a business day &mdash; so the guardrail is still ON and the "LLC" does not print anywhere.
 It lifts by itself on the next refresh after the filing indexes. Note
 <b>BISCAYNE SOLUTIONS INC.</b> is an ACTIVE Florida company; confirm the Division accepted ours as
@@ -86,7 +86,7 @@ distinguishable (FS 605.0112) when the record appears.</div>
 <div class="step"><div class="when">Step 1 &middot; this week &middot; $125 &middot; 1 hour</div>
   <b>Pick a name and file the LLC on Sunbiz.</b> Check availability first &mdash; 14 candidates were
   already checked and every real word is crowded, so a coined name clears fastest (that is exactly why
-  "Tradervert" was available).
+  the personal entity's coined name was available).
   <div class="note">Sunbiz turnaround: 2&ndash;5 business days. Nothing else on this page starts until
   this is filed, so the cost of waiting a week is a week added to everything below.</div></div>
 

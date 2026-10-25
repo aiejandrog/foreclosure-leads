@@ -15,6 +15,7 @@ from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
 import paths as P
+import footprint as _footprint
 import equity_state as _es
 import lien_xcheck as _xc
 
@@ -1945,8 +1946,12 @@ def _js(v):
 
 
 _EMAIL_RE = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
-# Ours, and Jesse's. These are on the page deliberately (sender identity, the Brief Jesse button).
-_OWN_EMAILS = ('agonzalez0311707@gmail.com', 'celusa13@gmail.com', 'miamisolutionsgroup@gmail.com')
+# NOBODY is exempt. This used to be a tuple of "our own" addresses -- the operator's personal Gmail,
+# the advisor's Gmail, an old company Gmail -- subtracted from the count because they were "on the
+# page deliberately". That allow-list was the leak: it is how a personal mailbox reached a public
+# repo and stayed there. Operator identity is sealed inside the payload now (footprint.py), so the
+# page has no reason to carry any of these, and assert_clean() below refuses a consumer mailbox.
+_OWN_EMAILS = ()
 
 
 def assert_no_bulk_emails(html, where, limit=6):
@@ -2055,8 +2060,14 @@ def subst_build_facts(tpl, updated):
     import board_url as _burl
     name, _doc, _warn = _entity.display_llc()
     snd = _entity.sender()
+    import footprint as _fp
     out = (tpl.replace('__UPDATED__', updated)
               .replace('__ENTITY_VERIFIED__', 'true' if _entity.verified() else 'false')
+              # Operator identity is NEVER substituted into the page's plaintext: blank here, real
+              # values sealed in the payload (make_tracker) or written into the local twin only.
+              .replace('__SENDER_IDENTITY__', _fp.PUBLIC_IDENTITY_JS)
+              .replace('__SENDER_RETIRED__', _fp.PUBLIC_RETIRED_JS)
+              .replace('__ADVISOR_EMAIL__', _fp.PUBLIC_ADVISOR_JS)
               .replace('__ENTITY_LLC__', _js(name))
               .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
               .replace('__EMBLEM_W__', str(_brand.NATIVE_W))
@@ -4035,7 +4046,8 @@ def make_tracker(leads):
         # Guarded: if OneDrive has the Desktop HTML open/locked, don't let a PermissionError abort the whole
         # build (which would also skip the docs/index.html publish below). Warn and keep going.
         try:
-            open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
+            open(desktop,'w',encoding='utf-8').write(
+                _footprint.twin_identity(tpl).replace('__DATA__', _esc_json(slim)))
         except Exception as e:
             print(f"WARN: could not write Desktop copy ({e}) - is it open? continuing to publish docs/index.html")
 
@@ -4127,7 +4139,7 @@ def make_tracker(leads):
         # ship in the clear (see _side_rp above). _applyPayload() in the template unwraps both shapes,
         # so an older cached page holding a plain array still opens.
         _payload = json.dumps(_encrypt_multi(
-            json.dumps({'rows': slim, 'side': {'rp': _side_rp, 'dw': _side_dw}}), codes))
+            json.dumps({'rows': slim, 'side': dict({'rp': _side_rp, 'dw': _side_dw}, **_footprint.sealed_side())}), codes))
     else:
         # phsrc joins the strip for the same reason phdnc is here: with `phones` gone it describes
         # nothing, and "this lead had two household numbers" is still a fact about a real household
@@ -4219,6 +4231,7 @@ def make_tracker(leads):
     # 200 while doing nothing -- which is exactly how design-preview.html stayed dead unnoticed.
     assert_no_placeholders(_page, 'docs/index.html')
     assert_no_bulk_emails(_page, 'docs/index.html')
+    _footprint.assert_clean(_page, 'docs/index.html')
     open(docs,'w',encoding='utf-8').write(_page)
     # ---- CALL MODE (docs/call/) ----------------------------------------------------------------
     # The phone-first calling page. Wrapped in try/except ON PURPOSE: this is an additive artifact,

@@ -39,7 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 SECRETS = ['gmail.key', 'captcha.key', 'tracerfy.key', 'zerobounce.key', 'whitepages.key',
            'streetview.key', 'sheets_crm_webhook.url', 'tracerfy_mcp.url', 'site.codes',
-           'sender.json', 'batchdata.key', 'lob.key']
+           'sender.json', 'batchdata.key', 'lob.key', 'footprint.local.json']
 LEDGERS = ['skiptrace_results.json', 'worker_notes.json', 'mail_sent.json', 'optouts.json',
            'deads.json', 'bounced_emails.json', 'verified_emails.json', 'retrace_queue.json',
            'bd_budget.json', 'leads_final.json', 'lp_leads.json', 'broward_leads.json',

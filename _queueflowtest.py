@@ -5,6 +5,7 @@ _histWhy / _qvRestore / advance extracted by name from call_mode.py, and ledger_
 stamp_unknown / history_coverage from call_mode.py. Nothing here touches live notes or ledgers.
 """
 import io, json, os, subprocess, sys, tempfile
+os.environ.setdefault('DEALFLOW_ADVISOR_EMAILS', 'advisor@example.org')   # the advisor is local config now, not a literal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)

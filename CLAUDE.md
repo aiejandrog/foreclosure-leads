@@ -209,10 +209,38 @@ writing: a no-street letter to the owner's mailing address (`mailAddr`, #235) an
 Palm Beach rows before a bankruptcy search. Neither is built; draft wording is under project files
 `letters-mailing-address/`.
 
+## Personal identifiers never ship (`footprint.py`)
+
+The board (`docs/index.html`) and Call Mode (`docs/call/`) are mirrored to a **public** repo. Until
+2026-10-25 they carried, in plaintext and outside the encrypted payload: a home address (as a worked
+example in a comment), a personal Gmail (inside a regex), the advisor's Gmail (Brief Jesse), a
+personal phone number (in a comment) and the operator's name, phone and email (`SENDER_DEFAULTS`).
+The one email guard exempted "our own" addresses by name, so the allow-list *was* the leak.
+
+- **No real personal value is ever a literal** in tracked code, a template, a comment, a test, a
+  commit message or a PR. Examples in comments use invented values (`100 NW 1st Ave`,
+  `you@example.com`). A regex that matches a real address is the same leak as the address.
+- Real values live in two untracked files: `sender.json` (operator identity) and
+  `footprint.local.json` (advisor address, retired defaults, deny list; start from
+  `footprint.local.json.template`).
+- They reach a page only **inside the encrypted payload** (`side.sender`, `side.advisor`,
+  `side.retired`; Call Mode `p.s`) and are merged on unlock by `_applyPayload()` /
+  `_applySealedSender()`. What ships in the clear is blank. The Desktop twin, which is never
+  published, gets them written in by `footprint.twin_identity()`.
+- `footprint.assert_clean()` runs on the finished board and call pages and refuses to publish a
+  page with a consumer mailbox, or any value from `footprint.local.json`, in plain, regex-escaped
+  or oddly spaced form. `_OWN_EMAILS` is empty on purpose: do not add an exemption.
+- Every allow-list that used to hold the advisor's address (`send_server.ADVISOR_EMAILS`,
+  `mail_guard`, `call_mode.ADVISOR_EMAILS`, `deal_desk`) now reads `footprint.advisor_emails()` and
+  **fails closed**: no local file, nobody is an advisor, a test send reaches only the sending login.
+- Commits into the public site repo are pinned to a GitHub noreply identity (`publish_site.py`).
+  The engine repo is private and keeps the machine's own identity.
+- Test: `python _footprinttest.py`.
+
 ## Never commit
 
-Homeowner PII, `leads_*.json`, `worker_notes.json`, `optouts.json`, `mail_sent.json`, and any
-`*.key` / `*.pass` / `*.codes` / `*.url`. `.gitignore` blocks these by kind — if you add a script
+Homeowner PII, `leads_*.json`, `worker_notes.json`, `optouts.json`, `mail_sent.json`,
+`footprint.local.json`, and any `*.key` / `*.pass` / `*.codes` / `*.url`. `.gitignore` blocks these by kind — if you add a script
 that carries a name or number inline, gitignore it in the same commit.
 
 ## Publish gates — never bypass

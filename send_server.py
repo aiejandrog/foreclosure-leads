@@ -479,12 +479,16 @@ def _optout_set():
 # every recipient is one of ours: the advisor (Brief Jesse, tracker_template.html _JESSE; the same
 # set as call_mode.ADVISOR_EMAILS) or the sending login itself (self smoke-tests). A test flag on a
 # send to anyone else is refused outright, never downgraded and never sent.
-ADVISOR_EMAILS = frozenset({'celusa13@gmail.com'})
+try:
+    import footprint as _footprint
+except ImportError:   # a sandbox that stages a fixed module list (tests do): no config means NO advisor
+    _footprint = None
+ADVISOR_EMAILS = frozenset(_footprint.advisor_emails() if _footprint else ())   # untracked footprint.local.json; empty = nobody
 
 
 def _operator_recipients(addrs, login=None):
     """True when every address in addrs is the advisor or the sending login. Empty is False."""
-    own = set(ADVISOR_EMAILS)
+    own = set(ADVISOR_EMAILS) | (_footprint.advisor_emails() if _footprint else set())   # live: a local-config edit needs no restart
     if login:
         own.add(str(login).strip().lower())
     rc = [str(a).strip().lower() for a in addrs if str(a).strip()]
