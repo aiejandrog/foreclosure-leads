@@ -102,8 +102,13 @@ def _run(args, cwd, check=True, env=None):
 
 
 def _pages():
+    """Every built page to publish. Never a PDF: door books and call sheets are gitignored in the engine
+    and carry homeowner phones and addresses; they ride into the public repo only because this walks the
+    local docs/ folder, so they are excluded by kind, here, for the mirror, the guard and site_fresh."""
     for root, _dirs, files in os.walk(DOCS):
         for n in files:
+            if n.lower().endswith('.pdf'):
+                continue
             yield os.path.join(root, n)
 
 
@@ -175,7 +180,7 @@ def mirror(dry=False):
             rel = os.path.relpath(dst, SITE_DOCS)
             if rel in KEEP or os.path.basename(rel) in KEEP:
                 continue
-            if not os.path.exists(os.path.join(DOCS, rel)):
+            if rel.lower().endswith('.pdf') or not os.path.exists(os.path.join(DOCS, rel)):
                 if not dry:
                     os.remove(dst)
                 removed += 1

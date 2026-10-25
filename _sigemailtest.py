@@ -57,7 +57,7 @@ for label, snd in (
     ('outreach email, no email key', {}),
     ('outreach email, blank email', {'email': '   ', 'name': 'Alejandro Gonzalez'}),
     ('outreach email, retired default', {'name': 'Alejandro Gonzalez', 'email': RETIRED,
-                                       'phone': '(786) 631-1823'}),
+                                       'phone': '(305) 555-0100'}),
 ):
     no_gmail(label, OE._sig(snd))
 kept = OE._sig({'name': 'Alejandro Gonzalez', 'email': CUSTOM})
@@ -67,7 +67,7 @@ chk('that saved address is not rewritten to the business inbox', BUSINESS not in
 # --- cadence follow-ups ------------------------------------------------------
 lead = {'owner': 'Jane Doe', 'addr': '1 MAIN ST, MIAMI, FL 33101', 'auction': '2026-11-01'}
 for label, snd in (
-    ('cadence, no email', {'name': 'Alejandro Gonzalez', 'phone': '(786) 631-1823'}),
+    ('cadence, no email', {'name': 'Alejandro Gonzalez', 'phone': '(305) 555-0100'}),
     ('cadence, retired default', {'name': 'Alejandro Gonzalez', 'email': ' ' + RETIRED + ' '}),
 ):
     bodies = C.steps(lead, snd)

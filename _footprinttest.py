@@ -293,5 +293,26 @@ if os.path.exists(REAL):
 else:
     print('  (skipped: no footprint.local.json on this machine)')
 
+# ---- 7. PDFs never ride into the public site repo -----------------------------------------------
+print('=== site publish skips PDFs ===')
+import publish_site as PS   # noqa: E402
+_d, _s = os.path.join(TMP, 'docs'), os.path.join(TMP, 'site_docs')
+os.makedirs(os.path.join(_d, 'x'))
+os.makedirs(os.path.join(_s, 'x'))
+for _f in ('index.html', 'x/book.pdf', 'x/BOOK2.PDF'):
+    open(os.path.join(_d, _f), 'w').write('x')
+open(os.path.join(_s, 'x', 'book.pdf'), 'w').write('old')        # already published by an earlier mirror
+_old = (PS.DOCS, PS.SITE_DOCS)
+PS.DOCS, PS.SITE_DOCS = _d, _s
+try:
+    rel = sorted(os.path.relpath(p, _d).replace(os.sep, '/') for p in PS._pages())
+    rec('_pages() yields no PDF', rel == ['index.html'], rel)
+    PS.mirror()
+    left = sorted(os.path.relpath(os.path.join(r, n), _s).replace(os.sep, '/')
+                  for r, _x, fs in os.walk(_s) for n in fs)
+    rec('mirror copies the page and removes a PDF that is still in the local docs/', left == ['index.html'], left)
+finally:
+    PS.DOCS, PS.SITE_DOCS = _old
+
 print('\n%d passed, %d failed' % (len(ok), len(bad)))
 sys.exit(1 if bad else 0)

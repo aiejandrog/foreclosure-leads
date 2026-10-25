@@ -164,8 +164,8 @@ if (typeof ctx.mergeNotes === 'function') {
 console.log('\n== paste an email: the board\'s email from the card, no bridge ==');
 T('the email block baked into the page', ctx.MAIL_OK === true && typeof ctx._mailBodies === 'function' && typeof ctx._subjLine === 'function');
 T('no build-time slot was left unfilled', !/"__ALEXMAIL_EN__"|"__OPTOUT_EN__"|__IDENT_EN__|__IDENT_ES__/.test(html));
-ctx._applySealedSender({ name: 'Alejandro Gonzalez', phone: '(786) 631-1823' });   // what a real unlock does with payload.s
-ctx.notes = {}; store.fcSender = JSON.stringify({ name: 'Alejandro Gonzalez', llc: 'Biscayne Solutions Group', phone: '(786) 631-1823', addr: '123 Main St, Miami, FL 33101' });
+ctx._applySealedSender({ name: 'Alejandro Gonzalez', phone: '(305) 555-0100' });   // what a real unlock does with payload.s
+ctx.notes = {}; store.fcSender = JSON.stringify({ name: 'Alejandro Gonzalez', llc: 'Biscayne Solutions Group', phone: '(305) 555-0100', addr: '123 Main St, Miami, FL 33101' });
 ctx.cur = A; ctx.phIdx = 0; ctx.screenLead();
 T('the paste box now takes a number or an email', /NUMBER OR EMAIL ON WHITEPAGES/.test(app()) && /or email\. Pasted numbers are not checked/.test(app()));
 T('_mailAddr trims and lower-cases a pasted address and refuses junk', ctx._mailAddr('  Foo.Bar@Example.COM ') === 'foo.bar@example.com' && ctx._mailAddr('305-555-0001') === '' && ctx._mailAddr('nobody@') === '');
@@ -191,7 +191,7 @@ ctx.MAIL_PAUSE = pauseWas;
 
 let M = ctx.composeMail(A, 'owner@example.com', 'en');
 T('first touch, sale date: the plain subject the board and the nightly sender use', M.subj === 'Regarding your property at 1 TEST ST', M.subj);
-T('the body is Alejandro\'s cold copy with the date, the case number, the identity line and the sign-off', /Hi Test,/.test(M.body) && /auction on 10\/01\/2026/.test(M.body) && /I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney\./.test(M.body) && /Alejandro Gonzalez\nBiscayne Solutions Group\nPhone: \(786\) 631-1823\n123 Main St/.test(M.body), M.body.slice(0, 300));
+T('the body is Alejandro\'s cold copy with the date, the case number, the identity line and the sign-off', /Hi Test,/.test(M.body) && /auction on 10\/01\/2026/.test(M.body) && /I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney\./.test(M.body) && /Alejandro Gonzalez\nBiscayne Solutions Group\nPhone: \(305\) 555-0100\n123 Main St/.test(M.body), M.body.slice(0, 300));
 T('the approved opt-out line closes it', /If now's not a good time, just tell me and I won't reach out again\./.test(M.body));
 T('no token or placeholder survives into the body', !/\u0001|__[A-Z_]+__|\$\{/.test(M.body));
 M = ctx.composeMail(A, 'owner@example.com', 'es');
