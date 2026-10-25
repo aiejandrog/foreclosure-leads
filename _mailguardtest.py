@@ -240,7 +240,7 @@ rec('"unsubscribe" is already an opt-out to replies.is_stop_text()', _R.is_stop_
 # leaves a letter that reads completely normal and is missing the one line the statute requires.
 print('\nPOSTAL ADDRESS')
 rec('a populated sender.json without addr is refused',
-    _raises(lambda: G.require_sender_address({'name': 'Alex', 'phone': '(786) 631-1823'})))
+    _raises(lambda: G.require_sender_address({'name': 'Alex', 'phone': '(305) 555-0100'})))
 rec('...and with one is fine',
     G.require_sender_address({'name': 'Alex', 'addr': '1 Main St, Miami, FL 33101'}))
 rec('an EMPTY config is left alone (preview/dry-run path)', G.require_sender_address({}))
@@ -283,7 +283,7 @@ rec('UNSUB_URL empty renders the reply line, set renders the link',
 print('\nEVERY BODY')
 import outreach_email as _OE
 _SND = {'name': 'Alex Gonzalez', 'title': 'Acquisitions', 'llc': 'Biscayne Solutions Group LLC',
-        'phone': '(786) 631-1823', 'email': 'alejandro@bsgflorida.com',
+        'phone': '(305) 555-0100', 'email': 'alejandro@bsgflorida.com',
         'addr': '1 SE 2nd Ave Ste 2000, Miami, FL 33131', 'web': 'BSGflorida.com'}
 _LEADS = {
     'early': {'case': 'CACE-25-001', 'addr': '123 MAIN ST, MIAMI, FL- 33101', 'owners': 'Maria Lopez'},

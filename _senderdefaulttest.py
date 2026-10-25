@@ -1,5 +1,5 @@
 """One-shot: verify the prefilled outreach identity (Alejandro Gonzalez / the gated company name /
-(786) 631-1823), the stale-'Jose' migration, and that a custom saved name is left alone. Gitignored _*.py.
+(305) 555-0100), the stale-'Jose' migration, and that a custom saved name is left alone. Gitignored _*.py.
 
 The company name is NOT hardcoded here. Until 2026-08-26 it was, as 'Miami Solutions Group' -- a name
 that belongs to a different Florida company -- so this suite asserted the bug was correct and went
@@ -41,7 +41,7 @@ with sync_playwright() as p:
     ctx1 = b.new_context(viewport={'width':1500,'height':1000})
     pg1 = fresh_load(ctx1)
     s1 = pg1.evaluate("() => ({name: sender.name, llc: sender.llc, phone: sender.phone})")
-    rec('Fresh device prefills name/company/phone', s1['name']=='Alejandro Gonzalez' and s1['llc']==CO and s1['phone']=='(786) 631-1823', str(s1))
+    rec('Fresh device prefills name/company/phone', s1['name']=='Alejandro Gonzalez' and s1['llc']==CO and s1['phone']=='(305) 555-0100', str(s1))
 
     # the generated email actually carries all three (no [YOUR NAME]/[YOUR COMPANY]/[YOUR PHONE] left)
     # PICK A LEAD THAT CAN ACTUALLY PRODUCE AN EMAIL. This took the first lead with a case
@@ -94,7 +94,7 @@ with sync_playwright() as p:
     pg000.evaluate("() => localStorage.setItem('fcSender', JSON.stringify({name:'', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''}))")
     pg4 = fresh_load(ctx4)
     s4 = pg4.evaluate("() => ({name: sender.name, llc: sender.llc, phone: sender.phone}))".replace('}))','})'))
-    rec('Empty saved sender does NOT clobber the prefilled defaults', s4['name']=='Alejandro Gonzalez' and s4['llc']==CO and s4['phone']=='(786) 631-1823', str(s4))
+    rec('Empty saved sender does NOT clobber the prefilled defaults', s4['name']=='Alejandro Gonzalez' and s4['llc']==CO and s4['phone']=='(305) 555-0100', str(s4))
     # and the generated email has no placeholders in that state
     case4 = pg4.evaluate("() => { const r=DATA.find(x=>x.case && x.case.length>3); return r.case; }")
     with pg4.context.expect_page() as pop4:

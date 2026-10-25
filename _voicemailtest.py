@@ -65,7 +65,7 @@ else:
     js = ('var SCRIPT_ALL=' + json.dumps(script, ensure_ascii=False) + ';\n'
           'var VMEN=' + json.dumps(CM.VOICEMAIL_EN, ensure_ascii=False) + ', VMES='
           + json.dumps(CM.VOICEMAIL_ES, ensure_ascii=False) + ';\n'
-          "var SENDER={name:'Alejandro Gonzalez', phone:'(786) 631-1823', bsigner:''}, SEAT=null;\n"
+          "var SENDER={name:'Alejandro Gonzalez', phone:'(305) 555-0111', bsigner:''}, SEAT=null;\n"
           "var _SENDER_DEF={name:SENDER.name, phone:SENDER.phone};\n"
           "function esc(x){ return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }\n"
           "function firstName(r){ return (r&&r.f)||''; }\n"
@@ -92,7 +92,7 @@ SEAT = {n:2, i:1, w:'Carlos'}; out.wrongC = _vmVoiceWrong();
 SENDER.name = 'Carlos Gonzalez'; out.wrongCdefphone = _vmVoiceWrong();
 out.warnhtml = _vmWarnHtml();
 SENDER.phone = '(305) 555-0100'; out.wrongC2 = _vmVoiceWrong(); out.warnnone = _vmWarnHtml();
-SEAT = {n:2, i:0, w:'Alejandro'}; SENDER.name='Alejandro Gonzalez'; SENDER.phone='(786) 631-1823'; out.wrongA2 = _vmVoiceWrong();
+SEAT = {n:2, i:0, w:'Alejandro'}; SENDER.name='Alejandro Gonzalez'; SENDER.phone='(305) 555-0111'; out.wrongA2 = _vmVoiceWrong();
 out.noaddr_es = fillScript(VMES, {f:'', x: md(5), d: 5});
 /* 2026-10-15: a dateless row is baked d=0 (call_rows keeps it: 0 is not < 0). liveDays falls back
    to r.d when r.x is empty, so the voicemail said 'for today' with no sale on record. */
@@ -125,13 +125,13 @@ console.log(JSON.stringify(out));
               "court sale scheduled on your property at 123 NW 5 ST in about 12 days. We work with "
               "homeowners in this situation, and there may be more than one way to handle it, depending "
               "on what you want to do with the house. If you'd like to talk it through, call me at "
-              "(786) 631-1823. Again, that's (786) 631-1823. If now's not a good time, just let me know "
+              "(305) 555-0111. Again, that's (305) 555-0111. If now's not a good time, just let me know "
               "and I won't reach out again. Thank you.")
     EXP_ES = ("Hola Maria, le habla Alejandro Gonzalez de Biscayne Solutions Group. Según los registros "
               "públicos, hay una venta judicial programada para su propiedad en 123 NW 5 ST en unos 12 "
               "días. Trabajamos con propietarios en esta situación, y puede haber más de una manera de "
               "manejarlo, según lo que usted quiera hacer con la casa. Si desea conversarlo, llámeme al "
-              "(786) 631-1823. Repito, (786) 631-1823. Si ahora no es buen momento, solo dígamelo y no lo "
+              "(305) 555-0111. Repito, (305) 555-0111. Si ahora no es buen momento, solo dígamelo y no lo "
               "vuelvo a contactar. Gracias.")
     rec('EN rendered exactly', o.get('days_en') == EXP_EN, o.get('days_en'))
     rec('ES rendered exactly', o.get('days_es') == EXP_ES, o.get('days_es'))

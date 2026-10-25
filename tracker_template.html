@@ -12599,7 +12599,7 @@ function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||
 // what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
 // /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
 var _liveCap = null, _liveCapAt = 0;
-// Texting hold (text_hold.py, 2026-10-07 — was the Quo inbound scan; Quo is gone). HELD until a
+// Texting hold (text_hold.py, 2026-10-07; no inbound text scan runs any more). HELD until a
 // successful /health says text_hold is false: the bridge confirms the do-not-contact list is fresh
 // and runs the §362 check on every confirmed text. Bridge down is a hold.
 var TEXT_HOLD_DOWN = 'Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.';

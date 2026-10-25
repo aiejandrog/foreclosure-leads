@@ -36,7 +36,7 @@ with C._RunLock() as c:
     T('a 7h-old lock (killed run) is taken over', c.held is True)
 
 print('== steps() on a bad owner ==')
-sender = {'name': 'Alex', 'phone': '(786) 631-1823', 'email': 'a@example.com', 'llc': ''}
+sender = {'name': 'Alex', 'phone': '(305) 555-0100', 'email': 'a@example.com', 'llc': ''}
 for owner in ('', ' , ', None):
     try:
         out = C.steps({'owner': owner, 'addr': '1 MAIN ST, MIAMI, FL- 33101', 'auction': '2026-10-15'}, sender)

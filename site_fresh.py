@@ -20,10 +20,10 @@ WHAT IT DOES
   * runs publish_site.guard() against the engine docs/ about to be published: board encrypted, no
     phone-shaped number, no consumer mailbox, nothing from footprint.local.json outside the payload
   * stages README.md / .gitattributes / docs/.nojekyll from the site repo's HEAD, plus a byte-for-byte
-    copy of docs/ -- WITHOUT *.pdf unless --keep-pdfs. PDFs are not built pages: the door books that
-    reached the site repo are gitignored in the engine and ride in only because the mirror copies
-    whatever sits in the local docs/ folder (their phone numbers are never scanned: guard() reads
-    .html only). They are listed so you decide, not dropped silently.
+    copy of the publishable pages in docs/ -- never a *.pdf (publish_site._pages() skips them). The door
+    books that once reached the site repo are gitignored in the engine and rode in only because the
+    mirror used to copy whatever sat in the local docs/ folder (their phone numbers are never scanned:
+    guard() reads .html only).
   * makes ONE commit with the GitHub noreply identity (publish_site.SITE_GIT_*), in a throwaway repo
   * --push: `git push --force` that commit over main, then resets THIS machine's site clone to it so
     the next nightly publish is a fast-forward and not "PUSH REJECTED"
@@ -54,8 +54,8 @@ def git(args, cwd, env=None, check=True):
     return p
 
 
-def stage(keep_pdfs):
-    """Build the single-commit repo in a temp dir. Returns (dir, copied, excluded)."""
+def stage():
+    """Build the single-commit repo in a temp dir. Returns (dir, copied)."""
     tmp = tempfile.mkdtemp(prefix='site_fresh_')
     # root files and .nojekyll come from the site repo's own HEAD, never from the engine
     for rel in ('README.md', '.gitattributes', 'docs/.nojekyll'):
@@ -65,17 +65,14 @@ def stage(keep_pdfs):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst, 'w', encoding='utf-8', newline='') as f:
                 f.write(r.stdout)
-    copied, excluded = 0, []
+    copied = 0
     for src in PS._pages():
         rel = os.path.relpath(src, PS.DOCS)
-        if rel.lower().endswith('.pdf') and not keep_pdfs:
-            excluded.append(rel.replace(os.sep, '/'))
-            continue
         dst = os.path.join(tmp, 'docs', rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
         copied += 1
-    return tmp, copied, excluded
+    return tmp, copied
 
 
 def verify(tmp):
@@ -104,13 +101,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--push', action='store_true', help='force-push the fresh commit over main (destructive)')
     ap.add_argument('--yes', action='store_true', help='skip the interactive confirmation for --push')
-    ap.add_argument('--keep-pdfs', action='store_true', help='include *.pdf found under docs/')
     a = ap.parse_args()
 
     PS.tracked()
     PS.guard()
     old = git(['rev-list', '--count', 'HEAD'], PS.SITE).stdout.strip()
-    tmp, copied, excluded = stage(a.keep_pdfs)
+    tmp, copied = stage()
     try:
         git(['init', '-q'], tmp)
         git(['checkout', '-q', '-B', 'main'], tmp)
@@ -123,10 +119,6 @@ def main():
         print('site_fresh: staged ONE commit, %d file(s), %.1f MB, identity %s' %
               (len(tracked), size / 1048576.0, PS.SITE_GIT_EMAIL))
         print('site_fresh: the site repo currently has %s commit(s) on this clone' % old)
-        if excluded:
-            print('site_fresh: %d PDF(s) NOT carried over (not built pages; pass --keep-pdfs to include):' % len(excluded))
-            for e in excluded:
-                print('    ' + e)
         if not a.push:
             print('site_fresh: DRY RUN -- nothing pushed. Re-run with --push to rewrite the public history.')
             return 0
