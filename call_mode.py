@@ -3854,6 +3854,10 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,system-ui,sans-serif;
      padding:0 0 env(safe-area-inset-bottom)}
 .wrap{max-width:560px;margin:0 auto;padding:14px 14px 40px}
+/* DESKTOP WIDTH (2026-10-26). 560px is a phone column; on a 1920 monitor it left two thirds of
+   the window empty. From 1024px the column grows to 880px. Every row inside already wraps
+   (lane buttons are flex 1 1 82px, cards are fluid), so nothing new can overflow sideways. */
+@media (min-width:1024px){.wrap{max-width:880px}}
 /* COLUMN, not a row (2026-09-09). .top holds the lane buttons AND the status lines under them
    (hidden count, seat chip, build stamp, session strip) — every one of which is written as a
    full-width centered .supn line. As a flex ROW with space-between that only looked right while
