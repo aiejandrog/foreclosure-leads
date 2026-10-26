@@ -800,3 +800,4 @@ rf_status.json.tmp
 !_assertedquotatest.py
 # _navtest: dealflow_nav strip on the board header, Call Mode and the Morning Worker. Static checks, no network.
 !_navtest.py
+!_lpstatusbrowardtest.py
