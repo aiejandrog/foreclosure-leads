@@ -4001,6 +4001,15 @@ body.shopen .lkfab{display:none !important}
 .toast{position:fixed;left:0;right:0;bottom:0;z-index:60;pointer-events:none;background:var(--ok);color:#fff;padding:16px;
      font-weight:700;text-align:center;transform:translateY(100%);transition:transform .18s}
 .toast.on{transform:none}
+/* worker hand-off banner (workerWatch): slides down from the top, tap opens the Worker lane */
+.wkban{position:fixed;left:10px;right:10px;top:10px;z-index:61;display:none;align-items:center;gap:10px;
+     background:#0B2A17;color:#CFF3DC;border-radius:12px;padding:12px 14px;font-weight:700;
+     box-shadow:0 6px 24px rgba(0,0,0,.35);animation:wkin .45s cubic-bezier(.2,.9,.3,1.2)}
+.wkban.on{display:flex}
+.wkban .wkn{font-size:22px;animation:wkbob 1.2s ease-in-out infinite}
+.wkban button{margin-left:auto;background:#1f7a44;color:#fff;border:0;border-radius:8px;padding:9px 12px;font-weight:800}
+@keyframes wkin{0%{opacity:0;transform:translateY(-120%)}100%{opacity:1;transform:none}}
+@keyframes wkbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .toast.bad{background:var(--bad)}
 .gate{padding:28px 18px;max-width:420px;margin:0 auto}
 .gate input{width:100%;min-height:52px;font-size:17px;padding:0 12px;border-radius:10px;border:1px solid #2a3f6b;
@@ -4124,6 +4133,7 @@ __REFRESHSTATUS__
      when a text lands mid-call. Hidden until the payload is unlocked. -->
 <button id="lkbtn" class="lkfab" style="display:none" title="Identify an inbound number">&#128269; Who texted me?</button>
 <div class="toast" id="toast"></div>
+<div class="wkban" id="wkban"></div>
 <!-- z-index 45: above the sheet (40), below the pill (50). This line carries "logged to this phone
      only — team sync is off", which matters exactly when he is working the queue with the sheet up;
      in normal flow the open sheet covered it and the warning was unreadable at the moment it applied. -->
@@ -9326,6 +9336,7 @@ document.addEventListener('visibilitychange',function(){
        fresh teammate outcome sits in notes and changes nothing until the next full repaint. */
     try{ teamRecheck(); }catch(e){}
     try{ teamWatch(); }catch(e){}
+    try{ workerWatch(); }catch(e){}
     if(touched) return syncPush(); }).catch(function(){}); } }catch(e){}
 });
 /* THE BACKGROUND TICK. startTeamSync() already pulls every 45s, but nothing consumed the result
@@ -9337,6 +9348,39 @@ document.addEventListener('visibilitychange',function(){
    reading a card and tapping dial, and teamWatch's case+timestamp dedup means a tick with
    nothing new is silent. */
 setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); }catch(e){} }, 20000);
+/* MORNING WORKER HAND-OFFS ARRIVE LIVE (2026-10-26). The worker's "Send to Call Mode" button (and its
+   auto-run) stamps the synced .wq flag; startTeamSync pulls it within 45s. This tick says so: a banner
+   with how many of MY leads just arrived, and one tap to the Worker lane where they sort first. Only
+   leads on this page's own dial list that are not hard-suppressed count, so the number is what this
+   phone can actually call. Each case announces once per hand-off (keyed by its wq date). */
+var _WK_SEEN = 'fcWkSeen', _WKT = null;
+function workerWatch(){
+  if(!ROWS || !ROWS.length) return 0;
+  _WQSET = null;
+  var q = wqSet(), seen = {};
+  try{ seen = JSON.parse(localStorage.getItem(_WK_SEEN)||'{}') || {}; }catch(e){}
+  var mine = ROWS.filter(function(r){
+    if(!q[r.c] || !_seatMine(r)) return false;
+    try{ return !hardSuppressed(r); }catch(e){ return false; } });
+  var keep = {}, fresh = 0;
+  mine.forEach(function(r){ var w = (notes[r.c]||{}).wq || 'q'; keep[r.c] = w; if(seen[r.c] !== w) fresh++; });
+  try{ localStorage.setItem(_WK_SEEN, JSON.stringify(keep)); }catch(e){}
+  if(!fresh) return 0;
+  var b = $('wkban'); if(!b) return fresh;
+  b.innerHTML = '<span class="wkn">&#128229;</span><span>' + fresh + ' new from Morning Worker'
+    + '<br><span style="font-weight:500;opacity:.85;font-size:12px">' + mine.length + ' waiting on this phone</span></span>'
+    + '<button id="wkgo">Open</button>';
+  b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
+  $('wkgo').onclick = function(){
+    b.classList.remove('on');
+    if(SCREEN !== 'lead'){ toast('Log this call first, then open the Worker lane', {ms:3000}); return; }
+    lane = 'worker'; QVIEW = null; BLANE = null; i = 0; render();
+  };
+  clearTimeout(_WKT); _WKT = setTimeout(function(){ b.classList.remove('on'); }, 20000);
+  return fresh;
+}
+setInterval(function(){ try{ workerWatch(); }catch(e){ logErr(e, 'workerWatch'); } }, 20000);
+setTimeout(function(){ try{ workerWatch(); }catch(e){} }, 3000);
 boot();
 </script></body></html>
 """

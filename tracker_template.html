@@ -13570,6 +13570,17 @@ function genMorningWorker(lane, autostart){
     +   '.mwblocked h2{margin:0 0 9px;font:800 21px "Segoe UI",Arial,sans-serif;color:#8a1c1c}'
     +   '.mwblocked p{color:#5b6472;font-size:13.5px;line-height:1.6;margin:8px 0}'
     +   '#mwrfs{border-radius:8px;margin:0 0 10px}'
+    // SEND TO CALL MODE (2026-10-26): the button fills left to right as marks go out, a phone flies
+    // off its right edge, and the done state turns it green with the count.
+    +   '#mwsendcm{position:relative;overflow:hidden;display:block;width:100%;margin:0 0 8px;padding:11px 14px;border:0;border-radius:8px;background:#0B2A17;color:#CFF3DC;font:800 13.5px \'Segoe UI\',Arial,sans-serif;cursor:pointer}'
+    +   '#mwsendcm .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(80,200,120,.35);transition:width .25s ease}'
+    +   '#mwsendcm .lbl{position:relative}'
+    +   '#mwsendcm.done{background:#1f7a44;color:#fff}'
+    +   '#mwsendcm.busy{cursor:progress}'
+    +   '.mwfly{position:absolute;top:50%;left:12%;font-size:20px;transform:translateY(-50%);animation:mwfly .9s ease-in forwards;pointer-events:none}'
+    +   '@keyframes mwfly{0%{left:12%;opacity:1;transform:translateY(-50%) scale(1)}100%{left:96%;opacity:0;transform:translateY(-90%) scale(1.5)}}'
+    +   '#mwsendcmmsg{display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#eaf6ee;color:#14391f;font:600 12.5px/1.5 \'Segoe UI\',Arial;animation:mwin .35s ease-out}'
+    +   '@keyframes mwin{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:none}}'
     + '</style>'
     + '<div class="mw">'
     // The page strip (dealflow_nav.ITEMS order). This worker is a blob: tab of its own, so every
@@ -13630,6 +13641,13 @@ function genMorningWorker(lane, autostart){
     // CALL MODE, always reachable — it used to appear only after a whole auto-run finished, so the
     // one surface that starts real conversations was buried behind the email queue. A real anchor
     // (not window.open) so the popup blocker has no say.
+    // SEND TO CALL MODE (2026-10-26, Alex: "a button that says send over to call mode ... whenever
+    // you want"). Hands every phone-only lead the worker holds (Call list, text batch, and the
+    // phone-only cards in today's lanes) to Call Mode on demand, the same way an auto-run callq
+    // does: a mark to the board, which stamps the synced .wq note. No bridge needed; the phones
+    // pick it up on their next team sync and show it at the top of the Worker lane.
+    +   '<button type="button" id="mwsendcm"><span class="fill"></span><span class="lbl">&#128229; SEND TO CALL MODE</span></button>'
+    +   '<div id="mwsendcmmsg"></div>'
     +   '<a href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener" '
     +     'style="display:block;text-align:center;text-decoration:none;margin:0 0 14px;padding:11px 14px;'
     +     'border-radius:8px;background:#286c34;color:#fff;font:800 13.5px \'Segoe UI\',Arial,sans-serif">'
@@ -14052,6 +14070,43 @@ function genMorningWorker(lane, autostart){
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
     +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||"", pcs:(r.pcs||[])});'
     +     'renderTextQ();'
+    +   '}'
+    /* SEND TO CALL MODE. The set: the Call list, the text batch, and every card in today's lanes that
+       has a phone and no email this worker can send (no address, replied, 3 sent, or held by the
+       first-touch rule). One "callq" mark per case, with hand:1 so the board logs it as a hand-off.
+       Nothing is sent to anyone and nothing is retired; Call Mode's own gates (DNC, stay, opt-out,
+       seat) still decide what is dialable. Marks go out in small batches so the fill animates and a
+       board tab under background throttling is not handed a few hundred messages in one tick. */
+    +   'function _cmSet(){'
+    +     'var seen={}, out=[];'
+    +     'function add(c){ if(c && !seen[c]){ seen[c]=1; out.push(c); } }'
+    +     'CALLQ.forEach(function(x){ add(x.c); }); TEXTQ.forEach(function(x){ add(x.c); });'
+    +     'Object.keys(LANES||{}).forEach(function(k){ (LANES[k]||[]).forEach(function(r){'
+    +       'if(r && r.c && r.phones && r.phones.length && !r.mailTo) add(r.c); }); });'
+    +     'return out;'
+    +   '}'
+    +   'var CMBUSY=false;'
+    +   'function sendToCallMode(btn){'
+    +     'if(CMBUSY) return; var cs=_cmSet(), msg=document.getElementById("mwsendcmmsg"), lbl=btn.querySelector(".lbl"), fill=btn.querySelector(".fill");'
+    +     'if(!cs.length){ msg.style.display="block"; msg.textContent="Nothing to send yet: no phone-only leads in the Call list, the text batch or today\u2019s lanes."; return; }'
+    +     'CMBUSY=true; btn.classList.remove("done"); btn.classList.add("busy"); msg.style.display="none";'
+    +     'var n=0, ok=0, B=10;'
+    +     'function fly(){ var f=document.createElement("span"); f.className="mwfly"; f.textContent="\ud83d\udcde"; btn.appendChild(f); setTimeout(function(){ try{f.remove();}catch(e){} },950); }'
+    +     'function step(){'
+    +       'var end=Math.min(cs.length, n+B);'
+    +       'for(; n<end; n++){ if(post("callq", {qc:cs[n], hand:1})) ok++; }'
+    +       'fill.style.width=Math.round(100*n/cs.length)+"%"; lbl.textContent="Sending "+n+" of "+cs.length+"\u2026"; fly();'
+    +       'if(n<cs.length) return setTimeout(step, 120);'
+    +       'CMBUSY=false; btn.classList.remove("busy"); btn.classList.add("done");'
+    +       'lbl.textContent="\u2713 "+cs.length+" sent to Call Mode \u00b7 tap to send again";'
+    +       'setTimeout(function(){ fill.style.width="0"; }, 1200);'
+    +       'msg.style.display="block";'
+    +       'msg.innerHTML= ok===cs.length'
+    +         '? "<b>"+cs.length+" leads handed to Call Mode.</b> Each is on one phone only, yours or Carlos\u2019s, split by household; owners who replied are on yours. They sit at the top of the <b>Worker</b> lane within about a minute (open Call Mode or switch back to it to pull now). DNC numbers, stay holds and opt-outs are still kept off the dial list."'
+    +         ': "<b>"+ok+" of "+cs.length+" reached the board.</b> The board tab is closed or reloading, so "+(cs.length-ok)+" are buffered and go through when it is back. Keep the board tab open.";'
+    +       'addLog("callq","Call Mode",cs.length+" phone-only lead(s) sent to Call Mode by the button");'
+    +     '}'
+    +     'step();'
     +   '}'
     /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
        Reported 2026-09-20: "WHEN I PRESS ON THE CALL KEEP THE DETAILS OF THE PROPERTY THERE FOR ME
@@ -15096,6 +15151,8 @@ function genMorningWorker(lane, autostart){
     +   'if(cpl){ e.preventDefault(); return _copyDay(cpl); }'
     +   'var cpq=e.target.closest&&e.target.closest("#mwcopycallq");'
     +   'if(cpq){ e.preventDefault(); return _copyCallList(cpq); }'
+    +   'var scm=e.target.closest&&e.target.closest("#mwsendcm");'
+    +   'if(scm){ e.preventDefault(); return sendToCallMode(scm); }'
     +   'var qb=e.target.closest&&e.target.closest("[data-qbad]");'
     +   'if(qb){'
     +     'e.preventDefault();'
@@ -15667,7 +15724,9 @@ window.addEventListener('message', function(ev){
     // autoLog (so no 72h retire), no cap charge. The lead stays eligible until a real 'callout'
     // outcome retires it. Just record the honest breadcrumb.
     _docLog(r.case, 'worker-callq', 'en');
-    _wlog(r.case, 'callq', 'phone-only — queued to CALL (no email; nothing auto-sent, never capped)', true);
+    _wlog(r.case, 'callq', (d.extra && d.extra.hand)
+      ? 'sent to Call Mode from the worker (nothing sent to the owner)'
+      : 'phone-only — queued to CALL (no email; nothing auto-sent, never capped)', true);
     // DURABLE now. The in-tab Call list dies with the Blob document; this ledger does not.
     try {
       var _cq = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
