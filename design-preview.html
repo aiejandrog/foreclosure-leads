@@ -2277,7 +2277,7 @@ body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-26T18:34","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-10-26T18:39","good":null,"rows":[],"last":null,"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -13523,8 +13523,8 @@ function genMorningWorker(lane, autostart){
     +   '.mwnav .dfn{flex:0 0 auto;display:inline-flex;align-items:center;min-height:36px;padding:7px 13px;border-radius:9px;color:#3a4250;font:600 13px "Segoe UI",Arial,sans-serif;text-decoration:none;white-space:nowrap}'
     +   '.mwnav .dfn.on{background:#0B1730;color:#F4E5A7}'
     // the two sticky banners (bounce pause, marks not reaching the board) both pin at the top; on a
-    // short or zoomed window a 3-4 line pinned banner took a third of the screen, so there they scroll
-    +   '@media (max-height:700px){#mwbounceban,#mwmarkban{position:static!important}}'
+    // very short window (200% zoom, a phone sideways) a 3-4 line pinned banner took a third of the screen, so there they scroll
+    +   '@media (max-height:520px){#mwbounceban,#mwmarkban{position:static!important}}'
     +   '.mwnav .dfn:not(.on):hover{background:#fff}'
     +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0;flex:1 1 260px;min-width:0}'
     +   '.mwtitle .sub{display:block;font:600 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:2px;letter-spacing:.02em}'
@@ -14073,7 +14073,7 @@ function genMorningWorker(lane, autostart){
     +       'var q=MARKQ.splice(0,MARKQ.length);'
     +       'q.forEach(function(m){ try{window.opener.postMessage(m,"*"); _pendWatch(m,3);}catch(e){ MARKQ.push(m); } });'
     +       'var b=document.getElementById("mwmarkban");'
-    +       'if(b && !MARKQ.length){ b.remove(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
+    +       'if(b && !MARKQ.length){ b.remove(); _banStack(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
     +     '}'
     +   '},5000);'
     // AUTO-RUN CHANNELS. email is the only channel the machine can legally auto-send. A phone-only
