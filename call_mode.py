@@ -2331,12 +2331,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             'sx': ''.join({'wp': 'w', 'hh': 'h', 'nm': 'n'}.get(
                 phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc) else '', 't') for k in order),
             # TWILIO LINE CHECK per number, same index as `p`: 'a' active when last checked,
-            # 'u' unreachable when last checked (handset off; sorted last above), '-' never checked.
+            # 'u' unreachable when last checked (handset off; sorted last above), 'k' checked but Twilio
+            # answered unknown, '-' never checked.
             # Disconnected numbers never get here (dropped above). None when nothing on the lead
             # was checked, so the card can say "line not checked" instead of a row of dashes.
             'lv': (lambda s: s if s.strip('-') else None)(''.join(
-                ({'active': 'a', 'reachable': 'a', _PV.UNREACHABLE: 'u'}.get(_PV.line_status(keep[k], _lsv), '-')
-                 if _lsv else '-') for k in order)),
+                ((lambda v: '-' if not v else {'active': 'a', 'reachable': 'a', _PV.UNREACHABLE: 'u'}.get(v, 'k'))(
+                    _PV.line_status(keep[k], _lsv)) if _lsv else '-') for k in order)),
             # LINE TYPE per number, one character each: 'm' mobile, 'l' landline, '-' unknown.
             'pt': (lambda _t: (lambda s: s if s.strip('-') else None)(''.join(
                 ('m' if 'mob' in str(_t[keep_oi[k]] or '').lower() else
@@ -4161,7 +4162,12 @@ function _wpChip(r, k){
    of 220 when the board measured it). Only a lis pendens or a lead with no sale date can mean the
    case actually ended. True only for a calendared, not-yet-passed sale. */
 function _closedWithSale(r, st){
-  return /closed/i.test(String(st||'')) && !r.lp && !r.xf && r.x && typeof r.d==='number' && r.d>=0 && r.d<9999;
+  if(!/closed/i.test(String(st||'')) || r.lp || r.xf || !r.x) return false;
+  // The docket's own sale result outranks the calendar: a cancelled, held or set-aside sale is not "still set".
+  if(r.sr && r.sr.st && r.sr.st !== 'reset' && r.sr.st !== 'at_risk' && r.sr.st !== 'unknown') return false;
+  // Live day count (r.d is frozen at build), so a tab left open past the sale stops saying it.
+  var d = liveDays(r);
+  return typeof d==='number' && d>=0 && d<9999;
 }
 function _srcChip(r, k){
   var c = String(r.sx||'').charAt(k);
@@ -4176,6 +4182,7 @@ function _lineChip(r, k){
   var c = String(r.lv).charAt(k);
   if(c==='a') return '<span class="chip ok">line active (Twilio)</span>';
   if(c==='u') return '<span class="chip">unreachable at last check</span>';
+  if(c==='k') return '<span class="chip" style="opacity:.7">line checked, status unknown</span>';
   return '<span class="chip" style="opacity:.7">line not checked</span>';
 }
 function _dncRows(r){

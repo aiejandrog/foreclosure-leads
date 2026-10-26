@@ -72,14 +72,14 @@ rec('sx aligned with p: trace, Whitepages, untagged = trace, household',
     and r['sx'][r['p'].index(C)] == 't' and r['sx'][r['p'].index(D)] == 'h', (r['p'], r.get('sx')))
 import phone_validate as _PVt  # noqa: E402
 _orig_v = _PVt.verdicts
-_PVt.verdicts = lambda: {_PVt.phone_key(B): 'active', _PVt.phone_key(C): 'unreachable'}
+_PVt.verdicts = lambda: {_PVt.phone_key(B): 'active', _PVt.phone_key(C): 'unreachable', _PVt.phone_key(D): 'unknown'}
 try:
     r = row(lead('LV'))
 finally:
     _PVt.verdicts = _orig_v
 rec('lv aligned with p: active, unreachable, unchecked', r.get('lv') and len(r['lv']) == len(r['p'])
     and r['lv'][r['p'].index(B)] == 'a' and r['lv'][r['p'].index(C)] == 'u'
-    and r['lv'][r['p'].index(A)] == '-', (r['p'], r.get('lv')))
+    and r['lv'][r['p'].index(A)] == '-' and r['lv'][r['p'].index(D)] == 'k', (r['p'], r.get('lv')))
 _PVt.verdicts = lambda: {}
 try:
     r = row(lead('NOLV'))
@@ -260,7 +260,7 @@ pick = SRC[SRC.find('function _wireNumList('):SRC.find('/* WHICH LINE THE CALL G
 for bad in ('saveNotes', 'queueSync', 'dials.push', 'logOutcome', 'tel:', 'dialHref'):
     rec('picking a number never touches ' + bad, bad not in pick)
 
-FNS = ''.join(grab_fn(n) for n in ('esc', 'fmt', 'badSet', '_phSrcNote', '_wpChip', '_srcChip', '_lineChip', '_dncRows', '_numList', '_closedWithSale'))
+FNS = ''.join(grab_fn(n) for n in ('esc', 'fmt', 'badSet', '_phSrcNote', '_wpChip', '_srcChip', '_lineChip', '_dncRows', '_numList', '_closedWithSale', 'isBalloon', 'liveDays', '_heldNow'))
 HARNESS = FNS + r"""
 var phIdx = 1, notes = {X: {badph: ['3055550104'], dials: [{ph4: '0101', oc: 'noans'}, {ph4: '0101', oc: 'vm'}]}};
 var r = {c: 'X', p: ['3055550103', '3055550101', '3055550102', '3055550104'], pw: 'o--h', pt: 'mlmm', ps: ['', '', '', 'hh']};
@@ -270,12 +270,17 @@ var onlydnc = _numList({c: 'V', p: ['3055550101'], dn: [['3055550199', 'o', 'l']
 var none = _numList({c: 'Y', p: ['3055550101', '3055550102']});
 var one = _numList({c: 'Z', p: ['3055550101']});
 var ownerHH = {c:'R', p:['3055550101','3055550102'], pw:'o-', ps:['hh',''], pt:'mm'};
+var _fd = new Date(Date.now() + 30*864e5), _fut = (_fd.getMonth()+1) + '/' + _fd.getDate() + '/' + _fd.getFullYear();
 var srcd = _numList({c: 'S', p: ['3055550101', '3055550102', '3055550103'], sx: 'twh', lv: 'a-u'});
 var srcnolv = _numList({c: 'T', p: ['3055550101', '3055550102'], sx: 'tt'});
 console.log(JSON.stringify({h: h, none: none, one: one, withdnc: withdnc, onlydnc: onlydnc,
   ownerHH:_numList(ownerHH), ownerNote:_phSrcNote(ownerHH,0), srcd: srcd, srcnolv: srcnolv,
-  cw: [_closedWithSale({x: '11/01/2026', d: 20}, 'CLOSED'), _closedWithSale({x: '11/01/2026', d: 20}, 'OPEN'),
-       _closedWithSale({x: '2026-09-01', d: 9999, lp: 1}, 'CLOSED'), _closedWithSale({x: '2026-09-01', d: 9999, xf: 1}, 'CLOSED')]}));
+  cw: [_closedWithSale({x: _fut, d: 20}, 'CLOSED'), _closedWithSale({x: _fut, d: 20}, 'OPEN'),
+       _closedWithSale({x: '2026-09-01', d: 9999, lp: 1}, 'CLOSED'), _closedWithSale({x: '2026-09-01', d: 9999, xf: 1}, 'CLOSED'),
+       _closedWithSale({x: '01/05/2020', d: 20}, 'CLOSED'),
+       _closedWithSale({x: _fut, d: 20, sr: {st: 'cancelled'}}, 'CLOSED'),
+       _closedWithSale({x: _fut, d: 20, sr: {st: 'reset'}}, 'CLOSED')],
+  lvk: _numList({c: 'K', p: ['3055550101', '3055550102'], sx: 'tt', lv: 'ka'})}));
 """
 fd, path = tempfile.mkstemp(suffix='.js')
 os.close(fd)
@@ -318,7 +323,9 @@ rec('a page baked before sx/lv shows neither chip', 'skip trace<' not in h and '
     and 'line active' not in h and 'from the skip trace' not in h)
 
 rec('CLOSED with a calendared sale is labeled normal; LP / no-sale CLOSED is not',
-    out.get('cw') == [True, False, False, False], out.get('cw'))
+    out.get('cw') == [True, False, False, False, False, False, True], out.get('cw'))
+rec('a checked-but-unknown line is not called unchecked', 'line checked, status unknown' in out.get('lvk', '')
+    and 'line not checked' not in out.get('lvk', '') and '1 line-checked active' in out.get('lvk', ''))
 rec('both CLOSED displays use it', SRC.count('_closedWithSale(r, r.') == 2)
 
 wd = out.get('withdnc', '')
