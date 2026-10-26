@@ -3843,11 +3843,15 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
 /* WHO TEXTED ME — always reachable, thumb-sized, out of the way of the call buttons */
-.lkfab{position:fixed;right:10px;bottom:12px;z-index:52;min-height:44px;padding:11px 15px;
+/* bottom tracks the MEASURED collapsed sheet (--sheeth, set by _sheetPad). At a fixed 12px the
+   button sat on top of the sheet's peek line and the team-sync warning, covering the opener he
+   reads from. Hidden while the sheet is open, so it never sits on the script text. */
+.lkfab{position:fixed;right:10px;bottom:calc(var(--sheeth,0px) + 10px);z-index:52;min-height:44px;padding:11px 15px;
   border-radius:999px;border:1px solid #2a3f6b;background:#12213f;color:var(--ink);
   font:700 13px "Segoe UI",Arial,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45);
   touch-action:manipulation;-webkit-tap-highlight-color:rgba(198,161,75,.25)}
 .lkfab:active{background:#1b2c50}
+body.shopen .lkfab{display:none !important}
 /* THE FILE — the reference block on the outcome screen, up for the whole call */
 .refbox{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0f1d3a;border:1px solid #2a3f6b}
 .reft{width:100%;border-collapse:collapse;font-size:13px;line-height:1.5}
@@ -3924,7 +3928,9 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
    The sheet is always in the DOM, so "a newer list is ready" was permanently unreachable: the one
    control whose entire job is to rescue him from a stale list could never be pressed.
    It sits above the safe-area inset too, so it clears the sheet's grip rather than hiding behind it. */
-.pill{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:50;
+/* Above the collapsed sheet AND the Who-texted-me button (2026-10-26): at 12px it sat on the
+   sheet's peek, so the opener line was unreadable while the pill was up. */
+.pill{position:fixed;left:12px;right:12px;bottom:calc(var(--sheeth,0px) + 64px);z-index:50;
      background:var(--gold);color:#0b1730;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.5);
      min-height:52px;padding:14px;font-weight:700;text-align:center;display:none}
 .mut{color:var(--mut)}
@@ -4011,8 +4017,14 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 /* Clearance for the fixed bottom sheet, sized to the MEASURED collapsed height, not the guessed
    one: 1px border + 46px grip + ~75px of wrapped peek + safe-area inset ≈ 122-156px. It was 76px —
    and only on the lead screen — so the last button of every other screen sat under the sheet and a
-   tap opened the script instead. Every #app paint appends this now. */
-.sheetpad{height:calc(130px + env(safe-area-inset-bottom))}
+   tap opened the script instead. Every #app paint appends this now.
+   2026-10-26: the clearance moved to BODY, sized by _sheetPad from the real grip + peek height.
+   As a fixed 130px inside #app it sat ABOVE the #sync line, so scrolled to the bottom the "team sync
+   is off" warning and the Who-texted-me button landed on the sheet's peek and covered the opener;
+   and at 150-200% zoom the peek wraps taller than 130px. Body padding clears all three: the
+   collapsed sheet, the sync line and the button (+64px). .sheetpad stays as a zero-height marker. */
+.sheetpad{height:0}
+body{padding-bottom:calc(var(--sheeth,130px) + 64px + env(safe-area-inset-bottom))}
 /* Logging screens hide the sheet entirely (screenOutcome / afterCall add .hid; screenLead removes
    it). The script belongs to the CALL; while logging, the sheet was only a tap-thief. */
 .sheet.hid{display:none}
@@ -8790,6 +8802,38 @@ document.addEventListener('click', function(ev){
 var SCRIPT=__SCRIPT__, ciocIdx=-1, objIdx=-1;
 var SCRIPT_ALL=SCRIPT;   /* the full payload; renderSheet shadows SCRIPT per lane (homeowner vs SCRIPT_ALL.bal) */
 function sheetToggle(){ $('sheet').classList.toggle('open'); }
+/* --sheeth = the COLLAPSED sheet's height (grip + peek + border + safe-area), 0 while it is hidden.
+   Body padding, the Who-texted-me button and the new-list pill all stand on it, so nothing fixed
+   lands on the opener line at any width or zoom. body.shopen hides the button over an open sheet. */
+function _sheetPad(){
+  try{
+    var sh = document.getElementById('sheet'), h = 0;
+    if(sh && getComputedStyle(sh).display !== 'none'){
+      var g = document.getElementById('grip'), pk = document.getElementById('peek');
+      h = Math.ceil((g ? g.offsetHeight : 0) + (pk ? pk.offsetHeight : 0) + 1
+                    + (parseFloat(getComputedStyle(sh).paddingBottom) || 0));
+    }
+    var root = document.documentElement;
+    if(root.style.getPropertyValue('--sheeth') !== h + 'px') root.style.setProperty('--sheeth', h + 'px');
+    var open = !!(h && sh.classList.contains('open'));
+    document.body.classList.toggle('shopen', open);
+    /* The team-sync line rides INSIDE the open sheet, under the grip. At z-45 in page flow it
+       painted across the open script; below the sheet it would be hidden exactly while he works
+       with the script up. Collapsed, it goes back above the pill in normal flow. */
+    var sy = document.getElementById('sync');
+    if(sy && open && sy.parentNode !== sh) sh.insertBefore(sy, document.getElementById('peek'));
+    else if(sy && !open && sy.parentNode === sh) document.body.insertBefore(sy, document.getElementById('pill'));
+  }catch(e){}
+}
+(function(){
+  try{
+    var sh = document.getElementById('sheet');
+    if(window.ResizeObserver){ var ro = new ResizeObserver(_sheetPad); ro.observe(sh); ro.observe(document.getElementById('peek')); }
+    if(window.MutationObserver) new MutationObserver(_sheetPad).observe(sh, {attributes:true, attributeFilter:['class']});
+    window.addEventListener('resize', _sheetPad);
+    _sheetPad();
+  }catch(e){}
+})();
 
 /* ONE LANGUAGE AT A TIME. Every script block used to render EN and ES stacked — on the call screen
    that stacked the opener twice, the close cue, the drawer peek and (on voicemail) two more blocks:
