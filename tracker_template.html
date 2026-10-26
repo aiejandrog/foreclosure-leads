@@ -13702,6 +13702,8 @@ function genMorningWorker(lane, autostart){
     + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
+    // the "Find a number" panel's leads (no phone, no email), by case only, for Send to Call Mode
+    +   'var LKCASES=' + JSON.stringify((function(){ try{ return _workerLookupRows().map(function(r){ return r.case; }); }catch(e){ return []; } })()) + ';'
     +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
@@ -14083,6 +14085,9 @@ function genMorningWorker(lane, autostart){
     +     'CALLQ.forEach(function(x){ add(x.c); }); TEXTQ.forEach(function(x){ add(x.c); });'
     +     'Object.keys(LANES||{}).forEach(function(k){ (LANES[k]||[]).forEach(function(r){'
     +       'if(r && r.c && r.phones && r.phones.length && !r.mailTo) add(r.c); }); });'
+    // no phone, no email: these land on Call Mode's "Find a number" list (Whitepages, type the number
+    // or address), Morning Worker picks first. Counted apart so the message says which is which.
+    +     'var nph=out.length; (typeof LKCASES!=="undefined"?LKCASES:[]).forEach(add); out.nph=nph;'
     +     'return out;'
     +   '}'
     +   'var CMBUSY=false;'
@@ -14102,7 +14107,7 @@ function genMorningWorker(lane, autostart){
     +       'setTimeout(function(){ fill.style.width="0"; }, 1200);'
     +       'msg.style.display="block";'
     +       'msg.innerHTML= ok===cs.length'
-    +         '? "<b>"+cs.length+" leads handed to Call Mode.</b> Each is on one phone only, yours or Carlos\u2019s, split by household; owners who replied are on yours. They sit at the top of the <b>Worker</b> lane within about a minute (open Call Mode or switch back to it to pull now). DNC numbers, stay holds and opt-outs are still kept off the dial list."'
+    +         '? "<b>"+cs.length+" leads handed to Call Mode</b> ("+(cs.nph||0)+" to call, "+(cs.length-(cs.nph||0))+" to look up on Whitepages under <b>Find a number</b>). Each is on one phone only, yours or Carlos\u2019s, split by household; owners who replied are on yours. They sit at the top of the <b>Worker</b> lane within about a minute (open Call Mode or switch back to it to pull now). DNC numbers, stay holds and opt-outs are still kept off the dial list."'
     +         ': "<b>"+ok+" of "+cs.length+" reached the board.</b> The board tab is closed or reloading, so "+(cs.length-ok)+" are buffered and go through when it is back. Keep the board tab open.";'
     +       'addLog("callq","Call Mode",cs.length+" phone-only lead(s) sent to Call Mode by the button");'
     +     '}'

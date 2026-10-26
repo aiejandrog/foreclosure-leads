@@ -180,6 +180,8 @@ function _seatMine(r){ return r.c !== 'OTHER'; }
 function supReason(r, k){ return {k: r.c === 'DNC' ? 'hard' : ''}; }
 function _clmOwner(c){ return c === 'CLAIMED' ? 'Carlos' : ''; }
 function render(){} function toast(){}
+var LKR = [];
+function lkRows(){ return LKR; }
 var ROWS = [{c:'A'}, {c:'B'}, {c:'OTHER'}, {c:'DNC'}, {c:'PLAIN'}, {c:'CLAIMED'}];
 var notes = {A:{wq:'2026-10-26'}, B:{wq:'2026-10-26'}, OTHER:{wq:'2026-10-26'}, DNC:{wq:'2026-10-26'}, CLAIMED:{wq:'2026-10-26'}};
 var out = {};
@@ -187,6 +189,10 @@ out.first = workerWatch(); out.on = BAN.classList.on; out.txt = BAN.innerHTML;
 out.again = workerWatch();
 notes.B.wq = '2026-10-27'; out.requeue = workerWatch();
 GO.onclick(); out.lane = lane; out.qv = QVIEW;
+// a no-number lead the worker sent: counted as "to look up", and Open goes to Find a number when
+// nothing is waiting to dial
+LKR = [{c:'LK1'}]; notes.LK1 = {wq:'2026-10-27'}; ROWS = [{c:'PLAIN'}];
+out.lk = workerWatch(); out.lktxt = BAN.innerHTML; lane = 'soon'; GO.onclick(); out.blane = BLANE; out.lane2 = lane;
 console.log(JSON.stringify(out));
 '''
 rc, so, se = node(H2)
@@ -197,12 +203,36 @@ rec('banner says how many arrived', '2 new from Morning Worker' in w.get('txt', 
 rec('each hand-off announces once', w.get('again') == 0, w)
 rec('a lead handed off again on a later day announces again', w.get('requeue') == 1, w)
 rec('Open goes to the Worker lane with every view', w.get('lane') == 'worker' and w.get('qv') is None, w)
+rec('a no-number worker lead is announced as one to look up', w.get('lk') == 1 and '1 to look up' in w.get('lktxt', ''), w)
+rec('with nothing to dial, Open goes to Find a number', w.get('blane') == '__lk' and w.get('lane2') == 'soon', w)
 SRCT = io.open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
 _hb = SRCT[SRCT.find('if(d.extra && d.extra.hand){'):SRCT.find('_docLog(r.case, \'worker-callq\'')]
 rec('a button hand-off only stamps .wq: no fcCallQueue (tomorrow\'s text batch), no per-lead log',
     '.wq = _today()' in _hb and 'fcCallQueue' not in _hb.split('return;')[0].split('*/')[-1] and 'return;' in _hb)
 rec('the tick runs on a timer and after the return-to-page pull',
     "workerWatch(); }catch(e){ logErr(e, 'workerWatch'); } }, 20000)" in SRC and "try{ workerWatch(); }catch(e){}\n    if(touched)" in SRC)
+
+print('\nFIND A NUMBER: ORDER AND EMAIL')
+H3 = 'var _WQSET=null;\n' + ''.join(grab_fn(n) for n in ('workerQ', 'wqSet', '_filedMs', '_lkGroup', 'lkSorted')) + r'''
+var localStorage = {getItem:function(){ return null; }};
+function pad(n){ return (n<10?'0':'')+n; }
+function mdy(daysAgo){ var t=new Date(Date.now()-daysAgo*86400000); return (t.getMonth()+1)+'/'+t.getDate()+'/'+t.getFullYear(); }
+var notes = {W:{wq:'2026-10-26'}};
+var LK = [{c:'OLDLP', lp:1, x:mdy(60)}, {c:'S30', x:'12/31/2099', d:30}, {c:'NEW2', lp:1, x:mdy(2)},
+          {c:'S5', x:'12/31/2099', d:5}, {c:'W', lp:1, x:mdy(90)}, {c:'NEW6', lp:1, x:mdy(6)}];
+function lkRows(){ return LK; }
+console.log(JSON.stringify(lkSorted().map(function(r){ return r.c; })));
+'''
+rc, so, se = node(H3)
+rec('lookup harness runs', rc == 0, se)
+order = json.loads(so.strip().splitlines()[-1]) if rc == 0 else []
+rec('Find a number: worker picks, then filings from the last 14 days newest first, then soonest sale, then the rest',
+    order == ['W', 'NEW2', 'NEW6', 'S5', 'S30', 'OLDLP'], order)
+rec('the lookup box takes an email too and routes it to the same gated composer',
+    "if(/@/.test(v)){" in SRC and "screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });" in SRC
+    and "var v = mailCheck(r, raw);" in SRC)
+rec('each seat page prints its own Find a number count (a count, no lead)',
+    "LOOKUPN=__LOOKUPN__" in SRC and "lookupn=_lk_mine" in SRC)
 
 print('\n%s (%d failed)' % ('ALL PASS' if not FAILS else 'FAILED', len(FAILS)))
 sys.exit(1 if FAILS else 0)
