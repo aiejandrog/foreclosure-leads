@@ -133,7 +133,8 @@ class EmailVariantTests(unittest.TestCase):
         # template, so this check -- the one guarding the Spanish dated email's ${sigES} ending --
         # errored out on the laptop and only ever ran in CI.
         source = Path(__file__).with_name('tracker_template.html').read_text(encoding='utf-8')
-        block = source.split('  const bodyES = td', 1)[1].split(';\n', 1)[0]
+        # the dated bodies live in _mailBodies() since 2026-10-24 (shared with Call Mode), as `var`
+        block = source.split('  var bodyES = td', 1)[1].split(';\n', 1)[0]
         self.assertRegex(block, r'\$\{sigES\}\\n\\n`$')
 
     def test_spanish_meaning_drift_is_rejected(self):

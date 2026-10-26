@@ -180,6 +180,51 @@ def main():
         r = render(ok, '2026-10-12T10:00')
         check('clean morning: green', r['h'] == '&#10003; Refreshed today 5:30 AM' and '#E7F4EA' in r['c'], r['h'])
 
+    if node:
+        def live(s, now_iso, j):
+            js = ("var _N=new Date(%s).getTime();var _D=Date;Date=function(a){return arguments.length?new _D(a):new _D(_N);};"
+                  "Date.now=function(){return _N;};Date.prototype=_D.prototype;"
+                  "var W={document:{hidden:false},setInterval:function(){},setTimeout:function(){return 1;},clearTimeout:function(){},"
+                  "fetch:function(u){W.url=u;return Promise.resolve({json:function(){return %s;}});}};"
+                  "var el={style:{},innerHTML:'',ownerDocument:{defaultView:W}};"
+                  "var document={getElementById:function(){return el;}};var window=W;"
+                  % (json.dumps(now_iso), json.dumps(j)))
+            src = R.page_html(s)
+            src = src[src.index('<script>') + 8:src.rindex('</script>')]
+            js += src + ";setTimeout(function(){console.log(JSON.stringify({h:el.innerHTML,c:el.style.cssText,u:W.url,f:typeof W.__dfRfs}));},20);"
+            out = subprocess.run([node, '-e', js], capture_output=True, text=True, timeout=30)
+            return json.loads(out.stdout) if out.returncode == 0 else {'h': 'ERR ' + out.stderr, 'c': '', 'u': '', 'f': ''}
+
+        base = {'baked': '2026-10-24T05:41', 'good': '2026-10-24T05:30', 'rows': [],
+                'last': {'at': '2026-10-24T05:30', 'rc': None, 'why': None}, 'earlier': None}
+        run = {'ok': True, 'state': 'running', 'running': True, 'started': '2026-10-24T11:36:02', 'elapsed': 4320,
+               'eta': 3900, 'pct': 0.52, 'n': 57, 'done': 22,
+               'step': {'i': 23, 'key': '3b', 'tag': '3b/5', 'label': 'Skip-tracing <owner> phones', 'secs': 260}}
+        r = live(base, '2026-10-24T12:48', run)
+        check('live: asks the local bridge', r['u'] == 'http://127.0.0.1:8823/refresh', r['u'])
+        check('live: a running refresh paints step, time in, time left and a bar',
+              'Refresh running' in r['h'] and 'step 23 of 57' in r['h'] and '1h12m in' in r['h']
+              and 'about 1h05m left' in r['h'] and 'width:52%' in r['h'] and '#E8F0FE' in r['c'], r['h'])
+        check('live: the step label is escaped', '&lt;owner&gt;' in r['h'] and '<owner>' not in r['h'], r['h'])
+        check('live: the function is shared for the Morning Worker', r['f'] == 'function', r['f'])
+        fin = {'ok': True, 'state': 'ended', 'running': False, 'started': '2026-10-24T11:36:02',
+               'ended': '2026-10-24T14:48:00', 'elapsed': 11518, 'rc': 0, 'why': 'ok', 'n': 57, 'done': 57}
+        r = live(base, '2026-10-24T15:00', fin)
+        check('live: a newer finished run offers a reload', 'Refresh finished today 2:48 PM (took 3h11m)' in r['h']
+              and 'Reload' in r['h'], r['h'])
+        mine = dict(base, baked='2026-10-24T13:10', last={'at': '2026-10-24T11:36', 'rc': None, 'why': None})
+        r = live(mine, '2026-10-24T15:00', fin)
+        check('live: no reload offered on the page that run built', 'Reload' not in r['h']
+              and 'Refreshed today 11:36 AM' in r['h'], r['h'])
+        r = live(base, '2026-10-24T15:00', dict(fin, rc=6, why='publish guard blocked it'))
+        check('live: a blocked publish says the live site kept the last good board',
+              'did not publish: publish guard blocked it' in r['h'] and '#FBF1DC' in r['c'], r['h'])
+        r = live(base, '2026-10-24T15:00', {'ok': True, 'state': 'stale', 'running': False,
+                                             'started': '2026-10-24T11:36:02', 'n': 57})
+        check('live: a run that stopped without finishing says so', 'stopped without finishing' in r['h'], r['h'])
+        r = live(base, '2026-10-24T15:00', {'ok': False})
+        check('live: a bridge that cannot answer keeps the baked line', r['h'] == '&#10003; Refreshed today 5:30 AM', r['h'])
+
     print('\n%d check(s) failed' % len(FAILS) if FAILS else '\nall passed')
     return 1 if FAILS else 0
 

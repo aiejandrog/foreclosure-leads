@@ -124,6 +124,13 @@ if errorlevel 1 (
   echo     code already on disk. Anything pushed from another machine lands on the NEXT run.>> "%LOG%"
 )
 
+rem  LIVE PROGRESS WINDOW (2026-10-24). This window prints one line per step; the window opened
+rem  here redraws every two seconds with every step, its time, an estimate of time left and the
+rem  newest log lines, and closes itself ten minutes after the run ends. It only reads, so closing
+rem  it never touches the run, and it will not open a second copy. DEALFLOW_NO_WATCH=1 turns it
+rem  off. Opened here, below the [0/4] self-pull, for the byte-offset reason in refresh_progress.py.
+if not defined DEALFLOW_NO_WATCH start "DealFlow refresh progress" python -u refresh_progress.py watch --until-done
+python -u refresh_progress.py step 1
 echo [1/4] Pulling new auction leads (scrape + enrich)...
 python -u foreclosure_leads.py >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -141,6 +148,7 @@ if errorlevel 1 (
 
 rem  Publish the fresh leads NOW, before the slower cases/records/phones steps -- so even if a
 rem  later step is slow or fails, the newest leads are already live on the site.
+python -u refresh_progress.py step 1b
 echo [1b/5] Publishing fresh leads immediately...
 rem  GUARDED 2026-08-19: same corrupt-page + enrichment gate as the final publish. This early push
 rem  is the exact block whose autostash pull can write conflict markers into docs/index.html (the
@@ -202,12 +210,14 @@ git push origin main >> "%LOG%" 2>&1
 rem  Re-scrape the OTHER counties too (Miami-Dade was done above by foreclosure_leads.py). county_leads.py
 rem  has its own thin-scrape guard, so a blocked county keeps its last good file. The fresh county leads
 rem  land in the final rebuild (step 4) which re-merges every *_leads.json.
+python -u refresh_progress.py step 1c
 echo [1c/5] Refreshing Broward + Palm Beach auctions (statewide cadastral enrich)...
 python -u county_leads.py --county broward >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! Broward scrape thin/failed - kept last good Broward file.>> "%LOG%"
 python -u county_leads.py --county "palm beach" >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! Palm Beach scrape thin/failed - kept last good Palm Beach file.>> "%LOG%"
 
+python -u refresh_progress.py step 1d
 echo [1d/5] Resolving parcel-less auction stubs (defendant name -^> appraiser roll, corroborated)...
 rem  'parcel not linked' rows are auction items that publish NOTHING (no address, no folio). The
 rem  court knows the defendant and the appraiser knows what they own; stub_resolve ties the two,
@@ -215,6 +225,7 @@ rem  caches case-^>folio in stub_folios.json, and the scrape hooks keep it resol
 rem  --limit caps Broward clerk lookups (2Captcha, ~$0.003/case) per run.
 python -u stub_resolve.py --sweep --limit 25 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 1e
 echo [1e/5] Broward Official Records daily index - off unless DEALFLOW_BROWARD_OR_FEED=1...
 rem  Free SFTP on BCFTP.Broward.org as the public user crpublic. The password is
 rem  BROWARD_SFTP_PASSWORD, never this file. broward_or_fetch.py saves new daily
@@ -228,16 +239,20 @@ if errorlevel 1 echo     ^!^! Broward OR fetch errored - refresh continues. See 
 python -u broward_or_feed.py >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! Broward OR feed errored - refresh continues. See leads-run.log.>> "%LOG%"
 
+python -u refresh_progress.py step 2
 echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
 python -u gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python -u gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 2c
 echo [2c/5] Deep per-parcel tax links for Broward leads (county-taxes.net account URLs, new only)...
 python -u gen_tax_links.py --limit 60 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 2d
 echo [2d/5] Radius comps for Broward + Palm Beach leads (cadastral recent sales, new only)...
 python -u comps.py --limit 80 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 2a
 echo [2a/5] Clerk Official Records daily file - off unless DEALFLOW_OR_DAILY=1...
 rem  Paid Miami-Dade Clerk CDS "Records" folder. or_daily_file.py signs in with
 rem  CLERKDEV_USERNAME / CLERKDEV_PASSWORD, downloads new dly_records_MMDDYYYY.zip
@@ -253,6 +268,7 @@ rem  warns in the log; healthcheck repeats that warning.
 python -u or_daily_file.py >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! OR daily file errored - gap only, refresh continues. See leads-run.log.>> "%LOG%"
 
+python -u refresh_progress.py step 2b
 echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (2Captcha solves the Turnstile wall)...
 rem  Miami-Dade Official Records sits behind Cloudflare Turnstile. captcha_solver.py -> 2Captcha mints a
 rem  valid token (~$0.003/solve) so records_liens.py reads the chain with plain requests, no browser.
@@ -297,6 +313,7 @@ rem  no CAPTCHA_KEY repo secret. Until that secret exists, this laptop line is t
 rem  moving Palm Beach coverage.
 if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 2e
 echo [2e/5] Title discovery + owner tokens - off unless DEALFLOW_TITLE=1
 rem  F2 (2026-09-26). run_title_chain.py runs miami_title_discovery for up to 3 near-sale Miami cases
 rem  a night (FREE: cached tokens, Camoufox mints, local OCR - never vision, never a paid solve) and,
@@ -306,6 +323,7 @@ rem  paid-reads cap). Without DEALFLOW_TITLE=1 it prints one line and exits. Nev
 rem  to DEALFLOW_DIR\title_discovery, outside the repo.
 python -u run_title_chain.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 2f
 echo [2f/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
 rem  run_documents.py's documented nightly line. Setting DEALFLOW_DOCS=1 is the decision to spend up to
 rem  $1.00 a night on vision reads and up to $1.00 a night on owner-search tokens: at most 10 mints,
@@ -324,6 +342,7 @@ rem  --limit 10: the $1.00 vision cap is split evenly across the cases picked, a
 rem  $0.10, enough for one three-page judgment at the measured $0.0675. 25 left each $0.04.
 if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 --token-budget 10 --captcha-max-spend 1.00 --captcha-state captcha/run_documents-{day}.json --optional-tokens --max-minutes 20 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 2c-lp
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
 rem  file most foreclosures over a rolling window, keep the LIS PENDENS, dedupe -> the owner the DAY
@@ -361,15 +380,18 @@ if not "%LPEXIT%"=="0" echo     ^!^! LP CHAIN exit %LPEXIT% - see leads-run.log.
 if not "%LPEXIT%"=="0" if "%RUNEXIT%"=="0" set "RUNEXIT=7"
 
 
+python -u refresh_progress.py step 2d-geo
 echo [2d/5] Geocoding new leads (keyless US Census) -> lat/lng for the origin-anchored door route...
 python -u geo_enrich.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3
 echo [3/5] Humans behind LLC owners (Sunbiz officers + agent; FREE) - MUST run before skip-trace...
 rem  Resolve the person behind every LLC FIRST, so the skip-trace step below can trace that officer
 rem  (skiptrace.py reads llc_officers.json). Free Sunbiz curl - always runs, even with no phone key,
 rem  so a company-owned lead still ships with a human name + People/CyberBG links.
 python -u llc_officers.py --limit 60 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3b
 echo [3b/5] Skip-tracing owner + LLC-officer phones (ALL tiers, capped so a run can't overspend)...
 if exist tracerfy.key goto :phones
 rem BatchData RETIRED 2026-08-16: the provider was exited 08-11 (see BATCHDATA-EXIT.md) but this
@@ -423,18 +445,23 @@ rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dia
 rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
 rem  After :rebuild so it runs with or without tracerfy.key.
 python -u phone_validate.py >> "%LOG%" 2>&1
+python -u refresh_progress.py step 3b-photos
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...
 python -u property_photos.py --zillow >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3c
 echo [3c/5] Property types (BCPA + PBCPAO use codes, cached per folio)...
 python -u property_types.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3d
 echo [3d/5] Zillow listing status (LISTED/PENDING/SOLD/RENTAL/OFF-MKT + Zestimate, 7-day cache)...
 python -u listing_status.py --limit 120 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3d2
 echo [3d2/5] Redfin Estimate (advisory AVM cross-check, 21-day cache, headless browser)...
 python -u redfin_value.py --limit 100 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3e
 echo [3e/5] Sale-history survival counts (MD docket, 7-day cache - the STALLER signal)...
 rem  --limit 150 -> 200 (2026-09-26). sale_history.py now also reads the ~350 Miami-Dade LIS PENDENS
 rem  cases (the board's Fresh-filings lane). Until now not one of them had a stay read, so the send
@@ -445,6 +472,7 @@ rem  three nights, ahead of re-reads of distant auction cases. Free public clerk
 rem  two small requests and a 0.25s pause per case, no captcha, no spend.
 python -u sale_history.py --limit 200 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3f
 echo [3f/5] Ownership flip gate (live appraiser owner vs defendant; budget-capped)...
 rem  ADDED 2026-08-19: ownership_scan.py was called by NOTHING - not this bat, not refresh.yml -
 rem  so the title-flip truth on the board was only as fresh as the last time a human remembered
@@ -462,6 +490,7 @@ rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phon
 rem  [3g/5] PACER stay lookup REMOVED 2026-10-16 (Alejandro: PACER is a by-hand tool for a client's bankruptcy).
 rem  pacer_stay.py --case still works by hand. Existing clears expire and active hits keep holding.
 
+python -u refresh_progress.py step 3g2
 echo [3g2/5] Federal bankruptcy check - CourtListener, leads stay held without COURTLISTENER_TOKEN...
 rem  ADDED 2026-09-27. Primary provider for the stay gate. PACER is by hand only, see above. Parked until an
 rem  account exists. No token: exit 0, no network, a counts-only status, and the pipeline alert
@@ -473,6 +502,7 @@ rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at b
 rem  This used to be a manual step a human had to remember after every send day; forgetting it
 rem  is how the account ran a 24-33% bounce rate for a week (provider tolerance ~2%) — the
 rem  bounce ledger only protects the NEXT send if it is refreshed before the queue bakes.
+python -u refresh_progress.py step 3h
 echo [3h/5] Harvesting hard bounces from the inbox...
 python -u bounces.py >> "%LOG%" 2>&1
 
@@ -484,6 +514,7 @@ rem  2026-08-23. --api spends the already-loaded zerobounce.key at ~$0.008/addre
 rem  caps it near $1.20/night (worst case) while clearing the ~3,900-address backlog in a few weeks.
 rem  provider_check() degrades to free-tier-only on any key/credit/network failure -- see its
 rem  docstring -- so a dead key never breaks this step, it just stops buying anything.
+python -u refresh_progress.py step 3i
 echo [3i/5] Verifying fresh addresses before they enter the sendable pool...
 python -u verify_emails.py --api --limit 150 >> "%LOG%" 2>&1
 
@@ -491,6 +522,7 @@ rem  ENTITY GATE. Re-verify the company against Sunbiz BEFORE the board is built
 rem  that has just indexed starts printing its " LLC" on this run instead of the next one --
 rem  and so a name that stops being ACTIVE stops being claimed. Exit 1 = "not verified",
 rem  which is the guard working, NOT a pipeline failure: never gate the build on it.
+python -u refresh_progress.py step 3j
 echo [3j/5] Verifying the company entity against Sunbiz...
 python -u entity_check.py --quiet >> "%LOG%" 2>&1
 
@@ -515,6 +547,7 @@ rem                                running nightly. Here it returns 3,142 rows a
 rem    county_plaintiffs.py        Broward path pins C:\Windows\System32\curl.exe; the same
 rem                                Cloudflare wall refresh.yml documents elsewhere. Prints "BRO ok"
 rem                                here, not "landing failed".
+python -u refresh_progress.py step 3k
 echo [3k/5] Code-enforcement liens (free county ArcGIS)...
 python -u code_liens.py >> "%LOG%" 2>&1
 rem  C2 (2026-09-26): what each RECORDED code lien prints -- fine, daily rate, start date -- read
@@ -524,18 +557,23 @@ rem  payoff, and it never enters equity. Non-fatal: a failure leaves the board a
 python -u code_lien_amounts.py --limit 25 >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! code_lien_amounts failed - code-lien estimates not refreshed ^(board unaffected^).>> "%LOG%"
 
+python -u refresh_progress.py step 3l
 echo [3l/5] Back taxes + sold certificates (feeds equity and the tax chip)...
 python -u county_taxes.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3m
 echo [3m/5] Judgment entry dates (FS 55.03 post-judgment interest accrual)...
 python -u judgment_interest.py --all >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3n
 echo [3n/5] Broward plaintiff resolution (needs native Windows curl)...
 python -u county_plaintiffs.py --county broward --near >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3o
 echo [3o/5] Broward private-lender mortgages (AcclaimWeb, needs Schannel curl)...
 python -u fl_lp\broward_mortgages.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3q
 echo [3q/5] Sale results from the Miami-Dade docket - held, cancelled, moved, at risk, amended judgments...
 rem  sale_results.py reads the free OCS docket for every Miami case with a sale in the last 7 or next
 rem  30 days, including cases the scrape already dropped, and writes sale_results.json - gitignored.
@@ -543,12 +581,14 @@ rem  The [4/5] rebuild bakes it as row.sr. Display only, gates nothing; capped a
 rem  a clerk outage costs the chips, never the publish.
 python -u sale_results.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3q2
 echo [3q2/5] RealForeclose Closed/Canceled status - cancelled, redeemed, dismissed, bankruptcy - all 3 counties, free...
 rem  rf_status.py reads the Closed/Canceled list for every upcoming sale date we hold and writes
 rem  rf_status.json - gitignored. The [4/5] rebuild bakes it as row.rf; Call Mode drops redeemed, dismissed
 rem  and bankruptcy-cancelled sales. Add-only, never fatal: a failed read costs the stamps, never the publish.
 python -u rf_status.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3p
 echo [3p/5] Live dockets (Miami-Dade OCS JSON API) - the FILINGS, shown inline on the board...
 rem  A "click Docket, land on the docket" LINK is impossible: MD retired /ocs/Search.aspx and their
 rem  SPA refuses to render a case from a URL (the case-number token mints but resolves empty);
@@ -559,12 +599,15 @@ rem  MUST run before the [4/5] rebuild, which reads dockets.json. Never a gate: 
 rem  the inline docket, never the publish.
 python -u gen_dockets.py --limit 120 --stale 21 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 4
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 4b
 echo [4b/5] Refreshing the Deals-on-the-Clock auction forecast (reads the freshly-built board)...
 python -u auction_forecast.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 4c
 echo [4c/5] Archiving today's auction calendar (churn + cash-buyer history)...
 rem  ADDED 2026-08-15. This step lives in refresh.yml but was never in this bat, and the cloud
 rem  workflow stopped publishing on 07-27 - so auction_archive.json holds 722 records ALL stamped
@@ -580,9 +623,11 @@ rem  HARD DEPENDENCY: auction_archive.py immediately above. Without it cash_buye
 rem  _load_board(), which reads the Desktop plaintext twin and raises an uncaught FileNotFoundError
 rem  on any machine that does not have one. That is exactly why it sits HERE and not with the
 rem  other four moved enrichers above the rebuild.
+python -u refresh_progress.py step 4c2
 echo [4c2/5] Cash buyers (who keeps winning the auctions)...
 python -u cash_buyers.py --days 120 >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 4d
 echo [4d/5] Morning worker standup (today's meeting agenda + workable lanes)...
 rem  ADDED 2026-08-27: morning_planner.py was called by NOTHING — not this bat, not refresh.yml,
 rem  not a scheduled task. analyst.py imports it as a LIBRARY, which is why a grep looked like it
@@ -595,16 +640,19 @@ set DEALFLOW_SCHEDULED=1
 python -u morning_planner.py >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! morning worker failed - see leads-run.log ^(board unaffected^).>> "%LOG%"
 
+python -u refresh_progress.py step 4d-crm
 echo [4d/5] Team CRM (Desktop CSV always; Google Sheets when sheets_crm_webhook.url exists)...
 rem  Reads the Desktop twin's RAW payload, so it MUST run after the [4/5] rebuild above.
 python -u sheets_crm.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 4d2
 echo [4d2/5] Deal desk — every open YES ranked by how long it has gone stale + how close the sale is...
 rem  The 2026-09-16 audit: the business loses deals AFTER the yes, not at the pitch (5 appointments
 rem  booked and abandoned, a retainer never chased, an offer that sat until the sale passed). This
 rem  surfaces every advanced-stage lead with its ONE next action and days idle -> DEALFLOW\DEAL-DESK-<date>.md.
 python -u deal_desk.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 4e
 echo [4e/5] Contact trust — do the traced phones/emails belong to the OWNER?
 rem  WHY THIS RUNS EVERY NIGHT (2026-08-23). Twice in one week a stranger was one dial away from
 rem  being told his home was in foreclosure. 1400 Saint Charles Pl "#107" does not exist on the
@@ -636,6 +684,7 @@ rem  the site is a separate public repo, keeping it there would mean metered Act
 rem  book built from broward_mortgages.json as last COMMITTED (2026-09-06) while this machine
 rem  refreshed the real file nightly and never pushed it. Here it reads today's sweep.
 rem  Never fatal: this is an additive page and must not cost the board.
+python -u refresh_progress.py step 4c-balloon
 echo [4c/5] Hard-money balloon book (sweep -^> enrich -^> price -^> publish)...
 python -u fl_lp/broward_mortgages.py --months 2 >> "%LOG%" 2>&1
 python -u hardmoney_enrich.py --limit 120 >> "%LOG%" 2>&1
@@ -643,6 +692,7 @@ python -u hardmoney_values.py >> "%LOG%" 2>&1
 python -u hardmoney_balloon.py --months 30 >> "%LOG%" 2>&1
 if errorlevel 1 (echo     note: balloon book step failed - board publish continues.>> "%LOG%")
 
+python -u refresh_progress.py step gate
 echo [gate] healthcheck + publish guard before anything goes live...
 rem  ATTRIBUTION CORRECTED 2026-09-18. Commit 7b4d61b escaped the parens on the two GATE echoes
 rem  below and its message blamed e310696. That is WRONG: e310696^ already carries them inside
@@ -683,6 +733,7 @@ if errorlevel 1 (
   set "RUNEXIT=6"
   goto :end
 )
+python -u refresh_progress.py step 5
 echo [5/5] Publishing to the live site...
 git add docs/index.html docs/call docs/hm-balloon-q7v3n8 >> "%LOG%" 2>&1
 git commit -m "refresh: auto lead + phone update" >> "%LOG%" 2>&1
@@ -736,6 +787,7 @@ rem  That last sentence was FALSE until 2026-08-31: this line named `--box mg4` 
 rem  second box was defined-but-never-scanned, and it failed silently because a box that matches
 rem  nothing looks exactly like a box that never ran. No argument now = every box in BOXES, each
 rem  written to its own buybox_<key>.json for the morning digest.
+python -u refresh_progress.py step buybox
 echo [buybox] Re-scanning standing acquisition criteria...
 python -u buybox.py >> "%LOG%" 2>&1
 
@@ -750,19 +802,23 @@ rem
 rem  jose_buybox.py is the deal-math ladder (70% entry / 85% DSCR), and it is where tax deeds
 rem  belong now that the homeowner ladder no longer ranks them -- it already lanes TD rows as
 rem  "competitive-auction, room = pre-auction negotiation window", which is the honest framing.
+python -u refresh_progress.py step jose
 echo [jose]   Ranking the acquisition lane - 70pct entry / 85pct DSCR...
 python -u jose_buybox.py >> "%LOG%" 2>&1
 
 rem  Jesse's 3-5 minute deep-dive worklist -- which leads must be checked BEFORE anyone is called.
+python -u refresh_progress.py step dilig
 echo [dilig]  Building the deep-dive worklist...
 python -u diligence_list.py >> "%LOG%" 2>&1
 
 rem  The investor / hard-money refi lane (private-lender foreclosures with a reset sale date).
+python -u refresh_progress.py step refi
 echo [refi]   Refreshing the investor-refi lane...
 python -u investor_lane.py >> "%LOG%" 2>&1
 
 rem  Recovers phone numbers the morning worker retired by accident. Local JSON only; it never
 rem  deletes a mark, it restores one, and it prints the rebuild command rather than rebuilding.
+python -u refresh_progress.py step phones
 echo [phones] Auditing numbers retired by mistake...
 rem  --date IS LOAD-BEARING, do not drop it. Unpinned, this clears `badph` on EVERY case in
 rem  worker_notes.json on every run, so a number Alejandro or Carlos marks bad today is silently
@@ -778,6 +834,7 @@ rem  where it was proposed -- would have blocked every publish starting tonight.
 rem  so the count is visible every morning and can be driven to zero before it is ever promoted
 rem  to a gate. It is the "populated field, wrong meaning" detector, which is precisely the bug
 rem  class that let a tax-deed opening bid rank as owner equity for weeks.
+python -u refresh_progress.py step verify
 echo [verify] Checking status coverage (advisory)...
 python -u verify_status_coverage.py >> "%LOG%" 2>&1
 
@@ -804,6 +861,7 @@ rem  The real work (scrape -> enrich -> build -> publish) is all ABOVE this labe
 rem  so moving the report ahead of the healthcheck costs nothing and guarantees the morning signal
 rem  survives a truncated tail. The `health:` line it prints comes from the PREVIOUS run's
 rem  health.json — one run stale, which is worth far more than no report at all.
+python -u refresh_progress.py step report
 echo [report] Writing run status to Desktop + notification...
 python -u run_report.py >> "%LOG%" 2>&1
 
@@ -822,6 +880,7 @@ rem  gate this whole ledger channel was built to end.
 rem
 rem  NOT A GATE. It runs after the publish and after the morning signal; a failure costs one night
 rem  of desktop freshness and can never stop the board shipping or delay run_report.
+python -u refresh_progress.py step ledger
 echo [ledger] Syncing opt-out + mail ledgers and the board twin...
 python -u ledger_sync.py >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! ledger_sync failed - desktop twin/ledgers stay stale until next run.>> "%LOG%"
@@ -836,6 +895,7 @@ rem    morning_planner.py what do I knock today
 rem    healthcheck.py     is the infrastructure sane
 rem    morning_digest.py  what CHANGED since yesterday, across every subsystem
 rem  Never raises and always exits 0 by construction, so it cannot mask the health gate below.
+python -u refresh_progress.py step digest
 echo [digest] Building the morning digest...
 python -u morning_digest.py >> "%LOG%" 2>&1
 
@@ -846,6 +906,7 @@ rem  engine and WHICH file went silent, which publish_guard cannot).
 rem  Exit 0 clean, 2 drift, 3 cannot-evaluate. Fail-loud rule: a case it cannot judge alarms
 rem  rather than passing quietly. The `if errorlevel 2` branch reports both drift and cannot-eval
 rem  because both should get eyes on the log.
+python -u refresh_progress.py step drift
 echo [drift]  Watching for two-engine drift...
 python -u engine_drift.py >> "%LOG%" 2>&1
 if errorlevel 2 (
@@ -856,6 +917,7 @@ if errorlevel 2 (
 
 echo ==================== done %date% %time% ====================>> "%LOG%"
 
+python -u refresh_progress.py step health
 echo [health] Checking shipped data + upstream sources...
 python -u healthcheck.py >> "%LOG%" 2>&1
 rem  errorlevel 2 is the compliance block, 1 the advisory - test 2 first, because batch's
@@ -885,6 +947,9 @@ rem  healthcheck ever ran. That is the hole this closes.
 rem  ALWAYS WRITE THE ENDED LINE (2026-09-25). It used to be written only for a non-zero rc, so a
 rem  clean night and a killed one both ended without it and the log could not tell them apart.
 echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
+rem  LIVE PROGRESS: close the last step and keep this run's step times, which are what the
+rem  next run's "about N left" is estimated from. Prints, never fails: see refresh_progress.py.
+python -u refresh_progress.py done %RUNEXIT%
 if exist refresh-running.flag del refresh-running.flag
 rem  PIPELINE ALERTS. Counts only, one file, its own commit. Fail-soft: this script exits 0
 rem  even when the push does not land, and the exit below is still RUNEXIT. It does not publish

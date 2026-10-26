@@ -370,6 +370,25 @@ class Report(unittest.TestCase):
             out = LP.audit_all_lp(days=1, held_rows=[], search_fn=lambda lo, hi: recs)
         self.assertEqual(len(out['capped']), 1)
 
+    def test_whole_miami_sweep_is_off_by_default_and_cuts_to_kinds(self):
+        self.assertFalse(LP.MD_WHOLE, 'a recurring paid read stays off until Alex enables it')
+        def rec(case, p1, p2='JANE DOE'):
+            return {'casE_NUM': case, 'firsT_PARTY': p1, 'seconD_PARTY': p2, 'doC_TYPE': 'LIS PENDENS - LIS'}
+        day = [rec('2026-1', 'WELLS FARGO BANK NA'), rec('2026-1', 'WELLS FARGO BANK NA'),
+               rec('2026-2', 'SUNSET HOMEOWNERS ASSOCIATION'), rec('2026-3', 'WELLS FARGO BANK NA', 'CHASE BANK')]
+        calls = []
+        def fake(lo, hi):
+            calls.append((lo, hi))
+            return None if len(calls) == 2 else day
+        with mock.patch('builtins.print'):
+            rows, info = LP.whole_miami_sweep(days=3, kinds='BANK-1st', search_fn=fake)
+            allrows, _ = LP.whole_miami_sweep(days=1, kinds='all', search_fn=lambda lo, hi: day)
+        self.assertEqual([r['case'] for r in rows], ['2026-1'])      # HOA cut, both-lender row dropped, dup once
+        self.assertEqual(info['windows'], 3)
+        self.assertEqual(len(info['failed']), 1)
+        self.assertTrue(all(lo == hi for lo, hi in calls))
+        self.assertEqual(sorted(r['case'] for r in allrows), ['2026-1', '2026-2'])
+
     def test_report_runs_read_only_on_this_checkout(self):
         with mock.patch('builtins.print'):
             self.assertEqual(CR.main([]), 0)

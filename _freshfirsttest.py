@@ -98,8 +98,10 @@ _i = SRC.find('def stamp_ledger(')
 exec(SRC[_i:SRC.find('\ndef ', _i + 10)], _ns)
 _rows = [{'c': 'A'}, {'c': 'B', 'pcs': ['Z']}, {'c': 'C'}]
 _n = _ns['stamp_ledger'](_rows, {'A': {'n': 2, 'last': 5}, 'Z': {'n': 1, 'last': 9}}, {'A': {'n': 1, 'last': 7}})
-rec('stamp_ledger stamps le/lt, walks pcs, counts stamped rows',
-    _rows == [{'c': 'A', 'le': 5, 'lt': 7}, {'c': 'B', 'pcs': ['Z'], 'le': 9}, {'c': 'C'}] and _n == 2, _rows)
+# `ln` (2026-10-24): confirmed email sends summed over the person's cases, so the card's email stage
+# starts from the bridge's count. Display/order/stage only, same as le/lt.
+rec('stamp_ledger stamps le/ln/lt, walks pcs, counts stamped rows',
+    _rows == [{'c': 'A', 'le': 5, 'ln': 2, 'lt': 7}, {'c': 'B', 'pcs': ['Z'], 'le': 9, 'ln': 1}, {'c': 'C'}] and _n == 2, _rows)
 rec('stamp_ledger ignores a text composer opened but never sent',
     _ns['stamp_ledger']([{'c': 'O'}], {}, {'O': {'n': 0, 'opens': 1, 'last': 8}}) == 0)
 rec('stamp_ledger tolerates missing ledgers', _ns['stamp_ledger']([{'c': 'Q'}], None, None) == 0)

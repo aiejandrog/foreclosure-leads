@@ -26,6 +26,8 @@ _*.py
 !_inflightretrytest.py
 !_wplinktest.py
 !_wpcontactstest.py
+!_refreshprogresstest.py
+!_callpastetest.py
 !_textbatchtest.py
 !_textbatchtpltest.py
 !_bridgereloadtest.py
@@ -796,3 +798,6 @@ rf_status.json.tmp
 !_ledgergatetest.py
 # _assertedquotatest: a first touch on a paid ZeroBounce valid is paced at PROBE_DAILY_CAP whatever the breaker says. AST + pure checks, no server, no SMTP.
 !_assertedquotatest.py
+# _navtest: dealflow_nav strip on the board header, Call Mode and the Morning Worker. Static checks, no network.
+!_navtest.py
+!_lpstatusbrowardtest.py

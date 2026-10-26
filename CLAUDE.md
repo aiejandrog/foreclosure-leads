@@ -466,6 +466,18 @@ python clerk_bk_accept.py --entries docket.json --case CACE-99-000123
 `--entries` classifies a local JSON file (`{"status": "Pending", "entries": [{"date", "text"}]}`).
 It is not a live read and it does not clear a lead.
 
+**Broward early-filing dismissal check (2026-10-26, at Alejandro's direction, off by default).**
+`lp_status.py` also asks the Broward clerk API (`case.json`, one request per case, the same
+`BROWARD_CLERK_API_KEY` and client as `clerk_bk.py`) whether a Broward lis pendens case was dismissed.
+It runs only with `DEALFLOW_LP_BROWARD=1` and the key set. A disposition that reads as a dismissal of
+the whole action drops the row from the early lane; a partial dismissal ("as to unknown parties", a
+count) or any other terminal-looking label is stored as `review`, printed with its text, and drops
+nothing. A denied, rate-limited, captcha or unparseable read stores nothing and stops the pass; the
+row stays "not checked". Bounded by `LP_BROWARD_MAX_CASES` (400) and `LP_BROWARD_MAX_RUNTIME_S` (600),
+TTL 14 days, newest filings first. The disposition vocabulary was NOT validated against live
+responses: before leaving the flag on, run one pass and read the `REVIEW` lines. Palm Beach has no
+adapter. Test: `python _lpstatusbrowardtest.py`.
+
 ## Scheduled tasks
 
 Register/enable/disable only via `pwsh .\desktop-setup\install-tasks.ps1` — **`pwsh`, not

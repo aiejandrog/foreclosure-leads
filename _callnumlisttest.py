@@ -167,6 +167,31 @@ rec('Whitepages listing our owner too is not a disagreement', r.get('wo') is Non
 r = row(lead('WO-NONE', owners='MARTINEZ, ORLANDO', wpAllPhones=wo_all))
 rec('no Whitepages owners: nothing flagged', r.get('wo') is None and 'w' not in r['pw'], (r.get('wo'), r['pw']))
 
+print('\nWHITEPAGES LIKELY OWNER: FIRST NAME + A 5+ LETTER SURNAME PIECE (10-22, INVENTED NAMES)')
+lk_owners = [{'name': 'Gina L Onojobi', 'notOwner': True, 'phones': [{'n': D, 'type': 'mobile'}]}]
+lk_all = [{'n': D, 'resident': True, 'source': 'property', 'owner': 'Gina L Onojobi'},
+          {'n': A, 'resident': True, 'source': 'property', 'owner': 'Ana Rivera'}]
+r = row(lead('LK', owners='MCKNIGHT-ADEONOJOBI,GINA', wpOwners=lk_owners, wpAllPhones=lk_all))
+rec('a likely owner is marked l, not w', r['pw'][r['p'].index(D)] == 'l', r.get('pw'))
+rec('no different-owner warning for a likely owner', r.get('wo') is None, r.get('wo'))
+rec('the household tag that governs texting is unchanged', r['ps'][r['p'].index(D)] == 'hh', r.get('ps'))
+r = row(lead('LK-ORD', owners='MCKNIGHT-ADEONOJOBI,GINA', wpOwners=lk_owners, phsrc=['st', 'st', 'hh', 'hh'],
+             wpAllPhones=[{'n': C, 'resident': True, 'source': 'property', 'owner': 'Ana Rivera'}] + lk_all[:1]))
+rec('the likely-owner number sorts ahead of a plain household number',
+    r['p'].index(D) < r['p'].index(C) and r['pw'][r['p'].index(C)] == 'h', (r['p'], r['pw']))
+r = row(lead('LK-4', owners='MCKNIGHT-ADEONOJOBI,GINA',
+             wpAllPhones=[{'n': D, 'resident': True, 'source': 'property', 'owner': 'Gina Jobi'}]))
+rec('a 4-letter surname piece is not enough', r['pw'][r['p'].index(D)] == 'h', r.get('pw'))
+r = row(lead('LK-FN', owners='MCKNIGHT-ADEONOJOBI,GINA',
+             wpAllPhones=[{'n': D, 'resident': True, 'source': 'property', 'owner': 'Tina Onojobi'}]))
+rec('a different first name is not enough', r['pw'][r['p'].index(D)] == 'h', r.get('pw'))
+_tx = call_mode._PAGE
+_i_dnt = _tx.index("This number is on the do-not-text list. Call only.")
+_i_lk = _tx.index("Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.")
+_i_sit = _tx.index("else if(sitKeys.length){")
+rec('text button: likely-owner hold sits after the hard gates and before every text offer',
+    _i_dnt < _i_lk < _i_sit and "charAt(phIdx)==='l' && !sitKeys.length" in _tx)
+
 _pg2 = call_mode._PAGE
 
 
@@ -182,7 +207,9 @@ open(_js2, 'w', encoding='utf-8').write(
     + ''.join(_fn(n) for n in ('esc', 'has', 'firstName', '_wpChip', '_phSrcNote')) + """
 var r = {on: 'Orlando Martinez', o: 'MARTINEZ, ORLANDO', f: '', wo: ['Maylen Perez Diaz'], pw: 'hw', ps: ['', 'hh']};
 var r0 = {on: 'Orlando Martinez', o: 'MARTINEZ, ORLANDO', f: '', pw: 'h', ps: ['']};
-console.log(JSON.stringify([firstName(r), firstName(r0), _wpChip(r, 1), _phSrcNote(r, 1), _phSrcNote(r, 0)]));
+var rl = {on: 'Gina Mcknight', o: 'MCKNIGHT-ADEONOJOBI,GINA', f: '', pw: 'l', ps: ['hh']};
+console.log(JSON.stringify([firstName(r), firstName(r0), _wpChip(r, 1), _phSrcNote(r, 1), _phSrcNote(r, 0),
+                            _wpChip(rl, 0), _phSrcNote(rl, 0), firstName(rl)]));
 """)
 _p4 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js2], capture_output=True, text=True, timeout=60)
 _o4 = json.loads(_p4.stdout or 'null') if _p4.returncode == 0 else None
@@ -191,6 +218,9 @@ rec('card: no greeting by name when Whitepages names a different owner', bool(_o
 rec('card: her number says Whitepages owner, verify', bool(_o4) and 'listed OWNER Maylen Perez Diaz' in _o4[2] and 'verify' in _o4[2], _o4)
 rec('card: dialing her number says who Whitepages says she is', bool(_o4) and 'Maylen Perez Diaz' in _o4[3]
     and 'Orlando Martinez' in _o4[3] and 'whether they own the house' in _o4[3], _o4)
+rec('card: likely owner chip and note, greeting kept', bool(_o4) and 'likely owner' in _o4[5]
+    and 'no text yet' in _o4[5] and 'LIKELY the owner' in _o4[6] and 'Gina Mcknight' in _o4[6]
+    and 'No text' in _o4[6] and _o4[7] == 'Gina', _o4)
 rec('card: the warn bar names both', 'Whitepages lists a different owner' in _pg2 and 'r.wo.join' in _pg2)
 
 print('\nDNC / AGENT NUMBERS STAY OUT')

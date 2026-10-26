@@ -9,8 +9,10 @@ refresh), which runner_lock.py passes through unchanged; the outer wrapper then 
 "did not start - cross-machine lease exit 7", which is only true for exit 9 or 10. So this file
 reads the ENDED line for the verdict and counts a lease line only when it carries 9 or 10.
 
-Source: leads-run.log only (the REFRESH banners, the "REFRESH ENDED rc=N" lines, lease
-refusals). Nothing new is written anywhere. leads_final.json's mtime is NOT used: two dozen scripts
+Source: leads-run.log (the REFRESH banners, the "REFRESH ENDED rc=N" lines, lease refusals), plus
+how long the last run took from refresh_progress's step history when it has that run. Nothing new
+is written anywhere. The page script also asks the local send bridge where a running refresh is
+(GET /refresh); see the LIVE note above _JS. leads_final.json's mtime is NOT used: two dozen scripts
 rewrite that file, so its age says nothing about the last scrape.
 The bake time is the board's own build time; the page compares it with the viewer's clock, so a
 board that nothing rebuilt still turns red by itself when it gets old.
@@ -239,21 +241,61 @@ def summary(log_path=LOG, now=None):
     # leads on the board and NOT lis pendens filings, so the page labels them "auction lists".
     rows = [[n, rows[k]] for k, n in (('BROWARD', 'Broward'), ('MIAMI-DADE', 'Miami'),
                                       ('PALM BEACH', 'Palm Beach')) if k in rows]
+    out_last = {k: last[k] for k in ('at', 'rc', 'why')} if last else None
+    took = _took(last['at']) if last and last['rc'] is not None else None
+    if out_last and took:
+        out_last['took'] = took
     return {'baked': now.strftime('%Y-%m-%dT%H:%M'), 'good': good, 'rows': rows,
-            'last': ({k: last[k] for k in ('at', 'rc', 'why')} if last else None),
-            'earlier': earlier}
+            'last': out_last, 'earlier': earlier}
+
+
+def _took(at):
+    """Seconds the run that started at `at` took, from refresh_progress's step history, or None.
+    That history is written by `refresh_progress.py done` at the end of each run."""
+    try:
+        import refresh_progress
+        start = datetime.strptime(at, '%Y-%m-%dT%H:%M').timestamp()
+        with open(refresh_progress._paths()[1], encoding='utf-8') as f:
+            hist = json.load(f)
+        for h in reversed(hist if isinstance(hist, list) else []):
+            if abs(float(h.get('started') or 0) - start) <= 120 and h.get('ended'):
+                return int(float(h['ended']) - float(h['started']))
+    except Exception:      # noqa: BLE001 - an optional detail on a line that must never break a build
+        return None
+    return None
 
 
 # Self-contained: no board CSS, no board JS. The verdict is decided at VIEW time, so a board that
 # nothing rebuilt still goes red on its own once it is old.
+#
+# LIVE (2026-10-24). On the machine that runs the refresh, the send bridge answers GET /refresh with
+# where the running refresh-dealflow.bat is (refresh_progress.public(): step, times, estimate, no
+# log text). While a run is going this strip turns into its progress bar; when a run newer than this
+# page has finished it says so and offers a reload. Anywhere the bridge cannot be reached (a phone,
+# the bridge down) the fetch fails quietly and the baked line stays. The function is exposed as
+# window.__dfRfs so the Morning Worker window paints the same strip from the same code.
 _JS = r"""(function(){
-var S=%s, el=document.getElementById('rfstat'); if(!el) return;
+var S=%s;
+function dfRfs(S, el, live){
+if(!el) return;
+var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
 function t(s){ if(!s) return null; var d=new Date(s); return isNaN(d.getTime())?null:d; }
 function hm(s){ var d=t(s); if(!d) return '?'; var h=d.getHours(), m=('0'+d.getMinutes()).slice(-2);
   var day=(d.toDateString()===new Date().toDateString())?'today':(d.getMonth()+1)+'/'+d.getDate();
   return day+' '+((h+11)%%12+1)+':'+m+(h<12?' AM':' PM'); }
 function age(s){ var d=t(s); if(!d) return ''; var h=(Date.now()-d.getTime())/36e5;
   return h<1?'under an hour old':h<48?Math.round(h)+'h old':Math.round(h/24)+' days old'; }
+function dur(x){ x=Math.max(0,Math.round(x||0)); var h=Math.floor(x/3600), m=Math.floor(x%%3600/60);
+  return h?h+'h'+('0'+m).slice(-2)+'m':(m?m+'m':x+'s'); }
+function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+var C={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF'],run:['#E8F0FE','#123C84']};
+function paint(lvl, msg, pct){
+  var c=C[lvl];
+  el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
+    +'background:'+c[0]+';color:'+c[1]+';text-align:center;position:relative';
+  el.innerHTML=msg+(pct==null?'':'<span style="position:absolute;left:0;bottom:0;height:3px;width:'
+    +Math.round(Math.max(0.02,Math.min(1,pct))*100)+'%%;background:#1F6FEB;transition:width .6s"></span>');
+}
 var L=S.last, G=S.good, lvl='ok', msg;
 var oldH = t(S.baked) ? (Date.now()-t(S.baked).getTime())/36e5 : 0;
 var from=' &middot; leads from '+(G?hm(G)+' ('+age(G)+')':'an older run');
@@ -270,12 +312,52 @@ if(L && (L.rc===1||L.rc===3||L.rc===9||L.rc===10||L.rc===-1)){
 } else {
   lvl='warn'; msg='No refresh record on the machine that built this board';
 }
+if(L && L.took && lvl!=='bad') msg+=' &middot; took '+dur(L.took);
 if(lvl!=='bad' && S.rows && S.rows.length) msg+=' &middot; auction lists '+S.rows.map(function(x){return x[0]+' '+x[1];}).join(', ');
 if(S.earlier && lvl!=='bad') msg+=' &middot; '+hm(S.earlier.at).replace(/^today /,'')+' run failed ('+S.earlier.why+'), recovered';
-var c={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF']}[lvl];
-el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
-  +'background:'+c[0]+';color:'+c[1]+';text-align:center';
-el.innerHTML=msg;
+var BAKED={lvl:lvl, msg:msg};
+paint(lvl, msg, null);
+if(!live || !W || !W.fetch) return;
+/* The Morning Worker is a blob: document whose URL is revoked a minute after it opens, so a reload
+   there loads an error page and loses a run in progress. Only the page itself may offer Reload. */
+function reloadLink(){
+  if(W !== window || String(W.location && W.location.protocol) === 'blob:') return ' &middot; reload the board tab when this run is done';
+  return ' <a href="#" onclick="location.reload();return false" style="color:inherit;font-weight:800">Reload</a>';
+}
+function show(j){
+  if(!j || !j.ok){ paint(BAKED.lvl, BAKED.msg, null); return; }
+  var baked=t(S.baked), st=t(j.started), en=t(j.ended);
+  var mine=baked && st && baked.getTime()>=st.getTime()-60000;    // this page was built by that run
+  if(j.running){
+    var s=j.step;
+    var m='&#8635; <b>Refresh running</b>'+(s?' &middot; step '+s.i+' of '+j.n+': '+esc(s.label)+' ('+dur(s.secs)+')'
+      :' &middot; checking the network and updating code')+' &middot; '+dur(j.elapsed)+' in'
+      +(j.eta!=null?' &middot; about '+dur(j.eta)+' left':'');
+    paint('run', m, j.pct); return;
+  }
+  if(j.state==='ended' && en && !mine && (!baked || en.getTime()>baked.getTime())){
+    var rc=j.rc, why=esc(j.why||('exit '+rc));
+    if(rc===1||rc===3||rc===9||rc===10){ paint('bad','&#10007; Refresh FAILED '+hm(j.ended)+': '+why+' &middot; this page is the last good build',null); return; }
+    if(rc===2||rc===5||rc===6){ paint('warn','&#9888; Refresh finished '+hm(j.ended)+' but did not publish: '+why+' &middot; the live site kept the last good board',null); return; }
+    paint('ok','&#10003; Refresh finished '+hm(j.ended)+' (took '+dur(j.elapsed)+')'+(rc?', '+why:'')+' &middot; this page is older'+reloadLink(),null); return;
+  }
+  if(j.state==='stale' && st && (!baked || st.getTime()>baked.getTime())){
+    paint('warn','&#9888; The refresh that started '+hm(j.started)+' stopped without finishing (window closed, restart or sleep) &middot; this page is from before it',null); return;
+  }
+  paint(BAKED.lvl, BAKED.msg, null);
+}
+function poll(){
+  if(W.document && W.document.hidden) return;
+  var ac=W.AbortController?new W.AbortController():null, to=ac?W.setTimeout(function(){ac.abort();},2500):null;
+  W.fetch('http://127.0.0.1:8823/refresh', ac?{signal:ac.signal}:{})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(to) W.clearTimeout(to); show(j); })
+    .catch(function(){ if(to) W.clearTimeout(to); });
+}
+poll(); W.setInterval(poll, 20000);
+}
+if(typeof window!=='undefined'){ window.__dfRfs=dfRfs; window.__dfRfsS=S; }
+dfRfs(S, document.getElementById('rfstat'), true);
 })();"""
 
 

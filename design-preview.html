@@ -1904,18 +1904,10 @@ body.compact .dg-v{font-size:14.5px}
   /* Plan today is a daily action sheet, not a filter — keep it on the collapsed chrome so
      Alejandro can open the day's list without digging through Filters at the door. Same #plan
      button + openPlanModal(); no duplicated control. */
-  .controls.mcol > #plan{display:inline-flex !important;order:-1}
   /* CALL MODE survives the collapse too — and leads it. This is the phone page; hiding it on the
      phone was exactly backwards (2026-08-18: the button shipped, then vanished under 430px with
      the rest of the cluster). order:-2 puts it ahead of Filters and Plan today, because at a door
      or in the car the first thing he wants is the dialer, not a filter. */
-  .controls.mcol > #callmodebtn,
-  .controls.mcol > #callmodebtn2{display:inline-flex !important;order:-2;
-    min-height:46px;padding:11px 16px;touch-action:manipulation;
-    background:#286c34;color:#fff;border-color:#286c34;font-weight:800;
-    -webkit-tap-highlight-color:rgba(40,108,52,.25)}
-  .controls.mcol > #callmodebtn svg,
-  .controls.mcol > #callmodebtn2 svg{stroke:#fff}
   .mfiltbtn{display:inline-flex;align-items:center;gap:6px;order:-1;
     min-height:44px;padding:10px 14px;touch-action:manipulation}
   #plan.abtn{min-height:44px;padding:10px 14px;touch-action:manipulation;
@@ -2033,6 +2025,130 @@ body.compact .dg-v{font-size:14.5px}
 #dispoPackView.pv-preview::before{content:'PREVIEW';position:absolute;top:8px;right:12px;
   background:#0B1730;color:#C6A14B;padding:2px 8px;font-size:9px;letter-spacing:.12em;font-weight:800}
 
+/* ============================== NAV + COMMAND TIERS (2026-10-24) ============================== */
+/* Tier 1: the page nav. The same surfaces that used to be six buttons scattered through the filter
+   cluster (Call Mode, Carlos, Worker, Balloon Book, Playbook) sit together, in one place, on every
+   page: Call Mode renders the same strip (dealflow_nav.py) with its own page marked. */
+.dfnav{display:inline-flex;gap:3px;align-items:center;margin-left:16px;padding:3px;border-radius:var(--pill);
+  background:rgba(11,23,48,.05);border:1px solid var(--line)}
+.dfnav .dfn{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:var(--pill);
+  border:1px solid transparent;background:transparent;color:var(--ink-2);font-weight:600;font-size:12.5px;
+  cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1.2;transition:all .16s var(--e-lux)}
+.dfnav .dfn svg{width:13px;height:13px;display:block;flex:0 0 auto}
+.dfnav .dfn:hover{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.dfnav .dfn.on{background:var(--navy-grad);color:#fff;box-shadow:var(--sh-2)}
+.dfnav #callmodebtn.dfn{color:#1f5a29;background:rgba(40,108,52,.10);border-color:rgba(40,108,52,.30);font-weight:700}
+.dfnav #callmodebtn.dfn:hover{background:rgba(40,108,52,.18)}
+.dfnav #callmodebtn2.dfn{color:#1f5a29}
+.dfnav #playbookbtn.dfn{font-size:12.5px;padding:6px 13px}
+.dfnav #playbookbtn.dfn::before{content:none}
+body.mini .dfnav .dfn{padding:4px 10px;font-size:12px}
+/* The build pill. Was a line of grey text that vanished on phones; now a pill with a dot that goes
+   amber with the existing .stale class, visible on every width, because "is this board fresh" is
+   the first question on a morning the nightly did not run. */
+.brand .upd{display:inline-flex;align-items:center;gap:0;padding:5px 11px;border-radius:var(--pill);
+  border:1px solid var(--line);background:var(--surface);font-size:12px;color:var(--muted);
+  max-height:none;line-height:1.3;white-space:nowrap}
+.brand .upd::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#2E9E5B;
+  margin-right:7px;box-shadow:0 0 0 3px rgba(46,158,91,.16)}
+.brand .upd b{color:var(--ink);font-weight:700;margin:0 2px}
+.brand .upd{overflow:visible}
+#stalemark:not(:empty)::before{content:' \00B7 '}
+.brand .tag{white-space:nowrap}
+.lockbtn{white-space:nowrap}
+@media(max-width:1280px){.brand .tag{display:none}}
+/* Tier 1 wraps on desktop too (2026-10-26 audit). With six nav items, a stale build pill and
+   Refresh / Lock on one non-wrapping row, the row ran ~1,490px wide: at 1024-1400px the Refresh
+   and Lock buttons sat off the right edge and the whole page scrolled sideways. Now the pill,
+   Refresh and Lock drop to a second line, still right-aligned, whenever the row does not fit. */
+@media(min-width:861px){.brand{flex-wrap:wrap;row-gap:8px}.brand .upd{margin-left:auto}}
+.brand .upd.stale{border-color:rgba(180,83,9,.45);background:rgba(180,83,9,.06)}
+.brand .upd.stale::before{background:#B45309;box-shadow:0 0 0 3px rgba(180,83,9,.16)}
+.brand .upd.stale b,.brand .upd.stale #stalemark{color:#B45309 !important}
+/* Tier 2: today's actions. One row, search and sort pinned right. */
+.controls.work{margin-bottom:8px}
+.controls.work .actions{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center}
+.controls.work .find{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.controls.work .sortl{font-size:12px;color:var(--muted)}
+/* Tier 3: filters + the More menu. */
+details.more{position:relative;display:inline-block;margin-left:auto}
+.controls.filt .stats{margin-left:10px}
+details.more>summary{list-style:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  border-radius:var(--pill);padding:7px 13px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-2);font-weight:600;font-size:12.5px;user-select:none;transition:all .16s var(--e-lux)}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary svg{width:14px;height:14px}
+details.more>summary:hover,details.more[open]>summary{border-color:rgba(198,161,75,.5);color:var(--gold-d)}
+details.more .morepanel{position:absolute;right:0;top:calc(100% + 8px);z-index:70;min-width:270px;
+  display:flex;flex-direction:column;gap:3px;padding:8px;border-radius:var(--r-lg);
+  background:var(--surface);border:1px solid var(--line);box-shadow:var(--sh-3)}
+details.more .mgroup{font-family:var(--f-label);font-size:10.5px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted-2);padding:8px 10px 3px}
+details.more .mgroup:first-child{padding-top:4px}
+/* the moved tools keep their own ID rules (display:inline-flex etc.); inside the panel they are rows */
+details.more .morepanel>button{display:flex !important;width:100%;justify-content:flex-start;gap:9px;
+  padding:9px 11px;border-radius:10px;border:1px solid transparent;background:transparent;box-shadow:none;
+  font-size:13px;text-align:left;margin:0}
+details.more .morepanel>button:hover{background:rgba(198,161,75,.08);border-color:rgba(198,161,75,.3);transform:none}
+details.more .morepanel>button svg{width:14px;height:14px}
+@media(max-width:860px){
+  /* line 1: wordmark + build pill + Refresh + Lock; line 2: the page nav as a swipeable strip */
+  .brand{align-items:center}
+  .brand .spacer{display:none}
+  .brand>div:first-child{flex:1 1 auto;min-width:0}
+  .brand .upd{display:inline-flex;font-size:11px;padding:4px 9px}
+  .brand .upd .updtxt,.brand .upd b{display:none}
+  #stalemark:not(:empty)::before{content:none}
+  #refreshbtn{font-size:0;padding:6px 10px}
+  #refreshbtn::before{content:'\21BB';font-size:15px;line-height:1}
+  #refreshbtn .ghdot{margin-right:0}
+  /* WRAPS onto a second line (2026-10-26). As a swipe strip with its scrollbar hidden, Worker,
+     Balloon Book and Playbook sat past the right edge at phone width with no sign they existed. */
+  .dfnav{order:10;flex:1 1 100%;margin:2px 0 0;display:flex;flex-wrap:wrap;
+    border-radius:14px;padding:4px}
+  .dfnav .dfn{flex:0 0 auto;min-height:40px;padding:8px 14px;font-size:13px;touch-action:manipulation}
+  .dfnav #callmodebtn.dfn{background:#286c34;color:#fff;border-color:#286c34;font-weight:800}
+  .dfnav #callmodebtn.dfn svg{stroke:#fff}
+  /* today's actions: one swipeable strip, never a stack; search gets its own full line under it */
+  .controls.work{gap:8px}
+  .controls.work .actions{flex:1 1 100%;display:flex;flex-wrap:nowrap;overflow-x:auto;gap:7px;padding:1px 1px 4px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-snap-type:x proximity}
+  .controls.work .actions::-webkit-scrollbar{display:none}
+  .controls.work .actions{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}
+  .controls.work .actions>*{flex:0 0 auto;min-height:42px;padding:9px 14px;scroll-snap-align:start;touch-action:manipulation}
+  .controls.work .find{flex:1 1 100%;margin-left:0;display:flex;flex-wrap:wrap}
+  .controls.work .sortl{flex:1 1 100%;display:flex;align-items:center;gap:6px}
+  .controls.work .sortl select{flex:1 1 auto;min-width:0}
+  /* the filter row collapsed: Filters, More and the count stay; everything else waits behind Filters */
+  .controls.mcol > details.more{display:inline-block !important}
+  .controls.mcol > .stats{display:inline !important;margin-left:auto;font-size:11px}
+  details.more>summary{min-height:44px;padding:10px 14px;touch-action:manipulation}
+  details.more .morepanel{position:static;width:100%;min-width:0;margin-top:8px;box-shadow:var(--sh-2)}
+  details.more .morepanel>button{min-height:46px}
+}
+/* ============================== ZOOM + RESIZE SAFETY (2026-10-26) ==============================
+   Alejandro: buttons and panels landing on top of banners, and scrolling that stops working when the
+   window is resized or zoomed. Rendered at 375-1920px and 125/150/200% zoom before changing anything;
+   each rule below answers one thing that was measured broken.
+   1. body.hflow: the sticky header held 43-58% of a laptop window at 125-150% zoom (four wrapped
+      tiers), so the rows scrolled through a slot under it. When the header (shrunk or not) is taller
+      than 38% of the window it scrolls away with the page instead. The header-fit IIFE decides; it looks
+      at heights, so a normal window keeps the sticky header exactly as before. */
+@media(min-width:861px){body.hflow header{position:relative}}
+/* 2. The expanded row under a lead is as wide as the 1,770px table, so on a 1024-1600px window the
+      Court & sale and Do buttons (Call script, Email, Log, Copy all) sat past the right edge until the
+      table was dragged sideways. The row's content now pins to the visible part of the table and wraps
+      inside it. --tblvw is the table viewport's width, kept by the table-scroll IIFE. */
+.lwrap{position:sticky;left:16px;max-width:calc(var(--tblvw,100vw) - 64px)}
+/* 3. The access-code box at 200% zoom: #gate centred it in a fixed frame with no scroll, so on a
+      short window its top and the Unlock button were cut off with no way to reach them. */
+#gate{overflow-y:auto}
+#gate .box{margin:auto}
+/* 4. Bottom bars (deliverability banner, work queue, after-call bar, new-board pill, backup warning)
+      were all pinned at bottom 0-18px and painted on top of each other. _bottomDock() stacks them
+      and pads the page by their total height so the last rows can scroll clear of them. */
+body.docked{padding-bottom:var(--dockh,0px)}
+body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </style></head><body>
 <div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">South Florida foreclosure desk</div><div class="bar" aria-hidden="true"><i></i></div></div></div>
 <div id="welcome"></div>
@@ -2161,13 +2277,27 @@ body.compact .dg-v{font-size:14.5px}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-16T20:21","good":null,"rows":[],"last":null,"earlier":null}, el=document.getElementById('rfstat'); if(!el) return;
+var S={"baked":"2026-10-26T18:43","good":null,"rows":[],"last":null,"earlier":null};
+function dfRfs(S, el, live){
+if(!el) return;
+var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
 function t(s){ if(!s) return null; var d=new Date(s); return isNaN(d.getTime())?null:d; }
 function hm(s){ var d=t(s); if(!d) return '?'; var h=d.getHours(), m=('0'+d.getMinutes()).slice(-2);
   var day=(d.toDateString()===new Date().toDateString())?'today':(d.getMonth()+1)+'/'+d.getDate();
   return day+' '+((h+11)%12+1)+':'+m+(h<12?' AM':' PM'); }
 function age(s){ var d=t(s); if(!d) return ''; var h=(Date.now()-d.getTime())/36e5;
   return h<1?'under an hour old':h<48?Math.round(h)+'h old':Math.round(h/24)+' days old'; }
+function dur(x){ x=Math.max(0,Math.round(x||0)); var h=Math.floor(x/3600), m=Math.floor(x%3600/60);
+  return h?h+'h'+('0'+m).slice(-2)+'m':(m?m+'m':x+'s'); }
+function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+var C={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF'],run:['#E8F0FE','#123C84']};
+function paint(lvl, msg, pct){
+  var c=C[lvl];
+  el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
+    +'background:'+c[0]+';color:'+c[1]+';text-align:center;position:relative';
+  el.innerHTML=msg+(pct==null?'':'<span style="position:absolute;left:0;bottom:0;height:3px;width:'
+    +Math.round(Math.max(0.02,Math.min(1,pct))*100)+'%;background:#1F6FEB;transition:width .6s"></span>');
+}
 var L=S.last, G=S.good, lvl='ok', msg;
 var oldH = t(S.baked) ? (Date.now()-t(S.baked).getTime())/36e5 : 0;
 var from=' &middot; leads from '+(G?hm(G)+' ('+age(G)+')':'an older run');
@@ -2184,32 +2314,102 @@ if(L && (L.rc===1||L.rc===3||L.rc===9||L.rc===10||L.rc===-1)){
 } else {
   lvl='warn'; msg='No refresh record on the machine that built this board';
 }
+if(L && L.took && lvl!=='bad') msg+=' &middot; took '+dur(L.took);
 if(lvl!=='bad' && S.rows && S.rows.length) msg+=' &middot; auction lists '+S.rows.map(function(x){return x[0]+' '+x[1];}).join(', ');
 if(S.earlier && lvl!=='bad') msg+=' &middot; '+hm(S.earlier.at).replace(/^today /,'')+' run failed ('+S.earlier.why+'), recovered';
-var c={ok:['#E7F4EA','#1E5B2E'],warn:['#FBF1DC','#7A4E05'],bad:['#B42318','#FFFFFF']}[lvl];
-el.style.cssText='display:block;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;padding:6px 12px;'
-  +'background:'+c[0]+';color:'+c[1]+';text-align:center';
-el.innerHTML=msg;
+var BAKED={lvl:lvl, msg:msg};
+paint(lvl, msg, null);
+if(!live || !W || !W.fetch) return;
+/* The Morning Worker is a blob: document whose URL is revoked a minute after it opens, so a reload
+   there loads an error page and loses a run in progress. Only the page itself may offer Reload. */
+function reloadLink(){
+  if(W !== window || String(W.location && W.location.protocol) === 'blob:') return ' &middot; reload the board tab when this run is done';
+  return ' <a href="#" onclick="location.reload();return false" style="color:inherit;font-weight:800">Reload</a>';
+}
+function show(j){
+  if(!j || !j.ok){ paint(BAKED.lvl, BAKED.msg, null); return; }
+  var baked=t(S.baked), st=t(j.started), en=t(j.ended);
+  var mine=baked && st && baked.getTime()>=st.getTime()-60000;    // this page was built by that run
+  if(j.running){
+    var s=j.step;
+    var m='&#8635; <b>Refresh running</b>'+(s?' &middot; step '+s.i+' of '+j.n+': '+esc(s.label)+' ('+dur(s.secs)+')'
+      :' &middot; checking the network and updating code')+' &middot; '+dur(j.elapsed)+' in'
+      +(j.eta!=null?' &middot; about '+dur(j.eta)+' left':'');
+    paint('run', m, j.pct); return;
+  }
+  if(j.state==='ended' && en && !mine && (!baked || en.getTime()>baked.getTime())){
+    var rc=j.rc, why=esc(j.why||('exit '+rc));
+    if(rc===1||rc===3||rc===9||rc===10){ paint('bad','&#10007; Refresh FAILED '+hm(j.ended)+': '+why+' &middot; this page is the last good build',null); return; }
+    if(rc===2||rc===5||rc===6){ paint('warn','&#9888; Refresh finished '+hm(j.ended)+' but did not publish: '+why+' &middot; the live site kept the last good board',null); return; }
+    paint('ok','&#10003; Refresh finished '+hm(j.ended)+' (took '+dur(j.elapsed)+')'+(rc?', '+why:'')+' &middot; this page is older'+reloadLink(),null); return;
+  }
+  if(j.state==='stale' && st && (!baked || st.getTime()>baked.getTime())){
+    paint('warn','&#9888; The refresh that started '+hm(j.started)+' stopped without finishing (window closed, restart or sleep) &middot; this page is from before it',null); return;
+  }
+  paint(BAKED.lvl, BAKED.msg, null);
+}
+function poll(){
+  if(W.document && W.document.hidden) return;
+  var ac=W.AbortController?new W.AbortController():null, to=ac?W.setTimeout(function(){ac.abort();},2500):null;
+  W.fetch('http://127.0.0.1:8823/refresh', ac?{signal:ac.signal}:{})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(to) W.clearTimeout(to); show(j); })
+    .catch(function(){ if(to) W.clearTimeout(to); });
+}
+poll(); W.setInterval(poll, 20000);
+}
+if(typeof window!=='undefined'){ window.__dfRfs=dfRfs; window.__dfRfsS=S; }
+dfRfs(S, document.getElementById('rfstat'), true);
 })();</script>
 <header>
+<!-- FOUR TIERS, 2026-10-24. The header was one wrapping row of ~40 buttons: filters, daily actions,
+     navigation to the other pages and export/sync tools all in the same cluster, so nothing could be
+     found without reading every chip, and on a phone the open filter panel was a full screen tall.
+     Every element below is the SAME element with the SAME id as before (the JS wires by id); only
+     the containers changed. Tier 1 .brand = wordmark, page nav, build pill. Tier 2 .controls.work =
+     today's actions + search + sort. Tier 3 .controls.filt = what narrows the list, plus the More
+     menu that holds the export / sync / mail tools. The More menu is a <details>, no JS. The nav
+     labels are mirrored by dealflow_nav.py for Call Mode; _navtest.py keeps the two in step. -->
 <div class="brand">
 <div>
 <div class="wm">DEAL<b>FLOW</b></div>
-<div class="tag">South Florida · Foreclosure &amp; Tax-Deed Intelligence</div>
+<div class="tag">South Florida &middot; Foreclosure &amp; Tax-Deed Intelligence</div>
 </div>
+<nav class="dfnav" aria-label="DealFlow pages">
+<a class="dfn on" href="#" aria-current="page" onclick="window.scrollTo(0,0);return false" title="This page: every lead, every lane">Board</a>
+<button id="callmodebtn" class="dfn" onclick="openCallMode()" title="CALL MODE — the phone page. Every dialable lead, one tap to dial, one tap to log the outcome, the full CIOC objection deck (14 cards, EN + ES) in the script drawer, and the after-call text panel. Outcomes sync back to this board. Built for the phone: open it there with the same access code."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z"/></svg>Call Mode</button>
+<button id="callmodebtn2" class="dfn" onclick="openCallMode('carlos')" title="CALL MODE &middot; CARLOS &mdash; Carlos's half of the dialable list. The split is fixed at BUILD time (call_mode.CALL_SEATS): his page holds only his rows, this one holds only Alejandro's, so the same homeowner is never on both phones. Same outcomes, same 45s team sync, same access gate."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z"/><circle cx="18" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Carlos</button>
+<button id="workerbtn" class="dfn" onclick="openMorningWorker()" title="Morning outreach worker — three lanes by urgency: URGENT (sale inside 7 days), ACTIVE (8 days or more), EARLY (fresh filing, no auction date yet). All tiers, contactable leads not touched in 72 hours. One card at a time: tap Email / Text / WP-lookup, or press Start auto-run to walk the whole queue and send by itself through the local bridge (nothing opens a composer unless the bridge is offline). Daily send cap warns at 240 and hard-stops at 300 messages, OR 450 recipients - whichever binds first, which in practice is recipients at roughly 234 messages because each send BCCs the owner's alternates. The badge shows whichever is closer to its ceiling. Calls are never capped. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Worker<span id="mcapbadge" class="mcapbadge" title="Today's send count — live from the bridge that actually enforces it, not this board's own log."></span></button>
+<a id="hmbtn" class="dfn" href="hm-balloon-q7v3n8/" target="_blank" rel="noopener"
+   title="Hard-Money Balloon Book — Broward investors on 10-12% hard-money paper with a 1-2yr balloon coming due, priced against the county roll and graded for Jesse's son's DSCR program (70-80% LTV, 6-8%, 30yr fixed). Sorted fundable-first.">Balloon Book</a>
+<button id="playbookbtn" class="dfn" title="Open the Playbook — the survival rule, 5 exits, door script, FL 501.1377 lines, deal math, felony bucket. Everything you need at the door. Keyboard: ? or P.">Playbook</button>
+</nav>
 <span class="spacer"></span>
-<span class="upd" id="upd">Updated <b id="upddate">2026-07-14 12:00</b><span id="stalemark"></span> · auto-refreshes daily 9am · notes saved on this device</span>
-<button id="playbookbtn" class="lockbtn" style="display:inline-block" title="Open the Playbook — the survival rule, 5 exits, door script, FL 501.1377 lines, deal math, felony bucket. Everything you need at the door. Keyboard: ? or P.">📖 Playbook</button>
+<span class="upd" id="upd" title="When this board was built. Green = fresh, amber = the nightly refresh has not published for 3+ days. Notes you type are saved on this device."><span class="updtxt">Built </span><b id="upddate">2026-07-14 12:00</b><span id="stalemark"></span></span>
 <button id="refreshbtn" class="lockbtn" style="display:inline-block" title="Refresh the deal data now — fires the cloud pipeline (GitHub Actions). Checks freshness first; 60-min cooldown per device.">&#8635; Refresh</button>
-<!-- Balloon Book — the refi play, a SEPARATE product from the foreclosure board. Relative link so it
-     works on Pages; the Desktop plaintext twin has no sibling folder, so it simply 404s there.
-     Rebuilt nightly by refresh.yml step [4c/5]. -->
-<a id="hmbtn" class="lockbtn" href="hm-balloon-q7v3n8/" target="_blank" rel="noopener"
-   style="display:inline-block;text-decoration:none"
-   title="Hard-Money Balloon Book — Broward investors on 10-12% hard-money paper with a 1-2yr balloon coming due, priced against the county roll and graded for Jesse's son's DSCR program (70-80% LTV, 6-8%, 30yr fixed). Sorted fundable-first.">💰 Balloon Book</a>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
-<div class="controls mcol">
+<div class="controls work">
+<div class="actions" role="group" aria-label="Today">
+<button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
+<button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
+<button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
+<button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
+<button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
+<button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
+<button id="mislist" class="abtn" title="MISCALCULATED DEALS — properties ACTIVELY LISTED (or pending) while the foreclosure sale is ≤21 days out. The listing agent is protecting a fantasy price while the clock runs out on their own client. The gatekeeper play (drill card 12): full commission on the buy + the re-listing after — the same property pays the agent twice, and BSG gets the deal. Red chip = listed ABOVE the cadastral value."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12l-8 8-8-8V4h8z"/><circle cx="9" cy="8" r="1.5"/></svg>Listed + sale</button>
+<button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
+</div>
+<span class="find">
+<span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… name, address, case, or a PHONE NUMBER that just texted you" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
+<label class="sortl">Sort <select id="sortby">
+<option value="_fresh" selected title="Freshest filings the competition can't see yet — pre-auction court filings first, picked-over auction-week leads last">🔥 First-mover (fresh &amp; uncontested)</option>
+<option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
+<option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option><option value="next">Follow-up due</option>
+</select></label>
+</span>
+</div>
+<div class="controls filt mcol">
 <!-- Mobile-only disclosure. On a 390px phone the control cluster is ~500px tall and pushes the first
      deal card to y=838 — a full screen of filters before a single lead is visible, on the exact
      device used standing at a front door. This button collapses everything except the search box;
@@ -2247,35 +2447,27 @@ el.innerHTML=msg;
 <button id="eq30" title="Only leads with 30%+ REAL owner equity, and only where the judgment is posted and the recorded lien search VERIFIED the property (clear or priced). Value minus the full payoff (judgment PLUS accrued FS 55.03 interest) and every lien we know about — surviving mortgage, juniors, assessments, municipal liens, back taxes. Excludes gross/unverified equity and anything the records flagged dead. ON A FORECLOSURE this is the same number printed on the row. ON A TAX DEED the row prints your PROFIT MARGIN instead (capped near 20% by the bid model), so a tax deed can read &quot;19% margin&quot; and still belong here — the owner&rsquo;s equity is what got it in.">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
-<button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
-<button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
-<button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
-<button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
-<button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
-<button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
-<button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
-<button id="callmodebtn" class="abtn callmode-btn" onclick="openCallMode()" title="CALL MODE — the phone page. Every dialable lead, one tap to dial, one tap to log the outcome, the full CIOC objection deck (14 cards, EN + ES) in the script drawer, and the after-call text panel. Outcomes sync back to this board. Built for the phone: open it there with the same access code."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z"/></svg>Call Mode</button>
-<button id="callmodebtn2" class="abtn callmode-btn" onclick="openCallMode('carlos')" title="CALL MODE &middot; CARLOS &mdash; Carlos's half of the dialable list. The split is fixed at BUILD time (call_mode.CALL_SEATS): his page holds only his rows, this one holds only Alejandro's, so the same homeowner is never on both phones. Same outcomes, same 45s team sync, same access gate."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z"/><circle cx="18" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Call Mode &middot; Carlos</button>
-<button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — three lanes by urgency: URGENT (sale inside 7 days), ACTIVE (8-45 days), EARLY (fresh filing, no auction date yet). All tiers, contactable leads not touched in 72 hours. One card at a time: tap Email / Text / WP-lookup, or press Start auto-run to walk the whole queue and send by itself through the local bridge (nothing opens a composer unless the bridge is offline). Daily send cap warns at 240 and hard-stops at 300 messages, OR 450 recipients - whichever binds first, which in practice is recipients at roughly 234 messages because each send BCCs the owner's alternates. The badge shows whichever is closer to its ceiling. Calls are never capped. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker<span id="mcapbadge" class="mcapbadge" title="Today's send count — live from the bridge that actually enforces it, not this board's own log."></span></button>
-<button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
-<button id="mislist" class="abtn" title="MISCALCULATED DEALS — properties ACTIVELY LISTED (or pending) while the foreclosure sale is ≤21 days out. The listing agent is protecting a fantasy price while the clock runs out on their own client. The gatekeeper play (drill card 12): full commission on the buy + the re-listing after — the same property pays the agent twice, and BSG gets the deal. Red chip = listed ABOVE the cadastral value."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12l-8 8-8-8V4h8z"/><circle cx="9" cy="8" r="1.5"/></svg>Listed + sale</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
 <span id="funnelbar" class="funnelbar" title="THE FUNNEL — every lead sits at one rung: call the best equity first; no answer → email + text; still cold → a letter (only where mail can still land in time); everything else filters down to Carlos's door route. Tap a stage to work only that stage, best equity first."></span>
 <select id="nearrad" class="tf" title="Radius from your home base — expand to broaden the net" style="display:none;padding:5px 8px"><option value="1">1&nbsp;mi</option><option value="2">2&nbsp;mi</option><option value="3">3&nbsp;mi</option><option value="5" selected>5&nbsp;mi</option><option value="10">10&nbsp;mi</option><option value="15">15&nbsp;mi</option><option value="25">25&nbsp;mi</option><option value="50">50&nbsp;mi</option></select>
-<span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… name, address, case, or a PHONE NUMBER that just texted you" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
-<label style="font-size:12px">Sort <select id="sortby">
-<option value="_fresh" selected title="Freshest filings the competition can't see yet — pre-auction court filings first, picked-over auction-week leads last">🔥 First-mover (fresh &amp; uncontested)</option>
-<option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
-<option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option><option value="next">Follow-up due</option>
-</select></label>
-<button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
-<button id="denstog" title="Toggle compact density — fit more rows on screen (persists on this device)">Compact</button>
-<button id="exp">Export CSV (with my notes)</button>
-<button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
+<details class="more" id="moremenu">
+<summary title="Export, sync, mail batch, messages, cadence, saved deals, proof sheet, density and the deal-model setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</summary>
+<div class="morepanel">
+<div class="mgroup">Work it</div>
+<button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
+<button id="savedbtn" title="Your saved batch — star deals to save them here (kept on this device). Print a field packet for Carlos, copy a list to send, or share any deal."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8z"/></svg> Saved<span class="favn"></span></button>
+<div class="mgroup">Send</div>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
 <button id="bulktext" title="MESSAGES batch — Text owners who have a textable number via Phone Link / Messages. Personalized bilingual SMS (cold / urgent / follow-up). One owner at a time so you review + send. DNC, opted-out, and Do-Not-Text skipped. Outbound copy carries no opt-out boilerplate (2026-09-02, operator's call: reads as bulk marketing and invites the opt-out it warns about). Opt-outs are still honored everywhere: a reply auto-suppresses via the one-way ledger."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Messages</button>
 <button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
-<button id="savedbtn" title="Your saved batch — star deals to save them here (kept on this device). Print a field packet for Carlos, copy a list to send, or share any deal."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8z"/></svg> Saved<span class="favn"></span></button>
+<div class="mgroup">Data</div>
+<button id="exp">Export CSV (with my notes)</button>
+<button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
+<div class="mgroup">View</div>
+<button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
+<button id="denstog" title="Toggle compact density — fit more rows on screen (persists on this device)">Compact</button>
+</div>
+</details>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -2844,13 +3036,31 @@ function _dTyped(v){ return v != null && v !== ''; }
    should call _payoffOf() so the board can never show the frozen number in one place and the
    accrued one in another — that inconsistency is worse than either number alone. */
 function _payoffOf(r){ return (+((r||{}).payoff) > 0) ? +r.payoff : (+((r||{}).judg) || 0); }
+/* LIS PENDENS ESTIMATED DEBT (loan_balance.py, 2026-10-17). A fresh filing has no judgment, so the
+   debt used to be "unknown" even when the recorded chain priced every open loan. debtEst is those
+   loans amortized from their recording month at that month's Freddie Mac 30-year rate (the same
+   estimate PropStream labels "Est. Balance"). An ESTIMATE: arrears and fees ride on top, and the
+   real note rate and term are not public. Only lis pendens rows carry it.
+   It is NOT a payoff or a judgment: _payoffOf stays the court figure, and only the equity readers
+   (_debtUnknown, _netEqOf, _ownerOwedOf, recompute) add this through _debtOf. Not used on an
+   association (mr / HOA lpkind) row, where the mortgages survive and are not what is being
+   foreclosed, nor once the operator has typed a senior or junior figure: the row then reads "debt
+   unknown" again until a payoff is entered, which is the safe side. */
+function _lpDebtEst(r){
+  if(!r || r.st !== 'LP' || r.mr || /HOA/i.test(String(r.lpkind||'')) || !(+r.debtEst > 0) || +r.payoff > 0 || +r.judg > 0) return 0;
+  var nn = (typeof notes !== 'undefined' && notes && notes[r.case]) || {};
+  if(_dTyped(nn.slien) || _dTyped(nn.jlien)) return 0;
+  return +r.debtEst;
+}
+function _isLpEst(r){ return _lpDebtEst(r) > 0; }
+function _debtOf(r){ return _payoffOf(r) || _lpDebtEst(r); }
 function _isAccrued(r){ return !!((r||{}).jaccrued) && (+((r||{}).payoff) > 0); }
 /* DEBT UNKNOWN (2026-09-30). A foreclosure whose judgment is not posted (r.ju) and every lis pendens
    row (no judgment exists yet) have _payoffOf() == 0. That is an UNKNOWN debt, not $0 owed, and
    subtracting nothing made _netEqOf() return the whole house value: the row read "judgment not
    posted · 100% eq" and the 30%+ equity filter let it through. Tax deeds price off the opening bid
    and balloon rows off their own loan, so neither is this case. */
-function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_payoffOf(r) > 0); }
+function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_debtOf(r) > 0); }
 /* LIENS VERIFIED. equity_state.py stamps eqstate on every lead; only 'clear' and 'priced' are
    facts. 'unpriced' / 'none' / 'unchecked' mean liens the recorded search did not establish are
    counted as $0, so the equity shown is the MOST it can be: a ceiling, rendered with "≤". */
@@ -2861,11 +3071,13 @@ function _eqCeiling(r){ return !!r && r.st !== 'TD' && !_liensVerified(r); }
 // condo figure -> "~"; liens not verified -> "≤" (the most it can be); else the plain figure.
 var _EQ_TIP_APPROX = 'Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).';
 var _EQ_TIP_UNKNOWN = 'Equity unknown — no final judgment is posted, so the debt is not known. It is not zero. Pull the docket or ask the owner what they owe.';
+var _EQ_TIP_LPEST = 'Estimate — no judgment yet. The recorded loans are amortized from their recording month at that month\'s Freddie Mac 30-year average (30-year term), like PropStream\'s Est. Balance. Missed payments, interest and fees are on top; ask the owner what they owe.';
 var _EQ_TIP_CEIL = 'At most this much — the recorded lien search is not verified for this property, so any mortgage or lien it missed is counted as $0. Ask the owner what they owe.';
 function _eqRowHtml(r){
   if(!_basisOf(r)) return '';
   if(_debtUnknown(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_UNKNOWN+'">eq unknown</span>';
   var p = _eqPct(r);
+  if(_isLpEst(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_LPEST+'">~'+p+'% eq est.</span>';
   if(r.eqfake||(r.st!=='TD'&&r.condo)) return ' · <span class="eqfake" title="'+_EQ_TIP_APPROX+'">~'+p+'% eq</span>';
   if(_eqCeiling(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_CEIL+'">≤'+p+'% eq</span>';
   return ' · '+p+'% '+(r.st==='TD'?'margin':'eq');
@@ -2874,6 +3086,7 @@ function _eqStatTxt(r){
   if(!_basisOf(r)) return '—';
   if(_debtUnknown(r)) return 'unknown';
   var p = _eqPct(r);
+  if(_isLpEst(r)) return '~'+p+'% est.';
   if(r.eqfake||(r.st!=='TD'&&r.condo)) return '~'+p+'%';
   if(_eqCeiling(r)) return '≤'+p+'%';
   return p+'%';
@@ -2881,6 +3094,7 @@ function _eqStatTxt(r){
 function _netEqTxt(r, fmtFn){
   if(_debtUnknown(r)) return 'unknown — ' + (r.st === 'LP' ? 'no judgment yet, loan balance not known' : 'judgment not posted');
   var f = fmtFn || fmtMoney, n = _netEqOf(r);
+  if(_isLpEst(r)) return 'about ' + f(n) + ' (est. loan balances ' + f(_lpDebtEst(r)) + ', recorded ' + f(+r.orestface||0) + ')';
   return (_eqCeiling(r) && n > 0) ? ('at most ' + f(n) + ' (liens not verified)') : f(n);
 }
 function _accrNote(r, long){
@@ -2920,7 +3134,7 @@ function recompute(){
        makes every downstream number (equity, cash, profit, verdict, call sheets) honest at once.
        Rows with no verified entry date have no `payoff` and fall back to the as-entered amount;
        `jaccrued` tells the UI which is which so it can label them instead of bluffing. */
-    const judg = (+r.payoff > 0) ? +r.payoff : (r.judg||0);
+    const judg = _debtOf(r);   // a lis pendens row's estimated loan balances when no court number exists
     // kimi: the value that drives the math. Florida's Save Our Homes cap suppresses the county
     // just/market value on long-held homesteads — 102 leads on this board have a comps-VERIFIED
     // ARV >=1.3x the capped county number (this one: capped $380k vs verified $579k), and every
@@ -2972,14 +3186,17 @@ function recompute(){
     // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
     // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing
     // one) = total survivors − juniors-after. Junior (orjuniors) is a payoff only on an owner purchase.
-    const _jp = chainConf ? (+r.orjuniors || 0) : 0;
+    // a lis pendens debtEst already carries EVERY open mortgage on the chain (in `judg` above), so
+    // the chain's senior/junior split must not add them a second time
+    const _lpEst = _isLpEst(r);
+    const _jp = (chainConf && !_lpEst) ? (+r.orjuniors || 0) : 0;
     // orsurvsen is the pipeline's single seniors-only figure (foreclosure_leads._senior_surviving).
     // The subtraction below survives ONLY as a reader for boards built before that field existed —
     // it is correct for the records/Broward feeds (whose `surv` bundles the juniors) and WRONG for
     // BatchData (whose `surv` is already seniors-only), which is the bug it replaces. No arithmetic
     // on the surviving senior happens in the browser any more.
     const _legacy = Math.max(0, (+r.orsurv || +r.orjunior || +r.orsurvfirst || 0) - _jp);
-    const _survTotal = !chainConf ? 0
+    const _survTotal = (!chainConf || _lpEst) ? 0
                      : (r.orsurvsen != null ? (+r.orsurvsen || 0) : _legacy);
     // ON AN ASSOCIATION SALE THE WHOLE OPEN STACK SURVIVES (FS 718.116) — and both tracers already
     // compute exactly that (records_liens.py:299 / broward_liens.py:318 sum EVERY open lien, and
@@ -3576,7 +3793,9 @@ function _contactLineHtml(r, ph, opts){
   // or a listing agent discloses this homeowner's foreclosure to a third party who never asked.
   // Call stays live on all of them (reaching the owner through the household is the whole point
   // of keeping these numbers); only the written, owner-addressed message is withheld.
-  const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0;
+  // 'wpm' (pasted from whitepages.com on a Call Mode card) is call-only too, until a call on it
+  // reaches a person: same rule as a Whitepages likely-owner number (Alejandro, 2026-10-22).
+  const _srcOwner = ['hh','nm','ag','xl','wpm'].indexOf(String(opts.src||'')) < 0;
   const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
@@ -3594,6 +3813,8 @@ function _contactLineHtml(r, ph, opts){
       ? ' <span class="cttag" title="Whitepages places this person at the address but the deed does not name them — spouse, adult child, tenant. Ask for the owner by name; do not greet them as the owner.">household</span>'
       : src==='nm'
         ? ' <span class="cttag" title="Matched on the owner\'s NAME only, not the property address. A namesake in the same city looks identical here — confirm the address before saying anything about the case.">name match</span>'
+      : src==='wpm'
+        ? ' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card. Not checked against the do-not-call registry; confirm you are speaking with the owner before you mention the filing.">Whitepages, pasted</span>'
         : '';
   // DNC numbers stay dialable (manual single dial about their own foreclosure); Text/WA stay off.
   const call = '<a class="ctact ctact-call" href="'+esc(_telNum(digits))+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
@@ -3668,12 +3889,26 @@ function _contactBlockHtml(r){
     }));
   });
   if(String(nn.phone||'').replace(/\D/g,'').length >= 10) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
+  // Numbers pasted from whitepages.com on a Call Mode card (notes.wpm, call_mode.py pasteCall).
+  // The first one also fills nn.phone above, so only the others are added here.
+  // A number Call Mode marked bad stays off the card here as well.
+  (nn.wpm||[]).forEach(function(w){
+    var wd = String(w||'').replace(/\D/g,'');
+    if(wd.length !== 10 || wd === String(nn.phone||'').replace(/\D/g,'').slice(-10)) return;
+    if((r.phones||[]).some(function(ph){ return String(ph||'').replace(/\D/g,'').slice(-10) === wd; })) return;
+    if((nn.badph||[]).some(function(b){ return String(b||'').replace(/\D/g,'').slice(-10) === wd; })) return;
+    lines.push(_contactLineHtml(r, wd, { dnc:false, mobile:true, src:'wpm' }));
+  });
   if(lines.length) h += '<div class="csphones">'+lines.join('')+'</div>';
   else h += '<div class="csmut">No phone yet — use Find a number below, then Text.</div>';
   h += _messagesBarHtml(r);
   if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
   if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
+  // Shown, never fed to the worker's auto-send list: that list is the traced `emails` and stays so.
+  const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0);
+  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card">Whitepages, pasted</span></span></div>';
   h += _csPeople(r);
   return h;
 }
@@ -4440,6 +4675,16 @@ function _taxStatusHtml(r, nn){
   return '<span class="taxchip"><span class="tc tc-miss">TAXES — not checked</span> '+openTax+
     ' <input class="cssurvin btax" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" placeholder="$ or 0 if current" title="Confirm on the tax bill, then type the amount (0 if current)."></span>';
 }
+// Estimated balance today for one open chain row (loan_balance.py). The recorded amount stays the fact.
+function _estLine(l, fm){
+  if(!l || l.est == null || !(+l.est >= 0) || String(l.st||'').toUpperCase() !== 'OPEN') return '';
+  var how = l.esth === 'amort' ? 'amortized at '+(+l.estr||0).toFixed(2)+'%, the Freddie Mac 30-yr average that month, 30-yr term'
+          : l.esth === 'vendor' ? 'BatchData estimate'
+          : l.esth === 'eqshare' ? 'equity-share agreement, not a loan: payoff is a share of value and is usually MORE'
+          : l.esth === 'credit_line' ? 'credit line: balance is whatever was drawn, recorded line kept'
+          : 'estimate';
+  return '<div class="dsmeta">Est. balance now <b>'+fm(+l.est)+'</b> <span class="mini">('+esc(how)+')</span></div>';
+}
 function _debtStack(r){
   const liens = (r.orliens||[]);
   if(!liens.length) return '';
@@ -4534,6 +4779,7 @@ function _debtStack(r){
       '<div class="dstop"><span class="dsparty">'+esc(l.party||'(lender not indexed)')+'</span>'+
       '<span class="dsamt">'+fm(l.amt)+'</span></div>'+
       '<div class="dsmeta">'+esc(l.d||'')+(l.bp?' · '+esc(l.bp):'')+' '+badge+'</div>'+
+      _estLine(l, fm)+
       '<div class="dsnote">'+note+'</div></div>';
   };
   let h = '<div class="cssec">THE DEBT STACK — who holds what, and what survives</div><div class="dsbox">';
@@ -4905,8 +5151,31 @@ function _wpNameUrl(r){ if(r.co) return '';
   const c=_wpCity(r);
   return 'https://www.whitepages.com/name/'+_wpSlug(n)+'/'+(c?c+'-FL':'FL');
 }
+function _wpStreet(street){
+  // Whitepages spells its own links "2929 NW 123rd Ter Apt B105"; ours ("2929 NW 123 TER #B105")
+  // lands on the city's property list instead of the house. Same rules as wp_web._wp_street and
+  // Call Mode's fileLinks (parity pinned by _wplinktest).
+  const SUF={st:1,ave:1,ct:1,ter:1,dr:1,rd:1,ln:1,pl:1,blvd:1,way:1,cir:1,pkwy:1,hwy:1,trl:1,
+             street:1,avenue:1,court:1,terrace:1,drive:1,road:1,lane:1,place:1,circle:1};
+  const ROUTE={road:1,rd:1,highway:1,hwy:1,sr:1,us:1,route:1,rte:1,cr:1};
+  const DIR={n:1,s:1,e:1,w:1,ne:1,nw:1,se:1,sw:1};
+  const ord=n=>{ n=parseInt(n,10); const m=n%100, d=n%10;
+    return n+((m>=10&&m<=20)?'th':(d===1?'st':d===2?'nd':d===3?'rd':'th')); };
+  let s=String(street||''), unit='';
+  const um=s.match(/(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)/i);
+  if(um){ unit=um[1]; s=s.replace(um[0],' '); }
+  const t=s.replace(/[^A-Za-z0-9 ]/g,' ').trim().split(/\s+/).filter(Boolean);
+  if(!unit && t.length>=3 && /^\d+$/.test(t[t.length-1]) && SUF[t[t.length-2].toLowerCase()]
+     && !ROUTE[t[t.length-2].toLowerCase()]) unit=t.pop();
+  const out=t.map((w,i)=>{ const lo=w.toLowerCase();
+    if(i>0 && /^\d+$/.test(w)) return ROUTE[t[i-1].toLowerCase()] ? w : ord(w);
+    if(DIR[lo] || lo==='us' || lo==='sr' || lo==='cr') return w.toUpperCase();
+    return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase(); });
+  if(unit) out.push('Apt', unit.toUpperCase());
+  return out.join(' ');
+}
 function _wpAddrUrl(r){ const p=String(r.addr||'').split(','); if(!p[0]||p.length<2) return '';
-  return 'https://www.whitepages.com/address/'+_wpSlug(p[0])+'/'+_wpCity(r)+'-FL';
+  return 'https://www.whitepages.com/address/'+_wpSlug(_wpStreet(p[0]))+'/'+_wpCity(r)+'-FL';
 }
 function _wpPropUrl(r){
   // Prefer opaque /property/{id}#owner when we have it (Property Intel detail page with phones/relatives).
@@ -5659,7 +5928,7 @@ function _pbRender(){
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
     +   '<h4>📞 The PHONE opener — the 4-second rule (rebuilt after a live hang-up, 07/28)</h4>'
     +   '<p class="pblede">On the phone their thumb is on End Call. "I saw your property on the foreclosure calendar" as sentence one = guaranteed hang-up: it confirms their worst fear (another vulture) before they decide you\'re human. Three beats, in order — "foreclosure" is not spoken until beat 3:</p>'
-    +   '<div class="pbscript"><span class="pbtag">1</span>"Hi — sorry to bother you. Is this the owner at [street]?" — WAIT. If "who\'s asking?": "My name\'s [name], I\'m calling from Miami. Are you the owner there?"</div>'
+    +   '<div class="pbscript"><span class="pbtag">1</span>"Hey [first name], it\'s [name] with Biscayne Solutions Group. How you doing?" — assume it\'s them, never "is this...?". WAIT. If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
     +   '<div class="pbscript"><span class="pbtag">2</span>"Thanks. Real quick — do you still own it, or has that already been handled?" — a yes/no about THEM buys 30 more seconds.</div>'
     +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. I\'m not the bank, not a lawyer — I\'m with Biscayne Solutions Group. My job is you knowing every option before that date. Got 60 seconds?"</div>'
     +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
@@ -6404,21 +6673,31 @@ function _textBodies(o){
       return t.toLowerCase().replace(/(^|['\-])([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
     }).join(' ');
   };
-  const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
+  /* 2026-10-22 (Alejandro: "lower caps non bothered is how i want our texts to be scripted and sent
+     out and templated", then "leave all of these ¿ and the weird shit in spanish make it like how i
+     text", "or english", "lowercaps unbothered", "human asf"). Every text is written the way a person
+     types on a phone: all lower case, no ¿ or ¡, no accent marks in the Spanish (ñ stays, "años"
+     without it is a different word). The owner's first name and the sender's name are lower-cased
+     here too, so a capitals record ("HILL") cannot shout in the middle of a casual text. The street
+     keeps _streetCase's casing so the address still reads as an address. */
+  const sN = String(o.sender || '').toLowerCase(), first = String(o.first || '').toLowerCase(), tone = o.tone || 'cold';
   const stEN = _streetCase(o.stEN) || 'your property', stES = _streetCase(o.stES) || 'su propiedad';
   const td = !!o.td, lp = !!o.lp;
   /* Opt-out on every batch text (2026-09-26, attorney: not the carrier-keyword instruction). The owner is
      told to say it is not a good time; inbound STOP / PARE / "not a good time" still opt out.
-     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN. */
-  const stopEN = " If now's not a good time, just let me know and I won't text you again.";
-  const stopES = ' Si ahora no es buen momento, solo dígamelo y no le vuelvo a escribir.';
-  const hi = 'Hi'+(first?' '+first:''), hola = 'Hola'+(first?' '+first:'');
+     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN, lower-cased on 2026-10-22
+     (and "dígamelo" without its accent): the attorney's words are unchanged, and
+     replies._OUR_OPTOUT_LINE matches either casing and either spelling, so an owner quoting it back
+     is still not a stop. */
+  const stopEN = " if now's not a good time, just let me know and i won't text you again.";
+  const stopES = ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.';
+  const hi = 'hi'+(first?' '+first:''), hola = 'hola'+(first?' '+first:'');
   /* The real days to the sale, when the caller knows them and it is a sale (never a just-filed case).
      "about" because a sale can be reset after the nightly read. Empty when unknown: the body then
      says the date is set without counting. */
   const d = (!lp && typeof o.days === 'number' && o.days >= 0 && o.days <= 365) ? Math.floor(o.days) : -1;
   const inEN = d === 0 ? 'today' : d === 1 ? 'tomorrow' : d > 1 ? 'in about '+d+' days' : '';
-  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' días' : '';
+  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' dias' : '';
   let en, es;
   /* 2026-10-13 rewrite (Alejandro: the old bodies read "robotic, super scripted", then "i dont like
      ... if you have a plan keep it, just get to the point like be urgent"). Written the way a person
@@ -6429,64 +6708,65 @@ function _textBodies(o){
      deceptive to a homeowner in distress. Unchanged rules: sender and company first, the attorney's
      let-me-know line last, the first question is keep or sell (#57), no sale number, no fee claim
      beyond "free" on the advisor call, no em dashes, and the word "foreclosure" stays out (a text
-     can be read by someone not on title). */
+     can be read by someone not on title). 2026-10-22: same facts, lower case, shorter, and the
+     just-filed body is his own sample, word for word. */
   if(tone==='urgent'){
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. The court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
-       + " After the sale, most options are gone. Our senior advisor can go over what's still possible"
-       + ' with you for free, today if you want. Are you hoping to keep the house, or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. La subasta de '+stES+' es '+(inES||'muy pronto')+'.'
-       + ' Después de la subasta, casi todas las opciones se acaban. Nuestro asesor principal le explica'
-       + ' gratis lo que todavía se puede hacer, hoy mismo si quiere. ¿Quiere quedarse con la casa o está'
+    en = hi+", it's "+sN+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
+       + " after the sale most options are gone. our senior advisor can go over what's still possible"
+       + ' with you for free, today if you want. are you hoping to keep the house, or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+'.'
+       + ' despues de la subasta casi todas las opciones se acaban. nuestro asesor principal le explica'
+       + ' gratis lo que todavia se puede hacer, hoy mismo si quiere. quiere quedarse con la casa o esta'
        + ' pensando en venderla?'+stopES;
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
        ever weakened, delete this body in the same commit. */
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. This is my last text about '+stEN+'.'
-       + (inEN ? ' The sale is '+inEN+', and once it happens most options are gone.'
-               : ' Every week that passes, fewer options are left.')
-       + ' If you want to talk, save my number. The call with our senior advisor is free.'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Este es mi último mensaje sobre '+stES+'.'
-       + (inES ? ' La subasta es '+inES+', y después casi todas las opciones se acaban.'
-               : ' Cada semana que pasa quedan menos opciones.')
-       + ' Si quiere hablar, guarde mi número. La llamada con nuestro asesor principal es gratis.'+stopES;
+    en = hi+", it's "+sN+' with biscayne solutions group. this is my last text about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+', and once it happens most options are gone.'
+               : ' every week that goes by, fewer options are left.')
+       + ' if you ever want to talk, save my number. the call with our senior advisor is free.'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. este es mi ultimo mensaje sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+', y despues casi todas las opciones se acaban.'
+               : ' cada semana que pasa quedan menos opciones.')
+       + ' si algun dia quiere hablar, guarde mi numero. la llamada con nuestro asesor principal es gratis.'+stopES;
   } else if(tone==='followup'){
-    en = hi+', '+sN+' again from Biscayne Solutions Group about '+stEN+'.'
-       + (inEN ? ' The sale is '+inEN+', and every week takes options off the table.'
-               : ' Every week this goes on takes options off the table.')
-       + ' A call with our senior advisor is free and takes 5 minutes. Want me to set it up today?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Le escribo otra vez sobre '+stES+'.'
-       + (inES ? ' La subasta es '+inES+', y cada semana quedan menos opciones.'
-               : ' Cada semana que pasa quedan menos opciones.')
-       + ' Hablar con nuestro asesor principal es gratis y toma 5 minutos. ¿Se lo coordino hoy?'+stopES;
+    en = hi+', '+sN+' again from biscayne solutions group about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+', and the options shrink every week.'
+               : ' the options shrink every week this goes on.')
+       + ' a call with our senior advisor is free and takes 5 minutes. want me to set it up today?'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group, le escribo otra vez sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+', y cada semana quedan menos opciones.'
+               : ' cada semana que pasa quedan menos opciones.')
+       + ' hablar con nuestro asesor principal es gratis y toma 5 minutos. se lo coordino hoy?'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
-    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " Two things many owners don't hear: paying the back taxes stops it, and if it sells for"
-       + " more than what's owed, the extra money is yours. Want me to walk you through it?"+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
-       + ' Dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por más de lo que'
-       + ' se debe, lo extra es suyo. ¿Quiere que se lo explique?'+stopES;
+    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " two things most owners don't hear: paying the back taxes stops it, and if it sells for"
+       + " more than what's owed, the extra money is yours. want me to walk you through it?"+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
+       + ' dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por mas de lo que'
+       + ' se debe, lo extra es suyo. quiere que se lo explique?'+stopES;
   } else if(lp){
     // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
-    en = hi+", it's "+sN+' with Biscayne Solutions Group. I saw a case was just filed at the courthouse'
-       + ' on '+stEN+'. Right now you have the most options, and they shrink every week the case moves.'
-       + ' Our senior advisor can walk you through them for free. Are you hoping to keep the house, or'
+    en = hi+", it's "+sN+' with biscayne solutions group. i saw a case was just filed at the courthouse'
+       + ' on '+stEN+'. right now you have the most options, and they shrink every week the case moves.'
+       + ' our senior advisor can walk you through them for free. are you hoping to keep the house, or'
        + ' open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Vi que acaban de abrir un caso en la corte'
-       + ' sobre '+stES+'. Ahora es cuando más opciones tiene, y cada semana que avanza el caso quedan'
-       + ' menos. Nuestro asesor principal se las explica gratis. ¿Quiere quedarse con la casa o está'
+    es = hola+', soy '+sN+' de biscayne solutions group. vi que acaban de abrir un caso en la corte'
+       + ' sobre '+stES+'. ahora es cuando mas opciones tiene, y cada semana que avanza el caso quedan'
+       + ' menos. nuestro asesor principal se las explica gratis. quiere quedarse con la casa o esta'
        + ' pensando en venderla?'+stopES;
   } else {
-    en = hi+", it's "+sN+" with Biscayne Solutions Group. There's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " We're not a lender. Every week that passes takes options off the table. Our senior advisor"
-       + " (30+ years) can go over what's still open with you for free. Are you hoping to keep the house,"
-       + ' or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de Biscayne Solutions Group. Hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
-       + ' No somos prestamistas. Cada semana que pasa quedan menos opciones. Nuestro asesor principal'
-       + ' (más de 30 años) le explica gratis las opciones que todavía tiene. ¿Quiere quedarse con la'
-       + ' casa o está pensando en venderla?'+stopES;
+    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " we're not a lender. you still have options, but they shrink every week. our senior advisor"
+       + " has 30+ years doing this and can go over them with you for free. are you hoping to keep the"
+       + ' house, or open to selling?'+stopEN;
+    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
+       + ' no somos prestamistas. todavia tiene opciones, pero cada semana quedan menos. nuestro asesor'
+       + ' principal tiene mas de 30 años en esto y se las explica gratis. quiere quedarse con la casa'
+       + ' o esta pensando en venderla?'+stopES;
   }
   return {en: en, es: es};
 }
@@ -6687,6 +6967,21 @@ function _callModeUrlAbs(sub){
       return new URL('call/'+_seatSeg(sub), location.href).href;
   }catch(e){}
   return _CALL_FALLBACK + _seatSeg(sub);
+}
+/* Same rule for the board itself and the Balloon Book: the Morning Worker is a blob: document, so
+   its page strip (dealflow_nav) needs absolute targets. On http(s) these resolve from the page's
+   own address; from a local file they fall back to the one baked board address. */
+function _boardUrlAbs(){
+  try{
+    if(location.protocol === 'http:' || location.protocol === 'https:') return new URL('./', location.href).href;
+  }catch(e){}
+  return 'https://aiejandrog.github.io/dealflow-board/';
+}
+function _balloonUrlAbs(){
+  try{
+    if(location.protocol === 'http:' || location.protocol === 'https:') return new URL('hm-balloon-q7v3n8/', location.href).href;
+  }catch(e){}
+  return 'https://aiejandrog.github.io/dealflow-board/hm-balloon-q7v3n8/';
 }
 function openCallMode(sub){
   /* ONE tab, not two (2026-09-16). window.open(url,'_blank','noopener') returns null BY SPEC (the
@@ -7376,7 +7671,7 @@ function _ownerOwedOf(r){
   // disagreed about whether the lead even clears 30%. Same formula on both sides now.
   // TAX DEED is deliberately NOT the same quantity: the row prints a PROFIT MARGIN (capped ~20% by
   // the TD bid model) while this asks "does the owner have equity" — see the eq30 filter comment.
-  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : _payoffOf(r);
+  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : _debtOf(r);
   // FS 197.502(6)(c): on a HOMESTEAD tax deed the opening bid = delinquent taxes + HALF the
   // ASSESSED value on the tax roll. My first pass wrote `r.value / 2` — `r.value` is JV (just /
   // market) value; on any homestead with a Save Our Homes differential (which is most of them)
@@ -7441,7 +7736,7 @@ function _netEqOf(r){
   // board prints — reading the frozen figure overstated net equity by $3.58M across the board on the
   // day it was measured. _payoffOf falls back to r.judg when no verified entry date exists, so rows
   // without accrual are unaffected.
-  var stack = _payoffOf(r)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
+  var stack = _debtOf(r)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
   return Math.max(0, v - stack);
 }
 // The number _netEqOf() returns means two different things by sale type, so it must never wear one
@@ -8714,6 +9009,7 @@ function _profitPaths(r){
   var netEq = _ownerEqOf(r);
   var debt = val ? Math.max(0, val - netEq) : 0;
   var fresh = _filedYear(r) >= 2024;
+  var _est = _isLpEst(r) ? ' est.' : '';   // net equity built on estimated loan balances says so
   var fc = r.st !== 'TD';
   var intent = (notes[r.case]||{}).intent || '';
   // each path tagged with the owner-intent(s) it serves — used to float the matching plays up
@@ -8727,13 +9023,13 @@ function _profitPaths(r){
     add('Equity unknown — get the balance first', 'No judgment is posted, so what they owe is not known. Ask the owner for the loan balance or a payoff letter before picking a play. It could be anywhere from deep equity to underwater.', ['sell','walk','keep']);
   } else if(netEq >= 100000){
     var loan = Math.round(val * 0.65);
-    add('Hard-equity loan referral', '~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
+    add('Hard-equity loan referral', '~'+fmtK(netEq)+_est+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
     // quote the SAME quantity as the tier below (net equity), then the discount-buy spread on top —
     // quoting only `val*0.75 − debt` here meant a lead with MORE owner equity could display a
     // smaller number than the thin-equity tier directly under it ($100k equity → "spread $0").
-    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity. Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+_est+' net equity. Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
   } else if(netEq >= 25000){
-    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+_est+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
   } else {
     add('No-equity rescue — dignity play', 'Still money here: $1,800–$3,000 stop fee, or arrears-reinstatement (bank rolls the past-due back in → rent it at market). And the human lever: we buy them 60–90 days to move out with dignity + $500–800 movers, instead of the sheriff putting grandma’s things on the street. Practice reps live on exactly these.', ['sell','walk','keep']);
   }
@@ -8936,8 +9232,9 @@ function _docLog(caseId, key, lang){
 // _bsgHead() derives width from height so it always scales, never stretches. Rules are BORDERS,
 // not backgrounds, so they survive print without color-adjust.
 // The inbox that goes on paper a homeowner, servicer or opposing counsel receives (Jose,
-// 2026-08-08). Deliberately NOT sender.email — that stays the personal address the outreach
-// pipeline sends from, and the two must not be collapsed into one value.
+// 2026-08-08). Deliberately NOT sender.email — that is the signature contact on outreach
+// mail (alejandro@bsgflorida.com unless the operator saved a different address). This
+// client-paper inbox is a separate value. Do not collapse the two.
 // The company inbox, injected at build time from sender.json `client_email` -- it used to be this
 // literal in THREE files, which is three chances to change two of them. It still carries the OLD
 // company name: renaming it to a biscayne* address that does not exist yet would silently
@@ -9017,7 +9314,12 @@ function _docShell(title, bodyHtml, opts){
   // The @media print rules make it look like a real form when Carlos hits Print.
   opts = opts || {};
   var stamp = 'DEALFLOW · ' + esc(new Date().toLocaleString()) + (opts.key ? ' · doc '+esc(opts.key) : '');
-  return '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'
+  // The Morning Worker is a SCREEN, not paper: without a viewport meta a phone lays it out at 980px
+  // and shrinks it to fit, so every button and template on it was tiny and pinch-zoom only. The
+  // printable docs keep their old behaviour (opts.screen is set by genMorningWorker alone).
+  return '<!doctype html><html><head><meta charset="utf-8">'
+    + (opts.screen ? '<meta name="viewport" content="width=device-width, initial-scale=1">' : '')
+    + '<title>'+esc(title)+'</title><style>'
     + 'body{font:14.5px/1.55 Georgia,serif;color:#111;margin:0;padding:0;background:#f4f5f7}'
     + '.bar{background:#0B1730;padding:10px 16px;display:flex;gap:8px;font:13px Arial,sans-serif;flex-wrap:wrap;align-items:center}'
     + '.bar button{padding:8px 14px;cursor:pointer;border:1px solid #33436A;background:#152747;color:#CDD8EF;border-radius:6px;font-size:13px}'
@@ -10245,6 +10547,7 @@ function genAttyPacket(r){
       eqSpec = 'unknown <span class="mini">(no final judgment posted — the debt is not known — ATTORNEY TO VERIFY)</span>';
     } else if(isFinite(eqd) && eqd > 0){
       eqSpec = fmtMoney(eqd) + (isFinite(eqp) ? ' <span class="mini">(~'+Math.round(eqp)+'% of value)</span>' : '')
+             + (_isLpEst(r) ? ' <span class="mini">(ESTIMATED from recorded loans amortized to today, NOT a payoff, no judgment yet — ATTORNEY TO VERIFY)</span>' : '')
              + ' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
     } else if(isFinite(eqd)){
       eqSpec = '$0 <span class="mini">(debt stack meets or exceeds value — ATTORNEY TO VERIFY)</span>';
@@ -10927,10 +11230,10 @@ function genFieldSheet(r){
     // THE OPENER — bilingual, the four-second version, from the playbook
     +   '<div class="fsec">The opener &middot; el saludo</div>'
     +   '<div class="fscript">'
-    +     '<p><b>EN:</b> &ldquo;Hi, are you '+esc(first)+'? My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
+    +     '<p><b>EN:</b> &ldquo;'+(first&&!r.co?'Hey '+esc(first)+', how are you? ':'Hi there, how are you? ')+'My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
     +       '. I&rsquo;m with Biscayne Solutions Group &mdash; I&rsquo;m not your lender or an attorney. I saw the county has a sale '
     +       'date on this property and I wanted to see, face to face, if there&rsquo;s a way I can help before that date.&rdquo;</p>'
-    +     '<p><b>ES:</b> &ldquo;Hola, &iquest;es usted '+esc(first)+'? Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
+    +     '<p><b>ES:</b> &ldquo;'+(first&&!r.co?'Hola '+esc(first)+', &iquest;c&oacute;mo est&aacute;? ':'Hola, &iquest;c&oacute;mo est&aacute;? ')+'Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
     +       '. Soy de Biscayne Solutions Group &mdash; no soy prestamista ni abogado. Vi que el condado tiene fecha de '
     +       'subasta y quer&iacute;a ver, en persona, si puedo ayudar antes de esa fecha.&rdquo;</p>'
     +   '</div>'
@@ -11050,12 +11353,21 @@ function genDialReady(r){
     + fact('Demandante', r.plaintiff)
     + fact('Señal del dueño', r.co?'empresa (pida por el manager)':(r.hs?'homestead — casa familiar':'estatus desconocido'));
   // the 3 beats — mirror genScript's 4-second opener, just SHORTER for at-a-glance reading
+  // Beat 1 assumes it is them (2026-10-26, Alejandro: "always assume"), never "is this...?".
+  var drFirst = r.co ? '' : _firstName(_ownerName((r.owners||'').split(';')[0].trim(), r));
+  var drName = esc((typeof sender==="object"&&sender&&sender.name)||'[your name]');
   var beatsEN = ''
-    + '<div class="drbeat"><span class="drn">1</span>“Hi — sorry to bother you. Is this the owner at <b>'+esc(street)+'</b>?” <span class="drwait">WAIT</span></div>'
+    + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
+        ? '“Hey <b>'+esc(drFirst)+'</b>, it’s '+drName+' with Biscayne Solutions Group. How you doing?”'
+        : '“Hey, it’s '+drName+' with Biscayne Solutions Group. You’re the owner over on <b>'+esc(street)+'</b>, right?”')
+    + ' <span class="drwait">WAIT</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. I’m not the bank, not a lawyer — I’m with Biscayne Solutions Group. Got <b>60 seconds</b>?”</div>';
   var beatsES = ''
-    + '<div class="drbeat"><span class="drn">1</span>“Hola — perdone la molestia. ¿Hablo con el dueño de <b>'+esc(street)+'</b>?” <span class="drwait">ESPERE</span></div>'
+    + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
+        ? '“Hola <b>'+esc(drFirst)+'</b>, le habla '+drName+', de Biscayne Solutions Group. ¿Cómo está?”'
+        : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Usted es el dueño de <b>'+esc(street)+'</b>, ¿verdad?”')
+    + ' <span class="drwait">ESPERE</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“Le hablo claro — su caso salió en los registros del condado, con fecha <b>'+_dfHtml(f.saleDate)+'</b>. No soy el banco ni abogado — comprador local. ¿Me da <b>60 segundos</b>?”</div>';
   var dncNote = '';
@@ -12551,8 +12863,14 @@ var WORKER_LANES = {
            test:function(d,r){ return !!_replyWaiting(r); }},
   urgent: {t:'URGENT',  ic:'🔴', d:'Sale inside 7 days — call these first',
            test:function(d,r){ return d!=null && d>=0 && d<=7 && !_replyWaiting(r); }},
-  active: {t:'ACTIVE',  ic:'🟡', d:'Sale 8–45 days out — the working middle',
-           test:function(d,r){ return d!=null && d>=8 && d<=45 && !_replyWaiting(r); }},
+  // NO UPPER BOUND (2026-10-22). This read d<=45, so an auction-calendar lead with a sale 46-120
+  // days out (the calendars are scraped 120 days ahead) sat in NO lane: not URGENT, not ACTIVE, and
+  // not EARLY, which is LP / no-date only. Call Mode dials those leads (its 46+ lane, MAX_DAYS 120
+  // since 10-15) and cadence / outreach_email have filed them under 'active' since 09-08, but the
+  // 8am worker never emailed them until the sale aged into 45 days. The queue sort is soonest sale
+  // first and puts 8-45 ahead of 46+, so the nearer leads still go first.
+  active: {t:'ACTIVE',  ic:'🟡', d:'Sale 8+ days out — the working middle, soonest first',
+           test:function(d,r){ return d!=null && d>=8 && !_replyWaiting(r); }},
   early:  {t:'EARLY',   ic:'🌱', d:'Fresh filing, no sale date yet — be the first call',
            // d<0 exclusion: an LP row that GAINS a sale date which then passes must not sit in
            // "be the first call" — with live _saleDays a stale tab can now produce negative d here
@@ -13073,6 +13391,58 @@ function _workerCard(r){
     repPhone: rw ? rw.phone : ''
   };
 }
+/* FIND A NUMBER on the Morning Worker (2026-10-22, Alejandro: "all leads even ones with no phone
+   numbers scraped throw them in morning worker and call mode because then i can use whitepage to
+   verify the number"). A lead with no phone and no email has nothing the worker can send, so it
+   never enters a lane; this lists the ones that pass every OTHER worker gate, so they can be looked
+   up. The gate is _workerEligible itself, asked about a copy of the row that carries a placeholder
+   address (never used, never shown, never sent to) so only its "reachable at all" test is answered
+   for it: opt-outs, stays, diligence holds, passed sales, cooldowns and the no policy all still
+   decide. A number already typed into the lead's phone box (n.phone) takes it off this list. The
+   number is entered on the board row or in Call Mode's own Find-a-number list, where the call
+   is made. */
+var _LK_PLACEHOLDER = 'lookup-placeholder@invalid';
+function _workerLookupRows(){
+  var out = [];
+  DATA.forEach(function(r){
+    if(!r || !r.case || r.rfHold) return;
+    if((r.phones||[]).length || (r.emails||[]).length) return;
+    if(String((notes[r.case]||{}).phone||'').replace(/\D/g,'').length >= 10) return;
+    if(!_workerEligible(Object.assign({}, r, {emails:[_LK_PLACEHOLDER]}))) return;
+    out.push(r);
+  });
+  out.sort(function(a, b){
+    var da = _saleDays(a), db = _saleDays(b);
+    da = (da == null) ? 99999 : da; db = (db == null) ? 99999 : db;
+    return (da - db) || (_filedMs(b) - _filedMs(a));
+  });
+  return out;
+}
+function _workerLookupHtml(){
+  var rows = _workerLookupRows();
+  if(!rows.length) return '';
+  var CAP = 150;
+  var items = rows.slice(0, CAP).map(function(r){
+    var d = _saleDays(r);
+    var clock = (d == null) ? 'no sale date' : (d < 0 ? 'sale passed' : 'sale in ' + d + 'd');
+    var wa = _wpAddrUrl(r), wn = _wpNameUrl(r);
+    return '<div style="padding:8px 14px;border-bottom:1px solid #eef0f5">'
+      + '<b>' + esc(r.owners || r.oname || r.case) + '</b>'
+      + '<div style="font-size:12.5px;color:#5b6472">' + esc(r.addr || 'address unresolved') + ' &middot; ' + clock + '</div>'
+      + '<div style="margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;font:700 12.5px Segoe UI,Arial">'
+      + (wa ? '<a href="' + esc(wa) + '" target="_blank" rel="noopener">Whitepages address</a>' : '')
+      + (wn ? '<a href="' + esc(wn) + '" target="_blank" rel="noopener">Whitepages name</a>' : '')
+      + '</div></div>';
+  }).join('');
+  return '<div style="background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
+    + '<div class="mwloghead" style="background:#3a2a06;color:#F6E9C8"><span>&#128269; Find a number &mdash; no phone, no email</span>'
+    + '<span class="mwlogstats">' + rows.length + '</span></div>'
+    + '<div style="padding:8px 14px;border-bottom:1px solid #eef0f5;font-size:12.5px;color:#5b6472">Look the owner up on Whitepages, '
+    + 'then type the number in Call Mode under <b>Find a number</b> (or in the lead\'s phone box on the board). '
+    + '<a href="https://aiejandrog.github.io/dealflow-board/call/" target="_blank" rel="noopener">Open Call Mode</a>'
+    + (rows.length > CAP ? ' &middot; showing the ' + CAP + ' soonest sales of ' + rows.length : '') + '</div>'
+    + '<div style="max-height:320px;overflow-y:auto">' + items + '</div></div>';
+}
 function genMorningWorker(lane, autostart){
   // Default to the REPLIED lane whenever anyone is waiting — replies open the day, period.
   // No lane asked for: the first lane that has someone workable in it, so the worker never opens
@@ -13157,6 +13527,14 @@ function genMorningWorker(lane, autostart){
     + '<style>'
     +   '.mw{max-width:820px;margin:0 auto;padding:20px 22px 40px;font:15px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;background:#fbfaf6;min-height:100vh}'
     +   '.mwtop{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid #e2e6ee;margin-bottom:18px;flex-wrap:wrap}'
+    // wraps, never a hidden-scrollbar strip: at phone width Balloon Book and Playbook were off-screen
+    +   '.mwnav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px;border-radius:12px;margin:0 0 12px;background:#eef1f6;border:1px solid #d5dae4}'
+    +   '.mwnav .dfn{flex:0 0 auto;display:inline-flex;align-items:center;min-height:36px;padding:7px 13px;border-radius:9px;color:#3a4250;font:600 13px "Segoe UI",Arial,sans-serif;text-decoration:none;white-space:nowrap}'
+    +   '.mwnav .dfn.on{background:#0B1730;color:#F4E5A7}'
+    // the two sticky banners (bounce pause, marks not reaching the board) both pin at the top; on a
+    // very short window (200% zoom, a phone sideways) a 3-4 line pinned banner took a third of the screen, so there they scroll
+    +   '@media (max-height:520px){#mwbounceban,#mwmarkban{position:static!important}}'
+    +   '.mwnav .dfn:not(.on):hover{background:#fff}'
     +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0;flex:1 1 260px;min-width:0}'
     +   '.mwtitle .sub{display:block;font:600 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:2px;letter-spacing:.02em}'
     +   '.mwprog{background:#0B1730;color:#F4E5A7;padding:8px 14px;border-radius:6px;font:700 13px "Segoe UI",Arial,sans-serif;letter-spacing:.02em}'
@@ -13277,8 +13655,25 @@ function genMorningWorker(lane, autostart){
     +   '.mwblocked{background:#fff5f4;border:2px solid #8a1c1c;border-radius:12px;padding:26px 24px;text-align:center}'
     +   '.mwblocked h2{margin:0 0 9px;font:800 21px "Segoe UI",Arial,sans-serif;color:#8a1c1c}'
     +   '.mwblocked p{color:#5b6472;font-size:13.5px;line-height:1.6;margin:8px 0}'
+    +   '#mwrfs{border-radius:8px;margin:0 0 10px}'
     + '</style>'
     + '<div class="mw">'
+    // The page strip (dealflow_nav.ITEMS order). This worker is a blob: tab of its own, so every
+    // target is absolute (_boardUrlAbs / _callModeUrlAbs); anchors, not window.open, one tab each.
+    +   '<nav class="dfnav mwnav" aria-label="DealFlow pages">'
+    // Board: a plain link. It used to call window.opener.focus() and return false, but Chrome does
+    // not switch tabs for focus() called from another tab (only a window's own opener may focus it),
+    // so the tap did nothing at all while the board tab was open (2026-10-26 audit).
+    +     '<a class="dfn" href="' + esc(_boardUrlAbs()) + '" target="_blank" rel="noopener">Board</a>'
+    +     '<a class="dfn" href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener">Call Mode</a>'
+    +     '<a class="dfn" href="' + esc(_callModeUrlAbs('carlos')) + '" target="_blank" rel="noopener">Carlos</a>'
+    +     '<a class="dfn on" href="#" aria-current="page" onclick="return false">Worker</a>'
+    +     '<a class="dfn" href="' + esc(_balloonUrlAbs()) + '" target="_blank" rel="noopener">Balloon Book</a>'
+    +     '<a class="dfn" href="' + esc(_boardUrlAbs()) + '#playbook" target="_blank" rel="noopener">Playbook</a>'
+    +   '</nav>'
+    // the live refresh line: same script as the board's status line (refresh_status.py), painted
+    // from the opener's copy so this window never carries a second version of it
+    +   '<div id="mwrfs" style="display:none"></div>'
     +   '<div class="mwtop">'
     +     '<h1 class="mwtitle">Morning outreach worker'
     +       '<span class="sub">' + esc(laneMeta.ic + ' ' + laneMeta.t) + ' · ' + esc(laneMeta.d)
@@ -13366,6 +13761,7 @@ function genMorningWorker(lane, autostart){
     +     '<div class="mwloghead" style="background:#0B2A17;color:#CFF3DC"><span>&#9742; Call these &mdash; phone only, no email</span><span style="display:flex;gap:8px;align-items:center"><button id="mwcopycallq" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:inherit;border-radius:6px;padding:3px 9px;font:700 11px Arial;cursor:pointer">&#10697; Copy list</button><span class="mwlogstats" id="mwcallqn"></span></span></div>'
     +     '<div id="mwcallqlist" style="max-height:320px;overflow-y:auto"></div>'
     +   '</div>'
+    +   (function(){ try{ return _workerLookupHtml(); }catch(e){ return ''; } })()
     +   '<div class="mwlogwrap">'
     +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span style="display:flex;gap:8px;align-items:center"><button id="mwcopylog" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:inherit;border-radius:6px;padding:3px 9px;font:700 11px Arial;cursor:pointer">&#10697; Copy day</button><span class="mwlogstats" id="mwlogstats"></span></span></div>'
     +     '<div class="mwlog" id="mwlog"></div>'
@@ -13377,7 +13773,7 @@ function genMorningWorker(lane, autostart){
     +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
-    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null)};'
+    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null), ft:(j.bounce_rule==="paused"), ftDead:+(j.bounce.day_dead||0), ftSent:+(j.bounce.day_sent||0), ftDay:String(j.bounce.day_date||"")};'
     +   'if(BOUNCE.blocked) render();'
     +   '}}).catch(function(){});}catch(e){}'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
@@ -13472,6 +13868,10 @@ function genMorningWorker(lane, autostart){
     // 'sent' gets its own glyph so a DELIVERED line is visually distinct from an ATTEMPT at a
     // glance — that distinction is the whole point of the rewrite.
     +   'var ICON={callq:"&#9742;",callout:"&#128222;",call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",textopen:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
+    // FLIGHT RECORDER (2026-10-21): one fire-and-forget line per run event to the bridge's
+    // worker_runs.jsonl, so an unattended morning that sends nothing can say why after this tab is
+    // gone. Counts and codes only. It never blocks, never throws, and nothing reads it to decide.
+    +   'function runlog(ev, x){ try{ fetch("http://127.0.0.1:8823/runlog", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
     +     'if(LOG.length>1000) LOG=LOG.slice(-1000);'
@@ -13528,7 +13928,7 @@ function genMorningWorker(lane, autostart){
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
     +   'var TEXT_HOLD_DOWN="Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.";'
-    +   'var BRIDGE_OK=null, BRIDGE_HOLD="", TEXT_HOLD=TEXT_HOLD_DOWN;'
+    +   'var BRIDGE_OK=null, BRIDGE_HOLD="", BRIDGE_WHY="", TEXT_HOLD=TEXT_HOLD_DOWN;'
     +   'function paintTextHold(){ var h=document.getElementById("mwtexthold"); if(!h) return; if(TEXT_HOLD){ h.style.display="block"; h.textContent=TEXT_HOLD; } else { h.style.display="none"; h.textContent=""; } }'
     +   'function renderBridge(){'
     +     'var b=document.getElementById("mwbridge"); if(!b) return;'
@@ -13544,13 +13944,15 @@ function genMorningWorker(lane, autostart){
     // renderRunBar too: the Start buttons are disabled until the bridge is confirmed up, so the
     // bar has to change the moment the probe answers or it offers a button that refuses to run.
     +   'function bridgeUp(ok){ if(BRIDGE_OK!==ok){ BRIDGE_OK=ok; renderBridge(); renderRunBar(); } }'
+    // live refresh line + the Board link (focus the board tab that opened this window)
+    +   'try{ var _rf=window.opener&&window.opener.__dfRfs; if(_rf) _rf(window.opener.__dfRfsS, document.getElementById("mwrfs"), true); }catch(e){}'
     +   'function probeBridge(){'
     +     'var ac = (typeof AbortController!=="undefined") ? new AbortController() : null;'
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
     +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
-    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold===false)?"":((j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):TEXT_HOLD_DOWN); paintTextHold(); bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
-    +       '.catch(function(){ if(to) clearTimeout(to); TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold(); bridgeUp(false); });'
+    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold===false)?"":((j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):TEXT_HOLD_DOWN); paintTextHold(); BRIDGE_WHY=(j&&j.ready)?"":"not_ready"; bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
+    +       '.catch(function(e){ if(to) clearTimeout(to); BRIDGE_WHY=(e&&e.name==="AbortError")?"timeout":"down"; TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold(); bridgeUp(false); });'
     +   '}'
     +   'function renderCap(){'
     +     'var n=sentToday(), left=Math.max(0,CAP.max-n), blocked=n>=CAP.max, warn=n>=CAP.warnAt;'
@@ -13582,6 +13984,7 @@ function genMorningWorker(lane, autostart){
     +   'function setLane(k){'
     +     'if(!LANES[k] || k===lane) return;'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
+    +     'if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
     +     'cancelSyncWait(); auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
     +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){'
     +       'el.classList.toggle("on", el.dataset.lane===k);'
@@ -13662,6 +14065,12 @@ function genMorningWorker(lane, autostart){
     +     'var b=document.getElementById("mwmarkban");'
     +     'if(!b){ b=document.createElement("div"); b.id="mwmarkban"; b.style.cssText="position:sticky;top:0;z-index:100;background:#8f2b23;color:#fff;font:700 12.5px/1.4 Arial;padding:8px 12px;border-radius:8px;margin:0 0 10px"; if(main&&main.parentNode) main.parentNode.insertBefore(b, main.parentNode.firstChild); }'
     +     'b.innerHTML="&#9888; BOARD TAB IS CLOSED — "+MARKQ.length+" mark(s) could not reach the board (backed up to the bridge). Reopen the board and keep it open; buffered marks flush automatically.";'
+    // both banners are sticky at the top: the bounce banner stands under this one, never behind it
+    +     '_banStack();'
+    +   '}'
+    +   'function _banStack(){'
+    +     'var mb=document.getElementById("mwmarkban"), bb=document.getElementById("mwbounceban");'
+    +     'if(bb) bb.style.top=(mb ? mb.offsetHeight+6 : 0)+"px";'
     +   '}'
     // The flush rides the ACK path, not splice-and-forget. The old version blind-posted into
     // whatever window.opener pointed at — a reloaded board sitting at the access gate swallowed
@@ -13673,7 +14082,7 @@ function genMorningWorker(lane, autostart){
     +       'var q=MARKQ.splice(0,MARKQ.length);'
     +       'q.forEach(function(m){ try{window.opener.postMessage(m,"*"); _pendWatch(m,3);}catch(e){ MARKQ.push(m); } });'
     +       'var b=document.getElementById("mwmarkban");'
-    +       'if(b && !MARKQ.length){ b.remove(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
+    +       'if(b && !MARKQ.length){ b.remove(); _banStack(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
     +     '}'
     +   '},5000);'
     // AUTO-RUN CHANNELS. email is the only channel the machine can legally auto-send. A phone-only
@@ -14021,6 +14430,7 @@ function genMorningWorker(lane, autostart){
     +       'var whyMap={replied:"owner already replied — this is a live conversation, not a template",'
     +                   'done:"3 emails already sent — the last one promised no more, honoring that",'
     +                   'fth:"no address the send bridge will accept yet (no verification or reply on record)"};'
+    +       'runlog("no_email", {why:String(r.mailWhy||"none"), lane:lane});'
     +       'addLog("skip", r.first||r.owner, "no email to send ("+(whyMap[r.mailWhy]||"no reachable mailbox for this lead")+")", "warn");'
     +       'advance();'
     +       'return;'
@@ -14060,6 +14470,7 @@ function genMorningWorker(lane, autostart){
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
     +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'runlog("send_answer", {status:x.status, ok:!!(x.j&&x.j.ok), blocked:String((x.j&&x.j.blocked)||""), skip:!!(x.j&&x.j.skip), ft_paused:!!(x.j&&x.j.first_touch_paused), lane:lane});'
     +         'if(_seq===SENDSEQ) sending=false;'
     +         'var _mv=_live();'
     +         'if(x.j.blocked==="optout_stale" && x.j.hold==="sync" && auto && !SYNCWAIT && SYNCTRY<SYNC_MAX){'
@@ -14078,13 +14489,13 @@ function genMorningWorker(lane, autostart){
     // person); x.j.to is the one that actually got it, and the archive must name THAT mailbox.
     +           'post("sent", {mid:x.j.message_id||"", via:"bridge", to:String(x.j.to||""), portfolio:(r.portfolio||[]).map(function(p){return p.c;}), qc:qc});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
-    +           'if(_mv) setTimeout(function(){ advance(); }, 900);'
+    +           'if(_mv) advance(1600);'
     +         '} else if(x.status===409 && x.j.skip){'
     +           'bridgeUp(true);'
     // The bridge says WHY it deferred (24h dedupe, or the per-alias warm-up cap in senders.json);
     // show its sentence rather than guessing, so a capped lane never reads as a duplicate.
     +           'addLog("skip", r.first||r.owner, String(x.j.err||"already emailed inside 24h — deferred"), "warn");'
-    +           'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +           'post("skip", {qc:qc}); if(_mv) advance(1400);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
     // This is the single most authoritative moment the true count exists — the server just used it
@@ -14100,9 +14511,14 @@ function genMorningWorker(lane, autostart){
     +           'pause();'
     +   '} else if(x.status===403 && x.j.blocked && x.j.skip){'
     +     'bridgeUp(true);'
-    +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null))};'
-    +     'addLog("skip", r.first||r.owner, "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears.", "warn");'
-    +     'post("skip", {qc:qc}); if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +     'var _ob=x.j.bounce||{};'
+    +     'BOUNCE={blocked:true, rate:_ob.rate||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null)), ft:(!!x.j.first_touch_paused || !!(BOUNCE&&BOUNCE.ft)), ftDead:+(_ob.day_dead||(BOUNCE&&BOUNCE.ftDead)||0), ftSent:+(_ob.day_sent||(BOUNCE&&BOUNCE.ftSent)||0), ftDay:String(_ob.day_date||(BOUNCE&&BOUNCE.ftDay)||"")};'
+    // Three refusals share this shape. Say which one it was: a first-touch bounce pause is not a
+    // missing-evidence hold, and logging it as one sent the 10-18 diagnosis down the wrong road.
+    +     'addLog("skip", r.first||r.owner, (x.j.first_touch_paused ? "held — first emails are paused by the bounce rule. Stays queued; resumes when the pause lifts."'
+    +     '  : ("proven_pool" in x.j) ? "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears."'
+    +     '  : "held — "+String(x.j.err||"bounce check refused this send")+" Stays queued."), "warn");'
+    +     'post("skip", {qc:qc}); if(_mv) advance(1400);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
@@ -14119,11 +14535,12 @@ function genMorningWorker(lane, autostart){
     // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
     +           'post("skip", {qc:qc, why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
-    +           'if(_mv) setTimeout(function(){ advance(); }, 700);'
+    +           'if(_mv) advance(1400);'
     +         '}'
     +       '})'
     +       '.catch(function(err){'
     +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
+    +         'runlog("send_error", {lane:lane});'
     +         'if(_seq===SENDSEQ) sending=false;'
     +         'bridgeUp(false);'
     // AUTO-RUN: never open a Gmail composer or wait on a confirm click — that is precisely the
@@ -14421,9 +14838,18 @@ function genMorningWorker(lane, autostart){
     +   '}'
     +   'window.addEventListener("focus", onBack);'
     +   'document.addEventListener("visibilitychange", function(){ if(!document.hidden) onBack(); });'
-    +   'function advance(){'
+    // ms: the wait before the next lead, 700 by default. doSend passes its own (1600 after a delivery,
+    // 1400 after a skip: the old answer-then-advance delay plus this 700) and calls advance() the
+    // moment the answer lands. It used to wait on a bare setTimeout(advance) that no one tracked:
+    // a lane switch inside that window advanced the NEW lane past its lead 1, and clearing it on
+    // Stop left `i` on the lead just emailed, so Start re-sent it and the 409 logged a false skip.
+    // Moving `i` now and waiting in nextStep (which Stop, pause and runOne's !auto check own)
+    // closes both. _autorunnavtest.py (2026-10-22, supersedes #318).
+    +   'function advance(ms){'
     +     'i++;'
-    +     'if(auto && i<Q.length){ nextStep=setTimeout(runOne, 700); return; }'
+    // Paint the lead `i` now points at before waiting, so the card's buttons (which read Q[i]) never
+    // sit under the previous lead's name while the run waits.
+    +     'if(auto && i<Q.length){ render(); if(nextStep) clearTimeout(nextStep); nextStep=setTimeout(runOne, ms||700); return; }'
     +     'if(auto && autoAll && i>=Q.length && hopNextLane()) return;'
     /* THE RUN IS OVER, SO SAY SO. `auto` was set by Start and cleared by a lane switch, by pause()
        and by the cap card -- but NOT by reaching the end of the queue. So after a lane finished
@@ -14432,7 +14858,7 @@ function genMorningWorker(lane, autostart){
        gate's own comment claimed `auto` is cleared by "stop/lane-switch/queue-end"; queue-end was
        the one that was not true. Surfaced by driving the loop under node (_autorunstoptest 3a):
        six leads out of six delivered and `auto` still set. */
-    +     'if(auto && i>=Q.length){ auto=false; autoAll=false; }'
+    +     'if(auto && i>=Q.length){ runlog("run_end", {lane:lane, delivered:STATS.sent||0, skipped:STATS.skip||0, attempts:STATS.email||0}); auto=false; autoAll=false; }'
     +     'render();'
     +   '}'
     +   'function hopNextLane(){'
@@ -14502,7 +14928,7 @@ function genMorningWorker(lane, autostart){
        is not confirmed up, refuse to start and say how to fix it. */
     +   'function startRun(all, src){'
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
-    +     'cancelSyncWait(); SYNCTRY=0;'
+    +     'cancelSyncWait(); SYNCTRY=0; if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
     +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight — its outcome is not known yet, so nothing else sends until it answers and is recorded on its own lead. If the bridge is gone, restart send_server.py and reload this tab.","warn"); return; }'
     +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
@@ -14513,6 +14939,7 @@ function genMorningWorker(lane, autostart){
     +     'if(i>=Q.length){ addLog("fail","auto-run","nothing left to work in "+LMETA[lane].t+" — pick a lane with leads in it.","warn"); return; }'
     +     'if(sentToday()>=CAP.max){ addLog("fail","auto-run","⛔ daily send cap already reached — auto-run NOT started. Keep calling; calls are not capped.","warn"); return; }'
     +     'autoAll=!!all; auto=true;'
+    +     'runlog("run_start", {src:String(src||"button"), all:!!all, lane:lane, queued:Q.length});'
     +     'if(autoAll){ addLog("open","ALL LANES","▶▶ auto-run ALL started ("+(src||"button")+") — "+LMETA[lane].t+" first, then the rest: "+LANE_ORDER.map(function(k){return LMETA[k].t+" ("+laneCount(k)+")";}).join(" → ")+"."); }'
     +     'else { addLog("open", (Q[i]&&(Q[i].first||Q[i].owner))||"", "auto-run started ("+(src||"button")+") — "+LMETA[lane].t+" ONLY, "+Math.max(0,Q.length-i)+" leads queued"); }'
     +     'renderRunBar();'
@@ -14536,6 +14963,7 @@ function genMorningWorker(lane, autostart){
        `i` is preserved, so Start resumes from the lead the run stopped on rather than the top. */
     +   'function stopRun(src){'
     +     'var wasAuto=!!(auto||autoAll), wasBatch=!!tbOn, wasStarting=!!ASTIMER;'
+    +     'runlog("run_stopped", {src:String(src||"stop"), was_auto:wasAuto, was_countdown:wasStarting, delivered:STATS.sent||0});'
     +     'auto=false; autoAll=false; awaitingReturn=false; tbOn=false;'
     +     'var wasWaiting=!!SYNCWAIT; cancelSyncWait();'
     +     'clearInterval(tick); tick=null;'
@@ -14554,7 +14982,7 @@ function genMorningWorker(lane, autostart){
     // pause() is stop's quiet sibling: the run halted itself (cap, SMTP auth, bridge offline) and
     // the caller has already written the sentence explaining why. Clear the pending next-lead timer
     // for the same reason stopRun does, or the 700ms hop restarts the run the caller just stopped.
-    +   'function pause(){ auto=false; autoAll=false; if(nextStep){ clearTimeout(nextStep); nextStep=null; } render(); }'
+    +   'function pause(){ if(auto) runlog("run_paused", {lane:lane, lead:i+1, of:Q.length, delivered:STATS.sent||0, skipped:STATS.skip||0}); auto=false; autoAll=false; if(nextStep){ clearTimeout(nextStep); nextStep=null; } render(); }'
     +   'function runOne(){'
     // STOP IS AUTHORITATIVE. advance() and hopNextLane() schedule the next lead on a timer; if the
     // operator stops inside that window the timer still fires, so the loop has to re-check here
@@ -14585,8 +15013,11 @@ function genMorningWorker(lane, autostart){
     +     'if(BOUNCE && BOUNCE.blocked && !document.getElementById("mwbounceban")){'
     +     'var bb=document.createElement("div"); bb.id="mwbounceban";'
     +     'bb.style.cssText="position:sticky;top:0;z-index:99;background:#8a6d1c;color:#fff;font:700 13px/1.45 Arial;padding:9px 14px;border-radius:8px;margin:0 0 12px";'
+    // A first-touch pause (#226) is its own state: the trailing rate can sit well under the ceiling
+    // while one bad day pauses every first email, so the verified-only sentence would read wrong.
+    +   'if(BOUNCE.ft) bb.innerHTML="&#9993; FIRST EMAILS PAUSED — "+(BOUNCE.ftSent?(BOUNCE.ftDead+" of "+BOUNCE.ftSent+" first emails"+(BOUNCE.ftDay?" sent "+BOUNCE.ftDay:"")+" bounced. "):"")+"Every first email is held and stays queued until the pause lifts. Follow-ups to addresses that already accepted mail are not part of this pause. <b>Calls, texts and replies are unaffected.</b>"; else '
     +   'bb.innerHTML="&#9993; VERIFIED-ONLY MODE — trailing bounce rate "+(Math.round((BOUNCE.rate||0)*1000)/10)+"% is over the "+(Math.round((BOUNCE.ceiling||0.1)*100))+"% ceiling. Emails to addresses that already accepted mail STILL SEND"+(BOUNCE.pool!=null?" ("+BOUNCE.pool+" addresses sendable)":"")+"; new/unverified addresses are auto-held and stay queued. <b>Calls, texts and replies are unaffected.</b>";'
-    +     'main.parentNode.insertBefore(bb, main);'
+    +     'main.parentNode.insertBefore(bb, main); _banStack();'
     +     '}'
     // The cap is checked at RENDER time, not just at open time, so a run that crosses the ceiling
     // mid-morning stops there instead of finishing the queue it was handed.
@@ -14901,11 +15332,14 @@ function genMorningWorker(lane, autostart){
            FTSA problem. Refuse outside the safe window and say so.
          - cap + empty-queue check, so it never starts work it cannot finish.
        The 50/day cap, opt-out ledger and per-lead cooldown all still apply inside the run. */
+    +   'runlog("worker_loaded", {autostart:AUTOSTART, lane:lane, queued:Q.length, lanes:LANE_ORDER.map(function(k){ return k+":"+laneCount(k); }).join(","), hour:new Date().getHours()});'
+    +   'if(AUTOSTART && !Q.length) runlog("autostart_skipped", {why:"empty_queue", lane:lane});'
     +   'if(AUTOSTART && Q.length){'
     +     '(function(){'
     +       'var g=_wftsa();'
-    +       'if(!g.safe){ addLog("fail","auto-start","⏰ "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
-    +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
+    +       'if(!g.safe){ runlog("autostart_skipped", {why:"hours", hour:g.hour}); addLog("fail","auto-start","⏰ "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
+    +       'if(sentToday()>=CAP.max){ runlog("autostart_skipped", {why:"daily_cap", sent:sentToday()}); addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
+    +       'runlog("autostart_countdown", {lane:lane, queued:Q.length});'
     +       'var left=20, box=document.createElement("div");'
     +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
     +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — all lanes from "+lane.toUpperCase()+", "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).reduce(function(n,k){return n+laneCount(k);},0)+" leads queued. Emails will send automatically.</div>"'
@@ -14925,8 +15359,18 @@ function genMorningWorker(lane, autostart){
     // a bridge that is down at 8am does not just fail quietly — it opens a real Gmail composer
     // and a "did it send?" prompt for every single queued lead, unattended, all morning. That is
     // the exact failure the operator told us to stop producing.
-    +           'if(BRIDGE_HOLD){ addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
+    +           'var _bt=0;'
+    // ONE 1.5s /health probe at tab load was the whole check. On 2026-10-21 it failed at 08:00 with
+    // the 07:45 task having exited 0, and nothing could say whether the bridge was down, slow or
+    // had no mail login. Give a bridge that is still coming up ~15s (5 re-probes, 3s apart) before
+    // giving up, under ASTIMER so the run bar's Cancel/Stop still reaches this wait, and record
+    // which failure it was.
+    +           '(function go(){'
+    +           'ASTIMER=null;'
+    +           'if(BRIDGE_OK!==true && !BRIDGE_HOLD && _bt<5){ _bt++; probeBridge(); ASTIMER=setTimeout(go,3000); renderRunBar(); return; }'
+    +           'if(BRIDGE_HOLD){ runlog("autostart_skipped", {why:"bridge_hold", hold:String(BRIDGE_HOLD).slice(0,60)}); addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
     +           'if(BRIDGE_OK!==true){'
+    +             'runlog("autostart_skipped", {why:"bridge_not_confirmed", cause:BRIDGE_WHY||"unknown", probes:_bt+1});'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
@@ -14934,7 +15378,8 @@ function genMorningWorker(lane, autostart){
     // here would be two loops on the same lead, the 2026-08-13 duplicate-send shape.
     +           'if(auto || SYNCWAIT){ renderRunBar(); return; }'
     +           'auto=true; autoAll=true; addLog("open","auto-start","▶ auto-run ALL lanes started automatically (8am scheduler) — "+LANE_ORDER.slice(Math.max(0,LANE_ORDER.indexOf(lane))).map(function(k){return k.toUpperCase()+" ("+laneCount(k)+")";}).join(" → "));'
-    +           'renderRunBar(); runOne(); }'
+    +           'runlog("autostart_run", {lane:lane, queued:Q.length, lanes:LANE_ORDER.map(function(k){ return k+":"+laneCount(k); }).join(",")});'
+    +           'renderRunBar(); runOne(); })(); }'
     +       '},1000);'
     // Cancel goes through stopRun so the unattended start and a hand-pressed Stop leave exactly the
     // same state behind -- one path, one set of cleared timers, one log line.
@@ -14947,7 +15392,24 @@ function genMorningWorker(lane, autostart){
   var _laneTot = 0, _laneN = 0;
   LANE_KEYS.forEach(function(k){ _laneTot += laneCounts[k]; if(laneCounts[k]) _laneN++; });
   return _docShell('Morning worker · '+_laneTot+' lead'+(_laneTot===1?'':'s')+' across '+_laneN+' lane'+(_laneN===1?'':'s'),
-                   body, {key:'worker'});
+                   body, {key:'worker', screen:true});
+}
+/* One tap to open the Morning Worker after a #worker=open arrival (Call Mode's nav). Removes itself
+   on tap or after 20 s. Manual worker only: never the #worker=morning auto-send path. */
+function _workerOpenBar(){
+  try{
+    if(document.getElementById('wkopenbar')) return;
+    var b = document.createElement('button');
+    b.id = 'wkopenbar'; b.type = 'button';
+    b.textContent = '\u2600 Morning Worker did not open? Tap here';
+    b.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:200;'
+      + 'padding:12px 18px;border-radius:999px;border:0;background:#0B1730;color:#fff;font-weight:700;'
+      + 'font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;max-width:calc(100vw - 32px)';
+    var gone = function(){ try{ b.remove(); }catch(e){} };
+    b.onclick = function(){ gone(); openMorningWorker('', false); };
+    document.body.appendChild(b);
+    setTimeout(gone, 20000);
+  }catch(e){}
 }
 function openMorningWorker(lane, autostart){
   _docLog('__batch__', 'worker-open', 'en');
@@ -15791,17 +16253,23 @@ function genScript(r){
   // they recognize (their street, not their case), (3) force a yes/no about THEM ("still own it?").
   // Only AFTER they engage does the honest reveal land — with a 60-second ceiling so staying on
   // feels affordable. "Foreclosure" is not spoken until beat 3.
+  // 2026-10-26 (Alejandro): beat 1 no longer asks "is this the owner?". It greets them by name, like
+  // someone who knows them, and the wait after it is where a wrong person says so.
   const street = esc((r.addr||'').split(',')[0]);
   const openEN =
-      `<b>Beat 1 — earn the next 10 seconds (no company, no reason yet):</b><br>`
-    + `"Hi — sorry to bother you. Is this the owner at <b>${street}</b>?" <span class="key">(WAIT. Let them answer. If "who's asking?": "My name's ${esc(sN)} — I'm calling from Miami. Are you the owner there?")</span><br><br>`
+      `<b>Beat 1 — assume it's them (no reason yet):</b><br>`
+    + (first && !r.co
+        ? `"Hey ${first}, it's ${esc(sN)} with Biscayne Solutions Group. How you doing?" <span class="key">(WAIT. Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
+        : `"Hey, it's ${esc(sN)} with Biscayne Solutions Group. You're the owner over on <b>${street}</b>, right?" <span class="key">(WAIT. If they're not: "Oh, my bad. Do I have the right number for the owner?")</span><br><br>`)
     + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
     + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
     + `<b>Beat 3 — the honest reveal, with a ceiling:</b><br>`
     + `"I'll be straight with you — your ${td?'property came up on the county tax-deed list':'case came up on the county records I work through'}${caseTagEN ? ' ('+caseNo+')' : ''}, ${dateClauseEN}. I'm not the bank, not a lawyer — I'm with Biscayne Solutions Group, and my job is making sure you know every option before that date. Most people don't know how many they have. Got <b>60 seconds</b>?"`;
   const openES =
-      `<b>Paso 1 — gane los próximos 10 segundos (sin compañía, sin motivo aún):</b><br>`
-    + `"Hola — perdone la molestia. ¿Hablo con el dueño de <b>${street}</b>?" <span class="key">(ESPERE la respuesta. Si dicen "¿quién habla?": "Me llamo ${esc(sN)} — llamo de Miami. ¿Usted es el dueño?")</span><br><br>`
+      `<b>Paso 1 — dé por hecho que es la persona (sin motivo aún):</b><br>`
+    + (first && !r.co
+        ? `"Hola ${first}, le habla ${esc(sN)}, de Biscayne Solutions Group. ¿Cómo está?" <span class="key">(ESPERE. Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
+        : `"Hola, le habla ${esc(sN)}, de Biscayne Solutions Group. Usted es el dueño de <b>${street}</b>, ¿verdad?" <span class="key">(ESPERE. Si no es: "Ay, disculpe. ¿Tengo el número correcto del dueño?")</span><br><br>`)
     + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
     + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
     + `<b>Paso 3 — la verdad, con techo de tiempo:</b><br>`
@@ -16101,7 +16569,7 @@ function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
    IMAP on the substring SUBJ_TAG = 'Regarding your property at'. A prefix survives both. Anything
    appended AFTER the street becomes part of the captured address, matches no lead, and every reply
    from an address not already on file silently stops being attributed. */
-var SUBJECT_STYLE = 'measured';
+var SUBJECT_STYLE = 'plain';   // 2026-10-19: no date, no URGENT, no foreclosure word (spam). Same in outreach_email.py.
 /* ══════════ BALLOON / REFI LANE — investor email (vault: "Refi Lane — investor email + text", 2026-08-30) ══════════
    Audience inversion, stated once: everything the homeowner composer protects AGAINST is the target
    here. Work mailboxes are the RIGHT address for an LLC officer (the consumer allowlist is bypassed on
@@ -16222,6 +16690,8 @@ function _safeStreet(raw, fallback){
 }
 function _subjLine(street, dt, td, lang){
   var d = String(dt||'').trim(), tag;
+  if(String(SUBJECT_STYLE||'').toLowerCase() === 'plain')
+    return (lang === 'es' ? 'Referente a su propiedad en ' : 'Regarding your property at ') + String(street||'');
   var urgent = (String(SUBJECT_STYLE||'urgent').toLowerCase() !== 'measured');
   if(lang === 'es'){
     tag = d ? ((td?'Subasta de tax deed ':'Fecha de subasta ') + d + ' - ') : '';
@@ -16249,7 +16719,7 @@ function _subjLine(street, dt, td, lang){
    bake fails, foreclosure_leads.py substitutes an empty string here and genEmail falls back to the
    2026-08-29 body below, which is itself compliant (identity disclosure, STOP line, CAN-SPAM sig).
    Never a raw placeholder: assert_no_placeholders would fail the build first. */
-var _ALEXMAIL_EN = "Hi \u0001FIRST\u0001,\n\nI know this is a stressful time, and you're likely receiving a lot of mail and calls about your property so I'll be brief and direct\n\nYour home is scheduled for foreclosure auction on \u0001DATE\u0001.\nIf nothing changes before that date, the house is sold to the highest bidder and every choice you have right now goes with it.\nBut this does not have to happen.\nMy name is \u0001SIGNER\u0001 with the team at \u0001COMPANY\u0001. \u0001IDENT\u0001\nOur senior advisor has spent over 30 years in mortgages and foreclosure workouts, and he personally reviews your case. He has sat across from people in exactly your position and walked them out of it with their equity intact.\n\nWe specialize in Urgent Foreclosure Cases that are facing an auction in just a few days.\n\nI don't know if you already have a plan, but I want to offer you something completely free and without any obligation: a private phone call. Most take about five minutes; I block fifteen so you are never rushed.\n\nDuring that call, we will:\n\n  \u2022 Review your entire case and situation.\n  \u2022 Explain every option available to you (many of which you may not know exist)\n  \u2022 Give you a clear, honest path forward.\n\nThere are no tricks, no hidden fees, and no pressure.\n\nHere's what I need from you:\n\nPick a time that works for you at cal.com/bsgflorida/free-records-review, or simply reply with the best phone number and times to call you. You can also call me directly at \u0001PHONE\u0001 and I'll take your call personally.\n\nThere is still time to protect and save your home or equity, but the clock is ticking.\nPlease don't wait.\n\nReply now or call me today.\n\nWarm regards,\n\n\u0001SIG\u0001\n\nIf now's not a good time, just tell me and I won't reach out again.\n\n\n\n";
+var _ALEXMAIL_EN = "Hi \u0001FIRST\u0001,\n\nYou're probably getting a lot of mail and calls about your property, so I'll keep this short.\n\nYour home is scheduled for auction on \u0001DATE\u0001.\nIf nothing changes before that date, the house is sold to the highest bidder and the choices you have right now go with it. It doesn't have to go that way.\n\nMy name is \u0001SIGNER\u0001 with \u0001COMPANY\u0001. \u0001IDENT\u0001\nOur senior advisor has spent over 30 years in mortgages and foreclosure workouts, and he personally reviews each case. He has sat across from people in your position and walked them through it with their equity intact.\n\nIf you're open to it, I'd like to set up a short phone call. Most take about five minutes; I block fifteen so you are never rushed. It costs you nothing, and you decide what happens next.\n\nOn that call we'll:\n\n  \u2022 Go over your case and where things stand.\n  \u2022 Walk through the options you have, including some you may not have heard of.\n  \u2022 Give you a clear, honest read on the way forward.\n\nYou can pick a time at cal.com/bsgflorida/free-records-review, reply with the best number and time to reach you, or call me directly at \u0001PHONE\u0001.\n\nBest regards,\n\n\u0001SIG\u0001\n\nIf now's not a good time, just tell me and I won't reach out again.\n\n\n\n";
 // Email opt-out sentence, baked from outreach_copy._unsub() so every body below moves with it. An
 // unbaked placeholder (raw template in a test) falls back to the approved wording.
 var _OPTOUT_EN = "If now's not a good time, just tell me and I won't reach out again.", _OPTOUT_ES = "Si ahora no es buen momento, solo d\u00edgamelo y no lo vuelvo a contactar.";
@@ -16265,6 +16735,66 @@ function _alexFill(t, v){
   return t;
 }
 
+/* ---- ONE EMAIL COMPOSE, TWO SURFACES (2026-10-24) -----------------------------------------
+   Every email body the board can write lives in _mailBodies(), a PURE function: plain values in,
+   bodies out, no DOM, no notes, no sender global. call_mode.extract_mail_js() lifts this block
+   verbatim into Call Mode, where an operator pastes an address off whitepages.com and sends the
+   same first touch the Morning Worker sends. A copy there would be the fourth copy of these words
+   to drift (08-22, 08-28, 08-29); one block read by two pages cannot.
+   v: first, street, addr, dt, td, caseTagEN, caseTagES, plaintiff, sN, sL, sP, sig (CAN-SPAM block). */
+/* CAN-SPAM signature block from the sender fields (blank fields skipped). */
+function _mailSig(s){
+  s = s || {};
+  return [s.name, s.title, s.llc, (s.phone?'Phone: '+s.phone:''), (s.email?'Email: '+s.email:''), s.addr, s.web]
+    .filter(function(x){ return x && String(x).trim(); }).join('\n');
+}
+/* Which body a stage gets: 'replied' composes the follow body (a manual send should still be short
+   and threaded, never the cold pitch); 'done' composes the final body. Both are manual-only paths. */
+function _mailPick(B, stage, early, lang){
+  var en = (lang !== 'es');
+  if(stage==='final' || stage==='done') return en ? B.bodyFinalEN : B.bodyFinalES;
+  if(stage==='follow' || stage==='replied') return en ? B.bodyFollowEN : B.bodyFollowES;
+  if(early) return en ? B.bodyEarlyEN : B.bodyEarlyES;
+  return en ? B.bodyColdEN : B.bodyES;
+}
+function _mailBodies(v){
+  var first = v.first || '', street = v.street || '', addr = v.addr || '', dt = v.dt || '', td = !!v.td;
+  // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
+  // site, a concrete credibility signal, included wherever the tool actually has one, never fabricated.
+  var caseNo = String(v.caseNo || '').trim(), plaintiff = v.plaintiff || '';
+  var caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
+  var caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
+  // sL falls back to the same name the intro lines already fall back to: an empty company rendered
+  // "Alejandro Gonzalez with . I am not your lender" in the cold body and "de ." in Spanish when
+  // Call Mode baked no display name (2026-10-26 audit). The board always passes a value.
+  var sN = v.sN || '', sL = v.sL || 'Biscayne Solutions Group', sP = v.sP || '', sig = v.sig || '';
+  // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
+  // every email keeps it). bodyColdEN is Alejandro's baked template and carries it after the SIG token.
+  var sigEN = sig + "\n\n" + _OPTOUT_EN;
+  var sigES = sig + "\n\n" + _OPTOUT_ES;
+  var _IDENT_EN = `I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney.`;
+  var introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. ${_IDENT_EN}`;
+  var introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. No soy su prestamista, no soy del gobierno, no soy una empresa de rescate de ejecuciones, y no soy abogado.`;
+  var bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI saw there's a case filed at the courthouse on ${street}${caseTagEN}. Our record doesn't show a sale date yet (it may be out of date). That means you still have time to choose, but the options shrink every week the case moves.\n\nOn a short free call with our senior advisor, over 30 years in mortgages and foreclosure workouts, you'll find out exactly which ones are still open to you. Are you hoping to keep the house, or open to selling?\n\nCall or text me at ${sP}, or reply with a time that works for you today or tomorrow.\n\n${sigEN}\n\n`;
+  var bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nVi que hay un caso abierto en la corte sobre ${street}${caseTagES}. Nuestro registro todavía no muestra fecha de subasta (puede estar desactualizado). Eso quiere decir que todavía tiene tiempo para decidir, pero cada semana que avanza el caso quedan menos opciones.\n\nEn una llamada corta y gratis con nuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución hipotecaria, sabrá exactamente cuáles opciones todavía tiene. ¿Quiere quedarse con la casa o está pensando en venderla?\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga hoy o mañana.\n\n${sigES}\n\n`;
+  var bodyEN = td
+    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm writing about ${street}${caseTagEN}. Our record lists a tax-deed sale date of ${dt} and may be out of date; please check the current status with the county.\n\nIf you would like to discuss the property with our senior advisor, let me know.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`
+    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
+  var bodyES = td
+    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo sobre ${street}${caseTagES}. Nuestro registro indica una subasta de tax deed para el ${dt} y puede estar desactualizado; confirme el estado actual con el condado.\n\nSi desea conversar sobre la propiedad con nuestro asesor principal, dígamelo.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`
+    : `Hola${first?' '+first:''},\n\nProbablemente esté recibiendo mucha correspondencia y muchas llamadas sobre su propiedad, así que seré breve.\n\nSu casa está programada para subastarse el ${dt}.\nSi nada cambia antes de esa fecha, la casa se vende al mejor postor y las opciones que tiene ahora desaparecen con ella. No tiene por qué ser así.\n\nMi nombre es ${sN}, de ${sL}. No soy su prestamista, no soy del gobierno, no soy una empresa de rescate de ejecuciones, y no soy abogado.\nNuestro asesor principal lleva más de 30 años trabajando en hipotecas y soluciones para casos de ejecución hipotecaria, y revisa personalmente cada caso. Se ha sentado frente a personas en su situación y las ha acompañado en el proceso, manteniendo su capital en la propiedad intacto.\n\nSi está dispuesto, me gustaría coordinar una breve llamada telefónica. La mayoría dura unos cinco minutos; reservo quince para que nunca se sienta apurado. No le cuesta nada, y usted decide qué pasa después.\n\nEn esa llamada:\n\n  • Revisaremos su caso y en qué situación se encuentra.\n  • Repasaremos las opciones que tiene, incluidas algunas que quizás no conozca.\n  • Le daremos una evaluación clara y honesta de cómo seguir adelante.\n\nPuede elegir un horario en cal.com/bsgflorida/free-records-review, responder con el mejor número y horario para contactarlo, o llamarme directamente al ${sP}.\n\nSaludos cordiales,\n\n${sigES}\n\n`;
+  var bodyColdEN = (!td && _ALEXMAIL_EN)
+    ? _alexFill(_ALEXMAIL_EN, {first:first, date:dt, signer:sN, phone:sP,
+                               company:sL, sig:sig, ident:_IDENT_EN})
+    : bodyEN;
+  var bodyFollowEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm following up on my earlier note about ${street}. If you would like to discuss the property, let me know. If the matter is already handled, there is no need to reply.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
+  var bodyFollowES = `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo para dar seguimiento a mi mensaje sobre ${street}. Si desea conversar sobre la propiedad, dígamelo. Si el asunto ya está resuelto, no necesita responder.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
+  var bodyFinalEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nThis is my last note about ${street}. If you would like to discuss the property, you can contact me. I won't send another follow-up after this note.\n\nCall or text me at ${sP}, or reply with a time that works for you.\n\n${sigEN}\n\n`;
+  var bodyFinalES = `Hola${first?' '+first:''},\n\n${introES}\n\nEsta es mi última nota sobre ${street}. Si desea conversar sobre la propiedad, puede comunicarse conmigo. No enviaré otro mensaje de seguimiento después de esta nota.\n\nLlámeme o mándeme un texto al ${sP}, o responda con un horario que le convenga.\n\n${sigES}\n\n`;
+  return {introEN:introEN, introES:introES, sigEN:sigEN, sigES:sigES,
+          bodyEarlyEN:bodyEarlyEN, bodyEarlyES:bodyEarlyES, bodyEN:bodyEN, bodyES:bodyES, bodyColdEN:bodyColdEN,
+          bodyFollowEN:bodyFollowEN, bodyFollowES:bodyFollowES, bodyFinalEN:bodyFinalEN, bodyFinalES:bodyFinalES};
+}
 function genEmail(r, quiet){
   // BALLOON ROWS ARE A DIFFERENT AUDIENCE. An LLC investor with a maturing hard-money note gets the
   // Refi Lane pitch, not the homeowner letter — see genBalloonEmail. Branch before anything below
@@ -16287,9 +16817,7 @@ function genEmail(r, quiet){
   const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
   // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
   // site — a concrete credibility signal — included wherever the tool actually has one, never fabricated.
-  const caseNo = (r.case||'').trim();
-  const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
-  const caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
+  const caseNo = (r.case||'').trim();   // the case tag itself is built in _mailBodies
   /* REACH EVERY ADDRESS ON FILE — BUT VIA BCC.
      Why all of them: skiptrace returns several addresses per lead and only one is usually live.
      One owner replied from a dotted variant of the address we mailed (first.last@ vs firstlast@)
@@ -16309,13 +16837,12 @@ function genEmail(r, quiet){
   const to = emails[0] || '';
   const bcc = emails.slice(1).join(', ');
   // professional signature block (blank fields skipped)
-  const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
-  // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
-  // every email keeps it). outreach_email.py has always appended it (sig_en / sig_es); these bodies
-  // did not, so the board's early, tax-deed, Spanish, follow and final emails went out without it.
-  // bodyColdEN is Alejandro's baked template and already carries it after the SIG token.
-  const sigEN = sig + "\n\n" + _OPTOUT_EN;
-  const sigES = sig + "\n\n" + _OPTOUT_ES;
+  const sig = _mailSig({name:sN, title:sT, llc:sL, phone:sP, email:sE, addr:sA, web:sW});
+  // Bodies, intro and signed-off signatures come from _mailBodies() above, the one block Call Mode
+  // shares. Nothing below composes a sentence of its own.
+  const _MB = _mailBodies({first:first, street:street, addr:addr, dt:dt, td:td, caseNo:caseNo,
+                           plaintiff:plaintiff, sN:sN, sL:sL, sP:sP, sig:sig});
+  const sigEN = _MB.sigEN, sigES = _MB.sigES, introEN = _MB.introEN, introES = _MB.introES;
   /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
      tail replies.py needs; both are satisfiable and both are required. Built by _subjLine() above,
      which outreach_email.py mirrors line for line, so the manual composer and the unattended
@@ -16356,22 +16883,12 @@ function genEmail(r, quiet){
   // Hoisted to its own const so Alejandro's baked body can be filled with the SAME build-time
   // substitution instead of hand-typing the sentence a second time. Change disclaimer.identity()
   // and every one of these moves together, including the automated sender.
-  const _IDENT_EN = `I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney.`;
-  const introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. ${_IDENT_EN}`;
-  const introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. No soy su prestamista, no soy del gobierno, no soy una empresa de rescate de ejecuciones, y no soy abogado.`;
-  // EARLY-STAGE COPY, 2026-10-16 (Alejandro: "make it more urgent"). No sale date exists yet, so the
-  // urgency comes only from things true of every fresh Florida case: the sale is usually set 20 to
-  // 35 days after a final judgment (s. 45.031(1)(a), unless the court orders otherwise), a served
-  // defendant generally has 20 days to respond (Fla. R. Civ. P. 1.140(a)), and every option takes
-  // weeks to set up. No invented deadline, no claim that we stop or delay the sale.
-  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nA foreclosure case was just filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. The clock on that case is already running.\n\nIn Florida, once the court enters a final judgment, the auction is usually set just 20 to 35 days later. After that, most of your choices are gone. Right now there is no auction date, and that is the strongest position you will be in.\n\nCatching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours: each one takes weeks to set up, and each one gets harder every week the case moves. If you were served court papers, they carry a deadline to respond, usually 20 days. An attorney can tell you exactly where yours stands.\n\nOur senior advisor, over 30 years in mortgages and foreclosure workouts, can go over your options with you this week. Five minutes, free, no fee ever. If nothing fits, we shake hands and part friends.\n\nCall or text me today.\n\n${sigEN}\n\n`;
-  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nSe acaba de presentar un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. El reloj de ese caso ya está corriendo.\n\nEn Florida, cuando la corte dicta la sentencia final, la subasta normalmente se fija apenas de 20 a 35 días después. A partir de ahí, la mayoría de sus opciones se acaban. Ahora mismo no hay fecha de subasta, y esa es la posición más fuerte en la que va a estar.\n\nPonerse al día con el préstamo, ajustarlo con el banco, vender en sus términos y quedarse con lo suyo: cada una toma semanas en prepararse, y cada una se pone más difícil cada semana que el caso sigue adelante. Si a usted le entregaron documentos de la corte, traen un plazo para responder, normalmente 20 días. Un abogado le puede decir exactamente dónde está el suyo.\n\nNuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución, puede repasar sus opciones con usted esta semana. Cinco minutos, gratis, sin cobrarle nunca. Si nada le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto hoy.\n\n${sigES}\n\n`;
-  const bodyEN = td
-    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nCounty records show ${addr} has a tax deed sale set for ${dt}${caseTagEN}. You can check that number yourself on the county's site.\n\nBefore that date you still have real paths: pay the back taxes and keep it, sell first (we can buy as-is if that fits), or claim the surplus if it sells for more than what is owed.\n\nOur senior advisor can tell you which one fits. Five free minutes, no fee ever. If none of them fit, we shake hands and part friends.\n\nCall or text me.\n\n${sigEN}\n\n`
-    : `Hi${first?' '+first:''},\n\n${addr} is scheduled to be sold at auction on ${dt}${caseTagEN}${plaintiff?`, in a case brought by ${plaintiff}`:''}.\n\nThat case number is real. Pull it up on the county clerk's site and you can see it yourself in about a minute.\n\n${introEN} I know you're getting a lot of mail and calls right now, so I'll keep this short.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs runway. Catching the loan up, reworking it with the bank, selling on your own terms and keeping what's yours, having an attorney ask the court for more time: every one of them takes time, and that date does not move on its own.\n\nFive free minutes with our senior advisor, over 30 years in mortgages and foreclosure workouts, and you'll know which of those are still open to you. No fee, ever. If none of them fit, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sigEN}\n\n`;
-  const bodyES = td
-    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Puede verificar ese número usted mismo en el sitio del condado.\n\nAntes de esa fecha todavía tiene caminos reales: pagar los impuestos atrasados y quedarse con la propiedad, vender antes (podemos comprar tal cual si le sirve), o reclamar el excedente si se vende por más de lo que se debe.\n\nNuestro asesor principal le puede decir cuál le conviene. Cinco minutos gratis, sin cobrarle nunca. Si ninguno le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto.\n\n${sigES}\n\n`
-    : `Hola${first?' '+first:''},\n\n${addr} está programada para venderse en subasta el ${dt}${caseTagES}${plaintiff?`, en un caso presentado por ${plaintiff}`:''}.\n\nEse número de caso es real. Búsquelo en el sitio del clerk del condado y usted mismo lo puede ver en un minuto.\n\n${introES} Sé que está recibiendo mucha correspondencia y muchas llamadas ahora mismo, así que voy a ser breve.\n\nNo sé si usted ya tiene un plan. La mayoría de los dueños con quienes hablamos lo tienen, y si el suyo está funcionando, sígalo. Lo que es cierto para todo plan es que necesita tiempo. Ponerse al día con el préstamo, ajustarlo con el banco, vender en sus términos y quedarse con lo suyo, o que un abogado le pida más tiempo a la corte: todas requieren tiempo, y esa fecha no se mueve sola.\n\nCinco minutos gratis con nuestro asesor principal, más de 30 años en hipotecas y casos de ejecución, y usted va a saber cuáles de esas siguen abiertas para usted. Sin cobrarle nunca. Si ninguna le sirve, nos damos la mano y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número de teléfono y la mejor hora para llamarlo. O llámeme o mándeme un texto y lo coordinamos.\n\n${sigES}\n\n`;
+  // Draft bilingual proposal: same facts, uncertainty and callback ask in both languages.
+  // Keep the language-specific signature as the final content of every variant.
+  /* 2026-10-22 (Alejandro, on the old body: "where the fuck is the urgency here ... i sense no call
+     to action"). Same facts, now said plainly: a case is filed, no sale date shows yet, and the
+     options shrink every week the case moves. That is the only pressure, and it is true; there is
+     no deadline here to invent. One ask: keep or sell, then call, text or reply with a time. */
   /* ---- ALEJANDRO'S COPY — ENGLISH COLD BODY ----------------------------------------------------
      He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME template
      string outreach_email.py renders (baked above from outreach_copy.email_body_template()), so
@@ -16386,37 +16903,19 @@ function genEmail(r, quiet){
        * follow / final and ALL Spanish -> unchanged (his copy is English only)
      ident is the build-time I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney. substitution; sig is the CAN-SPAM block (physical mailing
      address) that his three-line sign-off cannot carry on its own. */
-  const bodyColdEN = (!td && _ALEXMAIL_EN)
-    ? _alexFill(_ALEXMAIL_EN, {first:first, date:dt, signer:sN, phone:sP,
-                               company:sL, sig:sig, ident:_IDENT_EN})
-    : bodyEN;
-  // FOLLOW / FINAL are type-agnostic: only the date clause changes when no auction date exists,
-  // so one pair of bodies serves FC, TD and LP leads alike.
-  const dlEN = dt ? `before ${dt}` : 'before the court moves the case forward';
-  const dlES = dt ? `antes del ${dt}` : 'antes de que la corte avance el caso';
+  // Follow/final are type-agnostic and do not invent a current case status or deadline.
   // FOLLOW-UPS CARRY THE DISCLOSURE TOO. outreach_email.py puts intro (name + company +
   // identity) at the top of ALL THREE stage bodies — cold and both follow-ups. This pair had
   // none of it, so the manual follow-up, the one an operator actually clicks, was the single
   // surface reaching a homeowner with no statement of who is writing or who they are not.
   // Email also gets read out of order, forwarded, or never delivered, so 'they saw it in the
   // first one' is not a safe assumption.
-  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${sN} with ${sL||'Biscayne Solutions Group'} again. I am not your lender, not the government, not a foreclosure-rescue company, and not an attorney. I wrote you a few days back about ${street}.\n\n${dt?`The sale date is still ${dt}.`:'The case is still moving.'}\n\nIf you're working a plan right now, the bank, a lawyer, money on the way, keep going. You did the right thing, and I'm not asking you to change any of it.\n\nI'm asking to be your parachute. Plans can land late, and late can cost the house. So let a backup sit ready ${dlEN}. It costs nothing: five free minutes with our senior advisor, no fee ever. If your plan works, tear the backup up and we part friends.\n\nAll I need is a reply with a good number and the best time to reach you.\n\n${sigEN}\n\n`;
-  const bodyFollowES = `Hola${first?' '+first:''},\n\nSoy ${sN}, de ${sL||'Biscayne Solutions Group'}, otra vez. No soy su prestamista, no soy del gobierno, no soy una empresa de rescate de ejecuciones, y no soy abogado. Le escribí hace unos días sobre ${street}.\n\n${dt?`La fecha de subasta sigue siendo el ${dt}.`:'El caso sigue avanzando.'}\n\nSi usted ya tiene un plan en marcha, el banco, un abogado, dinero en camino, sígalo. Hizo lo correcto, y no le pido que cambie nada.\n\nLe pido ser su paracaídas. Los planes a veces llegan tarde, y tarde puede costar la casa. Deje un respaldo listo ${dlES}. No cuesta nada: cinco minutos gratis con nuestro asesor principal, sin cobrarle nunca. Si su plan funciona, rompa el respaldo y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número y la mejor hora para llamarlo.\n\n${sigES}\n\n`;
-  const fdEN = dt ? `If the ${dt} sale date is already handled` : 'If the case is already handled';
-  const fdES = dt ? `Si la subasta del ${dt} ya está resuelta` : 'Si el caso ya está resuelto';
-  const bodyFinalEN = `Hi${first?' '+first:''},\n\nThis is my last note about ${street}.\n\n${fdEN}, ignore this and I truly wish you well.\n\nIf it's not, the door stays open. Our senior advisor will still go over your options with you, five minutes, free, no fee ever. Every choice stays yours.\n\nI won't email you again after this. My number stays good.\n\n${sigEN}\n\n`;
-  const bodyFinalES = `Hola${first?' '+first:''},\n\nEsta es mi última nota sobre ${street}.\n\n${fdES}, ignore este mensaje y le deseo lo mejor, de verdad.\n\nSi no lo está, la puerta sigue abierta. Nuestro asesor principal todavía puede repasar sus opciones con usted, cinco minutos, gratis, sin cobrarle nunca. Cada decisión sigue siendo suya.\n\nNo le vuelvo a escribir después de esta. Mi número queda a su disposición.\n\n${sigES}\n\n`;
   // 'replied' composes the follow body (a manual send should still be short + threaded, never the
   // cold pitch); 'done' composes the final body. Both are manual-only paths — _cardMail blanks them.
   const isFinal  = (stage==='final' || stage==='done');
   const isFollow = (stage==='follow' || stage==='replied');
-  const D = isFinal
-    ? {en:{subj:reSubjEN, body:bodyFinalEN},  es:{subj:reSubjES, body:bodyFinalES}}
-    : isFollow
-    ? {en:{subj:reSubjEN, body:bodyFollowEN}, es:{subj:reSubjES, body:bodyFollowES}}
-    : early
-    ? {en:{subj:subjEN, body:bodyEarlyEN}, es:{subj:subjES, body:bodyEarlyES}}
-    : {en:{subj:subjEN, body:bodyColdEN},  es:{subj:subjES, body:bodyES}};
+  const D = {en:{subj:(isFinal||isFollow)?reSubjEN:subjEN, body:_mailPick(_MB, stage, early, 'en')},
+             es:{subj:(isFinal||isFollow)?reSubjES:subjES, body:_mailPick(_MB, stage, early, 'es')}};
   // SENT-CONTENT CAPTURE. Alejandro: "I need to see the results of what's sending. What is the
   // input?" Stash the EXACT composed subject+body on a global the moment it is built, so the
   // worker's log can archive the real text rather than a summary. Reading it from here instead
@@ -16939,7 +17438,7 @@ const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.tou
 function _mergeLead(local, remote){
   local = local || {}; remote = remote || {};
   const out = Object.assign({}, local);
-  const ch = { optout:false, touches:0, status:false, deal:false, note:false, dials:false };
+  const ch = { optout:false, touches:0, status:false, deal:false, note:false, dials:false, no:false };
   // audit ledger: union every opt-out event from both devices (dedup by ts|act), so the ORIGINAL
   // "set" timestamp on the teammate's device is preserved as evidence, not just the local one.
   const _lseen = new Set(), _ol = [];
@@ -17016,6 +17515,18 @@ function _mergeLead(local, remote){
   if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
+  // numbers pasted from Whitepages on a Call Mode card: union, so a paste on either phone survives
+  if((local.wpm||[]).length || (remote.wpm||[]).length){
+    const _w = [];
+    (local.wpm||[]).concat(remote.wpm||[]).forEach(x => { const d = String(x||'').replace(/\D/g,''); if(d.length===10 && _w.indexOf(d)<0) _w.push(d); });
+    out.wpm = _w;
+  }
+  // emails pasted from Whitepages on a Call Mode card (notes.wpe): union, same reason
+  if((local.wpe||[]).length || (remote.wpe||[]).length){
+    const _e = [];
+    (local.wpe||[]).concat(remote.wpe||[]).forEach(x => { const a = String(x||'').trim().toLowerCase(); if(a.indexOf('@')>0 && _e.indexOf(a)<0) _e.push(a); });
+    out.wpe = _e;
+  }
   // verified-lien / deal numbers: LATEST-WRITE-WINS by per-field timestamp (notes[c].dts). Falls back
   // to prefer-larger only for pre-Round-B legacy data (which keeps the conservative default).
   const ldts = local.dts||{}, rdts = remote.dts||{}, mdts = Object.assign({}, ldts);
@@ -17035,19 +17546,69 @@ function _mergeLead(local, remote){
   if(occWin !== locc){ out.occ = occWin; ch.deal = true; if(rtocc > ltocc) mdts.occ = rtocc; }
   if(Object.keys(mdts).length) out.dts = mdts;
   // free-text note: keep both, distinct
-  if(remote.note && remote.note !== (local.note||'') && (local.note||'').indexOf(remote.note) === -1){
-    out.note = local.note ? (local.note + '\n— (merged) ' + remote.note) : remote.note; ch.note = true;
+  /* Union by SEGMENT. The old rule appended "\n— (merged) " + remote whenever the local note did not
+     contain the remote one, so a note one side had merely EXTENDED (a callback line) came back as
+     old + sep + extended, and every round between two pages or devices re-wrapped it: 3.5 MB after 12
+     appends with the board and Call Mode open together (2026-10-17). Split both on the separator,
+     keep each distinct segment once, and drop a segment another segment already contains. Lossless:
+     every character of either note survives in some kept segment. */
+  if(remote.note && remote.note !== (local.note||'')){
+    const _sep = '\n— (merged) ', _ls = String(local.note||'').split(_sep), _rs = String(remote.note).split(_sep);
+    const _all = _ls.concat(_rs).filter(function(x, ix, a){ return x && a.indexOf(x) === ix; });
+    const _keep = _all.filter(function(x){ return !_all.some(function(y){ return y !== x && y.indexOf(x) !== -1; }); });
+    const _nn = _keep.join(_sep);
+    if(_nn !== (local.note||'')){ out.note = _nn; ch.note = true; }
   }
+  /* THE NO MARKS (2026-10-18, "fix the no sync"). n.no / noAt / noWasLp / resurf are the 09-02 no
+     policy: a hard no is permanent, a soft no is retired until its ONE event-driven resurface, and
+     resurf counts that resurface as spent. This function never named them, so Object.assign kept the
+     LOCAL side and a teammate's no was dropped on every pull. A hard no still arrived (it also sets
+     DO NOT CONTACT), but a soft no on a lead this phone already had as Contacted stayed on normal
+     cadence here, and a soft no the teammate already resurfaced could resurface a second time.
+     (Call Mode wrapped this function to fix it on 09-25, but the wrapper wrote onto the returned
+     [out, ch] array, so it never did anything.)
+     Rule, per side: a hard no wins forever. A soft no stands unless the merged dials show a
+     talked / appointment / callback logged AFTER both that side's noAt and the latest soft-no call
+     row -- Call Mode clears a soft no on exactly those outcomes, and without this a teammate's stale
+     copy would put back a no the homeowner has since talked their way out of. The notint rows count
+     because a repeat no (the second no on the resurface is the permanent one) keeps the first noAt.
+     Of the soft nos that stand, the LATEST noAt is kept with its own noWasLp: keeping the earliest
+     let a talk between two nos clear the later one. A soft no with no noAt cannot be dated, so it
+     wins and stands. resurf is the larger of them. */
+  const _NO_KEYS = ['no', 'noAt', 'noWasLp', 'resurf'];
+  const _lastOc = ocs => _dl.filter(v => ocs.indexOf(v.oc) >= 0 && +v.tsu > 0).reduce((m, v) => Math.max(m, +v.tsu), 0);
+  const _reengaged = _lastOc(['talked', 'appt', 'callback']), _lastNo = _lastOc(['notint']);
+  const _softStands = s => s.no === 'soft' && !(+s.noAt > 0 && _reengaged > Math.max(+s.noAt, _lastNo));
+  const _hard = [local, remote].filter(s => s.no === 'hard');
+  const _soft = [local, remote].filter(_softStands);
+  const _nb = {};
+  if(_hard.length){
+    _nb.no = 'hard';
+    const _ha = _hard.map(s => +s.noAt).filter(v => v > 0);
+    if(_ha.length) _nb.noAt = Math.min.apply(null, _ha);
+  } else if(_soft.length){
+    const _first = _soft.slice().sort((a, b) => (+b.noAt > 0 ? +b.noAt : Infinity) - (+a.noAt > 0 ? +a.noAt : Infinity))[0];
+    _nb.no = 'soft';
+    if(+_first.noAt > 0) _nb.noAt = +_first.noAt;
+    const _lp = (_first.noWasLp != null) ? _first.noWasLp : (_soft.filter(s => s.noWasLp != null)[0] || {}).noWasLp;
+    if(_lp != null) _nb.noWasLp = _lp;
+    _nb.resurf = Math.max.apply(null, _soft.map(s => +s.resurf || 0));
+  }
+  _NO_KEYS.forEach(k => {
+    if(_nb[k] == null){ if(k in out){ delete out[k]; ch.no = true; } }
+    else if(out[k] !== _nb[k]){ out[k] = _nb[k]; ch.no = true; }
+  });
   return [out, ch];
 }
 function mergeNotes(remoteNotes){
-  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, dials:0, violations:0 };
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, dials:0, nos:0, violations:0 };
   Object.keys(remoteNotes||{}).forEach(caseId => {
     const before = _dialedAfter(notes[caseId]).length;
     const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
     notes[caseId] = merged;
-    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note||ch.dials) sum.leads++;
+    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note||ch.dials||ch.no) sum.leads++;
     if(ch.dials) sum.dials++;
+    if(ch.no) sum.nos++;
     if(ch.optout) sum.optouts++;
     sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
     // a merged-in opt-out can retroactively turn a call you already logged into an after-opt-out contact
@@ -17056,7 +17617,7 @@ function mergeNotes(remoteNotes){
   try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
   // only persist/re-render when the merge actually changed something — otherwise the 45s auto-sync poll
   // triggers a needless save()->syncPushSoon()->push + full render on every empty pull (jank + churn).
-  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes || sum.dials;
+  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes || sum.dials || sum.nos;
   if(changed){ save(); try{ recompute(); }catch(e){} render(); }
   syncFreshness();
   return sum;
@@ -18660,6 +19221,84 @@ document.addEventListener('click', e => {
   btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); };
   update();
 })();
+// ZOOM + RESIZE SAFETY (2026-10-26) — the JS half of the block at the end of the main <style>.
+// Header fit: a sticky header taller than 38% of the window becomes a header that scrolls away (body.hflow).
+// Measured, not guessed from a breakpoint: 125% and 150% zoom shrink the window's CSS height and the
+// four tiers wrap taller as it narrows, so no width or height media query catches every case.
+(function(){
+  const header = document.querySelector('header'); if(!header) return;
+  let raf = 0;
+  const fit = () => { raf = 0;
+    const tall = innerWidth > 860 && header.offsetHeight > innerHeight * 0.38;
+    if(document.body.classList.contains('hflow') !== tall) document.body.classList.toggle('hflow', tall); };
+  const soon = () => { if(!raf) raf = requestAnimationFrame(fit); };
+  window.addEventListener('resize', soon);
+  if(window.ResizeObserver) new ResizeObserver(soon).observe(header);
+  soon();
+})();
+// _bottomDock: every bar the board pins to the bottom of the window, stacked instead of overlapping.
+// They used to share bottom:0-18px, so the work queue painted over the deliverability banner, the
+// new-board pill over the work queue, and #toTop under all of them. Order = bottom-most first. The
+// page gets the stack's height as bottom padding (body.docked) so its last rows scroll clear.
+(function(){
+  const ORDER = ['nbwarn', 'bouncebanner', 'workbar', 'aftercall', 'freshpill', 'wkopenbar'];
+  const GAP = 8;
+  let raf = 0;
+  const ro = window.ResizeObserver ? new ResizeObserver(() => soon()) : null;
+  const seen = new WeakSet();
+  function dock(){
+    raf = 0;
+    let y = 0;
+    ORDER.forEach(id => {
+      const e = document.getElementById(id);
+      if(!e) return;
+      if(ro && !seen.has(e)){ seen.add(e); ro.observe(e); }
+      const cs = getComputedStyle(e);
+      if(cs.display === 'none' || cs.visibility === 'hidden' || !e.offsetHeight) return;
+      // full-width bars sit flush (bottom 0); the floating pills keep their 14px lift off the edge
+      const flush = (id === 'nbwarn' || id === 'bouncebanner');
+      const b = (y ? y + GAP : (flush ? 0 : 14)) + 'px';
+      if(e.style.bottom !== b) e.style.bottom = b;
+      y = parseFloat(b) + e.offsetHeight;
+    });
+    const h = y ? (y + GAP) + 'px' : '0px';
+    if(document.body.style.getPropertyValue('--dockh') !== h) document.body.style.setProperty('--dockh', h);
+    document.body.classList.toggle('docked', !!y);
+  }
+  function soon(){ if(!raf) raf = requestAnimationFrame(dock); }
+  if(window.MutationObserver) new MutationObserver(soon).observe(document.body, {childList:true});
+  window.addEventListener('resize', soon);
+  // the bars toggle their own display/class without leaving the DOM: a slow sweep catches that too
+  setInterval(soon, 1500);
+  soon();
+})();
+// _modalScroll: the page scroll lock follows the modals that are actually open. Each modal locked and
+// unlocked body scroll on its own, so stacking two broke it both ways: closing the top one (or Escape,
+// which closes the Call Sheet unconditionally) unlocked the page under a modal that was still up, and
+// the Call Sheet / Playbook also set body.style.overflow, which nothing else ever cleared. One
+// reconciler, run after any modal's class or style changes: locked iff a modal is showing.
+(function(){
+  const IDS = ['dealmodal','logmodal','planmodal','gallerymodal','lookupmodal','syncmodal','mailmodal',
+               'refreshmodal','cadencemodal','savedmodal','csmodal','playbookmodal','textmodal','nearmemodal'];
+  const watched = new WeakSet();
+  let raf = 0;
+  const mo = window.MutationObserver ? new MutationObserver(() => soon()) : null;
+  function sync(){
+    raf = 0;
+    let open = false;
+    IDS.forEach(id => {
+      const m = document.getElementById(id); if(!m) return;
+      if(mo && !watched.has(m)){ watched.add(m); mo.observe(m, {attributes:true, attributeFilter:['class','style']}); }
+      if(getComputedStyle(m).display !== 'none') open = true;
+    });
+    document.body.classList.toggle('modal-open', open);
+    if(!open && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+  }
+  function soon(){ if(!raf) raf = requestAnimationFrame(sync); }
+  // modals created on first use (Near Me) are picked up when they are appended
+  if(mo) new MutationObserver(soon).observe(document.body, {childList:true});
+  soon();
+})();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; _senderBanner(); }
 // Removed 2026-07-19 per Alejandro: the red "Sender identity incomplete" banner was too loud —
@@ -19052,6 +19691,7 @@ function lkReport(a){
   let rec='<div class="lksec">Recorded mortgages &amp; liens</div>';
   if(lead && lead.orliens && lead.orliens.length){
     const rows=lead.orliens.map(l=>'<tr><td>'+esc(l.d)+'</td><td>'+esc(l.party)+'</td><td style="text-align:right">'+lkM(l.amt)+'</td>'
+      +'<td style="text-align:right" title="estimated balance today, amortized (see the debt stack)">'+(l.st==='OPEN'&&l.est!=null?lkM(l.est):'')+'</td>'
       +'<td class="'+(l.st==='OPEN'?'lkbad':'lkok')+'">'+esc(l.st)+'</td></tr>').join('');
     const hoa=(lead.orftype==='HOA'), low=(lead.orconf!=='ok');
     // SOURCE OF TRUTH. This was a THIRD independent reading of the chain — raw orsurvfirst/orjunior,
@@ -19072,7 +19712,7 @@ function lkReport(a){
     call += sv>0
       ? '<div class="lkcallout '+(low?'':'hot')+'"><b>Surviving '+(hoa?'FIRST':'2nd')+' mortgage &asymp; '+lkM(sv)+'</b> &mdash; '+(hoa?'this whole loan SURVIVES the sale (only the ~'+lkM(lead.judg||0)+' HOA lien is being foreclosed), so it is NOT wiped.':'an OPEN loan beyond the one being foreclosed, so it does NOT get wiped at the sale.')+' '+(low?'Original recorded size on a common-name record &mdash; verify the payoff.':'Pulled from Official Records.')+' This is the number that makes the raw equity a lie.</div>'
       : '<div class="lknote" style="margin-bottom:8px">'+(hoa?'No open mortgage found on record &mdash; but confirm, since an HOA sale leaves any mortgage in place.':'Only the foreclosing loan is open on record &mdash; no surviving 2nd found.')+'</div>';
-    rec+='<div class="lkcard">'+call+'<table class="lktbl lkliens"><tr><th>Recorded</th><th>Lender</th><th>Amount</th><th>Status</th></tr>'+rows+'</table>'
+    rec+='<div class="lkcard">'+call+'<table class="lktbl lkliens"><tr><th>Recorded</th><th>Lender</th><th>Amount</th><th>Est. now</th><th>Status</th></tr>'+rows+'</table>'
       +'<div class="lknote">Amounts are original loan size (from doc tax) &mdash; a real payoff shrinks with principal paid, grows with arrears. '+(condo?'Condo: still get the association estoppel for the special assessment. ':'')+'Confirm with a payoff letter.</div></div>';
   } else {
     rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
@@ -19099,10 +19739,11 @@ function lkReport(a){
   const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
       +'<div class="lkcgrid">'
         +'<label>List / market price $<input id="lklp" type="number" value="'+(_lkSeed||'')+'" oninput="lkCalc()"></label>'
-        +'<label>Total payoff (all mortgages+liens+HOA) $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
+        +'<label>Total payoff (all mortgages+liens+HOA)'+((lead&&_isLpEst(lead))?' <i>(est. loan balances, not a payoff)</i>':'')+' $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
         +'<label>Sale commission %<input id="lkcm" type="number" value="6" step="0.5" oninput="lkCalc()"></label>'
         +'<label>Closing costs %<input id="lkcc" type="number" value="2" step="0.5" oninput="lkCalc()"></label>'
       +'</div>'
+      +((lead&&_isLpEst(lead))?'<div class="lknote" style="color:var(--amber-ink)"><b>Estimated payoff.</b> No judgment is posted, so this is the recorded loans amortized to today. Hometap-type equity shares, credit lines and arrears are NOT reflected. Get a payoff letter before quoting the owner.</div>':'')
       +'<div class="lkph">A · If the owner just sells retail</div>'
       +'<div class="lkout">Owner walks with &asymp; <b id="lknet">&mdash;</b></div>'
       +'<div class="lknote" id="lknote1">The number that shows a seller they\'re stuck &mdash; the reason to deal.</div>'
@@ -19529,6 +20170,12 @@ async function boot(){
   // Deferred + best-effort: never blocks boot, and an unattended #worker=morning open must not
   // hang on a prompt — skip it there; _devSrc() stamps the stable id until a human answers.
   if(!/worker=morning/.test(location.hash||'')) setTimeout(_ensureDeviceLabel, 1500);
+  // #playbook opens the field manual after boot: the nav strip on Call Mode and in the Morning
+  // Worker links here (dealflow_nav.py). Consumed once; nothing is sent, so no per-day guard.
+  if(/(^|[#&])playbook(=|&|$)/.test(location.hash||'')){
+    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+    setTimeout(function(){ try{ openPlaybook(); }catch(e){} }, 600);
+  }
   // #worker=morning auto-opens the Morning Worker after boot. Lets Windows Task Scheduler
   // fire Chrome at 7 AM to the URL + fragment and land straight in the queue.
   // Opened BY the 8am Windows task -> auto-start the run (countdown + cancel inside the worker).
@@ -19544,7 +20191,23 @@ async function boot(){
        1. strip the hash the moment it is consumed, so a refresh cannot replay it;
        2. a per-DAY key, so even a fresh tab opened at the same URL will not auto-send twice.
      A human can always still press "Start auto-run" — this only governs the unattended path. */
+  /* FLIGHT RECORDER, main-tab half (2026-10-21): the worker tab records what happens inside it; this
+     records what the board decided before it opened one (armed or not, already ran, stale, popup).
+     The 8 AM key is written BEFORE the stale check, so "key present" never proved a run began.
+     Counts and codes only; fire-and-forget; nothing reads it to decide. */
+  function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
+  // #worker=open (Call Mode's nav link, 2026-10-24): show the worker in MANUAL mode and nothing
+  // else. Never routed through the =morning branch below, which is the scheduler's auto-send path.
+  /* No lane forced: openMorningWorker('') lets the worker open REPLIED-first when an owner is
+     waiting; 'urgent' here buried the callbacks (2026-10-26 audit, same bug openMorningWorker's own
+     comment records). This open runs with no tap behind it, so a browser that blocks pop-ups shows
+     nothing; the bar below gives one tap that opens it from a real gesture. */
+  if(/worker=open/.test(location.hash||'')){
+    try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+    setTimeout(function(){ try{ openMorningWorker('', false); }catch(e){} _workerOpenBar(); }, 500);
+  }
   if(/worker=morning/.test(location.hash||'')){
+    try{ _runlog('task_open', {built_age_days:(typeof _boardAgeDays==='function')?_boardAgeDays():null, rows:(DATA||[]).length, hour:new Date().getHours()}); }catch(e){}
     // LOCAL day: the UTC key minted a FRESH day at 8 PM ET, so a worker tab opened in the
     // evening could auto-send a second time on the same local day — the exact replay this
     // per-day key exists to prevent. (2026-08-26)
@@ -19562,6 +20225,7 @@ async function boot(){
     var _armed = false;
     try { _armed = localStorage.getItem('fcArmedRunner') === 'true'; } catch(e){}
     if(!_armed){
+      _runlog('blocked_not_armed', {});
       setTimeout(function(){ try{
         openMorningWorker('urgent', false);
         if(typeof _shareToast === 'function')
@@ -19569,6 +20233,7 @@ async function boot(){
       }catch(e){} }, 500);
       try { console.info('[dealflow] #worker=morning ignored for auto-send — fcArmedRunner not set on this device.'); } catch(e){}
     } else if(_already){
+      _runlog('blocked_already_ran_today', {});
       // Opened again the same day: show the worker, but never auto-send. Say why, out loud.
       setTimeout(function(){ try{ openMorningWorker('urgent', false); }catch(e){} }, 500);
       try { console.info('[dealflow] auto-run already ran today — worker opened in MANUAL mode.'); } catch(e){}
@@ -19581,6 +20246,7 @@ async function boot(){
         try{
           var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
           var _stale = (_age != null && _age >= 1);
+          try{ var _alane = _autoRunLane(); _runlog(_stale ? 'blocked_stale_board' : 'open_requested', {lane:_alane, built_age_days:_age, queue:(typeof _workerQueue==='function')?_workerQueue(_alane).length:null}); }catch(e){}
           openMorningWorker(_autoRunLane(), !_stale);
           if(_stale && typeof _shareToast === 'function')
             _shareToast('AUTO-RUN BLOCKED: board data is ' + _age + ' day(s) old. Reload the board (or run the refresh), then start the worker by hand.');
@@ -19724,12 +20390,12 @@ let _userTouched = false;
 function stampFreshness(){
   try{
     var el=document.getElementById('upddate'); if(!el) return;
-    var d=new Date((el.textContent||'').trim()+'T12:00:00'); if(isNaN(d.getTime())) return;
+    var d=new Date((el.textContent||'').trim().slice(0,10)+'T12:00:00'); if(isNaN(d.getTime())) return;
     var days=Math.floor((Date.now()-d.getTime())/86400000);
     var mark=document.getElementById('stalemark'), upd=document.getElementById('upd');
-    if(days>=3){ if(upd) upd.classList.add('stale'); if(mark) mark.textContent=' · '+days+'d old — refresh overdue'; }
-    else if(days<=0){ if(mark) mark.textContent=' · today'; }
-    else { if(mark) mark.textContent=' · '+days+'d ago'; }
+    if(days>=3){ if(upd) upd.classList.add('stale'); if(mark) mark.textContent=days+'d old — refresh overdue'; }
+    else if(days<=0){ if(mark) mark.textContent='today'; }
+    else { if(mark) mark.textContent=days+'d ago'; }
   }catch(e){}
 }
 stampFreshness();
@@ -19743,6 +20409,7 @@ stampFreshness();
   function maxX(){ return wrap.scrollWidth - wrap.clientWidth; }
   function update(){
     var mx=maxX();
+    var vw=wrap.clientWidth+'px'; if(wrap.style.getPropertyValue('--tblvw')!==vw) wrap.style.setProperty('--tblvw', vw);
     wrap.classList.toggle('canleft', wrap.scrollLeft>4);
     wrap.classList.toggle('canright', wrap.scrollLeft < mx-4);
     if(nudge) nudge.classList.toggle('on', !scrolled && mx>40 && wrap.scrollLeft<4);
