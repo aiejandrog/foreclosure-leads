@@ -3286,7 +3286,7 @@ def _mail_llc_json():
 
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js='', text_js='', histcov='null', mail_js='', subdir='', lookupn=0):
+               seat=None, funnel_js='', text_js='', histcov='null', mail_js='', lookupn=0, subdir=''):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -3823,7 +3823,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, mail_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
                       seat=seat, funnel_js=funnel_js, text_js=text_js, mail_js=mail_js, subdir=subdir,
-                      histcov=history_coverage(total, _shipped_all, audit), lookupn=_lk_mine)
+                      lookupn=_lk_mine, histcov=history_coverage(total, _shipped_all, audit))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
