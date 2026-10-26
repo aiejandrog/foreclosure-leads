@@ -6290,7 +6290,7 @@ function mailPauseWhy(){
     return d + ' of ' + n + ' first emails' + (m.day ? ' sent ' + m.day : '') + ' bounced (' + Math.round(100 * d / n) + '%).';
   var w = {day_rate:'one day\'s first emails bounced over the limit.', hard_bounces:'too many hard bounces in one day.',
            aggregate:'first emails bounced over the limit.', list_unreadable:'the bounce list could not be read.'};
-  return w[m.why] || 'the bounce rate is over the limit.';
+  return w[m.why] || ('the bounce rate is over the limit' + (m.why ? ' (' + m.why + ')' : '') + '.');
 }
 /* The email for this lead, this stage, this language: the board's block, the board's values. */
 function composeMail(r, addr, lg){
