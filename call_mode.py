@@ -163,14 +163,14 @@ TONALITY = [
 # lead hears "pre-foreclosure" and a set sale hears its date. "Foreclosure" is said only after the
 # greeting has settled that this is the owner (NEVER_SAY): the full sheet carries a [Wait for yes.]
 # cue after the greeting, and the guided "who's asking?" answer re-confirms the owner first.
-_OPEN_ASK_EN = ("It is {sender} with Biscayne Solutions Group. Do you know your property on {st1} is "
-                "in pre-foreclosure{date}?")
+# 2026-10-26 (Alejandro): "always assume". The greeting now names us and assumes it is them, so the
+# question no longer re-introduces the caller: _OPEN_ASK_* is the question alone.
+_OPEN_ASK_EN = "Do you know your property on {st1} is in pre-foreclosure{date}?"
 _OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy your house. I help owners see what options "
                  "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_ASK_ES = ("Le habla {sender}, de Biscayne Solutions Group. ¿Usted sabe que su propiedad en {st1} "
-                "está en proceso de foreclosure{date_es}?")
+_OPEN_ASK_ES = "¿Usted sabe que su propiedad en {st1} está en proceso de foreclosure{date_es}?"
 _OPEN_NOTS_ES = ("No soy su prestamista y no le llamo para comprarle la casa. Ayudo a los dueños a ver "
                  "qué opciones tienen antes de que esto avance más. ¿Le puedo hacer un par de preguntas "
                  "rápidas?")
@@ -278,16 +278,30 @@ if len(NEPQ_K) != len(NEPQ_Q_EN):
     raise RuntimeError('call_mode: NEPQ_K has %d beat labels vs %d questions — zip() would silently '
                        'drop the unlabeled beats.' % (len(NEPQ_K), len(NEPQ_Q_EN)))
 
+# ASSUME IT IS THEM (2026-10-26, Alejandro: "hi, is this Lewis? ... we don't know if that's Lewis. We
+# want to be familiar ... always assume"). The greeting says their name, says ours, and asks how they
+# are, like a call to someone we know. No "is this ...?": the question is what made it sound like a
+# stranger reading a list. The wait after "how you doing?" is the identity check: someone who is not
+# them says so there ("this isn't Lewis", "he's not here"), and the guided call has a branch for it,
+# before anything about the property is said (NEVER_SAY: "foreclosure" only once it is the owner).
 # Two variants, because greeting the wrong "name" is worse than not greeting one.
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
-PHONE_OPENER_EN = "Hi, is this {first}? [Wait for yes.] " + _OPEN_BODY_EN
-PHONE_OPENER_ES = "Hola, ¿hablo con {first}? [Espere el sí.] " + _OPEN_BODY_ES
+GREET_EN = "Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"
+GREET_ES = "Hola {first}, le habla {sender}, de Biscayne Solutions Group. ¿Cómo está?"
+# No usable name: still assume. Say who we are, then assume they own the place and let them correct it.
+GREET_ANON_EN = "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?"
+GREET_ANON_ES = "Hola, le habla {sender}, de Biscayne Solutions Group. Usted es el dueño de {st1}, ¿verdad?"
+# The cue is the identity check: only the person answering to the name goes on to the question.
+WAIT_EN = "[Wait. If it's not them, they'll say so.]"
+WAIT_ES = "[Espere. Si no es la persona, se lo va a decir.]"
+PHONE_OPENER_EN = GREET_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
+PHONE_OPENER_ES = GREET_ES + " " + WAIT_ES + " " + _OPEN_BODY_ES
 # {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
-PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? [Wait for yes.] " + _OPEN_BODY_EN
-PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? [Espere el sí.] " + _OPEN_BODY_ES
+PHONE_OPENER_ANON_EN = GREET_ANON_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
+PHONE_OPENER_ANON_ES = GREET_ANON_ES + " " + WAIT_ES + " " + _OPEN_BODY_ES
 
 # WARM opener (2026-09-05, Alejandro's own field style): when he already KNOWS the person — a prior
 # Talked / Appointment / Callback on this human — the cold disarm reads as amnesia. His open is just
@@ -785,8 +799,14 @@ BOOK_ES = ("Perfecto — lo tengo anotado para [la hora que escogió]. Hágame u
            "guarde mi número ahora mismo... es el {phone}. ... Ahora léamelo de vuelta, para saber que lo "
            "tiene bien.")
 # Gatekeeper / not the owner: "the property on {st1}", never the word foreclosure (NEVER_SAY).
-WHO_EN = "It's {sender} with Biscayne Solutions Group. I'm trying to reach the owner of {st1}. Is that you?"
-WHO_ES = "Le habla {sender}, de Biscayne Solutions Group. Busco al dueño de {st1}. ¿Es usted?"
+WHO_EN = "It's {sender}, with Biscayne Solutions Group. I'm calling for the owner of {st1}. That's you, right?"
+WHO_ES = "Le habla {sender}, de Biscayne Solutions Group. Llamo por el dueño de {st1}. Es usted, ¿verdad?"
+# THE FALLBACK when the greeting named the wrong person ("this isn't Lewis" / "who?"). Light, no
+# apology speech, no reason for the call. Find out if it is the right number, then route.
+NOTME_EN = "Oh, my bad. I'm looking for {first}. Do I have the right number for them?"
+NOTME_ES = "Ay, disculpe. Busco a {first}. ¿Tengo el número correcto?"
+NOTME_AEN = "Oh, my bad. I'm looking for the owner of {st1}. Do I have the right number?"
+NOTME_AES = "Ay, disculpe. Busco al dueño de {st1}. ¿Tengo el número correcto?"
 GATE_EN = ("No problem at all — when's usually a good time to catch them? ... Or if it's easier, could I "
            "leave my number with you? It's {phone}, and it's about the property on {st1}.")
 GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fácil, ¿le puedo dejar mi número? "
@@ -887,14 +907,24 @@ def _flow():
     q1, q2, q3, q4, q5, q6 = (_beat(i) for i in range(6))
     return [
         {'id': 'greet', 'k': 'THE OPENER',
-         'en': 'Hi, is this {first}?', 'es': 'Hola, ¿hablo con {first}?',
-         'aen': 'Hi, am I speaking with the owner of {st1}?', 'aes': 'Hola, ¿hablo con el dueño de {st1}?',
-         'tone': 'Warm and casual, voice DOWN on the name — like you half-know them. Then STOP.',
-         'listen': 'Wait. Let them answer. Do not fill the gap.',
-         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
+         'en': GREET_EN, 'es': GREET_ES, 'aen': GREET_ANON_EN, 'aes': GREET_ANON_ES,
+         'tone': 'Familiar and sure, like you already know them. Easy on the name, no question in your '
+                 'voice. Then STOP.',
+         'listen': 'Wait. If it is not them, they will tell you. Do not fill the gap.',
+         'br': [['Good / hey / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
+                ['That\'s not me / who?', 'notme'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Their phone\'s AI answered (asks name + reason)', 'screen'],
                 ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
+         'ret': 'disarm'},
+        # Not them: the assumed name was wrong. Ask if it is the right number, then route.
+        {'id': 'notme', 'k': 'NOT THEM — the fallback',
+         'en': NOTME_EN, 'es': NOTME_ES, 'aen': NOTME_AEN, 'aes': NOTME_AES,
+         'tone': 'Light and quick. No reason for the call, nothing about the house.',
+         'listen': 'Right number but not here = take the message line. No one by that name = wrong number.',
+         'br': [['Oh, that is me', 'disarm'], ['They\'re not here / I can take a message', 'gate'],
+                ['Who\'s asking? / what\'s it about?', 'who'],
+                ['No one by that name / wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         # "Who's asking?" is not a yes: a spouse or a tenant asks it too, and the next line says
         # foreclosure (NEVER_SAY). Name yourself, then confirm the owner before the question.
@@ -907,8 +937,8 @@ def _flow():
          'ret': 'disarm'},
         {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
          'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
-         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
-                 'question. Then STOP.',
+         'tone': 'Calm and plain, like a neighbor who saw the paperwork. You already said your name, so '
+                 'just the question. Then STOP.',
          'listen': 'Wait for the answer. Do not explain anything yet.',
          'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
                 ['What do you do?', 'intro30'],

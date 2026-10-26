@@ -2277,7 +2277,7 @@ body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-26T18:39","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-10-26T18:43","good":null,"rows":[],"last":null,"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -5928,7 +5928,7 @@ function _pbRender(){
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
     +   '<h4>📞 The PHONE opener — the 4-second rule (rebuilt after a live hang-up, 07/28)</h4>'
     +   '<p class="pblede">On the phone their thumb is on End Call. "I saw your property on the foreclosure calendar" as sentence one = guaranteed hang-up: it confirms their worst fear (another vulture) before they decide you\'re human. Three beats, in order — "foreclosure" is not spoken until beat 3:</p>'
-    +   '<div class="pbscript"><span class="pbtag">1</span>"Hi — sorry to bother you. Is this the owner at [street]?" — WAIT. If "who\'s asking?": "My name\'s [name], I\'m calling from Miami. Are you the owner there?"</div>'
+    +   '<div class="pbscript"><span class="pbtag">1</span>"Hey [first name], it\'s [name] with Biscayne Solutions Group. How you doing?" — assume it\'s them, never "is this...?". WAIT. If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
     +   '<div class="pbscript"><span class="pbtag">2</span>"Thanks. Real quick — do you still own it, or has that already been handled?" — a yes/no about THEM buys 30 more seconds.</div>'
     +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. I\'m not the bank, not a lawyer — I\'m with Biscayne Solutions Group. My job is you knowing every option before that date. Got 60 seconds?"</div>'
     +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
@@ -11230,10 +11230,10 @@ function genFieldSheet(r){
     // THE OPENER — bilingual, the four-second version, from the playbook
     +   '<div class="fsec">The opener &middot; el saludo</div>'
     +   '<div class="fscript">'
-    +     '<p><b>EN:</b> &ldquo;Hi, are you '+esc(first)+'? My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
+    +     '<p><b>EN:</b> &ldquo;'+(first&&!r.co?'Hey '+esc(first)+', how are you? ':'Hi there, how are you? ')+'My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
     +       '. I&rsquo;m with Biscayne Solutions Group &mdash; I&rsquo;m not your lender or an attorney. I saw the county has a sale '
     +       'date on this property and I wanted to see, face to face, if there&rsquo;s a way I can help before that date.&rdquo;</p>'
-    +     '<p><b>ES:</b> &ldquo;Hola, &iquest;es usted '+esc(first)+'? Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
+    +     '<p><b>ES:</b> &ldquo;'+(first&&!r.co?'Hola '+esc(first)+', &iquest;c&oacute;mo est&aacute;? ':'Hola, &iquest;c&oacute;mo est&aacute;? ')+'Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
     +       '. Soy de Biscayne Solutions Group &mdash; no soy prestamista ni abogado. Vi que el condado tiene fecha de '
     +       'subasta y quer&iacute;a ver, en persona, si puedo ayudar antes de esa fecha.&rdquo;</p>'
     +   '</div>'
@@ -11353,12 +11353,21 @@ function genDialReady(r){
     + fact('Demandante', r.plaintiff)
     + fact('Señal del dueño', r.co?'empresa (pida por el manager)':(r.hs?'homestead — casa familiar':'estatus desconocido'));
   // the 3 beats — mirror genScript's 4-second opener, just SHORTER for at-a-glance reading
+  // Beat 1 assumes it is them (2026-10-26, Alejandro: "always assume"), never "is this...?".
+  var drFirst = r.co ? '' : _firstName(_ownerName((r.owners||'').split(';')[0].trim(), r));
+  var drName = esc((typeof sender==="object"&&sender&&sender.name)||'[your name]');
   var beatsEN = ''
-    + '<div class="drbeat"><span class="drn">1</span>“Hi — sorry to bother you. Is this the owner at <b>'+esc(street)+'</b>?” <span class="drwait">WAIT</span></div>'
+    + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
+        ? '“Hey <b>'+esc(drFirst)+'</b>, it’s '+drName+' with Biscayne Solutions Group. How you doing?”'
+        : '“Hey, it’s '+drName+' with Biscayne Solutions Group. You’re the owner over on <b>'+esc(street)+'</b>, right?”')
+    + ' <span class="drwait">WAIT</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. I’m not the bank, not a lawyer — I’m with Biscayne Solutions Group. Got <b>60 seconds</b>?”</div>';
   var beatsES = ''
-    + '<div class="drbeat"><span class="drn">1</span>“Hola — perdone la molestia. ¿Hablo con el dueño de <b>'+esc(street)+'</b>?” <span class="drwait">ESPERE</span></div>'
+    + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
+        ? '“Hola <b>'+esc(drFirst)+'</b>, le habla '+drName+', de Biscayne Solutions Group. ¿Cómo está?”'
+        : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Usted es el dueño de <b>'+esc(street)+'</b>, ¿verdad?”')
+    + ' <span class="drwait">ESPERE</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“Le hablo claro — su caso salió en los registros del condado, con fecha <b>'+_dfHtml(f.saleDate)+'</b>. No soy el banco ni abogado — comprador local. ¿Me da <b>60 segundos</b>?”</div>';
   var dncNote = '';
@@ -16244,17 +16253,23 @@ function genScript(r){
   // they recognize (their street, not their case), (3) force a yes/no about THEM ("still own it?").
   // Only AFTER they engage does the honest reveal land — with a 60-second ceiling so staying on
   // feels affordable. "Foreclosure" is not spoken until beat 3.
+  // 2026-10-26 (Alejandro): beat 1 no longer asks "is this the owner?". It greets them by name, like
+  // someone who knows them, and the wait after it is where a wrong person says so.
   const street = esc((r.addr||'').split(',')[0]);
   const openEN =
-      `<b>Beat 1 — earn the next 10 seconds (no company, no reason yet):</b><br>`
-    + `"Hi — sorry to bother you. Is this the owner at <b>${street}</b>?" <span class="key">(WAIT. Let them answer. If "who's asking?": "My name's ${esc(sN)} — I'm calling from Miami. Are you the owner there?")</span><br><br>`
+      `<b>Beat 1 — assume it's them (no reason yet):</b><br>`
+    + (first && !r.co
+        ? `"Hey ${first}, it's ${esc(sN)} with Biscayne Solutions Group. How you doing?" <span class="key">(WAIT. Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
+        : `"Hey, it's ${esc(sN)} with Biscayne Solutions Group. You're the owner over on <b>${street}</b>, right?" <span class="key">(WAIT. If they're not: "Oh, my bad. Do I have the right number for the owner?")</span><br><br>`)
     + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
     + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
     + `<b>Beat 3 — the honest reveal, with a ceiling:</b><br>`
     + `"I'll be straight with you — your ${td?'property came up on the county tax-deed list':'case came up on the county records I work through'}${caseTagEN ? ' ('+caseNo+')' : ''}, ${dateClauseEN}. I'm not the bank, not a lawyer — I'm with Biscayne Solutions Group, and my job is making sure you know every option before that date. Most people don't know how many they have. Got <b>60 seconds</b>?"`;
   const openES =
-      `<b>Paso 1 — gane los próximos 10 segundos (sin compañía, sin motivo aún):</b><br>`
-    + `"Hola — perdone la molestia. ¿Hablo con el dueño de <b>${street}</b>?" <span class="key">(ESPERE la respuesta. Si dicen "¿quién habla?": "Me llamo ${esc(sN)} — llamo de Miami. ¿Usted es el dueño?")</span><br><br>`
+      `<b>Paso 1 — dé por hecho que es la persona (sin motivo aún):</b><br>`
+    + (first && !r.co
+        ? `"Hola ${first}, le habla ${esc(sN)}, de Biscayne Solutions Group. ¿Cómo está?" <span class="key">(ESPERE. Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
+        : `"Hola, le habla ${esc(sN)}, de Biscayne Solutions Group. Usted es el dueño de <b>${street}</b>, ¿verdad?" <span class="key">(ESPERE. Si no es: "Ay, disculpe. ¿Tengo el número correcto del dueño?")</span><br><br>`)
     + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
     + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
     + `<b>Paso 3 — la verdad, con techo de tiempo:</b><br>`
