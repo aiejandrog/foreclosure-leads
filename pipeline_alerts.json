@@ -1,47 +1,47 @@
 {
  "alerts": [
   {
-   "at": "2026-10-24T15:44:41-04:00",
+   "at": "2026-10-26T06:35:09-04:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 11.9% (5 of 42 sent on 2026-10-21), over the 5% daily ceiling (minimum sample 20). Post-cutoff first touches: 11.9% (5 of 42 bounced). Rule: paused (day_rate). First-touch sends are paused."
   },
   {
-   "at": "2026-10-24T15:44:41-04:00",
+   "at": "2026-10-26T06:35:09-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-10-24T15:44:41-04:00",
+   "at": "2026-10-26T06:35:09-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-24 11:42): battery 18% (under 50%); send server port 8823 is not listening; 3 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealFlow Sheets CRM, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 43h ago."
   },
   {
-   "at": "2026-10-24T15:44:41-04:00",
+   "at": "2026-10-26T06:35:09-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-24T15:44:41-04:00",
+ "published_at": "2026-10-26T06:35:09-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
    "errors": 1,
-   "filings": 2054,
-   "holds": 538,
-   "leads_checked": 19,
+   "filings": 2062,
+   "holds": 544,
+   "leads_checked": 16,
    "provider": "courtlistener",
-   "pull_age_h": 0.7,
+   "pull_age_h": 0.57,
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 73,
-   "truncated": 1
+   "requests_used": 89,
+   "truncated": 3
   },
   "bounce": {
    "ceiling": 0.1,
@@ -79,7 +79,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 12.69688
+   "usd": 11.90329
   },
   "clerk_bk": {
    "readable": false
@@ -96,14 +96,14 @@
     "events": [],
     "readable": true
    },
-   "cap": 30,
+   "cap": 40,
    "caps": [
-    30,
-    30
+    40,
+    40
    ],
-   "date": "2026-10-24",
+   "date": "2026-10-26",
    "eligible": 47,
-   "judged": true,
+   "judged": false,
    "paused": true,
    "readable": true,
    "scheduled": true,
@@ -125,7 +125,7 @@
   "optout_sync": {
    "date": "2026-10-24",
    "failed_steps": [],
-   "past_cutoff": true,
+   "past_cutoff": false,
    "readable": true,
    "run_ok": true,
    "started_at": 1792855665,
@@ -135,7 +135,7 @@
    "cap": 100000.0,
    "month": "2026-10",
    "readable": true,
-   "spent": 76.904
+   "spent": 79.3427
   },
   "readiness": {
    "at": "2026-10-24T11:42:17-04:00",
