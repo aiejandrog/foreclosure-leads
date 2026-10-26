@@ -807,3 +807,7 @@ rf_status.json.tmp
 !_cadenceskiptest.py
 # _bouncelisttest: cadence reads a legacy bounced_emails.json list at send time. example.com only.
 !_bouncelisttest.py
+
+# send bridge access log -- runtime, per machine, never committed (#384 added one by accident)
+send_server.log
+send_server.log.*
