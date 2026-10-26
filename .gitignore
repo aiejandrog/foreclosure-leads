@@ -23,6 +23,7 @@ _*.py
 !_skiptracelptest.py
 !_workersendracetest.py
 !_workerrunlogtest.py
+!_mailpausetest.py
 !_inflightretrytest.py
 !_wplinktest.py
 !_wpcontactstest.py
