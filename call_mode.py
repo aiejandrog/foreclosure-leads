@@ -3286,7 +3286,7 @@ def _mail_llc_json():
 
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js='', text_js='', histcov='null', mail_js='', subdir=''):
+               seat=None, funnel_js='', text_js='', histcov='null', mail_js='', lookupn=0, subdir=''):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -3297,7 +3297,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     # exact expected count so a third copy (e.g. in a comment) still fails the build.
     for _ph, _want in (('__SYNCJS__', 1), ('__FUNNELJS__', 1), ('__TEXTTPLJS__', 1),
                        ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
-                       ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
+                       ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1), ('__LOOKUPN__', 1),
                        ('__BOOKURL__', 1), ('__DFNAV__', 1), ('__DFNAVCSS__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
@@ -3360,6 +3360,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__SIG__', sig) \
                 .replace('__BSIG__', board_sig) \
                 .replace('__SHOWN__', str(len(rows))) \
+                .replace('__LOOKUPN__', str(int(lookupn or 0))) \
                 .replace('__TOTAL__', str(total)) \
                 .replace('__VMEN__', json.dumps(VOICEMAIL_EN)) \
                 .replace('__VMES__', json.dumps(VOICEMAIL_ES)) \
@@ -3680,7 +3681,8 @@ def seat_rows(rows, n, i):
 
 
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
-                  textperson=None, seat=None, subdir='', rows=None, audit=None, lookup=None):
+                  textperson=None, seat=None, subdir='', rows=None, audit=None, lookup=None,
+                  ledger=None):
     """Write docs/call/<subdir>/index.html. `encrypt` is foreclosure_leads._encrypt_multi and
     `guard` is its _js_guard — both INJECTED rather than re-implemented, so the crypto and the
     parse check can never drift from the board's.
@@ -3766,6 +3768,16 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # absent from them, and the cut note above for why it is this page's list and not the crew's.
     _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
     _n_lk = mark_lookup(_cov, lookup, _crew_sb)
+    # The lookup list can open the email composer, whose stage reads `ln` (confirmed server sends).
+    # Without it a lead cadence already mailed three times would offer a fresh first touch.
+    _lk_rows = [r for r in _cov if r.get('lk')]
+    if ledger:
+        stamp_ledger(_lk_rows, *ledger)
+    if audit:
+        stamp_unknown(_lk_rows, audit)
+    # this page's own "Find a number" count, plaintext on the page (a count, no lead), so how many
+    # no-phone leads each phone carries is readable without the access code
+    _lk_mine = sum(1 for r in _cov if r.get('lk') and (not seat or (r.get('sb', 0) % seat[0]) == seat[1]))
     # EVERY LEAD, OR SAY WHICH ONES ARE MISSING. The whole promise of the board lanes on the phone
     # is that they count the same book the board counts; a lead that falls out of BOTH the dial
     # queue and the coverage set makes a lane read low, and a lane reading low is indistinguishable
@@ -3811,7 +3823,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_no_dead_overrides(_PAGE, mail_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
                       seat=seat, funnel_js=funnel_js, text_js=text_js, mail_js=mail_js, subdir=subdir,
-                      histcov=history_coverage(total, _shipped_all, audit))
+                      lookupn=_lk_mine, histcov=history_coverage(total, _shipped_all, audit))
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -4005,6 +4017,15 @@ body.shopen .lkfab{display:none !important}
 .toast{position:fixed;left:0;right:0;bottom:0;z-index:60;pointer-events:none;background:var(--ok);color:#fff;padding:16px;
      font-weight:700;text-align:center;transform:translateY(100%);transition:transform .18s}
 .toast.on{transform:none}
+/* worker hand-off banner (workerWatch): slides down from the top, tap opens the Worker lane */
+.wkban{position:fixed;left:10px;right:10px;top:10px;z-index:61;display:none;align-items:center;gap:10px;
+     background:#0B2A17;color:#CFF3DC;border-radius:12px;padding:12px 14px;font-weight:700;
+     box-shadow:0 6px 24px rgba(0,0,0,.35);animation:wkin .45s cubic-bezier(.2,.9,.3,1.2)}
+.wkban.on{display:flex}
+.wkban .wkn{font-size:22px;animation:wkbob 1.2s ease-in-out infinite}
+.wkban button{margin-left:auto;background:#1f7a44;color:#fff;border:0;border-radius:8px;padding:9px 12px;font-weight:800}
+@keyframes wkin{0%{opacity:0;transform:translateY(-120%)}100%{opacity:1;transform:none}}
+@keyframes wkbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .toast.bad{background:var(--bad)}
 .gate{padding:28px 18px;max-width:420px;margin:0 auto}
 .gate input{width:100%;min-height:52px;font-size:17px;padding:0 12px;border-radius:10px;border:1px solid #2a3f6b;
@@ -4128,6 +4149,7 @@ __REFRESHSTATUS__
      when a text lands mid-call. Hidden until the payload is unlocked. -->
 <button id="lkbtn" class="lkfab" style="display:none" title="Identify an inbound number">&#128269; Who texted me?</button>
 <div class="toast" id="toast"></div>
+<div class="wkban" id="wkban"></div>
 <!-- z-index 45: above the sheet (40), below the pill (50). This line carries "logged to this phone
      only — team sync is off", which matters exactly when he is working the queue with the sheet up;
      in normal flow the open sheet covered it and the warning was unreadable at the moment it applied. -->
@@ -4160,7 +4182,7 @@ var HISTCOV=__HISTCOV__;
    already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
 var SEAT=__SEAT__;
-var SHOWN=__SHOWN__, TOTAL=__TOTAL__, VMEN=__VMEN__, VMES=__VMES__;
+var SHOWN=__SHOWN__, TOTAL=__TOTAL__, LOOKUPN=__LOOKUPN__, VMEN=__VMEN__, VMES=__VMES__;
 var LS='fcLeadNotes', ROWS=[], PHIDX=null, lane='soon', i=0, cur=null, phIdx=0, notes={};
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -6162,7 +6184,7 @@ function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length =
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp'].forEach(function(k){
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
@@ -6192,8 +6214,31 @@ function promoteLookups(){
   if(n){ ROWS = _dropExpired(ROWS); }
   return n;
 }
+/* WHAT TO LOOK UP FIRST (2026-10-26, Alex: "the leads you scrape up you can still throw them our way and
+   we look them up through whitepages"). 0 = the Morning Worker sent it over (.wq), 1 = filed in the last
+   14 days, newest first (the first call on a new filing is the edge), 2 = a dated sale, soonest first,
+   3 = the rest, newest filing first. Order only: lkRows() still decides who is on the list. */
+function _lkGroup(r){
+  try{ if(wqSet()[r.c]) return 0; }catch(e){}
+  var f = _filedMs(r);
+  if((r.lp || r.xf) && f && (Date.now() - f) <= 14*86400000) return 1;
+  if(!r.lp && !r.xf && typeof r.d === 'number' && r.d >= 0 && r.d < 9999) return 2;
+  return 3;
+}
+function lkSorted(){
+  _WQSET = null;
+  return lkRows().map(function(r, ix){ return {r:r, ix:ix, g:_lkGroup(r)}; }).sort(function(a, b){
+    if(a.g !== b.g) return a.g - b.g;
+    /* worker picks keep the worker panel's order: soonest sale, then newest filing */
+    if(a.g === 0){ var da = (typeof a.r.d === 'number' && a.r.d >= 0) ? a.r.d : 99999,
+                         db = (typeof b.r.d === 'number' && b.r.d >= 0) ? b.r.d : 99999;
+                   return (da - db) || (_filedMs(b.r) - _filedMs(a.r)) || (a.ix - b.ix); }
+    if(a.g === 2) return (a.r.d - b.r.d) || (a.ix - b.ix);
+    return (_filedMs(b.r) - _filedMs(a.r)) || (a.ix - b.ix);
+  }).map(function(o){ return o.r; });
+}
 function lookupList(){
-  var rows = lkRows();
+  var rows = lkSorted();
   var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + rows.length + '</b>'
             + '<div class="sub">These leads passed every check and have no number yet. Look the owner up '
             + 'on Whitepages, type the number you trust, and it becomes a normal lead you can call.</div></div>';
@@ -6207,15 +6252,19 @@ function lookupList(){
     var eq = (typeof r.e === 'number') ? (r.e + '% equity') : 'equity not checked';
     var links = fileLinks({fo:r.fo, ct:r.ct, o:(r.o || r.on || ''), a:(r.a || ''), c:r.c, z:r.z}).filter(function(x){
       return /Whitepages|People search/.test(x[0]); });
+    var _g = _lkGroup(r);
     return '<div class="card"><b>' + esc(ownerLabel(r)) + '</b>'
+         + (_g === 0 ? ' <span class="chip ok">from Morning Worker</span>' : (_g === 1 ? ' <span class="chip hot">new filing</span>' : ''))
          + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
          + (r.bq ? '<div class="sub" style="color:var(--gold)">Bankruptcy not checked. Ask first: Have you filed for bankruptcy?</div>' : '')
          + '<div class="flinks" style="margin-top:8px">' + links.map(function(x){
              return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('') + '</div>'
-         + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="tel" '
-         + 'inputmode="tel" placeholder="Number you found" style="flex:1;min-width:0">'
-         + '<button class="lkadd" data-c="' + esc(r.c) + '">Save &amp; call</button></div></div>';
+         + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" '
+         + 'placeholder="Number or email you found" style="flex:1;min-width:0">'
+         + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
+         + (wpeAddrs(r.c).length ? '<div class="sub">Emailed before: ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
+         + '</div>';
   }).join('');
   var more = rows.length > CAP ? '<div class="card"><b>' + (rows.length - CAP) + ' more.</b><div class="sub">'
     + 'Showing the first ' + CAP + '. Save numbers on these and the rest move up.</div></div>' : '';
@@ -6389,10 +6438,13 @@ function mailLog(r, M, how){
                   to:M.to, by:caller()});
   saveNotes(); try{ queueSync(); }catch(e){}
 }
-function screenMail(r, raw){
+/* back: where Back / confirm return. The dial card by default; the Find-a-number list passes its own,
+   because a lead with no number has no dial card to return to. */
+function screenMail(r, raw, back){
   var v = mailCheck(r, raw);
   if(v.why){ toast(v.why, {bad:true}); return; }
-  SCREEN = 'mail'; _MAIL = [r, v.addr];
+  var ret = back || screenLead;
+  SCREEN = 'mail'; _MAIL = [r, v.addr, back];
   document.getElementById('sheet').classList.add('hid');
   var M = composeMail(r, v.addr, lang()), s = _mailSender();
   $('app').innerHTML = '<div class="card mailcard">'
@@ -6417,9 +6469,9 @@ function screenMail(r, raw){
   function opened(h){ how = h; $('mlsend').style.display = 'none'; $('mlconf').style.display = 'block'; }
   $('mlapp').addEventListener('click', function(){ opened('mail app'); });
   $('mlgm').addEventListener('click', function(){ opened('Gmail'); });
-  $('mly').onclick = function(){ mailLog(r, M, how || 'mail app'); toast('Email logged on this lead'); screenLead(); };
+  $('mly').onclick = function(){ mailLog(r, M, how || 'mail app'); toast('Email logged on this lead'); ret(); };
   $('mln').onclick = function(){ $('mlconf').style.display = 'none'; $('mlsend').style.display = 'block'; };
-  $('mlback').onclick = function(){ screenLead(); };
+  $('mlback').onclick = function(){ ret(); };
 }
 /* Addresses already pasted on this lead (here, the board or a teammate's phone): one tap each. */
 function _wpeList(r){
@@ -8665,7 +8717,18 @@ function wire(){
   Array.prototype.forEach.call(document.querySelectorAll('button.lkadd'), function(b){
     b.onclick=function(){ var c = b.getAttribute('data-c');
       var inp = document.querySelector('input.lknum[data-c="' + c.replace(/"/g, '') + '"]');
-      lkSave(c, inp ? inp.value : ''); };
+      var v = inp ? inp.value : '';
+      /* EMAIL FROM THE LOOKUP LIST (2026-10-26, Alex: "enable personalized manual emailing with pre
+         template email"). An address goes to the same templated composer and the same mailCheck as a
+         dial card (opt-out, hard no, do-not-contact hold, reply on file, three-email ladder, bounce
+         pause, investor lane); a number still goes to lkSave. */
+      if(/@/.test(v)){
+        var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
+        if(!lr){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
+        screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
+        return;
+      }
+      lkSave(c, v); };
   });
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
@@ -8965,7 +9028,7 @@ function setLang(v){
      left the old body on screen would send the wrong language. Rebuilt from its own saved args;
      repainting resets the chip selection to the default, which is the safe direction. */
   else if(SCREEN==='after' && _lastAfter){ afterCall(_lastAfter[0], _lastAfter[1], _lastAfter[2]); }
-  else if(SCREEN==='mail' && _MAIL){ screenMail(_MAIL[0], _MAIL[1]); }
+  else if(SCREEN==='mail' && _MAIL){ screenMail(_MAIL[0], _MAIL[1], _MAIL[2]); }
   if(cur) renderSheet(cur);
 }
 function langChips(){
@@ -9330,6 +9393,7 @@ document.addEventListener('visibilitychange',function(){
        fresh teammate outcome sits in notes and changes nothing until the next full repaint. */
     try{ teamRecheck(); }catch(e){}
     try{ teamWatch(); }catch(e){}
+    try{ workerWatch(); }catch(e){}
     if(touched) return syncPush(); }).catch(function(){}); } }catch(e){}
 });
 /* THE BACKGROUND TICK. startTeamSync() already pulls every 45s, but nothing consumed the result
@@ -9341,6 +9405,49 @@ document.addEventListener('visibilitychange',function(){
    reading a card and tapping dial, and teamWatch's case+timestamp dedup means a tick with
    nothing new is silent. */
 setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); }catch(e){} }, 20000);
+/* MORNING WORKER HAND-OFFS ARRIVE LIVE (2026-10-26). The worker's "Send to Call Mode" button (and its
+   auto-run) stamps the synced .wq flag; startTeamSync pulls it within 45s. This tick says so: a banner
+   with how many of MY leads just arrived, and one tap to the Worker lane where they sort first. Only
+   leads on this page's own dial list that are not hard-suppressed count, so the number is what this
+   phone can actually call. Each case announces once per hand-off (keyed by its wq date). */
+var _WK_SEEN = 'fcWkSeen:' + location.pathname, _WKT = null;   // per seat page: both share one origin
+function workerWatch(){
+  /* nothing decrypted yet (both lists empty): writing `keep` now would forget every hand-off seen */
+  if(!ROWS || (!ROWS.length && !(COV && COV.length))) return 0;
+  _WQSET = null;
+  var q = wqSet(), seen = {};
+  try{ seen = JSON.parse(localStorage.getItem(_WK_SEEN)||'{}') || {}; }catch(e){}
+  /* the same test the Worker lane applies (supReason + teammate claim), so the number on the banner
+     is the number in the lane it opens */
+  var mine = ROWS.filter(function(r){
+    if(!q[r.c] || !_seatMine(r)) return false;
+    try{ return !supReason(r, 'worker').k && !_clmOwner(r.c); }catch(e){ return false; } });
+  /* no-number leads the worker sent over wait on the Find a number list (lkRows: this seat, unclaimed,
+     not hard-suppressed) */
+  var lks = [];
+  try{ lks = lkRows().filter(function(r){ return q[r.c]; }); }catch(e){}
+  var keep = {}, fresh = 0;
+  mine.concat(lks).forEach(function(r){ var w = (notes[r.c]||{}).wq || 'q'; keep[r.c] = w; if(seen[r.c] !== w) fresh++; });
+  try{ localStorage.setItem(_WK_SEEN, JSON.stringify(keep)); }catch(e){}
+  if(!fresh) return 0;
+  var b = $('wkban'); if(!b) return fresh;
+  b.innerHTML = '<span class="wkn">&#128229;</span><span>' + fresh + ' new from Morning Worker'
+    + '<br><span style="font-weight:500;opacity:.85;font-size:12px">' + mine.length + ' to call'
+    + (lks.length ? ' &middot; ' + lks.length + ' to look up' : '') + ' on this phone</span></span>'
+    + '<button id="wkgo">Open</button><button id="wkx" aria-label="Close" style="margin-left:0;background:transparent;color:inherit;padding:9px 6px">&#10005;</button>';
+  b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
+  $('wkx').onclick = function(){ b.classList.remove('on'); };
+  $('wkgo').onclick = function(){
+    b.classList.remove('on');
+    if(SCREEN !== 'lead'){ toast('Log this call first, then open the Worker lane', {ms:3000}); return; }
+    if(!mine.length && lks.length){ BLANE = '__lk'; i = 0; render(); return; }
+    lane = 'worker'; QVIEW = null; BLANE = null; i = 0; render();
+  };
+  clearTimeout(_WKT); _WKT = setTimeout(function(){ b.classList.remove('on'); }, 20000);
+  return fresh;
+}
+setInterval(function(){ try{ workerWatch(); }catch(e){ logErr(e, 'workerWatch'); } }, 20000);
+setTimeout(function(){ try{ workerWatch(); }catch(e){} }, 3000);
 boot();
 </script></body></html>
 """

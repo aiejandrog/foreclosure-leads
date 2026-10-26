@@ -4288,7 +4288,8 @@ def make_tracker(leads):
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
-            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all, audit=_cm_audit, lookup=_cm_lk)
+            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all, audit=_cm_audit, lookup=_cm_lk,
+            ledger=(_mlog, _tlog))
         if _cm_rows:
             print('call mode: %d dialable lead(s) of %d qualifying -> docs/call/  (%s)'
                   % (_cm_rows, _cm_total, 'encrypted' if codes else 'STUB — no site.codes'))
@@ -4302,7 +4303,8 @@ def make_tracker(leads):
                 _sr, _st = call_mode.make_callmode(
                     slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
                     optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
-                    seat=_seat, subdir=_seat[2], rows=_cm_all, audit=_cm_audit, lookup=_cm_lk)
+                    seat=_seat, subdir=_seat[2], rows=_cm_all, audit=_cm_audit, lookup=_cm_lk,
+                    ledger=(_mlog, _tlog))
                 if _sr:
                     print('call mode/%s: %d dialable lead(s) of %d qualifying -> docs/call/%s/'
                           % (_seat[2].lower(), _sr, _st, _seat[2].lower()))
