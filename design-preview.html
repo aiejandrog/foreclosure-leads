@@ -2277,7 +2277,7 @@ body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-26T18:43","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-10-26T20:55","good":null,"rows":[],"last":null,"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -5928,7 +5928,7 @@ function _pbRender(){
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
     +   '<h4>📞 The PHONE opener — the 4-second rule (rebuilt after a live hang-up, 07/28)</h4>'
     +   '<p class="pblede">On the phone their thumb is on End Call. "I saw your property on the foreclosure calendar" as sentence one = guaranteed hang-up: it confirms their worst fear (another vulture) before they decide you\'re human. Three beats, in order — "foreclosure" is not spoken until beat 3:</p>'
-    +   '<div class="pbscript"><span class="pbtag">1</span>"Hey [first name], it\'s [name] with Biscayne Solutions Group. How you doing?" — assume it\'s them, never "is this...?". WAIT. If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
+    +   '<div class="pbscript"><span class="pbtag">1</span>"Hi, [first name]? Can you hear me?" — assume it\'s them, never "is this...?". WAIT. Then: "It\'s [name] with Biscayne Solutions Group." If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
     +   '<div class="pbscript"><span class="pbtag">2</span>"Thanks. Real quick — do you still own it, or has that already been handled?" — a yes/no about THEM buys 30 more seconds.</div>'
     +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. I\'m not the bank, not a lawyer — I\'m with Biscayne Solutions Group. My job is you knowing every option before that date. Got 60 seconds?"</div>'
     +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
@@ -6710,63 +6710,61 @@ function _textBodies(o){
      beyond "free" on the advisor call, no em dashes, and the word "foreclosure" stays out (a text
      can be read by someone not on title). 2026-10-22: same facts, lower case, shorter, and the
      just-filed body is his own sample, word for word. */
+  /* 2026-10-26 (Alejandro pasted a one-line lender text as the target: "sweet and short but
+     inciting", a name, a deadline, one call to action). Same facts as before, cut to three beats:
+     who, the one true dated fact, then ONE ask, call or text me back today. The ask is the reply
+     itself, so the phone the text leaves from is the callback and no number is typed into the
+     body. The sender signs with a first name only; the company still follows it. Still no invented
+     deadline, offer or approval: the only date is the real sale, and a case with no sale says only
+     that it was filed. Keep-or-sell (#57) is the first question on the call, not in the text. */
+  const me = sN.split(' ')[0] || sN;
+  const ask = ' call or text me back today', pide = ' llameme o escribame hoy';
   if(tone==='urgent'){
-    en = hi+", it's "+sN+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
-       + " after the sale most options are gone. our senior advisor can go over what's still possible"
-       + ' with you for free, today if you want. are you hoping to keep the house, or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+'.'
-       + ' despues de la subasta casi todas las opciones se acaban. nuestro asesor principal le explica'
-       + ' gratis lo que todavia se puede hacer, hoy mismo si quiere. quiere quedarse con la casa o esta'
-       + ' pensando en venderla?'+stopES;
+    en = hi+', '+me+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+','
+       + ' after that most options are gone.'+ask+', our advisor walks you through it free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+','
+       + ' y despues casi todas las opciones se acaban.'+pide+', nuestro asesor se lo explica gratis.'+stopES;
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
        ever weakened, delete this body in the same commit. */
-    en = hi+", it's "+sN+' with biscayne solutions group. this is my last text about '+stEN+'.'
-       + (inEN ? ' the sale is '+inEN+', and once it happens most options are gone.'
-               : ' every week that goes by, fewer options are left.')
-       + ' if you ever want to talk, save my number. the call with our senior advisor is free.'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. este es mi ultimo mensaje sobre '+stES+'.'
-       + (inES ? ' la subasta es '+inES+', y despues casi todas las opciones se acaban.'
-               : ' cada semana que pasa quedan menos opciones.')
-       + ' si algun dia quiere hablar, guarde mi numero. la llamada con nuestro asesor principal es gratis.'+stopES;
+    en = hi+', '+me+' with biscayne solutions group, last text from me about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+' and after it most options are gone.' : ' every week fewer options are left.')
+       + ' call or text me back here anytime, the call is free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group, ultimo mensaje mio sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+' y despues casi todas las opciones se acaban.' : ' cada semana quedan menos opciones.')
+       + ' llameme o escribame aqui cuando quiera, la llamada es gratis.'+stopES;
   } else if(tone==='followup'){
-    en = hi+', '+sN+' again from biscayne solutions group about '+stEN+'.'
-       + (inEN ? ' the sale is '+inEN+', and the options shrink every week.'
-               : ' the options shrink every week this goes on.')
-       + ' a call with our senior advisor is free and takes 5 minutes. want me to set it up today?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group, le escribo otra vez sobre '+stES+'.'
-       + (inES ? ' la subasta es '+inES+', y cada semana quedan menos opciones.'
-               : ' cada semana que pasa quedan menos opciones.')
-       + ' hablar con nuestro asesor principal es gratis y toma 5 minutos. se lo coordino hoy?'+stopES;
+    en = hi+', '+me+' again from biscayne solutions group about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+' and options shrink every week.' : ' options shrink every week.')
+       + ask+", it's 5 minutes and free."+stopEN;
+    es = hola+', '+me+' otra vez de biscayne solutions group sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+' y cada semana quedan menos opciones.' : ' cada semana quedan menos opciones.')
+       + pide+', son 5 minutos y es gratis.'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
-    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " two things most owners don't hear: paying the back taxes stops it, and if it sells for"
-       + " more than what's owed, the extra money is yours. want me to walk you through it?"+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
-       + ' dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por mas de lo que'
-       + ' se debe, lo extra es suyo. quiere que se lo explique?'+stopES;
+    en = hi+', '+me+" with biscayne solutions group. there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " paying the back taxes stops it, and if it sells for more than what's owed, the extra is yours."
+       + ask+'.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
+       + ' pagar lo atrasado la detiene, y si se vende por mas de lo que se debe, lo extra es suyo.'
+       + pide+'.'+stopES;
   } else if(lp){
     // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
-    en = hi+", it's "+sN+' with biscayne solutions group. i saw a case was just filed at the courthouse'
-       + ' on '+stEN+'. right now you have the most options, and they shrink every week the case moves.'
-       + ' our senior advisor can walk you through them for free. are you hoping to keep the house, or'
-       + ' open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. vi que acaban de abrir un caso en la corte'
-       + ' sobre '+stES+'. ahora es cuando mas opciones tiene, y cada semana que avanza el caso quedan'
-       + ' menos. nuestro asesor principal se las explica gratis. quiere quedarse con la casa o esta'
-       + ' pensando en venderla?'+stopES;
+    en = hi+', '+me+' with biscayne solutions group. a case was just filed at the courthouse on '+stEN+'.'
+       + ' you have the most options right now and they shrink every week.'
+       + ask+', our advisor goes over them free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. acaban de abrir un caso en la corte sobre '+stES+'.'
+       + ' ahora es cuando mas opciones tiene y cada semana quedan menos.'
+       + pide+', nuestro asesor se las explica gratis.'+stopES;
   } else {
-    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " we're not a lender. you still have options, but they shrink every week. our senior advisor"
-       + " has 30+ years doing this and can go over them with you for free. are you hoping to keep the"
-       + ' house, or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
-       + ' no somos prestamistas. todavia tiene opciones, pero cada semana quedan menos. nuestro asesor'
-       + ' principal tiene mas de 30 años en esto y se las explica gratis. quiere quedarse con la casa'
-       + ' o esta pensando en venderla?'+stopES;
+    en = hi+', '+me+" with biscayne solutions group. there's a court sale set for "+stEN+(inEN?' '+inEN:'')
+       + " and your options shrink every week. we're not a lender."
+       + ask+', our advisor goes over them free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. hay fecha de subasta para '+stES+(inES?' '+inES:'')
+       + ' y cada semana quedan menos opciones. no somos prestamistas.'
+       + pide+', nuestro asesor se las explica gratis.'+stopES;
   }
   return {en: en, es: es};
 }
@@ -11358,14 +11356,14 @@ function genDialReady(r){
   var drName = esc((typeof sender==="object"&&sender&&sender.name)||'[your name]');
   var beatsEN = ''
     + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
-        ? '“Hey <b>'+esc(drFirst)+'</b>, it’s '+drName+' with Biscayne Solutions Group. How you doing?”'
+        ? '“Hi, <b>'+esc(drFirst)+'</b>? Can you hear me?” <span class="drwait">WAIT</span> “It’s '+drName+' with Biscayne Solutions Group.”'
         : '“Hey, it’s '+drName+' with Biscayne Solutions Group. You’re the owner over on <b>'+esc(street)+'</b>, right?”')
     + ' <span class="drwait">WAIT</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. I’m not the bank, not a lawyer — I’m with Biscayne Solutions Group. Got <b>60 seconds</b>?”</div>';
   var beatsES = ''
     + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
-        ? '“Hola <b>'+esc(drFirst)+'</b>, le habla '+drName+', de Biscayne Solutions Group. ¿Cómo está?”'
+        ? '“Hola, ¿<b>'+esc(drFirst)+'</b>? ¿Me escucha?” <span class="drwait">ESPERE</span> “Le habla '+drName+', de Biscayne Solutions Group.”'
         : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Usted es el dueño de <b>'+esc(street)+'</b>, ¿verdad?”')
     + ' <span class="drwait">ESPERE</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
@@ -14072,6 +14070,8 @@ function genMorningWorker(lane, autostart){
     +     'var mb=document.getElementById("mwmarkban"), bb=document.getElementById("mwbounceban");'
     +     'if(bb) bb.style.top=(mb ? mb.offsetHeight+6 : 0)+"px";'
     +   '}'
+    // a narrower window wraps the marks banner taller: restack so the two never overlap
+    +   'window.addEventListener("resize", _banStack);'
     // The flush rides the ACK path, not splice-and-forget. The old version blind-posted into
     // whatever window.opener pointed at — a reloaded board sitting at the access gate swallowed
     // every mark pre-ack while this logged "delivered". Now each re-post goes through _pendWatch:
@@ -16259,7 +16259,7 @@ function genScript(r){
   const openEN =
       `<b>Beat 1 — assume it's them (no reason yet):</b><br>`
     + (first && !r.co
-        ? `"Hey ${first}, it's ${esc(sN)} with Biscayne Solutions Group. How you doing?" <span class="key">(WAIT. Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
+        ? `"Hi, ${first}? Can you hear me?" <span class="key">(WAIT. Then: "It's ${esc(sN)} with Biscayne Solutions Group." Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
         : `"Hey, it's ${esc(sN)} with Biscayne Solutions Group. You're the owner over on <b>${street}</b>, right?" <span class="key">(WAIT. If they're not: "Oh, my bad. Do I have the right number for the owner?")</span><br><br>`)
     + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
     + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
@@ -16268,7 +16268,7 @@ function genScript(r){
   const openES =
       `<b>Paso 1 — dé por hecho que es la persona (sin motivo aún):</b><br>`
     + (first && !r.co
-        ? `"Hola ${first}, le habla ${esc(sN)}, de Biscayne Solutions Group. ¿Cómo está?" <span class="key">(ESPERE. Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
+        ? `"Hola, ¿${first}? ¿Me escucha?" <span class="key">(ESPERE. Luego: "Le habla ${esc(sN)}, de Biscayne Solutions Group." Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
         : `"Hola, le habla ${esc(sN)}, de Biscayne Solutions Group. Usted es el dueño de <b>${street}</b>, ¿verdad?" <span class="key">(ESPERE. Si no es: "Ay, disculpe. ¿Tengo el número correcto del dueño?")</span><br><br>`)
     + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
     + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
