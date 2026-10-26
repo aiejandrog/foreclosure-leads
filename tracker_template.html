@@ -15723,10 +15723,19 @@ window.addEventListener('message', function(ev){
     // to auto-send and we do not auto-text cold leads. This is NOT a contact: no _sentAdd, no
     // autoLog (so no 72h retire), no cap charge. The lead stays eligible until a real 'callout'
     // outcome retires it. Just record the honest breadcrumb.
+    // SEND TO CALL MODE (hand:1, the worker's button). Only the synced .wq stamp: that is what the
+    // phones read. No fcCallQueue entry, because PERSISTQ re-bakes that list into tomorrow's TEXT
+    // BATCH with a cold template, and the button covers replied owners and balloon investors the
+    // auto-run deliberately never texts. No per-lead doc/worker log and one coalesced save, so a
+    // few hundred marks do not mean a few hundred full serializations of notes on this tab.
+    if(d.extra && d.extra.hand){
+      (notes[r.case] = notes[r.case] || {status:'',note:''}).wq = _today();
+      clearTimeout(window.__cmSaveT);
+      window.__cmSaveT = setTimeout(function(){ try{ save(); }catch(e){} }, 400);
+      return;
+    }
     _docLog(r.case, 'worker-callq', 'en');
-    _wlog(r.case, 'callq', (d.extra && d.extra.hand)
-      ? 'sent to Call Mode from the worker (nothing sent to the owner)'
-      : 'phone-only — queued to CALL (no email; nothing auto-sent, never capped)', true);
+    _wlog(r.case, 'callq', 'phone-only — queued to CALL (no email; nothing auto-sent, never capped)', true);
     // DURABLE now. The in-tab Call list dies with the Blob document; this ledger does not.
     try {
       var _cq = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');

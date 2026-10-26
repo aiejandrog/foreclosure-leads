@@ -9353,15 +9353,17 @@ setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); 
    with how many of MY leads just arrived, and one tap to the Worker lane where they sort first. Only
    leads on this page's own dial list that are not hard-suppressed count, so the number is what this
    phone can actually call. Each case announces once per hand-off (keyed by its wq date). */
-var _WK_SEEN = 'fcWkSeen', _WKT = null;
+var _WK_SEEN = 'fcWkSeen:' + location.pathname, _WKT = null;   // per seat page: both share one origin
 function workerWatch(){
   if(!ROWS || !ROWS.length) return 0;
   _WQSET = null;
   var q = wqSet(), seen = {};
   try{ seen = JSON.parse(localStorage.getItem(_WK_SEEN)||'{}') || {}; }catch(e){}
+  /* the same test the Worker lane applies (supReason + teammate claim), so the number on the banner
+     is the number in the lane it opens */
   var mine = ROWS.filter(function(r){
     if(!q[r.c] || !_seatMine(r)) return false;
-    try{ return !hardSuppressed(r); }catch(e){ return false; } });
+    try{ return !supReason(r, 'worker').k && !_clmOwner(r.c); }catch(e){ return false; } });
   var keep = {}, fresh = 0;
   mine.forEach(function(r){ var w = (notes[r.c]||{}).wq || 'q'; keep[r.c] = w; if(seen[r.c] !== w) fresh++; });
   try{ localStorage.setItem(_WK_SEEN, JSON.stringify(keep)); }catch(e){}
@@ -9369,8 +9371,9 @@ function workerWatch(){
   var b = $('wkban'); if(!b) return fresh;
   b.innerHTML = '<span class="wkn">&#128229;</span><span>' + fresh + ' new from Morning Worker'
     + '<br><span style="font-weight:500;opacity:.85;font-size:12px">' + mine.length + ' waiting on this phone</span></span>'
-    + '<button id="wkgo">Open</button>';
+    + '<button id="wkgo">Open</button><button id="wkx" aria-label="Close" style="margin-left:0;background:transparent;color:inherit;padding:9px 6px">&#10005;</button>';
   b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
+  $('wkx').onclick = function(){ b.classList.remove('on'); };
   $('wkgo').onclick = function(){
     b.classList.remove('on');
     if(SCREEN !== 'lead'){ toast('Log this call first, then open the Worker lane', {ms:3000}); return; }

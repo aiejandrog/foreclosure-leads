@@ -169,18 +169,19 @@ rec('the order never reads a hiding rule',
     '_wkTier' not in SRC[SRC.find('function supReason('):SRC.find('\n}\n', SRC.find('function supReason('))])
 
 print('\nLIVE HAND-OFF BANNER (workerWatch)')
-W = 'var _WQSET=null, _WK_SEEN="fcWkSeen", _WKT=null, SCREEN="lead", lane="soon", QVIEW="untouched", BLANE=null, i=0;\n' \
+W = 'var _WQSET=null, _WK_SEEN="fcWkSeen:/call/", _WKT=null, SCREEN="lead", lane="soon", QVIEW="untouched", BLANE=null, i=0;\n' \
     + ''.join(grab_fn(n) for n in ('workerQ', 'wqSet', 'workerWatch'))
 H2 = W + r'''
 var store = {}; var localStorage = {getItem:function(k){ return store[k]||null; }, setItem:function(k,v){ store[k]=v; }};
 var BAN = {innerHTML:'', offsetWidth:1, classList:{on:0, add:function(){ this.on=1; }, remove:function(){ this.on=0; }}};
-var GO = {onclick:null};
-function $(id){ return id==='wkban' ? BAN : GO; }
+var GO = {onclick:null}, X = {onclick:null};
+function $(id){ return id==='wkban' ? BAN : (id==='wkx' ? X : GO); }
 function _seatMine(r){ return r.c !== 'OTHER'; }
-function hardSuppressed(r){ return r.c === 'DNC' ? 'do not call' : ''; }
+function supReason(r, k){ return {k: r.c === 'DNC' ? 'hard' : ''}; }
+function _clmOwner(c){ return c === 'CLAIMED' ? 'Carlos' : ''; }
 function render(){} function toast(){}
-var ROWS = [{c:'A'}, {c:'B'}, {c:'OTHER'}, {c:'DNC'}, {c:'PLAIN'}];
-var notes = {A:{wq:'2026-10-26'}, B:{wq:'2026-10-26'}, OTHER:{wq:'2026-10-26'}, DNC:{wq:'2026-10-26'}};
+var ROWS = [{c:'A'}, {c:'B'}, {c:'OTHER'}, {c:'DNC'}, {c:'PLAIN'}, {c:'CLAIMED'}];
+var notes = {A:{wq:'2026-10-26'}, B:{wq:'2026-10-26'}, OTHER:{wq:'2026-10-26'}, DNC:{wq:'2026-10-26'}, CLAIMED:{wq:'2026-10-26'}};
 var out = {};
 out.first = workerWatch(); out.on = BAN.classList.on; out.txt = BAN.innerHTML;
 out.again = workerWatch();
@@ -191,11 +192,15 @@ console.log(JSON.stringify(out));
 rc, so, se = node(H2)
 rec('workerWatch harness runs', rc == 0, se)
 w = json.loads(so.strip().splitlines()[-1]) if rc == 0 else {}
-rec('announces only this phone\'s worker leads that are not hard-suppressed', w.get('first') == 2 and w.get('on') == 1, w)
+rec('announces only this phone\'s worker leads the Worker lane would list (no suppressed, no claimed)', w.get('first') == 2 and w.get('on') == 1, w)
 rec('banner says how many arrived', '2 new from Morning Worker' in w.get('txt', ''), w)
 rec('each hand-off announces once', w.get('again') == 0, w)
 rec('a lead handed off again on a later day announces again', w.get('requeue') == 1, w)
 rec('Open goes to the Worker lane with every view', w.get('lane') == 'worker' and w.get('qv') is None, w)
+SRCT = io.open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
+_hb = SRCT[SRCT.find('if(d.extra && d.extra.hand){'):SRCT.find('_docLog(r.case, \'worker-callq\'')]
+rec('a button hand-off only stamps .wq: no fcCallQueue (tomorrow\'s text batch), no per-lead log',
+    '.wq = _today()' in _hb and 'fcCallQueue' not in _hb.split('return;')[0].split('*/')[-1] and 'return;' in _hb)
 rec('the tick runs on a timer and after the return-to-page pull',
     "workerWatch(); }catch(e){ logErr(e, 'workerWatch'); } }, 20000)" in SRC and "try{ workerWatch(); }catch(e){}\n    if(touched)" in SRC)
 
