@@ -173,6 +173,9 @@ refresh-running.flag
 hc-ping.rid
 healthcheck.url
 diligence_server.log
+# the send bridge writes this on every start; #384 committed a container copy, which makes
+# `git pull` on the laptop abort ("untracked working tree file would be overwritten").
+send_server.log
 batchdata.key
 site.pass
 skiptrace_results.json
