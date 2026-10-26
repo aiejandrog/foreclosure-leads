@@ -3963,6 +3963,9 @@ body.shopen .lkfab{display:none !important}
 .pill{position:fixed;left:12px;right:12px;bottom:calc(var(--sheeth,0px) + 64px);z-index:50;
      background:var(--gold);color:#0b1730;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.5);
      min-height:52px;padding:14px;font-weight:700;text-align:center;display:none}
+/* With the script sheet OPEN the pill moves to the top of the screen: --sheeth is the collapsed
+   height, so at the bottom it would sit on the open script's text and controls. */
+body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .mut{color:var(--mut)}
 /* ---- the four bands. "Everything on the card" is a hierarchy problem, not an omission problem:
    at 390px the essentials must read without a scroll, so type size carries the ranking. ---- */

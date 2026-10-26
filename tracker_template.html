@@ -13988,6 +13988,8 @@ function genMorningWorker(lane, autostart){
     +     'var mb=document.getElementById("mwmarkban"), bb=document.getElementById("mwbounceban");'
     +     'if(bb) bb.style.top=(mb ? mb.offsetHeight+6 : 0)+"px";'
     +   '}'
+    // a narrower window wraps the marks banner taller: restack so the two never overlap
+    +   'window.addEventListener("resize", _banStack);'
     // The flush rides the ACK path, not splice-and-forget. The old version blind-posted into
     // whatever window.opener pointed at — a reloaded board sitting at the access gate swallowed
     // every mark pre-ack while this logged "delivered". Now each re-post goes through _pendWatch:
