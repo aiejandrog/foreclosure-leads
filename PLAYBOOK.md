@@ -267,8 +267,9 @@ county-court file. A competitor executed our exact playbook first, and left the 
 CLICK. The old opener confirmed their worst fear (another vulture) before they decided we were
 human. The frame that survives pickup — three beats, "foreclosure" never spoken until beat 3:
 
-1. **"Hi — sorry to bother you. Is this the owner at [street]?"** (WAIT. If "who's asking?":
-   "My name's ___, I'm calling from Miami. Are you the owner there?")
+1. **"Hey [first name], it's [name] with Biscayne Solutions Group. How you doing?"** (WAIT.
+   Updated 2026-10-26: assume it's them, never "is this...?". If it's not them they'll say so:
+   "Oh, my bad, I'm looking for [first name]. Do I have the right number?")
 2. **"Thanks. Real quick — do you still own it, or has that already been handled?"** (a yes/no
    about THEM buys the next 30 seconds)
 3. **"I'll be straight with you — your case came up on the county records I work through, date
