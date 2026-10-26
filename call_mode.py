@@ -4059,6 +4059,8 @@ body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .chip{font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid #2a3f6b;color:var(--mut)}
 .chip.hot{border-color:var(--gold);color:var(--gold)}
+.lkf{background:transparent;border:1px solid #2a3f6b;color:var(--mut);border-radius:999px;padding:6px 12px;font-weight:700}
+.lkf.on{border-color:var(--gold);color:var(--gold)}
 .chip.bad{border-color:var(--bad);color:#ff8a80}
 .chip.ok{border-color:#2e7d32;color:#7fd18a}
 .warnbar{background:#3a2a12;border:1px solid #7a4a12;color:#f0b357;border-radius:9px;padding:9px 11px;
@@ -6179,7 +6181,7 @@ function ownerLabel(r){
    dial row with that one number, so the card, the outcome screen, the cooldowns and
    hardSuppressed() all apply to it exactly as to a traced number. Nothing here dials a lead the
    build held: an unmarked coverage row is never offered. */
-var LKDONE = {};
+var LKDONE = {}, LKSHOW = 200, LKEQ = false;
 function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length === 11 && d.charAt(0) === '1') d = d.slice(1); return d.length === 10 ? d : ''; }
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
@@ -6238,12 +6240,19 @@ function lkSorted(){
   }).map(function(o){ return o.r; });
 }
 function lookupList(){
-  var rows = lkSorted();
-  var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + rows.length + '</b>'
+  var all = lkSorted();
+  /* "Has equity" (2026-10-26, Alex: "i need their information ... for them to have equity"): only
+     rows with a known, positive equity figure. Unknown equity is not zero, so the default shows all. */
+  var nEq = all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }).length;
+  var rows = LKEQ ? all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }) : all;
+  var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + all.length + '</b>'
             + '<div class="sub">These leads passed every check and have no number yet. Look the owner up '
-            + 'on Whitepages, type the number you trust, and it becomes a normal lead you can call.</div></div>';
+            + 'on Whitepages, type the number you trust, and it becomes a normal lead you can call.</div>'
+            + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
+            + '<button class="lkf' + (LKEQ ? '' : ' on') + '" data-eq="0">All ' + all.length + '</button>'
+            + '<button class="lkf' + (LKEQ ? ' on' : '') + '" data-eq="1">Has equity ' + nEq + '</button></div></div>';
   if(!rows.length) return head() + head_ + '<div class="card">Nothing to look up right now.</div><div class="sheetpad"></div>';
-  var CAP = 200, shown = rows.slice(0, CAP);
+  var CAP = LKSHOW, shown = rows.slice(0, CAP);
   var body = shown.map(function(r){
     var bv = _bView(r);
     var clock = (!bv.auction) ? 'no sale date'
@@ -6267,7 +6276,8 @@ function lookupList(){
          + '</div>';
   }).join('');
   var more = rows.length > CAP ? '<div class="card"><b>' + (rows.length - CAP) + ' more.</b><div class="sub">'
-    + 'Showing the first ' + CAP + '. Save numbers on these and the rest move up.</div></div>' : '';
+    + 'Showing the first ' + CAP + '.</div><button id="lkmore" style="margin-top:8px">Show ' + Math.min(200, rows.length - CAP)
+    + ' more</button></div>' : '';
   return head() + head_ + body + more + '<div class="sheetpad"></div>';
 }
 function lkSave(c, raw){
@@ -8714,6 +8724,11 @@ function wire(){
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-lk]'), function(b){
     b.onclick=function(){ BLANE = (BLANE === '__lk') ? null : '__lk'; i=0; render(); };
   });
+  Array.prototype.forEach.call(document.querySelectorAll('button.lkf'), function(b){
+    b.onclick=function(){ LKEQ = b.getAttribute('data-eq') === '1'; LKSHOW = 200; render(); };
+  });
+  var _lkm = $('lkmore');
+  if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };
   Array.prototype.forEach.call(document.querySelectorAll('button.lkadd'), function(b){
     b.onclick=function(){ var c = b.getAttribute('data-c');
       var inp = document.querySelector('input.lknum[data-c="' + c.replace(/"/g, '') + '"]');
