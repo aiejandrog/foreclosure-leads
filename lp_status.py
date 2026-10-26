@@ -28,12 +28,22 @@ and means nothing is wrong. It is only meaningful on a lead with NO sale schedul
 
 That is why this script only runs against LP leads, and why the flag it sets is scoped to them.
 
+BROWARD (off by default). The Broward clerk's Commercial Data API returns a case summary with a
+disposition status, ONE request per case. With DEALFLOW_LP_BROWARD=1 and BROWARD_CLERK_API_KEY set,
+Broward LP rows are checked too. The vocabulary was NOT validated against live responses when this was
+written (no key existed), so the mapping is deliberately strict: only a disposition that reads as a
+dismissal of the whole action drops a row. Any other terminal-looking label is stored as `review` with
+its text and drops nothing. A failed, denied, rate-limited or unparseable read stores nothing, so the
+row stays "not checked" and the pass stops early rather than hammering the clerk.
+Palm Beach has no adapter.
+
 Run:  python lp_status.py                # check every LP case, cached
       python lp_status.py --refresh      # ignore the cache
       python lp_status.py --case <case>  # one case, verbose
 """
 import json
 import os
+import re
 import sys
 import time
 
@@ -49,6 +59,34 @@ COVERAGE = os.path.join(HERE, '_lp_status_coverage.json')
 # clients; until one exists, their rows must read as UNCHECKED rather than inherit the
 # empty-status shape that means "verified and fine" everywhere else.
 COUNTY_ADAPTERS = ('MIAMI-DADE',)
+
+ENV_BROWARD = 'DEALFLOW_LP_BROWARD'
+ENV_BROWARD_RUNTIME = 'LP_BROWARD_MAX_RUNTIME_S'
+ENV_BROWARD_CASES = 'LP_BROWARD_MAX_CASES'
+BROWARD_RUNTIME_DEFAULT = 600.0
+BROWARD_CASES_DEFAULT = 400
+
+
+def broward_enabled(env=None):
+    """True only when the flag is on AND the clerk key is set. Either one missing = not checked."""
+    env = os.environ if env is None else env
+    if str(env.get(ENV_BROWARD) or '').strip() != '1':
+        return False
+    return bool(str(env.get('BROWARD_CLERK_API_KEY') or '').strip())
+
+
+def adapters(env=None):
+    """Counties checked this run. Broward joins only through broward_enabled()."""
+    return COUNTY_ADAPTERS + (('BROWARD',) if broward_enabled(env) else ())
+
+
+def _env_num(name, default, cast, env=None):
+    env = os.environ if env is None else env
+    try:
+        v = cast(str(env.get(name) or '').strip() or default)
+    except Exception:
+        return default
+    return v if v > 0 else default
 
 # Terminal clerk statuses. On a lead with no sale scheduled these mean the case ended.
 # How long a clerk status is trusted before it is fetched again. Two weeks is a compromise:
@@ -94,6 +132,108 @@ def check(case):
     }
 
 
+# A disposition that dismisses the WHOLE action. Anything naming a party, an unknown party or a partial
+# dismissal is not this: it goes to review, it never drops a row.
+_DISMISS = re.compile(r'\bdismiss', re.I)
+_PARTIAL = re.compile(r'\b(unknown|parties|party|as to|in part|partial|count|counterclaim|cross)\b', re.I)
+_TERMINAL_WORDS = re.compile(r'\b(closed|disposed|disposition|judgment|final|reclosed|satisfied)\b', re.I)
+
+
+def broward_verdict(label):
+    """label -> (dismissed, review). `dismissed` only for an unambiguous whole-case dismissal."""
+    label = ' '.join(str(label or '').split())
+    if not label:
+        return False, False
+    if _DISMISS.search(label):
+        if _PARTIAL.search(label):
+            return False, True
+        return True, False
+    return False, bool(_TERMINAL_WORDS.search(label))
+
+
+def check_broward(case, key, transport, clock, gap=None, deadline=None):
+    """One Broward case -> (record_or_None, problem). A problem never produces a record."""
+    import clerk_bk as CK
+    api_case = CK.broward_api_case(case)
+    if not api_case:
+        return None, 'not_civil_number'
+    gap = CK.DEFAULT_MIN_INTERVAL if gap is None else gap
+    last = getattr(clock, 'last_http', None)
+    if last is not None and gap > 0:
+        wait = gap - (clock.time() - last)
+        if wait > 0:
+            if deadline is not None and clock.time() + wait > deadline:
+                return None, 'time_budget'
+            clock.sleep(wait)
+    url = CK._api_url(api_case, 'case', key)
+    if not CK.allowed_url(url, api_case):
+        return None, 'refused_url'
+    status, payload, problem = CK._get_json(url, key, transport, clock, CK.HTTP_TIMEOUT, deadline)
+    clock.last_http = clock.time()
+    if problem or payload is None:
+        return None, CK.scrub(problem or 'error', key)
+    label, err = CK.parse_case_payload(payload, api_case)
+    if err:
+        return None, 'unparseable'
+    dismissed, review = broward_verdict(label)
+    return {
+        'status': label.upper(),
+        'dismissed': dismissed,
+        'terminal': dismissed,           # only a clear dismissal leaves the early lane
+        'review': review and not dismissed,
+        'codes': [],
+        'src': 'broward-api',
+        'checked': time.strftime('%Y-%m-%d'),
+    }, ''
+
+
+def run_broward(feed, cache, env=None, transport=None, clock=None):
+    """Check Broward LP cases within the run budget. Returns a counts dict. Mutates cache."""
+    import clerk_bk as CK
+    env = os.environ if env is None else env
+    key = CK.api_key(env)
+    clock = clock or CK.Clock()
+    transport = transport or CK.urllib_transport
+    max_cases = _env_num(ENV_BROWARD_CASES, BROWARD_CASES_DEFAULT, int, env)
+    budget = _env_num(ENV_BROWARD_RUNTIME, BROWARD_RUNTIME_DEFAULT, float, env)
+    deadline = clock.time() + budget
+    now = clock.time()
+    rows = [r for r in feed if str(r.get('county') or '').upper() == 'BROWARD']
+    # never-checked first, then the oldest check; newest filings first inside each group
+    todo, fresh = [], 0
+    for r in sorted(rows, key=lambda r: str(r.get('date') or ''), reverse=True):
+        c = str(r.get('case') or '').strip()
+        if not c or '-' not in c:
+            continue
+        rec = cache.get(c)
+        if rec is None:
+            todo.append((0, c))
+        elif (now - float(rec.get('at') or 0)) > STATUS_TTL_DAYS * 86400:
+            todo.append((1, c))
+        else:
+            fresh += 1
+    todo = [c for _, c in sorted(todo, key=lambda t: t[0])][:max_cases]
+    out = {'cases': len(rows), 'asked': 0, 'recorded': 0, 'fresh': fresh,
+           'stopped': '', 'problems': {}, 'review': {}}
+    for c in todo:
+        rec, problem = check_broward(c, key, transport, clock, deadline=deadline)
+        out['asked'] += 1
+        if rec:
+            rec['at'] = clock.time()
+            cache[c] = rec
+            out['recorded'] += 1
+            if rec.get('review'):
+                out['review'][rec['status']] = out['review'].get(rec['status'], 0) + 1
+            continue
+        out['problems'][problem] = out['problems'].get(problem, 0) + 1
+        # Denied, rate-limited or out of time: stop the pass. A per-case problem (bad number,
+        # unparseable body) just skips that case.
+        if problem in ('denied', 'rate_limited', 'time_budget', 'captcha', 'truncated'):
+            out['stopped'] = problem
+            break
+    return out
+
+
 def main():
     args = sys.argv[1:]
     one = args[args.index('--case') + 1] if '--case' in args else None
@@ -122,8 +262,9 @@ def main():
     for r in feed:
         by_county.setdefault(str(r.get('county') or 'MIAMI-DADE').upper(), 0)
         by_county[str(r.get('county') or 'MIAMI-DADE').upper()] += 1
-    covered = sorted(c for c in by_county if c in COUNTY_ADAPTERS)
-    uncovered = sorted(c for c in by_county if c not in COUNTY_ADAPTERS)
+    active = adapters()
+    covered = sorted(c for c in by_county if c in active)
+    uncovered = sorted(c for c in by_county if c not in active)
     try:
         json.dump({'ran': time.strftime('%Y-%m-%d %H:%M'),
                    'ttl_days': STATUS_TTL_DAYS,
@@ -138,8 +279,8 @@ def main():
               'They are stamped unchecked, not assumed live.'
               % (', '.join(uncovered), sum(by_county[c] for c in uncovered)))
 
-    feed = [r for r in feed if str(r.get('county') or 'MIAMI-DADE').upper() in COUNTY_ADAPTERS]
-    cases = [str(r.get('case') or '').strip() for r in feed]
+    md_feed = [r for r in feed if str(r.get('county') or 'MIAMI-DADE').upper() in COUNTY_ADAPTERS]
+    cases = [str(r.get('case') or '').strip() for r in md_feed]
     cases = [c for c in cases if c and '-' in c]          # skip synthesized LP-XXXX keys
     # STALE-CACHE RE-CHECK (2026-09-01). This was `c not in cache`, so a case checked ONCE as OPEN
     # was never looked at again -- and reinstatement is most common in the first weeks after filing,
@@ -171,6 +312,19 @@ def main():
         time.sleep(0.6)
 
     json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=0)
+
+    if 'BROWARD' in active:
+        bw = run_broward(feed, cache)
+        json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=0)
+        print('BROWARD: %d LP case(s) · %d asked · %d recorded · %d still fresh%s'
+              % (bw['cases'], bw['asked'], bw['recorded'], bw['fresh'],
+                 (' · STOPPED: ' + bw['stopped']) if bw['stopped'] else ''))
+        if bw['problems']:
+            print('  problems (counts only): ' + ', '.join('%s %d' % kv for kv in sorted(bw['problems'].items())))
+        for lab, n in sorted(bw['review'].items()):
+            print('  REVIEW (not dropped): %s x%d' % (lab, n))
+    elif str(os.environ.get(ENV_BROWARD) or '').strip() == '1':
+        print('BROWARD: flag is on but BROWARD_CLERK_API_KEY is not set, Broward rows stay unchecked.')
 
     dismissed = [c for c, v in cache.items() if v.get('dismissed')]
     terminal = [c for c, v in cache.items() if v.get('terminal') and not v.get('dismissed')]
