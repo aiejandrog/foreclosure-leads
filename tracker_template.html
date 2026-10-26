@@ -6626,63 +6626,61 @@ function _textBodies(o){
      beyond "free" on the advisor call, no em dashes, and the word "foreclosure" stays out (a text
      can be read by someone not on title). 2026-10-22: same facts, lower case, shorter, and the
      just-filed body is his own sample, word for word. */
+  /* 2026-10-26 (Alejandro pasted a one-line lender text as the target: "sweet and short but
+     inciting", a name, a deadline, one call to action). Same facts as before, cut to three beats:
+     who, the one true dated fact, then ONE ask, call or text me back today. The ask is the reply
+     itself, so the phone the text leaves from is the callback and no number is typed into the
+     body. The sender signs with a first name only; the company still follows it. Still no invented
+     deadline, offer or approval: the only date is the real sale, and a case with no sale says only
+     that it was filed. Keep-or-sell (#57) is the first question on the call, not in the text. */
+  const me = sN.split(' ')[0] || sN;
+  const ask = ' call or text me back today', pide = ' llameme o escribame hoy';
   if(tone==='urgent'){
-    en = hi+", it's "+sN+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+'.'
-       + " after the sale most options are gone. our senior advisor can go over what's still possible"
-       + ' with you for free, today if you want. are you hoping to keep the house, or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+'.'
-       + ' despues de la subasta casi todas las opciones se acaban. nuestro asesor principal le explica'
-       + ' gratis lo que todavia se puede hacer, hoy mismo si quiere. quiere quedarse con la casa o esta'
-       + ' pensando en venderla?'+stopES;
+    en = hi+', '+me+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+','
+       + ' after that most options are gone.'+ask+', our advisor walks you through it free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+','
+       + ' y despues casi todas las opciones se acaban.'+pide+', nuestro asesor se lo explica gratis.'+stopES;
   } else if(tone==='t3'){
     /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
        TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
        ever weakened, delete this body in the same commit. */
-    en = hi+", it's "+sN+' with biscayne solutions group. this is my last text about '+stEN+'.'
-       + (inEN ? ' the sale is '+inEN+', and once it happens most options are gone.'
-               : ' every week that goes by, fewer options are left.')
-       + ' if you ever want to talk, save my number. the call with our senior advisor is free.'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. este es mi ultimo mensaje sobre '+stES+'.'
-       + (inES ? ' la subasta es '+inES+', y despues casi todas las opciones se acaban.'
-               : ' cada semana que pasa quedan menos opciones.')
-       + ' si algun dia quiere hablar, guarde mi numero. la llamada con nuestro asesor principal es gratis.'+stopES;
+    en = hi+', '+me+' with biscayne solutions group, last text from me about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+' and after it most options are gone.' : ' every week fewer options are left.')
+       + ' call or text me back here anytime, the call is free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group, ultimo mensaje mio sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+' y despues casi todas las opciones se acaban.' : ' cada semana quedan menos opciones.')
+       + ' llameme o escribame aqui cuando quiera, la llamada es gratis.'+stopES;
   } else if(tone==='followup'){
-    en = hi+', '+sN+' again from biscayne solutions group about '+stEN+'.'
-       + (inEN ? ' the sale is '+inEN+', and the options shrink every week.'
-               : ' the options shrink every week this goes on.')
-       + ' a call with our senior advisor is free and takes 5 minutes. want me to set it up today?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group, le escribo otra vez sobre '+stES+'.'
-       + (inES ? ' la subasta es '+inES+', y cada semana quedan menos opciones.'
-               : ' cada semana que pasa quedan menos opciones.')
-       + ' hablar con nuestro asesor principal es gratis y toma 5 minutos. se lo coordino hoy?'+stopES;
+    en = hi+', '+me+' again from biscayne solutions group about '+stEN+'.'
+       + (inEN ? ' the sale is '+inEN+' and options shrink every week.' : ' options shrink every week.')
+       + ask+", it's 5 minutes and free."+stopEN;
+    es = hola+', '+me+' otra vez de biscayne solutions group sobre '+stES+'.'
+       + (inES ? ' la subasta es '+inES+' y cada semana quedan menos opciones.' : ' cada semana quedan menos opciones.')
+       + pide+', son 5 minutos y es gratis.'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
-    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " two things most owners don't hear: paying the back taxes stops it, and if it sells for"
-       + " more than what's owed, the extra money is yours. want me to walk you through it?"+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
-       + ' dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende por mas de lo que'
-       + ' se debe, lo extra es suyo. quiere que se lo explique?'+stopES;
+    en = hi+', '+me+" with biscayne solutions group. there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
+       + " paying the back taxes stops it, and if it sells for more than what's owed, the extra is yours."
+       + ask+'.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
+       + ' pagar lo atrasado la detiene, y si se vende por mas de lo que se debe, lo extra es suyo.'
+       + pide+'.'+stopES;
   } else if(lp){
     // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
-    en = hi+", it's "+sN+' with biscayne solutions group. i saw a case was just filed at the courthouse'
-       + ' on '+stEN+'. right now you have the most options, and they shrink every week the case moves.'
-       + ' our senior advisor can walk you through them for free. are you hoping to keep the house, or'
-       + ' open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. vi que acaban de abrir un caso en la corte'
-       + ' sobre '+stES+'. ahora es cuando mas opciones tiene, y cada semana que avanza el caso quedan'
-       + ' menos. nuestro asesor principal se las explica gratis. quiere quedarse con la casa o esta'
-       + ' pensando en venderla?'+stopES;
+    en = hi+', '+me+' with biscayne solutions group. a case was just filed at the courthouse on '+stEN+'.'
+       + ' you have the most options right now and they shrink every week.'
+       + ask+', our advisor goes over them free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. acaban de abrir un caso en la corte sobre '+stES+'.'
+       + ' ahora es cuando mas opciones tiene y cada semana quedan menos.'
+       + pide+', nuestro asesor se las explica gratis.'+stopES;
   } else {
-    en = hi+", it's "+sN+" with biscayne solutions group. saw there's a court sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " we're not a lender. you still have options, but they shrink every week. our senior advisor"
-       + " has 30+ years doing this and can go over them with you for free. are you hoping to keep the"
-       + ' house, or open to selling?'+stopEN;
-    es = hola+', soy '+sN+' de biscayne solutions group. vi que hay fecha de subasta para '+stES+(inES?' '+inES:'')+'.'
-       + ' no somos prestamistas. todavia tiene opciones, pero cada semana quedan menos. nuestro asesor'
-       + ' principal tiene mas de 30 años en esto y se las explica gratis. quiere quedarse con la casa'
-       + ' o esta pensando en venderla?'+stopES;
+    en = hi+', '+me+" with biscayne solutions group. there's a court sale set for "+stEN+(inEN?' '+inEN:'')
+       + " and your options shrink every week. we're not a lender."
+       + ask+', our advisor goes over them free.'+stopEN;
+    es = hola+', soy '+me+' de biscayne solutions group. hay fecha de subasta para '+stES+(inES?' '+inES:'')
+       + ' y cada semana quedan menos opciones. no somos prestamistas.'
+       + pide+', nuestro asesor se las explica gratis.'+stopES;
   }
   return {en: en, es: es};
 }

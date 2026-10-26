@@ -135,7 +135,10 @@ for k, v in S.items():
         'si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.' in v['es'], v['es'])
     rec('%s: no "Reply STOP" in either language' % k,
         'reply stop' not in (v['en'] + v['es']).lower() and 'responda stop' not in (v['en'] + v['es']).lower())
-    rec('%s: the sender name is filled in' % k, 'test sender' in v['en'] and 'test sender' in v['es'])
+    # 2026-10-26: the texts sign with the sender's first name only ("test sender" -> "test").
+    rec('%s: the sender first name is filled in' % k,
+        v['en'].startswith('hi [first name], test ') and 'test sender' not in v['en']
+        and ' test ' in v['es'] and 'test sender' not in v['es'], v['en'][:60])
 K = out['keys']
 rec('_smsTplKey follows _textBodies order',
     K == {'urgent/CC': 'urgent', 't3/LP': 't3', 'followup/LP': 'followup', 'cold/TD': 'td',
