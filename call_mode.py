@@ -288,16 +288,20 @@ if len(NEPQ_K) != len(NEPQ_Q_EN):
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
-GREET_EN = "Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"
-GREET_ES = "Hola {first}, le habla {sender}, de Biscayne Solutions Group. ¿Cómo está?"
+# 2026-10-26 evening, Alejandro's own words: "Hi, Karl? Can you hear me?" Their name and a line
+# check, nothing else; who we are comes after they answer (INTRO_*).
+GREET_EN = "Hi, {first}? Can you hear me?"
+GREET_ES = "Hola, ¿{first}? ¿Me escucha?"
+INTRO_EN = "It's {sender} with Biscayne Solutions Group."
+INTRO_ES = "Le habla {sender}, de Biscayne Solutions Group."
 # No usable name: still assume. Say who we are, then assume they own the place and let them correct it.
 GREET_ANON_EN = "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?"
 GREET_ANON_ES = "Hola, le habla {sender}, de Biscayne Solutions Group. Usted es el dueño de {st1}, ¿verdad?"
 # The cue is the identity check: only the person answering to the name goes on to the question.
 WAIT_EN = "[Wait. If it's not them, they'll say so.]"
 WAIT_ES = "[Espere. Si no es la persona, se lo va a decir.]"
-PHONE_OPENER_EN = GREET_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
-PHONE_OPENER_ES = GREET_ES + " " + WAIT_ES + " " + _OPEN_BODY_ES
+PHONE_OPENER_EN = GREET_EN + " " + WAIT_EN + " " + INTRO_EN + " " + _OPEN_BODY_EN
+PHONE_OPENER_ES = GREET_ES + " " + WAIT_ES + " " + INTRO_ES + " " + _OPEN_BODY_ES
 # {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
 PHONE_OPENER_ANON_EN = GREET_ANON_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
@@ -908,8 +912,8 @@ def _flow():
     return [
         {'id': 'greet', 'k': 'THE OPENER',
          'en': GREET_EN, 'es': GREET_ES, 'aen': GREET_ANON_EN, 'aes': GREET_ANON_ES,
-         'tone': 'Familiar and sure, like you already know them. Easy on the name, no question in your '
-                 'voice. Then STOP.',
+         'tone': 'Familiar, like you already know them: their name, then "can you hear me?". Never '
+                 '"is this...?". Then STOP.',
          'listen': 'Wait. If it is not them, they will tell you. Do not fill the gap.',
          'br': [['Good / hey / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
                 ['That\'s not me / who?', 'notme'],
@@ -936,9 +940,12 @@ def _flow():
                 ['Wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
-         'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
-         'tone': 'Calm and plain, like a neighbor who saw the paperwork. You already said your name, so '
-                 'just the question. Then STOP.',
+         # Named: the greeting was only "Hi, {first}? Can you hear me?", so say who we are first.
+         # No name: the greeting already did, so the question alone (aen/aes).
+         'en': INTRO_EN + ' ' + _OPEN_ASK_EN, 'es': INTRO_ES + ' ' + _OPEN_ASK_ES,
+         'aen': _OPEN_ASK_EN, 'aes': _OPEN_ASK_ES,
+         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
+                 'question. Then STOP.',
          'listen': 'Wait for the answer. Do not explain anything yet.',
          'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
                 ['What do you do?', 'intro30'],
@@ -1853,7 +1860,7 @@ def _household_links(slim, rows):
     return n
 
 
-def _seat_by_household(rows):
+def _seat_by_household(rows, pin=None):
     """ONE HOUSEHOLD, ONE SEAT (2026-10-15). The seat bucket is a hash of the CASE number, so a person
     with two cases (an HOA case and a bank case, an auction row and an LP row, two properties), two
     owners of one house under different person keys, or two rows carrying the same phone could land
@@ -1893,7 +1900,17 @@ def _seat_by_household(rows):
         if r.get('c'):
             groups.setdefault(find('r:%d' % i), []).append(r)
     moved = 0
+    pin = pin or ()
     for g in groups.values():
+        # A household holding a case in `pin` (an owner who wrote back, replied_cases) goes to
+        # bucket 0, which is seat 0 (Alejandro) for every seat count, since 0 % n == 0. The whole
+        # group moves together, so the household is still on one phone.
+        if pin and any(str(r['c']) in pin for r in g):
+            for r in g:
+                if r.get('sb') != 0:
+                    moved += 1
+                r['sb'] = 0
+            continue
         if len(g) < 2:
             continue
         sb = _seat_bucket(min(str(r['c']) for r in g))
@@ -1994,8 +2011,32 @@ def _wp_resident_owner_numbers(d):
             and wp_contacts.grade_property_owner(owner, e['owner']) == 'wp'}
 
 
-def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=None):
+def replied_cases(notes=None, replies=None):
+    """Cases whose owner wrote back: the board's REPLIES table (replies.py, IMAP) minus STOP replies,
+    a note flagged `replied` (Call Mode's "flag as replied" button), or an email touch logged as a
+    reply (the same /replied/ test the page's mailHistCM uses). The Morning Worker sends exactly these
+    owners to the Call list ("owner REPLIED"), and call_rows puts them on Alejandro's seat
+    (2026-10-26, Alex: worker call-only leads split between him and Carlos, replies to him)."""
+    out = set()
+    for c, v in ((replies or {}).items() if isinstance(replies, dict) else ()):
+        if isinstance(v, dict) and not v.get('stop') and c and not str(c).startswith('@'):
+            out.add(str(c))
+    for c, n in ((notes or {}).items() if isinstance(notes, dict) else ()):
+        if not isinstance(n, dict) or not c or str(c)[:1] in ('#', '@'):
+            continue
+        if n.get('replied') or any(isinstance(t, dict) and t.get('ch') == 'email'
+                                   and re.search(r'replied', str(t.get('out') or ''), re.I)
+                                   for t in (n.get('touches') or [])):
+            out.add(str(c))
+    return out
+
+
+def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=None, replied=None):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
+
+    replied : optional set of case numbers whose owner wrote back (replied_cases). Their household
+             goes to seat 0 (Alejandro) and the row carries rp=1 so the page can put it first. Seat
+             and order only: nothing is added to or removed from the list by this.
 
     lookup : optional list. When given, every lead that passes EVERY gate below except having a
              dialable number is appended to it as {'c', 'sb', 'pk', 'bq', 'bu'} (2026-10-22,
@@ -2174,7 +2215,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             continue
         if need_lookup:
             # Every gate above passed; only the number is missing. Not a dial row (no `p`).
-            lookup.append({'c': case, 'sb': _seat_bucket(case), 'pk': d.get('pkey') or ('C' + case),
+            _lk_rp = bool(replied) and (case in replied or any(
+                c in replied for c in (_groups.get(d.get('pkey') or '') or ())))
+            lookup.append({'c': case, 'sb': 0 if _lk_rp else _seat_bucket(case), 'rp': 1 if _lk_rp else None, 'pk': d.get('pkey') or ('C' + case),
                            'bq': 1 if d.get('bkAsk') else None, 'bu': d.get('bkUntil') or None,
                            'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
                            'xf': 1 if (not is_lp and not d.get('auction')
@@ -2496,7 +2539,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
                 _h = ((_h ^ ord(_ch)) * 16777619) & 0xFFFFFFFF
             row['sb'] = _h % 12
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
-    _seat_by_household(out)
+    # PER PERSON, not per case: a reply logged on a sibling case (r.pcs, same person key) pins this
+    # row too, which is also what the page's _isReplied reads, so the chip and the seat agree.
+    _replied = {str(c) for c in (replied or ())}
+    _pin = set()
+    for r in out:
+        if _replied and any(str(c) in _replied for c in [r.get('c')] + list(r.get('pcs') or [])):
+            r['rp'] = 1
+            _pin.add(str(r.get('c')))
+    _seat_by_household(out, pin=_pin)
     _household_links(slim, out)
     # HIGHEST-CONVERTING FIRST (2026-08-19, his words: "I don't want clients whose auction date is
     # today or two-three days out. I need the highest converting leads.") The old key was
@@ -3008,8 +3059,9 @@ def mark_lookup(cov, lookup, crew_sb=None):
         if not x or r.get('oo') or r.get('sibclaimed') or r.get('saleBkAct') or r.get('lpDismissed'):
             continue
         r['lk'] = 1
-        r['sb'] = crew_sb.get(x.get('pk'), x['sb'])
-        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs'):
+        # a replied lookup lead stays on seat 0; its person's dial rows were pinned there too
+        r['sb'] = 0 if x.get('rp') else crew_sb.get(x.get('pk'), x['sb'])
+        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp'):
             if x.get(k) not in (None, '', []):
                 r[k] = x[k]
         n += 1
@@ -5533,7 +5585,8 @@ function pool(){
     _FRESHN = 0; return keep;
   }
   var _ff = _freshFirst(keep, lane);
-  _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; else break; }
+  /* every untouched row, not a leading run: worker hand-offs now sort above the fresh ones */
+  _FRESHN = 0; for(var _q=0; _q<_ff.length; _q++){ if(_contactTier(_ff[_q]) === 0) _FRESHN++; }
   return _ff;
 }
 /* NEVER-CALLED FIRST (2026-09-28). supReason() hides a no-answer for its 24h cooldown, and the
@@ -5559,12 +5612,35 @@ function _contactTier(r){
   try{ for(var k in lastOutreach(r)) return 1; }catch(e){}
   return 0;
 }
+/* WORKER HAND-OFF FIRST (2026-10-26, Alex: "the leads that get sent into call only from morning worker
+   gets added and sent to call mode and gets distributed to me and Carlos"). The split is the seat
+   partition already on this page: a worker lead is on exactly one phone, by household, and an owner who
+   replied is baked onto Alejandro's seat (rp, call_rows). This only puts them at the top of whatever
+   lane they are in: 0 = the owner replied, 1 = the Morning Worker queued it for a call (workerQ), 2 = the
+   rest. Order only; supReason() and every gate in pool() still decide who is listed at all. */
+function _isReplied(r){
+  if(r.rp) return true;
+  try{ var cs=[r.c].concat(r.pcs||[]);
+    for(var i=0;i<cs.length;i++){ if((notes[cs[i]]||{}).replied) return true; } }catch(e){}
+  try{ return !!mailHistCM(r).replied; }catch(e){ return false; }
+}
+function _wkTier(r){
+  if(_isReplied(r)) return 0;
+  try{ if(wqSet()[r.c]) return 1; }catch(e){}
+  return 2;
+}
+function _wkChips(r){
+  var h='';
+  if(_isReplied(r)) h += '<span class="chip hot">owner replied &middot; talk like a person, no script</span>';
+  try{ if(wqSet()[r.c]) h += '<span class="chip ok">from Morning Worker &middot; call list</span>'; }catch(e){}
+  return h ? '<div class="chips">'+h+'</div>' : '';
+}
 function _freshFirst(rows, ln){
   var tagged = rows.map(function(r, ix){
     var t = _contactTier(r);
-    return {r:r, ix:ix, t:t, f:(ln==='lp' && t === 0) ? _filedMs(r) : 0};
+    return {r:r, ix:ix, t:t, w:_wkTier(r), f:(ln==='lp' && t === 0) ? _filedMs(r) : 0};
   });
-  tagged.sort(function(a, b){ return (a.t - b.t) || (b.f - a.f) || (a.ix - b.ix); });
+  tagged.sort(function(a, b){ return (a.w - b.w) || (a.t - b.t) || (b.f - a.f) || (a.ix - b.ix); });
   return tagged.map(function(o){ return o.r; });
 }
 /* How many leads in the lane just painted nobody has reached on any channel. Shown in head() so a
@@ -6000,7 +6076,7 @@ function head(){
     /* ALL RETRIES, SAID OUT LOUD (2026-09-30). When every lead left in the lane has been reached
        before, the list is a follow-up list, and it must read like one. */
     +((!QVIEW && _FRESHN >= 0)?('<div class="supn">'+(_FRESHN
-          ? ('<b>'+_FRESHN+'</b> never contacted at the top &middot; everything after is a retry')
+          ? ('<b>'+_FRESHN+'</b> never contacted &middot; replies and Morning Worker hand-offs first, then fresh, then retries')
           : '<b>No fresh leads left in this lane</b> &mdash; every lead here was already called, emailed or texted. '
             +'New ones arrive with the next board rebuild.')+'</div>'):'')
     +(_SUPT?('<div class="supn">'+_SUPT+' more hidden &mdash; <b>we already reached them another way</b> '
@@ -6082,7 +6158,7 @@ function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length =
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st'].forEach(function(k){
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
@@ -7342,6 +7418,7 @@ function screenLead(){
   if(has(r,'C')) wc += '<span class="chip">company owner &middot; ask for the manager</span>';
   if(has(r,'W')) wc += '<span class="chip">elder signal</span>';
   if(wc) who += '<div class="chips">'+wc+'</div>';
+  who += _wkChips(r);
   if(r.po) who += '<div class="warnbar">Roll owner is now <b>'+esc(r.po)+'</b> &mdash; do NOT open with the name above. Ask who you are speaking with.</div>';
   if(r.wo && r.wo.length) who += '<div class="warnbar">Whitepages lists a different owner: <b>'+esc(r.wo.join(' / '))+'</b>. Our county / court record says <b>'+esc(r.on||r.o||'the name above')+'</b>. Verify who owns it: ask for the owner of the house, not a name.</div>';
   /* BANKRUPTCY NOT CHECKED (2026-10-13). This lead is on the list only because the attorney approved
@@ -7488,7 +7565,8 @@ function screenLead(){
   if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc;
     /* the balloon card builds its own WHO band; the bankruptcy question is the attorney's condition
        and must open every released card, this lane included */
-    if(r.bq) who += _bqBar(); }
+    if(r.bq) who += _bqBar();
+    who += _wkChips(r); }
   $('app').innerHTML = head()
     + '<div class="card">'
     +   priorBar(r)
@@ -9058,7 +9136,9 @@ function renderSheet(r){
   // The peek is the doorway. In GUIDED mode it says so in gold — the first line of the opener plus
   // "tap to start" — so the guided call is impossible to miss (the toggle used to hide in the drawer).
   var _guidedOn = !!(SCRIPT.flow && SCRIPT.flow.length && _g.on);
-  $('peek').innerHTML = '<b>'+esc(op.split('.')[0])+'.</b> '
+  // First sentence, before any [cue]; keep its own ? or ! ("Hi, Karl? Can you hear me?").
+  var _pk = op.split('[')[0].trim().split('. ')[0]; if(!/[.?!]$/.test(_pk)) _pk += '.';
+  $('peek').innerHTML = '<b>'+esc(_pk)+'</b> '
     + (_guidedOn
         ? '<span class="mut">&hellip;</span> <b style="color:var(--gold)">&#9654; TAP TO START THE CALL</b>'
           + '<span class="mut"> &middot; guided, one line at a time</span>'

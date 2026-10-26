@@ -267,7 +267,7 @@ county-court file. A competitor executed our exact playbook first, and left the 
 CLICK. The old opener confirmed their worst fear (another vulture) before they decided we were
 human. The frame that survives pickup — three beats, "foreclosure" never spoken until beat 3:
 
-1. **"Hey [first name], it's [name] with Biscayne Solutions Group. How you doing?"** (WAIT.
+1. **"Hi, [first name]? Can you hear me?"** (WAIT, then "It's [name] with Biscayne Solutions Group."
    Updated 2026-10-26: assume it's them, never "is this...?". If it's not them they'll say so:
    "Oh, my bad, I'm looking for [first name]. Do I have the right number?")
 2. **"Thanks. Real quick — do you still own it, or has that already been handled?"** (a yes/no

@@ -5844,7 +5844,7 @@ function _pbRender(){
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
     +   '<h4>📞 The PHONE opener — the 4-second rule (rebuilt after a live hang-up, 07/28)</h4>'
     +   '<p class="pblede">On the phone their thumb is on End Call. "I saw your property on the foreclosure calendar" as sentence one = guaranteed hang-up: it confirms their worst fear (another vulture) before they decide you\'re human. Three beats, in order — "foreclosure" is not spoken until beat 3:</p>'
-    +   '<div class="pbscript"><span class="pbtag">1</span>"Hey [first name], it\'s [name] with Biscayne Solutions Group. How you doing?" — assume it\'s them, never "is this...?". WAIT. If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
+    +   '<div class="pbscript"><span class="pbtag">1</span>"Hi, [first name]? Can you hear me?" — assume it\'s them, never "is this...?". WAIT. Then: "It\'s [name] with Biscayne Solutions Group." If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
     +   '<div class="pbscript"><span class="pbtag">2</span>"Thanks. Real quick — do you still own it, or has that already been handled?" — a yes/no about THEM buys 30 more seconds.</div>'
     +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. I\'m not the bank, not a lawyer — I\'m with Biscayne Solutions Group. My job is you knowing every option before that date. Got 60 seconds?"</div>'
     +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
@@ -11272,14 +11272,14 @@ function genDialReady(r){
   var drName = esc((typeof sender==="object"&&sender&&sender.name)||'[your name]');
   var beatsEN = ''
     + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
-        ? '“Hey <b>'+esc(drFirst)+'</b>, it’s '+drName+' with Biscayne Solutions Group. How you doing?”'
+        ? '“Hi, <b>'+esc(drFirst)+'</b>? Can you hear me?” <span class="drwait">WAIT</span> “It’s '+drName+' with Biscayne Solutions Group.”'
         : '“Hey, it’s '+drName+' with Biscayne Solutions Group. You’re the owner over on <b>'+esc(street)+'</b>, right?”')
     + ' <span class="drwait">WAIT</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. I’m not the bank, not a lawyer — I’m with Biscayne Solutions Group. Got <b>60 seconds</b>?”</div>';
   var beatsES = ''
     + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
-        ? '“Hola <b>'+esc(drFirst)+'</b>, le habla '+drName+', de Biscayne Solutions Group. ¿Cómo está?”'
+        ? '“Hola, ¿<b>'+esc(drFirst)+'</b>? ¿Me escucha?” <span class="drwait">ESPERE</span> “Le habla '+drName+', de Biscayne Solutions Group.”'
         : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Usted es el dueño de <b>'+esc(street)+'</b>, ¿verdad?”')
     + ' <span class="drwait">ESPERE</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
@@ -14990,7 +14990,7 @@ function genMorningWorker(lane, autostart){
     // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
     // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
     +       'if(CALLQ.length){'
-    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'__BOARDURL__call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'__BOARDURL__call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; split with Carlos by household, replies on yours &middot; outcomes sync back</span></a></div>";'
     +       '}'
     +       'main.innerHTML=doneHtml;'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
@@ -16175,7 +16175,7 @@ function genScript(r){
   const openEN =
       `<b>Beat 1 — assume it's them (no reason yet):</b><br>`
     + (first && !r.co
-        ? `"Hey ${first}, it's ${esc(sN)} with Biscayne Solutions Group. How you doing?" <span class="key">(WAIT. Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
+        ? `"Hi, ${first}? Can you hear me?" <span class="key">(WAIT. Then: "It's ${esc(sN)} with Biscayne Solutions Group." Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
         : `"Hey, it's ${esc(sN)} with Biscayne Solutions Group. You're the owner over on <b>${street}</b>, right?" <span class="key">(WAIT. If they're not: "Oh, my bad. Do I have the right number for the owner?")</span><br><br>`)
     + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
     + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
@@ -16184,7 +16184,7 @@ function genScript(r){
   const openES =
       `<b>Paso 1 — dé por hecho que es la persona (sin motivo aún):</b><br>`
     + (first && !r.co
-        ? `"Hola ${first}, le habla ${esc(sN)}, de Biscayne Solutions Group. ¿Cómo está?" <span class="key">(ESPERE. Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
+        ? `"Hola, ¿${first}? ¿Me escucha?" <span class="key">(ESPERE. Luego: "Le habla ${esc(sN)}, de Biscayne Solutions Group." Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
         : `"Hola, le habla ${esc(sN)}, de Biscayne Solutions Group. Usted es el dueño de <b>${street}</b>, ¿verdad?" <span class="key">(ESPERE. Si no es: "Ay, disculpe. ¿Tengo el número correcto del dueño?")</span><br><br>`)
     + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
     + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
