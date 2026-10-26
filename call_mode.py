@@ -288,16 +288,20 @@ if len(NEPQ_K) != len(NEPQ_Q_EN):
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
-GREET_EN = "Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"
-GREET_ES = "Hola {first}, le habla {sender}, de Biscayne Solutions Group. ¿Cómo está?"
+# 2026-10-26 evening, Alejandro's own words: "Hi, Karl? Can you hear me?" Their name and a line
+# check, nothing else; who we are comes after they answer (INTRO_*).
+GREET_EN = "Hi, {first}? Can you hear me?"
+GREET_ES = "Hola, ¿{first}? ¿Me escucha?"
+INTRO_EN = "It's {sender} with Biscayne Solutions Group."
+INTRO_ES = "Le habla {sender}, de Biscayne Solutions Group."
 # No usable name: still assume. Say who we are, then assume they own the place and let them correct it.
 GREET_ANON_EN = "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?"
 GREET_ANON_ES = "Hola, le habla {sender}, de Biscayne Solutions Group. Usted es el dueño de {st1}, ¿verdad?"
 # The cue is the identity check: only the person answering to the name goes on to the question.
 WAIT_EN = "[Wait. If it's not them, they'll say so.]"
 WAIT_ES = "[Espere. Si no es la persona, se lo va a decir.]"
-PHONE_OPENER_EN = GREET_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
-PHONE_OPENER_ES = GREET_ES + " " + WAIT_ES + " " + _OPEN_BODY_ES
+PHONE_OPENER_EN = GREET_EN + " " + WAIT_EN + " " + INTRO_EN + " " + _OPEN_BODY_EN
+PHONE_OPENER_ES = GREET_ES + " " + WAIT_ES + " " + INTRO_ES + " " + _OPEN_BODY_ES
 # {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
 PHONE_OPENER_ANON_EN = GREET_ANON_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
@@ -908,8 +912,8 @@ def _flow():
     return [
         {'id': 'greet', 'k': 'THE OPENER',
          'en': GREET_EN, 'es': GREET_ES, 'aen': GREET_ANON_EN, 'aes': GREET_ANON_ES,
-         'tone': 'Familiar and sure, like you already know them. Easy on the name, no question in your '
-                 'voice. Then STOP.',
+         'tone': 'Familiar, like you already know them: their name, then "can you hear me?". Never '
+                 '"is this...?". Then STOP.',
          'listen': 'Wait. If it is not them, they will tell you. Do not fill the gap.',
          'br': [['Good / hey / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
                 ['That\'s not me / who?', 'notme'],
@@ -936,9 +940,12 @@ def _flow():
                 ['Wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
-         'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
-         'tone': 'Calm and plain, like a neighbor who saw the paperwork. You already said your name, so '
-                 'just the question. Then STOP.',
+         # Named: the greeting was only "Hi, {first}? Can you hear me?", so say who we are first.
+         # No name: the greeting already did, so the question alone (aen/aes).
+         'en': INTRO_EN + ' ' + _OPEN_ASK_EN, 'es': INTRO_ES + ' ' + _OPEN_ASK_ES,
+         'aen': _OPEN_ASK_EN, 'aes': _OPEN_ASK_ES,
+         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
+                 'question. Then STOP.',
          'listen': 'Wait for the answer. Do not explain anything yet.',
          'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
                 ['What do you do?', 'intro30'],
@@ -9058,7 +9065,9 @@ function renderSheet(r){
   // The peek is the doorway. In GUIDED mode it says so in gold — the first line of the opener plus
   // "tap to start" — so the guided call is impossible to miss (the toggle used to hide in the drawer).
   var _guidedOn = !!(SCRIPT.flow && SCRIPT.flow.length && _g.on);
-  $('peek').innerHTML = '<b>'+esc(op.split('.')[0])+'.</b> '
+  // First sentence, before any [cue]; keep its own ? or ! ("Hi, Karl? Can you hear me?").
+  var _pk = op.split('[')[0].trim().split('. ')[0]; if(!/[.?!]$/.test(_pk)) _pk += '.';
+  $('peek').innerHTML = '<b>'+esc(_pk)+'</b> '
     + (_guidedOn
         ? '<span class="mut">&hellip;</span> <b style="color:var(--gold)">&#9654; TAP TO START THE CALL</b>'
           + '<span class="mut"> &middot; guided, one line at a time</span>'

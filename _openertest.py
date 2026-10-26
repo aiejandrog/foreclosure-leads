@@ -31,7 +31,7 @@ chk('Do you know your property on {st1} is in pre-foreclosure{date}?' in C._OPEN
 chk('está en proceso de foreclosure{date_es}?' in C._OPEN_ASK_ES, 'ES opener carries the Spanish date token')
 chk('{date}' not in C._OPEN_ASK_ES, 'ES opener never renders the English date clause')
 chk('random' not in C._OPEN_BODY_EN and 'help me out' not in C._OPEN_BODY_EN, 'old disarm retired')
-chk(C.PHONE_OPENER_EN.startswith("Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"), 'named opener assumes it is them (2026-10-26)')
+chk(C.PHONE_OPENER_EN.startswith("Hi, {first}? Can you hear me?"), "named opener is his line (2026-10-26)")
 for k in ('PHONE_OPENER_EN', 'PHONE_OPENER_ES', 'PHONE_OPENER_ANON_EN', 'PHONE_OPENER_ANON_ES', 'GREET_EN', 'GREET_ES'):
     v = getattr(C, k).lower()
     chk('is this' not in v and 'hablo con' not in v and 'am i speaking' not in v, k + ': no "is this ...?" greeting')
@@ -49,7 +49,7 @@ chk('foreclosure' not in (F['notme']['en'] + F['notme']['es'] + F['notme']['aen'
 chk(nm.get('Oh, that is me') == 'disarm' and 'gate' in nm.values() and 'obj:16' in nm.values(), 'fallback routes: me / message / wrong number')
 chk(F['greet']['aen'] == C.GREET_ANON_EN and '{first}' not in C.GREET_ANON_EN, 'no-name greeting never says {first}')
 dis = dict((b[0], b[1]) for b in F['disarm']['br'])
-chk(F['disarm']['en'] == C._OPEN_ASK_EN, 'guided disarm is the question alone')
+chk(F['disarm']['en'] == C.INTRO_EN + ' ' + C._OPEN_ASK_EN and F['disarm']['aen'] == C._OPEN_ASK_EN, 'guided disarm: intro + question (named), question alone (no name)')
 chk(dis.get("No, I didn't know") == 'news' and dis.get('Yes, I know') == 'nots', 'yes -> nots, no -> news')
 chk(dict((b[0], b[1]) for b in F['news']['br']).get('Continue →') == 'nots', 'news -> nots')
 chk(dict((b[0], b[1]) for b in F['nots']['br']).get('Okay / sure') == 'frame', 'nots -> frame')

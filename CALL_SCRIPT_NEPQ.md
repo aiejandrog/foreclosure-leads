@@ -54,8 +54,8 @@ A **no** means *stop recording*, not hang up.
 Pick the variant off the lead card. Keep it to name → two "nots" → the reason → a tiny ask.
 
 **Cold (name known), assume it's them (2026-10-26):**
-> "Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"… *[wait: if it's not
-> them, they'll say so]* … "Do you know your property on {st1} is in pre-foreclosure{date}?" *[stop,
+> "Hi, {first}? Can you hear me?"… *[wait: if it's not them, they'll say so]* … "It's {sender}
+> with Biscayne Solutions Group. Do you know your property on {st1} is in pre-foreclosure{date}?" *[stop,
 > let them answer]* … "I'm **not** your lender and I'm **not** calling to buy your house. I help
 > owners see what options they have before this goes any further. Can I ask you a couple of quick
 > questions?"
