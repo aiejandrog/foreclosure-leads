@@ -3681,7 +3681,8 @@ def seat_rows(rows, n, i):
 
 
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
-                  textperson=None, seat=None, subdir='', rows=None, audit=None, lookup=None):
+                  textperson=None, seat=None, subdir='', rows=None, audit=None, lookup=None,
+                  ledger=None):
     """Write docs/call/<subdir>/index.html. `encrypt` is foreclosure_leads._encrypt_multi and
     `guard` is its _js_guard — both INJECTED rather than re-implemented, so the crypto and the
     parse check can never drift from the board's.
@@ -3767,6 +3768,13 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # absent from them, and the cut note above for why it is this page's list and not the crew's.
     _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
     _n_lk = mark_lookup(_cov, lookup, _crew_sb)
+    # The lookup list can open the email composer, whose stage reads `ln` (confirmed server sends).
+    # Without it a lead cadence already mailed three times would offer a fresh first touch.
+    _lk_rows = [r for r in _cov if r.get('lk')]
+    if ledger:
+        stamp_ledger(_lk_rows, *ledger)
+    if audit:
+        stamp_unknown(_lk_rows, audit)
     # this page's own "Find a number" count, plaintext on the page (a count, no lead), so how many
     # no-phone leads each phone carries is readable without the access code
     _lk_mine = sum(1 for r in _cov if r.get('lk') and (not seat or (r.get('sb', 0) % seat[0]) == seat[1]))
@@ -6176,7 +6184,7 @@ function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length =
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp'].forEach(function(k){
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
@@ -6221,6 +6229,10 @@ function lkSorted(){
   _WQSET = null;
   return lkRows().map(function(r, ix){ return {r:r, ix:ix, g:_lkGroup(r)}; }).sort(function(a, b){
     if(a.g !== b.g) return a.g - b.g;
+    /* worker picks keep the worker panel's order: soonest sale, then newest filing */
+    if(a.g === 0){ var da = (typeof a.r.d === 'number' && a.r.d >= 0) ? a.r.d : 99999,
+                         db = (typeof b.r.d === 'number' && b.r.d >= 0) ? b.r.d : 99999;
+                   return (da - db) || (_filedMs(b.r) - _filedMs(a.r)) || (a.ix - b.ix); }
     if(a.g === 2) return (a.r.d - b.r.d) || (a.ix - b.ix);
     return (_filedMs(b.r) - _filedMs(a.r)) || (a.ix - b.ix);
   }).map(function(o){ return o.r; });
@@ -9400,7 +9412,8 @@ setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); 
    phone can actually call. Each case announces once per hand-off (keyed by its wq date). */
 var _WK_SEEN = 'fcWkSeen:' + location.pathname, _WKT = null;   // per seat page: both share one origin
 function workerWatch(){
-  if(!ROWS || !ROWS.length) return 0;
+  /* nothing decrypted yet (both lists empty): writing `keep` now would forget every hand-off seen */
+  if(!ROWS || (!ROWS.length && !(COV && COV.length))) return 0;
   _WQSET = null;
   var q = wqSet(), seen = {};
   try{ seen = JSON.parse(localStorage.getItem(_WK_SEEN)||'{}') || {}; }catch(e){}

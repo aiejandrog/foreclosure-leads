@@ -109,7 +109,7 @@ rec('a reply on a sibling case pins the person\'s dial row to seat 0',
 cov = [{'c': sib_lp}]
 CM.mark_lookup(cov, lk2, crew_sb={'PX': 7})
 rec('mark_lookup keeps a replied lookup lead on seat 0 and carries rp', cov[0].get('sb') == 0 and cov[0].get('rp') == 1, cov)
-rec('a promoted lookup keeps rp on the phone', "'ne','st','rp']" in SRC)
+rec('a promoted lookup keeps rp on the phone', "'ne','st','rp'," in SRC)
 rec('a bad note cannot cost both phone pages', "_cm_rp = set()" in FL)
 
 print('\nBUILD WIRING')
@@ -193,6 +193,11 @@ GO.onclick(); out.lane = lane; out.qv = QVIEW;
 // nothing is waiting to dial
 LKR = [{c:'LK1'}]; notes.LK1 = {wq:'2026-10-27'}; ROWS = [{c:'PLAIN'}];
 out.lk = workerWatch(); out.lktxt = BAN.innerHTML; lane = 'soon'; GO.onclick(); out.blane = BLANE; out.lane2 = lane;
+// a seat page with no dial rows at all still announces its lookups
+var COV = [{c:'LK2'}]; LKR = [{c:'LK2'}]; notes.LK2 = {wq:'2026-10-27'}; ROWS = [];
+out.empty = workerWatch();
+// before the payload decrypts (both lists empty) nothing is announced and nothing seen is forgotten
+var before = store[_WK_SEEN]; COV = []; LKR = []; out.boot = workerWatch(); out.kept = (store[_WK_SEEN] === before);
 console.log(JSON.stringify(out));
 '''
 rc, so, se = node(H2)
@@ -205,6 +210,8 @@ rec('a lead handed off again on a later day announces again', w.get('requeue') =
 rec('Open goes to the Worker lane with every view', w.get('lane') == 'worker' and w.get('qv') is None, w)
 rec('a no-number worker lead is announced as one to look up', w.get('lk') == 1 and '1 to look up' in w.get('lktxt', ''), w)
 rec('with nothing to dial, Open goes to Find a number', w.get('blane') == '__lk' and w.get('lane2') == 'soon', w)
+rec('a seat page with no dial rows still announces worker lookups', w.get('empty') == 1, w)
+rec('before decrypt: no banner, the seen list is not wiped', w.get('boot') == 0 and w.get('kept') is True, w)
 SRCT = io.open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
 _hb = SRCT[SRCT.find('if(d.extra && d.extra.hand){'):SRCT.find('_docLog(r.case, \'worker-callq\'')]
 rec('a button hand-off only stamps .wq: no fcCallQueue (tomorrow\'s text batch), no per-lead log',
@@ -217,20 +224,38 @@ H3 = 'var _WQSET=null;\n' + ''.join(grab_fn(n) for n in ('workerQ', 'wqSet', '_f
 var localStorage = {getItem:function(){ return null; }};
 function pad(n){ return (n<10?'0':'')+n; }
 function mdy(daysAgo){ var t=new Date(Date.now()-daysAgo*86400000); return (t.getMonth()+1)+'/'+t.getDate()+'/'+t.getFullYear(); }
-var notes = {W:{wq:'2026-10-26'}};
+var notes = {W:{wq:'2026-10-26'}, W2:{wq:'2026-10-26'}};
 var LK = [{c:'OLDLP', lp:1, x:mdy(60)}, {c:'S30', x:'12/31/2099', d:30}, {c:'NEW2', lp:1, x:mdy(2)},
-          {c:'S5', x:'12/31/2099', d:5}, {c:'W', lp:1, x:mdy(90)}, {c:'NEW6', lp:1, x:mdy(6)}];
+          {c:'S5', x:'12/31/2099', d:5}, {c:'W', lp:1, x:mdy(90)}, {c:'NEW6', lp:1, x:mdy(6)}, {c:'W2', x:'12/31/2099', d:3}];
 function lkRows(){ return LK; }
 console.log(JSON.stringify(lkSorted().map(function(r){ return r.c; })));
 '''
 rc, so, se = node(H3)
 rec('lookup harness runs', rc == 0, se)
 order = json.loads(so.strip().splitlines()[-1]) if rc == 0 else []
-rec('Find a number: worker picks, then filings from the last 14 days newest first, then soonest sale, then the rest',
-    order == ['W', 'NEW2', 'NEW6', 'S5', 'S30', 'OLDLP'], order)
+rec('Find a number: worker picks (soonest sale first), then filings from the last 14 days newest first, then soonest sale, then the rest',
+    order == ['W2', 'W', 'NEW2', 'NEW6', 'S5', 'S30', 'OLDLP'], order)
 rec('the lookup box takes an email too and routes it to the same gated composer',
     "if(/@/.test(v)){" in SRC and "screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });" in SRC
     and "var v = mailCheck(r, raw);" in SRC)
+H4 = ''.join(grab_fn(n) for n in ('lkAsDial', 'mailHistCM')) + r'''
+var notes = {};
+var r = lkAsDial({c:'M', lk:1, ln:3, le:1761000000000, sb:1}, '');
+console.log(JSON.stringify({ln:r.ln, sends:mailHistCM(r).sends}));
+'''
+rc, so, se = node(H4)
+m = json.loads(so.strip().splitlines()[-1]) if rc == 0 else {}
+rec('a lookup lead keeps its confirmed server sends, so the composer sees three emails, not a first touch',
+    m.get('ln') == 3 and m.get('sends') == 3, (m, se))
+rec('the build stamps the server send ledger onto lookup rows on both seat pages',
+    'stamp_ledger(_lk_rows, *ledger)' in SRC
+    and io.open(os.path.join(HERE, 'foreclosure_leads.py'), encoding='utf-8').read().count('ledger=(_mlog, _tlog))') == 2)
+import call_mode as _cmx
+_lr = [{'c': 'M1', 'lk': 1}]
+_cmx.stamp_ledger(_lr, {'M1': {'n': 3, 'last': 1761000000000}}, {})
+rec('stamp_ledger gives a lookup row its send count', _lr[0].get('ln') == 3, _lr)
+rec('the hand-off sends the worker panel\'s top 60 lookups, not the whole list',
+    '_workerLookupRows().slice(0, 60)' in SRCT)
 rec('each seat page prints its own Find a number count (a count, no lead)',
     "LOOKUPN=__LOOKUPN__" in SRC and "lookupn=_lk_mine" in SRC)
 

@@ -13703,7 +13703,7 @@ function genMorningWorker(lane, autostart){
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
     // the "Find a number" panel's leads (no phone, no email), by case only, for Send to Call Mode
-    +   'var LKCASES=' + JSON.stringify((function(){ try{ return _workerLookupRows().map(function(r){ return r.case; }); }catch(e){ return []; } })()) + ';'
+    +   'var LKCASES=' + JSON.stringify((function(){ try{ return _workerLookupRows().slice(0, 60).map(function(r){ return r.case; }); }catch(e){ return []; } })()) + ';'
     +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
