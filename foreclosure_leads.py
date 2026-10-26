@@ -2615,6 +2615,8 @@ def make_tracker(leads):
             d['arv'] = _cp.get('arv', 0); d['arvconf'] = _cp.get('conf', '')
             d['arvpsf'] = _cp.get('psf', 0); d['arvn'] = _cp.get('n', 0)
             d['comps'] = _cp.get('comps', [])
+            import value_join as _vj
+            _vj.note_roll_value(d, _cp)
         _dd = diligence.get(r.get('Case #', ''))
         if _dd:
             d['diligence'] = _dd
@@ -2697,6 +2699,8 @@ def make_tracker(leads):
                     _d['arv'] = _cp.get('arv', 0); _d['arvconf'] = _cp.get('conf', '')
                     _d['arvpsf'] = _cp.get('psf', 0); _d['arvn'] = _cp.get('n', 0)
                     _d['comps'] = _cp.get('comps', [])
+                    import value_join as _vj
+                    _vj.note_roll_value(_d, _cp)
                 # Deep Diligence (diligence.py) — Capri-H brief on Call Sheet
                 _dd = diligence.get(_d.get('case', ''))
                 if _dd:
@@ -3145,27 +3149,23 @@ def make_tracker(leads):
     except Exception as _e:
         print(f"post-judgment interest: SKIPPED ({_e}) — judgments shown as entered")
 
-    # Redfin Estimate (redfin_value.py) — advisory second-opinion value, folio-keyed post-pass.
-    # A PURE sidecar merge: rfval/rfurl/rfchk never touch the lead files, so they can't be lost by
-    # the MD rebuild or the county slim.extend. Only apply a real, address-matched estimate
-    # (v>0 and conf in ok/addr); nomatch/zero entries are skipped so the row stays clean. Advisory
-    # only — nothing here feeds val/_valsrc/_profit (see tracker_template.html r._valx).
-    _rff = os.path.join(HERE, 'redfin_cache.json')
-    if os.path.exists(_rff):
-        try:
-            _rf = json.load(open(_rff, encoding='utf-8')); _rfn = 0
-            for _r in slim:
-                _f = re.sub(r'\D', '', str(_r.get('folio') or ''))
-                _h = _rf.get(_f)
-                if _h and int(_h.get('v') or 0) > 0 and _h.get('conf') in ('ok', 'addr'):
-                    _r['rfval'] = int(_h['v'])
-                    _r['rfurl'] = _h.get('url', '')
-                    _r['rfchk'] = time.strftime('%Y-%m-%d', time.localtime(_h.get('t') or 0))
-                    _rfn += 1
-            if _rfn:
-                print(f"redfin: {_rfn} lead(s) carry a Redfin Estimate")
-        except Exception as e:
-            print(f"redfin_cache.json skipped ({e})")
+    # Free value sidecars. Redfin and the Zestimate stay advisory (rfval / zest) — they are
+    # not copied into `value`, so they do not move _basisOf. A missing county just/market
+    # value is filled from the pa_values cache only (the same JV the roll already uses).
+    # Letter-bearing Broward ids and case-keyed cache rows join here; a digit-only lookup
+    # missed both. value_join never prints a folio or an owner.
+    try:
+        import value_join as _vj
+        _side = _vj.load_sidecars(HERE)
+        _vs = _vj.attach(slim, redfin=_side['redfin'], listing=_side['listing'], pa=_side['pa'])
+        if _vs.get('rfval'):
+            print(f"redfin: {_vs['rfval']} lead(s) carry a Redfin Estimate")
+        if _vs.get('zest'):
+            print(f"zestimate: {_vs['zest']} lead(s) filled from the listing cache")
+        if _vs.get('pval'):
+            print(f"roll value: {_vs['pval']} lead(s) filled from the property-appraiser cache")
+    except Exception as e:
+        print(f"value sidecars skipped ({e})")
 
     # bake lat/lng from geocode_cache.json (geo_enrich.py, keyless US Census) so the board's origin-
     # anchored door route can sort deals by REAL distance and expand outward from home.
@@ -4068,6 +4068,8 @@ def make_tracker(leads):
     # COVERAGE MARKER — a plaintext, greppable census of how enriched this build actually is, so the
     # publish guard can compare a new build against the one already live WITHOUT decrypting either.
     # It carries only counts, never a name, number or address.
+    import value_join as _vj_cov
+    _vc = _vj_cov.census_bits(slim)
     _cov = {
         'leads':  len(slim),
         'phones': sum(1 for d in slim if d.get('phones')),
@@ -4076,6 +4078,12 @@ def make_tracker(leads):
         'arv':    sum(1 for d in slim if d.get('arv')),
         'rfval':  sum(1 for d in slim if d.get('rfval')),
         'zest':   sum(1 for d in slim if d.get('zest')),
+        # UNION of the sources above plus county just/market (`value`). healthcheck's
+        # "shipped board · valued" used to take the max of arv/rfval/zest, so a row whose
+        # only number was the property-appraiser roll did not count. Census only — not in
+        # publish_guard.FIELDS. pval is the county-value count by itself.
+        'pval':   _vc['pval'],
+        'valued': _vc['valued'],
         # Miami-Dade rows with a parcel AND an appraiser market value. The 09-30 evening board had
         # 194 Miami auction leads with a folio and not one value (every appraiser read failed), and
         # nothing here counted it, so the guard could not see that equity was gone board-wide.
