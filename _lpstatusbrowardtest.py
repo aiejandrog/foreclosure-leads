@@ -61,6 +61,8 @@ V = LS.broward_verdict
 check('plain dismissal drops', V('Dismissed') == (True, False), V('Dismissed'))
 check('dismissed without prejudice drops', V('Dismissed Without Prejudice') == (True, False))
 check('voluntary dismissal drops', V('Voluntary Dismissal') == (True, False))
+for _l in ('Dismissal Vacated','Order Setting Aside Dismissal','Reinstated After Dismissal','Motion to Dismiss Denied','Not Dismissed','Dismissed - Defendant Jones'):
+    check('%s is review, never a drop' % _l, V(_l) == (False, True), V(_l))
 check('dismissal of unknown parties does NOT drop (case is alive)',
       V('Dismissed As To Unknown Parties') == (False, True), V('Dismissed As To Unknown Parties'))
 check('dismissal of a count does NOT drop', V('Dismissed - Count II') == (False, True))
@@ -107,6 +109,19 @@ f7 = Fake({}, special={C1: (200, json.dumps({'Case_Number': 'CACE26999999', 'Dis
 c7 = {}
 LS.run_broward(feed(C1), c7, transport=f7, clock=clock())
 check('a response for a different case number is not trusted', not c7)
+
+# --- unknown schema and outages ----------------------------------------------------------------
+f10 = Fake({}, special={C1: (200, json.dumps({'Case_Number': api(C1), 'Foo': 1}).encode())})
+c10 = {}
+out = LS.run_broward(feed(C1), c10, transport=f10, clock=clock())
+check('a payload with no disposition field stores nothing', not c10 and out['problems'].get('no_disposition') == 1, out)
+def boom(url, timeout):
+    raise OSError('connection reset ' + KEY)
+many = ['CACE-26-%06d' % (200 + i) for i in range(12)]
+c11 = {}
+out = LS.run_broward(feed(*many), c11, transport=boom, clock=clock())
+check('an outage stops after a run of failures, not at the deadline', out['stopped'] == 'consecutive_failures' and out['asked'] == 5, out)
+check('transport error text (and the key) never reach the problem counts', KEY not in json.dumps(out) and set(out['problems']) <= {'error'}, out)
 
 # --- budget ----------------------------------------------------------------------------------
 os.environ['LP_BROWARD_MAX_CASES'] = '1'

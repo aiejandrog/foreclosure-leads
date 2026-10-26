@@ -132,10 +132,12 @@ def check(case):
     }
 
 
-# A disposition that dismisses the WHOLE action. Anything naming a party, an unknown party or a partial
-# dismissal is not this: it goes to review, it never drops a row.
-_DISMISS = re.compile(r'\bdismiss', re.I)
-_PARTIAL = re.compile(r'\b(unknown|parties|party|as to|in part|partial|count|counterclaim|cross)\b', re.I)
+# ALLOWLIST. Only a label that is nothing but a whole-case dismissal drops a row. Every other label
+# that mentions dismissal ("Dismissal Vacated", "Motion to Dismiss Denied", "Not Dismissed",
+# "Reinstated After Dismissal", "Dismissed - Defendant Jones", "As To Unknown Parties") goes to review.
+_DISMISS_WORD = re.compile(r'dismiss', re.I)
+_WHOLE_DISMISSAL = re.compile(
+    r'^(?:voluntar(?:y|ily)\s+|involuntar(?:y|ily)\s+)?dismiss(?:ed|al)(?:\s+(?:with|without)\s+prejudice)?$', re.I)
 _TERMINAL_WORDS = re.compile(r'\b(closed|disposed|disposition|judgment|final|reclosed|satisfied)\b', re.I)
 
 
@@ -144,11 +146,15 @@ def broward_verdict(label):
     label = ' '.join(str(label or '').split())
     if not label:
         return False, False
-    if _DISMISS.search(label):
-        if _PARTIAL.search(label):
-            return False, True
+    if _WHOLE_DISMISSAL.match(label):
         return True, False
-    return False, bool(_TERMINAL_WORDS.search(label))
+    return False, bool(_DISMISS_WORD.search(label) or _TERMINAL_WORDS.search(label))
+
+
+_KNOWN_PROBLEMS = {'denied', 'rate_limited', 'time_budget', 'captcha', 'truncated', 'not_json',
+                   'http_404', 'http_500', 'http_502', 'http_503'}
+_STOP_PROBLEMS = ('denied', 'rate_limited', 'time_budget', 'captcha', 'truncated')
+_MAX_CONSECUTIVE_FAILS = 5
 
 
 def check_broward(case, key, transport, clock, gap=None, deadline=None):
@@ -171,10 +177,14 @@ def check_broward(case, key, transport, clock, gap=None, deadline=None):
     status, payload, problem = CK._get_json(url, key, transport, clock, CK.HTTP_TIMEOUT, deadline)
     clock.last_http = clock.time()
     if problem or payload is None:
-        return None, CK.scrub(problem or 'error', key)
+        problem = problem if problem in _KNOWN_PROBLEMS else 'error'
+        return None, problem
     label, err = CK.parse_case_payload(payload, api_case)
     if err:
         return None, 'unparseable'
+    if not label:
+        # a matching case number with no disposition field is a schema we do not know, not an open case
+        return None, 'no_disposition'
     dismissed, review = broward_verdict(label)
     return {
         'status': label.upper(),
@@ -215,6 +225,7 @@ def run_broward(feed, cache, env=None, transport=None, clock=None):
     todo = [c for _, c in sorted(todo, key=lambda t: t[0])][:max_cases]
     out = {'cases': len(rows), 'asked': 0, 'recorded': 0, 'fresh': fresh,
            'stopped': '', 'problems': {}, 'review': {}}
+    fails = 0
     for c in todo:
         rec, problem = check_broward(c, key, transport, clock, deadline=deadline)
         out['asked'] += 1
@@ -222,14 +233,19 @@ def run_broward(feed, cache, env=None, transport=None, clock=None):
             rec['at'] = clock.time()
             cache[c] = rec
             out['recorded'] += 1
+            fails = 0
             if rec.get('review'):
                 out['review'][rec['status']] = out['review'].get(rec['status'], 0) + 1
             continue
         out['problems'][problem] = out['problems'].get(problem, 0) + 1
-        # Denied, rate-limited or out of time: stop the pass. A per-case problem (bad number,
-        # unparseable body) just skips that case.
-        if problem in ('denied', 'rate_limited', 'time_budget', 'captcha', 'truncated'):
+        fails += 1
+        # Denied, rate-limited or out of time: stop the pass. So does a run of failures in a row
+        # (an outage or a changed schema), instead of working through every case until the deadline.
+        if problem in _STOP_PROBLEMS:
             out['stopped'] = problem
+            break
+        if fails >= _MAX_CONSECUTIVE_FAILS:
+            out['stopped'] = 'consecutive_failures'
             break
     return out
 
