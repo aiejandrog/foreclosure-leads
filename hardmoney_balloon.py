@@ -272,7 +272,8 @@ def _write_report(full, hits, lenders, lo, hi, months):
                      (' &middot; ' + H.escape(h['agent_ph'])) if h.get('agent_ph') else ''))
     lend_rows = ''.join('<li><b>%s</b> &times;%d</li>' % (H.escape(k), v)
                         for k, v in sorted(lenders.items(), key=lambda x: -x[1]))
-    doc = """<!doctype html><html><head><meta charset="utf-8"><title>Hard-Money Balloon Book</title>
+    doc = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Hard-Money Balloon Book</title>
 <style>
 body{{font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif;color:#0e1b33;max-width:1000px;margin:0 auto;padding:26px}}
 h1{{font-size:23px;margin:0 0 3px}} .sub{{color:#5a6577;margin-bottom:18px}}
@@ -288,6 +289,8 @@ tr:nth-child(even){{background:#fafcff}} .mut{{color:#9aa4b6}}
 .box{{background:#f3f6fb;border:1px solid #dbe3ef;border-radius:10px;padding:14px 16px;margin:18px 0}}
 .box h3{{margin:0 0 8px;font-size:14px}} .yes{{color:#0b5d1e;font-weight:700}} .no{{color:#8a1c1c;font-weight:700}}
 ul{{margin:6px 0 0 18px;columns:2}}
+.tblwrap{{overflow-x:auto;-webkit-overflow-scrolling:touch}}
+@media(max-width:640px){{body{{padding:14px}} ul{{columns:1}}}}
 </style></head><body>
 <h1>Hard-Money Balloon Book &mdash; investor loans coming due</h1>
 <div class="sub">Biscayne Solutions Group &middot; built {date} from public mortgage records + Sunbiz &middot;
@@ -332,8 +335,8 @@ LLC&rsquo;s name today &mdash; usually because it already sold, which means they
 &times; <b>Vacant-land rows are never scored.</b> A ground-up construction loan is written against finished value;
 calling it &ldquo;upside down&rdquo; against dirt would be wrong on the first call.</div></div>
 <div class="box"><h3>Private lenders in the book (by volume of loans)</h3><ul>{lend_rows}</ul></div>
-<table><thead><tr><th>Originated</th><th>Age</th><th>Lender</th><th>Loan</th><th>LTV</th><th>Verdict</th><th>Owner (LLC)</th><th>Property</th><th>Human behind the LLC</th></tr></thead>
-<tbody>{rows}</tbody></table>
+<div class="tblwrap"><table><thead><tr><th>Originated</th><th>Age</th><th>Lender</th><th>Loan</th><th>LTV</th><th>Verdict</th><th>Owner (LLC)</th><th>Property</th><th>Human behind the LLC</th></tr></thead>
+<tbody>{rows}</tbody></table></div>
 </body></html>""".format(date=datetime.date.today().isoformat(), lo=lo, hi=hi, months=months,
                          n=n, zone_n=zone_n, swept_n=len(swept), totalM=round(total / 1e6, 1),
                          fits_n=len(fits), fitsM=round(fits_vol / 1e6, 1),
@@ -356,6 +359,15 @@ calling it &ldquo;upside down&rdquo; against dirt would be wrong on the first ca
     pub = re.sub(r'(<tr>(?:<td[^>]*>.*?</td>){8})<td>.*?</td></tr>',
                  r'\1<td><span class="mut">on file</span></td></tr>', pub)
     pub = pub.replace('<div class="kpi"><div class="n">{human_n}</div>'.format(human_n=''), '')
+    # The page strip (dealflow_nav.py), on the PUBLISHED copy only: its links are relative to
+    # docs/hm-balloon-q7v3n8/, and the local copies below live in folders with no board beside them.
+    # Before 2026-10-26 the book was the one surface in the strip with no way back to the others.
+    try:
+        import dealflow_nav as _nav
+        pub = pub.replace('</style>', _nav.CSS_LIGHT + '\n</style>', 1)
+        pub = pub.replace('<body>\n', '<body>\n' + _nav.strip('balloon', 1, target_blank=()) + '\n', 1)
+    except Exception as _e:
+        print('balloon book: page strip skipped (%s)' % str(_e)[:80])
     docs_out = os.path.join(HERE, 'docs', 'hm-balloon-q7v3n8', 'index.html')
     os.makedirs(os.path.dirname(docs_out), exist_ok=True)
     open(docs_out, 'w', encoding='utf-8').write(pub)
