@@ -80,6 +80,18 @@ CSS_DARK = (
 )
 
 
+# Light-theme CSS for the white standalone pages (the Balloon Book). Same shape as CSS_DARK.
+CSS_LIGHT = (
+    '.dfnav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px;border-radius:12px;'
+    'margin:0 0 16px;background:#f3f6fb;border:1px solid #dbe3ef}'
+    '.dfnav .dfn{flex:0 0 auto;display:inline-flex;align-items:center;min-height:36px;padding:6px 13px;'
+    'border-radius:9px;border:1px solid transparent;color:#33415c;font-size:13px;font-weight:600;'
+    'text-decoration:none;white-space:nowrap;line-height:1.2}'
+    '.dfnav .dfn.on{background:#0B1730;color:#fff;border-color:#0B1730}'
+    '.dfnav .dfn:not(.on):hover{background:#fff;border-color:#dbe3ef}'
+)
+
+
 def board_nav_labels(template_html):
     """The labels inside the board template's <nav class="dfnav">, in order - what _navtest.py
     compares against ITEMS. Button/anchor text only; badges (<span>) are stripped."""

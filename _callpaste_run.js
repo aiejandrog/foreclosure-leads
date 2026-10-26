@@ -13,7 +13,8 @@
  *     lane, a reply on file, a closed three-email ladder and a cold email under the bridge's bounce
  *     pause; composeMail renders the board's own bodies (first touch / early / tax deed / follow /
  *     final, EN and ES) with no token left; the email screen hands off to the mail app or Gmail and
- *     writes one ch:'email' touch + notes.wpe only after the operator confirms it sent.
+ *     writes one ch:'email' touch + notes.wpe only after the operator confirms it sent; a held
+ *     do-not-contact list (textingHeld) refuses the email the same as a text.
  */
 const fs = require('fs');
 const vm = require('vm');
@@ -168,7 +169,12 @@ ctx.notes = {}; store.fcSender = JSON.stringify({ name: 'Alejandro Gonzalez', ll
 ctx.cur = A; ctx.phIdx = 0; ctx.screenLead();
 T('the paste box now takes a number or an email', /NUMBER OR EMAIL ON WHITEPAGES/.test(app()) && /or email\. Pasted numbers are not checked/.test(app()));
 T('_mailAddr trims and lower-cases a pasted address and refuses junk', ctx._mailAddr('  Foo.Bar@Example.COM ') === 'foo.bar@example.com' && ctx._mailAddr('305-555-0001') === '' && ctx._mailAddr('nobody@') === '');
+// The do-not-contact list hold that holds a text holds a pasted email too (2026-10-26 audit).
+ctx.TEXTHOLDLIVE = true; ctx.TEXTHOLD = { held: true, why: 'HOLD texting: the do-not-contact list is missing.', live: true, ok: false };
 let mc = ctx.mailCheck(A, 'owner@example.com');
+T('a held do-not-contact list refuses the email, and says why', /not confirmed fresh/.test(mc.why || '') && /list is missing/.test(mc.why || ''), JSON.stringify(mc));
+ctx.TEXTHOLD = { held: false, why: '', live: true, ok: true };
+mc = ctx.mailCheck(A, 'owner@example.com');
 T('a fresh lead with a good address composes a first touch', !mc.why && mc.stage === 'cold', JSON.stringify(mc));
 ctx.notes['CASE-S'] = { status: 'DO NOT CONTACT', note: '' };
 mc = ctx.mailCheck(S, 'owner@example.com');

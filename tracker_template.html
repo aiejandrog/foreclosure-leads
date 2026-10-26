@@ -2057,6 +2057,11 @@ body.mini .dfnav .dfn{padding:4px 10px;font-size:12px}
 .brand .tag{white-space:nowrap}
 .lockbtn{white-space:nowrap}
 @media(max-width:1280px){.brand .tag{display:none}}
+/* Tier 1 wraps on desktop too (2026-10-26 audit). With six nav items, a stale build pill and
+   Refresh / Lock on one non-wrapping row, the row ran ~1,490px wide: at 1024-1400px the Refresh
+   and Lock buttons sat off the right edge and the whole page scrolled sideways. Now the pill,
+   Refresh and Lock drop to a second line, still right-aligned, whenever the row does not fit. */
+@media(min-width:861px){.brand{flex-wrap:wrap;row-gap:8px}.brand .upd{margin-left:auto}}
 .brand .upd.stale{border-color:rgba(180,83,9,.45);background:rgba(180,83,9,.06)}
 .brand .upd.stale::before{background:#B45309;box-shadow:0 0 0 3px rgba(180,83,9,.16)}
 .brand .upd.stale b,.brand .upd.stale #stalemark{color:#B45309 !important}
@@ -13531,9 +13536,10 @@ function genMorningWorker(lane, autostart){
     // The page strip (dealflow_nav.ITEMS order). This worker is a blob: tab of its own, so every
     // target is absolute (_boardUrlAbs / _callModeUrlAbs); anchors, not window.open, one tab each.
     +   '<nav class="dfnav mwnav" aria-label="DealFlow pages">'
-    // Board: go back to the tab that opened this worker when it is still there (no second board tab,
-    // no second access-gate pass); the href is the fallback for a worker opened on its own.
-    +     '<a class="dfn" href="' + esc(_boardUrlAbs()) + '" target="_blank" rel="noopener" onclick="try{if(window.opener&&!window.opener.closed){window.opener.focus();return false;}}catch(e){}">Board</a>'
+    // Board: a plain link. It used to call window.opener.focus() and return false, but Chrome does
+    // not switch tabs for focus() called from another tab (only a window's own opener may focus it),
+    // so the tap did nothing at all while the board tab was open (2026-10-26 audit).
+    +     '<a class="dfn" href="' + esc(_boardUrlAbs()) + '" target="_blank" rel="noopener">Board</a>'
     +     '<a class="dfn" href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener">Call Mode</a>'
     +     '<a class="dfn" href="' + esc(_callModeUrlAbs('carlos')) + '" target="_blank" rel="noopener">Carlos</a>'
     +     '<a class="dfn on" href="#" aria-current="page" onclick="return false">Worker</a>'
@@ -15257,6 +15263,23 @@ function genMorningWorker(lane, autostart){
   return _docShell('Morning worker · '+_laneTot+' lead'+(_laneTot===1?'':'s')+' across '+_laneN+' lane'+(_laneN===1?'':'s'),
                    body, {key:'worker'});
 }
+/* One tap to open the Morning Worker after a #worker=open arrival (Call Mode's nav). Removes itself
+   on tap or after 20 s. Manual worker only: never the #worker=morning auto-send path. */
+function _workerOpenBar(){
+  try{
+    if(document.getElementById('wkopenbar')) return;
+    var b = document.createElement('button');
+    b.id = 'wkopenbar'; b.type = 'button';
+    b.textContent = '\u2600 Morning Worker did not open? Tap here';
+    b.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:200;'
+      + 'padding:12px 18px;border-radius:999px;border:0;background:#0B1730;color:#fff;font-weight:700;'
+      + 'font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;max-width:calc(100vw - 32px)';
+    var gone = function(){ try{ b.remove(); }catch(e){} };
+    b.onclick = function(){ gone(); openMorningWorker('', false); };
+    document.body.appendChild(b);
+    setTimeout(gone, 20000);
+  }catch(e){}
+}
 function openMorningWorker(lane, autostart){
   _docLog('__batch__', 'worker-open', 'en');
   // No explicit lane -> genMorningWorker decides, and it decides REPLIED-first whenever an owner
@@ -16604,7 +16627,10 @@ function _mailBodies(v){
   var caseNo = String(v.caseNo || '').trim(), plaintiff = v.plaintiff || '';
   var caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
   var caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
-  var sN = v.sN || '', sL = v.sL || '', sP = v.sP || '', sig = v.sig || '';
+  // sL falls back to the same name the intro lines already fall back to: an empty company rendered
+  // "Alejandro Gonzalez with . I am not your lender" in the cold body and "de ." in Spanish when
+  // Call Mode baked no display name (2026-10-26 audit). The board always passes a value.
+  var sN = v.sN || '', sL = v.sL || 'Biscayne Solutions Group', sP = v.sP || '', sig = v.sig || '';
   // The approved opt-out line under the signature, in the body's own language (CLAUDE.md, 2026-09-26:
   // every email keeps it). bodyColdEN is Alejandro's baked template and carries it after the SIG token.
   var sigEN = sig + "\n\n" + _OPTOUT_EN;
@@ -19957,9 +19983,13 @@ async function boot(){
   function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
   // #worker=open (Call Mode's nav link, 2026-10-24): show the worker in MANUAL mode and nothing
   // else. Never routed through the =morning branch below, which is the scheduler's auto-send path.
+  /* No lane forced: openMorningWorker('') lets the worker open REPLIED-first when an owner is
+     waiting; 'urgent' here buried the callbacks (2026-10-26 audit, same bug openMorningWorker's own
+     comment records). This open runs with no tap behind it, so a browser that blocks pop-ups shows
+     nothing; the bar below gives one tap that opens it from a real gesture. */
   if(/worker=open/.test(location.hash||'')){
     try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
-    setTimeout(function(){ try{ openMorningWorker('urgent', false); }catch(e){} }, 500);
+    setTimeout(function(){ try{ openMorningWorker('', false); }catch(e){} _workerOpenBar(); }, 500);
   }
   if(/worker=morning/.test(location.hash||'')){
     try{ _runlog('task_open', {built_age_days:(typeof _boardAgeDays==='function')?_boardAgeDays():null, rows:(DATA||[]).length, hour:new Date().getHours()}); }catch(e){}

@@ -6221,6 +6221,12 @@ function mailCheck(r, raw){
   if(r.st === 'BAL') return {addr:addr, why:'Investor lane: the balloon email lives on the board. Use its Email button.'};
   var h = hardSuppressed(r);
   if(h) return {addr:addr, why:'Not emailed: ' + h};
+  /* SAME LIST, SAME HOLD (2026-10-26 audit). The do-not-contact list this page checks a text against
+     is the one a homeowner email must clear too (CLAUDE.md: a stale or unreadable ledger blocks
+     sends; the hold banner itself says "Email is held by the same list"). The card used to open the
+     mail app anyway while the page was showing that banner. */
+  if(typeof textingHeld === 'function' && textingHeld())
+    return {addr:addr, why:'Not emailed: the do-not-contact list is not confirmed fresh. ' + (typeof textHoldWhy === 'function' ? textHoldWhy() : '')};
   var st = mailStageCM(r);
   if(st === 'replied') return {addr:addr, why:'They already replied by email. Answer them in your inbox, not with a template.'};
   if(st === 'done') return {addr:addr, why:'Three emails already went to this person and the last one promised no more. Call only.'};
