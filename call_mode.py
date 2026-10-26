@@ -163,14 +163,14 @@ TONALITY = [
 # lead hears "pre-foreclosure" and a set sale hears its date. "Foreclosure" is said only after the
 # greeting has settled that this is the owner (NEVER_SAY): the full sheet carries a [Wait for yes.]
 # cue after the greeting, and the guided "who's asking?" answer re-confirms the owner first.
-_OPEN_ASK_EN = ("It is {sender} with Biscayne Solutions Group. Do you know your property on {st1} is "
-                "in pre-foreclosure{date}?")
+# 2026-10-26 (Alejandro): "always assume". The greeting now names us and assumes it is them, so the
+# question no longer re-introduces the caller: _OPEN_ASK_* is the question alone.
+_OPEN_ASK_EN = "Do you know your property on {st1} is in pre-foreclosure{date}?"
 _OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy your house. I help owners see what options "
                  "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_ASK_ES = ("Le habla {sender}, de Biscayne Solutions Group. ¿Usted sabe que su propiedad en {st1} "
-                "está en proceso de foreclosure{date_es}?")
+_OPEN_ASK_ES = "¿Usted sabe que su propiedad en {st1} está en proceso de foreclosure{date_es}?"
 _OPEN_NOTS_ES = ("No soy su prestamista y no le llamo para comprarle la casa. Ayudo a los dueños a ver "
                  "qué opciones tienen antes de que esto avance más. ¿Le puedo hacer un par de preguntas "
                  "rápidas?")
@@ -278,16 +278,30 @@ if len(NEPQ_K) != len(NEPQ_Q_EN):
     raise RuntimeError('call_mode: NEPQ_K has %d beat labels vs %d questions — zip() would silently '
                        'drop the unlabeled beats.' % (len(NEPQ_K), len(NEPQ_Q_EN)))
 
+# ASSUME IT IS THEM (2026-10-26, Alejandro: "hi, is this Lewis? ... we don't know if that's Lewis. We
+# want to be familiar ... always assume"). The greeting says their name, says ours, and asks how they
+# are, like a call to someone we know. No "is this ...?": the question is what made it sound like a
+# stranger reading a list. The wait after "how you doing?" is the identity check: someone who is not
+# them says so there ("this isn't Lewis", "he's not here"), and the guided call has a branch for it,
+# before anything about the property is said (NEVER_SAY: "foreclosure" only once it is the owner).
 # Two variants, because greeting the wrong "name" is worse than not greeting one.
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
-PHONE_OPENER_EN = "Hi, is this {first}? [Wait for yes.] " + _OPEN_BODY_EN
-PHONE_OPENER_ES = "Hola, ¿hablo con {first}? [Espere el sí.] " + _OPEN_BODY_ES
+GREET_EN = "Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"
+GREET_ES = "Hola {first}, le habla {sender}, de Biscayne Solutions Group. ¿Cómo está?"
+# No usable name: still assume. Say who we are, then assume they own the place and let them correct it.
+GREET_ANON_EN = "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?"
+GREET_ANON_ES = "Hola, le habla {sender}, de Biscayne Solutions Group. Usted es el dueño de {st1}, ¿verdad?"
+# The cue is the identity check: only the person answering to the name goes on to the question.
+WAIT_EN = "[Wait. If it's not them, they'll say so.]"
+WAIT_ES = "[Espere. Si no es la persona, se lo va a decir.]"
+PHONE_OPENER_EN = GREET_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
+PHONE_OPENER_ES = GREET_ES + " " + WAIT_ES + " " + _OPEN_BODY_ES
 # {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
-PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? [Wait for yes.] " + _OPEN_BODY_EN
-PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? [Espere el sí.] " + _OPEN_BODY_ES
+PHONE_OPENER_ANON_EN = GREET_ANON_EN + " " + WAIT_EN + " " + _OPEN_BODY_EN
+PHONE_OPENER_ANON_ES = GREET_ANON_ES + " " + WAIT_ES + " " + _OPEN_BODY_ES
 
 # WARM opener (2026-09-05, Alejandro's own field style): when he already KNOWS the person — a prior
 # Talked / Appointment / Callback on this human — the cold disarm reads as amnesia. His open is just
@@ -785,8 +799,14 @@ BOOK_ES = ("Perfecto — lo tengo anotado para [la hora que escogió]. Hágame u
            "guarde mi número ahora mismo... es el {phone}. ... Ahora léamelo de vuelta, para saber que lo "
            "tiene bien.")
 # Gatekeeper / not the owner: "the property on {st1}", never the word foreclosure (NEVER_SAY).
-WHO_EN = "It's {sender} with Biscayne Solutions Group. I'm trying to reach the owner of {st1}. Is that you?"
-WHO_ES = "Le habla {sender}, de Biscayne Solutions Group. Busco al dueño de {st1}. ¿Es usted?"
+WHO_EN = "It's {sender}, with Biscayne Solutions Group. I'm calling for the owner of {st1}. That's you, right?"
+WHO_ES = "Le habla {sender}, de Biscayne Solutions Group. Llamo por el dueño de {st1}. Es usted, ¿verdad?"
+# THE FALLBACK when the greeting named the wrong person ("this isn't Lewis" / "who?"). Light, no
+# apology speech, no reason for the call. Find out if it is the right number, then route.
+NOTME_EN = "Oh, my bad. I'm looking for {first}. Do I have the right number for them?"
+NOTME_ES = "Ay, disculpe. Busco a {first}. ¿Tengo el número correcto?"
+NOTME_AEN = "Oh, my bad. I'm looking for the owner of {st1}. Do I have the right number?"
+NOTME_AES = "Ay, disculpe. Busco al dueño de {st1}. ¿Tengo el número correcto?"
 GATE_EN = ("No problem at all — when's usually a good time to catch them? ... Or if it's easier, could I "
            "leave my number with you? It's {phone}, and it's about the property on {st1}.")
 GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fácil, ¿le puedo dejar mi número? "
@@ -887,14 +907,24 @@ def _flow():
     q1, q2, q3, q4, q5, q6 = (_beat(i) for i in range(6))
     return [
         {'id': 'greet', 'k': 'THE OPENER',
-         'en': 'Hi, is this {first}?', 'es': 'Hola, ¿hablo con {first}?',
-         'aen': 'Hi, am I speaking with the owner of {st1}?', 'aes': 'Hola, ¿hablo con el dueño de {st1}?',
-         'tone': 'Warm and casual, voice DOWN on the name — like you half-know them. Then STOP.',
-         'listen': 'Wait. Let them answer. Do not fill the gap.',
-         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
+         'en': GREET_EN, 'es': GREET_ES, 'aen': GREET_ANON_EN, 'aes': GREET_ANON_ES,
+         'tone': 'Familiar and sure, like you already know them. Easy on the name, no question in your '
+                 'voice. Then STOP.',
+         'listen': 'Wait. If it is not them, they will tell you. Do not fill the gap.',
+         'br': [['Good / hey / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'who'],
+                ['That\'s not me / who?', 'notme'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Their phone\'s AI answered (asks name + reason)', 'screen'],
                 ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
+         'ret': 'disarm'},
+        # Not them: the assumed name was wrong. Ask if it is the right number, then route.
+        {'id': 'notme', 'k': 'NOT THEM — the fallback',
+         'en': NOTME_EN, 'es': NOTME_ES, 'aen': NOTME_AEN, 'aes': NOTME_AES,
+         'tone': 'Light and quick. No reason for the call, nothing about the house.',
+         'listen': 'Right number but not here = take the message line. No one by that name = wrong number.',
+         'br': [['Oh, that is me', 'disarm'], ['They\'re not here / I can take a message', 'gate'],
+                ['Who\'s asking? / what\'s it about?', 'who'],
+                ['No one by that name / wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         # "Who's asking?" is not a yes: a spouse or a tenant asks it too, and the next line says
         # foreclosure (NEVER_SAY). Name yourself, then confirm the owner before the question.
@@ -907,8 +937,8 @@ def _flow():
          'ret': 'disarm'},
         {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
          'en': _OPEN_ASK_EN, 'es': _OPEN_ASK_ES,
-         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
-                 'question. Then STOP.',
+         'tone': 'Calm and plain, like a neighbor who saw the paperwork. You already said your name, so '
+                 'just the question. Then STOP.',
          'listen': 'Wait for the answer. Do not explain anything yet.',
          'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
                 ['What do you do?', 'intro30'],
@@ -3843,11 +3873,15 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
 /* WHO TEXTED ME — always reachable, thumb-sized, out of the way of the call buttons */
-.lkfab{position:fixed;right:10px;bottom:12px;z-index:52;min-height:44px;padding:11px 15px;
+/* bottom tracks the MEASURED collapsed sheet (--sheeth, set by _sheetPad). At a fixed 12px the
+   button sat on top of the sheet's peek line and the team-sync warning, covering the opener he
+   reads from. Hidden while the sheet is open, so it never sits on the script text. */
+.lkfab{position:fixed;right:10px;bottom:calc(var(--sheeth,0px) + 10px);z-index:52;min-height:44px;padding:11px 15px;
   border-radius:999px;border:1px solid #2a3f6b;background:#12213f;color:var(--ink);
   font:700 13px "Segoe UI",Arial,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45);
   touch-action:manipulation;-webkit-tap-highlight-color:rgba(198,161,75,.25)}
 .lkfab:active{background:#1b2c50}
+body.shopen .lkfab{display:none !important}
 /* THE FILE — the reference block on the outcome screen, up for the whole call */
 .refbox{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0f1d3a;border:1px solid #2a3f6b}
 .reft{width:100%;border-collapse:collapse;font-size:13px;line-height:1.5}
@@ -3924,9 +3958,14 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
    The sheet is always in the DOM, so "a newer list is ready" was permanently unreachable: the one
    control whose entire job is to rescue him from a stale list could never be pressed.
    It sits above the safe-area inset too, so it clears the sheet's grip rather than hiding behind it. */
-.pill{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:50;
+/* Above the collapsed sheet AND the Who-texted-me button (2026-10-26): at 12px it sat on the
+   sheet's peek, so the opener line was unreadable while the pill was up. */
+.pill{position:fixed;left:12px;right:12px;bottom:calc(var(--sheeth,0px) + 64px);z-index:50;
      background:var(--gold);color:#0b1730;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.5);
      min-height:52px;padding:14px;font-weight:700;text-align:center;display:none}
+/* With the script sheet OPEN the pill moves to the top of the screen: --sheeth is the collapsed
+   height, so at the bottom it would sit on the open script's text and controls. */
+body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .mut{color:var(--mut)}
 /* ---- the four bands. "Everything on the card" is a hierarchy problem, not an omission problem:
    at 390px the essentials must read without a scroll, so type size carries the ranking. ---- */
@@ -4011,8 +4050,14 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
 /* Clearance for the fixed bottom sheet, sized to the MEASURED collapsed height, not the guessed
    one: 1px border + 46px grip + ~75px of wrapped peek + safe-area inset ≈ 122-156px. It was 76px —
    and only on the lead screen — so the last button of every other screen sat under the sheet and a
-   tap opened the script instead. Every #app paint appends this now. */
-.sheetpad{height:calc(130px + env(safe-area-inset-bottom))}
+   tap opened the script instead. Every #app paint appends this now.
+   2026-10-26: the clearance moved to BODY, sized by _sheetPad from the real grip + peek height.
+   As a fixed 130px inside #app it sat ABOVE the #sync line, so scrolled to the bottom the "team sync
+   is off" warning and the Who-texted-me button landed on the sheet's peek and covered the opener;
+   and at 150-200% zoom the peek wraps taller than 130px. Body padding clears all three: the
+   collapsed sheet, the sync line and the button (+64px). .sheetpad stays as a zero-height marker. */
+.sheetpad{height:0}
+body{padding-bottom:calc(var(--sheeth,130px) + 64px + env(safe-area-inset-bottom))}
 /* Logging screens hide the sheet entirely (screenOutcome / afterCall add .hid; screenLead removes
    it). The script belongs to the CALL; while logging, the sheet was only a tap-thief. */
 .sheet.hid{display:none}
@@ -8790,6 +8835,38 @@ document.addEventListener('click', function(ev){
 var SCRIPT=__SCRIPT__, ciocIdx=-1, objIdx=-1;
 var SCRIPT_ALL=SCRIPT;   /* the full payload; renderSheet shadows SCRIPT per lane (homeowner vs SCRIPT_ALL.bal) */
 function sheetToggle(){ $('sheet').classList.toggle('open'); }
+/* --sheeth = the COLLAPSED sheet's height (grip + peek + border + safe-area), 0 while it is hidden.
+   Body padding, the Who-texted-me button and the new-list pill all stand on it, so nothing fixed
+   lands on the opener line at any width or zoom. body.shopen hides the button over an open sheet. */
+function _sheetPad(){
+  try{
+    var sh = document.getElementById('sheet'), h = 0;
+    if(sh && getComputedStyle(sh).display !== 'none'){
+      var g = document.getElementById('grip'), pk = document.getElementById('peek');
+      h = Math.ceil((g ? g.offsetHeight : 0) + (pk ? pk.offsetHeight : 0) + 1
+                    + (parseFloat(getComputedStyle(sh).paddingBottom) || 0));
+    }
+    var root = document.documentElement;
+    if(root.style.getPropertyValue('--sheeth') !== h + 'px') root.style.setProperty('--sheeth', h + 'px');
+    var open = !!(h && sh.classList.contains('open'));
+    document.body.classList.toggle('shopen', open);
+    /* The team-sync line rides INSIDE the open sheet, under the grip. At z-45 in page flow it
+       painted across the open script; below the sheet it would be hidden exactly while he works
+       with the script up. Collapsed, it goes back above the pill in normal flow. */
+    var sy = document.getElementById('sync');
+    if(sy && open && sy.parentNode !== sh) sh.insertBefore(sy, document.getElementById('peek'));
+    else if(sy && !open && sy.parentNode === sh) document.body.insertBefore(sy, document.getElementById('pill'));
+  }catch(e){}
+}
+(function(){
+  try{
+    var sh = document.getElementById('sheet');
+    if(window.ResizeObserver){ var ro = new ResizeObserver(_sheetPad); ro.observe(sh); ro.observe(document.getElementById('peek')); }
+    if(window.MutationObserver) new MutationObserver(_sheetPad).observe(sh, {attributes:true, attributeFilter:['class']});
+    window.addEventListener('resize', _sheetPad);
+    _sheetPad();
+  }catch(e){}
+})();
 
 /* ONE LANGUAGE AT A TIME. Every script block used to render EN and ES stacked — on the call screen
    that stacked the opener twice, the close cue, the drawer peek and (on voicemail) two more blocks:

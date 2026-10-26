@@ -53,14 +53,23 @@ A **no** means *stop recording*, not hang up.
 
 Pick the variant off the lead card. Keep it to name → two "nots" → the reason → a tiny ask.
 
-**Cold (name known):**
-> "Hi, is this {first}?… It's {sender} with Biscayne Solutions Group. This might sound a little
-> random… but I've got a copy of the court paperwork on {st1} right in front of me… and I was
-> hoping you could help me out for a second. I'm **not** your lender, and I'm **not** calling to
-> buy the place. Can I ask you something real quick?"
+**Cold (name known), assume it's them (2026-10-26):**
+> "Hey {first}, it's {sender} with Biscayne Solutions Group. How you doing?"… *[wait: if it's not
+> them, they'll say so]* … "Do you know your property on {st1} is in pre-foreclosure{date}?" *[stop,
+> let them answer]* … "I'm **not** your lender and I'm **not** calling to buy your house. I help
+> owners see what options they have before this goes any further. Can I ask you a couple of quick
+> questions?"
 
-**Anon (no name / not confirmed owner):**
-> "Hi, am I speaking with the owner of {st1}?…" + same body.
+Never "Hi, is this {first}?". Asking sounds like a stranger reading a list; saying their name like
+you know them is what earns the next ten seconds.
+
+**Not them (fallback):** "Oh, my bad. I'm looking for {first}. Do I have the right number for them?"
+Not here → leave the number (gatekeeper line, property on {st1}, never "foreclosure"). No one by
+that name → wrong number, log it.
+
+**Anon (no usable name):**
+> "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?" + same
+> question and nots.
 
 **Warm (prior Talked/Callback/Appt on this person):**
 > "{first}!… it's {sender}, from Biscayne Solutions Group. How've you been?… Listen, I was looking

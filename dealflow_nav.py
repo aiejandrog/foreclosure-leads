@@ -67,11 +67,12 @@ def strip(current, depth, target_blank=('board', 'balloon', 'worker', 'playbook'
 
 # Dark-theme CSS for the pages that are not the board (Call Mode is navy; the board's own strip is
 # styled in tracker_template.html against its light palette). Same shape, same names.
+# WRAPS, never scrolls sideways (2026-10-26). It was a one-line strip with overflow-x:auto and the
+# scrollbar hidden: at phone width Balloon Book and Playbook sat past the right edge with nothing on
+# screen saying the strip could be swiped, so on a phone those two pages read as missing.
 CSS_DARK = (
-    '.dfnav{display:flex;gap:4px;align-items:center;padding:4px;border-radius:12px;margin:0 0 10px;'
-    'background:#0f1d3a;border:1px solid #2a3f6b;overflow-x:auto;-webkit-overflow-scrolling:touch;'
-    'scrollbar-width:none}'
-    '.dfnav::-webkit-scrollbar{display:none}'
+    '.dfnav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px;border-radius:12px;'
+    'margin:0 0 10px;background:#0f1d3a;border:1px solid #2a3f6b}'
     '.dfnav .dfn{flex:0 0 auto;display:inline-flex;align-items:center;min-height:38px;padding:7px 13px;'
     'border-radius:9px;border:1px solid transparent;color:#94a7c8;font-size:13.5px;font-weight:600;'
     'text-decoration:none;white-space:nowrap;line-height:1.2;touch-action:manipulation}'

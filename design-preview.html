@@ -2102,9 +2102,10 @@ details.more .morepanel>button svg{width:14px;height:14px}
   #refreshbtn{font-size:0;padding:6px 10px}
   #refreshbtn::before{content:'\21BB';font-size:15px;line-height:1}
   #refreshbtn .ghdot{margin-right:0}
-  .dfnav{order:10;flex:1 1 100%;margin:2px 0 0;display:flex;flex-wrap:nowrap;overflow-x:auto;
-    -webkit-overflow-scrolling:touch;scrollbar-width:none;border-radius:14px;padding:4px}
-  .dfnav::-webkit-scrollbar{display:none}
+  /* WRAPS onto a second line (2026-10-26). As a swipe strip with its scrollbar hidden, Worker,
+     Balloon Book and Playbook sat past the right edge at phone width with no sign they existed. */
+  .dfnav{order:10;flex:1 1 100%;margin:2px 0 0;display:flex;flex-wrap:wrap;
+    border-radius:14px;padding:4px}
   .dfnav .dfn{flex:0 0 auto;min-height:40px;padding:8px 14px;font-size:13px;touch-action:manipulation}
   .dfnav #callmodebtn.dfn{background:#286c34;color:#fff;border-color:#286c34;font-weight:800}
   .dfnav #callmodebtn.dfn svg{stroke:#fff}
@@ -2125,6 +2126,29 @@ details.more .morepanel>button svg{width:14px;height:14px}
   details.more .morepanel{position:static;width:100%;min-width:0;margin-top:8px;box-shadow:var(--sh-2)}
   details.more .morepanel>button{min-height:46px}
 }
+/* ============================== ZOOM + RESIZE SAFETY (2026-10-26) ==============================
+   Alejandro: buttons and panels landing on top of banners, and scrolling that stops working when the
+   window is resized or zoomed. Rendered at 375-1920px and 125/150/200% zoom before changing anything;
+   each rule below answers one thing that was measured broken.
+   1. body.hflow: the sticky header held 43-58% of a laptop window at 125-150% zoom (four wrapped
+      tiers), so the rows scrolled through a slot under it. When the header (shrunk or not) is taller
+      than 38% of the window it scrolls away with the page instead. The header-fit IIFE decides; it looks
+      at heights, so a normal window keeps the sticky header exactly as before. */
+@media(min-width:861px){body.hflow header{position:relative}}
+/* 2. The expanded row under a lead is as wide as the 1,770px table, so on a 1024-1600px window the
+      Court & sale and Do buttons (Call script, Email, Log, Copy all) sat past the right edge until the
+      table was dragged sideways. The row's content now pins to the visible part of the table and wraps
+      inside it. --tblvw is the table viewport's width, kept by the table-scroll IIFE. */
+.lwrap{position:sticky;left:16px;max-width:calc(var(--tblvw,100vw) - 64px)}
+/* 3. The access-code box at 200% zoom: #gate centred it in a fixed frame with no scroll, so on a
+      short window its top and the Unlock button were cut off with no way to reach them. */
+#gate{overflow-y:auto}
+#gate .box{margin:auto}
+/* 4. Bottom bars (deliverability banner, work queue, after-call bar, new-board pill, backup warning)
+      were all pinned at bottom 0-18px and painted on top of each other. _bottomDock() stacks them
+      and pads the page by their total height so the last rows can scroll clear of them. */
+body.docked{padding-bottom:var(--dockh,0px)}
+body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </style></head><body>
 <div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">South Florida foreclosure desk</div><div class="bar" aria-hidden="true"><i></i></div></div></div>
 <div id="welcome"></div>
@@ -2253,7 +2277,7 @@ details.more .morepanel>button svg{width:14px;height:14px}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-26T06:27","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-10-26T18:43","good":null,"rows":[],"last":null,"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -5904,7 +5928,7 @@ function _pbRender(){
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
     +   '<h4>📞 The PHONE opener — the 4-second rule (rebuilt after a live hang-up, 07/28)</h4>'
     +   '<p class="pblede">On the phone their thumb is on End Call. "I saw your property on the foreclosure calendar" as sentence one = guaranteed hang-up: it confirms their worst fear (another vulture) before they decide you\'re human. Three beats, in order — "foreclosure" is not spoken until beat 3:</p>'
-    +   '<div class="pbscript"><span class="pbtag">1</span>"Hi — sorry to bother you. Is this the owner at [street]?" — WAIT. If "who\'s asking?": "My name\'s [name], I\'m calling from Miami. Are you the owner there?"</div>'
+    +   '<div class="pbscript"><span class="pbtag">1</span>"Hey [first name], it\'s [name] with Biscayne Solutions Group. How you doing?" — assume it\'s them, never "is this...?". WAIT. If it\'s not them they\'ll say so: "Oh, my bad, I\'m looking for [first name]. Do I have the right number?"</div>'
     +   '<div class="pbscript"><span class="pbtag">2</span>"Thanks. Real quick — do you still own it, or has that already been handled?" — a yes/no about THEM buys 30 more seconds.</div>'
     +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. I\'m not the bank, not a lawyer — I\'m with Biscayne Solutions Group. My job is you knowing every option before that date. Got 60 seconds?"</div>'
     +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
@@ -9290,7 +9314,12 @@ function _docShell(title, bodyHtml, opts){
   // The @media print rules make it look like a real form when Carlos hits Print.
   opts = opts || {};
   var stamp = 'DEALFLOW · ' + esc(new Date().toLocaleString()) + (opts.key ? ' · doc '+esc(opts.key) : '');
-  return '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'
+  // The Morning Worker is a SCREEN, not paper: without a viewport meta a phone lays it out at 980px
+  // and shrinks it to fit, so every button and template on it was tiny and pinch-zoom only. The
+  // printable docs keep their old behaviour (opts.screen is set by genMorningWorker alone).
+  return '<!doctype html><html><head><meta charset="utf-8">'
+    + (opts.screen ? '<meta name="viewport" content="width=device-width, initial-scale=1">' : '')
+    + '<title>'+esc(title)+'</title><style>'
     + 'body{font:14.5px/1.55 Georgia,serif;color:#111;margin:0;padding:0;background:#f4f5f7}'
     + '.bar{background:#0B1730;padding:10px 16px;display:flex;gap:8px;font:13px Arial,sans-serif;flex-wrap:wrap;align-items:center}'
     + '.bar button{padding:8px 14px;cursor:pointer;border:1px solid #33436A;background:#152747;color:#CDD8EF;border-radius:6px;font-size:13px}'
@@ -11201,10 +11230,10 @@ function genFieldSheet(r){
     // THE OPENER — bilingual, the four-second version, from the playbook
     +   '<div class="fsec">The opener &middot; el saludo</div>'
     +   '<div class="fscript">'
-    +     '<p><b>EN:</b> &ldquo;Hi, are you '+esc(first)+'? My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
+    +     '<p><b>EN:</b> &ldquo;'+(first&&!r.co?'Hey '+esc(first)+', how are you? ':'Hi there, how are you? ')+'My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
     +       '. I&rsquo;m with Biscayne Solutions Group &mdash; I&rsquo;m not your lender or an attorney. I saw the county has a sale '
     +       'date on this property and I wanted to see, face to face, if there&rsquo;s a way I can help before that date.&rdquo;</p>'
-    +     '<p><b>ES:</b> &ldquo;Hola, &iquest;es usted '+esc(first)+'? Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
+    +     '<p><b>ES:</b> &ldquo;'+(first&&!r.co?'Hola '+esc(first)+', &iquest;c&oacute;mo est&aacute;? ':'Hola, &iquest;c&oacute;mo est&aacute;? ')+'Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
     +       '. Soy de Biscayne Solutions Group &mdash; no soy prestamista ni abogado. Vi que el condado tiene fecha de '
     +       'subasta y quer&iacute;a ver, en persona, si puedo ayudar antes de esa fecha.&rdquo;</p>'
     +   '</div>'
@@ -11324,12 +11353,21 @@ function genDialReady(r){
     + fact('Demandante', r.plaintiff)
     + fact('Señal del dueño', r.co?'empresa (pida por el manager)':(r.hs?'homestead — casa familiar':'estatus desconocido'));
   // the 3 beats — mirror genScript's 4-second opener, just SHORTER for at-a-glance reading
+  // Beat 1 assumes it is them (2026-10-26, Alejandro: "always assume"), never "is this...?".
+  var drFirst = r.co ? '' : _firstName(_ownerName((r.owners||'').split(';')[0].trim(), r));
+  var drName = esc((typeof sender==="object"&&sender&&sender.name)||'[your name]');
   var beatsEN = ''
-    + '<div class="drbeat"><span class="drn">1</span>“Hi — sorry to bother you. Is this the owner at <b>'+esc(street)+'</b>?” <span class="drwait">WAIT</span></div>'
+    + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
+        ? '“Hey <b>'+esc(drFirst)+'</b>, it’s '+drName+' with Biscayne Solutions Group. How you doing?”'
+        : '“Hey, it’s '+drName+' with Biscayne Solutions Group. You’re the owner over on <b>'+esc(street)+'</b>, right?”')
+    + ' <span class="drwait">WAIT</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. I’m not the bank, not a lawyer — I’m with Biscayne Solutions Group. Got <b>60 seconds</b>?”</div>';
   var beatsES = ''
-    + '<div class="drbeat"><span class="drn">1</span>“Hola — perdone la molestia. ¿Hablo con el dueño de <b>'+esc(street)+'</b>?” <span class="drwait">ESPERE</span></div>'
+    + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
+        ? '“Hola <b>'+esc(drFirst)+'</b>, le habla '+drName+', de Biscayne Solutions Group. ¿Cómo está?”'
+        : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Usted es el dueño de <b>'+esc(street)+'</b>, ¿verdad?”')
+    + ' <span class="drwait">ESPERE</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“Le hablo claro — su caso salió en los registros del condado, con fecha <b>'+_dfHtml(f.saleDate)+'</b>. No soy el banco ni abogado — comprador local. ¿Me da <b>60 segundos</b>?”</div>';
   var dncNote = '';
@@ -13489,10 +13527,13 @@ function genMorningWorker(lane, autostart){
     + '<style>'
     +   '.mw{max-width:820px;margin:0 auto;padding:20px 22px 40px;font:15px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;background:#fbfaf6;min-height:100vh}'
     +   '.mwtop{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid #e2e6ee;margin-bottom:18px;flex-wrap:wrap}'
-    +   '.mwnav{display:flex;gap:4px;align-items:center;padding:4px;border-radius:12px;margin:0 0 12px;background:#eef1f6;border:1px solid #d5dae4;overflow-x:auto;scrollbar-width:none}'
-    +   '.mwnav::-webkit-scrollbar{display:none}'
+    // wraps, never a hidden-scrollbar strip: at phone width Balloon Book and Playbook were off-screen
+    +   '.mwnav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px;border-radius:12px;margin:0 0 12px;background:#eef1f6;border:1px solid #d5dae4}'
     +   '.mwnav .dfn{flex:0 0 auto;display:inline-flex;align-items:center;min-height:36px;padding:7px 13px;border-radius:9px;color:#3a4250;font:600 13px "Segoe UI",Arial,sans-serif;text-decoration:none;white-space:nowrap}'
     +   '.mwnav .dfn.on{background:#0B1730;color:#F4E5A7}'
+    // the two sticky banners (bounce pause, marks not reaching the board) both pin at the top; on a
+    // very short window (200% zoom, a phone sideways) a 3-4 line pinned banner took a third of the screen, so there they scroll
+    +   '@media (max-height:520px){#mwbounceban,#mwmarkban{position:static!important}}'
     +   '.mwnav .dfn:not(.on):hover{background:#fff}'
     +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0;flex:1 1 260px;min-width:0}'
     +   '.mwtitle .sub{display:block;font:600 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:2px;letter-spacing:.02em}'
@@ -14024,6 +14065,12 @@ function genMorningWorker(lane, autostart){
     +     'var b=document.getElementById("mwmarkban");'
     +     'if(!b){ b=document.createElement("div"); b.id="mwmarkban"; b.style.cssText="position:sticky;top:0;z-index:100;background:#8f2b23;color:#fff;font:700 12.5px/1.4 Arial;padding:8px 12px;border-radius:8px;margin:0 0 10px"; if(main&&main.parentNode) main.parentNode.insertBefore(b, main.parentNode.firstChild); }'
     +     'b.innerHTML="&#9888; BOARD TAB IS CLOSED — "+MARKQ.length+" mark(s) could not reach the board (backed up to the bridge). Reopen the board and keep it open; buffered marks flush automatically.";'
+    // both banners are sticky at the top: the bounce banner stands under this one, never behind it
+    +     '_banStack();'
+    +   '}'
+    +   'function _banStack(){'
+    +     'var mb=document.getElementById("mwmarkban"), bb=document.getElementById("mwbounceban");'
+    +     'if(bb) bb.style.top=(mb ? mb.offsetHeight+6 : 0)+"px";'
     +   '}'
     // The flush rides the ACK path, not splice-and-forget. The old version blind-posted into
     // whatever window.opener pointed at — a reloaded board sitting at the access gate swallowed
@@ -14035,7 +14082,7 @@ function genMorningWorker(lane, autostart){
     +       'var q=MARKQ.splice(0,MARKQ.length);'
     +       'q.forEach(function(m){ try{window.opener.postMessage(m,"*"); _pendWatch(m,3);}catch(e){ MARKQ.push(m); } });'
     +       'var b=document.getElementById("mwmarkban");'
-    +       'if(b && !MARKQ.length){ b.remove(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
+    +       'if(b && !MARKQ.length){ b.remove(); _banStack(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
     +     '}'
     +   '},5000);'
     // AUTO-RUN CHANNELS. email is the only channel the machine can legally auto-send. A phone-only
@@ -14970,7 +15017,7 @@ function genMorningWorker(lane, autostart){
     // while one bad day pauses every first email, so the verified-only sentence would read wrong.
     +   'if(BOUNCE.ft) bb.innerHTML="&#9993; FIRST EMAILS PAUSED — "+(BOUNCE.ftSent?(BOUNCE.ftDead+" of "+BOUNCE.ftSent+" first emails"+(BOUNCE.ftDay?" sent "+BOUNCE.ftDay:"")+" bounced. "):"")+"Every first email is held and stays queued until the pause lifts. Follow-ups to addresses that already accepted mail are not part of this pause. <b>Calls, texts and replies are unaffected.</b>"; else '
     +   'bb.innerHTML="&#9993; VERIFIED-ONLY MODE — trailing bounce rate "+(Math.round((BOUNCE.rate||0)*1000)/10)+"% is over the "+(Math.round((BOUNCE.ceiling||0.1)*100))+"% ceiling. Emails to addresses that already accepted mail STILL SEND"+(BOUNCE.pool!=null?" ("+BOUNCE.pool+" addresses sendable)":"")+"; new/unverified addresses are auto-held and stay queued. <b>Calls, texts and replies are unaffected.</b>";'
-    +     'main.parentNode.insertBefore(bb, main);'
+    +     'main.parentNode.insertBefore(bb, main); _banStack();'
     +     '}'
     // The cap is checked at RENDER time, not just at open time, so a run that crosses the ceiling
     // mid-morning stops there instead of finishing the queue it was handed.
@@ -15345,7 +15392,7 @@ function genMorningWorker(lane, autostart){
   var _laneTot = 0, _laneN = 0;
   LANE_KEYS.forEach(function(k){ _laneTot += laneCounts[k]; if(laneCounts[k]) _laneN++; });
   return _docShell('Morning worker · '+_laneTot+' lead'+(_laneTot===1?'':'s')+' across '+_laneN+' lane'+(_laneN===1?'':'s'),
-                   body, {key:'worker'});
+                   body, {key:'worker', screen:true});
 }
 /* One tap to open the Morning Worker after a #worker=open arrival (Call Mode's nav). Removes itself
    on tap or after 20 s. Manual worker only: never the #worker=morning auto-send path. */
@@ -16206,17 +16253,23 @@ function genScript(r){
   // they recognize (their street, not their case), (3) force a yes/no about THEM ("still own it?").
   // Only AFTER they engage does the honest reveal land — with a 60-second ceiling so staying on
   // feels affordable. "Foreclosure" is not spoken until beat 3.
+  // 2026-10-26 (Alejandro): beat 1 no longer asks "is this the owner?". It greets them by name, like
+  // someone who knows them, and the wait after it is where a wrong person says so.
   const street = esc((r.addr||'').split(',')[0]);
   const openEN =
-      `<b>Beat 1 — earn the next 10 seconds (no company, no reason yet):</b><br>`
-    + `"Hi — sorry to bother you. Is this the owner at <b>${street}</b>?" <span class="key">(WAIT. Let them answer. If "who's asking?": "My name's ${esc(sN)} — I'm calling from Miami. Are you the owner there?")</span><br><br>`
+      `<b>Beat 1 — assume it's them (no reason yet):</b><br>`
+    + (first && !r.co
+        ? `"Hey ${first}, it's ${esc(sN)} with Biscayne Solutions Group. How you doing?" <span class="key">(WAIT. Never "is this...?". If it's not them they'll say so: "Oh, my bad, I'm looking for ${first}. Do I have the right number?")</span><br><br>`
+        : `"Hey, it's ${esc(sN)} with Biscayne Solutions Group. You're the owner over on <b>${street}</b>, right?" <span class="key">(WAIT. If they're not: "Oh, my bad. Do I have the right number for the owner?")</span><br><br>`)
     + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
     + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
     + `<b>Beat 3 — the honest reveal, with a ceiling:</b><br>`
     + `"I'll be straight with you — your ${td?'property came up on the county tax-deed list':'case came up on the county records I work through'}${caseTagEN ? ' ('+caseNo+')' : ''}, ${dateClauseEN}. I'm not the bank, not a lawyer — I'm with Biscayne Solutions Group, and my job is making sure you know every option before that date. Most people don't know how many they have. Got <b>60 seconds</b>?"`;
   const openES =
-      `<b>Paso 1 — gane los próximos 10 segundos (sin compañía, sin motivo aún):</b><br>`
-    + `"Hola — perdone la molestia. ¿Hablo con el dueño de <b>${street}</b>?" <span class="key">(ESPERE la respuesta. Si dicen "¿quién habla?": "Me llamo ${esc(sN)} — llamo de Miami. ¿Usted es el dueño?")</span><br><br>`
+      `<b>Paso 1 — dé por hecho que es la persona (sin motivo aún):</b><br>`
+    + (first && !r.co
+        ? `"Hola ${first}, le habla ${esc(sN)}, de Biscayne Solutions Group. ¿Cómo está?" <span class="key">(ESPERE. Nunca "¿hablo con...?". Si no es la persona, se lo va a decir: "Ay, disculpe, busco a ${first}. ¿Tengo el número correcto?")</span><br><br>`
+        : `"Hola, le habla ${esc(sN)}, de Biscayne Solutions Group. Usted es el dueño de <b>${street}</b>, ¿verdad?" <span class="key">(ESPERE. Si no es: "Ay, disculpe. ¿Tengo el número correcto del dueño?")</span><br><br>`)
     + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
     + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
     + `<b>Paso 3 — la verdad, con techo de tiempo:</b><br>`
@@ -19168,6 +19221,84 @@ document.addEventListener('click', e => {
   btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); };
   update();
 })();
+// ZOOM + RESIZE SAFETY (2026-10-26) — the JS half of the block at the end of the main <style>.
+// Header fit: a sticky header taller than 38% of the window becomes a header that scrolls away (body.hflow).
+// Measured, not guessed from a breakpoint: 125% and 150% zoom shrink the window's CSS height and the
+// four tiers wrap taller as it narrows, so no width or height media query catches every case.
+(function(){
+  const header = document.querySelector('header'); if(!header) return;
+  let raf = 0;
+  const fit = () => { raf = 0;
+    const tall = innerWidth > 860 && header.offsetHeight > innerHeight * 0.38;
+    if(document.body.classList.contains('hflow') !== tall) document.body.classList.toggle('hflow', tall); };
+  const soon = () => { if(!raf) raf = requestAnimationFrame(fit); };
+  window.addEventListener('resize', soon);
+  if(window.ResizeObserver) new ResizeObserver(soon).observe(header);
+  soon();
+})();
+// _bottomDock: every bar the board pins to the bottom of the window, stacked instead of overlapping.
+// They used to share bottom:0-18px, so the work queue painted over the deliverability banner, the
+// new-board pill over the work queue, and #toTop under all of them. Order = bottom-most first. The
+// page gets the stack's height as bottom padding (body.docked) so its last rows scroll clear.
+(function(){
+  const ORDER = ['nbwarn', 'bouncebanner', 'workbar', 'aftercall', 'freshpill', 'wkopenbar'];
+  const GAP = 8;
+  let raf = 0;
+  const ro = window.ResizeObserver ? new ResizeObserver(() => soon()) : null;
+  const seen = new WeakSet();
+  function dock(){
+    raf = 0;
+    let y = 0;
+    ORDER.forEach(id => {
+      const e = document.getElementById(id);
+      if(!e) return;
+      if(ro && !seen.has(e)){ seen.add(e); ro.observe(e); }
+      const cs = getComputedStyle(e);
+      if(cs.display === 'none' || cs.visibility === 'hidden' || !e.offsetHeight) return;
+      // full-width bars sit flush (bottom 0); the floating pills keep their 14px lift off the edge
+      const flush = (id === 'nbwarn' || id === 'bouncebanner');
+      const b = (y ? y + GAP : (flush ? 0 : 14)) + 'px';
+      if(e.style.bottom !== b) e.style.bottom = b;
+      y = parseFloat(b) + e.offsetHeight;
+    });
+    const h = y ? (y + GAP) + 'px' : '0px';
+    if(document.body.style.getPropertyValue('--dockh') !== h) document.body.style.setProperty('--dockh', h);
+    document.body.classList.toggle('docked', !!y);
+  }
+  function soon(){ if(!raf) raf = requestAnimationFrame(dock); }
+  if(window.MutationObserver) new MutationObserver(soon).observe(document.body, {childList:true});
+  window.addEventListener('resize', soon);
+  // the bars toggle their own display/class without leaving the DOM: a slow sweep catches that too
+  setInterval(soon, 1500);
+  soon();
+})();
+// _modalScroll: the page scroll lock follows the modals that are actually open. Each modal locked and
+// unlocked body scroll on its own, so stacking two broke it both ways: closing the top one (or Escape,
+// which closes the Call Sheet unconditionally) unlocked the page under a modal that was still up, and
+// the Call Sheet / Playbook also set body.style.overflow, which nothing else ever cleared. One
+// reconciler, run after any modal's class or style changes: locked iff a modal is showing.
+(function(){
+  const IDS = ['dealmodal','logmodal','planmodal','gallerymodal','lookupmodal','syncmodal','mailmodal',
+               'refreshmodal','cadencemodal','savedmodal','csmodal','playbookmodal','textmodal','nearmemodal'];
+  const watched = new WeakSet();
+  let raf = 0;
+  const mo = window.MutationObserver ? new MutationObserver(() => soon()) : null;
+  function sync(){
+    raf = 0;
+    let open = false;
+    IDS.forEach(id => {
+      const m = document.getElementById(id); if(!m) return;
+      if(mo && !watched.has(m)){ watched.add(m); mo.observe(m, {attributes:true, attributeFilter:['class','style']}); }
+      if(getComputedStyle(m).display !== 'none') open = true;
+    });
+    document.body.classList.toggle('modal-open', open);
+    if(!open && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+  }
+  function soon(){ if(!raf) raf = requestAnimationFrame(sync); }
+  // modals created on first use (Near Me) are picked up when they are appended
+  if(mo) new MutationObserver(soon).observe(document.body, {childList:true});
+  soon();
+})();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; _senderBanner(); }
 // Removed 2026-07-19 per Alejandro: the red "Sender identity incomplete" banner was too loud —
@@ -20278,6 +20409,7 @@ stampFreshness();
   function maxX(){ return wrap.scrollWidth - wrap.clientWidth; }
   function update(){
     var mx=maxX();
+    var vw=wrap.clientWidth+'px'; if(wrap.style.getPropertyValue('--tblvw')!==vw) wrap.style.setProperty('--tblvw', vw);
     wrap.classList.toggle('canleft', wrap.scrollLeft>4);
     wrap.classList.toggle('canright', wrap.scrollLeft < mx-4);
     if(nudge) nudge.classList.toggle('on', !scrolled && mx>40 && wrap.scrollLeft<4);
