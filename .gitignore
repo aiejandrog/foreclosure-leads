@@ -803,3 +803,7 @@ rf_status.json.tmp
 !_lpstatusbrowardtest.py
 # _valuejointest: free value-source join and the board's valued census. Case numbers and parcel ids only.
 !_valuejointest.py
+# _cadenceskiptest: cadence_skip.json holds follow-ups by case number until the line is removed. Synthetic cases only.
+!_cadenceskiptest.py
+# _bouncelisttest: cadence reads a legacy bounced_emails.json list at send time. example.com only.
+!_bouncelisttest.py
