@@ -14990,7 +14990,7 @@ function genMorningWorker(lane, autostart){
     // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
     // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
     +       'if(CALLQ.length){'
-    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'__BOARDURL__call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'__BOARDURL__call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; split with Carlos by household, replies on yours &middot; outcomes sync back</span></a></div>";'
     +       '}'
     +       'main.innerHTML=doneHtml;'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
