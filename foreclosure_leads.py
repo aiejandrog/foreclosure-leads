@@ -4253,8 +4253,22 @@ def make_tracker(leads):
         except ValueError:
             _cm_cap = 0
         _cm_lk = []        # every gate passed, no number yet: the page's "Find a number" list
+        # OWNERS WHO WROTE BACK go to Alejandro's seat (2026-10-26). The Morning Worker sends them to
+        # the Call list as "owner REPLIED"; the rest of the worker's call-only leads keep the normal
+        # household split and reach either phone through the synced `.wq` note flag.
+        try:
+            _cm_wn = json.load(open(os.path.join(HERE, 'worker_notes.json'), encoding='utf-8'))
+            _cm_wn = _cm_wn.get('notes') if isinstance(_cm_wn, dict) else None
+        except Exception:
+            _cm_wn = None
+        _cm_rp = call_mode.replied_cases(_cm_wn if isinstance(_cm_wn, dict) else {}, _replies)
         _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads,
-                                      cap=_cm_cap if _cm_cap > 0 else 10 ** 6, lookup=_cm_lk)
+                                      cap=_cm_cap if _cm_cap > 0 else 10 ** 6, lookup=_cm_lk,
+                                      replied=_cm_rp)
+        _cm_rpn = sum(1 for _r in _cm_all[0] if _r.get('rp'))
+        if _cm_rpn:
+            print('call mode: %d dial row(s) of owners who replied, pinned to the %s seat'
+                  % (_cm_rpn, call_mode.CALL_SEATS[0][2]))
         # Server-confirmed emails and texts (mail_sent.json / text_sent.json) onto the dial rows, so a
         # lead cadence already mailed stops sorting as never-contacted on the phone. Order and the
         # "already contacted" bar only; Call Mode's hiding rules do not read these fields.
