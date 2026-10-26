@@ -235,7 +235,8 @@ def main(argv=None):
                 ld.phones, ld.emails = [], []
         else:
             leads, summary = build_all(rows, optouts, opt_cases, deads, notes, list_name,
-                                       county=a.county or None)
+                                       county=a.county or None,
+                                       send_hold=default_send_hold if a.scope == 'send' else None)
         if a.limit:
             full = [ld for ld in leads if ld.zip and ld.city and getattr(ld, 'folio', '')]
             summary['complete_rows_available'] = len(full)

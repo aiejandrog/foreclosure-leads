@@ -57,6 +57,25 @@ l2, s2 = PS.build_all(rows, optouts, {'2099-000002-CA-01'}, deads, notes, 'T',
                       never_contact=lambda c: c == '2099-000005-CA-01',
                       send_hold=lambda c: held_cases.get(c, (True, 'gate_unevaluable:X')))
 rec('send scope drops held and unevaluable leads', [l.property_address for l in l2] == ['9 MAIN ST'] and s2['held'].get('bankruptcy_hold') == 1, s2['held'])
+# the command-line path itself: --scope send must hand the per-lead stay check to the builder
+_saved = (EX.preflight, EX.read_twin, EX.load_suppression, EX.load_deads, EX.load_notes, PS.default_send_hold)
+_seen = []
+def _hold(c):
+    _seen.append(c); return (True, 'bankruptcy_hold') if c == '2099-000001-CA-01' else (False, '')
+EX.preflight = lambda: []; EX.read_twin = lambda p=None: rows
+EX.load_suppression = lambda: ({}, set(), set()); EX.load_deads = lambda: {}; EX.load_notes = lambda: {}
+PS.default_send_hold = _hold
+import contextlib, io
+def _cli(scope):
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = PS.main(['--scope', scope, '--dry-run', '--list-name', 'T'])
+    return rc, out.getvalue()
+rc, o = _cli('send')
+rec('CLI --scope send runs the stay check on every lead and drops the held one', rc == 0 and '2099-000001-CA-01' in _seen and len(_seen) >= 3 and '"bankruptcy_hold": 1' in o, (rc, _seen, o[-300:]))
+_seen.clear(); rc, o = _cli('all')
+rec('CLI --scope all does not run it', rc == 0 and not _seen)
+(EX.preflight, EX.read_twin, EX.load_suppression, EX.load_deads, EX.load_notes, PS.default_send_hold) = _saved
 rec('default send hold fails closed', PS.default_send_hold('not-a-case')[0] is True)
 try:
     PS.build_all(rows, {}, set(), {}, {}, 'T', county='NOPE', never_contact=lambda c: False); ok = False
