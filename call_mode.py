@@ -2215,7 +2215,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             continue
         if need_lookup:
             # Every gate above passed; only the number is missing. Not a dial row (no `p`).
-            lookup.append({'c': case, 'sb': 0 if case in (replied or ()) else _seat_bucket(case), 'pk': d.get('pkey') or ('C' + case),
+            _lk_rp = bool(replied) and (case in replied or any(
+                c in replied for c in (_groups.get(d.get('pkey') or '') or ())))
+            lookup.append({'c': case, 'sb': 0 if _lk_rp else _seat_bucket(case), 'rp': 1 if _lk_rp else None, 'pk': d.get('pkey') or ('C' + case),
                            'bq': 1 if d.get('bkAsk') else None, 'bu': d.get('bkUntil') or None,
                            'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
                            'xf': 1 if (not is_lp and not d.get('auction')
@@ -2537,11 +2539,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
                 _h = ((_h ^ ord(_ch)) * 16777619) & 0xFFFFFFFF
             row['sb'] = _h % 12
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
+    # PER PERSON, not per case: a reply logged on a sibling case (r.pcs, same person key) pins this
+    # row too, which is also what the page's _isReplied reads, so the chip and the seat agree.
     _replied = {str(c) for c in (replied or ())}
+    _pin = set()
     for r in out:
-        if str(r.get('c') or '') in _replied:
+        if _replied and any(str(c) in _replied for c in [r.get('c')] + list(r.get('pcs') or [])):
             r['rp'] = 1
-    _seat_by_household(out, pin=_replied)
+            _pin.add(str(r.get('c')))
+    _seat_by_household(out, pin=_pin)
     _household_links(slim, out)
     # HIGHEST-CONVERTING FIRST (2026-08-19, his words: "I don't want clients whose auction date is
     # today or two-three days out. I need the highest converting leads.") The old key was
@@ -3053,8 +3059,9 @@ def mark_lookup(cov, lookup, crew_sb=None):
         if not x or r.get('oo') or r.get('sibclaimed') or r.get('saleBkAct') or r.get('lpDismissed'):
             continue
         r['lk'] = 1
-        r['sb'] = crew_sb.get(x.get('pk'), x['sb'])
-        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs'):
+        # a replied lookup lead stays on seat 0; its person's dial rows were pinned there too
+        r['sb'] = 0 if x.get('rp') else crew_sb.get(x.get('pk'), x['sb'])
+        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp'):
             if x.get(k) not in (None, '', []):
                 r[k] = x[k]
         n += 1
@@ -6151,7 +6158,7 @@ function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length =
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st'].forEach(function(k){
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)

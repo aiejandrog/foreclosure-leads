@@ -4261,7 +4261,11 @@ def make_tracker(leads):
             _cm_wn = _cm_wn.get('notes') if isinstance(_cm_wn, dict) else None
         except Exception:
             _cm_wn = None
-        _cm_rp = call_mode.replied_cases(_cm_wn if isinstance(_cm_wn, dict) else {}, _replies)
+        try:
+            _cm_rp = call_mode.replied_cases(_cm_wn if isinstance(_cm_wn, dict) else {}, _replies)
+        except Exception as _rpe:      # a malformed note must not cost both phone pages
+            print('call mode: replied owners not pinned (%s)' % str(_rpe)[:80])
+            _cm_rp = set()
         _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads,
                                       cap=_cm_cap if _cm_cap > 0 else 10 ** 6, lookup=_cm_lk,
                                       replied=_cm_rp)
