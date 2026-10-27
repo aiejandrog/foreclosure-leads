@@ -1,8 +1,9 @@
 # READ-ONLY. Diligence gate before/after on the LIVE board twin. Counts only: no names, numbers, addresses.
-# python gate_compare.py   (GATE_BRANCH=origin/<branch> to compare another branch against the checked-out code)
+# python gate_compare.py   (compares diligence_* at GATE_BASE vs GATE_BRANCH, default pre-#389 main vs origin/main)
 # Writes nothing, spends nothing, does not switch the repo's branch. Run from the repo folder.
 import json, os, re, sys, io, contextlib, collections, subprocess, tempfile
-REPO = os.getcwd(); BR = os.environ.get('GATE_BRANCH') or 'origin/claude/project-thread-drc9nu'
+REPO = os.getcwd(); BR = os.environ.get('GATE_BRANCH') or 'origin/main'
+BASE = os.environ.get('GATE_BASE') or 'e8f169b'   # main just before #389
 sys.path.insert(0, REPO)
 import paths as P
 mode = sys.argv[1] if len(sys.argv) > 1 else 'driver'
@@ -10,14 +11,16 @@ def jl(p, d):
     try: return json.load(open(p, encoding='utf-8')) or d
     except Exception: return d
 if mode == 'driver':
-    tmp = tempfile.mkdtemp()
-    for f in ('diligence_flags.py', 'diligence_gate.py'):
-        src = subprocess.run(['git', '--no-pager', 'show', BR + ':' + f], capture_output=True, text=True, encoding='utf-8').stdout
-        if not src.strip(): sys.exit('could not read %s from %s - did git fetch run?' % (f, BR))
-        open(os.path.join(tmp, f), 'w', encoding='utf-8').write(src)
+    dirs = {}
+    for m, ref in (('before', BASE), ('after', BR)):
+        dirs[m] = tempfile.mkdtemp()
+        for f in ('diligence_flags.py', 'diligence_gate.py'):
+            src = subprocess.run(['git', '--no-pager', 'show', ref + ':' + f], capture_output=True, text=True, encoding='utf-8').stdout
+            if not src.strip(): sys.exit('could not read %s from %s - did git fetch run?' % (f, ref))
+            open(os.path.join(dirs[m], f), 'w', encoding='utf-8').write(src)
     res = {}
     for m in ('before', 'after'):
-        env = dict(os.environ, GATE_TMP=tmp)
+        env = dict(os.environ, GATE_TMP=dirs[m])
         out = subprocess.run([sys.executable, __file__ if os.path.exists(__file__) else sys.argv[0], m], capture_output=True, text=True, encoding='utf-8', env=env)
         if out.returncode: print(out.stdout[-1500:], out.stderr[-1500:]); sys.exit('%s run failed' % m)
         res[m] = json.loads(out.stdout.strip().splitlines()[-1])
@@ -43,8 +46,7 @@ if mode == 'driver':
     print('\nUP codes are recodes when "rows newly held" is 0 (a row lost its first code and shows its next).' if up else '')
     sys.exit(0)
 # ---------- one side: 'before' = code on disk (main), 'after' = branch diligence_* + simulated inputs ----------
-if mode == 'after':
-    sys.path.insert(0, os.environ['GATE_TMP'])
+sys.path.insert(0, os.environ['GATE_TMP'])
 import diligence_flags as DF, diligence_gate as DG
 DG.HERE = REPO; DG._OWN = None
 with contextlib.redirect_stdout(io.StringIO()):
