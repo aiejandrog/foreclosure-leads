@@ -270,11 +270,22 @@ def gate(row):
             if CONDITIONAL_CODE in codes:
                 m, a = _flag_msg(r, CONDITIONAL_CODE)
                 return _v(False, True, CONDITIONAL_CODE, g, codes, m, a)
+            # HOA_CODEFENDANT with no open association case is warn-only (2026-10-27): it goes out,
+            # and the card says which association to look up.
+            if 'HOA_CODEFENDANT' in codes:
+                m, a = _flag_msg(r, 'HOA_CODEFENDANT')
+                return _v(False, True, 'HOA_CODEFENDANT', g, codes, m, a)
             return _v(False, False, '', g, codes, '', '')
 
         # Which of this row's codes are actually load-bearing, judged with the row's OWN dive state.
         dive = _dive(r)
-        blocking = [c for c in codes if c in _ALWAYS or (dive and c in _ON_DIVE)]
+        _cb = getattr(_DF, 'code_blocks', None)
+        if _cb is not None:
+            # diligence_flags owns the per-code conditions (HOA_CODEFENDANT needs an open association
+            # case, 2026-10-27), so ask it rather than re-test tuple membership here.
+            blocking = [c for c in codes if c in _ALWAYS or (c in _ON_DIVE and _cb(c, r, dive))]
+        else:
+            blocking = [c for c in codes if c in _ALWAYS or (dive and c in _ON_DIVE)]
 
         # ---- UNKNOWNS NEVER HOLD ALONE ----------------------------------------------------
         # _ALWAYS / _ON_DIVE above already exclude the warn-only codes, so `blocking` cannot contain
@@ -286,7 +297,8 @@ def gate(row):
         if not blocking:
             # Held only by unknowns. Release, and carry the reason: the most severe warn-only code
             # on the row is what the closer needs to see, not a generic "unverified".
-            _w = next((c for c in codes if c in _WARN_ONLY), CONDITIONAL_CODE)
+            _w = next((c for c in codes if c in _WARN_ONLY),
+                      'HOA_CODEFENDANT' if 'HOA_CODEFENDANT' in codes else CONDITIONAL_CODE)
             m, a = _flag_msg(r, _w)
             return _v(False, True, _w, g, codes, m, a)
 
@@ -390,6 +402,7 @@ class Tally(object):
         self.unchecked = 0      # could not evaluate -> RELEASED
         self.unchecked_why = ''
         self.seen = 0
+        self.taxdeed = 0        # tax-deed rows: kept off contact paths, NOT counted as diligence holds
 
     def check(self, row):
         g = gate(row)
@@ -398,6 +411,10 @@ class Tally(object):
             self.unchecked += 1
             if not self.unchecked_why:
                 self.unchecked_why = g['why']
+        elif g['hold'] and _is_td(row):
+            # A tax deed is an auction, not a homeowner lead (2026-10-27, Alejandro: "do not count
+            # them"). Still held on every contact path; counted on its own line, not in the holds.
+            self.taxdeed += 1
         elif g['hold']:
             c = g['code'] or '?'
             self.held[c] = self.held.get(c, 0) + 1
@@ -441,6 +458,9 @@ class Tally(object):
                 print('%s   of those, %d are NOT a defect — they are an unrun check. Clear them with:'
                       '  python ownership_scan.py --days 45   (ownership.json currently covers %d '
                       'case(s))' % (indent, _todo, len(ownership())))
+            if self.taxdeed:
+                print('%s%s: %d tax-deed row(s) kept off contact paths — auctions, not homeowner '
+                      'leads, so not counted as diligence holds.' % (indent, label, self.taxdeed))
             if self.warned:
                 print('%s%s: %d lead(s) RELEASED WITH A WARNING — the equity number on these is not '
                       'a number, do not quote it.' % (indent, label, self.warned))
@@ -450,6 +470,13 @@ class Tally(object):
                       % (indent, label, self.unchecked, _clip(self.unchecked_why, 100)))
         except Exception as e:                                 # a REPORT must never kill a build
             print('%s%s: diligence tally report failed (%s)' % (indent, label, str(e)[:80]))
+
+
+def _is_td(row):
+    try:
+        return bool(_DF.is_tax_deed_row(row)) if _DF else False
+    except Exception:
+        return False
 
 
 def _case(row):

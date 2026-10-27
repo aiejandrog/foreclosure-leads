@@ -638,6 +638,10 @@ def pick_callable(leads, cache, n, skiptrace=None, max_days=None):
             continue
         if (cache.get(k) or {}).get('_person'):
             continue
+        # a one-parcel LP row's addr is a name-matched parcel (lp_leads addrConf=medium): a paid
+        # search there buys the parcel's residents, not the owner's file
+        if r.get('addrConf') == 'medium':
+            continue
         d = _days_to_sale(r)
         if d < 0 or (d != 9999 and d > max_days):
             continue

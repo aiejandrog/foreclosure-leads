@@ -45,11 +45,15 @@ def order(leads):
 print('\nTRACED AND UNDERWATER NEVER REACHES THE SORT')
 ids, by = order([
     lead('UNTRACED-60', 20, eq=60, judg=160000),
-    lead('TRACED-NEG20', 20, eq=-20, judg=480000, eqstate='priced'),
+    lead('TRACED-NEG20', 20, eq=-20, judg=480000, eqstate='priced', arv=400000, arvconf='ok'),
     lead('TRACED-45', 20, eq=45, judg=220000, eqstate='priced'),
     lead('UNTRACED-UNKNOWN', 20),
 ])
 rec('a traced lead whose judgment exceeds the value is held by the diligence gate', 'TRACED-NEG20' not in by, ids)
+# 2026-10-27: on the COUNTY roll alone a judgment 1.2x the roll is a normal first-mortgage case (the
+# roll lags market), so it ships; one past roll / 0.70 is still held.
+rec('county basis: judgment 1.2x the roll is not held', 'CNTY-120' in order([lead('CNTY-120', 20, eq=-20, judg=480000)])[1])
+rec('county basis: judgment 1.5x the roll is held', 'CNTY-150' not in order([lead('CNTY-150', 20, eq=-50, judg=600000)])[1])
 rec('a traced lead with equity still opens the band', ids[0] == 'TRACED-45', ids)
 rec('an untraced lead with unknown equity sorts after untraced leads with a number',
     ids.index('UNTRACED-60') < ids.index('UNTRACED-UNKNOWN'), ids)
@@ -81,7 +85,7 @@ print('\nA RECORDED LIEN ON THE CHAIN COMES OFF TOO')
 ids, by = order([lead('CHAIN', 20, eq=50, judg=200000, orsurv=100000)])
 rec('equity counts the chain lien the diligence gate counts', by['CHAIN'].get('e') == 25.0, by['CHAIN'].get('e'))
 rec('a lead the chain sinks is held, not ranked',
-    'CHAIN-SUNK' not in order([lead('CHAIN-SUNK', 20, eq=50, judg=200000, orsurv=250000)])[1])
+    'CHAIN-SUNK' not in order([lead('CHAIN-SUNK', 20, eq=50, judg=200000, orsurv=250000, arv=400000, arvconf='ok')])[1])
 # basis 400k, payoff 390k -> 2.5%: a thin-but-arguable deal the -25 floor keeps
 rec('a thin lead after interest still ships', 'THIN' in order([lead('THIN', 20, eq=5, judg=380000, payoff=390000)])[1])
 rec('reordering by interest: 25%->15% falls below a 20% lead with no interest',

@@ -698,6 +698,23 @@ def _sale_refs(sales):
     return out
 
 
+def _last_sale_instr(refs):
+    """Instrument of the newest sale in sale_refs ('' if none). The board row carries it as `lsi` so
+    diligence_flags can tell a clerk certificate of title from a purchase (RECENT_SALE, 2026-10-27)."""
+    best, key = '', (0, 0, 0)
+    for x in refs if isinstance(refs, list) else []:
+        if not isinstance(x, dict):
+            continue
+        m = re.match(r'\s*(\d{1,2})/(\d{1,2})/(\d{4})', str(x.get('d') or '')) or None
+        k = (int(m.group(3)), int(m.group(1)), int(m.group(2))) if m else None
+        if k is None:
+            m = re.match(r'\s*(\d{4})-(\d{2})-(\d{2})', str(x.get('d') or ''))
+            k = (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+        if k and k > key:                 # same-day tie keeps the first (the appraiser lists newest first)
+            best, key = str(x.get('i') or ''), k
+    return best
+
+
 def _prior_enrichment(path=None):
     """folio -> the last good appraiser read in the previous leads_final.json, or {}.
 
@@ -2452,6 +2469,7 @@ def make_tracker(leads):
             'ownerAge': r.get('owner_age') or 0,
             'wid': bool(r.get('widow')),
             'lsd': (r.get('last_sale_date') or '')[:10],
+            'lsi': _last_sale_instr(r.get('sale_refs')),
             # condo -> the displayed equity is a GROSS upper bound: a special assessment (40-yr recert) or a
             # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
             # MARGINAL cap until the association estoppel is entered. (Lesson from the Hondroulis condo deal.)
@@ -2819,7 +2837,8 @@ def make_tracker(leads):
                 # (skiptrace via='mailTrace') belongs only on that unconfirmed LP row, which the
                 # diligence gate holds. An auction row or a now-confirmed row on the same case
                 # number waits for its own search at the property instead of inheriting it.
-                _mtrow = bool(_d.get('mailTrace')) and not (_d.get('addr') or '').strip()
+                _mtrow = bool(_d.get('mailTrace')) and (not (_d.get('addr') or '').strip()
+                                                        or _d.get('addrConf') == 'medium')
                 if _ph and _ph.get('via') == 'mailTrace' and not _mtrow:
                     _ph = None
                 if _ph and _ph.get('phones'):
@@ -3472,7 +3491,10 @@ def make_tracker(leads):
                             # anything that was on the row before this merge and is now gone
                             _r['phrank'] = []
                             _r['phbest'] = None
-                    if _all_em:
+                    # a one-parcel LP row (mailTrace, addrConf=medium) gets no email from any source:
+                    # its parcel is a name match, so nothing automatic first-touches it
+                    if _all_em and not (_r.get('mailTrace') and (_r.get('addrConf') == 'medium'
+                                                                or not (_r.get('addr') or '').strip())):
                         _cur_em = set((e or '').lower() for e in (_r.get('emails') or []))
                         _add_em = [e for e in _all_em if e.lower() not in _cur_em]
                         if _add_em:

@@ -113,6 +113,13 @@ DEEP_DIVE_EQ_USD = 25000
 # (foreclosure_leads.py:594 uses 15y for a different question; 2y is the "did this just move" one).
 RECENT_SALE_YEARS = 2
 
+# UNDERWATER on a COUNTY basis (2026-10-27, Alejandro). The property-appraiser roll lags market by
+# roughly 15-30%, so on a first-mortgage foreclosure a judgment at or a little above the roll value is
+# normal and says nothing about equity. With a county basis UNDERWATER fires only when the debt is
+# above the roll divided by this factor, i.e. above what the house is worth even if the roll is 30%
+# low. With a market basis (a confident comps ARV, see basis_of) it fires at debt >= basis as before.
+COUNTY_ROLL_LAG = 0.70
+
 SEV_CRITICAL, SEV_HIGH, SEV_MED, SEV_LOW = 'critical', 'high', 'med', 'low'
 _SEV_RANK = {SEV_CRITICAL: 4, SEV_HIGH: 3, SEV_MED: 2, SEV_LOW: 1, '': 0}
 
@@ -356,6 +363,19 @@ def basis_of(row):
     return val
 
 
+def basis_src_of(row):
+    """'arv' when basis_of() used a confident comps ARV (a market figure), else 'county'."""
+    try:
+        r = _d(row)
+        val = _n(_first(r, 'value', 'market_value', 'val'))
+        arv = _n(r.get('arv'))
+        conf = _s(_first(r, 'arvconf', 'arv_conf')).lower()
+        # the same test basis_of() applies, so an ARV that merely equals the roll is still 'county'
+        return 'arv' if (arv and val and conf == 'ok' and (0.7 * val) <= arv <= (2.5 * val)) else 'county'
+    except Exception:
+        return 'county'
+
+
 def owner_owed_of(row):
     """What the owner owes on the foreclosing instrument. Bake-time only — the board's runtime
     _payoffOf/_slien/_jlien operator overrides do not exist yet at this point in the pipeline, so
@@ -570,6 +590,63 @@ def plaintiff_is_assn(row):
             return True
         nm, _c = _assn_match(_first(r, 'plaintiff', 'Plaintiff'))
         return bool(nm)
+    except Exception:
+        return False
+
+
+def hoa_case_open(row):
+    """Name of an OPEN association foreclosure on this owner (sibling_cases.py `sib`, unsold), or ''.
+
+    2026-10-27 (Alejandro): an association co-defendant on a bank's foreclosure is a pleading
+    artifact by itself; Florida lenders name the HOA in nearly every condo/HOA case (F.S. 720.3085 /
+    718.116). What makes it a problem is the association's OWN case, still open, behind ours. A sold
+    one is already SIBLING_CLAIMED. The row does not carry lien priority, so "behind ours" is read as
+    "an open association case exists on this owner" — an HOA lien is junior to a first mortgage."""
+    try:
+        for s in _d(row).get('sib') or []:
+            if not isinstance(s, dict) or s.get('sold'):
+                continue
+            nm, _c = _assn_match(s.get('pl') or s.get('plaintiff') or '')
+            if nm:
+                return _s(s.get('case')) or nm
+        return ''
+    except Exception:
+        return ''
+
+
+# Miami-Dade's appraiser writes 'Certificate of Title' (cut to 8 characters, 'Certific', by
+# foreclosure_leads._sale_refs); Broward's RecInfo writes CET-D / CET.
+_COT_RE = re.compile(r'^\s*CERTIF|CERTIFICATE\s+OF\s+TITLE|\bCET\b|\bCOT\b', re.I)
+
+
+def _date_key(v):
+    """(y, m, d) from 'M/D/YYYY' or 'YYYY-MM-DD', None otherwise."""
+    t = _s(v)
+    m = re.match(r'\s*(\d{1,2})/(\d{1,2})/(\d{4})', t)
+    if m:
+        return (int(m.group(3)), int(m.group(1)), int(m.group(2)))
+    m = re.match(r'\s*(\d{4})-(\d{2})-(\d{2})', t)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def last_sale_is_cert_of_title(row):
+    """True when the property's most recent recorded sale is a clerk CERTIFICATE OF TITLE.
+
+    Reads `lsi` (the board row's last-sale instrument, baked from the appraiser's sale history) or
+    the newest `sale_refs` entry (Miami-Dade fat rows). False when no instrument is on the row, so a
+    row without one behaves exactly as before."""
+    try:
+        r = _d(row)
+        ins = _s(r.get('lsi'))
+        if not ins:
+            refs = [x for x in (r.get('sale_refs') or []) if isinstance(x, dict)]
+            best, by = None, (0, 0, 0)
+            for x in refs:
+                k = _date_key(x.get('d'))
+                if k and k > by:            # strictly newer: a same-day tie keeps the first (newest-first list)
+                    best, by = x, k
+            ins = _s((best or {}).get('i'))
+        return bool(ins) and bool(_COT_RE.search(ins))
     except Exception:
         return False
 
@@ -850,7 +927,10 @@ def risk_flags(row):
         # is a pitch that must not happen, and that is true whether or not anyone calls it "equity".
         basis = basis_of(r)
         debt = known_debt_of(r)
-        if basis > 0 and debt['total'] > 0 and debt['total'] >= basis:
+        # Market basis: debt >= basis. County roll basis: debt must clear the roll's lag too
+        # (COUNTY_ROLL_LAG), because a first-mortgage judgment at the assessed value is normal.
+        _uw_bar = basis if basis_src_of(r) == 'arv' else basis / COUNTY_ROLL_LAG
+        if basis > 0 and debt['total'] > 0 and debt['total'] >= _uw_bar:
             out.append(_flag(
                 'UNDERWATER', SEV_CRITICAL,
                 'Known debt of $%s is at or above the $%s this row calls the value — the owner is '
@@ -915,7 +995,11 @@ def risk_flags(row):
                     'Pull the deed at %s and read WHO it conveyed to and under WHAT instrument '
                     'before treating this owner as the owner.' % (links['records'] or 'the county official records'),
                     _s(_first(r, 'title_owner'))))
-            elif (cy - sy) <= RECENT_SALE_YEARS:
+            elif (cy - sy) <= RECENT_SALE_YEARS and not last_sale_is_cert_of_title(r):
+                # A certificate of title BEFORE our filing is how the current owner took the house
+                # at an earlier foreclosure sale, not a purchase whose price says anything about the
+                # loan (2026-10-27). On or after the filing (branch above) it still flags: there a
+                # certificate of title means the sale on this house already happened.
                 px = _n(_first(r, 'bprice', 'last_sale_price'))
                 out.append(_flag(
                     'RECENT_SALE', SEV_MED,
@@ -1092,6 +1176,21 @@ _HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_
 _HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 
+def code_blocks(code, row, dive):
+    """Does this one code hold this row? The single place the hold tuples are applied, so
+    diligence_gate reads the same answer instead of re-testing tuple membership.
+
+    HOA_CODEFENDANT (2026-10-27, Alejandro): warn-only unless an open association case on this owner
+    is on the row (hoa_case_open). Still dive-gated on top of that."""
+    if code in _HOLD_ALWAYS:
+        return True
+    if not (dive and code in _HOLD_ON_DIVE):
+        return False
+    if code == 'HOA_CODEFENDANT':
+        return bool(hoa_case_open(row))
+    return True
+
+
 def contact_gate(row):
     """HOLD or RELEASE for ONE lead, with the reason. This is THE call for every contact path —
     door route, call sheet, call mode, cold email, cadence enrolment, letters, the team sheet.
@@ -1134,7 +1233,7 @@ def contact_gate(row):
         hit = None
         for f in fl:                                  # fl is already sorted most-severe-first
             c = _s(f.get('code'))
-            if c in _HOLD_ALWAYS or (dive and c in _HOLD_ON_DIVE):
+            if code_blocks(c, row, dive):
                 hit = f
                 break
         if hit is None and (title_status_of(row) == 'transferred' or row.get('sibclaimed')):
@@ -1498,7 +1597,10 @@ def _selftest():
     # present (kills PARTIES_UNAVAILABLE), no eqfake, no sale data. Only the debt can hold it.
     sis_u = {'case': '502024CA010265XXXAMB', 'county': 'PALM BEACH', 'value': 273683,
              'judg': 20323.36, 'orsurvfirst': 298000, 'orconf': 'ok', 'title_status': 'clear',
-             'defs': 'UNKNOWN TENANT #1', 'filed': 2024}
+             'defs': 'UNKNOWN TENANT #1', 'filed': 2024,
+             # $273,683 is her MARKET figure, so it rides as a confident comps ARV: UNDERWATER on a
+             # market basis fires at debt >= basis (2026-10-27).
+             'arv': 273683, 'arvconf': 'ok'}
     uf = [f for f in risk_flags(sis_u) if f['code'] == 'UNDERWATER']
     chk({f['code'] for f in risk_flags(sis_u)} == {'UNDERWATER'},
         'UNDERWATER fires alone (got %s)' % sorted({f['code'] for f in risk_flags(sis_u)}))
@@ -1513,6 +1615,14 @@ def _selftest():
         == known_debt_of(sis_u)['total'], 'duplicate chain fields cannot inflate the debt')
     chk(not any(f['code'] == 'UNDERWATER' for f in risk_flags(dict(sis_u, ju=True, orsurvfirst=0))),
         'a judgment we cannot read is a blank, not a debt — no UNDERWATER off it')
+    # COUNTY basis (2026-10-27): the roll lags market, so debt at 1.16x the roll is a normal first-
+    # mortgage foreclosure, not proof; debt above roll / COUNTY_ROLL_LAG still is.
+    sis_c = dict(sis_u, arv=0, arvconf='')
+    chk(basis_src_of(sis_c) == 'county' and basis_src_of(sis_u) == 'arv', 'basis source read')
+    chk(not any(f['code'] == 'UNDERWATER' for f in risk_flags(sis_c)),
+        'county basis: debt 1.16x the roll does not fire UNDERWATER')
+    chk(any(f['code'] == 'UNDERWATER' for f in risk_flags(dict(sis_c, orsurvfirst=400000))),
+        'county basis: debt above roll / %.2f still fires UNDERWATER' % COUNTY_ROLL_LAG)
 
     # #6 PURCHASE_ANCHOR, isolated from the dive: ju=True kills the dive AND the judgment figure, so
     # the only flag that can hold this row is the price she paid. This is the shape that proves the
