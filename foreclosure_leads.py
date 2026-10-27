@@ -710,7 +710,7 @@ def _last_sale_instr(refs):
         if k is None:
             m = re.match(r'\s*(\d{4})-(\d{2})-(\d{2})', str(x.get('d') or ''))
             k = (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
-        if k and k >= key:
+        if k and k > key:                 # same-day tie keeps the first (the appraiser lists newest first)
             best, key = str(x.get('i') or ''), k
     return best
 
@@ -3491,7 +3491,10 @@ def make_tracker(leads):
                             # anything that was on the row before this merge and is now gone
                             _r['phrank'] = []
                             _r['phbest'] = None
-                    if _all_em:
+                    # a one-parcel LP row (mailTrace, addrConf=medium) gets no email from any source:
+                    # its parcel is a name match, so nothing automatic first-touches it
+                    if _all_em and not (_r.get('mailTrace') and (_r.get('addrConf') == 'medium'
+                                                                or not (_r.get('addr') or '').strip())):
                         _cur_em = set((e or '').lower() for e in (_r.get('emails') or []))
                         _add_em = [e for e in _all_em if e.lower() not in _cur_em]
                         if _add_em:

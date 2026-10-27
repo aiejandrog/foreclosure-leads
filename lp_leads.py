@@ -185,7 +185,9 @@ def build():
         # while ADDRESS_UNCONFIRMED held the row, phones and all. `addr` now carries that parcel,
         # stamped addrConf='medium' so every reader can tell it from a homestead-corroborated 'high'.
         # Value stays gated on 'high' (no equity is computed off it), skiptrace keeps searching the
-        # mailing address (skiptrace._confirmed_addr), and the board merge still attaches no email.
+        # mailing address (skiptrace._confirmed_addr), the board merge attaches no email (skiptrace or
+        # Whitepages), and the Whitepages deep search skips it. Door routes and letters that read `addr`
+        # DO now see this parcel; that is the exposure Alejandro accepted on 2026-10-27.
         addr_conf = ''
         if mail_trace and full and not addr:
             addr, folio, addr_conf = full, str(a.get('folio') or ''), 'medium'

@@ -367,9 +367,11 @@ def basis_src_of(row):
     """'arv' when basis_of() used a confident comps ARV (a market figure), else 'county'."""
     try:
         r = _d(row)
-        b = basis_of(r)
+        val = _n(_first(r, 'value', 'market_value', 'val'))
         arv = _n(r.get('arv'))
-        return 'arv' if (b > 0 and arv and b == arv) else 'county'
+        conf = _s(_first(r, 'arvconf', 'arv_conf')).lower()
+        # the same test basis_of() applies, so an ARV that merely equals the roll is still 'county'
+        return 'arv' if (arv and val and conf == 'ok' and (0.7 * val) <= arv <= (2.5 * val)) else 'county'
     except Exception:
         return 'county'
 
@@ -617,6 +619,16 @@ def hoa_case_open(row):
 _COT_RE = re.compile(r'^\s*CERTIF|CERTIFICATE\s+OF\s+TITLE|\bCET\b|\bCOT\b', re.I)
 
 
+def _date_key(v):
+    """(y, m, d) from 'M/D/YYYY' or 'YYYY-MM-DD', None otherwise."""
+    t = _s(v)
+    m = re.match(r'\s*(\d{1,2})/(\d{1,2})/(\d{4})', t)
+    if m:
+        return (int(m.group(3)), int(m.group(1)), int(m.group(2)))
+    m = re.match(r'\s*(\d{4})-(\d{2})-(\d{2})', t)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
 def last_sale_is_cert_of_title(row):
     """True when the property's most recent recorded sale is a clerk CERTIFICATE OF TITLE.
 
@@ -628,11 +640,11 @@ def last_sale_is_cert_of_title(row):
         ins = _s(r.get('lsi'))
         if not ins:
             refs = [x for x in (r.get('sale_refs') or []) if isinstance(x, dict)]
-            best, by = None, 0
+            best, by = None, (0, 0, 0)
             for x in refs:
-                y = _year_of(x.get('d'))
-                if y and y >= by:
-                    best, by = x, y
+                k = _date_key(x.get('d'))
+                if k and k > by:            # strictly newer: a same-day tie keeps the first (newest-first list)
+                    best, by = x, k
             ins = _s((best or {}).get('i'))
         return bool(ins) and bool(_COT_RE.search(ins))
     except Exception:
