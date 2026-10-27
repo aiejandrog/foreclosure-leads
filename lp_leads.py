@@ -101,6 +101,7 @@ def build():
     stats = _statuses()
     nhigh = nadv = nmismatch = nvalued = ndismissed = nclosed = nunanchored = 0
     nmailtrace = 0
+    npromoted = 0
     npbnocase = 0
     out, seen = [], set()
     for lp in feed:
@@ -179,6 +180,17 @@ def build():
             mail_trace = str(a.get('mailAddr') or '').strip()
             if mail_trace:
                 nmailtrace += 1
+        # THE ONE-PARCEL ADDRESS GOES ON THE ROW (2026-10-27, Alejandro). A mailTrace row is one
+        # parcel carrying every token of the defendant's name; its address was sitting in addrGuess
+        # while ADDRESS_UNCONFIRMED held the row, phones and all. `addr` now carries that parcel,
+        # stamped addrConf='medium' so every reader can tell it from a homestead-corroborated 'high'.
+        # Value stays gated on 'high' (no equity is computed off it), skiptrace keeps searching the
+        # mailing address (skiptrace._confirmed_addr), and the board merge still attaches no email.
+        addr_conf = ''
+        if mail_trace and full and not addr:
+            addr, folio, addr_conf = full, str(a.get('folio') or ''), 'medium'
+            addr_guess = ''
+            npromoted += 1
 
         # VALUE (lp_values.py, off the Property Appraiser). Gated on `high` for the same reason the
         # address is: pricing a parcel we are not sure we identified produces a confident number
@@ -284,6 +296,8 @@ def build():
             out[-1]['anchorWhy'] = str(a.get('evidence') or '')[:180]
         if mail_trace:
             out[-1]['mailTrace'] = mail_trace
+        if addr_conf:
+            out[-1]['addrConf'] = addr_conf
     # This file had NO write guard at all — 1,007 rows, overwritten unconditionally, so an upstream
     # lis_pendens.json that came back thin (a walled sweep, an interrupted write) silently emptied
     # the entire Fresh-filings lane and the board simply showed fewer leads. Same ratio rule as the
@@ -302,7 +316,7 @@ def build():
         print(f'  addresses: {nhigh} filled (high confidence, skiptrace-ready) · '
               f'{nadv} advisory only (needs human) · {nmismatch} owner-of-record changed since filing')
         print(f'  mailing-address phone search: {nmailtrace} one-parcel Broward row(s) '
-              f'(phones only, off the dial queue until the address is confirmed)')
+              f'({npromoted} carry their one matched parcel as addr, addrConf=medium)')
         # Printed unconditionally, zero included: "0 unanchored" and "the stamp stopped running"
         # are different facts and only one of them is good news.
         print(f'  anchor:    {nunanchored} row(s) UNANCHORED — the defendant\'s name sits on '

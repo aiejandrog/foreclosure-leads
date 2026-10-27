@@ -227,6 +227,13 @@ class TraceSkip(Exception):
 
 
 # ---- schema helpers: work across Miami-Dade (leads_final.json) AND county files (broward/palmbeach_leads.json)
+def _is_tax_deed(r):
+    # same predicate as diligence_flags.is_tax_deed_row / buybox.is_tax_deed, inlined so the paid
+    # caller keeps no import on the flag module
+    u = ' '.join(str(r.get(k) or '') for k in ('sale_type', 'st', 'case_type', 'ctype', 'Auction Type',
+                                                'auction_type', 'clerk_case_type')).upper()
+    return 'TAX DEED' in u or 'TAXDEED' in u.replace(' ', '') or bool(re.search(r'\bTD\b', u))
+
 def _case(r):  return (r.get('Case #', '') or r.get('case', '') or '').strip()
 def _mailaddr(r): return r.get('mailing_address', '') or r.get('mail', '') or ''
 def _propaddr(r): return r.get('Address', '') or r.get('addr', '') or ''
@@ -367,6 +374,11 @@ def address_for(lead):
 
 
 def _confirmed_addr(lead):
+    # A one-parcel LP row whose addr came from the name match (lp_leads addrConf='medium') is not a
+    # confirmed property for tracing: keep searching the owner's mailing address, so the cached
+    # mailTrace result stays valid and no credit is spent re-searching the same person.
+    if lead.get('mailTrace') and lead.get('addrConf') == 'medium':
+        return parse_addr(_mailaddr(lead))
     return parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
 
 
@@ -429,6 +441,11 @@ def select(leads, args, llcs=None):
         # usually means final judgment, the most urgent owner there is. An explicit --case traces.
         if (not args.case and (r.get('st') or '') == 'LP'
                 and (r.get('lpDismissed') or r.get('ownerMismatch'))):
+            continue
+        # A TAX DEED is an auction, not a homeowner lead, and is held off every contact path, so a
+        # Tracerfy credit spent on it never reaches a dial (2026-10-27, Alejandro: "do not enrich
+        # them"). Credits go to the numberless homeowner leads instead. An explicit --case traces.
+        if not args.case and _is_tax_deed(r):
             continue
         if lp_days:
             # FRESH-FILING FAST LANE. A lis pendens is the one moment the owner has heard from

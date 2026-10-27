@@ -56,7 +56,11 @@ L.build()
 rows = {r['case']: r for r in json.load(open(L.OUT))}
 
 chk('one-parcel medium row carries mailTrace', rows['CACE-26-000101'].get('mailTrace') == MAIL)
-chk('...and still no confirmed addr', rows['CACE-26-000101'].get('addr') == '')
+# 2026-10-27: the one matched parcel rides as addr, stamped addrConf=medium (lp_leads).
+chk('...and carries its one matched parcel as addr, addrConf=medium',
+    rows['CACE-26-000101'].get('addr', '').startswith('10 EAST ST') and rows['CACE-26-000101'].get('addrConf') == 'medium')
+chk('skiptrace keeps searching the mailing address on that row (no paid re-search)',
+    S._via(rows['CACE-26-000101']) == 'mailTrace')
 chk('several parcels: no mailTrace', not rows['CACE-26-000102'].get('mailTrace'))
 chk('high row: real addr, no mailTrace', rows['CACE-26-000103'].get('addr') and not rows['CACE-26-000103'].get('mailTrace'))
 chk('owner changed since filing: no mailTrace', not rows['CACE-26-000104'].get('mailTrace'))
@@ -69,20 +73,23 @@ chk('skiptrace has nothing for a several-parcel row', not S.address_for(rows['CA
 
 ph = {'phones': ['9545550101'], 'phdnc': [False], 'phsrc': ['st'], 'phrank': [''], 'phbest': 0}
 r1 = dict(rows['CACE-26-000101'], **ph)
+r0 = dict(r1, addr='', addrConf='')          # a mailTrace row with no parcel address at all
 r3 = dict(rows['CACE-26-000103'], **ph)
-out, _n = CM.call_rows([r1, r3])
+out, _n = CM.call_rows([r0, r3])
 got = {r.get('c') for r in out}
-chk('mailTrace row stays off the dial queue', 'CACE-26-000101' not in got)
+chk('mailTrace row with no address stays off the dial queue', 'CACE-26-000101' not in got)
+chk('mailTrace row carrying its parcel address ships', 'CACE-26-000101' in {r.get('c') for r in CM.call_rows([r1])[0]})
 chk('confirmed-address twin still ships', 'CACE-26-000103' in got)
-r1b = dict(r1, addr='10 EAST ST, SUNRISE, FL 33313')
+r1b = dict(r1, addr='10 EAST ST, SUNRISE, FL 33313', addrConf='')
 chk('once the address is confirmed it ships', 'CACE-26-000101' in {r.get('c') for r in CM.call_rows([r1b])[0]})
 
 import diligence_flags as DF   # noqa: E402
 import diligence_gate as DG    # noqa: E402
-chk('diligence: mailTrace row with no addr is ADDRESS_UNCONFIRMED', DF.address_unconfirmed(r1))
+chk('diligence: mailTrace row with no addr is ADDRESS_UNCONFIRMED', DF.address_unconfirmed(r0))
+chk('diligence: mailTrace row with its parcel addr is not', not DF.address_unconfirmed(r1))
 chk('diligence: confirmed twin is not', not DF.address_unconfirmed(r3) and not DF.address_unconfirmed(r1b))
 chk('diligence: the code is a hold-always code', 'ADDRESS_UNCONFIRMED' in DF._HOLD_ALWAYS)
-chk('diligence: the gate holds it (Morning Worker, call sheet, Call Mode read this)', DG.is_hold(r1) and DG.gate(r1)['hold'])
+chk('diligence: the gate holds it (Morning Worker, call sheet, Call Mode read this)', DG.is_hold(r0) and DG.gate(r0)['hold'])
 chk('diligence: the gate off switch cannot release it', 'ADDRESS_UNCONFIRMED' in DG.NEVER_RELEASED)
 chk('diligence: junk never raises', DF.address_unconfirmed(None) is False and DF.address_unconfirmed({}) is False)
 

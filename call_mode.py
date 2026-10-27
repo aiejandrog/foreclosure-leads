@@ -3628,7 +3628,8 @@ def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
         return sum(1 for v in r.values() if v not in (None, '', [], {}))
 
     def _unconfirmed(r):
-        return bool(r.get('mailTrace')) and not str(r.get('addr') or '').strip()
+        return bool(r.get('mailTrace')) and (not str(r.get('addr') or '').strip()
+                                             or r.get('addrConf') == 'medium')
 
     def _d(r):
         v = r.get(days)
