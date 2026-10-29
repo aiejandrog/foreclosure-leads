@@ -83,6 +83,7 @@ _stop_run = threading.Event()   # set on sustained 429 wall OR budget exhaustion
 _stop_why = {'why': ''}         # which one - the operator decision differs (top up WP vs raise the cap)
 _spend_lock = threading.Lock()
 _run = {'spent': 0.0, 'max': WP_MAX_SPEND, 'calls': 0, 'inflight': 0.0}
+_touched = set()                # cases this run actually worked on (the totals count only these)
 
 
 def wp_spent_today():
@@ -222,7 +223,12 @@ def _first_owner_name(owners_str):
 # Whitepages spend roughly double its charged amount. Higher-volume tiers reach $0.15 at 2,500+/mo —
 # raise this only against a plan we actually hold. WP_PRICE overrides it for a plan bought at another
 # price (2026-10-29: a $100 / 500-search pack is 0.20), so --max-spend and the ledger read in real dollars.
-WP_EST_COST = float(os.environ.get('WP_PRICE', '0.22') or 0.22)
+try:
+    WP_EST_COST = float(os.environ.get('WP_PRICE', '') or 0.22)
+except ValueError:
+    WP_EST_COST = 0.22
+if WP_EST_COST <= 0:            # a zero price would make every cap unreachable
+    WP_EST_COST = 0.22
 
 
 def _http_get(url, key, retries=3):
@@ -319,7 +325,20 @@ def _save_cache(cache):
         tmp = CACHE + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(cache, f, indent=1)
-        os.replace(tmp, CACHE)
+        # Windows refuses the rename while anything (the bake, antivirus) holds the target open.
+        # Retry briefly, then fall back to the old in-place write rather than kill a paid run.
+        for _i in range(6):
+            try:
+                os.replace(tmp, CACHE)
+                return
+            except PermissionError:
+                time.sleep(0.5)
+        with open(CACHE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=1)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def _count_phones_on_property(prop_response):
@@ -452,6 +471,7 @@ def enrich_one(lead, key, deep, cache, relatives=False):
     if _stop_run.is_set():
         return
     case = _lead_key(lead)
+    _touched.add(case)
     parts = _split_addr(_lead_addr(lead))
     entry = cache.get(case) or {}
 
@@ -721,16 +741,22 @@ def pick_best(leads, cache, n, skiptrace=None, max_days=None, equity=None):
     skiptrace = skiptrace if skiptrace is not None else {}
     equity = _board_equity() if equity is None else equity
     out, held = _gated(leads, cache, max_days, 'pick-best')
+    # never looked up at all: a lead with a cached Property result makes no new call here (owners
+    # only), and one cached as a 404 would pay for the same miss twice
+    _n0 = len(out)
+    out = [r for r in out if not _cache_looked(cache.get(_lead_key(r)))]
+    held_cached = _n0 - len(out)
 
     def tier(r):
-        if _skip_miss(skiptrace.get(_lead_key(r))):
-            return 0
-        return 1 if _lead_phone_count(r, skiptrace) == 0 else 2
+        if _lead_phone_count(r, skiptrace):
+            return 2
+        return 0 if _skip_miss(skiptrace.get(_lead_key(r))) else 1
     out.sort(key=lambda r: (tier(r), min(_lead_phone_count(r, skiptrace), 5),
                             0 if equity.get(_lead_key(r)) else 1, _days_to_sale(r), _lead_key(r)))
     tiers = [tier(r) for r in out[:n]]
     _log(f'  --pick-best: {len(out)} eligible (sale within {max_days}d or undated), {held} skipped for '
-         f'a contact hold; taking {min(n, len(out))}: {tiers.count(0)} skip-trace miss, '
+         f'a contact hold, {held_cached} already looked up; taking {min(n, len(out))}: '
+         f'{tiers.count(0)} skip-trace miss, '
          f'{tiers.count(1)} no number, {tiers.count(2)} with numbers; '
          f'{sum(1 for r in out[:n] if equity.get(_lead_key(r)))} with verified equity')
     return out[:n]
@@ -869,8 +895,11 @@ def report(leads, cache, cases, skiptrace=None, lines=True):
             print(f"  {c:24s}  {len(k['owner']):5d}  {len(k['household']):9d}  {len(k['name_only']):9d}  "
                   f"{k['dropped']:16d}  {k['relatives']:3d} ({k['relative_phones']} #)")
         known = set()
-        for src in (r.get('phones'), (skiptrace.get(c) or {}).get('phones')):
-            for p in src or []:
+        _sk = skiptrace.get(c)
+        for src in (r.get('phones'), (_sk if isinstance(_sk, dict) else {}).get('phones')):
+            if not isinstance(src, list):
+                src = [src] if src else []
+            for p in src:
                 d = ''.join(ch for ch in str(p.get('number') if isinstance(p, dict) else p) if ch.isdigit())
                 if len(d) >= 10: known.add(d[-10:])
         new_owner = k['owner'] - known
@@ -1038,6 +1067,9 @@ def main():
     print(f'{len(todo)} lookup(s) queued (concurrency={CONCURRENCY}, throttle={THROTTLE_S}s, deep={args.deep}, '
           f'relatives={args.relatives}, up to {est_calls} API calls = ${est_calls*WP_EST_COST:.2f} at '
           f'${WP_EST_COST:.2f}/query)', flush=True)
+    if args.pick_best:
+        print('  each lead: 1 Property call, plus up to 2 Person calls when Property finds no owner; '
+              'the dollar cap is what stops the run', flush=True)
     print(f'caps: this run ${_run["max"]:.2f} (--max-spend) · today ${wp_spent_today():.2f} spent of '
           f'${WP_DAILY_CAP:.2f} (WP_DAILY_CAP)', flush=True)
     if args.dry_run:
@@ -1070,9 +1102,13 @@ def main():
     print(f'spend: {_run["calls"]} billed request(s) = ${_run["spent"]:.2f} this run · '
           f'${wp_spent_today():.2f} today')
     if args.relatives or args.case or args.pick_miami or args.pick_callable or args.pick_best:
-        report(leads, cache, [_lead_key(r) for r in todo], skiptrace, lines=not args.pick_best)
+        report(leads, cache, [_lead_key(r) for r in todo if not args.pick_best or _lead_key(r) in _touched],
+               skiptrace, lines=not args.pick_best)
     if _stop_run.is_set():
-        print('RESUME: python whitepages_lookup.py --gap --limit 25')
+        if args.pick_best:
+            print('RESUME: run the same --pick-best command again (leads already looked up are skipped)')
+        else:
+            print('RESUME: python whitepages_lookup.py --gap --limit 25')
         print('        (or: python wp_gap_loop.py)')
         sys.exit(3)
 

@@ -283,6 +283,17 @@ rec('--pick-best: a trace that errored is not a miss (it ranks as a no-number le
 rec('--pick-best: never-contact and past-a-year leads are not bought',
     '2025-000201-CA-01' not in _best and '2025-310006-CA-01' not in _best, _best)
 rec('--pick-best: n caps the list', len(L.pick_best(_bp, {}, 2, _bst, equity={})) == 2)
+_cached = {'2025-310002-CA-01': {'result': {'ownership_info': {}}, '_http': 200},
+           '2025-310003-CA-01': {'result': None, '_http': 404},
+           '2025-310004-CA-01': {'_prop_id': 'pro-abcd1234'}}                 # a bare id stamp is not a lookup
+_bc = [L._lead_key(r) for r in L.pick_best(_bp, _cached, 20, _bst, equity={})]
+rec('--pick-best: a lead already looked up (Property hit or 404) is not bought again; a bare id stamp is',
+    '2025-310002-CA-01' not in _bc and '2025-310003-CA-01' not in _bc and '2025-310004-CA-01' in _bc, _bc)
+_bst2 = dict(_bst, **{'2025-310004-CA-01': {'phones': []}})
+_bp2 = [dict(r, phones=['3055550044']) if r['Case #'] == '2025-310004-CA-01' else r for r in _bp]
+_b2 = [L._lead_key(r) for r in L.pick_best(_bp2, {}, 20, _bst2, equity={})]
+rec('--pick-best: a trace miss whose county file has a number is not in the first tier',
+    _b2.index('2025-310004-CA-01') > _b2.index('2025-310003-CA-01'), _b2)
 _ST._EXCLUSION_OVERRIDE = _bad
 rec('--pick-best: an unreadable opt-out ledger buys nothing', L.pick_best(_bp, {}, 20, _bst, equity={}) == [])
 _ST._EXCLUSION_OVERRIDE = None
@@ -294,6 +305,12 @@ import subprocess  # noqa: E402
 _pr = subprocess.run([sys.executable, '-c', 'import whitepages_lookup as L; print(L.WP_EST_COST)'],
                      cwd=HERE, env=dict(os.environ, WP_PRICE='0.20'), capture_output=True, text=True)
 rec('WP_PRICE sets the per-search price', _pr.stdout.strip().endswith('0.2'), _pr.stdout + _pr.stderr)
+_pr0 = subprocess.run([sys.executable, '-c', 'import whitepages_lookup as L; print(L.WP_EST_COST)'],
+                      cwd=HERE, env=dict(os.environ, WP_PRICE='0'), capture_output=True, text=True)
+rec('WP_PRICE=0 cannot switch the caps off (falls back to 0.22)', _pr0.stdout.strip().endswith('0.22'),
+    _pr0.stdout + _pr0.stderr)
+rec('the .tmp cache copy is gitignored', 'whitepages_lookup.json.tmp' in open(os.path.join(HERE, '.gitignore'),
+                                                                        encoding='utf-8').read())
 
 # the cache is written then renamed, so a bake reading it mid-run never sees half a file
 _src = open(os.path.join(HERE, 'whitepages_lookup.py'), encoding='utf-8').read()
