@@ -257,7 +257,48 @@ _bad = _ST._empty_index()
 _bad['dnc_unreadable'] = True
 _ST._EXCLUSION_OVERRIDE = _bad
 rec('--pick-callable: an unreadable opt-out ledger buys nothing', L.pick_callable(_pool, {}, 10, _st) == [])
+
+# 7b. --pick-best: a bought block of searches (2026-10-29). Same gates, any sale within a year.
+_ST._EXCLUSION_OVERRIDE = _ST._empty_index()
+_bp = [
+    {'Case #': '2025-310001-CA-01', 'Address': '1 A ST, Miami', 'owners': 'ROE, AMY', 'days': 5},     # has numbers
+    {'Case #': '2025-310002-CA-01', 'Address': '2 A ST, Miami', 'owners': 'ROE, BEN', 'days': 40},    # trace miss
+    {'Case #': '2025-310003-CA-01', 'Address': '3 A ST, Miami', 'owners': 'ROE, CAL', 'days': 9},     # never traced
+    {'Case #': '2025-310004-CA-01', 'Address': '4 A ST, Miami', 'owners': 'ROE, DEE', 'days': 30},    # never traced, equity
+    {'Case #': '2025-310005-CA-01', 'Address': '5 A ST, Miami', 'owners': 'ROE, EVE', 'days': 300},   # far out, traced miss
+    {'Case #': '2025-310006-CA-01', 'Address': '6 A ST, Miami', 'owners': 'ROE, FAY', 'days': 400},   # past a year
+    {'Case #': '2025-310007-CA-01', 'Address': '7 A ST, Miami', 'owners': 'ROE, GUS', 'days': 7},     # trace errored
+    {'Case #': '2025-000201-CA-01', 'Address': '8 A ST, Miami', 'owners': 'DOE, JOHN', 'days': 3},    # never-contact
+]
+_bst = {'2025-310001-CA-01': {'phones': [{'number': '3055550001'}]},
+        '2025-310002-CA-01': {'phones': []},
+        '2025-310005-CA-01': {'phones': []},
+        '2025-310007-CA-01': {'phones': [], 'outcome': 'error'}}
+_best = [L._lead_key(r) for r in L.pick_best(_bp, {}, 20, _bst, equity={'2025-310004-CA-01': True})]
+rec('--pick-best: skip-trace misses first, then no-number leads (verified equity first), then leads with numbers',
+    _best == ['2025-310002-CA-01', '2025-310005-CA-01', '2025-310004-CA-01', '2025-310007-CA-01',
+              '2025-310003-CA-01', '2025-310001-CA-01'], _best)
+rec('--pick-best: a trace that errored is not a miss (it ranks as a no-number lead)',
+    _best.index('2025-310007-CA-01') > _best.index('2025-310005-CA-01'))
+rec('--pick-best: never-contact and past-a-year leads are not bought',
+    '2025-000201-CA-01' not in _best and '2025-310006-CA-01' not in _best, _best)
+rec('--pick-best: n caps the list', len(L.pick_best(_bp, {}, 2, _bst, equity={})) == 2)
+_ST._EXCLUSION_OVERRIDE = _bad
+rec('--pick-best: an unreadable opt-out ledger buys nothing', L.pick_best(_bp, {}, 20, _bst, equity={}) == [])
 _ST._EXCLUSION_OVERRIDE = None
+rec('--pick-best: an unreadable board twin orders without equity, buys normally',
+    L._board_equity(os.path.join(HERE, 'no-such-board.html')) == {})
+
+# WP_PRICE: a plan bought at another price reads in real dollars
+import subprocess  # noqa: E402
+_pr = subprocess.run([sys.executable, '-c', 'import whitepages_lookup as L; print(L.WP_EST_COST)'],
+                     cwd=HERE, env=dict(os.environ, WP_PRICE='0.20'), capture_output=True, text=True)
+rec('WP_PRICE sets the per-search price', _pr.stdout.strip().endswith('0.2'), _pr.stdout + _pr.stderr)
+
+# the cache is written then renamed, so a bake reading it mid-run never sees half a file
+_src = open(os.path.join(HERE, 'whitepages_lookup.py'), encoding='utf-8').read()
+_sv = _src[_src.index('def _save_cache'):_src.index('def _count_phones_on_property')]
+rec('cache write is atomic (tmp + os.replace)', 'os.replace(' in _sv and ".tmp'" in _sv)
 
 # the nightly line must sit where the batch can reach it: after the :rebuild label, which both the
 # tracerfy and no-tracerfy paths arrive at. On 10-22 it first landed between `goto :rebuild` and
