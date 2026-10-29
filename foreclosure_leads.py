@@ -2651,6 +2651,7 @@ def make_tracker(leads):
         # orsecond and sib are attached above, AFTER _es.apply stamped the label — so a CLEAR can sit
         # beside a lender's separate foreclosure on the same property. Settle it now (equity_state).
         _es.demote_for_bank_fc(d)
+        d['eqc'] = _es.card(d)          # the speak/don't-speak card Call Mode and the board read
         slim.append(d)
 
     # BALLOON LANE (2026-09-08): refresh balloon_leads.json from hardmoney_balloon so the county merge
@@ -2831,6 +2832,7 @@ def make_tracker(leads):
                 if _h:
                     _fwd_flags(_d, _h, _cft)                          # surviving-1st / TAKEN / 2nd-foreclosure flags
                 _es.demote_for_bank_fc(_d)                            # CLEAR beside a 2ND FORECLOSURE -> UNVERIFIED
+                _d['eqc'] = _es.card(_d)                              # the speak/don't-speak card (equity_state.card)
                 # skip-traced phones/emails for this county lead (skiptrace.py now covers all counties)
                 _ph = st.get(_d.get('case', ''))
                 # A number found at the tax-roll MAILING address of a one-parcel Broward filing
