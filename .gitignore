@@ -270,6 +270,7 @@ pipeline_alerts.json.tmp
 gmail.key
 whitepages.key
 whitepages_lookup.json
+whitepages_lookup.json.tmp
 *whitepages*cookies*
 *_cookies.txt
 _wp_*.py

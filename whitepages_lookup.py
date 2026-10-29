@@ -83,6 +83,7 @@ _stop_run = threading.Event()   # set on sustained 429 wall OR budget exhaustion
 _stop_why = {'why': ''}         # which one - the operator decision differs (top up WP vs raise the cap)
 _spend_lock = threading.Lock()
 _run = {'spent': 0.0, 'max': WP_MAX_SPEND, 'calls': 0, 'inflight': 0.0}
+_touched = set()                # cases this run actually worked on (the totals count only these)
 
 
 def wp_spent_today():
@@ -220,8 +221,14 @@ def _first_owner_name(owners_str):
 # ($220/mo for 1,000, overages at $0.22). Verified 2026-08-15. The old 0.10 was copied from a .bat
 # comment and understated the true cost by 2.2x, so bd_budget's shared daily ceiling was letting
 # Whitepages spend roughly double its charged amount. Higher-volume tiers reach $0.15 at 2,500+/mo —
-# raise this only against a plan we actually hold.
-WP_EST_COST = 0.22
+# raise this only against a plan we actually hold. WP_PRICE overrides it for a plan bought at another
+# price (2026-10-29: a $100 / 500-search pack is 0.20), so --max-spend and the ledger read in real dollars.
+try:
+    WP_EST_COST = float(os.environ.get('WP_PRICE', '') or 0.22)
+except ValueError:
+    WP_EST_COST = 0.22
+if WP_EST_COST <= 0:            # a zero price would make every cap unreachable
+    WP_EST_COST = 0.22
 
 
 def _http_get(url, key, retries=3):
@@ -311,8 +318,27 @@ def _log(msg):
 
 
 def _save_cache(cache):
+    # Write-then-rename. The nightly bake reads this file while a manual run may be writing it; a
+    # half-written file made the bake print "WhitepagesPro merge skipped" and ship a board with no
+    # Whitepages numbers at all.
     with _cache_lock:
-        json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=1)
+        tmp = CACHE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=1)
+        # Windows refuses the rename while anything (the bake, antivirus) holds the target open.
+        # Retry briefly, then fall back to the old in-place write rather than kill a paid run.
+        for _i in range(6):
+            try:
+                os.replace(tmp, CACHE)
+                return
+            except PermissionError:
+                time.sleep(0.5)
+        with open(CACHE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=1)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def _count_phones_on_property(prop_response):
@@ -445,6 +471,7 @@ def enrich_one(lead, key, deep, cache, relatives=False):
     if _stop_run.is_set():
         return
     case = _lead_key(lead)
+    _touched.add(case)
     parts = _split_addr(_lead_addr(lead))
     entry = cache.get(case) or {}
 
@@ -622,15 +649,13 @@ def pick_miami(leads, cache, n):
 PICK_MAX_DAYS = int(os.environ.get('WP_PICK_MAX_DAYS', '60'))
 
 
-def pick_callable(leads, cache, n, skiptrace=None, max_days=None):
-    """The n leads the nightly deep search should spend on, any county: person-owned, a property
-    address, no contact hold, never Person-searched, a sale inside max_days (or a lis pendens with
-    no sale yet, after every dated one). Fewest known phones first inside the same week of sale,
-    then soonest sale: the lead with two dead numbers gains more from a deep file than the one
-    with ten. Jesse's method (owner, the household, relatives) on the leads that are about to be
-    called, inside --max-spend and WP_DAILY_CAP."""
-    max_days = PICK_MAX_DAYS if max_days is None else max_days
-    skiptrace = skiptrace if skiptrace is not None else {}
+def _gated(leads, cache, max_days, tag):
+    """Leads a paid deep search may spend on, any county: person-owned, a property address, no
+    contact hold, never Person-searched, a sale inside max_days (or a lis pendens with no sale yet).
+    Then the gates skiptrace applies before it spends (10-18): a §362 stay from the docket cache or
+    PACER, an outreach hold, a closed case, and Do Not Contact / opt-out from the ledger and Call
+    Mode notes. Read only. If they cannot be read, nothing is bought: an unreadable gate is not an
+    open one. -> (eligible, held_count)"""
     out, held = [], 0
     for r in leads:
         k = _lead_key(r)
@@ -649,24 +674,91 @@ def pick_callable(leads, cache, n, skiptrace=None, max_days=None):
             held += 1
             continue
         out.append(r)
-    # The same gates skiptrace applies before it spends (10-18): a §362 stay from the docket cache
-    # or PACER, an outreach hold (Broward / Palm Beach send_hold), a closed case, and Do Not Contact
-    # / opt-out from the ledger and Call Mode notes. Read only. If they cannot be read, nothing is
-    # bought: an unreadable gate is not an open one.
     if out:
         try:
             import skiptrace as _ST
             _idx = _ST.exclusion_index(out, leads)
             kept = [r for r in out if not _ST.exclusion_reasons(r, _idx)]
         except Exception as e:
-            _log(f'  --pick-callable: contact gates unreadable ({str(e)[:80]}); buying nothing')
+            _log(f'  --{tag}: contact gates unreadable ({str(e)[:80]}); buying nothing')
             kept = []
         held += len(out) - len(kept)
         out = kept
+    return out, held
+
+
+def pick_callable(leads, cache, n, skiptrace=None, max_days=None):
+    """The n leads the nightly deep search should spend on (see _gated for who qualifies). Fewest
+    known phones first inside the same week of sale, then soonest sale: the lead with two dead
+    numbers gains more from a deep file than the one with ten. Jesse's method (owner, the
+    household, relatives) on the leads that are about to be called, inside --max-spend and
+    WP_DAILY_CAP."""
+    max_days = PICK_MAX_DAYS if max_days is None else max_days
+    skiptrace = skiptrace if skiptrace is not None else {}
+    out, held = _gated(leads, cache, max_days, 'pick-callable')
     out.sort(key=lambda r: (_days_to_sale(r) // 7, min(_lead_phone_count(r, skiptrace), 5),
                             _days_to_sale(r), _lead_key(r)))
     _log(f'  --pick-callable: {len(out)} eligible (sale within {max_days}d or undated), '
          f'{held} skipped for a contact hold; taking {min(n, len(out))}')
+    return out[:n]
+
+
+PICK_BEST_MAX_DAYS = int(os.environ.get('WP_PICK_BEST_MAX_DAYS', '365'))
+EQ_FACT = ('clear', 'priced')           # equity_state: the only states that are a fact
+
+
+def _skip_miss(hit):
+    """The skip trace ran on this lead and came back with no phone (not an error, not a skip)."""
+    if not isinstance(hit, dict) or hit.get('outcome'):
+        return False
+    return _phone_list_count(hit.get('phones')) == 0
+
+
+def _board_equity(path=None):
+    """case -> True when the board twin says the equity is a fact (clear/priced and above 0).
+    {} when the twin cannot be read: then equity just does not reorder anything."""
+    try:
+        import paths as _P
+        from foreclosure_report import load_board
+        out = {}
+        for r in load_board(path or _P.TWIN):
+            try:
+                out[r.get('case')] = r.get('eqstate') in EQ_FACT and float(r.get('eq') or 0) > 0
+            except (TypeError, ValueError):
+                pass
+        return out
+    except Exception as e:
+        _log(f'  --pick-best: board twin unreadable ({e.__class__.__name__}); equity not used to order')
+        return {}
+
+
+def pick_best(leads, cache, n, skiptrace=None, max_days=None, equity=None):
+    """The n leads a one-off bought block of searches should go to (2026-10-29, Alex's $100 / 500).
+    Same eligibility and gates as the nightly pick (_gated), any sale inside max_days (default a year).
+    Order: the skip trace ran and found nothing, then leads with no number at all, then everyone
+    else by fewest numbers; inside each, verified equity first, then soonest sale."""
+    max_days = PICK_BEST_MAX_DAYS if max_days is None else max_days
+    skiptrace = skiptrace if skiptrace is not None else {}
+    equity = _board_equity() if equity is None else equity
+    out, held = _gated(leads, cache, max_days, 'pick-best')
+    # never looked up at all: a lead with a cached Property result makes no new call here (owners
+    # only), and one cached as a 404 would pay for the same miss twice
+    _n0 = len(out)
+    out = [r for r in out if not _cache_looked(cache.get(_lead_key(r)))]
+    held_cached = _n0 - len(out)
+
+    def tier(r):
+        if _lead_phone_count(r, skiptrace):
+            return 2
+        return 0 if _skip_miss(skiptrace.get(_lead_key(r))) else 1
+    out.sort(key=lambda r: (tier(r), min(_lead_phone_count(r, skiptrace), 5),
+                            0 if equity.get(_lead_key(r)) else 1, _days_to_sale(r), _lead_key(r)))
+    tiers = [tier(r) for r in out[:n]]
+    _log(f'  --pick-best: {len(out)} eligible (sale within {max_days}d or undated), {held} skipped for '
+         f'a contact hold, {held_cached} already looked up; taking {min(n, len(out))}: '
+         f'{tiers.count(0)} skip-trace miss, '
+         f'{tiers.count(1)} no number, {tiers.count(2)} with numbers; '
+         f'{sum(1 for r in out[:n] if equity.get(_lead_key(r)))} with verified equity')
     return out[:n]
 
 
@@ -678,6 +770,8 @@ def build_todo(leads, cache, args, skiptrace=None):
         return pick_miami(leads, cache, args.pick_miami)
     if getattr(args, 'pick_callable', 0):
         return pick_callable(leads, cache, args.pick_callable, skiptrace)
+    if getattr(args, 'pick_best', 0):
+        return pick_best(leads, cache, args.pick_best, skiptrace)
     if args.case:
         by = {_lead_key(r): r for r in leads}
         out = []
@@ -779,18 +873,49 @@ def lead_contacts(lead, entry):
     return out
 
 
-def report(leads, cache, cases):
-    """One line per lead: counts only. Safe to paste into chat."""
+def report(leads, cache, cases, skiptrace=None, lines=True):
+    """One line per lead (lines=True), then totals: counts only. Safe to paste into chat. A property
+    record on a different parcel (APN gate) counts for its Person half only, as the bake does."""
     by = {_lead_key(r): r for r in leads}
-    print('\nper-lead result (counts only):')
-    print('  case                      owner  household  name-only  dropped-namesake  relatives(with #)')
+    skiptrace = skiptrace if skiptrace is not None else {}
+    if lines:
+        print('\nper-lead result (counts only):')
+        print('  case                      owner  household  name-only  dropped-namesake  relatives(with #)')
+    t = {'looked': 0, 'any': 0, 'owner_leads': 0, 'owner_new': 0, 'new_owner_leads': 0, 'household': 0,
+         'name_only': 0, 'had_none_now_owner': 0}
     for c in cases:
         r, e = by.get(c), cache.get(c)
         if not r or not e:
-            print(f'  {c:24s}  not looked up'); continue
+            if lines: print(f'  {c:24s}  not looked up')
+            continue
+        if _parcel_verdict(r, e) == 'mismatch':
+            e = {k: v for k, v in e.items() if k != 'result'}
         k = lead_contacts(r, e)
-        print(f"  {c:24s}  {len(k['owner']):5d}  {len(k['household']):9d}  {len(k['name_only']):9d}  "
-              f"{k['dropped']:16d}  {k['relatives']:3d} ({k['relative_phones']} #)")
+        if lines:
+            print(f"  {c:24s}  {len(k['owner']):5d}  {len(k['household']):9d}  {len(k['name_only']):9d}  "
+                  f"{k['dropped']:16d}  {k['relatives']:3d} ({k['relative_phones']} #)")
+        known = set()
+        _sk = skiptrace.get(c)
+        for src in (r.get('phones'), (_sk if isinstance(_sk, dict) else {}).get('phones')):
+            if not isinstance(src, list):
+                src = [src] if src else []
+            for p in src:
+                d = ''.join(ch for ch in str(p.get('number') if isinstance(p, dict) else p) if ch.isdigit())
+                if len(d) >= 10: known.add(d[-10:])
+        new_owner = k['owner'] - known
+        t['looked'] += 1
+        t['any'] += bool(k['owner'] or k['household'] or k['name_only'])
+        t['owner_leads'] += bool(k['owner'])
+        t['owner_new'] += len(new_owner)
+        t['new_owner_leads'] += bool(new_owner)
+        t['household'] += len(k['household'])
+        t['name_only'] += len(k['name_only'])
+        t['had_none_now_owner'] += bool(not known and k['owner'])
+    print(f"\nTOTALS: {t['looked']} lead(s) looked up · {t['any']} got any number · "
+          f"{t['owner_leads']} got an owner-graded number")
+    print(f"        {t['owner_new']} owner number(s) we did not have, on {t['new_owner_leads']} lead(s) · "
+          f"{t['had_none_now_owner']} lead(s) went from no number to an owner number")
+    print(f"        {t['household']} household number(s) · {t['name_only']} name-only (unconfirmed) number(s)")
 
 
 def schema(cache):
@@ -820,6 +945,9 @@ def main():
     ap.add_argument('--pick-callable', type=int, default=0, metavar='N',
                     help='the N leads about to be called (any county, sale within WP_PICK_MAX_DAYS, '
                          'fewest phones first) with no contact hold and no Person search yet')
+    ap.add_argument('--pick-best', type=int, default=0, metavar='N',
+                    help='a bought block of searches: skip-trace misses, then no-number leads, then the '
+                         'rest, verified equity and soonest sale first (sale within WP_PICK_BEST_MAX_DAYS)')
     ap.add_argument('--estimate', action='store_true',
                     help='print what a full --pick-callable --relatives sweep would cost, $0')
     ap.add_argument('--relatives', action='store_true',
@@ -865,7 +993,8 @@ def main():
         _save_cache(cache)
         print(f'stamped {stamped} wp_prop_id(s) into cache (Marisela preserved)', flush=True)
     if args.ensure_prop_ids and not (args.gap or args.all or args.upgrade or args.case or args.stats
-                                     or args.pick_miami or args.pick_callable or args.estimate
+                                     or args.pick_miami or args.pick_callable or args.pick_best
+                                     or args.estimate
                                      or args.report or args.schema):
         return
 
@@ -923,7 +1052,7 @@ def main():
     if args.max_spend is not None:
         _run['max'] = float(args.max_spend)
     todo = build_todo(leads, cache, args, skiptrace=skiptrace)
-    if not args.case and not args.pick_miami and not args.pick_callable:
+    if not args.case and not args.pick_miami and not args.pick_callable and not args.pick_best:
         _before = len(todo)
         todo = [r for r in todo if not contact_hold(r)]
         if len(todo) != _before:
@@ -938,6 +1067,9 @@ def main():
     print(f'{len(todo)} lookup(s) queued (concurrency={CONCURRENCY}, throttle={THROTTLE_S}s, deep={args.deep}, '
           f'relatives={args.relatives}, up to {est_calls} API calls = ${est_calls*WP_EST_COST:.2f} at '
           f'${WP_EST_COST:.2f}/query)', flush=True)
+    if args.pick_best:
+        print('  each lead: 1 Property call, plus up to 2 Person calls when Property finds no owner; '
+              'the dollar cap is what stops the run', flush=True)
     print(f'caps: this run ${_run["max"]:.2f} (--max-spend) · today ${wp_spent_today():.2f} spent of '
           f'${WP_DAILY_CAP:.2f} (WP_DAILY_CAP)', flush=True)
     if args.dry_run:
@@ -969,10 +1101,14 @@ def main():
     print(f'cache -> whitepages_lookup.json ({len(cache)} entries)')
     print(f'spend: {_run["calls"]} billed request(s) = ${_run["spent"]:.2f} this run · '
           f'${wp_spent_today():.2f} today')
-    if args.relatives or args.case or args.pick_miami or args.pick_callable:
-        report(leads, cache, [_lead_key(r) for r in todo])
+    if args.relatives or args.case or args.pick_miami or args.pick_callable or args.pick_best:
+        report(leads, cache, [_lead_key(r) for r in todo if not args.pick_best or _lead_key(r) in _touched],
+               skiptrace, lines=not args.pick_best)
     if _stop_run.is_set():
-        print('RESUME: python whitepages_lookup.py --gap --limit 25')
+        if args.pick_best:
+            print('RESUME: run the same --pick-best command again (leads already looked up are skipped)')
+        else:
+            print('RESUME: python whitepages_lookup.py --gap --limit 25')
         print('        (or: python wp_gap_loop.py)')
         sys.exit(3)
 
