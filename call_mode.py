@@ -6425,19 +6425,24 @@ function pasteCheck(r, raw){
   if(h) return {num:num, why:'Not dialed: ' + h};
   return {num:num, why:''};
 }
-/* ---- EMAIL FROM THE CARD, NO BRIDGE (2026-10-24, Alejandro: "whitepages has emails too that we can
-   input copy and paste ... go straight templated to emails to go straight out like morning worker and
-   i dont want to have a bridge"). The address goes in the same box as a number; the card composes the
-   board's email for this lead's stage (the block above, one copy), opens the mail app or Gmail with
-   it filled in, and logs one ch:'email' touch once the operator confirms it went. The board's
-   _mailHist reads that touch, so the stage advances on both surfaces; `ln` (confirmed bridge sends)
-   seeds the count so a lead cadence already emailed does not get a second first touch.
-   NOT LOOSENED: hardSuppressed() (person opt-out, hard no, wrong number, dead), a reply on file, the
-   closed three-email ladder, the bridge's first-touch bounce pause and the investor lane all refuse.
-   The address itself is the operator's: a pasted address is not domain-filtered the way the
-   worker's auto-send list is, same as the board's "use by hand if you know it is good". */
+/* ---- EMAIL FROM THE CARD (2026-10-24 paste; the send is the bridge's).
+   The address goes in the same box as a number. The card composes the board's email for this
+   lead's stage (the block above, one copy) and hands it to POST /send, the same request the
+   Morning Worker uses. That is what decides the address is verified, picks the From address
+   (warm-up aliases, Reply-To on bsgflorida.com), and applies the opt-out ledger, the bounce
+   list, the stay/county hold, the first-touch pause, the slow restart and the daily caps.
+   This page does not open the mail app or Gmail. Those would leave from whatever account the
+   phone is signed into, and none of those checks would run.
+   What this page still refuses before the screen opens, because it can see it without the
+   ledger: hardSuppressed() (person opt-out, hard no, wrong number, dead), a reply on file, the
+   closed three-email ladder, a baked first-touch rule of 'paused', and the investor lane.
+   slow_restart and the daily caps are not reimplemented here. The bridge applies them when
+   Send is tapped, and a refusal is shown as the bridge wrote it. `ln` (confirmed bridge
+   sends) still seeds the stage so a lead cadence already emailed does not get a second
+   first touch. A touch is written only after /send answers ok. */
 var MAIL_OK = (typeof _mailBodies === 'function' && typeof _subjLine === 'function' && typeof _mailPick === 'function');
 var _MAIL = null;
+var _mailSendP = null;
 function _mailAddr(raw){
   var m = String(raw||'').trim().toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/);
   return m ? m[0] : '';
@@ -6523,13 +6528,11 @@ function composeMail(r, addr, lg){
   if(stage !== 'cold') subj = 'Re: ' + subj;   /* threads under the first email, same as the board */
   return {to:addr, subj:subj, body:_mailPick(B, stage, early, lg), stage:stage, early:early, lang:lg};
 }
-function _mailtoHref(M){ return 'mailto:' + M.to + '?subject=' + encodeURIComponent(M.subj) + '&body=' + encodeURIComponent(M.body); }
-function _gmailHref(M){ return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(M.to) + '&su=' + encodeURIComponent(M.subj) + '&body=' + encodeURIComponent(M.body); }
 function _stageWord(st){
   return st==='cold' ? 'first touch' : st==='follow' ? 'follow-up #2' : st==='final' ? 'final note #3'
        : st==='replied' ? 'they replied' : 'ladder closed';
 }
-/* One ch:'email' touch, written only after the operator says it went. The address is saved on the
+/* One ch:'email' touch, written only after /send answers ok. The address is saved on the
    lead (notes.wpe) so the board shows it and the next visit offers it again. */
 function mailLog(r, M, how){
   var n = notes[r.c] = notes[r.c] || {status:'', note:''};
@@ -6539,6 +6542,40 @@ function mailLog(r, M, how){
                   out:'Email sent — ' + _stageWord(M.stage) + ' (' + how + ', address pasted from Whitepages)',
                   to:M.to, by:caller()});
   saveNotes(); try{ queueSync(); }catch(e){}
+}
+/* POST /send, the Morning Worker's request. Success is j.ok === true and nothing else: a 200
+   with ok false (stale opt-out ledger, unreadable list) is a refusal. The bridge's err is the
+   message shown. A phone cannot reach 127.0.0.1 on the laptop, and that is a refusal too.
+   Nothing here opens a mail client when the bridge is down. */
+function mailViaBridge(r, M){
+  return new Promise(function(resolve){
+    var done = false;
+    var fin = function(res){ if(done) return; done = true; resolve(res); };
+    var slow = setTimeout(function(){
+      fin({ok:false, why:'The send bridge has not answered yet. This email was not logged. If the laptop may still be sending it, check the mail ledger before trying again.'});
+    }, 150000);
+    var payload = {
+      to: M.to, subj: M.subj, body: M.body,
+      meta: {c: r.c || '', owner: String(firstName(r) || r.on || r.o || '').slice(0, 80),
+             addr: String(r.a || '').slice(0, 120), lang: M.lang || 'en',
+             pcs: r.pcs || []}
+    };
+    var unreachable = 'The send bridge on the laptop did not answer, so this email was not sent. Paste-an-email goes out only through that bridge, from the company address, after the same checks as every other send. Open Call Mode on the laptop that runs the bridge and try again.';
+    var fail = function(why){ clearTimeout(slow); fin({ok:false, why:why}); };
+    try{
+      fetch('http://127.0.0.1:8823/send', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      }).then(function(rs){
+        return rs.json().then(function(j){
+          clearTimeout(slow);
+          j = j || {};
+          if(j.ok === true) fin({ok:true, to: _mailAddr(j.to) || M.to, why:''});
+          else fin({ok:false, why: String(j.err || 'The send bridge refused this email.')});
+        }, function(){ fail('The send bridge answered something this page could not read, so this email was not sent.'); });
+      }, function(){ fail(unreachable); });
+    }catch(e){ fail(unreachable); }
+  });
 }
 /* back: where Back / confirm return. The dial card by default; the Find-a-number list passes its own,
    because a lead with no number has no dial card to return to. */
@@ -6555,24 +6592,34 @@ function screenMail(r, raw, back){
     + '<div class="mailk">Subject</div><div class="mailv"><b>' + esc(M.subj) + '</b></div>'
     + '<div class="mailk">Message</div><pre class="mailbody">' + esc(M.body) + '</pre>'
     + (s.addr ? '' : '<div class="pcnote bad">No mailing address in your signature. Set it on the board under Sender so the email carries one (CAN-SPAM).</div>')
-    + '<div id="mlsend">'
-    +   '<a id="mlapp" class="pcgo" href="' + esc(_mailtoHref(M)) + '">&#9993; Send from your mail app</a>'
-    +   '<a id="mlgm" class="pcgo alt" target="_blank" rel="noopener" href="' + esc(_gmailHref(M)) + '">Send from Gmail</a>'
-    +   '<div class="pcnote">Opens with everything filled in; you press Send there. Then come back and confirm, so the lead shows it.</div>'
-    + '</div>'
-    + '<div id="mlconf" style="display:none">'
-    +   '<button type="button" id="mly" class="pcgo">Yes, it sent &mdash; log it</button>'
-    +   '<button type="button" id="mln" class="ghost" style="margin-top:8px">It did not send</button>'
-    + '</div>'
+    + '<div class="pcnote">This send goes through the laptop bridge, from the company address (the bsgfl.com and biscaynesolutionsgroup.com warm-up aliases, Reply-To on bsgflorida.com). The bridge sends it only when the address is one the pipeline already verified, the lead is clear to contact, and the daily limits have room. Your mail app is not opened.</div>'
+    + '<button type="button" id="mlgo" class="pcgo">Send from the company address</button>'
+    + '<div id="mlwhy" class="pcnote bad" style="display:none"></div>'
     + '<button type="button" id="mlback" class="ghost" style="margin-top:12px">&#8592; Back to the card</button>'
     + '</div><div class="sheetpad"></div>';
   wireLang();
-  var how = '';
-  function opened(h){ how = h; $('mlsend').style.display = 'none'; $('mlconf').style.display = 'block'; }
-  $('mlapp').addEventListener('click', function(){ opened('mail app'); });
-  $('mlgm').addEventListener('click', function(){ opened('Gmail'); });
-  $('mly').onclick = function(){ mailLog(r, M, how || 'mail app'); toast('Email logged on this lead'); ret(); };
-  $('mln').onclick = function(){ $('mlconf').style.display = 'none'; $('mlsend').style.display = 'block'; };
+  var sending = false;
+  $('mlgo').onclick = function(){
+    if(sending) return;
+    sending = true;
+    $('mlgo').disabled = true;
+    $('mlgo').textContent = 'Sending\u2026';
+    var why = $('mlwhy'); if(why) why.style.display = 'none';
+    _mailSendP = mailViaBridge(r, M).then(function(res){
+      if(res.ok){
+        if(res.to) M.to = res.to;
+        mailLog(r, M, 'company mail');
+        toast('Email sent from the company address');
+        ret();
+        return;
+      }
+      sending = false;
+      var b = $('mlgo');
+      if(b){ b.disabled = false; b.textContent = 'Send from the company address'; }
+      var box = $('mlwhy');
+      if(box){ box.textContent = res.why || 'The send bridge refused this email.'; box.style.display = 'block'; }
+    });
+  };
   $('mlback').onclick = function(){ ret(); };
 }
 /* Addresses already pasted on this lead (here, the board or a teammate's phone): one tap each. */
@@ -6596,7 +6643,7 @@ function pasteBlock(r){
     + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="pcclip" class="pcclip">Paste</button>' : '')
     + '</div>'
     + '<button type="button" id="pcgo" class="pcgo" disabled>Call this number</button>'
-    + '<div class="pcnote" id="pcwhy">Saved on this lead and logged like any call' + (em ? ' or email' : '') + '. Pasted numbers are not checked against the do-not-call registry.</div>'
+    + '<div class="pcnote" id="pcwhy">Saved on this lead and logged like any call' + (em ? '. An email goes out only through the laptop send bridge, from the company address' : '') + '. Pasted numbers are not checked against the do-not-call registry.</div>'
     + _wpeList(r)
     + '</div>';
 }
@@ -7866,7 +7913,7 @@ function textStage(r){
 __TEXTTPLJS__
 /* ---- EMAIL BODIES: the board's own compose block (call_mode.extract_mail_js), baked with the same
    words the Morning Worker and the nightly sender use. Empty when the bake failed; MAIL_OK is then
-   false and the card shows no email box. Composed on this page, handed to the mail app: no bridge. */
+   false and the card shows no email box. Composed on this page, sent by POST /send on the laptop. */
 __MAILJS__
 var MAIL_PAUSE = __MAILPAUSE__;   /* the bridge's first-touch bounce rule at build time: {rule, why} */
 var MAIL_LLC = __MAILLLC__;       /* entity.display_llc(): the company name as it may legally be shown */
