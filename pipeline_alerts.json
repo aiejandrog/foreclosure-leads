@@ -1,37 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-10-30T11:07:46-04:00",
+   "at": "2026-10-30T17:50:10-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-10-30T11:07:46-04:00",
+   "at": "2026-10-30T17:50:10-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-29 21:16): on battery; send server port 8823 is not listening; 2 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 21h ago."
   },
   {
-   "at": "2026-10-30T11:07:46-04:00",
+   "at": "2026-10-30T17:50:10-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 38 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 38 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge. Bridge log: the bridge first started today at 15:25, after the 8 AM run."
   },
   {
-   "at": "2026-10-30T11:07:46-04:00",
-   "key": "stale-refresh-flag",
-   "severity": "warn",
-   "text": "refresh-running.flag is 16.5h old, past the 6h refresh limit, so it was ignored and this file was published."
-  },
-  {
-   "at": "2026-10-30T11:07:46-04:00",
-   "key": "tracerfy-credits",
+   "at": "2026-10-30T17:50:10-04:00",
+   "key": "paid-reads-cap",
    "severity": "fail",
-   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
+   "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   }
  ],
- "published_at": "2026-10-30T11:07:46-04:00",
+ "published_at": "2026-10-30T17:50:10-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -42,7 +36,7 @@
    "holds": 600,
    "leads_checked": 0,
    "provider": "courtlistener",
-   "pull_age_h": 13.85,
+   "pull_age_h": 20.56,
    "pull_ok": true,
    "readable": true,
    "reason": "ok",
@@ -139,7 +133,7 @@
    "state": "finished"
   },
   "paid_reads": {
-   "cap": 100000.0,
+   "cap": 0.0,
    "month": "2026-10",
    "readable": true,
    "spent": 80.5733
@@ -171,12 +165,9 @@
    "tasks_ok": true
   },
   "refresh_flag": {
-   "age_h": 16.5,
-   "stale": true
+   "stale": false
   },
-  "tracerfy": {
-   "credits": 1
-  }
+  "tracerfy": {}
  },
  "version": 1
 }
