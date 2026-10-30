@@ -40,7 +40,7 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Option B: do not probe; leave DEALFLOW_OR_FOLIO off | Risk: the folio search stays unproven against the live site; Miami common-name lien mismatches continue
 - Recommendation: A, after D4. Full first pass afterwards is estimated at ~$1.22 for ~370 Miami leads (per-solve price from code; lead count estimated).
 - Fallback in progress: flag stays off; code merges after QA PASS (off = byte-identical).
-- Status: OPEN
+- Status: DECIDED 2026-10-30 (Alex: "we do not need to spend any money"): no live folio probe. DEALFLOW_OR_FOLIO stays off.
 
 ### D3: Lift the refusal of scan-read Miami judgment figures? (equity, 2026-10-29, E-c)
 - Touches: a rule (judgment_for_analyze refuses scan-read figures until a 12-case review)
@@ -56,7 +56,7 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Option B: do not renew | Risk: Miami lien chains stay frozen at the last pull; folio search can't run
 - Recommendation: Alex to check the renewal price first; see docs/agent-team/EQUITY-LIVE-RUN.md on claude/agents-equity.
 - Fallback in progress: none needed; nothing runs live.
-- Status: OPEN
+- Status: DECIDED 2026-10-30 (Alex: "we do not need to spend any money"): do NOT renew Official Records. Miami lien chains stay frozen at the last pull.
 
 ### D5: The paid-reads monthly cap is effectively off (Lead, 2026-10-29, found while checking the refresh)
 - Touches: spend cap. paid_reads.json beside the code (gitignored, laptop) says {"monthly_cap": 100000}; the code default is $50. The October ledger total is $80.57: pacer_stay $59.00, records_liens $8.67, lis_pendens $6.01, gen_records_qs $2.92, broward_plaintiff $2.76, palmbeach_liens $1.21.
@@ -64,14 +64,14 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Option B: leave it | Risk: no ceiling on 2Captcha/PACER spend if a step loops
 - Recommendation: A. Also check why pacer_stay spent $59 in October when CLAUDE.md (2026-10-16) says PACER is by-hand only.
 - Fallback in progress: nothing changed.
-- Status: OPEN
+- Status: DECIDED 2026-10-30 (Alex): monthly_cap set to 0 in paid_reads.json on the laptop (gitignored, per machine). Every paid 2Captcha read is refused. Side effect to know: the lis pendens sweep and the Palm Beach / Broward lien solves stop updating until the cap is raised, e.g. {"monthly_cap": 5}. The Whitepages button has its own caps and is unaffected. The desktop needs the same edit.
 
 ### D6: Stop the nightly paying 2Captcha to mint Miami Records links that come back "blocked"? (Lead, 2026-10-29)
 - Touches: spend. refresh step [2/5] gen_records_qs.py solves Turnstile ($) per owner, but the Official Records login lapsed 10/26 (D4), so every owner tonight printed "no records / blocked"
 - Option A: skip gen_records_qs until D4 is renewed | Risk: no new Records deep links; the board falls back to open-the-search + copy-the-name
 - Option B: leave it | Risk: paying for solves that cannot work, every night
 - Recommendation: A (a one-line guard or env flag; that is a .bat change, so it goes through QA as a PR).
-- Status: OPEN
+- Status: RESOLVED by D5 on 2026-10-30: with the cap at 0, step 2's gen_records_qs solves are refused, so no money is spent and no 2Captcha wait. No code change.
 
 ### D7: Rename the booking page slug so the first-touch email stops scoring a "free" hit? (deliverability, 2026-10-29, task 4)
 - Touches: outreach_copy.BOOKING_URL (cal.com/bsgflorida/free-records-review) and the cal.com page itself. Email copy trigger.
@@ -145,7 +145,7 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Option B: leave | Risk: disk copy can show a soft no for a person who said hard no, until status DNC is merged
 - Recommendation: A, by the suppression-surface owner.
 - Fallback in progress: none.
-- Status: OPEN
+- Status: RULED 2026-10-30 by the Lead under Alex's delegation ("make qa decide and make decisions"): a newer hard no replaces an older soft no. DO NOT CONTACT already wins, so nobody is contacted either way; this fixes the recorded reason. Queued as a fixer item after the merge train (LEGAL REVIEW, QA decides). Alex may overrule.
 
 ### D16: Call Mode now posts /notes and /text to the bridge (callfix, 2026-10-30) -- LEGAL REVIEW in PR title
 - Touches: suppression (POST /notes runs optout_sync.ledger_from_notes, so a DNC tapped in Call Mode reaches optouts.json sooner, add-only) and the text ledger (POST /text writes text_sent.json). No send path, no copy, no gate changed; send_server.py untouched.
