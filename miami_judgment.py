@@ -1120,6 +1120,32 @@ def judgment_for_analyze(report, allow_ocr=False):
     return agreed_amount(candidates) if candidates else None
 
 
+REPORT_DIR = 'judgment_reports'     # under DEALFLOW_DIR: `--out judgment_reports/<case>.json`
+COURT_COPY = 'court copy'
+
+
+def court_judgment(case, base=None):
+    """(amount, 'court copy') from this case's stored run report, or None. $0, no network.
+
+    Reads DEALFLOW_DIR/judgment_reports/<case>.json (what `--out` wrote) and asks
+    judgment_for_analyze, so every refusal there stands: page-verified, fully read, tied to the case,
+    pages agree on one total, and NO figure read off a scan until a human has checked it. Every Miami
+    judgment seen so far is a scan, so this returns None until that review has happened. Never raises.
+    """
+    try:
+        import paths as P
+        name = re.sub(r'[^A-Za-z0-9._-]', '_', str(case or ''))
+        if not name:
+            return None
+        path = os.path.join(base or os.path.join(P.DEALFLOW_DIR, REPORT_DIR), name + '.json')
+        with open(path, encoding='utf-8') as fh:
+            report = json.load(fh)
+        amount = judgment_for_analyze(report)
+        return (float(amount), COURT_COPY) if amount else None
+    except Exception:
+        return None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('case', help='Miami-Dade case number, e.g. 2026-020206-CC-25')

@@ -49,7 +49,7 @@ chk('clear + judgment not posted: fact but may_quote False', c['fact'] and not c
     and c['judgment_source'] == 'not posted' and c['net'] is None, str(c))
 
 # court copy provenance
-c = E.card(row(OK_CLEAR, judg_src='court copy'))
+c = E.card(row(OK_CLEAR, judg_src='court copy', judgc=111000))
 chk('court copy source', c['judgment_source'] == 'court copy')
 
 # lender foreclosure on the lead's own case: an empty "clear" is demoted to none

@@ -2651,6 +2651,8 @@ def make_tracker(leads):
         # orsecond and sib are attached above, AFTER _es.apply stamped the label — so a CLEAR can sit
         # beside a lender's separate foreclosure on the same property. Settle it now (equity_state).
         _es.demote_for_bank_fc(d)
+        if rlh and rlh.get('judgment_source') == 'court copy' and rlh.get('judgment_used'):
+            d['judg_src'] = 'court copy'; d['judgc'] = rlh['judgment_used']   # DEALFLOW_COURT_JUDGMENT=1
         d['eqc'] = _es.card(d)          # the speak/don't-speak card Call Mode and the board read
         slim.append(d)
 

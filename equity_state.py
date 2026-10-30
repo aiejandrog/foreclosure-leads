@@ -369,17 +369,19 @@ def card(lead):
     try:
         import diligence_flags as _df
         basis, bsrc = _df.basis_of(lead), _df.basis_src_of(lead)
-        debt = _df.known_debt_of(lead)
+        debt = _df.known_debt_of(dict(lead, judg=_num(lead.get('judgc'))) if lead.get('judg_src') == COURT_COPY
+                                 and _num(lead.get('judgc')) > 0 else lead)
     except Exception:
         basis, bsrc, debt = 0.0, 'county', {'total': 0.0}
     # judgment: a zero or a `ju` row is "not posted", never a $0 debt
-    jv = _num(lead.get('judg') if lead.get('judg') is not None else lead.get('judgment'))
+    court = lead.get('judg_src') == COURT_COPY and _num(lead.get('judgc')) > 0
+    jv = _num(lead.get('judgc')) if court else _num(lead.get('judg') if lead.get('judg') is not None else lead.get('judgment'))
     unknown = bool(lead.get('ju') or lead.get('judgment_unknown'))
     judgment = jv if (jv > 0 and not unknown) else None
     if judgment is None:
         jsrc = 'not posted'
     else:
-        jsrc = COURT_COPY if lead.get('judg_src') == COURT_COPY else 'docket'
+        jsrc = COURT_COPY if court else 'docket'
     liens = []
     for l in (lead.get('orliens') or []):
         if not isinstance(l, dict):

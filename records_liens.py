@@ -525,6 +525,20 @@ def folio_merge(name_models, folio_models, folio):
     return out, False
 
 
+def judgment_for(case, board_judgment):
+    """(judgment for analyze, source). DEALFLOW_COURT_JUDGMENT=1 swaps in a page-verified, fully read,
+    case-tied final-judgment figure from a stored miami_judgment report (no network); source is then
+    'court copy'. Flag off, or anything less than that, returns the board's own figure and None."""
+    if os.environ.get('DEALFLOW_COURT_JUDGMENT') != '1':
+        return board_judgment, None
+    try:
+        import miami_judgment as _MJ
+        cj = _MJ.court_judgment(case)
+    except Exception:
+        cj = None
+    return cj if cj else (board_judgment, None)
+
+
 def fetch_by_folio(folio, qs_cache=None, fetch=None):
     """Instruments the clerk indexed on this folio, or None. `fetch(folio_digits)` is the paid search
     (default: fetch_via_turnstile with the folio searchtype; spend cap, monthly ledger and ledger lock
@@ -1835,6 +1849,7 @@ def _run(a, ap):
             case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
             folio = r.get('Folio', '') or r.get('year_folio', '')
             judg = num(r.get('judgment'))
+            judg, _jsrc = judgment_for(case, judg)
             models = None
             _paid0 = paid
             _def_blocked = False   # a paid search (the owner's or a defendant's) the clerk never answered
@@ -2016,6 +2031,9 @@ def _run(a, ap):
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)
             res['searched_as'] = _searched
+            if _jsrc:
+                res['judgment_source'] = _jsrc          # 'court copy': equity_state.card reads it
+                res['judgment_used'] = judg
             if _folio_only:
                 # no name search answered: the folio's own instruments are all we saw, and most newer
                 # mortgages carry no folio. Never a clear, never a priced FACT (equity_state: truncated).
