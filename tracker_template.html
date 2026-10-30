@@ -17610,6 +17610,7 @@ function openMailModal(){
 }
 (function(){ const b=document.getElementById('mailbatch'); if(b) b.addEventListener('click', openMailModal); })();
 const _DNC = s => s === 'DO NOT CONTACT';
+const _AY_STAGES = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];   // same list as send_server._AFTER_YES_STAGES
 const _DEAD = s => s === 'Dead' || s === 'DO NOT CONTACT';
 const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.touches.length-1].d || '') : '';
 function _mergeLead(local, remote){
@@ -17689,7 +17690,29 @@ function _mergeLead(local, remote){
   ch.touches = Math.max(0, tt.length - (local.touches||[]).length);
   if(tt.length) out.touches = tt;
   // follow-up: the sooner defined date
-  if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
+  if(remote.next && !_DEAD(out.status) && (!out.next || remote.next < out.next)) out.next = remote.next;   // a suppressed lead is handed no next step (D14)
+  /* AFTER THE YES (D14, mirrors send_server._merge_note). Call Mode writes stage, stageAt, nextStep,
+     equityVerified, keepOrSell, apptUnverified and afterYesAt as ONE unit; this merge used to drop
+     all of them from a teammate's copy, so their next-step dates never reached this board. The side
+     with the larger afterYesAt supplies the whole unit and its stage, so an older push never walks a
+     stage back. stageAt dates union, earliest per stage. A hard suppression (DO NOT CONTACT / Dead,
+     from either side; out.status was settled above) is never overridden and is never handed a next
+     step: the whole unit is skipped. `replied` is sticky. */
+  if(remote.replied && !out.replied){ out.replied = remote.replied; if(remote.repliedNote != null) out.repliedNote = remote.repliedNote; if(remote.repliedStop) out.repliedStop = remote.repliedStop; ch.note = true; }
+  const _lay = +local.afterYesAt || 0, _ray = +remote.afterYesAt || 0;
+  if((_lay || _ray) && !_DEAD(out.status)){
+    const _win = _ray > _lay ? remote : local;
+    if(_ray !== _lay){
+      ['nextStep','equityVerified','keepOrSell','apptUnverified'].forEach(k => { if(_win[k] != null) out[k] = _win[k]; else delete out[k]; });
+      out.afterYesAt = Math.max(_lay, _ray);
+      if(_win.nextStep && _win.nextStep.date) out.next = _win.nextStep.date;
+      if(_AY_STAGES.indexOf(_win.status) >= 0) out.status = _win.status;   // the newer save's stage; an older push never walks it back
+      ch.deal = true;
+    }
+    const _sa = {};
+    [local.stageAt, remote.stageAt].forEach(m => { if(m && typeof m === 'object') Object.keys(m).forEach(s => { if(!(s in _sa) || String(m[s]) < String(_sa[s])) _sa[s] = m[s]; }); });
+    if(Object.keys(_sa).length && JSON.stringify(_sa) !== JSON.stringify(local.stageAt || {})){ out.stageAt = _sa; ch.deal = true; }
+  }
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
   // numbers pasted from Whitepages on a Call Mode card: union, so a paste on either phone survives
