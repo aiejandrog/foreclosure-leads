@@ -3265,12 +3265,16 @@ def bake_mail_js(block, where='call mode'):
 
 
 def _mail_pause_json():
-    """The bridge's first-touch bounce rule at build time, counts-free: {rule, why}. 'paused' holds a
-    cold email from the card the way it holds one at /send; follow-ups are not first touches."""
+    """The bridge's first-touch bounce rule at build time: {rule, why, dead, sent, day}. The counts are
+    aggregate (no address); they let the card say '5 of 42 bounced' instead of the raw reason code.
+    'paused' holds a cold email from the card the way it holds one at /send; follow-ups are not first
+    touches."""
     try:
         import send_server as _SS
         h = _SS._bounce_health() or {}
-        return json.dumps({'rule': str(h.get('ft_rule') or 'unmeasured')[:24], 'why': str(h.get('ft_why') or '')[:80]})
+        return json.dumps({'rule': str(h.get('ft_rule') or 'unmeasured')[:24], 'why': str(h.get('ft_why') or '')[:80],
+                           'dead': int(h.get('day_dead') or 0), 'sent': int(h.get('day_sent') or 0),
+                           'day': str(h.get('day_date') or '')[:10]})
     except Exception:
         return json.dumps({'rule': 'unknown', 'why': ''})
 
@@ -6416,8 +6420,17 @@ function mailCheck(r, raw){
   if(st === 'replied') return {addr:addr, why:'They already replied by email. Answer them in your inbox, not with a template.'};
   if(st === 'done') return {addr:addr, why:'Three emails already went to this person and the last one promised no more. Call only.'};
   if(st === 'cold' && MAIL_PAUSE && MAIL_PAUSE.rule === 'paused')
-    return {addr:addr, why:'First emails are paused (bounce rate' + (MAIL_PAUSE.why ? ': ' + MAIL_PAUSE.why : '') + '). Follow-ups still go; a first email waits.'};
+    return {addr:addr, why:'First emails are paused: ' + mailPauseWhy() + ' Follow-ups still go; a first email waits.'};
   return {addr:addr, why:'', stage:st};
+}
+/* Why first emails are paused, in words. MAIL_PAUSE.why is a code ('day_rate'); the card used to print it raw. */
+function mailPauseWhy(){
+  var m = MAIL_PAUSE || {}, n = +m.sent || 0, d = +m.dead || 0;
+  if(n > 0)
+    return d + ' of ' + n + ' first emails' + (m.day ? ' sent ' + m.day : '') + ' bounced (' + Math.round(100 * d / n) + '%).';
+  var w = {day_rate:'one day\'s first emails bounced over the limit.', hard_bounces:'too many hard bounces in one day.',
+           aggregate:'first emails bounced over the limit.', list_unreadable:'the bounce list could not be read.'};
+  return w[m.why] || ('the bounce rate is over the limit' + (m.why ? ' (' + m.why + ')' : '') + '.');
 }
 /* The email for this lead, this stage, this language: the board's block, the board's values. */
 function composeMail(r, addr, lg){
