@@ -15422,6 +15422,11 @@ function genMorningWorker(lane, autostart){
     +           'if(BRIDGE_HOLD){ runlog("autostart_skipped", {why:"bridge_hold", hold:String(BRIDGE_HOLD).slice(0,60)}); addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
     +           'if(BRIDGE_OK!==true){'
     +             'runlog("autostart_skipped", {why:"bridge_not_confirmed", cause:BRIDGE_WHY||"unknown", probes:_bt+1});'
+    // ONE RETRY TOKEN (proposal, 2026-10-22; inert unless fcAutoRetry is 'true' on this profile).
+    // A bridge that was not up is the one skip worth a second unattended try: nothing was sent and
+    // nothing about the leads changed. The board's 08:30 open spends this token once; a hold, a
+    // stale board, the cap or an empty queue never write it. Same origin (blob: from the board).
+    +             'try{ var _d=new Date(), _k="dealflow_autostart_retry_"+_d.getFullYear()+"-"+String(_d.getMonth()+1).padStart(2,"0")+"-"+String(_d.getDate()).padStart(2,"0"); if(!localStorage.getItem(_k+"_used")) localStorage.setItem(_k, "1"); }catch(e){}'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
@@ -20269,6 +20274,14 @@ async function boot(){
      records what the board decided before it opened one (armed or not, already ran, stale, popup).
      The 8 AM key is written BEFORE the stale check, so "key present" never proved a run began.
      Counts and codes only; fire-and-forget; nothing reads it to decide. */
+  function _retryToken(){
+    try{
+      return localStorage.getItem('fcAutoRetry') === 'true'
+          && localStorage.getItem('dealflow_autostart_retry_' + _today()) === '1'
+          && !localStorage.getItem('dealflow_autostart_retry_' + _today() + '_used')
+          && new Date().getHours() < 10;
+    }catch(e){ return false; }
+  }
   function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
   // #worker=open (Call Mode's nav link, 2026-10-24): show the worker in MANUAL mode and nothing
   // else. Never routed through the =morning branch below, which is the scheduler's auto-send path.
@@ -20306,6 +20319,22 @@ async function boot(){
           _shareToast('AUTO-RUN BLOCKED: this machine is not the armed runner. Worker opened in MANUAL mode — press Start yourself, or arm this machine only if it is the scheduled sender.');
       }catch(e){} }, 500);
       try { console.info('[dealflow] #worker=morning ignored for auto-send — fcArmedRunner not set on this device.'); } catch(e){}
+    } else if(_already && _retryToken()){
+      /* SECOND TRY AFTER A BRIDGE THAT WAS NOT UP (proposal, 2026-10-22, OFF by default).
+         Only when this profile is armed for it (fcAutoRetry === 'true'), the worker left today's
+         one retry token (it writes one only for bridge_not_confirmed), and it is still before 10.
+         The token is spent here before anything opens, so a reload or a third open cannot use it.
+         Every other gate (stale board below, hours, cap, the bridge check itself) runs again. */
+      try { localStorage.removeItem('dealflow_autostart_retry_' + _today());
+            localStorage.setItem('dealflow_autostart_retry_' + _today() + '_used', String(Date.now())); } catch(e){}
+      _runlog('retry_after_bridge', {});
+      setTimeout(function(){
+        try{
+          var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
+          var _stale = (_age != null && _age >= 1);
+          openMorningWorker(_autoRunLane(), !_stale);
+        }catch(e){}
+      }, 500);
     } else if(_already){
       _runlog('blocked_already_ran_today', {});
       // Opened again the same day: show the worker, but never auto-send. Say why, out loud.
