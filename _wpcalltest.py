@@ -137,7 +137,8 @@ def main():
     try:
         for f in ('send_server.py', 'bridge_auth.py', 'bounce_scan.py', 'stay_gate.py', 'mail_guard.py',
                   'deliverability.py', 'sync_gate.py', 'text_hold.py', 'optout_sync.py',
-                  'whitepages_lookup.py', 'wp_contacts.py', 'ownership_gate.py', 'bd_budget.py'):
+                  'whitepages_lookup.py', 'wp_contacts.py', 'ownership_gate.py', 'bd_budget.py', 'bk_lookup.py',
+                  'bk_waiver.json'):
             shutil.copy(HERE / f, work / f)
         today = dt.date.today().isoformat()
         (work / 'sync_status.json').write_text(json.dumps({
@@ -157,11 +158,33 @@ def main():
             lead(11, '100 NW 11 ST, Miami, FL 33101', 'ZZTESTK ALPHA'),      # over the cap
             lead(12, '100 NW 12 ST, Miami, FL 33101', 'ZZTESTL ALPHA'),      # a number on the ledger
         ]
+        # federal-check (Broward / Palm Beach) leads for the attorney's unchecked-lead waiver
+        def fl_lead(case, county, n):
+            return {'Case #': case, 'Address': '100 NW %d AVE, Fort Lauderdale, FL 33301' % (50 + n),
+                    'owners': 'ZZTESTW%d ALPHA' % n, 'County': county, 'folio': '50-0000-000-%04d' % n}
+        for i, (cs, co) in enumerate((('CACE-99-777701', 'BROWARD'), ('502099CA007771XXXXMB', 'PALM BEACH'),
+                                      ('CACE-99-777704', 'BROWARD'), ('CACE-99-777705', 'BROWARD'),
+                                      ('CACE-99-777708', 'BROWARD'), ('CACE-99-777709', 'BROWARD'),
+                                      ('CACE-99-777710', 'BROWARD'), ('CACE-99-777799', 'BROWARD'),
+                                      ('CACE-99-777712', 'BROWARD')), 1):
+            leads.append(fl_lead(cs, co, i))
         (work / 'leads_final.json').write_text(json.dumps(leads), encoding='utf-8')
         (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {
-            '2099-000004-CA-01': {'optout': '2099-01-01'}}}), encoding='utf-8')
-        (work / 'never_contact.json').write_text(json.dumps(['2099-000005']), encoding='utf-8')
+            '2099-000004-CA-01': {'optout': '2099-01-01'}, 'cace-99-777708': {'optout': '2099-01-01'}}}), encoding='utf-8')
+        (work / 'never_contact.json').write_text(json.dumps(['2099-000005', 'CACE-99-777799']), encoding='utf-8')
+        now = time.time()
+        ent = lambda **k: dict({'verdict': 'unavailable', 'why': '', 'searched': False, 'ok_check': False, 'err': '',
+                                't': now, 'cases': [], 'src': 'courtlistener'}, **k)
+        (work / 'bk_lead_cache.json').write_text(json.dumps({
+            'CACE-99-777704': ent(verdict='clear', searched=True, ok_check=True),          # clear_unconfirmed
+            'CACE-99-777705': ent(verdict='active', searched=True, ok_check=True, cases=[
+                {'no': '26-77705', 'court': 'flsb', 'open': True, 'match': 'exact', 'filed': '2026-09-01'}]),
+        }), encoding='utf-8')
+        (work / 'pacer_stay_cache.json').write_text(json.dumps({
+            'CACE-99-777709': {'env': 'prod', 'verdict': 'active', 'a': True, 't': now, 'bd': '2026-09-01',
+                               'cases': [{'no': '26-77709', 'open': True}]}}), encoding='utf-8')
         (work / 'worker_notes.json').write_text(json.dumps({'notes': {
+            'CACE-99-777710': {'status': 'Dead'},
             '2099-000006-CA-01': {'status': 'Dead'},
             '2099-000009-CA-01': {'status': 'Do Not Contact'}}}), encoding='utf-8')
         cache = {'2099-%06d-CA-01' % i: {'a': False, 'bd': '', 'sl': '', 'b': 0, 'v': 5, 't': 0}
@@ -175,7 +198,9 @@ def main():
         keys = work / 'bridge_keys.json'
         env = dict(os.environ, DEALFLOW_DIR=str(work), DEALFLOW_BRIDGE_KEYS=str(keys),
                    DEALFLOW_BRIDGE_REQUIRE_KEY='1', DEALFLOW_BRIDGE_RELOAD_POLL_S='0',
-                   WP_DAILY_CAP='1.00', WP_MAX_SPEND='2', WP_THROTTLE_S='0')
+                   WP_DAILY_CAP='1.00', WP_MAX_SPEND='2', WP_THROTTLE_S='0',
+                   DEALFLOW_BK_CACHE=str(work / 'bk_lead_cache.json'))
+        env.pop('DEALFLOW_BK_ALLOW_UNCHECKED', None)
         sys.path.insert(0, str(HERE))
         os.environ['DEALFLOW_BRIDGE_KEYS'] = str(keys)
         import bridge_auth as BA
@@ -289,6 +314,45 @@ def main():
         got = {x['n'] for x in j.get('numbers') or []}
         rec('a number on the do-not-contact ledger is not returned', '3055550199' not in got and '3055550111' in got
             and j.get('dropped_dnc') == 1, j)
+        print("-- the attorney's unchecked-lead waiver (Alex, 2026-10-30: let those leads flow through)")
+        proc.terminate(); proc.wait(10)
+        (work / 'optouts.json').write_text(json.dumps({'_dealflow_notes': True, 'notes': {
+            '2099-000004-CA-01': {'optout': '2099-01-01'}, 'cace-99-777708': {'optout': '2099-01-01'}}}), encoding='utf-8')
+        env2 = dict(env, WP_DAILY_CAP='10')
+        proc = subprocess.Popen([sys.executable, '_run.py'], cwd=str(work), stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, env=env2)
+        any(call(port, '/health', key=dev_key)[0] == 200 or time.sleep(0.25) for _ in range(80))
+        for c, label in (('CACE-99-777701', 'Broward, no federal check'),
+                         ('502099CA007771XXXXMB', 'Palm Beach, no federal check'),
+                         ('CACE-99-777704', 'Broward, CourtListener clear_unconfirmed')):
+            j = look(c)
+            rec('waiver: %s is looked up' % label, j.get('ok') is True and j.get('spent') == 0.22, j)
+        for c, want, label in (('CACE-99-777705', 'stay', 'an open CourtListener match'),
+                               ('CACE-99-777709', 'stay', 'a PACER active entry'),
+                               ('CACE-99-777708', 'ledger', 'the opt-out ledger'),
+                               ('CACE-99-777710', 'dead', 'a Dead note'),
+                               ('CACE-99-777799', 'never_contact', 'never_contact.json'),
+                               ('2099-000007-CA-01', 'stay', 'a Miami-Dade stem stay')):
+            n0 = nreq()
+            j = look(c)
+            rec('waiver: %s is still refused (%s)' % (label, want),
+                j.get('ok') is False and j.get('blocked') == want and nreq() == n0, j)
+        (work / 'pacer_stay_cache.json').write_text('{torn', encoding='utf-8')
+        n0 = nreq()
+        j = look('CACE-99-777712')
+        rec('waiver: a torn PACER file is refused', j.get('ok') is False and j.get('blocked') == 'stay' and nreq() == n0, j)
+        (work / 'pacer_stay_cache.json').unlink()
+        proc.terminate(); proc.wait(10)
+        env3 = dict(env2, DEALFLOW_BK_ALLOW_UNCHECKED='0')
+        proc = subprocess.Popen([sys.executable, '_run.py'], cwd=str(work), stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, env=env3)
+        any(call(port, '/health', key=dev_key)[0] == 200 or time.sleep(0.25) for _ in range(80))
+        n0 = nreq()
+        j = look('CACE-99-777712')
+        rec('DEALFLOW_BK_ALLOW_UNCHECKED=0 wins: a lead with no federal check is refused again, no request',
+            j.get('ok') is False and j.get('blocked') == 'stay' and nreq() == n0, j)
+        rec('no request left the machine in the waiver phase',
+            not any(l.startswith('EGRESS') for l in reqlog.read_text(encoding='utf-8').splitlines()))
     finally:
         if proc:
             proc.terminate()
