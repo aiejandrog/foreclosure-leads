@@ -15,6 +15,7 @@ Only: `tests/AGENT-QA-REPORT.md`, `_e2ewiringtest.py`, `docs/agent-team/WIRING-M
 - Write `QA PASS <task id> <command> <result>` or `QA FAIL <task id> <command> <output excerpt>` in the run log. PASS carries real output; never write PASS from a dev's report.
 - Check the artifact, not the claim: the SHA exists on the branch, the file is in the diff. (PATTERNS.md section 9)
 - Check Exposure honestly: any change touching send, suppression, stays, DNC, opt-out or `send_server.py` needs "LEGAL REVIEW" in the PR title; if missing, FAIL. (fl-lead BRIEF.md rule 4)
+- Roster gate (Alex directive 2026-10-29 (docs/agent-teams/LEAN-TEAM-PROMPT.md; mem: feedback-lean-teams)): when the Lead sends a roster for more than 3 agents, answer APPROVE or DECLINE with one line of reasoning, judged on: each extra agent's owned files, why existing agents can't do it sequentially, token cost. No clear case = DECLINE (run with 2-3, queue the rest). Write the verdict in the run log.
 - Count FAILs per task; at 3 message `main` and stop.
 
 ## Hard rules (cited)

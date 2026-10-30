@@ -15,7 +15,8 @@ A rule marked **PROPOSAL, needs Alex** has no source yet.
 
 ## 2. Roster
 
-- Lead (the main session, fixed for life) + 3-5 teammates. 5-6 tasks each. (NOTES > Roles; Limits)
+- Lead (the main session, fixed for life) + **2-3 agents by default**, Sonnet. 5-6 tasks each. Scope is settled before spawning; use the round template docs/agent-teams/LEAN-TEAM-PROMPT.md (Lead-owned). (Alex directive 2026-10-29 (docs/agent-teams/LEAN-TEAM-PROMPT.md; mem: feedback-lean-teams); NOTES > Roles; Limits)
+- **Roster gate:** more than 3 only after QA approves. The Lead first spawns only `qa` and sends the roster: each extra agent, the files it owns, why that work can't be done by an existing agent sequentially, expected token cost. QA answers APPROVE or DECLINE with one line. DECLINE or no clear answer = run with 2-3 and queue the rest. Record the verdict in the run log. (Alex directive 2026-10-29 (docs/agent-teams/LEAN-TEAM-PROMPT.md; mem: feedback-lean-teams))
 - Exactly one **QA gate**: runs tests and writes PASS/FAIL, edits no product code. Role file: .claude/agents/qa-gate.md.
 - Dev roles own files (section 3). Existing role files: equity-dev, callmode-dev, board-dev. Spawn by name in the spawn prompt; say what to call each one. (NOTES > Roles; Subagent definitions)
 - Teammates do not inherit the lead's conversation. The spawn prompt carries the brief path, the task, the owned files, the branch. (NOTES > Roles; Limits)
