@@ -1761,6 +1761,30 @@ def _call_equity_parts(d):
     return eq, 0
 
 
+def _eqc_slim(c):
+    """The baked equity card, trimmed for the handset. None when the lead has none (the page then falls
+    back to eqv, which is the same clear/priced test). Amounts are RECORDED amounts, never payoffs."""
+    if not isinstance(c, dict) or not c.get('state'):
+        return None
+
+    def num(v):
+        try:
+            return float(v) if v is not None and not isinstance(v, bool) else None
+        except (TypeError, ValueError):
+            return None
+    liens = []
+    for x in (c.get('liens') or [])[:8]:
+        if isinstance(x, dict):
+            liens.append([str(x.get('type') or '')[:24], num(x.get('amount')), str(x.get('recorded') or '')[:10],
+                          str(x.get('source') or '')[:24]])
+    out = {'st': str(c.get('state'))[:12], 'lb': str(c.get('label') or '')[:90],
+           'f': 1 if c.get('fact') else 0, 'q': 1 if c.get('may_quote') else 0,
+           'j': num(c.get('judgment')), 'js': str(c.get('judgment_source') or '')[:14],
+           'li': liens or None, 'b': num(c.get('basis')), 'bs': str(c.get('basis_source') or '')[:8] or None,
+           'n': num(c.get('net')) if c.get('may_quote') else None}
+    return {k: v for k, v in out.items() if v is not None}
+
+
 def _call_equity(d):
     """Equity % for the dial queue, or None when it is not known. See _call_equity_parts."""
     return _call_equity_parts(d)[0]
@@ -2422,6 +2446,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # "UNDERWATER $480k" about a lead whose own card said "Equity 4% VERIFIED". A dict
             # literal will not warn you; only the payload does.
             'eqv': 1 if str(d.get('eqstate') or '') in ('clear', 'priced') else 0,
+            # EQUITY CARD (equity_state.card, baked as d['eqc']). Short keys. st state, lb label, f fact,
+            # q may_quote, j judgment, js its source, li recorded liens [type, amount, recorded, source],
+            # b basis, bs basis source, n net. Call Mode reads this and never recomputes value - judgment.
+            'eqc': _eqc_slim(d.get('eqc')),
             'ss': (d.get('orsurvsen') if isinstance(d.get('orsurvsen'), (int, float)) else None),
             'oc': _s('orconf', 6), 'td': _n('taxDue'), 'et': _n('etax'),
             # ---- clock ----
@@ -7593,7 +7621,7 @@ function screenLead(){
     if(r.sr.amj) clock += '<span class="chip">amended judgment '+esc(_sm(r.sr.amj))+(r.sr.ama?' $'+Math.round(r.sr.ama).toLocaleString():'')+'</span>'; }
   clock += '</div>';
 
-  var mny = '<div class="grid">'
+  var mny = eqCardHtml(r) + '<div class="grid">'
     + kv('They owe (with interest)', (r.jf && r.py!=null ? 'at least ' : '') + money(r.py))
     + kv('Property value', money(r.v))
     + kv('Equity', r.e==null ? '<span class="nc">not known</span>' : (Math.round(r.e)+'%'+(has(r,'E')?' <span class="nc">gross</span>':'')
@@ -7602,7 +7630,7 @@ function screenLead(){
          // `el`: the equity above already has a recorded lien off it, which "They owe" does not
          // include. Without this, owe + value on the card do not add up to the percent.
          + (r.el ? ' <span class="nc">after a $'+Math.round(r.el).toLocaleString()+' recorded lien, indicative</span>' : '')
-         + (r.eqv ? ' <span class="ok">VERIFIED</span>' : ' <span class="nc">unverified — chain not traced</span>')))
+         + (eqFact(r) ? ' <span class="ok">VERIFIED</span>' : ' <span class="nc">Equity not verified -- do not quote a number</span>')))
     + kv('Surviving 1st', r.ss==null ? '<span class="nc">not checked</span>' : (r.ss===0?'none':money(r.ss)), 1)
     + '</div>';
   var mc='';
@@ -8085,18 +8113,16 @@ function screenOutcome(){
   addRef('Property', esc(propertyLabel(r)));
   addRef('Owner', esc(ownerLabel(r)));
   if(r.v || r.jg || r.py){
-    var eqv = (r.v && (r.py || r.jg)) ? (+r.v - (+r.py || +r.jg)) : 0;
-    /* UNDERWATER MUST SHOW. Showing equity only when positive quietly hid the single fact that
-       changes the whole call: BARBOSA BRADS is owed $537k on a $473k house with the sale TODAY —
-       there is no equity to protect, so cash-for-keys and surplus are off the table and the
-       honest conversation is a short sale or the bank's own workout. Silence there reads as
-       "fine". */
+    /* RULE 6 (2026-10-29): this used to print value minus payoff/judgment as "equity" with no check on
+       how well the debt was known. A dollar equity or UNDERWATER figure now comes only from eqc.n, which
+       exists only when eqc.q (fact AND judgment known). Otherwise the line says the equity is unverified. */
+    var _en = (eqMay(r) && r.eqc.n != null) ? +r.eqc.n : null;
     addRef('Money', (r.v ? 'worth <b>' + _money(r.v) + '</b>' : '')
       + ((r.py || r.jg) ? ' &middot; owed ' + _money(r.py || r.jg) : ' &middot; owed <b>not posted</b>')
-      + (eqv > 0 ? ' &middot; equity <b style="color:#7ad48f">' + _money(eqv) + '</b>'
-         : (eqv < 0 ? ' &middot; <b style="color:#ff8a80">UNDERWATER ' + _money(-eqv)
+      + (_en != null && _en > 0 ? ' &middot; equity <b style="color:#7ad48f">' + _money(_en) + '</b>'
+         : (_en != null && _en < 0 ? ' &middot; <b style="color:#ff8a80">UNDERWATER ' + _money(-_en)
                       + '</b> <span class="mut">(no equity &mdash; short sale / lender workout, not cash-for-keys)</span>'
-            : '')));
+            : ' &middot; <b style="color:#ff8a80">Equity not verified -- do not quote a number</b>')));
   }
   /* THE DATE LINE — three honest states, because r.x and r.d don't mean one thing. r.x is
      auction OR filed date; r.d uses 9999 as the NO-AUCTION sentinel. The first version tested
@@ -8122,7 +8148,7 @@ function screenOutcome(){
   if(r.p && r.p.length > 1) addRef('Their numbers',
     r.p.map(function(x, i){ return (i === phIdx ? '<b>' + fmt(x) + ' (dialing)</b>' : fmt(x)); }).join(' &middot; '));
   var refBlock = refRows
-    ? '<div class="refbox"><div class="ltag" style="margin:0 0 6px">THE FILE &mdash; for reference on this call</div>'
+    ? eqCardHtml(r) + '<div class="refbox"><div class="ltag" style="margin:0 0 6px">THE FILE &mdash; for reference on this call</div>'
       + '<table class="reft">' + refRows + '</table>'
       + '<div class="flinks" style="margin-top:9px">'
       + fileLinks(r).map(function(x){
@@ -8331,6 +8357,152 @@ function _afterMail(r){
   }
   return '';
 }
+/* EQUITY IS A FACT ONLY WHEN THE BAKE SAYS SO (2026-10-29). eqc.fact is equity_state's clear / priced;
+   unpriced is a CEILING and none / unchecked a GUESS, neither of which may be spoken as a number. Rows
+   baked before eqc existed fall back to eqv, which is the same clear/priced test. */
+function eqFact(r){ return !!(r && (r.eqc ? r.eqc.f : r.eqv)); }
+function eqMay(r){ return !!(r && r.eqc && r.eqc.q); }   /* a dollar equity figure may be spoken */
+function _eqUsd(v){ return '$' + Math.round(+v || 0).toLocaleString(); }
+/* THE EQUITY CARD, from the baked eqc (state label, judgment + source, each recorded lien, net). A GUESS
+   or a CEILING gets plain warning words and no figure. Recorded amounts are never called a payoff. */
+function eqCardHtml(r){
+  var c = r && r.eqc, h = '<div class="refbox" id="eqcard"><div class="ltag" style="margin:0 0 6px">EQUITY</div>';
+  if(!c){
+    h += eqFact(r) ? '<div><b style="color:#7ad48f">Verified</b> <span class="mut">(older bake, no detail)</span></div>'
+                   : '<div class="nc"><b>Equity not verified -- do not quote a number</b></div>';
+    return h + '</div>';
+  }
+  var st = c.st || '';
+  h += '<div>' + (c.f ? '<b style="color:#7ad48f">' : '<b style="color:#ff8a80">') + esc(c.lb || st) + '</b>'
+     + ' <span class="mut">[' + esc(st.toUpperCase()) + ']</span></div>';
+  if(!c.f) h += '<div class="nc"><b>Equity not verified -- do not quote a number</b>'
+     + (st === 'unpriced' ? ' <span class="mut">(a ceiling, not a figure)</span>' : ' <span class="mut">(a guess)</span>') + '</div>';
+  h += '<div class="mut" style="margin-top:4px">Judgment: ' + (c.j != null ? '<b>' + _eqUsd(c.j) + '</b> from ' + esc(c.js || 'unknown')
+     : '<b>not posted</b>') + '</div>';
+  (c.li || []).forEach(function(x){
+    h += '<div class="mut">Recorded ' + esc(x[0] || 'lien') + ': ' + (x[1] != null ? _eqUsd(x[1]) : 'amount not read')
+       + (x[2] ? ' &middot; ' + esc(x[2]) : '') + (x[3] ? ' &middot; ' + esc(x[3]) : '') + ' <span class="nc">recorded amount, not a payoff</span></div>';
+  });
+  if(c.q && c.n != null){
+    h += '<div style="margin-top:4px">Net equity: <b style="color:' + (c.n >= 0 ? '#7ad48f' : '#ff8a80') + '">'
+       + (c.n < 0 ? 'UNDERWATER ' + _eqUsd(-c.n) : _eqUsd(c.n)) + '</b> <span class="mut">'
+       + (c.b != null ? 'on ' + _eqUsd(c.b) + (c.bs ? ' (' + esc(c.bs) + ')' : '') + ' value, ' : '')
+       + 'less the judgment and recorded liens above</span></div>';
+  } else if(c.f){
+    h += '<div class="nc" style="margin-top:4px">Judgment not posted: no net figure yet. Do not quote a number.</div>';
+  }
+  return h + '</div>';
+}
+/* AFTER THE YES (2026-10-29). Once a lead is at Appointment or later the job is not "log the call", it
+   is "get this one to a signed, assigned, paid contract". This panel (on the after-call screen whenever
+   the lead's stage is Appointment..CLOSED) records the stage, a REQUIRED dated next step, whether equity
+   is verified and from what source, and keep-or-sell. It writes ONLY onto the case note (n.status = the
+   stage, n.stageAt, n.nextStep {date, what}, n.next, n.equityVerified {ok, source, d}, n.keepOrSell,
+   n.afterYesAt) and rides the same /notes path as every other note field. Nothing is sent to anyone.
+   AY_STAGES must equal the board's stage list (_afteryestest.py pins it). */
+var AY_STAGES = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
+function ayIsStage(s){ return AY_STAGES.indexOf(s) > -1; }
+function ayDateOk(d){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(d||''))) return false;
+  var p = String(d).split('-'), t = new Date(+p[0], +p[1]-1, +p[2]);
+  return t.getFullYear() === +p[0] && t.getMonth() === +p[1]-1 && t.getDate() === +p[2];
+}
+function ayTomorrow(nowMs){
+  var d = new Date(nowMs || Date.now()); d.setDate(d.getDate() + 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+/* Validate-and-write. Returns '' on success, else the reason nothing was saved. f = {stage, date, what,
+   eqOk, eqSource, keepOrSell, fact}. `fact` is eqFact(r): Offer made and everything after it are
+   refused unless the BAKED equity is a fact; ticking "equity verified" by hand does not unlock them. */
+function ayApply(n, f, todayStr, nowMs){
+  if(!n) return 'No lead note';
+  if(n.status === 'DO NOT CONTACT' || n.status === 'Dead') return 'This lead is closed out (' + n.status + ')';
+  if(!ayIsStage(f.stage)) return 'Pick a stage';
+  if(AY_STAGES.indexOf(f.stage) > 0 && !f.fact && n.status !== f.stage)
+    return 'Equity is not verified on this lead. No offer until it is. Stay at Appointment and verify equity first';
+  var date = String(f.date||'').trim();
+  if(f.stage !== 'CLOSED'){
+    if(!date) return 'A next-step date is required before this stage can be saved';
+    if(!ayDateOk(date)) return 'Next-step date must be a real date (YYYY-MM-DD)';
+    if(date < todayStr) return 'Next-step date is in the past';
+  }
+  var src = String(f.eqSource||'').trim();
+  if(f.eqOk && !src) return 'Say where the equity number came from (source) or untick equity verified';
+  var ks = (f.keepOrSell === 'keep' || f.keepOrSell === 'sell' || f.keepOrSell === 'undecided') ? f.keepOrSell : '';
+  n.status = f.stage;
+  n.stageAt = n.stageAt || {};
+  if(!n.stageAt[f.stage]) n.stageAt[f.stage] = todayStr;
+  if(f.stage !== 'CLOSED'){
+    n.nextStep = {date: date, what: String(f.what||'').trim().slice(0,120)};
+    n.next = date;
+  } else {
+    delete n.nextStep;
+  }
+  n.equityVerified = {ok: !!f.eqOk, source: f.eqOk ? src.slice(0,120) : '', d: todayStr};
+  if(ks) n.keepOrSell = ks; else delete n.keepOrSell;
+  if(f.fact) delete n.apptUnverified;
+  n.afterYesAt = nowMs;
+  return '';
+}
+/* Appointment booked on a lead whose equity is not a fact: it still saves, but the next step is forced
+   to "Verify equity" tomorrow and the note says so. Never walks a later stage back. */
+function ayBookedUnverified(n, todayStr, nowMs){
+  if(!n) return;
+  if(AY_STAGES.indexOf(n.status) < 1) n.status = 'Appointment';
+  n.stageAt = n.stageAt || {};
+  if(!n.stageAt.Appointment) n.stageAt.Appointment = todayStr;
+  var t = ayTomorrow(nowMs);
+  n.nextStep = {date: t, what: 'Verify equity'};
+  n.next = t;
+  n.apptUnverified = todayStr;
+  n.equityVerified = {ok: false, source: '', d: todayStr};
+  n.afterYesAt = nowMs;
+}
+/* The panel only needs a next step while the deal is still open and has none. */
+function ayNeedsDate(n){
+  return !!(n && ayIsStage(n.status) && n.status !== 'CLOSED' && !(n.nextStep && ayDateOk(n.nextStep.date)));
+}
+function ayPanelHtml(r){
+  var n = notes[r.c] || {};
+  if(!ayIsStage(n.status)) return '';
+  var ns = n.nextStep || {}, eq = n.equityVerified || {}, ks = n.keepOrSell || '', fact = eqFact(r);
+  var h = '<div class="afterlab">After the yes</div><div id="ay" class="card" style="margin:0 0 10px;padding:10px">'
+    + (n.apptUnverified && !fact ? '<div class="nc" id="ay_unv">Booked on unverified equity. Next step: verify equity.</div>' : '')
+    + '<div class="mut" style="font-size:12px;margin-bottom:6px">Stage, then the next dated step. A stage past Appointment cannot be saved without a date'
+    + (fact ? '.' : ', and Offer made / Under contract wait until equity is verified.') + '</div>'
+    + '<label class="mut" style="font-size:12px">Stage</label><select id="ay_st" style="width:100%;margin:2px 0 8px">'
+    + AY_STAGES.map(function(x){ return '<option' + (n.status===x?' selected':'') + '>' + esc(x) + '</option>'; }).join('')
+    + '</select>'
+    + '<label class="mut" style="font-size:12px">Next step date (required)</label>'
+    + '<input id="ay_dt" type="date" value="' + esc(ns.date||'') + '" style="width:100%;margin:2px 0 8px">'
+    + '<label class="mut" style="font-size:12px">Next step</label>'
+    + '<input id="ay_wh" type="text" maxlength="120" placeholder="e.g. meet at the house 3pm" value="' + esc(ns.what||'') + '" style="width:100%;margin:2px 0 8px">'
+    + '<label style="display:block;font-size:13px;margin:4px 0"><input id="ay_eq" type="checkbox"' + (eq.ok?' checked':'') + '> Equity verified</label>'
+    + '<input id="ay_es" type="text" maxlength="120" placeholder="source (title search, county records, payoff letter...)" value="' + esc(eq.source||'') + '" style="width:100%;margin:2px 0 8px">'
+    + '<label class="mut" style="font-size:12px">Keep or sell</label><select id="ay_ks" style="width:100%;margin:2px 0 8px">'
+    + [['','Not asked yet'],['keep','Wants to keep the house'],['sell','Wants to sell'],['undecided','Undecided']].map(function(x){
+        return '<option value="' + x[0] + '"' + (ks===x[0]?' selected':'') + '>' + esc(x[1]) + '</option>'; }).join('')
+    + '</select>'
+    + '<button id="ay_sv" class="big" style="margin-top:4px">Save the next step</button>'
+    + '<div id="ay_ok" class="mut" style="font-size:12px;margin-top:6px">'
+    + (ns.date ? ('Saved: ' + esc(n.status) + ', next ' + esc(ns.date)) : (n.status==='CLOSED' ? '' : 'No next step saved yet')) + '</div>'
+    + '</div>';
+  return h;
+}
+function ayWire(r){
+  var b = $('ay_sv'); if(!b) return;
+  b.onclick = function(){
+    var n = notes[r.c] = notes[r.c] || {status:'',note:''};
+    var err = ayApply(n, {stage: $('ay_st').value, date: $('ay_dt').value, what: $('ay_wh').value,
+                          eqOk: $('ay_eq').checked, eqSource: $('ay_es').value, keepOrSell: $('ay_ks').value,
+                          fact: eqFact(r)},
+                      today(), Date.now());
+    if(err){ toast(err, {bad:true, ms:4000}); return; }
+    saveNotes(); queueSync();
+    var ok = $('ay_ok'); if(ok) ok.textContent = 'Saved: ' + n.status + (n.nextStep ? ', next ' + n.nextStep.date : '');
+    toast('Next step saved');
+  };
+}
 function afterCall(r, o, nextC){
   try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */
   SCREEN='after';
@@ -8443,6 +8615,8 @@ function afterCall(r, o, nextC){
     + (_nphTop ? '<button id="nph" class="big" style="margin-top:12px">&#128222; Call their next number: '
         + fmt(r.p[_nextPh]) + ' (' + (_nextPh + 1) + ' of ' + r.p.length + ')</button>' : '')
     + book
+    + (o.k === 'appt' && !eqFact(r) ? '<div class="nc" id="ay_unv0">Booked on unverified equity. Verify equity before any number is spoken.</div>' : '')
+    + ayPanelHtml(r)
     + _afterMail(r)
     + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
     + '<div class="afterlab">Call them back</div>'
@@ -8461,7 +8635,15 @@ function afterCall(r, o, nextC){
         : '')
     + '<button id="nx" style="margin-top:14px">Next lead &rarr;</button>'
     + '</div><div class="sheetpad"></div>';
+  /* An open deal with no dated next step does not walk away: that is how an appointment dies. Every
+     leave-this-screen path (Next lead, the callback chips) goes through go(). */
   var go = function(){ advance(r.c, nextC); };
+  var _go0 = go;
+  go = function(){
+    if(ayNeedsDate(notes[r.c])){ toast('Set the next step date first', {bad:true, ms:3500}); var d=$('ay_dt'); if(d) d.focus(); return; }
+    _go0();
+  };
+  ayWire(r);
   $('nx').onclick = go;
   if($('aem')) $('aem').onclick = function(){ screenMail(r, $('aem').getAttribute('data-em')); };
   if($('nph')) $('nph').onclick = function(){
@@ -8647,7 +8829,10 @@ function logOutcome(r,o,digits){
      outcome logged on that serve; a real conversation (talked / appointment / callback) clears the
      retirement outright -- they re-engaged, so ordinary cadence applies again. */
   if(_ns.soft && _ns.open && n.no !== 'hard') n.resurf = (n.resurf||0) + 1;
-  if(o.k==='appt') n.status='Appointment';
+  if(o.k==='appt'){
+    if(AY_STAGES.indexOf(n.status) < 1) n.status='Appointment';   /* never walk Offer made / Under contract back */
+    if(!eqFact(r)) ayBookedUnverified(n, today(), Date.now());
+  }
   else if(o.k==='dnc'){ n.no='hard'; n.noAt=n.noAt||Date.now(); stopEverywhere(r, digits); }
   else if(o.k==='wrong'){ n.wrongown=n.wrongown||today(); n.status=n.status||'Wrong number'; }
   else if(o.k==='talked') n.status=n.status||'Contacted';
