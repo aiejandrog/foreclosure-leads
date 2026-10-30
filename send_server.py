@@ -698,6 +698,8 @@ _ARRAY_KEYS = (
     ('optlog',  lambda o: (str(o.get('ts') or ''), str(o.get('act') or ''), str(o.get('src') or ''))),
 )
 _STATUS_RANK = {'DO NOT CONTACT': 3, 'Dead': 2}
+_AFTER_YES_KEYS = ('nextStep', 'next', 'equityVerified', 'keepOrSell', 'stageAt', 'afterYesAt')
+_AFTER_YES_STAGES = ('Appointment', 'Offer made', 'Under contract', 'Assigned', 'CLOSED')
 
 
 def _merge_note(cur, inc):
@@ -744,9 +746,41 @@ def _merge_note(cur, inc):
         out['status'] = ins_
     if inc.get('cooldownH') is not None and (it >= ct or cur.get('cooldownH') is None):
         out['cooldownH'] = inc.get('cooldownH')
+    # AFTER THE YES (2026-10-29). Call Mode's "After the yes" panel writes the stage (status), stageAt,
+    # nextStep, equityVerified, keepOrSell and afterYesAt as ONE unit. The fill-only loop below would keep
+    # an OLD nextStep forever and the activity-time rule above can keep an old stage, so the unit follows
+    # the larger afterYesAt. A hard suppression (DO NOT CONTACT / Dead, from either side) is never
+    # overridden and never given a next step: the status stays and the unit is left alone.
+    try:
+        cay, iay = int(cur.get('afterYesAt') or 0), int(inc.get('afterYesAt') or 0)
+    except Exception:
+        cay, iay = 0, 0
+    _dead = str(out.get('status') or '') in ('DO NOT CONTACT', 'Dead')
+    if iay > cay and not _dead:
+        for k in ('nextStep', 'equityVerified', 'keepOrSell'):
+            if k in inc:
+                out[k] = inc[k]
+            else:
+                out.pop(k, None)
+        sa = dict(inc['stageAt']) if isinstance(inc.get('stageAt'), dict) else {}
+        for k, v in (cur['stageAt'].items() if isinstance(cur.get('stageAt'), dict) else []):
+            if k not in sa or str(v) < str(sa[k]):
+                sa[k] = v
+        if sa:
+            out['stageAt'] = sa
+        out['afterYesAt'] = iay
+        ns = inc.get('nextStep')
+        if isinstance(ns, dict) and ns.get('date'):
+            out['next'] = ns['date']
+        if ins_ in _AFTER_YES_STAGES:
+            out['status'] = ins_
+    elif cay > iay and not _dead and cs in _AFTER_YES_STAGES:
+        out['status'] = cs        # the stored save is newer: an older push does not walk the stage back
     for k, v in inc.items():
         if k in out or k in ('touches', 'dials', 'optlog', 'badph', 'dntph', 'status', 'cooldownH'):
             continue
+        if _dead and k in _AFTER_YES_KEYS:
+            continue          # a suppressed lead is not handed a next step by a fill
         out[k] = v
     return out, added
 
