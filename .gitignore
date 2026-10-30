@@ -812,3 +812,11 @@ rf_status.json.tmp
 !_cadenceskiptest.py
 # _bouncelisttest: cadence reads a legacy bounced_emails.json list at send time. example.com only.
 !_bouncelisttest.py
+
+# _followupgapstest: reports/followup_gaps.py on invented notes, temp dir only.
+!_followupgapstest.py
+
+# _funneltruthtest: reports/funnel_truth.py on invented notes, temp dir only.
+!_funneltruthtest.py
+# _boardstagetest: board after-the-yes counts, overdue list and eqc chip, extracted JS in node, invented data.
+!_boardstagetest.py

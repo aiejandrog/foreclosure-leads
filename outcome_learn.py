@@ -66,6 +66,53 @@ def marker_counts(dials):
     return counts
 
 
+AY_LADDER = ['Appointment', 'Offer made', 'Under contract', 'Assigned', 'CLOSED']
+AY_OPEN = AY_LADDER[:4]
+
+
+def _ymd(s):
+    s = str(s or '')
+    return s if len(s) == 10 and _date(s, '%Y-%m-%d') else ''
+
+
+def after_yes_counts(notes, today=None):
+    """After-the-yes stages and the next-step date, from Call Mode's note fields (status = stage,
+    stageAt{stage: date}, nextStep{date, what}, next, equityVerified{ok}, apptUnverified). Counts only.
+    Same rules as the board's _funnelStats: a stageAt stamp counts a rung even after the status moved
+    on; the open-deal checks skip opted-out and wrong-owner leads."""
+    today = (today or dt.date.today()).isoformat()
+    c = collections.Counter()
+    for case, n in (notes or {}).items():
+        if str(case)[:1] in ('@', '#') or not isinstance(n, dict):
+            continue
+        st = n.get('status') or ''
+        sa = n.get('stageAt') if isinstance(n.get('stageAt'), dict) else {}
+        rung = AY_LADDER.index(st) if st in AY_LADDER else -1
+        for i, name in enumerate(AY_LADDER):
+            if sa.get(name) and i > rung:
+                rung = i
+        if rung >= 0:
+            c['reached ' + AY_LADDER[0]] += 1
+            for i in (1, 2, 4):
+                if rung >= i:
+                    c['reached ' + AY_LADDER[i]] += 1
+        if n.get('apptUnverified'):
+            c['appointments booked on unverified equity'] += 1
+        if st not in AY_OPEN or n.get('optout') or n.get('wrongown'):
+            continue
+        c['open deals'] += 1
+        ns = n.get('nextStep') if isinstance(n.get('nextStep'), dict) else {}
+        d = _ymd(ns.get('date')) or _ymd(n.get('next'))
+        if not d:
+            c['open deals with no dated next step'] += 1
+        elif d < today:
+            c['open deals with next step overdue'] += 1
+        eqv = n.get('equityVerified')
+        if isinstance(eqv, dict) and eqv.get('ok'):
+            c['open deals with equity verified'] += 1
+    return dict(c)
+
+
 def _load(path, default):
     try:
         with open(path, encoding='utf-8') as f:
@@ -218,6 +265,7 @@ def compute(days=None, today=None):
         'notes_received_utc': wn.get('received_utc'),
         'totals': dict(tot),
         'outcomes': dict(oc_all),
+        'after_yes': after_yes_counts(notes, today),
         'by_signal': {s: {v: dict(c) for v, c in vals.items()} for s, vals in tab.items()},
     }
 
@@ -233,6 +281,8 @@ def render(res):
                   t.get('unlinked attempt markers', 0)))
     out.append('Unlinked markers are not confirmed missing outcomes; legacy rows may lack timing links.')
     out.append('outcomes: ' + ', '.join('%s %d' % kv for kv in sorted(res['outcomes'].items(), key=lambda x: -x[1])))
+    if res.get('after_yes'):
+        out.append('after the yes: ' + ', '.join('%s %d' % kv for kv in sorted(res['after_yes'].items())))
     convos = sum(v for k, v in res['outcomes'].items() if k in CONVO)
     if convos < MIN_TRUST:
         out.append('VERDICT: %d conversations logged. Under %d, no signal below can be trusted to re-rank '

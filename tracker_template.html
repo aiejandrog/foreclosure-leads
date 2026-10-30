@@ -432,6 +432,7 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 
 /* ============================== KPI BAND ============================== */
 .kpis{display:flex;gap:12px;padding:14px 16px 2px;flex-wrap:wrap}
+.fuover{margin:6px 16px 0;padding:8px 12px;border:1px solid #d1242f;border-radius:8px;font-size:13px}.fuover a{margin-left:6px}.eqc{font-weight:600}.eqc-ok{color:#1a7f37}.eqc-none,.eqc-unchecked,.eqc-unpriced{color:#9a6700}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-lg);padding:14px 18px;box-shadow:var(--sh-2);position:relative;
   overflow:hidden;transition:transform .28s var(--e-lux),box-shadow .28s var(--e-lux)}
@@ -2428,6 +2429,7 @@ __REFRESHSTATUS__
 </div>
 </div>
 <div id="kpis" class="kpis"></div>
+<div id="fuoverdue" class="fuover" hidden></div>
 <button id="toTop" title="Scroll back to top">&#8593; Top</button>
 <div id="shorthelp"><div class="sh-t">Keyboard</div>
 <div class="sh-r"><span>Focus search</span><kbd>/</kbd></div>
@@ -2982,6 +2984,19 @@ function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_de
    counted as $0, so the equity shown is the MOST it can be: a ceiling, rendered with "≤". */
 function _liensVerified(r){ return !!r && (r.eqstate === 'clear' || r.eqstate === 'priced'); }
 function _eqCeiling(r){ return !!r && r.st !== 'TD' && !_liensVerified(r); }
+/* EQUITY CARD (read-only display of the baked r.eqc from equity_state.card()). Shows the state, whether a
+   figure may be spoken (may_quote), and the net only when may_quote. It changes no gate: _liensVerified,
+   _eqCeiling and every send/dial hold still read r.eqstate. A recorded lien amount is never labelled a payoff. */
+var _EQC_NAME = {clear:'Verified clear', priced:'Verified, priced', unpriced:'Ceiling only', none:'Unverified', unchecked:'Not checked'};
+function _eqcChip(r, fmtFn){
+  var c = r && r.eqc; if(!c || typeof c !== 'object') return '';
+  var st = _EQC_NAME[c.state] ? c.state : 'unchecked';
+  var f = fmtFn || (typeof fmtK === 'function' ? fmtK : function(v){ return '$' + Math.round(v); });
+  var q = c.may_quote === true && (st === 'clear' || st === 'priced');   // display only: never says quote on an unfactual state
+  var txt = 'Equity: ' + _EQC_NAME[st] + ' &middot; ' + (q ? 'may quote' : 'do not quote');
+  if(q && typeof c.net === 'number') txt += ' &middot; net ~' + esc(f(c.net));
+  return '<div class="meta eqc eqc-' + st + (q ? ' eqc-ok' : '') + '" title="' + esc(c.why || c.label || '') + '">' + txt + '</div>';
+}
 /* One text for "net equity" wherever a dollar figure is printed. fmtFn formats dollars. */
 // ROW + CARD equity text. Precedence: no worth -> nothing; debt unknown -> "eq unknown"; a gross or
 // condo figure -> "~"; liens not verified -> "≤" (the most it can be); else the plain figure.
@@ -4105,29 +4120,77 @@ const STATUS_OPTS = ['','Letter sent','Skip-traced','Called - no answer','Called
   'CLOSED','Lost - sold at auction','Dead','DO NOT CONTACT'];
 // Terminal states worth date-stamping so the funnel can be measured over a real time window.
 const _OUTCOME_STATES = ['Offer made','Under contract','Assigned','CLOSED','Lost - sold at auction'];
+// AFTER-THE-YES (2026-10-29). Call Mode's after-the-yes panel writes onto notes[case]: status = stage,
+// stageAt{stage:'YYYY-MM-DD'} (first date reached), nextStep{date,what} (mirrored to n.next),
+// equityVerified{ok,source,d}, keepOrSell, afterYesAt. Read-only here: counts and a list, nothing is sent.
+const _AY_OPEN = ['Appointment','Offer made','Under contract','Assigned'];   // deal in motion, needs a dated next step
+const _AY_LADDER = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
+// The dated next step on a note: nextStep.date, else the mirrored/legacy n.next. '' when none/invalid.
+function _nextStepDate(n){
+  if(!n) return '';
+  const ok = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d||'')) ? String(d) : '';
+  return ok(n.nextStep && n.nextStep.date) || ok(n.next);
+}
+// Highest ladder rung a lead has reached, by status OR by the stageAt stamps (a lead that reached
+// Appointment and was later marked Dead still reached it). -1 = never.
+function _ayRung(n){
+  if(!n) return -1;
+  let top = _AY_LADDER.indexOf(n.status||'');
+  const sa = n.stageAt;
+  if(sa && typeof sa === 'object') _AY_LADDER.forEach(function(st, i){ if(sa[st] && i > top) top = i; });
+  return top;
+}
+// Open follow-ups whose next step date has passed, oldest first. Open = a conversation-or-later lead
+// that is not closed out, opted out or the wrong person. Day math is calendar days on the YYYY-MM-DD
+// strings, so it does not drift with the time zone. todayStr is injectable for tests.
+const _FU_OPEN = ['Called - talked','Door - spoke','Contacted','Callback','Gatekeeper'].concat(_AY_OPEN);
+function _overdueFollowups(nts, todayStr){
+  const out = [];
+  const day = s => { const p = String(s).split('-'); return Date.UTC(+p[0], +p[1]-1, +p[2]) / 86400000; };
+  const t = day(todayStr || _today());
+  Object.keys(nts||{}).forEach(function(c){
+    if(c.charAt(0) === '@' || c.charAt(0) === '#') return;
+    const n = nts[c]; if(!n || _FU_OPEN.indexOf(n.status||'') < 0) return;
+    try{ if(_effOptout(n).out || _isWrongOwner(n)) return; }catch(e){ return; }   // unreadable = leave it off the list
+    const d = _nextStepDate(n); if(!d || d >= (todayStr || _today())) return;
+    out.push({c:c, date:d, days:Math.round(t - day(d)), stage:n.status, what:String((n.nextStep && n.nextStep.what) || '').slice(0,120)});
+  });
+  out.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.c < b.c ? -1 : 1); });
+  return out;
+}
 // Funnel counts for the current board. Attempts = any logged status at all; the rest are ladder
 // positions AT OR BEYOND that rung, so a CLOSED deal still counts as a contact and a contract.
-function _funnelStats(){
-  const s = {attempts:0, contacts:0, appointments:0, offers:0, contracts:0, closes:0, revenue:0};
+// After-the-yes additions: a stageAt stamp counts a rung even if the status moved on (e.g. to Dead),
+// and openDeals / noNext / overdue say whether the deals in motion each have a dated next step.
+function _funnelStats(todayStr){
+  const s = {attempts:0, contacts:0, appointments:0, offers:0, contracts:0, closes:0, revenue:0,
+             openDeals:0, noNext:0, overdue:0, apptUnverified:0};
   // Call Mode writes its own status words ('Contacted' on Talked, 'Callback', 'Not interested' on a
-  // soft no). Each one means a human answered, so each is a contact. Without them every
-  // conversation logged from the phone counted as worked-but-never-reached (2026-10-22: the KPI read
-  // "210 worked, 0 reached" while the call log held 32 conversations).
+  // soft no). Each one means a human answered, so each is a contact (PR #364).
   const CONTACTED = ['Called - talked','Contacted','Callback','Not interested','Door - spoke','Appointment',
                      'Offer made','Under contract','Assigned','CLOSED'];
-  const APPT      = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
-  const OFFER     = ['Offer made','Under contract','Assigned','CLOSED'];
-  const CONTRACT  = ['Under contract','Assigned','CLOSED'];
+  const td = todayStr || _today();
   try{
     Object.keys(notes||{}).forEach(function(c){
-      const st = (notes[c]||{}).status || '';
-      if(!st) return;
+      if(c.charAt(0) === '@' || c.charAt(0) === '#') return;
+      const n = notes[c]||{};
+      const st = n.status || '';
+      const rung = _ayRung(n);                 // 0 Appointment .. 4 CLOSED, -1 never
+      if(!st && rung < 0) return;
       s.attempts++;
-      if(CONTACTED.indexOf(st) > -1) s.contacts++;
-      if(APPT.indexOf(st)      > -1) s.appointments++;
-      if(OFFER.indexOf(st)     > -1) s.offers++;
-      if(CONTRACT.indexOf(st)  > -1) s.contracts++;
-      if(st === 'CLOSED'){ s.closes++; s.revenue += (+(notes[c].closedAmt) || 0); }
+      if(CONTACTED.indexOf(st) > -1 || rung > -1) s.contacts++;
+      if(rung >= 0) s.appointments++;
+      if(rung >= 1) s.offers++;
+      if(rung >= 2) s.contracts++;
+      if(st === 'CLOSED'){ s.closes++; s.revenue += (+(n.closedAmt) || 0); }
+      if(n.apptUnverified) s.apptUnverified++;
+      let _held = false;
+      try{ _held = _effOptout(n).out || _isWrongOwner(n); }catch(e){ _held = true; }
+      if(_AY_OPEN.indexOf(st) > -1 && !_held){
+        s.openDeals++;
+        const d = _nextStepDate(n);
+        if(!d) s.noNext++; else if(d < td) s.overdue++;
+      }
     });
   }catch(e){}
   return s;
@@ -18571,6 +18634,17 @@ function render(){
     + _kpi('Est. profit · view', fmtK(_tot), _kp.length+' profitable', 'gold')
     + _kpi('Avg ROI', _avg+'%', 'on profitable deals')
     + _fnTile;
+  // OVERDUE FOLLOW-UPS: next step date passed, oldest first (read-only; opens the call sheet via #case=)
+  try{
+    const _fo = document.getElementById('fuoverdue');
+    if(_fo){
+      const _od = _overdueFollowups(notes);
+      _fo.hidden = !_od.length;
+      _fo.innerHTML = !_od.length ? '' : '<b>Overdue follow-ups (' + _od.length + ')</b>' + (_fn.noNext ? ' &middot; ' + _fn.noNext + ' open deal(s) with no dated next step' : '')
+        + _od.slice(0,10).map(function(o){ return '<div><a href="#case='+esc(o.c)+'">'+esc(o.c)+'</a> '+esc(o.stage)+' &middot; '+o.days+' day'+(o.days===1?'':'s')+' late (was '+esc(o.date)+')'+(o.what?' &middot; '+esc(o.what):'')+'</div>'; }).join('')
+        + (_od.length > 10 ? '<div>+' + (_od.length-10) + ' more</div>' : '');
+    }
+  }catch(e){}
   // live count on the Hide-dead button so it's obvious what it tracks
   const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
   const hd = document.getElementById('hd');
@@ -18858,6 +18932,7 @@ function render(){
         _playBadge(r)+
         '<span class="cscore">Score '+r.score+'</span></div>'+
       '<div class="fchips">'+flagChips(r)+landChips(r)+verifyChip(r)+'</div>'+
+      _eqcChip(r)+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
