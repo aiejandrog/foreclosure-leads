@@ -171,8 +171,8 @@ EMAIL = {'2099-000401-CA-01': 'skip@example.com', '2099-000402-CA-01': 'keep@exa
          '502025CC009919': 'other@example.com', '2025-005697-CA-02': 'suffix@example.com',
          'CACE-25-009496': 'seq@example.com'}
 json.dump({'sender': {'name': 'Test Sender'}, 'queue': [
-    {'case': c, 'owner': 'A', 'email': EMAIL[c], 'addr': '1 EXAMPLE AVE', 'step': 1}
-    for c in CASES]}, open(C.QUEUE, 'w'))
+    {'case': c, 'owner': 'OWNER%d' % i, 'email': EMAIL[c], 'addr': '%d EXAMPLE AVE' % (i + 1), 'step': 1}
+    for i, c in enumerate(CASES)]}, open(C.QUEUE, 'w'))
 json.dump({c: {'step': 1, 'next': TODAY, 'status': 'active', 'owner': 'A',
                'email': EMAIL[c], 'addr': '1 EXAMPLE AVE', 'log': []}
            for c in CASES if c != '2099-000404-CA-01'}, open(C.STATE, 'w'))
