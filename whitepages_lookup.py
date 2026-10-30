@@ -76,6 +76,16 @@ COUNTY_CITY = {
     'PALMBEACH': 'West Palm Beach', 'PB': 'West Palm Beach',
 }
 
+class WPAuthError(Exception):
+    """A 401/403 from Whitepages, raised instead of os._exit(2) when AUTH_RAISES is on. The send
+    bridge turns it on (a long-lived server must not exit on a bad key); the CLI never does."""
+    def __init__(self, code):
+        super().__init__('Whitepages answered HTTP %s' % code)
+        self.code = code
+
+
+AUTH_RAISES = False             # default False: the CLI keeps its exit-on-bad-key behaviour
+
 _cache_lock = threading.Lock()
 _progress_lock = threading.Lock()
 _stats = {'ok': 0, 'miss': 0, 'err': 0, 'person': 0, 'person_miss': 0, 'phones_added': 0, 'rate_limited': 0}
@@ -278,6 +288,8 @@ def _http_get(url, key, retries=3):
             _release_wp()
             if e.code in (401, 403):
                 _log(f'  AUTH ERROR ({e.code}) — key rejected. Stopping. {body}')
+                if AUTH_RAISES:
+                    raise WPAuthError(e.code)
                 os._exit(2)
             _log(f'  HTTP {e.code}: {body}')
             return None

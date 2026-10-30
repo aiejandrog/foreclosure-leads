@@ -4120,6 +4120,12 @@ body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .chip{font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid #2a3f6b;color:var(--mut)}
 .chip.hot{border-color:var(--gold);color:var(--gold)}
+.wplk{margin-top:8px;width:100%;min-height:44px}
+.wplk[disabled]{opacity:.6}
+.wpspin{display:inline-block;width:12px;height:12px;margin-right:6px;border:2px solid #2a3f6b;border-top-color:var(--gold);border-radius:50%;animation:wpspin .8s linear infinite;vertical-align:-2px}
+@keyframes wpspin{to{transform:rotate(360deg)}}
+.wpnum{display:flex;gap:6px;align-items:center;margin-top:6px}
+.wpnum button{flex:1;min-height:44px;text-align:left}
 .lkf{background:transparent;border:1px solid #2a3f6b;color:var(--mut);border-radius:999px;padding:6px 12px;font-weight:700}
 .lkf.on{border-color:var(--gold);color:var(--gold)}
 .chip.bad{border-color:var(--bad);color:#ff8a80}
@@ -6477,6 +6483,7 @@ function lookupList(){
          + (r.bq ? '<div class="sub" style="color:var(--gold)">Bankruptcy not checked. Ask first: Have you filed for bankruptcy?</div>' : '')
          + '<div class="flinks" style="margin-top:8px">' + links.map(function(x){
              return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('') + '</div>'
+         + wpBlock(r)
          + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" '
          + 'placeholder="Number or email you found" style="flex:1;min-width:0">'
          + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
@@ -6487,6 +6494,73 @@ function lookupList(){
     + 'Showing the first ' + CAP + '.</div><button id="lkmore" style="margin-top:8px">Show ' + Math.min(200, rows.length - CAP)
     + ' more</button></div>' : '';
   return head() + head_ + body + more + '<div class="sheetpad"></div>';
+}
+/* ══════════════ LOOK UP ON WHITEPAGES FROM THE CARD (2026-10-30, Alejandro) ══════════════
+   "Whitepages search the prospect up from Call Mode." One tap on a Find-a-number card posts the case to
+   the bridge (POST /wp/lookup), which runs the Whitepages lookup under its own daily cap and returns
+   only the owner's numbers: kind 'owner' (placed at the property) or 'likely' (the name only). The
+   button names the price before the tap; that labelled button is the confirmation, there is no
+   dialog. It costs about $0.22, up to $0.44 when the address finds no owner and a name search runs.
+   A lookup is never repeated: the answer is saved on the lead as notes.wpl {ts, n, cached, k} and the
+   button stays locked on it, also after a reload and on another phone once the note syncs.
+   The numbers are saved as notes.wpm (call only: a Whitepages-sourced number is not texted until a
+   call reaches a person, see afterCall's 'wpm' rule). There is no text path here. A number the card
+   would refuse to dial (that lead's do-not-call list, marked bad, a hard no) is dropped, not saved. */
+var WPBUSY = {}, WPERR = {};
+function wpDone(c){ var l = (notes[c] || {}).wpl; return (l && l.ts) ? l : null; }
+function wpBlock(r){
+  var c = r.c, l = wpDone(c), q = esc(c);
+  if(WPBUSY[c]) return '<div class="sub"><span class="wpspin"></span>Looking up on Whitepages&hellip;</div>'
+                     + '<button class="wplk" disabled>Looking up&hellip;</button>';
+  if(l){
+    var ks = l.k || {}, nums = Object.keys(ks);
+    return '<button class="wplk" disabled>Looked up, ' + (l.n || 0) + ' number' + ((l.n || 0) === 1 ? '' : 's') + '</button>'
+         + (l.cached ? '<div class="sub">Already on file from an earlier lookup. No charge.</div>' : '')
+         + (nums.length ? nums.map(function(n){
+             return '<div class="wpnum"><button class="wpdial" data-c="' + q + '" data-n="' + esc(n) + '">&#9742; ' + esc(fmt(n))
+                  + ' &middot; ' + (ks[n] === 'owner' ? 'owner' : 'likely owner') + '</button></div>'; }).join('')
+           + '<div class="sub">Call only. A likely owner is a name match, not confirmed: no text until a call reaches them.</div>'
+           : '<div class="sub">Whitepages had no number for the owner.</div>');
+  }
+  return (WPERR[c] ? '<div class="sub" style="color:var(--gold)">' + esc(WPERR[c]) + '</div>' : '')
+       + '<button class="wplk" data-c="' + q + '">Look up on Whitepages (about $0.22)</button>';
+}
+function wpLookup(c){
+  if(WPBUSY[c] || wpDone(c)) return;
+  var r = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
+  if(!r){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
+  var why = hardSuppressed(lkAsDial(r, ''));
+  if(why){ toast('Not looked up: ' + why, {bad:true}); return; }
+  WPBUSY[c] = 1; delete WPERR[c]; render();
+  var fail = function(m){ WPBUSY[c] = 0; WPERR[c] = m; render(); };
+  var p;
+  try{
+    p = bridgeFetch('/wp/lookup', {method:'POST', headers:{'Content-Type':'application/json'},
+                                   body: JSON.stringify({case: c})});
+  }catch(e){ fail('The bridge did not answer. Nothing was looked up.'); return; }
+  p.then(function(resp){ return resp.json(); }).then(function(j){
+    j = j || {};
+    if(!j.ok){
+      var m = j.blocked === 'key' ? (j.http === 403 ? 'Whitepages key rejected (403): check the key on the bridge PC'
+                                                    : 'No working Whitepages key on the bridge PC')
+            : j.blocked === 'budget' ? 'Whitepages daily cap reached'
+            : (j.err || 'Whitepages lookup refused');
+      return fail(m);
+    }
+    var row = lkAsDial(r, ''), ks = {}, n = 0;
+    (j.numbers || []).forEach(function(x){
+      var d = _lkDigits(x && x.n), kind = x && x.kind;
+      if(!d || (kind !== 'owner' && kind !== 'likely') || ks[d]) return;
+      if(pasteCheck(row, d).why) return;                 /* the card would refuse to dial it: do not save it */
+      ks[d] = kind; n++;
+    });
+    var nt = notes[c] || (notes[c] = {});
+    nt.wpm = nt.wpm || [];
+    Object.keys(ks).forEach(function(d){ if(nt.wpm.indexOf(d) < 0) nt.wpm.push(d); });
+    nt.wpl = {ts: Date.now(), n: n, cached: !!j.cached, k: ks};
+    saveNotes(); try{ queueSync(); }catch(e){}
+    WPBUSY[c] = 0; render();
+  }).catch(function(){ fail('The bridge did not answer. Nothing was looked up.'); });
 }
 function lkSave(c, raw){
   var r = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
@@ -9155,6 +9229,12 @@ function wire(){
   });
   var _lkm = $('lkmore');
   if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };
+  Array.prototype.forEach.call(document.querySelectorAll('button.wplk'), function(b){
+    b.onclick=function(){ var c = b.getAttribute('data-c'); if(c) wpLookup(c); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('button.wpdial'), function(b){
+    b.onclick=function(){ var c = b.getAttribute('data-c'), n = b.getAttribute('data-n'); if(c && n) lkSave(c, n); };
+  });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkadd'), function(b){
     b.onclick=function(){ var c = b.getAttribute('data-c');
       var inp = document.querySelector('input.lknum[data-c="' + c.replace(/"/g, '') + '"]');

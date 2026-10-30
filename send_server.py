@@ -1928,6 +1928,135 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
 
 
 # ---------------------------------------------------------------- HTTP handler
+_WP_LOCK = threading.Lock()      # one Whitepages lookup at a time: whitepages_lookup keeps run state in module globals
+
+
+def _wp_numbers(WL, lead, entry):
+    """Owner and likely-owner numbers from one whitepages_lookup.json entry, graded by
+    wp_contacts (the same bar the board bake uses). Never relatives, never household. Numbers on the
+    do-not-contact ledger (as '#digits') are dropped. -> (numbers, dropped_dnc)"""
+    import wp_contacts as W
+    owners, addr = WL._lead_owners(lead), WL._lead_addr(lead)
+    res = (entry or {}).get('result') or {}
+    verdict = W.wp_parcel_verdict(res.get('apn'), WL._lead_folio(lead))
+    own, likely = {}, {}
+    for o in W.parcel_owners(verdict, owners, addr, res):
+        if W.grade_property_owner(owners, o.get('name')) == 'wp':
+            for p in W._phones_of(o):
+                own.setdefault(p['n'], p['type'])
+    for pr in (entry or {}).get('_person') or []:
+        for rec in (pr.get('response') or []):
+            g = W.grade_person_record(owners, addr, rec)
+            if g is None:
+                continue
+            for p in W._phones_of(rec):
+                (own if g == 'wp' else likely).setdefault(p['n'], p['type'])
+    for n in own:
+        likely.pop(n, None)
+    blocked = set()
+    try:
+        cases, _em = _optout_set()
+        from optout_sync import notes_dnc_keys
+        blocked = {re.sub(r'\D', '', k)[-10:] for k in (set(cases) | set(notes_dnc_keys()))
+                   if str(k).startswith('#')}
+    except Exception:
+        blocked = set()
+    out, dropped = [], 0
+    for kind, grp in (('owner', own), ('likely', likely)):
+        for n in sorted(grp):
+            if n in blocked:
+                dropped += 1
+                continue
+            out.append({'n': n, 'kind': kind, 'type': grp[n]})
+    return out, dropped
+
+
+def _wp_lookup_case(case):
+    """The work of POST /wp/lookup. Returns the JSON answer; never raises on a refusal."""
+    # 1. do-not-contact: the ledger must be readable, and the case must not be on it or marked DNC
+    if not _optout_readable():
+        return {'ok': False, 'blocked': 'ledger',
+                'err': 'The do-not-contact list is missing or unreadable, so nothing is looked up.'}
+    cases, _em = _optout_set()
+    if case.lower() in cases:
+        return {'ok': False, 'blocked': 'ledger', 'err': 'On the do-not-contact list. No lookup.'}
+    try:
+        notes = {}
+        if os.path.exists(NOTES_FILE):
+            nd = json.load(open(NOTES_FILE, encoding='utf-8')) or {}
+            notes = (nd.get('notes') if isinstance(nd, dict) else None) or {}
+        st = str(((notes.get(case) or {}) if isinstance(notes, dict) else {}).get('status') or '').strip().lower()
+    except Exception:
+        return {'ok': False, 'blocked': 'dead', 'err': 'The call notes file is unreadable, so Dead / DNC cannot be checked.'}
+    if st in ('dead', 'do not contact', 'dnc'):
+        return {'ok': False, 'blocked': 'dead' if st == 'dead' else 'ledger',
+                'err': 'This lead is marked %s. No lookup.' % ('Dead' if st == 'dead' else 'Do Not Contact')}
+    # 2. the lead itself, from the case id
+    try:
+        import whitepages_lookup as WL
+    except Exception as e:
+        return {'ok': False, 'blocked': 'unavailable', 'err': 'whitepages_lookup.py could not load (%s)' % type(e).__name__}
+    lead = next((r for r in WL.load_all_leads() if WL._lead_key(r) == case), None)
+    if not lead:
+        return {'ok': False, 'blocked': 'no_lead', 'err': 'That case is not in the lead files on the bridge PC.'}
+    why = WL.contact_hold(lead)
+    if why:
+        return {'ok': False, 'blocked': 'never_contact' if why.startswith('never-contact') else 'hold',
+                'err': 'Held (%s). No lookup.' % why}
+    try:
+        import stay_gate as _SG
+        sv = _SG.check(case, STAY_CACHE_FILE)
+    except Exception as e:
+        sv = {'ok': False, 'why': 'stay_gate could not run (%s)' % type(e).__name__}
+    if not sv.get('ok'):
+        return {'ok': False, 'blocked': 'stay', 'code': sv.get('code') or 'stay_unverified',
+                'err': 'No clear bankruptcy-stay verdict: %s' % str(sv.get('why') or 'unknown')[:160]}
+    with _WP_LOCK:
+        # 3. cached: $0
+        try:
+            cache = json.load(open(WL.CACHE, encoding='utf-8')) if os.path.exists(WL.CACHE) else {}
+            if not isinstance(cache, dict):
+                raise ValueError('not an object')
+        except Exception:
+            return {'ok': False, 'blocked': 'unavailable',
+                    'err': 'whitepages_lookup.json is unreadable; not overwriting it.'}
+        if WL._cache_looked(cache.get(case)):
+            nums, dd = _wp_numbers(WL, lead, cache[case])
+            return {'ok': True, 'cached': True, 'spent': 0.0, 'numbers': nums, 'dropped_dnc': dd}
+        # 4. paid lookup
+        if not os.path.exists(WL.KEY_F):
+            return {'ok': False, 'blocked': 'key', 'http': None,
+                    'err': 'No Whitepages key on the bridge PC.'}
+        if WL.wp_spent_today() + WL.WP_EST_COST > WL.WP_DAILY_CAP + 1e-9:
+            return {'ok': False, 'blocked': 'budget', 'err': 'Whitepages daily cap reached.'}
+        try:
+            key = WL._load_key()
+        except SystemExit:
+            return {'ok': False, 'blocked': 'key', 'http': None, 'err': 'The Whitepages key file is empty or unreadable.'}
+        WL.AUTH_RAISES = True
+        WL._stop_run.clear()
+        WL._stop_why['why'] = ''
+        WL._run.update(spent=0.0, inflight=0.0, calls=0, max=WL.WP_MAX_SPEND)
+        try:
+            WL.enrich_one(lead, key, False, cache, False)
+        except WL.WPAuthError as e:
+            return {'ok': False, 'blocked': 'key', 'http': e.code,
+                    'err': 'Whitepages rejected the key (HTTP %s).' % e.code}
+        finally:
+            key = None
+        spent = round(WL._run['spent'], 2)
+        if WL._stop_run.is_set() and not WL._cache_looked(cache.get(case)):
+            why = WL._stop_why['why']
+            WL._stop_run.clear()
+            return {'ok': False, 'blocked': 'budget' if 'cap' in why else 'rate', 'spent': spent,
+                    'err': 'Whitepages daily cap reached.' if 'cap' in why else 'Whitepages is rate limiting. Try again later.'}
+        if not WL._cache_looked(cache.get(case)):
+            return {'ok': False, 'blocked': 'error', 'spent': spent,
+                    'err': 'Whitepages did not answer. Nothing was saved.'}
+        nums, dd = _wp_numbers(WL, lead, cache[case])
+        return {'ok': True, 'cached': False, 'spent': spent, 'numbers': nums, 'dropped_dnc': dd}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'DealFlowSend/1.0'
     timeout = 60             # client-socket read timeout: a half-sent request cannot stall a reload drain
@@ -2216,6 +2345,44 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {'ok': False, 'err': str(e)[:120]})
         return self._json(200, {'ok': True})
 
+    def _handle_wp_lookup(self):
+        """POST /wp/lookup {case} -- Call Mode's "Look up on Whitepages" button (2026-10-30, Alex).
+
+        PAID: one tap can cost about $0.22 (Property) and up to $0.44 when Property finds no owner
+        and the Person search runs. Spend is whitepages_lookup's own: _require_wp / _charge_wp,
+        WP_DAILY_CAP, WP_MAX_SPEND, and the shared bd_budget ledger it writes. No cap is changed here.
+        A case already in whitepages_lookup.json is answered from that cache for $0.
+        Refuses, before any money moves: no case, a case on the do-not-contact ledger or marked
+        DNC, a Dead case, a never-contact / bankruptcy-flagged / dismissed lead, a case with no
+        clear stay verdict (stay_gate.check, read-only), no Whitepages key, a spent daily cap.
+        Returns only the owner's numbers: 'owner' (Whitepages places the owner at the property) and
+        'likely' (owner by name only). Household members and relatives are never returned. Writes
+        nothing but whitepages_lookup.json (through whitepages_lookup) and the shared spend ledger.
+        Never echoes the key or any header."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        if ln <= 0 or ln > 5_000:
+            return self._json(400, {'ok': False, 'blocked': 'bad_request', 'err': 'missing or oversized body'})
+        try:
+            d = json.loads(self.rfile.read(ln).decode('utf-8'))
+        except Exception:
+            return self._json(400, {'ok': False, 'blocked': 'bad_request', 'err': 'bad json'})
+        if not isinstance(d, dict):
+            return self._json(400, {'ok': False, 'blocked': 'bad_request', 'err': 'bad json'})
+        case = str(d.get('case') or '').strip()
+        if not case or len(case) > 60 or not re.match(r'^[A-Za-z0-9 ._#:/-]+$', case):
+            return self._json(200, {'ok': False, 'blocked': 'bad_request', 'err': 'no usable case'})
+        try:
+            out = _wp_lookup_case(case)
+        except Exception as e:
+            out = {'ok': False, 'blocked': 'error',
+                   'err': 'Whitepages lookup failed (%s)' % type(e).__name__}
+        if out.get('blocked') in ('ledger', 'dead', 'never_contact', 'stay', 'hold'):
+            _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                          'd': dt.date.today().isoformat(), 'gate': out.get('blocked'), 'ch': 'wp_lookup',
+                          'code': 'wp_lookup_' + str(out.get('blocked')), 'case': case[:40],
+                          'why': str(out.get('err') or '')[:160]})
+        return self._json(200, out)
+
     def _handle_text_check(self):
         """POST /text/check {case, to, pcs?, portfolio?} — the pre-flight every Text button asks BEFORE
         it opens an sms: composer (2026-10-09, Alex chose "Check first").
@@ -2484,6 +2651,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_runlog()
         if self.path.startswith('/retrace'):
             return self._handle_retrace()
+        if self.path.startswith('/wp/lookup'):
+            return self._handle_wp_lookup()
         if self.path.startswith('/text/check'):       # BEFORE /text — startswith('/text') shadows it
             return self._handle_text_check()
         if self.path.startswith('/text'):
