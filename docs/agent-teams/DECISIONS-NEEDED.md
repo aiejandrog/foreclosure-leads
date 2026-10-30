@@ -57,3 +57,29 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Recommendation: Alex to check the renewal price first; see docs/agent-team/EQUITY-LIVE-RUN.md on claude/agents-equity.
 - Fallback in progress: none needed; nothing runs live.
 - Status: OPEN
+
+### D5: Who fixes the board's merge of the after-the-yes unit? (callfix, 2026-10-30)
+- Touches: tracker_template.html `_mergeLead` (board sync, also extracted into Call Mode); no send, no spend
+- Finding: a remote note for a lead the board already has contributes only status and next. nextStep, stageAt, equityVerified, keepOrSell, afterYesAt, apptUnverified, replied, textopen are dropped (node-verified on fixtures).
+- Option A: board owner takes the unit from the side with the larger afterYesAt, never on DO NOT CONTACT / Dead, plus a test | Risk: touches the shared sync block both pages run; needs QA on both
+- Option B: leave it; the disk copy gets the unit via Call Mode's new /notes push | Risk: the board and other phones never show the next step
+- Recommendation: A.
+- Fallback in progress: none; reported only.
+- Status: OPEN
+
+### D6: _merge_note fill-only gaps (callfix, 2026-10-30) -- suppression surface, report only
+- Touches: send_server._merge_note (no / DNC fields)
+- Finding: stored no:'soft' stays over incoming no:'hard'; a second wpe address, a newer wq and replied are not taken. DO NOT CONTACT status still wins and /notes ledgers it, so no stop is lost today.
+- Option A: Alex/attorney-owned fix: hard beats soft, union wpe | Risk: edits the suppression surface and send_server.py (LEGAL REVIEW)
+- Option B: leave | Risk: disk copy can show a soft no for a person who said hard no, until status DNC is merged
+- Recommendation: A, by the suppression-surface owner.
+- Fallback in progress: none.
+- Status: OPEN
+
+### D7: Call Mode now posts /notes and /text to the bridge (callfix, 2026-10-30) -- LEGAL REVIEW in PR title
+- Touches: suppression (POST /notes runs optout_sync.ledger_from_notes, so a DNC tapped in Call Mode reaches optouts.json sooner, add-only) and the text ledger (POST /text writes text_sent.json). No send path, no copy, no gate changed; send_server.py untouched.
+- Option A: ship both posts (recommended: the board already does the same; Call Mode alone was the gap) | Risk: more writers of the ledger sweep input; a bad note in a phone's localStorage would be ledgered like the board's
+- Option B: ship only the device key and drop the /notes and /text posts | Risk: Call Mode work stays off disk unless a board tab is open on the bridge PC
+- Recommendation: A.
+- Fallback in progress: none needed; if Alex says B, remove callNotesPushSoon() from saveNotes() and the two callTextLedger() calls.
+- Status: OPEN
