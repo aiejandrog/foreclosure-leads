@@ -1825,6 +1825,39 @@ def _seat_bucket(case):
     return h % 12
 
 
+_ORD_DIR = frozenset(('N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'))
+_ORD_TYPE = frozenset((
+    'AVE', 'AV', 'AVENUE', 'ST', 'STREET', 'TER', 'TERR', 'TERRACE', 'CT', 'COURT', 'PL', 'PLACE',
+    'DR', 'DRIVE', 'RD', 'ROAD', 'LN', 'LANE', 'BLVD', 'WAY', 'CIR', 'CIRCLE', 'PKWY', 'TRL',
+    'PATH', 'LOOP', 'MNR', 'MANOR', 'PSGE', 'PASSAGE'))
+_ORD_ROUTE = frozenset(('SR', 'US', 'HWY', 'HIGHWAY', 'RTE', 'ROUTE', 'CR', 'I', 'FM'))
+
+
+def _ord_addr(addr):
+    """'622 SE 5 AVE, Hialeah, FL' -> '622 SE 5th AVE, Hialeah, FL'. Inserts an ordinal suffix
+    after a bare street number (directional or house number before it, street type after it).
+    Only the part before the first comma is read; nothing else is changed."""
+    if not addr or not isinstance(addr, str):
+        return addr
+    head, comma, rest = addr.partition(',')
+    parts = re.split(r'(\s+)', head)
+    idx = [i for i, t in enumerate(parts) if t and not t.isspace()]
+    for k in range(1, len(idx) - 1):
+        t = parts[idx[k]]
+        if not (t.isascii() and t.isdigit()):
+            continue
+        prev = parts[idx[k - 1]].upper()
+        nxt = parts[idx[k + 1]].upper()
+        if prev in _ORD_ROUTE or nxt not in _ORD_TYPE:
+            continue
+        if not (prev in _ORD_DIR or k - 1 == 0):
+            continue
+        n = int(t)
+        suf = 'th' if 11 <= n % 100 <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+        parts[idx[k]] = t + suf
+    return ''.join(parts) + comma + rest
+
+
 def _seat_links(r):
     """The keys that say two dial rows reach the same household: person key, street line, phone."""
     keys = []
@@ -2369,7 +2402,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # The pipeline already fixes this: owner_clean flips "Last, First" to "First Last"
             # (foreclosure_leads.py:536-539) and ships as `oname`. Ship it and use it. ~14 B/lead.
             'on': _greet_name(d),
-            'a': (d.get('addr') or '').strip(),
+            'a': _ord_addr((d.get('addr') or '').strip()),
             # Advisory candidates stay separate from the address used by scripts and links.
             'ag': (d.get('addrGuess') or '').strip() or None,
             'aw': (d.get('addrWhy') or '').strip() or None,
@@ -3073,7 +3106,7 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
             'c': case,
             'o': (_o if _o != _on else None),
             'on': _on,
-            'a': (d.get('addr') or '').strip(),
+            'a': _ord_addr((d.get('addr') or '').strip()),
             'ag': (d.get('addrGuess') or '').strip() or None,
             'aw': (d.get('addrWhy') or '').strip() or None,
             # BOARD KEY NAMES from here down — _funnelStage reads these verbatim.
