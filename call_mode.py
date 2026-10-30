@@ -4569,7 +4569,7 @@ function _absorbStored(raw){
 }
 function saveNotes(){
   try{ _absorbStored(localStorage.getItem(LS)); }catch(e){ logErr(e,'saveNotes absorb'); }
-  try{ var _s=JSON.stringify(notes); localStorage.setItem(LS,_s); _LSLAST=_s; _SAVEFAIL=0; }catch(e){
+  try{ var _s=JSON.stringify(notes); localStorage.setItem(LS,_s); _LSLAST=_s; _SAVEFAIL=0; try{ callNotesPushSoon(); }catch(_p){} }catch(e){
   /* A swallowed setItem failure (private mode, quota) lost every log while the UI kept stamping
      green checks. Say it, loudly, and put it in the error chip. The toast is gone in seconds, so
      _SAVEFAIL also puts a line on the session strip until a save lands: what is logged now lives
@@ -5779,6 +5779,104 @@ function holdBakeFresh(q){
   if(typeof q.maxAgeH !== 'number' || !(q.maxAgeH > 0)) return false;
   return (Date.now() - t) <= q.maxAgeH * 3600000;
 }
+/* BRIDGE-KEY-START  One helper for every call to the send bridge (bridge_auth.py, 2026-10-13).
+   A request from the bridge computer itself needs no key; anything else (a phone, the desktop, a
+   Tailscale address) must send X-Dealflow-Key. The key and the bridge address are per device, typed
+   once into the Bridge key button, kept in this browser's localStorage only. They are never baked
+   into the build, never committed, never logged. With no key set this adds NO header, so a laptop on
+   127.0.0.1 behaves exactly as before. This block is byte-identical in call_mode.py and
+   tracker_template.html; _callwiringtest.py fails if the two copies drift. */
+function _bridgeBase(){
+  var b = '';
+  try{ b = String(localStorage.getItem('dfBridgeBase') || '').trim().replace(/\/+$/, ''); }catch(e){}
+  return /^https?:\/\/[^\s\/]+(\/[^\s]*)?$/i.test(b) ? b : 'http://127.0.0.1:8823';
+}
+function _bridgeKey(){
+  try{ return String(localStorage.getItem('dfBridgeKey') || '').trim(); }catch(e){ return ''; }
+}
+function _bridgeMsg(){
+  return 'This device needs a bridge key; on the bridge PC run python bridge_auth.py add <name>';
+}
+function _bridgeDenied(){
+  var now = Date.now();
+  if(typeof window !== 'undefined' && window.__bridgeDeniedAt && now - window.__bridgeDeniedAt < 20000) return;
+  if(typeof window !== 'undefined') window.__bridgeDeniedAt = now;
+  var m = _bridgeMsg();
+  try{
+    if(typeof toast === 'function') toast(m, {bad:true, ms:6000});
+    else if(typeof _nbWarn === 'function') _nbWarn(m);
+    else if(typeof addLog === 'function') addLog('fail', '', m);
+  }catch(e){}
+}
+function bridgeFetch(path, opts){
+  var o = {}, h = {}, k;
+  opts = opts || {};
+  for(k in opts) o[k] = opts[k];
+  for(k in (opts.headers || {})) h[k] = opts.headers[k];
+  var key = _bridgeKey();
+  if(key) h['X-Dealflow-Key'] = key;
+  o.headers = h;
+  return fetch(_bridgeBase() + path, o).then(function(r){
+    if(!r || r.status !== 401) return r;
+    return r.clone().json().then(function(j){
+      if(!j || j.blocked !== 'device_key') return r;
+      _bridgeDenied();
+      return new Response(JSON.stringify({ok:false, blocked:'device_key', err:_bridgeMsg()}),
+                          {status:401, headers:{'Content-Type':'application/json'}});
+    }, function(){ return r; });
+  });
+}
+function setBridgeKey(){
+  var had = !!_bridgeKey();
+  var v = prompt('Bridge key for THIS device (made on the bridge PC with: python bridge_auth.py add <name>). '
+               + (had ? 'A key is set. Leave blank to remove it.' : 'None set yet.'), '');
+  if(v === null) return;
+  v = String(v).trim();
+  var b = prompt('Bridge address for this device (blank = the same computer, http://127.0.0.1:8823). '
+               + 'The --base address printed when the key was made, for a phone or the desktop.', '');
+  try{
+    if(v) localStorage.setItem('dfBridgeKey', v); else localStorage.removeItem('dfBridgeKey');
+    if(b !== null){ b = String(b).trim(); if(b) localStorage.setItem('dfBridgeBase', b); else localStorage.removeItem('dfBridgeBase'); }
+  }catch(e){}
+  try{
+    if(typeof toast === 'function') toast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
+    else if(typeof _shareToast === 'function') _shareToast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
+  }catch(e){}
+}
+/* BRIDGE-KEY-END */
+/* CALL MODE -> DISK (2026-10-30). Every outcome Call Mode logs used to reach the team sync and nothing
+   else: this page never posted to the bridge's /notes, so worker_notes.json (the scorecard, analyst.py)
+   and the DNC ledger sweep (optout_sync.ledger_from_notes, run by /notes) only saw a call if the board
+   was open on the bridge computer to relay it. saveNotes() calls this after every successful local
+   write. Debounced, one request in flight, add-only on the server (_merge_note). Fails silent like the
+   board's notesBridgePush: the local save and the team sync are unchanged when the bridge is down. A
+   missing device key shows the plain message from bridgeFetch. workerLog / sentArchive are left out of
+   the body on purpose: this page has none, and the server must not read an empty list as a deletion. */
+var _cnT = null, _cnBusy = false;
+function callNotesPushSoon(){ clearTimeout(_cnT); _cnT = setTimeout(callNotesPush, 4000); }
+function callNotesPush(){
+  if(_cnBusy){ callNotesPushSoon(); return; }
+  _cnBusy = true;
+  var dev = ''; try{ dev = localStorage.getItem('fcDevice') || ''; }catch(e){}
+  try{
+    bridgeFetch('/notes', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({_dealflow_notes: 1, exported: today(), device: dev, notes: notes})})
+      .then(function(){ _cnBusy = false; }, function(){ _cnBusy = false; });
+  }catch(e){ _cnBusy = false; }
+}
+/* The text ledger (text_sent.json) is what the 3-touch ladder reads across devices. Call Mode wrote
+   the local touch only, so a text sent from here was invisible to the board and to the next phone.
+   Same body the board posts (_textLedgerPost). confirmed:false = composer opened, true = "Yes, it sent". */
+function callTextLedger(r, digits, confirmed, kind, stage, body){
+  var dev = ''; try{ dev = localStorage.getItem('fcDevice') || ''; }catch(e){}
+  try{
+    bridgeFetch('/text', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({case: (r && r.c) || '', pkey: (r && r.pk) || '', to: String(digits || ''),
+        owner: String((r && (firstName(r) || r.on || r.o)) || '').slice(0, 60), stage: String(stage || ''),
+        tone: String(kind || ''), lang: lang(), body_len: String(body || '').length,
+        confirmed: !!confirmed, device: dev})}).catch(function(){});
+  }catch(e){}
+}
 function textingHeld(){
   /* A successful /health answer wins. If this page cannot poll the bridge, the bake is trusted
      only while the do-not-contact list it saw is still inside the age window. Otherwise held. */
@@ -5819,7 +5917,7 @@ function textPreflight(c, num, pcs){
     };
     t = setTimeout(function(){ unreachable('the bridge did not answer the do-not-contact check'); }, 3500);
     try{
-      fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
+      bridgeFetch('/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({case: c || '', to: String(num || ''), pcs: pcs || []})})
         .then(function(rs){
           /* the bridge ANSWERED: a body we cannot read is a refusal, never the phone fallback */
@@ -5831,7 +5929,7 @@ function textPreflight(c, num, pcs){
 }
 function pollTextHold(){
   var was = textingHeld();
-  fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
+  bridgeFetch('/health').then(function(r){ return r.json(); }).then(function(j){
     if(!j || typeof j.text_hold !== 'boolean'){ TEXTHOLDLIVE = false; }
     else {
       TEXTHOLDLIVE = true;
@@ -6573,7 +6671,7 @@ function mailViaBridge(r, M){
     var unreachable = 'The send bridge on the laptop did not answer, so this email was not sent. Paste-an-email goes out only through that bridge, from the company address, after the same checks as every other send. Open Call Mode on the laptop that runs the bridge and try again.';
     var fail = function(why){ clearTimeout(slow); fin({ok:false, why:why}); };
     try{
-      fetch('http://127.0.0.1:8823/send', {
+      bridgeFetch('/send', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
       }).then(function(rs){
@@ -6996,6 +7094,7 @@ function sessStrip(){
     + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
     + (mails?(' &middot; <b>'+mails+'</b> email'+(mails===1?'':'s')):'')
     + ' &middot; this session: <b>'+_WORKED.length+'</b> worked'
+    + ' &middot; <span id="bkeybtn" style="text-decoration:underline" title="Key for the send bridge, kept on this device only">bridge key'+(_bridgeKey()?' &#10003;':'')+'</span>'
     + (st.streak>1?' &middot; <b>'+st.streak+'</b>-day streak':'')
     + (st.best && st.best.n>dials?' &middot; best day '+st.best.n:(st.best && dials>=st.best.n && dials>0 && st.best.d!==td?' &middot; <b>new best day</b>':''))
     + '</div>';
@@ -8749,6 +8848,7 @@ function afterCall(r, o, nextC){
        touch on a message that was never sent. He confirms below once it is actually gone. */
     var n = notes[r.c] = notes[r.c] || {status:'',note:''};
     n.textopen = today(); saveNotes(); queueSync();
+    callTextLedger(r, r.p[phIdx], false, _txk, st, body);
     var openComposer = function(){
       /* CLIPBOARD FIRST, ALWAYS. On the desktop this sms: link lands in Phone Link, and Phone Link
          honours an activation only while it has NO window open: with its window up on the Messages
@@ -8786,6 +8886,7 @@ function afterCall(r, o, nextC){
       nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text',
                        out:'Text sent — ' + txKind(_txk, st), by:caller()});
       saveNotes(); queueSync();
+      callTextLedger(r, r.p[phIdx], true, _txk, st, body);
       if(!_ftsaCapToast(nn)) toast('Text logged');
       go();
     };
@@ -9060,7 +9161,7 @@ function wire(){
   if(cl) cl.onclick = function(e){ e.preventDefault(); _csDays = 1; screenCallStats(); };
   // the session strip: tap to set today's dial goal (dialGoal / setDialGoal)
   var ss = $('sess');
-  if(ss) ss.onclick = function(e){ e.preventDefault(); setDialGoal(); };
+  if(ss) ss.onclick = function(e){ e.preventDefault(); if(e.target && e.target.id === 'bkeybtn'){ setBridgeKey(); render(); return; } setDialGoal(); };
 }
 /* Open one lead's card in the dial lane that holds it (a board-lane row, or a lead just given a
    number on the Find-a-number list). */
