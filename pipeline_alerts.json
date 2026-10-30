@@ -1,31 +1,37 @@
 {
  "alerts": [
   {
-   "at": "2026-10-30T17:50:10-04:00",
+   "at": "2026-10-30T19:43:56-04:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-10-30T17:50:10-04:00",
+   "at": "2026-10-30T19:43:56-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 21h ago."
+   "text": "Evening readiness check last ran 22h ago."
   },
   {
-   "at": "2026-10-30T17:50:10-04:00",
+   "at": "2026-10-30T19:43:56-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 38 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge. Bridge log: the bridge first started today at 15:25, after the 8 AM run."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 37 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge. Bridge log: the bridge first started today at 15:25, after the 8 AM run."
   },
   {
-   "at": "2026-10-30T17:50:10-04:00",
+   "at": "2026-10-30T19:43:56-04:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
+  },
+  {
+   "at": "2026-10-30T19:43:56-04:00",
+   "key": "tracerfy-credits",
+   "severity": "fail",
+   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-30T17:50:10-04:00",
+ "published_at": "2026-10-30T19:43:56-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -36,7 +42,7 @@
    "holds": 600,
    "leads_checked": 0,
    "provider": "courtlistener",
-   "pull_age_h": 20.56,
+   "pull_age_h": 22.45,
    "pull_ok": true,
    "readable": true,
    "reason": "ok",
@@ -103,7 +109,7 @@
     40
    ],
    "date": "2026-10-30",
-   "eligible": 38,
+   "eligible": 37,
    "judged": true,
    "paused": false,
    "readable": true,
@@ -167,7 +173,9 @@
   "refresh_flag": {
    "stale": false
   },
-  "tracerfy": {}
+  "tracerfy": {
+   "credits": 1
+  }
  },
  "version": 1
 }
