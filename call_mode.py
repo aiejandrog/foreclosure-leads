@@ -3963,7 +3963,15 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system
 /* DESKTOP WIDTH (2026-10-26). 560px is a phone column; on a 1920 monitor it left two thirds of
    the window empty. From 1024px the column grows to 880px. Every row inside already wraps
    (lane buttons are flex 1 1 82px, cards are fluid), so nothing new can overflow sideways. */
+@media (min-width:640px){.wrap{max-width:min(720px,100%)}}
 @media (min-width:1024px){.wrap{max-width:880px}}
+/* FITS THE WINDOW (2026-10-30). Between 640 and 1023px the column was a fixed 560px (73% of a 768
+   window, wide empty margins). It now grows with the window to 720px, then 880px from 1024px; a
+   phone (under 640px) is unchanged. A long unbroken string (an e-mail, a URL, a run-together name)
+   used to push the page sideways, because a flex/grid child will not shrink below it: it now
+   breaks inside the column instead. */
+.wrap{min-width:0;overflow-wrap:anywhere}
+.wrap .lane,.wrap .dfnav,.wrap .card{min-width:0;max-width:100%}
 /* COLUMN, not a row (2026-09-09). .top holds the lane buttons AND the status lines under them
    (hidden count, seat chip, build stamp, session strip) — every one of which is written as a
    full-width centered .supn line. As a flex ROW with space-between that only looked right while
