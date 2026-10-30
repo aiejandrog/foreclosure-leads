@@ -38,3 +38,9 @@ D14 option A is implemented; Lead to mark D14 resolved on merge. Not fixed (repo
 
 ## Full ci_suite result (15bc4e4, DEALFLOW_DIR temp, background)
 `CI SUMMARY: 244 pass / 12 fail, 39 skipped`. The 11 baseline failures all failed as expected (_ballooncurrencytest _callworkflowparitytest _judgmentpasstest _lpcoveragetest _openertest _resimplisynctest _syncgatetest _texttpltest _tracerfytest _uifixturetest _workerrunlogtest). One extra: `_pacerstaytest` failed in the suite with `/send` "timed out" (three ci_suite runs sharing the machine); rerun alone on this branch with a fresh DEALFLOW_DIR it passes ("all PACER stay checks passed"). It does not read tracker_template.html. Not rerun on a detached origin/main because it passes on the branch. `_autorunstoptest` passed this run.
+
+## QA (qa, 2026-10-30, 02ba84d, temp DEALFLOW_DIR)
+- QA PASS boardmerge `_boardmergetest _boardstagetest _verifytraintest _callwiringtest _mergenotetest _funnelparitytest _nosynctest _queueflowtest _cmtabtest` each alone -> exit 0
+- QA PASS boardmerge `python ci_suite.py` -> 246 pass / 11 fail = exactly the 11 baseline.
+- DNC/Dead: after-the-yes unit skipped and remote.next not applied when _DEAD(out.status); a newer save only sets status from the after-the-yes stage list, so it cannot replace Dead/DO NOT CONTACT. Diff touches only _mergeLead and one const (_AY_STAGES); no owned suppression function, no send_server.py. _suppressiontest/_optouttest/_dnctest fail with a Playwright fill() error identically on main-based fl-verify (not counted).
+- Verdict: MERGE.
