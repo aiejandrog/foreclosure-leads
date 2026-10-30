@@ -35,3 +35,6 @@ Board-only JS. A teammate's newer after-the-yes unit now replaces this device's 
 
 ## Decisions needed
 D14 option A is implemented; Lead to mark D14 resolved on merge. Not fixed (report only, suppression surface): D15, `textopen` is still not merged by `_mergeLead`.
+
+## Full ci_suite result (15bc4e4, DEALFLOW_DIR temp, background)
+`CI SUMMARY: 244 pass / 12 fail, 39 skipped`. The 11 baseline failures all failed as expected (_ballooncurrencytest _callworkflowparitytest _judgmentpasstest _lpcoveragetest _openertest _resimplisynctest _syncgatetest _texttpltest _tracerfytest _uifixturetest _workerrunlogtest). One extra: `_pacerstaytest` failed in the suite with `/send` "timed out" (three ci_suite runs sharing the machine); rerun alone on this branch with a fresh DEALFLOW_DIR it passes ("all PACER stay checks passed"). It does not read tracker_template.html. Not rerun on a detached origin/main because it passes on the branch. `_autorunstoptest` passed this run.
