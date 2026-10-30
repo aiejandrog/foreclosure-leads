@@ -13,6 +13,11 @@ import os
 import sys
 # Follow-up sends are off unless this is exactly 1. This fixture expects one to leave.
 os.environ['DEALFLOW_FOLLOWUPS_ON'] = '1'
+# PR #192: cadence asks the send bridge's stay verdict (bk_lookup.contact_blocked_reason) before it mails.
+# These fixtures carry no docket data and are not about the stay gate (_staygatesfailclosedtest owns it),
+# so the verdict is stubbed clear here.
+import bk_lookup as _BKL_STUB
+_BKL_STUB.contact_blocked_reason = lambda case, here=None: (False, '')
 import tempfile
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')

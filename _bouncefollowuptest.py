@@ -457,6 +457,8 @@ CD.OPTOUTS = str(C / 'optouts.json')
 CD._ss.HERE = str(C)
 CD._ss.SENT_LEDGER = str(C / 'mail_sent.json')
 CD._ss.REFUSAL_LOG = str(C / 'send_refusals.jsonl')
+# PR #192: cadence asks the stay verdict from this folder's own docket cache; these cases have a docket read, no stay.
+(C / 'sale_history_cache.json').write_text(json.dumps({c: {'a': False, 'bd': '', 'sl': '', 'b': 0, 'v': 5, 't': 0} for c in ['2099-000031-CA-01', '2099-000032-CA-01', '2099-000099-CA-01']}), encoding='utf-8')
 json.dump([row('gone@example.com', 26, case='2099-000031-CA-01')], open(CD._ss.SENT_LEDGER, 'w'))
 json.dump({'_dealflow_notes': 1, 'notes': {}}, open(CD.OPTOUTS, 'w'))
 json.dump({'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
