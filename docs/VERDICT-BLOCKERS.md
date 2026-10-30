@@ -26,7 +26,7 @@ Legend for the "unknown" column: a lead is counted in the reason that fires firs
 |---|---|---|---|
 | Miami-Dade | OCS `caseStatus` (anonymous docket API, `docket.py:1-30`) stored as `cstatus`; LP rows via `lp_status.py` (`_lp_status_cache.json`) | `cstatus` empty (12 rows); 2 BAL rows are not court cases | 12 empty; 2 of 689 LP rows unchecked |
 | Broward | none. `cstatus` is empty on every row (`county_leads.py` never writes it). Only `lp_status.py` could, and its Broward branch is **off** unless `DEALFLOW_LP_BROWARD=1` and `BROWARD_CLERK_API_KEY` set (`lp_status.py:31-38`). Neither is set in this process (`BROWARD_CLERK_API_KEY` unset; flag unset) | no adapter output, so `lpStatusChecked` is False on all LP rows; FC/TD rows are "open" only by being on the auction list when scraped | 2,216 unknown (1,571 LP, 298 BAL, 347 FC/TD INFERRED open) |
-| Palm Beach | none. `lp_status.py:36` "Palm Beach has no adapter". eCaseView is reCAPTCHA v3 behind a headed browser (`pb_case_lookup.py:10-25`) and non-commercial (CLAUDE.md, `palmbeach_documents.py:1-6`) | no automated source | 1,351 unknown (922 LP, 429 FC/TD INFERRED open) |
+| Palm Beach | none. `lp_status.py:38` "Palm Beach has no adapter". eCaseView is reCAPTCHA v3 behind a headed browser (`pb_case_lookup.py:10-25`) and non-commercial (CLAUDE.md, `palmbeach_documents.py:1-6`) | no automated source | 1,351 unknown (922 LP, 429 FC/TD INFERRED open) |
 
 ### 1.2 Judgment amount
 
