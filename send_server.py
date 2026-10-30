@@ -2003,6 +2003,12 @@ def _wp_lookup_case(case):
     if why:
         return {'ok': False, 'blocked': 'never_contact' if why.startswith('never-contact') else 'hold',
                 'err': 'Held (%s). No lookup.' % why}
+    # Stay verdict, read-only. stay_gate.check() layers bk_lookup.gate_opinion on the docket verdict,
+    # and that is where the attorney's unchecked-lead waiver lives (bk_waiver.json / DEALFLOW_BK_ALLOW_UNCHECKED,
+    # CLAUDE.md "Unchecked-lead waiver 2026-10-13"; applied here at Alex's direction 2026-10-30). So a Broward
+    # or Palm Beach lead with no federal check passes exactly as it does on /send, and an open or possible
+    # CourtListener match, a PACER hit, a torn PACER file, never_contact and a Miami-Dade docket stay do
+    # not. DEALFLOW_BK_ALLOW_UNCHECKED=0 turns it off. Nothing of the waiver is re-implemented here.
     try:
         import stay_gate as _SG
         sv = _SG.check(case, STAY_CACHE_FILE)
