@@ -5102,7 +5102,7 @@ function briefJesse(caseId){
       : 'Advisor address not set on this build — Gmail opened pre-filled, pick the recipient');
   };
   if(!_JESSE){ mailtoFallback(); return; }
-  bridgeFetch('/send', {
+  fetch('http://127.0.0.1:8823/send', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({to: _JESSE, subj: subj, body: body,
                           meta: {c: r.case, owner: r.oname || r.owners || '', addr: r.addr || '', test: true}})
@@ -6560,7 +6560,7 @@ function textPreflight(r, digits){
     try{
       var pcs = [];
       try{ pcs = (typeof _personCases === 'function' ? _personCases(r) : []).filter(function(c){ return c && c !== r.case; }); }catch(e){}
-      bridgeFetch('/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
+      fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({case: (r && r.case) || '', to: String(digits || ''), pcs: pcs})})
         .then(function(rs){ return rs.json(); })
         .then(function(j){ fin(!!(j && j.ok === true), (j && j.err) || 'blocked by the do-not-contact check'); })
@@ -6577,7 +6577,7 @@ function _textLedgerPost(r, digits, confirmed){
                 body_len:(smsMsg(r, textLang, textTone)||'').length,
                 confirmed:!!confirmed,
                 device:(localStorage.getItem('fcDevice')||'')};
-    bridgeFetch('/text', {method:'POST', headers:{'Content-Type':'application/json'},
+    fetch('http://127.0.0.1:8823/text', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body)}).catch(function(){});
   }catch(e){}
 }
@@ -9372,7 +9372,7 @@ function _docShell(title, bodyHtml, opts){
     + '.fmcap{font:8.5pt Arial,sans-serif;color:#5A6472;letter-spacing:.05em;margin-top:4px}'
     + BSG_LH_CSS
     + '@media print{.noprint{display:none}body{background:#fff}.doc{box-shadow:none;margin:0;padding:24px 32px}}'
-    + '</style></head><body>'
+    + '</style>' + (opts.screen ? '<script>' + _bridgeSrc() + '<\/script>' : '') + '</head><body>'
     + '<div class="bar noprint"><button onclick="window.print()">Print / Save as PDF</button>'
     + (opts.note ? '<span style="color:#F4E5A7;font-size:12px">'+esc(opts.note)+'</span>' : '')
     + '<span class="stamp">'+stamp+'</span></div>'
@@ -11429,7 +11429,7 @@ function genDialReady(r){
     +   'p.b.querySelector(".does").textContent="✓ "+p.es+" — registrado";'
     + '});'
     + 'function _bridge(m,b,en,es){'
-    +   'try{bridgeFetch("/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({c:m.dialoutcome.c,k:"dialoutcome",extra:{out:m.dialoutcome.out}})})'
+    +   'try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({c:m.dialoutcome.c,k:"dialoutcome",extra:{out:m.dialoutcome.out}})})'
     +   '.then(function(r){var g=r&&r.ok;'
     +     'b.querySelector(".doen").textContent=(g?"⚠ "+en+" — board did not confirm; sent to bridge":"✗ "+en+" — NOT logged");'
     +     'b.querySelector(".does").textContent=(g?"⚠ "+es+" — al puente":"✗ "+es+" — NO registrado");'
@@ -12723,7 +12723,7 @@ function _textHoldApply(j){
 function _pollLiveCap(){
   var ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
   var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;
-  bridgeFetch('/health', ac?{signal:ac.signal}:{})
+  fetch('http://127.0.0.1:8823/health', ac?{signal:ac.signal}:{})
     .then(function(r){ return r.json(); })
     .then(function(j){ if(to) clearTimeout(to);
       if(j && j.ready){ _liveCap = j; _liveCapAt = Date.now(); }
@@ -13799,13 +13799,13 @@ function genMorningWorker(lane, autostart){
     +     '<div class="mwlog" id="mwlog"></div>'
     +   '</div>'
     + '</div>'
-    + '<script>' + _bridgeSrc() + '(function(){'
+    + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
     // the "Find a number" panel's leads (no phone, no email), by case only, for Send to Call Mode
     +   'var LKCASES=' + JSON.stringify((function(){ try{ return _workerLookupRows().slice(0, 60).map(function(r){ return r.case; }); }catch(e){ return []; } })()) + ';'
     +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
-    +   'try{ bridgeFetch("/health").then(function(r){return r.json();}).then(function(j){'
+    +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
     +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null), ft:(j.bounce_rule==="paused"), ftDead:+(j.bounce.day_dead||0), ftSent:+(j.bounce.day_sent||0), ftDay:String(j.bounce.day_date||"")};'
     +   'if(BOUNCE.blocked) render();'
@@ -13905,7 +13905,7 @@ function genMorningWorker(lane, autostart){
     // FLIGHT RECORDER (2026-10-21): one fire-and-forget line per run event to the bridge's
     // worker_runs.jsonl, so an unattended morning that sends nothing can say why after this tab is
     // gone. Counts and codes only. It never blocks, never throws, and nothing reads it to decide.
-    +   'function runlog(ev, x){ try{ bridgeFetch("/runlog", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }'
+    +   'function runlog(ev, x){ try{ fetch("http://127.0.0.1:8823/runlog", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
     +     'if(LOG.length>1000) LOG=LOG.slice(-1000);'
@@ -13983,7 +13983,7 @@ function genMorningWorker(lane, autostart){
     +   'function probeBridge(){'
     +     'var ac = (typeof AbortController!=="undefined") ? new AbortController() : null;'
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
-    +     'bridgeFetch("/health", ac?{signal:ac.signal}:{})'
+    +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
     +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; TEXT_HOLD=(j&&j.text_hold===false)?"":((j&&j.text_hold)?(j.text_hold_why||"Inbound STOP scan failed or is stale. Texting is held. Email is not."):TEXT_HOLD_DOWN); paintTextHold(); BRIDGE_WHY=(j&&j.ready)?"":"not_ready"; bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
     +       '.catch(function(e){ if(to) clearTimeout(to); BRIDGE_WHY=(e&&e.name==="AbortError")?"timeout":"down"; TEXT_HOLD=TEXT_HOLD_DOWN; paintTextHold(); bridgeUp(false); });'
@@ -14092,7 +14092,7 @@ function genMorningWorker(lane, autostart){
     // retirement, /retrace request) — losing it silently re-dials dead numbers forever.
     +     'if(["sent","callout","text","callq","done","skip","badnum"].indexOf(m.workerAct.k)<0) return;'
     +     'MARKQ.push(m);'
-    +     'try{bridgeFetch("/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m.workerAct)}).catch(function(){});}catch(e){}'
+    +     'try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m.workerAct)}).catch(function(){});}catch(e){}'
     +     '_markBanner();'
     +   '}'
     +   'function _markBanner(){'
@@ -14430,7 +14430,7 @@ function genMorningWorker(lane, autostart){
     +     'var to=String(href||"").split("?")[0].replace(/\\D/g,""), done=false, t=null;'
     +     'var fin=function(ok, why, ans){ if(done) return; done=true; if(t) clearTimeout(t); cb(ok, why, !!ans); };'
     +     't=setTimeout(function(){ fin(false, "the bridge did not answer the do-not-contact check"); }, 3500);'
-    +     'try{ bridgeFetch("/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
+    +     'try{ fetch("http://127.0.0.1:8823/text/check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({case:c, to:to, pcs:pcs||[]})})'
     +       '.then(function(rs){ return rs.json(); })'
     +       '.then(function(j){ fin(!!(j && j.ok===true), (j && j.err) || "blocked by the do-not-contact check", true); })'
     +       '.catch(function(){ fin(false, "the bridge is not reachable"); }); }'
@@ -14542,7 +14542,7 @@ function genMorningWorker(lane, autostart){
     +       'addLog("fail", r.first||r.owner, "send bridge has not answered in "+Math.round(SEND_WAIT_MS/1000)+"s — outcome UNKNOWN. Run paused. The request is still open: its result will be recorded on THIS lead when it lands, and nothing else sends until then. If the bridge is gone, restart send_server.py and reload this tab, then check mail_sent.json for this lead before pressing Start.", "warn");'
     +       'if(_live()) pause();'
     +     '}, SEND_WAIT_MS);'
-    +     'bridgeFetch("/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
+    +     'fetch("http://127.0.0.1:8823/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
     +         'if(_settled) return; _settled=true; clearTimeout(_sto);'
@@ -15875,7 +15875,7 @@ window.addEventListener('message', function(ev){
     try { _callqRetire(r.case, nb); } catch(e){}
     _wlog(r.case, 'skip', 'bad number '+bph+' recorded — queued for re-trace; lead re-enters when a new number lands', true);
     try {
-      bridgeFetch('/retrace', {method:'POST', headers:{'Content-Type':'application/json'},
+      fetch('http://127.0.0.1:8823/retrace', {method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({c:r.case, ph:bph})}).catch(function(){});
     } catch(e){}
     save();
@@ -17265,7 +17265,7 @@ function _bridgeDenied(){
     else if(typeof addLog === 'function') addLog('fail', '', m);
   }catch(e){}
 }
-function bridgeFetch(path, opts){
+function bridgeFetch(path, opts, f){
   var o = {}, h = {}, k;
   opts = opts || {};
   for(k in opts) o[k] = opts[k];
@@ -17273,7 +17273,8 @@ function bridgeFetch(path, opts){
   var key = _bridgeKey();
   if(key) h['X-Dealflow-Key'] = key;
   o.headers = h;
-  return fetch(_bridgeBase() + path, o).then(function(r){
+  var go = f || (typeof window !== 'undefined' && window.__bridgeOrigFetch) || fetch;
+  return go(_bridgeBase() + path, o).then(function(r){
     if(!r || r.status !== 401) return r;
     return r.clone().json().then(function(j){
       if(!j || j.blocked !== 'device_key') return r;
@@ -17300,8 +17301,24 @@ function setBridgeKey(){
     else if(typeof _shareToast === 'function') _shareToast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
   }catch(e){}
 }
+/* Existing call sites keep their literal fetch('http://127.0.0.1:8823/...'): this wraps the page's fetch once, so
+   a call to the default bridge address gets the key, the stored address and the plain 401 message, and every
+   other URL passes through untouched. */
+function _bridgeInstall(){
+  try{
+    if(typeof window === 'undefined' || window.__bridgeOrigFetch || typeof window.fetch !== 'function') return;
+    var orig = window.fetch.bind(window);
+    window.__bridgeOrigFetch = orig;
+    window.fetch = function(u, o){
+      var s = (typeof u === 'string') ? u : '';
+      if(s.indexOf('http://127.0.0.1:8823/') === 0) return bridgeFetch(s.slice(21), o, orig);
+      return orig(u, o);
+    };
+  }catch(e){}
+}
+_bridgeInstall();
 /* BRIDGE-KEY-END */
-function _bridgeSrc(){ var nl = String.fromCharCode(10); return [_bridgeBase,_bridgeKey,_bridgeMsg,_bridgeDenied,bridgeFetch].map(function(f){ return String(f); }).join(nl) + nl; }
+function _bridgeSrc(){ var nl = String.fromCharCode(10); return [_bridgeBase,_bridgeKey,_bridgeMsg,_bridgeDenied,bridgeFetch,_bridgeInstall].map(function(f){ return String(f); }).join(nl) + nl + '_bridgeInstall();' + nl; }
 /* ---- LOCAL NOTES BRIDGE (localStorage -> disk via send_server.py) ----------------------------
    Every call disposition, status, touch, the worker activity feed and the sent archive live ONLY
    in this browser's localStorage. One cleared Chrome profile = the entire call history of the
@@ -17321,7 +17338,7 @@ function _notesBridgePayload(){
 function notesBridgePush(){
   if(_nbBusy) return; _nbBusy = true;
   try{
-    bridgeFetch('/notes', {method:'POST', headers:{'Content-Type':'application/json'},
+    fetch('http://127.0.0.1:8823/notes', {method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify(_notesBridgePayload())})
       /* SILENCE WAS THE BUG (2026-08-26). This resolved the same way for every outcome: a 400,
          a 500, a bridge that is not running, and — the one that actually happened — a push the
@@ -20384,7 +20401,7 @@ async function boot(){
           && new Date().getHours() < 10;
     }catch(e){ return false; }
   }
-  function _runlog(ev, x){ try{ bridgeFetch('/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
+  function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
   // #worker=open (Call Mode's nav link, 2026-10-24): show the worker in MANUAL mode and nothing
   // else. Never routed through the =morning branch below, which is the scheduler's auto-send path.
   /* No lane forced: openMorningWorker('') lets the worker open REPLIED-first when an owner is
@@ -20512,7 +20529,7 @@ async function boot(){
   // semantics, zero duplicated branch logic), then tell the bridge how far we consumed.
   setTimeout(function(){
     try{
-      bridgeFetch('/marks').then(function(r){ return r.json(); }).then(function(j){
+      fetch('http://127.0.0.1:8823/marks').then(function(r){ return r.json(); }).then(function(j){
         if(!j || !j.ok || !(j.marks||[]).length) return;
         // __replaying bypasses logTouch's confirm() guards: a replayed mark documents a contact
         // that ALREADY happened — the guards' own "proceed = document it" semantics — and a
@@ -20533,7 +20550,7 @@ async function boot(){
         setTimeout(function(){
           window.__replaying = false;
           try{
-            bridgeFetch('/marks/consumed', {method:'POST',
+            fetch('http://127.0.0.1:8823/marks/consumed', {method:'POST',
               headers:{'Content-Type':'application/json'}, body:JSON.stringify({offset:j.offset})});
           }catch(e){}
           if(typeof _shareToast === 'function')

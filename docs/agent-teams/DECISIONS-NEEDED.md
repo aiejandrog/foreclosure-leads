@@ -75,3 +75,11 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Recommendation: A, by the suppression-surface owner.
 - Fallback in progress: none.
 - Status: OPEN
+
+### D7: Call Mode now posts /notes and /text to the bridge (callfix, 2026-10-30) -- LEGAL REVIEW in PR title
+- Touches: suppression (POST /notes runs optout_sync.ledger_from_notes, so a DNC tapped in Call Mode reaches optouts.json sooner, add-only) and the text ledger (POST /text writes text_sent.json). No send path, no copy, no gate changed; send_server.py untouched.
+- Option A: ship both posts (recommended: the board already does the same; Call Mode alone was the gap) | Risk: more writers of the ledger sweep input; a bad note in a phone's localStorage would be ledgered like the board's
+- Option B: ship only the device key and drop the /notes and /text posts | Risk: Call Mode work stays off disk unless a board tab is open on the bridge PC
+- Recommendation: A.
+- Fallback in progress: none needed; if Alex says B, remove callNotesPushSoon() from saveNotes() and the two callTextLedger() calls.
+- Status: OPEN

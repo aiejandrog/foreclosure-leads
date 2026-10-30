@@ -5808,7 +5808,7 @@ function _bridgeDenied(){
     else if(typeof addLog === 'function') addLog('fail', '', m);
   }catch(e){}
 }
-function bridgeFetch(path, opts){
+function bridgeFetch(path, opts, f){
   var o = {}, h = {}, k;
   opts = opts || {};
   for(k in opts) o[k] = opts[k];
@@ -5816,7 +5816,8 @@ function bridgeFetch(path, opts){
   var key = _bridgeKey();
   if(key) h['X-Dealflow-Key'] = key;
   o.headers = h;
-  return fetch(_bridgeBase() + path, o).then(function(r){
+  var go = f || (typeof window !== 'undefined' && window.__bridgeOrigFetch) || fetch;
+  return go(_bridgeBase() + path, o).then(function(r){
     if(!r || r.status !== 401) return r;
     return r.clone().json().then(function(j){
       if(!j || j.blocked !== 'device_key') return r;
@@ -5843,6 +5844,22 @@ function setBridgeKey(){
     else if(typeof _shareToast === 'function') _shareToast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
   }catch(e){}
 }
+/* Existing call sites keep their literal fetch('http://127.0.0.1:8823/...'): this wraps the page's fetch once, so
+   a call to the default bridge address gets the key, the stored address and the plain 401 message, and every
+   other URL passes through untouched. */
+function _bridgeInstall(){
+  try{
+    if(typeof window === 'undefined' || window.__bridgeOrigFetch || typeof window.fetch !== 'function') return;
+    var orig = window.fetch.bind(window);
+    window.__bridgeOrigFetch = orig;
+    window.fetch = function(u, o){
+      var s = (typeof u === 'string') ? u : '';
+      if(s.indexOf('http://127.0.0.1:8823/') === 0) return bridgeFetch(s.slice(21), o, orig);
+      return orig(u, o);
+    };
+  }catch(e){}
+}
+_bridgeInstall();
 /* BRIDGE-KEY-END */
 /* CALL MODE -> DISK (2026-10-30). Every outcome Call Mode logs used to reach the team sync and nothing
    else: this page never posted to the bridge's /notes, so worker_notes.json (the scorecard, analyst.py)
@@ -5917,7 +5934,7 @@ function textPreflight(c, num, pcs){
     };
     t = setTimeout(function(){ unreachable('the bridge did not answer the do-not-contact check'); }, 3500);
     try{
-      bridgeFetch('/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
+      fetch('http://127.0.0.1:8823/text/check', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({case: c || '', to: String(num || ''), pcs: pcs || []})})
         .then(function(rs){
           /* the bridge ANSWERED: a body we cannot read is a refusal, never the phone fallback */
@@ -5929,7 +5946,7 @@ function textPreflight(c, num, pcs){
 }
 function pollTextHold(){
   var was = textingHeld();
-  bridgeFetch('/health').then(function(r){ return r.json(); }).then(function(j){
+  fetch('http://127.0.0.1:8823/health').then(function(r){ return r.json(); }).then(function(j){
     if(!j || typeof j.text_hold !== 'boolean'){ TEXTHOLDLIVE = false; }
     else {
       TEXTHOLDLIVE = true;
@@ -6671,7 +6688,7 @@ function mailViaBridge(r, M){
     var unreachable = 'The send bridge on the laptop did not answer, so this email was not sent. Paste-an-email goes out only through that bridge, from the company address, after the same checks as every other send. Open Call Mode on the laptop that runs the bridge and try again.';
     var fail = function(why){ clearTimeout(slow); fin({ok:false, why:why}); };
     try{
-      bridgeFetch('/send', {
+      fetch('http://127.0.0.1:8823/send', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
       }).then(function(rs){

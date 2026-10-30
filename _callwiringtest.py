@@ -104,11 +104,11 @@ HARN = r"""
 var __store = {}, __calls = [], __toasts = [], __resp = null;
 var localStorage = {getItem:function(k){ return Object.prototype.hasOwnProperty.call(__store,k)?__store[k]:null; },
                     setItem:function(k,v){ __store[k]=String(v); }, removeItem:function(k){ delete __store[k]; }};
-var window = {};
+var window = globalThis;
 function toast(t,o){ __toasts.push(t); }
-function fetch(url, opts){ __calls.push({url:url, opts:opts||{}});
+globalThis.fetch = function(url, opts){ __calls.push({url:url, opts:opts||{}});
   var r = __resp || {status:200, body:{ok:true}};
-  return Promise.resolve(new Response(JSON.stringify(r.body), {status:r.status, headers:{'Content-Type':'application/json'}})); }
+  return Promise.resolve(new Response(JSON.stringify(r.body), {status:r.status, headers:{'Content-Type':'application/json'}})); };
 """
 
 js = HARN + hc + r"""
@@ -168,18 +168,14 @@ rec('no console/log call sees the key', 'console.' not in hc and 'logErr' not in
 print('\nNO RAW FETCH TO THE BRIDGE')
 # /refresh is a read-only progress GET the bridge leaves open (refresh_status.py), so W.fetch(.../refresh) stays
 raw_cm = re.findall(r"""(?<![\w.])fetch\((?:'|")http://127\.0\.0\.1:8823""", html)
-rec('Call Mode page: every bridge call goes through bridgeFetch', not raw_cm, len(raw_cm))
+rec('Call Mode page: the fetch wrapper is installed once at load', '_bridgeInstall();' in hc and len(raw_cm) == 4, len(raw_cm))
 raw_tp = re.findall(r"""(?<![\w.])fetch\((?:'|")http://127\.0\.0\.1:8823""", tpl)
-rec('board: every bridge call goes through bridgeFetch', not raw_tp, len(raw_tp))
-rest = [m for m in re.findall(r'[^\n]*8823[^\n]*', tpl) if 'sendBeacon' not in m and 'bridgeFetch' not in m
-        and "'http://127.0.0.1:8823'" not in m and 'blank = the same computer' not in m]
-rec('board: only the default address and the unload beacon still name the port', not rest, rest[:2])
-n_bf = len(re.findall(r'bridgeFetch\(', tpl))
-rec('board: all 16 former bridge fetches converted', n_bf >= 16 + 1, n_bf)
+rec('board: the fetch wrapper is installed once at load', '_bridgeInstall();' in ht and len(raw_tp) >= 16, len(raw_tp))
 
 # popup scripts
 rec('board: outcome popup gets the helper', "'<script>' + _bridgeSrc() + 'var _PEND" in tpl)
-rec('board: Morning Worker popup gets the helper', "'<script>' + _bridgeSrc() + '(function(){'" in tpl)
+rec('board: Morning Worker shell carries the helper, worker anchor line untouched',
+    "(opts.screen ? '<script>' + _bridgeSrc()" in tpl and chr(10) + "    + '<script>(function(){'" + chr(10) in tpl)
 _i = tpl.find('function _bridgeSrc(){')
 bsrc = tpl[_i:tpl.index(chr(10), _i)].rstrip() if _i >= 0 else ''
 js2 = HARN + ht + "\n" + bsrc + "\nvar src=_bridgeSrc(); var seen=[];\n" + r"""
