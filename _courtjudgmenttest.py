@@ -33,7 +33,7 @@ chk('path-like case cannot escape the folder', MJ.court_judgment('../../etc/pass
 lead = {'case': CASE, 'ctype': 'HOA/Condo', 'value': 600000, 'judg': 300000, 'ju': False}
 E.apply(lead, {'conf': 'ok', 'liens': [], 'nrec': 12, 'second_fc': []})
 c = E.card(lead)
-chk('docket by default', c['judgment'] == 300000 and c['judgment_source'] == 'docket')
+chk('auction listing by default', c['judgment'] == 300000 and c['judgment_source'] == 'auction listing')
 lead.update(judg_src='court copy', judgc=412880.45)
 c = E.card(lead)
 chk('eqc.judgment_source = court copy, figure and net use it',
