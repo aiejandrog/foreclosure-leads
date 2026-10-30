@@ -1956,7 +1956,24 @@ class Handler(BaseHTTPRequestHandler):
         The bind address (127.0.0.1) is the actual security boundary; CORS is UX plumbing."""
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Dealflow-Key')
+        self.send_header('Access-Control-Allow-Private-Network', 'true')
+
+    def _auth(self, open_ok=False):
+        """Device-key gate (bridge_auth.py, 2026-10-13). A request from this computer itself needs
+        no key unless DEALFLOW_BRIDGE_REQUIRE_KEY=1 or it came through a proxy. open_ok=True (for
+        /health) lets a keyless remote caller through to a minimal answer. Fail closed: if the
+        gate cannot be evaluated, the request is refused."""
+        try:
+            import bridge_auth as _BA
+            ok, dev, why = _BA.check(self.client_address[0], self.headers)
+        except Exception as e:
+            ok, dev, why = False, '', 'the device-key check could not run (%s)' % str(e)[:80]
+        self._device = dev
+        if ok or open_ok:
+            return ok
+        self._json(401, {'ok': False, 'blocked': 'device_key', 'err': why})
+        return False
 
     def _json(self, status, obj):
         raw = json.dumps(obj).encode('utf-8')
@@ -1967,14 +1984,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def do_OPTIONS(self):
+    def do_OPTIONS(self):       # browser preflight carries no key; it reveals nothing
         self.send_response(204)
         self._cors()
         self.end_headers()
 
     def do_GET(self):
-        if self.path.startswith('/marks'):
-            return self._handle_marks_get()
         if self.path.startswith('/pid'):          # cheap liveness for a reloading predecessor
             return self._json(200, {'ok': True, 'pid': os.getpid()})
         if self.path.startswith('/refresh'):
@@ -1986,6 +2001,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, refresh_progress.public())
             except Exception as e:
                 return self._json(200, {'ok': False, 'err': str(e)[:120]})
+        if self.path.startswith('/health'):
+            if not self._auth(open_ok=True):      # keyless remote caller: liveness only
+                # text_hold is spelled out so a page reading this holds texting with a reason
+                # instead of mistaking a missing field for "not held".
+                return self._json(200, {'ok': True, 'ready': False, 'auth': 'device key required',
+                                        'text_hold': True,
+                                        'text_hold_why': 'HOLD texting: this device has no valid bridge key. '
+                                                         'Open the setup link for this device once.'})
+        elif not self._auth():
+            return
+        if self.path.startswith('/marks'):
+            return self._handle_marks_get()
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
             _bh = _bounce_health()
@@ -2440,6 +2467,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         global _LAST_POST
+        if not self._auth():
+            return
         _LAST_POST = time.time()          # a code reload waits until POSTs have been quiet a while
         if self.path.startswith('/notes'):
             return self._handle_notes()
@@ -3425,7 +3454,8 @@ def _already_running(host, port, timeout=2.5):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--host', default='127.0.0.1',
-                    help='bind address (default 127.0.0.1 — DO NOT change unless you know why)')
+                    help='bind address (default 127.0.0.1). A non-loopback address (e.g. a Tailscale IP) is '
+                         'refused unless a device key exists (bridge_auth.py), and a wildcard never.')
     ap.add_argument('--port', type=int, default=8823)
     # NOTE: this default SILENTLY OVERRODE Handler.daily_cap — raising the class attribute alone
     # did nothing because main() always reassigns from args. Keep the two in sync.
@@ -3436,6 +3466,14 @@ def main():
     args = ap.parse_args()
 
     Handler.daily_cap = args.limit
+    try:
+        import bridge_auth as _BA
+        _hs_ok, _hs_why = _BA.host_is_safe(args.host)
+    except Exception as e:
+        _hs_ok, _hs_why = False, 'bridge_auth.py could not be loaded (%s)' % str(e)[:80]
+    if not _hs_ok:
+        print('  refusing to start: ' + _hs_why)
+        raise SystemExit(2)
 
     # Idempotent start — see _already_running(). Exit 0, not an error: a duplicate launch means the
     # bridge is up, which is the desired end state.
