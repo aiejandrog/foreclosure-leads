@@ -338,7 +338,9 @@ def coverage_documented(chain):
 #   label            LABEL[state] (or the row's own eqstate_why when the bake wrote a sharper one)
 #   fact             state in FACT
 #   judgment         the foreclosing case's figure, or None when it is not posted / unreadable
-#   judgment_source  'court copy' (a read final-judgment document) | 'docket' | 'not posted'
+#   judgment_source  'court copy' (a read final-judgment document) | 'docket' (only a row that says so)
+#                    | 'auction listing' (the auction page's figure, no document behind it)
+#                    | 'opening bid' (a tax deed: not a judgment, never quotable) | 'not posted'
 #   liens            [{type, amount, recorded, source}]  RECORDED amounts, never payoffs
 #   basis            value the equity is measured against (confident comps ARV, else county roll)
 #   basis_source     'arv' | 'county'
@@ -350,6 +352,8 @@ def coverage_documented(chain):
 # was signed, and `net` is a direction, not a quote of what the owner owes today.
 # ---------------------------------------------------------------------------------------------
 COURT_COPY = 'court copy'
+AUCTION_LISTING = 'auction listing'
+OPENING_BID = 'opening bid'
 
 
 def _num(v):
@@ -378,10 +382,21 @@ def card(lead):
     jv = _num(lead.get('judgc')) if court else _num(lead.get('judg') if lead.get('judg') is not None else lead.get('judgment'))
     unknown = bool(lead.get('ju') or lead.get('judgment_unknown'))
     judgment = jv if (jv > 0 and not unknown) else None
+    try:
+        import diligence_flags as _dfx
+        taxdeed = bool(_dfx.is_tax_deed_row(lead))
+    except Exception:
+        taxdeed = str(lead.get('st') or lead.get('sale_type') or '').upper() == 'TD'
     if judgment is None:
         jsrc = 'not posted'
+    elif taxdeed:
+        jsrc = OPENING_BID          # the bake stores the opening bid in the judgment field
+    elif court:
+        jsrc = COURT_COPY
+    elif lead.get('judg_src') == 'docket':
+        jsrc = 'docket'
     else:
-        jsrc = COURT_COPY if court else 'docket'
+        jsrc = AUCTION_LISTING      # county_leads / foreclosure_leads take it from the auction page
     liens = []
     for l in (lead.get('orliens') or []):
         if not isinstance(l, dict):
@@ -391,13 +406,15 @@ def card(lead):
                       'recorded': str(l.get('d') or ''),
                       'source': str(l.get('src') or 'official records')})
     fact = st in FACT
-    may = bool(fact and judgment is not None)
+    may = bool(fact and judgment is not None and jsrc != OPENING_BID)
     net = None
     if may and basis > 0:
         net = round(basis - _num(debt.get('total')), 2)
     why = lead.get('eqstate_why') or LABEL[st]
     if fact and judgment is None:
         why = why + ' — but the judgment is not posted, so no figure may be quoted'
+    elif fact and jsrc == OPENING_BID:
+        why = why + ' — but this is a tax deed: the figure is the auction opening bid, not a judgment, so no figure may be quoted'
     return {'state': st, 'label': why if why.startswith(('UNVERIFIED', 'CEILING')) else LABEL[st],
             'fact': fact, 'judgment': judgment, 'judgment_source': jsrc, 'liens': liens,
             'basis': basis if basis > 0 else None, 'basis_source': bsrc if basis > 0 else None,
