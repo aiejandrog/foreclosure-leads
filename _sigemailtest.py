@@ -1,18 +1,27 @@
-"""The signature contact line is the business inbox, never the retired personal Gmail.
+"""The signature contact line is the business inbox, never a retired personal default.
 
 outreach_email, cadence follow-ups, and letterheads that show an email all print
-outreach_copy.signature_email(). A blank and the retired Gmail both render
+outreach_copy.signature_email(). A blank and a retired default both render
 alejandro@bsgflorida.com. An operator who saved a different address keeps it.
 The From address is not this line.
+
+The retired address is NOT in this repo: it lives in the untracked footprint.local.json
+(retired_emails), so this test builds a throwaway one with an invented address.
 
 Run: python _sigemailtest.py
 """
 import json
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+
+RETIRED = 'retired.default@example.net'
+_FP = os.path.join(tempfile.mkdtemp(prefix='sig_'), 'footprint.local.json')
+json.dump({'retired_emails': [RETIRED]}, open(_FP, 'w'))
+os.environ['DEALFLOW_FOOTPRINT_JSON'] = _FP
 
 import cadence as C                 # noqa: E402
 import outreach_copy as OC          # noqa: E402
@@ -20,7 +29,6 @@ import outreach_email as OE         # noqa: E402
 import outreach_mail as OM          # noqa: E402
 
 BUSINESS = 'alejandro@bsgflorida.com'
-RETIRED = 'agonzalez0311707@gmail.com'
 CUSTOM = 'ops@example.com'
 
 fails = []
@@ -34,13 +42,13 @@ def chk(name, cond, got=''):
 
 def no_gmail(label, text):
     chk(label + ' shows ' + BUSINESS, BUSINESS in text)
-    chk(label + ' never shows the retired Gmail', RETIRED not in text.lower())
+    chk(label + ' never shows the retired address', RETIRED not in text.lower())
 
 
 # --- the one rule -----------------------------------------------------------
 chk('blank becomes the business inbox', OC.signature_email('') == BUSINESS)
 chk('missing becomes the business inbox', OC.signature_email(None) == BUSINESS)
-chk('retired Gmail, any case or space, becomes the business inbox',
+chk('a retired default, any case or space, becomes the business inbox',
     OC.signature_email('  ' + RETIRED.upper() + '  ') == BUSINESS)
 chk('a different saved address is left alone', OC.signature_email(CUSTOM) == CUSTOM)
 
@@ -48,48 +56,50 @@ chk('a different saved address is left alone', OC.signature_email(CUSTOM) == CUS
 for label, snd in (
     ('outreach email, no email key', {}),
     ('outreach email, blank email', {'email': '   ', 'name': 'Alejandro Gonzalez'}),
-    ('outreach email, retired Gmail', {'name': 'Alejandro Gonzalez', 'email': RETIRED,
-                                       'phone': '(786) 631-1823'}),
+    ('outreach email, retired default', {'name': 'Alejandro Gonzalez', 'email': RETIRED,
+                                       'phone': '(305) 555-0100'}),
 ):
     no_gmail(label, OE._sig(snd))
 kept = OE._sig({'name': 'Alejandro Gonzalez', 'email': CUSTOM})
-chk('outreach email keeps a saved address that is not the Gmail', 'Email: ' + CUSTOM in kept)
+chk('outreach email keeps a saved address that is not the retired one', 'Email: ' + CUSTOM in kept)
 chk('that saved address is not rewritten to the business inbox', BUSINESS not in kept)
 
 # --- cadence follow-ups ------------------------------------------------------
 lead = {'owner': 'Jane Doe', 'addr': '1 MAIN ST, MIAMI, FL 33101', 'auction': '2026-11-01'}
 for label, snd in (
-    ('cadence, no email', {'name': 'Alejandro Gonzalez', 'phone': '(786) 631-1823'}),
-    ('cadence, retired Gmail', {'name': 'Alejandro Gonzalez', 'email': ' ' + RETIRED + ' '}),
+    ('cadence, no email', {'name': 'Alejandro Gonzalez', 'phone': '(305) 555-0100'}),
+    ('cadence, retired default', {'name': 'Alejandro Gonzalez', 'email': ' ' + RETIRED + ' '}),
 ):
     bodies = C.steps(lead, snd)
     chk(label + ' renders four touches', len(bodies) == 4)
     for subj, body in bodies:
         no_gmail(label + ' / ' + subj[:24], body)
 kept_steps = C.steps(lead, {'name': 'Alejandro Gonzalez', 'email': CUSTOM})
-chk('cadence keeps a saved address that is not the Gmail',
+chk('cadence keeps a saved address that is not the retired one',
     all(CUSTOM in body and BUSINESS not in body and RETIRED not in body.lower()
         for _s, body in kept_steps))
 
 # --- letters that show an email (letterhead + footer) -----------------------
 for label, snd in (
     ('letterhead, no email', {'name': 'Alejandro Gonzalez'}),
-    ('letterhead, retired Gmail', {'name': 'Alejandro Gonzalez', 'email': RETIRED}),
+    ('letterhead, retired default', {'name': 'Alejandro Gonzalez', 'email': RETIRED}),
 ):
     no_gmail(label + ' header', OM._lh_header(snd))
     no_gmail(label + ' footer', OM._lh_sign(snd))
 custom_head = OM._lh_header({'name': 'Alejandro Gonzalez', 'email': CUSTOM})
-chk('letterhead keeps a saved address that is not the Gmail', CUSTOM in custom_head and BUSINESS not in custom_head)
+chk('letterhead keeps a saved address that is not the retired one', CUSTOM in custom_head and BUSINESS not in custom_head)
 
 # --- tracked defaults --------------------------------------------------------
 tpl = json.load(open(os.path.join(HERE, 'sender.json.template'), encoding='utf-8'))
 chk('sender.json.template email is the business inbox', tpl.get('email') == BUSINESS)
 board = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
-chk('board default signature email is the business inbox',
-    "email:'%s'" % BUSINESS in board)
-# The heal regex escapes the dot, so the raw address is not a contiguous string in the file.
-chk('board still drops a saved copy of the retired Gmail',
-    'agonzalez0311707@gmail\\.com' in board and 'delete saved.email' in board)
+# The board no longer carries ANY sender literal: the default email arrives sealed in the payload
+# (side.sender), and the retired values to heal off a device arrive sealed too (side.retired).
+chk('board template carries no business-email literal (it is sealed, not published)',
+    BUSINESS not in board)
+chk('board default sender is token-fed', '__SENDER_IDENTITY__' in board and '__SENDER_RETIRED__' in board)
+chk('board still drops a saved copy of a retired email (data-driven, from the sealed list)',
+    "_senderRetired('email', saved.email)" in board and 'delete saved.email' in board)
 
 print('\n%d failure(s)' % len(fails))
 sys.exit(1 if fails else 0)

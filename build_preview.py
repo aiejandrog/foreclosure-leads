@@ -10,7 +10,7 @@ Design lives in tracker_template.html (the <style> blocks + render()). Edit THAT
 
 All names/addresses/cases below are INVENTED for layout only.
 """
-import json, os
+import json, os, sys
 import foreclosure_leads as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -137,6 +137,10 @@ except Exception as _e:
 tpl = F._bake_alex_email(tpl, 'design-preview.html')   # never raises; falls back loudly
 html = tpl.replace("__DATA__", F._esc_json(FAKE))
 F.assert_no_placeholders(html, 'design-preview.html')
-out = os.path.join(HERE, "design-preview.html")
+import footprint as _footprint
+_footprint.assert_clean(html, 'design-preview.html')   # no personal mailbox or local-config value, ever
+# `--out PATH` lets a test build into a temp file instead of rewriting the tracked preview.
+out = (sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv
+       else os.path.join(HERE, "design-preview.html"))
 open(out, "w", encoding="utf-8").write(html)
 print(f"wrote {out}  ({len(FAKE)} sample leads, plaintext, no gate)")

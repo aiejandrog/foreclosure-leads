@@ -14,6 +14,7 @@ row stamped with its source and machine, a failed send writes an error row, and 
 writes nothing; (4) every sender in the repo that reaches _smtp_send is inside a gate.
 """
 import json, os, pathlib, sys, tempfile, types
+os.environ.setdefault('DEALFLOW_ADVISOR_EMAILS', 'advisor@example.org')   # the advisor is local config now, not a literal
 import datetime as dt
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -177,9 +178,9 @@ try:
 except MG.UnsendableError:
     rec('a bare homeowner send is refused', True)
 rec('mail to the sending login alone is allowed', MG.require_gated('login@example.com', login='login@example.com'))
-rec('mail to the advisor alone is allowed', MG.require_gated('celusa13@gmail.com'))
+rec('mail to the advisor alone is allowed', MG.require_gated('advisor@example.org'))
 try:
-    MG.require_gated('celusa13@gmail.com', bcc='owner@example.com')
+    MG.require_gated('advisor@example.org', bcc='owner@example.com')
     rec('an owner hidden in bcc is refused', False)
 except MG.UnsendableError:
     rec('an owner hidden in bcc is refused', True)

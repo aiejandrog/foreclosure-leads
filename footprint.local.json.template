@@ -1,0 +1,8 @@
+{
+  "_comment": "Copy to footprint.local.json (gitignored, per machine). Real values live there and NOWHERE else -- never in tracked code, a template, a comment, a test, a PR or a commit message. See footprint.py.",
+  "advisor_emails": ["advisor@example.org"],
+  "retired_emails": ["old-default@example.org"],
+  "retired_addr_prefixes": ["100 Example Ave"],
+  "warmup_peers": ["peer@example.org"],
+  "deny": ["any string that must never appear in a published page"]
+}

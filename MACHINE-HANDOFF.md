@@ -244,7 +244,14 @@ passes `meta.wl`; boards built before 09-07 send without it and fall to the `def
 
 **Secrets (never commit, never put in OneDrive):**
 `site.codes`, `captcha.key`, `tracerfy.key`, `tracerfy_mcp.url`, `gmail.key`, `streetview.key`,
-`whitepages.key`, `zerobounce.key`, `sheets_crm_webhook.url`
+`whitepages.key`, `zerobounce.key`, `sheets_crm_webhook.url`, `footprint.local.json`
+
+`footprint.local.json` (template: `footprint.local.json.template`) names the advisor's address (who a
+Brief-Jesse / test send may reach), the retired sender defaults to heal off devices, and a deny list
+that fails any build whose published page contains them. **An engine without it still builds**, but:
+Brief Jesse has no recipient, a test send to the advisor is refused, and the board's retired-default
+heal has nothing to drop. It is the ONLY place those addresses live -- never in tracked code. The
+operator identity itself comes from `sender.json` and is sealed inside the encrypted payload.
 
 > Desktop status 2026-08-22: it holds the `DEALFLOW_TRANSFER_2026-08-20` snapshot, so its worker
 > state is **frozen at 08-20** while the laptop has kept working. Re-copy §3 at arming time or the
@@ -462,8 +469,10 @@ YAML rather than re-typing it); `--live` runs it against this repo's current log
    local and global config, so every `git commit` on this box failed with *"Author identity
    unknown"*. Had the desktop been armed in that state, each refresh would have scraped, enriched,
    rebuilt the board — and then failed silently at the commit step, publishing nothing while
-   `leads-run.log` filled with fatal errors. Now set to
-   `Alejandro Gonzalez <agonzalez0311707@gmail.com>`, matching the laptop's commits.
+   `leads-run.log` filled with fatal errors. Now set to the
+   same name and `user.email` the laptop uses (read it with `git config --get user.email` there; do
+   not write it into this file). For commits that reach a PUBLIC repo -- the site mirror -- the
+   publish step pins a GitHub noreply identity instead, see `publish_site.py`.
    **Check this on any new machine before arming it:** `git config --get user.email`
 
 ---

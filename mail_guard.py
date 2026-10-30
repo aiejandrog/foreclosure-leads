@@ -260,7 +260,10 @@ def assert_sendable(subj='', body='', to='', unsub=None):
 # This cannot stop a script that opens its own smtplib connection. It stops the one entry point
 # this repo owns, and makes the bypass an explicit act instead of a default.
 _TL = threading.local()
-_OPERATOR_FALLBACK = frozenset({'celusa13@gmail.com'})
+try:
+    import footprint as _footprint   # the advisor's address comes from the untracked local config
+except ImportError:   # a sandbox that stages a fixed module list (tests do): no config means NO advisor
+    _footprint = None
 
 
 @contextlib.contextmanager
@@ -282,7 +285,7 @@ def current_gate():
 
 
 def _operator_addrs(login=''):
-    own = set(_OPERATOR_FALLBACK)
+    own = set(_footprint.advisor_emails() if _footprint else ())
     try:
         import send_server as _SS
         own |= {str(a).strip().lower() for a in getattr(_SS, 'ADVISOR_EMAILS', ())}

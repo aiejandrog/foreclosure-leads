@@ -37,10 +37,10 @@ def html_text(h):
 
 bodies = {
     'long': OC.email_body('Maria', '2026-11-04', sig_block='Alejandro Gonzalez\nBiscayne Solutions Group\n'
-                          '(786) 631-1823\n8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122'),
+                          '(305) 555-0100\n8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122'),
     'short': OC.email_body_short('Maria', '2026-11-04'),
     'tricky': 'Hi <Ann> & Co,\n\nSee https://example.com/a?b=1&c=2, or mail a.b@bsgflorida.com.\n'
-              'Call (786) 631-1823.\n\n  • one\n  • two\n\n' + OC.OPTOUT_LINE_EN + '\n' + OC.OPTOUT_LINE_ES,
+              'Call (305) 555-0100.\n\n  • one\n  • two\n\n' + OC.OPTOUT_LINE_EN + '\n' + OC.OPTOUT_LINE_ES,
 }
 for k, b in bodies.items():
     h = EH.render(b)
@@ -53,7 +53,7 @@ h = EH.render(bodies['tricky'])
 check('escapes markup in the body', '&lt;Ann&gt; &amp; Co' in h and '<Ann>' not in h)
 check('links the url with & escaped', 'href="https://example.com/a?b=1&amp;c=2"' in h)
 check('links the email', 'href="mailto:a.b@bsgflorida.com"' in h)
-check('links the phone', 'href="tel:+17866311823"' in h)
+check('links the phone', 'href="tel:+13055550100"' in h)
 check('a dashed case number is not a phone', 'tel:' not in EH.render('Case 13-2025-CA-012345-0000-01'))
 check('bullets become a list', '<ul' in h and h.count('<li') == 2)
 check('opt-out lines survive', html.escape(OC.OPTOUT_LINE_EN) in h and OC.OPTOUT_LINE_ES in html.unescape(h))

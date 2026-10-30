@@ -16,7 +16,7 @@ decisions, not open work.
 
 Run:  python deal_desk.py                 # write DEALFLOW\DEAL-DESK-<date>.md + deal_desk.json, print top
       python deal_desk.py --print         # ...and print the whole desk
-      python deal_desk.py --email jesse    # ...and SMTP it to Jesse (celusa13@gmail.com)
+      python deal_desk.py --email jesse    # ...and SMTP it to the advisor (footprint.local.json advisor_emails)
 """
 import argparse
 import datetime
@@ -28,7 +28,7 @@ import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'deal_desk.json')
-JESSE = 'celusa13@gmail.com'
+import footprint as _footprint
 
 # Stages that are OPEN WORK, with how committed the owner is (higher = closer to money) and the one
 # next action that moves it. Anything not here (Dead, DO NOT CONTACT, Wrong number, Not interested,
@@ -175,6 +175,9 @@ def write_md(desk, today):
 def email_jesse(path, desk, today):
     import json as _j
     import outreach_email as O
+    JESSE = _footprint.advisor_email()
+    if not JESSE:
+        raise SystemExit('deal_desk: no advisor address configured -- add advisor_emails to footprint.local.json')
     hot = [d for d in desk if d['pri'] >= 120]
     body = ['Deal desk %s — %d open deals, %d on fire. Full list attached below.' % (today.isoformat(), len(desk), len(hot)), '',
             'Top of the desk (work these first):']
@@ -196,7 +199,7 @@ def email_jesse(path, desk, today):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--print', action='store_true')
-    ap.add_argument('--email', default='', help='"jesse" -> SMTP the desk to celusa13@gmail.com')
+    ap.add_argument('--email', default='', help='"jesse" -> SMTP the desk to the configured advisor address')
     a = ap.parse_args()
     desk, today = build()
     with open(OUT, 'w', encoding='utf-8') as f:

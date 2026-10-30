@@ -22,6 +22,7 @@ import json
 import os
 # Follow-up sends are off unless this is exactly 1 (PR #294). This fixture expects one to leave.
 os.environ['DEALFLOW_FOLLOWUPS_ON'] = '1'
+os.environ.setdefault('DEALFLOW_ADVISOR_EMAILS', 'advisor@example.org')   # the advisor is local config now, not a literal
 import pathlib
 import shutil
 import socket
@@ -91,7 +92,7 @@ OPTOUTS = {'_dealflow_notes': True, 'notes': {'2099-000023-CA-01': {'status': 'D
 
 def seed(d):
     for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py',
-              'bounce_scan.py', 'bridge_auth.py'):
+              'bounce_scan.py', 'bridge_auth.py', 'footprint.py'):
         shutil.copy(HERE / f, d / f)
     w = lambda n, v: (d / n).write_text(json.dumps(v), encoding='utf-8')
     w('sync_status.json', {'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,
@@ -143,7 +144,7 @@ rec('with the ZeroBounce switch off, zerobounce valid is held', S._recipient_ver
 S.FIRST_TOUCH_ADMIT_ZEROBOUNCE_VALID = True
 E = T / 'empty'
 E.mkdir()
-for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'footprint.py'):
     shutil.copy(HERE / f, E / f)
 S2 = load(E / 'send_server.py', 'send_server_ft_empty')
 rec('no verification files at all -> hold (never a pass by default)',
@@ -280,7 +281,7 @@ try:
         st == 200 and j.get('gate') == 'delivered', (st, j))
     st, j = send('replied@example.com')
     rec('an owner who replied from this address: sends (200)', st == 200 and j.get('gate') == 'replied', (st, j))
-    st, j = send('celusa13@gmail.com', test=True)
+    st, j = send('advisor@example.org', test=True)
     rec('meta.test (1:1 to the advisor/operator) is exempt from the gate', st == 200 and 'gate' not in j, (st, j))
     st, hj2 = call(port, '/health')
     rec('recipients_today counts one per send: no BCC fan-out', hj2.get('recipients_today') == 5, hj2.get('recipients_today'))

@@ -27,8 +27,10 @@
  */
 
 var LEADS_TAB = 'Leads';
-// Team inbox rule (memory: never infer teammate addresses): celusa13 + Alejandro only.
-var NOTIFY = 'celusa13@gmail.com,agonzalez0311707@gmail.com';
+// Team inbox rule (memory: never infer teammate addresses): the two team inboxes only. They are NOT
+// written in this file (it is checked in): set Script Properties > NOTIFY to a comma-separated list
+// of the exact addresses, in the Apps Script editor. Blank means no notification email is sent.
+var NOTIFY = PropertiesService.getScriptProperties().getProperty('NOTIFY') || '';
 
 function doPost(e) {
   try {
