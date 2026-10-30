@@ -5,7 +5,9 @@ How it works end to end:
      Export queue. That produces cadence_queue.json next to this script.
   2. Run `python cadence.py` on this machine (double-click cadence-run.bat, or schedule it).
      It sends every step that's DUE today over Gmail SMTP (gmail.key, gitignored), schedules the
-     next touch (day 0/2/4/7), and advances the state in cadence_state.json.
+     next touch (day 0/2/4/7), and advances the state in cadence_state.json. One run sends at
+     most one note per case, and per owner across sibling cases or the same email or property
+     address. Any other due step stays active and waits out that same spacing.
   3. Every run also polls the inbox (IMAP) for anything FROM an enrolled owner. The moment a
      reply lands, that sequence is CANCELLED for good — the lead goes warm and no more touches
      go out. Replies containing stop/unsubscribe/para/detener are additionally ledgered straight
@@ -114,6 +116,99 @@ def _cadence_lane(entry, today):
     if days <= 7:
         return 'urgent'
     return 'active'          # 8 days and beyond, 45 included — see docstring
+
+
+# Day 0 / 2 / 4 / 7. Index is the step about to be sent: days that must have passed since the
+# previous note. Touch 1 has no previous cadence note, so its gap is 0. The send loop below
+# used to apply this only when it scheduled the NEXT step, which let a second due sequence for
+# the same owner leave in the same run.
+TOUCH_GAPS = (0, 2, 2, 3)
+_MIN_GAP = min(g for g in TOUCH_GAPS if g > 0)
+# Same ceiling sibling_optout uses. An email, owner label, or property address on more cases
+# than this is a firm or a building, not one homeowner, and must not tie those cases together.
+_MAX_SHARED = 8
+
+
+def _norm_email(value):
+    return str(value or '').strip().lower()
+
+
+def _norm_owner(value):
+    """Token-sorted owner label, so 'PERSON, SAMPLE' and 'Sample Person' are one owner."""
+    return ' '.join(sorted(re.findall(r'[a-z0-9]+', str(value or '').lower())))
+
+
+def _norm_addr(value):
+    return ' '.join(re.findall(r'[a-z0-9]+', str(value or '').lower()))
+
+
+def _touch_index(state):
+    """Case -> identity keys (email, owner, property address), dropping keys on too many cases."""
+    per, buckets = {}, {}
+    for c, s in (state or {}).items():
+        keys = []
+        for pref, val in (('em', _norm_email(s.get('email'))),
+                          ('ow', _norm_owner(s.get('owner'))),
+                          ('ad', _norm_addr(s.get('addr')))):
+            if val:
+                keys.append(pref + ':' + val)
+        per[c] = keys
+        for k in keys:
+            buckets.setdefault(k, set()).add(c)
+    wide = {k for k, cs in buckets.items() if len(cs) > _MAX_SHARED}
+    return {c: [k for k in ks if k not in wide] for c, ks in per.items()}
+
+
+def _related_cases(index, case):
+    """This case plus every case that shares one of its identity keys."""
+    mine = set((index or {}).get(case) or [])
+    if not mine:
+        return {case}
+    out = {case}
+    for c, ks in index.items():
+        if mine.intersection(ks):
+            out.add(c)
+    return out
+
+
+def _last_sent(state, cases):
+    """Latest date a 'sent step' was logged on any of these cases. Deferred lines do not count."""
+    last = None
+    for c in cases:
+        for ev in ((state.get(c) or {}).get('log') or []):
+            if not str(ev.get('ev') or '').startswith('sent step'):
+                continue
+            try:
+                d = datetime.strptime(str(ev.get('d') or '')[:10], '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            if last is None or d > last:
+                last = d
+    return last
+
+
+def _next_touch(step, today, last, same_run):
+    """Date this step may send, or None if it may send now.
+
+    `step` is the 0-based step about to go. `last` is the latest cadence send to this case
+    or to the same owner, email, or property address. `same_run` means this process already
+    sent one of those. The wait is TOUCH_GAPS. A same-run collision waits at least the
+    smallest positive gap, so a step whose own gap is 0 still cannot leave the same day."""
+    try:
+        step = int(step)
+    except (TypeError, ValueError):
+        step = 0
+    if step < 0:
+        step = 0
+    need = TOUCH_GAPS[step] if step < len(TOUCH_GAPS) else TOUCH_GAPS[-1]
+    if same_run:
+        need = max(need, _MIN_GAP)
+        last = today if last is None else (today if last < today else last)
+    if last is None or need <= 0:
+        return None
+    if (today - last).days >= need:
+        return None
+    return last + timedelta(days=need)
 
 # STOP DETECTION IS NOT LOCAL ANY MORE. This module used to own the regex below, and earlier today
 # (d53955d) I made its verdict permanent: a detected stop now writes optouts.json and the
@@ -817,6 +912,10 @@ def _run(args):
         except Exception as e:
             print(f'  deliverability evidence unreadable ({str(e)[:80]}) — every step HELD this run')
     held = 0
+    # Built from the whole state, not just active: a sibling that already finished still
+    # counts as a recent note to that owner.
+    _touch_of = _touch_index(state)
+    _mailed = set()
     for c, s in active.items():
         due = s.get('next') or str(today)
         if due > str(today):
@@ -827,6 +926,27 @@ def _run(args):
             continue
         if _compliance_hold or _ledger_hold or _sync_hold or _bounce_hold or _skip_hold:
             held += 1
+            continue
+        _keys = list(_touch_of.get(c) or [])
+        _same = (c in _mailed) or bool(set(_keys) & _mailed)
+        _nxt = _next_touch(step, today, _last_sent(state, _related_cases(_touch_of, c)), _same)
+        if _nxt is not None:
+            # Not consumed. A second hand run today must not send it either, so next moves
+            # off today by the cadence gap. Status stays active.
+            s['next'] = str(_nxt)
+            s.setdefault('log', []).append({
+                'd': str(today),
+                'ev': 'deferred — one note per owner, next %s' % _nxt})
+            _why = ('already sent this owner a note in this run' if _same
+                    else 'last note is inside the cadence gap')
+            print(f"  DEFERRED step {step+1}/4 -> {s.get('email') or c}: {_why}. "
+                  f"Next {_nxt}. Step stays due.")
+            if not args.dry_run:
+                try:
+                    _save_state(state)
+                except Exception as e:
+                    print(f'  !! deferred {s.get("email") or c} but cadence_state.json could not '
+                          f'be written ({str(e)[:80]}).')
             continue
         subj, body = steps(s, sender)[step]
         lane = _cadence_lane(s, today)
@@ -890,8 +1010,13 @@ def _run(args):
             # one command whose entire job is "show me what would go out" was the one command that
             # could not see a hole in it. Report here, do not raise: a dry run should list every
             # problem in the batch, not stop at the first.
+            _refused = False
             for _why in _MG.check(subj, body, s['email']):
                 print(f'    !! WOULD BE REFUSED — {_why}')
+                _refused = True
+            if not _refused:
+                _mailed.add(c)
+                _mailed.update(_keys)
             continue
         # WARM-UP CAP, metered off the SHARED ledger so cadence and the bridge draw on one budget.
         # Skipped WITHOUT advancing the step: the touch stays due and goes out tomorrow rather than
@@ -970,12 +1095,14 @@ def _run(args):
         print(f"  sent step {step+1}/4 -> {s['email']}  ({s['owner']})"
               + (f'  as {alias} [{lane}]' if alias else ''))
         s['log'].append({'d': str(today), 'ev': f'sent step {step+1}'})
-        gaps = [0, 2, 2, 3]
+        _mailed.add(c)
+        _mailed.update(_keys)
         s['step'] = step + 1
         if s['step'] >= 4:
             s['status'] = 'completed'
         else:
-            s['next'] = str(today + timedelta(days=gaps[s['step']]))
+            # TOUCH_GAPS[new step] is the wait before that upcoming step. Same days as before.
+            s['next'] = str(today + timedelta(days=TOUCH_GAPS[s['step']]))
         # PERSIST AFTER EVERY SEND, not once at the end of the run.
         # The step advance above was in MEMORY only, and the single json.dump lived past the end of
         # this loop — so a run that died, was killed, hit an SMTP error or was closed mid-batch

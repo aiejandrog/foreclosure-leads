@@ -825,3 +825,5 @@ rf_status.json.tmp
 !_funneltruthtest.py
 # _boardstagetest: board after-the-yes counts, overdue list and eqc chip, extracted JS in node, invented data.
 !_boardstagetest.py
+# _cadenceonetouchtest: one cadence note per owner per run, and the day 0/2/4/7 gap. example.com only.
+!_cadenceonetouchtest.py
