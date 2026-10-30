@@ -326,3 +326,79 @@ def coverage_documented(chain):
         return False
     return ('second_fc' in chain and not chain.get('second_fc')
             and not chain.get('second_fc_unsure'))
+
+
+# ---------------------------------------------------------------------------------------------
+# card(): the ONE object Call Mode and the board read to decide whether an equity number may be
+# SPOKEN (2026-10-29, agent-team round 2). Everything here is read off fields the bake already
+# stamped (eqstate, judg, orliens, value/arv); no state is re-derived. Baked on each board row as
+# `eqc`.
+#
+#   state            eqstate (clear/priced/unpriced/none/unchecked); 'unchecked' when never stamped
+#   label            LABEL[state] (or the row's own eqstate_why when the bake wrote a sharper one)
+#   fact             state in FACT
+#   judgment         the foreclosing case's figure, or None when it is not posted / unreadable
+#   judgment_source  'court copy' (a read final-judgment document) | 'docket' | 'not posted'
+#   liens            [{type, amount, recorded, source}]  RECORDED amounts, never payoffs
+#   basis            value the equity is measured against (confident comps ARV, else county roll)
+#   basis_source     'arv' | 'county'
+#   net              basis minus the debt this row can see; None unless may_quote
+#   may_quote        fact AND a known judgment: the only case where a figure may be said aloud
+#   why              the one-line reason, for the card
+#
+# A recorded amount is never a payoff: `liens[*].amount` is what the instrument says on the day it
+# was signed, and `net` is a direction, not a quote of what the owner owes today.
+# ---------------------------------------------------------------------------------------------
+COURT_COPY = 'court copy'
+
+
+def _num(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return f if f == f and f not in (float('inf'), float('-inf')) else 0.0
+
+
+def card(lead):
+    """Never raises. See the block comment above for the schema."""
+    lead = lead if isinstance(lead, dict) else {}
+    st = lead.get('eqstate')
+    if st not in LABEL:
+        st = 'unchecked'
+    try:
+        import diligence_flags as _df
+        basis, bsrc = _df.basis_of(lead), _df.basis_src_of(lead)
+        debt = _df.known_debt_of(dict(lead, judg=_num(lead.get('judgc'))) if lead.get('judg_src') == COURT_COPY
+                                 and _num(lead.get('judgc')) > 0 else lead)
+    except Exception:
+        basis, bsrc, debt = 0.0, 'county', {'total': 0.0}
+    # judgment: a zero or a `ju` row is "not posted", never a $0 debt
+    court = lead.get('judg_src') == COURT_COPY and _num(lead.get('judgc')) > 0
+    jv = _num(lead.get('judgc')) if court else _num(lead.get('judg') if lead.get('judg') is not None else lead.get('judgment'))
+    unknown = bool(lead.get('ju') or lead.get('judgment_unknown'))
+    judgment = jv if (jv > 0 and not unknown) else None
+    if judgment is None:
+        jsrc = 'not posted'
+    else:
+        jsrc = COURT_COPY if court else 'docket'
+    liens = []
+    for l in (lead.get('orliens') or []):
+        if not isinstance(l, dict):
+            continue
+        liens.append({'type': str(l.get('kind') or l.get('type') or 'mortgage'),
+                      'amount': l.get('amt') or None,
+                      'recorded': str(l.get('d') or ''),
+                      'source': str(l.get('src') or 'official records')})
+    fact = st in FACT
+    may = bool(fact and judgment is not None)
+    net = None
+    if may and basis > 0:
+        net = round(basis - _num(debt.get('total')), 2)
+    why = lead.get('eqstate_why') or LABEL[st]
+    if fact and judgment is None:
+        why = why + ' — but the judgment is not posted, so no figure may be quoted'
+    return {'state': st, 'label': why if why.startswith(('UNVERIFIED', 'CEILING')) else LABEL[st],
+            'fact': fact, 'judgment': judgment, 'judgment_source': jsrc, 'liens': liens,
+            'basis': basis if basis > 0 else None, 'basis_source': bsrc if basis > 0 else None,
+            'net': net, 'may_quote': may, 'why': why}

@@ -417,7 +417,7 @@ def _ledger_save(charged=None, final=False):
 _PAID_QS = {'last': None}
 
 
-def fetch_via_turnstile(owner_lf, tries=3):
+def fetch_via_turnstile(owner_lf, tries=3, searchtype='Name/Document'):
     """THE UNLOCK — pull an owner's recorded docs by solving Cloudflare Turnstile (2Captcha), no
     browser. Solves the token, POSTs the same standardsearch the app uses with it in the
     x-recaptcha-token header, then the (ungated) getStandardRecords GET. Returns models or None.
@@ -434,7 +434,7 @@ def fetch_via_turnstile(owner_lf, tries=3):
     party = owner_lf[0].strip()
     url = (OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(party)
            + '&dateRangeFrom=&dateRangeTo=&documentType=&searchT=&firstQuery=y&searchtype='
-           + urllib.parse.quote('Name/Document'))
+           + urllib.parse.quote(searchtype))
     for _ in range(max(1, tries)):
         if not _may_submit():
             return None
@@ -466,6 +466,98 @@ def fetch_via_turnstile(owner_lf, tries=3):
         # isValidSearch:false with a fresh token = a bad solve; loop and re-solve
         time.sleep(1)
     return None
+
+# ---- folio-keyed search (DEALFLOW_OR_FOLIO=1, default OFF) ---------------------------------------
+# WHY (2026-10-29): the owner search is by SURNAME, so a common name returns every family of that name
+# and analyze() then places a loan by folio OR by subdivision + surname. A namesake's mortgage in the
+# same subdivision rides in on the subdivision match. A search by the parcel's own folio returns the
+# instruments the clerk indexed ON that parcel, and nothing else.
+#
+# HOW, and the one thing it must not do: folio is blank on most newer mortgages, so a folio search
+# ALONE would drop the very loans we need and read as a clear. So it runs BEFORE the name search and
+# is then combined with it: (1) the name search's records are SCOPED (a record indexed under a
+# DIFFERENT, non-blank folio is another parcel's and is dropped), (2) the folio search's own records
+# are added. Only when the name search finds nothing at all does the folio result stand alone, and
+# then the chain is marked `truncated` + `folio_only` so equity_state can never read it as a FACT.
+#
+# UNVERIFIED AGAINST THE LIVE CLERK: the searchtype label and the folio format the Miami-Dade Official
+# Records standardsearch accepts have not been exercised from this repo (only 'Name/Document' has).
+# FOLIO_SEARCHTYPE overrides the label. A result is believed only if it carries the folio asked for.
+FOLIO_SEARCHTYPE = os.environ.get('DEALFLOW_OR_FOLIO_TYPE') or 'Parcel ID'
+
+
+def folio_enabled():
+    return os.environ.get('DEALFLOW_OR_FOLIO') == '1'
+
+
+def _rec_key(r):
+    bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
+    if all(bp):
+        return ('bp',) + bp + (str(r.get('doC_TYPE', '')).strip().upper(),)
+    if r.get('cfN_MASTER_ID'):
+        return ('cfn', str(r.get('cfN_MASTER_ID')).strip(), str(r.get('doC_TYPE', '')).strip().upper())
+    return None
+
+
+def folio_scope(models, folio):
+    """Drop every record indexed under a DIFFERENT, non-blank folio: another parcel's instrument.
+    Blank-folio records stay (most newer mortgages), so this can only remove, never add."""
+    fol = norm_folio(folio)
+    if not fol or not models:
+        return models
+    return [r for r in models if not norm_folio(r.get('foliO_NUMBER', '')) or norm_folio(r.get('foliO_NUMBER', '')) == fol]
+
+
+def folio_merge(name_models, folio_models, folio):
+    """(models, folio_only). name_models may be None. Scoped name records + the folio search's own."""
+    fol = norm_folio(folio)
+    on_parcel = [r for r in (folio_models or []) if norm_folio(r.get('foliO_NUMBER', '')) == fol]
+    if not name_models:
+        return (on_parcel or None), bool(on_parcel)
+    out, seen = [], set()
+    for r in folio_scope(name_models, folio) + on_parcel:
+        k = _rec_key(r)
+        if k is not None:
+            if k in seen:
+                continue
+            seen.add(k)
+        out.append(r)
+    return out, False
+
+
+def judgment_for(case, board_judgment):
+    """(judgment for analyze, source). DEALFLOW_COURT_JUDGMENT=1 swaps in a page-verified, fully read,
+    case-tied final-judgment figure from a stored miami_judgment report (no network); source is then
+    'court copy'. Flag off, or anything less than that, returns the board's own figure and None."""
+    if os.environ.get('DEALFLOW_COURT_JUDGMENT') != '1':
+        return board_judgment, None
+    try:
+        import miami_judgment as _MJ
+        cj = _MJ.court_judgment(case)
+    except Exception:
+        cj = None
+    return cj if cj else (board_judgment, None)
+
+
+def fetch_by_folio(folio, qs_cache=None, fetch=None):
+    """Instruments the clerk indexed on this folio, or None. `fetch(folio_digits)` is the paid search
+    (default: fetch_via_turnstile with the folio searchtype; spend cap, monthly ledger and ledger lock
+    all apply because it is the same function). A cached folio token is reused first, free."""
+    fol = norm_folio(folio)
+    if not fol:
+        return None
+    key = 'folio:' + fol
+    models = None
+    if qs_cache is not None and key in qs_cache:
+        models = records_by_qs(qs_cache[key])
+    if not models:
+        _PAID_QS['last'] = None
+        models = (fetch or (lambda f: fetch_via_turnstile((f, ''), searchtype=FOLIO_SEARCHTYPE)))(fol)
+        if models and qs_cache is not None and _PAID_QS.get('last'):
+            qs_cache[key] = _PAID_QS['last']
+    on_parcel = [r for r in (models or []) if norm_folio(r.get('foliO_NUMBER', '')) == fol]
+    return on_parcel or None     # a search that does not carry the folio asked for is not believed
+
 
 # ---- Camoufox: let the browser mint its own Turnstile token, for free ------------------------
 # Measured 2026-08-22 (CAMOUFOX-EVAL.md): Turnstile runs invisible/managed on this site, so it hands
@@ -1757,6 +1849,7 @@ def _run(a, ap):
             case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
             folio = r.get('Folio', '') or r.get('year_folio', '')
             judg = num(r.get('judgment'))
+            judg, _jsrc = judgment_for(case, judg)
             models = None
             _paid0 = paid
             _def_blocked = False   # a paid search (the owner's or a defendant's) the clerk never answered
@@ -1771,6 +1864,14 @@ def _run(a, ap):
             # surname-only search. The cached token and Camoufox (first AND last name) are what
             # came back narrower, so they are skipped for it.
             _wider = bool(a.repull and (out.get(case) or {}).get('wider_repull'))
+            _fm = None                                        # DEALFLOW_OR_FOLIO=1: the folio search, before the name search
+            if folio_enabled() and norm_folio(folio) and not a.cached_only:
+                _fm = fetch_by_folio(folio, qs_cache)
+                if _fm:
+                    try:
+                        json.dump(qs_cache, open(QS_CACHE, 'w', encoding='utf-8'), indent=1)
+                    except Exception:
+                        pass
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
@@ -1896,6 +1997,11 @@ def _run(a, ap):
                         break
             if models is None and _owner_models is not None:
                 models, _src = _owner_models, _owner_src
+            _folio_only = False
+            if _fm:
+                models, _folio_only = folio_merge(models, _fm, folio)
+                if _folio_only:
+                    _src = 'folio'
             if models is None:
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
@@ -1925,6 +2031,14 @@ def _run(a, ap):
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
                           owner=_searched, case=case, co_owners=_co)
             res['searched_as'] = _searched
+            if _jsrc:
+                res['judgment_source'] = _jsrc          # 'court copy': equity_state.card reads it
+                res['judgment_used'] = judg
+            if _folio_only:
+                # no name search answered: the folio's own instruments are all we saw, and most newer
+                # mortgages carry no folio. Never a clear, never a priced FACT (equity_state: truncated).
+                res['folio_only'] = True
+                res['truncated'] = True
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
                 _old = out.get(case)
