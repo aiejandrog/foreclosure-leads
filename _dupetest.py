@@ -75,7 +75,7 @@ by = {r['c']: r for r in rows}
 rec('a case listed twice yields ONE row', len(rows) == 2 and len(by) == 2,
     '%d rows / %d cases' % (len(rows), len(by)))
 rec('the kept row is the enriched one (a card with no address is useless)',
-    by['CASE-A'].get('a', '').startswith('1410 NW 48 PL'), by['CASE-A'].get('a'))
+    by['CASE-A'].get('a', '').startswith('1410 NW 48th PL'), by['CASE-A'].get('a'))
 rec('the kept row keeps its own sale date', by['CASE-A'].get('d') == 11, by['CASE-A'].get('d'))
 rec('the collapse is recorded on the row', by['CASE-A'].get('dupn') == 1, by['CASE-A'].get('dupn'))
 rec('no sooner-date warning when the kept row IS the soonest',
