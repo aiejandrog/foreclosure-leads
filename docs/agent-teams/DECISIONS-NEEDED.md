@@ -154,3 +154,12 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Recommendation: A.
 - Fallback in progress: none needed; if Alex says B, remove callNotesPushSoon() from saveNotes() and the two callTextLedger() calls.
 - Status: OPEN
+
+### D18: Manual "Complete" touches bypass the mail_sent and text ledgers (fix-complete, 2026-10-30)
+- Touches: Call Mode only (call_mode.py, new Complete sheet; new /notes content via saveNotes, no new /notes or /text code). No send_server.py, no suppression code.
+- Finding: Complete writes a touches entry (src:'manual') for Called / Texted / Emailed / voicemail / letter / door / other. A manual "Emailed" is not a row in mail_sent.json, so the nightly cadence cannot see it and may still email a lead the operator already emailed by hand; the touch shows only in Call Mode and the board. A manual "Texted" is not a text_sent.json row (nothing is posted to /text). A manual call or text does count toward the FTSA 3-in-24h cap (safe direction).
+- Option A: keep it a touches entry only (as built) | Risk: cadence / worker double-contact on a hand-emailed lead until the operator also uses the real send path
+- Option B: Complete also posts /text (confirmed) and writes a mail_sent row | Risk: a new writer of two ledgers from a free-form tap, no proof a message actually left; touches LEGAL REVIEW surface
+- Recommendation: A (the default).
+- Fallback in progress: A is shipped.
+- Status: OPEN

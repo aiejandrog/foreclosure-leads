@@ -47,7 +47,7 @@ NAMES = ('lastCall', '_inbound', 'lastOutreach', '_contactTier', '_navPush', '_n
 FNS = ''.join(grab_fn(n) for n in NAMES)
 rec('state declared once', SRC.count('var _NAVB=[], _NAVF=[];') == 1)
 rec('lead card carries Back and Next', "id=\"navback\"" in SRC and '_navRow()' in SRC)
-rec('Next is wired to navNext', "$('skip').onclick=function(){ navNext(); };" in SRC)
+rec('Next is wired to navNext (through the Complete sheet since 2026-10-30)', "$('skip').onclick=function(){ completeThen(cur, navNext); };" in SRC)
 rec('queue-clear screen offers Back', "if($('navback')) $('navback').onclick=navBack;" in SRC)
 nav = SRC[SRC.find('function _navPush('):SRC.find('function _navRow(')]
 for bad in ('saveNotes', 'queueSync', 'logOutcome', '_WORKED', 'notes[', 'dials', 'cooldown'):

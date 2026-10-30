@@ -4028,6 +4028,14 @@ body.shopen .lkfab{display:none !important}
 .regsum{font-size:15px;color:var(--ink)}
 .regsum b{color:var(--gold);font-size:19px}
 .reglist{margin-top:12px;max-height:62vh;overflow:auto}
+/* Complete sheet: 2 columns, every target >=48px, fits 360px */
+.cmpgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.cmpchip,.cmpwho{flex:1 1 calc(50% - 8px);min-width:0;min-height:48px;padding:8px 10px;border-radius:12px;border:1px solid #2a3f6b;
+  background:#0f1d3a;color:var(--ink);font-size:15px;font-weight:600;touch-action:manipulation}
+.cmpwho{flex:1 1 calc(33% - 8px)}
+.cmpchip.on,.cmpwho.on{background:#1d4ed8;border-color:#5b8cff;color:#fff}
+.cmpchip.lock{opacity:.75;border-style:dashed}
+.cmplk{display:block;font-size:11px;font-weight:600;color:var(--mut)}
 .regrow{padding:11px 2px;border-bottom:1px solid #1c2b4d}
 .regtop{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:15px}
 .regago{color:var(--mut);font-size:12.5px;white-space:nowrap}
@@ -6653,6 +6661,129 @@ function composeMail(r, addr, lg){
   if(stage !== 'cold') subj = 'Re: ' + subj;   /* threads under the first email, same as the board */
   return {to:addr, subj:subj, body:_mailPick(B, stage, early, lg), stage:stage, early:early, lang:lg};
 }
+/* COMPLETE STEP (2026-10-30, Alex: "when you press next it shows you what did you do, did you email,
+   did you call them, or multiple things, so we can have it logged"). Pressing Next on a lead, or Next
+   lead on the post-outcome screen, opens ONE sheet first. Chips write plain touches by hand:
+   {d, ts, tsu, ch, out, src:'manual', mk, by}, then ONE saveNotes(), exactly like the pasted-email and
+   text-sent code. What it never does: add a dial, a conversation, an appointment, a stage or a status;
+   touch no / dnc / notint, badph / dntph, opt-out or the ledgers; post /text or /notes itself; write
+   mail_sent.json or text_sent.json; add a phone number or a wpRelatives entry. "Spoke to someone else" is
+   a note on ch 'other', which OUTREACH_CH does not read, so it never makes anyone callable and never moves
+   a lead out of Untouched by itself. A manual call or text touch DOES count toward _tele24 (FTSA 3 in
+   24h): the safe direction. */
+var _CMP = null;
+var CMP_CHIPS = [
+  {k:'call',  lbl:'Called',                  ch:'call',  out:'Called'},
+  {k:'text',  lbl:'Texted',                  ch:'text',  out:'Texted'},
+  {k:'email', lbl:'Emailed',                 ch:'email', out:'Emailed'},
+  {k:'vm',    lbl:'Left a voicemail',        ch:'call',  out:'Left a voicemail'},
+  {k:'letter',lbl:'Mailed a letter',         ch:'letter',out:'Mailed a letter'},
+  {k:'door',  lbl:'Knocked on the door',     ch:'door',  out:'Knocked on the door'},
+  {k:'spoke', lbl:'Spoke to someone else',   ch:'other', out:'Spoke to someone else'},
+  {k:'other', lbl:'Other',                   ch:'other', out:'Other'}
+];
+var CMP_WHO = ['son','daughter','spouse','relative','neighbour','other'];
+/* Which chips are already on the record TODAY for this case: ticked and locked, never written twice. */
+function cmpDone(r){
+  var n = notes[r.c] || {}, td = today(), d = {};
+  (n.touches||[]).forEach(function(t){
+    if(t.d !== td || _inbound(t)) return;
+    if(t.mk && t.src === 'manual'){ if(t.mk !== 'spoke' && t.mk !== 'other') d[t.mk] = 1; return; }
+    if(t.ch === 'call') d.call = 1;
+    else if(t.ch === 'text') d.text = 1;
+    else if(t.ch === 'email') d.email = 1;
+    else if(t.ch === 'letter') d.letter = 1;
+    else if(t.ch === 'door') d.door = 1;
+  });
+  (n.dials||[]).forEach(function(x){
+    if(x.d !== td) return;
+    if(x.oc === 'voicemail') d.vm = 1;
+    if(x.oc && x.oc !== 'pending' && x.oc !== 'redial') d.call = 1;
+  });
+  return d;
+}
+/* Write the ticked chips: one touch each, one save. Returns the number written. */
+function cmpLog(r, sel, who, note){
+  var done = cmpDone(r), n, cnt = 0, td = today();
+  who = String(who||'').replace(/\s+/g,' ').trim().slice(0,40);
+  note = String(note||'').replace(/\s+/g,' ').trim().slice(0,200);
+  CMP_CHIPS.forEach(function(c){
+    if(!sel[c.k] || done[c.k]) return;
+    if(!n){ n = notes[r.c] = notes[r.c] || {status:'', note:''}; n.touches = n.touches || []; }
+    var t = {d:td, ts:nowTS(), tsu:Date.now(), ch:c.ch, out:c.out + ' (logged by hand)', src:'manual', mk:c.k, by:caller()};
+    if(c.k === 'spoke'){ t.who = who; t.out = 'Spoke to ' + (who || 'someone else') + ' (logged by hand)' + (note ? ' — ' + note : ''); }
+    else if(c.k === 'other'){ t.out = 'Other (logged by hand)' + (note ? ' — ' + note : ''); }
+    if(note && (c.k === 'spoke' || c.k === 'other')) t.note = note;
+    n.touches.push(t); cnt++;
+  });
+  if(cnt){ try{ _FCGEN++; }catch(e){} saveNotes(); try{ queueSync(); }catch(e){} }
+  return cnt;
+}
+function completeThen(r, after){
+  /* A person who just became do-not-contact / opted out / dead is not asked anything and nothing is
+     logged on them here: the sheet is for work on a live lead. */
+  if(!r || hardSuppressed(r)) return after();
+  _CMP = {r:r, after:after, sel:{}, who:'', note:''};
+  screenComplete();
+}
+function screenComplete(){
+  var S = _CMP, r = S.r, done = cmpDone(r);
+  SCREEN = 'complete';
+  try{ document.getElementById('sheet').classList.add('hid'); }catch(e){}
+  var chips = CMP_CHIPS.map(function(c){
+    var lock = !!done[c.k], on = lock || !!S.sel[c.k];
+    return '<button type="button" class="cmpchip' + (on ? ' on' : '') + (lock ? ' lock' : '') + '" data-k="' + c.k + '"'
+      + ' aria-pressed="' + (on ? 'true' : 'false') + '"' + (lock ? ' disabled' : '') + '>'
+      + (lock ? '&#10003; ' : '') + esc(c.lbl) + (lock ? ' <span class="cmplk">logged today</span>' : '') + '</button>';
+  }).join('');
+  var whoQ = CMP_WHO.map(function(w){
+    return '<button type="button" class="cmpwho' + (S.who === w ? ' on' : '') + '" data-w="' + w + '">' + w + '</button>';
+  }).join('');
+  $('app').innerHTML = '<div class="card">'
+    + '<div class="addr" style="font-size:17px">What did you do on this lead?</div>'
+    + '<div class="own">' + esc(propertyLabel(r)) + ' &middot; ' + esc(ownerLabel(r)) + '</div>'
+    + '<div class="mut" style="font-size:12.5px;margin-top:6px">Tick everything you did. What is already logged today is ticked and locked.</div>'
+    + '<div class="cmpgrid">' + chips + '</div>'
+    + '<div id="cmpwhobox" style="display:' + (S.sel.spoke ? 'block' : 'none') + '">'
+    +   '<div class="afterlab">Who?</div><div class="cmpgrid">' + whoQ + '</div></div>'
+    + '<div id="cmpnotebox" style="display:' + ((S.sel.spoke || S.sel.other) ? 'block' : 'none') + '">'
+    +   '<div class="afterlab">Note</div>'
+    +   '<input id="cmpnote" maxlength="200" autocomplete="off" placeholder="What happened (short)" value="' + esc(S.note) + '"'
+    +   ' style="width:100%;min-height:48px;padding:10px 12px;border-radius:12px;border:1px solid #2a3f6b;background:#0f1d3a;color:var(--ink);font-size:16px"></div>'
+    + '<button id="cmplog" class="big" style="margin-top:16px"></button>'
+    + '<button id="cmpskip" class="ghost" style="margin-top:8px">Skip, log nothing</button>'
+    + '</div><div class="sheetpad"></div>';
+  var upd = function(){
+    var k, picked = 0;
+    for(k in S.sel) if(S.sel[k] && !done[k]) picked++;
+    $('cmplog').innerHTML = picked ? ('Log ' + picked + ' and next lead &rarr;') : 'Next lead &rarr;';
+  };
+  upd();
+  Array.prototype.forEach.call(document.querySelectorAll('.cmpchip'), function(b){
+    b.onclick = function(){
+      var k = b.getAttribute('data-k');
+      if(done[k]) return;
+      S.sel[k] = !S.sel[k];
+      b.classList.toggle('on', !!S.sel[k]); b.setAttribute('aria-pressed', S.sel[k] ? 'true' : 'false');
+      $('cmpwhobox').style.display = S.sel.spoke ? 'block' : 'none';
+      $('cmpnotebox').style.display = (S.sel.spoke || S.sel.other) ? 'block' : 'none';
+      upd();
+    };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.cmpwho'), function(b){
+    b.onclick = function(){
+      var w = b.getAttribute('data-w'); S.who = (S.who === w) ? '' : w;
+      Array.prototype.forEach.call(document.querySelectorAll('.cmpwho'), function(x){ x.classList.toggle('on', x.getAttribute('data-w') === S.who); });
+    };
+  });
+  $('cmpnote').oninput = function(){ S.note = $('cmpnote').value; };
+  $('cmplog').onclick = function(){
+    var cnt = cmpLog(r, S.sel, S.who, S.note), a = S.after; _CMP = null;
+    if(cnt) toast('Logged ' + cnt + (cnt === 1 ? ' action' : ' actions'));
+    a();
+  };
+  $('cmpskip').onclick = function(){ var a = S.after; _CMP = null; a(); };
+}
 function _stageWord(st){
   return st==='cold' ? 'first touch' : st==='follow' ? 'follow-up #2' : st==='final' ? 'final note #3'
        : st==='replied' ? 'they replied' : 'ladder closed';
@@ -7183,6 +7314,14 @@ function screenRegistry(){
   Object.keys(notes || {}).forEach(function(c){
     var n = notes[c] || {};
     var lc = lastCall(n);
+    /* a touch logged by hand from the Complete sheet (any channel) is in the log too */
+    var lm = null;
+    (n.touches||[]).forEach(function(t){
+      if(t.src !== 'manual') return;
+      var mts = +t.tsu || +new Date(t.ts || t.d || 0) || 0;
+      if(mts && (!lm || mts > lm.ts)) lm = {ts:mts, out:t.out || '', by:t.by || ''};
+    });
+    if(lm && (!lc || lm.ts > lc.ts)) lc = lm;
     if(!lc) return;
     var row = ROWS.filter(function(x){ return x.c === c; })[0] || null;
     rows.push({
@@ -7211,7 +7350,7 @@ function screenRegistry(){
   $('app').innerHTML = head()
     + '<div class="card">'
     +   '<div class="band"><div class="bl">THE CALL LOG</div>'
-    +     '<div class="regsum"><b>' + rows.length + '</b> people called &middot; '
+    +     '<div class="regsum"><b>' + rows.length + '</b> people logged &middot; '
     +       mine + ' by you &middot; ' + team + ' by teammates</div>'
     +     '<div class="regsub" style="margin-top:6px">Anyone on this list inside their cooldown is '
     +       'skipped in the queue &mdash; that is how two people never dial the same owner.</div>'
@@ -7980,7 +8119,7 @@ function screenLead(){
      reachable without any teammate involvement: in the worker lane retireFromWorkerQ() shrinks the
      pool on the first logged number, so i++ from there lands one past the next person. Skipping is
      also the one action that must NOT count as work, so it does not touch _WORKED. */
-  $('skip').onclick=function(){ navNext(); };
+  $('skip').onclick=function(){ completeThen(cur, navNext); };
   $('navback').onclick=function(){ navBack(); };
   wireBrief(document, cur);
   wire();
@@ -8820,7 +8959,11 @@ function afterCall(r, o, nextC){
     _go0();
   };
   ayWire(r);
-  $('nx').onclick = go;
+  $('nx').onclick = function(){
+    /* the open-deal date guard answers first (its toast and focus), then the Complete sheet, then go() */
+    if(ayNeedsDate(notes[r.c])) return go();
+    completeThen(r, go);
+  };
   if($('aem')) $('aem').onclick = function(){ screenMail(r, $('aem').getAttribute('data-em')); };
   if($('nph')) $('nph').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
