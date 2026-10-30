@@ -52,6 +52,7 @@ def main():
         # Copy the server into a scratch dir so it reads a THROWAWAY gmail.key / mail_sent.json and
         # can never touch the real ones.
         shutil.copy(HERE / 'send_server.py', work / 'send_server.py')
+        shutil.copy(HERE / 'bridge_auth.py', work / 'bridge_auth.py')
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
         (work / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
 
@@ -188,6 +189,7 @@ def main():
         proc3 = None
         try:
             shutil.copy(HERE / 'send_server.py', work3 / 'send_server.py')
+            shutil.copy(HERE / 'bridge_auth.py', work3 / 'bridge_auth.py')
             (work3 / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
             (work3 / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
             # 10 delivered sends; 4 of those addresses later bounced -> 40%, far over the 10% ceiling.

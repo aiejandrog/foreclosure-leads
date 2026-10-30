@@ -334,7 +334,7 @@ def server():
     proc = None
     try:
         # The bridge imports stay_gate and mail_guard from its own folder, exactly as in the repo.
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+        for f in ('send_server.py', 'bridge_auth.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
             shutil.copy(HERE / f, work / f)
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
@@ -526,7 +526,7 @@ def no_warmup_hold():
     work = pathlib.Path(tempfile.mkdtemp(prefix='dfstayhold_'))
     proc = None
     try:
-        for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
+        for f in ('send_server.py', 'bridge_auth.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py'):
             shutil.copy(HERE / f, work / f)
         write_sync_ok(work)
         (work / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')

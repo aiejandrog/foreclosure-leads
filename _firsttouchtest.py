@@ -91,7 +91,7 @@ OPTOUTS = {'_dealflow_notes': True, 'notes': {'2099-000023-CA-01': {'status': 'D
 
 def seed(d):
     for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py',
-              'bounce_scan.py'):
+              'bounce_scan.py', 'bridge_auth.py'):
         shutil.copy(HERE / f, d / f)
     w = lambda n, v: (d / n).write_text(json.dumps(v), encoding='utf-8')
     w('sync_status.json', {'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,

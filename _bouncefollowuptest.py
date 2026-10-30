@@ -319,7 +319,7 @@ LEDGER = [dict(r, login=TL) for r in FILLER] + [row('gone@example.com', 26, logi
 W = T / 'srv'
 W.mkdir()
 for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py',
-          'bounce_scan.py', 'bounces.py', 'replies.py', 'paths.py', 'optout_sync.py'):
+          'bounce_scan.py', 'bridge_auth.py', 'bounces.py', 'replies.py', 'paths.py', 'optout_sync.py'):
     shutil.copy(HERE / f, W / f)
 w = lambda n, v: (W / n).write_text(json.dumps(v), encoding='utf-8')
 w('sync_status.json', {'date': TODAY.isoformat(), 'state': 'finished', 'ok': True,

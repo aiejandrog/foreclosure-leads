@@ -192,6 +192,7 @@ def call(port, path, payload=None):
 LATER_GATES = [f for f in ('stay_gate.py', 'deliverability.py') if (HERE / f).exists()]
 work = pathlib.Path(tempfile.mkdtemp(prefix='syncbridge_', dir=str(T)))
 shutil.copy(HERE / 'send_server.py', work / 'send_server.py')
+shutil.copy(HERE / 'bridge_auth.py', work / 'bridge_auth.py')
 shutil.copy(HERE / 'sync_gate.py', work / 'sync_gate.py')
 shutil.copy(HERE / 'mail_guard.py', work / 'mail_guard.py')        # send_server's last pre-SMTP check
 for f in LATER_GATES:
@@ -282,7 +283,7 @@ rec('the bridge log never carries a recipient address for a held send',
 
 # a bridge whose sync_gate.py is missing entirely (bad deploy) must hold, not pass
 work2 = pathlib.Path(tempfile.mkdtemp(prefix='syncbridge2_', dir=str(T)))
-for f in ['send_server.py', 'mail_guard.py'] + LATER_GATES:
+for f in ['send_server.py', 'bridge_auth.py', 'mail_guard.py'] + LATER_GATES:
     shutil.copy(HERE / f, work2 / f)
 for f in ('gmail.key', 'sender.json', 'optouts.json', 'sync_status.json'):
     if (work / f).exists():

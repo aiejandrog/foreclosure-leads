@@ -253,6 +253,7 @@ try:
         if '/' not in n:                                  # tracked code only, never scratch scripts
             shutil.copy(os.path.join(HERE, n), os.path.join(work, n))
     shutil.copy(os.path.join(HERE, 'send_server.py'), os.path.join(work, 'send_server.py'))
+    shutil.copy(os.path.join(HERE, 'bridge_auth.py'), os.path.join(work, 'bridge_auth.py'))
     good_text_hold = open(os.path.join(HERE, 'text_hold.py'), encoding='utf-8').read()
     git(work, 'init', '-q')
     git(work, 'add', '-A')

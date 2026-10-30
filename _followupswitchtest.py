@@ -337,7 +337,7 @@ def start_bridge(env_value, ledger=None):
     port = free_port()
     work = pathlib.Path(tempfile.mkdtemp(prefix='dffu_'))
     for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py',
-              'sync_gate.py', 'text_hold.py', 'bounce_scan.py'):
+              'sync_gate.py', 'text_hold.py', 'bounce_scan.py', 'bridge_auth.py'):
         shutil.copy(HERE / f, work / f)
     today = TODAY.isoformat()
     (work / 'sync_status.json').write_text(json.dumps({
