@@ -9,7 +9,7 @@ The fix-agent skill reads this before it edits anything. Its source is docs/agen
 | board-dev | tracker_template.html (NOT the owned suppression functions below), outcome_learn.py, reports/ |
 | qa-gate | tests/AGENT-QA-REPORT.md, _e2ewiringtest.py, QA lines in run logs. No product code |
 | fixer | Only the files named in its fix item, and only if the role that owns them is named in the spawn prompt |
-| Lead | docs/agent-teams/DECISIONS-NEEDED.md (master list), PLAN, summaries, merges to main |
+| Lead | docs/agent-teams/DECISIONS-NEEDED.md master list (fixers may only APPEND one new entry on their branch; the Lead merges and renumbers), PLAN, summaries, merges to main |
 
 Anyone may add a new `_<name>test.py`.
 

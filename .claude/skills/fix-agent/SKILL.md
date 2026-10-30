@@ -34,9 +34,9 @@ No refactors, no renames, no "while I'm here". A change that touches rule 6 (quo
 - Never `taskkill` or `Stop-Process` python.exe, node.exe, or any process you didn't start. Other agents' tests are running.
 
 ## 6. Legal triggers
-If the change touches `send_server.py`, `stay_gate.py`, `never_contact.json`, DNC, opt-out, or the `/notes` and `/text` bridge paths:
+If the change touches `send_server.py`, `stay_gate.py`, `never_contact.json`, `bk_lookup.py`, DNC, opt-out, or the `/notes` and `/text` bridge paths:
 - Put LEGAL REVIEW in the PR title.
-- Append an entry to `docs/agent-teams/DECISIONS-NEEDED.md`. Re-read the file on `origin/main` first and take the next free D-number, using the entry format in that file. The Lead merges the master list.
+- Append ONE new entry at the end of `docs/agent-teams/DECISIONS-NEEDED.md` on your branch: append-only. Never edit, renumber or delete an existing entry. Re-read the file on `origin/main` first and take the next free D-number, using the entry format in that file. The Lead owns the master list and settles numbering at merge.
 - Never write "Decisions needed: none" for these.
 
 ## 7. Hand off
