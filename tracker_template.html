@@ -2417,6 +2417,7 @@ __REFRESHSTATUS__
 <input id="sAddr" placeholder="Mailing address (for email compliance)" style="width:230px">
 <input id="sWeb" placeholder="Website (optional)" style="width:150px">
 <span class="stats" id="sendersaved" style="margin-left:0"></span>
+<button id="bkeybtn" style="font-size:11px;padding:3px 9px" onclick="setBridgeKey()" title="Key for the send bridge, kept on this device only. Needed only off the bridge computer off the bridge computer (python bridge_auth.py add NAME). Stored in this browser only.">Bridge key</button>
 </div>
 <div class="controls" style="margin-top:8px">
 <span style="color:var(--muted);font-size:12px">Lookup any county property:</span>
@@ -9371,7 +9372,7 @@ function _docShell(title, bodyHtml, opts){
     + '.fmcap{font:8.5pt Arial,sans-serif;color:#5A6472;letter-spacing:.05em;margin-top:4px}'
     + BSG_LH_CSS
     + '@media print{.noprint{display:none}body{background:#fff}.doc{box-shadow:none;margin:0;padding:24px 32px}}'
-    + '</style></head><body>'
+    + '</style>' + (opts.screen ? '<script>' + _bridgeSrc() + '<\/script>' : '') + '</head><body>'
     + '<div class="bar noprint"><button onclick="window.print()">Print / Save as PDF</button>'
     + (opts.note ? '<span style="color:#F4E5A7;font-size:12px">'+esc(opts.note)+'</span>' : '')
     + '<span class="stamp">'+stamp+'</span></div>'
@@ -11419,7 +11420,7 @@ function genDialReady(r){
   // board acknowledges. The old honest-stamp version still trusted a live-looking opener — a
   // RELOADED board (nightly refresh) kept closed===false while eating the message. Now: ⏳ on tap,
   // ✓ on ack, two silent re-posts, then the bridge fallback with the truthful ⚠/✗ label.
-  var outcomeScript = '<script>var _PEND={},_SEQ=0;'
+  var outcomeScript = '<script>' + _bridgeSrc() + 'var _PEND={},_SEQ=0;'
     + 'window.addEventListener("message",function(ev){'
     +   'if(ev.source!==window.opener)return;'
     +   'var a=ev&&ev.data&&ev.data.workerAck;if(!a||!_PEND[a])return;'
@@ -17235,6 +17236,89 @@ function exportNotes(){
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
 
+/* BRIDGE-KEY-START  One helper for every call to the send bridge (bridge_auth.py, 2026-10-13).
+   A request from the bridge computer itself needs no key; anything else (a phone, the desktop, a
+   Tailscale address) must send X-Dealflow-Key. The key and the bridge address are per device, typed
+   once into the Bridge key button, kept in this browser's localStorage only. They are never baked
+   into the build, never committed, never logged. With no key set this adds NO header, so a laptop on
+   127.0.0.1 behaves exactly as before. This block is byte-identical in call_mode.py and
+   tracker_template.html; _callwiringtest.py fails if the two copies drift. */
+function _bridgeBase(){
+  var b = '';
+  try{ b = String(localStorage.getItem('dfBridgeBase') || '').trim().replace(/\/+$/, ''); }catch(e){}
+  return /^https?:\/\/[^\s\/]+(\/[^\s]*)?$/i.test(b) ? b : 'http://127.0.0.1:8823';
+}
+function _bridgeKey(){
+  try{ return String(localStorage.getItem('dfBridgeKey') || '').trim(); }catch(e){ return ''; }
+}
+function _bridgeMsg(){
+  return 'This device needs a bridge key; on the bridge PC run python bridge_auth.py add <name>';
+}
+function _bridgeDenied(){
+  var now = Date.now();
+  if(typeof window !== 'undefined' && window.__bridgeDeniedAt && now - window.__bridgeDeniedAt < 20000) return;
+  if(typeof window !== 'undefined') window.__bridgeDeniedAt = now;
+  var m = _bridgeMsg();
+  try{
+    if(typeof toast === 'function') toast(m, {bad:true, ms:6000});
+    else if(typeof _nbWarn === 'function') _nbWarn(m);
+    else if(typeof addLog === 'function') addLog('fail', '', m);
+  }catch(e){}
+}
+function bridgeFetch(path, opts, f){
+  var o = {}, h = {}, k;
+  opts = opts || {};
+  for(k in opts) o[k] = opts[k];
+  for(k in (opts.headers || {})) h[k] = opts.headers[k];
+  var key = _bridgeKey();
+  if(key) h['X-Dealflow-Key'] = key;
+  o.headers = h;
+  var go = f || (typeof window !== 'undefined' && window.__bridgeOrigFetch) || fetch;
+  return go(_bridgeBase() + path, o).then(function(r){
+    if(!r || r.status !== 401) return r;
+    return r.clone().json().then(function(j){
+      if(!j || j.blocked !== 'device_key') return r;
+      _bridgeDenied();
+      return new Response(JSON.stringify({ok:false, blocked:'device_key', err:_bridgeMsg()}),
+                          {status:401, headers:{'Content-Type':'application/json'}});
+    }, function(){ return r; });
+  });
+}
+function setBridgeKey(){
+  var had = !!_bridgeKey();
+  var v = prompt('Bridge key for THIS device (made on the bridge PC with: python bridge_auth.py add <name>). '
+               + (had ? 'A key is set. Leave blank to remove it.' : 'None set yet.'), '');
+  if(v === null) return;
+  v = String(v).trim();
+  var b = prompt('Bridge address for this device (blank = the same computer, http://127.0.0.1:8823). '
+               + 'The --base address printed when the key was made, for a phone or the desktop.', '');
+  try{
+    if(v) localStorage.setItem('dfBridgeKey', v); else localStorage.removeItem('dfBridgeKey');
+    if(b !== null){ b = String(b).trim(); if(b) localStorage.setItem('dfBridgeBase', b); else localStorage.removeItem('dfBridgeBase'); }
+  }catch(e){}
+  try{
+    if(typeof toast === 'function') toast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
+    else if(typeof _shareToast === 'function') _shareToast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
+  }catch(e){}
+}
+/* Existing call sites keep their literal fetch('http://127.0.0.1:8823/...'): this wraps the page's fetch once, so
+   a call to the default bridge address gets the key, the stored address and the plain 401 message, and every
+   other URL passes through untouched. */
+function _bridgeInstall(){
+  try{
+    if(typeof window === 'undefined' || window.__bridgeOrigFetch || typeof window.fetch !== 'function') return;
+    var orig = window.fetch.bind(window);
+    window.__bridgeOrigFetch = orig;
+    window.fetch = function(u, o){
+      var s = (typeof u === 'string') ? u : '';
+      if(s.indexOf('http://127.0.0.1:8823/') === 0) return bridgeFetch(s.slice(21), o, orig);
+      return orig(u, o);
+    };
+  }catch(e){}
+}
+_bridgeInstall();
+/* BRIDGE-KEY-END */
+function _bridgeSrc(){ var nl = String.fromCharCode(10); return [_bridgeBase,_bridgeKey,_bridgeMsg,_bridgeDenied,bridgeFetch,_bridgeInstall].map(function(f){ return String(f); }).join(nl) + nl + '_bridgeInstall();' + nl; }
 /* ---- LOCAL NOTES BRIDGE (localStorage -> disk via send_server.py) ----------------------------
    Every call disposition, status, touch, the worker activity feed and the sent archive live ONLY
    in this browser's localStorage. One cleared Chrome profile = the entire call history of the
