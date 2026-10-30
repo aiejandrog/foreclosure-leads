@@ -1790,7 +1790,7 @@ def _eqc_slim(c):
                           str(x.get('source') or '')[:24]])
     out = {'st': str(c.get('state'))[:12], 'lb': str(c.get('label') or '')[:90],
            'f': 1 if c.get('fact') else 0, 'q': 1 if c.get('may_quote') else 0,
-           'j': num(c.get('judgment')), 'js': str(c.get('judgment_source') or '')[:14],
+           'j': num(c.get('judgment')), 'js': str(c.get('judgment_source') or '')[:16],
            'li': liens or None, 'b': num(c.get('basis')), 'bs': str(c.get('basis_source') or '')[:8] or None,
            'n': num(c.get('net')) if c.get('may_quote') else None}
     return {k: v for k, v in out.items() if v is not None}
@@ -8551,7 +8551,9 @@ function eqCardHtml(r){
      + ' <span class="mut">[' + esc(st.toUpperCase()) + ']</span></div>';
   if(!c.f) h += '<div class="nc"><b>Equity not verified -- do not quote a number</b>'
      + (st === 'unpriced' ? ' <span class="mut">(a ceiling, not a figure)</span>' : ' <span class="mut">(a guess)</span>') + '</div>';
-  h += '<div class="mut" style="margin-top:4px">Judgment: ' + (c.j != null ? '<b>' + _eqUsd(c.j) + '</b> from ' + esc(c.js || 'unknown')
+  h += '<div class="mut" style="margin-top:4px">Judgment: ' + (c.j != null ? '<b>' + _eqUsd(c.j) + '</b> ' + (c.js === 'court copy' ? 'from court copy' : c.js === 'docket' ? 'per docket'
+       : c.js === 'opening bid' ? '<span class="nc">tax deed opening bid, not a judgment</span>'
+       : '<span class="nc">per ' + esc(c.js || 'unknown source') + ', not court-verified</span>')
      : '<b>not posted</b>') + '</div>';
   (c.li || []).forEach(function(x){
     h += '<div class="mut">Recorded ' + esc(x[0] || 'lien') + ': ' + (x[1] != null ? _eqUsd(x[1]) : 'amount not read')
