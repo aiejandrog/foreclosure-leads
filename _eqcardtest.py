@@ -25,7 +25,7 @@ NONE = {'conf': 'none', 'liens': []}
 c = E.card(row(OK_CLEAR))
 chk('schema keys', set(c) == KEYS, str(sorted(set(c) ^ KEYS)))
 chk('clear: fact + may_quote + net', c['state'] == 'clear' and c['fact'] and c['may_quote'] and c['net'] == 300000.0, str(c))
-chk('judgment source docket', c['judgment'] == 100000 and c['judgment_source'] == 'docket')
+chk('judgment source auction listing', c['judgment'] == 100000 and c['judgment_source'] == 'auction listing')
 chk('basis county', c['basis'] == 400000 and c['basis_source'] == 'county')
 
 c = E.card(row(PRICED, orliens=PRICED['liens'], orsurvfirst=150000))
