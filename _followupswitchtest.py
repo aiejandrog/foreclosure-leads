@@ -332,7 +332,7 @@ def start_bridge(env_value, ledger=None):
     port = free_port()
     work = pathlib.Path(tempfile.mkdtemp(prefix='dffu_'))
     for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py',
-              'sync_gate.py', 'text_hold.py'):
+              'sync_gate.py', 'text_hold.py', 'bounce_scan.py'):
         shutil.copy(HERE / f, work / f)
     today = TODAY.isoformat()
     (work / 'sync_status.json').write_text(json.dumps({
@@ -374,6 +374,7 @@ def start_bridge(env_value, ledger=None):
         'sys.argv = ["send_server.py", "--port", "%d", "--limit", "50"]\n'
         'exec(open("send_server.py", encoding="utf-8").read())\n' % port, encoding='utf-8')
     env = os.environ.copy()
+    env['DEALFLOW_BOUNCE_SCAN_GATE'] = '0'   # PR #290's scan hold is not what this suite tests
     env.pop('DEALFLOW_FOLLOWUPS_ON', None)
     env['PYTHONUNBUFFERED'] = '1'
     if env_value is not None:

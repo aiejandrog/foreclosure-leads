@@ -20,6 +20,8 @@ import datetime as dt
 import importlib.util
 import json
 import os
+# Follow-up sends are off unless this is exactly 1 (PR #294). This fixture expects one to leave.
+os.environ['DEALFLOW_FOLLOWUPS_ON'] = '1'
 import pathlib
 import shutil
 import socket
