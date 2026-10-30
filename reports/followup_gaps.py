@@ -136,12 +136,17 @@ def main(argv=None):
     ap.add_argument('--stale-days', type=int, default=7)
     ap.add_argument('--format', choices=('text', 'json'), default='text')
     a = ap.parse_args(argv)
-    with open(a.notes or default_notes_path(), encoding='utf-8') as f:
-        data = json.load(f)
+    try:
+        with open(a.notes or default_notes_path(), encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        print('worker_notes.json not found or unreadable (%s)' % e.__class__.__name__)
+        return 1
     notes = data.get('notes', data) if isinstance(data, dict) else {}
     r = analyse(notes, stale_days=a.stale_days)
     print(json.dumps(r, indent=1) if a.format == 'json' else render(r))
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
