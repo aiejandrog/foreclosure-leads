@@ -827,3 +827,5 @@ rf_status.json.tmp
 !_boardstagetest.py
 # _cadenceonetouchtest: one cadence note per owner per run, and the day 0/2/4/7 gap. example.com only.
 !_cadenceonetouchtest.py
+# _followupswitchtest: DEALFLOW_FOLLOWUPS_ON gates follow-up email. Fake cases and example.com only.
+!_followupswitchtest.py

@@ -25,6 +25,12 @@ on a strict ACTIVE Sunbiz match. Never sign with a raw sender.llc string; see sa
 
 Run `python cadence.py --dry-run` first: prints exactly what it would send, to whom, and what the
 reply check would do — without touching the mail server. gmail.key = one line:  you@gmail.com:apppassword
+
+Follow-ups leave only when DEALFLOW_FOLLOWUPS_ON is exactly the characters 1. Unset, a run
+prints each due follow-up as "<case> <step>" and exits 0 without sending or advancing that
+step. Any other value, or an environment that cannot be read, exits 2 and sends no follow-up.
+First touches are not gated by this switch. cadence-run.bat and cadence-daily.bat both start
+this file, so a hand run and the scheduled run read the same switch.
 """
 import argparse, json, os, re, smtplib, ssl, sys, time
 from datetime import date, datetime, timedelta, timezone
@@ -74,6 +80,38 @@ except Exception as _e:                                    # pragma: no cover - 
     _ss, _LANES_OK = None, False
     print('cadence: send_server import failed (%s) — NO deliverability gate, so every due step is '
           'HELD this run (fail closed; nothing is sent).' % (str(_e)[:80],))
+
+
+def _followups_status():
+    """('on', '') | ('off', '') | ('bad', why). The rule lives in send_server.followups_status.
+
+    Absent is off. Exactly 1 is on. Anything else, or an environment that cannot be
+    read, is fail-closed. If send_server did not import, the same reading is done here
+    so a bad value still exits non-zero. The deliverability hold already stops every
+    send in that case.
+    """
+    if _LANES_OK:
+        return _ss.followups_status()
+    try:
+        env = os.environ
+        present = 'DEALFLOW_FOLLOWUPS_ON' in env
+        raw = env.get('DEALFLOW_FOLLOWUPS_ON') if present else None
+    except Exception as e:
+        return 'bad', 'DEALFLOW_FOLLOWUPS_ON unreadable (%s)' % type(e).__name__
+    if not present:
+        return 'off', ''
+    if raw == '1':
+        return 'on', ''
+    return 'bad', 'DEALFLOW_FOLLOWUPS_ON is not exactly 1'
+
+
+def _followup_line(case, step_number):
+    if _LANES_OK:
+        return _ss.followup_list_line(case, step_number)
+    c = str(case or '').strip()
+    if (not c) or ('@' in c) or any(ch.isspace() for ch in c):
+        c = '-'
+    return '%s %s' % (c, int(step_number))
 
 
 def _save_state(state):
@@ -911,6 +949,11 @@ def _run(args):
             _ev = _ss._deliverability_evidence()
         except Exception as e:
             print(f'  deliverability evidence unreadable ({str(e)[:80]}) — every step HELD this run')
+    try:
+        _fu_mode, _fu_why = _followups_status()
+    except Exception as _fue:
+        _fu_mode, _fu_why = ('bad', 'DEALFLOW_FOLLOWUPS_ON unreadable (%s)' % type(_fue).__name__)
+    _fu_lines = []
     held = 0
     # Built from the whole state, not just active: a sibling that already finished still
     # counts as a recent note to that owner.
@@ -926,6 +969,12 @@ def _run(args):
             continue
         if _compliance_hold or _ledger_hold or _sync_hold or _bounce_hold or _skip_hold:
             held += 1
+            continue
+        # FOLLOW-UPS SWITCH. Step 2 and later never leave unless DEALFLOW_FOLLOWUPS_ON
+        # is exactly 1. Checked before the body is built, so the dry-run line is the
+        # case number and the step, and the step is not consumed.
+        if step >= 1 and _fu_mode != 'on':
+            _fu_lines.append(_followup_line(c, step + 1))
             continue
         _keys = list(_touch_of.get(c) or [])
         _same = (c in _mailed) or bool(set(_keys) & _mailed)
@@ -1002,6 +1051,13 @@ def _run(args):
                 capped['first-touch'] = capped.get('first-touch', 0) + 1
                 continue
             alias = _ftp if _ftp != cred[0] else ''
+        # A step-1 touch that is not a first touch, or any Re:/Fwd:/Fw: subject, is a
+        # follow-up too. Release a warm-up slot if one was reserved before this was known.
+        if _fu_mode != 'on' and _LANES_OK and _ss.followup_due(step, _first, subj):
+            if _ft_slot:
+                _ss._release_first_touch_slot(_ft_slot)
+            _fu_lines.append(_followup_line(c, step + 1))
+            continue
         if args.dry_run or not cred:
             _as = f'  [{lane} -> {alias}]' if alias else f'  [{lane} -> login]'
             print(f"  [dry-run] {s['email']}  step {step+1}/4  '{subj}'{_as}")
@@ -1127,10 +1183,20 @@ def _run(args):
         _save_state(state)
     else:
         print('  [dry-run] state NOT written (status flips above are for display only)')
+    if _fu_mode == 'bad':
+        print('  FOLLOW-UPS REFUSED — %s. Follow-ups were not sent and their steps were not advanced.'
+              % _fu_why)
+    elif _fu_lines:
+        print('  follow-ups off (set DEALFLOW_FOLLOWUPS_ON=1 to send). '
+              'Follow-ups were not sent and their steps were not advanced:')
+    for _line in _fu_lines:
+        print(_line)
     print(f'done. {sent} sent, {sum(1 for s in state.values() if s.get("status")=="active")} active, '
           f'{sum(1 for s in state.values() if s.get("status")=="replied")} replied-cancelled, '
           f'{sum(1 for s in state.values() if s.get("status")=="suppressed")} suppressed, '
           f'{sum(1 for s in state.values() if s.get("status")=="stopped")} opted-out.')
+    if _fu_mode == 'bad':
+        return 2
     return 0
 
 

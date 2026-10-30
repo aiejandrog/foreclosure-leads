@@ -69,6 +69,10 @@ rem  DEALFLOW_ARMED_MACHINE, or a lease held elsewhere or unreadable, exits 9 an
 rem  never starts. This does not change what cadence.py sends. -u so the log is written as
 rem  the run goes, not flushed at exit. A cadence run that dies halfway has already mailed
 rem  people, and the log is the only record of who.
+rem  FOLLOW-UPS ARE ON (Alejandro D0, 2026-10-29: keep follow-ups going). PR #294 makes cadence.py
+rem  send a step 2+ email only when DEALFLOW_FOLLOWUPS_ON is exactly 1; unset it prints the case and step
+rem  and sends nothing. Remove this line to pause every follow-up.
+set "DEALFLOW_FOLLOWUPS_ON=1"
 python -u runner_lock.py run --runner cadence-daily.bat -- python -u cadence.py >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
 if "%RC%"=="9" goto :refused
