@@ -183,3 +183,19 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Recommendation: A. QA decides the merge.
 - Still open, not built: giving the search stage its own clock, and the free-tier cap (125/day) cannot keep ~4,200 leads on a 14-day cycle; the attorney waiver covers the remainder.
 - Status: DECIDED 2026-10-31: option A shipped. QA PASS on both commits (qa2); merged by the Lead under Alex's "QA decides" rule; Alex's own spec 4b asked for the status change.
+
+### D20: Complete-sheet-only leads do not count as an attempt in the funnel (Lead, 2026-10-31, from WIRING-MAP.md)
+- Touches: tracker_template.html _funnelStats / outcome_learn (display and counts only; no send, no suppression)
+- Today: a lead whose only record is hand-logged Complete-sheet touches ('src: manual') is not an attempt in _funnelStats and does not reach outcome_learn. By design: a hand log is not a dial or a conversation. Effect: hand-logged work under-counts.
+- Option A: count manual call/text/email touches as attempts but never as dials or conversations | Risk: small; the funnel's "attempts" figure rises
+- Option B: leave as is | Risk: Alex's own hand-logged work is invisible in the funnel
+- Recommendation: A, as a small board-dev fixer item after the refresh.
+- Status: OPEN
+
+### D21: Worker marks of unlisted kinds are lost when the tab closes; a failed DNC sweep inside /notes still answers ok (Lead, 2026-10-31, from WIRING-MAP.md; read from code only, not asserted by a test)
+- Touches: tracker_template.html marks buffer; send_server.py /notes (ledger_from_notes) = suppression-adjacent, report only
+- Today: only the kinds sent / callout / text / callq / done / skip / badnum survive; the marks replay empties its buffer after 1 s whether or not each mark was handled; ledger_from_notes failing inside /notes still returns ok:true (the nightly sweep catches it); the unload sendBeacon cannot carry the device key; callTextLedger swallows its own failures.
+- Option A: fix as separate fixer items (LEGAL REVIEW for the /notes part) | Risk: touches the notes path
+- Option B: leave; the nightly sweep and the buffer limits are the backstop | Risk: a hand mark or a ledger failure can be missed for a day
+- Recommendation: A for the ok:true-on-failure case first (it hides a failed do-not-contact write); the rest are low priority.
+- Status: OPEN
