@@ -14534,7 +14534,8 @@ function genMorningWorker(lane, autostart){
     // button calls doSend directly, so the guard lives here too: a second request while one's
     // outcome is unknown would draw a 409 "skip" on a lead that was really sent.
     +     'if(sendInFlight()){ addLog("fail", r.first||r.owner, "a send is still waiting for the bridge — its outcome is not known yet, so this one was not sent. Nothing was marked.", "warn"); return; }'
-    +     'var qc=r.c, _seq=++SENDSEQ;'
+    // Stop clears auto while a request is pending; its rejection must retain the original mode.
+    +     'var qc=r.c, _seq=++SENDSEQ, _wasAuto=!!(auto||autoAll);'
     +     'var _live=function(){ return _seq===SENDSEQ && !!Q[i] && Q[i].c===qc; };'
     +     'sending=true;'
     +     'var _settled=false, _sto=setTimeout(function(){'
@@ -14625,9 +14626,9 @@ function genMorningWorker(lane, autostart){
     // if it drops mid-queue anyway, PAUSE rather than grinding every remaining lead through a
     // popup — same posture as the cap/auth failures above, and it leaves the whole remaining
     // queue untouched (not falsely skipped) for the next run once the bridge is back.
-    +         'if(auto){'
+    +         'if(_wasAuto){'
     +           'addLog("fail", r.first||r.owner, "send bridge went offline mid-run — pausing auto-run so nothing opens a composer. Restart send_server.py, then press Start Auto again.", "warn");'
-    +           'pause(); return;'
+    +           'if(_live() && auto) pause(); return;'
     +         '}'
     // MANUAL (operator clicked Email on this one lead): a human is right here, so the Gmail-compose
     // fallback + confirm click is legitimate — this is an ATTEMPT, never a send.
