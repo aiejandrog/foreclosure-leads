@@ -182,4 +182,4 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Option B: ship commit 1 only | Risk: the nightly search stays starved (0 leads checked) until matching is fast
 - Recommendation: A. QA decides the merge.
 - Still open, not built: giving the search stage its own clock, and the free-tier cap (125/day) cannot keep ~4,200 leads on a 14-day cycle; the attorney waiver covers the remainder.
-- Status: OPEN
+- Status: DECIDED 2026-10-31: option A shipped. QA PASS on both commits (qa2); merged by the Lead under Alex's "QA decides" rule; Alex's own spec 4b asked for the status change.
