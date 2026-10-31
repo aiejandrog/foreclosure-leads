@@ -619,6 +619,9 @@ def health_alert(sig, at):
                   'healthcheck FAIL stages: %s.' % ', '.join(kept), at)
 
 
+BK_STARVED_RUNS = 3  # runs in a row that spent their whole limit before one lead was searched
+
+
 def bk_lookup_alert(sig, at):
     """Fail when the nightly CourtListener pull did not succeed or is older than 36h.
 
@@ -641,6 +644,15 @@ def bk_lookup_alert(sig, at):
         shown = 'unknown' if age is None else ('%.0f' % age)
         return _alert('bk-lookup', 'fail',
                       'Federal bankruptcy pull is %sh old (limit 36h).' % shown, at)
+    try:
+        starved = int(sig.get('starved_runs') or 0)
+        needing = int(sig.get('needing_search') or 0)
+    except (TypeError, ValueError):
+        starved, needing = 0, 0
+    if starved >= BK_STARVED_RUNS and needing > 0:
+        return _alert('bk-lookup', 'warn',
+                      'Federal bankruptcy search ran out of time with %d lead(s) unsearched for %d '
+                      'runs in a row. They stay held.' % (needing, starved), at)
     return None
 
 
