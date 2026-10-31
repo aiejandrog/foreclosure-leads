@@ -168,7 +168,10 @@ _IN_RE = re.compile(r'^(?:IN\s+RE|IN\s+THE\s+MATTER\s+OF)\s+', re.I)
 
 
 class ProviderError(Exception):
-    pass
+    # Counts only, set by http_get for the status file: the HTTP status the last attempt got
+    # (0 when no status came back) and how many requests the call made. Never text from the body.
+    http_status = 0
+    attempts = 0
 
 
 class BudgetExhausted(ProviderError):
@@ -1046,6 +1049,15 @@ def wait_for_slot(budget, clock, reserve=0, max_wait=None, deadline=None):
         slept += clock.time() - before
 
 
+def _with_counts(exc, status, attempts):
+    try:
+        exc.http_status = int(status)
+    except (TypeError, ValueError):
+        exc.http_status = 0
+    exc.attempts = int(attempts)
+    return exc
+
+
 def http_get(url, provider, transport, budget, clock, reserve=0, max_wait=None, deadline=None):
     """(status, payload_dict). Records every attempt. Raises BudgetExhausted, RateLimited, or TimeBudget.
     The token is not included in any exception text. A full minute or hour window waits.
@@ -1071,7 +1083,8 @@ def http_get(url, provider, transport, budget, clock, reserve=0, max_wait=None, 
             budget.record(clock.time())
             if not getattr(budget, 'unreadable', False):
                 save_budget(budget)
-            raise NetworkError('CourtListener network error (%s)' % type(e).__name__)
+            raise _with_counts(NetworkError('CourtListener network error (%s)' % type(e).__name__),
+                               0, attempt + 1)
         budget.record(clock.time())
         if not getattr(budget, 'unreadable', False):
             save_budget(budget)
@@ -1081,23 +1094,26 @@ def http_get(url, provider, transport, budget, clock, reserve=0, max_wait=None, 
             if deadline is not None and clock.time() + wait > float(deadline):
                 raise TimeBudget('CourtListener nightly run hit its time limit')
             if max_wait is not None and slept + wait > float(max_wait) + 1e-9:
-                raise RateLimited(
-                    'CourtListener returned 429 until the retry budget was spent — lead stays held')
+                raise _with_counts(RateLimited(
+                    'CourtListener returned 429 until the retry budget was spent — lead stays held'),
+                    429, attempt)
             before = clock.time()
             clock.sleep(wait)
             slept += clock.time() - before
             continue
         if status == 429:
-            raise RateLimited('CourtListener returned 429 until the retry budget was spent — lead stays held')
+            raise _with_counts(RateLimited(
+                'CourtListener returned 429 until the retry budget was spent — lead stays held'),
+                429, attempt + 1)
         if status != 200:
             # Touch the body only to redact a token if the server echoed one. The text is not logged.
             raw = body.decode('utf-8', 'replace') if isinstance(body, (bytes, bytearray)) else body
             scrub(raw, token)
-            raise ProviderError('CourtListener HTTP %s' % status)
+            raise _with_counts(ProviderError('CourtListener HTTP %s' % status), status, attempt + 1)
         try:
             payload = json.loads(body.decode('utf-8') if isinstance(body, (bytes, bytearray)) else body)
         except Exception:
-            raise ProviderError('CourtListener response was not JSON')
+            raise _with_counts(ProviderError('CourtListener response was not JSON'), status, attempt + 1)
         return status, payload
 
 
@@ -2196,6 +2212,13 @@ def public_status():
         'truncated': num('truncated'),
         'provider': 'courtlistener' if data.get('provider') in (None, '', 'courtlistener') else 'other',
         'reason': re.sub(r'[^a-z0-9_:-]', '', str(data.get('reason') or '').lower())[:40],
+        'needing_search': num('needing_search'),
+        'searched_this_run': num('searched_this_run'),
+        'starved_runs': num('starved_runs'),
+        'match_s': num('match_s'),
+        'last_http_status': num('last_http_status'),
+        'pull_attempts': num('pull_attempts'),
+        'pull_fail': re.sub(r'[^a-z0-9_]', '', str(data.get('pull_fail') or '').lower())[:20],
     }
 
 
@@ -2206,11 +2229,12 @@ def write_status(**fields):
     # Drop anything that is not a count, a bool, or a short safe label.
     allowed = ('pull_ok', 'pull_t', 'pull_ts', 'filings', 'leads_checked', 'holds', 'errors',
                'requests_used', 'requests_minute', 'requests_hour', 'requests_day', 'truncated',
-               'provider', 'reason')
+               'provider', 'reason', 'needing_search', 'searched_this_run', 'match_s',
+               'requests_this_run', 'starved_runs', 'last_http_status', 'pull_attempts', 'pull_fail')
     for k, v in fields.items():
         if k not in allowed:
             continue
-        if k == 'reason':
+        if k in ('reason', 'pull_fail'):
             v = re.sub(r'[^a-z0-9_:-]', '', str(v or '').lower())[:40]
         elif k == 'provider':
             v = 'courtlistener' if v == 'courtlistener' else 'other'
@@ -2263,19 +2287,77 @@ def save_filings(rows, now):
     return kept
 
 
+def _owner_index_tokens(owners):
+    """Tokens a filing must share with this lead to be worth comparing, or None when an owner has
+    none (then every filing is compared, as before). A person match needs a shared surname token
+    (match_readings skips a pair with no surname overlap); an entity match needs a shared token
+    (match_entity: equal token lists, or the shorter a subset of the longer)."""
+    keys = set()
+    for o in owners:
+        if o.get('kind') == 'entity':
+            got = set(o.get('tokens') or [])
+        else:
+            got = set()
+            for r in o.get('readings') or []:
+                got.update(r.get('surnames') or [])
+        if not got:
+            return None
+        keys |= got
+    return keys
+
+
+def _index_filings(items):
+    """({token: [item position, ...]}, [positions always compared], [items in order]).
+
+    Each filing is indexed under every token of every party string, both as stored and with the
+    'IN RE' caption stripped, which is a superset of what the matcher compares. A filing whose
+    parties are not a list is always compared, so it behaves exactly as it did."""
+    order = []
+    by_token = {}
+    always = []
+    for item in items.values():
+        if not isinstance(item, dict):
+            continue
+        pos = len(order)
+        order.append(item)
+        parties = item.get('parties')
+        if not isinstance(parties, (list, tuple)):
+            always.append(pos)
+            continue
+        seen = set()
+        for party in parties:
+            seen.update(tokens(party))
+            seen.update(tokens(_strip_caption(party)))
+        for t in seen:
+            by_token.setdefault(t, []).append(pos)
+    return by_token, always, order
+
+
 def match_filings_to_leads(leads, items, cache, now):
-    """Local match. Open filing + name match writes a hold. Does not clear a lead by itself."""
+    """Local match. Open filing + name match writes a hold. Does not clear a lead by itself.
+
+    Filings are indexed by name token, so a lead is compared only with the filings that share a
+    token with it. The comparison itself (cases_from_hits) and the order of the results are the
+    same as comparing every lead with every filing."""
     holds = 0
+    by_token, always, order = _index_filings(items)
+    everything = range(len(order))
     for ld in leads.values():
         owners = lead_owners(ld)
         if not owners:
             continue
+        keys = _owner_index_tokens(owners)
+        if keys is None:
+            cand = everything
+        else:
+            hit = set(always)
+            for t in keys:
+                hit.update(by_token.get(t, ()))
+            cand = sorted(hit)
         found = []
-        for item in items.values():
-            if not isinstance(item, dict):
-                continue
-            found.extend(cases_from_hits(owners, [item], county=ld.get('county') or '',
-                                     place=ld.get('place') or ''))
+        for pos in cand:
+            found.extend(cases_from_hits(owners, [order[pos]], county=ld.get('county') or '',
+                                         place=ld.get('place') or ''))
         if not found:
             continue
         entry = put_entry(cache, ld['key'], found, searched=False, ok_check=True, err_why='', now=now)
@@ -2506,6 +2588,9 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None, 
     n_rows = 0
     time_stopped = False
     reason = 'ok'
+    run_t0 = clock.time()
+    fail_status = fail_attempts = 0
+    fail_label = ''
     items = {}
     if not ok_av:
         items = load_filings().get('items') or {}
@@ -2540,20 +2625,34 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None, 
             errors += 1
             time_stopped = True
             log('CourtListener: nightly pull stopped, daily rate budget exhausted. Remaining leads stay held.')
-        except (RateLimited, ProviderError):
+        except (RateLimited, ProviderError) as e:
             items = load_filings().get('items') or {}
             pull_ok = False
             reason = 'pull_failed'
             errors += 1
+            fail_status = int(getattr(e, 'http_status', 0) or 0)
+            fail_attempts = int(getattr(e, 'attempts', 0) or 0)
+            fail_label = ('rate_limited' if isinstance(e, RateLimited)
+                          else 'network' if isinstance(e, NetworkError) else 'http_error')
             log('CourtListener: nightly pull failed. Leads stay held.')
     if not isinstance(items, dict):
         items = {}
     prog.update(filings=len(items), pull_ok=bool(pull_ok), errors=errors, stage='match')
+    match_t0 = clock.time()
     match_filings_to_leads(leads, items, cache, clock.time())
+    match_s = max(0, int(clock.time() - match_t0))
+    needing = sum(1 for ld in leads.values() if _needs_party_search(cache.get(ld['key']), clock.time()))
     checked = 0
     truncated_n = 0
     net_errors = 0
     prog.update(checked=0, truncated=0, stage='search')
+    if ok_av and not time_stopped and clock.time() >= deadline and needing > 0:
+        # The deadline passed before one lead was searched (the match step can outrun it). Say so:
+        # without this the status read reason ok, leads_checked 0 and nothing alerted.
+        if reason in ('ok', 'pull_truncated'):
+            reason = 'time_budget'
+        log('CourtListener: the time limit passed before any lead was searched '
+            '(match step %ds, %d lead(s) still need a search). They stay held.' % (match_s, needing))
     if ok_av and not time_stopped and clock.time() < deadline:
         # Soonest contact first: first-touch email, then a phone, then a letter.
         # Miami is in this same order, not after every other county.
@@ -2613,11 +2712,21 @@ def run_nightly(here=HERE, env=None, transport=None, clock=None, provider=None, 
             op = entry_opinion(k, ent, overrides, clock.time())
             if op and op.get('blocks'):
                 hold_n += 1
+    prev, _ex = _load(status_path())
+    try:
+        prev_starved = int((prev or {}).get('starved_runs') or 0) if isinstance(prev, dict) else 0
+    except (TypeError, ValueError):
+        prev_starved = 0
+    starved = (prev_starved + 1) if (reason == 'time_budget' and checked == 0 and needing > 0) else 0
+    this_run_requests = sum(1 for t in budget.hits if t >= run_t0)
     write_status(pull_ok=bool(pull_ok), pull_t=clock.time(), pull_ts=_stamp(),
                  filings=len(items) if isinstance(items, dict) else 0,
                  leads_checked=checked, holds=hold_n, errors=errors, truncated=truncated_n,
                  provider='courtlistener' if provider.name == PROVIDER_COURTLISTENER else 'other',
-                 reason=reason, **fields)
+                 reason=reason, needing_search=needing, searched_this_run=checked,
+                 match_s=match_s, requests_this_run=this_run_requests, starved_runs=starved,
+                 last_http_status=fail_status, pull_attempts=fail_attempts, pull_fail=fail_label,
+                 **fields)
     log('CourtListener: status filings=%d checked=%d holds=%d errors=%d truncated=%d requests=%d' % (
         len(items) if isinstance(items, dict) else 0, checked, hold_n, errors, truncated_n,
         fields['requests_used']))

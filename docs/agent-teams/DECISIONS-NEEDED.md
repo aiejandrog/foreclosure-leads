@@ -174,3 +174,12 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Recommendation: A (the default).
 - Fallback in progress: A is shipped.
 - Status: OPEN
+### D19: Federal bankruptcy status now says when the search was skipped, and the match step is indexed (bkfix, 2026-10-31) -- LEGAL REVIEW in PR title
+- Touches: bk_lookup.py (stay surface) and pipeline_alerts.py. Status file and alert only in commit 1; matching speed only in commit 2. No hold, verdict, clear rule, waiver, cache entry or budget cap changes. Root cause (docs/BK-CHECK-DIAGNOSIS.md): `match_filings_to_leads()` outran the 900 s deadline, so the per-lead search loop never ran and the status read `reason: ok, leads_checked: 0`.
+- Commit 1: when the deadline has passed before any lead is searched, the status reason is `time_budget` (other reasons keep their codes). Counts added to the status: leads still needing a search, leads searched this run, seconds in the match step, requests this run, consecutive starved runs. A failed pull records the HTTP status, the attempt count and a short label (http_error / rate_limited / network); the existing bounded backoff is unchanged. `bk-lookup` raises a warning after 3 starved runs in a row. Counts and codes only.
+- Commit 2: filings are indexed by name token so a lead is compared only with filings that share a token. Output must be identical to the full cross product; `_bkmatchindextest.py` compares the old and new matcher field by field.
+- Option A: ship both (recommended; Alex's earlier spec 4b asked for the status change) | Risk: any bug in the index could drop a match and so release a hold; the equality test and the 15 existing bk suites are the guard
+- Option B: ship commit 1 only | Risk: the nightly search stays starved (0 leads checked) until matching is fast
+- Recommendation: A. QA decides the merge.
+- Still open, not built: giving the search stage its own clock, and the free-tier cap (125/day) cannot keep ~4,200 leads on a 14-day cycle; the attorney waiver covers the remainder.
+- Status: DECIDED 2026-10-31: option A shipped. QA PASS on both commits (qa2); merged by the Lead under Alex's "QA decides" rule; Alex's own spec 4b asked for the status change.
