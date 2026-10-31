@@ -83,6 +83,30 @@ class PersonUnitTests(unittest.TestCase):
         self.assertEqual(self.grade(self.street + ' #2a', self.street + ' Unit 2A'), 'wp')
         self.assertEqual(self.grade(self.street + ' Unit 2B', self.street + ' Unit 2A'), 'nm')
 
+    def test_marker_like_street_names_do_not_hide_the_actual_unit(self):
+        for street in ('100 United Avenue', '100 Apartment Road', '100 Steadfast Road'):
+            with self.subTest(street=street):
+                self.assertEqual(W._unit_key(street), '')
+                self.assertEqual(W._unit_key(street + ' Apt 201'), '201')
+                self.assertEqual(self.grade(street + ' Apt 202', street + ' Apt 201'), 'nm')
+                self.assertEqual(self.grade(street + ' Apt 201', street + ' Apt 201'), 'wp')
+                self.assertEqual(self.grade(street, street), 'wp')
+        for marker, unit in (('Unit201', '201'), ('Apt201', '201'),
+                             ('Unit2A', '2A'), ('#2a', '2A'), ('UnitA', 'A')):
+            with self.subTest(compact_marker=marker):
+                self.assertEqual(self.grade(self.street + ' ' + marker,
+                                           self.street + ' Unit ' + unit), 'wp')
+
+    def test_unit_before_comma_less_city_state_is_not_discarded(self):
+        lead = self.street + ' Apt 201 Example City FL'
+        for address in (self.street + ' Apt 202 Example City FL',
+                        {'full_address': self.street + ' Apt 202 Example City FL'}):
+            with self.subTest(address_kind=type(address).__name__):
+                self.assertEqual(self.grade(address, lead), 'nm')
+        self.assertEqual(self.grade(self.street + ' Apt 201 Example City FL', lead), 'wp')
+        self.assertEqual(self.grade({'full_address': self.street + ' Apt 201 Example City FL'}, lead), 'wp')
+        self.assertEqual(self.grade(self.street + ' Example City FL', lead), 'nm')
+
     def test_structured_unit_cannot_be_bypassed_by_bare_line(self):
         for key in ('unit', 'unit_number', 'street_line_2', 'line2'):
             with self.subTest(key=key):

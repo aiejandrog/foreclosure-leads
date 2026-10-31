@@ -196,9 +196,23 @@ def same_street(a, b):
 
 def _unit_key(addr):
     """Explicit secondary unit, including a unit on the next comma-separated line."""
-    match = re.search(r'(?:\b(?:APT|APARTMENT|UNIT|STE|SUITE)\.?\s*#?\s*|#\s*)'
-                      r'([A-Z0-9]+(?:-[A-Z0-9]+)*)\b', str(addr or '').upper())
-    return match.group(1) if match else ''
+    text = str(addr or '').upper()
+    for match in re.finditer(r'(?:\b(?:APARTMENT|SUITE|UNIT|APT|STE)(?=\b|\d|[A-Z]\b)\.?\s*#?\s*|#\s*)'
+                             r'(?P<unit>[A-Z0-9]+(?:-[A-Z0-9]+)*)\b', text):
+        prefix = text[:match.start()].strip(' ,')
+        street = _street_key(prefix.split(',')[0]) if prefix else None
+        if prefix and not street:
+            continue                         # "Apartment Road" is a street name, not unit ROAD
+        unit = match.group('unit')
+        if unit in _SUFFIX or unit in _DIRS:
+            continue
+        # A long alphabetic token after a marker can still be part of a street name. Numeric
+        # and single-letter units remain usable without a street suffix. Do not require the
+        # unit to end the line: full_address can append city/state without a comma.
+        if prefix and unit.isalpha() and len(unit) > 1 and not street[3]:
+            continue
+        return unit
+    return ''
 
 
 def _addr_strings(rec):
