@@ -5,7 +5,7 @@ against CourtListener, no .bat, nothing written under ~/DEALFLOW. Line numbers a
 unless stated.
 
 ## Root cause (3 sentences)
-`run_nightly()` sets its 900 s deadline at the top (2492) and then runs `match_filings_to_leads()`
+`run_nightly()` sets its 900 s deadline at the top (2490) and then runs `match_filings_to_leads()`
 (call 2552, defined 2266) before any lead is searched; that function compares every lead to every
 cached filing (4,247 leads x 2,400 filings, fuzzy `cases_from_hits`) and now takes longer than the
 whole deadline (a 150-lead sample extrapolates to ~33 min on a loaded machine). The search loop is
@@ -14,8 +14,8 @@ is set, so the status reads `reason: ok, errors: 0, leads_checked: 0` and no ale
 pull is not the cause: it used a few pages (19 requests that day) and the token and budget were fine.
 
 ## (1) Order a run spends time and requests
-1. `deadline = now + max_runtime_s`: 2492 (BK_MAX_RUNTIME_S default 900, lines 88 and 997).
-2. `pull_filings` (call 2523, defined 2428): resumes the flsb cursor, at most PULL_PAGE_CAP=20 pages
+1. `deadline = now + max_runtime_s`: 2490 (BK_MAX_RUNTIME_S default 900, lines 88 and 997).
+2. `pull_filings` (call 2521, defined 2428): resumes the flsb cursor, at most PULL_PAGE_CAP=20 pages
    (119), keeps NIGHTLY_PRESEND_RESERVE=10 requests free (125, used at 2470). It returns at once
    when caught up (2438). It cannot eat the whole budget: 20 pages max.
 3. `match_filings_to_leads` (2552): pure CPU, no deadline check inside it, no requests. This is where
@@ -43,7 +43,7 @@ requests sit between. pull_state last_success_t is 21:02:22.
   the binding limit before 10-29, and matching has grown with filings (1,757 to 2,400 in that log).
 
 ## (3) Is `leads_checked` what we think?
-No, it is per run. `checked` is a local reset to 0 (2551) and `write_status(leads_checked=checked)`
+No, it is per run. `checked` is a local reset to 0 (2553) and `write_status(leads_checked=checked)`
 (2618) overwrites the field each run; `presend_check` adds 1 (2681); the crash path writes
 `prog['checked']` (2766). It is never a cumulative count of leads with a fresh check. The real
 coverage number is the cache (section 4).
