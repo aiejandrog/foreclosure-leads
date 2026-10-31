@@ -2287,19 +2287,77 @@ def save_filings(rows, now):
     return kept
 
 
+def _owner_index_tokens(owners):
+    """Tokens a filing must share with this lead to be worth comparing, or None when an owner has
+    none (then every filing is compared, as before). A person match needs a shared surname token
+    (match_readings skips a pair with no surname overlap); an entity match needs a shared token
+    (match_entity: equal token lists, or the shorter a subset of the longer)."""
+    keys = set()
+    for o in owners:
+        if o.get('kind') == 'entity':
+            got = set(o.get('tokens') or [])
+        else:
+            got = set()
+            for r in o.get('readings') or []:
+                got.update(r.get('surnames') or [])
+        if not got:
+            return None
+        keys |= got
+    return keys
+
+
+def _index_filings(items):
+    """({token: [item position, ...]}, [positions always compared], [items in order]).
+
+    Each filing is indexed under every token of every party string, both as stored and with the
+    'IN RE' caption stripped, which is a superset of what the matcher compares. A filing whose
+    parties are not a list is always compared, so it behaves exactly as it did."""
+    order = []
+    by_token = {}
+    always = []
+    for item in items.values():
+        if not isinstance(item, dict):
+            continue
+        pos = len(order)
+        order.append(item)
+        parties = item.get('parties')
+        if not isinstance(parties, (list, tuple)):
+            always.append(pos)
+            continue
+        seen = set()
+        for party in parties:
+            seen.update(tokens(party))
+            seen.update(tokens(_strip_caption(party)))
+        for t in seen:
+            by_token.setdefault(t, []).append(pos)
+    return by_token, always, order
+
+
 def match_filings_to_leads(leads, items, cache, now):
-    """Local match. Open filing + name match writes a hold. Does not clear a lead by itself."""
+    """Local match. Open filing + name match writes a hold. Does not clear a lead by itself.
+
+    Filings are indexed by name token, so a lead is compared only with the filings that share a
+    token with it. The comparison itself (cases_from_hits) and the order of the results are the
+    same as comparing every lead with every filing."""
     holds = 0
+    by_token, always, order = _index_filings(items)
+    everything = range(len(order))
     for ld in leads.values():
         owners = lead_owners(ld)
         if not owners:
             continue
+        keys = _owner_index_tokens(owners)
+        if keys is None:
+            cand = everything
+        else:
+            hit = set(always)
+            for t in keys:
+                hit.update(by_token.get(t, ()))
+            cand = sorted(hit)
         found = []
-        for item in items.values():
-            if not isinstance(item, dict):
-                continue
-            found.extend(cases_from_hits(owners, [item], county=ld.get('county') or '',
-                                     place=ld.get('place') or ''))
+        for pos in cand:
+            found.extend(cases_from_hits(owners, [order[pos]], county=ld.get('county') or '',
+                                         place=ld.get('place') or ''))
         if not found:
             continue
         entry = put_entry(cache, ld['key'], found, searched=False, ok_check=True, err_why='', now=now)
