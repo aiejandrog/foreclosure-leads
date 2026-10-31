@@ -194,6 +194,27 @@ def same_street(a, b):
     return True
 
 
+def _unit_key(addr):
+    """Explicit secondary unit, including a unit on the next comma-separated line."""
+    text = str(addr or '').upper()
+    for match in re.finditer(r'(?:\b(?:APARTMENT|SUITE|UNIT|APT|STE)(?=\b|\d|[A-Z]\b)\.?\s*#?\s*|#\s*)'
+                             r'(?P<unit>[A-Z0-9]+(?:-[A-Z0-9]+)*)\b', text):
+        prefix = text[:match.start()].strip(' ,')
+        street = _street_key(prefix.split(',')[0]) if prefix else None
+        if prefix and not street:
+            continue                         # "Apartment Road" is a street name, not unit ROAD
+        unit = match.group('unit')
+        if unit in _SUFFIX or unit in _DIRS:
+            continue
+        # A long alphabetic token after a marker can still be part of a street name. Numeric
+        # and single-letter units remain usable without a street suffix. Do not require the
+        # unit to end the line: full_address can append city/state without a comma.
+        if prefix and unit.isalpha() and len(unit) > 1 and not street[3]:
+            continue
+        return unit
+    return ''
+
+
 def _addr_strings(rec):
     out = []
     for k in _ADDR_LIST_KEYS:
@@ -204,6 +225,7 @@ def _addr_strings(rec):
             if isinstance(a, str):
                 out.append(a)
             elif isinstance(a, dict):
+                lines = []
                 # Whitepages' own address dicts carry `street` as the street NAME only (no house
                 # number) next to `line1` / `full_address` (seen on every cached /property record,
                 # 2026-10-22). Reading `street` first made _street_key fail on every such address,
@@ -211,18 +233,38 @@ def _addr_strings(rec):
                 # house + street rebuilt when only the parts are there.
                 for kk in ('street_line_1', 'line1', 'full_address', 'address'):
                     if a.get(kk):
-                        out.append(str(a.get(kk)))
+                        lines.append(str(a.get(kk)))
                 if a.get('house') and a.get('street'):
-                    out.append('%s %s' % (a.get('house'), a.get('street')))
+                    lines.append('%s %s' % (a.get('house'), a.get('street')))
+                units = {_unit_key(line) for line in lines} - {''}
+                for kk in ('unit', 'unit_number', 'street_line_2', 'line2'):
+                    value = str(a.get(kk) or '').strip().upper()
+                    unit = _unit_key(value)
+                    if not unit and kk in ('unit', 'unit_number') and re.fullmatch(r'[A-Z0-9]+(?:-[A-Z0-9]+)*', value):
+                        unit = value
+                    if unit:
+                        units.add(unit)
+                if len(units) > 1:
+                    continue                       # conflicting fields cannot confirm a property
+                unit = next(iter(units), '')
+                # A bare line1 / house+street must not bypass the unit on full_address or line2.
+                out.extend(line if _unit_key(line) or not unit else line + ' UNIT ' + unit
+                           for line in lines)
     return [a for a in out if a]
 
 
 def at_property(rec, lead_addr):
-    """True when a Person record places this person at the lead's street address."""
+    """True when a Person record matches the street AND any explicit unit on either side.
+
+    A missing or different unit is name-only evidence, never confirmation of the lead's unit.
+    same_street intentionally remains a building comparison for its other callers.
+    """
     want = str(lead_addr or '').split(',')[0]
     if not _street_key(want):
         return False
-    return any(same_street(a.split(',')[0], want) for a in _addr_strings(rec))
+    unit = _unit_key(lead_addr)
+    return any(same_street(a.split(',')[0], want) and _unit_key(a) == unit
+               for a in _addr_strings(rec))
 
 
 def grade_person_record(lead_owners, lead_addr, rec):
