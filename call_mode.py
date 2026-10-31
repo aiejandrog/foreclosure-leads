@@ -2435,6 +2435,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # _wp_phone_kinds). Absent when the lead has no Whitepages record, so the card can say
             # "not checked" instead of implying Whitepages looked and found nothing.
             'pw': ''.join(_pw[k] for k in order) if _wpk is not None else None,
+            # Cached evidence state is separate from accepted per-number evidence. A parcel
+            # rejection or checked miss must not be described as a lookup never performed.
+            'ws': d.get('wpKey') if d.get('wpKey') in ('ok', 'none', 'mismatch', 'unverified') else None,
             # WHERE EACH NUMBER CAME FROM, same index as `p`, one character each (2026-10-22, Alejandro:
             # "no source at all on the 10 numbers"): 't' skip trace (phsrc 'st', or untagged, which
             # phone_src treats as the trace), 'w' Whitepages owner record, 'h' Whitepages household,
@@ -4381,15 +4384,22 @@ function _dncRows(r){
   return h;
 }
 function _numList(r){
-  var p = r.p||[]; if(p.length < 2 && !(r.dn||[]).length) return '';
+  var p = r.p||[]; if(p.length < 2 && !(r.dn||[]).length && !r.ws) return '';
   var bad = badSet(r), cnt = {};
   (((notes[r.c]||{}).dials)||[]).forEach(function(x){ if(x && x.ph4) cnt[String(x.ph4)] = (cnt[String(x.ph4)]||0) + 1; });
   var nwp = 0; for(var j=0;j<p.length;j++){ if(r.pw!=null && String(r.pw).charAt(j)==='o') nwp++; }
+  var reason = '', wpStatus;
+  if(r.ws==='mismatch') reason = 'Whitepages cache: property evidence rejected — parcel mismatch';
+  else if(r.ws==='unverified') reason = 'Whitepages cache: property evidence rejected — parcel not verified';
+  if(r.pw!=null) wpStatus = nwp + ' confirmed the owner’s by Whitepages' + (reason ? ' &middot; ' + reason : '');
+  else if(reason) wpStatus = '<span class="nc">'+reason+'</span>';
+  else if(r.ws==='none') wpStatus = '<span class="nc">Whitepages cache checked: no accepted contacts</span>';
+  else if(r.ws==='ok') wpStatus = '<span class="nc">Whitepages cache checked: no accepted phone evidence</span>';
+  else wpStatus = '<span class="nc">Whitepages not checked for this lead</span>';
   var h = '<div class="numlist" style="margin:8px 0 4px">'
     + '<div class="ltag" style="margin:0 0 4px">ALL ' + (p.length + (r.dn||[]).length) + ' NUMBERS'
     + ((r.dn||[]).length ? ' (' + (r.dn||[]).length + ' do-not-call)' : '')
-    + (r.pw==null ? ' &middot; <span class="nc">Whitepages not checked for this lead</span>'
-                  : ' &middot; ' + nwp + ' confirmed the owner’s by Whitepages') + '</div>';
+    + ' &middot; ' + wpStatus + '</div>';
   var nst = String(r.sx||'').split('').filter(function(c){ return c==='t'; }).length;
   var nla = String(r.lv||'').split('').filter(function(c){ return c==='a'; }).length;
   if(r.sx) h += '<div class="nc" style="margin:0 0 4px;font-size:12px">' + nst + ' of ' + p.length + ' from the skip trace &middot; '
