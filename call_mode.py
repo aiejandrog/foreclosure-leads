@@ -6260,7 +6260,7 @@ function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) re
 function navBack(){
   _qvRestore();
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
-  var k=_navSeek(_NAVB, cur && cur.c);
+  var k=_navSeek(_NAVB, onLead ? cur.c : null);
   if(k<0){ toast('No earlier lead in this lane'); return; }
   if(from) _NAVF.push({c:from, l:lane});
   if(cur) delete cur._rcStay;
