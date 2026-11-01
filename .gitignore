@@ -863,3 +863,13 @@ footprint.local.json
 REPLY-DRAFTS-*
 JESSE-RUN-*.log
 evidence/
+
+# Names of owners / defendants / buyers (public-record derived, but homeowner PII by repo rule).
+# Untracked 2026-11-01: they live on the laptop (DEALFLOW_DIR twin) and are rebuilt by the nightly.
+/lis_pendens.json
+/ownership.json
+/ownership_cache.json
+/county_plaintiffs.json
+/cash_buyers.json
+/batchdata_liens.json
+/diligence_cache.json
