@@ -848,3 +848,18 @@ footprint.local.json
 # in a comment, a personal mailbox in a regex) and ships to a public repo, so a laptop whose copy of
 # this suite was lost is a laptop that stops noticing.
 !_footprinttest.py
+
+# ADDED 2026-11-01 — backup copies and run artifacts that slip past the rules above. This repo is
+# PUBLIC and the nightly bats stage with `git add -A`, so each of these is one bat-run from being
+# world-downloadable:
+#  - *.bak-<date>: `*.bak` / `*.bak.json` above do NOT match the dated-suffix form, so
+#    leads_final.json.bak-20260914 (899 KB of homeowner leads) and records_liens.json.bak-20260914
+#    sat untracked-but-committable. (pacer_stay_cache.json.bak-* was patched by name earlier; this
+#    generalizes it so the next dated backup is covered without another edit.)
+#  - REPLY-DRAFTS-*: drafted homeowner replies — names and case details inline.
+#  - JESSE-RUN-*.log: operator run log, carries addresses (jesse_watch.py itself is already ignored).
+#  - evidence/: county docket pulls, one folder per CACE-* case (recorded instruments, party names).
+*.bak-*
+REPLY-DRAFTS-*
+JESSE-RUN-*.log
+evidence/
