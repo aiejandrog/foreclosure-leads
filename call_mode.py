@@ -9002,7 +9002,17 @@ function afterCall(r, o, nextC){
      until a call on it reaches a person. */
   else if(String((r.ps||[])[phIdx]||'')==='wpm' && !sitKeys.length)
                             txt = '<div class="nc">Pasted from Whitepages, not confirmed yet. No text until a call reaches them.</div>';
-  else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
+  /* NOT THE OWNER'S NUMBER: no text, whatever the call outcome (2026-11-01). The board's
+     textablePhones() withholds 'hh' (household member at the address) and 'nm' (name-only match,
+     maybe a namesake) because the text names the property and the case, which tells somebody who
+     never asked about this homeowner's foreclosure. This panel had no such gate: the number card
+     says "do not discuss the case with them" and the panel still offered the ladder text and every
+     situational one. A LIKELY owner ('l', also tagged hh) is handled above and keeps its own rule. */
+  else if(['hh','nm'].indexOf(String((r.ps||[])[phIdx]||'')) > -1 && String(r.pw||'').charAt(phIdx)!=='l')
+                            txt = '<div class="nc">' + ((r.ps||[])[phIdx]==='nm'
+                              ? 'Name-only match, may be a different person. Not the owner’s confirmed number: call only, no text.'
+                              : 'Household member, not the owner. A text would tell them about the filing: call only, no text.') + '</div>';
+  else if(!fl.ok)          txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
   else if(sitKeys.length){
     _chips = '<div>' + sitKeys.map(function(k, ix){
       return '<button class="txch'+(ix===0?' on':'')+'" data-sit="'+k+'">'+esc(TEXT_SIT[k].t)+'</button>';
