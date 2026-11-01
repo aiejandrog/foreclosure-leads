@@ -1,31 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-11-01T07:48:54-05:00",
+   "at": "2026-11-01T08:32:25-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-01T07:48:54-05:00",
+   "at": "2026-11-01T08:32:25-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-31 21:20): send server port 8823 is not listening; 3 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-01T07:48:54-05:00",
+   "at": "2026-11-01T08:32:25-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-01T07:48:54-05:00",
+   "at": "2026-11-01T08:32:25-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-01T07:48:54-05:00",
+ "published_at": "2026-11-01T08:32:25-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -39,7 +39,7 @@
    "match_s": 1,
    "needing_search": 4214,
    "provider": "courtlistener",
-   "pull_age_h": 0.64,
+   "pull_age_h": 1.37,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
@@ -64,23 +64,23 @@
    "ft_dead": 1,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.16666666666666666,
+   "ft_rate": 0.0625,
    "ft_restart_cap": 10,
    "ft_rule": "slow_restart",
-   "ft_sent": 6,
+   "ft_sent": 16,
    "ft_why": "slow_restart",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.0032166975922527864,
-   "mailed": 55,
+   "lb": 0.002720874527486619,
+   "mailed": 65,
    "post_dead": 1,
-   "post_lb": 0.0032166975922527864,
-   "post_mailed": 55,
-   "post_rate": 0.01818181818181818,
+   "post_lb": 0.002720874527486619,
+   "post_mailed": 65,
+   "post_rate": 0.015384615384615385,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.01818181818181818,
+   "rate": 0.015384615384615385,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
@@ -110,19 +110,37 @@
     40
    ],
    "date": "2026-11-01",
-   "eligible": 37,
+   "eligible": 33,
    "judged": false,
    "paused": false,
    "readable": true,
    "scheduled": true,
-   "sent": 0,
+   "sent": 10,
    "worker_run": {
-    "ev": {},
-    "no_email": {},
-    "queued": 0,
+    "board_age_days": 0,
+    "ev": {
+     "autostart_countdown": 1,
+     "autostart_run": 1,
+     "no_email": 2,
+     "open_requested": 1,
+     "run_end": 1,
+     "send_answer": 57,
+     "task_open": 1,
+     "worker_loaded": 1
+    },
+    "no_email": {
+     "none": 2
+    },
+    "queued": 25,
     "readable": true,
-    "refused": {},
-    "rows": 0,
+    "refused": {
+     "bounce_scan_stale": 3,
+     "followups_off": 39,
+     "merge_fields": 2,
+     "probe_quota_exhausted": 2,
+     "stay_case_unresolvable": 1
+    },
+    "rows": 65,
     "skipped": {}
    }
   },
@@ -133,7 +151,7 @@
   "optout_sync": {
    "date": "2026-11-01",
    "failed_steps": [],
-   "past_cutoff": false,
+   "past_cutoff": true,
    "readable": true,
    "run_ok": true,
    "started_at": 1793535303,
