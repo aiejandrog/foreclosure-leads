@@ -63,6 +63,12 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 TPL = os.path.join(HERE, 'tracker_template.html')
 
+# This test's diagnostic strings include the Worker UI's black-square marker.  The default Windows
+# console codec is often cp1252, which cannot write that character; an otherwise passing stop/race
+# regression then aborts while reporting its result.  Keep the harness UTF-8 like the files it reads.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 fails = []
 checks = []
 
