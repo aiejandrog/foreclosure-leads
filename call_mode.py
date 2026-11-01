@@ -9104,7 +9104,10 @@ function afterCall(r, o, nextC){
          confirmation state is visible, then advance. EXCEPT while the "did it actually send?"
          confirm is up — auto-advancing there would destroy the unanswered confirm and the text
          send would never be logged. He answers that first; Next lead is still one tap away. */
-      if(!$('txy')) setTimeout(go, 450);
+      /* Only while THIS after-call panel is still up: Next lead inside the 450 ms opens the Complete sheet,
+         and a go() fired over it dismissed the sheet with _CMP set and nothing logged (2026-11-01). */
+      var _afterTok = _lastAfter;
+      if(!$('txy')) setTimeout(function(){ if(SCREEN === 'after' && _lastAfter === _afterTok) go(); }, 450);
     };
   });
   /* Chip taps swap which template the Send button fires. The button is re-labelled in place; the
