@@ -1,52 +1,58 @@
 {
  "alerts": [
   {
-   "at": "2026-10-30T19:43:56-04:00",
-   "key": "healthcheck-fail",
-   "severity": "fail",
-   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
-  },
-  {
-   "at": "2026-10-30T19:43:56-04:00",
+   "at": "2026-10-31T21:20:22-04:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 22h ago."
+   "text": "Laptop readiness (checked 10-31 21:20): send server port 8823 is not listening; 3 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-30T19:43:56-04:00",
+   "at": "2026-10-31T21:20:22-04:00",
    "key": "morning-sends",
    "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 37 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge. Bridge log: the bridge first started today at 15:25, after the 8 AM run."
+   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 37 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge."
   },
   {
-   "at": "2026-10-30T19:43:56-04:00",
+   "at": "2026-10-31T21:20:22-04:00",
+   "key": "optout-sync",
+   "severity": "fail",
+   "text": "07:15 opt-out sync did not run on 2026-10-31 (last recorded 2026-10-30)."
+  },
+  {
+   "at": "2026-10-31T21:20:22-04:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-10-30T19:43:56-04:00",
+   "at": "2026-10-31T21:20:22-04:00",
+   "key": "stale-refresh-flag",
+   "severity": "warn",
+   "text": "refresh-running.flag is 25.5h old, past the 6h refresh limit, so it was ignored and this file was published."
+  },
+  {
+   "at": "2026-10-31T21:20:22-04:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-30T19:43:56-04:00",
+ "published_at": "2026-10-31T21:20:22-04:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
    "errors": 0,
-   "filings": 2400,
-   "holds": 600,
+   "filings": 2527,
+   "holds": 594,
    "leads_checked": 0,
    "provider": "courtlistener",
-   "pull_age_h": 22.45,
+   "pull_age_h": 0.0,
    "pull_ok": true,
    "readable": true,
    "reason": "ok",
-   "requests_used": 19,
+   "requests_used": 12,
    "truncated": 0
   },
   "bounce": {
@@ -91,7 +97,7 @@
    "readable": false
   },
   "health_fails": {
-   "fresh": true,
+   "fresh": false,
    "names": [
     "skiptrace freshness",
     "RULE: ARV-comp coverage"
@@ -108,7 +114,7 @@
     40,
     40
    ],
-   "date": "2026-10-30",
+   "date": "2026-10-31",
    "eligible": 37,
    "judged": true,
    "paused": false,
@@ -145,16 +151,17 @@
    "spent": 80.5733
   },
   "readiness": {
-   "at": "2026-10-29T21:16:59-04:00",
+   "at": "2026-10-31T21:20:22-04:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
    "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 2,
+   "failed": 3,
    "failed_names": [
     "DEALFLOW Morning Worker",
+    "DEALFLOW Refresh",
     "DealflowSendServerDaily"
    ],
    "interactive": 3,
@@ -163,15 +170,16 @@
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": false,
-   "pct": 74,
+   "on_ac": true,
+   "pct": 79,
    "port_open": false,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
   },
   "refresh_flag": {
-   "stale": false
+   "age_h": 25.5,
+   "stale": true
   },
   "tracerfy": {
    "credits": 1
