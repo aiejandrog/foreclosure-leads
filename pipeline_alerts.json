@@ -1,58 +1,53 @@
 {
  "alerts": [
   {
-   "at": "2026-10-31T21:20:22-04:00",
+   "at": "2026-11-01T07:48:54-05:00",
+   "key": "healthcheck-fail",
+   "severity": "fail",
+   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
+  },
+  {
+   "at": "2026-11-01T07:48:54-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 10-31 21:20): send server port 8823 is not listening; 3 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-10-31T21:20:22-04:00",
-   "key": "morning-sends",
-   "severity": "fail",
-   "text": "Morning Worker was scheduled (2 addresses, per-address cap 40, 40) and 37 leads were eligible, but 0 first-touch emails were sent. Run record: nothing recorded today. Either the bridge or board predates the recorder, or the 8 AM page never reached the bridge."
-  },
-  {
-   "at": "2026-10-31T21:20:22-04:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync did not run on 2026-10-31 (last recorded 2026-10-30)."
-  },
-  {
-   "at": "2026-10-31T21:20:22-04:00",
+   "at": "2026-11-01T07:48:54-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-10-31T21:20:22-04:00",
-   "key": "stale-refresh-flag",
-   "severity": "warn",
-   "text": "refresh-running.flag is 25.5h old, past the 6h refresh limit, so it was ignored and this file was published."
-  },
-  {
-   "at": "2026-10-31T21:20:22-04:00",
+   "at": "2026-11-01T07:48:54-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-10-31T21:20:22-04:00",
+ "published_at": "2026-11-01T07:48:54-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 0,
-   "filings": 2527,
-   "holds": 594,
-   "leads_checked": 0,
+   "errors": 3,
+   "filings": 2562,
+   "holds": 597,
+   "last_http_status": 0,
+   "leads_checked": 33,
+   "match_s": 1,
+   "needing_search": 4214,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.64,
+   "pull_attempts": 0,
+   "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "ok",
-   "requests_used": 12,
+   "reason": "time_budget",
+   "requests_used": 56,
+   "searched_this_run": 33,
+   "starved_runs": 0,
    "truncated": 0
   },
   "bounce": {
@@ -97,7 +92,7 @@
    "readable": false
   },
   "health_fails": {
-   "fresh": false,
+   "fresh": true,
    "names": [
     "skiptrace freshness",
     "RULE: ARV-comp coverage"
@@ -114,9 +109,9 @@
     40,
     40
    ],
-   "date": "2026-10-31",
+   "date": "2026-11-01",
    "eligible": 37,
-   "judged": true,
+   "judged": false,
    "paused": false,
    "readable": true,
    "scheduled": true,
@@ -136,19 +131,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-10-30",
+   "date": "2026-11-01",
    "failed_steps": [],
-   "past_cutoff": true,
+   "past_cutoff": false,
    "readable": true,
    "run_ok": true,
-   "started_at": 1793372718,
+   "started_at": 1793535303,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 0.0,
-   "month": "2026-10",
+   "month": "2026-11",
    "readable": true,
-   "spent": 80.5733
+   "spent": 0.0
   },
   "readiness": {
    "at": "2026-10-31T21:20:22-04:00",
@@ -178,8 +173,7 @@
    "tasks_ok": true
   },
   "refresh_flag": {
-   "age_h": 25.5,
-   "stale": true
+   "stale": false
   },
   "tracerfy": {
    "credits": 1
