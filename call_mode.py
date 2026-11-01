@@ -2239,7 +2239,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             if _lsv and _PV.line_status(p, _lsv) == _PV.DEAD:
                 _dead_dropped += 1
                 continue
-            dg = _digits(p)
+            # _ph10, not _digits: a stored "13055550101" is a dialable number. Testing the raw digits
+            # dropped it, and a lead whose only number had that shape landed under Find a number.
+            dg = _ph10(p)
             if len(dg) == 10:
                 pairs.append((oi, dg))
         need_lookup = (not pairs) and n_dnc == 0 and lookup is not None
