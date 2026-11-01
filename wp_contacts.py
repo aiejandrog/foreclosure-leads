@@ -195,24 +195,36 @@ def same_street(a, b):
 
 
 def _unit_key(addr):
-    """Explicit secondary unit, including a unit on the next comma-separated line."""
+    """Explicit unit, '' if absent, or None when marker-like text is ambiguous."""
     text = str(addr or '').upper()
-    for match in re.finditer(r'(?:\b(?:APARTMENT|SUITE|UNIT|APT|STE)(?=\b|\d|[A-Z]\b)\.?\s*#?\s*|#\s*)'
+    compact_letters, ambiguous_segments = set(), set()
+    for match in re.finditer(r'(?:(?P<marker>\b(?:APARTMENT|SUITE|UNIT|APT|STE))\.?\s*#?\s*|#\s*)'
                              r'(?P<unit>[A-Z0-9]+(?:-[A-Z0-9]+)*)\b', text):
         prefix = text[:match.start()].strip(' ,')
         street = _street_key(prefix.split(',')[0]) if prefix else None
         if prefix and not street:
             continue                         # "Apartment Road" is a street name, not unit ROAD
         unit = match.group('unit')
-        if unit in _SUFFIX or unit in _DIRS:
+        compact = bool(match.group('marker') and text[match.end('marker')].isalnum())
+        segment = text[:match.start()].count(',')
+        # A compact alphabetic token without a completed street suffix can still be part
+        # of a street name. Keep it unknown, never absent; spaced Unit PH remains explicit.
+        if prefix and compact and unit.isalpha() and len(unit) > 1 and not street[3]:
+            ambiguous_segments.add(segment)
             continue
-        # A long alphabetic token after a marker can still be part of a street name. Numeric
-        # and single-letter units remain usable without a street suffix. Do not require the
-        # unit to end the line: full_address can append city/state without a comma.
-        if prefix and unit.isalpha() and len(unit) > 1 and not street[3]:
+        if unit.isalpha() and len(unit) > 2:
+            ambiguous_segments.add(segment) # e.g. "Apartment City", not a proved unit CITY
             continue
+        if compact and unit.isalpha() and len(unit) > 1:
+            if text[match.end():].split(',')[0].strip():
+                ambiguous_segments.add(segment)  # "United City" must not become unit ED
+            elif segment not in ambiguous_segments:
+                compact_letters.add(unit)    # bounded UnitPH / UnitAA, unless contradicted
+            continue                         # a later explicit Apt201 takes precedence
         return unit
-    return ''
+    if compact_letters:
+        return next(iter(compact_letters)) if len(compact_letters) == 1 else None
+    return None if ambiguous_segments else ''
 
 
 def _addr_strings(rec):
@@ -236,15 +248,20 @@ def _addr_strings(rec):
                         lines.append(str(a.get(kk)))
                 if a.get('house') and a.get('street'):
                     lines.append('%s %s' % (a.get('house'), a.get('street')))
-                units = {_unit_key(line) for line in lines} - {''}
+                found_units = {_unit_key(line) for line in lines}
+                ambiguous = None in found_units
+                units = found_units - {'', None}
                 for kk in ('unit', 'unit_number', 'street_line_2', 'line2'):
                     value = str(a.get(kk) or '').strip().upper()
                     unit = _unit_key(value)
+                    if unit is None:
+                        ambiguous = True
+                        continue
                     if not unit and kk in ('unit', 'unit_number') and re.fullmatch(r'[A-Z0-9]+(?:-[A-Z0-9]+)*', value):
                         unit = value
                     if unit:
                         units.add(unit)
-                if len(units) > 1:
+                if len(units) > 1 or (ambiguous and not units):
                     continue                       # conflicting fields cannot confirm a property
                 unit = next(iter(units), '')
                 # A bare line1 / house+street must not bypass the unit on full_address or line2.
@@ -263,6 +280,8 @@ def at_property(rec, lead_addr):
     if not _street_key(want):
         return False
     unit = _unit_key(lead_addr)
+    if unit is None:
+        return False
     return any(same_street(a.split(',')[0], want) and _unit_key(a) == unit
                for a in _addr_strings(rec))
 

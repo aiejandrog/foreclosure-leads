@@ -21,20 +21,23 @@ def baked_unit_leads():
                  and isinstance(n.body[0].targets[0], ast.Name)
                  and n.body[0].targets[0].id == '_wp')
     rows, cache = [], {}
+    unit_pairs = [('UnitPH1', 'UnitPH2'), ('AptA1', 'AptA2'), ('UnitPH', 'UnitQH'),
+                  ('UnitPH-1', 'UnitPH-2'), ('UnitAA', 'UnitBB'), ('SuiteTH', 'SuitePH')]
     for county, area in [('MIAMI-DADE', '305'), ('BROWARD', '954'), ('PALM BEACH', '561')]:
         for i in range(12):
             case = f'SYNTHETIC-UNIT-{area}-{i:02}'
             nums = [area + str(5550100 + i * 4 + j) for j in range(4)]
             street = f'{100 + i} Example Street'
+            wanted_unit, other_unit = unit_pairs[i % len(unit_pairs)]
             rows.append(dict(case=case, county=county, st='LP', days=9999,
                              owners='EXAMPLE, TAYLOR', oname='Taylor Example',
-                             addr=street + ' Apt 201, Example City, FL',
+                             addr=street + ' ' + wanted_unit + ', Example City, FL',
                              phones=nums[:2], phdnc=[False, True],
                              phsrc=['st', 'st'], phtype=['mobile', 'mobile']))
             cache[case] = {'_person': [{'name': 'Taylor Example', 'response': [
-                {'name': 'Taylor Example', 'addresses': [street + ' Unit 202'],
+                {'name': 'Taylor Example', 'addresses': [street + ' ' + other_unit],
                  'phones': [{'number': nums[2], 'type': 'mobile'}]},
-                {'name': 'Taylor Example', 'addresses': [street + ' Unit 201'],
+                {'name': 'Taylor Example', 'addresses': [street + ' ' + wanted_unit],
                  'phones': [{'number': nums[3], 'type': 'mobile'}]}]}]}
     with tempfile.TemporaryDirectory() as temp:
         path = Path(temp) / 'whitepages_lookup.json'
@@ -106,6 +109,89 @@ class PersonUnitTests(unittest.TestCase):
         self.assertEqual(self.grade(self.street + ' Apt 201 Example City FL', lead), 'wp')
         self.assertEqual(self.grade({'full_address': self.street + ' Apt 201 Example City FL'}, lead), 'wp')
         self.assertEqual(self.grade(self.street + ' Example City FL', lead), 'nm')
+
+    def test_compact_letter_first_units_are_not_silently_discarded(self):
+        pairs = [('UnitPH1', 'UnitPH2'), ('AptA1', 'AptA2'), ('UnitPH', 'UnitQH'),
+                 ('UnitPH', 'UnitTH'), ('UnitAA', 'UnitBB'), ('UnitPH-1', 'UnitPH-2'),
+                 ('SuiteTH', 'SuitePH'), ('SteAA', 'SteBB'),
+                 ('ApartmentA1', 'ApartmentA2')]
+        for wanted, other in pairs:
+            lead = self.street + ' ' + wanted + ', Example City FL'
+            for address in (self.street + ' ' + other + ' Example City FL',
+                            {'full_address': self.street + ' ' + other + ' Example City FL'}):
+                with self.subTest(wanted=wanted, other=other, kind=type(address).__name__):
+                    self.assertEqual(self.grade(address, lead), 'nm')
+            with self.subTest(matching=wanted):
+                self.assertEqual(self.grade(self.street + ' ' + wanted + ', Example City FL', lead), 'wp')
+                self.assertEqual(self.grade({'full_address':lead}, lead), 'wp')
+
+    def test_marker_like_city_text_cannot_hide_an_explicit_unit(self):
+        for city in ('United City', 'Apartment City', 'Steadfast City'):
+            for lead, other in ((self.street + ', ' + city + ', Apt201',
+                                 self.street + ', ' + city + ', Apt202'),
+                                (self.street + ' Apt201, ' + city,
+                                 self.street + ' Apt202, ' + city)):
+                for address in (other, {'full_address':other}):
+                    with self.subTest(city=city, kind=type(address).__name__, lead=lead):
+                        self.assertEqual(self.grade(address, lead), 'nm')
+                self.assertEqual(self.grade(lead, lead), 'wp')
+
+    def test_compact_alphabetic_unit_context_must_be_unambiguous(self):
+        for unit in ('PH', 'TH', 'AA', 'BB'):
+            with self.subTest(unit=unit):
+                clear = self.street + ' Unit' + unit + ', United City, FL'
+                self.assertEqual(self.grade(clear, clear), 'wp')
+                explicit = self.street + ' Unit ' + unit + ' Example City FL'
+                self.assertEqual(self.grade(explicit, explicit), 'wp')
+                ambiguous = self.street + ' Unit' + unit + ' Example City FL'
+                self.assertIsNone(W._unit_key(ambiguous))
+                self.assertEqual(self.grade(ambiguous, ambiguous), 'nm')
+                self.assertEqual(self.grade({'full_address':ambiguous}, ambiguous), 'nm')
+
+    def test_terminal_city_fragment_cannot_resolve_a_prior_unit_ambiguity(self):
+        for wanted, other in (('PH', 'QH'), ('AA', 'BB'), ('ED', 'PH')):
+            lead = self.street + ' Unit' + wanted + ' United'
+            wrong = self.street + ' Unit' + other + ' United'
+            for address in (wrong, {'full_address':wrong}):
+                with self.subTest(wanted=wanted, other=other, kind=type(address).__name__):
+                    self.assertEqual(self.grade(address, lead), 'nm')
+            with self.subTest(ambiguous=wanted):
+                self.assertIsNone(W._unit_key(lead))
+                self.assertEqual(self.grade(lead, lead), 'nm')
+
+    def test_recognized_direction_and_suffix_units_are_not_absent(self):
+        for unit in sorted(set(W._DIRS) | set(W._SUFFIX)):
+            other = 'W' if unit == 'E' else 'E'
+            for marker in ('Unit ', 'Unit', '#'):
+                lead = self.street + ' ' + marker + unit
+                wrong = self.street + ' ' + marker + other
+                for address in (wrong, {'full_address':wrong}):
+                    with self.subTest(unit=unit, marker=marker, kind=type(address).__name__):
+                        self.assertEqual(self.grade(address, lead), 'nm')
+                with self.subTest(parsed_unit=unit, marker=marker):
+                    self.assertNotEqual(W._unit_key(lead), '')
+        for unit in ('E', 'W'):
+            for marker in ('Unit ', 'Unit'):
+                lead = self.street + ' ' + marker + unit
+                self.assertEqual(self.grade(lead, lead), 'wp')
+
+    def test_suffix_less_street_does_not_erase_explicit_alphabetic_units(self):
+        for marker in ('Unit ', 'Apt ', 'Suite ', '#'):
+            lead = '100 Example ' + marker + 'PH'
+            wrong = '100 Example ' + marker + 'QH'
+            for address in (wrong, {'full_address':wrong}):
+                with self.subTest(marker=marker, kind=type(address).__name__):
+                    self.assertEqual(self.grade(address, lead), 'nm')
+            self.assertEqual(self.grade(lead, lead), 'wp')
+        self.assertEqual(self.grade('100 Example UnitQH', '100 Example UnitPH'), 'nm')
+
+    def test_compact_letter_first_secondary_fields_keep_attribution(self):
+        for key in ('unit', 'unit_number', 'street_line_2', 'line2'):
+            with self.subTest(key=key):
+                self.assertEqual(self.grade({'line1':self.street, key:'UnitPH2'},
+                                           self.street + ' UnitPH1'), 'nm')
+                self.assertEqual(self.grade({'line1':self.street, key:'UnitPH1'},
+                                           self.street + ' UnitPH1'), 'wp')
 
     def test_structured_unit_cannot_be_bypassed_by_bare_line(self):
         for key in ('unit', 'unit_number', 'street_line_2', 'line2'):
