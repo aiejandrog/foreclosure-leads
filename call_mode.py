@@ -3887,7 +3887,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
             '  A new gate in call_rows drops leads; coverage_rows has to pick them up.'
             % (len(_lost), ', '.join(_lost[:8]), ' ...' if len(_lost) > 8 else ''))
     _plain = json.dumps({'r': rows, 'b': _cov, 'x': phone_index(slim, lookup_hold_fn(slim, optouts, deads)),
-                         's': _sealed_identity()})
+                         's': _sealed_identity(), 'n': sorted(dnc_numbers(slim))})
     # SAY THE PAYLOAD SIZE OUT LOUD, every build. This page exists to open on cell data at a door
     # (~100 KB was the founding budget) and coverage roughly doubles it. A number in the log is what
     # makes the next person's addition to these rows a decision rather than an accident.
@@ -4304,7 +4304,7 @@ var HISTCOV=__HISTCOV__;
    seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
 var SEAT=__SEAT__;
 var SHOWN=__SHOWN__, TOTAL=__TOTAL__, LOOKUPN=__LOOKUPN__, VMEN=__VMEN__, VMES=__VMES__;
-var LS='fcLeadNotes', ROWS=[], PHIDX=null, lane='soon', i=0, cur=null, phIdx=0, notes={};
+var LS='fcLeadNotes', ROWS=[], PHIDX=null, DNCALL=[], lane='soon', i=0, cur=null, phIdx=0, notes={};
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6):d;}
@@ -4862,6 +4862,7 @@ async function boot(){
        device's cache, in which case the board lanes count only the dial queue and say so, rather
        than quietly reporting a book two thirds the size of the one on the laptop. */
     ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; ROWS=_dropExpired(ROWS);
+    DNCALL=Array.isArray(p.n)?p.n:[];   /* every number do-not-call on ANY lead, dial row or not */
     try{ _applySealedSender(p.s); }catch(e){}   /* identity is sealed in the payload, never in the page */
     return ROWS; };
   var saved=null; try{saved=localStorage.getItem('fcPw');}catch(e){}
@@ -6626,6 +6627,7 @@ function lkSave(c, raw){
   if(!r){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
   var num = _lkDigits(raw);
   if(!num){ toast('Type a 10-digit number', {bad:true}); return; }
+  if(dncElsewhere(num)){ toast('Not saved: that number is on the do-not-call list', {bad:true}); return; }
   var row = lkAsDial(r, num), why = hardSuppressed(row);
   if(why){ toast('Not saved: ' + why, {bad:true}); return; }
   var n = notes[c] || (notes[c] = {});
@@ -6671,11 +6673,21 @@ function applyPasted(){
   ROWS.forEach(function(r){ wpmNums(r.c).forEach(function(num){
     if(!pasteCheck(r, num).why) _addNum(r, num); }); });
 }
+/* A number that is do-not-call on ANY lead is do-not-call here (2026-11-01). pasteCheck and lkSave used to look
+   only at the lead's own `dn`, so a number flagged on lead B could be typed into lead A and dialled. Two sources:
+   every row's `dn`, and the build's whole-book list (payload `n`), which also covers a lead with no dial row. */
+function dncElsewhere(num){
+  if(!num) return false;
+  if((DNCALL||[]).some(function(x){ return String(x||'').replace(/\D/g,'').slice(-10) === num; })) return true;
+  return (ROWS||[]).some(function(rw){ return (rw.dn||[]).some(function(x){
+    return String((x||[])[0]||'').replace(/\D/g,'').slice(-10) === num; }); });
+}
 function pasteCheck(r, raw){
   var num = _lkDigits(raw);
   if(!num) return {why:'Paste a 10-digit US number'};
   if((r.dn||[]).some(function(x){ return String((x||[])[0]||'').replace(/\D/g,'').slice(-10) === num; }))
     return {num:num, why:'That number is on the do-not-call list for this lead. It cannot be dialed from here.'};
+  if(dncElsewhere(num)) return {num:num, why:'That number is on the do-not-call list. It cannot be dialed from here.'};
   if(badSet(r)[num]) return {num:num, why:'You marked that number bad on this lead.'};
   var probe = {}; for(var k in r){ if(Object.prototype.hasOwnProperty.call(r, k)) probe[k] = r[k]; }
   probe.p = [num]; probe.r = [''];
