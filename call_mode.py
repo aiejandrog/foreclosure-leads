@@ -8599,7 +8599,8 @@ function screenOutcome(){
     +'<div class="own">'+fmt(d)+'</div>'
     +sessStrip()
     /* FIRST thing under the number: the moment it goes to voicemail there is no time to scroll. */
-    +'<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>'
+    +(_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
+      : '<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>')
     + refBlock
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
@@ -8613,7 +8614,7 @@ function screenOutcome(){
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
   wireBrief(document, r);
-  $('vmbtn').onclick = function(){ vmOpen(r); };
+  if($('vmbtn')) $('vmbtn').onclick = function(){ vmOpen(r); };
   $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
@@ -9761,6 +9762,20 @@ function wireLang(root){
 /* FULL-SCREEN VOICEMAIL. The same words as the sheet's "IF NO ANSWER" block (VMEN/VMES, or the
    investor lane's SCRIPT.vm), big, alone on the screen. Logging goes through the SAME .oc outcome
    button the card uses, so a voicemail logged here is exactly a "Left voicemail" tap: a miss, 24h. */
+/* NO VOICEMAIL-SALE SCRIPT ON A NUMBER THAT IS NOT THE OWNER'S (2026-11-01). The voicemail says
+   "Public records show a court sale scheduled on your property", so whoever hears it learns about
+   the filing; the call script's wrong-person rule is never to say foreclosure to a non-owner, and the
+   after-call text is already withheld on these numbers. Held: a household member (hh), a name-only
+   match (nm), a pasted number (wpm), a Whitepages likely owner not yet confirmed (l), and a number
+   Whitepages gives to someone else (h, w), even when the skip trace tagged it. Everything else keeps
+   the script: the owner, a Whitepages-confirmed owner, a skip-trace number with no contradiction.
+   Returns the reason, or '' when the script may be shown. Wording of the voicemail is not touched. */
+function _vmHold(r, i){
+  var s = String(((r && r.ps) || [])[i] || ''), w = String((r && r.pw) || '').charAt(i);
+  if(s==='hh' || s==='nm' || s==='wpm' || w==='l' || w==='h' || w==='w')
+    return 'Not the owner’s confirmed number: no voicemail script. Do not leave a message about the case.';
+  return '';
+}
 function _vmTexts(r){
   var S = (r && r.st==='BAL' && SCRIPT_ALL.bal) ? SCRIPT_ALL.bal : SCRIPT_ALL;
   return S.vm ? {en:S.vm.en, es:S.vm.es, tone:null} : {en:VMEN, es:VMES, tone:S.vmtone||null};
@@ -10030,7 +10045,8 @@ function renderSheet(r){
      /* WRONG VOICE GUARD (2026-10-12): an unset phone falls back to Alejandro's name and number, so
         on Carlos's page the voicemail would leave Alejandro's callback. Say so above the words. */
      + _vmWarnHtml()
-     + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
+     + (_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
+        : (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r)));
 
   // BUSY / CALL ME BACK (NEPQ Calendar Commitment) — the most common early bail. Flip status: YOUR
   // time is the scarce thing. Its own block so it's one glance away, not buried in the drill pack.
