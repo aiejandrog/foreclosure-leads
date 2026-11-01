@@ -86,6 +86,14 @@ _NAVF = [{c:'D', l:'soon'}]; advance(cur.c, 'B'); out.adv_clears = _NAVF.length 
 // queue clear: i past end, Back returns to the last lead left
 ALL = [{c:'A'}, {c:'B'}]; _NAVB = []; _NAVF = []; i = 1; render(); navNext(); out.qclear_i = i;
 navBack(); out.qclear_back = cur.c + '|' + _NAVF.length;
+// REAL walk to the end (cur stays on the last lead, as in the page): A -> B -> C -> queue clear, then Back must be C,
+// not B (the stale cur was passed as "here", so the lead just left was skipped; 2026-11-01)
+ALL = [{c:'A'}, {c:'B'}, {c:'C'}]; _NAVB = []; _NAVF = []; toasts = []; i = 0; render();
+navNext(); navNext(); navNext(); out.walk_end_i = i;
+navBack(); out.walk_back = cur.c + '@' + i + '|' + toasts.length;
+// a one-lead lane: Next to the end, Back must return to it (it used to do nothing)
+ALL = [{c:'Z'}]; _NAVB = []; _NAVF = []; toasts = []; i = 0; render(); navNext(); navBack();
+out.one_back = i + '|' + toasts.length;
 out.notes = JSON.stringify(notes);
 console.log(JSON.stringify(out));
 """
@@ -105,6 +113,8 @@ rec('Back passes over the lead already on screen', res.get('pass_here') == 'A', 
 rec('an outcome advance clears the redo trail', res.get('adv_clears') == '0|B', res)
 rec('Next off the last lead reaches queue clear', res.get('qclear_i') == 2, res)
 rec('Back from queue clear returns to the last lead', res.get('qclear_back') == 'B|0', res)
+rec('Back from queue clear lands on the LAST lead left (3-lead walk)', res.get('walk_end_i') == 3 and res.get('walk_back') == 'C@2|0', res)
+rec('Back from queue clear in a one-lead lane returns to it', res.get('one_back') == '0|0', res)
 rec('no notes written', res.get('notes') == '{}', res)
 
 print('\n%s (%d failed)' % ('ALL PASS' if not fails else 'FAILED', len(fails)))
