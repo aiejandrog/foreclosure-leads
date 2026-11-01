@@ -4318,6 +4318,11 @@ function _phSrcNote(r, i){
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
   if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. No text to this number until a call reaches them.';
   if(String(r.pw||'').charAt(i)==='w') return 'Whitepages lists this number\u2019s person (' + esc((r.wo||[]).join(' / ')) + ') as the OWNER; our record says ' + esc(r.on||'someone else') + '. Ask who you are speaking with and whether they own the house before you mention the filing.';
+  /* SKIP TRACE AND WHITEPAGES DISAGREE (2026-11-01): the trace tagged this number to the owner (no ps
+     tag) and Whitepages lists it under someone else at the address. The card said nothing; the
+     conflict was only a chip in the number list, hidden on a one-number lead. States the evidence
+     only. Label only: no change to order, dialing or texting. */
+  if(!s && String(r.pw||'').charAt(i)==='h') return 'Skip trace lists this number for the owner; Whitepages lists it for someone else at the address. The evidence conflicts: ask who you are speaking with before you mention the filing.';
   if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
   if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
   return '';
