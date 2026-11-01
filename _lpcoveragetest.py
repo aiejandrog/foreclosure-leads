@@ -45,6 +45,19 @@ def pb_sweep(windows, fail=()):
 
 
 class PalmBeach(unittest.TestCase):
+    def test_repeated_pages_cannot_claim_complete(self):
+        def repeated(length, start):
+            return {'recordsTotal': 4, 'data': [{'id': 1}, {'id': 2}]}
+        rows, complete = PB._page_all(repeated, page=2, limit=4)
+        self.assertEqual([r['id'] for r in rows], [1, 2])
+        self.assertFalse(complete)
+
+    def test_declared_empty_window_is_verified_empty(self):
+        rows = pb_sweep({'default': (0, 0)})
+        self.assertEqual(rows, [])
+        self.assertEqual(PB.LAST['status'], 'ok')
+        self.assertEqual(PB.LAST['retrieved'], 0)
+
     def test_whole_window_read_is_ok(self):
         rows = pb_sweep({'default': (150, 150)})
         self.assertEqual(rows, [])                      # the doc parser is stubbed out

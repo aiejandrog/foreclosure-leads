@@ -19,6 +19,7 @@ a LEGAL description (unlike Broward's grid), so Phase-2 resolution has something
 """
 import datetime
 import json
+import json
 import os
 import re
 import sys
@@ -114,7 +115,22 @@ def _page_all(get, total=None, page=PAGE, limit=40, on_total=None):
     than we managed to pull -- an honest "this window is partial", which the caller turns into
     a narrower query rather than a silent undercount.
     """
-    rows, start, seen = [], 0, 0
+    rows, start, seen, identities = [], 0, 0, set()
+
+    def identity(row):
+        if isinstance(row, dict):
+            for key in ('InstrumentNumber', 'instrument', 'id', 'ID', 'RecordID',
+                        'BookPage', 'bookpage', 'CaseNumber', 'case'):
+                value = row.get(key)
+                if value not in (None, ''):
+                    return (key, str(value).strip().upper())
+            try:
+                return ('row', json.dumps(row, sort_keys=True, default=str,
+                                          separators=(',', ':')))
+            except (TypeError, ValueError):
+                pass
+        return ('row', repr(row))
+
     while seen < limit:
         seen += 1
         res = get(page, start)
@@ -125,13 +141,20 @@ def _page_all(get, total=None, page=PAGE, limit=40, on_total=None):
                 on_total(total)
         if not batch:
             break
-        rows += batch
+        fresh = [row for row in batch if identity(row) not in identities]
+        if not fresh:
+            # A server that ignores `start` is not at EOF. Returning the repeated page as
+            # complete would inflate the row count to the declared total and falsely certify
+            # coverage, so stop conservatively with complete=False below.
+            break
+        identities.update(identity(row) for row in fresh)
+        rows += fresh
         if len(batch) < page:
             break                      # a short page is the end of the grid, positively
         start += len(batch)
         if total is not None and len(rows) >= total:
             break
-    complete = (total is not None and len(rows) >= total)
+    complete = (total is not None and len(identities) >= total)
     return rows, complete
 
 
@@ -265,6 +288,13 @@ def _sweep_window(d_from, d_to, depth=0):
         rows, complete = _page_all(P.get_search_results,
                                    on_total=lambda v: declared.__setitem__('v', v))
         if not rows:
+            if declared.get('v') == 0:
+                LAST.setdefault('windows', []).append({
+                    'from': _iso(d_from), 'to': _iso(d_to), 'total': 0,
+                    'retrieved': 0, 'complete': True})
+                print('PALM BEACH: %s..%s doctype=%s -> verified empty window'
+                      % (d_from, d_to, LP_DOCTYPE_ID))
+                return []
             continue
         truncated = (not complete) or len(rows) >= CRITERIA_COUNT
         if truncated and depth < MAX_SPLIT_DEPTH:
