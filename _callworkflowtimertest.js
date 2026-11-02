@@ -100,4 +100,26 @@ function mk2(dev, extra) { const m = mk(Object.assign({ deviceId: dev, newId: un
 { const { t } = mk(); t.start(CTX);
   rec('lease warns when another device is timing the same caller',
       t.leaseWarning({ deviceId: 'devB', callerId: 'C1', ts: 1000 }, 2000) !== '' && t.leaseWarning({ deviceId: 'devA', callerId: 'C1', ts: 1000 }, 2000) === ''); }
+// resume (2026-11-02): one Start work covers a calling block, not one dial
+{ const m = mk(); m.t.start(CTX); m.c.adv(MIN); m.t.interaction(); m.t.launchDialer(); m.c.adv(4 * MIN);
+  rec('resume refuses while the dialer return is unsettled', m.t.resume({ callerId: 'C1' }).resumed === false);
+  m.t.returnFromDialer({ kind: 'unknown' });
+  const r = m.t.resume({ callerId: 'C1', caseId: 'X2' });
+  rec('after the dialer return the session resumes', r.resumed === true && m.t.state().status === 'running');
+  rec('resume keeps the same session (no second session_started)', m.evs.filter(e => e.event_type === 'session_started').length === 1);
+  m.c.adv(2 * MIN); m.t.interaction(); m.t.pause();
+  rec('time away is not credited: 1 min before + 2 min after = 180 s', CW.activeSeconds(store(m.evs), 'C1', WIN) === 180, CW.activeSeconds(store(m.evs), 'C1', WIN));
+  rec('resumed segment carries the new case', m.evs.filter(e => e.event_type === 'active_interval_confirmed').pop().case_refs[0] === 'X2'); }
+{ const m = mk(); m.t.start(CTX); m.c.adv(MIN); m.t.hidden(); m.c.adv(30 * MIN);
+  rec('background pause resumes on return', m.t.resume({ callerId: 'C1' }).resumed === true && m.t.state().status === 'running'); }
+{ const m = mk(); m.t.start(CTX); m.c.adv(MIN); m.t.pause('manual');
+  rec('manual pause never auto-resumes', m.t.resume({ callerId: 'C1' }).resumed === false && m.t.state().status === 'paused');
+  const i = mk(); i.t.start(CTX); i.c.adv(6 * MIN); i.t.tick();
+  rec('idle pause never auto-resumes', i.t.resume({ callerId: 'C1' }).resumed === false && i.t.state().pauseReason === 'idle');
+  const s2 = mk(); s2.t.start(CTX); s2.t.hidden(); s2.t.stop('manual');
+  rec('End work is never resumed', s2.t.resume({ callerId: 'C1' }).resumed === false && s2.t.state().status === 'stopped');
+  const q = mk(); q.t.start(CTX); q.t.pause('empty_queue');
+  rec('empty-queue pause resumes when a lead is back', q.t.resume({ callerId: 'C1', caseId: 'X3' }).resumed === true);
+  const c2 = mk(); c2.t.start(CTX); c2.t.hidden();
+  rec('a different caller does not resume the old session', c2.t.resume({ callerId: 'C2' }).resumed === false); }
 console.log(fails + ' failure(s)'); process.exit(fails ? 1 : 0);

@@ -39,10 +39,12 @@ function El() {
   };
 }
 const elCache = {};
+const docL = {};
+const fire = (n, ev) => (docL[n] || []).forEach(f => f(ev || { target: null }));
 const documentStub = {
   getElementById(id){ return elCache[id] || (elCache[id] = El()); },
   querySelector(){ return El(); }, querySelectorAll(){ return []; },
-  createElement(){ return El(); }, addEventListener(){},
+  createElement(){ return El(); }, addEventListener(n, f){ (docL[n] = docL[n] || []).push(f); },
   body: El(), documentElement: El(), hidden: false, title: '',
 };
 const ctx = {
@@ -104,6 +106,36 @@ T('session_started persisted to this phone only', JSON.parse(store.fcWfEvents).s
 T('bar says Working', /Working/.test(ctx.wfBarHtml()));
 ctx.WFT.pause('manual'); ctx.WFT.stop('manual');
 T('bar says Not timing after End', /Not timing/.test(ctx.wfBarHtml()));
+console.log('\n== start work survives a dial (2026-11-02) ==');
+ctx.cur = A; ctx.WFT.start({ callerId: ctx.wfCaller(), caseId: 'CASE-A' });
+ctx.WFDIAL = true; ctx.WFHID = false; ctx.WFT.launchDialer();
+T('tapping Call pauses for the dialer', ctx.WFT.state().status === 'paused');
+let asked = 0; ctx.prompt = () => { asked++; return '2'; };
+documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; fire('visibilitychange');
+T('coming back from the phone app asks once and resumes Working', asked === 1 && ctx.WFT.state().status === 'running' && /Working/.test(ctx.wfBarHtml()), ctx.WFT.state().status);
+ctx.WFDIAL = true; ctx.WFHID = false; ctx.WFT.launchDialer(); asked = 0;
+fire('click'); 
+T('a dial that never hid the page (laptop) settles on the next tap and resumes', asked === 1 && ctx.WFT.state().status === 'running');
+documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; asked = 0; fire('visibilitychange');
+T('switching apps and back resumes without a prompt', asked === 0 && ctx.WFT.state().status === 'running');
+ctx.WFT.pause('manual'); documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; fire('visibilitychange');
+T('a manual Pause stays paused after switching apps', ctx.WFT.state().status === 'paused');
+ctx.WFT.stop('manual'); ctx.prompt = () => null;
+ctx.WFT.start({ callerId: ctx.wfCaller(), caseId: 'CASE-A' }); ctx.WFT.pause('empty_queue'); ctx.wfResume();
+T('a lead back on screen after the queue ran empty resumes Working', ctx.WFT.state().status === 'running');
+ctx.WFT.stop('manual');
+store.fcWfTimer = JSON.stringify({ status: 'running', callerId: ctx.wfCaller(), session: 'OLD-S', seg: 1, wall0: Date.now() - 120000, provisionalEndWall: Date.now() - 30000, ts: Date.now() - 30000 });
+ctx.WF.list = []; ctx.cur = null; ctx.wfBoot(); ctx.wfResume();
+T('after a reload, nothing starts before a lead is on screen', ctx.WFT.state().status === 'stopped');
+ctx.cur = A; ctx.wfResume();
+T('after a reload mid-session, Working restarts once a lead is on screen', ctx.WFT.state().status === 'running' && ctx.WFREC.unknownSeconds > 0);
+ctx.WFT.stop('manual');
+store.fcWfTimer = JSON.stringify({ status: 'running', callerId: ctx.wfCaller(), session: 'OLD-T', seg: 1, wall0: Date.now() - 3600000, provisionalEndWall: Date.now() - 1800000, ts: Date.now() - 1800000 });
+ctx.WF.list = []; ctx.wfBoot(); ctx.wfResume();
+T('a reload long after the last heartbeat does not restart the timer', ctx.WFT.state().status === 'stopped');
+store.fcWfTimer = JSON.stringify({ status: 'running', callerId: 'someone-else', session: 'OLD-U', seg: 1, wall0: Date.now() - 60000, provisionalEndWall: Date.now() - 10000, ts: Date.now() - 10000 });
+ctx.WF.list = []; ctx.wfBoot(); ctx.wfResume();
+T('a reload never restarts another caller\'s timer', ctx.WFT.state().status === 'stopped');
 T('every stored event validates', JSON.parse(store.fcWfEvents).every(e => ctx.CW.validate(e).ok));
 T('timer events never touch the notes store or any send/ledger key', !Object.keys(store).some(k => /optout|bounce|mail_sent|text_sent/i.test(k)));
 
