@@ -1,86 +1,92 @@
 {
  "alerts": [
   {
-   "at": "2026-11-01T08:32:25-05:00",
+   "at": "2026-11-02T08:18:30-05:00",
+   "key": "bounce-rate",
+   "severity": "fail",
+   "text": "First-touch bounce 20.0% (2 of 10 sent on 2026-11-01): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 18.8% (3 of 16 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
+  },
+  {
+   "at": "2026-11-02T08:18:30-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-01T08:32:25-05:00",
+   "at": "2026-11-02T08:18:30-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 10-31 21:20): send server port 8823 is not listening; 3 DEALFLOW task(s) last result failed (DEALFLOW Morning Worker, DEALFLOW Refresh, DealflowSendServerDaily); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 36h ago."
   },
   {
-   "at": "2026-11-01T08:32:25-05:00",
+   "at": "2026-11-02T08:18:30-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-01T08:32:25-05:00",
+   "at": "2026-11-02T08:18:30-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-01T08:32:25-05:00",
+ "published_at": "2026-11-02T08:18:30-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 3,
-   "filings": 2562,
-   "holds": 597,
+   "errors": 4,
+   "filings": 2568,
+   "holds": 594,
    "last_http_status": 0,
-   "leads_checked": 33,
+   "leads_checked": 30,
    "match_s": 1,
-   "needing_search": 4214,
+   "needing_search": 4197,
    "provider": "courtlistener",
-   "pull_age_h": 1.37,
+   "pull_age_h": 1.16,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 56,
-   "searched_this_run": 33,
+   "requests_used": 73,
+   "searched_this_run": 30,
    "starved_runs": 0,
-   "truncated": 0
+   "truncated": 2
   },
   "bounce": {
    "ceiling": 0.1,
-   "day_blocked": false,
+   "day_blocked": true,
    "day_ceiling": 0.05,
-   "day_date": "2026-10-26",
-   "day_dead": 1,
+   "day_date": "2026-11-01",
+   "day_dead": 2,
    "day_min": 20,
-   "day_rate": 0.16666666666666666,
-   "day_sent": 6,
-   "dead": 1,
+   "day_rate": 0.2,
+   "day_sent": 10,
+   "dead": 3,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
-   "ft_dead": 1,
+   "ft_dead": 3,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.0625,
+   "ft_rate": 0.1875,
    "ft_restart_cap": 10,
-   "ft_rule": "slow_restart",
+   "ft_rule": "paused",
    "ft_sent": 16,
-   "ft_why": "slow_restart",
+   "ft_why": "hard_bounces",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.002720874527486619,
+   "lb": 0.015819553585903267,
    "mailed": 65,
-   "post_dead": 1,
-   "post_lb": 0.002720874527486619,
+   "post_dead": 3,
+   "post_lb": 0.015819553585903267,
    "post_mailed": 65,
-   "post_rate": 0.015384615384615385,
+   "post_rate": 0.046153846153846156,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.015384615384615385,
+   "rate": 0.046153846153846156,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
@@ -109,38 +115,34 @@
     40,
     40
    ],
-   "date": "2026-11-01",
+   "date": "2026-11-02",
    "eligible": 33,
    "judged": false,
-   "paused": false,
+   "paused": true,
    "readable": true,
    "scheduled": true,
-   "sent": 10,
+   "sent": 0,
    "worker_run": {
     "board_age_days": 0,
     "ev": {
      "autostart_countdown": 1,
      "autostart_run": 1,
-     "no_email": 2,
+     "no_email": 6,
      "open_requested": 1,
      "run_end": 1,
-     "send_answer": 57,
+     "send_answer": 15,
      "task_open": 1,
      "worker_loaded": 1
     },
     "no_email": {
-     "none": 2
+     "none": 6
     },
-    "queued": 25,
+    "queued": 31,
     "readable": true,
     "refused": {
-     "bounce_scan_stale": 3,
-     "followups_off": 39,
-     "merge_fields": 2,
-     "probe_quota_exhausted": 2,
-     "stay_case_unresolvable": 1
+     "followups_off": 15
     },
-    "rows": 65,
+    "rows": 27,
     "skipped": {}
    }
   },
@@ -149,12 +151,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-01",
+   "date": "2026-11-02",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1793535303,
+   "started_at": 1793621704,
    "state": "finished"
   },
   "paid_reads": {
