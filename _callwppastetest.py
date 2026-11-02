@@ -77,7 +77,7 @@ html = call_mode.build_html([], 0, {'ct': 'x', 'k': 'y'}, 'built', 'sig', 'bsig'
 path = os.path.join(_T, 'call.html')
 open(path, 'w', encoding='utf-8').write(html)
 
-JS = """([rows, cov, A, B]) => {
+JS = """async ([rows, cov, A, B]) => {
   try { localStorage.clear(); } catch(e) {}
   notes = {}; ROWS = rows; COV = cov;
   start();
@@ -102,6 +102,16 @@ JS = """([rows, cov, A, B]) => {
   o.dupe = cur.p.length - before;
   pasteSave(cur, '3055550109');                 // A's own DNC number
   o.dncRefused = cur.p.length - before === 1 && (notes[A].wpm||[]).indexOf('3055550109') < 0;
+  // BACK FROM THE OUTCOME SCREEN: same lead, same number, nothing logged beyond the dial's pending row
+  window._tapShieldUntil = 0; phIdx = 1;
+  const dl0 = ndial(), tc0 = ((notes[A]||{}).touches||[]).length;
+  document.getElementById('dial').click();
+  await new Promise(res => setTimeout(res, 30));     // the dial handler paints the outcome screen on a 0 ms timer
+  o.ocScreen = SCREEN;
+  document.getElementById('ocback').click();
+  o.ocBack = SCREEN + '|' + cur.c + '|' + phIdx + '|' + (ndial() - dl0) + '|' + (((notes[A]||{}).touches||[]).length - tc0)
+           + '|' + ((notes[A].dials||[]).slice(-1)[0]||{}).oc;
+  window._tapShieldUntil = 0;
   // AFTER A MISSED CALL: the question
   const NA = OUTCOMES.find(x => x.k === 'noanswer'), TK = OUTCOMES.find(x => x.k === 'talked');
   phIdx = 0;
@@ -187,10 +197,13 @@ rec('Save, keep searching: same card, number added, button number unchanged, not
 rec('the box is cleared for the next paste', out['cleared'])
 rec('pasting the same number twice adds it once', out['dupe'] == 1, out['dupe'])
 rec("a DNC number is still refused", out['dncRefused'])
+rec('dial tap opens the outcome screen', out['ocScreen'] == 'outcome', out['ocScreen'])
+rec('Back from the outcome screen: same lead, same number, no outcome logged, only the pending dial row',
+    out['ocBack'] == 'lead|%s|1|1|0|pending' % A['case'], out['ocBack'])
 rec('after-call panel has the paste box', out['afterPaste'])
 rec('Next lead after a missed call asks about the next number', out['asked'], out)
 rec('it offers number 2 of 4', '(305) 555-0102' in (out['askedNum'] or '') and '2 of 4' in (out['askedNum'] or ''), out['askedNum'])
-rec('Yes: same lead, next number on the button, nothing dialled', out['yes'] == 'lead|%s|1|0' % A['case'], out['yes'])
+rec('Yes: same lead, next number on the button, nothing dialled since (1 row = the Back test dial)', out['yes'] == 'lead|%s|1|1' % A['case'], out['yes'])
 rec('No: carries on to the Complete sheet', out['no'] == 'complete', out['no'])
 rec('after a conversation there is no question', out['talked'] != 'asked', out['talked'])
 rec('after-call paste: accepted, saved, asks to call it next',
