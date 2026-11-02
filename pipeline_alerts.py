@@ -732,6 +732,42 @@ def read_clerk_bk():
     return sig if isinstance(sig, dict) else {'readable': False}
 
 
+def wp_web_alert(sig, at):
+    """WARN (never fail) when the nightly Whitepages web lookup is on and its last run stopped on a
+    login wall, bot check, rate limit or error, or its status is older than 36h or missing.
+
+    Silent unless WP_WEB_NIGHTLY=1. A run that only ran out of time is not an alert. Counts and
+    a reason label only."""
+    if str(os.environ.get('WP_WEB_NIGHTLY') or '').strip() != '1':
+        return None
+    if not isinstance(sig, dict) or not sig.get('readable'):
+        return _alert('wp-web', 'warn',
+                      'Nightly Whitepages web lookup is on but has no status file yet.', at)
+    reason = re.sub(r'[^a-z_]', '', str(sig.get('reason') or '').lower())[:20]
+    if reason in ('login_required', 'challenge', 'rate_limited', 'error'):
+        return _alert('wp-web', 'warn',
+                      'Nightly Whitepages web lookup stopped: %s. Owner phones from it are not '
+                      'updating.' % reason, at)
+    try:
+        age = float(sig.get('age_h'))
+    except (TypeError, ValueError):
+        age = None
+    if age is None or age > 36:
+        shown = 'unknown' if age is None else ('%.0f' % age)
+        return _alert('wp-web', 'warn',
+                      'Nightly Whitepages web lookup status is %sh old (limit 36h).' % shown, at)
+    return None
+
+
+def read_wp_web():
+    try:
+        import wp_web as WW
+        sig = WW.public_status()
+    except Exception:
+        return {'readable': False}
+    return sig if isinstance(sig, dict) else {'readable': False}
+
+
 def stale_flag_alert(sig, at):
     """A refresh-running.flag older than the task limit. Publishing ignored it."""
     if not isinstance(sig, dict) or not sig.get('stale'):
@@ -769,6 +805,7 @@ def alerts_from(signals, now, th=None):
         bk_lookup_alert(signals.get('bk_lookup'), at),
         bake_bk_alert(signals.get('bake_bk'), at),
         clerk_bk_alert(signals.get('clerk_bk'), at),
+        wp_web_alert(signals.get('wp_web'), at),
     ]
     return sorted((a for a in found if a), key=lambda a: a['key'])
 
@@ -1363,6 +1400,7 @@ def gather(now, th, measure=False):
         'bk_lookup': _try(read_bk_lookup, {'readable': False}),
         'bake_bk': _try(read_bake_bk, {'degraded': False}),
         'clerk_bk': _try(read_clerk_bk, {'readable': False}),
+        'wp_web': _try(read_wp_web, {'readable': False}),
         'readiness': measure_readiness(now, th['port']) if measure else None,
     }
 
