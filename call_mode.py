@@ -4542,7 +4542,9 @@ function _wireNumList(){
    arrives, keep 'tel' and pair the NEW phone with Phone Link (or set 'gv'), so the printed number
    never carries the cold-dial volume. */
 var DIALER='tel';
-function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
+function phoneDigits(d){ d=String(d==null?'':d).replace(/\D/g,''); if(d.length===11 && d.charAt(0)==='1') d=d.slice(1); return d; }
+function dialHref(d){ d=phoneDigits(d); if(d.length!==10) return ''; return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+d : 'tel:+1'+d; }
+function smsHref(d){ d=phoneDigits(d); return d.length===10 ? 'sms:+1'+d : ''; }
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
    outcome-logging flow (screenOutcome, the after-call bar) lives on this page. So GV dials open in
    a separate tab/app and this page stays put, same as tel: always behaved. */
@@ -6597,7 +6599,7 @@ function ownerLabel(r){
    dial row with that one number, so the card, the outcome screen, the cooldowns and
    hardSuppressed() all apply to it exactly as to a traced number. Nothing here dials a lead the
    build held: an unmarked coverage row is never offered. */
-var LKDONE = {}, LKSHOW = 200, LKEQ = false;
+var LKDONE = {}, LKSHOW = 200, LKEQ = false, LKSCROLL = 0;
 function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length === 11 && d.charAt(0) === '1') d = d.slice(1); return d.length === 10 ? d : ''; }
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
@@ -6686,9 +6688,9 @@ function lookupList(){
          + '<div class="flinks" style="margin-top:8px">' + links.map(function(x){
              return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('') + '</div>'
          + wpBlock(r)
-         + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" '
+         + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" aria-label="Phone number or email for ' + esc(ownerLabel(r)) + '" '
          + 'placeholder="Number or email you found" style="flex:1;min-width:0">'
-         + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
+         + '<button class="lkadd" data-c="' + esc(r.c) + '" type="button">Call or email</button></div>'
          + (wpeAddrs(r.c).length ? '<div class="sub">Emailed before: ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
          + '</div>';
   }).join('');
@@ -7821,7 +7823,7 @@ function screenLookup(prefill){
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
                    + (textingHeld()
                       ? '<span class="nc lkth">' + esc(textHoldWhy() || 'Texting is held.') + '</span>'
-                      : '<a href="sms:' + esc(h.num) + '" class="lktx" data-c="' + esc(h.c) + '" data-n="' + esc(h.num)
+                      : '<a href="' + smsHref(h.num) + '" class="lktx" data-c="' + esc(h.c) + '" data-n="' + esc(h.num)
                         + '" data-pcs="' + esc(JSON.stringify(h.pcs || [])) + '">&#128172; Text</a>'); })())
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
@@ -9448,7 +9450,7 @@ function afterCall(r, o, nextC){
           navigator.clipboard.writeText(body).catch(function(){});
         }
       }catch(e){}
-      location.href = 'sms:' + r.p[phIdx] + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? '&' : '?')
+      location.href = smsHref(r.p[phIdx]) + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? '&' : '?')
         + 'body=' + encodeURIComponent(body);
     };
     openComposer();
@@ -9719,7 +9721,7 @@ function wire(){
     b.onclick=function(){ BLANE = (BLANE === '__lk') ? null : '__lk'; i=0; render(); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkf'), function(b){
-    b.onclick=function(){ LKEQ = b.getAttribute('data-eq') === '1'; LKSHOW = 200; render(); };
+    b.onclick=function(){ LKSCROLL = window.scrollY || 0; LKEQ = b.getAttribute('data-eq') === '1'; LKSHOW = 200; render(); setTimeout(function(){ try{ window.scrollTo(0, LKSCROLL); }catch(e){} }, 0); };
   });
   var _lkm = $('lkmore');
   if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };
@@ -9744,6 +9746,9 @@ function wire(){
         return;
       }
       lkSave(c, v); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('input.lknum'), function(inp){
+    inp.onkeydown=function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); var b=inp.parentNode && inp.parentNode.querySelector('button.lkadd'); if(b) b.click(); } };
   });
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
