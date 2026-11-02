@@ -1858,6 +1858,47 @@ def _ord_addr(addr):
     return ''.join(parts) + comma + rest
 
 
+# A '#' unit after one of these reads as an apartment: "1200 BRICKELL AVE #415" -> "... AVE APT 415".
+_UNIT_AFTER = _ORD_TYPE | frozenset(('BLVD', 'BOULEVARD', 'PKWY', 'PARKWAY', 'HWY', 'CIR', 'TRL',
+                                     'TRAIL', 'PT', 'POINT', 'ROW', 'ISLE', 'PLZ', 'PLAZA', 'CV', 'COVE'))
+# ...and never after one of these: an existing designator ("APT #4") or a legal-description word.
+_UNIT_NOT_AFTER = frozenset(('APT', 'UNIT', 'STE', 'SUITE', 'BLDG', 'BUILDING', 'FL', 'FLOOR', 'RM',
+                             'ROOM', 'LOT', 'LOTS', 'BLK', 'BLOCK', 'TRACT', 'TR', 'PB', 'PG', 'OR',
+                             'SEC', 'SECTION', 'PARCEL', 'NO', 'NUM', 'NUMBER', 'PH', 'PHASE', 'TWP', 'RGE'))
+_UNIT_HASH = re.compile(r'(?P<word>[A-Za-z]+\.?)?(?P<gap>\s*)#\s*(?P<unit>[A-Za-z0-9][A-Za-z0-9-]*)(?P<end>\s*$)?')
+
+
+def _unit_addr(addr):
+    """'1200 BRICKELL AVE #415, Miami, FL 33131' -> '1200 BRICKELL AVE APT 415, Miami, FL 33131'.
+    Display only (Alex, 2026-11-02): the stored county address keeps its '#'. Only the street line
+    (before the first comma) of an address that starts with a house number is read. A '#' unit is
+    spelled out when the word before it is a street type, or when it is the last thing on the street
+    line and the word before it is not a designator or legal-description word. 'APT', 'UNIT', 'STE'
+    and 'SUITE' already there are left alone. 'APT' follows the line's case ('Apt' in mixed case)."""
+    if not addr or not isinstance(addr, str):
+        return addr
+    head, comma, rest = addr.partition(',')
+    if not re.match(r'\s*\d', head) or '#' not in head:
+        return addr
+    apt = 'Apt' if re.search(r'[a-z]', re.sub(r'(?<=\d)(?:st|nd|rd|th)\b', '', head)) else 'APT'
+
+    def sub(m):
+        word = (m.group('word') or '').rstrip('.').upper()
+        if m.start() == 0 or word in _UNIT_NOT_AFTER:
+            return m.group(0)
+        if word in _UNIT_AFTER or (m.group('end') is not None and (word or head[:m.start()].strip())):
+            lead = (m.group('word') or '') + (' ' if m.group('word') else (m.group('gap') or ' '))
+            return lead + apt + ' ' + m.group('unit') + (m.group('end') or '')
+        return m.group(0)
+    return _UNIT_HASH.sub(sub, head) + comma + rest
+
+
+def _addr_show(addr):
+    """The address Call Mode shows and scripts read: '#' units as 'APT', then ordinal street numbers
+    (unit first, so '8 ST#12' still gets its 'th')."""
+    return _ord_addr(_unit_addr(addr))
+
+
 def _seat_links(r):
     """The keys that say two dial rows reach the same household: person key, street line, phone."""
     keys = []
@@ -2404,7 +2445,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # The pipeline already fixes this: owner_clean flips "Last, First" to "First Last"
             # (foreclosure_leads.py:536-539) and ships as `oname`. Ship it and use it. ~14 B/lead.
             'on': _greet_name(d),
-            'a': _ord_addr((d.get('addr') or '').strip()),
+            'a': _addr_show((d.get('addr') or '').strip()),
             # Advisory candidates stay separate from the address used by scripts and links.
             'ag': (d.get('addrGuess') or '').strip() or None,
             'aw': (d.get('addrWhy') or '').strip() or None,
@@ -2859,7 +2900,13 @@ def _ledger_addr_key(addr):
     ('HOMESTEAD, FL 33034', '1ST ST, MIAMI BEACH', '0', a bare ZIP) names no one property and keys
     to nothing."""
     a = re.sub(r'[^A-Z0-9]+', ' ', str(addr or '').upper()).strip()
-    return a if re.match(r'\d+\s+\S', a) else ''
+    if not re.match(r'\d+\s+\S', a):
+        return ''
+    # Call Mode shows '5 AVE #4' as '5th AVE APT 4' (_addr_show) and logs that string with an email;
+    # the board row keeps the county spelling. Fold both so the two still key to one property.
+    a = re.sub(r'(?<=\d)(?:ST|ND|RD|TH)\b', '', a)
+    a = re.sub(r'\b(?:APT|UNIT|STE|SUITE)\b', ' ', a)
+    return re.sub(r'\s+', ' ', a).strip()
 
 
 def _address_index(slim):
@@ -3111,7 +3158,7 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
             'c': case,
             'o': (_o if _o != _on else None),
             'on': _on,
-            'a': _ord_addr((d.get('addr') or '').strip()),
+            'a': _addr_show((d.get('addr') or '').strip()),
             'ag': (d.get('addrGuess') or '').strip() or None,
             'aw': (d.get('addrWhy') or '').strip() or None,
             # BOARD KEY NAMES from here down — _funnelStage reads these verbatim.
