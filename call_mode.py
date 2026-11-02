@@ -8774,7 +8774,6 @@ function screenOutcome(){
   wireBrief(document, r);
   if($('vmbtn')) $('vmbtn').onclick = function(){ vmOpen(r); };
   if($('ocback')) $('ocback').onclick = function(){
-    try{ vmClose(); }catch(e){}
     window._tapShieldUntil = Date.now() + 400;
     screenLead();
   };
