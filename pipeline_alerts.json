@@ -1,37 +1,37 @@
 {
  "alerts": [
   {
-   "at": "2026-11-02T08:18:30-05:00",
+   "at": "2026-11-02T08:44:50-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 20.0% (2 of 10 sent on 2026-11-01): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 18.8% (3 of 16 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-11-02T08:18:30-05:00",
+   "at": "2026-11-02T08:44:50-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-02T08:18:30-05:00",
+   "at": "2026-11-02T08:44:50-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Evening readiness check last ran 36h ago."
   },
   {
-   "at": "2026-11-02T08:18:30-05:00",
+   "at": "2026-11-02T08:44:50-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-02T08:18:30-05:00",
+   "at": "2026-11-02T08:44:50-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-02T08:18:30-05:00",
+ "published_at": "2026-11-02T08:44:50-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -45,7 +45,7 @@
    "match_s": 1,
    "needing_search": 4197,
    "provider": "courtlistener",
-   "pull_age_h": 1.16,
+   "pull_age_h": 1.6,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
