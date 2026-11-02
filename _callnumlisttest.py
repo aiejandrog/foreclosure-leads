@@ -254,7 +254,7 @@ def grab_fn(name):
     return SRC[i:j + 2] if i >= 0 and j > 0 else ''
 
 
-rec('the lead card renders the list', '+   _numList(r)\n    +   _navRow()' in SRC)
+rec('the lead card renders the list', '+   _numList(r)\n    +   pasteBlock(r)' in SRC and SRC.find('+   pasteBlock(r)') < SRC.find('+   _navRow()'))
 rec('the list is wired on every lead paint', "  _wireNumList();\n  $('dial').addEventListener('click'" in SRC)
 pick = SRC[SRC.find('function _wireNumList('):SRC.find('/* WHICH LINE THE CALL GOES OUT ON')]
 for bad in ('saveNotes', 'queueSync', 'dials.push', 'logOutcome', 'tel:', 'dialHref'):
@@ -330,7 +330,7 @@ rec('both CLOSED displays use it', SRC.count('_closedWithSale(r, r.') == 2)
 
 wd = out.get('withdnc', '')
 rec('DNC number is listed, struck through and labeled', '(305) 555-0199' in wd and 'do-not-call flag' in wd and 'line-through' in wd)
-rec('the header counts it', 'ALL 3 NUMBERS (1 do-not-call)' in wd, wd[:200])
+rec('the header counts it', 'ALL 3 NUMBERS &middot; 2 you can dial &middot; 1 do-not-call, listed last' in wd, wd[:200])
 rec('a DNC row is not a button and carries no data-k', wd.count('data-k=') == 2 and wd.count('<button') == 2, wd)
 rec('no tel/dial link anywhere in a DNC row', 'href' not in out.get('withdnc', '') and 'tel:' not in wd)
 rec('DNC household / line labels shown', 'household' in wd)

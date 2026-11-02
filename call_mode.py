@@ -4223,6 +4223,17 @@ body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .pastecall .pcnote{font-size:11.5px;line-height:1.4;color:var(--mut);margin-top:6px}
 .pastecall .pcnote.bad{color:#ff9d94}
 .pastecall .pcgo.mail{background:#1F6FEB}
+.pastecall .pcbtns{display:flex;gap:6px;margin-top:8px}
+.pastecall .pcbtns .pcgo{margin-top:0;flex:1}
+.pastecall .pcgo.keep{background:#132244;border:1px solid var(--gold);color:var(--ink)}
+.pastecall .pcwp{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.pastecall .pcwp a{font:700 12.5px system-ui,sans-serif;color:var(--gold);text-decoration:none;border:1px solid #2a3f6b;
+  border-radius:8px;padding:6px 9px}
+.stepl{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:14px 0 5px}
+.numchk{display:flex;flex-wrap:wrap;gap:4px 6px;margin:6px 0 2px}
+.nxq{margin:14px 0 4px;padding:12px;border-radius:12px;border:1px solid var(--gold);background:#132244}
+.nxq .nxbtns{display:flex;gap:8px;margin-top:10px}
+.nxq .nxbtns button{flex:1}
 .pastecall .pcsaved{margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .pastecall .pcem{min-height:46px;border-radius:10px;border:1px solid #2a3f6b;background:#132244;color:var(--ink);
   font:700 14px system-ui,sans-serif;text-align:left;padding:0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -4377,6 +4388,38 @@ function _lineChip(r, k){
   if(c==='k') return '<span class="chip" style="opacity:.7">line checked, status unknown</span>';
   return '<span class="chip" style="opacity:.7">line not checked</span>';
 }
+/* THE DO-NOT-CALL COUNT, ONE MEANING (2026-11-02). The line under the dial button said "7 withheld,
+   do-not-call flag on file" and the list header said "ALL 10 NUMBERS (7 do-not-call)": the same seven
+   numbers, counted once each (3 dialable + 7 DNC = 10), but worded so they read as two different
+   facts. Both now say "do-not-call, not dialable". r.k counts every DNC number the build dropped;
+   r.dn lists the ones the card can show (an agent / office number or a malformed one is counted in
+   r.k and not listed), so when the two differ the card says how many are not shown and why.
+   Display only: this reads the DNC verdict, it does not produce one. */
+function _dncNote(r){
+  var k = +r.k || 0, nd = (r.dn||[]).length;
+  if(!k && !nd) return '';
+  var n = Math.max(k, nd);
+  return ' &middot; plus ' + n + ' do-not-call, not dialable'
+    + (nd && nd < n ? ' (' + nd + ' listed below, ' + (n - nd) + ' agent, office or malformed not shown)'
+                    : (nd ? ' (listed below)' : ''));
+}
+/* WHAT HAS BEEN CHECKED ON THE NUMBER ON THE BUTTON, in the order the checks happen: where it came
+   from (skip trace / Whitepages / pasted), whether Twilio has line-checked it, and what Whitepages
+   says about whose it is. The same chips the list shows per row, pulled up next to the dial button so
+   he does not have to find the highlighted row to know what he is about to dial. Labels only. */
+function _numChecks(r, k){
+  var p = r.p||[]; if(k < 0 || k >= p.length) return '';
+  var src = _srcChip(r, k), line = _lineChip(r, k), wp = _wpChip(r, k), pasted = String((r.ps||[])[k]||'') === 'wpm';
+  if(pasted){
+    src = '<span class="chip">pasted from Whitepages</span>';
+    line = '<span class="chip" style="opacity:.7">line not checked (pasted)</span>';
+    wp = '<span class="chip" style="opacity:.7">not registry-checked for do-not-call</span>';
+  }
+  if(!src) src = '<span class="chip" style="opacity:.7">source not recorded</span>';
+  if(!line) line = '<span class="chip" style="opacity:.7">line not checked</span>';
+  if(!wp) wp = (r.pw == null) ? '<span class="chip" style="opacity:.7">Whitepages not checked</span>' : '';
+  return '<div class="numchk"><span class="chip hot">on the button</span>' + src + line + wp + '</div>';
+}
 function _dncRows(r){
   var h = '', dn = r.dn||[];
   for(var q=0;q<dn.length;q++){
@@ -4405,8 +4448,9 @@ function _numList(r){
   else wpStatus = '<span class="nc">Whitepages not checked for this lead</span>';
   var h = '<div class="numlist" style="margin:8px 0 4px">'
     + '<div class="ltag" style="margin:0 0 4px">ALL ' + (p.length + (r.dn||[]).length) + ' NUMBERS'
-    + ((r.dn||[]).length ? ' (' + (r.dn||[]).length + ' do-not-call)' : '')
-    + ' &middot; ' + wpStatus + '</div>';
+    + ((r.dn||[]).length ? ' &middot; ' + p.length + ' you can dial &middot; ' + (r.dn||[]).length + ' do-not-call, listed last' : '')
+    + ' &middot; ' + wpStatus + '</div>'
+    + '<div class="nc" style="margin:0 0 4px;font-size:12px">Tap a number to switch the dial button to it. Tapping does not dial and does not leave this lead.</div>';
   var nst = String(r.sx||'').split('').filter(function(c){ return c==='t'; }).length;
   var nla = String(r.lv||'').split('').filter(function(c){ return c==='a'; }).length;
   if(r.sx) h += '<div class="nc" style="margin:0 0 4px;font-size:12px">' + nst + ' of ' + p.length + ' from the skip trace &middot; '
@@ -6062,6 +6106,49 @@ function start(){
   render(); freshCheck();
   paintSync();
   try{ pollTextHold(); }catch(e){}
+  try{ mailHandoff(); }catch(e){ try{ logErr(e, 'mail-handoff'); }catch(_e){} }
+  window.addEventListener('hashchange', function(){ try{ mailHandoff(); }catch(e){} });
+}
+/* EMAIL FROM THE BOARD (2026-11-02, Alex: "a direct link to email from the board routing the specific
+   property to the searched up one ... and have the whole thing pre filled"). The board's link on an
+   address pasted from Whitepages opens this page at #mail=<case> and leaves {c, to, ts} in
+   localStorage.fcMailTo (same origin; the address never goes in the URL). This opens screenMail for
+   that lead and address: the same composer, the same mailCheck, the same POST /send as pasting the
+   address on the card, so the bridge still decides the From address and applies the opt-out ledger,
+   the bounce list, the stay/county hold, the first-touch pause and the caps.
+   Fails closed: a lead that is not on this page (held, suppressed, another seat, not built yet) opens
+   nothing. With no handoff (the board was opened from a file, so another origin), an address is used
+   only when it is the lead's single pasted Whitepages address; otherwise the lead's card opens and
+   the addresses are one tap each under the paste box. */
+var MAIL_HANDOFF_MS = 10 * 60 * 1000;
+function mailHandoff(){
+  var m = String(location.hash || '').match(/^#mail=([^&]+)/);
+  if(!m) return false;
+  var c = ''; try{ c = decodeURIComponent(m[1]); }catch(e){ c = m[1]; }
+  try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){ location.hash = ''; }
+  /* Never over a call in progress: the outcome screen, the after-call panel and the Complete sheet
+     each hold work that is not logged yet. The handoff stays put for the next tap of the link. */
+  if(SCREEN !== 'lead'){ toast('Finish this call first, then tap the email link on the board again.', {bad:true, ms:6000}); return false; }
+  var h = null;
+  try{ h = JSON.parse(localStorage.getItem('fcMailTo') || 'null'); localStorage.removeItem('fcMailTo'); }catch(e){ h = null; }
+  var addr = (h && h.c === c && typeof h.ts === 'number' && Math.abs(Date.now() - h.ts) < MAIL_HANDOFF_MS) ? _mailAddr(h.to) : '';
+  var r = ROWS.filter(function(x){ return x.c === c; })[0];
+  if(!r){
+    var cv = (COV || []).filter(function(x){ return x && x.c === c && x.lk && _seatMine(x); })[0];
+    if(cv) r = lkAsDial(cv, '');
+  }
+  if(!r){ toast('That lead is not on this Call Mode page (held, opted out, on the other seat, or not built yet). Nothing was opened.', {bad:true, ms:7000}); return false; }
+  if(!addr){ var A = wpeAddrs(c); if(A.length === 1) addr = A[0]; }
+  if(!addr || wpeAddrs(c).indexOf(addr) < 0){
+    if(ROWS.indexOf(r) >= 0) _openCase(c);
+    toast(addr ? 'That address is not one pasted from Whitepages on this lead. Pick one on the card.' : 'Pick the address on the card, under the paste box.', {bad:true, ms:6000});
+    return false;
+  }
+  screenMail(r, addr, function(){ render(); });
+  /* screenMail refuses with a toast (opt-out, hold, stale list, ladder closed, pause); then the lead's
+     card opens, so he is at least on the property he clicked. */
+  if(SCREEN !== 'mail'){ if(ROWS.indexOf(r) >= 0) _openCase(c); return false; }
+  return true;
 }
 /* THE SYNC LINE, and it is now a BUTTON when sync is off.
    It used to read "Turn it on in the board" — technically true (same origin, so the board's
@@ -6284,8 +6371,8 @@ function navNext(){
 }
 function _navRow(){
   return '<div style="display:flex;gap:10px">'
-    + '<button class="big" id="navback" style="flex:1;background:#2a3f6b'+(_navHasBack()?'':';opacity:.45')+'">&lsaquo; Back</button>'
-    + '<button class="big" id="skip" style="flex:1;background:#2a3f6b">Next &rsaquo;</button></div>';
+    + '<button class="big" id="navback" style="flex:1;background:#2a3f6b'+(_navHasBack()?'':';opacity:.45')+'">&lsaquo; Previous lead</button>'
+    + '<button class="big" id="skip" style="flex:1;background:#2a3f6b">Next lead &rsaquo;</button></div>';
 }
 /* WHICH SCREEN IS UP. The board's extracted mergeNotes ends with `render()` — harmless on the
    board, where render repaints a static list, and CATASTROPHIC here, where the page is a wizard.
@@ -7035,21 +7122,38 @@ function _wpeList(r){
       : '<button type="button" class="pcem" data-em="' + esc(a) + '">&#9993; Email ' + esc(a) + ' &middot; ' + esc(_stageWord(v.stage)) + '</button>';
   }).join('') + '</div>';
 }
+/* KEEP SEARCHING (2026-11-02, Alex: "when i paste the number in there and i proceed i need there to be
+   a way for me to keep searching up numbers"). The one button here used to save AND dial, so the
+   first pasted number took him off the card to the outcome screen while the next number was still
+   sitting on Whitepages. Now: "Save, keep searching" adds the number to this lead's list and leaves
+   him on the same card with the box cleared for the next one; "Save & call now" is the old
+   behaviour. Both go through the same pasteCheck (lead's DNC list, any-lead DNC, marked bad,
+   hardSuppressed) and the same save. The lead's Whitepages links sit above the box so the next
+   search is one tap from where he pastes. */
+function _pcWpLinks(r){
+  var L = (typeof fileLinks === 'function' ? fileLinks(r) : []).filter(function(x){ return /^Whitepages/.test(x[0]); });
+  if(!L.length) return '';
+  return '<div class="pcwp">' + L.map(function(x){
+    return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0] === 'Whitepages' ? 'Whitepages by name' : 'Whitepages by address') + ' &#8599;</a>';
+  }).join('') + '</div>';
+}
 function pasteBlock(r){
   var em = MAIL_OK;
   return '<div class="pastecall">'
     + '<div class="ltag" style="margin:0 0 6px">' + (em ? 'FOUND A NUMBER OR EMAIL ON WHITEPAGES?' : 'FOUND ANOTHER NUMBER ON WHITEPAGES?') + '</div>'
+    + _pcWpLinks(r)
     + '<div class="pcrow"><input id="pcnum" type="text" inputmode="' + (em ? 'email' : 'tel') + '" autocomplete="off" autocapitalize="off" spellcheck="false" '
     +   'placeholder="' + (em ? 'Paste the number or email here' : 'Paste the number here') + '" aria-label="' + (em ? 'Phone number or email from Whitepages' : 'Phone number from Whitepages') + '">'
     + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="pcclip" class="pcclip">Paste</button>' : '')
     + '</div>'
-    + '<button type="button" id="pcgo" class="pcgo" disabled>Call this number</button>'
-    + '<div class="pcnote" id="pcwhy">Saved on this lead and logged like any call' + (em ? '. An email goes out only through the laptop send bridge, from the company address' : '') + '. Pasted numbers are not checked against the do-not-call registry.</div>'
+    + '<div class="pcbtns"><button type="button" id="pcsave" class="pcgo keep" disabled>Save, keep searching</button>'
+    + '<button type="button" id="pcgo" class="pcgo" disabled>Save &amp; call now</button></div>'
+    + '<div class="pcnote" id="pcwhy">Save, keep searching: the number joins this lead\'s list and you stay on this card for the next one. Save &amp; call: dials it and logs it like any call' + (em ? '. An email goes out only through the laptop send bridge, from the company address' : '') + '. Pasted numbers are not checked against the do-not-call registry or line-checked with Twilio.</div>'
     + _wpeList(r)
     + '</div>';
 }
 function _wirePaste(r){
-  var inp = $('pcnum'), go = $('pcgo'), why = $('pcwhy'), clip = $('pcclip');
+  var inp = $('pcnum'), go = $('pcgo'), why = $('pcwhy'), clip = $('pcclip'), sv = $('pcsave');
   if(!inp || !go) return;
   var base = why ? why.innerHTML : '';
   function isMail(){ return MAIL_OK && String(inp.value||'').indexOf('@') >= 0; }
@@ -7059,13 +7163,15 @@ function _wirePaste(r){
       go.disabled = !e.addr || !!e.why;
       go.textContent = e.addr ? '\u2709 Email ' + e.addr : 'Email this address';
       go.className = 'pcgo mail';
+      if(sv) sv.style.display = 'none';
       if(why){ why.innerHTML = (e.addr && e.why) ? '<b>' + esc(e.why) + '</b>' : base; why.className = 'pcnote' + (e.addr && e.why ? ' bad' : ''); }
       return;
     }
     var v = pasteCheck(r, inp.value);
     go.disabled = !v.num || !!v.why;
-    go.textContent = v.num ? 'Call ' + fmt(v.num) : 'Call this number';
+    go.textContent = v.num ? 'Save & call ' + fmt(v.num) : 'Save & call now';
     go.className = 'pcgo';
+    if(sv){ sv.style.display = ''; sv.disabled = go.disabled; }
     if(why){ why.innerHTML = (v.num && v.why) ? '<b>' + esc(v.why) + '</b>' : base; why.className = 'pcnote' + (v.num && v.why ? ' bad' : ''); }
   }
   Array.prototype.forEach.call(document.querySelectorAll('.pcem'), function(b){
@@ -7079,17 +7185,35 @@ function _wirePaste(r){
       .catch(function(){ inp.focus(); toast('Long-press the box and choose Paste'); });
   };
   go.onclick = function(){ if(isMail()) screenMail(r, inp.value); else pasteCall(r, inp.value); };
+  if(sv) sv.onclick = function(){ if(!isMail()) pasteSave(r, inp.value); };
 }
-function pasteCall(r, raw){
+/* Save a checked pasted number on this lead (notes.wpm, the board's phone box when empty, the dial
+   list). Returns {k: its index in r.p, was: true when it was already on the lead} or null. */
+function _savePasted(r, raw){
   var v = pasteCheck(r, raw);
-  if(!v.num || v.why){ toast(v.why || 'Paste a 10-digit US number', {bad:true}); return; }
+  if(!v.num || v.why){ toast(v.why || 'Paste a 10-digit US number', {bad:true}); return null; }
+  var p0 = (r.p||[]).length;
   var n = notes[r.c] = notes[r.c] || {status:'', note:''};
   n.wpm = n.wpm || []; if(n.wpm.indexOf(v.num) < 0) n.wpm.push(v.num);
   if(!_lkDigits(n.phone)) n.phone = v.num;
   saveNotes(); try{ queueSync(); }catch(e){}
-  phIdx = _addNum(r, v.num);
+  var k = _addNum(r, v.num);
+  return {k:k, num:v.num, was:(k < p0)};
+}
+function pasteCall(r, raw){
+  var s = _savePasted(r, raw); if(!s) return;
+  phIdx = s.k;
   screenLead();
   var a = $('dial'); if(a) a.click();
+}
+/* Save, stay on this card, clear the box, put the cursor back in it. The number on the dial button
+   does not change: he is still verifying. */
+function pasteSave(r, raw){
+  var s = _savePasted(r, raw); if(!s) return;
+  screenLead();
+  toast(s.was ? fmt(s.num) + ' is already number ' + (s.k + 1) + ' on this lead'
+              : 'Saved ' + fmt(s.num) + ' as number ' + (s.k + 1) + '. Paste the next one.');
+  var inp = $('pcnum'); if(inp){ try{ inp.focus(); }catch(e){} }
 }
 function boardList(){
   if(BLANE === '__lk') return lookupList();
@@ -8196,7 +8320,7 @@ function screenLead(){
     +   fileBand(r)
     +   cbCard(r)
     +   '<a class="dial" href="'+dialHref(d)+'"'+dialTarget()+' id="dial">'+fmt(d)+'</a>'
-    +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
+    +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length+' you can dial'
     /* 'N' (not the owner) is new; an unmapped letter used to fall through to "last resort", which
        reads as a bad number rather than a different person. */
     +     (rk?(' &middot; '+(rk==='C'?'call first':rk==='O'?'ok':rk==='N'?'not the owner':'last resort')):'')
@@ -8204,10 +8328,18 @@ function screenLead(){
        first sentence out of your mouth. The script on this page greets the owner by first name;
        on these two it is "is <owner> home?" instead. */
     +     (_phSrcNote(r, phIdx) ? '<br><b>'+_phSrcNote(r, phIdx)+'</b>' : '')
-    +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
+    +     _dncNote(r)+'</div>'
+    +   _numChecks(r, phIdx)
     +   _numList(r)
-    +   _navRow()
     +   pasteBlock(r)
+    /* NEXT-STEP ORDER (2026-11-02, Alex: "what if i want to click through other numbers on whitepages
+       to verify but its instantly telling me to skip"). The card now reads top to bottom: dial the
+       number on the button, what has been checked on it, every other number (tap to switch), the
+       Whitepages paste box, and only then leaving the lead. Previous / Next used to sit between the
+       number list and the paste box, labelled just "Back" and "Next", so the button under his
+       numbers read as "skip this lead". */
+    +   '<div class="stepl">DONE WITH THIS LEAD?</div>'
+    +   _navRow()
     + '</div>'
     + '<div class="sub">'+(i+1)+' of '+pool().length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
     + '<div class="sheetpad"></div>';
@@ -8964,6 +9096,72 @@ function ayWire(r){
     toast('Next step saved');
   };
 }
+/* "CALL THE NEXT NUMBER FOR THIS PROSPECT?" (2026-11-02). Replaces the after-call panel with one
+   question. Yes puts number k on the dial button of the SAME lead (screenLead, no auto-dial: the
+   dial tap is still the one handler that logs the attempt and checks the FTSA window). No runs
+   whatever leaving would have done (the Complete sheet, then the next lead). At the FTSA cap
+   (3 telephonic touches to this person in 24h) Yes is not offered: screenLead would refuse the
+   lead anyway, and the number is already saved for tomorrow. */
+function nextNumPrompt(r, k, onNo){
+  var p = r.p||[];
+  if(k < 0 || k >= p.length) return onNo();
+  SCREEN = 'after';
+  var cap = _tele24(r) >= 3;
+  $('app').innerHTML = '<div class="card"><div class="nxq">'
+    + '<div class="addr" style="font-size:17px">Call another number for ' + esc(firstName(r) || 'this owner') + '?</div>'
+    + '<div class="own" style="margin-top:6px">' + fmt(String(p[k]).replace(/\D/g,'')) + ' &middot; number ' + (k + 1) + ' of ' + p.length + '</div>'
+    + _numChecks(r, k).replace('<span class="chip hot">on the button</span>', '')
+    + (_phSrcNote(r, k) ? '<div class="nc" style="margin-top:6px">' + _phSrcNote(r, k) + '</div>' : '')
+    + (cap ? '<div class="nc" style="margin-top:6px">FTSA cap: 3 telephonic touches to this person in 24 hours. The number is saved; call it after the oldest touch ages out.</div>' : '')
+    + '<div class="nxbtns">'
+    + (cap ? '' : '<button id="nxyes" class="big">&#128222; Yes, go to that number</button>')
+    + '<button id="nxno" class="ghost">' + (cap ? 'OK, move on' : 'No, move on') + '</button>'
+    + '</div></div></div><div class="sheetpad"></div>';
+  if($('nxyes')) $('nxyes').onclick = function(){
+    window._tapShieldUntil = Date.now() + 400;
+    phIdx = k; toast('Number ' + (k + 1) + ' of ' + p.length); screenLead();
+  };
+  $('nxno').onclick = function(){ onNo(); };
+}
+/* SMART PASTE ON THE AFTER-CALL PANEL (2026-11-02, Alex: "and have a smart like paste in number or
+   something as well"). Same checks and same save as the card's box (pasteCheck, notes.wpm), then the
+   "call it next?" question with that number. A number already on the lead is not added twice. Not
+   line-checked with Twilio and not registry-checked for do-not-call, same as the card's box. */
+function _afterPasteHtml(){
+  return '<div class="afterlab">Found another number for them? Paste it</div>'
+    + '<div class="pastecall" style="margin-top:0"><div class="pcrow">'
+    + '<input id="apnum" type="text" inputmode="tel" autocomplete="off" spellcheck="false" placeholder="Paste a number" aria-label="Another phone number for this owner">'
+    + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="apclip" class="pcclip">Paste</button>' : '')
+    + '</div><button type="button" id="apgo" class="pcgo" disabled>Add it and call it next</button>'
+    + '<div class="pcnote" id="apwhy">Checked against this lead\'s do-not-call list, numbers marked bad and opt-outs. Not registry-checked or line-checked.</div></div>';
+}
+function _wireAfterPaste(r, back){
+  var inp = $('apnum'), go = $('apgo'), why = $('apwhy'), clip = $('apclip');
+  if(!inp || !go) return;
+  var base = why ? why.innerHTML : '';
+  function upd(){
+    var v = pasteCheck(r, inp.value), k = -1;
+    if(v.num && !v.why){
+      for(var j=0;j<(r.p||[]).length;j++) if(String(r.p[j]).replace(/\D/g,'').slice(-10) === v.num) k = j;
+    }
+    go.disabled = !v.num || !!v.why;
+    go.textContent = !v.num ? 'Add it and call it next'
+                   : (k >= 0 ? 'Already number ' + (k + 1) + ', call it next' : 'Add ' + fmt(v.num) + ' and call it next');
+    if(why){ why.innerHTML = (v.num && v.why) ? '<b>' + esc(v.why) + '</b>' : base; why.className = 'pcnote' + (v.num && v.why ? ' bad' : ''); }
+  }
+  inp.addEventListener('input', upd);
+  inp.addEventListener('paste', function(){ setTimeout(upd, 0); });
+  inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' && !go.disabled){ ev.preventDefault(); go.click(); } });
+  if(clip) clip.onclick = function(){
+    navigator.clipboard.readText().then(function(t){ inp.value = t || ''; upd(); })
+      .catch(function(){ inp.focus(); toast('Long-press the box and choose Paste'); });
+  };
+  go.onclick = function(){
+    var s = _savePasted(r, inp.value); if(!s) return;
+    if(!s.was) toast('Saved ' + fmt(s.num) + ' on this lead');
+    nextNumPrompt(r, s.k, back);
+  };
+}
 function afterCall(r, o, nextC){
   try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */
   SCREEN='after';
@@ -8979,6 +9177,11 @@ function afterCall(r, o, nextC){
      number, and a resurfaced lead can open on number 3). Never offer the number just dialled. */
   if(_nextPh < 0) _nextPh = untriedEarlierPh(r, phIdx);
   var _nphTop = (o.k==='badnum'||o.k==='gate') && _nextPh >= 0;
+  /* ASK BEFORE LEAVING (2026-11-02, Alex: "you put done sent text done finish that screen ask if we
+     call next number for the prospect"). Only after an outcome that did not reach the owner on this
+     line (no answer, voicemail, bad number, gatekeeper): after a conversation, a callback, an
+     appointment, a no or a stop, another number for the same person is not the next step. */
+  var _askNext = miss && _nextPh >= 0;
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field
@@ -9104,6 +9307,7 @@ function afterCall(r, o, nextC){
         ? '<button id="nph" class="ghost" style="margin-top:14px">&#128222; Try their next number ('
           + (_nextPh + 1) + ' of ' + r.p.length + ')</button>'
         : '')
+    + (hardSuppressed(r) ? '' : _afterPasteHtml())
     + '<button id="nx" style="margin-top:14px">Next lead &rarr;</button>'
     + '</div><div class="sheetpad"></div>';
   /* An open deal with no dated next step does not walk away: that is how an appointment dies. Every
@@ -9118,8 +9322,10 @@ function afterCall(r, o, nextC){
   $('nx').onclick = function(){
     /* the open-deal date guard answers first (its toast and focus), then the Complete sheet, then go() */
     if(ayNeedsDate(notes[r.c])) return go();
+    if(_askNext) return nextNumPrompt(r, _nextPh, function(){ completeThen(r, go); });
     completeThen(r, go);
   };
+  _wireAfterPaste(r, function(){ afterCall(r, o, nextC); });
   if($('aem')) $('aem').onclick = function(){ screenMail(r, $('aem').getAttribute('data-em')); };
   if($('nph')) $('nph').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
@@ -9209,6 +9415,7 @@ function afterCall(r, o, nextC){
       saveNotes(); queueSync();
       callTextLedger(r, r.p[phIdx], true, _txk, st, body);
       if(!_ftsaCapToast(nn)) toast('Text logged');
+      if(_askNext && !ayNeedsDate(notes[r.c])) return nextNumPrompt(r, _nextPh, go);
       go();
     };
     /* RESEND. Same body, same number — re-fires the composer. Does NOT log anything: a second open
