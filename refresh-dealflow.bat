@@ -603,6 +603,26 @@ rem  MUST run before the [4/5] rebuild, which reads dockets.json. Never a gate: 
 rem  the inline docket, never the publish.
 python -u gen_dockets.py --limit 120 --stale 21 >> "%LOG%" 2>&1
 
+rem  [3w] Whitepages WEB lookup (2026-11-02, Alejandro: "go on and automate it now"). OFF unless
+rem  WP_WEB_NIGHTLY=1. Owner phones/emails for new leads from his logged-in whitepages.com
+rem  session (wp_web.py, laptop only), cached in whitepages_lookup.json BEFORE the [4/5] rebuild
+rem  so tonight's board bakes them. TERMS/BAN RISK: whitepages.com forbids automated access and
+rem  commercial use; Alejandro accepted that in writing on 2026-10-22 (see the wp_web.py docstring).
+rem  Cap: WP_WEB_NIGHTLY_MAX leads (default 15, hard max 25, read from wp_web.py --nightly-cap);
+rem  WP_WEB_MAX_RUNTIME_S (default 900) bounds the run. A login wall, bot check or 403/429 stops
+rem  the run and starts a 24 h cooldown (wp_web_status.json in DEALFLOW_DIR; pipeline_alerts
+rem  wp-web warns). This step only writes whitepages_lookup.json: it stages and pushes nothing,
+rem  and the gates before the final push (healthcheck, publish_guard) run unchanged below.
+rem  Fail-soft: a nonzero exit logs one line and the refresh carries on.
+python -u refresh_progress.py step 3w
+echo [3w/5] Whitepages web lookup - off unless WP_WEB_NIGHTLY=1...
+set "WP_WEB_NIGHTLY_N="
+if "%WP_WEB_NIGHTLY%"=="1" for /f "delims=" %%N in ('python wp_web.py --nightly-cap 2^>nul') do set "WP_WEB_NIGHTLY_N=%%N"
+if "%WP_WEB_NIGHTLY%"=="1" if not defined WP_WEB_NIGHTLY_N set "WP_WEB_NIGHTLY_N=15"
+if "%WP_WEB_NIGHTLY%"=="1" set "WP_WEB_MAX_LEADS=%WP_WEB_NIGHTLY_N%"
+if "%WP_WEB_NIGHTLY%"=="1" python -u wp_web.py --pick-callable %WP_WEB_NIGHTLY_N% >> "%LOG%" 2>&1
+if "%WP_WEB_NIGHTLY%"=="1" if errorlevel 1 echo     WARN: Whitepages web lookup exited nonzero - refresh continues. See leads-run.log.>> "%LOG%"
+
 python -u refresh_progress.py step 4
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1

@@ -402,20 +402,59 @@ def _addr_query(street, city, state):
                                  urllib.parse.quote('%s-%s' % (slug(city), state)))
 
 
+class _Stop(Exception):
+    """The site is refusing this session (login wall, bot check, 403/429). Carries the page text
+    so a calibration run can still save it. Never retried, never worked around."""
+
+    def __init__(self, reason, text=''):
+        Exception.__init__(self, reason)
+        self.reason = reason
+        self.text = text
+
+
+_SIGNED_IN_RE = re.compile(r'sign out|log out|my account', re.I)
+_LOGIN_URL_RE = re.compile(r'/(log-?in|sign-?in)\b', re.I)
+
+
+def classify_block(text, url, status, has_entry):
+    """'rate_limited' | 'challenge' | 'login_required' | None. Pure; no page access."""
+    if status == 429:
+        return 'rate_limited'
+    if status == 403:
+        return 'challenge'
+    if url and _LOGIN_URL_RE.search(url):
+        return 'login_required'
+    if has_entry:
+        return None
+    low = (text or '').lower()
+    if text and _BLOCK_RE.search(text):
+        return 'challenge'
+    if text and re.search(r'\b(log in|sign in)\b', low) and not _SIGNED_IN_RE.search(low):
+        return 'login_required'
+    return None
+
+
 def _scrape_one(page, lead):
-    """Navigate to the lead's address page and return (entry, text). Never raises for a miss."""
+    """Navigate to the lead's address page and return (entry, text). Never raises for a miss;
+    raises _Stop when the site is refusing the session."""
     import whitepages_lookup as WL
     parts = WL._split_addr(WL._lead_addr(lead))
     if not parts:
         return None, ''
     street, city, state = parts
-    page.goto(_addr_query(street, city, state), wait_until='domcontentloaded', timeout=45000)
+    resp = page.goto(_addr_query(street, city, state), wait_until='domcontentloaded', timeout=45000)
+    code = getattr(resp, 'status', None)
+    if code in (403, 429):
+        raise _Stop(classify_block('', '', code, False))
     try:
         page.wait_for_selector('text=/Owners?\\s*&\\s*Residents?|Cell Phone|Landline/i', timeout=12000)
     except Exception:
         pass
     text = page.inner_text('body')
     people = parse_people_text(text) if page_matches_address(text, street) else []
+    why = classify_block(text, getattr(page, 'url', '') or '', code, bool(people))
+    if why:
+        raise _Stop(why, text)
     addr = WL._lead_addr(lead)
     return (to_cache_entry(people, addr, page_text=text) if people else None), text
 
@@ -440,63 +479,174 @@ def _login():
     print('Session saved to %s' % PROFILE)
 
 
-def _run(todo, save_text=None, save_html=None, refresh=False):
-    import whitepages_lookup as WL
+STATUS_NAME = 'wp_web_status.json'
+COOLDOWN_S = 24 * 3600
+COOLDOWN_REASONS = ('challenge', 'rate_limited')
+REASONS = ('ok', 'time_budget', 'login_required', 'challenge', 'rate_limited', 'error')
+HARD_MAX_NIGHTLY = 25
+
+
+def _env_pos_int(name, default):
+    try:
+        v = int(float(os.environ.get(name, '') or default))
+    except (TypeError, ValueError):
+        return default
+    return v if v > 0 else default
+
+
+def nightly_cap():
+    """Leads for one nightly run: WP_WEB_NIGHTLY_MAX (default 15), never above 25."""
+    return min(_env_pos_int('WP_WEB_NIGHTLY_MAX', 15), HARD_MAX_NIGHTLY)
+
+
+def max_runtime_s():
+    """Wall-clock cap for one run, checked between leads: WP_WEB_MAX_RUNTIME_S (default 900)."""
+    return _env_pos_int('WP_WEB_MAX_RUNTIME_S', 900)
+
+
+def status_path():
+    import paths as P
+    return P.out(STATUS_NAME)
+
+
+def read_status():
+    import json
+    try:
+        d = json.load(open(status_path(), encoding='utf-8'))
+    except Exception:
+        return None
+    return d if isinstance(d, dict) else None
+
+
+def write_status(attempted, cached, reason, now=None):
+    """Counts, a reason and times only: never a name, phone, email, address or case number.
+    challenge / rate_limited also record a 24 h cooldown the next automated run honours."""
+    import json
+    if reason not in REASONS:
+        reason = 'error'
+    now = time.time() if now is None else now
+    doc = {'ts': int(now), 'reason': reason, 'attempted': int(attempted), 'cached': int(cached)}
+    if reason in COOLDOWN_REASONS:
+        doc['cooldown_until'] = int(now + COOLDOWN_S)
+    tmp = status_path() + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(doc, f)
+    os.replace(tmp, status_path())
+    return doc
+
+
+def cooldown_active(now=None):
+    st = read_status() or {}
+    try:
+        until = float(st.get('cooldown_until') or 0)
+    except (TypeError, ValueError):
+        return False
+    return until > (time.time() if now is None else now)
+
+
+def public_status(now=None):
+    """What pipeline_alerts reads: counts, reason and age only."""
+    st = read_status()
+    if not st:
+        return {'readable': False}
+    try:
+        age = ((time.time() if now is None else now) - float(st.get('ts'))) / 3600.0
+    except (TypeError, ValueError):
+        age = None
+    reason = st.get('reason') if st.get('reason') in REASONS else 'error'
+    return {'readable': True, 'reason': reason, 'age_h': age,
+            'attempted': st.get('attempted'), 'cached': st.get('cached')}
+
+
+import contextlib  # noqa: E402
+
+
+@contextlib.contextmanager
+def _browser():
     from playwright.sync_api import sync_playwright
-    cache = _load_cache()
-    scraped = miss = 0
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(PROFILE, headless=False, channel=CHANNEL,
                                                     viewport={'width': 1280, 'height': 920})
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        for idx, lead in enumerate(todo):
-            case = WL._lead_key(lead)
-            if not refresh and WL._cache_looked(cache.get(case)):
-                print('  %s: already looked up, skipping (use --refresh)' % case[-4:], flush=True)
-                continue
-            try:
-                entry, text = _scrape_one(page, lead)
-            except Exception as e:
-                print('  ...%s: error %s' % (case[-4:], e.__class__.__name__), flush=True)
-                entry, text = None, ''
-            if text and _BLOCK_RE.search(text) and not entry:
-                # The site is refusing this session. Do NOT retry or push on: more requests while
-                # blocked is what turns a pause into a ban. Stop the run and say how to continue.
-                print('  ...%s: whitepages.com is blocking this session ("%s"). Stopping the run; '
-                      'nothing was changed. Wait, then try again, or use --from-file with a page you '
-                      'copied yourself.' % (case[-4:], _BLOCK_RE.search(text).group(0)), flush=True)
-                if save_text:
-                    open(save_text, 'w', encoding='utf-8').write(text)
-                miss += 1
-                break
-            if save_text and text:
-                open(save_text, 'w', encoding='utf-8').write(text)
-                print('  wrote visible text to %s (%d chars)' % (save_text, len(text)))
-            if save_html:
-                open(save_html, 'w', encoding='utf-8').write(page.content())
-                print('  wrote page HTML to %s' % save_html)
-            if entry:
-                old = cache.get(case) or {}
-                for k in ('_person', '_prop_id'):           # keep any API layer already present
-                    if old.get(k) is not None:
-                        entry[k] = old[k]
-                cache = _put(case, entry, cache)
-                ow, res, ph = _counts(entry)
-                print('  ...%s: %d owner(s), %d resident(s), %d phone(s)' % (case[-4:], ow, res, ph), flush=True)
-                scraped += 1
-            else:
-                why = ''
-                low = (text or '').lower()
-                if text and re.search(r'\b(log in|sign in)\b', low) and not re.search(r'sign out|log out|my account', low):
-                    why = ' (page looks SIGNED OUT: run --login again and finish signing in)'
-                elif text and re.search(r'verify you are human|captcha|unusual traffic|access denied', low):
-                    why = ' (page shows a bot check: solve it in the window, or wait and retry)'
-                print('  ...%s: no owners/residents parsed%s' % (case[-4:], why), flush=True)
-                miss += 1
-            if idx < len(todo) - 1:
-                time.sleep(THROTTLE_S + random.uniform(0, 6))
-        ctx.close()
-    print('scraped %d lead(s), %d with nothing parsed. cache: %s' % (scraped, miss, CACHE))
+        try:
+            yield ctx.pages[0] if ctx.pages else ctx.new_page()
+        finally:
+            ctx.close()
+
+
+def _scrape_loop(page, todo, save_text=None, save_html=None, refresh=False,
+                 max_runtime=None, clock=time.monotonic, sleep=time.sleep):
+    """Scrape leads one by one. Returns (attempted, cached, reason).
+
+    The runtime cap is checked BETWEEN leads (never cuts one off). A login wall, bot check or
+    HTTP 403/429 (_Stop) ends the whole run at once: no retry, no workaround."""
+    import whitepages_lookup as WL
+    cache = _load_cache()
+    started = clock()
+    attempted = cached = miss = 0
+    reason = 'ok'
+    for idx, lead in enumerate(todo):
+        case = WL._lead_key(lead)
+        if not refresh and WL._cache_looked(cache.get(case)):
+            print('  %s: already looked up, skipping (use --refresh)' % case[-4:], flush=True)
+            continue
+        if max_runtime is not None and clock() - started >= max_runtime:
+            print('  time budget (%ds) used up; stopping between leads.' % max_runtime, flush=True)
+            reason = 'time_budget'
+            break
+        attempted += 1
+        try:
+            entry, text = _scrape_one(page, lead)
+        except _Stop as stop:
+            print('  ...%s: whitepages.com stopped this session (%s). Stopping the run; nothing '
+                  'else is requested. Wait, fix the login by hand, or use --from-file.'
+                  % (case[-4:], stop.reason), flush=True)
+            if save_text and stop.text:
+                open(save_text, 'w', encoding='utf-8').write(stop.text)
+            reason = stop.reason
+            break
+        except Exception as e:
+            print('  ...%s: error %s' % (case[-4:], e.__class__.__name__), flush=True)
+            entry, text = None, ''
+        if save_text and text:
+            open(save_text, 'w', encoding='utf-8').write(text)
+            print('  wrote visible text to %s (%d chars)' % (save_text, len(text)))
+        if save_html:
+            open(save_html, 'w', encoding='utf-8').write(page.content())
+            print('  wrote page HTML to %s' % save_html)
+        if entry:
+            old = cache.get(case) or {}
+            for k in ('_person', '_prop_id'):           # keep any API layer already present
+                if old.get(k) is not None:
+                    entry[k] = old[k]
+            cache = _put(case, entry, cache)
+            ow, res, ph = _counts(entry)
+            print('  ...%s: %d owner(s), %d resident(s), %d phone(s)' % (case[-4:], ow, res, ph), flush=True)
+            cached += 1
+        else:
+            print('  ...%s: no owners/residents parsed' % case[-4:], flush=True)
+            miss += 1
+        if idx < len(todo) - 1:
+            sleep(THROTTLE_S + random.uniform(0, 6))
+    print('scraped %d lead(s), %d with nothing parsed. cache: %s' % (cached, miss, CACHE))
+    return attempted, cached, reason
+
+
+def _run(todo, save_text=None, save_html=None, refresh=False):
+    """One automated run. Always leaves a counts-only status file; returns the reason."""
+    attempted = cached = 0
+    reason = 'ok'
+    try:
+        with _browser() as page:
+            attempted, cached, reason = _scrape_loop(page, todo, save_text=save_text, save_html=save_html,
+                                                     refresh=refresh, max_runtime=max_runtime_s())
+    except Exception as e:
+        print('  browser/run error %s; nothing else requested.' % e.__class__.__name__, flush=True)
+        reason = 'error'
+    try:
+        write_status(attempted, cached, reason)
+    except Exception as e:
+        print('  could not write %s (%s)' % (STATUS_NAME, e.__class__.__name__), flush=True)
+    return reason
 
 
 # cache helpers — reuse whitepages_lookup's file and writer so there is one cache
@@ -1250,10 +1400,17 @@ def main(argv=None):
                     help='for every kept page, say why its address did or did not match (masked shapes)')
     ap.add_argument('--reparse', action='store_true',
                     help='re-read every page this tool cached with the current parser; no browser')
+    ap.add_argument('--nightly-cap', action='store_true',
+                    help='print the nightly lead cap (WP_WEB_NIGHTLY_MAX, default 15, max 25) and exit')
+    ap.add_argument('--ignore-cooldown', action='store_true',
+                    help='run by hand even inside the 24 h cooldown after a challenge / rate limit')
     ap.add_argument('--save-text', metavar='FILE', help='write one lead\'s visible page text (calibration)')
     ap.add_argument('--save-html', metavar='FILE', help='write one lead\'s page HTML (calibration)')
     a = ap.parse_args(argv)
 
+    if a.nightly_cap:
+        print(nightly_cap())
+        return 0
     if a.login:
         _login()
         return 0
@@ -1337,6 +1494,10 @@ def main(argv=None):
         # These are the leads the two-misses rule stopped offering: never hand them to the automated run.
         print('--retry-misses needs --assist (or --plan)')
         return 2
+    if not (a.assist or a.plan) and not a.ignore_cooldown and cooldown_active():
+        print('wp_web: in the 24 h cooldown after a challenge / rate limit (see %s). Not requesting '
+              'anything. --ignore-cooldown overrides, by hand only.' % STATUS_NAME)
+        return 0
     todo = _select(a)
     if a.assist and not a.plan:
         print('%d lead(s) selected for hand-assisted copy' % len(todo))
@@ -1349,6 +1510,7 @@ def main(argv=None):
     if a.plan:
         return 0
     if not todo:
+        write_status(0, 0, 'ok')        # nothing to do tonight is a healthy night, not a stale one
         return 0
     _run(todo, save_text=a.save_text, save_html=a.save_html, refresh=a.refresh)
     return 0
