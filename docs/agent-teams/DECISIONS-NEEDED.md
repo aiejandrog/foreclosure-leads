@@ -199,3 +199,12 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Option B: leave; the nightly sweep and the buffer limits are the backstop | Risk: a hand mark or a ledger failure can be missed for a day
 - Recommendation: A for the ok:true-on-failure case first (it hides a failed do-not-contact write); the rest are low priority.
 - Status: OPEN
+
+### D22: Board "Email, pre-filled" link on Whitepages-pasted addresses, and pasted numbers on the after-call panel (thread "Call Mode WP paste flow and email link", 2026-11-02) -- LEGAL REVIEW in PR title
+- Touches: tracker_template.html `_contactBlockHtml` / new `_boardMailHeld` / `_cmMail` (email send entry point, the send trigger); call_mode.py new `mailHandoff`, `_afterPasteHtml` / `_wireAfterPaste`, `nextNumPrompt`, `_dncNote`. No change to send_server.py, `/send`, `mailCheck`, `pasteCheck`, `hardSuppressed`, the ledger, the bounce list, the stay gate or the DNC verdict.
+- What changes: (1) An address pasted from Whitepages on a Call Mode card, shown on the board as plain text since 10-24, gets an "Email, pre-filled" link that opens that lead in Call Mode's composer for that address (the existing screenMail + POST /send path). The address goes through same-origin localStorage, not the URL. Hidden when the board holds the lead (opt-out / DNC, wrong person, bankruptcy flag, diligence hold, sibling claim, owner gone, sale passed). Call Mode refuses unless the lead is on its page, the address is one pasted on that lead, no call is in progress, and mailCheck passes; the bridge then applies the ledger, bounces, stay and caps as before. (2) The after-call panel gets a paste box: a number there gets the same pasteCheck as the card's box (lead DNC, any-lead DNC, marked bad, opt-out), so it is NOT checked against the DNC registry or line-checked with Twilio, the same open question as the card's box since 10-24. (3) The DNC line on the card is reworded only; it reads r.k / r.dn, it does not produce a DNC verdict.
+- Option A: merge as is | Risk: one more entry point to an email send (same gates); pasted numbers stay unregistry-checked, as today
+- Option B: merge without the board link (Call Mode changes only) | Risk: Alex keeps copying the address into Call Mode by hand
+- Recommendation: A. Alex asked for the link on 11-02; the send path and every check behind it are unchanged.
+- Fallback in progress: PR left open for Alex; nothing merged.
+- Status: OPEN

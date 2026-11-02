@@ -838,6 +838,7 @@ a.ctact:hover{text-decoration:none;filter:none}
 .ctact-wa svg{width:13px;height:13px;display:block;stroke:#fff;color:#fff}
 .cttag{font-size:10px;font-weight:700;color:var(--muted,#6b7280);margin-left:2px}
 .cttag.dnc{color:#c0392b}
+.cmmail{font-size:11.5px;font-weight:700;margin-left:6px;padding:2px 8px;border-radius:6px;border:1px solid #1F6FEB;color:#1F6FEB;text-decoration:none;white-space:nowrap}
 .csmsgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
 .csmsglbl{font-family:var(--f-label,inherit);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-2)}
@@ -3714,6 +3715,30 @@ function _textContactBlocked(r){
   if(r.saleBkAct) return 'bk';
   return '';
 }
+/* Why the board will not offer "Email, pre-filled" on this lead, or ''. Reads verdicts the board
+   already has (the any-channel block, the diligence hold, the bankruptcy flag, a sibling claim, a dead
+   or flipped owner, a passed sale, a wrong-owner mark). It produces none: Call Mode's mailCheck and
+   the send bridge's ledger, bounce and stay checks still decide the send. */
+function _boardMailHeld(r){
+  const n = notes[r.case]||{};
+  const b = _textContactBlocked(r);
+  if(b === 'optout') return 'opted out / do not contact';
+  if(b === 'wrong' || n.wrongown) return 'wrong person';
+  if(b === 'bk' || r.saleBkAct) return 'bankruptcy stay';
+  if(r.ddhold) return 'diligence hold';
+  if(r.sibclaimed) return 'claimed on another case';
+  if(typeof isFlaggedDead === 'function' && isFlaggedDead(r)) return 'owner gone';
+  if(_aucPassed(r)) return 'sale passed';
+  return '';
+}
+/* Hand the address to Call Mode without putting it in the URL: same origin, so localStorage carries
+   {c, to, ts} and the link carries only the case number. Call Mode drops a handoff older than 10
+   minutes or for another case. Returns true so the link navigates. */
+function _cmMail(a){
+  try{ localStorage.setItem('fcMailTo', JSON.stringify({c:a.getAttribute('data-c'), to:a.getAttribute('data-em'), ts:Date.now()})); }catch(e){}
+  try{ a.href = _callModeUrl() + '#mail=' + encodeURIComponent(a.getAttribute('data-c')) + '&t=' + Date.now().toString(36); }catch(e){}
+  return true;
+}
 // ANY-CHANNEL contact gate (2026-08-11 deep sweep). _textContactBlocked was enforced on the text
 // and WhatsApp paths only, so an owner who opted out, was marked DO NOT CONTACT / wrong person, or
 // sat under an ACTIVE §362 bankruptcy stay could still have a letter, a door hanger and a cold
@@ -3862,8 +3887,17 @@ function _contactBlockHtml(r){
   // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
   // Shown as text, never as a mailto link and never fed to the worker's auto-send list.
   // Sending one is Call Mode's POST /send. A mailto here would leave from this browser's account.
+  // 2026-11-02 (Alex: "a direct link to email from the board routing the specific property to the
+  // searched up one"): each one gets "Email, pre-filled", which opens THIS lead in Call Mode's
+  // composer for THAT address (_cmMail below). Still Call Mode's POST /send, never a mailto. Hidden
+  // while the board itself holds the lead (_boardMailHeld); Call Mode and the bridge check again.
   const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0);
-  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(esc).join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card. Sending it is the Call Mode bridge send.">Whitepages, pasted</span></span></div>';
+  const _mh = _boardMailHeld(r);
+  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(function(e){
+      return esc(e) + (_mh ? '' : ' <a class="cmmail" href="'+esc(_callModeUrl())+'#mail='+encodeURIComponent(r.case)+'" target="dfcall" data-c="'+esc(r.case)+'" data-em="'+esc(e)+'" onclick="return _cmMail(this)" title="Opens this property in Call Mode with the email to this address already written. It sends from the company address through the laptop send bridge, after the opt-out, bounce and stay checks.">&#9993; Email, pre-filled</a>');
+    }).join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card. Sending it is the Call Mode bridge send.">Whitepages, pasted</span>'
+    + (_mh ? ' <span class="cttag dnc" title="'+esc(_mh)+'">no email: '+esc(_mh)+'</span>' : '')
+    + '</span></div>';
   h += _csPeople(r);
   return h;
 }
