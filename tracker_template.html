@@ -3774,7 +3774,7 @@ function _contactLineHtml(r, ph, opts){
   // of keeping these numbers); only the written, owner-addressed message is withheld.
   // 'wpm' (pasted from whitepages.com on a Call Mode card) is call-only too, until a call on it
   // reaches a person: same rule as a Whitepages likely-owner number (Alejandro, 2026-10-22).
-  const _srcOwner = ['hh','nm','ag','xl','wpm'].indexOf(String(opts.src||'')) < 0;
+  const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0; // 'wpm' removed 2026-11-02: pasted Whitepages numbers are textable
   const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
@@ -6798,12 +6798,18 @@ function _textBodies(o){
        + pide+'.'+stopES;
   } else if(lp){
     // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
+    /* 2026-11-02 (Alejandro approved the tightened wording). Three edits, same facts:
+       "most options right now / shrink every week" -> "more options today than you will next
+       week" (concrete comparison instead of an abstract trend), the shared `ask` is replaced by
+       the single ask "text me back" (an either/or invites the reader to pick neither), and the
+       advisor call is time-boxed to 5 minutes, the same frame TEXT_SIT already uses. No new
+       claim, no invented deadline: a just-filed case still says only that it was filed. */
     en = hi+', '+me+' with biscayne solutions group. a case was just filed at the courthouse on '+stEN+'.'
-       + ' you have the most options right now and they shrink every week.'
-       + ask+', our advisor goes over them free.'+stopEN;
+       + ' you have more options today than you will next week.'
+       + ' text me back and our advisor walks you through them, 5 minutes, free.'+stopEN;
     es = hola+', soy '+me+' de biscayne solutions group. acaban de abrir un caso en la corte sobre '+stES+'.'
-       + ' ahora es cuando mas opciones tiene y cada semana quedan menos.'
-       + pide+', nuestro asesor se las explica gratis.'+stopES;
+       + ' hoy tiene mas opciones que la semana que viene.'
+       + ' escribame y nuestro asesor se las explica, 5 minutos, gratis.'+stopES;
   } else {
     en = hi+', '+me+" with biscayne solutions group. there's a court sale set for "+stEN+(inEN?' '+inEN:'')
        + " and your options shrink every week. we're not a lender."
