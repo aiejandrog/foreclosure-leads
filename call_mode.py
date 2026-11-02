@@ -4542,7 +4542,8 @@ function _wireNumList(){
    arrives, keep 'tel' and pair the NEW phone with Phone Link (or set 'gv'), so the printed number
    never carries the cold-dial volume. */
 var DIALER='tel';
-function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
+function phoneDigits(d){ d=String(d==null?'':d).replace(/\D/g,''); if(d.length===11 && d.charAt(0)==='1') d=d.slice(1); return d; }
+function dialHref(d){ d=phoneDigits(d); if(d.length!==10) return ''; return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+d : 'tel:+1'+d; }
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
    outcome-logging flow (screenOutcome, the after-call bar) lives on this page. So GV dials open in
    a separate tab/app and this page stays put, same as tel: always behaved. */
