@@ -298,21 +298,30 @@ print('\n-- first touches rotate across the warm-up senders; the main domain res
 MAIN = 'alejandro@bsgflorida.com'
 WU1, WU2 = 'alejandro@bsgfl.com', 'alejandro@biscaynesolutionsgroup.com'
 repo_senders = json.loads((HERE / 'senders.json').read_text(encoding='utf-8'))
-rec('repo senders.json: first touches from the two warm-up addresses, main domain not among them',
-    repo_senders.get('first_touch', {}).get('from') == [WU1, WU2])
+# 2026-11-02, at Alejandro's direction: the first_touch block was removed so first touches follow the lane map
+# (bsgflorida.com). The alias-rotation mechanism below is still tested against this fixture of the old block.
+FT_FIXTURE = {'from': [WU1, WU2], 'ramp_start': '2026-09-27',
+              'ramp': [{'through_day': 7, 'per_day': 10}, {'through_day': 14, 'per_day': 15},
+                       {'through_day': 21, 'per_day': 20}, {'through_day': 28, 'per_day': 30},
+                       {'through_day': 9999, 'per_day': 40}]}
 SU = T / 'sunit'
 SU.mkdir()
 seed(SU)
 S3 = load(SU / 'send_server.py', 'send_server_ft_senders')
-rec('repo config: first-touch cap is 10/address on its first day, never above the alias ramp',
-    all(S3._first_touch_cap(repo_senders, a, dt.date.fromisoformat(repo_senders['first_touch']['ramp_start'])) ==
-        min(10, S3._ramp_cap(repo_senders, a, dt.date.fromisoformat(repo_senders['first_touch']['ramp_start'])))
+rec('repo senders.json: no first_touch block, so first touches follow the lane map',
+    'first_touch' not in repo_senders and S3._first_touch_senders(repo_senders) == [])
+rec('repo senders.json: every lane sends as the main domain (aliases fail DMARC)',
+    set(repo_senders['lanes'].values()) == {MAIN})
+fixture_cfg = dict(repo_senders, first_touch=FT_FIXTURE)
+rec('fixture: first-touch cap is 10/address on its first day, never above the alias ramp',
+    all(S3._first_touch_cap(fixture_cfg, a, dt.date.fromisoformat(FT_FIXTURE['ramp_start'])) ==
+        min(10, S3._ramp_cap(fixture_cfg, a, dt.date.fromisoformat(FT_FIXTURE['ramp_start'])))
         for a in (WU1, WU2)))
-rec('repo config: 0 before first_touch.ramp_start',
-    S3._first_touch_cap(repo_senders, WU1, dt.date.fromisoformat(repo_senders['first_touch']['ramp_start']) - dt.timedelta(days=1)) == 0)
-rec('repo config: the ramp rises slowly (15 in week 2)',
-    S3._first_touch_cap(repo_senders, WU1, dt.date.fromisoformat(repo_senders['first_touch']['ramp_start']) + dt.timedelta(days=8))
-    == min(15, S3._ramp_cap(repo_senders, WU1, dt.date.fromisoformat(repo_senders['first_touch']['ramp_start']) + dt.timedelta(days=8))))
+rec('fixture: 0 before first_touch.ramp_start',
+    S3._first_touch_cap(fixture_cfg, WU1, dt.date.fromisoformat(FT_FIXTURE['ramp_start']) - dt.timedelta(days=1)) == 0)
+rec('fixture: the ramp rises slowly (15 in week 2)',
+    S3._first_touch_cap(fixture_cfg, WU1, dt.date.fromisoformat(FT_FIXTURE['ramp_start']) + dt.timedelta(days=8))
+    == min(15, S3._ramp_cap(fixture_cfg, WU1, dt.date.fromisoformat(FT_FIXTURE['ramp_start']) + dt.timedelta(days=8))))
 flat = {'main_domain': 'bsgflorida.com', 'ramp_start': day(40), 'ramp': [{'through_day': 9999, 'per_day': 100}],
         'lanes': {'default': MAIN}, 'first_touch': {'from': [WU1, MAIN, WU2, 'junk']}}
 rec('no first_touch ramp -> flat default of 10/day', S3._first_touch_cap(flat, WU1) == S3.FIRST_TOUCH_DEFAULT_PER_DAY == 10)
@@ -368,7 +377,7 @@ SW.mkdir()
 seed(SW)
 cfg = dict(repo_senders)
 cfg['ramp_start'] = day(40)                                          # alias ramp: 100/day, not binding
-cfg['first_touch'] = dict(repo_senders['first_touch'], ramp_start=TODAY.isoformat(),
+cfg['first_touch'] = dict(FT_FIXTURE, ramp_start=TODAY.isoformat(),
                           ramp=[{'through_day': 9999, 'per_day': 2}])  # 2 first touches per address today
 (SW / 'senders.json').write_text(json.dumps(cfg), encoding='utf-8')
 extra = {'zb%d@example.com' % i: {'v': 'ok', 'why': 'zerobounce:valid', 'd': day(1)} for i in range(10, 20)}

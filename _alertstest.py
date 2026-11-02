@@ -298,12 +298,9 @@ rec('the morning alert carries the bridge line and stays clean',
 rec('a hostile code is dropped, not published', 'x1' not in PA._top({'../etc/passwd': 1}) and PA._top({'ok_code': 2}) == 'ok_code x2')
 
 cfg = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'senders.json'), encoding='utf-8'))
-addrs = S._first_touch_senders(cfg)
-rec('repo ramp: two warm-up addresses', len(addrs) == 2)
-rec('repo ramp: cap 0 on 2026-09-26',
-    all(S._first_touch_cap(cfg, a, dt.date(2026, 9, 26)) == 0 for a in addrs))
-rec('repo ramp: cap 10 on 2026-09-27',
-    all(S._first_touch_cap(cfg, a, dt.date(2026, 9, 27)) == 10 for a in addrs))
+# 2026-11-02, at Alejandro's direction: no first_touch block, first touches follow the lane map.
+rec('repo senders.json: no first_touch block, so no warm-up first-touch addresses',
+    'first_touch' not in cfg and S._first_touch_senders(cfg) == [])
 
 print('-- laptop readiness --')
 
