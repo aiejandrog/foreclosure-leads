@@ -26,6 +26,7 @@ REASON = {
     "overdue": "next_step_overdue",
     "missing_next": "missing_next_step",
     "callable": "callable_follow_up",
+    "research": "stale_or_unverified_source",
     "unknown": "needs_manager_review",
 }
 
@@ -71,7 +72,8 @@ def _snapshot(row: dict[str, Any], note: dict[str, Any], evaluation_date: date |
     """Stable, non-sensitive evidence snapshot for a review report."""
     fields = ("status", "auction", "days", "saleBkAct", "bk", "bkWhy", "stay", "rfHold", "ddhold",
               "unanchored", "contact_hold", "sibclaimed", "lpDismissed", "suppressed",
-              "suppression", "dnc", "optout", "never_contact", "wpKey", "eqstate")
+              "suppression", "dnc", "optout", "never_contact", "clerk_stale", "source_stale",
+              "stale", "judgment_unknown", "bkdeg", "wpKey", "eqstate")
     values = {k: row.get(k) for k in fields if k in row}
     note_values = {k: note.get(k) for k in ("status", "optout", "dnc", "never_contact", "no",
                                              "contact_hold", "suppressed", "apptUnverified", "rfHold", "stay",
@@ -104,6 +106,10 @@ def classify(row: dict[str, Any], note: dict[str, Any] | None = None,
         action, reason = "hold", hold
     elif appointment_unverified:
         action, reason = "verify_equity", REASON["appointment_unverified"]
+    elif (row.get("clerk_stale") or row.get("source_stale") or row.get("stale")
+          or row.get("judgment_unknown") or row.get("eqstate") in ("unpriced", "unknown")
+          or row.get("bkdeg")):
+        action, reason = "research", REASON["research"]
     elif overdue:
         action, reason = "complete_overdue_next_step", REASON["overdue"]
     elif urgent:
@@ -167,3 +173,11 @@ def report(rows: list[dict[str, Any]], notes: dict[str, dict[str, Any]] | None =
         counts[item["action"]] = counts.get(item["action"], 0) + 1
     return {"generated_for": (today or date.today()).isoformat(), "total": len(items),
             "counts": counts, "items": items}
+
+
+def serialize_review(report_data: dict[str, Any]) -> dict[str, Any]:
+    """Make the report contract explicit: review-only data cannot trigger outreach."""
+    return {"review_only": True, "outreach_eligible": False,
+            "generated_for": report_data.get("generated_for"),
+            "total": report_data.get("total", 0), "counts": dict(report_data.get("counts") or {}),
+            "items": list(report_data.get("items") or [])}
