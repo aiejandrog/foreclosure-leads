@@ -6341,6 +6341,7 @@ function render(){
      phone must be told this one is taken. Claiming at dial-time would leave the most likely
      collision window completely unguarded. */
   _clmTake(cur.c);
+  wfResume();
   screenLead();
 }
 /* ONE NAV ON EVERY SURFACE (2026-10-24): Board / Call Mode / Morning Worker, the same trio the
@@ -9547,7 +9548,7 @@ __CWJS__
 __CWTIMERJS__
 var WF_TZ = 'America/New_York', WF_KEY = 'fcWfEvents', WF_TKEY = 'fcWfTimer';
 var WF = {store: CW.newStore(), list: [], err: ''};
-var WFDIAL = false, WFHID = false, WFREC = null, _CBQ = null, _CBDUE = Object.create(null), _CBFUT = 0, _CBHELD = [];
+var WFDIAL = false, WFHID = false, WFREC = null, WFAUTO = '', _CBQ = null, _CBDUE = Object.create(null), _CBFUT = 0, _CBHELD = [];
 function wfDevice(){ try{ return _deviceId(); }catch(e){ return 'dev-unknown'; } }
 function wfCaller(){ return String(caller() || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 function wfLoad(){
@@ -9581,6 +9582,10 @@ function wfBoot(){
   try{
     var saved = JSON.parse(localStorage.getItem(WF_TKEY) || 'null');
     WFREC = WFT.recover(saved);
+    /* A page reload mid-session (a deploy landing, iOS evicting the tab) used to leave the timer off
+       until he noticed and re-tapped Start. If the timer was running within the idle window, start a
+       NEW session for the same caller once a lead is on screen; the lost stretch stays unknown. */
+    if(saved && saved.status === 'running' && saved.callerId && Date.now() - (+saved.ts || 0) < 5 * 60000) WFAUTO = saved.callerId;
     localStorage.removeItem(WF_TKEY);
   }catch(e){ WFREC = null; }
 }
@@ -9626,7 +9631,19 @@ function wfDialReturn(){
    call after that went uncounted unless he re-tapped Start. A session paused only for the dialer or
    for another app now resumes when he is back; a manual Pause, an idle pause and End work do not. */
 function wfResume(){
-  try{ wfSyncCaller(); WFT.resume({callerId: wfCaller(), caseId: cur && cur.c}); }catch(e){}
+  try{
+    if(document.hidden) return;
+    wfSyncCaller();
+    var c = wfCaller(), cc = cur && cur.c;
+    if(WFAUTO){
+      if(WFAUTO !== c){ WFAUTO = ''; return; }
+      if(!cc) return;
+      WFAUTO = '';
+      if(WFT.state().status === 'stopped') WFT.start({callerId: c, caseId: cc});
+      return;
+    }
+    WFT.resume({callerId: c, caseId: cc});
+  }catch(e){}
 }
 document.addEventListener('click', function(ev){
   var b = ev.target && ev.target.closest ? ev.target.closest('[data-wf]') : null;

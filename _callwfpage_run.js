@@ -121,6 +121,21 @@ T('switching apps and back resumes without a prompt', asked === 0 && ctx.WFT.sta
 ctx.WFT.pause('manual'); documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; fire('visibilitychange');
 T('a manual Pause stays paused after switching apps', ctx.WFT.state().status === 'paused');
 ctx.WFT.stop('manual'); ctx.prompt = () => null;
+ctx.WFT.start({ callerId: ctx.wfCaller(), caseId: 'CASE-A' }); ctx.WFT.pause('empty_queue'); ctx.wfResume();
+T('a lead back on screen after the queue ran empty resumes Working', ctx.WFT.state().status === 'running');
+ctx.WFT.stop('manual');
+store.fcWfTimer = JSON.stringify({ status: 'running', callerId: ctx.wfCaller(), session: 'OLD-S', seg: 1, wall0: Date.now() - 120000, provisionalEndWall: Date.now() - 30000, ts: Date.now() - 30000 });
+ctx.WF.list = []; ctx.cur = null; ctx.wfBoot(); ctx.wfResume();
+T('after a reload, nothing starts before a lead is on screen', ctx.WFT.state().status === 'stopped');
+ctx.cur = A; ctx.wfResume();
+T('after a reload mid-session, Working restarts once a lead is on screen', ctx.WFT.state().status === 'running' && ctx.WFREC.unknownSeconds > 0);
+ctx.WFT.stop('manual');
+store.fcWfTimer = JSON.stringify({ status: 'running', callerId: ctx.wfCaller(), session: 'OLD-T', seg: 1, wall0: Date.now() - 3600000, provisionalEndWall: Date.now() - 1800000, ts: Date.now() - 1800000 });
+ctx.WF.list = []; ctx.wfBoot(); ctx.wfResume();
+T('a reload long after the last heartbeat does not restart the timer', ctx.WFT.state().status === 'stopped');
+store.fcWfTimer = JSON.stringify({ status: 'running', callerId: 'someone-else', session: 'OLD-U', seg: 1, wall0: Date.now() - 60000, provisionalEndWall: Date.now() - 10000, ts: Date.now() - 10000 });
+ctx.WF.list = []; ctx.wfBoot(); ctx.wfResume();
+T('a reload never restarts another caller\'s timer', ctx.WFT.state().status === 'stopped');
 T('every stored event validates', JSON.parse(store.fcWfEvents).every(e => ctx.CW.validate(e).ok));
 T('timer events never touch the notes store or any send/ledger key', !Object.keys(store).some(k => /optout|bounce|mail_sent|text_sent/i.test(k)));
 

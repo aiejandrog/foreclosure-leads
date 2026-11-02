@@ -13,9 +13,9 @@
  *     return the caller confirms, corrects or marks unknown, and the interval is labelled self-reported.
  *   - Start needs a selected caller and a current case. Switching caller ends the session first.
  *   - resume() (2026-11-02): a session paused ONLY because the caller left for the dialer or another
- *     app picks back up as a new segment when they come back, so one Start work covers a whole
- *     calling block instead of one dial. A manual Pause, an idle pause, an empty queue and a stopped
- *     session are never resumed. The stretch away is still not credited (dialer: self-report only).
+ *     app, or because the queue ran empty, picks back up as a new segment when they come back or a
+ *     lead is on screen again, so one Start work covers a whole calling block instead of one dial.
+ *     A manual Pause, an idle pause and a stopped session are never resumed. The stretch away is still not credited (dialer: self-report only).
  */
 (function (root) {
   'use strict';
@@ -81,9 +81,9 @@
       persist();
       return { ok: true, session_id: st.session };
     };
-    /* Pick a session back up after the caller returns from the dialer or another app. Only those two
-       pause reasons resume; the new segment starts NOW, so nothing from the time away is credited. */
-    var RESUMABLE = { dialer_launch: 1, background: 1 };
+    /* Pick a session back up after the caller returns from the dialer or another app, or a lead is
+       back on screen after the queue ran empty. Only those pause reasons resume; the new segment starts NOW, so nothing from the time away is credited. */
+    var RESUMABLE = { dialer_launch: 1, background: 1, empty_queue: 1 };
     api.resume = function (ctx) {
       if (st.status !== 'paused' || !RESUMABLE[st.pauseReason] || st.away) return { ok: false, resumed: false };
       if (ctx && ctx.callerId && ctx.callerId !== st.callerId) return { ok: false, resumed: false };

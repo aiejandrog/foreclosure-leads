@@ -118,6 +118,8 @@ function mk2(dev, extra) { const m = mk(Object.assign({ deviceId: dev, newId: un
   rec('idle pause never auto-resumes', i.t.resume({ callerId: 'C1' }).resumed === false && i.t.state().pauseReason === 'idle');
   const s2 = mk(); s2.t.start(CTX); s2.t.hidden(); s2.t.stop('manual');
   rec('End work is never resumed', s2.t.resume({ callerId: 'C1' }).resumed === false && s2.t.state().status === 'stopped');
+  const q = mk(); q.t.start(CTX); q.t.pause('empty_queue');
+  rec('empty-queue pause resumes when a lead is back', q.t.resume({ callerId: 'C1', caseId: 'X3' }).resumed === true);
   const c2 = mk(); c2.t.start(CTX); c2.t.hidden();
   rec('a different caller does not resume the old session', c2.t.resume({ callerId: 'C2' }).resumed === false); }
 console.log(fails + ' failure(s)'); process.exit(fails ? 1 : 0);
