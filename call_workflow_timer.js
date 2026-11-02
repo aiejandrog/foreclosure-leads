@@ -12,6 +12,10 @@
  *   - Backgrounding pauses at visibility loss. A manual dialer launch is not credited by itself; on
  *     return the caller confirms, corrects or marks unknown, and the interval is labelled self-reported.
  *   - Start needs a selected caller and a current case. Switching caller ends the session first.
+ *   - resume() (2026-11-02): a session paused ONLY because the caller left for the dialer or another
+ *     app picks back up as a new segment when they come back, so one Start work covers a whole
+ *     calling block instead of one dial. A manual Pause, an idle pause, an empty queue and a stopped
+ *     session are never resumed. The stretch away is still not credited (dialer: self-report only).
  */
 (function (root) {
   'use strict';
@@ -20,7 +24,7 @@
   T.create = function (o) {
     var idleMs = o.idleMs || 5 * 60000, hbMs = o.heartbeatMs || 15000;
     var st = { status: 'stopped', callerId: null, session: null, seg: 0, wall0: 0, mono0: 0, last: 0, hbAt: null, hbMono: 0, caseId: null,
-               away: null };
+               away: null, pauseReason: null };
     var seqN = 0;
     function iso(t) { return new Date(t).toISOString(); }
     function emit(type, payload, at, callerId) {
@@ -49,6 +53,7 @@
       var r = settle(endMono, reason);
       emit(stopped ? 'session_stopped' : 'session_paused', { _id: (stopped ? 'ss:' : 'sp:') + st.session + ':' + st.seg, session_id: st.session, reason: reason }, st.wall0 + Math.max(0, endMono - st.mono0));
       st.status = stopped ? 'stopped' : 'paused';
+      st.pauseReason = stopped ? null : reason;
       st.hbAt = null; persist();
       return r;
     }
@@ -59,7 +64,7 @@
       return false;
     }
     var api = {};
-    api.state = function () { return { status: st.status, session: st.session, callerId: st.callerId, seg: st.seg }; };
+    api.state = function () { return { status: st.status, session: st.session, callerId: st.callerId, seg: st.seg, pauseReason: st.status === 'paused' ? st.pauseReason : null }; };
     api.start = function (ctx) {
       if (!ctx || !ctx.callerId) return { ok: false, error: 'select a caller first' };
       if (!ctx.caseId) return { ok: false, error: 'open a lead first' };
@@ -75,6 +80,15 @@
       if (fresh) emit('session_started', { _id: 'st:' + st.session, session_id: st.session }, st.wall0);
       persist();
       return { ok: true, session_id: st.session };
+    };
+    /* Pick a session back up after the caller returns from the dialer or another app. Only those two
+       pause reasons resume; the new segment starts NOW, so nothing from the time away is credited. */
+    var RESUMABLE = { dialer_launch: 1, background: 1 };
+    api.resume = function (ctx) {
+      if (st.status !== 'paused' || !RESUMABLE[st.pauseReason] || st.away) return { ok: false, resumed: false };
+      if (ctx && ctx.callerId && ctx.callerId !== st.callerId) return { ok: false, resumed: false };
+      var r = api.start({ callerId: st.callerId, caseId: (ctx && ctx.caseId) || st.caseId });
+      return { ok: r.ok, resumed: r.ok };
     };
     api.interaction = function () { if (idleGuard()) return; if (st.status === 'running') st.last = o.mono(); };
     api.tick = function () {

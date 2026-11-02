@@ -39,10 +39,12 @@ function El() {
   };
 }
 const elCache = {};
+const docL = {};
+const fire = (n, ev) => (docL[n] || []).forEach(f => f(ev || { target: null }));
 const documentStub = {
   getElementById(id){ return elCache[id] || (elCache[id] = El()); },
   querySelector(){ return El(); }, querySelectorAll(){ return []; },
-  createElement(){ return El(); }, addEventListener(){},
+  createElement(){ return El(); }, addEventListener(n, f){ (docL[n] = docL[n] || []).push(f); },
   body: El(), documentElement: El(), hidden: false, title: '',
 };
 const ctx = {
@@ -104,6 +106,21 @@ T('session_started persisted to this phone only', JSON.parse(store.fcWfEvents).s
 T('bar says Working', /Working/.test(ctx.wfBarHtml()));
 ctx.WFT.pause('manual'); ctx.WFT.stop('manual');
 T('bar says Not timing after End', /Not timing/.test(ctx.wfBarHtml()));
+console.log('\n== start work survives a dial (2026-11-02) ==');
+ctx.cur = A; ctx.WFT.start({ callerId: ctx.wfCaller(), caseId: 'CASE-A' });
+ctx.WFDIAL = true; ctx.WFHID = false; ctx.WFT.launchDialer();
+T('tapping Call pauses for the dialer', ctx.WFT.state().status === 'paused');
+let asked = 0; ctx.prompt = () => { asked++; return '2'; };
+documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; fire('visibilitychange');
+T('coming back from the phone app asks once and resumes Working', asked === 1 && ctx.WFT.state().status === 'running' && /Working/.test(ctx.wfBarHtml()), ctx.WFT.state().status);
+ctx.WFDIAL = true; ctx.WFHID = false; ctx.WFT.launchDialer(); asked = 0;
+fire('click'); 
+T('a dial that never hid the page (laptop) settles on the next tap and resumes', asked === 1 && ctx.WFT.state().status === 'running');
+documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; asked = 0; fire('visibilitychange');
+T('switching apps and back resumes without a prompt', asked === 0 && ctx.WFT.state().status === 'running');
+ctx.WFT.pause('manual'); documentStub.hidden = true; fire('visibilitychange'); documentStub.hidden = false; fire('visibilitychange');
+T('a manual Pause stays paused after switching apps', ctx.WFT.state().status === 'paused');
+ctx.WFT.stop('manual'); ctx.prompt = () => null;
 T('every stored event validates', JSON.parse(store.fcWfEvents).every(e => ctx.CW.validate(e).ok));
 T('timer events never touch the notes store or any send/ledger key', !Object.keys(store).some(k => /optout|bounce|mail_sent|text_sent/i.test(k)));
 

@@ -9606,7 +9606,8 @@ function wfAct(a){
   wfSyncCaller();
   if(a === 'start'){
     var r = WFT.start({callerId: wfCaller(), caseId: cur && cur.c});
-    if(!r.ok) toast(r.error === 'select a caller first' ? 'Pick who is calling first (access code), then Start work.' : r.error);
+    if(!r.ok) toast(r.error === 'select a caller first' ? 'Pick who is calling first (access code), then Start work.'
+                  : r.error === 'open a lead first' ? 'Open a lead first, then Start work.' : r.error);
   } else if(a === 'pause') WFT.pause('manual');
   else if(a === 'end') WFT.stop('manual');
   wfPaint();
@@ -9616,16 +9617,29 @@ function wfDialReturn(){
   var a = prompt('You came back from a call. How many minutes were you on it or working it? Leave blank to count NOTHING for that stretch (this is your own estimate and is labelled self-reported).', '');
   var m = a == null ? NaN : parseFloat(a);
   var r = (isFinite(m) && m > 0) ? WFT.returnFromDialer({kind: 'confirm', seconds: m * 60}) : WFT.returnFromDialer({kind: 'unknown'});
+  wfResume();
   wfPaint();
   if(r && r.credited) toast('Counted ' + wfMin(r.credited) + ' min (self-reported)');
+}
+/* START WORK COVERS THE WHOLE BLOCK (2026-11-02). Every Call tap paused the timer for the dialer and
+   nothing ever restarted it, so after the first dial the bar read Paused / Start work again and every
+   call after that went uncounted unless he re-tapped Start. A session paused only for the dialer or
+   for another app now resumes when he is back; a manual Pause, an idle pause and End work do not. */
+function wfResume(){
+  try{ wfSyncCaller(); WFT.resume({callerId: wfCaller(), caseId: cur && cur.c}); }catch(e){}
 }
 document.addEventListener('click', function(ev){
   var b = ev.target && ev.target.closest ? ev.target.closest('[data-wf]') : null;
   if(b){ wfAct(b.getAttribute('data-wf')); ev.preventDefault(); }
 }, false);
-['click', 'touchstart', 'keydown', 'input'].forEach(function(n){ document.addEventListener(n, function(){ WFT.interaction(); }, true); });
+['click', 'touchstart', 'keydown', 'input'].forEach(function(n){ document.addEventListener(n, function(){
+  /* A dial that never backgrounded the page (laptop, tel: handed to another device): the first touch
+     back on the page is the return from that call. */
+  if(WFDIAL && !WFHID){ WFHID = true; wfDialReturn(); }
+  WFT.interaction();
+}, true); });
 document.addEventListener('visibilitychange', function(){
-  if(document.hidden){ WFHID = true; WFT.hidden(); } else { wfDialReturn(); }
+  if(document.hidden){ WFHID = true; WFT.hidden(); } else if(WFDIAL){ wfDialReturn(); } else { WFHID = false; wfResume(); }
   wfPaint();
 });
 setInterval(function(){ var r = WFT.tick(); if(r && r.idle) toast('Work timer paused: no activity for 5 minutes'); wfPaint(); }, 5000);
