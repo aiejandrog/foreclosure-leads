@@ -74,7 +74,8 @@ class FollowupShadowTests(unittest.TestCase):
     def test_every_row_gate_alias_is_visible_and_changes_snapshot(self):
         base = self.row()
         original = F.classify(base, {"status": "Contacted"}, TODAY)["source_snapshot"]
-        for field in ("dnc", "optout", "never_contact", "suppressed", "suppression", "bk"):
+        for field in ("dnc", "optout", "never_contact", "suppressed", "suppression", "bk",
+                      "clerk_stale", "source_stale", "stale", "judgment_unknown", "bkdeg"):
             changed = dict(base)
             changed[field] = True
             snap = F.classify(changed, {"status": "Contacted"}, TODAY)["source_snapshot"]
@@ -111,6 +112,18 @@ class FollowupShadowTests(unittest.TestCase):
         self.assertEqual(after["source_snapshot"]["fields"]["evaluation_date"], "2026-11-20")
         self.assertEqual(before["action"], "prioritize_follow_up")
         self.assertEqual(after["action"], "follow_up")
+
+    def test_stale_or_unknown_sources_remain_research_not_outreach(self):
+        for row in (self.row(clerk_stale=True), self.row(judgment_unknown=True), self.row(eqstate="unpriced"), self.row(bkdeg=1)):
+            got = F.classify(row, {"status": "Contacted", "nextStep": {"date": "2026-11-30", "what": "call"}}, TODAY)
+            self.assertEqual(got["action"], "research")
+
+    def test_serialized_report_is_review_only(self):
+        raw = F.report([self.row(case="A")], {"A": {"status": "Contacted"}}, TODAY)
+        out = F.serialize_review(raw)
+        self.assertTrue(out["review_only"])
+        self.assertFalse(out["outreach_eligible"])
+        self.assertEqual(out["items"][0]["case"], "A")
 
     def test_report_is_count_only_and_pure(self):
         rows = [self.row(case="A", auction="11/05/2026"), self.row(case="B", saleBkAct=True)]
