@@ -8749,6 +8749,12 @@ function screenOutcome(){
     : '';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
+    /* BACK TO THE NUMBERS (2026-11-02, Alex: "from when you click on a number ... i want to be able to
+       go back in case i wanted to press on another number"). Returns to this lead's card, same number
+       on the button, so another number can be picked. Logs no outcome and does not advance. The dial
+       tap's 'pending' row stays: the dialer did open, so it is an attempt, and it keeps counting toward
+       the 3-in-24h FTSA cap (the safe direction); the card's "dialed, no outcome logged" bar says so. */
+    +'<button id="ocback" class="ghost" style="margin:8px 0 2px">&lsaquo; Back to the numbers (nothing logged)</button>'
     +sessStrip()
     /* FIRST thing under the number: the moment it goes to voicemail there is no time to scroll. */
     +(_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
@@ -8767,6 +8773,11 @@ function screenOutcome(){
      outcome he eventually taps logs its own entry for that attempt. */
   wireBrief(document, r);
   if($('vmbtn')) $('vmbtn').onclick = function(){ vmOpen(r); };
+  if($('ocback')) $('ocback').onclick = function(){
+    try{ vmClose(); }catch(e){}
+    window._tapShieldUntil = Date.now() + 400;
+    screenLead();
+  };
   $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
