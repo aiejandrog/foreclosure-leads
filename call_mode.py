@@ -7137,6 +7137,16 @@ function screenMail(r, raw, back){
   var sending = false;
   $('mlgo').onclick = function(){
     if(sending) return;
+    /* Re-check at the irreversible boundary: another device/sync may have
+       changed opt-out, hold, reply, or ladder state since preview. */
+    var fresh = mailCheck(r, M.to);
+    if(fresh.why){
+      var gate = $('mlwhy');
+      if(gate){ gate.textContent = fresh.why; gate.style.display = 'block'; }
+      return;
+    }
+    /* Rebuild from the fresh row so stale preview text cannot be sent. */
+    M = composeMail(r, fresh.addr, lang());
     sending = true;
     $('mlgo').disabled = true;
     $('mlgo').textContent = 'Sending\u2026';
