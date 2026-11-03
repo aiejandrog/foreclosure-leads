@@ -219,3 +219,11 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Also for the attorney: a relative who says "stop" or "not interested" currently marks the whole lead (owner) do-not-contact / soft no. Conservative, unchanged here; confirm that is wanted.
 - Fallback in progress: PR open, not merged. Switch off by default.
 - Status: OPEN
+
+### D24: Remove the Whitepages "no text until a call reaches them" hold (thread "Make merges go live in Call Mode faster", 2026-11-03) -- LEGAL REVIEW in PR title
+- Touches: call_mode.py afterCall text panel (the 2026-10-22 likely-owner `pw 'l'` branch and the pasted `ps 'wpm'` branch are deleted); `_callnumlisttest.py`, `_calltextownertest.py` inverted to tripwires.
+- Alex chose "Remove it via LEGAL REVIEW PR" on 2026-11-03 (laptop had an uncommitted copy of this change dated 11-02).
+- Kept: suppression, text hold, FTSA 3-in-24h cap, bad number, do-not-text, relative / not-sure, household `hh` and name-only `nm` (call only), 8 AM-8 PM window. Board batch and send bridge unchanged.
+- Risk: a likely-owner or pasted number is unconfirmed; the text names the property and the filing, so a wrong number is a disclosure to a third party. Pasted numbers are not registry-checked (open attorney question).
+- Recommendation: attorney sign-off before merge, same question as the pasted-number DNC item.
+- Status: OPEN

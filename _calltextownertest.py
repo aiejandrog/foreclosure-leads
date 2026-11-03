@@ -115,11 +115,15 @@ rec('deed owner filed as a resident (ps hh) stays call-only, like the board', re
 rec('an owner number still gets the ladder text', res.get('owner/noanswer', {}).get('button') is True, res.get('owner/noanswer'))
 rec('a lead with no ps array still gets the ladder text', res.get('owner/no-ps', {}).get('button') is True, res.get('owner/no-ps'))
 rec('an owner number still gets the situational text', res.get('owner/appt', {}).get('button') is True, res.get('owner/appt'))
-rec('likely owner, no answer: held with its own wording', res.get('likely/noanswer', {}).get('button') is False
-    and 'Likely owner per Whitepages' in res.get('likely/noanswer', {}).get('txt', ''), res.get('likely/noanswer'))
-rec('likely owner, call reached them: the situational text is still offered (2026-10-22 rule kept)',
+# 2026-11-03 (Alejandro, LEGAL REVIEW): the Whitepages text hold was removed by request. A likely owner
+# and a pasted number are now textable WITHOUT a prior call. These inverted assertions are the
+# tripwire: if the gate comes back, they fail loudly.
+rec('likely owner, no answer: text is now offered (hold removed 2026-11-03)',
+    res.get('likely/noanswer', {}).get('button') is True, res.get('likely/noanswer'))
+rec('likely owner, call reached them: situational text still offered',
     res.get('likely/talked', {}).get('button') is True, res.get('likely/talked'))
-rec('pasted number has no text button', res.get('wpm/noanswer', {}).get('button') is False, res.get('wpm/noanswer'))
+rec('pasted number now has a text button (hold removed 2026-11-03)',
+    res.get('wpm/noanswer', {}).get('button') is True, res.get('wpm/noanswer'))
 rec('do-not-text still wins over the household note', 'do-not-text' in res.get('dnt+hh', {}).get('txt', ''), res.get('dnt+hh'))
 rec('suppressed still blocks an owner number', 'suppressed' in res.get('supp+owner', {}).get('txt', ''), res.get('supp+owner'))
 rec('stale list still blocks an owner number', res.get('held+owner', {}).get('button') is False, res.get('held+owner'))

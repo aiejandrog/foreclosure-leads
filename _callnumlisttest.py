@@ -187,10 +187,16 @@ r = row(lead('LK-FN', owners='MCKNIGHT-ADEONOJOBI,GINA',
 rec('a different first name is not enough', r['pw'][r['p'].index(D)] == 'h', r.get('pw'))
 _tx = call_mode._PAGE
 _i_dnt = _tx.index("This number is on the do-not-text list. Call only.")
-_i_lk = _tx.index("Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.")
 _i_sit = _tx.index("else if(sitKeys.length){")
-rec('text button: likely-owner hold sits after the hard gates and before every text offer',
-    _i_dnt < _i_lk < _i_sit and "charAt(phIdx)==='l' && !sitKeys.length" in _tx)
+rec('text button: hard gates still precede every text offer', _i_dnt < _i_sit)
+# 2026-11-03 (Alejandro, LEGAL REVIEW): the Whitepages likely-owner text hold was REMOVED. A likely
+# owner is textable without a prior call. This asserts it stays removed - if someone re-adds the gate,
+# this goes red instead of silently re-blocking the operator's texts.
+rec('likely-owner text hold is gone', "Likely owner per Whitepages, not confirmed yet" not in _tx
+    and "charAt(phIdx)==='l' && !sitKeys.length" not in _tx)
+rec('pasted-Whitepages text hold is gone', "Pasted from Whitepages, not confirmed yet" not in _tx)
+rec('household and name-match holds are KEPT (not the owner, do not disclose)',
+    "['hh','nm'].indexOf(String((r.ps||[])[phIdx]||'')) > -1" in _tx)
 
 _pg2 = call_mode._PAGE
 
