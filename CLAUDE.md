@@ -250,7 +250,7 @@ that carries a name or number inline, gitignore it in the same commit.
 publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
 
-**Six paths publish, and all six are gated (the last three only since 2026-09-17, `access_codes.py` since 2026-10-08):**
+**Seven paths publish, and all seven are gated (the last three only since 2026-09-17, `access_codes.py` since 2026-10-08, `quick_publish.py` since 2026-11-03):**
 
 | path | when | gates |
 |---|---|---|
@@ -260,6 +260,7 @@ behaviour, not a bug to route around.
 | `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
 | `run-phones.bat` | manual one-click | healthcheck + publish_guard (since 2026-09-19) |
 | `access_codes.py` create / revoke | manual | healthcheck + publish_guard (since 2026-10-08) |
+| `quick_publish.py` | manual, after a merge | healthcheck + publish_guard; refuses while a refresh owns the repo |
 
 `run-phones.bat` was missing from this table entirely, which is how it stayed an ungated publish
 path for a month after the other four were gated. It is the manual twin of `run-phones-nightly.bat`
@@ -278,6 +279,13 @@ If you add another publish path, gate it in the same commit. `grep -l publish_gu
 check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
 `access_codes.py` was that hole from 876a831 (2026-10-08): it ran `publish_site.py` straight after
 `make_tracker()` with neither gate, until `publish_gates_pass()` landed the same day.
+
+`quick_publish.py` (2026-11-03) is how merged code reaches the live board and Call Mode without
+waiting for the nightly: `--ff-only` pull, `make_tracker()` on the last refresh's
+`leads_final.json`, both gates, commit `docs/index.html` + `docs/call`, `publish_site.py`. No scrape,
+lookup, spend or send. It refuses while `refresh-running.flag` is fresh or a runner lease is live,
+and undoes its local commit when the engine push fails so main is never left ahead of origin.
+Test: `python _quickpublishtest.py`.
 
 ## Whitepages Pro (owner phones + relatives)
 
