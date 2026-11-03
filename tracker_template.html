@@ -17762,6 +17762,21 @@ function _mergeLead(local, remote){
     (local.wpm||[]).concat(remote.wpm||[]).forEach(x => { const d = String(x||'').replace(/\D/g,''); if(d.length===10 && _w.indexOf(d)<0) _w.push(d); });
     out.wpm = _w;
   }
+  /* numbers tagged Relative / Not sure on a Call Mode paste box (notes.wpr, [{n, k:'r'|'u', ts, by}]):
+     union by number so a tag on either phone survives; 'r' wins over 'u'. Call only: nothing on this
+     board reads wpr as an owner number (not the text batch, not the phone box). */
+  if((local.wpr||[]).length || (remote.wpr||[]).length){
+    const _rm = {}, _ro = [];
+    (local.wpr||[]).concat(remote.wpr||[]).forEach(x => {
+      if(!x || typeof x !== 'object') return;
+      const d = String(x.n||'').replace(/\D/g,'').slice(-10), k = x.k;
+      if(d.length !== 10 || (k !== 'r' && k !== 'u')) return;
+      if(_rm[d]){ if(k === 'r') _rm[d].k = 'r'; return; }
+      _rm[d] = Object.assign({}, x, {n:d}); _ro.push(_rm[d]);
+    });
+    if(JSON.stringify(_ro) !== JSON.stringify(local.wpr||[])) ch.note = true;
+    out.wpr = _ro;
+  }
   // emails pasted from Whitepages on a Call Mode card (notes.wpe): union, same reason
   if((local.wpe||[]).length || (remote.wpe||[]).length){
     const _e = [];

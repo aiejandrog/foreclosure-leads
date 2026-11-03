@@ -863,6 +863,26 @@ def _merge_note(cur, inc):
         if a or b:
             # UNION ONLY. A merge must never resurrect a number someone retired.
             out[field] = sorted({str(x) for x in list(a) + list(b)})
+    # Numbers tagged Relative / Not sure in Call Mode (notes.wpr, [{n, k: 'r'|'u', ts, by}], 2026-11-03).
+    # Union by number so neither phone's tag is lost; 'r' (relative) wins over 'u'. Call only: nothing
+    # on this bridge reads wpr as an owner number.
+    a, b = cur.get('wpr') or [], inc.get('wpr') or []
+    if a or b:
+        _rm, _ro = {}, []
+        for x in list(a) + list(b):
+            if not isinstance(x, dict):
+                continue
+            d = re.sub(r'\D', '', str(x.get('n') or ''))[-10:]
+            k = x.get('k')
+            if len(d) != 10 or k not in ('r', 'u'):
+                continue
+            if d in _rm:
+                if k == 'r':
+                    _rm[d]['k'] = 'r'
+                continue
+            _rm[d] = dict(x, n=d)
+            _ro.append(_rm[d])
+        out['wpr'] = _ro
     for field in ('optout', 'wrongown'):
         a, b = cur.get(field), inc.get(field)
         if a and b:
@@ -908,7 +928,7 @@ def _merge_note(cur, inc):
     elif cay > iay and not _dead and cs in _AFTER_YES_STAGES:
         out['status'] = cs        # the stored save is newer: an older push does not walk the stage back
     for k, v in inc.items():
-        if k in out or k in ('touches', 'dials', 'optlog', 'badph', 'dntph', 'status', 'cooldownH'):
+        if k in out or k in ('touches', 'dials', 'optlog', 'badph', 'dntph', 'status', 'cooldownH', 'wpr'):
             continue
         if _dead and k in _AFTER_YES_KEYS:
             continue          # a suppressed lead is not handed a next step by a fill
