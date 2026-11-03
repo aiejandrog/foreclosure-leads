@@ -3265,6 +3265,15 @@ def history_coverage(total, shipped, audit=None):
                        'total': int(total), 'shipped': int(shipped)})
 
 
+def _relative_dial_on():
+    """The relatives switch (2026-11-03). Calling a relative of the owner is NOT cleared by the attorney
+    (s.501.1377 and privacy: a relative learns about the filing). Off unless DEALFLOW_RELATIVE_DIAL=1
+    at build time. Off, Call Mode never opens the dialer on a number tagged relative; it only records
+    a call the operator already placed on his own phone, so the dial still counts and has an outcome.
+    Turning it on is the attorney's or Alejandro's call: set the variable, do not edit the gate."""
+    return os.environ.get('DEALFLOW_RELATIVE_DIAL', '').strip() == '1'
+
+
 def _text_hold_json():
     """What Call Mode shows before it can ask the bridge (text_hold.status() at build time).
 
@@ -3444,7 +3453,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1),
-                       ('__MAILJS__', 1), ('__MAILPAUSE__', 1), ('__MAILLLC__', 1)):
+                       ('__MAILJS__', 1), ('__MAILPAUSE__', 1), ('__MAILLLC__', 1), ('__RELDIAL__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -3511,6 +3520,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                                                 if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson))) \
                 .replace('__TEXTHOLD__', _text_hold_json()) \
+                .replace('__RELDIAL__', 'true' if _relative_dial_on() else 'false') \
                 .replace('__HISTCOV__', histcov) \
                 .replace('__CWJS__', _read_module('call_workflow.js')) \
                 .replace('__CWTIMERJS__', _read_module('call_workflow_timer.js')) \
@@ -4269,6 +4279,10 @@ body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .pastecall .pcgo:disabled{opacity:.4}
 .pastecall .pcnote{font-size:11.5px;line-height:1.4;color:var(--mut);margin-top:6px}
 .pastecall .pcnote.bad{color:#ff9d94}
+.pckind{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px}
+.pckind .pcklab{font-size:12px;color:var(--mut);margin-right:2px}
+.pckind button{min-height:38px;padding:0 12px;border-radius:999px;border:1px solid #2a3f6b;background:#132244;color:inherit;font:inherit;font-size:13px}
+.pckind button.on{background:#2a3f6b;border-color:var(--gold);font-weight:700}
 .pastecall .pcgo.mail{background:#1F6FEB}
 .pastecall .pcbtns{display:flex;gap:6px;margin-top:8px}
 .pastecall .pcbtns .pcgo{margin-top:0;flex:1}
@@ -4355,6 +4369,9 @@ var TEXTPERSON=__TEXTPERSON__;
 /* Baked at build from text_hold.status() (the do-not-contact list's age). A live /health poll below
    can freshen it. A failed poll keeps the bake: the phone often cannot see the laptop. */
 var TEXTHOLD=__TEXTHOLD__;
+/* Relatives switch, baked from DEALFLOW_RELATIVE_DIAL (see _relative_dial_on). false = a number tagged
+   relative is log-only: no tel: link, no redial, the call he placed on his phone is recorded. */
+var RELDIAL=__RELDIAL__;
 var TEXTHOLDBAKE=TEXTHOLD;
 var TEXTHOLDLIVE=false;
 /* Baked history coverage (call_mode.history_coverage): ledgers_ok, capped, counts only. */
@@ -4374,6 +4391,11 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    which is the overwhelming majority and the case that needs no words at all. */
 function _phSrcNote(r, i){
   var s = (r.ps||[])[i] || '';
+  /* A number he tagged Relative or Not sure on a paste box (notes.wpr) wins over its source tag. */
+  var _rk = (typeof relKind === 'function') ? relKind(r, i) : '';   /* node tests extract this function alone */
+  if(_rk === 'r') return 'RELATIVE of the owner (you tagged it). Ask only for ' + esc(r.on||'the owner') + ' to call you back: do not mention the foreclosure, the sale, the case or any amount. Calling relatives is NOT cleared by the attorney yet'
+    + (RELDIAL ? '.' : ': Call Mode does not dial it. Dial it on your phone, then tap the log button so the call counts.') + ' Call only, never texted.';
+  if(_rk === 'u') return 'You were not sure whose number this is. Ask for ' + esc(r.on||'the owner') + ' by name and confirm who you are speaking with before you mention the filing. Call only, never texted.';
   if(s==='wpm') return 'You pasted this number from Whitepages. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. Pasted numbers are not checked against the do-not-call registry.';
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
   if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. No text to this number until a call reaches them.';
@@ -4456,7 +4478,7 @@ function _dncNote(r){
    he does not have to find the highlighted row to know what he is about to dial. Labels only. */
 function _numChecks(r, k){
   var p = r.p||[]; if(k < 0 || k >= p.length) return '';
-  var src = _srcChip(r, k), line = _lineChip(r, k), wp = _wpChip(r, k), pasted = String((r.ps||[])[k]||'') === 'wpm';
+  var src = _srcChip(r, k), line = _lineChip(r, k), wp = _wpChip(r, k), pasted = ['wpm','wpr'].indexOf(String((r.ps||[])[k]||'')) > -1;
   if(pasted){
     src = '<span class="chip">pasted from Whitepages</span>';
     line = '<span class="chip" style="opacity:.7">line not checked (pasted)</span>';
@@ -4465,7 +4487,9 @@ function _numChecks(r, k){
   if(!src) src = '<span class="chip" style="opacity:.7">source not recorded</span>';
   if(!line) line = '<span class="chip" style="opacity:.7">line not checked</span>';
   if(!wp) wp = (r.pw == null) ? '<span class="chip" style="opacity:.7">Whitepages not checked</span>' : '';
-  return '<div class="numchk"><span class="chip hot">on the button</span>' + src + line + wp + '</div>';
+  var _rkk = (typeof relKind === 'function') ? relKind(r, k) : '';
+  var rel = _rkk === 'r' ? '<span class="chip bad">relative &middot; legal review</span>' : (_rkk === 'u' ? '<span class="chip">not sure whose</span>' : '');
+  return '<div class="numchk"><span class="chip hot">on the button</span>' + rel + src + line + wp + '</div>';
 }
 function _dncRows(r){
   var h = '', dn = r.dn||[];
@@ -4515,7 +4539,8 @@ function _numList(r){
       + _lineChip(r, k)
       + (s==='hh' && 'owl'.indexOf(String(r.pw||'').charAt(k)||'x')<0 ? '<span class="chip bad">not the owner &middot; household</span>' : '')
       + (s==='nm' ? '<span class="chip bad">name only &middot; maybe a namesake</span>' : '')
-      + (s==='wpm' ? '<span class="chip">pasted from Whitepages</span>' : '')
+      + ((s==='wpm' || s==='wpr') ? '<span class="chip">pasted from Whitepages</span>' : '')
+      + (typeof relKind !== 'function' ? '' : relKind(r, k)==='r' ? '<span class="chip bad">relative</span>' : (relKind(r, k)==='u' ? '<span class="chip">not sure whose</span>' : ''))
       + (t==='m' ? '<span class="chip">mobile</span>' : (t==='l' ? '<span class="chip">landline</span>' : ''))
       + (isBad ? '<span class="chip bad">marked bad</span>' : (n ? '<span class="chip">rung '+n+'&times;</span>' : ''))
       + '</button>';
@@ -6802,19 +6827,101 @@ function wpmNums(c){
   (((notes[c]||{}).wpm)||[]).forEach(function(x){ var d = _lkDigits(x); if(d && out.indexOf(d) < 0) out.push(d); });
   return out;
 }
-function _addNum(r, num){
+function _addNum(r, num, tag){
   var p = r.p = r.p || [];
   for(var k=0;k<p.length;k++){ if(String(p[k]).replace(/\D/g,'').slice(-10) === num) return k; }
   r.r = r.r || []; r.ps = r.ps || [];
   while(r.r.length < p.length) r.r.push('');
   while(r.ps.length < p.length) r.ps.push('');
-  p.push(num); r.r.push(''); r.ps.push('wpm');
+  p.push(num); r.r.push(''); r.ps.push(tag || 'wpm');
   return p.length - 1;
 }
 /* Pasted numbers saved on this phone, the board or a teammate's phone ride along on their lead. */
 function applyPasted(){
-  ROWS.forEach(function(r){ wpmNums(r.c).forEach(function(num){
-    if(!pasteCheck(r, num).why) _addNum(r, num); }); });
+  ROWS.forEach(function(r){
+    wpmNums(r.c).forEach(function(num){ if(!pasteCheck(r, num).why) _addNum(r, num); });
+    wprList(r.c).forEach(function(e){ if(!pasteCheck(r, e.n).why) _addNum(r, e.n, 'wpr'); });
+  });
+}
+/* ══════════════ WHOSE NUMBER: OWNER / RELATIVE / NOT SURE (2026-11-03, Alex) ══════════════
+   "I need a better system for logging the phone calls I am dialing on the relatives from Whitepages."
+   He dials relatives he finds on whitepages.com; those calls were placed on his phone and never
+   reached the lead's log, so the dial count, the outcome and the next session knew nothing.
+   The paste boxes (card and after-call) now ask whose number it is. Owner keeps the old path
+   (notes.wpm). Relative and Not sure go to notes.wpr = [{n, k:'r'|'u', ts, by}], a list nothing else
+   reads as an owner number: the board's text batch, the worker, the send bridge and notes.phone never
+   see it. Both are call only, never texted from Call Mode. A tag on a number the lead already had (a
+   traced number that turned out to be the sister's) is recorded the same way and wins over its source.
+   LEGAL REVIEW: calling relatives is not cleared by the attorney. With RELDIAL false (the default) a
+   relative number is log-only: no tel: link, no redial; the button records a call he already placed so
+   it still counts as one dial with an outcome. A visible warning shows whenever Relative is picked and
+   on the card of a relative number. Not checked against the do-not-call registry, same as any paste. */
+var PASTEKIND = 'o', PASTEKIND_C = null;
+function wprList(c){
+  var out = [], seen = {};
+  (((notes[c]||{}).wpr)||[]).forEach(function(e){
+    var d = _lkDigits(e && e.n), k = e && e.k;
+    if(!d || (k !== 'r' && k !== 'u')) return;
+    if(seen[d] != null){ if(k === 'r') out[seen[d]].k = 'r'; return; }   /* relative wins over not sure */
+    seen[d] = out.length; out.push({n:d, k:k});
+  });
+  return out;
+}
+function relKindNum(c, num){
+  var d = _lkDigits(num); if(!d) return '';
+  var l = wprList(c);
+  for(var j=0;j<l.length;j++) if(l[j].n === d) return l[j].k;
+  return '';
+}
+function relKind(r, i){ return r ? relKindNum(r.c, (r.p||[])[i]) : ''; }
+function relLogOnly(r, i){ return !RELDIAL && relKind(r, i) === 'r'; }
+function _pasteKind(r){ if(!r || PASTEKIND_C !== r.c){ PASTEKIND = 'o'; PASTEKIND_C = r ? r.c : null; } return PASTEKIND; }
+function _kindHtml(id){
+  return '<div class="pckind" id="' + id + '" role="group" aria-label="Whose number is it">'
+    + '<span class="pcklab">Whose number?</span>'
+    + [['o','Owner'],['r','Relative'],['u','Not sure']].map(function(x){
+        return '<button type="button" data-k="' + x[0] + '" class="' + (PASTEKIND === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('')
+    + '</div><div class="pckwarn" id="' + id + 'w">' + _kindWarn(PASTEKIND) + '</div>';
+}
+function _kindWarn(k){
+  if(k === 'r') return '<div class="warnbar" style="margin:6px 0 0">&#9888; RELATIVE: calling relatives is <b>not cleared by the attorney</b> yet. '
+    + 'Ask only for the owner to call you back. Do not say foreclosure, auction, sale, case or any amount to a relative. Call only, never texted.'
+    + (RELDIAL ? '' : '<br><b>Call Mode will not dial it.</b> Dial it on your phone, then tap the log button so the call counts and gets an outcome.')
+    + '</div>';
+  if(k === 'u') return '<div class="nc" style="margin-top:6px">Not sure whose: ask for the owner by name and confirm who you are speaking with before you mention the filing. Call only, never texted.</div>';
+  return '';
+}
+function _wireKind(id, onChange){
+  var box = $(id); if(!box) return;
+  Array.prototype.forEach.call(box.querySelectorAll('button[data-k]'), function(b){
+    b.onclick = function(){
+      PASTEKIND = b.getAttribute('data-k');
+      Array.prototype.forEach.call(box.querySelectorAll('button[data-k]'), function(x){ x.classList.toggle('on', x === b); });
+      var w = $(id + 'w'); if(w) w.innerHTML = _kindWarn(PASTEKIND);
+      if(onChange) onChange();
+    };
+  });
+}
+/* The go-button label for a pasted number of the chosen kind. */
+function _kindGoLabel(num){
+  if(PASTEKIND === 'r' && !RELDIAL) return 'Save & log a call to ' + fmt(num);
+  return 'Save & call ' + fmt(num);
+}
+/* Save a relative / not-sure number: notes.wpr only (never wpm, never notes.phone). Same refusals as
+   any paste (pasteCheck). Returns the _savePasted shape or null. */
+function _saveOther(r, raw, k){
+  var v = pasteCheck(r, raw);
+  if(!v.num || v.why){ toast(v.why || 'Paste a 10-digit US number', {bad:true}); return null; }
+  var p0 = (r.p||[]).length;
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+  n.wpr = n.wpr || [];
+  var hit = null;
+  n.wpr.forEach(function(e){ if(e && _lkDigits(e.n) === v.num) hit = e; });
+  if(!hit) n.wpr.push({n:v.num, k:k, ts:Date.now(), by:caller()});
+  else if(k === 'r') hit.k = 'r';
+  saveNotes(); try{ queueSync(); }catch(e){}
+  var idx = _addNum(r, v.num, 'wpr');
+  return {k:idx, num:v.num, was:(idx < p0)};
 }
 /* A number that is do-not-call on ANY lead is do-not-call here (2026-11-01). pasteCheck and lkSave used to look
    only at the lead's own `dn`, so a number flagged on lead B could be typed into lead A and dialled. Two sources:
@@ -7190,6 +7297,7 @@ function pasteBlock(r){
   return '<div class="pastecall">'
     + '<div class="ltag" style="margin:0 0 6px">' + (em ? 'FOUND A NUMBER OR EMAIL ON WHITEPAGES?' : 'FOUND ANOTHER NUMBER ON WHITEPAGES?') + '</div>'
     + _pcWpLinks(r)
+    + (_pasteKind(r), _kindHtml('pck'))
     + '<div class="pcrow"><input id="pcnum" type="text" inputmode="' + (em ? 'email' : 'tel') + '" autocomplete="off" autocapitalize="off" spellcheck="false" '
     +   'placeholder="' + (em ? 'Paste the number or email here' : 'Paste the number here') + '" aria-label="' + (em ? 'Phone number or email from Whitepages' : 'Phone number from Whitepages') + '">'
     + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="pcclip" class="pcclip">Paste</button>' : '')
@@ -7217,7 +7325,7 @@ function _wirePaste(r){
     }
     var v = pasteCheck(r, inp.value);
     go.disabled = !v.num || !!v.why;
-    go.textContent = v.num ? 'Save & call ' + fmt(v.num) : 'Save & call now';
+    go.textContent = v.num ? _kindGoLabel(v.num) : (PASTEKIND === 'r' && !RELDIAL ? 'Save & log a call' : 'Save & call now');
     go.className = 'pcgo';
     if(sv){ sv.style.display = ''; sv.disabled = go.disabled; }
     if(why){ why.innerHTML = (v.num && v.why) ? '<b>' + esc(v.why) + '</b>' : base; why.className = 'pcnote' + (v.num && v.why ? ' bad' : ''); }
@@ -7225,6 +7333,7 @@ function _wirePaste(r){
   Array.prototype.forEach.call(document.querySelectorAll('.pcem'), function(b){
     b.onclick = function(){ screenMail(r, b.getAttribute('data-em')); };
   });
+  _wireKind('pck', upd);
   inp.addEventListener('input', upd);
   inp.addEventListener('paste', function(){ setTimeout(upd, 0); });
   inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' && !go.disabled){ ev.preventDefault(); go.click(); } });
@@ -7238,6 +7347,8 @@ function _wirePaste(r){
 /* Save a checked pasted number on this lead (notes.wpm, the board's phone box when empty, the dial
    list). Returns {k: its index in r.p, was: true when it was already on the lead} or null. */
 function _savePasted(r, raw){
+  var _kd = _pasteKind(r);
+  if(_kd === 'r' || _kd === 'u') return _saveOther(r, raw, _kd);
   var v = pasteCheck(r, raw);
   if(!v.num || v.why){ toast(v.why || 'Paste a 10-digit US number', {bad:true}); return null; }
   var p0 = (r.p||[]).length;
@@ -7531,16 +7642,17 @@ function _dialTaps(dl, td, me){
   }).length;
 }
 function sessStrip(){
-  var me = caller(), dials = 0, cases = {}, appts = 0, convs = 0, mails = 0, td = today();
+  var me = caller(), dials = 0, rels = 0, cases = {}, appts = 0, convs = 0, mails = 0, td = today();
   var goal = dialGoal(), st = dayStats();
   Object.keys(notes||{}).forEach(function(c){
     if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
     var n = notes[c]||{}, hit = false;
     var k = _dialTaps(n.dials, td, me);
-    if(k){ dials += k; hit = true; }
+    if(k){ dials += k; hit = true; rels += _dialTaps((n.dials||[]).filter(function(x){ return x && x.rel; }), td, me); }
     (n.touches||[]).forEach(function(t){
       if(t.d===td && t.ch==='call' && (!me || !t.by || t.by===me)){
         hit = true;
+        if(t.rel) return;   /* a relative is not the owner: no conversation or appointment counted */
         if(/APPOINTMENT/i.test(t.out||'')) appts++;
         if(/talked|appointment|callback/i.test(t.out||'')) convs++;
       }
@@ -7554,7 +7666,7 @@ function sessStrip(){
       + 'reload this page: what you log now lives only in it.</div>' : '')
     + '<div class="sess" id="sess" title="Tap to set today\'s dial goal">'
     + '<div class="sessbar"><i style="width:'+Math.round(Math.min(1, dials/goal)*100)+'%"></i></div>'
-    + 'TODAY: <b>'+dials+'</b>'+(goal?'<span class="goal"> / '+goal+'</span>':'')+' dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
+    + 'TODAY: <b>'+dials+'</b>'+(goal?'<span class="goal"> / '+goal+'</span>':'')+' dial'+(dials===1?'':'s')+(rels?' ('+rels+' to relatives or not-sure numbers)':'')+' &middot; <b>'+ppl+'</b> '
     + (ppl===1?'person':'people') + (convs?(' &middot; <b>'+convs+'</b> conv'+(convs===1?'':'s')):'')
     + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
     + (mails?(' &middot; <b>'+mails+'</b> email'+(mails===1?'':'s')):'')
@@ -8414,7 +8526,9 @@ function screenLead(){
     try{
       var n = notes[r.c] = notes[r.c] || {status:'',note:''};
       n.dials = n.dials || [];
-      n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'pending', by:caller()});
+      var _pr = {d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'pending', by:caller()};
+      if(relKind(r, phIdx)) _pr.rel = relKind(r, phIdx);   /* relative / not-sure dial: still ONE dial, tagged */
+      n.dials.push(_pr);
       /* 2026-09-10: this used to write n.cooldownH = 6. That field is the CONTACT cooldown and it
          SYNCS — it reached the board on a bare-date tie, where the clock never reads dials, so the
          6 suppressed nothing there and instead sat on the note permanently, rescaling the next
@@ -8428,7 +8542,16 @@ function screenLead(){
      tap dials (a callback they asked for is legitimate outside the window, a cold dial is not, and
      the rep is the one who knows which this is). The capture-phase listener runs before the
      outcome-screen handler above, so an un-armed tap paints nothing. (2026-09-25) */
-  if(!fl.ok){
+  /* RELATIVE, SWITCH OFF: the button records, it does not dial (see RELDIAL). Capture phase,
+     preventDefault only, so the logging handler above still runs and opens the outcome screen. */
+  var _lo = relLogOnly(r, phIdx);
+  if(_lo){
+    var _dl = $('dial');
+    _dl.setAttribute('href', '#'); _dl.removeAttribute('target');
+    _dl.innerHTML = '&#9998; Log a call you placed to ' + fmt(d);
+    _dl.addEventListener('click', function(ev){ ev.preventDefault(); }, true);
+  }
+  if(!fl.ok && !_lo){
     var _da = $('dial');
     _da.dataset.href = _da.getAttribute('href');
     _da.setAttribute('href', '#');
@@ -8812,7 +8935,8 @@ function screenOutcome(){
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
        the proven path (the main dial button), and returning from the dialer lands right back on
        this screen because the SCREEN guard defers any sync repaint. */
-    +'<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
+    + (relLogOnly(r, phIdx) ? '<div class="nc" style="margin-top:8px">Relative: dial it on your phone. Call Mode only logs it.</div>'
+        : '<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>')
     + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
     +'</div><div class="sheetpad"></div>';
@@ -8825,10 +8949,12 @@ function screenOutcome(){
     window._tapShieldUntil = Date.now() + 400;
     screenLead();
   };
-  $('redial').addEventListener('click', function(){
+  if($('redial')) $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
-    n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial', by:caller()});
+    var _rr = {d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial', by:caller()};
+    if(relKind(r, phIdx)) _rr.rel = relKind(r, phIdx);
+    n.dials.push(_rr);
     touched=true; saveNotes(); queueSync();
   });
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
@@ -9185,9 +9311,10 @@ function nextNumPrompt(r, k, onNo){
    something as well"). Same checks and same save as the card's box (pasteCheck, notes.wpm), then the
    "call it next?" question with that number. A number already on the lead is not added twice. Not
    line-checked with Twilio and not registry-checked for do-not-call, same as the card's box. */
-function _afterPasteHtml(){
+function _afterPasteHtml(r){
+  _pasteKind(r);
   return '<div class="afterlab">Found another number for them? Paste it</div>'
-    + '<div class="pastecall" style="margin-top:0"><div class="pcrow">'
+    + '<div class="pastecall" style="margin-top:0">' + _kindHtml('apk') + '<div class="pcrow">'
     + '<input id="apnum" type="text" inputmode="tel" autocomplete="off" spellcheck="false" placeholder="Paste a number" aria-label="Another phone number for this owner">'
     + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" id="apclip" class="pcclip">Paste</button>' : '')
     + '</div><button type="button" id="apgo" class="pcgo" disabled>Add it and call it next</button>'
@@ -9203,10 +9330,12 @@ function _wireAfterPaste(r, back){
       for(var j=0;j<(r.p||[]).length;j++) if(String(r.p[j]).replace(/\D/g,'').slice(-10) === v.num) k = j;
     }
     go.disabled = !v.num || !!v.why;
-    go.textContent = !v.num ? 'Add it and call it next'
-                   : (k >= 0 ? 'Already number ' + (k + 1) + ', call it next' : 'Add ' + fmt(v.num) + ' and call it next');
+    var _lg = (PASTEKIND === 'r' && !RELDIAL) ? 'log a call to it' : 'call it next';
+    go.textContent = !v.num ? 'Add it and ' + _lg
+                   : (k >= 0 ? 'Already number ' + (k + 1) + ', ' + _lg : 'Add ' + fmt(v.num) + ' and ' + _lg);
     if(why){ why.innerHTML = (v.num && v.why) ? '<b>' + esc(v.why) + '</b>' : base; why.className = 'pcnote' + (v.num && v.why ? ' bad' : ''); }
   }
+  _wireKind('apk', upd);
   inp.addEventListener('input', upd);
   inp.addEventListener('paste', function(){ setTimeout(upd, 0); });
   inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' && !go.disabled){ ev.preventDefault(); go.click(); } });
@@ -9273,6 +9402,9 @@ function afterCall(r, o, nextC){
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
+  /* RELATIVE / NOT SURE (2026-11-03): never texted from here, whatever the outcome. A text names the
+     property and the case; a relative never asked about this homeowner's foreclosure. */
+  else if(typeof relKind === 'function' && relKind(r, phIdx)) txt = '<div class="nc">' + (relKind(r, phIdx) === 'r' ? 'Relative’s number' : 'Not confirmed whose number this is') + ': call only, never texted.</div>';
   /* LIKELY OWNER, NOT CONFIRMED (2026-10-22, Alejandro: "calls yes, but no texting them until a call
      confirms it's them"). A Whitepages likely-owner number gets a text only after a call on it
      reached a person (talked, appointment, callback, not interested); no answer, voicemail and the
@@ -9365,7 +9497,7 @@ function afterCall(r, o, nextC){
         ? '<button id="nph" class="ghost" style="margin-top:14px">&#128222; Try their next number ('
           + (_nextPh + 1) + ' of ' + r.p.length + ')</button>'
         : '')
-    + (hardSuppressed(r) ? '' : _afterPasteHtml())
+    + (hardSuppressed(r) ? '' : _afterPasteHtml(r))
     + '<button id="nx" style="margin-top:14px">Next lead &rarr;</button>'
     + '</div><div class="sheetpad"></div>';
   /* An open deal with no dated next step does not walk away: that is how an appointment dies. Every
@@ -9545,10 +9677,17 @@ function logOutcome(r,o,digits){
      silently collapsing the second identical tap while stamping "✓ logged" read as a broken
      button — the caller now tells the truth: "dial counted, already logged today". */
   var fresh = !(last && last.d===today() && last.ch==='call' && last.out===o.t);
+  /* WHOSE LINE (2026-11-03): a call on a number tagged relative / not sure is still one dial and one
+     touch, tagged rel so it can be counted as a subset. Not the owner: it does not set "Contacted"
+     and it does not clear the owner's soft no. A relative's no or stop is still logged on the lead
+     as it is today (the conservative direction). */
+  var _rel = (typeof relKindNum === 'function') ? relKindNum(r.c, digits) : '';
   // `by` = who made this call (from their access code). It is what lets the other phone say
   // "called 2h ago by Carlos" instead of skipping a lead for no visible reason.
   if(fresh){
-    n.touches.push({d:today(),ts:nowTS(),tsu:Date.now(),ch:'call',out:o.t,by:caller()});
+    var _tch = {d:today(),ts:nowTS(),tsu:Date.now(),ch:'call',out:o.t,by:caller()};
+    if(_rel) _tch.rel = _rel;
+    n.touches.push(_tch);
     _ftsaCapToast(n);
   }
   n.dials=n.dials||[];
@@ -9568,6 +9707,7 @@ function logOutcome(r,o,digits){
   }
   var _row = {d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()};
   if(_tsd) _row.tsd = _tsd;
+  if(_rel) _row.rel = _rel;
   n.dials.push(_row);
   n.cooldownH=o.h;
   /* THE NO POLICY (see noState). A soft no that is served on its one resurface is spent by ANY
@@ -9580,7 +9720,7 @@ function logOutcome(r,o,digits){
   }
   else if(o.k==='dnc'){ n.no='hard'; n.noAt=n.noAt||Date.now(); stopEverywhere(r, digits); }
   else if(o.k==='wrong'){ n.wrongown=n.wrongown||today(); n.status=n.status||'Wrong number'; }
-  else if(o.k==='talked') n.status=n.status||'Contacted';
+  else if(o.k==='talked'){ if(!_rel) n.status=n.status||'Contacted'; }
   else if(o.k==='notint'){
     n.status=n.status||'Not interested';
     if(n.no!=='hard'){
@@ -9588,7 +9728,7 @@ function logOutcome(r,o,digits){
       else if(_ns.open){ n.resurf=Math.max(1, n.resurf||0); }   // second no on the resurface = permanent
     }
   }
-  if((o.k==='talked'||o.k==='appt'||o.k==='callback') && n.no==='soft'){ delete n.no; delete n.noAt; delete n.noWasLp; delete n.resurf; }
+  if(!_rel && (o.k==='talked'||o.k==='appt'||o.k==='callback') && n.no==='soft'){ delete n.no; delete n.noAt; delete n.noWasLp; delete n.resurf; }
   else if(o.k==='callback') n.status=n.status||'Callback';
   else if(o.k==='gate') n.status=n.status||'Gatekeeper';
   else if(o.k==='badnum'){

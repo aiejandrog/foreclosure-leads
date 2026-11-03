@@ -208,3 +208,14 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Recommendation: A. Alex asked for the link on 11-02; the send path and every check behind it are unchanged.
 - Fallback in progress: PR left open for Alex; nothing merged.
 - Status: OPEN
+
+### D23: Relatives found on Whitepages: may Call Mode dial them, or only log calls placed by hand? (thread "Log Whitepages relative dials in Call Mode", 2026-11-03) -- LEGAL REVIEW in PR title
+- Touches: call_mode.py paste boxes, screenLead dial button, logOutcome (no-policy: a relative's talk/callback no longer clears the owner's soft no); send_server.py `_merge_note` (/notes, union of the new `wpr` field); tracker_template.html `_mergeLead`. Trigger: calling relatives is NOT attorney-cleared (memory: "RELATIVES dialing needs attorney (NOT waived)"), s.501.1377 and privacy; pasted numbers are not checked against the do-not-call registry (already an open attorney question).
+- What shipped behind the switch: paste boxes ask Owner / Relative / Not sure. Relative and Not sure are saved to `notes.wpr` (never `wpm`, never `notes.phone`), call only, never texted. Every call is one dial row (relative ones tagged `rel`), and the strip shows the relative subset. With `DEALFLOW_RELATIVE_DIAL` unset (default), a relative number has no tel: link and no redial: the button only records a call already placed on the phone, with its outcome. A red warning shows whenever Relative is picked and on the card.
+- Option A: keep the switch OFF until the attorney answers in writing; Alex keeps dialing relatives from his phone and logs them here | Risk: the calls are happening anyway; this only records them. Logged relative dials count toward the person's FTSA 3-in-24h cap (conservative).
+- Option B: attorney approves; set `DEALFLOW_RELATIVE_DIAL=1` on the laptop (user env var, sign out/in for scheduled tasks), rebuild | Risk: Call Mode itself places calls to people who are not the homeowner; script must stay "ask the owner to call back", nothing about the filing.
+- Option C: attorney says no relatives at all | Then stop dialing them by hand too; leave the switch off (logging stays useful for anything already dialed).
+- Recommendation: A now, attorney question on the Patrick list: "May we call relatives of a homeowner in foreclosure, from numbers on Whitepages, with a script that only asks the owner to call back?"
+- Also for the attorney: a relative who says "stop" or "not interested" currently marks the whole lead (owner) do-not-contact / soft no. Conservative, unchanged here; confirm that is wanted.
+- Fallback in progress: PR open, not merged. Switch off by default.
+- Status: OPEN
