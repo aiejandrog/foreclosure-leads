@@ -9405,23 +9405,17 @@ function afterCall(r, o, nextC){
   /* RELATIVE / NOT SURE (2026-11-03): never texted from here, whatever the outcome. A text names the
      property and the case; a relative never asked about this homeowner's foreclosure. */
   else if(typeof relKind === 'function' && relKind(r, phIdx)) txt = '<div class="nc">' + (relKind(r, phIdx) === 'r' ? 'Relative’s number' : 'Not confirmed whose number this is') + ': call only, never texted.</div>';
-  /* LIKELY OWNER, NOT CONFIRMED (2026-10-22, Alejandro: "calls yes, but no texting them until a call
-     confirms it's them"). A Whitepages likely-owner number gets a text only after a call on it
-     reached a person (talked, appointment, callback, not interested); no answer, voicemail and the
-     rest stay call-only. */
-  else if(String(r.pw||'').charAt(phIdx)==='l' && !sitKeys.length)
-                            txt = '<div class="nc">Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.</div>';
-  /* A number PASTED from whitepages.com (ps 'wpm') follows the same rule: the operator read it off a
-     page, nobody has confirmed whose phone it is, and it was never registry-checked. Call only
-     until a call on it reaches a person. */
-  else if(String((r.ps||[])[phIdx]||'')==='wpm' && !sitKeys.length)
-                            txt = '<div class="nc">Pasted from Whitepages, not confirmed yet. No text until a call reaches them.</div>';
+  /* LIKELY OWNER / PASTED FROM WHITEPAGES (2026-11-03, Alejandro, LEGAL REVIEW): the 2026-10-22
+     "no text until a call reaches them" hold is REMOVED. A Whitepages likely-owner number ('l') and a
+     number pasted from whitepages.com (ps 'wpm') now get the same text offers as an owner number.
+     Every hard gate above (suppression, text hold, FTSA cap, bad number, do-not-text, relative) and
+     the 8 AM-8 PM window below still apply. Household and name-only numbers stay call-only below. */
   /* NOT THE OWNER'S NUMBER: no text, whatever the call outcome (2026-11-01). The board's
      textablePhones() withholds 'hh' (household member at the address) and 'nm' (name-only match,
      maybe a namesake) because the text names the property and the case, which tells somebody who
      never asked about this homeowner's foreclosure. This panel had no such gate: the number card
      says "do not discuss the case with them" and the panel still offered the ladder text and every
-     situational one. A LIKELY owner ('l', also tagged hh) is handled above and keeps its own rule. */
+     situational one. A LIKELY owner ('l', also tagged hh) is exempt: textable since 2026-11-03. */
   else if(['hh','nm'].indexOf(String((r.ps||[])[phIdx]||'')) > -1 && String(r.pw||'').charAt(phIdx)!=='l')
                             txt = '<div class="nc">' + ((r.ps||[])[phIdx]==='nm'
                               ? 'Name-only match, may be a different person. Not the owner’s confirmed number: call only, no text.'
