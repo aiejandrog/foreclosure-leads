@@ -5493,6 +5493,20 @@ function isThreeDay(r){
   var owed=(+r.py||0)||(+r.jg||0); if(!(+r.v>0) || !(owed>0) || +r.v<=owed) return false;
   return _caseYear(r.c) >= 2024;
 }
+/* EQUITY LANE (2026-11-04, Alex: "create a section on the call mode where its for leads that have
+   equity"). The STRICT reading: the bake's equity card says a figure may be spoken (eqc.q =
+   equity_state.card() may_quote: the recorded chain was traced clear/priced AND a real judgment is
+   posted, never a tax-deed opening bid) and that figure is positive (eqc.n > 0). A traced chain with
+   no judgment (eqc.f only), an unpriced ceiling and the scraped `e` percentage are NOT equity here:
+   unknown equity is not equity. Homeowner lane, so balloon (investor) rows stay out. It is a lane
+   predicate and nothing else: pool() still runs supReason() (opt-out, Dead, stay, DNC, diligence,
+   already called), the seat split and the claim filter on it like every other lane, and the build's
+   call_rows gates ran before any row reached this page. Sorted soonest sale first in _freshFirst. */
+function isEquity(r){
+  if(!r || isBalloon(r)) return false;
+  var c = r.eqc;
+  return !!(c && c.q && typeof c.n === 'number' && c.n > 0);
+}
 var LANES = [
   {k:'d3',     lbl:'3-DAY',             pred:isThreeDay, hide0:true},
   {k:'email',  lbl:'Emailed / replied', pred:isEmailFU,  hide0:true, ch:'email'},
@@ -5503,6 +5517,10 @@ var LANES = [
   {k:'lp',     lbl:'Fresh filings',     pred:function(r){ return !!r.lp && !isBalloon(r); }, hide0:false},
   {k:'bal',    lbl:'Balloon',           pred:isBalloon,  hide0:true},
   {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true},
+  /* Before 'all' and after the date lanes on purpose: _openCase() takes the FIRST lane holding a
+     lead, so a lead opened from the board still lands in its date lane. head() draws this button
+     second, right after All lanes. */
+  {k:'eq',     lbl:'Has equity',        pred:isEquity,   hide0:false},
   /* ALL LANES (call workflow spec section 3): the union of the lanes above, once per case. Appended
      LAST so the "open this lead from a board list" search finds a specific lane first. It carries
      no `ch`, so supReason() applies the ordinary neutral channel context: matching the email lane
@@ -5946,12 +5964,17 @@ function _wkChips(r){
   try{ if(wqSet()[r.c]) h += '<span class="chip ok">from Morning Worker &middot; call list</span>'; }catch(e){}
   return h ? '<div class="chips">'+h+'</div>' : '';
 }
+/* Equity lane order: soonest sale first. A passed/held sale (-1) or a lead with no sale date (fresh
+   filing) sorts after every dated sale. Applied inside the reply / worker / contact tiers, the same
+   way the Fresh-filings lane applies newest-filing-first. */
+function _eqSaleKey(r){ var d = liveDays(r); return (d === null || d < 0) ? 1e9 : d; }
 function _freshFirst(rows, ln){
   var tagged = rows.map(function(r, ix){
     var t = _contactTier(r);
-    return {r:r, ix:ix, t:t, w:_wkTier(r), f:(ln==='lp' && t === 0) ? _filedMs(r) : 0};
+    return {r:r, ix:ix, t:t, w:_wkTier(r), f:(ln==='lp' && t === 0) ? _filedMs(r) : 0,
+            s:(ln==='eq') ? _eqSaleKey(r) : 0};
   });
-  tagged.sort(function(a, b){ return (a.w - b.w) || (a.t - b.t) || (b.f - a.f) || (a.ix - b.ix); });
+  tagged.sort(function(a, b){ return (a.w - b.w) || (a.t - b.t) || (a.s - b.s) || (b.f - a.f) || (a.ix - b.ix); });
   return tagged.map(function(o){ return o.r; });
 }
 /* How many leads in the lane just painted nobody has reached on any channel. Shown in head() so a
@@ -6518,7 +6541,7 @@ function head(){
      Hidden only at raw 0 (an empty build must never read as a broken build); a lane whose rows are
      all suppressed shows a dimmed 0, because hiding it would be exactly the silent cap the line
      below forbids. */
-  var laneBtns = [laneDef('all')].concat(LANES.filter(function(L){ return L.k !== 'all'; })).map(function(L){
+  var laneBtns = [laneDef('all'), laneDef('eq')].concat(LANES.filter(function(L){ return L.k !== 'all' && L.k !== 'eq'; })).map(function(L){
     var C = _LANEN[L.k] || {raw:0, net:0};
     if(!C.raw && L.hide0) return '';
     return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+(C.raw && !C.net?' dim':'')+'">'
