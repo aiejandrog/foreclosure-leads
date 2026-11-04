@@ -9995,15 +9995,107 @@ function wfBoot(){
   }catch(e){ WFREC = null; }
 }
 function wfMin(sec){ return Math.round(sec / 60); }
+/* CLOCK IN (2026-11-04, Alex: "measure the actual time from where we are now and make it known on
+   this clock that you only have X amount of time to work"). The bar used to show only "confirmed
+   work", which drops every call, every app switch and every 5 quiet minutes, so a real hour of
+   dialing read 4 min. The clock is plain wall time from the tap: it keeps running through calls,
+   app switches and reloads, and only Pause and End work stop it. He picks how long he has when he
+   clocks in and the bar counts that down. One record per phone (fcClock), for this caller only;
+   nothing is synced, and it touches no send, note, ledger or suppression path.
+   The confirmed-work events above still run underneath for the callback list. */
+var CLK_KEY = 'fcClock', CLK_UPKEY = 'fcClockUpAt', _CLKUP = 0;
+function clkGet(){
+  try{
+    var k = JSON.parse(localStorage.getItem(CLK_KEY) || 'null');
+    if(!k || typeof k.start !== 'number' || k.by !== wfCaller()) return null;
+    return k;
+  }catch(e){ return null; }
+}
+function clkPut(k){ try{ if(k) localStorage.setItem(CLK_KEY, JSON.stringify(k)); else localStorage.removeItem(CLK_KEY); }catch(e){} }
+function clkWorkedMs(k, now){
+  if(!k) return 0;
+  now = now || Date.now();
+  var end = k.pauseAt || now;
+  return Math.max(0, end - k.start - (k.pausedMs || 0));
+}
+function clkLeftMs(k, now){ return k && k.planMin ? k.planMin * 60000 - clkWorkedMs(k, now) : null; }
+function clkFmt(ms, up){
+  /* worked rounds down and time left rounds up, so the two always add up to the plan */
+  var neg = ms < 0, m = (up ? Math.ceil : Math.floor)(Math.abs(ms) / 60000), h = Math.floor(m / 60);
+  return (neg ? '-' : '') + h + ':' + ('0' + (m % 60)).slice(-2);
+}
+function clkWords(ms){
+  var m = Math.round(Math.abs(ms) / 60000), h = Math.floor(m / 60);
+  return (h ? h + ' h ' : '') + (m % 60) + ' min';
+}
+function clkClock(t){ try{ return new Date(t).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}); }catch(e){ return ''; } }
+function clkIn(planMin){
+  var c = wfCaller();
+  if(!c){ toast('Pick who is calling first (access code), then clock in.'); return; }
+  planMin = +planMin || 0;
+  clkPut({by: c, start: Date.now(), planMin: planMin > 0 ? Math.round(planMin) : 0, pausedMs: 0, pauseAt: 0, upToast: 0});
+  try{ WFT.start({callerId: c, caseId: cur && cur.c}); }catch(e){}
+  toast(planMin > 0 ? 'Clocked in. You have ' + clkWords(planMin * 60000) + '.' : 'Clocked in.');
+}
+function clkPause(){ var k = clkGet(); if(k && !k.pauseAt){ k.pauseAt = Date.now(); clkPut(k); } try{ WFT.pause('manual'); }catch(e){} }
+function clkResume(){
+  var k = clkGet();
+  if(k && k.pauseAt){ k.pausedMs = (k.pausedMs || 0) + Math.max(0, Date.now() - k.pauseAt); k.pauseAt = 0; clkPut(k); }
+  try{ WFT.start({callerId: wfCaller(), caseId: cur && cur.c}); }catch(e){}
+}
+function clkOut(){
+  var k = clkGet();
+  if(k){
+    var w = clkWorkedMs(k);
+    try{ localStorage.setItem('fcClockLast', JSON.stringify({by: k.by, start: k.start, end: k.pauseAt || Date.now(), workedMs: w, planMin: k.planMin})); }catch(e){}
+    toast('Clocked out. You worked ' + clkWords(w) + '.');
+  }
+  clkPut(null);
+  try{ WFT.stop('manual'); }catch(e){}
+}
+function clkAdd(min){ var k = clkGet(); if(k){ k.planMin = (k.planMin || Math.ceil(clkWorkedMs(k) / 60000)) + min; k.upToast = 0; clkPut(k); } }
+function clkAskOther(){
+  var a = prompt('How many hours do you have to work? (for example 1.5)', '');
+  var h = a == null ? NaN : parseFloat(a);
+  if(isFinite(h) && h > 0 && h <= 16) clkIn(h * 60); else if(a != null) toast('Type the hours as a number, like 2 or 1.5');
+}
+function clkLine(k, now){
+  now = now || Date.now();
+  var w = clkWorkedMs(k, now), left = clkLeftMs(k, now);
+  return 'Worked ' + clkFmt(w) + (left == null ? '' : (left > 0 ? ' \u00b7 ' + clkFmt(left, true) + ' left of ' + clkFmt(k.planMin * 60000)
+                                                          : ' \u00b7 TIME UP (' + clkFmt(k.planMin * 60000) + ' done)'));
+}
+function clkTick(){
+  var k = clkGet(), el = document.getElementById('clk-t');
+  if(!k) return;
+  if(el) el.textContent = clkLine(k);
+  var left = clkLeftMs(k);
+  if(left != null && left <= 0 && !k.pauseAt && !k.upToast){
+    k.upToast = 1; clkPut(k);
+    toast('Time is up: you planned ' + clkWords(k.planMin * 60000) + '. Finish this call, then End work or add time.');
+    try{ if(navigator.vibrate) navigator.vibrate([300, 150, 300]); }catch(e){}
+    wfPaint();
+  }
+}
 function wfBarHtml(){
   wfSyncCaller();
-  var s = WFT.state(), run = s.status === 'running', c = wfCaller();
-  var sec = 0; try{ sec = CW.activeSeconds(WF.store, c, {from: Date.now() - 86400000, to: Date.now() + 1}); }catch(e){}
-  var h = '<div class="wfbar"><b>' + (run ? 'Working' : (s.status === 'paused' ? 'Paused' : 'Not timing')) + '</b>'
-    + (run ? '<button class="wfb" data-wf="pause">Pause</button><button class="wfb" data-wf="end">End work</button>'
-           : '<button class="wfb go" data-wf="start">Start work</button>' + (s.status === 'paused' ? '<button class="wfb" data-wf="end">End work</button>' : ''))
-    + '<span>counted in the last 24 h: ' + wfMin(sec) + ' min (confirmed work only)</span></div>';
-  if(WFREC && WFREC.unknownSeconds > 0) h += '<div class="supn">About ' + wfMin(WFREC.unknownSeconds) + ' min from the last session was not saved and is NOT counted.</div>';
+  var k = clkGet(), h;
+  if(!k){
+    var last = null; try{ last = JSON.parse(localStorage.getItem('fcClockLast') || 'null'); }catch(e){}
+    var lastTxt = (last && last.by === wfCaller() && Date.now() - last.end < 86400000)
+      ? '<span>last shift: ' + clkWords(last.workedMs) + ', clocked out ' + esc(clkClock(last.end)) + '</span>' : '';
+    h = '<div class="wfbar"><b>Not clocked in</b><span>How long do you have?</span>'
+      + '<button class="wfb go" data-wf="in60">1 h</button><button class="wfb go" data-wf="in120">2 h</button>'
+      + '<button class="wfb go" data-wf="in180">3 h</button><button class="wfb go" data-wf="in240">4 h</button>'
+      + '<button class="wfb" data-wf="inother">Other</button>' + lastTxt + '</div>';
+  } else {
+    var left = clkLeftMs(k), up = left != null && left <= 0;
+    h = '<div class="wfbar"' + (up ? ' style="color:#F6E9C8;background:#5a1d1d;border-radius:8px;padding:4px 8px"' : '') + '>'
+      + '<b>' + (k.pauseAt ? 'Paused' : 'Clocked in ' + esc(clkClock(k.start))) + '</b>'
+      + '<span id="clk-t" style="font-size:15px;font-weight:800;color:' + (up ? '#F6E9C8' : 'var(--gold)') + ';font-variant-numeric:tabular-nums">' + esc(clkLine(k)) + '</span>'
+      + (k.pauseAt ? '<button class="wfb go" data-wf="resume">Resume</button>' : '<button class="wfb" data-wf="pause">Pause</button>')
+      + '<button class="wfb" data-wf="add30">+30 min</button><button class="wfb" data-wf="end">End work</button></div>';
+  }
   if(WF.err) h += '<div class="supn" style="background:#3d2c08;color:#F6E9C8">' + esc(WF.err) + '</div>';
   return h;
 }
@@ -10014,22 +10106,23 @@ function wfSyncCaller(){
 }
 function wfAct(a){
   wfSyncCaller();
-  if(a === 'start'){
-    var r = WFT.start({callerId: wfCaller(), caseId: cur && cur.c});
-    if(!r.ok) toast(r.error === 'select a caller first' ? 'Pick who is calling first (access code), then Start work.'
-                  : r.error === 'open a lead first' ? 'Open a lead first, then Start work.' : r.error);
-  } else if(a === 'pause') WFT.pause('manual');
-  else if(a === 'end') WFT.stop('manual');
+  var m = /^in(\d+)$/.exec(a || '');
+  if(m) clkIn(+m[1]);
+  else if(a === 'inother') clkAskOther();
+  else if(a === 'start') clkIn(0);
+  else if(a === 'pause') clkPause();
+  else if(a === 'resume') clkResume();
+  else if(a === 'add30') clkAdd(30);
+  else if(a === 'end') clkOut();
   wfPaint();
 }
 function wfDialReturn(){
   if(!WFDIAL || !WFHID) return; WFDIAL = false; WFHID = false;
-  var a = prompt('You came back from a call. How many minutes were you on it or working it? Leave blank to count NOTHING for that stretch (this is your own estimate and is labelled self-reported).', '');
-  var m = a == null ? NaN : parseFloat(a);
-  var r = (isFinite(m) && m > 0) ? WFT.returnFromDialer({kind: 'confirm', seconds: m * 60}) : WFT.returnFromDialer({kind: 'unknown'});
+  /* No "how many minutes" question any more (2026-11-04): the clock-in clock counts the call itself,
+     and asking after each of 125 dials was the friction. The confirmed-work events record it as unknown. */
+  WFT.returnFromDialer({kind: 'unknown'});
   wfResume();
   wfPaint();
-  if(r && r.credited) toast('Counted ' + wfMin(r.credited) + ' min (self-reported)');
 }
 /* START WORK COVERS THE WHOLE BLOCK (2026-11-02). Every Call tap paused the timer for the dialer and
    nothing ever restarted it, so after the first dial the bar read Paused / Start work again and every
@@ -10039,7 +10132,10 @@ function wfResume(){
   try{
     if(document.hidden) return;
     wfSyncCaller();
-    var c = wfCaller(), cc = cur && cur.c;
+    var c = wfCaller(), cc = cur && cur.c, k = clkGet();
+    var ws = WFT.state();
+    if(k && !k.pauseAt && cc && (ws.status === 'stopped' || (ws.status === 'paused' && ws.pauseReason !== 'dialer_launch'))){
+      WFAUTO = ''; WFT.start({callerId: c, caseId: cc}); return; }
     if(WFAUTO){
       if(WFAUTO !== c){ WFAUTO = ''; return; }
       if(!cc) return;
@@ -10064,7 +10160,8 @@ document.addEventListener('visibilitychange', function(){
   if(document.hidden){ WFHID = true; WFT.hidden(); } else if(WFDIAL){ wfDialReturn(); } else { WFHID = false; wfResume(); }
   wfPaint();
 });
-setInterval(function(){ var r = WFT.tick(); if(r && r.idle) toast('Work timer paused: no activity for 5 minutes'); wfPaint(); }, 5000);
+setInterval(function(){ WFT.tick(); wfPaint(); }, 5000);
+setInterval(clkTick, 1000);
 wfBoot();
 
 /* REQUESTED CALLBACKS. Only an owner-asked call with a concrete due time. A reminder after a
