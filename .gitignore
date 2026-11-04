@@ -864,3 +864,4 @@ footprint.local.json
 REPLY-DRAFTS-*
 JESSE-RUN-*.log
 evidence/
+!_callcoachtest.py
