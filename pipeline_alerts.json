@@ -1,66 +1,66 @@
 {
  "alerts": [
   {
-   "at": "2026-11-04T09:03:20-05:00",
-   "key": "bk-lookup",
-   "severity": "fail",
-   "text": "Federal bankruptcy pull is 36h old (limit 36h)."
-  },
-  {
-   "at": "2026-11-04T09:03:20-05:00",
+   "at": "2026-11-04T09:13:08-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 20.0% (2 of 10 sent on 2026-11-01): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 20.0% (2 of 10 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-11-04T09:03:20-05:00",
-   "key": "laptop-readiness",
+   "at": "2026-11-04T09:13:08-05:00",
+   "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "Evening readiness check last ran 85h ago."
+   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage, lead data freshness."
   },
   {
-   "at": "2026-11-04T09:03:20-05:00",
+   "at": "2026-11-04T09:13:08-05:00",
+   "key": "laptop-readiness",
+   "severity": "fail",
+   "text": "Laptop readiness (checked 11-04 09:13): battery 13% (under 50%); 2 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync, DealFlow Sheets CRM); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+  },
+  {
+   "at": "2026-11-04T09:13:08-05:00",
    "key": "optout-sync",
    "severity": "fail",
    "text": "07:15 opt-out sync failed on 2026-11-04 (steps: ledger_sync)."
   },
   {
-   "at": "2026-11-04T09:03:20-05:00",
+   "at": "2026-11-04T09:13:08-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-04T09:03:20-05:00",
+   "at": "2026-11-04T09:13:08-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-04T09:03:20-05:00",
+ "published_at": "2026-11-04T09:13:08-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 3,
-   "filings": 2568,
-   "holds": 589,
+   "errors": 4,
+   "filings": 2667,
+   "holds": 579,
    "last_http_status": 0,
-   "leads_checked": 7,
-   "match_s": 4,
-   "needing_search": 4258,
+   "leads_checked": 23,
+   "match_s": 3,
+   "needing_search": 4265,
    "provider": "courtlistener",
-   "pull_age_h": 36.04,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "network",
-   "requests_used": 73,
-   "searched_this_run": 7,
+   "reason": "time_budget",
+   "requests_used": 50,
+   "searched_this_run": 23,
    "starved_runs": 0,
-   "truncated": 0
+   "truncated": 2
   },
   "bounce": {
    "ceiling": 0.1,
@@ -104,10 +104,11 @@
    "readable": false
   },
   "health_fails": {
-   "fresh": false,
+   "fresh": true,
    "names": [
     "skiptrace freshness",
-    "RULE: ARV-comp coverage"
+    "RULE: ARV-comp coverage",
+    "lead data freshness"
    ]
   },
   "morning_sends": {
@@ -128,13 +129,18 @@
    "worker_run": {
     "ev": {
      "autostart_countdown": 1,
+     "autostart_run": 1,
+     "run_paused": 1,
+     "send_answer": 1,
      "worker_loaded": 1
     },
     "no_email": {},
     "queued": 21,
     "readable": true,
-    "refused": {},
-    "rows": 2,
+    "refused": {
+     "optout_stale": 1
+    },
+    "rows": 5,
     "skipped": {}
    }
   },
@@ -160,18 +166,17 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-10-31T21:20:22-04:00",
+   "at": "2026-11-04T09:13:08-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
    "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 3,
+   "failed": 2,
    "failed_names": [
-    "DEALFLOW Morning Worker",
-    "DEALFLOW Refresh",
-    "DealflowSendServerDaily"
+    "DealFlow Opt-out Sync",
+    "DealFlow Sheets CRM"
    ],
    "interactive": 3,
    "interactive_names": [
@@ -180,8 +185,8 @@
     "DealFlow Replies"
    ],
    "on_ac": true,
-   "pct": 79,
-   "port_open": false,
+   "pct": 13,
+   "port_open": true,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
