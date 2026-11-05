@@ -864,3 +864,6 @@ footprint.local.json
 REPLY-DRAFTS-*
 JESSE-RUN-*.log
 evidence/
+
+# homeowner call recordings + transcripts (call_coach_server.py) - NEVER in a public repo
+call_sessions/

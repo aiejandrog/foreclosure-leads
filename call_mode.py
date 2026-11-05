@@ -8123,6 +8123,13 @@ function fileLinks(r){
   if(nm && wpSlug(nm))
     L.push(['Whitepages', 'https://www.whitepages.com/name/' + wpSlug(nm) + '/' + (wpCity ? wpCity + '-FL' : 'FL')]);
   if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);
+  /* LIVE CALL COACH (2026-11-04). Deep link into the recorder + live-transcript coach
+     (call_coach_server.py, 127.0.0.1:8777) with THIS lead preselected — the coach pre-fills the
+     name, street and sale date off the same leads_final row. Laptop only by design: the server
+     binds loopback, so on a phone the link simply does not resolve; the coach's mic IS the laptop
+     (speakerphone + laptop mic). Plain http on purpose — an <a> navigation to a loopback origin
+     is allowed from the https page, and the coach is its own tab, not a fetch. */
+  if(r.c) L.push(['Coach', 'http://127.0.0.1:8777/?case=' + encodeURIComponent(r.c)]);
   return L;
 }
 /* What to type into Whitepages' own Reverse Address box: our street in Whitepages' spelling, ordinal
