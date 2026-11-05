@@ -7,9 +7,20 @@
 <!-- call_coach_live.html — the whole front half of the live call coach.
      Served ONLY by call_coach_server.py on http://127.0.0.1:8777/ (Chrome refuses the mic on
      file:// — see HANDOFF_CALL_COACH.md §8, do not open this file directly).
-     Stage copy and objection bodies are VERBATIM from CALL_SCRIPT_NEPQ.md; the 14 manual cards
-     come live from /api/objections (call_objections.json — the same file Call Mode reads), so
-     approved copy changes flow here without touching this file.
+
+     COPY SOURCES. Stage copy is verbatim from CALL_SCRIPT_NEPQ.md. Objection BODIES come live
+     from /api/objections (call_objections.json — the cache of the vault drill pack Call Mode
+     reads), so approved copy edits flow here with no page change. TRIGGER phrases live HERE,
+     keyed by card n: call_objections.json is REWRITTEN from the vault by call_mode.load_objections
+     (which emits only n/t/say/reb/one/es), so a trigger field added to that json would be wiped
+     on the next board build. Coach owns the ears; the vault owns the words.
+
+     SPEAKER LABELS. One laptop mic hears the room, so free-path labels are a BEST GUESS by
+     content: a line that mostly matches the script you're supposed to be reading is tagged YOU?,
+     a line that tripped an objection trigger is tagged THEM?. With a Deepgram key saved (gear
+     button), streaming diarization labels YOU/THEM for real and cuts latency to ~300ms — the
+     first voice heard is assumed to be yours (you speak first on an outbound call).
+
      Deep link from Call Mode: /?case=2025-009471-CA-01 preselects the lead. -->
 <style>
 :root{--bg:#0b0e11;--panel:#141920;--line:#232b35;--txt:#dfe7ee;--dim:#8b98a6;--accent:#4db8ff;--ok:#38c172;--warn:#e6a23c;--hot:#ff5b5b}
@@ -42,6 +53,7 @@ code{color:var(--accent)}
 #dot{font-size:13px;letter-spacing:.08em;color:var(--hot);font-weight:700}
 #dot.rec{animation:pulse 1.4s infinite} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 #dot.plain{color:var(--dim)}
+#eng{font-size:11px;color:var(--dim)}
 #redflag{grid-column:1/-1;display:none;background:#3a0d0d;border-bottom:2px solid var(--hot);color:#ffd0d0;padding:10px 14px;font-weight:600;font-size:15px}
 #redflag.on{display:block}
 #redflag .why{color:#ff9a9a;font-weight:400;font-size:13px;display:block;margin-top:3px}
@@ -52,6 +64,9 @@ code{color:var(--accent)}
 #transcript .interim{color:var(--dim);font-style:italic}
 #transcript .empty{color:#4a5563}
 #transcript .ts{color:#3f4a57;font-size:11px;margin-right:6px}
+.spk{font-size:10px;font-weight:700;letter-spacing:.08em;border-radius:4px;padding:1px 5px;margin-right:6px}
+.spk.you{background:#0d2b1a;color:#5fd99a;border:1px solid #1d5c38}
+.spk.them{background:#2b1d0d;color:#e6b35c;border:1px solid #5c4410}
 
 .stagechip{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:#1b2129;border:1px solid var(--line);color:var(--dim);margin:0 4px 4px 0;cursor:pointer}
 .stagechip.now{background:var(--accent);border-color:var(--accent);color:#04121f;font-weight:700}
@@ -64,6 +79,7 @@ code{color:var(--accent)}
 #objection{display:none;margin-top:16px;background:#241a08;border:1px solid #5c4410;border-left:4px solid var(--warn);border-radius:0 10px 10px 0;padding:14px 16px;position:relative}
 #objection.on{display:block}
 #objection .who{color:var(--warn);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;padding-right:24px}
+#objection .back{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px}
 #objection .body{font-size:16px;line-height:1.55;white-space:pre-wrap}
 #objection .x{position:absolute;top:8px;right:10px;background:none;border:none;color:#8b98a6;font-size:18px;padding:2px 6px}
 
@@ -83,6 +99,14 @@ code{color:var(--accent)}
 .hit{padding:7px 10px;border:1px solid var(--line);border-radius:7px;margin-bottom:5px;cursor:pointer;font-size:12.5px;background:#101519}
 .hit:hover{background:#1a222b;border-color:var(--accent)} .hit b{color:var(--accent)} .hit span{color:var(--dim)}
 #pickcard{width:100%;margin-top:14px}
+
+/* overlays: idle warning + outcome picker */
+.overlay{position:fixed;inset:0;background:rgba(5,8,11,.82);display:none;align-items:center;justify-content:center;z-index:50}
+.overlay.on{display:flex}
+.obox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;max-width:460px;text-align:center}
+.obox h2{font-size:18px;margin-bottom:6px} .obox p{color:var(--dim);font-size:13px;margin-bottom:16px}
+.obox .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.obox .grid button{padding:12px 8px}
 </style>
 </head>
 <body>
@@ -110,6 +134,7 @@ code{color:var(--accent)}
     <div class="row">
       <button class="primary" id="startbtn" disabled onclick="Coach.start()">Start session</button>
       <button onclick="Coach.plain()">Plain Call Mode (no recording)</button>
+      <button title="Optional: a Deepgram API key turns on true YOU/THEM speaker labels and ~300ms transcript latency (~$0.004/min). Stored only in this browser." onclick="Coach.setKey()">&#9881; speed/speaker key</button>
     </div>
 
     <div class="err" id="gateerr"></div>
@@ -117,11 +142,11 @@ code{color:var(--accent)}
     <p class="fine">
       <b>Audio</b> goes to <code>call_sessions/&lt;stamp&gt;_&lt;case&gt;/audio.webm</code> on this laptop, in
       five-second chunks, so a crash costs you five seconds. Nothing leaves this machine.<br><br>
-      <b>Transcript</b> is Chrome's recognizer &mdash; that audio <em>is</em> processed by Google's speech
-      service. The text lands in <code>transcript.txt</code> when you stop.<br><br>
+      <b>Transcript</b> is Chrome's recognizer (audio <em>is</em> processed by Google's speech service) &mdash;
+      or Deepgram when a key is saved, which adds real speaker labels. The text lands in
+      <code>transcript.txt</code> when you stop.<br><br>
       <b>Speakerphone only.</b> Neither phone OS hands call audio to an app. Phone on speaker, laptop
-      mic listening. It hears both sides and cannot tell your voice from theirs &mdash; the red bar means
-      "heard on the line," not "you said."
+      mic listening. Without a Deepgram key, YOU?/THEM? labels are a best guess by content.
     </p>
   </div>
 </div>
@@ -132,6 +157,7 @@ code{color:var(--accent)}
     <span id="dot">&#9679; REC</span>
     <span class="t" id="clock">00:00</span>
     <span class="t" id="words">0 words</span>
+    <span id="eng"></span>
     <select id="lang" onchange="Coach.setLang(this.value)">
       <option value="en-US">English</option>
       <option value="es-US">Espa&ntilde;ol</option>
@@ -145,7 +171,7 @@ code{color:var(--accent)}
   <div id="redflag"><span id="rfphrase"></span><span class="why" id="rfwhy"></span></div>
 
   <div id="left">
-    <p class="h">Live transcript &mdash; heard on the line (both voices)</p>
+    <p class="h">Live transcript</p>
     <div id="transcript"><span class="empty">Waiting for speech&hellip;</span></div>
   </div>
 
@@ -172,7 +198,7 @@ code{color:var(--accent)}
     <div id="objection">
       <button class="x" title="dismiss (D)" onclick="Coach.dismissObjection()">&times;</button>
       <div class="who" id="objwho"></div>
-      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px">&#8617; say this back</div>
+      <div class="back">&#8617; say this back</div>
       <div class="body" id="objbody"></div>
     </div>
 
@@ -187,8 +213,37 @@ code{color:var(--accent)}
     </div>
 
     <select id="pickcard" onchange="Coach.manualCard(this.value)">
-      <option value="">Fire an objection card manually (call_objections.json, live)&hellip;</option>
+      <option value="">Fire an objection card manually (vault pack, live)&hellip;</option>
     </select>
+  </div>
+</div>
+
+<!-- idle auto-stop warning -->
+<div class="overlay" id="idlewarn">
+  <div class="obox">
+    <h2>Still on the call?</h2>
+    <p>No speech heard for a while &mdash; auto-saving in <span id="idlecount">10</span>s so the mic doesn't
+       keep transcribing your room after a hang-up.</p>
+    <button class="primary" onclick="Coach.keepGoing()">Keep going</button>
+  </div>
+</div>
+
+<!-- outcome picker on stop -->
+<div class="overlay" id="outcome">
+  <div class="obox">
+    <h2>How did it go?</h2>
+    <p>Saved with the recording (meta.json + outcomes.jsonl). Log the same outcome in Call Mode so the cadence moves.</p>
+    <div class="grid">
+      <button onclick="Coach.finish('talked')">Talked</button>
+      <button onclick="Coach.finish('appointment')">Appointment</button>
+      <button onclick="Coach.finish('callback')">Callback promised</button>
+      <button onclick="Coach.finish('not_interested')">Not interested</button>
+      <button onclick="Coach.finish('voicemail')">Voicemail / no answer</button>
+      <button onclick="Coach.finish('bad_number')">Bad number</button>
+    </div>
+    <div class="row" style="justify-content:center">
+      <button onclick="Coach.finish('')">Skip &mdash; just save</button>
+    </div>
   </div>
 </div>
 
@@ -264,8 +319,14 @@ var STAGES = [
 ];
 
 /* ============================ OBJECTIONS ============================
-   12 auto-fire cards. Bodies VERBATIM from CALL_SCRIPT_NEPQ.md § OBJECTIONS and
-   call_objections.json. m = lowercase trigger phrases; s = score weight. */
+   Two pools, one engine.
+   1. SCRIPT cards (below): bodies verbatim from CALL_SCRIPT_NEPQ.md § OBJECTIONS — these exist
+      only in the script, so they live here. Cards marked dup:<n> are stand-in copies of a vault
+      card and are REPLACED by the live vault card once /api/objections answers.
+   2. VAULT cards: bodies live from call_objections.json; trigger phrases come from TRIG below,
+      keyed by card n (the json cannot carry them — load_objections rewrites it from the vault).
+   Triggers are written APOSTROPHE-FREE and ACCENT-FREE: norm() strips both from the transcript
+   before matching, which is also what fixes “don’t” (curly) never matching "don't" (straight). */
 var CARDS = [
  {id:'notint', who:'“I’m not interested” — reflex, not a decision', s:2,
   m:['not interested','no estoy interesado','not into this','stop calling me','take me off'],
@@ -276,8 +337,8 @@ var CARDS = [
  {id:'busy', who:'“I’m busy / call me back later”', s:2,
   m:['busy right now','call me back','call me later','bad time','at work right now','in the middle of'],
   body:'No problem at all… what I’ll do — I’ll give you my number, and you’d have to call ME back later to catch me… what’s your timeframe on getting back to me, just to see if I’d even be free?\n\n(or, if they’ll give a day:) It might be tough to catch me cold with my schedule… if you’ve got your calendar handy I’ll pull mine and we’ll lock a specific time so neither of us is chasing the other — that work?\n\n(No-show on the callback? Wait 2 minutes, then call: “Hey {first}, it’s just {sender} getting back to you — running a little behind…”)'},
- {id:'plan', who:'“I already have a plan / a lawyer / a mod going” — be the parachute', s:2,
-  m:['have a lawyer','my attorney','have an attorney','my lawyer','already have a plan','modification going','working with someone','got it handled','have it handled'],
+ {id:'plan', who:'“I already have a plan / a mod going” — be the parachute', s:2,
+  m:['already have a plan','modification going','working with someone','got it handled','have it handled','plan in place','tengo un plan'],
   body:'Good — keep it. I don’t want to be your bank or your middleman… I want to be your parachute. You’re betting the house on that plan landing on time. Keep it exactly as-is… and let our advisor look at postponing the sale in parallel, for free. If your plan lands first, I did you a favor and you owe me a coffee. If it slips a day — and here a day is everything — you’ve already got backup. Fair?\n\n(still flat? skeptical tone:) Can I ask you something?… How can I point out that you MIGHT be missing something here… without you getting upset with me?'},
  {id:'legit', who:'“How do I know you’re legit?” — a concern in disguise', s:2,
   m:['legit','a scam','how do i know you','references','are you licensed','who are you really','sounds like a scam'],
@@ -286,24 +347,44 @@ var CARDS = [
   m:['how much does','what does it cost','what do you charge','your fee','cost me','cuanto cuesta'],
   body:'The records review with the advisor is free — you’re never asked to pay us anything up front. What matters more to you: what it costs… or actually keeping the room to save the house?\n\n(results-based reframe — never quote a fee)'},
  {id:'bail', who:'The 15-second bail-out — they’re clearly done', s:3,
-  m:['leave me alone','get off my phone','stop calling','hanging up','not talking to you','goodbye now','don’t call again','do not call'],
+  m:['leave me alone','get off my phone','stop calling','hanging up','not talking to you','goodbye now','dont call again','do not call'],
   body:'Totally understand — one thing and I’m gone: our senior advisor, 30-plus years, reviews your case free, five minutes, right on the phone. If nothing fits, we part friends. Fair?'},
- {id:'bank', who:'The Bank Mod Shield — “the bank’s working with me”', s:2,
-  m:['bank is working with me','working with the bank','bank is reviewing','in review with the bank','loss mitigation','loan modification','the mod','working on a modification'],
+ /* stand-ins, replaced by the live vault card when /api/objections answers */
+ {id:'bank', dup:1, who:'The Bank Mod Shield — “the bank’s working with me”', s:2,
+  m:['bank is working','working with the bank','bank is reviewing','in review','loss mitigation','loan modification','the modification','a modification','el banco esta','una modificacion'],
   body:'Good — you should absolutely keep working that modification, and nothing we do touches it. Let me ask you one thing: if talking to me couldn’t interfere with the mod at all, is there any other reason not to spend five minutes?\n\nHere’s what most people don’t know: in Florida the mod review and the foreclosure case run on separate tracks. The court date keeps moving while the bank ‘reviews,’ and denial letters routinely land two or three weeks before the sale — with no time left to react. It’s like driving with a spare in the trunk: you don’t need it until the tire blows on the highway. What if that denial comes 20 days out — what’s your move that day? The consult is free, no fees ever, no commitment. If the mod comes through, we shake hands and part friends.'},
- {id:'nothing', who:'“It’s too late — nothing anybody can do”', s:2,
-  m:['nothing anybody can do','nothing i can do','too late now','it’s over','its over','already lost','done deal','ya es tarde'],
+ {id:'nothing', dup:9, who:'“It’s too late — nothing anybody can do”', s:2,
+  m:['nothing anybody can do','nothing i can do','nothing can be done','too late now','its over','done deal','ya es tarde','se acabo'],
   body:'I hear you — and after months of this, being tired makes all the sense in the world. But let me ask just one thing: is it that nothing can be done, or that you’re done? Those are two different things, and only one of them is true.\n\nA sale date is a deadline, not a verdict — sales get postponed, cases get reworked, and even on the hardest path there’s a world of difference between walking out with cash for your keys and time to land, versus being put out with nothing. It’s like the two-minute warning in a game: that’s not when you leave the stadium, that’s when the plays matter most. What if the last ten minutes you spend on this house are the ones that decide how your family walks out of it? You’ve fought this long — isn’t it fair to yourself to hear what’s still on the table?'},
- {id:'money', who:'The Incoming Check / family money', s:2,
-  m:['tax refund','settlement check','money coming in','waiting on money','money on the way','my brother is lending','family is lending','borrowing from my','inheritance coming'],
+ {id:'money', dup:4, who:'The Incoming Check', s:2,
+  m:['tax refund','settlement check','money coming in','waiting on a check','waiting on money','check is coming','mi reembolso','esperando un cheque'],
   body:'Money on the way is a real asset — I’m not dismissing it. Let me isolate one thing: if that check clears before the sale date, you’re fine. So the only question is what happens if it doesn’t. Fair?\n\nHere’s the problem: your check runs on the IRS’s clock or an insurance adjuster’s clock — no deadline, slips for months, can get offset. The foreclosure runs on a court clock with a judge attached. You’re racing a train to the crossing, and only one of you has a schedule. And remember, the payoff grows daily while you wait, so the check has to beat the clock AND cover a bigger number. What if it lands two weeks after the sale? At that point the money arrives and the house is already gone — after the sale it can’t buy it back. Let’s map the backup for free, no fees ever. If the check wins the race, use it and we part friends.'},
- {id:'worth', who:'Worn out — “just take it, I’m done”', s:2,
-  m:['i’m worn out','im worn out','fed up','walk away from','just take it','i give up','can’t do this anymore','cant do this anymore','estoy agotado'],
+ {id:'worth', dup:11, who:'Worn out — “just take it, I’m done”', s:2,
+  m:['worn out','fed up','walk away from','just take it','i give up','cant do this anymore','estoy agotado','no puedo mas'],
   body:'I hear you, and the majority of people we speak to hit that exact wall — they just want to get away from all the problems, and that’s fair. Everybody gets there at some point. Let me ask you one thing: what is it that you TRULY want to do with this property?\n\nIf you’ve truly had it, then rather than the bank taking the house AND whatever equity you have, I’m sure you’d rather walk out with cash in your pocket, on your own timeline, with dignity — instead of a sheriff putting your things on the street on a date you don’t control. We have a program for exactly this — Cash for Keys. We agree on a set figure; you get half the money up front when we sign, and you pick your exit window: 30, 60 or 90 days. At the end you hand over the keys and receive the other half that same day. You pick the date. You pick the time. You run the show.'},
- {id:'talked', who:'Scam fatigue — “I already talked to three of you people”', s:2,
-  m:['talked to three','you people','all want the same','already talked to','tired of these calls','everyone keeps calling','all the same thing'],
+ {id:'talked', dup:7, who:'Scam fatigue — “I already talked to three of you people”', s:2,
+  m:['three of you','you people','all want the same','already talked to','get off my porch','tired of these calls','ya hable con'],
   body:'Honestly? You should be suspicious — most of the people knocking want to buy your house cheap, today, with a contract in their hand. Let me ask you straight: if I’m not here to buy your house and there’s nothing to sign, is there another reason not to talk?\n\nWe start with a free consultation with a senior advisor — 30-plus years doing this — and we lay out three to five options, including ones where you keep the house: refinance, modification through counsel, selling with your equity. No fees, ever, by law and by policy. Three bad mechanics doesn’t mean the engine fixes itself. What if the fourth conversation is the one where someone finally shows you the option that protects your equity instead of taking it? Five minutes, nothing to sign. Worst case, we shake hands and part friends — that’s the actual deal.'}
 ];
+
+/* Trigger phrases for the VAULT cards, keyed by card n. Coach-owned (see header comment).
+   n14 (Save My Number) is YOUR closing move — manual only, never auto-fired. */
+var TRIG = {
+ 1:['bank is working','working with the bank','bank is reviewing','in review','loss mitigation','loan modification','the modification','a modification','el banco esta','una modificacion'],
+ 2:['my attorney','my lawyer','talk to my attorney','talk to my lawyer','attorney is handling','lawyer is handling','have an attorney','have a lawyer','mi abogado'],
+ 3:['always gets pushed','they always push','been cancelled','been canceled','cancelled twice','canceled twice','postponed before','it always moves','siempre la posponen','la cancelaron'],
+ 4:['tax refund','settlement check','money coming in','waiting on a check','waiting on money','check is coming','mi reembolso','esperando un cheque'],
+ 5:['my brother is lending','family is lending','borrowing from family','my cousin is','my sister is lending','handling it in the family','dinero de familia','mi hermano me'],
+ 6:['filing bankruptcy','file bankruptcy','filed bankruptcy','chapter 13','chapter 7','automatic stay','bancarrota'],
+ 7:['three of you','you people','all want the same','already talked to','get off my porch','tired of these calls','ya hable con'],
+ 8:['wrong house','wrong address','not in foreclosure','no foreclosure here','not my house','casa equivocada','ninguna ejecucion'],
+ 9:['nothing anybody can do','nothing i can do','nothing can be done','too late now','its over','done deal','ya es tarde','se acabo'],
+ 10:['wife doesnt know','she doesnt know','husband doesnt know','before she comes out','before she hears','mi esposa no sabe'],
+ 11:['worn out','fed up','i give up','just take it','walk away from all','cant do this anymore','estoy agotado','no puedo mas'],
+ 12:['listed at','listing agent','my realtor has','zero showings','the agent has it','el agente lo tiene'],
+ 13:['approval coming','money arrives tomorrow','comes through tomorrow','wiring it','being reviewed right now','me llega manana','ya lo tengo resuelto'],
+ 14:[]
+};
 
 /* ============================ RED FLAGS ============================
    Fire on guardrail violations heard on the line. 16 regexes. */
@@ -323,7 +404,7 @@ var FLAGS = [
  {re:/100\s?percent/i,                                why:'Absolute claim — never certainty.'},
  {re:/i promise/i,                                    why:'Absolute claim — never a promise.'},
  {re:/we place loans?/i,                              why:'Licensed lenders lend; we INTRODUCE an advisor.'},
- {re:/no risk at all/i,                               why:'Absolute claim — there is always risk; say “free consult, no commitment.”'}
+ {re:/no risk at all/i,                               why:'Absolute claim — say “free consult, no commitment.”'}
 ];
 
 /* ============================== STATE ============================== */
@@ -331,15 +412,27 @@ var S = {
   sid:null, plain:false, stage:1, t0:0,
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
-  recorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  pending:[],                 // audio chunks whose POST failed; retried on next tick
+  recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
+  dg:null, dgOn:false, dgSpk0:null,
+  pending:[],
+  autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
-  lead:null, debounce:null, clockTimer:null
+  lead:null, hits:[], debounce:null, clockTimer:null,
+  lastSpeech:0, idleTimer:null, idleCounting:false, outcomeSel:null
 };
 function $(id){ return document.getElementById(id); }
 function now(){ return Date.now(); }
 function mmss(ms){ var s=Math.floor(ms/1000); return ('0'+Math.floor(s/60)).slice(-2)+':'+('0'+s%60).slice(-2); }
 function esc(x){ var d=document.createElement('div'); d.textContent=String(x==null?'':x); return d.innerHTML; }
+
+/* norm(): one normalization for transcript windows, trigger phrases and heuristics —
+   lowercase, accents stripped, straight AND curly apostrophes removed, non-alnum → space. */
+function norm(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[’']/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+CARDS.forEach(function(c){ c.nm=c.m.map(norm); });
+Object.keys(TRIG).forEach(function(k){ TRIG[k]=TRIG[k].map(norm); });
 
 /* ============================== MERGE ============================== */
 function merged(t){
@@ -397,7 +490,7 @@ function lookup(){
   }).catch(function(){ $('leadhits').innerHTML='<div class="hit"><span>server unreachable</span></div>'; });
 }
 function pick(i){
-  var m=(S.hits||[])[i]; if(!m) return;
+  var m=S.hits[i]; if(!m) return;
   S.lead=m;
   $('leadhits').innerHTML='';
   $('q').value=m.address||m.case||'';
@@ -411,9 +504,8 @@ function pick(i){
    +'<div><span class="k">Judgment</span><span class="v">'+esc(m.judgment||'?')+'</span></div>'
    +'<div><span class="k">Equity</span><span class="v">'+esc(m.equity!=null?('$'+Math.round(m.equity).toLocaleString()):'?')+'</span></div>'
    +'<div><span class="k">Tier/score</span><span class="v">'+esc(m.tier||'?')+' · '+esc(m.score!=null?m.score:'?')+(m.homestead?' · homestead':'')+'</span></div>';
-  // pre-fill merge fields off the lead
   var own=String(m.owners||'').replace(/,/g,' ').trim().split(/\s+/);
-  if(own.length&&!$('f_first').value) $('f_first').value=(own[0]||'').charAt(0)+ (own[0]||'').slice(1).toLowerCase();
+  if(own.length&&!$('f_first').value) $('f_first').value=(own[0]||'').charAt(0)+(own[0]||'').slice(1).toLowerCase();
   var st1=String(m.address||'').split(',')[0].trim();
   if(st1) $('f_st1').value=st1;
   if(m.auction) $('f_date').value=m.auction;
@@ -421,25 +513,39 @@ function pick(i){
 }
 
 /* ======================= OBJECTION AUTO-FIRE ======================= */
+function cardBody(c){
+  if(c.vault){
+    var es=(S.lang==='es-US'&&c.vault.es&&c.vault.es.reb);
+    return (es?c.vault.es.reb:c.vault.reb).join('\n\n');
+  }
+  return c.body;
+}
 function scanObjections(){
-  var win=(S.finals+' '+S.interim).toLowerCase().replace(/[^\wÀ-ÿ' ]+/g,' ');
-  win=win.slice(-240);
+  var win=norm(S.finals+' '+S.interim).slice(-240);
   var last80=win.slice(-80);
   var best=null,bestScore=0;
-  CARDS.forEach(function(c){
+  S.autoCards.forEach(function(c){
+    if(!c.nm.length) return;
     if(S.cooldown[c.id]&&now()<S.cooldown[c.id]) return;
     var hits=0,rec=0;
-    c.m.forEach(function(p){ if(win.indexOf(p)>=0){ hits++; if(last80.indexOf(p)>=0) rec=2; } });
+    c.nm.forEach(function(p){ if(p&&win.indexOf(p)>=0){ hits++; if(last80.indexOf(p)>=0) rec=2; } });
     if(!hits) return;
     var score=hits*c.s+rec;
     if(score>bestScore){ bestScore=score; best=c; }
   });
   if(best&&bestScore>=3&&best.id!==S.lastCard){
     if(S.lastCard===best.id&&now()-S.lastCardAt<20000) return;
-    showCard('heard on the line · '+best.who,merged(best.body));
+    showCard('heard on the line · '+best.who,merged(cardBody(best)));
     S.lastCard=best.id; S.lastCardAt=now();
     S.objFired.push({id:best.id,at:mmss(now()-S.t0),score:bestScore});
   }
+}
+function lineHitsTrigger(nline){
+  for(var i=0;i<S.autoCards.length;i++){
+    var c=S.autoCards[i];
+    for(var k=0;k<c.nm.length;k++) if(c.nm[k]&&nline.indexOf(c.nm[k])>=0) return true;
+  }
+  return false;
 }
 function showCard(who,body){
   $('objwho').textContent=who;
@@ -453,14 +559,14 @@ function dismissObjection(){
 }
 function manualCard(n){
   if(!n) return;
-  var c=(S.manualCards||[])[+n-1]; if(!c) return;
+  var c=S.manualCards[+n-1]; if(!c) return;
   var es=(S.lang==='es-US'&&c.es);
-  var body=(es? c.es.reb : c.reb).join('\n\n');
-  showCard((es?c.es.say:c.say)? c.t+' — “'+(es?c.es.say:c.say).slice(0,80)+'…”' : c.t, body);
+  var body=(es?c.es.reb:c.reb).join('\n\n');
+  showCard(c.t+(c.say?' — “'+String(es?c.es.say:c.say).slice(0,70)+'…”':''),body);
   S.objFired.push({id:'manual:'+c.n,at:mmss(now()-S.t0)});
   $('pickcard').value='';
 }
-function loadManualCards(){
+function loadCards(){
   fetch('/api/objections').then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(j){
     S.manualCards=j.cards||[];
     var sel=$('pickcard');
@@ -468,7 +574,16 @@ function loadManualCards(){
       var o=document.createElement('option'); o.value=String(i+1); o.textContent=c.n+' · '+c.t;
       sel.appendChild(o);
     });
-  }).catch(function(){ /* route absent: dropdown stays empty, auto-engine unaffected */ });
+    /* AUTO pool: script-only cards + every vault card that has triggers. Stand-ins (dup:<n>)
+       drop out in favor of the live vault body, so copy edits in the vault pack win. */
+    var auto=CARDS.filter(function(c){ return !c.dup; });
+    S.manualCards.forEach(function(c){
+      var trig=TRIG[c.n]||[];
+      if(!trig.length) return;
+      auto.push({id:'v'+c.n, who:c.t+' — “'+String(c.say||'').slice(0,70)+'…”', s:2, nm:trig, vault:c});
+    });
+    S.autoCards=auto;
+  }).catch(function(){ /* vault route unreachable: stand-ins keep full coverage */ });
 }
 
 /* =========================== RED FLAGS =========================== */
@@ -488,10 +603,43 @@ function scanFlags(txt){
   }
 }
 
+/* ======================= SPEAKER BEST-GUESS =======================
+   Free path (one mic): content heuristic. A line whose words mostly appear in the text YOU are
+   supposed to be reading (current stage line + probes + the open rebuttal) is tagged YOU?; a line
+   that tripped an objection trigger is THEM?. The ? is honest — one mic cannot know. The Deepgram
+   path replaces this with real diarization (no ?). */
+function guessSpeaker(nline){
+  if(lineHitsTrigger(nline)) return 'them?';
+  var ref=norm($('saytext').textContent+' '+$('saynote').textContent+' '
+               +($('objection').className==='on'?$('objbody').textContent:''));
+  var toks=nline.split(' ').filter(function(w){return w.length>2;});
+  if(toks.length<4) return '';
+  var hit=0;
+  toks.forEach(function(w){ if(ref.indexOf(w)>=0) hit++; });
+  return (hit/toks.length>=0.5)?'you?':'';
+}
+
 /* =========================== TRANSCRIPT =========================== */
+function pushFinal(text,spk){
+  text=String(text||'').trim();
+  if(!text) return;
+  var nline=norm(text);
+  var tag=spk||guessSpeaker(nline);
+  S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag});
+  S.finals+=' '+text;
+  S.lastSpeech=now();
+  scanFlags(text);
+  scanObjections();
+  renderTranscript();
+}
 function renderTranscript(){
   var el=$('transcript'),h='';
-  S.lines.forEach(function(l){ h+='<span class="ts">['+l.t+']</span>'+esc(l.text)+'\n'; });
+  S.lines.forEach(function(l){
+    var sp='';
+    if(l.spk==='you'||l.spk==='you?') sp='<span class="spk you">'+(l.spk==='you'?'YOU':'YOU?')+'</span>';
+    else if(l.spk==='them'||l.spk==='them?') sp='<span class="spk them">'+(l.spk==='them'?'THEM':'THEM?')+'</span>';
+    h+='<span class="ts">['+l.t+']</span>'+sp+esc(l.text)+'\n';
+  });
   if(S.interim) h+='<span class="interim">'+esc(S.interim)+'</span>';
   el.innerHTML=h||'<span class="empty">Waiting for speech…</span>';
   el.scrollTop=el.scrollHeight;
@@ -499,36 +647,86 @@ function renderTranscript(){
 }
 function startSR(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ gateErr('This browser has no Web Speech API — the live transcript needs CHROME. Recording still works.'); return; }
+  if(!SR){ gateErr('This browser has no Web Speech API — the live transcript needs CHROME (or a Deepgram key). Recording still works.'); return; }
   var r=new SR();
   r.continuous=true; r.interimResults=true; r.lang=S.lang;
   r.onresult=function(ev){
     var interim='';
     for(var i=ev.resultIndex;i<ev.results.length;i++){
       var t=ev.results[i][0].transcript;
-      if(ev.results[i].isFinal){
-        t=t.trim();
-        if(t){
-          S.lines.push({t:mmss(now()-S.t0),text:t});
-          S.finals+=' '+t;
-          scanFlags(t);
-          scanObjections();
-        }
-      } else interim+=t;
+      if(ev.results[i].isFinal) pushFinal(t,'');
+      else interim+=t;
     }
     S.interim=interim;
-    if(interim) scanObjections();
+    if(interim){ S.lastSpeech=now(); scanObjections(); }
     renderTranscript();
   };
   r.onend=function(){ if(S.srOn){ try{ r.start(); }catch(e){ setTimeout(function(){ if(S.srOn) try{r.start();}catch(_){} },400); } } };
   r.onerror=function(ev){ if(ev.error==='not-allowed'){ S.srOn=false; gateErr('Mic permission denied — transcript off.'); } };
   S.sr=r; S.srOn=true;
   try{ r.start(); }catch(e){}
+  $('eng').textContent='engine: Chrome';
 }
+
+/* ============== DEEPGRAM (optional: real YOU/THEM + ~300ms) ==============
+   Key saved in THIS browser's localStorage only (never the repo, never the server).
+   Streams the same mic through a second 250ms MediaRecorder to Deepgram's websocket with
+   diarization on. First voice heard = YOU (you speak first on an outbound call). */
+function dgKey(){ try{ return localStorage.getItem('coachDgKey')||''; }catch(e){ return ''; } }
+function setKey(){
+  var k=prompt('Deepgram API key (blank to clear). Turns on real YOU/THEM labels + ~300ms latency, ~$0.004/min. Stored only in this browser.');
+  if(k===null) return;
+  try{ k.trim()?localStorage.setItem('coachDgKey',k.trim()):localStorage.removeItem('coachDgKey'); }catch(e){}
+  alert(k.trim()?'Saved. Next session uses Deepgram.':'Cleared. Next session uses Chrome.');
+}
+function startDG(stream,key){
+  try{
+    var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2&language='+(S.lang==='es-US'?'es':'en-US')
+      +'&punctuate=true&interim_results=true&diarize=true&smart_format=true',['token',key]);
+    ws.onopen=function(){
+      $('eng').textContent='engine: Deepgram · live speaker labels';
+      var mr=new MediaRecorder(stream,{mimeType:(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm')});
+      mr.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0&&ws.readyState===1) ws.send(ev.data); };
+      mr.start(250);
+      S.dgRecorder=mr;
+    };
+    ws.onmessage=function(ev){
+      var j; try{ j=JSON.parse(ev.data); }catch(e){ return; }
+      var alt=j.channel&&j.channel.alternatives&&j.channel.alternatives[0];
+      if(!alt) return;
+      var txt=alt.transcript||'';
+      if(!txt) return;
+      if(j.is_final){
+        var words=alt.words||[], spk='';
+        if(words.length&&words[0].speaker!=null){
+          var count={}; words.forEach(function(w){ count[w.speaker]=(count[w.speaker]||0)+1; });
+          var maj=Object.keys(count).sort(function(a,b){return count[b]-count[a];})[0];
+          if(S.dgSpk0===null) S.dgSpk0=maj;      // first voice on an outbound call = you
+          spk=(maj===S.dgSpk0)?'you':'them';
+        }
+        S.interim='';
+        pushFinal(txt,spk);
+      } else {
+        S.interim=txt; S.lastSpeech=now(); scanObjections(); renderTranscript();
+      }
+    };
+    ws.onerror=function(){ ws.close(); };
+    ws.onclose=function(){
+      if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
+      S.dgRecorder=null;
+      if(S.dgOn){ S.dgOn=false; startSR(); $('eng').textContent='engine: Chrome (Deepgram dropped)'; }
+    };
+    S.dg=ws; S.dgOn=true;
+    return true;
+  }catch(e){ return false; }
+}
+
 function setLang(l){
   S.lang=l;
+  if(S.dgOn){ S.dgOn=false; try{S.dg.close();}catch(e){}
+    setTimeout(function(){ if(S.stream) (dgKey()?startDG(S.stream,dgKey()):startSR()); },300); return; }
   if(S.sr){ S.srOn=false; try{S.sr.stop();}catch(e){} S.sr=null;
-    setTimeout(function(){ if(S.sid||S.plain===false) startSR(); },300); }
+    setTimeout(function(){ startSR(); },300); }
 }
 
 /* ============================ RECORDER ============================ */
@@ -537,11 +735,7 @@ function postChunk(blob){
     .then(function(r){ if(!r.ok) throw 0; flushPending(); })
     .catch(function(){ S.pending.push(blob); });  // never drop audio silently
 }
-function flushPending(){
-  if(!S.pending.length) return;
-  var b=S.pending.shift();
-  postChunk(b);
-}
+function flushPending(){ if(S.pending.length) postChunk(S.pending.shift()); }
 function startRecorder(stream){
   var mime='audio/webm;codecs=opus';
   if(!window.MediaRecorder||!MediaRecorder.isTypeSupported(mime)) mime='audio/webm';
@@ -551,18 +745,35 @@ function startRecorder(stream){
   S.recorder=rec;
 }
 
+/* ======================= IDLE AUTO-STOP (90s) =======================
+   Forgetting Esc after a hang-up used to leave the mic transcribing the room. No speech for
+   80s -> "still there?" with a 10s countdown; 90s -> auto stop & save. Any speech resets it. */
+function idleTick(){
+  if(S.plain||!S.sid) return;
+  var quiet=now()-S.lastSpeech;
+  if(quiet>80000&&!S.idleCounting){
+    S.idleCounting=true; $('idlewarn').className='overlay on';
+  }
+  if(S.idleCounting){
+    var left=Math.max(0,Math.ceil((90000-quiet)/1000));
+    $('idlecount').textContent=left;
+    if(quiet<=80000){ S.idleCounting=false; $('idlewarn').className='overlay'; }
+    else if(quiet>=90000){ $('idlewarn').className='overlay'; S.outcomeAuto=true; stop(); }
+  }
+}
+function keepGoing(){ S.lastSpeech=now(); S.idleCounting=false; $('idlewarn').className='overlay'; }
+
 /* ========================== START / STOP ========================== */
 function gateErr(msg){ var e=$('gateerr'); e.textContent=msg; e.className='err on'; }
 function enterApp(){
   $('gate').style.display='none';
   $('app').className='on';
-  S.t0=now();
-  S.clockTimer=setInterval(function(){ $('clock').textContent=mmss(now()-S.t0); },500);
+  S.t0=now(); S.lastSpeech=now();
+  S.clockTimer=setInterval(function(){ $('clock').textContent=mmss(now()-S.t0); idleTick(); },500);
   S.stage=S.plain?1:0;
-  renderStage(); renderTranscript(); loadManualCards();
-  // deep link from Call Mode: /?case=XXXX
+  renderStage(); renderTranscript(); loadCards();
   var c=new URLSearchParams(location.search).get('case');
-  if(c&&!S.lead){ $('q').value=c; lookup(); setTimeout(function(){ if(S.hits&&S.hits.length===1) pick(0); },700); }
+  if(c&&!S.lead){ $('q').value=c; lookup(); setTimeout(function(){ if(S.hits.length===1) pick(0); },700); }
   document.addEventListener('keydown',function(ev){
     if(/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) return;
     var k=ev.key.toLowerCase();
@@ -585,7 +796,8 @@ function start(){
       $('dot').textContent='● REC'; $('dot').className='rec';
       startRecorder(stream);
       enterApp();
-      startSR();
+      var k=dgKey();
+      if(!k||!startDG(stream,k)) startSR();
     }).catch(function(){ gateErr('Server unreachable — is call_coach_server.py running on 127.0.0.1:8777?'); stream.getTracks().forEach(function(t){t.stop();}); });
   }).catch(function(){ gateErr('Mic permission denied. Chrome needs the mic for recording + transcript. Use Plain Call Mode otherwise.'); });
 }
@@ -596,16 +808,24 @@ function plain(){
 }
 function stop(){
   if(S.plain){ location.reload(); return; }
+  if(S.outcomeAuto){ finish('auto_silence'); return; }
+  $('outcome').className='overlay on';   // outcome first; finish() does the actual save
+}
+function finish(outcome){
+  $('outcome').className='overlay';
   S.srOn=false; if(S.sr){ try{S.sr.stop();}catch(e){} }
+  S.dgOn=false; if(S.dg){ try{S.dg.close();}catch(e){} }
+  if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
   var done=function(){
     var dur=Math.round((now()-S.t0)/1000);
     fetch('/api/session/'+encodeURIComponent(S.sid)+'/transcript',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({lines:S.lines})})
     .then(function(){ return fetch('/api/session/'+encodeURIComponent(S.sid)+'/end',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,consent_ack:true})}); })
+      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,consent_ack:true,outcome:outcome||null})}); })
     .then(function(r){return r.json();})
     .then(function(j){
-      alert('Saved — '+((j.meta&&j.meta.session_id)||S.sid)+'\n'+S.lines.length+' transcript lines · '+mmss(now()-S.t0));
+      alert('Saved — '+((j.meta&&j.meta.session_id)||S.sid)+'\n'+S.lines.length+' transcript lines · '+mmss(now()-S.t0)
+            +(outcome?'\noutcome: '+outcome:'')+'\n\nLog the outcome in Call Mode too so the cadence moves.');
       location.reload();
     })
     .catch(function(){ alert('Transcript/end POST failed — audio chunks already on disk under call_sessions/'+S.sid); });
@@ -616,9 +836,15 @@ function stop(){
   } else done();
 }
 
-return {start:start,plain:plain,stop:stop,next:next,back:back,jump:jump,fill:fill,
+/* test hook: drive the exact final-line pipeline without a mic (headless verification) */
+var _test={ say:function(t){ pushFinal(t,''); },
+            state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
+                                      lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
+
+return {start:start,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
-        dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang};
+        dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
+        setKey:setKey,keepGoing:keepGoing,_test:_test};
 })();
 </script>
 </body>
