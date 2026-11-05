@@ -646,10 +646,17 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
                         and _inst(m2.get('CrossPartyName')) != lend and _inst(m2.get('CrossPartyName')) not in chain):
                     is_open = False; break
         if inferred and is_open:                                             # rule 4: sale-kill
+            # Only a deed the owner GAVE (grantor, Party FROM) AFTER the loan sells the house out from
+            # under it. The owner's own purchase deed is recorded the same day as the purchase-money
+            # mortgage with a price above it, and used to kill that very mortgage: on an FHA chain
+            # (2026-11-05 acceptance fixture, deep_equity) the live first was read SATISFIED and the
+            # largest HUD partial claim was taken for the foreclosed loan, so the juniors shrank.
+            # _legacy keeps the old rule exactly: it is the control the conf ceiling compares against.
             for d in exact:
                 if not (d.get('DocTypeDescription') or '').upper().startswith('DEED'): continue
+                if not _legacy and not borrower(d): continue
                 dd = _jsdate(d.get('RecordDate'))
-                if dd and dd >= m['_dt'] and _num(d.get('Consideration')) >= amt * 0.7:
+                if dd and (dd >= m['_dt'] if _legacy else dd > m['_dt']) and _num(d.get('Consideration')) >= amt * 0.7:
                     is_open = False; break
         if not _legacy and fallback and is_open and _months(m['_dt'], newest) >= 360:
             # matured: 30+ years before the newest record on file, no release in this owner's index. The
