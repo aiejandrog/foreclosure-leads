@@ -927,8 +927,24 @@ def _merge_note(cur, inc):
             out['status'] = ins_
     elif cay > iay and not _dead and cs in _AFTER_YES_STAGES:
         out['status'] = cs        # the stored save is newer: an older push does not walk the stage back
+    # EQUITY RE-ROUTE (2026-11-05, Call Mode's "Next step"): `route` is one unit and the larger ts wins
+    # whole, like the board's _mergeLead. `atty` (the owner has an attorney: never routed) is a sticky
+    # date, earliest wins, never cleared.
+    def _rts(n):
+        x = n.get('route')
+        if not isinstance(x, dict):
+            return -1
+        try:
+            return int(x.get('ts') or 0)
+        except Exception:
+            return 0
+    if _rts(inc) > _rts(cur):
+        out['route'] = inc['route']
+    a, b = cur.get('atty'), inc.get('atty')
+    if a or b:
+        out['atty'] = min(str(a), str(b)) if (a and b) else (a or b)
     for k, v in inc.items():
-        if k in out or k in ('touches', 'dials', 'optlog', 'badph', 'dntph', 'status', 'cooldownH', 'wpr'):
+        if k in out or k in ('touches', 'dials', 'optlog', 'badph', 'dntph', 'status', 'cooldownH', 'wpr', 'route', 'atty'):
             continue
         if _dead and k in _AFTER_YES_KEYS:
             continue          # a suppressed lead is not handed a next step by a fill

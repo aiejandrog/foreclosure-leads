@@ -10,6 +10,7 @@ _*.py
 !_workerlanetest.py
 !_lookuplanetest.py
 !_equitylanetest.py
+!_equityroutetest.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
