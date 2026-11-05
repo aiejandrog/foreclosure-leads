@@ -435,6 +435,31 @@ def letter(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY
     ])
 
 
+# --- HELD: Agogee-format cold email (2026-11-05, Alex's wording, verbatim) -------------------
+# Nothing imports this. No send path (cadence, send_server /send, outreach_email, reply_send)
+# reads it. Email outreach stays paused until the SPF/DKIM/DMARC Show-original test per lane.
+# LEGAL REVIEW before any send path uses it: the "oct 29" win is unverified in the records, and
+# "stop a sale" wording is a s.501.1377 question. Personalize [auction date] per send; never put
+# a dollar equity figure in. Personal email only, one contact per household, no links/images.
+AGOGEE_HELD = True
+AGOGEE_SUBJECT = 'quick question about your auction on [auction date]'
+AGOGEE_BODY = (
+    "how much equity do you lose if your auction on [auction date] goes through as scheduled? "
+    "most homeowners don't know the number. the bank won't tell you. on a house like yours that "
+    "can be years of equity gone in one morning. last month we helped a homeowner stop a sale "
+    "scheduled for oct 29. i'll run a free 15-minute review of your options, including the ones "
+    "where i make nothing. reply 'yes' and i'll send the next step.\n\n"
+    "alejandro"
+)
+
+
+def agogee_email(auction_date):
+    """(subject, body) with [auction date] filled. Held: no caller."""
+    d = _short_date(auction_date) if not isinstance(auction_date, str) else auction_date
+    return (AGOGEE_SUBJECT.replace('[auction date]', d),
+            AGOGEE_BODY.replace('[auction date]', d))
+
+
 def cross_surface_check():
     """Every prospect-facing surface must promise the SAME call length.
 
