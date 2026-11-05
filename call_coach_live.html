@@ -73,6 +73,7 @@ code{color:var(--accent)}
 
 #nowstage{font-size:12px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin:14px 0 6px}
 #sayline{font-size:20px;line-height:1.45;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:0 10px 10px 0;padding:16px 18px}
+#sayline.pop{animation:saypop 1.1s} @keyframes saypop{0%{background:#0d3a22;border-left-color:#5fd99a}100%{background:var(--panel)}}
 #sayline .tag{display:block;font-size:10px;letter-spacing:.1em;color:var(--dim);margin-top:10px;text-transform:uppercase}
 #saynote{color:var(--dim);font-size:13px;margin-top:10px;line-height:1.6}
 
@@ -386,6 +387,48 @@ var TRIG = {
  14:[]
 };
 
+/* ===================== SITUATIONAL RESPONSES =====================
+   The layer between stages and objections: the ordinary things a prospect says that are not
+   objections but still have ONE right next line. When a THEM line matches, the green say-panel
+   swaps to that response and flashes — ask answered before you finish hearing it. Lines are
+   script-verbatim where the script has one; the rest obey every guardrail (identify, the two
+   nots, options never outcomes, no fee, advisor framing). */
+var SIT = [
+ {tag:'“who is this?” → identify + the two nots',
+  m:['who is this','whos this','who are you','whos calling','who am i speaking','con quien hablo','quien es','quien habla'],
+  say:'It’s {sender} with Biscayne Solutions Group. I’m NOT your lender and I’m NOT calling to buy your house — I help owners see what options they have on {st1} before this goes any further. Can I ask you a couple of quick questions?'},
+ {tag:'“how’d you get my number?” → public record, then back on track',
+  m:['how did you get my number','how do you have my number','where did you get my number','why are you calling me','como consiguio mi numero'],
+  say:'Fair question — when a case gets filed at the courthouse it’s public record, and that’s the only reason I have it. I’m not your lender and I’m not calling to buy your house… has anybody actually shown you what happens to your balance every time that sale date moves?'},
+ {tag:'“what do you want / what’s this about?” → status frame',
+  m:['what do you want','what is this about','whats this about','what is it you want','que quiere','de que se trata'],
+  say:'Honestly, this is pretty basic — I’m really just trying to understand where things stand on {st1} right now… compared to where you’d actually want them to land… so we can see what that gap looks like. Would that help you?'},
+ {tag:'it’s them → open',
+  m:['this is he','this is she','speaking','yes this is','thats me','si soy yo','el mismo','ella misma'],
+  say:'Hi, {first}? Can you hear me?… It’s {sender} with Biscayne Solutions Group. Do you know your property on {st1} is in pre-foreclosure{date}?… I’m NOT your lender and I’m NOT calling to buy your house.'},
+ {tag:'not them → right-number check',
+  m:['wrong person','not him','not her','he is not here','she is not here','they dont live here','no esta aqui','numero equivocado'],
+  say:'Oh, my bad. I’m looking for {first}. Do I have the right number for them?'},
+ {tag:'they can’t hear / confusion → slow down, re-identify',
+  m:['cant hear you','i cant hear','you are breaking up','say that again','what did you say','no le escucho','repita eso'],
+  say:'Sorry about that — it’s {sender}… with Biscayne Solutions Group… calling about your property on {st1}. Is this better?'},
+ {tag:'“is this about the house?” → yes + the two nots',
+  m:['about the house','about my house','about the property','is this the bank','are you the bank','es del banco','por la casa'],
+  say:'It is about {st1} — and the two things I’m NOT: I’m not your lender, and I’m not calling to buy your house. I help owners see their options before this goes any further. Can I ask you a couple of quick questions?'},
+ {tag:'hostile open → stay warm, 15-second version',
+  m:['stop wasting my time','make it quick','you got one minute','hurry up','rapido'],
+  say:'Totally understand — one thing and I’m gone: our senior advisor, 30-plus years, reviews your case free, five minutes, right on the phone. If nothing fits, we part friends. Fair?'}
+];
+SIT.forEach(function(s){ s.nm=s.m.map(norm); });
+
+/* Conversational role patterns — who talks like this on an outbound call. Prospect questions
+   and brush-offs tag THEM?; your identity/opener phrasing tags YOU?. Best guess, one mic. */
+var THEM_PAT=['who is this','whos this','who are you','whos calling','how did you get','why are you calling',
+ 'what do you want','what is this about','whats this about','wrong number','not interested','speaking',
+ 'this is he','this is she','hello','hola','que quiere','quien es','quien habla','no me llame'].map(norm);
+var YOU_PAT=['this is alejandro','its alejandro','biscayne solutions','can you hear me','im not your lender',
+ 'not calling to buy','our senior advisor','public record','le habla','soy alejandro'].map(norm);
+
 /* ============================ RED FLAGS ============================
    Fire on guardrail violations heard on the line. 16 regexes. */
 var FLAGS = [
@@ -535,11 +578,29 @@ function scanObjections(){
     if(score>bestScore){ bestScore=score; best=c; }
   });
   if(best&&bestScore>=3&&best.id!==S.lastCard){
-    if(S.lastCard===best.id&&now()-S.lastCardAt<20000) return;
+    if(S.lastCard===best.id&&now()-S.lastCardAt<20000) return false;
     showCard('heard on the line · '+best.who,merged(cardBody(best)));
     S.lastCard=best.id; S.lastCardAt=now();
     S.objFired.push({id:best.id,at:mmss(now()-S.t0),score:bestScore});
+    return true;
   }
+  return false;
+}
+/* The prospect said an ordinary thing with one right answer — swap the green line to it NOW. */
+function sitRespond(nline){
+  var best=null,bestN=0;
+  SIT.forEach(function(s){
+    if(S.sitCool&&S.sitCool[s.tag]&&now()<S.sitCool[s.tag]) return;
+    var hits=0;
+    s.nm.forEach(function(p){ if(p&&nline.indexOf(p)>=0) hits++; });
+    if(hits>bestN){ bestN=hits; best=s; }
+  });
+  if(!best) return false;
+  S.sitCool=S.sitCool||{}; S.sitCool[best.tag]=now()+15000;
+  $('saytext').textContent=merged(best.say);
+  $('saytag').textContent='they spoke → '+best.tag;
+  var sl=$('sayline'); sl.classList.remove('pop'); void sl.offsetWidth; sl.classList.add('pop');
+  return true;
 }
 function lineHitsTrigger(nline){
   for(var i=0;i<S.autoCards.length;i++){
@@ -610,11 +671,21 @@ function scanFlags(txt){
    that tripped an objection trigger is THEM?. The ? is honest — one mic cannot know. The Deepgram
    path replaces this with real diarization (no ?). */
 function guessSpeaker(nline){
+  // Your identity phrasing beats everything — "can you hear me", "biscayne solutions",
+  // "i'm not your lender" are things only the caller says.
+  for(var i=0;i<YOU_PAT.length;i++) if(YOU_PAT[i]&&nline.indexOf(YOU_PAT[i])>=0) return 'you?';
+  // Prospect by conversational role: their questions ("hi who is this"), their brush-offs,
+  // their objection triggers, and the situational asks.
+  for(var j=0;j<THEM_PAT.length;j++) if(THEM_PAT[j]&&nline.indexOf(THEM_PAT[j])>=0) return 'them?';
   if(lineHitsTrigger(nline)) return 'them?';
+  for(var k=0;k<SIT.length;k++) for(var p=0;p<SIT[k].nm.length;p++)
+    if(SIT[k].nm[p]&&nline.indexOf(SIT[k].nm[p])>=0) return 'them?';
+  // Fall back to script overlap: a line mostly made of the words you're supposed to be
+  // reading is you. Two real words is enough ("can you hear me" is three).
   var ref=norm($('saytext').textContent+' '+$('saynote').textContent+' '
                +($('objection').className==='on'?$('objbody').textContent:''));
   var toks=nline.split(' ').filter(function(w){return w.length>2;});
-  if(toks.length<4) return '';
+  if(toks.length<2) return '';
   var hit=0;
   toks.forEach(function(w){ if(ref.indexOf(w)>=0) hit++; });
   return (hit/toks.length>=0.5)?'you?':'';
@@ -630,7 +701,11 @@ function pushFinal(text,spk){
   S.finals+=' '+text;
   S.lastSpeech=now();
   scanFlags(text);
-  scanObjections();
+  // Every prospect line gets an answer: objection cards win (amber panel); otherwise the
+  // situational engine swaps the green line to the right response and flashes it. Lines not
+  // clearly yours are treated as possibly-theirs, so an unlabeled line still gets coached.
+  var fired=scanObjections();
+  if(!fired&&tag!=='you'&&tag!=='you?') sitRespond(nline);
   renderTranscript();
 }
 function renderTranscript(){
