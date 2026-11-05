@@ -260,7 +260,7 @@ var STAGES = [
   note:'A no means STOP RECORDING, not hang up. (In Plain mode you skip this chip.)',
   probes:[]},
  {id:'opener', name:'Opener',
-  say:'Hi, {first}? Can you hear me?… It’s {sender} with Biscayne Solutions Group. Do you know your property on {st1} is in pre-foreclosure{date}?… I’m NOT your lender and I’m NOT calling to buy your house. I help owners see what options they have before this goes any further. Can I ask you a couple of quick questions?',
+  say:'Hi, {first}? Can you hear me?… It’s {sender} with Biscayne Solutions Group. I work with homeowners in {county} who have a case filed against the house. Is that something you’ve already got handled, or worth two minutes?… [If they have a lawyer: “Got it, then you’re in good hands. I won’t call you again. Take care.” Hang up, mark Do Not Contact.] … I’m NOT your lender and I’m NOT calling to buy your house. I help owners see what options they have before this goes any further. Can I ask you a couple of quick questions?',
   note:'Curious, unhurried — lower status on purpose. Never “Hi, is this {first}?” — say the name like you know them. Every … is a real pause: stop and let them answer. The two “nots” kill the two objections they’re already loaded with.',
   probes:[
    'Not them → “Oh, my bad. I’m looking for {first}. Do I have the right number for them?”',
@@ -442,7 +442,8 @@ function merged(t){
     .split('{first}').join(first||'there')
     .split('{st1}').join(st1)
     .split('{date}').join(date?(', with the sale set for '+date):'')
-    .split('{sender}').join(sender);
+    .split('{sender}').join(sender)
+    .split('{county}').join('South Florida');
 }
 
 /* ============================== STAGES UI ============================== */

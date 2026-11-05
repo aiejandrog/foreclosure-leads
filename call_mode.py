@@ -167,12 +167,25 @@ TONALITY = [
 # cue after the greeting, and the guided "who's asking?" answer re-confirms the owner first.
 # 2026-10-26 (Alejandro): "always assume". The greeting now names us and assumes it is them, so the
 # question no longer re-introduces the caller: _OPEN_ASK_* is the question alone.
-_OPEN_ASK_EN = "Do you know your property on {st1} is in pre-foreclosure{date}?"
+# 2026-11-05 (Alejandro, after a live call blew up on "Do you know your property on [street] is i-"):
+# naming his address and his foreclosure in the second sentence reads as "I know your business" before
+# he knows who we are. The opener stays; the line after it ASKS instead of TELLS. No street, no date,
+# no "foreclosure": {county} is the lead's own county ("Broward"), and "a case filed against the
+# house" is the plain public-record fact. If they say they have a lawyer, that is the answer: one
+# line, no argument, Do Not Contact (the 'lawyer' step). This is an either/or by design, against
+# Jesse's 2026-09-04 rule below; Alejandro chose it so a represented owner has an easy way out.
+_OPEN_ASK_EN = ("I work with homeowners in {county} who have a case filed against the house. Is that "
+                "something you've already got handled, or worth two minutes?")
 _OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy your house. I help owners see what options "
                  "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_ASK_ES = "¿Usted sabe que su propiedad en {st1} está en proceso de foreclosure{date_es}?"
+_OPEN_ASK_ES = ("Trabajo con dueños de casa en {county} que tienen un caso presentado contra la casa. "
+                "¿Eso ya lo tiene resuelto, o vale la pena dos minutos?")
+# THEY HAVE A LAWYER (2026-11-05): represented means no re-dial and no text. One line, then hang up and
+# log Do Not Contact. Never ask who the lawyer is, never argue the plan, never call the lawyer.
+LAWYER_EN = "Got it, then you're in good hands. I won't call you again. Take care."
+LAWYER_ES = "Entendido, entonces está en buenas manos. No le vuelvo a llamar. Que esté bien."
 _OPEN_NOTS_ES = ("No soy su prestamista y no le llamo para comprarle la casa. Ayudo a los dueños a ver "
                  "qué opciones tienen antes de que esto avance más. ¿Le puedo hacer un par de preguntas "
                  "rápidas?")
@@ -930,7 +943,7 @@ def _flow():
                 ['That\'s not me / who?', 'notme'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Their phone\'s AI answered (asks name + reason)', 'screen'],
-                ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
+                ['Straight to voicemail', 'vm'], ['I have a lawyer', 'lawyer'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         # Not them: the assumed name was wrong. Ask if it is the right number, then route.
         {'id': 'notme', 'k': 'NOT THEM — the fallback',
@@ -950,26 +963,35 @@ def _flow():
          'br': [['Yes, that\'s me', 'disarm'], ['No / not here', 'gate'], ['What\'s it about?', 'gate'],
                 ['Wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
-        {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
+        {'id': 'disarm', 'k': 'YOUR OPENER — ask, don\'t tell',
          # Named: the greeting was only "Hi, {first}? Can you hear me?", so say who we are first.
          # No name: the greeting already did, so the question alone (aen/aes).
          'en': INTRO_EN + ' ' + _OPEN_ASK_EN, 'es': INTRO_ES + ' ' + _OPEN_ASK_ES,
          'aen': _OPEN_ASK_EN, 'aes': _OPEN_ASK_ES,
-         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
-                 'question. Then STOP.',
-         'listen': 'Wait for the answer. Do not explain anything yet.',
-         'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
+         'tone': 'Calm and plain. Your name, the company, then the question. Do NOT say their address, '
+                 'their sale date or the word foreclosure here. Then STOP.',
+         'listen': 'Wait for the answer. Do not explain anything yet. A lawyer = one line and you are done.',
+         'br': [['Worth two minutes / what is it?', 'nots'], ['I have a lawyer handling it', 'lawyer'],
+                ["What case? / I didn't know", 'news'], ['What? / who is this?', 'nots'],
+                ['Already handled', 'obj:1'], ['Hung up on me', 'end:notint'],
                 ['What do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
-                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['I\'m busy, call me back', 'busy'], ['The bank / a mod is handling it', 'obj:1'],
                 ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'nots'},
+        {'id': 'lawyer', 'k': 'THEY HAVE A LAWYER — one line, done',
+         'en': LAWYER_EN, 'es': LAWYER_ES,
+         'tone': 'Calm, short, no argument. Do not ask who the lawyer is or what the plan is.',
+         'listen': 'Hang up. Log it Do Not Contact and note "has a lawyer". No re-dial, no text.',
+         'br': [['Done: Do Not Contact', 'end:dnc']],
+         'ret': 'lawyer'},
         {'id': 'news', 'k': "THEY DIDN'T KNOW — be human first",
          'en': _OPEN_NEWS_EN, 'es': _OPEN_NEWS_ES,
          'tone': 'Soft and slow. This is news to them. No pitch, no hurry.',
          'listen': 'Give them a second. Let them react.',
-         'br': [['Continue →', 'nots'], ['We already reinstated', 'reinstated'], ['Not interested', 'obj:15'],
+         'br': [['Continue →', 'nots'], ['I have a lawyer handling it', 'lawyer'],
+                ['We already reinstated', 'reinstated'], ['Not interested', 'obj:15'],
                 ['Don\'t call me again', 'end:dnc']],
          'ret': 'nots'},
         {'id': 'nots', 'k': 'THE TWO NOTS + permission',
@@ -979,7 +1001,8 @@ def _flow():
          'br': [['Okay / sure', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
-                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['I\'m busy, call me back', 'busy'], ['I have a lawyer handling it', 'lawyer'],
+                ['The bank / a mod is handling it', 'obj:1'],
                 ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'frame'},
         {'id': 'intro30', 'k': 'WHAT DO YOU DO? — one humble line',
@@ -4712,6 +4735,9 @@ function fillScript(t, r){
     .split('{date}').join(
       (r && r.x && !r.xf && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
+    /* {county} — the opener's "homeowners in Broward" (2026-11-05). r.ct is the county's first two
+       letters; anything unknown says South Florida rather than a wrong county. */
+    .split('{county}').join(({MI:'Miami-Dade', BR:'Broward', PA:'Palm Beach'})[String((r && r.ct) || '').toUpperCase()] || 'South Florida')
     /* {gap} — balloon lane only: THEIR monthly 12%-vs-7% gap off the recorded amount, or the $400k
        example when the amount is unknown. Rounded to $50 because their rate is an assumption. */
     .split('{gap}').join((r && r.bal && +r.bal.amt) ? ('$'+(Math.round((+r.bal.amt)*0.05/12/50)*50).toLocaleString()) : '$1,700')
