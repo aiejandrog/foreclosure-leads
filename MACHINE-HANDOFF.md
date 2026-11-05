@@ -33,6 +33,14 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 ## 1. Who is the runner RIGHT NOW
 
+> ### 🛑 2026-11-05 — THE LAPTOP IS DEAD. Read [LAPTOP-LOSS-2026-11-05.md](LAPTOP-LOSS-2026-11-05.md) first.
+>
+> Damaged charging port, no power, no boot. DESKTOP-35NNMFL is taking over as the runner but is
+> **not armed yet** (all DealFlow tasks `Disabled`). Everything below this block describes the
+> laptop-as-runner world and is history until the desktop is stood up. If the laptop is ever
+> revived, its tasks are still `Ready` and will catch up missed runs — keep it off the network and
+> run `-DisableLocal` on it before anything else.
+
 > ### ⚠️ CORRECTION 2026-09-18 ~15:45 — the block below was wrong about the desktop
 >
 > Read on DESKTOP-35NNMFL itself (`hostname` checked) at 15:40: **9 DealFlow tasks were `Ready`
