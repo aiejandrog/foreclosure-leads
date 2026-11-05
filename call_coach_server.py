@@ -274,6 +274,15 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/leads/recent":
             return self._send(200, {"leads": recent_leads()})
 
+        if p == "/api/objections":
+            # The 14 approved objection cards -- the SAME call_objections.json Call Mode
+            # ships, so Jesse/Alejandro copy edits flow here without touching the page.
+            try:
+                with open(os.path.join(ROOT, "call_objections.json"), "r", encoding="utf-8") as f:
+                    return self._send(200, {"cards": json.load(f)})
+            except (OSError, ValueError):
+                return self._send(200, {"cards": []})
+
         if p == "/api/sessions":
             try:
                 names = sorted(os.listdir(SESSIONS), reverse=True)[:50]

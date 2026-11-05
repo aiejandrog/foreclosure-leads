@@ -866,6 +866,17 @@ window.Coach = (function () {
     else if (/^[1-9]$/.test(k)) go(+k - 1);
   });
 
+  /* Deep link from Call Mode's "Coach" link: /?case=<case #> preselects that lead on the gate. */
+  (function () {
+    var c = new URLSearchParams(location.search).get('case');
+    if (!c) return;
+    $('q').value = c;
+    api('/api/lead?q=' + encodeURIComponent(c)).then(function (r) {
+      var m = (r.matches || []).filter(function (l) { return String(l.case) === c; });
+      if (m.length === 1) selectLead(m[0]); else hits(r.matches || []);
+    }).catch(function () {});
+  })();
+
   return { start: start, plain: plain, stop: stop, declined: declined, next: next, back: back, go: go,
            lookup: lookup, debounceLookup: debounceLookup, recentIfEmpty: recentIfEmpty, fill: fill,
            dismissObjection: dismissObjection, fire: fireObjection, _state: S };
