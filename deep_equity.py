@@ -544,7 +544,7 @@ def compute(lead, sources, records_searches=None, coborrowers=(), links=None, tr
 
     owners = [o.strip() for o in re.split(r'\s*&\s*|\s*;\s*', owner) if o.strip()] if owner else []
     row = {
-        'case_key': case,
+        'case_key': case_norm(case),
         'parcel': folio,
         'address': lead.get('addr') or lead.get('address') or '',
         'owners': owners,
@@ -708,7 +708,7 @@ class Site:
 
 
 def manual_path(case, base=None):
-    return os.path.join(base or _dir(), 'manual', re.sub(r'[^A-Z0-9-]', '_', case.upper()) + '.json')
+    return os.path.join(base or _dir(), 'manual', case_norm(case) + '.json')
 
 
 def load_manual(case, base=None):
@@ -967,7 +967,7 @@ def tier2(leads, skip, latest=None, today=None, limit=25):
             continue
         if not has_phone(r, skip) or not str(r.get('case') or '').strip():
             continue
-        v = (latest.get(str(r.get('case')).upper()) or {}).get('verified')
+        v = (latest.get(case_norm(r.get('case'))) or {}).get('verified')
         if v:
             try:
                 if (today - datetime.date.fromisoformat(v['last_checked'][:10])).days < TIER2_RECHECK_DAYS:
@@ -1017,7 +1017,7 @@ def run_one(lead, fresh=False, log=None, sites=None, record_raw=False, base=None
             log('%s %s %s: %s' % (case, k, s['status'], s['why']))
     row = compute(dict(lead, owner=owner), sources, searches, co, links, trunc, nrec)
     if record_raw:
-        rd = os.path.join(base, 'raw', re.sub(r'[^A-Z0-9-]', '_', case))
+        rd = os.path.join(base, 'raw', case_norm(case))
         os.makedirs(rd, exist_ok=True)
         with open(os.path.join(rd, _now().strftime('%Y%m%d-%H%M%S') + '.json'), 'w', encoding='utf-8') as f:
             json.dump({'lead': lead, 'owner': owner, 'coborrowers': co, 'sources': sources,
@@ -1029,7 +1029,7 @@ def run_one(lead, fresh=False, log=None, sites=None, record_raw=False, base=None
 def replay(case, base=None):
     """Re-parse the newest recorded responses for a case. No network."""
     base = base or _dir()
-    rd = os.path.join(base, 'raw', re.sub(r'[^A-Z0-9-]', '_', case.upper()))
+    rd = os.path.join(base, 'raw', case_norm(case))
     files = sorted(f for f in os.listdir(rd) if f.endswith('.json')) if os.path.isdir(rd) else []
     if not files:
         raise SystemExit('no recorded responses for %s under %s (run --case %s --record first)' % (case, rd, case))
