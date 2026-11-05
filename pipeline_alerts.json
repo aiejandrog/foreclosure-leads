@@ -1,66 +1,60 @@
 {
  "alerts": [
   {
-   "at": "2026-11-04T09:13:08-05:00",
+   "at": "2026-11-04T21:33:40-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "First-touch bounce 20.0% (2 of 10 sent on 2026-11-01): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 20.0% (2 of 10 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
   },
   {
-   "at": "2026-11-04T09:13:08-05:00",
+   "at": "2026-11-04T21:33:40-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage, lead data freshness."
+   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-04T09:13:08-05:00",
+   "at": "2026-11-04T21:33:40-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-04 09:13): battery 13% (under 50%); 2 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync, DealFlow Sheets CRM); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 11-04 21:14): 1 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-04T09:13:08-05:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync failed on 2026-11-04 (steps: ledger_sync)."
-  },
-  {
-   "at": "2026-11-04T09:13:08-05:00",
+   "at": "2026-11-04T21:33:40-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-04T09:13:08-05:00",
+   "at": "2026-11-04T21:33:40-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-04T09:13:08-05:00",
+ "published_at": "2026-11-04T21:33:40-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 4,
+   "errors": 0,
    "filings": 2667,
-   "holds": 579,
+   "holds": 598,
    "last_http_status": 0,
-   "leads_checked": 23,
-   "match_s": 3,
-   "needing_search": 4265,
+   "leads_checked": 3,
+   "match_s": 2,
+   "needing_search": 4279,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.32,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 50,
-   "searched_this_run": 23,
+   "requests_used": 115,
+   "searched_this_run": 3,
    "starved_runs": 0,
-   "truncated": 2
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -107,8 +101,7 @@
    "fresh": true,
    "names": [
     "skiptrace freshness",
-    "RULE: ARV-comp coverage",
-    "lead data freshness"
+    "RULE: ARV-comp coverage"
    ]
   },
   "morning_sends": {
@@ -120,7 +113,7 @@
    "cap": 0,
    "caps": [],
    "date": "2026-11-04",
-   "eligible": 28,
+   "eligible": 29,
    "judged": true,
    "paused": true,
    "readable": true,
@@ -130,17 +123,17 @@
     "ev": {
      "autostart_countdown": 1,
      "autostart_run": 1,
-     "run_paused": 1,
-     "send_answer": 1,
+     "run_paused": 19,
+     "send_answer": 19,
      "worker_loaded": 1
     },
     "no_email": {},
     "queued": 21,
     "readable": true,
     "refused": {
-     "optout_stale": 1
+     "optout_stale": 19
     },
-    "rows": 5,
+    "rows": 41,
     "skipped": {}
    }
   },
@@ -150,13 +143,11 @@
   },
   "optout_sync": {
    "date": "2026-11-04",
-   "failed_steps": [
-    "ledger_sync"
-   ],
+   "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": false,
-   "started_at": 1793800983,
+   "run_ok": true,
+   "started_at": 1793829440,
    "state": "finished"
   },
   "paid_reads": {
@@ -166,17 +157,16 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-11-04T09:13:08-05:00",
+   "at": "2026-11-04T21:14:32-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
    "degraded_names": [],
    "disabled": 0,
    "disabled_names": [],
-   "failed": 2,
+   "failed": 1,
    "failed_names": [
-    "DealFlow Opt-out Sync",
-    "DealFlow Sheets CRM"
+    "DealFlow Opt-out Sync"
    ],
    "interactive": 3,
    "interactive_names": [
@@ -185,7 +175,7 @@
     "DealFlow Replies"
    ],
    "on_ac": true,
-   "pct": 13,
+   "pct": 79,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
