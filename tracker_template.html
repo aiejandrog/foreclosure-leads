@@ -17754,6 +17754,14 @@ function _mergeLead(local, remote){
     [local.stageAt, remote.stageAt].forEach(m => { if(m && typeof m === 'object') Object.keys(m).forEach(s => { if(!(s in _sa) || String(m[s]) < String(_sa[s])) _sa[s] = m[s]; }); });
     if(Object.keys(_sa).length && JSON.stringify(_sa) !== JSON.stringify(local.stageAt || {})){ out.stageAt = _sa; ch.deal = true; }
   }
+  /* EQUITY RE-ROUTE (2026-11-05, Call Mode's "Next step" after a call on a Has-equity lead). n.route is
+     ONE unit {k, d, ts, by[, done, dk, kn]}: the side with the larger ts supplies it whole, so a re-route
+     or a "Mailed" on one phone reaches the other. n.atty (owner has an attorney: never routed) is a
+     sticky date, earliest wins, never cleared by a merge -- the safe direction, like optout. */
+  const _lrt = (local.route && typeof local.route === 'object') ? (+local.route.ts || 0) : -1;
+  const _rrt = (remote.route && typeof remote.route === 'object') ? (+remote.route.ts || 0) : -1;
+  if(_rrt > _lrt){ out.route = remote.route; ch.note = true; }
+  if(remote.atty && (!out.atty || String(remote.atty) < String(out.atty))){ out.atty = remote.atty; ch.note = true; }
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
   // numbers pasted from Whitepages on a Call Mode card: union, so a paste on either phone survives
