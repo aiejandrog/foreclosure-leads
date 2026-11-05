@@ -864,3 +864,7 @@ footprint.local.json
 REPLY-DRAFTS-*
 JESSE-RUN-*.log
 evidence/
+
+# Live call coach (2026-11-05): recorded homeowner calls stay on the laptop, never in git.
+call_sessions/
+!_callcoachlivetest.py
