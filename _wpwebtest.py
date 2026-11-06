@@ -16,6 +16,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 os.environ['WP_WEB_MAX_LEADS'] = '15'
 
+import datetime as _dt  # noqa: E402
+
+
+def _auc(days):
+    # Sale dates relative to today. Fixed '11/01/2026'-style dates went into the past on
+    # 2026-11-01 and skiptrace._is_closed() then held every fixture lead as 'closed'.
+    return (_dt.date.today() + _dt.timedelta(days=days)).strftime('%m/%d/%Y')
+
 import wp_web as W          # noqa: E402
 import wp_contacts as C     # noqa: E402
 
@@ -227,14 +235,14 @@ rec('a person with no contact point is dropped',
     W.parse_people_text('Jane Q Public\nResident\nCell Phone\n—\nEmail Address\n—') == [])
 
 print('\nLEAD SELECTION (no browser)')
-leads = [{'case': 'A-1', 'owners': 'SMITH JOHN', 'addr': '5 OAK ST, MIAMI, FL 33101', 'auction': '11/01/2026', 'days': 10},
-         {'case': 'B-1', 'owners': 'ACME LLC', 'addr': '6 OAK ST, MIAMI, FL 33101', 'auction': '11/01/2026', 'days': 10}]
+leads = [{'case': 'A-1', 'owners': 'SMITH JOHN', 'addr': '5 OAK ST, MIAMI, FL 33101', 'auction': _auc(10), 'days': 10},
+         {'case': 'B-1', 'owners': 'ACME LLC', 'addr': '6 OAK ST, MIAMI, FL 33101', 'auction': _auc(10), 'days': 10}]
 WL.load_all_leads = lambda: leads
 WL.load_skiptrace = lambda: {}
 sel = W._select(type('A', (), {'case': None, 'pick_callable': 15})())
 rec('company owner not selected', all(WL._lead_key(r) != 'B-1' for r in sel), [WL._lead_key(r) for r in sel])
 rec('per-run cap honoured', len(sel) <= 15)
-leads.append({'case': 'C-1', 'owners': 'DOE JANE', 'addr': '7 OAK ST, MIAMI, FL 33101', 'auction': '11/02/2026', 'days': 11})
+leads.append({'case': 'C-1', 'owners': 'DOE JANE', 'addr': '7 OAK ST, MIAMI, FL 33101', 'auction': _auc(11), 'days': 11})
 WL.load_skiptrace = lambda: {'C-1': {'phones': [{'number': '3055550100'}]}}
 cm = W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 5})())
 rec('--compare takes only leads that already have trace numbers', [WL._lead_key(r) for r in cm] == ['C-1'], [WL._lead_key(r) for r in cm])
@@ -245,7 +253,7 @@ import paths as _P  # noqa: E402
 _P.DEALFLOW_DIR = td
 WL.CACHE = os.path.join(td, 'wp.json')
 W.CACHE = WL.CACHE
-leads.append({'case': 'D-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/03/2026', 'days': 12})
+leads.append({'case': 'D-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(12), 'days': 12})
 open(os.path.join(td, 'p.txt'), 'w', encoding='utf-8').write(PAGE)
 rc = W.ingest_file('D-1', os.path.join(td, 'p.txt'))
 import json as _j  # noqa: E402
@@ -281,7 +289,7 @@ seq = ['old', PAGE,                                   # E-0: copied the page -> 
 W._clipboard_text = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
 WL.CACHE = os.path.join(td, 'wp2.json')
 W.CACHE = WL.CACHE
-leads[:] = [{'case': 'E-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13 + i}
+leads[:] = [{'case': 'E-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13 + i}
             for i in range(4)]
 n_ok = W.assist(list(leads), wait_s=5)
 c2 = _j.load(open(WL.CACHE, encoding='utf-8')) if os.path.exists(WL.CACHE) else {}
@@ -340,7 +348,7 @@ OTHER = PAGE.replace('1723 Canal Dr', '1725 Canal Dr')
 seq[:] = ['old', OTHER, OTHER]
 WL.CACHE = os.path.join(td, 'wp3.json')
 W.CACHE = WL.CACHE
-leads[:] = [{'case': 'F-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'F-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 rec('assist refuses a page for a different address', W.assist(list(leads), wait_s=5) == 0
     and not os.path.exists(WL.CACHE) or 'F-0' not in _j.load(open(WL.CACHE, encoding='utf-8')))
 # --from-file never replaces an existing lookup without --refresh
@@ -351,7 +359,7 @@ open(os.path.join(td, 'p.txt'), 'w', encoding='utf-8').write(PAGE)
 rec('--from-file keeps an API entry', W.ingest_file('F-0', os.path.join(td, 'p.txt')) == 1
     and _j.load(open(WL.CACHE))['F-0']['result']['apn'] == 'API')
 # --reparse rebuilds kept pages and drops what fails; API entries untouched
-leads[:] = [{'case': c, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}
+leads[:] = [{'case': c, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}
             for c in ('G-0', 'G-1', 'G-2')]
 W._keep_page('G-0', TAIL)
 W._keep_page('G-1', OTHER)
@@ -370,8 +378,8 @@ rec('reparse drops a wrong-address page, leaves one with no kept copy', 'G-1' no
 rec('reparse never touches an API entry', c5.get('API-1', {}).get('result') == {'apn': 'x'})
 
 # a lead whose kept page is its own address with nobody on it is not offered again
-leads[:] = [{'case': 'H-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13},
-            {'case': 'H-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 14}]
+leads[:] = [{'case': 'H-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13},
+            {'case': 'H-1', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(14), 'days': 14}]
 WL.load_skiptrace = lambda: {'H-0': {'phones': [{'number': '3055550100'}]}, 'H-1': {'phones': [{'number': '3055550101'}]}}
 WL.CACHE = os.path.join(td, 'wp6.json')
 W.CACHE = WL.CACHE
@@ -387,7 +395,7 @@ rec('#12 lead matches an Apt 12 page', W.page_matches_address('123 Main St Apt 1
 rec('Apt 12 lead matches a #12 page', W.page_matches_address('123 Main St #12', '123 MAIN ST APT 12'))
 rec('Northwest 5th Street matches NW 5th St', W.page_matches_address('100 NW 5th St', '100 NORTHWEST 5TH STREET'))
 # reparse keeps a paid Person layer and refuses to run on empty lead files
-leads[:] = [{'case': 'J-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'J-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 W._keep_page('J-0', OTHER)
 _j.dump({'J-0': {'result': {}, '_src': 'wpweb-hand', '_person': {'x': 1}, '_http': 200, '_ts': 5}}, open(WL.CACHE, 'w'))
 W.reparse()
@@ -402,7 +410,7 @@ WL.load_all_leads = _ll
 rec('"West Ave" lead refuses an "Alton Ave" page', not W.page_matches_address('1234 Alton Ave', '1234 WEST AVE'))
 rec('"West Ave" lead matches a "West Ave" page', W.page_matches_address('1234 West Ave', '1234 WEST AVE'))
 SIGNEDOUT = '1723 Canal Dr\nCoral Springs, FL 33071\nOwners & Residents\nMarisol Romero\nResident\nCell Phone\nSign in to view\n'
-leads[:] = [{'case': 'K-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'K-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 WL.load_skiptrace = lambda: {'K-0': {'phones': [{'number': '3055550100'}]}}
 W._keep_page('K-0', SIGNEDOUT)
 rec('a signed-out copy (people, no phones) does not hide the lead', not W._known_empty(leads[0]))
@@ -414,7 +422,7 @@ W._set_clipboard = lambda a: put.append(a) or True
 seq[:] = ['old', OTHER, ADDR, PAGE, PAGE]
 WL.CACHE = os.path.join(td, 'wp8.json')
 W.CACHE = WL.CACHE
-leads[:] = [{'case': 'L-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'L-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 n8 = W.assist(list(leads), wait_s=10)
 rec('wrong page -> address on clipboard -> the right page is cached', n8 == 1 and put == ['1723 Canal Dr']
     and 'L-0' in _j.load(open(WL.CACHE, encoding='utf-8')), (n8, put))
@@ -428,7 +436,7 @@ W.time = _Clock()
 seq[:] = ['old', OTHER, ADDR + '\r\n', 'not a page', PAGE, PAGE]
 WL.CACHE = os.path.join(td, 'wp9.json')
 W.CACHE = WL.CACHE
-leads[:] = [{'case': 'M-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'M-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 rec('the address echoed back with CR/LF, or a stray copy, is not taken as the page',
     W.assist(list(leads), wait_s=10) == 1 and 'M-0' in _j.load(open(WL.CACHE, encoding='utf-8')))
 
@@ -441,7 +449,7 @@ put[:] = []
 seq[:] = ['old', CITY, ADDR, PAGE, PAGE]
 WL.CACHE = os.path.join(td, 'wp10.json')
 W.CACHE = WL.CACHE
-leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'N-0', 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 rec('city list -> address on clipboard -> the house page is cached', W.assist(list(leads), wait_s=10) == 1 and put == ['1723 Canal Dr'])
 import wp_linkprobe as _LP  # noqa: E402
 _S = '2634 SE 19 CT #205C'
@@ -484,7 +492,7 @@ rec('a house page with a search-records link is not the city list',
 
 # selection skips cached leads and leads with two misses this week
 leads[:] = [{'case': 'P-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR.replace('1723', str(1800 + i)),
-             'auction': '11/04/2026', 'days': 13 + i} for i in range(3)]
+             'auction': _auc(13), 'days': 13 + i} for i in range(3)]
 WL.load_skiptrace = lambda: {'P-%d' % i: {'phones': [{'number': '305555010%d' % i}]} for i in range(3)}
 WL.CACHE = os.path.join(td, 'wp11.json')
 W.CACHE = WL.CACHE
@@ -513,7 +521,7 @@ rec('UNIT 3-B and #3B are the same unit', W._part_diff('100 NW 5 ST UNIT 3-B', '
 rec('--retry-misses refuses the automated run', W.main(['--retry-misses']) == 2)
 
 leads[:] = [{'case': 'S-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR.replace('1723', str(1900 + i)),
-             'auction': '11/04/2026', 'days': 13 + i} for i in range(2)]
+             'auction': _auc(13), 'days': 13 + i} for i in range(2)]
 WL.load_skiptrace = lambda: {}
 W._note_attempt('S-1')
 ks = [WL._lead_key(r) for r in W._select(type('A', (), {'case': None, 'pick_callable': 0, 'compare': 0, 'refresh': False, 'retry_misses': True})())]
@@ -616,8 +624,8 @@ rec('a number with only a type and carrier is still hers', rr and len(rr['phones
 rec('--by-name refuses the automated run', W.main(['--by-name', '3']) == 2 and W.main(['--by-name', '0']) == 2)
 WL.CACHE = os.path.join(td, 'wp_name.json')
 W.CACHE = WL.CACHE
-leads[:] = [{'case': 'N-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13 + i}
-            for i in range(3)] + [{'case': 'N-9', 'owners': 'ACME LLC', 'addr': ADDR, 'auction': '11/04/2026', 'days': 13}]
+leads[:] = [{'case': 'N-%d' % i, 'owners': 'ROMERO, MARISOL', 'addr': ADDR, 'auction': _auc(13), 'days': 13 + i}
+            for i in range(3)] + [{'case': 'N-9', 'owners': 'ACME LLC', 'addr': ADDR, 'auction': _auc(13), 'days': 13}]
 W._note_attempt('N-1')
 W._note_attempt('N-9')
 W._note_attempt(W._NAME_MISS + 'N-2'); W._note_attempt('N-2'); W._note_attempt(W._NAME_MISS + 'N-2')
