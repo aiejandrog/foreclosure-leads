@@ -4105,6 +4105,11 @@ a.dial{background:var(--ok);color:#fff}
 a.redial{display:block;width:100%;min-height:50px;line-height:50px;margin-top:10px;border-radius:12px;
      border:1px solid var(--ok);color:var(--ok);background:transparent;font-size:16px;font-weight:700;
      text-align:center;text-decoration:none;touch-action:manipulation}
+/* THEY PICKED UP (2026-11-05): the one tap that starts the talk timer, and the readout that replaces it. */
+button.pubtn{display:block;width:100%;min-height:54px;margin-top:10px;border-radius:12px;border:0;background:var(--ok);
+     color:#fff;font-size:17px;font-weight:800;touch-action:manipulation}
+.puon{margin-top:10px;padding:13px 12px;border-radius:12px;border:1px solid var(--ok);color:var(--ok);font-size:17px;
+     font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
 button.big{background:#1d4ed8;color:#fff}
 .oc button{display:block;width:100%;min-height:56px;margin-top:9px;border-radius:12px;border:1px solid #2a3f6b;
      background:#0f1d3a;color:var(--ink);font-size:17px;font-weight:600;touch-action:manipulation}
@@ -7620,8 +7625,11 @@ function isWarm(r){
    changes no queue, cooldown or disposition. Mirrors call_stats.py (the command-line twin);
    _callstatstest.py runs both on one fixture and fails if they disagree.
    One row per day per seat. A dial = a logged outcome, plus any dial-tap/redial row that never got
-   an outcome that day (no_outcome). Talk time is NOT tracked: dial_to_log_min is dial tap -> outcome
-   tap on ANSWERED calls only (ring time + talk + the seconds before the tap), 0 < gap <= 60 min. */
+   an outcome that day (no_outcome). dial_to_log_min is dial tap -> outcome tap on ANSWERED calls only
+   (ring time + talk + the seconds before the tap), 0 < gap <= 60 min. TALK TIME (2026-11-05) exists only
+   when "They picked up" was tapped during the call: logOutcome writes talk = whole seconds from that tap
+   to the outcome tap on an answered outcome, 0 < talk <= 3600. talk_min / talked_calls / avg_talk_min
+   read that field and nothing else; a row without it is untimed, never zero. */
 var CS_ANSWERED = {talked:1,callback:1,appt:1,notint:1,dnc:1,gate:1};
 var CS_NOANS = {noanswer:1,voicemail:1};
 var CS_BAD = {badnum:1,wrong:1};
@@ -7639,7 +7647,8 @@ function callStatsRows(nts, who, days, nowMs){
       if(who && d.by && d.by!==who) continue;
       var seat = d.by || '', oc = d.oc || '', key = d.d+'|'+seat;
       var r = by[key] = by[key] || {date:d.d, seat:seat, dials:0, answered:0, no_answer_vm:0,
-        wrong_or_disconnected:0, appointments:0, no_outcome:0, other:0, dial_to_log_min:0, timed_calls:0};
+        wrong_or_disconnected:0, appointments:0, no_outcome:0, other:0, dial_to_log_min:0, timed_calls:0,
+        talk_s:0, talked_calls:0};
       if(oc==='pending' || oc==='redial'){
         var resolved = false;
         for(var j=i+1;j<dl.length;j++){ if(dl[j] && dl[j].d===d.d && dl[j].oc!=='pending' && dl[j].oc!=='redial'){ resolved = true; break; } }
@@ -7651,6 +7660,8 @@ function callStatsRows(nts, who, days, nowMs){
         r.answered++;
         var g = (+d.tsu - +d.tsd) / 1000;
         if(d.tsd && g > 0 && g <= 3600){ r.dial_to_log_min += g/60; r.timed_calls++; }
+        var tk = +d.talk;
+        if(d.talk != null && tk > 0 && tk <= 3600 && Math.round(tk) === tk){ r.talk_s += tk; r.talked_calls++; }
       }
       else if(CS_NOANS[oc]) r.no_answer_vm++;
       else if(CS_BAD[oc]) r.wrong_or_disconnected++;
@@ -7662,13 +7673,16 @@ function callStatsRows(nts, who, days, nowMs){
     return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.seat < b.seat ? -1 : a.seat > b.seat ? 1 : 0); });
 }
 var CS_COLS = ['date','seat','total_dials','answered','no_answer_vm','wrong_or_disconnected','appointments',
-  'no_outcome_tapped','other','dial_to_log_min','timed_calls','answer_rate','appt_rate'];
+  'no_outcome_tapped','other','dial_to_log_min','timed_calls','talk_min','talked_calls','avg_talk_min',
+  'answer_rate','appt_rate'];
 function callStatsCsv(rows){
   var out = [CS_COLS.join(',')];
   rows.forEach(function(r){
     var logged = r.dials - r.no_outcome;
     out.push([r.date, r.seat, r.dials, r.answered, r.no_answer_vm, r.wrong_or_disconnected, r.appointments,
       r.no_outcome, r.other, (Math.round(r.dial_to_log_min*10)/10).toFixed(1), r.timed_calls,
+      (Math.round(r.talk_s/60*10)/10).toFixed(1), r.talked_calls,
+      r.talked_calls ? (Math.round(r.talk_s/60/r.talked_calls*10)/10).toFixed(1) : '',
       logged ? (r.answered/logged).toFixed(3) : '', logged ? (r.appointments/logged).toFixed(3) : ''].join(','));
   });
   return out.join('\n');
@@ -7676,8 +7690,10 @@ function callStatsCsv(rows){
 var CS_NOTE = 'DealFlow Call Mode daily stats. total_dials = logged outcomes + dials with no outcome tapped. '
   + 'answered = a person picked up (talked, callback, appointment, soft no, hard no, not the owner). '
   + 'wrong_or_disconnected = wrong number + bad number. answer_rate and appt_rate = over logged dials '
-  + '(total_dials minus no_outcome_tapped). Talk time is not tracked: dial_to_log_min is the minutes from '
-  + 'the dial tap to the outcome tap on answered calls (includes ringing), timed_calls says how many had it.';
+  + '(total_dials minus no_outcome_tapped). dial_to_log_min is the minutes from the dial tap to the outcome '
+  + 'tap on answered calls (includes ringing), timed_calls says how many had it. Talk time is tracked only '
+  + 'when \'They picked up\' is tapped during the call: talk_min is the sum of talk seconds on answered calls '
+  + 'with a pickup tap, talked_calls is how many, avg_talk_min is its average.';
 /* CALLSTATS-END */
 /* THE SESSION STRIP — on every screen. "How many calls have I made, how many people have I been
    through" answered where he is looking, and the number MOVING on each logged outcome is the live
@@ -7861,12 +7877,15 @@ function screenCallStats(){
       + '<div class="regsub">' + r.dials + ' dials &middot; ' + r.answered + ' answered &middot; '
       + r.no_answer_vm + ' no answer/VM &middot; ' + r.wrong_or_disconnected + ' wrong/disconnected &middot; '
       + r.appointments + ' appt' + (r.no_outcome ? ' &middot; ' + r.no_outcome + ' with no outcome tapped' : '')
-      + (logged ? ' &middot; answer rate ' + Math.round(100*r.answered/logged) + '%' : '') + '</div></div>';
+      + (logged ? ' &middot; answer rate ' + Math.round(100*r.answered/logged) + '%' : '')
+      + (r.talked_calls ? ' &middot; talk ' + (Math.round(r.talk_s/60*10)/10).toFixed(1) + ' min on ' + r.talked_calls
+         + ' call' + (r.talked_calls === 1 ? '' : 's') : '') + '</div></div>';
   }).join('') : '<div class="regsub" style="padding:14px 2px">No dials logged ' + (_csDays===1 ? 'today' : 'in this window') + ' on this seat.</div>';
   $('app').innerHTML = head()
     + '<div class="card"><div class="band"><div class="bl">CALL STATS' + (me ? ' &middot; ' + esc(me) : '') + '</div>'
-    +   '<div class="regsub" style="margin-top:6px">Talk time is not tracked. dial_to_log_min is dial tap to outcome tap '
-    +   'on answered calls, ringing included.</div></div>'
+    +   '<div class="regsub" style="margin-top:6px">Talk time is tracked only when &lsquo;They picked up&rsquo; is tapped '
+    +   'during the call: talk_min is the sum of talk seconds on answered calls with a pickup tap, avg_talk_min is its '
+    +   'average. dial_to_log_min is dial tap to outcome tap on answered calls, ringing included.</div></div>'
     + '<div class="reglist">' + shown + '</div>'
     + '<button class="big" id="cscopy" style="margin-top:14px">Copy as text</button>'
     + '<button class="big" id="csdl" style="margin-top:8px">Download CSV</button>'
@@ -8885,6 +8904,42 @@ function setCallback(r, hours, label){
   toast('Callback ' + label);
 }
 
+/* CALLPICKUP-BEGIN  "THEY PICKED UP" (2026-11-05). The page cannot see the call: tel: hands it to the
+   phone's dialer and the page gets no answer / hang-up event. So talk time is one manual tap. It stamps
+   tsa (ms) on the open dial row (the trailing pending/redial row for THIS number today), once; a second
+   tap changes nothing. logOutcome carries tsa onto the outcome row and turns it into talk seconds. An
+   unanswered call never touches it. The live mm:ss readout is repainted by clkTick (no second timer). */
+function puRow(r, d){
+  var n = notes[r.c], dl = n && n.dials, x = dl && dl[dl.length-1];
+  return (x && (x.oc==='pending' || x.oc==='redial') && x.d===today() && x.ph4===String(d).slice(-4)) ? x : null;
+}
+function puMmss(ms){
+  var s = Math.max(0, Math.floor(ms/1000));
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+function puHtml(r, d){
+  var x = puRow(r, d);
+  if(!x) return '';
+  if(x.tsa) return '<div class="puon">On call <span id="pu-t" data-tsa="' + (+x.tsa) + '">'
+    + puMmss(Date.now() - x.tsa) + '</span></div>';
+  return '<button class="pubtn" id="pubtn">&#9742;&nbsp; They picked up</button>';
+}
+function puPaint(r, d){
+  var el = document.getElementById('pubox');
+  if(!el) return;
+  el.innerHTML = puHtml(r, d);
+  var b = document.getElementById('pubtn');
+  if(b) b.onclick = function(){
+    var x = puRow(r, d);
+    if(x && !x.tsa){ x.tsa = Date.now(); touched = true; saveNotes(); }
+    puPaint(r, d);
+  };
+}
+function puTick(){
+  var el = document.getElementById('pu-t');
+  if(el && SCREEN === 'outcome') el.textContent = puMmss(Date.now() - (+el.getAttribute('data-tsa') || Date.now()));
+}
+/* CALLPICKUP-END */
 function screenOutcome(){
   SCREEN='outcome';
   /* THE SHEET STAYS. This screen is not "the logging screen" — it paints the instant he taps dial
@@ -8990,6 +9045,8 @@ function screenOutcome(){
        the 3-in-24h FTSA cap (the safe direction); the card's "dialed, no outcome logged" bar says so. */
     +'<button id="ocback" class="ghost" style="margin:8px 0 2px">&lsaquo; Back to the numbers (nothing logged)</button>'
     +sessStrip()
+    /* They picked up / voicemail: the two first events of a call, stacked at the top. */
+    +'<div id="pubox"></div>'
     /* FIRST thing under the number: the moment it goes to voicemail there is no time to scroll. */
     +(_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
       : '<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>')
@@ -9007,6 +9064,7 @@ function screenOutcome(){
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
   wireBrief(document, r);
+  puPaint(r, d);
   if($('vmbtn')) $('vmbtn').onclick = function(){ vmOpen(r); };
   if($('ocback')) $('ocback').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
@@ -9019,6 +9077,7 @@ function screenOutcome(){
     if(relKind(r, phIdx)) _rr.rel = relKind(r, phIdx);
     n.dials.push(_rr);
     touched=true; saveNotes(); queueSync();
+    puPaint(r, d);                 /* a redial is a new call: the pickup button comes back for it */
   });
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
     b.onclick=function(){
@@ -9985,11 +10044,22 @@ function logOutcome(r,o,digits){
   var _tsd = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
               && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsu) || 0;
   /* CALLSTATS-TSD-END */
+  /* CALLSTATS-TSA-BEGIN  tsa = the "They picked up" tap on the same open row (2026-11-05). Carried onto
+     the outcome row; talk (whole seconds, pickup -> outcome tap) only on an answered outcome and only
+     when 0 < talk <= 3600, otherwise omitted. Both additive; old rows are untimed. */
+  var _tsa = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
+              && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsa) || 0;
+  /* CALLSTATS-TSA-END */
   if(_lastD && _lastD.oc==='pending' && _lastD.d===today() && _lastD.ph4===String(digits).slice(-4)){
     n.dials.pop();
   }
   var _row = {d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()};
   if(_tsd) _row.tsd = _tsd;
+  if(_tsa){
+    _row.tsa = _tsa;
+    var _talk = Math.round((_row.tsu - _tsa) / 1000);
+    if(CS_ANSWERED[o.k] && _talk > 0 && _talk <= 3600) _row.talk = _talk;
+  }
   if(_rel) _row.rel = _rel;
   n.dials.push(_row);
   n.cooldownH=o.h;
@@ -10351,6 +10421,7 @@ function clkLine(k, now){
                                                           : ' \u00b7 TIME UP (' + clkFmt(k.planMin * 60000) + ' done)'));
 }
 function clkTick(){
+  try{ puTick(); }catch(e){}       /* the "On call mm:ss" readout rides this 1 s loop; runs clocked in or not */
   var k = clkGet(), el = document.getElementById('clk-t');
   if(!k) return;
   if(el) el.textContent = clkLine(k);
