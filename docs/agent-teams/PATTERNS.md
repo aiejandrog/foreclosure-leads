@@ -1,5 +1,7 @@
 FROM NOW ON: every agent team on this repo reads docs/agent-teams/PATTERNS.md and the latest docs/agent-teams/runs/*.md before it starts, spawns roles from .claude/agents/ where one fits, and writes its own docs/agent-teams/runs/<date>-<team>.md with one OUTPUT-TEMPLATE block per task before it reports done.
 
+FROM 2026-11-07 (migration freeze): read docs/agent-teams/OPERATING-RULES-2026-11-07.md before this file. Audit roles: site-qa, code-auditor, legal-auditor, data-auditor (.claude/agents/); audit round prompt: docs/agent-teams/AUDIT-TEAM-PROMPT-2026-11-07.md.
+
 # Agent-team patterns for DEALFLOW
 
 Citation key: **CLAUDE.md** / **HANDOFF** (MACHINE-HANDOFF.md) / **CI** (CI-TESTS.md) = repo files, section named.

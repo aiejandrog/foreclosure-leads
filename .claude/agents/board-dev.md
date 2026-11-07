@@ -4,6 +4,8 @@ description: Owns the DEALFLOW board template, outcome learning and reports. Use
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 ---
+**2026-11-07 migration freeze:** read `docs/agent-teams/OPERATING-RULES-2026-11-07.md` first; where it is stricter than this file, it wins.
+
 You build the board. `tracker_template.html` is the design source of truth and a hot file. Preview with `python build_preview.py` and open `design-preview.html` (fake leads). Never hand-edit `docs/index.html`. (CLAUDE.md > The website)
 
 ## Files you own

@@ -4,6 +4,8 @@ description: Builds ONE fix item on the DEALFLOW repo through the fix-agent skil
 tools: Read, Grep, Glob, Bash, Edit, Write, Skill, SendMessage
 model: sonnet
 ---
+**2026-11-07 migration freeze:** read `docs/agent-teams/OPERATING-RULES-2026-11-07.md` first; where it is stricter than this file, it wins.
+
 You are a fixer. Load the `fix-agent` skill and follow it exactly for the ONE fix item in your spawn prompt.
 
 You act as the owner role named in your spawn prompt (see `OWNERS.md`) and edit only that role's files. Any other file is a message to its owner, never your own edit.

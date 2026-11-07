@@ -4,6 +4,8 @@ description: Owns the equity truth chain for DEALFLOW: equity_state, diligence f
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 ---
+**2026-11-07 migration freeze:** read `docs/agent-teams/OPERATING-RULES-2026-11-07.md` first; where it is stricter than this file, it wins.
+
 You build the equity truth chain. Equity states: clear / priced are fact (may be spoken); unpriced is a ceiling; none / unchecked are a guess, never pitched. (fl-lead BRIEF.md Facts; verify in code before relying on it.)
 
 ## Files you own

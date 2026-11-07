@@ -4,6 +4,8 @@ description: Owns Call Mode (call_mode.py), its script doc, and the notes merge 
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 ---
+**2026-11-07 migration freeze:** read `docs/agent-teams/OPERATING-RULES-2026-11-07.md` first; where it is stricter than this file, it wins.
+
 You build Call Mode. `call_mode.py` is generated into the published page and is a hot file; edit narrowly. (mem: dealflow-callmode-is-generated)
 
 ## Files you own
