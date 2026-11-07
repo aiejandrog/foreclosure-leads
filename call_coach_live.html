@@ -505,8 +505,13 @@ function pick(i){
    +'<div><span class="k">Judgment</span><span class="v">'+esc(m.judgment||'?')+'</span></div>'
    +'<div><span class="k">Equity</span><span class="v">'+esc(m.equity!=null?('$'+Math.round(m.equity).toLocaleString()):'?')+'</span></div>'
    +'<div><span class="k">Tier/score</span><span class="v">'+esc(m.tier||'?')+' · '+esc(m.score!=null?m.score:'?')+(m.homestead?' · homestead':'')+'</span></div>';
-  var own=String(m.owners||'').replace(/,/g,' ').trim().split(/\s+/);
-  if(own.length&&!$('f_first').value) $('f_first').value=(own[0]||'').charAt(0)+(own[0]||'').slice(1).toLowerCase();
+  /* County rolls write "LAST, FIRST": the first name is AFTER the comma (taking the first token
+     greeted people by their surname). A company / trust owner gets no first name. */
+  var o1=String(m.owners||'').split(/;|&| and /i)[0];
+  if(o1.indexOf(',')>=0) o1=o1.split(',').slice(1).join(' ');
+  var own=o1.replace(/[^A-Za-z '-]/g,' ').trim().split(/\s+/);
+  var corp=/\b(LLC|INC|CORP|TRUST|ESTATE|HOLDINGS|PROPERTIES|COMPANY|BANK)\b/i.test(String(m.owners||''));
+  if(own[0]&&own[0].length>1&&!corp&&!$('f_first').value) $('f_first').value=own[0].charAt(0).toUpperCase()+own[0].slice(1).toLowerCase();
   var st1=String(m.address||'').split(',')[0].trim();
   if(st1) $('f_st1').value=st1;
   if(m.auction) $('f_date').value=m.auction;
@@ -731,12 +736,29 @@ function setLang(l){
 }
 
 /* ============================ RECORDER ============================ */
-function postChunk(blob){
-  fetch('/api/session/'+encodeURIComponent(S.sid)+'/audio',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:blob})
-    .then(function(r){ if(!r.ok) throw 0; flushPending(); })
-    .catch(function(){ S.pending.push(blob); });  // never drop audio silently
+/* Strict FIFO: one chunk in flight, the next only after the server confirms. The chunks are pieces
+   of ONE webm stream and the server appends them in arrival order, so arrival order IS the file:
+   two in flight, or a failed chunk re-sent behind a later one, corrupts the recording. A failed POST
+   stays at the head of S.pending and is retried (every 2 s, and whenever a new chunk arrives). */
+function postChunk(blob){ S.pending.push(blob); pump(); }
+function pump(){
+  if(S.uploading||!S.pending.length||!S.sid) return;
+  S.uploading=true;
+  fetch('/api/session/'+encodeURIComponent(S.sid)+'/audio',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:S.pending[0]})
+    .then(function(r){ if(!r.ok) throw 0; S.pending.shift(); S.uploading=false; S.upFail=0; pump(); })
+    .catch(function(){ S.uploading=false; S.upFail=(S.upFail||0)+1; });  // never drop audio silently
 }
-function flushPending(){ if(S.pending.length) postChunk(S.pending.shift()); }
+setInterval(function(){ if(S.pending.length&&!S.uploading) pump(); },2000);
+/* Resolves true once every held chunk has landed, false at the deadline. */
+function drainAudio(deadline){
+  return new Promise(function(resolve){
+    (function wait(){
+      if(!S.pending.length&&!S.uploading) return resolve(true);
+      if(now()>deadline) return resolve(false);
+      pump(); setTimeout(wait,400);
+    })();
+  });
+}
 function startRecorder(stream){
   var mime='audio/webm;codecs=opus';
   if(!window.MediaRecorder||!MediaRecorder.isTypeSupported(mime)) mime='audio/webm';
@@ -819,8 +841,11 @@ function finish(outcome){
   if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
   var done=function(){
     var dur=Math.round((now()-S.t0)/1000);
-    fetch('/api/session/'+encodeURIComponent(S.sid)+'/transcript',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({lines:S.lines})})
+    drainAudio(now()+15000).then(function(ok){
+      if(!ok){ alert('NOT SAVED YET: '+S.pending.length+' audio chunk(s) still in this tab. Check call_coach_server.py is running, then press Esc again. Do not close this tab.'); throw 'held'; }
+      return fetch('/api/session/'+encodeURIComponent(S.sid)+'/transcript',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({lines:S.lines})});
+    })
     .then(function(){ return fetch('/api/session/'+encodeURIComponent(S.sid)+'/end',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,consent_ack:true,outcome:outcome||null})}); })
     .then(function(r){return r.json();})
@@ -829,7 +854,7 @@ function finish(outcome){
             +(outcome?'\noutcome: '+outcome:'')+'\n\nLog the outcome in Call Mode too so the cadence moves.');
       location.reload();
     })
-    .catch(function(){ alert('Transcript/end POST failed — audio chunks already on disk under call_sessions/'+S.sid); });
+    .catch(function(e){ if(e==='held') return; alert('Transcript/end POST failed — audio chunks already on disk under call_sessions/'+S.sid); });
   };
   if(S.recorder&&S.recorder.state!=='inactive'){
     S.recorder.onstop=function(){ if(S.stream) S.stream.getTracks().forEach(function(t){t.stop();}); setTimeout(done,600); };

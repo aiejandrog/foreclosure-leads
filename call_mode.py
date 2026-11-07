@@ -8184,6 +8184,53 @@ function fileLinks(r){
   if(r.c) L.push(['Coach', 'http://127.0.0.1:8777/?case=' + encodeURIComponent(r.c)]);
   return L;
 }
+/* COACH DOCK (2026-11-07, Alex: "have it in the call mode"). On a computer, the Coach link no longer
+   opens a second tab: it docks the live coach (call_coach_server.py on THIS machine, 127.0.0.1:8777)
+   as a panel on the right of Call Mode, with this lead preselected, so the script, objections and
+   transcript sit next to the dial screen. The coach keeps its own consent gate, recorder and save
+   path; Call Mode only frames it. On a phone (narrow screen or touch-only) the link is left alone:
+   the server is the computer's, so it cannot answer there. Nothing here reads or sends lead data;
+   the frame loads only the case number in its URL. */
+var COACH_ORIGIN = 'http://127.0.0.1:8777';
+function _coachDockable(){ return window.innerWidth >= 900 && !(window.matchMedia && matchMedia('(pointer:coarse)').matches && !matchMedia('(any-pointer:fine)').matches); }
+function coachDock(url){
+  var d = document.getElementById('coachdock');
+  if(!d){
+    var st = document.createElement('style');
+    st.textContent = '#coachdock{position:fixed;top:0;right:0;bottom:0;width:min(58vw,1100px);z-index:9000;background:#0b0e11;'
+      + 'border-left:2px solid #4aa8ff;box-shadow:-8px 0 24px rgba(0,0,0,.5);display:flex;flex-direction:column}'
+      + '#coachdock .cdbar{display:flex;gap:8px;align-items:center;padding:6px 10px;background:#14181d;color:#e6edf3;font:13px/1.4 system-ui,sans-serif}'
+      + '#coachdock .cdbar b{flex:1}#coachdock .cdbar button{font:inherit;padding:4px 10px;border-radius:6px;border:1px solid #333;background:#1b2129;color:#e6edf3;cursor:pointer}'
+      + '#coachdock .cdhint{padding:4px 10px;color:#8b98a6;font:12px/1.4 system-ui,sans-serif;background:#101418}'
+      + '#coachdock iframe{flex:1;border:0;width:100%;background:#0b0e11}'
+      + 'body.coachon{margin-right:min(58vw,1100px)}';
+    document.head.appendChild(st);
+    d = document.createElement('div'); d.id = 'coachdock';
+    d.innerHTML = '<div class="cdbar"><b>Live coach</b><button id="cdtab" title="Open in its own tab">Pop out</button>'
+      + '<button id="cdclose" title="Hide the coach (stop and save the call in the coach first)">Hide</button></div>'
+      + '<div class="cdhint">Blank or "can\'t connect"? Start it on this computer: <code>python call_coach_server.py</code>, then Reload.'
+      + ' <button id="cdreload" style="font:inherit;padding:1px 8px">Reload</button></div>'
+      + '<iframe id="cdframe" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe>';
+    document.body.appendChild(d);
+    document.getElementById('cdclose').onclick = function(){ d.style.display = 'none'; document.body.classList.remove('coachon'); };
+    document.getElementById('cdtab').onclick = function(){ window.open(document.getElementById('cdframe').src, '_blank', 'noopener'); };
+    document.getElementById('cdreload').onclick = function(){ var f = document.getElementById('cdframe'); f.src = f.src; };
+  }
+  var f = document.getElementById('cdframe');
+  /* Same lead already docked: just show it. Switching leads reloads the coach, which ends a call that
+     is recording without its stop-and-save, so ask first. */
+  var cur = f.getAttribute('src');
+  if(cur !== url){
+    if(cur && !confirm('Switch the coach to this lead?\n\nIf the coach is recording, press Stop & save in it first.')) { d.style.display = 'flex'; document.body.classList.add('coachon'); return; }
+    f.src = url;
+  }
+  d.style.display = 'flex'; document.body.classList.add('coachon');
+}
+document.addEventListener('click', function(e){
+  var a = e.target && e.target.closest ? e.target.closest('a[href^="' + COACH_ORIGIN + '/"]') : null;
+  if(!a || !_coachDockable() || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault(); coachDock(a.getAttribute('href'));
+}, true);
 /* What to type into Whitepages' own Reverse Address box: our street in Whitepages' spelling, ordinal
    and suffix included, no unit ("920 N 70 TER" -> "920 N 70th Ter"). Our county spelling often
    matches nothing; Whitepages' own spelling brings up the drop-down and the right house (and unit)
