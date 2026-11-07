@@ -356,7 +356,7 @@ def relatives_allowed(lead, never_contact=None):
     dismissed state strips them. The board re-checks at render time; this is the second lock."""
     if lead.get('saleBkAct') or lead.get('sale_bk_active') or lead.get('bkWhy'):
         return False
-    if lead.get('sibclaimed') or lead.get('lpDismissed') or lead.get('ddhold'):
+    if lead.get('sibclaimed') or lead.get('lpDismissed') or lead.get('ddhold') or lead.get('client'):
         return False
     if never_contact is not None:
         try:

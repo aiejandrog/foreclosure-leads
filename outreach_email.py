@@ -632,6 +632,12 @@ def _eligible(r, ledger, optouts, min_hours):
         return False, 'federal bankruptcy check unavailable — lead stays held'
     if r.get('sibclaimed'):
         return False, 'sibling case sold'
+    try:
+        import clients
+        if clients.is_client({'case': _case(r), 'client': r.get('client')}):
+            return False, 'existing client'
+    except Exception:
+        pass
     # DILIGENCE GATE. Sits with the other compliance drops, not with the judgment filters.
     # NOTE ON ROW SHAPE: _load_leads() reads the RAW *_leads.json files, which carry no
     # 'title_status' — diligence_gate merges ownership.json in itself, so a lead ownership_scan has

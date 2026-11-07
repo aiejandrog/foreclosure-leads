@@ -7,6 +7,7 @@ _*.py
 # board's behaviour lived on exactly one laptop and died with a fresh clone. These are the files
 # that fail loudly when a change breaks something: keep them.
 !_cstest.py
+!_clienttest.py
 !_workerlanetest.py
 !_lookuplanetest.py
 !_equitylanetest.py
@@ -334,6 +335,8 @@ bounce_scan_status.json.tmp
 # complete roster of homeowner mailboxes. Never commit.
 verified_emails.json
 deads.json
+# existing clients (clients.py) -- names who we work for; never commit
+clients.json
 zerobounce.key
 
 # Hard-money value cache — carries parcel values joined to named LLC borrowers. This repo is
