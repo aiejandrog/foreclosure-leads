@@ -1752,6 +1752,8 @@ def lookup_hold_fn(slim, optouts=None, deads=None):
             return 'bankruptcy stay on the docket'
         if _fed(case):
             return 'bankruptcy hold'
+        if d.get('client'):
+            return 'CLIENT'          # the page paints a CLIENT banner for this, not DO NOT CONTACT
         return ''
     return _hold
 
@@ -2238,6 +2240,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             _ident_dropped += 1
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
+            continue
+        # EXISTING CLIENT (clients.py, stamped by make_tracker). Not a lead on either seat: no dial
+        # lane, no Find a number, and so no mail/knock route either (routes only take dial rows).
+        # Not a do-not-contact; the lookup screen and the board-lane list say CLIENT instead.
+        if d.get('client'):
             continue
         if d.get('rfHold'):                                  # RealForeclose: sale cancelled per bankruptcy, redeemed or dismissed (rf_status.py)
             continue
@@ -3199,7 +3206,7 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
         }
         if oo:
             row['oo'] = 1
-        for k in ('sibclaimed', 'saleBkAct', 'lpDismissed'):
+        for k in ('sibclaimed', 'saleBkAct', 'lpDismissed', 'client'):
             if d.get(k):
                 row[k] = 1
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
@@ -3217,7 +3224,8 @@ def mark_lookup(cov, lookup, crew_sb=None):
     n = 0
     for r in cov or ():
         x = by.get(r.get('c'))
-        if not x or r.get('oo') or r.get('sibclaimed') or r.get('saleBkAct') or r.get('lpDismissed'):
+        if not x or r.get('oo') or r.get('sibclaimed') or r.get('saleBkAct') or r.get('lpDismissed') \
+                or r.get('client'):
             continue
         r['lk'] = 1
         # a replied lookup lead stays on seat 0; its person's dial rows were pinned there too
@@ -4874,7 +4882,8 @@ function _bView(r){
   var v = {
     case: r.c, auction: auc, days: dys,
     phones: new Array(nph), emails: new Array(r.ne || 0),
-    sibclaimed: r.sibclaimed || 0, saleBkAct: r.saleBkAct || 0, lpDismissed: r.lpDismissed || 0
+    sibclaimed: r.sibclaimed || 0, saleBkAct: r.saleBkAct || 0, lpDismissed: r.lpDismissed || 0,
+    client: r.client || 0
   };
   try { Object.defineProperty(r, '_bv', {value:v, enumerable:false}); } catch(e){ r._bv = v; }
   return v;
@@ -7458,6 +7467,7 @@ function boardList(){
     /* NAME THE BLOCKER. "Not callable" is not something a caller can act on; "the only number on
        file is do-not-call" and "the sale is 94 days out" send the lead to two different places. */
     var why = dial ? ''
+      : r.client ? '<b style="color:var(--gold)">CLIENT</b> &mdash; existing client, Alejandro handles directly. Not a lead.'
       : (r.kd && r.kd >= bv.phones.length) ? 'do-not-call on every number — mail or door only'
       : bv.phones.length ? 'not in today\'s dial queue'
       : bv.emails.length ? 'no phone — email only'
@@ -8005,6 +8015,7 @@ function screenLookup(prefill){
            too (2026-10-08). The Text link also obeys the text hold, as the queue's composer does:
            a lookup is not a way around a stale do-not-contact list. */
         +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num], pcs:h.pcs || []});
+              if(_hs === 'CLIENT') return clientBar();
               if(_hs) return '<span class="nc" style="color:#ff8a80;font-weight:800">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '</span>';
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
                    + (textingHeld()
@@ -8364,6 +8375,12 @@ function _balCard(r){
 function _bqBar(){
   return '<div class="warnbar">&#9888; <b>Bankruptcy not checked.</b> Ask first: &ldquo;Have you filed for bankruptcy?&rdquo; '
     + 'If yes: end the call, say nothing else, and tap <b>Do Not Contact</b>.</div>';
+}
+/* EXISTING CLIENT (clients.py, 2026-11-06). Not a do-not-contact and not a lead: Alejandro talks to
+   this person directly, so neither seat dials, texts, mails, knocks or searches them from here. */
+function clientBar(){
+  return '<div class="warnbar" style="border-color:var(--gold)">&#11088; <b>CLIENT</b> &mdash; this is an existing client. '
+    + 'Alejandro handles them directly. Do not work them as a lead: no cold call, text, letter, door or Whitepages search.</div>';
 }
 function screenLead(){
   SCREEN='lead';

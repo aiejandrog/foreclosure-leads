@@ -471,6 +471,12 @@ def _knock_eligible(r):
         return False
     if r.get('sibclaimed'):
         return False
+    try:
+        import clients
+        if clients.is_client(r):           # existing client: no door, no route (clients.py)
+            return False
+    except Exception:
+        pass
     return True
 
 

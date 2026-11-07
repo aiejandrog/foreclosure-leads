@@ -621,6 +621,12 @@ def contact_hold(r):
     if r.get('lpDismissed') or r.get('lpClosed') or r.get('ownerMismatch'):
         return 'dismissed/closed/owner mismatch'
     try:
+        import clients
+        if clients.is_client({'case': _lead_key(r), 'client': r.get('client')}):
+            return 'existing client'
+    except Exception:
+        pass
+    try:
         import stay_gate
         if stay_gate.never_contact(_lead_key(r)):
             return 'never-contact list'

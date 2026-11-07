@@ -2751,6 +2751,9 @@ function isFlaggedDead(r){
   // Only 'transferred' kills; 'unverified' must NOT — an appraiser outage is not evidence of a sale.
   if(r.title_status === 'transferred') return true;
   if(r.sibclaimed) return true;      // sibling case already sold + title issued — property is gone
+  // EXISTING CLIENT (clients.py, 2026-11-06). Not dead, but every consumer of this predicate (Worker,
+  // lane counts, mail queue, relatives, Hide flagged) must leave it alone. The card says CLIENT.
+  if(r.client) return true;
   if(r.ordeeded && r.ordeedconf==='ok') return true;
   // SOURCE OF TRUTH. This predicate hard-kills a lead — it feeds "Hide flagged", the 30%+ equity
   // filter and the Closers cockpit. It used raw orsurvfirst vs raw value−judgment: blind to the
@@ -3727,6 +3730,7 @@ function _boardMailHeld(r){
   if(b === 'bk' || r.saleBkAct) return 'bankruptcy stay';
   if(r.ddhold) return 'diligence hold';
   if(r.sibclaimed) return 'claimed on another case';
+  if(r.client) return 'existing client';
   if(typeof isFlaggedDead === 'function' && isFlaggedDead(r)) return 'owner gone';
   if(_aucPassed(r)) return 'sale passed';
   return '';
@@ -4504,6 +4508,8 @@ function _funnelStage(r){
   var st = String(n.status||'').toUpperCase();
   // ---- suppression first. These are legal walls, not preferences, and they outrank the money.
   if(r.sibclaimed || r.saleBkAct) return 'out';
+  // EXISTING CLIENT (clients.py): not a lead, so in no lane. Not a suppression verdict either.
+  if(r.client) return 'out';
   // The foreclosure was DISMISSED — the owner reinstated, refinanced, sold, or the bank withdrew.
   // There is nothing to call about. 8 of the 125 fresh filings are in this state; without the
   // check they sit in EARLY looking like opportunities and somebody phones a homeowner about a
@@ -5419,7 +5425,13 @@ function _callSheet(r){
       (s.sale?' — sale '+esc(s.sale):'')+(s.title?', Certificate of Title <b>'+esc(s.title)+'</b>':'')+
       (s.tpb?' to <b>'+esc(s.tpb)+'</b>':'')+'. The owner here no longer owns it. Do not knock, call, or mail. '+
       'Only live angle: a registry SURPLUS belongs to the former owner (FS 45.031).</div>'; })() : '';
-  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+_wpRelatives(r)+law+
+  const clientBan = r.client
+    ? '<div class="csbody csgovwarn" style="border-color:#b8860b;background:#fffbea">'+
+      '<b style="color:#8a6d00">⭐ CLIENT — EXISTING CLIENT, NOT A LEAD</b><br>'+
+      'Alejandro handles this owner directly. No cold call, text, letter, door or Whitepages search from the lead lanes. '+
+      'This is not a do-not-contact.</div>'
+    : '';
+  return '<div class="callsheet">'+who+clientBan+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+_wpRelatives(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+

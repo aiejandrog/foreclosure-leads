@@ -626,6 +626,14 @@ def _is_dnc(lead, index):
     return False
 
 
+def _is_client(lead):
+    try:
+        import clients
+        return clients.is_client({'case': _case(lead), 'client': lead.get('client')})
+    except Exception:
+        return False
+
+
 def exclusion_reasons(lead, index):
     """Every exclusion this lead matches. Empty means it can still be contacted.
 
@@ -648,6 +656,9 @@ def exclusion_reasons(lead, index):
     # bkWhy is the board's federal-hold sentence. On a §362 row it rides along with the
     # stay flag; counted here only when the stay flag itself is not what is holding the lead.
     if lead.get('bkWhy') and not stay:
+        outreach = True
+    # An existing client (clients.py) is not a lead: never pay to trace their numbers.
+    if not outreach and _is_client(lead):
         outreach = True
     if outreach:
         reasons.append('outreach_held')

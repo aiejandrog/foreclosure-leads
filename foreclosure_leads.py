@@ -4103,6 +4103,19 @@ def make_tracker(leads):
         print(f'dead ledger: {len(_deads)} case(s) baked in (retired on EVERY device)'
               + (f'; {len(_side_dw)} reason(s) sealed' if _side_dw else ''))
 
+    # ---- EXISTING CLIENTS (clients.py, 2026-11-06) -----------------------------------------------
+    # A client is not a lead. Stamped here, before the twin, the board payload and Call Mode are
+    # written, so every surface reads the same `client: 1` flag. Not an opt-out and not a ledger
+    # write: the row stays on the board with a CLIENT banner, it just leaves every outreach lane.
+    try:
+        import clients as _clients
+        _n_cl = _clients.stamp(slim)
+        if _n_cl or _clients.load():
+            print(f'clients: {_n_cl} of {len(_clients.load())} listed client case(s) on the board, '
+                  f'pulled from every outreach lane')
+    except Exception as e:
+        print(f'!! clients: could not stamp ({type(e).__name__}: {e}) -- clients may show as leads')
+
     # FINAL BOUNCE SWEEP — must run before ANY output is written, twin included.
     # The strip at the skiptrace merge is correct but not sufficient: emails are re-merged from more
     # than one source afterwards (the person/portfolio union among them), so a blacklisted address

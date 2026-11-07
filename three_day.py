@@ -26,6 +26,7 @@ import sys
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+import clients as _CL
 OUT = os.path.join(HERE, 'three_day_lane.json')
 DAYS = 3
 MIN_YEAR = 2024
@@ -150,6 +151,8 @@ def lane(rows=None, today=None, days=DAYS, min_year=MIN_YEAR):
         if str(n.get('status') or '').strip().upper() in ('DEAD', 'DO NOT CONTACT'):
             continue
         if r.get('saleBkAct') or r.get('sale_bk_active') or r.get('cert') or r.get('sibclaimed'):
+            continue
+        if _CL.is_client({'case': case, 'client': r.get('client')}):   # existing client, not a lead
             continue
         if _federal_held(case):
             continue
