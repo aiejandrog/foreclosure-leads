@@ -55,12 +55,15 @@ Pick the variant off the lead card. Keep it to name → two "nots" → the reaso
 
 **Cold (name known), assume it's them (2026-10-26):**
 > "Hi, {first}? Can you hear me?"… *[wait: if it's not them, they'll say so]* … "It's {sender}
-> with Biscayne Solutions Group. Do you know your property on {st1} is in pre-foreclosure{date}?" *[stop,
-> let them answer]* … "I'm **not** your lender and I'm **not** calling to buy your house. I help
+> with Biscayne Solutions Group. I work with homeowners in {county} who have a case filed against the
+> house. Is that something you've already got handled, or worth two minutes?" *[stop, let them answer]*
+> … *If they have a lawyer:* "Got it, then you're in good hands. I won't call you again. Take care."
+> Hang up, log Do Not Contact, no re-dial, no text. *Otherwise:* … "I'm **not** your lender and I'm **not** calling to buy your house. I help
 > owners see what options they have before this goes any further. Can I ask you a couple of quick
 > questions?"
 
-Never "Hi, is this {first}?". Asking sounds like a stranger reading a list; saying their name like
+2026-11-05: no street, no sale date, no "foreclosure" in the opener; naming his address first read as
+"I know your business" and a homeowner hung up. Never "Hi, is this {first}?". Asking sounds like a stranger reading a list; saying their name like
 you know them is what earns the next ten seconds.
 
 **Not them (fallback):** "Oh, my bad. I'm looking for {first}. Do I have the right number for them?"

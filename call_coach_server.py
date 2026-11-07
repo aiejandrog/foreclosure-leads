@@ -199,7 +199,18 @@ def end_session(sid, payload):
     m["objections_fired"] = payload.get("objections_fired")
     m["redflags_fired"] = payload.get("redflags_fired")
     m["consent_ack"] = payload.get("consent_ack")
+    m["outcome"] = payload.get("outcome")
     _write_json(mp, m)
+    # One append-only line per call so outcomes are greppable without opening each session
+    # folder. Lives INSIDE call_sessions/ so the same .gitignore line covers it.
+    try:
+        with open(os.path.join(SESSIONS, "outcomes.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "sid": sid, "case": m.get("case"), "outcome": m.get("outcome"),
+                "duration_s": m.get("duration_s"), "ended_utc": m.get("ended_utc"),
+            }, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
     return m
 
 

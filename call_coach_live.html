@@ -3,196 +3,207 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BSG Call Coach (live)</title>
-<!--
-  call_coach_live.html -- the page call_coach_server.py serves on http://127.0.0.1:8777/.
-  Spec: HANDOFF_CALL_COACH.md. Single file, no build step, no CDN, vanilla JS.
-  Records the call in 5 s chunks to call_sessions/<stamp>_<case>/ through the server, shows Chrome's
-  live transcript, walks the NEPQ stages, fires objection cards and guardrail red flags.
-  Open it from the server, never as file:// (Chrome refuses the mic on file://).
--->
+<title>BSG Call Coach</title>
+<!-- call_coach_live.html — the whole front half of the live call coach.
+     Served ONLY by call_coach_server.py on http://127.0.0.1:8777/ (Chrome refuses the mic on
+     file:// — see HANDOFF_CALL_COACH.md §8, do not open this file directly).
+
+     COPY SOURCES. Stage copy is verbatim from CALL_SCRIPT_NEPQ.md. Objection BODIES come live
+     from /api/objections (call_objections.json — the cache of the vault drill pack Call Mode
+     reads), so approved copy edits flow here with no page change. TRIGGER phrases live HERE,
+     keyed by card n: call_objections.json is REWRITTEN from the vault by call_mode.load_objections
+     (which emits only n/t/say/reb/one/es), so a trigger field added to that json would be wiped
+     on the next board build. Coach owns the ears; the vault owns the words.
+
+     SPEAKER LABELS. One laptop mic hears the room, so free-path labels are a BEST GUESS by
+     content: a line that mostly matches the script you're supposed to be reading is tagged YOU?,
+     a line that tripped an objection trigger is tagged THEM?. With a Deepgram key saved (gear
+     button), streaming diarization labels YOU/THEM for real and cuts latency to ~300ms — the
+     first voice heard is assumed to be yours (you speak first on an outbound call).
+
+     Deep link from Call Mode: /?case=2025-009471-CA-01 preselects the lead. -->
 <style>
-:root{--bg:#0b0e11;--panel:#14181d;--line:#262d36;--txt:#e6edf3;--dim:#8b98a6;--accent:#4aa8ff;--ok:#2ecc71;--warn:#f0a020;--hot:#ff4d4d}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0}
+:root{--bg:#0b0e11;--panel:#141920;--line:#232b35;--txt:#dfe7ee;--dim:#8b98a6;--accent:#4db8ff;--ok:#38c172;--warn:#e6a23c;--hot:#ff5b5b}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
-button{font:inherit;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:#1b2129;color:var(--txt);cursor:pointer}
-button:hover{border-color:var(--accent)}
-button:disabled{opacity:.4;cursor:not-allowed}
+button{font:inherit;color:var(--txt);background:#1b232d;border:1px solid var(--line);border-radius:8px;padding:9px 16px;cursor:pointer}
+button:hover{border-color:var(--accent)} button:disabled{opacity:.4;cursor:not-allowed}
 button.primary{background:var(--accent);border-color:var(--accent);color:#04121f;font-weight:700}
-input,select{font:inherit;width:100%;padding:7px 9px;border-radius:7px;border:1px solid var(--line);background:#0e1216;color:var(--txt)}
-code{font-size:12px;color:#c9d4e0}
+input,select{font:inherit;color:var(--txt);background:#10151b;border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+code{color:var(--accent)}
+
 /* ---------------- gate ---------------- */
 #gate{height:100%;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto}
-#gate.off{display:none}
 .card{max-width:700px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}
-.card h1{margin:0 0 4px;font-size:22px}
-.card .sub{color:var(--dim);margin:0 0 20px;font-size:13px}
+.card h1{margin:0 0 4px;font-size:22px} .card .sub{color:var(--dim);margin:0 0 20px;font-size:13px}
 .say{background:#0e1216;border-left:3px solid var(--accent);padding:12px 14px;border-radius:0 8px 8px 0;margin:14px 0;font-size:16px}
-.fine{color:var(--dim);font-size:12px;line-height:1.7;margin-top:18px}
-.fine b{color:var(--warn)}
+.fine{color:var(--dim);font-size:12px;line-height:1.7;margin-top:18px} .fine b{color:var(--warn)}
 .row{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
 .ack{display:flex;gap:9px;align-items:flex-start;margin-top:16px;font-size:13px;color:#c9d4e0}
 .ack input{width:auto;margin-top:3px}
-#gateerr{margin-top:14px}
-#gate #lookup{margin-top:16px}
+
 /* ---------------- app ---------------- */
 #app{display:none;height:100%;grid-template-rows:auto auto 1fr;grid-template-columns:1fr 1fr}
 #app.on{display:grid}
 #bar{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
-#bar .t{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
-#bar .sp{flex:1}
-#bar button{padding:6px 11px;font-size:13px}
-#bar select{width:auto;padding:4px 6px;font-size:13px}
+#bar .t{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px} #bar .sp{flex:1}
+#bar button{padding:6px 11px;font-size:13px} #bar select{width:auto;padding:5px 8px;font-size:13px}
 #dot{font-size:13px;letter-spacing:.08em;color:var(--hot);font-weight:700}
-#dot.rec{animation:pulse 1.4s infinite}
-#dot.plain{color:var(--dim);animation:none}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-#savest{font-size:12px;color:var(--dim)}
-#savest.bad{color:var(--hot);font-weight:700}
+#dot.rec{animation:pulse 1.4s infinite} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+#dot.plain{color:var(--dim)}
+#eng{font-size:11px;color:var(--dim)}
 #redflag{grid-column:1/-1;display:none;background:#3a0d0d;border-bottom:2px solid var(--hot);color:#ffd0d0;padding:10px 14px;font-weight:600;font-size:15px}
 #redflag.on{display:block}
 #redflag .why{color:#ff9a9a;font-weight:400;font-size:13px;display:block;margin-top:3px}
-#left,#right{overflow:auto;padding:16px;min-height:0}
-#left{border-right:1px solid var(--line);display:flex;flex-direction:column}
-#right{background:#0e1216}
+
+#left,#right{overflow:auto;padding:16px} #left{border-right:1px solid var(--line);display:flex;flex-direction:column} #right{background:#0e1216}
 .h{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
 #transcript{font-size:16px;line-height:1.65;white-space:pre-wrap;word-break:break-word;flex:1}
 #transcript .interim{color:var(--dim);font-style:italic}
 #transcript .empty{color:#4a5563}
 #transcript .ts{color:#3f4a57;font-size:11px;margin-right:6px}
-.stagechip,.objchip{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:#1b2129;border:1px solid var(--line);color:var(--dim);margin:0 4px 4px 0;cursor:pointer}
+.spk{font-size:10px;font-weight:700;letter-spacing:.08em;border-radius:4px;padding:1px 5px;margin-right:6px}
+.spk.you{background:#0d2b1a;color:#5fd99a;border:1px solid #1d5c38}
+.spk.them{background:#2b1d0d;color:#e6b35c;border:1px solid #5c4410}
+
+.stagechip{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:#1b2129;border:1px solid var(--line);color:var(--dim);margin:0 4px 4px 0;cursor:pointer}
 .stagechip.now{background:var(--accent);border-color:var(--accent);color:#04121f;font-weight:700}
-.objchip{border-color:#5c4410;color:#e8c27a}
-.objchip.now{background:var(--warn);color:#1a1205;font-weight:700}
+
 #nowstage{font-size:12px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin:14px 0 6px}
 #sayline{font-size:20px;line-height:1.45;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:0 10px 10px 0;padding:16px 18px}
 #sayline .tag{display:block;font-size:10px;letter-spacing:.1em;color:var(--dim);margin-top:10px;text-transform:uppercase}
 #saynote{color:var(--dim);font-size:13px;margin-top:10px;line-height:1.6}
+
 #objection{display:none;margin-top:16px;background:#241a08;border:1px solid #5c4410;border-left:4px solid var(--warn);border-radius:0 10px 10px 0;padding:14px 16px;position:relative}
 #objection.on{display:block}
 #objection .who{color:var(--warn);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;padding-right:24px}
-#objection .body{font-size:17px;line-height:1.5;white-space:pre-wrap}
+#objection .back{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px}
+#objection .body{font-size:16px;line-height:1.55;white-space:pre-wrap}
 #objection .x{position:absolute;top:8px;right:10px;background:none;border:none;color:#8b98a6;font-size:18px;padding:2px 6px}
-#probes{margin-top:16px;display:none}
-#probes.on{display:block}
+
+#probes{margin-top:16px;display:none} #probes.on{display:block}
 .probe{display:block;width:100%;text-align:left;margin-bottom:6px;font-size:14px;color:#c9d4e0;background:#14181d}
-.nav{display:flex;gap:8px;margin-top:18px}
-.nav button{flex:1}
+
+.nav{display:flex;gap:8px;margin-top:18px} .nav button{flex:1}
 .fill{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
 .fill label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:3px}
 .err{background:#3a0d0d;border:1px solid #5c1f1f;color:#ffb3b3;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;display:none}
 .err.on{display:block}
-#leadbox{background:#101519;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.7}
-#leadbox{display:flex;flex-wrap:wrap;gap:2px 18px}
-#leadbox .kv{white-space:nowrap}
-#leadbox .k{color:var(--dim);margin-right:4px}
-#leadbox .v{color:var(--txt)}
+
+#leadbox{background:#101519;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.7;display:none}
+#leadbox .k{color:var(--dim);display:inline-block;min-width:88px} #leadbox .v{color:var(--txt)}
 #leadbox .soon{color:var(--hot);font-weight:700}
 #leadhits{max-height:190px;overflow:auto;margin-bottom:10px}
 .hit{padding:7px 10px;border:1px solid var(--line);border-radius:7px;margin-bottom:5px;cursor:pointer;font-size:12.5px;background:#101519}
-.hit:hover{background:#1a222b;border-color:var(--accent)}
-.hit b{color:var(--accent)}
-.hit span{color:var(--dim)}
-.lookrow{display:grid;grid-template-columns:3fr 1fr;gap:8px;margin-bottom:8px}
-@media(max-width:900px){
-  #app.on{display:block;height:auto}
-  #left{border-right:none;border-bottom:1px solid var(--line);max-height:40vh}
-  .fill{grid-template-columns:1fr 1fr}
-}
+.hit:hover{background:#1a222b;border-color:var(--accent)} .hit b{color:var(--accent)} .hit span{color:var(--dim)}
+#pickcard{width:100%;margin-top:14px}
+
+/* overlays: idle warning + outcome picker */
+.overlay{position:fixed;inset:0;background:rgba(5,8,11,.82);display:none;align-items:center;justify-content:center;z-index:50}
+.overlay.on{display:flex}
+.obox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;max-width:460px;text-align:center}
+.obox h2{font-size:18px;margin-bottom:6px} .obox p{color:var(--dim);font-size:13px;margin-bottom:16px}
+.obox .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.obox .grid button{padding:12px 8px}
 </style>
 </head>
 <body>
 
-<!-- ============================== GATE ============================== -->
+<!-- ======================= GATE ======================= -->
 <div id="gate">
   <div class="card">
     <h1>BSG Call Coach</h1>
-    <p class="sub">Phone on speaker. Read this line first, out loud.</p>
-    <div class="say">
-      "Quick thing before we start — I record my calls so I keep your file straight. That okay with you?"
-    </div>
-    <div id="lookup">
-    <p class="h" style="margin-bottom:6px">Lead lookup — pick it before Start so the session folder carries the case #</p>
-    <div class="lookrow">
-      <input id="q" placeholder="address, owner name, or case # — then Enter" autocomplete="off"
-             onkeydown="if(event.key==='Enter')Coach.lookup()" oninput="Coach.debounceLookup()" onfocus="Coach.recentIfEmpty()">
-      <input id="f_phone" placeholder="number dialed" autocomplete="off">
-    </div>
-    <div id="leadhits"></div>
-    <div id="leadbox" style="display:none"></div>
+    <p class="sub">Recorder · instant transcript · NEPQ stage coach · objection auto-fire</p>
 
+    <div class="say">
+      "Quick thing before we start &mdash; I record my calls so I keep your file straight. That okay with you?"
     </div>
+
+    <p style="color:#8b98a6;font-size:13px;margin:0">
+      Read that out loud first. A <em>no</em> means <b style="color:#e6a23c">stop recording</b>, not hang up &mdash;
+      press the second button and the coach runs with no mic and nothing written to disk.
+    </p>
+
     <label class="ack">
-      <input type="checkbox" id="ack">
+      <input type="checkbox" id="ack" onchange="document.getElementById('startbtn').disabled=!this.checked">
       <span>I read that line and I'm recording this call. I accept responsibility for consent on this line.</span>
     </label>
+
     <div class="row">
       <button class="primary" id="startbtn" disabled onclick="Coach.start()">Start session</button>
       <button onclick="Coach.plain()">Plain Call Mode (no recording)</button>
+      <button title="Optional: a Deepgram API key turns on true YOU/THEM speaker labels and ~300ms transcript latency (~$0.004/min). Stored only in this browser." onclick="Coach.setKey()">&#9881; speed/speaker key</button>
     </div>
+
     <div class="err" id="gateerr"></div>
+
     <p class="fine">
       <b>Audio</b> goes to <code>call_sessions/&lt;stamp&gt;_&lt;case&gt;/audio.webm</code> on this laptop, in
-      five-second chunks, so a crash costs you five seconds. Nothing leaves the machine.<br><br>
-      <b>Transcript</b> is Chrome's recognizer — that audio <em>is</em> processed by Google's speech
-      service. The text lands in <code>transcript.txt</code> when you stop.<br><br>
+      five-second chunks, so a crash costs you five seconds. Nothing leaves this machine.<br><br>
+      <b>Transcript</b> is Chrome's recognizer (audio <em>is</em> processed by Google's speech service) &mdash;
+      or Deepgram when a key is saved, which adds real speaker labels. The text lands in
+      <code>transcript.txt</code> when you stop.<br><br>
       <b>Speakerphone only.</b> Neither phone OS hands call audio to an app. Phone on speaker, laptop
-      mic listening. It hears both sides and cannot tell your voice from theirs.
+      mic listening. Without a Deepgram key, YOU?/THEM? labels are a best guess by content.
     </p>
   </div>
 </div>
 
-<!-- ============================== APP ============================== -->
+<!-- ======================= APP ======================= -->
 <div id="app">
   <div id="bar">
-    <span id="dot">● REC</span>
+    <span id="dot">&#9679; REC</span>
     <span class="t" id="clock">00:00</span>
     <span class="t" id="words">0 words</span>
-    <select id="lang" title="Recognizer language">
-      <option value="en-US">en-US</option>
-      <option value="es-US">es-US</option>
+    <span id="eng"></span>
+    <select id="lang" onchange="Coach.setLang(this.value)">
+      <option value="en-US">English</option>
+      <option value="es-US">Espa&ntilde;ol</option>
     </select>
-    <span id="savest"></span>
     <span class="sp"></span>
-    <button id="saidno" onclick="Coach.declined()" title="They said no: stop recording, keep coaching">They said no</button>
-    <button onclick="Coach.back()">Back (B)</button>
+    <button onclick="Coach.back()">&larr; Back (B)</button>
     <button onclick="Coach.next()">Next stage (N)</button>
-    <button class="primary" id="stopbtn" onclick="Coach.stop()">Stop &amp; save (Esc)</button>
+    <button style="border-color:var(--hot);color:#ffb3b3" onclick="Coach.stop()">Stop &amp; save (Esc)</button>
   </div>
 
   <div id="redflag"><span id="rfphrase"></span><span class="why" id="rfwhy"></span></div>
 
   <div id="left">
     <p class="h">Live transcript</p>
-    <div class="err" id="srerr"></div>
-    <div id="transcript"><span class="empty">Waiting for speech…</span></div>
+    <div id="transcript"><span class="empty">Waiting for speech&hellip;</span></div>
   </div>
 
   <div id="right">
-    <div class="err" id="apperr"></div>
+    <p class="h" style="margin-bottom:6px">Lead</p>
+    <input id="q" placeholder="address, owner, or case # — Enter to search"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();Coach.lookup()}" oninput="Coach.debounceLookup()">
+    <div id="leadhits"></div>
+    <div id="leadbox"></div>
+
     <div class="fill">
-      <div><label>First name</label><input id="f_first" placeholder="Maria" oninput="Coach.fill()" autocomplete="off"></div>
-      <div><label>Street</label><input id="f_st1" placeholder="NW 12th Ave" oninput="Coach.fill()" autocomplete="off"></div>
-      <div><label>Sale date</label><input id="f_date" placeholder="the 18th" oninput="Coach.fill()" autocomplete="off"></div>
-      <div><label>Your name</label><input id="f_sender" value="Alejandro" oninput="Coach.fill()" autocomplete="off"></div>
+      <div><label>First name</label><input id="f_first" placeholder="Maria" oninput="Coach.fill()"></div>
+      <div><label>Street</label><input id="f_st1" placeholder="NW 12th Ave" oninput="Coach.fill()"></div>
+      <div><label>Sale date</label><input id="f_date" placeholder="the 18th" oninput="Coach.fill()"></div>
+      <div><label>Your name</label><input id="f_sender" value="Alejandro" oninput="Coach.fill()"></div>
     </div>
 
     <div id="chips"></div>
-    <div id="objchips"></div>
 
-    <div id="nowstage">Stage 0 — Consent</div>
+    <div id="nowstage"></div>
     <div id="sayline"><span id="saytext"></span><span class="tag" id="saytag">say this</span></div>
     <div id="saynote"></div>
 
     <div id="objection">
-      <button class="x" onclick="Coach.dismissObjection()" title="Dismiss (D)">&times;</button>
+      <button class="x" title="dismiss (D)" onclick="Coach.dismissObjection()">&times;</button>
       <div class="who" id="objwho"></div>
+      <div class="back">&#8617; say this back</div>
       <div class="body" id="objbody"></div>
     </div>
 
     <div id="probes">
-      <p class="h" style="margin-top:0">Probing loop — when they get vague</p>
+      <p class="h" style="margin-top:0">Probing loop &mdash; when they get vague</p>
       <div id="probelist"></div>
     </div>
 
@@ -200,686 +211,666 @@ code{font-size:12px;color:#c9d4e0}
       <button onclick="Coach.back()">&larr; Back</button>
       <button class="primary" onclick="Coach.next()">Next stage &rarr;</button>
     </div>
+
+    <select id="pickcard" onchange="Coach.manualCard(this.value)">
+      <option value="">Fire an objection card manually (vault pack, live)&hellip;</option>
+    </select>
   </div>
 </div>
 
-<!-- ======================================================================
-     ENGINE: data + pure functions, no DOM. _callcoachlivetest.py runs this
-     block in node, so keep it free of document/window references.
-     Copy is verbatim from CALL_SCRIPT_NEPQ.md (stages, objections 1-7) and
-     call_objections.json (cards bank/nothing/money/worth/talked).
-     ====================================================================== -->
-<script id="engine">
-var CoachEngine = (function () {
-  'use strict';
+<!-- idle auto-stop warning -->
+<div class="overlay" id="idlewarn">
+  <div class="obox">
+    <h2>Still on the call?</h2>
+    <p>No speech heard for a while &mdash; auto-saving in <span id="idlecount">10</span>s so the mic doesn't
+       keep transcribing your room after a hang-up.</p>
+    <button class="primary" onclick="Coach.keepGoing()">Keep going</button>
+  </div>
+</div>
 
-  var STAGES = [
-    { id: 'consent', name: 'Consent',
-      say: "Quick thing before we start — I record my calls so I keep your file straight. That okay with you?",
-      note: "A no means stop recording, not hang up. Tap \"They said no\" and keep going.",
-      probes: [] },
-    { id: 'opener', name: 'Opener',
-      say: "Hi, {first}? Can you hear me? … It's {sender} with Biscayne Solutions Group. Do you know your property on {st1} is in pre-foreclosure{date}? … I'm not your lender and I'm not calling to buy your house. I help owners see what options they have before this goes any further. Can I ask you a couple of quick questions?",
-      note: "Never \"Hi, is this {first}?\". Asking sounds like a stranger reading a list; saying their name like you know them is what earns the next ten seconds. Stop after the pre-foreclosure question and let them answer.",
-      probes: [
-        "Oh, my bad. I'm looking for {first}. Do I have the right number for them?",
-        "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?",
-        "{first}!… it's {sender}, from Biscayne Solutions Group. How've you been?… Listen, I was looking at your file on {st1} again and something jumped out I wanted to run by you. You got a quick second?"
-      ] },
-    { id: 'frame', name: 'Status frame',
-      say: "Honestly, this is pretty basic — I'm really just trying to understand where things stand on {st1} right now… compared to where you'd actually want them to land… so we can see what that gap looks like. And toward the end, if you feel like it might be worth it, we can talk about a couple of possible next steps. Would that help you?",
-      note: "Why it works: it positions you as the calm authority (not the needy salesperson), it removes the \"he's going to pitch me\" pressure, and their \"yes… that'd help\" is the first micro-commitment.",
-      probes: [
-        "La verdad, esto es bien sencillo — solo quiero entender cómo está la situación con {st1} ahora mismo… comparado con dónde a usted le gustaría que quedara… para ver cómo se ve esa diferencia. Y al final, si usted siente que pudiera valer la pena, hablamos de un par de posibles pasos a seguir. ¿Le parece que eso le ayudaría?"
-      ] },
-    { id: 'situation', name: 'Situation',
-      say: "Before I get into any of it… what is it you're actually hoping happens with {st1}?",
-      note: "One open question. Never a binary. Their answer picks which program the advisor even pitches.",
-      probes: [
-        "How long has this been going on?",
-        "What got you to this point, if you don't mind me asking?",
-        "Who've you talked to about it so far — the bank, an attorney, anybody?"
-      ] },
-    { id: 'problem', name: 'Problem awareness',
-      say: "When the bank or the attorney talked to you about that sale date… did anybody actually explain what happens to your balance every time that date gets pushed back?",
-      note: "Almost always: \"No, nobody really explained it.\" Let the silence sit. Then the money fact, handed straight back as a question (first probe).",
-      probes: [
-        "That's what I hear from just about everybody. Every time it moves… the interest and the legal fees keep stacking on top of what you already owe. Have you had a chance to see where that number's really sitting today… or is it kind of a moving target?",
-        "Not 100%?…",
-        "What do you mean by that?",
-        "Can I ask what you meant when you said…?",
-        "How long's that been going on?",
-        "Has that had an impact on you?",
-        "In what way, though?",
-        "You don't sound so sure… what is it you don't like about how it's going?",
-        "Can you give me a specific example of when that happened?",
-        "So to me it sounds like this is basically 100% under control for you. Is there anything you'd change about how it's being handled… if you could?"
-      ] },
-    { id: 'solution', name: 'Solution awareness',
-      say: "Before today… were you out there looking at options so this didn't go to sale… or what were you doing about it?",
-      note: "If no: \"I'm curious — what's held you back from doing that so far?\" If yes: \"What do you feel held that back from actually working?\" Then the objective state. If the advisor can save them money, downplay it.",
-      probes: [
-        "I'm curious — what's held you back from doing that so far?",
-        "What do you feel held that back from actually working?",
-        "Can I ask why you were considering that as the option?",
-        "Let's say the sale gets postponed and you actually get room to breathe on {st1}… what would that let you do that you can't right now?",
-        "How would that be different… than how things feel today?",
-        "What would that mean for you and your family… personally?"
-      ] },
-    { id: 'consequence', name: 'Consequence',
-      say: "Let me ask you straight — if nothing changes… and that date comes and goes… where does that leave you and your family?",
-      note: "Challenging/concerned tone. Pick one rail below, don't stack. Land it on an assumed statement + tie-down (last probe).",
-      probes: [
-        "Do you want to have to go through all that… if you… if you didn't have to?",
-        "Can you afford to take that risk?",
-        "Are you willing to just settle for that, though?… Well — whose choice is it, if you settle or not?",
-        "Why look at fixing this now?… Why not just push it down the road like a lot of people do… who end up losing the house they could've kept?",
-        "That's not something you're willing to just sit back and let happen. Right?"
-      ] },
-    { id: 'bridge', name: 'Bridge',
-      say: "Okay… based on everything you just told me… this is exactly the kind of thing we can actually help with. Because you said {repeat what they want}… and the way that date keeps moving has you feeling {repeat their emotion — stressed / worried / stuck}… I think you mentioned that a couple times.",
-      note: "Miner's transition formula, in their words + their emotion.",
-      probes: [] },
-    { id: 'close', name: 'Book the advisor',
-      say: "So here's the one thing I'd want for you before that date hits: our senior advisor — 30-plus years in mortgages and foreclosure workouts — takes about five minutes and lays your real options out. Worst case, you know more than you did this morning. That's fair, right?… Let me get you on his calendar. Is later today better… or first thing tomorrow?",
-      note: "The only either/or allowed is two ways to say yes — a time, never a whether. Measure what they DID, not what they said.",
-      probes: [
-        "Let me get the paperwork together — if we agree we shake hands; if not, I wasted fifteen minutes and we part friends.",
-        "Save my number right now… now read it all back to me.",
-        "Before we start, a few things I'm required to tell you: Biscayne Solutions Group is not associated with the government, and our service is not approved by the government or your lender. Even if you use our service, your lender may not agree to change your loan. You may stop doing business with us at any time. This consultation is free, and you'll never be asked to pay a fee before you get results."
-      ] }
-  ];
+<!-- outcome picker on stop -->
+<div class="overlay" id="outcome">
+  <div class="obox">
+    <h2>How did it go?</h2>
+    <p>Saved with the recording (meta.json + outcomes.jsonl). Log the same outcome in Call Mode so the cadence moves.</p>
+    <div class="grid">
+      <button onclick="Coach.finish('talked')">Talked</button>
+      <button onclick="Coach.finish('appointment')">Appointment</button>
+      <button onclick="Coach.finish('callback')">Callback promised</button>
+      <button onclick="Coach.finish('not_interested')">Not interested</button>
+      <button onclick="Coach.finish('voicemail')">Voicemail / no answer</button>
+      <button onclick="Coach.finish('bad_number')">Bad number</button>
+    </div>
+    <div class="row" style="justify-content:center">
+      <button onclick="Coach.finish('')">Skip &mdash; just save</button>
+    </div>
+  </div>
+</div>
 
-  /* 12 cards. s = score weight, m = trigger phrases (normalized at load like the window is).
-     Triggers are homeowner phrasing on purpose: nothing a stage line or probe says out loud may fire
-     a card (pinned by _callcoachlivetest.py), and no "stop calling" / do-not-call phrase is a
-     trigger, because a do-not-call request is logged, never rebutted. */
-  var OBJECTIONS = [
-    { id: 'notint', who: "\"I'm not interested\"", s: 3,
-      m: ["not interested", "no me interesa", "no thanks", "no thank you", "not for me", "don't need any help"],
-      body: "That's not a problem at all — honestly, I wasn't expecting you to be. Almost everybody I reach about a place like yours says the exact same thing when I first call… I'm not signing you up for anything, and I'm not calling to buy the house. Real quick though, so I'm not the twelfth person wasting your afternoon — has anybody actually shown you what happens to your balance every time that sale date gets pushed… or is that still kind of a question mark?\n\nBecause that's the only reason I called — not to pitch you a loan. Our senior advisor, 30-plus years, lays your real options out in five minutes, free. Worst case you know more than you did this morning, and we part friends. That's fair, right?" },
-    { id: 'writing', who: "\"Just send me something in writing\"", s: 3,
-      m: ["send me something", "send me some", "in writing", "mail me", "email me", "send it to me", "send me the info", "send me information", "por escrito", "mándeme"],
-      body: "Yeah, I can do that for sure… now, just so I send you the right thing and not a stack of junk — what specifically would you want it to show you?\n\nWhatever they say is their real concern. Then a Situation question, and at the end: \"So let's say you look it over and it lines up with what you told me… what would you want the next step to be?\"" },
-    { id: 'busy', who: "\"I'm busy / call me back later\"", s: 3,
-      m: ["i'm busy", "i am busy", "call me back", "call back later", "can't talk right now", "cannot talk right now", "i'm driving", "i'm at work", "estoy ocupado", "llámeme después", "llámeme más tarde"],
-      body: "No problem at all… what I'll do — I'll give you my number, and you'd have to call me back later to catch me… what's your timeframe on getting back to me, just to see if I'd even be free?\n\nOr, if they'll give a day: \"It might be tough to catch me cold with my schedule… if you've got your calendar handy I'll pull mine and we'll lock a specific time so neither of us is chasing the other — that work?\"" },
-    { id: 'plan', who: "\"I already have a plan / a lawyer\"", s: 3,
-      m: ["my lawyer", "my attorney", "have a lawyer", "have an attorney", "got a lawyer", "got an attorney", "already have a plan", "i have a plan", "got a plan", "it's handled", "taken care of", "mi abogado"],
-      body: "Good — keep it. I don't want to be your bank or your middleman… I want to be your parachute. You're betting the house on that plan landing on time. Keep it exactly as-is… and let our advisor look at postponing the sale in parallel, for free. If your plan lands first, I did you a favor and you owe me a coffee. If it slips a day — and here a day is everything — you've already got backup. Fair?\n\nStill flat: \"Can I ask you something?… How can I point out that you might be missing something here… without you getting upset with me?\"" },
-    { id: 'legit', who: "\"How do I know you're legit?\"", s: 3,
-      m: ["legit", "is this a scam", "a scam", "how do i know", "references", "are you real", "prove it", "estafa"],
-      body: "Totally fair — what specifically would you want to be sure of, so I point you to the right thing?\n\nAnswer that, then re-ask for the five minutes." },
-    { id: 'price', who: "\"What's this cost?\"", s: 3,
-      m: ["how much do you charge", "how much does it cost", "how much is this", "what do you charge", "what does it cost", "what's it cost", "what's the catch", "cuánto cuesta", "cuánto cobra"],
-      body: "The records review with the advisor is free — you're never asked to pay us anything up front. What matters more to you: what it costs… or actually keeping the room to save the house?" },
-    { id: 'bail', who: "The 15-second bail-out", s: 3,
-      m: ["gotta go", "i got to go", "i have to go", "i need to go", "i'm hanging up", "tengo que irme"],
-      body: "Totally understand — one thing and I'm gone: our senior advisor, 30-plus years, reviews your case free, five minutes, right on the phone. If nothing fits, we part friends. Fair?" },
-    { id: 'bank', who: "The Bank Mod Shield", s: 3,
-      m: ["modification", "loan mod", "working with the bank", "bank is working", "working with me", "forbearance", "modificación"],
-      body: "Good — you should absolutely keep working that modification, and nothing we do touches it. Let me ask you one thing: if talking to me couldn't interfere with the mod at all, is there any other reason not to spend five minutes?\n\nHere's what most people don't know: in Florida the mod review and the foreclosure case run on separate tracks. The court date keeps moving while the bank 'reviews,' and denial letters routinely land two or three weeks before the sale — with no time left to react. It's like driving with a spare in the trunk: you don't need it until the tire blows on the highway. What if that denial comes 20 days out — what's your move that day? The consult is free, no fees ever, no commitment. If the mod comes through, we shake hands and part friends." },
-    { id: 'nothing', who: "It's Too Late (Hopelessness)", s: 3,
-      m: ["too late", "nothing anybody can do", "nothing anyone can do", "nothing i can do", "nothing you can do", "it's over", "already over", "ya es tarde", "demasiado tarde"],
-      body: "I hear you — and after months of this, being tired makes all the sense in the world. But let me ask just one thing: is it that nothing can be done, or that you're done? Those are two different things, and only one of them is true.\n\nA sale date is a deadline, not a verdict — sales get postponed, cases get reworked, and even on the hardest path there's a world of difference between walking out with cash for your keys and time to land, versus being put out with nothing. It's like the two-minute warning in a game: that's not when you leave the stadium, that's when the plays matter most. What if the last ten minutes you spend on this house are the ones that decide how your family walks out of it? You've fought this long — isn't it fair to yourself to hear what's still on the table?" },
-    { id: 'money', who: "Money's coming (check / family)", s: 3,
-      m: ["tax refund", "settlement check", "check coming", "waiting on a check", "waiting on my check", "money coming", "money is coming", "my brother", "my sister", "lending me", "inside the family", "catch everything up", "inheritance"],
-      body: "Money on the way is a real asset — I'm not dismissing it. Let me isolate one thing: if that check clears before the sale date, you're fine. So the only question is what happens if it doesn't. Fair?\n\nHere's the problem: your check runs on the IRS's clock or an insurance adjuster's clock — no deadline, slips for months, can get offset. The foreclosure runs on a court clock with a judge attached. You're racing a train to the crossing, and only one of you has a schedule. And remember, the payoff grows daily while you wait, so the check has to beat the clock AND cover a bigger number. What if it lands two weeks after the sale? At that point the money arrives and the house is already gone — after the sale it can't buy it back. Let's map the backup for free, no fees ever. If the check wins the race, use it and we part friends.\n\nIf it's family money: \"That's the best kind of help — family money with no strings. One question: is the only thing standing between you and fixing this the money arriving, or has anyone actually pulled the exact reinstatement figure from the bank yet?\"" },
-    { id: 'worth', who: "Worn out — \"it's not worth it, I'm done\"", s: 3,
-      m: ["worn out", "fed up", "walk away", "walking away", "i'm done", "just take it", "not worth it", "give up", "given up", "estoy cansado"],
-      body: "I hear you, and the majority of people we speak to hit that exact wall — they just want to get away from all the problems, and that's fair. Everybody gets there at some point. Let me ask you one thing: what is it that you TRULY want to do with this property?" },
-    { id: 'talked', who: "The Scam Fatigue Wall", s: 3,
-      m: ["talked to three", "talked to a bunch", "already talked to", "you people", "all want the same thing", "everybody calls", "everyone keeps calling", "keep calling me", "ya hablé"],
-      body: "Honestly? You should be suspicious — most of the people knocking want to buy your house cheap, today, with a contract in their hand. Let me ask you straight: if I'm not here to buy your house and there's nothing to sign, is there another reason not to talk?\n\nWe start with a free consultation with a senior advisor — 30-plus years doing this — and we lay out three to five options, including ones where you keep the house: refinance, modification through counsel, selling with your equity. No fees, ever, by law and by policy. Three bad mechanics doesn't mean the engine fixes itself. What if the fourth conversation is the one where someone finally shows you the option that protects your equity instead of taking it? Five minutes, nothing to sign. Worst case, we shake hands and part friends — that's the actual deal." }
-  ];
-
-  /* 16 guardrail red flags (CALL_SCRIPT_NEPQ.md guardrails + NEVER SAY, Fla. Stat. 501.1377). They
-     are meant for the caller's own words; the mic cannot tell the voices apart, so they fire on
-     either side. Matched against the raw lowercased line with "%" read as " percent". */
-  var REDFLAGS = [
-    { re: /\bguarantee(d|s)?\b/, why: "Never guarantee an outcome" },
-    { re: /\bwe('ll| will) stop the (sale|foreclosure)\b/, why: "Promised outcome" },
-    { re: /\bwe (can|could) (stop|cancel|postpone) the (sale|foreclosure|auction)\b/, why: "Promised outcome — say \"options\"" },
-    { re: /\bsave your home\b/, why: "FS 501.1377 language — say \"options\"" },
-    { re: /\b(sign|transfer)\b.{0,30}\b(deed|title)\b/, why: "Core 501.1377 red flag — attorney only" },
-    { re: /\bquit ?claim\b/, why: "Deed instrument, never on a money-side call" },
-    { re: /\bour attorneys?\b/, why: "Guardrail: say \"our senior advisor\"" },
-    { re: /\bmy supervisor\b/, why: "Guardrail: say \"our senior advisor, 30+ years\"" },
-    { re: /\bmy clients?\b/, why: "Guardrail" },
-    { re: /\b(up ?front|advance) fee\b/, why: "No money up front, ever" },
-    { re: /\bpay (us|me) (a|the) fee\b/, why: "No money up front, ever" },
-    { re: /\bwe buy houses\b/, why: "Contradicts the opener" },
-    { re: /\bsign (today|now|tonight)\b/, why: "Pressure to sign" },
-    { re: /\b(it'?s|it is|we'?re|we are|i'?m|i am|that'?s) 100 ?percent\b/, why: "Absolute claim" },  // narrowed: the script's own "Not 100%?" / Two Truths lines say 100%
-    { re: /\bi promise\b/, why: "Absolute claim" },
-    { re: /\bwe place loans?\b/, why: "Licensed lenders lend; we introduce" }
-  ];
-
-  var WINDOW = 240, RECENT = 80, FIRE_AT = 3, REFIRE_MS = 20000, DISMISS_MS = 45000;
-
-  function norm(s) {
-    return String(s || '').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
-  }
-  OBJECTIONS.forEach(function (c) { c.mn = c.m.map(norm); });
-
-  /* fill(): replaces {first} {st1} {date} {sender}. {date} is the whole clause or nothing, as in
-     Call Mode: " with a sale date of <date>" when a sale date is set, so an LP lead hears just
-     "pre-foreclosure". Other {...} cues (bridge) stay on screen as cues. */
-  function fill(s, f) {
-    f = f || {};
-    var first = (f.first || '').trim(), st1 = (f.st1 || '').trim(), date = (f.date || '').trim(), me = (f.sender || '').trim();
-    return String(s || '')
-      .split('{first}').join(first || 'there')
-      .split('{st1}').join(st1 || 'your property')
-      .split('{date}').join(date ? ' with a sale date of ' + date : '')
-      .split('{sender}').join(me || 'me');
-  }
-
-  /* The spec's matcher, exactly: last 240 chars, hits * weight, +2 when a hit is in the last 80
-     chars, best score >= 3 fires. `state` carries lastFiredId / panelOpen / lastFire / cooldown. */
-  function scoreWindow(transcript) {
-    var w = norm(transcript);
-    w = w.slice(-WINDOW);
-    var tail = w.slice(-RECENT);
-    var best = null;
-    OBJECTIONS.forEach(function (c) {
-      var hits = 0, recent = false;
-      c.mn.forEach(function (p) {
-        if (p && (' ' + w + ' ').indexOf(' ' + p + ' ') >= 0) { hits++; if ((' ' + tail + ' ').indexOf(' ' + p + ' ') >= 0) recent = true; }
-      });
-      if (hits > 0) {
-        var score = hits * c.s + (recent ? 2 : 0);
-        if (!best || score > best.score) best = { id: c.id, score: score };
-      }
-    });
-    return best;
-  }
-
-  function pick(transcript, state, now) {
-    var best = scoreWindow(transcript);
-    if (!best || best.score < FIRE_AT) return null;
-    state = state || {};
-    if (best.id === state.lastFiredId && state.panelOpen) return null;          // already on screen
-    if (state.lastFire && now - (state.lastFire[best.id] || -1e12) < REFIRE_MS) return null;
-    if (state.cooldown && now < (state.cooldown[best.id] || 0)) return null;   // manual x
-    return best;
-  }
-
-  function redflags(line) {
-    var t = String(line || '').toLowerCase().replace(/%/g, ' percent');
-    var out = [];
-    REDFLAGS.forEach(function (r) {
-      var m = t.match(r.re);
-      if (m) out.push({ phrase: m[0], why: r.why });
-    });
-    return out;
-  }
-
-  function card(id) { for (var i = 0; i < OBJECTIONS.length; i++) if (OBJECTIONS[i].id === id) return OBJECTIONS[i]; return null; }
-
-  return { STAGES: STAGES, OBJECTIONS: OBJECTIONS, REDFLAGS: REDFLAGS, norm: norm, fill: fill,
-           scoreWindow: scoreWindow, pick: pick, redflags: redflags, card: card,
-           REFIRE_MS: REFIRE_MS, DISMISS_MS: DISMISS_MS };
-})();
-if (typeof module !== 'undefined') module.exports = CoachEngine;
-</script>
-
-<!-- ============================== UI ============================== -->
 <script>
-window.Coach = (function () {
-  'use strict';
-  var E = CoachEngine;
-  var $ = function (id) { return document.getElementById(id); };
+window.Coach = (function(){
+'use strict';
 
-  var S = {
-    mode: null,            // 'rec' | 'plain'
-    sid: null,
-    t0: 0,
-    stage: 0,
-    visited: [],
-    finals: [],            // [{t, text}]
-    interim: '',
-    words: 0,
-    objFired: [],          // [{id, t}]
-    rfFired: [],           // [{phrase, why, t}]
-    objState: { lastFiredId: null, panelOpen: false, lastFire: {}, cooldown: {} },
-    lead: null,
-    rec: null, stream: null, sr: null, srOn: false,
-    queue: [], uploading: false, bytes: 0, failCount: 0,
-    stopping: false, stopped: false,
-    consentAck: null,
-    timers: []
-  };
+/* ============================== STAGES ==============================
+   Copy is VERBATIM from CALL_SCRIPT_NEPQ.md. {first} {st1} {date} {sender}
+   are merge fields. Tonality notes ride in `note`; probes are per-stage. */
+var STAGES = [
+ {id:'consent', name:'Consent',
+  say:'Quick thing before we start — I record my calls so I keep your file straight. That okay with you?',
+  note:'A no means STOP RECORDING, not hang up. (In Plain mode you skip this chip.)',
+  probes:[]},
+ {id:'opener', name:'Opener',
+  say:'Hi, {first}? Can you hear me?… It’s {sender} with Biscayne Solutions Group. I work with homeowners in {county} who have a case filed against the house. Is that something you’ve already got handled, or worth two minutes?… [If they have a lawyer: “Got it, then you’re in good hands. I won’t call you again. Take care.” Hang up, mark Do Not Contact.] … I’m NOT your lender and I’m NOT calling to buy your house. I help owners see what options they have before this goes any further. Can I ask you a couple of quick questions?',
+  note:'Curious, unhurried — lower status on purpose. Never “Hi, is this {first}?” — say the name like you know them. Every … is a real pause: stop and let them answer. The two “nots” kill the two objections they’re already loaded with.',
+  probes:[
+   'Not them → “Oh, my bad. I’m looking for {first}. Do I have the right number for them?”',
+   'No usable name → “Hey, it’s {sender} with Biscayne Solutions Group. You’re the owner over on {st1}, right?”',
+   'Warm (prior Talked/Callback) → “{first}!… it’s {sender}, from Biscayne Solutions Group. How’ve you been?… Listen, I was looking at your file on {st1} again and something jumped out I wanted to run by you. You got a quick second?”']},
+ {id:'frame', name:'Status frame',
+  say:'Honestly, this is pretty basic — I’m really just trying to understand where things stand on {st1} right now… compared to where you’d actually want them to land… so we can see what that gap looks like. And toward the end, if you feel like it MIGHT be worth it, we can talk about a couple of POSSIBLE next steps. Would that help you?',
+  note:'Say it neutral, expert, unhurried — right after they say “okay, what is it?”. Their “yes… that’d help” is the first micro-commitment; everything after is built on it.',
+  probes:[
+   'ES → “La verdad, esto es bien sencillo — solo quiero entender cómo está la situación con {st1} ahora mismo… comparado con dónde a usted le gustaría que quedara… para ver cómo se ve esa diferencia. ¿Le parece que eso le ayudaría?”']},
+ {id:'situation', name:'Situation',
+  say:'Before I get into any of it… what is it you’re actually hoping happens with {st1}?',
+  note:'One open question. Never a binary. Their answer picks which program the advisor even pitches.',
+  probes:[
+   '“How long has this been going on?”',
+   '“What got you to this point, if you don’t mind me asking?”',
+   '“Who’ve you talked to about it so far — the bank, an attorney, anybody?”']},
+ {id:'problem', name:'Problem awareness',
+  say:'When the bank or the attorney talked to you about that sale date… did anybody actually explain what happens to your balance every time that date gets pushed back?',
+  note:'Almost always: “No, nobody really explained it.” LET THE SILENCE SIT. Then: “That’s what I hear from just about everybody. Every time it moves… the interest and the legal fees keep stacking on top of what you already owe. Have you had a chance to see where that number’s really sitting today… or is it kind of a moving target?”',
+  probes:[
+   '“Not 100%?…” (echo whatever they said)',
+   '“What do you mean by that?”',
+   '“Can I ask what you meant when you said…?”',
+   '“How long’s THAT been going on?”',
+   '“Has that had an impact on you?” → “In what way, though?”',
+   '“You don’t sound so sure… what is it you don’t like about how it’s going?”',
+   '“Can you give me a specific example of when that happened?”',
+   'Two Truths → “So to me it sounds like this is basically 100% under control for you. Is there ANYTHING you’d change about how it’s being handled… if you could?”']},
+ {id:'solution', name:'Solution awareness',
+  say:'Before today… were you out there looking at options so this didn’t go to sale… or what were you doing about it?',
+  note:'Surfaces the plan they have — you INSURE it, never fight it. If no: “I’m curious — what’s held you back from doing that so far?” If yes: “What do you feel held that back from actually working?” If the advisor can save them money, DOWNPLAY it (“it’s probably not huge, but…”) — humans inflate a number you shrink.',
+  probes:[
+   '“Let’s say the sale gets postponed and you actually get room to breathe on {st1}… what would that let you do that you can’t right now?”',
+   '“How would that be different… than how things feel today?”',
+   '“What would that mean for you and your family… personally?”']},
+ {id:'consequence', name:'Consequence',
+  say:'Let me ask you straight — if nothing changes… and that date comes and goes… where does that leave you and your family?',
+  note:'Challenging, concerned tone — take a problem THEY named and ask the consequence around it. Pick ONE rail, don’t stack. Land it on the assumed tie-down: “That’s not something you’re willing to just sit back and let happen. RIGHT?”',
+  probes:[
+   '“Do you want to have to go through all that… if you… if you didn’t have to?”',
+   '“Can you afford to take that risk?” (lean in — empathy, not a threat)',
+   '“Are you willing to just settle for that, though?… Well — whose choice is it, if you settle or not?”',
+   '“Why look at fixing this now?… Why not just push it down the road like a lot of people do… who end up losing the house they could’ve kept?”']},
+ {id:'bridge', name:'Bridge',
+  say:'Okay… based on everything you just told me… this is exactly the kind of thing we can actually help with. Because you said [repeat what they want]… and the way that date keeps moving has you feeling [their emotion — stressed / worried / stuck]… I think you mentioned that a couple times.',
+  note:'Miner’s transition formula: THEIR words + THEIR emotion, played back. Then straight into the close.',
+  probes:[]},
+ {id:'close', name:'Book the advisor',
+  say:'So here’s the one thing I’d want for you before that date hits: our senior advisor — 30-plus years in mortgages and foreclosure workouts — takes about five minutes and lays your real options out. Worst case, you know more than you did this morning. That’s fair, right?… Let me get you on his calendar. Is later today better… or first thing tomorrow?',
+  note:'The ONLY either/or allowed anywhere: two ways to say yes — a time, never a whether. Then the read-back test.',
+  probes:[
+   'Save-my-number → “Do me one favor before we hang up… save my number right now… Now read it all back to me — I want to make sure you got everything right.” (clean read-back = real; “pen ran out of ink” = don’t count the deal)',
+   'Paperwork trial close → “Let me get the paperwork together — if we agree we shake hands; if not, I wasted fifteen minutes and we part friends.”',
+   'MARS block (read verbatim when required) → “Before we start, a few things I’m required to tell you: Biscayne Solutions Group is not associated with the government, and our service is not approved by the government or your lender. Even if you use our service, your lender may not agree to change your loan. You may stop doing business with us at any time. This consultation is free, and you’ll never be asked to pay a fee before you get results.”']}
+];
 
-  /* -------------------------------------------------------------- helpers */
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function mmss(ms) { var s = Math.max(0, Math.floor(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
-  function now() { return Date.now(); }
-  function el() { return S.t0 ? now() - S.t0 : 0; }
-  function err(id, msg) { var e = $(id); if (!e) return; e.textContent = msg || ''; e.classList.toggle('on', !!msg); }
-  function fields() { return { first: $('f_first').value, st1: $('f_st1').value, date: $('f_date').value, sender: $('f_sender').value }; }
-  function api(path, opts) {
-    return fetch(path, opts).then(function (r) {
-      if (!r.ok) throw new Error(path + ' -> HTTP ' + r.status);
-      return r.json();
+/* ============================ OBJECTIONS ============================
+   Two pools, one engine.
+   1. SCRIPT cards (below): bodies verbatim from CALL_SCRIPT_NEPQ.md § OBJECTIONS — these exist
+      only in the script, so they live here. Cards marked dup:<n> are stand-in copies of a vault
+      card and are REPLACED by the live vault card once /api/objections answers.
+   2. VAULT cards: bodies live from call_objections.json; trigger phrases come from TRIG below,
+      keyed by card n (the json cannot carry them — load_objections rewrites it from the vault).
+   Triggers are written APOSTROPHE-FREE and ACCENT-FREE: norm() strips both from the transcript
+   before matching, which is also what fixes “don’t” (curly) never matching "don't" (straight). */
+var CARDS = [
+ {id:'notint', who:'“I’m not interested” — reflex, not a decision', s:2,
+  m:['not interested','no estoy interesado','not into this','stop calling me','take me off'],
+  body:'That’s not a problem at all — honestly, I wasn’t expecting you to be. Almost everybody I reach about a place like yours says the exact same thing when I first call… I’m not signing you up for anything, and I’m not calling to buy the house. Real quick though, so I’m not the twelfth person wasting your afternoon — has anybody actually shown you what happens to your balance every time that sale date gets pushed… or is that still kind of a question mark?\n\n(then) Because that’s the only reason I called — not to pitch you a loan. Our senior advisor, 30-plus years, lays your real options out in five minutes, free. Worst case you know more than you did this morning, and we part friends. That’s fair, right?'},
+ {id:'writing', who:'“Send me something in writing”', s:2,
+  m:['in writing','send me something','mail me','send me an email','send me the info','send it to me','send me info'],
+  body:'Yeah, I can do that for sure… now, just so I send you the RIGHT thing and not a stack of junk — what specifically would you want it to show you?\n\n(whatever they say IS their real concern — answer that, then at the end:) So let’s say you look it over and it lines up with what you told me… what would you want the next step to be?\n\nNEVER send blind — that’s how you never hear back.'},
+ {id:'busy', who:'“I’m busy / call me back later”', s:2,
+  m:['busy right now','call me back','call me later','bad time','at work right now','in the middle of'],
+  body:'No problem at all… what I’ll do — I’ll give you my number, and you’d have to call ME back later to catch me… what’s your timeframe on getting back to me, just to see if I’d even be free?\n\n(or, if they’ll give a day:) It might be tough to catch me cold with my schedule… if you’ve got your calendar handy I’ll pull mine and we’ll lock a specific time so neither of us is chasing the other — that work?\n\n(No-show on the callback? Wait 2 minutes, then call: “Hey {first}, it’s just {sender} getting back to you — running a little behind…”)'},
+ {id:'plan', who:'“I already have a plan / a mod going” — be the parachute', s:2,
+  m:['already have a plan','modification going','working with someone','got it handled','have it handled','plan in place','tengo un plan'],
+  body:'Good — keep it. I don’t want to be your bank or your middleman… I want to be your parachute. You’re betting the house on that plan landing on time. Keep it exactly as-is… and let our advisor look at postponing the sale in parallel, for free. If your plan lands first, I did you a favor and you owe me a coffee. If it slips a day — and here a day is everything — you’ve already got backup. Fair?\n\n(still flat? skeptical tone:) Can I ask you something?… How can I point out that you MIGHT be missing something here… without you getting upset with me?'},
+ {id:'legit', who:'“How do I know you’re legit?” — a concern in disguise', s:2,
+  m:['legit','a scam','how do i know you','references','are you licensed','who are you really','sounds like a scam'],
+  body:'Totally fair — what specifically would you want to be sure of, so I point you to the right thing?\n\n(answer THAT, then re-ask for the five minutes)'},
+ {id:'price', who:'Price / “what’s this cost?”', s:2,
+  m:['how much does','what does it cost','what do you charge','your fee','cost me','cuanto cuesta'],
+  body:'The records review with the advisor is free — you’re never asked to pay us anything up front. What matters more to you: what it costs… or actually keeping the room to save the house?\n\n(results-based reframe — never quote a fee)'},
+ {id:'bail', who:'The 15-second bail-out — they’re clearly done', s:3,
+  m:['leave me alone','get off my phone','stop calling','hanging up','not talking to you','goodbye now','dont call again','do not call'],
+  body:'Totally understand — one thing and I’m gone: our senior advisor, 30-plus years, reviews your case free, five minutes, right on the phone. If nothing fits, we part friends. Fair?'},
+ /* stand-ins, replaced by the live vault card when /api/objections answers */
+ {id:'bank', dup:1, who:'The Bank Mod Shield — “the bank’s working with me”', s:2,
+  m:['bank is working','working with the bank','bank is reviewing','in review','loss mitigation','loan modification','the modification','a modification','el banco esta','una modificacion'],
+  body:'Good — you should absolutely keep working that modification, and nothing we do touches it. Let me ask you one thing: if talking to me couldn’t interfere with the mod at all, is there any other reason not to spend five minutes?\n\nHere’s what most people don’t know: in Florida the mod review and the foreclosure case run on separate tracks. The court date keeps moving while the bank ‘reviews,’ and denial letters routinely land two or three weeks before the sale — with no time left to react. It’s like driving with a spare in the trunk: you don’t need it until the tire blows on the highway. What if that denial comes 20 days out — what’s your move that day? The consult is free, no fees ever, no commitment. If the mod comes through, we shake hands and part friends.'},
+ {id:'nothing', dup:9, who:'“It’s too late — nothing anybody can do”', s:2,
+  m:['nothing anybody can do','nothing i can do','nothing can be done','too late now','its over','done deal','ya es tarde','se acabo'],
+  body:'I hear you — and after months of this, being tired makes all the sense in the world. But let me ask just one thing: is it that nothing can be done, or that you’re done? Those are two different things, and only one of them is true.\n\nA sale date is a deadline, not a verdict — sales get postponed, cases get reworked, and even on the hardest path there’s a world of difference between walking out with cash for your keys and time to land, versus being put out with nothing. It’s like the two-minute warning in a game: that’s not when you leave the stadium, that’s when the plays matter most. What if the last ten minutes you spend on this house are the ones that decide how your family walks out of it? You’ve fought this long — isn’t it fair to yourself to hear what’s still on the table?'},
+ {id:'money', dup:4, who:'The Incoming Check', s:2,
+  m:['tax refund','settlement check','money coming in','waiting on a check','waiting on money','check is coming','mi reembolso','esperando un cheque'],
+  body:'Money on the way is a real asset — I’m not dismissing it. Let me isolate one thing: if that check clears before the sale date, you’re fine. So the only question is what happens if it doesn’t. Fair?\n\nHere’s the problem: your check runs on the IRS’s clock or an insurance adjuster’s clock — no deadline, slips for months, can get offset. The foreclosure runs on a court clock with a judge attached. You’re racing a train to the crossing, and only one of you has a schedule. And remember, the payoff grows daily while you wait, so the check has to beat the clock AND cover a bigger number. What if it lands two weeks after the sale? At that point the money arrives and the house is already gone — after the sale it can’t buy it back. Let’s map the backup for free, no fees ever. If the check wins the race, use it and we part friends.'},
+ {id:'worth', dup:11, who:'Worn out — “just take it, I’m done”', s:2,
+  m:['worn out','fed up','walk away from','just take it','i give up','cant do this anymore','estoy agotado','no puedo mas'],
+  body:'I hear you, and the majority of people we speak to hit that exact wall — they just want to get away from all the problems, and that’s fair. Everybody gets there at some point. Let me ask you one thing: what is it that you TRULY want to do with this property?\n\nIf you’ve truly had it, then rather than the bank taking the house AND whatever equity you have, I’m sure you’d rather walk out with cash in your pocket, on your own timeline, with dignity — instead of a sheriff putting your things on the street on a date you don’t control. We have a program for exactly this — Cash for Keys. We agree on a set figure; you get half the money up front when we sign, and you pick your exit window: 30, 60 or 90 days. At the end you hand over the keys and receive the other half that same day. You pick the date. You pick the time. You run the show.'},
+ {id:'talked', dup:7, who:'Scam fatigue — “I already talked to three of you people”', s:2,
+  m:['three of you','you people','all want the same','already talked to','get off my porch','tired of these calls','ya hable con'],
+  body:'Honestly? You should be suspicious — most of the people knocking want to buy your house cheap, today, with a contract in their hand. Let me ask you straight: if I’m not here to buy your house and there’s nothing to sign, is there another reason not to talk?\n\nWe start with a free consultation with a senior advisor — 30-plus years doing this — and we lay out three to five options, including ones where you keep the house: refinance, modification through counsel, selling with your equity. No fees, ever, by law and by policy. Three bad mechanics doesn’t mean the engine fixes itself. What if the fourth conversation is the one where someone finally shows you the option that protects your equity instead of taking it? Five minutes, nothing to sign. Worst case, we shake hands and part friends — that’s the actual deal.'}
+];
+
+/* Trigger phrases for the VAULT cards, keyed by card n. Coach-owned (see header comment).
+   n14 (Save My Number) is YOUR closing move — manual only, never auto-fired. */
+var TRIG = {
+ 1:['bank is working','working with the bank','bank is reviewing','in review','loss mitigation','loan modification','the modification','a modification','el banco esta','una modificacion'],
+ 2:['my attorney','my lawyer','talk to my attorney','talk to my lawyer','attorney is handling','lawyer is handling','have an attorney','have a lawyer','mi abogado'],
+ 3:['always gets pushed','they always push','been cancelled','been canceled','cancelled twice','canceled twice','postponed before','it always moves','siempre la posponen','la cancelaron'],
+ 4:['tax refund','settlement check','money coming in','waiting on a check','waiting on money','check is coming','mi reembolso','esperando un cheque'],
+ 5:['my brother is lending','family is lending','borrowing from family','my cousin is','my sister is lending','handling it in the family','dinero de familia','mi hermano me'],
+ 6:['filing bankruptcy','file bankruptcy','filed bankruptcy','chapter 13','chapter 7','automatic stay','bancarrota'],
+ 7:['three of you','you people','all want the same','already talked to','get off my porch','tired of these calls','ya hable con'],
+ 8:['wrong house','wrong address','not in foreclosure','no foreclosure here','not my house','casa equivocada','ninguna ejecucion'],
+ 9:['nothing anybody can do','nothing i can do','nothing can be done','too late now','its over','done deal','ya es tarde','se acabo'],
+ 10:['wife doesnt know','she doesnt know','husband doesnt know','before she comes out','before she hears','mi esposa no sabe'],
+ 11:['worn out','fed up','i give up','just take it','walk away from all','cant do this anymore','estoy agotado','no puedo mas'],
+ 12:['listed at','listing agent','my realtor has','zero showings','the agent has it','el agente lo tiene'],
+ 13:['approval coming','money arrives tomorrow','comes through tomorrow','wiring it','being reviewed right now','me llega manana','ya lo tengo resuelto'],
+ 14:[]
+};
+
+/* ============================ RED FLAGS ============================
+   Fire on guardrail violations heard on the line. 16 regexes. */
+var FLAGS = [
+ {re:/guarantee[ds]?/i,                               why:'Never guarantee an outcome — say “options.”'},
+ {re:/we('| wi)ll stop the (sale|foreclosure)/i,      why:'Promised outcome — FS 501.1377 reads this as deceptive.'},
+ {re:/save your (home|house)/i,                       why:'FS 501.1377 language — say “options,” never “save your home.”'},
+ {re:/\b(sign|transfer)\b.{0,30}\b(deed|title)\b/i,   why:'Core 501.1377 red flag — deed/title is attorney-only territory.'},
+ {re:/quit\s?claim/i,                                 why:'Deed instrument — never on a money-side call.'},
+ {re:/our attorneys?/i,                               why:'Guardrail: say “our senior advisor,” never “our attorneys.”'},
+ {re:/my supervisor/i,                                why:'Guardrail: say “our senior advisor, 30+ years.”'},
+ {re:/my clients?\b/i,                                why:'Guardrail: never “my clients.”'},
+ {re:/(up\s?front|advance) fee/i,                     why:'No money up front, ever (MARS + FS 501.1377).'},
+ {re:/pay (us|me) (a|the) fee/i,                      why:'No money up front, ever.'},
+ {re:/we buy houses/i,                                why:'Contradicts the opener — we are NOT buying the house.'},
+ {re:/sign (today|now|tonight)/i,                     why:'Pressure to sign — never.'},
+ {re:/100\s?percent/i,                                why:'Absolute claim — never certainty.'},
+ {re:/i promise/i,                                    why:'Absolute claim — never a promise.'},
+ {re:/we place loans?/i,                              why:'Licensed lenders lend; we INTRODUCE an advisor.'},
+ {re:/no risk at all/i,                               why:'Absolute claim — say “free consult, no commitment.”'}
+];
+
+/* ============================== STATE ============================== */
+var S = {
+  sid:null, plain:false, stage:1, t0:0,
+  stagesVisited:[], objFired:[], rfFired:[],
+  lines:[], finals:'', interim:'',
+  recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
+  dg:null, dgOn:false, dgSpk0:null,
+  pending:[],
+  autoCards:CARDS, manualCards:[],
+  lastCard:null, lastCardAt:0, cooldown:{},
+  lead:null, hits:[], debounce:null, clockTimer:null,
+  lastSpeech:0, idleTimer:null, idleCounting:false, outcomeSel:null
+};
+function $(id){ return document.getElementById(id); }
+function now(){ return Date.now(); }
+function mmss(ms){ var s=Math.floor(ms/1000); return ('0'+Math.floor(s/60)).slice(-2)+':'+('0'+s%60).slice(-2); }
+function esc(x){ var d=document.createElement('div'); d.textContent=String(x==null?'':x); return d.innerHTML; }
+
+/* norm(): one normalization for transcript windows, trigger phrases and heuristics —
+   lowercase, accents stripped, straight AND curly apostrophes removed, non-alnum → space. */
+function norm(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[’']/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+CARDS.forEach(function(c){ c.nm=c.m.map(norm); });
+Object.keys(TRIG).forEach(function(k){ TRIG[k]=TRIG[k].map(norm); });
+
+/* ============================== MERGE ============================== */
+function merged(t){
+  var first=$('f_first').value.trim(), st1=$('f_st1').value.trim()||'your property',
+      date=$('f_date').value.trim(), sender=$('f_sender').value.trim()||'Alejandro';
+  return String(t)
+    .split('{first}').join(first||'there')
+    .split('{st1}').join(st1)
+    .split('{date}').join(date?(', with the sale set for '+date):'')
+    .split('{sender}').join(sender)
+    .split('{county}').join('South Florida');
+}
+
+/* ============================== STAGES UI ============================== */
+function renderChips(){
+  var h='';
+  for(var i=0;i<STAGES.length;i++)
+    h+='<span class="stagechip'+(i===S.stage?' now':'')+'" onclick="Coach.jump('+i+')">'+i+' · '+esc(STAGES[i].name)+'</span>';
+  $('chips').innerHTML=h;
+}
+function renderStage(){
+  var st=STAGES[S.stage];
+  $('nowstage').textContent='Stage '+S.stage+' — '+st.name;
+  $('saytext').textContent=merged(st.say);
+  $('saytag').textContent='say this';
+  $('saynote').textContent=st.note?merged(st.note):'';
+  var pl=$('probelist'); pl.innerHTML='';
+  (st.probes||[]).forEach(function(p){
+    var b=document.createElement('button'); b.className='probe'; b.textContent=merged(p);
+    b.onclick=function(){ $('saytext').textContent=merged(p); $('saytag').textContent='variant — '+st.name; };
+    pl.appendChild(b);
+  });
+  $('probes').className=(st.probes&&st.probes.length)?'on':'';
+  if(S.stagesVisited.indexOf(st.id)<0) S.stagesVisited.push(st.id);
+  renderChips();
+}
+function jump(i){ if(i>=0&&i<STAGES.length){ S.stage=i; renderStage(); } }
+function next(){ jump(Math.min(S.stage+1,STAGES.length-1)); }
+function back(){ jump(Math.max(S.stage-1,0)); }
+function fill(){ renderStage(); }
+
+/* ============================ LEAD LOOKUP ============================ */
+function debounceLookup(){ clearTimeout(S.debounce); S.debounce=setTimeout(lookup,350); }
+function lookup(){
+  var q=$('q').value.trim();
+  if(q.length<2){ $('leadhits').innerHTML=''; return; }
+  fetch('/api/lead?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(j){
+    var h='';
+    (j.matches||[]).forEach(function(m,i){
+      h+='<div class="hit" onclick="Coach.pick('+i+')"><b>'+esc(m.address||'(no address)')+'</b><br>'
+        +'<span>'+esc(m.owners||'')+' · '+esc(m.case||'')+' · sale '+esc(m.auction||'?')
+        +(m.days!=null?' ('+m.days+'d)':'')+'</span></div>';
     });
+    $('leadhits').innerHTML=h||'<div class="hit"><span>no match</span></div>';
+    S.hits=j.matches||[];
+  }).catch(function(){ $('leadhits').innerHTML='<div class="hit"><span>server unreachable</span></div>'; });
+}
+function pick(i){
+  var m=S.hits[i]; if(!m) return;
+  S.lead=m;
+  $('leadhits').innerHTML='';
+  $('q').value=m.address||m.case||'';
+  var soon=(m.days!=null&&m.days<=14);
+  $('leadbox').style.display='block';
+  $('leadbox').innerHTML=
+    '<div><span class="k">Case</span><span class="v">'+esc(m.case||'')+'</span></div>'
+   +'<div><span class="k">Address</span><span class="v">'+esc(m.address||'')+'</span></div>'
+   +'<div><span class="k">Owner</span><span class="v">'+esc(m.owners||'')+'</span></div>'
+   +'<div><span class="k">Sale</span><span class="v'+(soon?' soon':'')+'">'+esc(m.auction||'?')+(m.days!=null?' · '+m.days+' days':'')+'</span></div>'
+   +'<div><span class="k">Judgment</span><span class="v">'+esc(m.judgment||'?')+'</span></div>'
+   +'<div><span class="k">Equity</span><span class="v">'+esc(m.equity!=null?('$'+Math.round(m.equity).toLocaleString()):'?')+'</span></div>'
+   +'<div><span class="k">Tier/score</span><span class="v">'+esc(m.tier||'?')+' · '+esc(m.score!=null?m.score:'?')+(m.homestead?' · homestead':'')+'</span></div>';
+  /* County rolls write "LAST, FIRST": the first name is AFTER the comma (taking the first token
+     greeted people by their surname). A company / trust owner gets no first name. */
+  var o1=String(m.owners||'').split(/;|&| and /i)[0];
+  if(o1.indexOf(',')>=0) o1=o1.split(',').slice(1).join(' ');
+  var own=o1.replace(/[^A-Za-z '-]/g,' ').trim().split(/\s+/);
+  var corp=/\b(LLC|INC|CORP|TRUST|ESTATE|HOLDINGS|PROPERTIES|COMPANY|BANK)\b/i.test(String(m.owners||''));
+  if(own[0]&&own[0].length>1&&!corp&&!$('f_first').value) $('f_first').value=own[0].charAt(0).toUpperCase()+own[0].slice(1).toLowerCase();
+  var st1=String(m.address||'').split(',')[0].trim();
+  if(st1) $('f_st1').value=st1;
+  if(m.auction) $('f_date').value=m.auction;
+  fill();
+}
+
+/* ======================= OBJECTION AUTO-FIRE ======================= */
+function cardBody(c){
+  if(c.vault){
+    var es=(S.lang==='es-US'&&c.vault.es&&c.vault.es.reb);
+    return (es?c.vault.es.reb:c.vault.reb).join('\n\n');
   }
-  function postJSON(path, body) { return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
-
-  /* ------------------------------------------------------------ gate */
-  $('ack').addEventListener('change', function () { $('startbtn').disabled = !this.checked; });
-
-  function showApp(mode) {
-    S.mode = mode;
-    $('apperr').after($('lookup')); // same node, moved from the gate into the right column
-    $('gate').classList.add('off');
-    $('app').classList.add('on');
-    $('dot').textContent = mode === 'rec' ? '● REC' : 'PLAIN — not recording';
-    $('dot').className = mode === 'rec' ? 'rec' : 'plain';
-    $('saidno').style.display = mode === 'rec' ? '' : 'none';
-    $('stopbtn').textContent = mode === 'rec' ? 'Stop & save (Esc)' : 'End call (Esc)';
-    if (mode === 'plain') $('transcript').innerHTML = '<span class="empty">Plain Call Mode: no mic, no transcript, nothing saved. Tap an objection below when you hear one.</span>';
-    S.t0 = now();
-    S.timers.push(setInterval(tick, 500));
-    S.visited.push(E.STAGES[0].id);
-    renderChips(); go(mode === 'rec' ? 1 : 0); // recording: consent was read at the gate
+  return c.body;
+}
+function scanObjections(){
+  var win=norm(S.finals+' '+S.interim).slice(-240);
+  var last80=win.slice(-80);
+  var best=null,bestScore=0;
+  S.autoCards.forEach(function(c){
+    if(!c.nm.length) return;
+    if(S.cooldown[c.id]&&now()<S.cooldown[c.id]) return;
+    var hits=0,rec=0;
+    c.nm.forEach(function(p){ if(p&&win.indexOf(p)>=0){ hits++; if(last80.indexOf(p)>=0) rec=2; } });
+    if(!hits) return;
+    var score=hits*c.s+rec;
+    if(score>bestScore){ bestScore=score; best=c; }
+  });
+  if(best&&bestScore>=3&&best.id!==S.lastCard){
+    if(S.lastCard===best.id&&now()-S.lastCardAt<20000) return;
+    showCard('heard on the line · '+best.who,merged(cardBody(best)));
+    S.lastCard=best.id; S.lastCardAt=now();
+    S.objFired.push({id:best.id,at:mmss(now()-S.t0),score:bestScore});
   }
+}
+function lineHitsTrigger(nline){
+  for(var i=0;i<S.autoCards.length;i++){
+    var c=S.autoCards[i];
+    for(var k=0;k<c.nm.length;k++) if(c.nm[k]&&nline.indexOf(c.nm[k])>=0) return true;
+  }
+  return false;
+}
+function showCard(who,body){
+  $('objwho').textContent=who;
+  $('objbody').textContent=body;
+  $('objection').className='on';
+}
+function dismissObjection(){
+  $('objection').className='';
+  if(S.lastCard) S.cooldown[S.lastCard]=now()+45000;
+  S.lastCard=null;
+}
+function manualCard(n){
+  if(!n) return;
+  var c=S.manualCards[+n-1]; if(!c) return;
+  var es=(S.lang==='es-US'&&c.es);
+  var body=(es?c.es.reb:c.reb).join('\n\n');
+  showCard(c.t+(c.say?' — “'+String(es?c.es.say:c.say).slice(0,70)+'…”':''),body);
+  S.objFired.push({id:'manual:'+c.n,at:mmss(now()-S.t0)});
+  $('pickcard').value='';
+}
+function loadCards(){
+  fetch('/api/objections').then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(j){
+    S.manualCards=j.cards||[];
+    var sel=$('pickcard');
+    S.manualCards.forEach(function(c,i){
+      var o=document.createElement('option'); o.value=String(i+1); o.textContent=c.n+' · '+c.t;
+      sel.appendChild(o);
+    });
+    /* AUTO pool: script-only cards + every vault card that has triggers. Stand-ins (dup:<n>)
+       drop out in favor of the live vault body, so copy edits in the vault pack win. */
+    var auto=CARDS.filter(function(c){ return !c.dup; });
+    S.manualCards.forEach(function(c){
+      var trig=TRIG[c.n]||[];
+      if(!trig.length) return;
+      auto.push({id:'v'+c.n, who:c.t+' — “'+String(c.say||'').slice(0,70)+'…”', s:2, nm:trig, vault:c});
+    });
+    S.autoCards=auto;
+  }).catch(function(){ /* vault route unreachable: stand-ins keep full coverage */ });
+}
 
-  function start() {
-    if (!$('ack').checked) return;
-    err('gateerr', '');
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      err('gateerr', 'This page has no microphone access. Open it from http://127.0.0.1:8777/ in Chrome (not file://).');
+/* =========================== RED FLAGS =========================== */
+var rfTimer=null;
+function scanFlags(txt){
+  for(var i=0;i<FLAGS.length;i++){
+    var m=txt.match(FLAGS[i].re);
+    if(m){
+      $('rfphrase').textContent='⚠ heard on the line: “'+m[0]+'”';
+      $('rfwhy').textContent=FLAGS[i].why;
+      $('redflag').className='on';
+      S.rfFired.push({phrase:m[0],at:mmss(now()-S.t0)});
+      clearTimeout(rfTimer);
+      rfTimer=setTimeout(function(){ $('redflag').className=''; },8000);
       return;
     }
-    $('startbtn').disabled = true;
-    S.consentAck = { ack: true, at_utc: new Date().toISOString(), line: 'recording consent line read; caller accepted responsibility' };
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
-      .then(function (stream) {
-        S.stream = stream;
-        return postJSON('/api/session/start', {
-          case: S.lead ? S.lead.case : null,
-          address: S.lead ? S.lead.address : null,
-          owners: S.lead ? S.lead.owners : null,
-          auction: S.lead ? S.lead.auction : null,
-          phone: $('f_phone').value || null
-        });
-      })
-      .then(function (r) {
-        S.sid = r.session_id;
-        showApp('rec');
-        startRecorder();
-        if (SR) startSR(SR); else err('srerr', 'No speech recognizer in this browser. Audio is still recording. Use Chrome for the live transcript.');
-        S.timers.push(setInterval(function () { if (S.sid && !S.stopped) saveTranscript().catch(function () {}); }, 30000));
-      })
-      .catch(function (e) {
-        if (S.stream) { S.stream.getTracks().forEach(function (t) { t.stop(); }); S.stream = null; }
-        $('startbtn').disabled = false;
-        err('gateerr', 'Could not start: ' + (e && e.message ? e.message : e) + '. Is call_coach_server.py running and the mic allowed?');
-      });
   }
+}
 
-  function plain() { S.consentAck = false; showApp('plain'); }
+/* ======================= SPEAKER BEST-GUESS =======================
+   Free path (one mic): content heuristic. A line whose words mostly appear in the text YOU are
+   supposed to be reading (current stage line + probes + the open rebuttal) is tagged YOU?; a line
+   that tripped an objection trigger is THEM?. The ? is honest — one mic cannot know. The Deepgram
+   path replaces this with real diarization (no ?). */
+function guessSpeaker(nline){
+  if(lineHitsTrigger(nline)) return 'them?';
+  var ref=norm($('saytext').textContent+' '+$('saynote').textContent+' '
+               +($('objection').className==='on'?$('objbody').textContent:''));
+  var toks=nline.split(' ').filter(function(w){return w.length>2;});
+  if(toks.length<4) return '';
+  var hit=0;
+  toks.forEach(function(w){ if(ref.indexOf(w)>=0) hit++; });
+  return (hit/toks.length>=0.5)?'you?':'';
+}
 
-  /* --------------------------------------------------------- recorder */
-  function startRecorder() {
-    var mime = 'audio/webm;codecs=opus';
-    var opts = (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) ? { mimeType: mime } : {};
-    try { S.rec = new MediaRecorder(S.stream, opts); }
-    catch (e) { err('apperr', 'Recorder failed to start: ' + e.message + '. Nothing is being recorded.'); return; }
-    S.rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) { S.queue.push(ev.data); pump(); } };
-    S.rec.onerror = function (ev) { err('apperr', 'Recorder error: ' + (ev.error && ev.error.name || 'unknown')); };
-    S.rec.start(5000);
-  }
-
-  /* Strict FIFO: one chunk in flight, next only after the server confirms. The chunks are pieces of
-     one webm stream and the server appends, so order is the file. A failed POST stays at the head
-     and is retried on the next tick; nothing is dropped. */
-  function pump() {
-    if (S.uploading || !S.queue.length || !S.sid) return;
-    S.uploading = true;
-    var blob = S.queue[0];
-    fetch('/api/session/' + encodeURIComponent(S.sid) + '/audio', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (j) { S.queue.shift(); S.bytes = j.bytes || S.bytes; S.failCount = 0; S.uploading = false; showSave(); pump(); })
-      .catch(function () { S.failCount++; S.uploading = false; showSave(); });
-  }
-
-  function showSave() {
-    var s = $('savest');
-    if (S.mode !== 'rec') { s.textContent = ''; return; }
-    if (S.failCount) { s.textContent = 'SAVE FAILING — ' + S.queue.length + ' chunk(s) held in memory, retrying'; s.className = 'bad'; }
-    else { s.textContent = 'saved ' + Math.round(S.bytes / 1024) + ' KB'; s.className = ''; }
-  }
-
-  /* ------------------------------------------------------- transcript */
-  function startSR(SR) {
-    var r = new SR();
-    r.continuous = true; r.interimResults = true; r.lang = $('lang').value;
-    r.onresult = function (ev) {
-      var interim = '';
-      for (var i = ev.resultIndex; i < ev.results.length; i++) {
-        var res = ev.results[i], txt = res[0].transcript;
-        if (res.isFinal) { if (txt.trim()) onFinal(txt.trim()); }
-        else interim += txt;
-      }
-      S.interim = interim; renderTranscript();
-    };
-    r.onerror = function (ev) {
-      if (ev.error === 'no-speech' || ev.error === 'aborted') return;
-      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { S.srOn = false; err('srerr', 'Speech recognizer blocked (' + ev.error + '). Audio is still recording.'); return; }
-      err('srerr', 'Recognizer: ' + ev.error + ' (restarting)');
-    };
-    r.onend = function () { if (S.srOn) { try { r.lang = $('lang').value; r.start(); } catch (e) {} } };
-    S.sr = r; S.srOn = true;
-    try { r.start(); } catch (e) { err('srerr', 'Recognizer failed: ' + e.message); }
-  }
-  function stopSR() { S.srOn = false; if (S.sr) { try { S.sr.stop(); } catch (e) {} } }
-
-  function onFinal(text) {
-    err('srerr', '');
-    S.finals.push({ t: mmss(el()), text: text });
-    S.words += text.split(/\s+/).filter(Boolean).length;
-    S.interim = '';
+/* =========================== TRANSCRIPT =========================== */
+function pushFinal(text,spk){
+  text=String(text||'').trim();
+  if(!text) return;
+  var nline=norm(text);
+  var tag=spk||guessSpeaker(nline);
+  S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag});
+  S.finals+=' '+text;
+  S.lastSpeech=now();
+  scanFlags(text);
+  scanObjections();
+  renderTranscript();
+}
+function renderTranscript(){
+  var el=$('transcript'),h='';
+  S.lines.forEach(function(l){
+    var sp='';
+    if(l.spk==='you'||l.spk==='you?') sp='<span class="spk you">'+(l.spk==='you'?'YOU':'YOU?')+'</span>';
+    else if(l.spk==='them'||l.spk==='them?') sp='<span class="spk them">'+(l.spk==='them'?'THEM':'THEM?')+'</span>';
+    h+='<span class="ts">['+l.t+']</span>'+sp+esc(l.text)+'\n';
+  });
+  if(S.interim) h+='<span class="interim">'+esc(S.interim)+'</span>';
+  el.innerHTML=h||'<span class="empty">Waiting for speech…</span>';
+  el.scrollTop=el.scrollHeight;
+  $('words').textContent=(S.finals.split(/\s+/).filter(Boolean).length)+' words';
+}
+function startSR(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ gateErr('This browser has no Web Speech API — the live transcript needs CHROME (or a Deepgram key). Recording still works.'); return; }
+  var r=new SR();
+  r.continuous=true; r.interimResults=true; r.lang=S.lang;
+  r.onresult=function(ev){
+    var interim='';
+    for(var i=ev.resultIndex;i<ev.results.length;i++){
+      var t=ev.results[i][0].transcript;
+      if(ev.results[i].isFinal) pushFinal(t,'');
+      else interim+=t;
+    }
+    S.interim=interim;
+    if(interim){ S.lastSpeech=now(); scanObjections(); }
     renderTranscript();
-    // red flags: this line only, so one phrase fires once
-    var rf = E.redflags(text);
-    if (rf.length) showRedflag(rf[0], rf);
-    // objections: the spec window
-    var all = S.finals.map(function (l) { return l.text; }).join(' ');
-    var hit = E.pick(all, S.objState, now());
-    if (hit) fireObjection(hit.id, 'heard');
-  }
+  };
+  r.onend=function(){ if(S.srOn){ try{ r.start(); }catch(e){ setTimeout(function(){ if(S.srOn) try{r.start();}catch(_){} },400); } } };
+  r.onerror=function(ev){ if(ev.error==='not-allowed'){ S.srOn=false; gateErr('Mic permission denied — transcript off.'); } };
+  S.sr=r; S.srOn=true;
+  try{ r.start(); }catch(e){}
+  $('eng').textContent='engine: Chrome';
+}
 
-  function renderTranscript() {
-    var box = $('transcript');
-    if (!S.finals.length && !S.interim) { box.innerHTML = '<span class="empty">Waiting for speech…</span>'; return; }
-    var h = S.finals.map(function (l) { return '<span class="ts">' + l.t + '</span>' + esc(l.text); }).join('\n');
-    if (S.interim) h += (h ? '\n' : '') + '<span class="interim">' + esc(S.interim) + '</span>';
-    box.innerHTML = h;
-    var left = $('left'); left.scrollTop = left.scrollHeight;
-  }
-
-  /* -------------------------------------------------------- red flags */
-  var rfTimer = null;
-  function showRedflag(f, all) {
-    all.forEach(function (x) { S.rfFired.push({ phrase: x.phrase, why: x.why, t: mmss(el()) }); });
-    $('rfphrase').textContent = 'RED FLAG: "' + f.phrase + '"';
-    $('rfwhy').textContent = f.why + (all.length > 1 ? '  (+' + (all.length - 1) + ' more)' : '');
-    $('redflag').classList.add('on');
-    clearTimeout(rfTimer);
-    rfTimer = setTimeout(function () { $('redflag').classList.remove('on'); }, 8000);
-  }
-
-  /* -------------------------------------------------------- objections */
-  function fireObjection(id, how) {
-    var c = E.card(id); if (!c) return;
-    var st = S.objState;
-    st.lastFiredId = id; st.panelOpen = true; st.lastFire[id] = now();
-    S.objFired.push({ id: id, t: mmss(el()), how: how });
-    $('objwho').textContent = c.who;
-    $('objbody').textContent = E.fill(c.body, fields());
-    $('objection').classList.add('on');
-    renderObjChips();
-  }
-  function dismissObjection() {
-    var st = S.objState;
-    if (st.lastFiredId) st.cooldown[st.lastFiredId] = now() + E.DISMISS_MS;
-    st.panelOpen = false;
-    $('objection').classList.remove('on');
-    renderObjChips();
-  }
-
-  /* ------------------------------------------------------------ stages */
-  function renderChips() {
-    $('chips').innerHTML = E.STAGES.map(function (s, i) {
-      return '<span class="stagechip' + (i === S.stage ? ' now' : '') + '" data-i="' + i + '" title="key ' + (i + 1) + '">' + (i + 1) + ' ' + esc(s.name) + '</span>';
-    }).join('');
-    renderObjChips();
-  }
-  function renderObjChips() {
-    var open = S.objState.panelOpen ? S.objState.lastFiredId : null;
-    $('objchips').innerHTML = E.OBJECTIONS.map(function (c) {
-      return '<span class="objchip' + (c.id === open ? ' now' : '') + '" data-o="' + c.id + '">' + esc(c.id) + '</span>';
-    }).join('');
-  }
-  $('chips').addEventListener('click', function (e) { var i = e.target.getAttribute('data-i'); if (i != null) go(+i); });
-  $('objchips').addEventListener('click', function (e) { var o = e.target.getAttribute('data-o'); if (o) fireObjection(o, 'tap'); });
-
-  function go(i) {
-    i = Math.max(0, Math.min(E.STAGES.length - 1, i));
-    S.stage = i;
-    var s = E.STAGES[i];
-    if (S.visited[S.visited.length - 1] !== s.id) S.visited.push(s.id);
-    $('nowstage').textContent = 'Stage ' + i + ' — ' + s.name;
-    $('saytag').textContent = 'say this';
-    renderStage();
-    renderChips();
-  }
-  function renderStage() {
-    var s = E.STAGES[S.stage], f = fields();
-    $('saytext').textContent = E.fill(s.say, f);
-    $('saynote').textContent = E.fill(s.note, f);
-    $('probelist').innerHTML = s.probes.map(function (p, k) {
-      return '<button class="probe" data-k="' + k + '">' + esc(E.fill(p, f)) + '</button>';
-    }).join('');
-    $('probes').classList.toggle('on', s.probes.length > 0);
-    if (S.objState.panelOpen && S.objState.lastFiredId) $('objbody').textContent = E.fill(E.card(S.objState.lastFiredId).body, f);
-  }
-  $('probelist').addEventListener('click', function (e) {
-    var k = e.target.getAttribute('data-k'); if (k == null) return;
-    $('saytext').textContent = E.fill(E.STAGES[S.stage].probes[+k], fields());
-    $('saytag').textContent = 'say this instead';
-  });
-  function next() { go(S.stage + 1); }
-  function back() { go(S.stage - 1); }
-
-  /* -------------------------------------------------------- lead lookup */
-  var lt = null;
-  function debounceLookup() { clearTimeout(lt); lt = setTimeout(lookup, 250); }
-  function lookup() {
-    var q = $('q').value.trim();
-    if (!q) { recentIfEmpty(); return; }
-    api('/api/lead?q=' + encodeURIComponent(q)).then(function (r) { hits(r.matches || []); })
-      .catch(function (e) { err('apperr', 'Lead lookup failed: ' + e.message); });
-  }
-  function recentIfEmpty() {
-    if ($('q').value.trim()) return;
-    api('/api/leads/recent').then(function (r) { hits(r.leads || [], true); }).catch(function () {});
-  }
-  var lastHits = [];
-  function hits(list, recent) {
-    lastHits = list;
-    if (!list.length) { $('leadhits').innerHTML = '<div class="hit"><span>' + (recent ? 'No upcoming auctions loaded.' : 'No match.') + '</span></div>'; return; }
-    $('leadhits').innerHTML = list.map(function (l, i) {
-      return '<div class="hit" data-h="' + i + '"><b>' + esc(l.address || '(no address)') + '</b> <span>' + esc(l.owners || '') +
-        ' · ' + esc(l.case || '') + (l.days != null ? ' · sale ' + (l.days >= 0 ? 'in ' + l.days + 'd' : l.days + 'd ago') : '') + '</span></div>';
-    }).join('');
-  }
-  $('leadhits').addEventListener('click', function (e) {
-    var n = e.target.closest('.hit'); if (!n || n.getAttribute('data-h') == null) return;
-    selectLead(lastHits[+n.getAttribute('data-h')]);
-  });
-
-  var NOTNAME = ['UNKNOWN', 'OWNER', 'TENANT', 'OCCUPANT', 'ESTATE', 'TRUST', 'TRUSTEE', 'HEIRS', 'TITLE', 'SEARCH', 'VIA', 'THE', 'LLC', 'INC', 'CORP', 'COMPANY', 'PROPERTIES', 'HOLDINGS'];
-  /* First owner's first name, or '' for a company / placeholder. County rolls write "LAST, FIRST";
-     take the part after the comma, as Call Mode's fallback does. */
-  function firstFrom(owners) {
-    var src = String(owners || '').split(/;|&| and /i)[0];
-    if (src.indexOf(',') >= 0) src = src.split(',').slice(1).join(' ');
-    var raw = src.replace(/[^A-Za-z '-]/g, ' ').trim(); if (!raw) return '';
-    var up = String(owners).toUpperCase();
-    if (/\b(LLC|INC|CORP|TRUST|ESTATE|HOLDINGS|PROPERTIES|COMPANY)\b/.test(up)) return '';
-    var tok = raw.split(/\s+/)[0].toUpperCase();
-    if (tok.length < 2 || NOTNAME.indexOf(tok) >= 0) return '';
-    return tok.charAt(0) + tok.slice(1).toLowerCase();
-  }
-  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  function spokenDate(a) {
-    var s = String(a || '').trim(), m;
-    if ((m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/))) return MONTHS[+m[2] - 1] + ' ' + (+m[3]);
-    if ((m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/))) return MONTHS[+m[1] - 1] + ' ' + (+m[2]);
-    return s;
-  }
-  function money(v) { var n = Number(String(v == null ? '' : v).replace(/[^0-9.-]/g, '')); return (v == null || v === '' || isNaN(n)) ? (v || '—') : '$' + Math.round(n).toLocaleString(); }
-
-  function selectLead(l) {
-    if (!l) return;
-    S.lead = l;
-    clearTimeout(lt); $('leadhits').innerHTML = '';
-    var rows = [
-      ['Case', esc(l.case)], ['Address', esc(l.address)], ['Owners', esc(l.owners)],
-      ['Auction', esc(l.auction || '—') + (l.days != null ? ' <span class="' + (l.days >= 0 && l.days <= 14 ? 'soon' : '') + '">(' + (l.days >= 0 ? 'in ' + l.days + ' days' : Math.abs(l.days) + ' days ago') + ')</span>' : '')],
-      ['Judgment', esc(money(l.judgment))], ['Opening bid', esc(money(l.opening_bid))], ['Plaintiff', esc(l.plaintiff || '—')],
-      ['Equity', esc(money(l.equity))], ['Tier / score', esc((l.tier || '—') + ' / ' + (l.score == null ? '—' : l.score))],
-      ['Homestead', esc(l.homestead == null ? '—' : String(l.homestead))]
-    ];
-    $('leadbox').innerHTML = rows.map(function (r) { return '<span class="kv"><span class="k">' + r[0] + '</span> <span class="v">' + r[1] + '</span></span>'; }).join('');
-    $('leadbox').style.display = '';
-    $('f_first').value = firstFrom(l.owners);
-    $('f_st1').value = String(l.address || '').split(',')[0].trim();
-    $('f_date').value = (l.days != null && l.days >= 0) ? spokenDate(l.auction) : '';
-    fill();
-  }
-  function fill() { renderStage(); }
-
-  /* --------------------------------------------------------- stop/save */
-  function saveTranscript(sid) {
-    sid = sid || S.sid;
-    if (!sid) return Promise.resolve();
-    return postJSON('/api/session/' + encodeURIComponent(sid) + '/transcript', { lines: S.finals })
-      .catch(function (e) { err('apperr', 'Transcript save failed (will retry): ' + e.message); throw e; });
-  }
-
-  function drain(deadlineMs) {
-    return new Promise(function (resolve) {
-      (function wait() {
-        if (!S.queue.length && !S.uploading) return resolve(true);
-        if (now() > deadlineMs) return resolve(false);
-        pump(); setTimeout(wait, 400);
-      })();
-    });
-  }
-
-  function endPayload() {
-    return {
-      duration_s: Math.round(el() / 1000),
-      stages_visited: S.visited.slice(),
-      objections_fired: S.objFired.slice(),
-      redflags_fired: S.rfFired.slice(),
-      consent_ack: S.consentAck
+/* ============== DEEPGRAM (optional: real YOU/THEM + ~300ms) ==============
+   Key saved in THIS browser's localStorage only (never the repo, never the server).
+   Streams the same mic through a second 250ms MediaRecorder to Deepgram's websocket with
+   diarization on. First voice heard = YOU (you speak first on an outbound call). */
+function dgKey(){ try{ return localStorage.getItem('coachDgKey')||''; }catch(e){ return ''; } }
+function setKey(){
+  var k=prompt('Deepgram API key (blank to clear). Turns on real YOU/THEM labels + ~300ms latency, ~$0.004/min. Stored only in this browser.');
+  if(k===null) return;
+  try{ k.trim()?localStorage.setItem('coachDgKey',k.trim()):localStorage.removeItem('coachDgKey'); }catch(e){}
+  alert(k.trim()?'Saved. Next session uses Deepgram.':'Cleared. Next session uses Chrome.');
+}
+function startDG(stream,key){
+  try{
+    var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2&language='+(S.lang==='es-US'?'es':'en-US')
+      +'&punctuate=true&interim_results=true&diarize=true&smart_format=true',['token',key]);
+    ws.onopen=function(){
+      $('eng').textContent='engine: Deepgram · live speaker labels';
+      var mr=new MediaRecorder(stream,{mimeType:(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm')});
+      mr.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0&&ws.readyState===1) ws.send(ev.data); };
+      mr.start(250);
+      S.dgRecorder=mr;
     };
-  }
+    ws.onmessage=function(ev){
+      var j; try{ j=JSON.parse(ev.data); }catch(e){ return; }
+      var alt=j.channel&&j.channel.alternatives&&j.channel.alternatives[0];
+      if(!alt) return;
+      var txt=alt.transcript||'';
+      if(!txt) return;
+      if(j.is_final){
+        var words=alt.words||[], spk='';
+        if(words.length&&words[0].speaker!=null){
+          var count={}; words.forEach(function(w){ count[w.speaker]=(count[w.speaker]||0)+1; });
+          var maj=Object.keys(count).sort(function(a,b){return count[b]-count[a];})[0];
+          if(S.dgSpk0===null) S.dgSpk0=maj;      // first voice on an outbound call = you
+          spk=(maj===S.dgSpk0)?'you':'them';
+        }
+        S.interim='';
+        pushFinal(txt,spk);
+      } else {
+        S.interim=txt; S.lastSpeech=now(); scanObjections(); renderTranscript();
+      }
+    };
+    ws.onerror=function(){ ws.close(); };
+    ws.onclose=function(){
+      if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
+      S.dgRecorder=null;
+      if(S.dgOn){ S.dgOn=false; startSR(); $('eng').textContent='engine: Chrome (Deepgram dropped)'; }
+    };
+    S.dg=ws; S.dgOn=true;
+    return true;
+  }catch(e){ return false; }
+}
 
-  /* Stop & save: flush the last chunk, wait for every chunk to land, then transcript, then /end.
-     If the server is unreachable the chunks stay in memory and the button turns into a retry; the
-     tab warns before closing while anything is unsaved. */
-  function stop() {
-    if (S.stopping) return;
-    if (S.mode !== 'rec') { finish('Call ended. Nothing was recorded or saved.'); return; }
-    S.stopping = true;
-    $('stopbtn').disabled = true; $('stopbtn').textContent = 'Saving…';
-    stopSR();
-    var flushed = new Promise(function (resolve) {
-      if (S.rec && S.rec.state !== 'inactive') { S.rec.addEventListener('stop', function () { resolve(); }, { once: true }); try { S.rec.stop(); } catch (e) { resolve(); } }
-      else resolve();
-    });
-    flushed.then(function () {
-      if (S.stream) S.stream.getTracks().forEach(function (t) { t.stop(); });
-      return drain(now() + 15000);
-    }).then(function (ok) {
-      if (!ok) throw new Error(S.queue.length + ' audio chunk(s) not saved yet');
-      return saveTranscript();
-    }).then(function () {
-      return postJSON('/api/session/' + encodeURIComponent(S.sid) + '/end', endPayload());
-    }).then(function (r) {
-      S.stopped = true;
-      finish('Saved: call_sessions/' + S.sid + '/  (' + Math.round(((r.meta && r.meta.audio_bytes) || S.bytes) / 1024) + ' KB audio, ' + S.finals.length + ' transcript lines)');
-    }).catch(function (e) {
-      S.stopping = false;
-      $('stopbtn').disabled = false; $('stopbtn').textContent = 'Retry save';
-      err('apperr', 'NOT SAVED YET: ' + e.message + '. Keep this tab open, check call_coach_server.py is running, then press Retry save.');
-    });
-  }
+function setLang(l){
+  S.lang=l;
+  if(S.dgOn){ S.dgOn=false; try{S.dg.close();}catch(e){}
+    setTimeout(function(){ if(S.stream) (dgKey()?startDG(S.stream,dgKey()):startSR()); },300); return; }
+  if(S.sr){ S.srOn=false; try{S.sr.stop();}catch(e){} S.sr=null;
+    setTimeout(function(){ startSR(); },300); }
+}
 
-  /* "They said no": recording stops now and the coach keeps running with no mic. The few seconds
-     before the no are already on disk in this session folder; meta.json records consent_ack:false. */
-  function declined() {
-    if (S.mode !== 'rec' || S.stopping) return;
-    S.consentAck = { ack: false, declined_at: mmss(el()) };
-    stopSR();
-    var sid = S.sid;
-    var flushed = new Promise(function (resolve) {
-      if (S.rec && S.rec.state !== 'inactive') { S.rec.addEventListener('stop', function () { resolve(); }, { once: true }); try { S.rec.stop(); } catch (e) { resolve(); } }
-      else resolve();
-    });
-    flushed.then(function () {
-      if (S.stream) S.stream.getTracks().forEach(function (t) { t.stop(); });
-      return drain(now() + 15000);
-    }).then(function () { return saveTranscript(sid); })
-      .then(function () { return postJSON('/api/session/' + encodeURIComponent(sid) + '/end', endPayload()); })
-      .then(function () {
-        err('apperr', 'Recording stopped. The seconds before the no are in call_sessions/' + sid + '/ — delete that folder if you want them gone.');
-      })
-      .catch(function (e) { err('apperr', 'Stopped recording, but the session did not close cleanly: ' + e.message); });
-    S.sid = null; S.mode = 'plain'; S.stopped = true;
-    $('dot').textContent = 'PLAIN — not recording'; $('dot').className = 'plain';
-    $('saidno').style.display = 'none';
-    $('stopbtn').textContent = 'End call (Esc)';
-    showSave();
-  }
-
-  function finish(msg) {
-    S.timers.forEach(clearInterval); S.timers = [];
-    $('dot').textContent = 'STOPPED'; $('dot').className = 'plain';
-    $('stopbtn').disabled = true; $('stopbtn').textContent = 'Done';
-    $('saidno').style.display = 'none';
-    $('savest').className = ''; $('savest').textContent = msg;
-    var b = document.createElement('button'); b.textContent = 'New call'; b.onclick = function () { location.reload(); };
-    $('stopbtn').after(b);
-  }
-
-  window.addEventListener('beforeunload', function (e) {
-    if (S.mode === 'rec' && !S.stopped) { e.preventDefault(); e.returnValue = ''; }
+/* ============================ RECORDER ============================ */
+/* Strict FIFO: one chunk in flight, the next only after the server confirms. The chunks are pieces
+   of ONE webm stream and the server appends them in arrival order, so arrival order IS the file:
+   two in flight, or a failed chunk re-sent behind a later one, corrupts the recording. A failed POST
+   stays at the head of S.pending and is retried (every 2 s, and whenever a new chunk arrives). */
+function postChunk(blob){ S.pending.push(blob); pump(); }
+function pump(){
+  if(S.uploading||!S.pending.length||!S.sid) return;
+  S.uploading=true;
+  fetch('/api/session/'+encodeURIComponent(S.sid)+'/audio',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:S.pending[0]})
+    .then(function(r){ if(!r.ok) throw 0; S.pending.shift(); S.uploading=false; S.upFail=0; pump(); })
+    .catch(function(){ S.uploading=false; S.upFail=(S.upFail||0)+1; });  // never drop audio silently
+}
+setInterval(function(){ if(S.pending.length&&!S.uploading) pump(); },2000);
+/* Resolves true once every held chunk has landed, false at the deadline. */
+function drainAudio(deadline){
+  return new Promise(function(resolve){
+    (function wait(){
+      if(!S.pending.length&&!S.uploading) return resolve(true);
+      if(now()>deadline) return resolve(false);
+      pump(); setTimeout(wait,400);
+    })();
   });
+}
+function startRecorder(stream){
+  var mime='audio/webm;codecs=opus';
+  if(!window.MediaRecorder||!MediaRecorder.isTypeSupported(mime)) mime='audio/webm';
+  var rec=new MediaRecorder(stream,{mimeType:mime});
+  rec.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0&&S.sid) postChunk(ev.data); };
+  rec.start(5000);   // 5-second chunks: a crash costs 5 seconds, not the call
+  S.recorder=rec;
+}
 
-  /* -------------------------------------------------------------- tick */
-  function tick() {
-    $('clock').textContent = mmss(el());
-    $('words').textContent = S.words + ' words';
-    if (S.queue.length && !S.uploading) pump();
+/* ======================= IDLE AUTO-STOP (90s) =======================
+   Forgetting Esc after a hang-up used to leave the mic transcribing the room. No speech for
+   80s -> "still there?" with a 10s countdown; 90s -> auto stop & save. Any speech resets it. */
+function idleTick(){
+  if(S.plain||!S.sid) return;
+  var quiet=now()-S.lastSpeech;
+  if(quiet>80000&&!S.idleCounting){
+    S.idleCounting=true; $('idlewarn').className='overlay on';
   }
+  if(S.idleCounting){
+    var left=Math.max(0,Math.ceil((90000-quiet)/1000));
+    $('idlecount').textContent=left;
+    if(quiet<=80000){ S.idleCounting=false; $('idlewarn').className='overlay'; }
+    else if(quiet>=90000){ $('idlewarn').className='overlay'; S.outcomeAuto=true; stop(); }
+  }
+}
+function keepGoing(){ S.lastSpeech=now(); S.idleCounting=false; $('idlewarn').className='overlay'; }
 
-  $('lang').addEventListener('change', function () { if (S.sr && S.srOn) { try { S.sr.stop(); } catch (e) {} } }); // onend restarts with the new lang
-
-  /* ---------------------------------------------------------- keyboard */
-  document.addEventListener('keydown', function (e) {
-    if (!$('app').classList.contains('on')) return;
-    var tag = (e.target && e.target.tagName) || '';
-    if (e.key === 'Escape') { e.preventDefault(); stop(); return; }
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
-    var k = e.key.toLowerCase();
-    if (k === 'n') next();
-    else if (k === 'b') back();
-    else if (k === 'd') dismissObjection();
-    else if (/^[1-9]$/.test(k)) go(+k - 1);
+/* ========================== START / STOP ========================== */
+function gateErr(msg){ var e=$('gateerr'); e.textContent=msg; e.className='err on'; }
+function enterApp(){
+  $('gate').style.display='none';
+  $('app').className='on';
+  S.t0=now(); S.lastSpeech=now();
+  S.clockTimer=setInterval(function(){ $('clock').textContent=mmss(now()-S.t0); idleTick(); },500);
+  S.stage=S.plain?1:0;
+  renderStage(); renderTranscript(); loadCards();
+  var c=new URLSearchParams(location.search).get('case');
+  if(c&&!S.lead){ $('q').value=c; lookup(); setTimeout(function(){ if(S.hits.length===1) pick(0); },700); }
+  document.addEventListener('keydown',function(ev){
+    if(/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) return;
+    var k=ev.key.toLowerCase();
+    if(k==='n') next();
+    else if(k==='b') back();
+    else if(k==='escape') stop();
+    else if(k==='d') dismissObjection();
+    else if(/^[1-9]$/.test(ev.key)) jump(+ev.key);
   });
+}
+function start(){
+  if(!$('ack').checked) return;
+  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(stream){
+    S.stream=stream; S.plain=false;
+    var lead=S.lead||{};
+    fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({case:lead.case||null,address:lead.address||null,owners:lead.owners||null,auction:lead.auction||null,phone:null,consent_ack:true})})
+    .then(function(r){return r.json();}).then(function(j){
+      S.sid=j.session_id;
+      $('dot').textContent='● REC'; $('dot').className='rec';
+      startRecorder(stream);
+      enterApp();
+      var k=dgKey();
+      if(!k||!startDG(stream,k)) startSR();
+    }).catch(function(){ gateErr('Server unreachable — is call_coach_server.py running on 127.0.0.1:8777?'); stream.getTracks().forEach(function(t){t.stop();}); });
+  }).catch(function(){ gateErr('Mic permission denied. Chrome needs the mic for recording + transcript. Use Plain Call Mode otherwise.'); });
+}
+function plain(){
+  S.plain=true; S.sid=null;
+  $('dot').textContent='PLAIN · no mic, nothing saved'; $('dot').className='plain';
+  enterApp();   // no mic, no recorder, no SR, no session folder
+}
+function stop(){
+  if(S.plain){ location.reload(); return; }
+  if(S.outcomeAuto){ finish('auto_silence'); return; }
+  $('outcome').className='overlay on';   // outcome first; finish() does the actual save
+}
+function finish(outcome){
+  $('outcome').className='overlay';
+  S.srOn=false; if(S.sr){ try{S.sr.stop();}catch(e){} }
+  S.dgOn=false; if(S.dg){ try{S.dg.close();}catch(e){} }
+  if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
+  var done=function(){
+    var dur=Math.round((now()-S.t0)/1000);
+    drainAudio(now()+15000).then(function(ok){
+      if(!ok){ alert('NOT SAVED YET: '+S.pending.length+' audio chunk(s) still in this tab. Check call_coach_server.py is running, then press Esc again. Do not close this tab.'); throw 'held'; }
+      return fetch('/api/session/'+encodeURIComponent(S.sid)+'/transcript',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({lines:S.lines})});
+    })
+    .then(function(){ return fetch('/api/session/'+encodeURIComponent(S.sid)+'/end',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,consent_ack:true,outcome:outcome||null})}); })
+    .then(function(r){return r.json();})
+    .then(function(j){
+      alert('Saved — '+((j.meta&&j.meta.session_id)||S.sid)+'\n'+S.lines.length+' transcript lines · '+mmss(now()-S.t0)
+            +(outcome?'\noutcome: '+outcome:'')+'\n\nLog the outcome in Call Mode too so the cadence moves.');
+      location.reload();
+    })
+    .catch(function(e){ if(e==='held') return; alert('Transcript/end POST failed — audio chunks already on disk under call_sessions/'+S.sid); });
+  };
+  if(S.recorder&&S.recorder.state!=='inactive'){
+    S.recorder.onstop=function(){ if(S.stream) S.stream.getTracks().forEach(function(t){t.stop();}); setTimeout(done,600); };
+    S.recorder.stop();  // flushes the final chunk through ondataavailable
+  } else done();
+}
 
-  /* Deep link from Call Mode's "Coach" link: /?case=<case #> preselects that lead on the gate. */
-  (function () {
-    var c = new URLSearchParams(location.search).get('case');
-    if (!c) return;
-    $('q').value = c;
-    api('/api/lead?q=' + encodeURIComponent(c)).then(function (r) {
-      var m = (r.matches || []).filter(function (l) { return String(l.case) === c; });
-      if (m.length === 1) selectLead(m[0]); else hits(r.matches || []);
-    }).catch(function () {});
-  })();
+/* test hook: drive the exact final-line pipeline without a mic (headless verification) */
+var _test={ say:function(t){ pushFinal(t,''); },
+            state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
+                                      lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
 
-  return { start: start, plain: plain, stop: stop, declined: declined, next: next, back: back, go: go,
-           lookup: lookup, debounceLookup: debounceLookup, recentIfEmpty: recentIfEmpty, fill: fill,
-           dismissObjection: dismissObjection, fire: fireObjection, _state: S };
+return {start:start,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
+        lookup:lookup,debounceLookup:debounceLookup,pick:pick,
+        dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
+        setKey:setKey,keepGoing:keepGoing,_test:_test};
 })();
 </script>
 </body>

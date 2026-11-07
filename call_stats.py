@@ -8,8 +8,9 @@
     python call_stats.py --notes PATH --out stats.csv
 
 The twin of callStatsRows() in call_mode.py (the "call stats" screen). _callstatstest.py runs both on one
-fixture. Definitions are in NOTE below. Talk time is not tracked; dial_to_log_min is the minutes from the
-dial tap to the outcome tap on answered calls.
+fixture. Definitions are in NOTE below. dial_to_log_min is the minutes from the dial tap to the outcome tap
+on answered calls. Talk time (talk_min, talked_calls, avg_talk_min) comes only from the `talk` seconds the
+page writes when "They picked up" was tapped during an answered call (2026-11-05).
 """
 import argparse
 import datetime as dt
@@ -22,12 +23,15 @@ ANSWERED = {'talked', 'callback', 'appt', 'notint', 'dnc', 'gate'}
 NOANS = {'noanswer', 'voicemail'}
 BAD = {'badnum', 'wrong'}
 COLS = ['date', 'seat', 'total_dials', 'answered', 'no_answer_vm', 'wrong_or_disconnected', 'appointments',
-        'no_outcome_tapped', 'other', 'dial_to_log_min', 'timed_calls', 'answer_rate', 'appt_rate']
+        'no_outcome_tapped', 'other', 'dial_to_log_min', 'timed_calls', 'talk_min', 'talked_calls', 'avg_talk_min',
+        'answer_rate', 'appt_rate']
 NOTE = ('DealFlow Call Mode daily stats. total_dials = logged outcomes + dials with no outcome tapped. '
         'answered = a person picked up (talked, callback, appointment, soft no, hard no, not the owner). '
         'wrong_or_disconnected = wrong number + bad number. answer_rate and appt_rate = over logged dials '
-        '(total_dials minus no_outcome_tapped). Talk time is not tracked: dial_to_log_min is the minutes from '
-        'the dial tap to the outcome tap on answered calls (includes ringing), timed_calls says how many had it.')
+        '(total_dials minus no_outcome_tapped). dial_to_log_min is the minutes from the dial tap to the outcome '
+        'tap on answered calls (includes ringing), timed_calls says how many had it. Talk time is tracked only '
+        'when \'They picked up\' is tapped during the call: talk_min is the sum of talk seconds on answered calls '
+        'with a pickup tap, talked_calls is how many, avg_talk_min is its average.')
 
 
 def rows_from_notes(notes, who=None, days=None, today=None):
@@ -49,7 +53,7 @@ def rows_from_notes(notes, who=None, days=None, today=None):
                 continue
             r = by.setdefault((day, seat), dict(date=day, seat=seat, dials=0, answered=0, no_answer_vm=0,
                               wrong_or_disconnected=0, appointments=0, no_outcome=0, other=0,
-                              dial_to_log_min=0.0, timed_calls=0))
+                              dial_to_log_min=0.0, timed_calls=0, talk_s=0, talked_calls=0))
             if oc in ('pending', 'redial'):
                 if not any(isinstance(x, dict) and x.get('d') == day and x.get('oc') not in ('pending', 'redial')
                            for x in dl[i + 1:]):
@@ -66,6 +70,14 @@ def rows_from_notes(notes, who=None, days=None, today=None):
                 if d.get('tsd') and 0 < g <= 3600:
                     r['dial_to_log_min'] += g / 60.0
                     r['timed_calls'] += 1
+                tk_raw = d.get('talk')
+                try:
+                    tk = float(tk_raw)
+                except (TypeError, ValueError):
+                    tk = 0
+                if tk_raw is not None and 0 < tk <= 3600 and tk == int(tk):
+                    r['talk_s'] += int(tk)
+                    r['talked_calls'] += 1
             elif oc in NOANS:
                 r['no_answer_vm'] += 1
             elif oc in BAD:
@@ -84,7 +96,9 @@ def to_csv(rows):
         out.append(','.join(str(x) for x in [
             r['date'], r['seat'], r['dials'], r['answered'], r['no_answer_vm'], r['wrong_or_disconnected'],
             r['appointments'], r['no_outcome'], r['other'], '%.1f' % (int(r['dial_to_log_min'] * 10 + 0.5) / 10.0),
-            r['timed_calls'], '%.3f' % (r['answered'] / logged) if logged else '',
+            r['timed_calls'], '%.1f' % (int(r['talk_s'] / 60.0 * 10 + 0.5) / 10.0), r['talked_calls'],
+            '%.1f' % (int(r['talk_s'] / 60.0 / r['talked_calls'] * 10 + 0.5) / 10.0) if r['talked_calls'] else '',
+            '%.3f' % (r['answered'] / logged) if logged else '',
             '%.3f' % (r['appointments'] / logged) if logged else '']))
     return '\n'.join(out)
 

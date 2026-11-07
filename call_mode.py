@@ -167,12 +167,25 @@ TONALITY = [
 # cue after the greeting, and the guided "who's asking?" answer re-confirms the owner first.
 # 2026-10-26 (Alejandro): "always assume". The greeting now names us and assumes it is them, so the
 # question no longer re-introduces the caller: _OPEN_ASK_* is the question alone.
-_OPEN_ASK_EN = "Do you know your property on {st1} is in pre-foreclosure{date}?"
+# 2026-11-05 (Alejandro, after a live call blew up on "Do you know your property on [street] is i-"):
+# naming his address and his foreclosure in the second sentence reads as "I know your business" before
+# he knows who we are. The opener stays; the line after it ASKS instead of TELLS. No street, no date,
+# no "foreclosure": {county} is the lead's own county ("Broward"), and "a case filed against the
+# house" is the plain public-record fact. If they say they have a lawyer, that is the answer: one
+# line, no argument, Do Not Contact (the 'lawyer' step). This is an either/or by design, against
+# Jesse's 2026-09-04 rule below; Alejandro chose it so a represented owner has an easy way out.
+_OPEN_ASK_EN = ("I work with homeowners in {county} who have a case filed against the house. Is that "
+                "something you've already got handled, or worth two minutes?")
 _OPEN_NOTS_EN = ("I am not your lender and I am not calling to buy your house. I help owners see what options "
                  "they have before this goes any further. Can I ask you a couple of quick questions?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_ASK_ES = "¿Usted sabe que su propiedad en {st1} está en proceso de foreclosure{date_es}?"
+_OPEN_ASK_ES = ("Trabajo con dueños de casa en {county} que tienen un caso presentado contra la casa. "
+                "¿Eso ya lo tiene resuelto, o vale la pena dos minutos?")
+# THEY HAVE A LAWYER (2026-11-05): represented means no re-dial and no text. One line, then hang up and
+# log Do Not Contact. Never ask who the lawyer is, never argue the plan, never call the lawyer.
+LAWYER_EN = "Got it, then you're in good hands. I won't call you again. Take care."
+LAWYER_ES = "Entendido, entonces está en buenas manos. No le vuelvo a llamar. Que esté bien."
 _OPEN_NOTS_ES = ("No soy su prestamista y no le llamo para comprarle la casa. Ayudo a los dueños a ver "
                  "qué opciones tienen antes de que esto avance más. ¿Le puedo hacer un par de preguntas "
                  "rápidas?")
@@ -930,7 +943,7 @@ def _flow():
                 ['That\'s not me / who?', 'notme'],
                 ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
                 ['Their phone\'s AI answered (asks name + reason)', 'screen'],
-                ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
+                ['Straight to voicemail', 'vm'], ['I have a lawyer', 'lawyer'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
         # Not them: the assumed name was wrong. Ask if it is the right number, then route.
         {'id': 'notme', 'k': 'NOT THEM — the fallback',
@@ -950,26 +963,35 @@ def _flow():
          'br': [['Yes, that\'s me', 'disarm'], ['No / not here', 'gate'], ['What\'s it about?', 'gate'],
                 ['Wrong number', 'obj:16'], ['Hung up on me', 'end:notint']],
          'ret': 'disarm'},
-        {'id': 'disarm', 'k': 'YOUR OPENER — do they know?',
+        {'id': 'disarm', 'k': 'YOUR OPENER — ask, don\'t tell',
          # Named: the greeting was only "Hi, {first}? Can you hear me?", so say who we are first.
          # No name: the greeting already did, so the question alone (aen/aes).
          'en': INTRO_EN + ' ' + _OPEN_ASK_EN, 'es': INTRO_ES + ' ' + _OPEN_ASK_ES,
          'aen': _OPEN_ASK_EN, 'aes': _OPEN_ASK_ES,
-         'tone': 'Calm and plain, like a neighbor who saw the paperwork. Your name, the company, then the '
-                 'question. Then STOP.',
-         'listen': 'Wait for the answer. Do not explain anything yet.',
-         'br': [['Yes, I know', 'nots'], ["No, I didn't know", 'news'], ['What? / who is this?', 'nots'],
+         'tone': 'Calm and plain. Your name, the company, then the question. Do NOT say their address, '
+                 'their sale date or the word foreclosure here. Then STOP.',
+         'listen': 'Wait for the answer. Do not explain anything yet. A lawyer = one line and you are done.',
+         'br': [['Worth two minutes / what is it?', 'nots'], ['I have a lawyer handling it', 'lawyer'],
+                ["What case? / I didn't know", 'news'], ['What? / who is this?', 'nots'],
+                ['Already handled', 'obj:1'], ['Hung up on me', 'end:notint'],
                 ['What do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
-                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['I\'m busy, call me back', 'busy'], ['The bank / a mod is handling it', 'obj:1'],
                 ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'nots'},
+        {'id': 'lawyer', 'k': 'THEY HAVE A LAWYER — one line, done',
+         'en': LAWYER_EN, 'es': LAWYER_ES,
+         'tone': 'Calm, short, no argument. Do not ask who the lawyer is or what the plan is.',
+         'listen': 'Hang up. Log it Do Not Contact and note "has a lawyer". No re-dial, no text.',
+         'br': [['Done: Do Not Contact', 'end:dnc']],
+         'ret': 'lawyer'},
         {'id': 'news', 'k': "THEY DIDN'T KNOW — be human first",
          'en': _OPEN_NEWS_EN, 'es': _OPEN_NEWS_ES,
          'tone': 'Soft and slow. This is news to them. No pitch, no hurry.',
          'listen': 'Give them a second. Let them react.',
-         'br': [['Continue →', 'nots'], ['We already reinstated', 'reinstated'], ['Not interested', 'obj:15'],
+         'br': [['Continue →', 'nots'], ['I have a lawyer handling it', 'lawyer'],
+                ['We already reinstated', 'reinstated'], ['Not interested', 'obj:15'],
                 ['Don\'t call me again', 'end:dnc']],
          'ret': 'nots'},
         {'id': 'nots', 'k': 'THE TWO NOTS + permission',
@@ -979,7 +1001,8 @@ def _flow():
          'br': [['Okay / sure', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
                 ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
                 ['Already selling it / finalized', 'selling'], ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
-                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['I\'m busy, call me back', 'busy'], ['I have a lawyer handling it', 'lawyer'],
+                ['The bank / a mod is handling it', 'obj:1'],
                 ['We already reinstated', 'reinstated'], ['Don\'t call me again', 'end:dnc']],
          'ret': 'frame'},
         {'id': 'intro30', 'k': 'WHAT DO YOU DO? — one humble line',
@@ -4082,6 +4105,11 @@ a.dial{background:var(--ok);color:#fff}
 a.redial{display:block;width:100%;min-height:50px;line-height:50px;margin-top:10px;border-radius:12px;
      border:1px solid var(--ok);color:var(--ok);background:transparent;font-size:16px;font-weight:700;
      text-align:center;text-decoration:none;touch-action:manipulation}
+/* THEY PICKED UP (2026-11-05): the one tap that starts the talk timer, and the readout that replaces it. */
+button.pubtn{display:block;width:100%;min-height:54px;margin-top:10px;border-radius:12px;border:0;background:var(--ok);
+     color:#fff;font-size:17px;font-weight:800;touch-action:manipulation}
+.puon{margin-top:10px;padding:13px 12px;border-radius:12px;border:1px solid var(--ok);color:var(--ok);font-size:17px;
+     font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
 button.big{background:#1d4ed8;color:#fff}
 .oc button{display:block;width:100%;min-height:56px;margin-top:9px;border-radius:12px;border:1px solid #2a3f6b;
      background:#0f1d3a;color:var(--ink);font-size:17px;font-weight:600;touch-action:manipulation}
@@ -4104,6 +4132,11 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
      color:var(--ink);font-size:14px;font-weight:600;touch-action:manipulation}
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
+/* equity re-route (screenRoutes / routePanelHtml) */
+.rtatty{display:block;width:100%;min-height:44px;margin-top:8px;border-radius:12px;border:1px dashed #5a2a2a;
+     background:transparent;color:var(--mut);font:inherit;font-size:13px}
+a.rtmap{display:block;text-align:center;min-height:44px;line-height:44px;margin:4px 0 6px;border-radius:12px;
+     border:1px solid #2a3f6b;background:#132244;color:var(--ink);text-decoration:none;font-weight:700;font-size:13.5px}
 /* WHO TEXTED ME — always reachable, thumb-sized, out of the way of the call buttons */
 /* bottom tracks the MEASURED collapsed sheet (--sheeth, set by _sheetPad). At a fixed 12px the
    button sat on top of the sheet's peek line and the team-sync warning, covering the opener he
@@ -4712,6 +4745,9 @@ function fillScript(t, r){
     .split('{date}').join(
       (r && r.x && !r.xf && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
+    /* {county} — the opener's "homeowners in Broward" (2026-11-05). r.ct is the county's first two
+       letters; anything unknown says South Florida rather than a wrong county. */
+    .split('{county}').join(({MI:'Miami-Dade', BR:'Broward', PA:'Palm Beach'})[String((r && r.ct) || '').toUpperCase()] || 'South Florida')
     /* {gap} — balloon lane only: THEIR monthly 12%-vs-7% gap off the recorded amount, or the $400k
        example when the amount is unknown. Rounded to $50 because their rate is an assumption. */
     .split('{gap}').join((r && r.bal && +r.bal.amt) ? ('$'+(Math.round((+r.bal.amt)*0.05/12/50)*50).toLocaleString()) : '$1,700')
@@ -6584,7 +6620,9 @@ function head(){
        nowhere, so a phone serving last week's list had no visible tell — the operator's only signal
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
        covers anything placed there; the top bar is the one strip nothing ever overlays. */
-    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+' &middot; <a href="#" id="cstatslink" style="color:var(--gold)">call stats</a></div>'
+    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+' &middot; <a href="#" id="cstatslink" style="color:var(--gold)">call stats</a>'
+    +(function(){ var _rn = 0; try{ _rn = routeOpenN(); }catch(e){} return ' &middot; <a href="#" id="routeslink" style="color:var(--gold)">routes' + (_rn ? ' ' + _rn : '') + '</a>'; })()
+    +'</div>'
     +sessStrip()
     +'</div>';
 }
@@ -7587,8 +7625,11 @@ function isWarm(r){
    changes no queue, cooldown or disposition. Mirrors call_stats.py (the command-line twin);
    _callstatstest.py runs both on one fixture and fails if they disagree.
    One row per day per seat. A dial = a logged outcome, plus any dial-tap/redial row that never got
-   an outcome that day (no_outcome). Talk time is NOT tracked: dial_to_log_min is dial tap -> outcome
-   tap on ANSWERED calls only (ring time + talk + the seconds before the tap), 0 < gap <= 60 min. */
+   an outcome that day (no_outcome). dial_to_log_min is dial tap -> outcome tap on ANSWERED calls only
+   (ring time + talk + the seconds before the tap), 0 < gap <= 60 min. TALK TIME (2026-11-05) exists only
+   when "They picked up" was tapped during the call: logOutcome writes talk = whole seconds from that tap
+   to the outcome tap on an answered outcome, 0 < talk <= 3600. talk_min / talked_calls / avg_talk_min
+   read that field and nothing else; a row without it is untimed, never zero. */
 var CS_ANSWERED = {talked:1,callback:1,appt:1,notint:1,dnc:1,gate:1};
 var CS_NOANS = {noanswer:1,voicemail:1};
 var CS_BAD = {badnum:1,wrong:1};
@@ -7606,7 +7647,8 @@ function callStatsRows(nts, who, days, nowMs){
       if(who && d.by && d.by!==who) continue;
       var seat = d.by || '', oc = d.oc || '', key = d.d+'|'+seat;
       var r = by[key] = by[key] || {date:d.d, seat:seat, dials:0, answered:0, no_answer_vm:0,
-        wrong_or_disconnected:0, appointments:0, no_outcome:0, other:0, dial_to_log_min:0, timed_calls:0};
+        wrong_or_disconnected:0, appointments:0, no_outcome:0, other:0, dial_to_log_min:0, timed_calls:0,
+        talk_s:0, talked_calls:0};
       if(oc==='pending' || oc==='redial'){
         var resolved = false;
         for(var j=i+1;j<dl.length;j++){ if(dl[j] && dl[j].d===d.d && dl[j].oc!=='pending' && dl[j].oc!=='redial'){ resolved = true; break; } }
@@ -7618,6 +7660,8 @@ function callStatsRows(nts, who, days, nowMs){
         r.answered++;
         var g = (+d.tsu - +d.tsd) / 1000;
         if(d.tsd && g > 0 && g <= 3600){ r.dial_to_log_min += g/60; r.timed_calls++; }
+        var tk = +d.talk;
+        if(d.talk != null && tk > 0 && tk <= 3600 && Math.round(tk) === tk){ r.talk_s += tk; r.talked_calls++; }
       }
       else if(CS_NOANS[oc]) r.no_answer_vm++;
       else if(CS_BAD[oc]) r.wrong_or_disconnected++;
@@ -7629,13 +7673,16 @@ function callStatsRows(nts, who, days, nowMs){
     return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.seat < b.seat ? -1 : a.seat > b.seat ? 1 : 0); });
 }
 var CS_COLS = ['date','seat','total_dials','answered','no_answer_vm','wrong_or_disconnected','appointments',
-  'no_outcome_tapped','other','dial_to_log_min','timed_calls','answer_rate','appt_rate'];
+  'no_outcome_tapped','other','dial_to_log_min','timed_calls','talk_min','talked_calls','avg_talk_min',
+  'answer_rate','appt_rate'];
 function callStatsCsv(rows){
   var out = [CS_COLS.join(',')];
   rows.forEach(function(r){
     var logged = r.dials - r.no_outcome;
     out.push([r.date, r.seat, r.dials, r.answered, r.no_answer_vm, r.wrong_or_disconnected, r.appointments,
       r.no_outcome, r.other, (Math.round(r.dial_to_log_min*10)/10).toFixed(1), r.timed_calls,
+      (Math.round(r.talk_s/60*10)/10).toFixed(1), r.talked_calls,
+      r.talked_calls ? (Math.round(r.talk_s/60/r.talked_calls*10)/10).toFixed(1) : '',
       logged ? (r.answered/logged).toFixed(3) : '', logged ? (r.appointments/logged).toFixed(3) : ''].join(','));
   });
   return out.join('\n');
@@ -7643,8 +7690,10 @@ function callStatsCsv(rows){
 var CS_NOTE = 'DealFlow Call Mode daily stats. total_dials = logged outcomes + dials with no outcome tapped. '
   + 'answered = a person picked up (talked, callback, appointment, soft no, hard no, not the owner). '
   + 'wrong_or_disconnected = wrong number + bad number. answer_rate and appt_rate = over logged dials '
-  + '(total_dials minus no_outcome_tapped). Talk time is not tracked: dial_to_log_min is the minutes from '
-  + 'the dial tap to the outcome tap on answered calls (includes ringing), timed_calls says how many had it.';
+  + '(total_dials minus no_outcome_tapped). dial_to_log_min is the minutes from the dial tap to the outcome '
+  + 'tap on answered calls (includes ringing), timed_calls says how many had it. Talk time is tracked only '
+  + 'when \'They picked up\' is tapped during the call: talk_min is the sum of talk seconds on answered calls '
+  + 'with a pickup tap, talked_calls is how many, avg_talk_min is its average.';
 /* CALLSTATS-END */
 /* THE SESSION STRIP — on every screen. "How many calls have I made, how many people have I been
    through" answered where he is looking, and the number MOVING on each logged outcome is the live
@@ -7828,12 +7877,15 @@ function screenCallStats(){
       + '<div class="regsub">' + r.dials + ' dials &middot; ' + r.answered + ' answered &middot; '
       + r.no_answer_vm + ' no answer/VM &middot; ' + r.wrong_or_disconnected + ' wrong/disconnected &middot; '
       + r.appointments + ' appt' + (r.no_outcome ? ' &middot; ' + r.no_outcome + ' with no outcome tapped' : '')
-      + (logged ? ' &middot; answer rate ' + Math.round(100*r.answered/logged) + '%' : '') + '</div></div>';
+      + (logged ? ' &middot; answer rate ' + Math.round(100*r.answered/logged) + '%' : '')
+      + (r.talked_calls ? ' &middot; talk ' + (Math.round(r.talk_s/60*10)/10).toFixed(1) + ' min on ' + r.talked_calls
+         + ' call' + (r.talked_calls === 1 ? '' : 's') : '') + '</div></div>';
   }).join('') : '<div class="regsub" style="padding:14px 2px">No dials logged ' + (_csDays===1 ? 'today' : 'in this window') + ' on this seat.</div>';
   $('app').innerHTML = head()
     + '<div class="card"><div class="band"><div class="bl">CALL STATS' + (me ? ' &middot; ' + esc(me) : '') + '</div>'
-    +   '<div class="regsub" style="margin-top:6px">Talk time is not tracked. dial_to_log_min is dial tap to outcome tap '
-    +   'on answered calls, ringing included.</div></div>'
+    +   '<div class="regsub" style="margin-top:6px">Talk time is tracked only when &lsquo;They picked up&rsquo; is tapped '
+    +   'during the call: talk_min is the sum of talk seconds on answered calls with a pickup tap, avg_talk_min is its '
+    +   'average. dial_to_log_min is dial tap to outcome tap on answered calls, ringing included.</div></div>'
     + '<div class="reglist">' + shown + '</div>'
     + '<button class="big" id="cscopy" style="margin-top:14px">Copy as text</button>'
     + '<button class="big" id="csdl" style="margin-top:8px">Download CSV</button>'
@@ -8132,6 +8184,53 @@ function fileLinks(r){
   if(r.c) L.push(['Coach', 'http://127.0.0.1:8777/?case=' + encodeURIComponent(r.c)]);
   return L;
 }
+/* COACH DOCK (2026-11-07, Alex: "have it in the call mode"). On a computer, the Coach link no longer
+   opens a second tab: it docks the live coach (call_coach_server.py on THIS machine, 127.0.0.1:8777)
+   as a panel on the right of Call Mode, with this lead preselected, so the script, objections and
+   transcript sit next to the dial screen. The coach keeps its own consent gate, recorder and save
+   path; Call Mode only frames it. On a phone (narrow screen or touch-only) the link is left alone:
+   the server is the computer's, so it cannot answer there. Nothing here reads or sends lead data;
+   the frame loads only the case number in its URL. */
+var COACH_ORIGIN = 'http://127.0.0.1:8777';
+function _coachDockable(){ return window.innerWidth >= 900 && !(window.matchMedia && matchMedia('(pointer:coarse)').matches && !matchMedia('(any-pointer:fine)').matches); }
+function coachDock(url){
+  var d = document.getElementById('coachdock');
+  if(!d){
+    var st = document.createElement('style');
+    st.textContent = '#coachdock{position:fixed;top:0;right:0;bottom:0;width:min(58vw,1100px);z-index:9000;background:#0b0e11;'
+      + 'border-left:2px solid #4aa8ff;box-shadow:-8px 0 24px rgba(0,0,0,.5);display:flex;flex-direction:column}'
+      + '#coachdock .cdbar{display:flex;gap:8px;align-items:center;padding:6px 10px;background:#14181d;color:#e6edf3;font:13px/1.4 system-ui,sans-serif}'
+      + '#coachdock .cdbar b{flex:1}#coachdock .cdbar button{font:inherit;padding:4px 10px;border-radius:6px;border:1px solid #333;background:#1b2129;color:#e6edf3;cursor:pointer}'
+      + '#coachdock .cdhint{padding:4px 10px;color:#8b98a6;font:12px/1.4 system-ui,sans-serif;background:#101418}'
+      + '#coachdock iframe{flex:1;border:0;width:100%;background:#0b0e11}'
+      + 'body.coachon{margin-right:min(58vw,1100px)}';
+    document.head.appendChild(st);
+    d = document.createElement('div'); d.id = 'coachdock';
+    d.innerHTML = '<div class="cdbar"><b>Live coach</b><button id="cdtab" title="Open in its own tab">Pop out</button>'
+      + '<button id="cdclose" title="Hide the coach (stop and save the call in the coach first)">Hide</button></div>'
+      + '<div class="cdhint">Blank or "can\'t connect"? Start it on this computer: <code>python call_coach_server.py</code>, then Reload.'
+      + ' <button id="cdreload" style="font:inherit;padding:1px 8px">Reload</button></div>'
+      + '<iframe id="cdframe" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe>';
+    document.body.appendChild(d);
+    document.getElementById('cdclose').onclick = function(){ d.style.display = 'none'; document.body.classList.remove('coachon'); };
+    document.getElementById('cdtab').onclick = function(){ window.open(document.getElementById('cdframe').src, '_blank', 'noopener'); };
+    document.getElementById('cdreload').onclick = function(){ var f = document.getElementById('cdframe'); f.src = f.src; };
+  }
+  var f = document.getElementById('cdframe');
+  /* Same lead already docked: just show it. Switching leads reloads the coach, which ends a call that
+     is recording without its stop-and-save, so ask first. */
+  var cur = f.getAttribute('src');
+  if(cur !== url){
+    if(cur && !confirm('Switch the coach to this lead?\n\nIf the coach is recording, press Stop & save in it first.')) { d.style.display = 'flex'; document.body.classList.add('coachon'); return; }
+    f.src = url;
+  }
+  d.style.display = 'flex'; document.body.classList.add('coachon');
+}
+document.addEventListener('click', function(e){
+  var a = e.target && e.target.closest ? e.target.closest('a[href^="' + COACH_ORIGIN + '/"]') : null;
+  if(!a || !_coachDockable() || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault(); coachDock(a.getAttribute('href'));
+}, true);
 /* What to type into Whitepages' own Reverse Address box: our street in Whitepages' spelling, ordinal
    and suffix included, no unit ("920 N 70 TER" -> "920 N 70th Ter"). Our county spelling often
    matches nothing; Whitepages' own spelling brings up the drop-down and the right house (and unit)
@@ -8852,6 +8951,42 @@ function setCallback(r, hours, label){
   toast('Callback ' + label);
 }
 
+/* CALLPICKUP-BEGIN  "THEY PICKED UP" (2026-11-05). The page cannot see the call: tel: hands it to the
+   phone's dialer and the page gets no answer / hang-up event. So talk time is one manual tap. It stamps
+   tsa (ms) on the open dial row (the trailing pending/redial row for THIS number today), once; a second
+   tap changes nothing. logOutcome carries tsa onto the outcome row and turns it into talk seconds. An
+   unanswered call never touches it. The live mm:ss readout is repainted by clkTick (no second timer). */
+function puRow(r, d){
+  var n = notes[r.c], dl = n && n.dials, x = dl && dl[dl.length-1];
+  return (x && (x.oc==='pending' || x.oc==='redial') && x.d===today() && x.ph4===String(d).slice(-4)) ? x : null;
+}
+function puMmss(ms){
+  var s = Math.max(0, Math.floor(ms/1000));
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+function puHtml(r, d){
+  var x = puRow(r, d);
+  if(!x) return '';
+  if(x.tsa) return '<div class="puon">On call <span id="pu-t" data-tsa="' + (+x.tsa) + '">'
+    + puMmss(Date.now() - x.tsa) + '</span></div>';
+  return '<button class="pubtn" id="pubtn">&#9742;&nbsp; They picked up</button>';
+}
+function puPaint(r, d){
+  var el = document.getElementById('pubox');
+  if(!el) return;
+  el.innerHTML = puHtml(r, d);
+  var b = document.getElementById('pubtn');
+  if(b) b.onclick = function(){
+    var x = puRow(r, d);
+    if(x && !x.tsa){ x.tsa = Date.now(); touched = true; saveNotes(); }
+    puPaint(r, d);
+  };
+}
+function puTick(){
+  var el = document.getElementById('pu-t');
+  if(el && SCREEN === 'outcome') el.textContent = puMmss(Date.now() - (+el.getAttribute('data-tsa') || Date.now()));
+}
+/* CALLPICKUP-END */
 function screenOutcome(){
   SCREEN='outcome';
   /* THE SHEET STAYS. This screen is not "the logging screen" — it paints the instant he taps dial
@@ -8957,6 +9092,8 @@ function screenOutcome(){
        the 3-in-24h FTSA cap (the safe direction); the card's "dialed, no outcome logged" bar says so. */
     +'<button id="ocback" class="ghost" style="margin:8px 0 2px">&lsaquo; Back to the numbers (nothing logged)</button>'
     +sessStrip()
+    /* They picked up / voicemail: the two first events of a call, stacked at the top. */
+    +'<div id="pubox"></div>'
     /* FIRST thing under the number: the moment it goes to voicemail there is no time to scroll. */
     +(_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
       : '<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>')
@@ -8974,6 +9111,7 @@ function screenOutcome(){
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
   wireBrief(document, r);
+  puPaint(r, d);
   if($('vmbtn')) $('vmbtn').onclick = function(){ vmOpen(r); };
   if($('ocback')) $('ocback').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
@@ -8986,6 +9124,7 @@ function screenOutcome(){
     if(relKind(r, phIdx)) _rr.rel = relKind(r, phIdx);
     n.dials.push(_rr);
     touched=true; saveNotes(); queueSync();
+    puPaint(r, d);                 /* a redial is a new call: the pickup button comes back for it */
   });
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
     b.onclick=function(){
@@ -9152,6 +9291,224 @@ function stopEverywhere(r, digits){
    back to the laptop to log it. Everything here writes to the SAME notes the board reads. */
 /* The after-call Email button: the first pasted address this lead may still be emailed at. Nothing
    when none is saved or every one is refused (the card itself says why). */
+/* ═══════════════ EQUITY RE-ROUTE: MAIL A LETTER OR KNOCK (2026-11-05) ═══════════════
+   Alex: "for the properties with equity on the call mode section i want a re route section after the
+   call to either prep this person up for mailing cards to them or to route them to knocking."
+   After an outcome on a "Has equity" lead (isEquity, the strict lane), the after-call panel asks one
+   question: Mail a letter / Knock / Neither, plus "They have an attorney". The choice is ONE unit on
+   the note, n.route = {k:'mail'|'knock'|'none', d, ts, by[, done, dk]}, and the newer ts wins on every
+   merge (board _mergeLead, bridge _merge_note), so both seats see the same lists. n.atty is a sticky
+   date, earliest wins, never cleared by a merge: an attorney-represented owner is never routed.
+   THE TWO LISTS (screenRoutes, "routes" in the top bar) re-check every exclusion at render time, not
+   only at tap time: routeBlock() drops a lead that is opted out / DNC / hard no / wrong owner / Dead
+   (hardSuppressed), said no (noState soft), has an attorney, left the equity lane, or is no longer on
+   this build's call list at all (a stay, a diligence hold, a do-not-call-only lead or a removed lead
+   is never baked into ROWS). Nothing here sends, mails, prints or spends: "Mailed" and "Knocked" write
+   one ch:'letter' / ch:'door' touch (src:'route'), the same channels the Complete sheet and the board
+   cadence (nextAction) already read, so the ordinary cooldowns apply.
+   A sealed letter, not a postcard: a postcard shows the foreclosure to anyone handling the mail. The
+   letter copy is bsg_mail_campaign.letter() (MARS lines + EN/ES opt-out); nothing is drafted here.
+   Doors follow the repo's door standard, 9 AM to 7 PM and never Sunday (bsg_daily_routes.py). */
+var ROUTE_KINDS = {mail:'Mail a letter', knock:'Knock', none:'Neither'};
+var ROUTE_MAIL_MIN_DAYS = 7;          /* nextAction's mailOK: ~5 business days of USPS runway */
+var ROUTE_CO_ORDER = {MI:0, BR:1, PA:2};
+function routeOf(n){
+  var x = n && n.route;
+  return (x && typeof x === 'object' && ROUTE_KINDS.hasOwnProperty(x.k)) ? x : null;
+}
+function routeAtty(r){
+  var cs = [r.c].concat(r.pcs || []);
+  for(var k = 0; k < cs.length; k++){ if((notes[cs[k]] || {}).atty) return true; }
+  return false;
+}
+/* '' = may be routed; otherwise the reason it may not. r null = not on this build's call list. */
+function routeBlock(r){
+  if(!r) return 'no longer on the call list (hold, stay or removed)';
+  var h = hardSuppressed(r);
+  if(h) return h;
+  if(noState(r).soft) return 'said not interested';
+  if(routeAtty(r)) return 'has an attorney';
+  if(!isEquity(r)) return 'not in the Has equity lane';
+  return '';
+}
+function setRoute(r, k){
+  if(!ROUTE_KINDS.hasOwnProperty(k) || routeBlock(r)) return false;
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+  n.route = {k:k, d:today(), ts:Date.now(), by:caller()};
+  try{ _FCGEN++; }catch(e){}
+  saveNotes(); try{ queueSync(); }catch(e){}
+  return true;
+}
+function setRouteAtty(r){
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+  n.atty = n.atty || today();
+  n.route = {k:'none', d:today(), ts:Date.now(), by:caller(), why:'attorney'};
+  try{ _FCGEN++; }catch(e){}
+  saveNotes(); try{ queueSync(); }catch(e){}
+}
+/* kind 'letter' (mailed: leaves the list) | 'door' (knocked, no answer: stays, attempt counted) |
+   'doordone' (talked at the door / finished: leaves the list). One touch each, one save. */
+function routeMark(r, kind){
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''}, x = routeOf(n);
+  if(!x) return false;
+  var ch = kind === 'letter' ? 'letter' : 'door';
+  var out = kind === 'letter' ? 'Mailed a letter (route list)'
+          : kind === 'door' ? 'Knocked, no answer (route list)' : 'Knocked, done (route list)';
+  n.touches = n.touches || [];
+  n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:ch, out:out, src:'route', mk:ch, by:caller()});
+  var y = {}; for(var q in x) y[q] = x[q];
+  y.ts = Date.now();
+  if(kind === 'door') y.kn = (+x.kn || 0) + 1;
+  else { y.done = today(); y.dk = kind; }
+  n.route = y;
+  try{ _FCGEN++; }catch(e){}
+  saveNotes(); try{ queueSync(); }catch(e){}
+  return true;
+}
+function routeCity(r){
+  var parts = String((r && r.a) || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var c = parts.length >= 2 ? parts[1].replace(/\bFL\b\.?/i, '').replace(/\d{5}(-\d{4})?/, '').trim() : '';
+  if(!c) return (r && r.z) ? 'ZIP ' + r.z : 'City unknown';
+  return c.toLowerCase().replace(/\b[a-z]/g, function(m){ return m.toUpperCase(); });
+}
+/* -> {mail:[{r,x,city,days}], knock:[{city, co, items:[...]}], blocked:[{c,why}]}. Open routes only. */
+function routeLists(){
+  var byC = {};
+  ROWS.forEach(function(r){ if(r && r.c && !byC[r.c]) byC[r.c] = r; });
+  var mail = [], kn = [], blocked = [];
+  Object.keys(notes || {}).forEach(function(c){
+    var x = routeOf(notes[c]);
+    if(!x || x.k === 'none' || x.done) return;
+    var r = byC[c] || null, why = routeBlock(r);
+    if(why){ blocked.push({c:c, k:x.k, why:why}); return; }
+    var it = {r:r, x:x, city:routeCity(r), days:liveDays(r)};
+    (x.k === 'mail' ? mail : kn).push(it);
+  });
+  var dk = function(it){ return (typeof it.days === 'number') ? it.days : 99999; };
+  mail.sort(function(a, b){ return dk(a) - dk(b); });
+  var g = {};
+  kn.forEach(function(it){
+    var co = String(it.r.ct || 'MI').toUpperCase(), key = co + '|' + it.city;
+    (g[key] = g[key] || {city:it.city, co:co, items:[]}).items.push(it);
+  });
+  var knock = Object.keys(g).map(function(k){ return g[k]; });
+  knock.forEach(function(G){ G.items.sort(function(a, b){ return dk(a) - dk(b); }); });
+  knock.sort(function(a, b){
+    var ca = ROUTE_CO_ORDER.hasOwnProperty(a.co) ? ROUTE_CO_ORDER[a.co] : 9;
+    var cb = ROUTE_CO_ORDER.hasOwnProperty(b.co) ? ROUTE_CO_ORDER[b.co] : 9;
+    if(ca !== cb) return ca - cb;
+    var ma = a.city === 'Miami' ? 0 : 1, mb = b.city === 'Miami' ? 0 : 1;   /* Miami first, then A-Z */
+    if(ma !== mb) return ma - mb;
+    return a.city < b.city ? -1 : a.city > b.city ? 1 : 0;
+  });
+  return {mail:mail, knock:knock, blocked:blocked};
+}
+function routeOpenN(){ var L = routeLists(); return L.mail.length + L.knock.reduce(function(s, G){ return s + G.items.length; }, 0); }
+/* Doors: 9 AM to 7 PM Eastern, never Sunday. */
+function doorClock(){
+  try{
+    var d = new Date();
+    var h = +new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', hour:'numeric', hour12:false}).format(d);
+    var wd = new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', weekday:'short'}).format(d);
+    return {ok: wd !== 'Sun' && h >= 9 && h < 19, sun: wd === 'Sun'};
+  }catch(e){ return {ok:true, sun:false}; }
+}
+/* The after-call question. '' when the lead is not an equity lead or may not be routed. */
+function routePanelHtml(r){
+  if(!r || !isEquity(r) || hardSuppressed(r)) return '';
+  var why = routeBlock(r), x = routeOf(notes[r.c] || {});
+  var h = '<div class="afterlab">Next step for this equity lead</div><div id="rtbox">';
+  if(why){ return h + '<div class="nc">Not routed: ' + esc(why) + '.</div></div>'; }
+  var d = liveDays(r), late = (typeof d === 'number' && d < ROUTE_MAIL_MIN_DAYS);
+  if(x) h += '<div class="mut" style="font-size:12px;margin-bottom:6px">Now: <b>' + esc(ROUTE_KINDS[x.k]) + '</b>'
+           + (x.done ? ' (done ' + esc(x.done) + ')' : '') + ' &middot; ' + esc(x.d || '') + (x.by ? ' by ' + esc(x.by) : '') + '</div>';
+  h += '<div class="cbrow">'
+     + '<button class="cb rt' + (x && x.k === 'mail' ? ' on' : '') + '" data-rt="mail"' + (late ? ' disabled' : '') + '>&#9993; Mail a letter</button>'
+     + '<button class="cb rt' + (x && x.k === 'knock' ? ' on' : '') + '" data-rt="knock">&#128682; Knock</button>'
+     + '<button class="cb rt' + (x && x.k === 'none' ? ' on' : '') + '" data-rt="none">Neither</button>'
+     + '</div>'
+     + (late ? '<div class="mut" style="font-size:12px;margin-top:6px">Sale in ' + d + ' day' + (d === 1 ? '' : 's') + ': a letter will not land in time. Knock instead.</div>' : '')
+     + '<button class="rtatty" data-rt="atty">They have an attorney &mdash; do not route</button>';
+  return h + '</div>';
+}
+function routeWire(r, repaint){
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rt]'), function(b){
+    b.onclick = function(){
+      var k = b.getAttribute('data-rt');
+      if(k === 'atty'){
+        if(!confirm('Mark that they have an attorney? This lead will not be routed to mail or knocking on any phone.')) return;
+        setRouteAtty(r); toast('Marked: has an attorney, not routed');
+      } else if(setRoute(r, k)){
+        toast(k === 'none' ? 'No mail or knock for this lead' : '✓ Added to the ' + (k === 'mail' ? 'mail queue' : 'knock route'));
+      } else { toast('Not routed: ' + (routeBlock(r) || 'try again'), {bad:true, ms:3500}); }
+      var box = $('rtbox'); if(box && box.parentNode){
+        var tmp = document.createElement('div'); tmp.innerHTML = routePanelHtml(r);
+        var nb = tmp.querySelector('#rtbox'); if(nb){ box.parentNode.replaceChild(nb, box); routeWire(r, repaint); }
+      } else if(repaint) repaint();
+    };
+  });
+}
+function _routeItemHtml(it, kind){
+  var r = it.r, x = it.x;
+  var sale = (typeof it.days === 'number') ? ('sale in ' + it.days + 'd') : (r.lp ? 'no sale date' : '');
+  return '<div class="regrow"><div class="regtop"><b>' + esc(r.a || r.c) + '</b><span class="regago">' + esc(sale) + '</span></div>'
+    + '<div class="regsub">' + esc(r.on || r.o || '') + ' &middot; ' + esc(r.c)
+    + ' &middot; routed ' + esc(x.d || '') + (x.by ? ' by ' + esc(x.by) : '')
+    + (+x.kn ? ' &middot; knocked ' + (+x.kn) + 'x, no answer' : '') + '</div>'
+    + ((kind === 'mail' && typeof it.days === 'number' && it.days < ROUTE_MAIL_MIN_DAYS)
+        ? '<div class="nc">Too late for a letter. Move it to Knock.</div>' : '')
+    + '<div class="cbrow" style="margin-top:6px">'
+    + (kind === 'mail'
+        ? '<button class="cb" data-rm="letter" data-c="' + esc(r.c) + '">Mailed &#10003;</button>'
+          + '<button class="cb" data-rs="knock" data-c="' + esc(r.c) + '">Move to Knock</button>'
+        : '<button class="cb" data-rm="door" data-c="' + esc(r.c) + '">No answer</button>'
+          + '<button class="cb" data-rm="doordone" data-c="' + esc(r.c) + '">Done &#10003;</button>'
+          + '<a class="cb" style="display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a || '') + '">Map</a>')
+    + '</div></div>';
+}
+function screenRoutes(){
+  SCREEN = 'routes';
+  var L = routeLists(), dc = doorClock();
+  var nK = L.knock.reduce(function(s, G){ return s + G.items.length; }, 0);
+  var mailH = L.mail.length ? L.mail.map(function(it){ return _routeItemHtml(it, 'mail'); }).join('')
+    : '<div class="regsub" style="padding:10px 2px">Nothing to mail. Equity leads you route to mail land here.</div>';
+  var knockH = L.knock.length ? L.knock.map(function(G){
+      var stops = G.items.slice(0, 10).map(function(it){ return it.r.a || ''; }).filter(Boolean);
+      var mapU = stops.length ? ('https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(stops[stops.length - 1])
+        + (stops.length > 1 ? '&waypoints=' + encodeURIComponent(stops.slice(0, -1).join('|')) : '')) : '';
+      return '<div class="afterlab">' + esc(G.city) + ' &middot; ' + G.items.length + (G.co === 'MI' ? '' : ' &middot; ' + esc(G.co === 'BR' ? 'Broward' : G.co === 'PA' ? 'Palm Beach' : G.co)) + '</div>'
+        + (mapU ? '<a class="rtmap" target="_blank" rel="noopener" href="' + mapU + '">Open ' + esc(G.city) + ' route in Maps (' + stops.length + ' stop' + (stops.length === 1 ? '' : 's') + ')</a>' : '')
+        + G.items.map(function(it){ return _routeItemHtml(it, 'knock'); }).join('');
+    }).join('')
+    : '<div class="regsub" style="padding:10px 2px">Nothing to knock. Equity leads you route to Knock land here.</div>';
+  $('app').innerHTML = head()
+    + '<div class="card">'
+    +   '<div class="band"><div class="bl">MAIL QUEUE &middot; ' + L.mail.length + '</div>'
+    +     '<div class="regsub">Sealed letter, hand-addressed, real stamp. Use the letter from bsg_mail_campaign (it carries the required disclosures and the opt-out line). Never a postcard.</div></div>'
+    +   '<div class="reglist">' + mailH + '</div>'
+    +   '<div class="band" style="margin-top:14px"><div class="bl">KNOCK ROUTE &middot; ' + nK + '</div>'
+    +     '<div class="regsub">Doors 9 AM to 7 PM, never Sunday. Skip any house with a No Soliciting sign and any gated community.</div>'
+    +     (dc.ok ? '' : '<div class="nc" style="margin-top:6px">' + (dc.sun ? 'Sunday: no doors today.' : 'Outside door hours right now.') + '</div>')
+    +   '</div>'
+    +   '<div class="reglist">' + knockH + '</div>'
+    +   (L.blocked.length ? '<div class="regsub" style="margin-top:10px">' + L.blocked.length + ' routed lead' + (L.blocked.length === 1 ? '' : 's') + ' dropped: opted out, said no, has an attorney, on hold or off the list.</div>' : '')
+    +   '<button class="big" id="rtback" style="margin-top:14px">&larr; Back to the queue</button>'
+    + '</div><div class="sheetpad"></div>';
+  var byC = {}; ROWS.forEach(function(r){ if(r && r.c && !byC[r.c]) byC[r.c] = r; });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function(b){
+    b.onclick = function(){
+      var r = byC[b.getAttribute('data-c')];
+      if(!r || routeBlock(r)){ toast('Not on the route any more', {bad:true}); screenRoutes(); return; }
+      var k = b.getAttribute('data-rm');
+      if(k !== 'letter' && !doorClock().ok && !confirm('It is outside door hours (9 AM to 7 PM, never Sunday). Log this knock anyway?')) return;
+      routeMark(r, k); toast(k === 'letter' ? '✓ Mailed' : k === 'door' ? 'Knock logged, stays on the route' : '✓ Done'); screenRoutes();
+    };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rs]'), function(b){
+    b.onclick = function(){ var r = byC[b.getAttribute('data-c')]; if(r && setRoute(r, 'knock')) toast('Moved to Knock'); screenRoutes(); };
+  });
+  $('rtback').onclick = function(){ SCREEN = 'lead'; render(); };
+}
 function _afterMail(r){
   if(!MAIL_OK) return '';
   var A = wpeAddrs(r.c);
@@ -9511,6 +9868,7 @@ function afterCall(r, o, nextC){
     + book
     + (o.k === 'appt' && !eqFact(r) ? '<div class="nc" id="ay_unv0">Booked on unverified equity. Verify equity before any number is spoken.</div>' : '')
     + ayPanelHtml(r)
+    + routePanelHtml(r)
     + _afterMail(r)
     + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
     + '<div class="afterlab">Call them back</div>'
@@ -9539,6 +9897,7 @@ function afterCall(r, o, nextC){
     _go0();
   };
   ayWire(r);
+  routeWire(r, function(){ afterCall(r, o, nextC); });
   $('nx').onclick = function(){
     /* the open-deal date guard answers first (its toast and focus), then the Complete sheet, then go() */
     if(ayNeedsDate(notes[r.c])) return go();
@@ -9732,11 +10091,22 @@ function logOutcome(r,o,digits){
   var _tsd = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
               && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsu) || 0;
   /* CALLSTATS-TSD-END */
+  /* CALLSTATS-TSA-BEGIN  tsa = the "They picked up" tap on the same open row (2026-11-05). Carried onto
+     the outcome row; talk (whole seconds, pickup -> outcome tap) only on an answered outcome and only
+     when 0 < talk <= 3600, otherwise omitted. Both additive; old rows are untimed. */
+  var _tsa = (_lastD && (_lastD.oc==='pending' || _lastD.oc==='redial') && _lastD.d===today()
+              && _lastD.ph4===String(digits).slice(-4) && +_lastD.tsa) || 0;
+  /* CALLSTATS-TSA-END */
   if(_lastD && _lastD.oc==='pending' && _lastD.d===today() && _lastD.ph4===String(digits).slice(-4)){
     n.dials.pop();
   }
   var _row = {d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()};
   if(_tsd) _row.tsd = _tsd;
+  if(_tsa){
+    _row.tsa = _tsa;
+    var _talk = Math.round((_row.tsu - _tsa) / 1000);
+    if(CS_ANSWERED[o.k] && _talk > 0 && _talk <= 3600) _row.talk = _talk;
+  }
   if(_rel) _row.rel = _rel;
   n.dials.push(_row);
   n.cooldownH=o.h;
@@ -9921,6 +10291,8 @@ function wire(){
   if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };
   var cl = $('cstatslink');
   if(cl) cl.onclick = function(e){ e.preventDefault(); _csDays = 1; screenCallStats(); };
+  var rtl = $('routeslink');
+  if(rtl) rtl.onclick = function(e){ e.preventDefault(); screenRoutes(); };
   // the session strip: tap to set today's dial goal (dialGoal / setDialGoal)
   var ss = $('sess');
   if(ss) ss.onclick = function(e){ e.preventDefault(); if(e.target && e.target.id === 'bkeybtn'){ setBridgeKey(); render(); return; } setDialGoal(); };
@@ -10096,6 +10468,7 @@ function clkLine(k, now){
                                                           : ' \u00b7 TIME UP (' + clkFmt(k.planMin * 60000) + ' done)'));
 }
 function clkTick(){
+  try{ puTick(); }catch(e){}       /* the "On call mm:ss" readout rides this 1 s loop; runs clocked in or not */
   var k = clkGet(), el = document.getElementById('clk-t');
   if(!k) return;
   if(el) el.textContent = clkLine(k);
@@ -10342,6 +10715,7 @@ function setLang(v){
      repainting resets the chip selection to the default, which is the safe direction. */
   else if(SCREEN==='after' && _lastAfter){ afterCall(_lastAfter[0], _lastAfter[1], _lastAfter[2]); }
   else if(SCREEN==='mail' && _MAIL){ screenMail(_MAIL[0], _MAIL[1], _MAIL[2]); }
+  else if(SCREEN==='routes'){ screenRoutes(); }
   if(cur) renderSheet(cur);
 }
 function langChips(){

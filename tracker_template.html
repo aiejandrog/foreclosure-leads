@@ -6798,18 +6798,12 @@ function _textBodies(o){
        + pide+'.'+stopES;
   } else if(lp){
     // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
-    /* 2026-11-02 (Alejandro approved the tightened wording). Three edits, same facts:
-       "most options right now / shrink every week" -> "more options today than you will next
-       week" (concrete comparison instead of an abstract trend), the shared `ask` is replaced by
-       the single ask "text me back" (an either/or invites the reader to pick neither), and the
-       advisor call is time-boxed to 5 minutes, the same frame TEXT_SIT already uses. No new
-       claim, no invented deadline: a just-filed case still says only that it was filed. */
     en = hi+', '+me+' with biscayne solutions group. a case was just filed at the courthouse on '+stEN+'.'
-       + ' you have more options today than you will next week.'
-       + ' text me back and our advisor walks you through them, 5 minutes, free.'+stopEN;
+       + ' you have the most options right now and they shrink every week.'
+       + ask+', our advisor goes over them free.'+stopEN;
     es = hola+', soy '+me+' de biscayne solutions group. acaban de abrir un caso en la corte sobre '+stES+'.'
-       + ' hoy tiene mas opciones que la semana que viene.'
-       + ' escribame y nuestro asesor se las explica, 5 minutos, gratis.'+stopES;
+       + ' ahora es cuando mas opciones tiene y cada semana quedan menos.'
+       + pide+', nuestro asesor se las explica gratis.'+stopES;
   } else {
     en = hi+', '+me+" with biscayne solutions group. there's a court sale set for "+stEN+(inEN?' '+inEN:'')
        + " and your options shrink every week. we're not a lender."
@@ -17754,6 +17748,14 @@ function _mergeLead(local, remote){
     [local.stageAt, remote.stageAt].forEach(m => { if(m && typeof m === 'object') Object.keys(m).forEach(s => { if(!(s in _sa) || String(m[s]) < String(_sa[s])) _sa[s] = m[s]; }); });
     if(Object.keys(_sa).length && JSON.stringify(_sa) !== JSON.stringify(local.stageAt || {})){ out.stageAt = _sa; ch.deal = true; }
   }
+  /* EQUITY RE-ROUTE (2026-11-05, Call Mode's "Next step" after a call on a Has-equity lead). n.route is
+     ONE unit {k, d, ts, by[, done, dk, kn]}: the side with the larger ts supplies it whole, so a re-route
+     or a "Mailed" on one phone reaches the other. n.atty (owner has an attorney: never routed) is a
+     sticky date, earliest wins, never cleared by a merge -- the safe direction, like optout. */
+  const _lrt = (local.route && typeof local.route === 'object') ? (+local.route.ts || 0) : -1;
+  const _rrt = (remote.route && typeof remote.route === 'object') ? (+remote.route.ts || 0) : -1;
+  if(_rrt > _lrt){ out.route = remote.route; ch.note = true; }
+  if(remote.atty && (!out.atty || String(remote.atty) < String(out.atty))){ out.atty = remote.atty; ch.note = true; }
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
   // numbers pasted from Whitepages on a Call Mode card: union, so a paste on either phone survives
