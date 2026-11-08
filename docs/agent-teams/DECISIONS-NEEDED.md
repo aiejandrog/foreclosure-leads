@@ -219,3 +219,12 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Also for the attorney: a relative who says "stop" or "not interested" currently marks the whole lead (owner) do-not-contact / soft no. Conservative, unchanged here; confirm that is wanted.
 - Fallback in progress: PR open, not merged. Switch off by default.
 - Status: OPEN
+
+### D24: Call Mode warns and retries when a Do Not Contact has not reached the bridge (fixer F-wire-02, page half, 2026-11-08) -- LEGAL REVIEW in PR title
+- Touches: call_mode.py notes-push block only (`callNotesPush`, `callNotesPushSoon`, new helpers `_cnDncIds` / `_cnAcked` / `_cnStrip` / `_cnPushed` / `_cnGood`). Reads the existing /notes answer; adds a local key `fcDncAck` (case ids only). No change to send_server.py, the ledger, `stopEverywhere`, `logOutcome`, the DNC verdict or the body POSTed to /notes.
+- What changes: a Do Not Contact tapped on a phone that cannot reach the bridge used to be POSTed once and forgotten. Now a failed push (rejection, non-2xx, or ok:false) with a DNC the bridge has not acknowledged shows a red strip ("Not backed up to the bridge: N Do Not Contact change(s) ...") and retries at 4, 8, 12 seconds, then waits for the next save. A good push clears the strip. With no unacknowledged DNC, behavior is unchanged.
+- Not fixed here (report only, owned surface): the bridge's /notes handler still answers ok:true when its own DNC sweep (`ledger_from_notes`) fails (D21). A 2xx with ok:true is therefore treated as delivered by this page; the strip cannot see a ledger failure behind it.
+- Option A: merge the page half as is | Risk: the strip is only a warning on the page; the opt-out still reaches optouts.json only when the bridge is reachable and its sweep succeeds
+- Option B: merge together with the server half (/notes returns ok:false when the DNC sweep fails; D21) | Risk: touches send_server.py and the suppression surface, so it is Alex's call
+- Recommendation: A now, B as its own LEGAL REVIEW item.
+- Status: OPEN

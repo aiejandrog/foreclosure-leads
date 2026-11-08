@@ -6127,16 +6127,74 @@ _bridgeInstall();
    board's notesBridgePush: the local save and the team sync are unchanged when the bridge is down. A
    missing device key shows the plain message from bridgeFetch. workerLog / sentArchive are left out of
    the body on purpose: this page has none, and the server must not read an empty list as a deletion. */
-var _cnT = null, _cnBusy = false;
-function callNotesPushSoon(){ clearTimeout(_cnT); _cnT = setTimeout(callNotesPush, 4000); }
+var _cnT = null, _cnBusy = false, _cnRetryN = 0;
+/* F-wire-02. A Do Not Contact tapped here is only on the opt-out list once /notes answers 2xx and not
+   ok:false. This page used to ignore the answer, so a phone that could not reach the bridge held an
+   opt-out nobody was told about. A DNC note is no==='hard', status 'DO NOT CONTACT', or an optout date.
+   fcDncAck holds the DNC ids a good push already carried (ids only). A failed push with a DNC id not
+   in it shows a strip and retries on the queueSync ladder (4 / 8 / 12 s, then stops until the next
+   saveNotes). A failure with nothing new at stake changes nothing. The local save and the body sent
+   are untouched. The helpers live inside callNotesPush so the one function carries its own wiring. */
+function callNotesPushSoon(){ _cnRetryN = 0; clearTimeout(_cnT); _cnT = setTimeout(callNotesPush, 4000); }
 function callNotesPush(){
   if(_cnBusy){ callNotesPushSoon(); return; }
   _cnBusy = true;
   var dev = ''; try{ dev = localStorage.getItem('fcDevice') || ''; }catch(e){}
+  function dncIds(){
+    var ids = [];
+    try{ Object.keys(notes || {}).forEach(function(k){
+      var n = notes[k];
+      if(n && (n.no === 'hard' || n.status === 'DO NOT CONTACT' || n.optout)) ids.push(k);
+    }); }catch(e){}
+    return ids;
+  }
+  function acked(){
+    try{ var a = JSON.parse(localStorage.getItem('fcDncAck') || '[]'); return Array.isArray(a) ? a : []; }catch(e){ return []; }
+  }
+  function strip(msg){
+    try{
+      var el = document.getElementById('notes-unsent-strip');
+      if(!msg){ if(el && el.parentNode) el.parentNode.removeChild(el); return; }
+      if(!el){
+        el = document.createElement('div'); el.id = 'notes-unsent-strip';
+        el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:70;background:#b71c1c;color:#fff;'
+          + 'padding:10px 14px;font-weight:800;font-size:14px;line-height:1.3;text-align:center';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+    }catch(e){}
+  }
+  function good(r){
+    if(!r || typeof r.status !== 'number' || r.status < 200 || r.status > 299) return Promise.resolve(false);
+    try{
+      return (r.clone ? r.clone() : r).json().then(function(j){ return !(j && j.ok === false); },
+                                                    function(){ return true; });
+    }catch(e){ return Promise.resolve(true); }
+  }
+  function done(sent, ok){
+    _cnBusy = false;
+    try{
+      if(ok){
+        _cnRetryN = 0;
+        var have = acked();
+        localStorage.setItem('fcDncAck', JSON.stringify(have.concat(sent.filter(function(k){ return have.indexOf(k) < 0; }))));
+        strip('');
+        return;
+      }
+      var seen = acked(), todo = dncIds().filter(function(k){ return seen.indexOf(k) < 0; });
+      if(!todo.length) return;
+      var cases = todo.filter(function(k){ return k.charAt(0) !== '#'; });
+      strip('Not backed up to the bridge: ' + (cases.length || todo.length) + ' Do Not Contact change(s) have not '
+        + 'reached the opt-out list. Keep this page open and get on the bridge network.');
+      if((_cnRetryN || 0) < 3){ _cnRetryN = (_cnRetryN || 0) + 1; clearTimeout(_cnT); _cnT = setTimeout(callNotesPush, 4000 * _cnRetryN); }
+    }catch(e){}
+  }
   try{
+    var sent = dncIds();
     bridgeFetch('/notes', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({_dealflow_notes: 1, exported: today(), device: dev, notes: notes})})
-      .then(function(){ _cnBusy = false; }, function(){ _cnBusy = false; });
+      .then(good, function(){ return false; })
+      .then(function(ok){ done(sent, ok); }, function(){ _cnBusy = false; });
   }catch(e){ _cnBusy = false; }
 }
 /* The text ledger (text_sent.json) is what the 3-touch ladder reads across devices. Call Mode wrote
