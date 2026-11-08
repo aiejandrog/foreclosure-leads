@@ -6164,12 +6164,17 @@ function callNotesPush(){
       el.textContent = msg;
     }catch(e){}
   }
+  /* Fail closed: delivered only for a 2xx whose body is a JSON object with ok === true. An HTML or text
+     body (captive portal), JSON with no ok field, ok:false, a non-2xx, a rejection, or anything thrown
+     while reading the answer all count as not delivered. send_server answers {ok:true,...} on success. */
   function good(r){
-    if(!r || typeof r.status !== 'number' || r.status < 200 || r.status > 299) return Promise.resolve(false);
     try{
-      return (r.clone ? r.clone() : r).json().then(function(j){ return !(j && j.ok === false); },
-                                                    function(){ return true; });
-    }catch(e){ return Promise.resolve(true); }
+      if(!r || typeof r.status !== 'number' || r.status < 200 || r.status > 299 || typeof r.json !== 'function')
+        return Promise.resolve(false);
+      return (r.clone ? r.clone() : r).json().then(function(j){
+        return !!(j && typeof j === 'object' && !Array.isArray(j) && j.ok === true);
+      }, function(){ return false; });
+    }catch(e){ return Promise.resolve(false); }
   }
   function done(sent, ok){
     _cnBusy = false;

@@ -13,6 +13,10 @@ Pins (a)-(g), run through node against the notes-push block extracted from call_
   (d) HTTP 500, or 200 {ok:false} -> treated as a failure, same as (a)
   (e) an earlier-acknowledged DNC plus a later non-DNC failure -> no strip (no nagging)
   (f) the body handed to bridgeFetch is byte-identical to the old code's body, success or failure
+  (h)-(o) fail-closed: a 2xx counts as delivered ONLY with a JSON object body and ok === true; an HTML or
+      text body, a JSON object with no ok field, {ok:false}, an array, null, no body, or an exception
+      reading it all keep the strip up and retry on the same ladder
+  (c2) a 200 {ok:true,...} with extra fields still removes the strip and acknowledges the ids
   (g) after the ladder is spent, the next saveNotes (callNotesPushSoon) starts a fresh ladder
 
 Invented leads only (2099-* cases, 555 numbers). No network, nothing listens on a port.
@@ -70,6 +74,14 @@ function bridgeFetch(path, opts){
   if(MODE === 'reject') return Promise.reject(new TypeError('Failed to fetch'));
   if(MODE === '500') return Promise.resolve(resp(500, {ok:false}));
   if(MODE === 'okfalse') return Promise.resolve(resp(200, {ok:false, err:'ledger'}));
+  if(MODE === 'html'){ var h = resp(200, null); h.json = function(){ return Promise.reject(new SyntaxError('Unexpected token <')); }; return Promise.resolve(h); }
+  if(MODE === 'text'){ var t = resp(200, null); t.json = function(){ return Promise.reject(new SyntaxError('Unexpected token O')); }; return Promise.resolve(t); }
+  if(MODE === 'nofield') return Promise.resolve(resp(200, {merged: 3}));
+  if(MODE === 'array') return Promise.resolve(resp(200, [{ok:true}]));
+  if(MODE === 'null') return Promise.resolve(resp(200, null));
+  if(MODE === 'nojson'){ return Promise.resolve({status:200, ok:true}); }
+  if(MODE === 'throwclone'){ return Promise.resolve({status:200, ok:true, clone:function(){ throw new Error('boom'); }}); }
+  if(MODE === 'okfull') return Promise.resolve(resp(200, {ok:true, merged:2, ledgered:1}));
   return Promise.resolve(resp(200, {ok:true}));
 }
 function flush(){ return new Promise(function(r){ realST(r, 8); }); }
@@ -112,7 +124,15 @@ out({text1:t1, strip_after: !!strip(), ms:ms, left: pending().length, calls: __c
 
 # ---------------------------------------------------------------- (a) and (d)
 print('\n(a) fetch rejects, unacknowledged DNC')
-for tag, mode, label in (('a', 'reject', 'rejects'), ('d1', '500', 'HTTP 500'), ('d2', 'okfalse', '200 with ok:false')):
+for tag, mode, label in (('a', 'reject', 'rejects'), ('d1', '500', 'HTTP 500'), ('d2', 'okfalse', '200 with ok:false'),
+                         ('h', 'html', '200 with an HTML body (captive portal)'),
+                         ('i', 'text', '200 with a non-JSON text body'),
+                         ('j', 'nofield', '200 JSON object with no ok field'),
+                         ('k', 'okfalse', '200 {ok:false} (k)'),
+                         ('l', 'array', '200 JSON array'),
+                         ('m', 'null', '200 JSON null'),
+                         ('n', 'nojson', '200 with no readable body at all'),
+                         ('o', 'throwclone', '200 where reading the body throws')):
     r, err = run(tag, ladder_body(mode))
     if r is None:
         rec('%s: node ran' % label, False, err)
@@ -161,6 +181,18 @@ out({strip: !!strip(), left: pending().length, ack: JSON.parse(__store.fcDncAck 
 """)
 rec('c: a plain first-try success acknowledges and shows nothing', r is not None and r['strip'] is False
     and r['left'] == 0 and r['ack'] == ['2099-000901-CA-01'], r or err)
+
+r, err = run('c3', """
+MODE = 'reject';
+notes = {'2099-000901-CA-01': DNC1, '#3055550901': PH1};
+callNotesPush(); await flush();
+var had = !!strip();
+MODE = 'okfull';
+fire(); await flush();
+out({had:had, strip: !!strip(), left: pending().length, ack: JSON.parse(__store.fcDncAck || '[]').sort()});
+""")
+rec('c: 200 {ok:true, ...extra} removes the strip and acknowledges the ids', r is not None and r['had'] is True
+    and r['strip'] is False and r['left'] == 0 and r['ack'] == ['#3055550901', '2099-000901-CA-01'], r or err)
 
 # ---------------------------------------------------------------- (e) no nagging
 print('\n(e) old acknowledged DNC, later non-DNC failure')
