@@ -50,3 +50,5 @@ reports, and open draft PRs.
   checklist. Do not redo them.
 - Audit team prompt: `docs/agent-teams/AUDIT-TEAM-PROMPT-2026-11-07.md`.
 - Audit roles: `.claude/agents/site-qa.md`, `code-auditor.md`, `legal-auditor.md`, `data-auditor.md`.
+- Audit loop with QA chief, fixers and autopsy (2026-11-08): `docs/agent-teams/AUDIT-LOOP-PROMPT-2026-11-08.md`,
+  `AUDIT-LOOP-PROTOCOL.md`; guard + flight recorder `.claude/hooks/agent_guard.py` (installed by Alex's setup paste only).
