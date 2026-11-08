@@ -2,6 +2,8 @@ FROM NOW ON: every agent team on this repo reads docs/agent-teams/PATTERNS.md an
 
 FROM 2026-11-07 (migration freeze): read docs/agent-teams/OPERATING-RULES-2026-11-07.md before this file. Audit roles: site-qa, code-auditor, legal-auditor, data-auditor (.claude/agents/); audit round prompt: docs/agent-teams/AUDIT-TEAM-PROMPT-2026-11-07.md.
 
+FROM 2026-11-08: the audit LOOP (tickets -> qa-chief triage -> fixers -> qa-gate -> PRs -> autopsy, with the agent_guard flight recorder) is docs/agent-teams/AUDIT-LOOP-PROMPT-2026-11-08.md; tickets, board and merge classes are in AUDIT-LOOP-PROTOCOL.md. New roles: qa-chief, ideas-scout, security-auditor, wiring-auditor, failure-reviewer.
+
 # Agent-team patterns for DEALFLOW
 
 Citation key: **CLAUDE.md** / **HANDOFF** (MACHINE-HANDOFF.md) / **CI** (CI-TESTS.md) = repo files, section named.

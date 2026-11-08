@@ -872,3 +872,7 @@ evidence/
 
 # homeowner call recordings + transcripts (call_coach_server.py) - NEVER in a public repo
 call_sessions/
+# _agentguardtest: agent-team flight recorder / freeze guard (.claude/hooks/agent_guard.py). example.com only.
+!_agentguardtest.py
+# Claude Code per-machine settings (the agent_guard hook is registered here by the audit-loop setup paste)
+.claude/settings.local.json
