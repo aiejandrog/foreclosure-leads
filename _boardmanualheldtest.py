@@ -18,6 +18,8 @@ Nothing here edits, reads or asserts a suppression function's body: the optout a
 only observed, to prove their behaviour did not move.
 
   python _boardmanualheldtest.py          (exit 0 = all pass, 1 = a failure, 0 + SKIP = no browser)
+
+BOARDHELD_TEMPLATE=<file> builds the board from another copy of the template (a candidate patch).
 """
 import copy
 import datetime as dt
@@ -77,6 +79,7 @@ def build_fixture():
         ('dead', {'ordeeded': True, 'ordeedconf': 'ok'}),   # isFlaggedDead -> 'owner gone'
         ('transferred', {'title_status': 'transferred'}),
         ('stopreply', {}),                   # no hold of its own; its reply says STOP
+        ('deadstatus', {}),                  # hand status 'Dead' only: observed, not asserted (see below)
     ]
     rows, cases = [], {}
     for i, (k, ov) in enumerate(HELD):
@@ -92,7 +95,8 @@ def build_fixture():
         r['days'] = 20
         rows.append(r)
         cases[k] = r['case']
-    tpl = F.subst_build_facts(open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read(),
+    tpl = F.subst_build_facts(open(os.environ.get('BOARDHELD_TEMPLATE') or os.path.join(HERE, 'tracker_template.html'),
+                              encoding='utf-8').read(),
                               '2026-11-08 12:00')
     tpl = tpl.replace('__MOTIONJS__', F._motion_js())
     for t, v in {'__OPTOUTS__': '[]', '__REPLIES__': '{}', '__MAILLOG__': '{}', '__MAILTO__': '{}',
@@ -173,7 +177,8 @@ def open_board(notes):
 now_utc = dt.datetime.now(dt.timezone.utc)
 iso = lambda d: (now_utc - dt.timedelta(days=d)).strftime('%Y-%m-%dT%H:%M:%S')
 
-DNC_NOTE = {CASES['optout']: {'status': 'DO NOT CONTACT', 'optout': True}}
+DNC_NOTE = {CASES['optout']: {'status': 'DO NOT CONTACT', 'optout': True},
+            CASES['deadstatus']: {'status': 'Dead', 'note': ''}}
 
 # ======================================================== A. composer and call sheet (no replies)
 ctx, p, errs = open_board(DNC_NOTE)
@@ -225,11 +230,14 @@ rec('(e) stay composer: 0 Send, existing BANKRUPTCY STAY sentence',
 for k in ('optout', 'stay'):
     rec('(e) %s call sheet: no Text, no WA, no mailto, no Call (as before)' % k,
         sheet[k]['text'] == 0 and sheet[k]['wa'] == 0 and sheet[k]['mail'] == 0 and sheet[k]['call'] == 0, sheet[k])
+# Observed only: a lead whose hand status is 'Dead' but which the records do not flag (isFlaggedDead)
+# is not in _boardMailHeld's list, so the helper does not cover it. Reported to chief, not asserted.
+print('INFO deadstatus (hand status Dead, no records flag): composer %s, call sheet %s' % (comp['deadstatus'], sheet['deadstatus']))
 rec('(a-d) no page errors on the composer / call sheet board', not errs, errs[:2])
 ctx.close()
 
 # ======================================================== C. Reply inbox (every lead has replied)
-notes = {c: {'status': '', 'note': '', 'replied': iso(3)} for c in CASES.values()}
+notes = {c: {'status': '', 'note': '', 'replied': iso(3)} for k, c in CASES.items() if k != 'deadstatus'}
 notes[CASES['optout']] = {'status': 'DO NOT CONTACT', 'optout': True, 'note': '', 'replied': iso(3)}
 notes[CASES['stopreply']] = {'status': '', 'note': '', 'replied': iso(2), 'repliedStop': True}
 ctx, p, errs = open_board(notes)
@@ -239,7 +247,7 @@ cards = p.evaluate("""()=>{ const d=new DOMParser().parseFromString(genReplyInbo
             call:c.querySelectorAll('.rbbtn.call').length, mail:c.querySelectorAll('a[href^="mailto:"]').length,
             open:c.querySelectorAll('a[href^="#case="]').length}; }); }""")
 by = {INV.get(c['case'], c['case']): c for c in cards}
-rec('(c) inbox: one card per replied lead', len(cards) == NROWS, '%d cards' % len(cards))
+rec('(c) inbox: one card per replied lead', len(cards) == NROWS - 1, '%d cards' % len(cards))
 for k in ('stopreply', 'optout', 'stay'):
     c = by.get(k) or {}
     rec('(c) inbox %s card: no Call button and no mailto, Open call sheet kept' % k,

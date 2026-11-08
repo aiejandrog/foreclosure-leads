@@ -219,3 +219,13 @@ Append only. Never edit or delete another entry. Lead commits this file and mark
 - Also for the attorney: a relative who says "stop" or "not interested" currently marks the whole lead (owner) do-not-contact / soft no. Conservative, unchanged here; confirm that is wanted.
 - Fallback in progress: PR open, not merged. Switch off by default.
 - Status: OPEN
+
+### D24: Board withholds Text, WhatsApp and mailto on held leads in the composer, call sheet and Reply inbox; Call stays; hand-status Dead not covered (audit loop 2026-11-08, F-site-01 / F-site-02 / F-ideas-01) -- LEGAL REVIEW in PR title
+- Touches: tracker_template.html `_contactLineHtml`, `_contactBlockHtml`, `textCardHtml`, `genReplyInbox`, new `_boardWrittenHeld` (reads `_boardMailHeld`); no suppression function, no send_server.py, no Call Mode
+- What changes: for a lead the board already holds as existing client, diligence hold, claimed on another case, or owner gone / transferred: the text composer shows "On hold: <reason>. Do not text." and no Send, WhatsApp, Copy or tone buttons; the call sheet shows no Text, no WA and no plain mailto link; the Reply inbox card shows no mailto. A STOP reply card, and a card the any-channel block already closes, show no Call button and no mailto. Nothing new can be sent. Stricter display only.
+- Not changed, Alex's call (D-F): the Call button on client / diligence-hold / claimed / owner-gone call sheets and inbox cards stays. Should Call also be withheld there?
+- Option A: merge as is (Call stays on those leads) | Risk: a client or a represented owner is still one tap from a call
+- Option B: also withhold Call on those leads, as a follow-up ticket | Risk: a client who calls back cannot be dialed from the board
+- Gap found, not fixed (outside the allowed functions): a lead whose only mark is the hand status "Dead" (not an investor-deed or records flag) is not in `_boardMailHeld`, so it still shows Send, Text, WA and mailto after this change. Fix needs `_boardMailHeld` to read the status, which this ticket forbids.
+- Recommendation: A for this PR; open a follow-up for the hand-status Dead gap.
+- Status: OPEN
