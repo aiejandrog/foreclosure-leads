@@ -565,6 +565,15 @@ python -u refresh_progress.py step 3l
 echo [3l/5] Back taxes + sold certificates (feeds equity and the tax chip)...
 python -u county_taxes.py >> "%LOG%" 2>&1
 
+python -u refresh_progress.py step 3l2
+echo [3l2/5] Deep equity check - Tier 2 shortlist, every lien summed, OFF unless DEALFLOW_DEEP_EQUITY=1...
+rem  ADDED 2026-11-05 deep_equity.py. Sale within 30 days + phone + case, up to 25 leads, soonest first.
+rem  Name search of Official Records for the owner and co-borrowers, every mortgage, HUD partial claim and
+rem  lien summed; a source that is not OK leaves equity blank. Writes only under DEALFLOW_DIR\deep_equity.
+rem  Read-only, no paid reads, no sends, no human-check solving. Runs after [3l] so the tax read is fresh.
+rem  Off by default until the acceptance case passes on this laptop. Non-fatal: the next echo clears errorlevel.
+if "%DEALFLOW_DEEP_EQUITY%"=="1" python -u deep_equity.py --tier 2 --limit 25 >> "%LOG%" 2>&1
+
 python -u refresh_progress.py step 3m
 echo [3m/5] Judgment entry dates (FS 55.03 post-judgment interest accrual)...
 python -u judgment_interest.py --all >> "%LOG%" 2>&1
