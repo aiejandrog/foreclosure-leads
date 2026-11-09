@@ -2538,8 +2538,12 @@ function _expireReleases(rows){
     (rows||[]).forEach(r => {
       if(r && r.bkUntil && !r.saleBkAct && now > r.bkUntil){
         r.saleBkAct = true;
-        r.bkWhy = 'Bankruptcy check expired on this page (built ' + (typeof BUILTAT==='string' ? BUILTAT : '?') +
-                  '). Held until the board is rebuilt.';
+        /* bkExpired: the hold is this page's age, not a bankruptcy finding. Labels below say so
+           (2026-11-09: a stale board showed every released lead as "BK STAY" and it read as a
+           filed case). Blocking is identical to any other saleBkAct row. */
+        r.bkExpired = true;
+        r.bkWhy = 'Bankruptcy release expired, rebuild the board (not a stay finding). Page built ' +
+                  (typeof BUILTAT==='string' ? BUILTAT : '?') + '; a release lasts 48h. Held until the board is rebuilt.';
         delete r.saleLift;
       }
     });
@@ -3857,7 +3861,9 @@ function _contactBlockHtml(r){
   let h = '';
   if(block==='wrong') return '<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
   if(block==='optout') return '<div class="csbad">⛔ OPTED OUT — all contact suppressed</div>';
-  if(block==='bk') return '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
+  if(block==='bk') return r.bkExpired
+    ? '<div class="csbad">⏳ BK CHECK EXPIRED — rebuild board · no contact</div>'
+    : '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
   const lines = [];
   // NO slice(0,4) HERE. The build already caps the array (foreclosure_leads.MAX_PHONES) after
   // ranking it, so slicing again threw away numbers that had already survived that cut — and
@@ -11780,7 +11786,8 @@ function genDealSnapshot(r){
   var owed = basis>0 ? Math.max(0, basis - spread) : 0;
   var flags = [];
   if(r.sibclaimed) flags.push({t:'CLAIMED — sibling case already sold', c:'#8a1c1c'});
-  if(r.saleBkAct) flags.push({t:'ACTIVE BK STAY — no contact permitted', c:'#8a1c1c'});
+  if(r.saleBkAct) flags.push({t: r.bkExpired ? 'BK CHECK EXPIRED — rebuild board, no contact until then'
+                                             : 'ACTIVE BK STAY — no contact permitted', c:'#8a1c1c'});
   if(r.mr && r.orconf!=='ok') flags.push({t:'Surviving 1st mortgage unverified', c:'#a35a10'});
   if(r.ju) flags.push({t:'Final judgment not posted — debt unknown', c:'#a35a10'});
   if(r.condo && !r._assessSet) flags.push({t:'Condo — pull the estoppel (special assessment risk)', c:'#a35a10'});
@@ -18896,6 +18903,8 @@ function render(){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else if(_isWrongOwner(n)){
       gCall.push('<span class="phone dncgate" title="Someone on these numbers told us they do NOT own this property. Re-verify the owner on the county appraiser and the recorded deed before contacting anyone. The deal is still live — the contact info is not.">🚫 WRONG PERSON'+(n.wrongown?' · '+esc(n.wrongown):'')+' — numbers withheld</span>');
+    } else if(r.saleBkAct && r.bkExpired){
+      gCall.push('<span class="phone dncgate" title="Not a bankruptcy finding. This page is older than the 48h bankruptcy release, so the lead is held until the board is rebuilt and the check runs again.">⏳ BK CHECK EXPIRED — rebuild board</span>');
     } else if(r.saleBkAct){
       gCall.push('<span class="phone dncgate" title="Active bankruptcy stay — no call, text, or WhatsApp.">⛔ BK STAY — no contact</span>');
     } else {
