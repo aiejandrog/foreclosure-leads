@@ -34,8 +34,10 @@ chk('letter carries the English opt-out line from outreach_copy', OC.OPTOUT_LINE
 chk('letter carries the Spanish opt-out line from outreach_copy', OC.OPTOUT_LINE_ES in t)
 chk('opt-out comes after the MARS block and before the signature',
     t.index(mars) < t.index(OC.OPTOUT_LINE_EN) < t.index(B.SENDER['name'], t.index(OC.OPTOUT_LINE_ES)))
-chk('the original offer and street sentence are unchanged',
+chk('the street sentence and the buy offer are still there',
     "I saw the court filing on 1 NW 2 St." in t and "I buy houses in this situation" in t)
+chk("the offer leads with keep-or-sell options, no sale-date assumption",
+    "keep the house or sell it" in t and "before a sale date gets set" not in t)
 chk('printed variant is the same words', B.letter_printed(ROW) == t)
 import html as H                      # noqa: E402
 book = B.build([ROW], 80, 14, {}, 1)

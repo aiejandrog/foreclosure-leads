@@ -12,6 +12,7 @@ _*.py
 !_lookuplanetest.py
 !_equitylanetest.py
 !_equityroutetest.py
+!_handmailtest.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
