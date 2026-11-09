@@ -381,21 +381,35 @@ def classify(searches, owner, coborrowers=(), folio='', subject_legal='', links=
             if dn and len(dn) >= 7 and dn in re.sub(r'[^\d ]', ' ', txt).split():
                 debt['released_by'] = rel['inst']; debt['released_on'] = rel['d']; used.add(rel['inst'])
                 break
-    for debt in sorted(debts, key=lambda x: x['d']):
-        if debt.get('released_by') or not debt['d']:
+    # last resort, name only: allowed ONLY when that holder has exactly one unreleased debt here and
+    # recorded a release after it. With two or more (three HUD partial claims, two HOA liens) a
+    # name cannot say WHICH one was released, and guessing wrong removes real debt -- the exact way
+    # the board overstated equity. Those stay open and the ambiguity is an unknown (equity blank).
+    ambiguous = []
+    unpaired = [d for d in debts if not d.get('released_by')]
+    for rel in sorted(releases, key=lambda x: x['d']):
+        if rel['inst'] in used or not rel['d']:
             continue
-        h = _inst_name(debt['holder'])
+        h = _inst_name(rel['holder'])
         if not h:
             continue
-        for rel in sorted(releases, key=lambda x: x['d']):
-            if rel['inst'] in used or not rel['d'] or rel['d'] < debt['d']:
-                continue
-            if _inst_name(rel['holder']) == h:
-                debt['released_by'] = rel['inst']; debt['released_on'] = rel['d']; used.add(rel['inst'])
-                debt['release_how'] = 'same holder, later date'
-                break
+        cands = [d for d in unpaired if not d.get('released_by') and d['d'] and d['d'] <= rel['d']
+                 and _inst_name(d['holder']) == h]
+        if len(cands) == 1:
+            debt = cands[0]
+            debt['released_by'] = rel['inst']; debt['released_on'] = rel['d']; used.add(rel['inst'])
+            debt['release_how'] = 'same holder, later date (only debt from that holder)'
+        elif len(cands) > 1:
+            ambiguous.append((rel, cands))
 
     open_debts, released, other_property, unknowns = [], [], [], []
+    for rel, cands in ambiguous:
+        mine = [d for d in cands if _borrower_side(d, people) and d['place'] != 'other']
+        if mine:
+            unknowns.append({'what': 'release %s recorded %s by %s could release any of %s; no recorder link '
+                                     'says which, so all stay open and equity is blank'
+                                     % (rel['inst'], rel['d'], rel['holder'][:40],
+                                        ', '.join(d['inst'] for d in mine)), 'inst': rel['inst']})
     for r in sorted(debts, key=lambda x: x['d']):
         if r['kind'] in ('mortgage', 'hud_partial_claim') and not _borrower_side(r, people):
             continue          # a mortgage one of our people HOLDS (lender side), not one they owe
@@ -603,17 +617,23 @@ def record(row, base=None):
     with open(os.path.join(base, 'runs.jsonl'), 'a', encoding='utf-8') as f:
         f.write(json.dumps(row, sort_keys=True) + '\n')
     lp = os.path.join(base, 'latest.json')
+    bad = None
     try:
-        latest = json.load(open(lp, encoding='utf-8'))
+        # `with`, so the handle is closed before the rename below: on Windows a file still open
+        # (an exception traceback keeps a bare open() alive) cannot be renamed (WinError 32)
+        with open(lp, encoding='utf-8') as f:
+            latest = json.load(f)
         if not isinstance(latest, dict):
             raise ValueError('latest.json is not a map')
     except FileNotFoundError:
         latest = {}
     except Exception as e:
+        bad = e
+        latest = {}
+    if bad is not None:
         # an unreadable latest view is never silently replaced: keep it, write beside it
         os.replace(lp, lp + '.unreadable-' + _now().strftime('%Y%m%d%H%M%S'))
-        print('deep_equity: latest.json unreadable (%s); kept a copy, rebuilding from this run' % e)
-        latest = {}
+        print('deep_equity: latest.json unreadable (%s); kept a copy, rebuilding from this run' % bad)
     key = row['case_key']
     ent = latest.get(key) or {}
     if row['verdict'] == VERIFIED:
@@ -888,7 +908,10 @@ def records_source(people, site, log, raw=None, fetch_links=True):
                 k = _kind(r.get('DocTypeDescription'), r.get('CrossPartyName'))
                 if k in DEBT_KINDS or k == 'release':
                     want.add(str(r.get('InstrumentNumber') or '').strip())
-        for inst in sorted(i for i in want if i.strip('0'))[:DETAILS_PER_LEAD]:
+        # newest first: the budget goes to the loans and releases that decide today's debt, not to
+        # a 1999 mortgage satisfied decades ago (ascending order spent it on those)
+        for inst in sorted((i for i in want if i.strip('0')), key=lambda i: (len(i), i),
+                           reverse=True)[:DETAILS_PER_LEAD]:
             if site.stopped:
                 log('records: details pages stopped after %d blocks' % BLOCK_TRIP)
                 break
@@ -1146,6 +1169,13 @@ def main(argv=None):
         lead = find_lead(a.case)
         if lead is None and a.folio and a.owner:
             lead = {'case': a.case, 'folio': a.folio, 'owners': a.owner, 'addr': a.addr}
+        elif lead is not None:
+            # a lis pendens row often has no folio or address yet (the nightly match left them
+            # blank): what the operator typed fills the blanks, never replaces a value on the row
+            lead = dict(lead)
+            for k, v in (('folio', a.folio), ('addr', a.addr), ('owners', a.owner)):
+                if v and not str(lead.get(k) or '').strip():
+                    lead[k] = v
         if lead is None:
             print('no Broward lead for %s (pass --folio and --owner to check it anyway)' % a.case)
             return 1

@@ -266,5 +266,36 @@ fx['expect']['debt_total'] = 267151.56
 json.dump(fx, open(fp, 'w'))
 ok(D.main(['--accept', fp]) == 1, 'accept: the board\'s old debt figure FAILS the test')
 
+# ---- 10. a release paired by holder name alone cannot pick between several debts ----------------
+amb = searches()
+amb[D.search_name(OWNER)] = owner_rows() + [
+    row(OWNER, 'TO', HUD, (2025, 6, 1), '900000020', 0, 'SATISFACTION OF MORTGAGE')]
+r = D.compute(LEAD, sources(), amb, [COB])
+ok(r['debt_subordinate_total'] == 88109.00, 'release by name: three HUD claims all stay open (%s)' % r['debt_subordinate_total'])
+ok(r['verdict'] == D.UNVERIFIED and r['equity_low'] is None and r['equity_high'] is None,
+   'release by name: which HUD claim it releases is unknown, so equity is blank')
+ok(any('900000020' in u for u in r['unknowns']), 'release by name: the unknown names the release')
+ok([(x['inst'], x['released_by']) for x in r['released']] == [('900000009', '900000013')],
+   'release by name: a holder with ONE debt still pairs (the HOA lien)')
+
+# ---- 11. --folio / --addr fill blanks on a lead row, never replace values ---------------------
+calls = []
+_find, _run = D.find_lead, D.run_one
+D.find_lead = lambda c, leads=None: {'case': c, 'owners': 'SAMPLE,ROBERT KEITH', 'folio': '', 'addr': ''}
+D.run_one = lambda lead, **k: calls.append(lead) or D.compute(lead, sources(), searches(), [COB])
+try:
+    D.main(['--case', CASE, '--folio', FOLIO, '--addr', '100 NW 1st Ave', '--owner', 'OTHER, NAME'])
+finally:
+    D.find_lead, D.run_one = _find, _run
+ok(calls and calls[0]['folio'] == FOLIO and calls[0]['addr'] == '100 NW 1st Ave',
+   'cli: --folio and --addr fill a lead row that has none')
+ok(calls and calls[0]['owners'] == 'SAMPLE,ROBERT KEITH', 'cli: --owner never replaces the owner on the row')
+
+# ---- 12. an unreadable latest.json is set aside, not a crash (Windows keeps open files locked) --
+b2 = tempfile.mkdtemp()
+open(os.path.join(b2, 'latest.json'), 'w').write('{not json')
+D.record(D.compute(LEAD, sources(), searches(), [COB]), b2)
+ok(any(f.startswith('latest.json.unreadable-') for f in os.listdir(b2)), 'record: torn latest.json kept beside')
+
 print('\n%d failure(s)' % len(FAILS))
 sys.exit(1 if FAILS else 0)
