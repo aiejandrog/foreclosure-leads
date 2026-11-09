@@ -5301,6 +5301,9 @@ function _callSheet(r){
     (r.hs?' <span class="cstag ok">HOMESTEAD</span>':'')+
     (_nameBroken(r)?' <span class="cstag warn">name incomplete</span>':'')+'</div>'+
     '<div class="cscase">Case '+esc(r.case)+' · '+esc(r.county||'MIAMI-DADE')+' · folio '+esc(r.folio||'—')+'</div>'+_csScout(r)+'</div>';
+  // F-site-08: the equity chip (state + may quote / do not quote) sits right under the address block,
+  // above every figure on the sheet. Same _eqcChip the mobile card uses; '' when the lead has no r.eqc.
+  who += _eqcChip(r);
   if(tt) who += '<div class="cstalk">🗣 <b>TALK TO '+esc(tt.name.toUpperCase())+'</b>'+(tt.rel?' — '+esc(tt.rel):'')+
     (tt.phone?' · <a href="'+esc(_telNum(tt.phone))+'">'+esc(tt.phone)+'</a>':'')+
     (tt.note?'<div class="cstn">'+esc(tt.note)+'</div>':'')+
@@ -5606,7 +5609,11 @@ function _csDiligence(r){
         // line rendered "− tax $0" — silently subtracting zero for delinquency. Treat both undefined
         // AND explicit false as "not pulled". Only when tax_checked is TRUE do we trust the number.
         ' − tax '+ (mm.tax_checked === true ? fm(mm.tax_certs) : '<i style="color:#8a1c1c">not pulled</i>')+
-        (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
+        // F-site-08: same figure, labelled. When the baked equity card says do not quote (r.eqc present and
+        // may_quote not true) the number is the MOST it can be, as _EQ_TIP_CEIL says on the row.
+        (mm.net_equity_est!=null?(r.eqc && r.eqc.may_quote !== true
+          ? ' → at most <b>'+fm(mm.net_equity_est)+'</b>, liens not verified'
+          : ' → net est <b>'+fm(mm.net_equity_est)+'</b>'):'')+
         (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
         (mm.value_source==='active_listing'?' <span class="dilg-tag">from active listing</span>':'')+
         (mm.notes?'<div class="css" style="margin-top:4px">'+esc(mm.notes)+'</div>':'')+
@@ -19054,7 +19061,7 @@ function render(){
         mrText(r)+
         dealTrigger(r);
     }
-    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
+    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + _eqcChip(r) + prof;   // F-site-08: same do-not-quote chip as the mobile card, above the figures. TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction || (r.st==='LP' ? 'not set' : '—'))+'</div>'+
       '<div class="submeta '+(_hasClock(r) && r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</div>'+
