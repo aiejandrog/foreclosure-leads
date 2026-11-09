@@ -260,7 +260,7 @@ rec('each seat page prints its own Find a number count (a count, no lead)',
     "LOOKUPN=__LOOKUPN__" in SRC and "lookupn=_lk_mine" in SRC)
 
 print('\nFIND A NUMBER: SHOW ALL, HAS EQUITY')
-H5 = 'var LKSHOW = 200, LKEQ = false, NO_SALE = 9999;\n' + grab_fn('lookupList') + r"""
+H5 = 'var LKSHOW = 200, LKEQ = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + grab_fn('lookupList') + r"""
 function esc(x){ return String(x); } function head(){ return ''; } function ownerLabel(r){ return r.c; }
 function propertyLabel(){ return ''; } function _bView(){ return {auction:''}; } function fileLinks(){ return []; }
 function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; }

@@ -127,7 +127,7 @@ run('_histWhy requires key, freshness, no failures and enough devices', HW)
 
 # ---- finding 2: one-off open then Next, whole flow ---------------------------------------------
 FLOW = r"""
-var QVIEW = 'untouched', lane = 'all', i = 0, cur = null, SCREEN = 'lead', _QVBACK = null, _NAVB = [], _NAVF = [];
+var QVIEW = 'untouched', lane = 'all', i = 0, cur = null, SCREEN = 'lead', _QVBACK = null, _NAVB = [], _NAVF = [], LKFROM = null;
 var fails = [], renders = 0, shown = [];
 function check(c, m){ if(!c){ console.log('ASSERT_FAIL ' + m); fails.push(m); } }
 var ALL = [{c:'U1', v:'untouched'}, {c:'U2', v:'untouched'}, {c:'R1', v:'retries'}, {c:'R2', v:'retries'}, {c:'R3', v:'retries'}];

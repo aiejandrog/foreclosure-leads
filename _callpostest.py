@@ -70,7 +70,7 @@ var STORE = {}, localStorage = {getItem:function(k){ return k in STORE ? STORE[k
   setItem:function(k, v){ STORE[k] = String(v); }, removeItem:function(k){ delete STORE[k]; }};
 var location = {pathname:'/dealflow-board/call/index.html'};
 """ + POSK + r"""
-var _NAVB = [], _NAVF = [], notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null, QVIEW = 'untouched';
+var LKFROM = null, _NAVB = [], _NAVF = [], notes = {}, SCREEN = 'lead', lane = 'soon', i = 0, cur = null, QVIEW = 'untouched';
 var _QVBACK = null;
 function _qvRestore(){}
 var LANES = [{k:'soon'}, {k:'lp'}, {k:'worker'}];
