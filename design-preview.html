@@ -432,6 +432,7 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 
 /* ============================== KPI BAND ============================== */
 .kpis{display:flex;gap:12px;padding:14px 16px 2px;flex-wrap:wrap}
+.fuover{margin:6px 16px 0;padding:8px 12px;border:1px solid #d1242f;border-radius:8px;font-size:13px}.fuover a{margin-left:6px}.eqc{font-weight:600}.eqc-ok{color:#1a7f37}.eqc-none,.eqc-unchecked,.eqc-unpriced{color:#9a6700}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-lg);padding:14px 18px;box-shadow:var(--sh-2);position:relative;
   overflow:hidden;transition:transform .28s var(--e-lux),box-shadow .28s var(--e-lux)}
@@ -837,6 +838,7 @@ a.ctact:hover{text-decoration:none;filter:none}
 .ctact-wa svg{width:13px;height:13px;display:block;stroke:#fff;color:#fff}
 .cttag{font-size:10px;font-weight:700;color:var(--muted,#6b7280);margin-left:2px}
 .cttag.dnc{color:#c0392b}
+.cmmail{font-size:11.5px;font-weight:700;margin-left:6px;padding:2px 8px;border-radius:6px;border:1px solid #1F6FEB;color:#1F6FEB;text-decoration:none;white-space:nowrap}
 .csmsgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
 .csmsglbl{font-family:var(--f-label,inherit);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-2)}
@@ -2277,7 +2279,7 @@ body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-10-26T20:55","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-11-08T18:41","good":null,"rows":[],"last":null,"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -2500,6 +2502,7 @@ dfRfs(S, document.getElementById('rfstat'), true);
 <input id="sAddr" placeholder="Mailing address (for email compliance)" style="width:230px">
 <input id="sWeb" placeholder="Website (optional)" style="width:150px">
 <span class="stats" id="sendersaved" style="margin-left:0"></span>
+<button id="bkeybtn" style="font-size:11px;padding:3px 9px" onclick="setBridgeKey()" title="Key for the send bridge, kept on this device only. Needed only off the bridge computer off the bridge computer (python bridge_auth.py add NAME). Stored in this browser only.">Bridge key</button>
 </div>
 <div class="controls" style="margin-top:8px">
 <span style="color:var(--muted);font-size:12px">Lookup any county property:</span>
@@ -2512,6 +2515,7 @@ dfRfs(S, document.getElementById('rfstat'), true);
 </div>
 </div>
 <div id="kpis" class="kpis"></div>
+<div id="fuoverdue" class="fuover" hidden></div>
 <button id="toTop" title="Scroll back to top">&#8593; Top</button>
 <div id="shorthelp"><div class="sh-t">Keyboard</div>
 <div class="sh-r"><span>Focus search</span><kbd>/</kbd></div>
@@ -2710,7 +2714,7 @@ const SERVER_OPTOUTS = [];
    deads.json baked at build time — cases where the DEAL no longer exists (dismissed, redeemed,
    sold). Same one-way posture as SERVER_OPTOUTS: the server can retire a lead on every device,
    it can never resurrect one, and it never overwrites a status that is already terminal locally.
-   Born from Milagros Martin (2026-003288-CA-01): dismissed 07/31, still pitched as Tier A for two
+   Born from Owner Example (2099-000001-CA-01): dismissed 07/31, still pitched as Tier A for two
    more days because "dead" only existed in one browser's localStorage. */
 const SERVER_DEADS = [];
 (function(){
@@ -2831,6 +2835,9 @@ function isFlaggedDead(r){
   // Only 'transferred' kills; 'unverified' must NOT — an appraiser outage is not evidence of a sale.
   if(r.title_status === 'transferred') return true;
   if(r.sibclaimed) return true;      // sibling case already sold + title issued — property is gone
+  // EXISTING CLIENT (clients.py, 2026-11-06). Not dead, but every consumer of this predicate (Worker,
+  // lane counts, mail queue, relatives, Hide flagged) must leave it alone. The card says CLIENT.
+  if(r.client) return true;
   if(r.ordeeded && r.ordeedconf==='ok') return true;
   // SOURCE OF TRUTH. This predicate hard-kills a lead — it feeds "Hide flagged", the 30%+ equity
   // filter and the Closers cockpit. It used raw orsurvfirst vs raw value−judgment: blind to the
@@ -2961,10 +2968,10 @@ function _workQueue(){
 // the first name is hard-coded here; llc/phone/email/addr are blank ON PURPOSE so the tracker
 // bans a mailing until Jose fills them in via Filters & setup. See the incomplete-sender banner
 // wired below (looks for the same 4 required fields and warns if any are still missing).
-// Entity is Biscayne Solutions Group (the joint foreclosure-side entity — distinct from
-// Alejandro's personal Tradervert). BSG has two managing members; either can sign for the company.
+// Entity is Biscayne Solutions Group (the joint foreclosure-side entity, separate from any entity
+// an individual holds). BSG has two managing members; either can sign for the company.
 // Do NOT surface ownership percentages in any generated doc; do NOT put BSG on an initial purchase
-// contract's buyer line — buyer is "Alejandro Gonzalez and/or assigns" per the wholesale convention,
+// contract's buyer line — buyer is "<principal's name> and/or assigns" per the wholesale convention,
 // and BSG only appears on the separate Assignment and on documents where the entity itself is the
 // counterparty (deed grantee, TPA representative, cash-for-keys, servicer cover).
 // Kept in sync with sender.json (gitignored) so the board, the headless email sender and Lob mail all
@@ -2979,40 +2986,62 @@ function _workQueue(){
 // True only when entity_check.py has a strict, exact, ACTIVE Sunbiz match for the configured
 // company. Injected at build time -- the board is JS and cannot ask Python at runtime.
 const ENTITY_VERIFIED = false;
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'', phone:'(786) 631-1823',
-                         addr:'8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122', title:'Acquisitions',
-                         email:'alejandro@bsgflorida.com', web:'', partner:''};
+// SENDER IDENTITY IS NOT IN THIS FILE (2026-10-25). This page is published to a public repo, so the
+// operator's name, phone, email and address are never literals here. They live in the local,
+// untracked sender.json; the build seals them INSIDE the encrypted payload (side.sender) and
+// _applyPayload() merges them in the moment a code opens the page. What ships in the clear is blank,
+// which every "is the sender set up?" check below already treats as missing. The two tokens are
+// filled by foreclosure_leads.subst_build_facts(); the local Desktop twin (never published) gets the
+// real values written straight in by footprint.twin_identity().
+const SENDER_DEFAULTS = Object.assign({llc:'', web:'', partner:''}, {"name": "", "phone": "", "email": "", "addr": "", "title": ""});
+const _SENDER_PH = Object.assign({}, SENDER_DEFAULTS);   // a saved value equal to a default is "unset"
+let SENDER_RETIRED = {"email": [], "addr": []};                  // sealed: old defaults to heal off devices
 let sender = Object.assign({}, SENDER_DEFAULTS);
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
 // blanks clobber the defaults, so a real generated email went out showing [YOUR NAME]/[YOUR COMPANY]/
 // [YOUR PHONE] even though defaults were set. Only merge saved values that actually have content; the old
 // auto-injected "Jose" is treated as unset so the current identity wins.
-try {
-  const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
-  if (saved.name === 'Jose') delete saved.name;
-  // A COMPANY name saved into `name` is always wrong — the letter and every email open with
-  // "My name is {name}", so it rendered "My name is Biscayne Solutions Group". Devices that saved the
-  // company there before this build get healed back to the person default instead of staying broken.
-  if (typeof saved.name === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
-  // IDENTITY NORMALIZER (2026-08-23). Two jobs at once, and both are needed:
-  //   1. RENAME. Carlos's and Jose's devices hold an fcSender saved under 'Miami Solutions Group'.
-  //      A saved non-empty value wins the merge below, so without this they keep printing the OLD
-  //      company on their paper forever while every other surface says Biscayne.
-  //   2. TRUTH-GATE HEAL. A device that saved the suffixed company string during the few hours
-  //      the un-gated build was live must drop the suffix again -- Sunbiz cannot substantiate the
-  //      entity yet, and a stale localStorage value would keep asserting it on that one operator's
-  //      documents long after every other surface stopped.
-  // Both collapse to: any recognised company string becomes the current build-time display value.
-  if (typeof saved.llc === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = SENDER_DEFAULTS.llc;
-  // 2026-10-16 (Alejandro): retired contact block. The personal Gmail and the 109th Ave address
-  // were the defaults until today, and a device that ever saved Sender setup holds them in
-  // fcSender, which wins the merge below. Drop exactly those two old values so the business inbox
-  // and the Doral mailbox reach every device; any other saved value is the operator's own.
-  if (typeof saved.email === 'string' && /^\s*agonzalez0311707@gmail\.com\s*$/i.test(saved.email)) delete saved.email;
-  if (typeof saved.addr === 'string' && /^\s*231\s+N\.?\s*W\.?\s+109(th)?\s+Ave(nue)?\b/i.test(saved.addr)) delete saved.addr;
-  for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
-} catch(e) {}
+// Runs at load (blank defaults, so a LOCKED page is inert) and again on unlock, once the sealed real
+// defaults and retired values have arrived. Updates `sender` IN PLACE: other code holds the object.
+function _senderRetired(kind, v){
+  const list = (SENDER_RETIRED && SENDER_RETIRED[kind]) || [];
+  const norm = x => String(x||'').toLowerCase().replace(/[^a-z0-9@]+/g, ' ').trim();
+  const x = norm(v);
+  return !!x && list.some(r => { const y = norm(r); return y && (kind === 'email' ? x === y : x.indexOf(y) === 0); });
+}
+function _rebuildSender(){
+  const next = Object.assign({}, SENDER_DEFAULTS);
+  try {
+    const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
+    if (saved.name === 'Jose') delete saved.name;
+    // A COMPANY name saved into `name` is always wrong — the letter and every email open with
+    // "My name is {name}", so it rendered "My name is Biscayne Solutions Group". Devices that saved the
+    // company there before this build get healed back to the person default instead of staying broken.
+    if (typeof saved.name === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
+    // IDENTITY NORMALIZER (2026-08-23). Two jobs at once, and both are needed:
+    //   1. RENAME. Carlos's and Jose's devices hold an fcSender saved under 'Miami Solutions Group'.
+    //      A saved non-empty value wins the merge below, so without this they keep printing the OLD
+    //      company on their paper forever while every other surface says Biscayne.
+    //   2. TRUTH-GATE HEAL. A device that saved the suffixed company string during the few hours
+    //      the un-gated build was live must drop the suffix again -- Sunbiz cannot substantiate the
+    //      entity yet, and a stale localStorage value would keep asserting it on that one operator's
+    //      documents long after every other surface stopped.
+    // Both collapse to: any recognised company string becomes the current build-time display value.
+    if (typeof saved.llc === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = SENDER_DEFAULTS.llc;
+    // RETIRED CONTACT BLOCK (2026-10-16, rewritten 2026-10-25). A device that ever saved Sender setup
+    // holds the old default email/address in fcSender, which wins the merge below. The old values are
+    // NOT written here -- naming them in a published page was itself the leak. The build seals them
+    // (side.retired) from the untracked footprint.local.json; this drops exactly those, and any other
+    // saved value is the operator's own.
+    if (typeof saved.email === 'string' && _senderRetired('email', saved.email)) delete saved.email;
+    if (typeof saved.addr === 'string' && _senderRetired('addr', saved.addr)) delete saved.addr;
+    for (const k in saved) { if (saved[k] !== '' && saved[k] != null && saved[k] !== _SENDER_PH[k]) next[k] = saved[k]; }
+  } catch(e) {}
+  Object.keys(sender).forEach(k => { delete sender[k]; });
+  Object.assign(sender, next);
+}
+_rebuildSender();
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
 const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
@@ -3066,6 +3095,19 @@ function _debtUnknown(r){ return !!r && r.st !== 'TD' && r.st !== 'BAL' && !(_de
    counted as $0, so the equity shown is the MOST it can be: a ceiling, rendered with "≤". */
 function _liensVerified(r){ return !!r && (r.eqstate === 'clear' || r.eqstate === 'priced'); }
 function _eqCeiling(r){ return !!r && r.st !== 'TD' && !_liensVerified(r); }
+/* EQUITY CARD (read-only display of the baked r.eqc from equity_state.card()). Shows the state, whether a
+   figure may be spoken (may_quote), and the net only when may_quote. It changes no gate: _liensVerified,
+   _eqCeiling and every send/dial hold still read r.eqstate. A recorded lien amount is never labelled a payoff. */
+var _EQC_NAME = {clear:'Verified clear', priced:'Verified, priced', unpriced:'Ceiling only', none:'Unverified', unchecked:'Not checked'};
+function _eqcChip(r, fmtFn){
+  var c = r && r.eqc; if(!c || typeof c !== 'object') return '';
+  var st = _EQC_NAME[c.state] ? c.state : 'unchecked';
+  var f = fmtFn || (typeof fmtK === 'function' ? fmtK : function(v){ return '$' + Math.round(v); });
+  var q = c.may_quote === true && (st === 'clear' || st === 'priced');   // display only: never says quote on an unfactual state
+  var txt = 'Equity: ' + _EQC_NAME[st] + ' &middot; ' + (q ? 'may quote' : 'do not quote');
+  if(q && typeof c.net === 'number') txt += ' &middot; net ~' + esc(f(c.net));
+  return '<div class="meta eqc eqc-' + st + (q ? ' eqc-ok' : '') + '" title="' + esc(c.why || c.label || '') + '">' + txt + '</div>';
+}
 /* One text for "net equity" wherever a dollar figure is printed. fmtFn formats dollars. */
 // ROW + CARD equity text. Precedence: no worth -> nothing; debt unknown -> "eq unknown"; a gross or
 // condo figure -> "~"; liens not verified -> "≤" (the most it can be); else the plain figure.
@@ -3202,8 +3244,8 @@ function recompute(){
     // compute exactly that (records_liens.py:299 / broward_liens.py:318 sum EVERY open lien, and
     // leave juniors_post at 0 so nothing is double-counted). This branch preferred `orsurvfirst`,
     // which is max(o.amt) — ONE mortgage — so every additional open mortgage vanished, and there was
-    // no second bucket to catch it: with juniors_post 0, _jlien is 0 too. Live lead COCE-26-012931
-    // (20850 NW 1 ST, Pembroke Pines) carries two opens totalling $28,680 but surfaced only $15,899,
+    // no second bucket to catch it: with juniors_post 0, _jlien is 0 too. Live lead COCE-99-000001
+    // (100 NW 1 ST, Pembroke Pines) carries two opens totalling $28,680 but surfaced only $15,899,
     // dropping $12,781 out of _slien, _netEqOf, netEqPct, _cash and _profit simultaneously — and the
     // call sheet printed the understated figure tagged RECORDS-VERIFIED.
     const chainSurv = _survTotal;
@@ -3292,7 +3334,7 @@ function setVerdict(r, x){
   const val = x.val;
   // CLAIMED — a SIBLING case on this property already sold at auction and title transferred
   // (sibling_cases.py, verified against the docket). The Martin lesson: Carlos knocked on
-  // 1101 SW 122 AVE 307 off our JPMorgan lead while R&V Investors already held title through
+  // 100 NW 1 AVE 307 off our JPMorgan lead while R&V Investors already held title through
   // the HOA case we never tracked. No profit math can resurrect a property someone else owns.
   if(r.sibclaimed){
     const s=(r.sib||[]).find(x=>x.sold)||{};
@@ -3306,7 +3348,7 @@ function setVerdict(r, x){
   // homeowner-rescue model does not apply. These price on $/SF, cap rate / NOI and zoning, not a
   // comp-$/sqft ARV and a 75%-of-value offer, and an old industrial parcel carries environmental risk
   // no residential comp can see. Never print a residential profit/ROI/STRONG off that math — route to
-  // manual underwriting. (2165 NW 19 ST: a use-48 warehouse was rendering STRONG on residential comps.)
+  // manual underwriting. (100 NW 1 ST: a use-48 warehouse was rendering STRONG on residential comps.)
   if(r.comm){
     r._profit=null; r._roi=null; r._equity=null; r._verdict='VERIFY'; r._vrank=2;
     r._whyShort='COMMERCIAL — underwrite manually, not the residential model';
@@ -3724,7 +3766,7 @@ function _optedOutIdentities(){
   return _OOP;
 }
 /* PERSON-LEVEL OPT-OUT — matches RAW or HASHED identity keys.
-   The server ledger no longer publishes '@someone@gmail.com' as a notes key: that put real
+   The server ledger no longer publishes '@someone@example.com' as a notes key: that put real
    addresses in a public page. It now publishes '@'+_addrKey(email) (and '#'+_addrKey(digits)), so
    this has to hash the lead's own contacts before comparing. RAW keys are still honoured because a
    device can create one locally when an operator opts someone out by hand, and because a browser
@@ -3759,6 +3801,40 @@ function _textContactBlocked(r){
   if(_isWrongOwner(n)) return 'wrong';
   if(r.saleBkAct) return 'bk';
   return '';
+}
+/* Why the board will not offer "Email, pre-filled" on this lead, or ''. Reads verdicts the board
+   already has (the any-channel block, the diligence hold, the bankruptcy flag, a sibling claim, a dead
+   or flipped owner, a passed sale, a wrong-owner mark). It produces none: Call Mode's mailCheck and
+   the send bridge's ledger, bounce and stay checks still decide the send. */
+function _boardMailHeld(r){
+  const n = notes[r.case]||{};
+  const b = _textContactBlocked(r);
+  if(b === 'optout') return 'opted out / do not contact';
+  if(b === 'wrong' || n.wrongown) return 'wrong person';
+  if(b === 'bk' || r.saleBkAct) return 'bankruptcy stay';
+  if(r.ddhold) return 'diligence hold';
+  if(r.sibclaimed) return 'claimed on another case';
+  if(r.client) return 'existing client';
+  if(typeof isFlaggedDead === 'function' && isFlaggedDead(r)) return 'owner gone';
+  if(_aucPassed(r)) return 'sale passed';
+  return '';
+}
+/* Why the board will not offer a WRITTEN channel (Text, WhatsApp, a plain mailto: link) on this lead
+   for one of the holds the any-channel block does not already cover, or ''. It only reads
+   _boardMailHeld and keeps its four non-suppression answers (existing client, diligence hold, claimed
+   on another case, owner gone / transferred). It produces no verdict of its own. 'sale passed' and the
+   three suppression answers keep their existing handling. The Call button is not decided here. */
+function _boardWrittenHeld(r){
+  const h = _boardMailHeld(r);
+  return (h === 'existing client' || h === 'diligence hold' || h === 'claimed on another case' || h === 'owner gone') ? h : '';
+}
+/* Hand the address to Call Mode without putting it in the URL: same origin, so localStorage carries
+   {c, to, ts} and the link carries only the case number. Call Mode drops a handoff older than 10
+   minutes or for another case. Returns true so the link navigates. */
+function _cmMail(a){
+  try{ localStorage.setItem('fcMailTo', JSON.stringify({c:a.getAttribute('data-c'), to:a.getAttribute('data-em'), ts:Date.now()})); }catch(e){}
+  try{ a.href = _callModeUrl() + '#mail=' + encodeURIComponent(a.getAttribute('data-c')) + '&t=' + Date.now().toString(36); }catch(e){}
+  return true;
 }
 // ANY-CHANNEL contact gate (2026-08-11 deep sweep). _textContactBlocked was enforced on the text
 // and WhatsApp paths only, so an owner who opted out, was marked DO NOT CONTACT / wrong person, or
@@ -3795,7 +3871,7 @@ function _contactLineHtml(r, ph, opts){
   // of keeping these numbers); only the written, owner-addressed message is withheld.
   // 'wpm' (pasted from whitepages.com on a Call Mode card) is call-only too, until a call on it
   // reaches a person: same rule as a Whitepages likely-owner number (Alejandro, 2026-10-22).
-  const _srcOwner = ['hh','nm','ag','xl','wpm'].indexOf(String(opts.src||'')) < 0;
+  const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0; // 'wpm' removed 2026-11-02: pasted Whitepages numbers are textable
   const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
@@ -3904,11 +3980,22 @@ function _contactBlockHtml(r){
   h += _messagesBarHtml(r);
   if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
-  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  // No plain mailto: link while the board holds the lead (client, diligence hold, claimed, owner gone).
+  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=> _boardWrittenHeld(r) ? esc(e) : '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
   // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
-  // Shown, never fed to the worker's auto-send list: that list is the traced `emails` and stays so.
+  // Shown as text, never as a mailto link and never fed to the worker's auto-send list.
+  // Sending one is Call Mode's POST /send. A mailto here would leave from this browser's account.
+  // 2026-11-02 (Alex: "a direct link to email from the board routing the specific property to the
+  // searched up one"): each one gets "Email, pre-filled", which opens THIS lead in Call Mode's
+  // composer for THAT address (_cmMail below). Still Call Mode's POST /send, never a mailto. Hidden
+  // while the board itself holds the lead (_boardMailHeld); Call Mode and the bridge check again.
   const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0);
-  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card">Whitepages, pasted</span></span></div>';
+  const _mh = _boardMailHeld(r);
+  if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(function(e){
+      return esc(e) + (_mh ? '' : ' <a class="cmmail" href="'+esc(_callModeUrl())+'#mail='+encodeURIComponent(r.case)+'" target="dfcall" data-c="'+esc(r.case)+'" data-em="'+esc(e)+'" onclick="return _cmMail(this)" title="Opens this property in Call Mode with the email to this address already written. It sends from the company address through the laptop send bridge, after the opt-out, bounce and stay checks.">&#9993; Email, pre-filled</a>');
+    }).join(' · ')+' <span class="cttag" title="Pasted from whitepages.com on a Call Mode card. Sending it is the Call Mode bridge send.">Whitepages, pasted</span>'
+    + (_mh ? ' <span class="cttag dnc" title="'+esc(_mh)+'">no email: '+esc(_mh)+'</span>' : '')
+    + '</span></div>';
   h += _csPeople(r);
   return h;
 }
@@ -4189,24 +4276,77 @@ const STATUS_OPTS = ['','Letter sent','Skip-traced','Called - no answer','Called
   'CLOSED','Lost - sold at auction','Dead','DO NOT CONTACT'];
 // Terminal states worth date-stamping so the funnel can be measured over a real time window.
 const _OUTCOME_STATES = ['Offer made','Under contract','Assigned','CLOSED','Lost - sold at auction'];
+// AFTER-THE-YES (2026-10-29). Call Mode's after-the-yes panel writes onto notes[case]: status = stage,
+// stageAt{stage:'YYYY-MM-DD'} (first date reached), nextStep{date,what} (mirrored to n.next),
+// equityVerified{ok,source,d}, keepOrSell, afterYesAt. Read-only here: counts and a list, nothing is sent.
+const _AY_OPEN = ['Appointment','Offer made','Under contract','Assigned'];   // deal in motion, needs a dated next step
+const _AY_LADDER = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
+// The dated next step on a note: nextStep.date, else the mirrored/legacy n.next. '' when none/invalid.
+function _nextStepDate(n){
+  if(!n) return '';
+  const ok = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d||'')) ? String(d) : '';
+  return ok(n.nextStep && n.nextStep.date) || ok(n.next);
+}
+// Highest ladder rung a lead has reached, by status OR by the stageAt stamps (a lead that reached
+// Appointment and was later marked Dead still reached it). -1 = never.
+function _ayRung(n){
+  if(!n) return -1;
+  let top = _AY_LADDER.indexOf(n.status||'');
+  const sa = n.stageAt;
+  if(sa && typeof sa === 'object') _AY_LADDER.forEach(function(st, i){ if(sa[st] && i > top) top = i; });
+  return top;
+}
+// Open follow-ups whose next step date has passed, oldest first. Open = a conversation-or-later lead
+// that is not closed out, opted out or the wrong person. Day math is calendar days on the YYYY-MM-DD
+// strings, so it does not drift with the time zone. todayStr is injectable for tests.
+const _FU_OPEN = ['Called - talked','Door - spoke','Contacted','Callback','Gatekeeper'].concat(_AY_OPEN);
+function _overdueFollowups(nts, todayStr){
+  const out = [];
+  const day = s => { const p = String(s).split('-'); return Date.UTC(+p[0], +p[1]-1, +p[2]) / 86400000; };
+  const t = day(todayStr || _today());
+  Object.keys(nts||{}).forEach(function(c){
+    if(c.charAt(0) === '@' || c.charAt(0) === '#') return;
+    const n = nts[c]; if(!n || _FU_OPEN.indexOf(n.status||'') < 0) return;
+    try{ if(_effOptout(n).out || _isWrongOwner(n)) return; }catch(e){ return; }   // unreadable = leave it off the list
+    const d = _nextStepDate(n); if(!d || d >= (todayStr || _today())) return;
+    out.push({c:c, date:d, days:Math.round(t - day(d)), stage:n.status, what:String((n.nextStep && n.nextStep.what) || '').slice(0,120)});
+  });
+  out.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.c < b.c ? -1 : 1); });
+  return out;
+}
 // Funnel counts for the current board. Attempts = any logged status at all; the rest are ladder
 // positions AT OR BEYOND that rung, so a CLOSED deal still counts as a contact and a contract.
-function _funnelStats(){
-  const s = {attempts:0, contacts:0, appointments:0, offers:0, contracts:0, closes:0, revenue:0};
-  const CONTACTED = ['Called - talked','Door - spoke','Appointment','Offer made','Under contract','Assigned','CLOSED'];
-  const APPT      = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
-  const OFFER     = ['Offer made','Under contract','Assigned','CLOSED'];
-  const CONTRACT  = ['Under contract','Assigned','CLOSED'];
+// After-the-yes additions: a stageAt stamp counts a rung even if the status moved on (e.g. to Dead),
+// and openDeals / noNext / overdue say whether the deals in motion each have a dated next step.
+function _funnelStats(todayStr){
+  const s = {attempts:0, contacts:0, appointments:0, offers:0, contracts:0, closes:0, revenue:0,
+             openDeals:0, noNext:0, overdue:0, apptUnverified:0};
+  // Call Mode writes its own status words ('Contacted' on Talked, 'Callback', 'Not interested' on a
+  // soft no). Each one means a human answered, so each is a contact (PR #364).
+  const CONTACTED = ['Called - talked','Contacted','Callback','Not interested','Door - spoke','Appointment',
+                     'Offer made','Under contract','Assigned','CLOSED'];
+  const td = todayStr || _today();
   try{
     Object.keys(notes||{}).forEach(function(c){
-      const st = (notes[c]||{}).status || '';
-      if(!st) return;
+      if(c.charAt(0) === '@' || c.charAt(0) === '#') return;
+      const n = notes[c]||{};
+      const st = n.status || '';
+      const rung = _ayRung(n);                 // 0 Appointment .. 4 CLOSED, -1 never
+      if(!st && rung < 0) return;
       s.attempts++;
-      if(CONTACTED.indexOf(st) > -1) s.contacts++;
-      if(APPT.indexOf(st)      > -1) s.appointments++;
-      if(OFFER.indexOf(st)     > -1) s.offers++;
-      if(CONTRACT.indexOf(st)  > -1) s.contracts++;
-      if(st === 'CLOSED'){ s.closes++; s.revenue += (+(notes[c].closedAmt) || 0); }
+      if(CONTACTED.indexOf(st) > -1 || rung > -1) s.contacts++;
+      if(rung >= 0) s.appointments++;
+      if(rung >= 1) s.offers++;
+      if(rung >= 2) s.contracts++;
+      if(st === 'CLOSED'){ s.closes++; s.revenue += (+(n.closedAmt) || 0); }
+      if(n.apptUnverified) s.apptUnverified++;
+      let _held = false;
+      try{ _held = _effOptout(n).out || _isWrongOwner(n); }catch(e){ _held = true; }
+      if(_AY_OPEN.indexOf(st) > -1 && !_held){
+        s.openDeals++;
+        const d = _nextStepDate(n);
+        if(!d) s.noNext++; else if(d < td) s.overdue++;
+      }
     });
   }catch(e){}
   return s;
@@ -4259,8 +4399,8 @@ function _effOptout(n){
 }
 // ---- WRONG-PERSON state (identity, not consent) --------------------------------------------------
 // Distinct from an opt-out on purpose. An opt-out kills the LEAD (the owner said stop). This kills
-// the CONTACT INFO while the deal stays alive: 1328 NW 7TH ST is still $535k against a $257k
-// judgment — we just had the wrong Nelson Hernandez. Derived from the audit ledger so it survives a
+// the CONTACT INFO while the deal stays alive: 100 NW 1 ST is still $535k against a $257k
+// judgment — we just had the wrong Owner Example. Derived from the audit ledger so it survives a
 // status change and rides the team sync; 'wrong-cleared' reverses it once the owner is re-verified.
 function _isWrongOwner(n){
   if(!n) return false;
@@ -4462,6 +4602,8 @@ function _funnelStage(r){
   var st = String(n.status||'').toUpperCase();
   // ---- suppression first. These are legal walls, not preferences, and they outrank the money.
   if(r.sibclaimed || r.saleBkAct) return 'out';
+  // EXISTING CLIENT (clients.py): not a lead, so in no lane. Not a suppression verdict either.
+  if(r.client) return 'out';
   // The foreclosure was DISMISSED — the owner reinstated, refinanced, sold, or the bank withdrew.
   // There is nothing to call about. 8 of the 125 fresh filings are in this state; without the
   // check they sit in EARLY looking like opportunities and somebody phones a homeowner about a
@@ -4478,7 +4620,7 @@ function _funnelStage(r){
   if((d != null && d < 0) || _aucPassed(r)) return 'out';
 
   // ---- someone actually talked to us. Nothing outranks that, not even a closer auction.
-  if(ts.some(function(t){ return /spoke|talked|callback|interested/i.test(t.out||''); })) return 'warm';
+  if(ts.some(function(t){ return /spoke|talked|callback|interested|appointment/i.test(t.out||''); })) return 'warm';
 
   var has = function(ch){ return ts.some(function(t){ return t.ch === ch; }); };
   var reachablePhone = (r.phones||[]).length > 0;
@@ -4810,7 +4952,7 @@ function _debtStack(r){
         .map(l=>esc(l.party||'?')+' '+fm(l.amt)+(l.d?' <span class="dsclosed-d">('+esc(String(l.d).slice(0,10))+')</span>':'')).join(' · ')+'</div>';
   }
   // ASSIGNMENT WARNING — the position guess above anchors on "face amount closest to the judgment".
-  // That silently breaks when the note was SOLD: on 525 W 79 Pl the 2005 New Century loan was
+  // That silently breaks when the note was SOLD: on 100 NW 1 Pl the 2005 New Century loan was
   // assigned to JPMorgan Chase in 2015, so Chase forecloses THAT loan — but the guess picked the
   // 2007 WaMu loan and mislabelled a $142,500 wiped loan as a surviving senior. The tell is cheap:
   // if the plaintiff's name matches NONE of the open lienholders, the note moved and the ordering
@@ -5018,7 +5160,9 @@ function _csPlay(r){ const p=r&&r._play; if(!p) return '';
    row. One click emails Jesse the whole file through the local bridge; bridge down -> Gmail opens
    pre-filled instead. Recipient HARDCODED — this can never email an owner. NOT logged as a touch
    (briefing your own advisor is not contact with the lead); doclog only. */
-var _JESSE = 'celusa13@gmail.com';
+// The advisor's address is NOT in this file: the build seals it (side.advisor) from the untracked
+// footprint.local.json and _applyPayload() sets it on unlock. Blank means "not set on this build".
+var _JESSE = "";
 function _advisorBrief(r){
   var money = function(v){ v = +v || 0;
     return v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : '$' + Math.round(v).toLocaleString(); };
@@ -5086,10 +5230,12 @@ function briefJesse(caseId){
   var subj = (r.addr || r.case) + ' — live call brief';
   var mailtoFallback = function(){
     var a = document.createElement('a');
-    a.href = 'mailto:' + _JESSE + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body.slice(0, 1500));
+    a.href = 'mailto:' + (_JESSE || '') + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body.slice(0, 1500));
     a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    if(typeof _shareToast === 'function') _shareToast('Bridge down — Gmail opened pre-filled, hit Send');
+    if(typeof _shareToast === 'function') _shareToast(_JESSE ? 'Bridge down — Gmail opened pre-filled, hit Send'
+      : 'Advisor address not set on this build — Gmail opened pre-filled, pick the recipient');
   };
+  if(!_JESSE){ mailtoFallback(); return; }
   fetch('http://127.0.0.1:8823/send', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({to: _JESSE, subj: subj, body: body,
@@ -5111,7 +5257,7 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
     + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — door folder + office forms + deed cards. Forms print directly; the quit claim deed is locked pending attorney review.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
-    + '<button type="button" class="csactbtn csact-field" onclick="briefJesse(\''+caseEsc+'\')" title="BRIEF JESSE — one click, mid-call. Emails Jesse (celusa13@gmail.com) everything he always asks: plaintiff, bank vs HOA, owed + accrual, equity, sale date, staller count, surviving liens, listing + agent, case + folio + links. Sends through the local bridge; if the bridge is down it opens Gmail pre-filled instead. Recipient is hardcoded — this can never email an owner.">⚡ Brief Jesse <span class="csactsub">live call</span></button>'
+    + '<button type="button" class="csactbtn csact-field" onclick="briefJesse(\''+caseEsc+'\')" title="BRIEF JESSE — one click, mid-call. Emails Jesse everything he always asks: plaintiff, bank vs HOA, owed + accrual, equity, sale date, staller count, surviving liens, listing + agent, case + folio + links. Sends through the local bridge; if the bridge is down it opens Gmail pre-filled instead. Recipient is hardcoded — this can never email an owner.">⚡ Brief Jesse <span class="csactsub">live call</span></button>'
     + (function(){ var rep=_isReplied(r);
         return '<button type="button" class="csactbtn'+(rep?' csact-save on':'')+'" onclick="_markReplied(\''+caseEsc+'\',event)" '
           + 'title="Flag that this owner WROTE BACK. A reply is the warmest signal on the board — it jumps them to the top of the Reply inbox, ahead of every score and tier. Works with no setup; replies.py fills this in automatically once gmail.key holds a real App Password.">'
@@ -5152,7 +5298,7 @@ function _wpNameUrl(r){ if(r.co) return '';
   return 'https://www.whitepages.com/name/'+_wpSlug(n)+'/'+(c?c+'-FL':'FL');
 }
 function _wpStreet(street){
-  // Whitepages spells its own links "2929 NW 123rd Ter Apt B105"; ours ("2929 NW 123 TER #B105")
+  // Whitepages spells its own links "100 NW 1st Ter Apt B105"; ours ("100 NW 1 TER #B105")
   // lands on the city's property list instead of the house. Same rules as wp_web._wp_street and
   // Call Mode's fileLinks (parity pinned by _wplinktest).
   const SUF={st:1,ave:1,ct:1,ter:1,dr:1,rd:1,ln:1,pl:1,blvd:1,way:1,cir:1,pkwy:1,hwy:1,trl:1,
@@ -5249,6 +5395,9 @@ function _callSheet(r){
     (r.hs?' <span class="cstag ok">HOMESTEAD</span>':'')+
     (_nameBroken(r)?' <span class="cstag warn">name incomplete</span>':'')+'</div>'+
     '<div class="cscase">Case '+esc(r.case)+' · '+esc(r.county||'MIAMI-DADE')+' · folio '+esc(r.folio||'—')+'</div>'+_csScout(r)+'</div>';
+  // F-site-08: the equity chip (state + may quote / do not quote) sits right under the address block,
+  // above every figure on the sheet. Same _eqcChip the mobile card uses; '' when the lead has no r.eqc.
+  who += _eqcChip(r);
   if(tt) who += '<div class="cstalk">🗣 <b>TALK TO '+esc(tt.name.toUpperCase())+'</b>'+(tt.rel?' — '+esc(tt.rel):'')+
     (tt.phone?' · <a href="'+esc(_telNum(tt.phone))+'">'+esc(tt.phone)+'</a>':'')+
     (tt.note?'<div class="cstn">'+esc(tt.note)+'</div>':'')+
@@ -5373,7 +5522,13 @@ function _callSheet(r){
       (s.sale?' — sale '+esc(s.sale):'')+(s.title?', Certificate of Title <b>'+esc(s.title)+'</b>':'')+
       (s.tpb?' to <b>'+esc(s.tpb)+'</b>':'')+'. The owner here no longer owns it. Do not knock, call, or mail. '+
       'Only live angle: a registry SURPLUS belongs to the former owner (FS 45.031).</div>'; })() : '';
-  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+_wpRelatives(r)+law+
+  const clientBan = r.client
+    ? '<div class="csbody csgovwarn" style="border-color:#b8860b;background:#fffbea">'+
+      '<b style="color:#8a6d00">⭐ CLIENT — EXISTING CLIENT, NOT A LEAD</b><br>'+
+      'Alejandro handles this owner directly. No cold call, text, letter, door or Whitepages search from the lead lanes. '+
+      'This is not a do-not-contact.</div>'
+    : '';
+  return '<div class="callsheet">'+who+clientBan+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+_wpRelatives(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
@@ -5548,7 +5703,11 @@ function _csDiligence(r){
         // line rendered "− tax $0" — silently subtracting zero for delinquency. Treat both undefined
         // AND explicit false as "not pulled". Only when tax_checked is TRUE do we trust the number.
         ' − tax '+ (mm.tax_checked === true ? fm(mm.tax_certs) : '<i style="color:#8a1c1c">not pulled</i>')+
-        (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
+        // F-site-08: same figure, labelled. When the baked equity card says do not quote (r.eqc present and
+        // may_quote not true) the number is the MOST it can be, as _EQ_TIP_CEIL says on the row.
+        (mm.net_equity_est!=null?(r.eqc && r.eqc.may_quote !== true
+          ? ' → at most <b>'+fm(mm.net_equity_est)+'</b>, liens not verified'
+          : ' → net est <b>'+fm(mm.net_equity_est)+'</b>'):'')+
         (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
         (mm.value_source==='active_listing'?' <span class="dilg-tag">from active listing</span>':'')+
         (mm.notes?'<div class="css" style="margin-top:4px">'+esc(mm.notes)+'</div>':'')+
@@ -5757,7 +5916,7 @@ function _copyCallSheet(c){
   // SOURCE-OF-TRUTH: same helpers the on-screen call sheet uses. Was: basis = ungated arv||val,
   // surv = raw r._chainSurv (ignored user override), NET EQUITY dropped junior lien + btax entirely.
   // Latest audit found this drift caused $6.3M misstated equity across the live board on Copy CS
-  // alone (worst single-lead case: CACE-26-002995 pasted $944,918 when actual net was $0).
+  // alone (worst single-lead case: CACE-99-000002 pasted $944,918 when actual net was $0).
   const basis = _basisOf(r), judg = _payoffOf(r), surv = +r._slien||0, jr = +r._jlien||0;
   const arv = +r.arv||0, val = +r.value||0;
   const arvUsed = (r._valsrc==='arv' && arv > 0);
@@ -6382,7 +6541,7 @@ function textablePhones(r){
   return out;
 }
 /* Greeting name for a text. Returns '' when there is no usable HUMAN first name — every template
-   below reads correctly without one ("Hi, Alejandro Gonzalez here..."). Two bugs this closes:
+   below reads correctly without one ("Hi, <Name> here..."). Two bugs this closes:
    it used to hand back the literal 'there', which is fine in English and renders "Hola there" in
    Spanish; and it took the first token of a COMPANY name, so an LLC-owned parcel opened with
    "Hi TOWERS," which tells the reader in three words that this is a blast. */
@@ -6658,9 +6817,9 @@ function _textTone(stage, days, isLP){
 }
 function _textBodies(o){
   o = o || {};
-  /* Clerk and appraiser records carry the street in capitals ("6270 NW 18 ST"), which reads like a
-     form letter in a text. Title-case it ("6270 NW 18 St"): directions and a few route prefixes stay
-     capitals, ordinals go lower ("18th"), a unit like "3B" is left alone. Anything that already has a
+  /* Clerk and appraiser records carry the street in capitals ("100 NW 1 ST"), which reads like a
+     form letter in a text. Title-case it ("100 NW 1 St"): directions and a few route prefixes stay
+     capitals, ordinals go lower ("1st"), a unit like "3B" is left alone. Anything that already has a
      lower-case letter (a placeholder like "[street]", the "your property" fallback) passes through. */
   const _streetCase = (s) => {
     s = s || '';
@@ -6841,6 +7000,7 @@ function textCardHtml(r){
   if(hardBlock==='bk') gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text, copy, or WhatsApp.</div>';
   else if(hardBlock==='optout') gate='<div class="txblock">⛔ OPTED OUT — all outreach suppressed. Do not text or copy a solicitation.</div>';
   else if(hardBlock==='wrong') gate='<div class="txblock">🚫 WRONG PERSON — these numbers are not the owner. Re-verify before any outreach.</div>';
+  else if(hardBlock==='held') gate='<div class="txblock">⛔ On hold: '+esc(_boardWrittenHeld(r))+'. Do not text.</div>';
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
@@ -7075,7 +7235,7 @@ const QUICKLOG=[
   {lbl:'\u{1f6aa} Door — spoke', ch:'door', out:'knocked, spoke with owner', status:'Door - spoke', nextDays:1},
   {lbl:'⛔ Said STOP', ch:'call', out:'asked to stop all contact', status:'DO NOT CONTACT', next:''},
   {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''},
-  // 2026-07-21 (Nelson Hernandez, 1328 NW 7TH ST Boca): he answered and said he does NOT own the
+  // 2026-07-21 (Owner Example, 100 NW 1 ST Boca): he answered and said he does NOT own the
   // property — and that ten people call him every day about it. Name-only skip-trace on a common
   // name puts a stranger's number on a lead, and every investor buying the same list dials it.
   // This flags the IDENTITY as wrong WITHOUT killing the deal: the property is still real (that
@@ -7676,7 +7836,7 @@ function _ownerOwedOf(r){
   // assessed is materially below market, so half-market over-subtracts by (market − assessed)/2.
   // Math.max(0, …) then clamps the impossible negative to zero — so `_ownerOwedOf` reported the
   // homeowner owes NOTHING, and the Lookup Deal Desk prefilled a $0 payoff on a live homestead
-  // (2026-2794TD, Belle Glade: obid $151,483 on JV $330,410 → owed came out $0). Prefer the real
+  // (2099-0001TD, Belle Glade: obid $151,483 on JV $330,410 → owed came out $0). Prefer the real
   // assessed value when the pipeline carries it; fall back to half-market only when it doesn't,
   // and expose the negative when it happens instead of silently zeroing it — that is itself proof
   // the field is wrong (taxes cannot be negative, so obid < half-of-something-real is impossible).
@@ -7723,7 +7883,7 @@ function _netEqOf(r){
   // true at a foreclosure sale, a fantasy at a tax deed, where the parcel is auctioned to the highest
   // bidder and an equity parcel gets run up toward market. You cannot win a $2.6M Delray house for its
   // $91,393 opening. Measured on the live board, the paper number overstated the deal analyzer's own
-  // model by up to $2,023,300 on a single lead (2026-2799TD: row $2,548,223 vs modeled $524,923).
+  // model by up to $2,023,300 on a single lead (2099-0002TD: row $2,548,223 vs modeled $524,923).
   // recompute() already models the realistic winning bid (max of opening+markup and clearPct of
   // market) and nets quiet title, carry and surviving municipal liens — so use that number here and
   // let every surface, message and export quote the same honest figure.
@@ -8128,13 +8288,13 @@ function _isUnitAddr(r){
   if(/\b(APT|UNIT|STE)\s*[\w-]+/i.test(a)) return true;
   if(/#\s*[\w-]+/.test(a)) return true;
   // THE DOMINANT PATTERN IN THIS DATA has no APT/UNIT/# keyword at all — the unit number simply
-  // trails the street-type token before the comma. Real examples off the live board:
-  //   "1101 SW 122 AVE 307, MIAMI"      -> unit 307
-  //   "10831 NW 7 ST 9-14, MIAMI"       -> unit 9-14
-  //   "3964 ESTEPONA AVE 5-D-3, DORAL"  -> unit 5-D-3
-  //   "6441 SW 116 CT E97, MIAMI"       -> unit E97
-  //   "18021 BISCAYNE BLVD 1902-2"      -> unit 1902-2
-  // A plain house ends at the street type: "8923 SW 206 ST, MIAMI" -> no unit.
+  // trails the street-type token before the comma. Example shapes (invented values):
+  //   "100 NW 1 AVE 307, MIAMI"        -> unit 307
+  //   "100 NW 1 ST 9-14, MIAMI"        -> unit 9-14
+  //   "100 EXAMPLE AVE 5-D-3, DORAL"   -> unit 5-D-3
+  //   "100 NW 1 CT E97, MIAMI"         -> unit E97
+  //   "100 EXAMPLE BLVD 1902-2"        -> unit 1902-2
+  // A plain house ends at the street type: "100 NW 1 ST, MIAMI" -> no unit.
   if(/\b(ST|AVE|BLVD|CT|TER|LN|DR|PL|WAY|RD|CIR|PKWY|HWY|PLZ|TRL|LOOP)\.?\s+[\w-]+\s*(?:,|$)/i.test(a)) return true;
   return !!(r && r.condo);
 }
@@ -8530,7 +8690,7 @@ function _openHashDeal(){
   }, 300);
 }
 // Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
-// number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
+// number itself — MD `2099-000001-CA-01`, PB `502099CA000001…`, BW `CACE-99-000001` all encode it.
 function _filedYear(r){
   var v = (r && r.filed);
   // county rows carry a bare year number; LP rows carry '8/7/2026' — +string is NaN, so pull the
@@ -9231,7 +9391,7 @@ function _docLog(caseId, key, lang){
 // not backgrounds, so they survive print without color-adjust.
 // The inbox that goes on paper a homeowner, servicer or opposing counsel receives (Jose,
 // 2026-08-08). Deliberately NOT sender.email — that is the signature contact on outreach
-// mail (alejandro@bsgflorida.com unless the operator saved a different address). This
+// mail (the sender.json email unless the operator saved a different address). This
 // client-paper inbox is a separate value. Do not collapse the two.
 // The company inbox, injected at build time from sender.json `client_email` -- it used to be this
 // literal in THREE files, which is three chances to change two of them. It still carries the OLD
@@ -9360,7 +9520,7 @@ function _docShell(title, bodyHtml, opts){
     + '.fmcap{font:8.5pt Arial,sans-serif;color:#5A6472;letter-spacing:.05em;margin-top:4px}'
     + BSG_LH_CSS
     + '@media print{.noprint{display:none}body{background:#fff}.doc{box-shadow:none;margin:0;padding:24px 32px}}'
-    + '</style></head><body>'
+    + '</style>' + (opts.screen ? '<script>' + _bridgeSrc() + '<\/script>' : '') + '</head><body>'
     + '<div class="bar noprint"><button onclick="window.print()">Print / Save as PDF</button>'
     + (opts.note ? '<span style="color:#F4E5A7;font-size:12px">'+esc(opts.note)+'</span>' : '')
     + '<span class="stamp">'+stamp+'</span></div>'
@@ -11408,7 +11568,7 @@ function genDialReady(r){
   // board acknowledges. The old honest-stamp version still trusted a live-looking opener — a
   // RELOADED board (nightly refresh) kept closed===false while eating the message. Now: ⏳ on tap,
   // ✓ on ack, two silent re-posts, then the bridge fallback with the truthful ⚠/✗ label.
-  var outcomeScript = '<script>var _PEND={},_SEQ=0;'
+  var outcomeScript = '<script>' + _bridgeSrc() + 'var _PEND={},_SEQ=0;'
     + 'window.addEventListener("message",function(ev){'
     +   'if(ev.source!==window.opener)return;'
     +   'var a=ev&&ev.data&&ev.data.workerAck;if(!a||!_PEND[a])return;'
@@ -12382,7 +12542,7 @@ function _replyWaiting(r){
   }
   if(answered) return null;
   var age = whenMs ? Math.max(0, Math.floor((Date.now()-whenMs)/86400000)) : null;
-  // owners often type their number INTO the reply ("call me at 305 909 3711") — mine it.
+  // owners often type their number INTO the reply ("call me at 305 555 0142") — mine it.
   var m = String(rep.note||'').replace(/[^ -~]/g,' ').match(/(\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}/);
   return {when:rep.when||'', ageDays:age, note:rep.note||'', phone:(m?m[0].replace(/[^\d]/g,'').replace(/^1/,''):'')};
 }
@@ -12653,7 +12813,7 @@ function genProofSheet(scope){
     +   '</div>'
     +   ((typeof REPLIES === 'undefined' || !REPLIES || !Object.keys(REPLIES).length)
           ? '<div class="pfnote"><b>Reply tracking is not live yet.</b> Every send below reads "awaiting reply" because nothing is checking the inbox. '
-            + 'To turn it on: create <code>gmail.key</code> in the repo (one line, <code>you@gmail.com:APP_PASSWORD</code> from a Google App Password) '
+            + 'To turn it on: create <code>gmail.key</code> in the repo (one line, <code>you@example.com:APP_PASSWORD</code> from a Google App Password) '
             + 'and run <code>python replies.py</code>. It never guesses a reply it has not actually seen.</div>'
           : '')
     +   '<div class="pfsec">What was sent — verbatim</div>'
@@ -12698,7 +12858,7 @@ function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||
 // what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
 // /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
 var _liveCap = null, _liveCapAt = 0;
-// Texting hold (text_hold.py, 2026-10-07 — was the Quo inbound scan; Quo is gone). HELD until a
+// Texting hold (text_hold.py, 2026-10-07; no inbound text scan runs any more). HELD until a
 // successful /health says text_hold is false: the bridge confirms the do-not-contact list is fresh
 // and runs the §362 check on every confirmed text. Bridge down is a hold.
 var TEXT_HOLD_DOWN = 'Texting is held: the send bridge is not running, so the do-not-contact list and the bankruptcy check cannot be confirmed. Start the send bridge on the laptop.';
@@ -13310,6 +13470,10 @@ function _autoRunLane(){
 }
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
+function _workerLookupUrl(r){
+  // Reuse the parcel detail link already verified and baked by the Whitepages merge.
+  return (r.wpPropId ? _wpPropUrl(r) : '') || _wpAddrUrl(r) || r.peopleaddr || r.people || _wpNameUrl(r) || '';
+}
 function _workerCard(r){
   var f = _docFields(r); var days = _saleDays(r); var chip = (r.st==='BAL' && r.bal) ? _balloonChip(r.bal.days) : _urgencyChip(days);
   var phList = _workerPhones(r);
@@ -13335,7 +13499,7 @@ function _workerCard(r){
     // needs nothing but the fields every lead already carries, so fall through to the reverse-
     // ADDRESS page (household landline, residents, relatives) and then the NAME page.
     phones: phList, emails: emList,
-    wpUrl: r.peopleaddr || r.people || _wpAddrUrl(r) || _wpNameUrl(r) || '',
+    wpUrl: _workerLookupUrl(r),
     // SMS BAKED PER CARD, for exactly the reason the Gmail URL is (see below). The old text step
     // posted to the board and the BOARD opened a modal — so the composer appeared on a tab the
     // operator was not looking at, the log literally said "switch tabs to send", and he never
@@ -13654,6 +13818,17 @@ function genMorningWorker(lane, autostart){
     +   '.mwblocked h2{margin:0 0 9px;font:800 21px "Segoe UI",Arial,sans-serif;color:#8a1c1c}'
     +   '.mwblocked p{color:#5b6472;font-size:13.5px;line-height:1.6;margin:8px 0}'
     +   '#mwrfs{border-radius:8px;margin:0 0 10px}'
+    // SEND TO CALL MODE (2026-10-26): the button fills left to right as marks go out, a phone flies
+    // off its right edge, and the done state turns it green with the count.
+    +   '#mwsendcm{position:relative;overflow:hidden;display:block;width:100%;margin:0 0 8px;padding:11px 14px;border:0;border-radius:8px;background:#0B2A17;color:#CFF3DC;font:800 13.5px \'Segoe UI\',Arial,sans-serif;cursor:pointer}'
+    +   '#mwsendcm .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(80,200,120,.35);transition:width .25s ease}'
+    +   '#mwsendcm .lbl{position:relative}'
+    +   '#mwsendcm.done{background:#1f7a44;color:#fff}'
+    +   '#mwsendcm.busy{cursor:progress}'
+    +   '.mwfly{position:absolute;top:50%;left:12%;font-size:20px;transform:translateY(-50%);animation:mwfly .9s ease-in forwards;pointer-events:none}'
+    +   '@keyframes mwfly{0%{left:12%;opacity:1;transform:translateY(-50%) scale(1)}100%{left:96%;opacity:0;transform:translateY(-90%) scale(1.5)}}'
+    +   '#mwsendcmmsg{display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#eaf6ee;color:#14391f;font:600 12.5px/1.5 \'Segoe UI\',Arial;animation:mwin .35s ease-out}'
+    +   '@keyframes mwin{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:none}}'
     + '</style>'
     + '<div class="mw">'
     // The page strip (dealflow_nav.ITEMS order). This worker is a blob: tab of its own, so every
@@ -13714,6 +13889,13 @@ function genMorningWorker(lane, autostart){
     // CALL MODE, always reachable — it used to appear only after a whole auto-run finished, so the
     // one surface that starts real conversations was buried behind the email queue. A real anchor
     // (not window.open) so the popup blocker has no say.
+    // SEND TO CALL MODE (2026-10-26, Alex: "a button that says send over to call mode ... whenever
+    // you want"). Hands every phone-only lead the worker holds (Call list, text batch, and the
+    // phone-only cards in today's lanes) to Call Mode on demand, the same way an auto-run callq
+    // does: a mark to the board, which stamps the synced .wq note. No bridge needed; the phones
+    // pick it up on their next team sync and show it at the top of the Worker lane.
+    +   '<button type="button" id="mwsendcm"><span class="fill"></span><span class="lbl">&#128229; SEND TO CALL MODE</span></button>'
+    +   '<div id="mwsendcmmsg"></div>'
     +   '<a href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener" '
     +     'style="display:block;text-align:center;text-decoration:none;margin:0 0 14px;padding:11px 14px;'
     +     'border-radius:8px;background:#286c34;color:#fff;font:800 13.5px \'Segoe UI\',Arial,sans-serif">'
@@ -13768,6 +13950,8 @@ function genMorningWorker(lane, autostart){
     + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
+    // the "Find a number" panel's leads (no phone, no email), by case only, for Send to Call Mode
+    +   'var LKCASES=' + JSON.stringify((function(){ try{ return _workerLookupRows().slice(0, 60).map(function(r){ return r.case; }); }catch(e){ return []; } })()) + ';'
     +   'var TEXTTPL=' + (function(){ try{ return JSON.stringify(_textTplSamples()); }catch(e){ return '{}'; } })() + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
@@ -14137,6 +14321,46 @@ function genMorningWorker(lane, autostart){
     +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||"", pcs:(r.pcs||[])});'
     +     'renderTextQ();'
     +   '}'
+    /* SEND TO CALL MODE. The set: the Call list, the text batch, and every card in today's lanes that
+       has a phone and no email this worker can send (no address, replied, 3 sent, or held by the
+       first-touch rule). One "callq" mark per case, with hand:1 so the board logs it as a hand-off.
+       Nothing is sent to anyone and nothing is retired; Call Mode's own gates (DNC, stay, opt-out,
+       seat) still decide what is dialable. Marks go out in small batches so the fill animates and a
+       board tab under background throttling is not handed a few hundred messages in one tick. */
+    +   'function _cmSet(){'
+    +     'var seen={}, out=[];'
+    +     'function add(c){ if(c && !seen[c]){ seen[c]=1; out.push(c); } }'
+    +     'CALLQ.forEach(function(x){ add(x.c); }); TEXTQ.forEach(function(x){ add(x.c); });'
+    +     'Object.keys(LANES||{}).forEach(function(k){ (LANES[k]||[]).forEach(function(r){'
+    +       'if(r && r.c && r.phones && r.phones.length && !r.mailTo) add(r.c); }); });'
+    // no phone, no email: these land on Call Mode's "Find a number" list (Whitepages, type the number
+    // or address), Morning Worker picks first. Counted apart so the message says which is which.
+    +     'var nph=out.length; (typeof LKCASES!=="undefined"?LKCASES:[]).forEach(add); out.nph=nph;'
+    +     'return out;'
+    +   '}'
+    +   'var CMBUSY=false;'
+    +   'function sendToCallMode(btn){'
+    +     'if(CMBUSY) return; var cs=_cmSet(), msg=document.getElementById("mwsendcmmsg"), lbl=btn.querySelector(".lbl"), fill=btn.querySelector(".fill");'
+    +     'if(!cs.length){ msg.style.display="block"; msg.textContent="Nothing to send yet: no phone-only leads in the Call list, the text batch or today\u2019s lanes."; return; }'
+    +     'CMBUSY=true; btn.classList.remove("done"); btn.classList.add("busy"); msg.style.display="none";'
+    +     'var n=0, ok=0, B=10;'
+    +     'function fly(){ var f=document.createElement("span"); f.className="mwfly"; f.textContent="\ud83d\udcde"; btn.appendChild(f); setTimeout(function(){ try{f.remove();}catch(e){} },950); }'
+    +     'function step(){'
+    +       'var end=Math.min(cs.length, n+B);'
+    +       'for(; n<end; n++){ if(post("callq", {qc:cs[n], hand:1})) ok++; }'
+    +       'fill.style.width=Math.round(100*n/cs.length)+"%"; lbl.textContent="Sending "+n+" of "+cs.length+"\u2026"; fly();'
+    +       'if(n<cs.length) return setTimeout(step, 120);'
+    +       'CMBUSY=false; btn.classList.remove("busy"); btn.classList.add("done");'
+    +       'lbl.textContent="\u2713 "+cs.length+" sent to Call Mode \u00b7 tap to send again";'
+    +       'setTimeout(function(){ fill.style.width="0"; }, 1200);'
+    +       'msg.style.display="block";'
+    +       'msg.innerHTML= ok===cs.length'
+    +         '? "<b>"+cs.length+" leads handed to Call Mode</b> ("+(cs.nph||0)+" to call, "+(cs.length-(cs.nph||0))+" to look up on Whitepages under <b>Find a number</b>). Each is on one phone only, yours or Carlos\u2019s, split by household; owners who replied are on yours. They sit at the top of the <b>Worker</b> lane within about a minute (open Call Mode or switch back to it to pull now). DNC numbers, stay holds and opt-outs are still kept off the dial list."'
+    +         ': "<b>"+ok+" of "+cs.length+" reached the board.</b> The board tab is closed or reloading, so "+(cs.length-ok)+" are buffered and go through when it is back. Keep the board tab open.";'
+    +       'addLog("callq","Call Mode",cs.length+" phone-only lead(s) sent to Call Mode by the button");'
+    +     '}'
+    +     'step();'
+    +   '}'
     /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
        Reported 2026-09-20: "WHEN I PRESS ON THE CALL KEEP THE DETAILS OF THE PROPERTY THERE FOR ME
        TO READ OFF IT BECAUSE WHEN I PREWSS ON IT IT DISAPPEARS AND I CANNOT SEE ANYTHING."
@@ -14458,7 +14682,8 @@ function genMorningWorker(lane, autostart){
     // button calls doSend directly, so the guard lives here too: a second request while one's
     // outcome is unknown would draw a 409 "skip" on a lead that was really sent.
     +     'if(sendInFlight()){ addLog("fail", r.first||r.owner, "a send is still waiting for the bridge — its outcome is not known yet, so this one was not sent. Nothing was marked.", "warn"); return; }'
-    +     'var qc=r.c, _seq=++SENDSEQ;'
+    // Stop clears auto while a request is pending; its rejection must retain the original mode.
+    +     'var qc=r.c, _seq=++SENDSEQ, _wasAuto=!!(auto||autoAll);'
     +     'var _live=function(){ return _seq===SENDSEQ && !!Q[i] && Q[i].c===qc; };'
     +     'sending=true;'
     +     'var _settled=false, _sto=setTimeout(function(){'
@@ -14549,9 +14774,9 @@ function genMorningWorker(lane, autostart){
     // if it drops mid-queue anyway, PAUSE rather than grinding every remaining lead through a
     // popup — same posture as the cap/auth failures above, and it leaves the whole remaining
     // queue untouched (not falsely skipped) for the next run once the bridge is back.
-    +         'if(auto){'
+    +         'if(_wasAuto){'
     +           'addLog("fail", r.first||r.owner, "send bridge went offline mid-run — pausing auto-run so nothing opens a composer. Restart send_server.py, then press Start Auto again.", "warn");'
-    +           'pause(); return;'
+    +           'if(_live() && auto) pause(); return;'
     +         '}'
     // MANUAL (operator clicked Email on this one lead): a human is right here, so the Gmail-compose
     // fallback + confirm click is legitimate — this is an ATTEMPT, never a send.
@@ -15074,7 +15299,7 @@ function genMorningWorker(lane, autostart){
     // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
     // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
     +       'if(CALLQ.length){'
-    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/dealflow-board/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/dealflow-board/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; split with Carlos by household, replies on yours &middot; outcomes sync back</span></a></div>";'
     +       '}'
     +       'main.innerHTML=doneHtml;'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
@@ -15180,6 +15405,8 @@ function genMorningWorker(lane, autostart){
     +   'if(cpl){ e.preventDefault(); return _copyDay(cpl); }'
     +   'var cpq=e.target.closest&&e.target.closest("#mwcopycallq");'
     +   'if(cpq){ e.preventDefault(); return _copyCallList(cpq); }'
+    +   'var scm=e.target.closest&&e.target.closest("#mwsendcm");'
+    +   'if(scm){ e.preventDefault(); return sendToCallMode(scm); }'
     +   'var qb=e.target.closest&&e.target.closest("[data-qbad]");'
     +   'if(qb){'
     +     'e.preventDefault();'
@@ -15188,7 +15415,7 @@ function genMorningWorker(lane, autostart){
     // to worker_notes[case].badph, drops the durable call-queue entry, and the build-time card
     // filter then removes that number from EVERY FUTURE BAKE. There was no confirmation and no undo.
     // On 2026-08-13 it fired 61 times in one day -- 20 inside the 08:09 minute alone, a click every
-    // ~3 seconds -- i.e. it was being used as "next". One of those was (954) 245-5005, whose owner
+    // ~3 seconds -- i.e. it was being used as "next". One of those was (954) 555-0100, whose owner
     // texted in that evening asking to sell a house with ~$56k of equity and six days to auction.
     // The cost of a confirmation is one tap. The cost of skipping it was nearly that lead.
     // RATE GUARD. A confirmation dialog does not survive a person in a rhythm -- they will tap
@@ -15371,6 +15598,11 @@ function genMorningWorker(lane, autostart){
     +           'if(BRIDGE_HOLD){ runlog("autostart_skipped", {why:"bridge_hold", hold:String(BRIDGE_HOLD).slice(0,60)}); addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
     +           'if(BRIDGE_OK!==true){'
     +             'runlog("autostart_skipped", {why:"bridge_not_confirmed", cause:BRIDGE_WHY||"unknown", probes:_bt+1});'
+    // ONE RETRY TOKEN (proposal, 2026-10-22; inert unless fcAutoRetry is 'true' on this profile).
+    // A bridge that was not up is the one skip worth a second unattended try: nothing was sent and
+    // nothing about the leads changed. The board's 08:30 open spends this token once; a hold, a
+    // stale board, the cap or an empty queue never write it. Same origin (blob: from the board).
+    +             'try{ var _d=new Date(), _k="dealflow_autostart_retry_"+_d.getFullYear()+"-"+String(_d.getMonth()+1).padStart(2,"0")+"-"+String(_d.getDate()).padStart(2,"0"); if(!localStorage.getItem(_k+"_used")) localStorage.setItem(_k, "1"); }catch(e){}'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'
     +           '}'
@@ -15750,6 +15982,17 @@ window.addEventListener('message', function(ev){
     // to auto-send and we do not auto-text cold leads. This is NOT a contact: no _sentAdd, no
     // autoLog (so no 72h retire), no cap charge. The lead stays eligible until a real 'callout'
     // outcome retires it. Just record the honest breadcrumb.
+    // SEND TO CALL MODE (hand:1, the worker's button). Only the synced .wq stamp: that is what the
+    // phones read. No fcCallQueue entry, because PERSISTQ re-bakes that list into tomorrow's TEXT
+    // BATCH with a cold template, and the button covers replied owners and balloon investors the
+    // auto-run deliberately never texts. No per-lead doc/worker log and one coalesced save, so a
+    // few hundred marks do not mean a few hundred full serializations of notes on this tab.
+    if(d.extra && d.extra.hand){
+      (notes[r.case] = notes[r.case] || {status:'',note:''}).wq = _today();
+      clearTimeout(window.__cmSaveT);
+      window.__cmSaveT = setTimeout(function(){ try{ save(); }catch(e){} }, 400);
+      return;
+    }
     _docLog(r.case, 'worker-callq', 'en');
     _wlog(r.case, 'callq', 'phone-only — queued to CALL (no email; nothing auto-sent, never capped)', true);
     // DURABLE now. The in-tab Call list dies with the Blob document; this ledger does not.
@@ -16551,9 +16794,9 @@ function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
 
 /* ---- SUBJECT_STYLE — 'urgent' | 'measured'. Alejandro's call, one word, in BOTH files. ---------
    'urgent'   (default, his 2026-08-28 framing):
-              URGENT: Foreclosure sale 09/22/2026 - Regarding your property at 12535 SW 33 ST
+              URGENT: Foreclosure sale 09/22/2026 - Regarding your property at 100 NW 1 ST
    'measured' (what shipped 2026-08-28 to 2026-08-30):
-              Sale date 09/22/2026 - Regarding your property at 12535 SW 33 ST
+              Sale date 09/22/2026 - Regarding your property at 100 NW 1 ST
 
    THE MEASURED FACT THAT LIVES NEXT TO THE DECISION, so it is never lost by being argued away:
    bounce rate on this channel was pulled from 28-33% down to 16.9% while the measured subject was
@@ -16824,9 +17067,9 @@ function genEmail(r, quiet){
      — that reply only reached us because replies.py also matches on
      subject. Mailing the first address alone is a coin flip on whether the owner ever sees it.
      Why BCC and never a shared To:: these are NOT all the owner's own addresses. Case
-     2025-007384-CA-01 is owned by DEBORAH C DAVIS SLADE, yet the six traced addresses include
-     shamikamiley@, wanda.smiley@ and talldadman@ — household members or relatives. A visible To:
-     would publish six strangers' addresses to each other AND tell five of them that Deborah is in
+     2099-000001-CA-01 is owned by OWNER EXAMPLE, yet the six traced addresses include
+     person1@, person2@ and person3@ — household members or relatives. A visible To:
+     would publish six strangers' addresses to each other AND tell five of them that the owner is in
      foreclosure. That is someone's private financial distress, disclosed by us, in writing.
      smtplib's send_message() delivers to Bcc recipients and strips the header, so nobody sees
      anyone else. */
@@ -17142,6 +17385,89 @@ function exportNotes(){
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
 
+/* BRIDGE-KEY-START  One helper for every call to the send bridge (bridge_auth.py, 2026-10-13).
+   A request from the bridge computer itself needs no key; anything else (a phone, the desktop, a
+   Tailscale address) must send X-Dealflow-Key. The key and the bridge address are per device, typed
+   once into the Bridge key button, kept in this browser's localStorage only. They are never baked
+   into the build, never committed, never logged. With no key set this adds NO header, so a laptop on
+   127.0.0.1 behaves exactly as before. This block is byte-identical in call_mode.py and
+   tracker_template.html; _callwiringtest.py fails if the two copies drift. */
+function _bridgeBase(){
+  var b = '';
+  try{ b = String(localStorage.getItem('dfBridgeBase') || '').trim().replace(/\/+$/, ''); }catch(e){}
+  return /^https?:\/\/[^\s\/]+(\/[^\s]*)?$/i.test(b) ? b : 'http://127.0.0.1:8823';
+}
+function _bridgeKey(){
+  try{ return String(localStorage.getItem('dfBridgeKey') || '').trim(); }catch(e){ return ''; }
+}
+function _bridgeMsg(){
+  return 'This device needs a bridge key; on the bridge PC run python bridge_auth.py add <name>';
+}
+function _bridgeDenied(){
+  var now = Date.now();
+  if(typeof window !== 'undefined' && window.__bridgeDeniedAt && now - window.__bridgeDeniedAt < 20000) return;
+  if(typeof window !== 'undefined') window.__bridgeDeniedAt = now;
+  var m = _bridgeMsg();
+  try{
+    if(typeof toast === 'function') toast(m, {bad:true, ms:6000});
+    else if(typeof _nbWarn === 'function') _nbWarn(m);
+    else if(typeof addLog === 'function') addLog('fail', '', m);
+  }catch(e){}
+}
+function bridgeFetch(path, opts, f){
+  var o = {}, h = {}, k;
+  opts = opts || {};
+  for(k in opts) o[k] = opts[k];
+  for(k in (opts.headers || {})) h[k] = opts.headers[k];
+  var key = _bridgeKey();
+  if(key) h['X-Dealflow-Key'] = key;
+  o.headers = h;
+  var go = f || (typeof window !== 'undefined' && window.__bridgeOrigFetch) || fetch;
+  return go(_bridgeBase() + path, o).then(function(r){
+    if(!r || r.status !== 401) return r;
+    return r.clone().json().then(function(j){
+      if(!j || j.blocked !== 'device_key') return r;
+      _bridgeDenied();
+      return new Response(JSON.stringify({ok:false, blocked:'device_key', err:_bridgeMsg()}),
+                          {status:401, headers:{'Content-Type':'application/json'}});
+    }, function(){ return r; });
+  });
+}
+function setBridgeKey(){
+  var had = !!_bridgeKey();
+  var v = prompt('Bridge key for THIS device (made on the bridge PC with: python bridge_auth.py add <name>). '
+               + (had ? 'A key is set. Leave blank to remove it.' : 'None set yet.'), '');
+  if(v === null) return;
+  v = String(v).trim();
+  var b = prompt('Bridge address for this device (blank = the same computer, http://127.0.0.1:8823). '
+               + 'The --base address printed when the key was made, for a phone or the desktop.', '');
+  try{
+    if(v) localStorage.setItem('dfBridgeKey', v); else localStorage.removeItem('dfBridgeKey');
+    if(b !== null){ b = String(b).trim(); if(b) localStorage.setItem('dfBridgeBase', b); else localStorage.removeItem('dfBridgeBase'); }
+  }catch(e){}
+  try{
+    if(typeof toast === 'function') toast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
+    else if(typeof _shareToast === 'function') _shareToast(v ? 'Bridge key saved on this device' : 'Bridge key removed');
+  }catch(e){}
+}
+/* Existing call sites keep their literal fetch('http://127.0.0.1:8823/...'): this wraps the page's fetch once, so
+   a call to the default bridge address gets the key, the stored address and the plain 401 message, and every
+   other URL passes through untouched. */
+function _bridgeInstall(){
+  try{
+    if(typeof window === 'undefined' || window.__bridgeOrigFetch || typeof window.fetch !== 'function') return;
+    var orig = window.fetch.bind(window);
+    window.__bridgeOrigFetch = orig;
+    window.fetch = function(u, o){
+      var s = (typeof u === 'string') ? u : '';
+      if(s.indexOf('http://127.0.0.1:8823/') === 0) return bridgeFetch(s.slice(21), o, orig);
+      return orig(u, o);
+    };
+  }catch(e){}
+}
+_bridgeInstall();
+/* BRIDGE-KEY-END */
+function _bridgeSrc(){ var nl = String.fromCharCode(10); return [_bridgeBase,_bridgeKey,_bridgeMsg,_bridgeDenied,bridgeFetch,_bridgeInstall].map(function(f){ return String(f); }).join(nl) + nl + '_bridgeInstall();' + nl; }
 /* ---- LOCAL NOTES BRIDGE (localStorage -> disk via send_server.py) ----------------------------
    Every call disposition, status, touch, the worker activity feed and the sent archive live ONLY
    in this browser's localStorage. One cleared Chrome profile = the entire call history of the
@@ -17433,6 +17759,7 @@ function openMailModal(){
 }
 (function(){ const b=document.getElementById('mailbatch'); if(b) b.addEventListener('click', openMailModal); })();
 const _DNC = s => s === 'DO NOT CONTACT';
+const _AY_STAGES = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];   // same list as send_server._AFTER_YES_STAGES
 const _DEAD = s => s === 'Dead' || s === 'DO NOT CONTACT';
 const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.touches.length-1].d || '') : '';
 function _mergeLead(local, remote){
@@ -17512,7 +17839,37 @@ function _mergeLead(local, remote){
   ch.touches = Math.max(0, tt.length - (local.touches||[]).length);
   if(tt.length) out.touches = tt;
   // follow-up: the sooner defined date
-  if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
+  if(remote.next && !_DEAD(out.status) && (!out.next || remote.next < out.next)) out.next = remote.next;   // a suppressed lead is handed no next step (D14)
+  /* AFTER THE YES (D14, mirrors send_server._merge_note). Call Mode writes stage, stageAt, nextStep,
+     equityVerified, keepOrSell, apptUnverified and afterYesAt as ONE unit; this merge used to drop
+     all of them from a teammate's copy, so their next-step dates never reached this board. The side
+     with the larger afterYesAt supplies the whole unit and its stage, so an older push never walks a
+     stage back. stageAt dates union, earliest per stage. A hard suppression (DO NOT CONTACT / Dead,
+     from either side; out.status was settled above) is never overridden and is never handed a next
+     step: the whole unit is skipped. `replied` is sticky. */
+  if(remote.replied && !out.replied){ out.replied = remote.replied; if(remote.repliedNote != null) out.repliedNote = remote.repliedNote; if(remote.repliedStop) out.repliedStop = remote.repliedStop; ch.note = true; }
+  const _lay = +local.afterYesAt || 0, _ray = +remote.afterYesAt || 0;
+  if((_lay || _ray) && !_DEAD(out.status)){
+    const _win = _ray > _lay ? remote : local;
+    if(_ray !== _lay){
+      ['nextStep','equityVerified','keepOrSell','apptUnverified'].forEach(k => { if(_win[k] != null) out[k] = _win[k]; else delete out[k]; });
+      out.afterYesAt = Math.max(_lay, _ray);
+      if(_win.nextStep && _win.nextStep.date) out.next = _win.nextStep.date;
+      if(_AY_STAGES.indexOf(_win.status) >= 0) out.status = _win.status;   // the newer save's stage; an older push never walks it back
+      ch.deal = true;
+    }
+    const _sa = {};
+    [local.stageAt, remote.stageAt].forEach(m => { if(m && typeof m === 'object') Object.keys(m).forEach(s => { if(!(s in _sa) || String(m[s]) < String(_sa[s])) _sa[s] = m[s]; }); });
+    if(Object.keys(_sa).length && JSON.stringify(_sa) !== JSON.stringify(local.stageAt || {})){ out.stageAt = _sa; ch.deal = true; }
+  }
+  /* EQUITY RE-ROUTE (2026-11-05, Call Mode's "Next step" after a call on a Has-equity lead). n.route is
+     ONE unit {k, d, ts, by[, done, dk, kn]}: the side with the larger ts supplies it whole, so a re-route
+     or a "Mailed" on one phone reaches the other. n.atty (owner has an attorney: never routed) is a
+     sticky date, earliest wins, never cleared by a merge -- the safe direction, like optout. */
+  const _lrt = (local.route && typeof local.route === 'object') ? (+local.route.ts || 0) : -1;
+  const _rrt = (remote.route && typeof remote.route === 'object') ? (+remote.route.ts || 0) : -1;
+  if(_rrt > _lrt){ out.route = remote.route; ch.note = true; }
+  if(remote.atty && (!out.atty || String(remote.atty) < String(out.atty))){ out.atty = remote.atty; ch.note = true; }
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
   // numbers pasted from Whitepages on a Call Mode card: union, so a paste on either phone survives
@@ -17520,6 +17877,21 @@ function _mergeLead(local, remote){
     const _w = [];
     (local.wpm||[]).concat(remote.wpm||[]).forEach(x => { const d = String(x||'').replace(/\D/g,''); if(d.length===10 && _w.indexOf(d)<0) _w.push(d); });
     out.wpm = _w;
+  }
+  /* numbers tagged Relative / Not sure on a Call Mode paste box (notes.wpr, [{n, k:'r'|'u', ts, by}]):
+     union by number so a tag on either phone survives; 'r' wins over 'u'. Call only: nothing on this
+     board reads wpr as an owner number (not the text batch, not the phone box). */
+  if((local.wpr||[]).length || (remote.wpr||[]).length){
+    const _rm = {}, _ro = [];
+    (local.wpr||[]).concat(remote.wpr||[]).forEach(x => {
+      if(!x || typeof x !== 'object') return;
+      const d = String(x.n||'').replace(/\D/g,'').slice(-10), k = x.k;
+      if(d.length !== 10 || (k !== 'r' && k !== 'u')) return;
+      if(_rm[d]){ if(k === 'r') _rm[d].k = 'r'; return; }
+      _rm[d] = Object.assign({}, x, {n:d}); _ro.push(_rm[d]);
+    });
+    if(JSON.stringify(_ro) !== JSON.stringify(local.wpr||[])) ch.note = true;
+    out.wpr = _ro;
   }
   // emails pasted from Whitepages on a Call Mode card (notes.wpe): union, same reason
   if((local.wpe||[]).length || (remote.wpe||[]).length){
@@ -18577,6 +18949,17 @@ function render(){
     + _kpi('Est. profit · view', fmtK(_tot), _kp.length+' profitable', 'gold')
     + _kpi('Avg ROI', _avg+'%', 'on profitable deals')
     + _fnTile;
+  // OVERDUE FOLLOW-UPS: next step date passed, oldest first (read-only; opens the call sheet via #case=)
+  try{
+    const _fo = document.getElementById('fuoverdue');
+    if(_fo){
+      const _od = _overdueFollowups(notes);
+      _fo.hidden = !_od.length;
+      _fo.innerHTML = !_od.length ? '' : '<b>Overdue follow-ups (' + _od.length + ')</b>' + (_fn.noNext ? ' &middot; ' + _fn.noNext + ' open deal(s) with no dated next step' : '')
+        + _od.slice(0,10).map(function(o){ return '<div><a href="#case='+esc(o.c)+'">'+esc(o.c)+'</a> '+esc(o.stage)+' &middot; '+o.days+' day'+(o.days===1?'':'s')+' late (was '+esc(o.date)+')'+(o.what?' &middot; '+esc(o.what):'')+'</div>'; }).join('')
+        + (_od.length > 10 ? '<div>+' + (_od.length-10) + ' more</div>' : '');
+    }
+  }catch(e){}
   // live count on the Hide-dead button so it's obvious what it tracks
   const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
   const hd = document.getElementById('hd');
@@ -18773,7 +19156,7 @@ function render(){
         mrText(r)+
         dealTrigger(r);
     }
-    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
+    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + _eqcChip(r) + prof;   // F-site-08: same do-not-quote chip as the mobile card, above the figures. TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction || (r.st==='LP' ? 'not set' : '—'))+'</div>'+
       '<div class="submeta '+(_hasClock(r) && r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</div>'+
@@ -18864,6 +19247,7 @@ function render(){
         _playBadge(r)+
         '<span class="cscore">Score '+r.score+'</span></div>'+
       '<div class="fchips">'+flagChips(r)+landChips(r)+verifyChip(r)+'</div>'+
+      _eqcChip(r)+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
@@ -19520,7 +19904,7 @@ function lkM(n){ n=+n||0; return (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocale
 function lkD(s){ s=String(s||''); return /^\d{8}$/.test(s) ? s.slice(4,6)+'/'+s.slice(6,8)+'/'+s.slice(0,4) : (s||'—'); }
 function lkFF(f){ f=String(f||'').replace(/\D/g,''); return f.length===13 ? f.slice(0,2)+'-'+f.slice(2,6)+'-'+f.slice(6,9)+'-'+f.slice(9) : f; }
 // normalize a human-typed address to Miami-Dade's terse format: 109TH->109, APT/UNIT/# dropped,
-// AVENUE->AVE, NORTHWEST->NW, etc. ("231 NW 109th Ave Apt 215" -> "231 NW 109 AVE 215")
+// AVENUE->AVE, NORTHWEST->NW, etc. ("100 NW 1st Ave Apt 2" -> "100 NW 1 AVE 2")
 function lkNorm(s){ return String(s||'').toUpperCase()
   .replace(/[.,]/g,' ')
   .replace(/\b(?:APT|APARTMENT|UNIT|STE|SUITE)\b|#/g,' ')
@@ -20016,6 +20400,15 @@ function _applyPayload(pl){
     Object.keys(dw).forEach(c => { if(SERVER_DEADS && SERVER_DEADS[c]) SERVER_DEADS[c].why = dw[c]; });
     if(Object.keys(dw).length) _applyServerDeadNotes();   // the reason only exists now — seed the note
   }catch(e){ /* a merge failure must never cost the unlock — the board still opens, text-free */ }
+  // OPERATOR IDENTITY, SEALED (2026-10-25): the real sender defaults, the advisor's address and the
+  // retired values to heal arrive here, never in the page's plaintext. Its own try: a bad identity
+  // block must cost the identity, not the lead data above or the rows below.
+  try{
+    if(side.sender && typeof side.sender === 'object'){ Object.assign(SENDER_DEFAULTS, side.sender); Object.assign(_SENDER_PH, side.sender); }
+    if(typeof side.advisor === 'string' && side.advisor) _JESSE = side.advisor;
+    if(side.retired && typeof side.retired === 'object') SENDER_RETIRED = side.retired;
+    if(side.sender || side.retired){ _rebuildSender(); if(typeof _senderBanner === 'function') _senderBanner(); }
+  }catch(e){}
   return _expireReleases((pl && pl.rows) || []);
 }
 function _greetWord(){
@@ -20195,6 +20588,14 @@ async function boot(){
      records what the board decided before it opened one (armed or not, already ran, stale, popup).
      The 8 AM key is written BEFORE the stale check, so "key present" never proved a run began.
      Counts and codes only; fire-and-forget; nothing reads it to decide. */
+  function _retryToken(){
+    try{
+      return localStorage.getItem('fcAutoRetry') === 'true'
+          && localStorage.getItem('dealflow_autostart_retry_' + _today()) === '1'
+          && !localStorage.getItem('dealflow_autostart_retry_' + _today() + '_used')
+          && new Date().getHours() < 10;
+    }catch(e){ return false; }
+  }
   function _runlog(ev, x){ try{ fetch('http://127.0.0.1:8823/runlog', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ev:ev, x:x||{}}), keepalive:true}).catch(function(){}); }catch(e){} }
   // #worker=open (Call Mode's nav link, 2026-10-24): show the worker in MANUAL mode and nothing
   // else. Never routed through the =morning branch below, which is the scheduler's auto-send path.
@@ -20232,6 +20633,22 @@ async function boot(){
           _shareToast('AUTO-RUN BLOCKED: this machine is not the armed runner. Worker opened in MANUAL mode — press Start yourself, or arm this machine only if it is the scheduled sender.');
       }catch(e){} }, 500);
       try { console.info('[dealflow] #worker=morning ignored for auto-send — fcArmedRunner not set on this device.'); } catch(e){}
+    } else if(_already && _retryToken()){
+      /* SECOND TRY AFTER A BRIDGE THAT WAS NOT UP (proposal, 2026-10-22, OFF by default).
+         Only when this profile is armed for it (fcAutoRetry === 'true'), the worker left today's
+         one retry token (it writes one only for bridge_not_confirmed), and it is still before 10.
+         The token is spent here before anything opens, so a reload or a third open cannot use it.
+         Every other gate (stale board below, hours, cap, the bridge check itself) runs again. */
+      try { localStorage.removeItem('dealflow_autostart_retry_' + _today());
+            localStorage.setItem('dealflow_autostart_retry_' + _today() + '_used', String(Date.now())); } catch(e){}
+      _runlog('retry_after_bridge', {});
+      setTimeout(function(){
+        try{
+          var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
+          var _stale = (_age != null && _age >= 1);
+          openMorningWorker(_autoRunLane(), !_stale);
+        }catch(e){}
+      }, 500);
     } else if(_already){
       _runlog('blocked_already_ran_today', {});
       // Opened again the same day: show the worker, but never auto-send. Say why, out loud.
