@@ -243,6 +243,106 @@ def pool(days, opt):
     return out, drops
 
 
+# The board's LETTER stage needs 11 days of runway (tracker_template MAIL_STAGE_DAYS); a letter
+# inside 7 days of the sale is refused everywhere (MAIL_FLOOR_DAYS, Call Mode ROUTE_MAIL_MIN_DAYS).
+BOARD_MIN_DAYS = 11
+FOLLOWUP_MIN_DAYS = 7
+
+
+def pool_board(tiers, min_days, cases=None, remail=False):
+    """Board leads for a hand-mailed run, selected by outreach_mail.build_selection -- the SAME
+    selector the paid Lob / Click2Mail path uses, so a stamp-and-envelope run can never be looser
+    than a paid one: opt-out ledger, stay gate (contact_blocked_reason), diligence gate, company
+    owners, vacant land, sale runway, and the letter ledger (mail_letters_sent.json) dedupe.
+    On top of that: existing clients and estates are dropped, and a first name is required.
+
+    cases: restrict to these case numbers (the touch-2 run passes touch 1's manifest).
+    remail: let ledgered cases through (touch 2 only; everything else still re-checks).
+    """
+    import outreach_mail as OM
+    leads = OM._load_leads()
+    if cases is not None:
+        want = {str(c).strip() for c in cases}
+        leads = [r for r in leads if OM._case(r) in want]
+    sent = {}
+    if os.path.exists(OM.SENT_LEDGER):
+        try:
+            sent = json.load(open(OM.SENT_LEDGER, encoding='utf-8'))
+        except Exception:
+            # An unreadable ledger cannot prove who was already mailed: hold the run.
+            raise SystemExit('ABORT: %s is unreadable; fix it before mailing.' % OM.SENT_LEDGER)
+    suppress = OM.load_suppress('')            # always unions the server opt-out ledger
+    queue, skips = OM.build_selection(leads, tiers, min_days, suppress, sent, remail, 0)
+    drops = dict(skips)
+    try:
+        import clients as _CL
+    except Exception:
+        _CL = None
+    out = []
+    for r, parsed in queue:
+        case = OM._case(r)
+        if _CL is None or _CL.is_client(r):
+            k = 'existing client' if _CL else 'client list unreadable'
+            drops[k] = drops.get(k, 0) + 1
+            continue
+        owner = str(OM._g(r, 'owners', 'oname', 'owner'))
+        if _ESTATE.search(owner) or _ENTITY.search(owner):
+            drops['estate/entity'] = drops.get('estate/entity', 0) + 1
+            continue
+        first = _first_name(owner)
+        if not first:
+            drops['no first name'] = drops.get('no first name', 0) + 1
+            continue
+        prop = str(OM._g(r, 'addr', 'Address')).strip()
+        if not prop:
+            drops['no property street'] = drops.get('no property street', 0) + 1
+            continue
+        out.append({'case': case, 'owner': owner, 'first': first, 'addr': prop, 'city': '', 'zip': '',
+                    'age': None, 'days': OM._days(r), 'plaintiff': str(r.get('plaintiff') or '').strip(),
+                    'env_line1': parsed['address_line1'], 'env_city': parsed['address_city'],
+                    'env_state': parsed['address_state'], 'env_zip': parsed['address_zip']})
+    out.sort(key=lambda r: r['days'])           # soonest sale first, same as Call Mode's mail queue
+    return out, drops
+
+
+def manifest_path(touch):
+    return P.out(os.path.join('mail', 'BSG_Mail_manifest_%s_touch%d.json' % (dt.date.today().isoformat(), touch)))
+
+
+def write_manifest(rows, touch):
+    """Case numbers only, outside the repo. Printed is not mailed: nothing is ledgered until
+    --mark-mailed runs on this file after the stack is at the post office."""
+    p = manifest_path(touch)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    json.dump({'touch': touch, 'printed': dt.date.today().isoformat(), 'cases': [r['case'] for r in rows]},
+              open(p, 'w', encoding='utf-8'), indent=1)
+    return p
+
+
+def mark_mailed(path):
+    """Ledger a mailed stack into mail_letters_sent.json (the letter dedupe outreach_mail reads),
+    so neither a later hand run nor a paid run mails the same case again. Touch 1 adds the case;
+    touch 2 adds a touch2 date to the existing entry. Never writes the opt-out ledger."""
+    import outreach_mail as OM
+    m = json.load(open(path, encoding='utf-8'))
+    touch, cases = int(m.get('touch') or 1), [str(c) for c in m.get('cases') or []]
+    sent = {}
+    if os.path.exists(OM.SENT_LEDGER):
+        sent = json.load(open(OM.SENT_LEDGER, encoding='utf-8'))   # unreadable -> raise, write nothing
+    today = dt.date.today().isoformat()
+    for c in cases:
+        e = sent.get(c) if isinstance(sent.get(c), dict) else {}
+        if touch == 2:
+            e['touch2'] = today
+        else:
+            e.update({'date': today, 'src': 'hand', 'touch': 1})
+        sent[c] = e
+    tmp = OM.SENT_LEDGER + '.tmp'
+    json.dump(sent, open(tmp, 'w', encoding='utf-8'), indent=1)
+    os.replace(tmp, OM.SENT_LEDGER)
+    return touch, len(cases)
+
+
 def contact_phone():
     """The number printed on the letter. The tracking line when one is set, otherwise the signer's
     with a warning -- never silently untrackable."""
@@ -266,14 +366,55 @@ def letter(r):
         "%s,\n\n"
         "I'm %s with %s, here in South Florida. I'm not with the government or your lender, "
         "I'm not a lawyer, and I'm not asking you for any money.\n\n"
-        "I saw the court filing on %s. If selling is something you'd consider, I buy houses in "
-        "this situation, or I can help you sell before a sale date gets set.\n\n"
+        "I saw the court filing on %s. Whether you want to keep the house or sell it, I can walk "
+        "you through the options you still have and what each one would mean for you. If selling "
+        "turns out to be the right move, I buy houses in this situation.\n\n"
         "%s\n\n"
         "%s\n\n"
         "%s\n%s"
         % (r['first'], SENDER['name'], SENDER['co'], street,
            mars, optout, SENDER['name'], contact_phone())
     )
+
+
+def letter_followup(r):
+    """The second touch, mailed about 7 days after letter(). Same disclosures, same opt-out, same
+    signer; shorter, and it says plainly that this is the one follow-up, so it never reads as the
+    start of a drip. Options first (keep or sell), no number, no deadline, no promise about the sale.
+    """
+    street = street_case(r['addr'].split(',')[0])
+    mars = D.mars_part('govt', 'may_agree', 'may_stop', company=SENDER['co'], as_html=False)
+    optout = '%s %s' % (OC.OPTOUT_LINE_EN, OC.OPTOUT_LINE_ES)
+    return (
+        "%s,\n\n"
+        "I wrote to you last week about %s. This is my one follow-up, in case the first letter got "
+        "lost with the rest of the mail.\n\n"
+        "I'm not with the government or your lender, I'm not a lawyer, and I'm not asking you for "
+        "any money. If it would help to have someone lay out your options, keeping the house or "
+        "selling it, in one short phone call, my number is below.\n\n"
+        "%s\n\n"
+        "%s\n\n"
+        "%s\n%s"
+        % (r['first'], street, mars, optout, SENDER['name'], contact_phone())
+    )
+
+
+# Which body this run prints: 1 = letter(), 2 = letter_followup(). Set by --touch.
+TOUCH = 1
+
+
+def body(r):
+    return letter_followup(r) if TOUCH == 2 else letter(r)
+
+
+def env_lines(r):
+    """(name, line1, 'City, FL zip') for the envelope. A board row carries the owner's parsed
+    mailing address (outreach_mail's selection); a fresh-LP row only has the property address."""
+    if r.get('env_line1'):
+        return (person_name(r['owner']), street_case(r['env_line1']),
+                '%s, %s %s' % (str(r.get('env_city') or '').title(), r.get('env_state') or 'FL', r.get('env_zip') or ''))
+    city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
+    return (person_name(r['owner']), street_case(r['addr']), '%s, FL %s' % (city.title(), r['zip']))
 
 
 def letterhead():
@@ -327,9 +468,11 @@ def build(rows, budget, days, drops, total_pool):
     half = cost / 2
     out = ['<html><head><meta charset="utf-8"><style>%s</style></head><body>' % CSS,
            '<h1>Handwrite &amp; Mail &mdash; %d letters</h1>' % len(rows),
-           '<div class="sub">%s &middot; lis pendens filed in the last %d days &middot; '
-           '$%.2f total postage ($%.2f each if you split it) &middot; freshest first</div>'
-           % (today, days, cost, half),
+           '<div class="sub">%s &middot; %s &middot; '
+           '$%.2f total postage ($%.2f each if you split it)</div>'
+           % (today, ('lis pendens filed in the last %d days, freshest first' % days)
+              if rows and rows[0].get('age') is not None else "board leads, soonest sale first",
+              cost, half),
            '<div class="how">'
            '<h2>&#9993; HOW TO RUN THIS</h2><ol>'
            '<li><b>Copy each letter by hand.</b> Blue or black pen, plain paper or a note card. '
@@ -360,13 +503,15 @@ def build(rows, budget, days, drops, total_pool):
            % (len(rows), half)]
 
     for n, r in enumerate(rows, 1):
-        city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
-        out.append('<div class="card"><h3 class="hd">%d. %s &nbsp;&middot;&nbsp; filed %d day%s ago</h3>'
-                   % (n, H.escape(street_case(r['addr'])), r['age'], '' if r['age'] == 1 else 's'))
-        out.append('<div class="env"><b>WRITE THIS ON THE ENVELOPE</b>%s<br>%s<br>%s, FL %s</div>'
-                   % (H.escape(person_name(r['owner'])), H.escape(street_case(r['addr'])),
-                      H.escape(city.title()), H.escape(r['zip'])))
-        out.append('<div class="body">%s</div>' % H.escape(letter(r)))
+        if r.get('age') is not None:
+            when = 'filed %d day%s ago' % (r['age'], '' if r['age'] == 1 else 's')
+        else:
+            when = 'sale in %s days' % r.get('days', '?')
+        out.append('<div class="card"><h3 class="hd">%d. %s &nbsp;&middot;&nbsp; %s</h3>'
+                   % (n, H.escape(street_case(r['addr'].split(',')[0])), when))
+        out.append('<div class="env"><b>WRITE THIS ON THE ENVELOPE</b>%s</div>'
+                   % '<br>'.join(H.escape(x) for x in env_lines(r)))
+        out.append('<div class="body">%s</div>' % H.escape(body(r)))
         meta = 'case %s' % r['case'] + (' &middot; %s' % H.escape(r['plaintiff'][:44])
                                         if r['plaintiff'] else '')
         out.append('<div class="meta">%s</div>' % meta)
@@ -391,13 +536,10 @@ def build_printed(rows, days, drops, total_pool):
     pretty = today.strftime('%B %-d, %Y') if os.name != 'nt' else today.strftime('%B %d, %Y').replace(' 0', ' ')
     out = ['<html><head><meta charset="utf-8"><style>%s</style></head><body>' % CSS]
     for r in rows:
-        city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
         out.append('<div class="pl">%s' % letterhead())
         out.append('<div class="dt">%s</div>' % pretty)
-        out.append('<div class="to">%s<br>%s<br>%s, FL %s</div>'
-                   % (H.escape(person_name(r['owner'])), H.escape(street_case(r['addr'])),
-                      H.escape(city.title()), H.escape(r['zip'])))
-        out.append('<div class="bd">%s</div>' % H.escape(letter(r)))
+        out.append('<div class="to">%s</div>' % '<br>'.join(H.escape(x) for x in env_lines(r)))
+        out.append('<div class="bd">%s</div>' % H.escape(body(r)))
         out.append('<div class="ft">%s &middot; %s &middot; case %s</div></div>'
                    % (H.escape(SENDER['co']), H.escape(contact_phone()), H.escape(r['case'])))
     out.append('</body></html>')
@@ -418,10 +560,9 @@ def build_envelopes(rows):
            '<div class="s">Hand-address these in the same order as the letters. '
            'Return address: %s.</div><table>' % H.escape(SENDER['co'])]
     for n, r in enumerate(rows, 1):
-        city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
-        out.append('<tr><td class="n">%d</td><td><b>%s</b><br>%s<br>%s, FL %s</td></tr>'
-                   % (n, H.escape(person_name(r['owner'])), H.escape(street_case(r['addr'])),
-                      H.escape(city.title()), H.escape(r['zip'])))
+        nm, l1, l2 = env_lines(r)
+        out.append('<tr><td class="n">%d</td><td><b>%s</b><br>%s<br>%s</td></tr>'
+                   % (n, H.escape(nm), H.escape(l1), H.escape(l2)))
     out.append('</table></body></html>')
     return '\n'.join(out)
 
@@ -437,7 +578,26 @@ def main():
                     help='letterhead + logo, one letter per sheet (instead of the copy-by-hand book)')
     ap.add_argument('--tracking-phone', default='',
                     help='number used ONLY on this campaign, so replies are attributable')
+    ap.add_argument('--board', action='store_true',
+                    help="mail the board's leads (outreach_mail's selector and safety gates) instead of fresh LPs")
+    ap.add_argument('--tier', default='A,B', help="with --board: tiers to include (default A,B; 'all' for every tier)")
+    ap.add_argument('--touch', type=int, choices=[1, 2], default=1,
+                    help='1 = first letter; 2 = the one follow-up, needs --manifest from touch 1')
+    ap.add_argument('--manifest', default='', help="touch 2: touch 1's manifest (only those cases, re-checked)")
+    ap.add_argument('--mark-mailed', default='', metavar='MANIFEST',
+                    help='after the stack is at the post office: ledger it so nothing mails it again')
     a = ap.parse_args()
+
+    if a.mark_mailed:
+        touch, n = mark_mailed(a.mark_mailed)
+        print('ledgered %d case(s) as mailed (touch %d) in mail_letters_sent.json' % (n, touch))
+        print('Also tap Mailed on each in Call Mode routes / the board so the other channels see it.')
+        return
+
+    global TOUCH
+    TOUCH = a.touch
+    if a.touch == 2 and not a.manifest:
+        raise SystemExit('--touch 2 needs --manifest <touch 1 manifest>: the follow-up only goes to people who got letter 1.')
 
     if a.signer_name:
         SENDER['name'] = a.signer_name
@@ -451,8 +611,19 @@ def main():
         print('         Letters will carry %s, the same line every other channel uses, so a call'
               % SENDER['phone'])
         print('         CANNOT be attributed to this mailing. You would be buying postage, not data.')
-    opt = _optout_keys()
-    rows, drops = pool(a.days, opt)
+    if a.manifest:
+        m = json.load(open(a.manifest, encoding='utf-8'))
+        age = (dt.date.today() - dt.date.fromisoformat(m.get('printed', dt.date.today().isoformat()))).days
+        if age < 6:
+            print('WARNING: touch 1 was printed %d day(s) ago; the follow-up is meant ~7 days after.' % age)
+        tiers = None
+        rows, drops = pool_board(tiers, FOLLOWUP_MIN_DAYS, cases=m.get('cases') or [], remail=True)
+    elif a.board:
+        tiers = None if a.tier.lower() == 'all' else {t.strip().upper() for t in a.tier.split(',') if t.strip()}
+        rows, drops = pool_board(tiers, BOARD_MIN_DAYS)
+    else:
+        opt = _optout_keys()
+        rows, drops = pool(a.days, opt)
     total = len(rows)
     n = a.limit if a.limit else int(a.budget // PER_LETTER)
     rows = rows[:n]
@@ -460,7 +631,7 @@ def main():
         print('no eligible letters — widen --days')
         return
 
-    tag = 'Printed' if a.printed else 'Handwrite'
+    tag = ('Printed' if a.printed else 'Handwrite') + ('_FollowUp' if TOUCH == 2 else '')
     html = build_printed(rows, a.days, drops, total) if a.printed \
         else build(rows, a.budget, a.days, drops, total)
     p_html = os.path.join(HERE, 'BSG_Mail_%s_%s.html' % (tag, dt.date.today().isoformat()))
@@ -479,6 +650,8 @@ def main():
           % (len(rows) * PER_LETTER, PER_LETTER, len(rows) * PER_LETTER / 2))
     print('  dropped:', ', '.join('%s %d' % (k, v) for k, v in sorted(drops.items()) if v) or 'none')
     print('wrote', p_html)
+    print('wrote', write_manifest(rows, TOUCH),
+          '\n  after the stack is mailed: python bsg_mail_campaign.py --mark-mailed <that file>')
     # _mkpdf.py is a SCRIPT (argv-driven), not a module with to_pdf() — importing and calling it
     # made it re-render its own default filename. Inline the same Playwright render bsg_daily_routes
     # uses, which is the working pattern in this repo.
