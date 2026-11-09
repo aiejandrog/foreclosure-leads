@@ -1,7 +1,7 @@
 ---
 name: wiring-auditor
 description: Traces every hop of DEALFLOW data and actions end to end (board -> Call Mode / Carlos seat -> Morning Worker -> send bridge /notes /mark /text /send -> worker_notes -> funnel counts) and proves where data silently drops or a button does nothing. Read-only; writes finding tickets.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, SendMessage
 model: sonnet
 ---
 **Read first:** `docs/agent-teams/OPERATING-RULES-2026-11-07.md`, `docs/agent-teams/AUDIT-LOOP-PROTOCOL.md`,

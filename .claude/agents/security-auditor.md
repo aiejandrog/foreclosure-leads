@@ -1,7 +1,7 @@
 ---
 name: security-auditor
 description: Read-only security audit of the DEALFLOW website and send bridge - payload encryption, clear-text PII, access codes, XSS and injection in the generated pages, bridge CORS and key checks, secrets in tracked files. Writes finding tickets; edits nothing.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, SendMessage
 model: sonnet
 ---
 **Read first:** `docs/agent-teams/OPERATING-RULES-2026-11-07.md`, `docs/agent-teams/AUDIT-LOOP-PROTOCOL.md`,

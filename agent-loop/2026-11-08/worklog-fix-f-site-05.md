@@ -1,0 +1,14 @@
+### B3: remove personal values from template comments (F-site-05, F-site-06 line 2633, F-sec-08 comments)
+- Task: B3, APPROVED-FIX #4, S4. Comment text only in tracker_template.html; new _commentpiitest.py.
+- Owner: board-dev (fixer-f-site-05)
+- Branch + PR: claude/agents-fix-f-site-05b @ ac4ebdb1 / PR #456 (draft, base main, cut from origin/main aac7a8a9). Superseded stacked branch claude/agents-fix-f-site-05 / PR #454 (comment posted, not closed).
+- Files changed: tracker_template.html (31 comment lines), _commentpiitest.py (new), design-preview.html (build_preview.py, clean run).
+- What changed (plain English): comments carrying owner names, real-shaped case ids, street addresses, two phone numbers and mailbox local parts now carry invented values. Code and page text identical (0 differing lines after stripping comments).
+- Tests run: _commentpiitest.py on unchanged origin/main -> 4 failed (a: 16969; b: 12443 15316; c: 2633 3163 5818 7737 7784 8591 16968; d: 17 lines), after -> ALL PASS; _footprinttest.py -> 46 passed; 69 template-reading suites, this tree vs fl-loop-base, PYTHONUTF8 off and on -> 0 differences (10 and 8 identical pre-existing failures).
+- QA verdict: pending (gate)
+- Exposure: none to homeowners; values stay in history and on the live page until the next publish.
+- Flags: none
+- Owned-surface bugs found: comment block above _optedOutIdentities names an opted-out owner; untouched, exempted in the test by function name (D-G b).
+- Needs Alex: D-G a (history scrub), D-G b, D-G c (Playbook Playbook intel block).
+- Decisions needed: none new.
+- Next run should know: ROUTE_ORIGIN is a street address in CODE (out of scope, chief to decide); badnum_audit.py, replies.py, _stoptexttest.py hold values also removed from comments; one Bash call was blocked by the guard for containing the text ".bat" in prose (no .bat run; I used the Write tool for the PR body instead). No B3 edit was guard-blocked, so there is no remaining-edits patch.

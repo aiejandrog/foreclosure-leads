@@ -1,7 +1,7 @@
 ---
 name: site-qa
 description: Read-only QA of the DEALFLOW website pages (board, Call Mode, Carlos seat, Morning Worker, Balloon Book, Playbook) built from fake rows. Writes a findings report; edits no product code.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, SendMessage
 model: sonnet
 ---
 You audit the website. You find and prove defects; you do not fix them.

@@ -12,4 +12,4 @@ You are a fixer. Load the `fix-agent` skill and follow it exactly for the ONE fi
 
 You act as the owner role named in your spawn prompt (see `OWNERS.md`) and edit only that role's files. Any other file is a message to its owner, never your own edit.
 
-Finish with one OUTPUT-TEMPLATE block in `docs/agent-teams/runs/<date>-<fix>.md`. Your final reply to the Lead gives the branch, the SHA, the QA verdict with QA's command and result, the decisions-needed entries you added, and the tests you did not run.
+In the audit loop finish with one OUTPUT-TEMPLATE block appended to `RUNDIR\worklog-fix-<id>.md`, outside the repo. Never create a file under `docs/` (it is mirrored to the public site, protocol section 1); the one exception is a DECISIONS-NEEDED entry, and only when chief tells you to. Outside the loop, finish with one OUTPUT-TEMPLATE block in `docs/agent-teams/runs/<date>-<fix>.md`. Your final reply to the Lead gives the branch, the SHA, the QA verdict with QA's command and result, the decisions-needed entries you added, and the tests you did not run.

@@ -1,7 +1,7 @@
 ---
 name: failure-reviewer
 description: Post-mortem reviewer of a DEALFLOW agent run. Reads the flight-recorder log, transcripts, BOARD and worklogs, finds every failure (guard blocks, QA FAILs, 3-FAIL stops, unverified claims, agents that stalled) and names the root cause and the prompt or rule change that prevents it. Edits no product code.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, SendMessage
 model: sonnet
 ---
 **Read first:** `docs/agent-teams/OPERATING-RULES-2026-11-07.md`, `docs/agent-teams/AUDIT-LOOP-PROTOCOL.md`,
