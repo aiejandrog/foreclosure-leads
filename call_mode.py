@@ -6244,7 +6244,9 @@ function start(){
   }catch(e){}
   i=0;
   try{ _posRestore(); }catch(e){ i=0; }   // back to the lead he was on, same lane, same day
-  render(); freshCheck();
+  render();
+  try{ _lkResume(); }catch(e){ logErr(e, 'lk-resume'); }   // or back on Find a number, where he was
+  freshCheck();
   paintSync();
   try{ pollTextHold(); }catch(e){}
   try{ mailHandoff(); }catch(e){ try{ logErr(e, 'mail-handoff'); }catch(_e){} }
@@ -6401,6 +6403,8 @@ function screenTeamKey(){
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
   var _wl = lane, _rest = _qvRestore();
+  /* a lead opened from Find a number goes back to that list once its call is done (2026-11-09) */
+  if(LKFROM && workedC === LKFROM){ _NAVF.length = 0; return _lkReturn(); }
   try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
@@ -6495,6 +6499,7 @@ function _posRestore(){
 function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
 function navBack(){
   _qvRestore();
+  if(LKFROM && cur && cur.c === LKFROM){ return _lkReturn(); }
   var onLead = !!cur && i < pool().length, from = onLead ? cur.c : null;
   var k=_navSeek(_NAVB, onLead ? cur.c : null);
   if(k<0){ toast('No earlier lead in this lane'); return; }
@@ -6511,6 +6516,10 @@ function navNext(){
   SCREEN='lead'; i=k; render();
 }
 function _navRow(){
+  if(LKFROM && cur && cur.c === LKFROM)
+    return '<div style="display:flex;gap:10px">'
+      + '<button class="big" id="navback" style="flex:1;background:#2a3f6b">&lsaquo; Back to Find a number</button>'
+      + '<button class="big" id="skip" style="flex:1;background:#2a3f6b">Next on Find a number &rsaquo;</button></div>';
   return '<div style="display:flex;gap:10px">'
     + '<button class="big" id="navback" style="flex:1;background:#2a3f6b'+(_navHasBack()?'':';opacity:.45')+'">&lsaquo; Previous lead</button>'
     + '<button class="big" id="skip" style="flex:1;background:#2a3f6b">Next lead &rsaquo;</button></div>';
@@ -6533,7 +6542,20 @@ function render(){
   try{ applyPasted(); }catch(e){ logErr(e, 'applyPasted'); }
   /* BOARD-LANE VIEW. Sits in front of the dial queue rather than filtering it: these lanes cover
      leads with no phone at all, which pool() cannot express and must not be taught to. */
-  if(BLANE){ $('app').innerHTML = boardList(); wire(); return; }
+  if(BLANE){
+    /* a background repaint of the Find a number list keeps the box he is typing in, and its cursor */
+    var _ae = document.activeElement, _fc = null, _ss = 0, _se = 0;
+    try{ if(_ae && _ae.classList && _ae.classList.contains('lknum')){ _fc = _ae.getAttribute('data-c'); _ss = _ae.selectionStart; _se = _ae.selectionEnd; } }catch(e){}
+    $('app').innerHTML = boardList(); wire();
+    if(BLANE === '__lk'){
+      try{ _lkWire(); }catch(e){ logErr(e, 'lk-wire'); }
+      if(_fc){ try{ var _ni = document.querySelector('input.lknum[data-c="' + _fc.replace(/"/g, '') + '"]');
+        if(_ni){ _ni.focus(); _ni.setSelectionRange(_ss, _se); } }catch(e){} }
+      try{ var _sr = _sheetLead(); if(_sr) renderSheet(_sr); }catch(e){ logErr(e, 'lk-sheet'); }
+      _lkSaveState();
+    }
+    return;
+  }
   var P=pool();
   /* An emptied lane and a never-populated lane are NOT the same event, and until now they printed the
      same words. Work every lead and the pool drains to zero, so a finished session was reporting
@@ -6694,6 +6716,10 @@ function ownerLabel(r){
    hardSuppressed() all apply to it exactly as to a traced number. Nothing here dials a lead the
    build held: an unmarked coverage row is never offered. */
 var LKDONE = {}, LKSHOW = 200, LKEQ = false;
+/* LKFOCUS: the list lead tapped last (its card has the gold border and the script drawer is filled
+   for it). LKFROM: the lead opened from this list, so logging its call comes back here. LKDRAFT: what
+   was typed in each box and not saved yet. All three are saved on this phone (_lkSaveState). */
+var LKFOCUS = null, LKFROM = null, LKDRAFT = {};
 function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length === 11 && d.charAt(0) === '1') d = d.slice(1); return d.length === 10 ? d : ''; }
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
@@ -6705,12 +6731,11 @@ function lkAsDial(r, num){
   if(o.st !== 'BAL' && o.st !== 'TD') delete o.st;
   return o;
 }
-function lkRows(){
-  return (COV || []).filter(function(r){
-    if(!r || !r.lk || LKDONE[r.c] || !_seatMine(r) || _clmOwner(r.c)) return false;
-    return !hardSuppressed(lkAsDial(r, ''));
-  });
+function _lkOk(r){
+  if(!r || !r.lk || LKDONE[r.c] || !_seatMine(r) || _clmOwner(r.c)) return false;
+  return !hardSuppressed(lkAsDial(r, ''));
 }
+function lkRows(){ return (COV || []).filter(_lkOk); }
 /* A number already saved on the lead (this phone, the board, or a teammate's sync) makes it a
    dial row on load, so a lookup done yesterday is not done again today. */
 function promoteLookups(){
@@ -6760,11 +6785,15 @@ function lookupList(){
   var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + all.length + '</b>'
             + '<div class="sub">These leads passed every check and have no number yet. Look the owner up '
             + 'on Whitepages, type the number you trust, and it becomes a normal lead you can call.</div>'
+            + '<div class="sub">The call script at the bottom is for the lead you tapped last (gold border). '
+            + 'After you log the call you come back here, to the next lead on this list.</div>'
             + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
             + '<button class="lkf' + (LKEQ ? '' : ' on') + '" data-eq="0">All ' + all.length + '</button>'
             + '<button class="lkf' + (LKEQ ? ' on' : '') + '" data-eq="1">Has equity ' + nEq + '</button></div></div>';
   if(!rows.length) return head() + head_ + '<div class="card">Nothing to look up right now.</div><div class="sheetpad"></div>';
   var CAP = LKSHOW, shown = rows.slice(0, CAP);
+  /* the script drawer is for the lead with the gold border: the first card until he taps another */
+  if(!shown.some(function(r){ return r.c === LKFOCUS; })) LKFOCUS = shown[0].c;
   var body = shown.map(function(r){
     var bv = _bView(r);
     var clock = (!bv.auction) ? 'no sale date'
@@ -6773,8 +6802,9 @@ function lookupList(){
     var eq = (typeof r.e === 'number') ? (r.e + '% equity') : 'equity not checked';
     var links = fileLinks({fo:r.fo, ct:r.ct, o:(r.o || r.on || ''), a:(r.a || ''), c:r.c, z:r.z}).filter(function(x){
       return /Whitepages|People search/.test(x[0]); });
-    var _g = _lkGroup(r);
-    return '<div class="card"><b>' + esc(ownerLabel(r)) + '</b>'
+    var _g = _lkGroup(r), _on = (LKFOCUS === r.c);
+    return '<div class="card lkcard" data-lkc="' + esc(r.c) + '"' + (_on ? ' style="border:1px solid var(--gold)"' : '') + '><b>' + esc(ownerLabel(r)) + '</b>'
+         + (_on ? ' <span class="chip ok lkon">script below</span>' : '')
          + (_g === 0 ? ' <span class="chip ok">from Morning Worker</span>' : (_g === 1 ? ' <span class="chip hot">new filing</span>' : ''))
          + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
@@ -6783,7 +6813,7 @@ function lookupList(){
              return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('') + '</div>'
          + wpBlock(r)
          + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" '
-         + 'placeholder="Number or email you found" style="flex:1;min-width:0">'
+         + 'placeholder="Number or email you found" style="flex:1;min-width:0" value="' + esc(LKDRAFT[r.c] || '') + '">'
          + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
          + (wpeAddrs(r.c).length ? '<div class="sub">Emailed before: ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
          + '</div>';
@@ -6874,13 +6904,128 @@ function lkSave(c, raw){
   row.ps = ['wpm'];
   saveNotes(); try{ queueSync(); }catch(e){}
   if(!ROWS.some(function(x){ return x.c === c; })) ROWS.push(row);
+  /* Where to come back to: the lead after this one on the list, so the call's outcome returns him
+     to the next lead to look up, not to the dial queue (2026-11-09). */
+  var _lks = lkSorted(), _nx = null;
+  for(var _q = 0; _q < _lks.length; _q++) if(_lks[_q].c === c){ _nx = (_lks[_q + 1] || _lks[_q - 1] || {}).c || null; break; }
   LKDONE[c] = 1;
+  delete LKDRAFT[c];
+  LKFOCUS = _nx;
   BLANE = null;
+  LKFROM = c;
   _openCase(c);
+  if(!(cur && cur.c === c)) LKFROM = null;          /* it did not open: nothing to come back from */
+  _lkSaveState();
   /* SAVE & CALL means call: the card is open on that number, so tap its dial button for him. The
      same handler logs the attempt and opens the outcome screen; outside 8-8 it only arms. */
   if(cur && cur.c === c && SCREEN === 'lead'){ var _d = $('dial'); if(_d) _d.click(); }
 }
+/* ══════════════ FIND A NUMBER: SAVED PLACE AND THE WAY BACK (2026-11-09, Alex) ══════════════
+   "From whenever you land on the page, I want you to save a ... format for you to retrace and go back
+   and have a saved format on the find a number category." Saved on this phone only, per page (each seat
+   has its own URL), in localStorage fcLkState:<path> as JSON:
+     on    the Find a number list was open          eq/show  the All / Has equity filter, how many shown
+     f     the lead tapped last (gold border)       y        scroll position on the list
+     from  the lead opened from the list            dr       numbers or emails typed and not saved yet
+   A reload (pull to refresh, a new build, iOS dropping the tab while the dialer is open) puts him back:
+   on the list at that lead, or on the card he opened from it. Same calendar day for the place; typed
+   drafts are kept 7 days, and only for leads still on the list. Nothing here is synced or sent, and it
+   decides nothing about who may be called: lkRows() and hardSuppressed() still do. */
+var _LKK = 'fcLkState:' + (typeof location !== 'undefined' ? location.pathname.replace(/index\.html?$/i, '') : '');
+var _LKY = 0;
+function _lkSaveState(){
+  try{
+    if(BLANE === '__lk') _LKY = window.scrollY || 0;
+    localStorage.setItem(_LKK, JSON.stringify({d: new Date().toDateString(), ts: Date.now(),
+      on: BLANE === '__lk' ? 1 : 0, eq: LKEQ ? 1 : 0, show: LKSHOW, f: LKFOCUS, from: LKFROM, y: _LKY, dr: LKDRAFT}));
+  }catch(e){}
+}
+function _lkLoadState(){
+  var s = null;
+  try{ s = JSON.parse(localStorage.getItem(_LKK) || 'null'); }catch(e){ s = null; }
+  if(!s || typeof s !== 'object') return null;
+  if(s.dr && typeof s.dr === 'object' && typeof s.ts === 'number' && (Date.now() - s.ts) < 7*86400000){
+    Object.keys(s.dr).forEach(function(c){ var v = s.dr[c]; if(typeof v === 'string' && v && LKDRAFT[c] === undefined) LKDRAFT[c] = v.slice(0, 200); });
+  }
+  if(s.d !== new Date().toDateString()) return null;
+  LKEQ = s.eq === 1;
+  if(typeof s.show === 'number' && s.show >= 200) LKSHOW = Math.min(s.show, 5000);
+  if(typeof s.f === 'string') LKFOCUS = s.f;
+  if(typeof s.y === 'number') _LKY = s.y;
+  return s;
+}
+/* start(): back to the list, or to the card opened from it */
+function _lkResume(){
+  var s = _lkLoadState();
+  var on = {}; lkRows().forEach(function(r){ on[r.c] = 1; });
+  Object.keys(LKDRAFT).forEach(function(c){ if(!on[c]) delete LKDRAFT[c]; });
+  if(!s) return false;
+  if(typeof s.from === 'string' && s.from && ROWS.some(function(r){ return r.c === s.from; })){
+    LKFROM = s.from; BLANE = null;
+    _openCase(s.from);
+    if(cur && cur.c === s.from) return true;
+    LKFROM = null;
+  }
+  /* on the list, or on a card from it that cannot reopen (just dialled, so it is cooling down): the list */
+  if((s.on || s.from) && lkRows().length){ BLANE = '__lk'; render(); _lkScroll(!s.from); return true; }
+  return false;
+}
+function _lkScroll(useY){
+  try{
+    var el = LKFOCUS ? document.querySelector('.lkcard[data-lkc="' + String(LKFOCUS).replace(/"/g, '') + '"]') : null;
+    if(el && el.scrollIntoView) el.scrollIntoView({block: 'center'});
+    else if(useY) window.scrollTo(0, _LKY || 0);
+  }catch(e){}
+}
+/* The list lead the script drawer is filled for: the one tapped last, else the first on the list.
+   Off the list it is the open card, as before. */
+function _sheetLead(){
+  if(BLANE === '__lk' && SCREEN === 'lead'){
+    var hit = null, k;
+    if(LKFOCUS) for(k = 0; k < (COV || []).length; k++) if(COV[k] && COV[k].c === LKFOCUS){ hit = _lkOk(COV[k]) ? COV[k] : null; break; }
+    if(!hit){ var L = lkSorted(); if(L.length){ hit = L[0]; LKFOCUS = hit.c; } }
+    if(hit) return lkAsDial(hit, '');
+  }
+  return cur;
+}
+/* The call on a lead opened from the list is over (outcome logged, Next, Back): go back to the list,
+   at the lead after it. Undoes the one-off view switch _openCase made, so the dial queue is where he
+   left it when he goes back to it. */
+function _lkReturn(){
+  LKFROM = null;
+  try{ _qvRestore(); }catch(e){}
+  try{ vmClose(); }catch(e){}
+  if(cur) delete cur._rcStay;
+  SCREEN = 'lead'; BLANE = '__lk';
+  render();
+  _lkScroll(false);
+  _lkSaveState();
+}
+/* The list is rebuilt on every render (a sync landing, the worker banner). Keep what he was typing
+   and where the cursor was. */
+function _lkWire(){
+  var app = $('app'); if(!app) return;
+  Array.prototype.forEach.call(app.querySelectorAll('input.lknum'), function(inp){
+    inp.oninput = function(){ var c = inp.getAttribute('data-c'); if(!c) return;
+      if(inp.value) LKDRAFT[c] = inp.value.slice(0, 200); else delete LKDRAFT[c]; _lkSaveState(); };
+  });
+  Array.prototype.forEach.call(app.querySelectorAll('.lkcard'), function(el){
+    var pick = function(){ var c = el.getAttribute('data-lkc'); if(!c || c === LKFOCUS) return;
+      var old = app.querySelector('.lkcard[data-lkc="' + String(LKFOCUS || '').replace(/"/g, '') + '"]');
+      if(old){ old.style.border = ''; var oc = old.querySelector('.lkon'); if(oc) oc.remove(); }
+      LKFOCUS = c; el.style.border = '1px solid var(--gold)';
+      var b = el.querySelector('b'); if(b && !el.querySelector('.lkon')) b.insertAdjacentHTML('afterend', ' <span class="chip ok lkon">script below</span>');
+      try{ var r = _sheetLead(); if(r) renderSheet(r); }catch(e){ logErr(e, 'lk-sheet'); }
+      _lkSaveState(); };
+    el.addEventListener('focusin', pick);
+    el.addEventListener('click', pick, true);
+  });
+}
+var _lkScrollT = null;
+if(typeof window !== 'undefined') window.addEventListener('scroll', function(){
+  if(BLANE !== '__lk' || SCREEN !== 'lead') return;
+  clearTimeout(_lkScrollT); _lkScrollT = setTimeout(_lkSaveState, 400);
+}, {passive: true});
 /* ══════════════ PASTE A NUMBER AND CALL (2026-10-24, Alejandro) ══════════════
    "a input for us to put the phone number copied from the whitepages and paste it and act as a
    regular call button and transitions over to the outcome page where we log everything". On every
@@ -10200,13 +10345,13 @@ function wire(){
      laneDef() silently resolves to 'soon'. Tapping "TRACE" would have quietly switched the DIAL
      queue to Sale-soon and looked like nothing happened. Select on the attribute that means it. */
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-v]'), function(b){
-    b.onclick=function(){ _QVBACK=null; QVIEW=b.dataset.v; BLANE=null; i=0; render(); };
+    b.onclick=function(){ _QVBACK=null; LKFROM=null; QVIEW=b.dataset.v; BLANE=null; i=0; render(); _lkSaveState(); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
     /* A lane tap during a one-off puts the SESSION's view back first (2026-10-19). It used to drop
        _QVBACK and keep the one-off's view, which left him in a Reached out session he never chose;
        a reload cured that only while restore refused every view but Untouched. */
-    b.onclick=function(){ if(_QVBACK){ QVIEW=_QVBACK.v; _QVBACK=null; } lane=b.dataset.l; BLANE=null; i=0; render();
+    b.onclick=function(){ if(_QVBACK){ QVIEW=_QVBACK.v; _QVBACK=null; } lane=b.dataset.l; LKFROM=null; BLANE=null; i=0; render(); _lkSaveState();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
          leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
          done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
@@ -10227,10 +10372,11 @@ function wire(){
     el.onclick=function(){ _openCase(el.getAttribute('data-open')); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-lk]'), function(b){
-    b.onclick=function(){ BLANE = (BLANE === '__lk') ? null : '__lk'; i=0; render(); };
+    b.onclick=function(){ if(BLANE === '__lk'){ _lkSaveState(); BLANE = null; i=0; render(); _lkSaveState(); return; }
+      BLANE = '__lk'; i=0; render(); _lkScroll(true); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkf'), function(b){
-    b.onclick=function(){ LKEQ = b.getAttribute('data-eq') === '1'; LKSHOW = 200; render(); };
+    b.onclick=function(){ LKEQ = b.getAttribute('data-eq') === '1'; LKSHOW = 200; render(); _lkSaveState(); };
   });
   var _lkm = $('lkmore');
   if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };
@@ -10251,7 +10397,8 @@ function wire(){
       if(/@/.test(v)){
         var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
         if(!lr){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
-        screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
+        screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); _lkScroll(false); });
+        if(SCREEN === 'mail'){ delete LKDRAFT[c]; _lkSaveState(); }
         return;
       }
       lkSave(c, v); };
@@ -10270,6 +10417,7 @@ function wire(){
 /* Open one lead's card in the dial lane that holds it (a board-lane row, or a lead just given a
    number on the Find-a-number list). */
 function _openCase(c){
+  if(LKFROM && c !== LKFROM) LKFROM = null;   /* a different lead opened on purpose: no way back to the list */
   var lane0 = lane;
   for(var q=0;q<LANES.length;q++){
     var L=LANES[q]; var hit=-1;
@@ -10686,7 +10834,7 @@ function setLang(v){
   else if(SCREEN==='after' && _lastAfter){ afterCall(_lastAfter[0], _lastAfter[1], _lastAfter[2]); }
   else if(SCREEN==='mail' && _MAIL){ screenMail(_MAIL[0], _MAIL[1], _MAIL[2]); }
   else if(SCREEN==='routes'){ screenRoutes(); }
-  if(cur) renderSheet(cur);
+  var _shr = _sheetLead(); if(_shr) renderSheet(_shr);
 }
 function langChips(){
   var L=lang();
@@ -10829,7 +10977,7 @@ function renderGuided(r, S, named, warm){
   return b;
 }
 function _gGo(to){
-  var S=(cur && cur.st==='BAL' && SCRIPT_ALL.bal)?SCRIPT_ALL.bal:SCRIPT_ALL;
+  var _sl=_sheetLead(), S=(_sl && _sl.st==='BAL' && SCRIPT_ALL.bal)?SCRIPT_ALL.bal:SCRIPT_ALL;
   if(to==='back'){ _g.step=_g.stack.pop()||'greet'; }
   else if(to==='restart'){ _g.step='greet'; _g.stack=[]; _g.ret=null; }
   else if(to==='ret'){ _g.stack.push(_g.step); _g.step=_g.ret||'greet'; _g.ret=null; }
@@ -10850,11 +10998,11 @@ function _gGo(to){
     if(to.indexOf('obj:')===0) _g.ret=(here&&here.ret)||_g.step;
     _g.step=to;
   }
-  renderSheet(cur);
+  renderSheet(_sheetLead());
 }
 function _gWire(){
   Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gto]'), function(el){ el.onclick=function(){ _gGo(el.dataset.gto); }; });
-  Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gmode]'), function(el){ el.onclick=function(){ _g.on=(el.dataset.gmode==='1'); _gSave(); renderSheet(cur); }; });
+  Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gmode]'), function(el){ el.onclick=function(){ _g.on=(el.dataset.gmode==='1'); _gSave(); renderSheet(_sheetLead()); }; });
   wireLang($('sbody'));
 }
 
@@ -11031,14 +11179,14 @@ function renderSheet(r){
   $('sbody').innerHTML = b;
   // delegated so the handlers survive every re-render of the body
   Array.prototype.forEach.call($('sbody').querySelectorAll('[data-cioc]'), function(el){
-    el.onclick=function(){ ciocIdx = (ciocIdx===+el.dataset.cioc) ? -1 : +el.dataset.cioc; renderSheet(cur); };
+    el.onclick=function(){ ciocIdx = (ciocIdx===+el.dataset.cioc) ? -1 : +el.dataset.cioc; renderSheet(_sheetLead()); };
   });
   Array.prototype.forEach.call($('sbody').querySelectorAll('[data-obj]'), function(el){
-    el.onclick=function(){ objIdx = (objIdx===+el.dataset.obj) ? -1 : +el.dataset.obj; renderSheet(cur); };
+    el.onclick=function(){ objIdx = (objIdx===+el.dataset.obj) ? -1 : +el.dataset.obj; renderSheet(_sheetLead()); };
   });
   // GUIDED / FULL toggle is rendered in the full sheet too — wire it here as well.
   Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gmode]'), function(el){
-    el.onclick=function(){ _g.on=(el.dataset.gmode==='1'); _gSave(); renderSheet(cur); };
+    el.onclick=function(){ _g.on=(el.dataset.gmode==='1'); _gSave(); renderSheet(_sheetLead()); };
   });
   wireLang($('sbody'));
 }
