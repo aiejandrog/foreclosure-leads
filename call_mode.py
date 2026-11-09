@@ -6403,9 +6403,9 @@ function screenTeamKey(){
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
   var _wl = lane, _rest = _qvRestore();
+  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   /* a lead opened from Find a number goes back to that list once its call is done (2026-11-09) */
   if(LKFROM && workedC === LKFROM){ _NAVF.length = 0; return _lkReturn(); }
-  try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   if(workedC){ _NAVB.push({c:workedC, l:_wl}); if(_NAVB.length>300) _NAVB.shift(); } _NAVF.length=0;   // Back can return here; a real move forward drops the redo trail
   if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
@@ -6994,7 +6994,6 @@ function _sheetLead(){
 function _lkReturn(){
   LKFROM = null;
   try{ _qvRestore(); }catch(e){}
-  try{ vmClose(); }catch(e){}
   if(cur) delete cur._rcStay;
   SCREEN = 'lead'; BLANE = '__lk';
   render();
@@ -10397,7 +10396,7 @@ function wire(){
       if(/@/.test(v)){
         var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
         if(!lr){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
-        screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); _lkScroll(false); });
+        screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
         if(SCREEN === 'mail'){ delete LKDRAFT[c]; _lkSaveState(); }
         return;
       }

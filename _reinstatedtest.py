@@ -38,7 +38,7 @@ function lang(){return LANG;} function langChips(){return '';}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 function fillScript(s){return s;} function say(en,es){return '<div class="say">'+(LANG==='es'?es:en)+'</div>';}
 function today(){return '2026-09-30';} function toast(m){clicked.push('toast:'+m);}
-function renderSheet(){} var OUTCOMES=[{k:'notint',t:'Soft no'},{k:'dnc',t:'Hard no'}];
+function renderSheet(){} function _sheetLead(){ return cur; } var OUTCOMES=[{k:'notint',t:'Soft no'},{k:'dnc',t:'Hard no'}];
 var document={querySelector:function(q){var m=q.match(/data-oc="(\w+)"/); return {click:function(){clicked.push(m[1]);}};}};
 """
 
