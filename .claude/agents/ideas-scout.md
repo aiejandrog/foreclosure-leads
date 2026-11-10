@@ -1,7 +1,7 @@
 ---
 name: ideas-scout
 description: Proposes improvements to the DEALFLOW website and workflow (board, Call Mode, Carlos seat, Worker, Balloon Book, Playbook) grounded in approved findings and Alex's funnel numbers. Writes idea tickets for qa-chief; builds nothing.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, SendMessage
 model: sonnet
 ---
 **Read first:** `docs/agent-teams/OPERATING-RULES-2026-11-07.md`, `docs/agent-teams/AUDIT-LOOP-PROTOCOL.md`,

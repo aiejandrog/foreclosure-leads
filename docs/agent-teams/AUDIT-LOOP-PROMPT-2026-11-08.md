@@ -71,11 +71,14 @@ main checkout root** (the hook is registered there), run `/hooks` and check PreT
 ```
 AUDIT LOOP RUN. Repo root = this folder (main checkout). You are "main", the Lead. You coordinate,
 spawn, shut down and export. You do not audit, fix or review code yourself. Wait for teammates.
+Open a NEW chat for the loop; do not use that window for other projects while the hook is active.
 
 READ FIRST (you, and tell every teammate to read them in its spawn prompt):
 docs/agent-teams/OPERATING-RULES-2026-11-07.md, docs/agent-teams/AUDIT-LOOP-PROTOCOL.md,
 docs/agent-teams/PATTERNS.md, OWNERS.md, CLAUDE.md sections your files touch (grep the heading).
 RUN = today's date (YYYY-MM-DD). RUNDIR = %USERPROFILE%\DEALFLOW\agent-logs\<RUN>.
+The recorder names its folder by UTC date, so a run that crosses 00:00 UTC writes into two folders:
+pass both to digest and to autopsy, and count guard blocks from both.
 HOOK = %USERPROFILE%\DEALFLOW\agent-hooks\agent_guard.py.
 
 HARD RULES (any break = stop that agent; the guard enforces most of them and logs every attempt):
@@ -103,7 +106,11 @@ a. Guard check: run `echo agent-guard-probe.bat`. It must come back "agent_guard
    If it runs, STOP and tell Alex "guard not active, run the setup paste". Do not continue.
 b. git fetch origin. git worktree add ..\fl-loop-base --detach origin/main. In it, with
    DEALFLOW_DIR set to a new temp folder: python ci_suite.py > %TEMP%\ci-base.txt 2>&1, then grep
-   FAIL lines. Note origin/main SHA and the baseline failures.
+   FAIL lines. Note origin/main SHA and the baseline failures. Run it twice, serially, once in the
+   default locale and once with PYTHONUTF8=1, with no other session running, and write both lists:
+   a suite that is red only inside the full run is noise. Before any browser suite set PW_CHROMIUM
+   to the system Chrome and write whether _dnctest.py honoured it; if it did not, every LEGAL REVIEW
+   PR body says "DNC/opt-out browser suites not run".
 c. Spawn ONLY "chief" from qa-chief (Sonnet). Send it: RUN, RUNDIR, the SHA, the baseline failures,
    and this wave plan for the roster gate (PATTERNS.md section 2):
      wave 1 site, sec, wire (+ code, legal, data only if docs/agent-teams/audits/2026-11-07-*.md
@@ -117,11 +124,20 @@ For each of site (site-qa), sec (security-auditor), wire (wiring-auditor), all S
   git worktree add ..\fl-loop-<name> --detach origin/main   (read-only audit, no branch, no commits)
   spawn prompt (under 30 lines): role file name, worktree path, RUN, RUNDIR, "write tickets in
   RUNDIR\worklog-<name>.md in the AUDIT-LOOP-PROTOCOL format and message each one to chief as you
-  write it; this loop replaces the docs/agent-teams/audits/ report path in your role file", scope =
-  board, Call Mode, Carlos seat, Morning Worker, Balloon Book, Playbook (+ bridge for sec and wire),
-  stop at 12 tickets or when your checks are done, end with an OUTPUT-TEMPLATE block.
-Chief triages as tickets arrive. When an auditor finishes and chief has no open NEEDS-INFO for it,
-shut it down. Then wave 1b if approved, same pattern.
+  write it (if you have no SendMessage, end the worklog with `READY: <ids>`); this loop replaces
+  the docs/agent-teams/audits/ report path in your role file", scope split by primary surface:
+  site = board, Reply inbox, Playbook, Balloon Book page; wire = Call Mode, Carlos seat, Morning
+  Worker, bridge routes, funnel; sec = public footprint, repo and Pages exposure, bridge auth. A
+  finding on another agent's surface is one line `SEE <name>` in your worklog, not a ticket (sec
+  keeps payload and access). Stop at 12 tickets or when your checks are done, end with an
+  OUTPUT-TEMPLATE block. Scratch: write only under <scratchpad>\<your-name>\; a bare name in the
+  scratchpad root belongs to nobody. A probe that starts the bridge runs in its own throwaway
+  worktree (git worktree add --detach ..\fl-probe-<name> origin/main) with DEALFLOW_DIR set,
+  because the bridge writes state files beside the code; main removes it.
+Chief is a subagent and ends at every hand-back. Main resumes it once per batch: after the auditors,
+after ideas, after each gate PASS. Chief's hand-back ends with `NEXT NEEDED FROM MAIN:`. When an
+auditor finishes and chief has no open NEEDS-INFO for it, shut it down. Then wave 1b if approved,
+same pattern.
 
 WAVE 2 IDEAS
 Spawn "ideas" from ideas-scout in ..\fl-loop-ideas (--detach origin/main) once wave-1 auditors are
@@ -129,19 +145,26 @@ shut down. Tell it to read the APPROVED tickets on RUNDIR\BOARD.md first. Chief 
 Shut ideas down when chief has ruled on every idea.
 
 WAVE 3 FIX
-Spawn "gate" from qa-gate. Tell it: baseline SHA and failures, its QA lines go in
+Spawn "gate" from qa-gate when the first fixer hands back (a gate with nothing to check stops at
+once). Tell it: baseline SHA and failures, its QA lines go in
 RUNDIR\worklog-gate.md, and its diff checklist adds: Carlos seat gets no WP or balloon data;
-merge class line present; nothing on the report-only list changed; tests not run are listed.
+merge class line present; nothing on the report-only list changed; tests not run are listed;
+the diff name list has no path under docs/.
 Take chief's APPROVED-FIX list, S1 first, then S2, S3, S4, S5; at most 4 fixes this run, at most
-2 fixers alive at once, and never two fixers on the same file (queue the second).
+2 fixers alive at once, and never two fixers on the same file at once. Every fixer branches from
+origin/main, never from another fixer's branch; "queue" means one after the other in time, not
+stacked; stack only on a textual dependency, with a written fallback if the earlier PR is blocked.
+Nobody merges during a run.
 For each ticket <id>: git worktree add ..\fl-fix-<id> -b claude/agents-fix-<id> origin/main, then
 spawn "fixer-<id>" from fixer (Sonnet) with: the ticket block verbatim, the owner role from
 OWNERS.md it acts as, the worktree, the branch, the test to write first, LEGAL REVIEW yes/no, and
-"hand to gate; after QA PASS push your branch and open a DRAFT PR (gh pr create --draft; if gh is
-missing write the body to docs/agent-teams/pr/fix-<id>.md on your branch) with the merge class chief
+"hand to gate; after QA PASS push your branch and open a DRAFT PR (gh pr create --draft --body-file
+RUNDIR\pr-<id>.md; the body file stays in RUNDIR, never in the repo) with the merge class chief
 gave; then message chief the PR link". Fixer follows the fix-agent skill.
 Gate FAIL goes back to the fixer; 3 FAILs = chief marks FAILED. Chief does the scope check after
 PASS and marks SHIPPED-PR. Shut each fixer down after SHIPPED-PR or FAILED.
+If a fixer is QA-BLOCKED, chief re-plans in the same reply (narrow to the edits the guard allows, or
+APPROVED-REPORT) so the fix slot is not left idle.
 
 WAVE 4 AUTOPSY
 Shut down gate. Run: python %USERPROFILE%\DEALFLOW\agent-hooks\agent_guard.py digest <RUN>.

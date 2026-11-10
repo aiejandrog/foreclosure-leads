@@ -35,6 +35,11 @@ Why the repo root and not `docs/`: `publish_site.py` copies all of `docs/` to th
 ```
 
 IDs: `F-<agent>-NN` for findings (`F-sec-03`), `I-NN` for ideas, `P-NN` for process tickets.
+If you have no SendMessage, the last line of your worklog is `READY: <ids>` and your hand-back lists
+them; main forwards the worklog path to chief, and BOARD Conversation lines say `main relayed`.
+Name a block of the page by file and line range (`tracker_template.html:6086-6095`), never by a
+surname or party label in it. Classify possible personal values with a script that prints counts and
+line numbers; never print context lines (`grep -c`, not `grep -n` with the line).
 IDEA adds: `Problem evidence`, `Expected effect` (prefix `guess:` when not measured), `Counter that
 would measure it`, `Effort S/M/L`, `$ cost` (must be 0).
 
@@ -56,6 +61,8 @@ NEW -> DENIED (reason) | DUPLICATE (of id) | APPROVED-REPORT (report-only surfac
 NEW -> APPROVED-FIX -> IN-FIX (fixer, branch) -> QA-FAIL (back to fixer, max 3) -> FAILED (to autopsy)
                                              -> QA-PASS (gate) -> SHIPPED-PR (chief accepted scope)
 ```
+Also: `BOUNCED` (chief rejected scope after a QA PASS; it counts toward the 3 like a QA-FAIL) and
+`QA-BLOCKED` (the fixer was stopped by the guard; chief re-plans in one reply).
 
 ## 5. BOARD.md (chief)
 
@@ -71,6 +78,9 @@ Below the table, a `## Conversation` list: one line per message that changed a s
 Append, never rewrite. One line per meaningful step:
 `ts  <verb>  <what>  <proof>` e.g. `18:40 RAN python _callmodenavtest.py -> 14 pass`.
 Every message you send that hands work to someone gets a line (`-> chief F-site-04 READY`).
+`ts` is the output of `date +%H:%M` run in that step, never an estimate. Each worklog ends with a
+`FINAL:` line (state, PR, SHA) written at your last hand-back; if the state changes afterwards chief
+appends one reconciling line to the board row, not to your worklog.
 End with one OUTPUT-TEMPLATE block (`docs/agent-teams/OUTPUT-TEMPLATE.md`).
 
 ## 7. Merge classes (written on every PR body; no agent ever merges)
@@ -95,3 +105,7 @@ Installed by Alex's setup paste, never by an agent. It refuses (exit 2) the free
 its docstring and logs the attempt. A BLOCKED line is not a crash: read the reason, do the allowed
 thing instead (import in a test, write a DECISIONS-NEEDED entry, push your own branch). Never try to
 get around it by rewording the command; the autopsy reads every block.
+
+A pushed branch is never moved: create `<branch>-b` from the new base with a plain push, open a new
+draft PR and comment "superseded by #N" on the old one. Force-push is refused even on your own
+branch and the Lead may not authorise it.
