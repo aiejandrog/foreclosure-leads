@@ -3735,6 +3735,15 @@ function _boardMailHeld(r){
   if(_aucPassed(r)) return 'sale passed';
   return '';
 }
+/* Why the board will not offer a WRITTEN channel (Text, WhatsApp, a plain mailto: link) on this lead
+   for one of the holds the any-channel block does not already cover, or ''. It only reads
+   _boardMailHeld and keeps its four non-suppression answers (existing client, diligence hold, claimed
+   on another case, owner gone / transferred). It produces no verdict of its own. 'sale passed' and the
+   three suppression answers keep their existing handling. The Call button is not decided here. */
+function _boardWrittenHeld(r){
+  const h = _boardMailHeld(r);
+  return (h === 'existing client' || h === 'diligence hold' || h === 'claimed on another case' || h === 'owner gone') ? h : '';
+}
 /* Hand the address to Call Mode without putting it in the URL: same origin, so localStorage carries
    {c, to, ts} and the link carries only the case number. Call Mode drops a handoff older than 10
    minutes or for another case. Returns true so the link navigates. */
@@ -3779,7 +3788,7 @@ function _contactLineHtml(r, ph, opts){
   // 'wpm' (pasted from whitepages.com on a Call Mode card) is call-only too, until a call on it
   // reaches a person: same rule as a Whitepages likely-owner number (Alejandro, 2026-10-22).
   const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0; // 'wpm' removed 2026-11-02: pasted Whitepages numbers are textable
-  const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
+  const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r) && !_boardWrittenHeld(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
     : (isMob ? '' : ' <span class="cttag">landline</span>');
@@ -3887,7 +3896,8 @@ function _contactBlockHtml(r){
   h += _messagesBarHtml(r);
   if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
-  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  // No plain mailto: link while the board holds the lead (client, diligence hold, claimed, owner gone).
+  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=> _boardWrittenHeld(r) ? esc(e) : '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
   // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
   // Shown as text, never as a mailto link and never fed to the worker's auto-send list.
   // Sending one is Call Mode's POST /send. A mailto here would leave from this browser's account.
@@ -6871,7 +6881,7 @@ function _copyTextMsg(t, btn){
   else fallbackCopy(t,done);
 }
 function textCardHtml(r){
-  const hardBlock=_textContactBlocked(r);
+  const hardBlock=_textContactBlocked(r) || (_boardWrittenHeld(r) ? 'held' : '');
   const phones=hardBlock?[]:textablePhones(r);
   const owner=_ownerName((r.owners||'').split(';')[0].trim(), r);
   const msg=smsMsg(r, textLang, textTone);
@@ -6906,6 +6916,7 @@ function textCardHtml(r){
   if(hardBlock==='bk') gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text, copy, or WhatsApp.</div>';
   else if(hardBlock==='optout') gate='<div class="txblock">⛔ OPTED OUT — all outreach suppressed. Do not text or copy a solicitation.</div>';
   else if(hardBlock==='wrong') gate='<div class="txblock">🚫 WRONG PERSON — these numbers are not the owner. Re-verify before any outreach.</div>';
+  else if(hardBlock==='held') gate='<div class="txblock">⛔ On hold: '+esc(_boardWrittenHeld(r))+'. Do not text.</div>';
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
@@ -12489,6 +12500,10 @@ function genReplyInbox(){
     var r = x.r, rep = x.rep, chip = _urgencyChip(r.days);
     var ph = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); })[0] || '';
     var em = (r.emails||[])[0] || '';
+    // A STOP reply, or any lead the any-channel block closes, gets no Call and no mailto here; a lead the
+    // board holds for another reason (client, diligence hold, claimed, owner gone) keeps Call, loses mailto.
+    var noContact = !!rep.stop || !!_textContactBlocked(r);
+    var noMail = noContact || !!_boardWrittenHeld(r);
     return '<div class="rbcard'+(rep.stop?' stop':'')+'">'
       + (rep.stop ? '<div class="rbstop">&#9940; STOP REQUEST — this owner has been AUTO-SUPPRESSED (removed from every outreach queue). Nothing more to do. If this was a false alarm, open the lead and clear the opt-out.</div>' : '')
       + '<div class="rbtop">'
@@ -12499,8 +12514,8 @@ function genReplyInbox(){
       + '</div>'
       + (rep.note ? '<div class="rbnote">'+esc(String(rep.note).slice(0,200))+'</div>' : '')
       + '<div class="rbacts">'
-      +   (ph ? '<a class="rbbtn call" href="'+esc(_telNum(ph))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>')
-      +   (em ? '<a class="rbbtn" href="mailto:'+esc(em)+'">&#9993; '+esc(em)+'</a>' : '')
+      +   (noContact ? '' : (ph ? '<a class="rbbtn call" href="'+esc(_telNum(ph))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>'))
+      +   (em && !noMail ? '<a class="rbbtn" href="mailto:'+esc(em)+'">&#9993; '+esc(em)+'</a>' : '')
       +   '<a class="rbbtn" href="#case='+esc(r.case)+'" onclick="closeReplyInbox&&closeReplyInbox()">Open call sheet &rarr;</a>'
       + '</div></div>';
   }
