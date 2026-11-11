@@ -10541,7 +10541,14 @@ function afterCall(r, o, nextC){
                  callback:['cbtext'],
                  talked:['aftertalk','booklink'],
                  notint:['aftertalk'] };
-  var sitKeys = sitMap[o.k] || [];
+  /* GATEKEEPER CALLBACK (2026-11-11, Alex: "fix it"). The script's gatekeeper step logs "Got a callback
+     time" as a plain callback, tagged gk on the dial row. The owner never asked for it, so the "you asked
+     me to reach back out" text is wrong, and a callback from someone else does not confirm whose number
+     this is. No text of any kind from this panel after one: call back. */
+  var _gkcb = false;
+  try{ var _dl = (notes[r.c] || {}).dials || [], _ld = _dl[_dl.length - 1];
+       _gkcb = o.k === 'callback' && !!(_ld && _ld.gk && _ld.oc === 'callback'); }catch(e){}
+  var sitKeys = _gkcb ? [] : (sitMap[o.k] || []);
   var _txk = sitKeys.length ? sitKeys[0] : 'ladder';
   var _chips = '';
   var txt = '';
@@ -10550,6 +10557,7 @@ function afterCall(r, o, nextC){
   else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
+  else if(_gkcb)            txt = '<div class="nc">Someone other than the owner asked for this callback. Call back at that time, no text.</div>';
   /* RELATIVE / NOT SURE (2026-11-03): never texted from here, whatever the outcome. A text names the
      property and the case; a relative never asked about this homeowner's foreclosure. */
   else if(typeof relKind === 'function' && relKind(r, phIdx)) txt = '<div class="nc">' + (relKind(r, phIdx) === 'r' ? 'Relative’s number' : 'Not confirmed whose number this is') + ': call only, never texted.</div>';
@@ -10899,7 +10907,8 @@ function logOutcome(r,o,digits){
       else if(_ns.open){ n.resurf=Math.max(1, n.resurf||0); }   // second no on the resurface = permanent
     }
   }
-  if(!_rel && (o.k==='talked'||o.k==='appt'||o.k==='callback') && n.no==='soft'){ delete n.no; delete n.noAt; delete n.noWasLp; delete n.resurf; }
+  /* A gatekeeper's callback (gk, 2026-11-11) is not the owner re-engaging, so it does not clear a soft no. */
+  if(!_rel && !_row.gk && (o.k==='talked'||o.k==='appt'||o.k==='callback') && n.no==='soft'){ delete n.no; delete n.noAt; delete n.noWasLp; delete n.resurf; }
   else if(o.k==='callback') n.status=n.status||'Callback';
   else if(o.k==='gate') n.status=n.status||'Gatekeeper';
   else if(o.k==='badnum'){
