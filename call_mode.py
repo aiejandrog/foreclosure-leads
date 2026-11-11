@@ -1797,6 +1797,24 @@ def _call_equity_parts(d):
     return eq, 0
 
 
+def _mail_to(d):
+    """WHERE A LETTER GOES (2026-11-11, Alex's decision 3: absentee owners are mailed at the owner's
+    mailing address, not the property). The owner's mailing address, trimmed for the handset, only
+    when it differs from the property's first line (an absentee owner) and the lead's equity card says
+    a figure may be quoted (the only leads Call Mode ever routes to mail). None otherwise, so an
+    owner-occupied row or a non-equity row ships nothing extra. Rides inside the encrypted payload."""
+    if not isinstance(d, dict):
+        return None
+    m = re.sub(r'\s+', ' ', str(d.get('mail') or '')).strip()
+    a1 = (d.get('addr') or '').split(',')[0].strip().upper()
+    if not m or m.split(',')[0].strip().upper() == a1:
+        return None
+    c = d.get('eqc')
+    if not (isinstance(c, dict) and c.get('may_quote')):
+        return None
+    return m[:90]
+
+
 def _eqc_slim(c):
     """The baked equity card, trimmed for the handset. None when the lead has none (the page then falls
     back to eqv, which is the same clear/priced test). Amounts are RECORDED amounts, never payoffs."""
@@ -2366,7 +2384,16 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
                            'd': days, 'lp': 1 if is_lp else None, 'z': (re.search(r'(\d{5})\s*$', (d.get('addr') or '')).group(1)
                                   if re.search(r'(\d{5})\s*$', (d.get('addr') or '')) else None),
                            'pl': (str(d.get('plaintiff') or '').strip()[:46] or None),
-                           'pcs': (_groups.get(d.get('pkey') or '') if len(_groups.get(d.get('pkey') or '') or []) > 1 else None)})
+                           'pcs': (_groups.get(d.get('pkey') or '') if len(_groups.get(d.get('pkey') or '') or []) > 1 else None),
+                           # NO-ANSWER TO MAIL (2026-11-11): a Whitepages-pasted lead becomes a dial row
+                           # through lkAsDial, and without its equity card isEquity() was false, so a
+                           # No answer on a pasted number could never route it to mail.
+                           'eqc': _eqc_slim(d.get('eqc')),
+                           'ab': 1 if ((d.get('mail') or '').split(',')[0].strip().upper()
+                                       and (d.get('addr') or '').split(',')[0].strip().upper()
+                                       and (d.get('mail') or '').split(',')[0].strip().upper()
+                                       != (d.get('addr') or '').split(',')[0].strip().upper()) else None,
+                           'ma': _mail_to(d)})
             continue
         rank = d.get('phrank') or []
         best = d.get('phbest')
@@ -2600,6 +2627,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # `"hs":0` on 1,300 rows is pure payload for no information
             'hs': 1 if d.get('hs') else None,
             'ab': 1 if (_m1 and _a1 and _m1 != _a1) else None,
+            # the owner's mailing address, absentee equity rows only (_mail_to): where the letter goes
+            'ma': _mail_to(d),
             'dd': _s('dor_desc', 30), 'bd': _n('beds'), 'ba': _n('baths'), 'sf': _n('sqft'),
             'zs': _s('zstatus', 12),
             # BUY-BOX. A standing acquisition criterion (buybox.py) that make_tracker stamps onto
@@ -3230,7 +3259,7 @@ def mark_lookup(cov, lookup, crew_sb=None):
         r['lk'] = 1
         # a replied lookup lead stays on seat 0; its person's dial rows were pinned there too
         r['sb'] = 0 if x.get('rp') else crew_sb.get(x.get('pk'), x['sb'])
-        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp'):
+        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp', 'eqc', 'ab', 'ma'):
             if x.get(k) not in (None, '', []):
                 r[k] = x[k]
         n += 1
@@ -6715,7 +6744,7 @@ function head(){
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
        covers anything placed there; the top bar is the one strip nothing ever overlays. */
     +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+' &middot; <a href="#" id="cstatslink" style="color:var(--gold)">call stats</a>'
-    +(function(){ var _rn = 0; try{ _rn = routeOpenN(); }catch(e){} return ' &middot; <a href="#" id="routeslink" style="color:var(--gold)">routes' + (_rn ? ' ' + _rn : '') + '</a>'; })()
+    +(function(){ var _rn = 0; try{ _rn = routeOpenN(); }catch(e){} return ' &middot; <a href="#" id="routeslink" style="color:var(--gold)">mail/knock' + (_rn ? ' ' + _rn : '') + '</a>'; })()
     +'</div>'
     +sessStrip()
     +'</div>';
@@ -6787,7 +6816,9 @@ function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length =
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu'].forEach(function(k){
+  /* eqc / ab / ma (2026-11-11): the equity card, absentee flag and mailing address, so a No answer on a
+     pasted number can route the lead to mail like any traced lead (noAnswerRoute). */
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu','eqc','ab','ma'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
@@ -8103,6 +8134,19 @@ function screenCallStats(){
     +   '<div class="regsub" style="margin-top:6px">Talk time is tracked only when &lsquo;They picked up&rsquo; is tapped '
     +   'during the call: talk_min is the sum of talk seconds on answered calls with a pickup tap, avg_talk_min is its '
     +   'average. dial_to_log_min is dial tap to outcome tap on answered calls, ringing included.</div></div>'
+    + (function(){
+        /* WEEKLY SCORECARD (2026-11-11): Monday to Sunday, this seat against the targets, the team total,
+           and on Fridays the week in review with a copy for an AI. Counts only. */
+        var W = weekStats(notes, Date.now()), s = W.seats[me || ''] || {cur:{}, prev:{}}, c = s.cur, pv = s.prev;
+        var v = function(f){ return (c[f] || 0); }, p = function(f){ return (pv[f] || 0); };
+        return '<div class="band" style="margin-top:10px"><div class="bl">' + (W.friday ? 'WEEK IN REVIEW' : 'THIS WEEK') + ' &middot; from ' + esc(_md(W.week)) + '</div>'
+          + '<div class="regsub">Dials ' + v('dials') + ' of ' + WEEK_TARGETS.dials + ' &middot; doors ' + v('doors') + ' of ' + WEEK_TARGETS.doors
+          + ' &middot; letters ' + v('letters') + ' of ' + WEEK_TARGETS.letters + '</div>'
+          + '<div class="regsub">Conversations ' + v('conversations') + ' &middot; appointments ' + v('appointments')
+          + ' &middot; last week: ' + p('dials') + ' dials, ' + p('conversations') + ' conversations, ' + p('appointments') + ' appt</div>'
+          + '<div class="regsub">Team: offers ' + W.total.cur.offers + ' &middot; under contract ' + W.total.cur.contracts + ' &middot; closed ' + W.total.cur.closed + '</div>'
+          + '<button class="ghost" id="cswk" style="margin-top:8px">Copy week for AI</button></div>';
+      })()
     + '<div class="reglist">' + shown + '</div>'
     + '<button class="big" id="cscopy" style="margin-top:14px">Copy as text</button>'
     + '<button class="big" id="csdl" style="margin-top:8px">Download CSV</button>'
@@ -8111,6 +8155,7 @@ function screenCallStats(){
     + '</div><div class="sheetpad"></div>';
   $('csback').onclick = function(){ SCREEN='lead'; render(); };
   $('cswin').onclick = function(){ _csDays = (_csDays===1 ? 14 : 1); screenCallStats(); };
+  if($('cswk')) $('cswk').onclick = function(){ _copyOut(weekText(weekStats(notes, Date.now())), 'Week copied: paste it into Claude or another AI'); };
   $('cscopy').onclick = function(){
     var done = function(){ toast('Copied'); };
     try{
@@ -8497,7 +8542,11 @@ function advisorBrief(r){
 function briefButtons(r){
   return '<div class="flinks" style="margin-top:10px">'
     + '<a href="#" class="briefjesse" style="background:#3d2c08;border-color:#A8720C;color:#F6E9C8;font-weight:800">&#9889; Brief Jesse</a>'
-    + '<a href="#" class="briefcopy">&#128203; Copy brief</a></div>';
+    + '<a href="#" class="briefcopy">&#128203; Copy brief</a>'
+    /* 2026-11-11: the prospect record (every dial, letter, knock, route and note, plus the next action)
+       and the same record as a prompt for Claude or another AI to challenge the plan. */
+    + '<a href="#" class="precord" data-c="' + esc(r.c) + '">&#128221; Record</a>'
+    + '<a href="#" class="praicopy" data-c="' + esc(r.c) + '">Copy for AI</a></div>';
 }
 function wireBrief(root, r){
   Array.prototype.forEach.call(root.querySelectorAll('.wpcopy'), function(b){
@@ -8529,6 +8578,12 @@ function wireBrief(root, r){
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       mark(); toast('Gmail opened — hit Send and keep talking');
     };
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('.precord'), function(b){
+    b.onclick = function(ev){ ev.preventDefault(); screenRecord(r.c, 'lead'); };
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('.praicopy'), function(b){
+    b.onclick = function(ev){ ev.preventDefault(); _copyOut(prospectPrompt(r.c), 'Copied: paste it into Claude or another AI'); };
   });
   Array.prototype.forEach.call(root.querySelectorAll('.briefcopy'), function(b){
     b.onclick = function(ev){
@@ -9510,6 +9565,7 @@ function routeBlock(r){
 }
 function setRoute(r, k){
   if(!ROUTE_KINDS.hasOwnProperty(k) || routeBlock(r)) return false;
+  if(k === 'knock' && r.ab) return false;   /* absentee: knocking a tenant's door discloses the foreclosure */
   var n = notes[r.c] = notes[r.c] || {status:'', note:''};
   n.route = {k:k, d:today(), ts:Date.now(), by:caller()};
   try{ _FCGEN++; }catch(e){}
@@ -9525,7 +9581,7 @@ function setRouteAtty(r){
 }
 /* kind 'letter' (mailed: leaves the list) | 'door' (knocked, no answer: stays, attempt counted) |
    'doordone' (talked at the door / finished: leaves the list). One touch each, one save. */
-function routeMark(r, kind){
+function routeMark(r, kind, how){
   var n = notes[r.c] = notes[r.c] || {status:'', note:''}, x = routeOf(n);
   if(!x) return false;
   var ch = kind === 'letter' ? 'letter' : 'door';
@@ -9537,6 +9593,16 @@ function routeMark(r, kind){
   y.ts = Date.now();
   if(kind === 'door') y.kn = (+x.kn || 0) + 1;
   else { y.done = today(); y.dk = kind; }
+  if(kind === 'letter'){
+    /* 2026-11-11: how it went out (hand-written or printed), who marked it, and a follow-up call date
+       mailed + MAIL_FOLLOWUP_DAYS unless an earlier call date is already set. */
+    y.how = how === 'lob' ? 'lob' : 'hand'; y.mby = caller();
+    var fu = _ymdAdd(today(), MAIL_FOLLOWUP_DAYS);
+    if(!(n.next && n.next >= today() && n.next <= fu)){
+      n.next = fu;
+      var _fm = fu.match(/^(\d{4})-(\d{2})-(\d{2})/); n.nextTs = new Date(+_fm[1], +_fm[2]-1, +_fm[3], 10).getTime();
+    }
+  }
   n.route = y;
   try{ _FCGEN++; }catch(e){}
   saveNotes(); try{ queueSync(); }catch(e){}
@@ -9550,13 +9616,12 @@ function routeCity(r){
 }
 /* -> {mail:[{r,x,city,days}], knock:[{city, co, items:[...]}], blocked:[{c,why}]}. Open routes only. */
 function routeLists(){
-  var byC = {};
-  ROWS.forEach(function(r){ if(r && r.c && !byC[r.c]) byC[r.c] = r; });
+  var byC = _rowsByC();
   var mail = [], kn = [], blocked = [];
   Object.keys(notes || {}).forEach(function(c){
     var x = routeOf(notes[c]);
     if(!x || x.k === 'none' || x.done) return;
-    var r = byC[c] || null, why = routeBlock(r);
+    var r = byC[c] || null, why = routeBlock(r) || routeLeftWhy(notes[c], x) || (x.k === 'knock' && r && r.ab ? 'absentee owner: never knocked' : '');
     if(why){ blocked.push({c:c, k:x.k, why:why}); return; }
     var it = {r:r, x:x, city:routeCity(r), days:liveDays(r)};
     (x.k === 'mail' ? mail : kn).push(it);
@@ -9598,13 +9663,15 @@ function routePanelHtml(r){
   if(why){ return h + '<div class="nc">Not routed: ' + esc(why) + '.</div></div>'; }
   var d = liveDays(r), late = (typeof d === 'number' && d < ROUTE_MAIL_MIN_DAYS);
   if(x) h += '<div class="mut" style="font-size:12px;margin-bottom:6px">Now: <b>' + esc(ROUTE_KINDS[x.k]) + '</b>'
-           + (x.done ? ' (done ' + esc(x.done) + ')' : '') + ' &middot; ' + esc(x.d || '') + (x.by ? ' by ' + esc(x.by) : '') + '</div>';
+           + (x.done ? ' (done ' + esc(x.done) + ')' : '') + ' &middot; ' + esc(x.d || '') + (x.by ? ' by ' + esc(x.by) : '')
+           + (x.auto === 'na' ? ' &middot; added automatically after the no answer' : '') + '</div>';
   h += '<div class="cbrow">'
      + '<button class="cb rt' + (x && x.k === 'mail' ? ' on' : '') + '" data-rt="mail"' + (late ? ' disabled' : '') + '>&#9993; Mail a letter</button>'
-     + '<button class="cb rt' + (x && x.k === 'knock' ? ' on' : '') + '" data-rt="knock">&#128682; Knock</button>'
+     + (r.ab ? '' : '<button class="cb rt' + (x && x.k === 'knock' ? ' on' : '') + '" data-rt="knock">&#128682; Knock</button>')
      + '<button class="cb rt' + (x && x.k === 'none' ? ' on' : '') + '" data-rt="none">Neither</button>'
      + '</div>'
-     + (late ? '<div class="mut" style="font-size:12px;margin-top:6px">Sale in ' + d + ' day' + (d === 1 ? '' : 's') + ': a letter will not land in time. Knock instead.</div>' : '')
+     + (late ? '<div class="mut" style="font-size:12px;margin-top:6px">Sale in ' + d + ' day' + (d === 1 ? '' : 's') + ': a letter will not land in time. ' + (r.ab ? 'Absentee owner: keep calling.' : 'Knock instead.') + '</div>' : '')
+     + (r.ab ? '<div class="mut" style="font-size:12px;margin-top:6px">Absentee owner: letters go to the mailing address, never a knock.</div>' : '')
      + '<button class="rtatty" data-rt="atty">They have an attorney &mdash; do not route</button>';
   return h + '</div>';
 }
@@ -9643,48 +9710,565 @@ function _routeItemHtml(it, kind){
           + '<a class="cb" style="display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a || '') + '">Map</a>')
     + '</div></div>';
 }
+/* ═══════════════ NO-ANSWER TO MAIL PIPELINE (2026-11-11) ═══════════════
+   Alex: "if we press no answer, like it sends that prospect directly towards a pipeline where we mail
+   ... a whole page like specifically for mailing ... keep everything organized ... mark it up as a
+   prompt so we can send it to you or any other agentic model. So it could dispute it with us."
+   His decisions the same day: the FIRST No answer or voicemail on a verified-equity lead routes it;
+   letters go out hand-written AND Lob printed; absentee owners are mailed at the owner's mailing
+   address (r.ma); one letter per lead; the board Mail batch is verified equity only.
+   - noAnswerRoute() runs inside logOutcome's save. It writes the same n.route unit the after-call
+     buttons write (newest ts wins on every merge), tagged auto:'na' with the miss count and the number's
+     source. It never overrides a route a person chose, never routes a lead that already got a letter,
+     never counts a miss on a relative / not-sure line, and never routes past routeBlock().
+   - Inside 7 days of the sale an owner-occupied lead goes to Knock; an absentee one is never knocked.
+   - "Mailed" sets a follow-up call date (mailed + 6 days) unless an earlier one is set. Ten days after
+     mailing, a still-unreached owner-occupied lead moves to Knock (routeAdvance, on opening the page).
+   - prospectRecord() is computed, not stored: every phone, the laptop and the board build the same one.
+     The AI copy leaves out full phone numbers, email addresses, the owner's last name and any equity
+     figure that may not be quoted.
+   Nothing here sends, mails, prints or spends. Letters print on the laptop:
+   python bsg_mail_campaign.py --from-route, which re-checks opt-out, stay and diligence at print time. */
+var MAIL_AFTER_MISSES = 1;
+var MAIL_FOLLOWUP_DAYS = 6;
+var MAIL_KNOCK_AFTER_DAYS = 10;
+var MAIL_LEFT_DAYS = 14;
+var MAIL_POSTAGE = 0.88;
+/* Alex's weekly targets for his seat (2026-11-11). Every seat sees these until a seat has its own. */
+var WEEK_TARGETS = {dials:625, doors:10, letters:10};
+var SX_WORD = {t:'skip-trace number', w:'Whitepages owner number', h:'Whitepages household number',
+               n:'Whitepages name-match number', p:'pasted Whitepages number'};
+var REACHED_OC = {talked:1, callback:1, appt:1};
+var _LAST_AUTO = null, _RTAB = 'mail', _MAILCK = {}, _GK_CB = null;
+function _ymd(t){ var d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function _ymdAdd(ymd, k){
+  var m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return '';
+  return _ymd(new Date(+m[1], +m[2]-1, +m[3] + k, 12).getTime());
+}
+function _ymdDiff(a, b){   /* b minus a, in whole days */
+  var x = String(a || '').match(/^(\d{4})-(\d{2})-(\d{2})/), y = String(b || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!x || !y) return null;
+  return Math.round((new Date(+y[1], +y[2]-1, +y[3], 12) - new Date(+x[1], +x[2]-1, +x[3], 12)) / 864e5);
+}
+function _md(ymd){ var m = String(ymd || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? m[1] + '-' + m[2] : ''; }
+function _hm(t){ if(!t) return ''; var d = new Date(+t); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+/* Which source a dialed number came from: 't' skip trace, 'w' / 'h' / 'n' Whitepages, 'p' pasted. */
+function numSrc(r, digits){
+  var d = _lkDigits(digits); if(!d || !r) return '';
+  var p = r.p || [];
+  for(var k = 0; k < p.length; k++){
+    if(_lkDigits(p[k]) !== d) continue;
+    var tag = (r.ps || [])[k];
+    if(tag === 'wpm' || tag === 'wpr') return 'p';
+    var ch = String(r.sx || '').charAt(k);
+    if(ch) return ch;
+    break;
+  }
+  if(wpmNums(r.c).indexOf(d) >= 0 || r.nl) return 'p';
+  return 't';
+}
+function ownerMisses(n){
+  var k = 0;
+  ((n && n.dials) || []).forEach(function(d){ if(d && !d.rel && (d.oc === 'noanswer' || d.oc === 'voicemail')) k++; });
+  return k;
+}
+/* When the owner was last reached (talked, callback, appointment on the owner's line). 0 = never. */
+function reachedAt(n){
+  var t = 0;
+  ((n && n.dials) || []).forEach(function(d){ if(d && !d.rel && !d.gk && REACHED_OC[d.oc]) t = Math.max(t, +d.tsu || 1); });
+  return t;
+}
+/* The SMS booking design's state (n.book), read only. */
+function bookOpen(n){ var b = n && n.book; return !!(b && typeof b === 'object' && (b.state === 'proposed' || b.state === 'booked')); }
+function letterSent(n){ return ((n && n.touches) || []).some(function(t){ return t && t.ch === 'letter'; }); }
+function _rowsByC(){
+  var byC = {};
+  (ROWS || []).forEach(function(r){ if(r && r.c && !byC[r.c]) byC[r.c] = r; });
+  try{ (COV || []).forEach(function(r){ if(r && r.lk && r.c && !byC[r.c]) byC[r.c] = lkAsDial(r, ''); }); }catch(e){}
+  return byC;
+}
+/* -> 'mail' | 'knock' | '' . Writes n.route; the caller (logOutcome) saves. */
+function noAnswerRoute(r, ok, digits){
+  if(ok !== 'noanswer' && ok !== 'voicemail') return '';
+  if(!r || !r.c) return '';
+  var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+  if(routeOf(n) || letterSent(n)) return '';          /* a person's choice stands; one letter per lead */
+  if(relKindNum(r.c, digits)) return '';              /* not the owner's line */
+  if(routeBlock(r)) return '';                        /* equity lane, opt-out, DNC, no, attorney */
+  if(reachedAt(n) || bookOpen(n)) return '';          /* reached: the booking flow owns it */
+  var mc = ownerMisses(n);
+  if(mc < MAIL_AFTER_MISSES) return '';
+  var days = liveDays(r), k = '';
+  if(typeof days !== 'number' || days >= ROUTE_MAIL_MIN_DAYS) k = 'mail';
+  else if(days >= 0 && !r.ab) k = 'knock';            /* absentee: the owner does not live there */
+  if(!k) return '';
+  var x = {k:k, d:today(), ts:Date.now(), by:caller(), auto:'na', mc:mc};
+  var sx = numSrc(r, digits); if(sx) x.sx = sx;
+  n.route = x;
+  return k;
+}
+/* Why a routed lead has left the pipeline even though routeBlock() still allows it. */
+function routeLeftWhy(n, x){
+  if(!x) return '';
+  if(reachedAt(n) > (+x.ts || 0)) return 'reached on the phone';
+  if(bookOpen(n)) return 'booking open';
+  return '';
+}
+/* Where the letter goes: the property for an owner who lives there, the mailing address for an absentee
+   owner (Alex's decision 3). {to, why}; why '' = mailable. */
+function mailTo(r){
+  if(!r) return {to:'', why:'not on the call list'};
+  if(r.ab){
+    if(r.ma && /\d/.test(r.ma)) return {to:r.ma, why:'', abs:1};
+    return {to:'', why:'absentee owner, no mailing address on file'};
+  }
+  if(r.a && /^\s*\d+\s+\S/.test(r.a)) return {to:r.a, why:''};
+  return {to:'', why:'no property street on file'};
+}
+/* Opening the Mail page moves what the calendar moved: a mail lead whose sale came inside 7 days goes to
+   Knock (owner-occupied only), and a mailed lead still unreached 10 days later goes to Knock. */
+function routeAdvance(){
+  var byC = _rowsByC(), t = today(), moved = 0;
+  Object.keys(notes || {}).forEach(function(c){
+    if(c.charAt(0) === '@' || c.charAt(0) === '#') return;
+    var n = notes[c], x = routeOf(n);
+    if(!x || x.k !== 'mail') return;
+    var r = byC[c] || null;
+    if(!r || r.ab || routeBlock(r) || routeLeftWhy(n, x)) return;
+    var days = liveDays(r), why = '';
+    if(!x.done && typeof days === 'number' && days >= 0 && days < ROUTE_MAIL_MIN_DAYS) why = 'late';
+    else if(x.done && x.dk === 'letter' && (typeof days !== 'number' || days >= 0)
+            && (_ymdDiff(x.done, t) || 0) >= MAIL_KNOCK_AFTER_DAYS) why = 'unreached';
+    if(!why) return;
+    n.route = {k:'knock', d:t, ts:Date.now(), by:caller(), auto:why, from:'mail', mailed:x.done || ''};
+    moved++;
+  });
+  if(moved){ try{ _FCGEN++; }catch(e){} saveNotes(); try{ queueSync(); }catch(e){} }
+  return moved;
+}
+function _whyLine(x){
+  if(!x) return '';
+  if(x.auto === 'na') return 'No answer x' + (+x.mc || 1) + ' on ' + _md(x.d) + (x.sx && SX_WORD[x.sx] ? ', ' + SX_WORD[x.sx] : '');
+  if(x.auto === 'late') return 'Moved from mail on ' + _md(x.d) + ': sale inside ' + ROUTE_MAIL_MIN_DAYS + ' days';
+  if(x.auto === 'unreached') return 'Mailed ' + _md(x.mailed) + ', still unreached after ' + MAIL_KNOCK_AFTER_DAYS + ' days';
+  return 'Routed by ' + (x.by || 'a teammate') + ' on ' + _md(x.d);
+}
+/* The Mail page's five sections. */
+function mailLists(){
+  var byC = _rowsByC(), t = today(), now = Date.now();
+  var ready = [], blocked = [], mailed = [], left = [];
+  Object.keys(notes || {}).forEach(function(c){
+    if(c.charAt(0) === '@' || c.charAt(0) === '#') return;
+    var n = notes[c], x = routeOf(n);
+    if(!x || x.k === 'none') return;
+    var r = byC[c] || null, gone = routeBlock(r) || routeLeftWhy(n, x);
+    var it = {c:c, r:r, x:x, n:n, days:r ? liveDays(r) : null};
+    if(gone){
+      var when = Math.max(+x.ts || 0, reachedAt(n));
+      if(now - when <= MAIL_LEFT_DAYS * 864e5){ it.why = gone; left.push(it); }
+      return;
+    }
+    if(x.k !== 'mail') return;
+    if(x.done){
+      if(x.dk !== 'letter') return;
+      it.fu = _ymdAdd(x.done, MAIL_FOLLOWUP_DAYS); it.due = it.fu <= t;
+      mailed.push(it); return;
+    }
+    if(typeof it.days === 'number' && it.days < ROUTE_MAIL_MIN_DAYS){
+      it.why = 'sale in ' + it.days + ' day' + (it.days === 1 ? '' : 's') + ': too late for a letter'
+             + (r.ab ? ' (absentee, keep calling)' : '');
+      blocked.push(it); return;
+    }
+    var m = mailTo(r);
+    if(m.why){ it.why = m.why; blocked.push(it); return; }
+    it.to = m.to; it.abs = !!m.abs;
+    ready.push(it);
+  });
+  var dk = function(it){ return (typeof it.days === 'number') ? it.days : 99999; };
+  [ready, blocked].forEach(function(L){ L.sort(function(a, b){ return dk(a) - dk(b); }); });
+  mailed.sort(function(a, b){ return a.fu < b.fu ? -1 : a.fu > b.fu ? 1 : 0; });
+  left.sort(function(a, b){ return (+b.x.ts || 0) - (+a.x.ts || 0); });
+  var unver = 0;
+  (ROWS || []).forEach(function(r){
+    if(!r || !r.c || isEquity(r)) return;
+    var n = notes[r.c];
+    if(n && ownerMisses(n) >= 1 && !reachedAt(n) && !hardSuppressed(r)) unver++;
+  });
+  return {ready:ready, blocked:blocked, mailed:mailed, left:left, unverified:unver};
+}
+/* ---------------- the prospect record ---------------- */
+function _firstLast(r){
+  var w = String((r && (r.on || r.o)) || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if(!w.length) return 'Owner name not on file';
+  return w.length === 1 ? w[0] : (w[0] + ' ' + w[w.length - 1].charAt(0).toUpperCase() + '.');
+}
+function _ocWord(k){ for(var j = 0; j < (OUTCOMES || []).length; j++){ if(OUTCOMES[j].k === k) return OUTCOMES[j].t; } return k || 'called'; }
+function _countyWord(ct){ return ct === 'BR' ? 'Broward' : ct === 'PA' ? 'Palm Beach' : 'Miami-Dade'; }
+function recTimeline(c, r, ai){
+  var n = notes[c] || {}, L = [];
+  (n.dials || []).forEach(function(d){
+    if(!d || d.oc === 'pending' || d.oc === 'redial') return;
+    var num = (d.sx && SX_WORD[d.sx] ? SX_WORD[d.sx] : 'number') + ' ...' + (d.ph4 || '????');
+    L.push({t:+d.tsu || 0, d:d.d, who:d.by || '', what:_ocWord(d.oc) + ', ' + num + (d.rel ? ' (relative line)' : '')});
+  });
+  (n.touches || []).forEach(function(x){
+    if(!x || x.ch === 'call' || x.ch === 'worker') return;
+    L.push({t:+x.tsu || 0, d:x.d, who:x.by || '', what:(x.ch === 'letter' ? 'Letter' : x.ch === 'door' ? 'Door' : x.ch === 'text' ? 'Text'
+            : x.ch === 'email' ? 'Email' : x.ch) + ': ' + String(x.out || '').slice(0, 80)});
+  });
+  var x = routeOf(n);
+  if(x){
+    var dd = r ? liveDays(r) : null;
+    L.push({t:+x.ts || 0, d:x.d, who:x.auto ? 'auto' : (x.by || ''),
+            what:(x.auto ? 'Routed to ' : 'Routed to ') + (x.k === 'mail' ? 'mail' : x.k === 'knock' ? 'knock' : 'neither')
+              + ' (' + _whyLine(x) + (typeof dd === 'number' && x.auto === 'na' ? ', sale in ' + dd + ' days' : '') + ')'
+              + (x.why ? ': ' + x.why : '')});
+  }
+  if(n.atty) L.push({t:0, d:n.atty, who:'', what:'Marked: has an attorney'});
+  if(n.next) L.push({t:+n.nextTs || 0, d:n.next, who:'', what:'Next call date set: ' + n.next});
+  if(n.book && typeof n.book === 'object' && n.book.state) L.push({t:+n.book.ts || 0, d:n.book.d || '', who:'', what:'Booking: ' + n.book.state});
+  Object.keys(n.stageAt || {}).forEach(function(s){ L.push({t:0, d:n.stageAt[s], who:'', what:'Stage: ' + s}); });
+  L.sort(function(a, b){
+    var ka = (a.d || '') + (a.t ? _hm(a.t) : '00:00'), kb = (b.d || '') + (b.t ? _hm(b.t) : '00:00');
+    return ka < kb ? -1 : ka > kb ? 1 : (a.t - b.t);
+  });
+  return L.map(function(e){ return _md(e.d) + ' ' + (e.t ? _hm(e.t) : '     ') + ' ' + (e.who || '-') + '  ' + e.what; });
+}
+function recHolds(r, n){
+  var H = [];
+  if(!r){ H.push('Not on this build\'s call list (a hold, a stay or removed)'); return H; }
+  var h = hardSuppressed(r); if(h) H.push('Do not contact: ' + h);
+  if(noState(r).soft) H.push('Said not interested (soft no)');
+  if(routeAtty(r)) H.push('Has an attorney: no mail, no knock');
+  if(r.bq) H.push('Bankruptcy not checked: ask first');
+  if(r.ab) H.push('Absentee owner: call and mail, do not knock');
+  var tc = 0; try{ tc = _tele24n(n || {}); }catch(e){}
+  if(tc) H.push(tc + ' call or text touch' + (tc === 1 ? '' : 'es') + ' in the last 24 hours (max 3)');
+  return H;
+}
+/* {s, why, s2, why2}: CLOSED | URGENT | MAIL | KNOCK | CALL | WAIT. */
+function nextAct(r, n){
+  n = n || {};
+  if(!r) return {s:'CLOSED', why:'no longer on the call list (hold, stay or removed)'};
+  var b = routeBlock(r);
+  if(b && b !== 'not in the Has equity lane') return {s:'CLOSED', why:b};
+  if(String(n.status || '') === 'Dead') return {s:'CLOSED', why:'marked Dead'};
+  var days = liveDays(r);
+  if(typeof days === 'number' && days < 0) return {s:'CLOSED', why:'sale date passed or held'};
+  var t = today(), now = Date.now(), reached = reachedAt(n), x = routeOf(n), C = [];
+  if(n.next && n.next <= t) C.push({s:'URGENT', why:(n.next < t ? 'call date overdue since ' : 'call due today, ') + _md(n.next)});
+  else if(n.status === 'Appointment' && n.nextStep && n.nextStep.date && (_ymdDiff(t, n.nextStep.date) || 0) <= 2)
+    C.push({s:'URGENT', why:'appointment step ' + _md(n.nextStep.date) + ': ' + (n.nextStep.what || 'next step')});
+  else if(typeof days === 'number' && days <= 7 && !reached) C.push({s:'URGENT', why:'Sale in ' + days + ' day' + (days === 1 ? '' : 's') + ', not reached'});
+  var open = x && !x.done && !routeLeftWhy(n, x) && !b;
+  if(open && x.k === 'mail'){
+    var m = mailTo(r);
+    if(!(typeof days === 'number' && days < ROUTE_MAIL_MIN_DAYS) && !m.why)
+      C.push({s:'MAIL', why:_whyLine(x) + (typeof days === 'number' ? ', sale in ' + days + ' days' : '') + (m.abs ? ', to the mailing address' : '')});
+  }
+  if(open && x.k === 'knock' && !r.ab) C.push({s:'KNOCK', why:_whyLine(x)});
+  var dl = (n.dials || []).filter(function(d){ return d && d.oc !== 'pending' && d.oc !== 'redial'; });
+  var last = dl[dl.length - 1], cool = last ? (+last.tsu || 0) + (+n.cooldownH || 24) * 3600e3 : 0;
+  if(!last) C.push({s:'CALL', why:'not dialed yet'});
+  else if(cool <= now) C.push({s:'CALL', why:'Last ' + _ocWord(last.oc).toLowerCase() + ' ' + Math.round((now - (+last.tsu || now)) / 3600e3) + ' h ago'});
+  if(x && x.done && x.dk === 'letter'){
+    var fu = _ymdAdd(x.done, MAIL_FOLLOWUP_DAYS);
+    if(fu > t) C.push({s:'WAIT', why:'Letter mailed ' + _md(x.done) + ', follow-up call ' + _md(fu)});
+  }
+  if(last && cool > now) C.push({s:'WAIT', why:_ocWord(last.oc) + ' ' + Math.round((now - (+last.tsu || now)) / 3600e3) + ' h ago, next call after the cooldown'});
+  var ord = {URGENT:0, MAIL:1, KNOCK:2, CALL:3, WAIT:4};
+  C.sort(function(a, b){ return ord[a.s] - ord[b.s]; });
+  if(!C.length) return {s:'WAIT', why:'nothing due'};
+  var out = {s:C[0].s, why:C[0].why};
+  for(var k = 1; k < C.length; k++){ if(C[k].s !== C[0].s){ out.s2 = C[k].s; out.why2 = C[k].why; break; } }
+  return out;
+}
+function prospectFacts(c, r){
+  var n = notes[c] || {}, d = r ? liveDays(r) : null, L = [];
+  L.push('Case ' + c + (r ? ', ' + _countyWord(r.ct) : '') + (r && r.a ? ', ' + r.a : ''));
+  L.push('Owner: ' + _firstLast(r) + (r ? (r.ab ? ', absentee (does not live there)' : ', lives there') : ''));
+  L.push('Sale: ' + (typeof d === 'number' ? (r.x || '') + ' (' + d + ' days)' : (r && r.lp ? 'none set (lis pendens)' : 'not known'))
+         + (r && r.dk && r.dk.s ? ', docket status ' + r.dk.s : ''));
+  var e = r && r.eqc;
+  L.push('Equity: ' + (r && isEquity(r) ? 'verified' : 'not verified') + (e && e.lb ? ' (' + e.lb + ')' : '')
+         + (e && e.q && e.n ? ', net about ' + _eqUsd(e.n) + ' (internal only, never said or written to the homeowner)' : ''));
+  return L;
+}
+function prospectPrompt(c){
+  var byC = _rowsByC(), r = byC[c] || null, n = notes[c] || {}, a = nextAct(r, n);
+  var H = recHolds(r, n), T = recTimeline(c, r, true);
+  return 'You are reviewing one foreclosure prospect for a small Miami real-estate team (BSG). Challenge our plan.\n\n'
+    + 'Rules we follow (do not suggest breaking them):\n'
+    + '- Mail and door knocks go only to verified-equity leads. No equity number or dollar figure is ever said or written to the homeowner.\n'
+    + '- Anyone who says stop, no, or wrong number is never contacted again on any channel.\n'
+    + '- Letters carry the required MARS disclosures and our opt-out line. Doors 9 AM to 7 PM, never Sunday.\n'
+    + '- Texts and calls: at most 3 per person in 24 hours; texts only after a call reached them.\n\n'
+    + 'Facts (from our records, as of ' + today() + ' ' + _hm(Date.now()) + '):\n'
+    + prospectFacts(c, r).join('\n') + '\n'
+    + 'Timeline:\n' + (T.length ? T.join('\n') : '(nothing logged yet)') + '\n'
+    + 'Holds: ' + (H.length ? H.join('; ') : 'none') + '\n\n'
+    + 'Our next action: ' + a.s + ' because ' + a.why + (a.s2 ? '. Then ' + a.s2 + ': ' + a.why2 : '') + '.\n\n'
+    + 'Questions:\n1. Is that the right next action? If not, what and why?\n2. What are we missing or assuming?\n'
+    + '3. What is the biggest risk with this prospect right now?\n'
+    + 'Say which of your points are facts from above and which are your guesses.\n';
+}
+/* Every open prospect in Mail, Knock and URGENT, most urgent first, at most 25. */
+function pipelineItems(){
+  var byC = _rowsByC(), out = [];
+  Object.keys(byC).forEach(function(c){
+    var r = byC[c], n = notes[c];
+    if(!n) return;
+    var a = nextAct(r, n);
+    if(a.s !== 'URGENT' && a.s !== 'MAIL' && a.s !== 'KNOCK') return;
+    out.push({c:c, r:r, a:a, days:liveDays(r)});
+  });
+  var ord = {URGENT:0, KNOCK:1, MAIL:2};
+  out.sort(function(x, y){
+    if(ord[x.a.s] !== ord[y.a.s]) return ord[x.a.s] - ord[y.a.s];
+    return ((typeof x.days === 'number') ? x.days : 99999) - ((typeof y.days === 'number') ? y.days : 99999);
+  });
+  return out.slice(0, 25);
+}
+function pipelinePrompt(){
+  var P = pipelineItems();
+  var blocks = P.map(function(it, i){
+    var T = recTimeline(it.c, it.r, true);
+    return (i + 1) + '. ' + prospectFacts(it.c, it.r).join(' | ') + '\n'
+      + '   Last steps: ' + (T.length ? T.slice(-4).join(' / ') : 'nothing logged') + '\n'
+      + '   Holds: ' + (recHolds(it.r, notes[it.c]).join('; ') || 'none') + '\n'
+      + '   Our next action: ' + it.a.s + ' because ' + it.a.why;
+  });
+  return 'You are reviewing the open foreclosure pipeline of a small Miami real-estate team (BSG). Challenge our plan.\n\n'
+    + 'Rules we follow (do not suggest breaking them):\n'
+    + '- Mail and door knocks go only to verified-equity leads. No equity number or dollar figure is ever said or written to the homeowner.\n'
+    + '- Anyone who says stop, no, or wrong number is never contacted again on any channel.\n'
+    + '- Letters carry the required MARS disclosures and our opt-out line. Doors 9 AM to 7 PM, never Sunday.\n'
+    + '- Texts and calls: at most 3 per person in 24 hours; texts only after a call reached them.\n\n'
+    + 'Open prospects (from our records, as of ' + today() + ' ' + _hm(Date.now()) + '), most urgent first:\n'
+    + (blocks.length ? blocks.join('\n') : '(none open)') + '\n\n'
+    + 'Questions:\n1. Which of these next actions would you change, and why?\n2. Who should we work first today?\n'
+    + '3. What are we missing or assuming?\nSay which of your points are facts from above and which are your guesses.\n';
+}
+function _copyOut(text, msg){
+  var done = function(){ toast(msg || 'Copied'); };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){
+      try{ if(navigator.share){ navigator.share({text:text}); return; } }catch(e){} prompt('Copy this:', text); }); }
+    else if(navigator.share) navigator.share({text:text});
+    else prompt('Copy this:', text);
+  }catch(e){ prompt('Copy this:', text); }
+}
+/* ---------------- weekly scorecard (the podcast's Friday KPI review) ---------------- */
+function _weekStart(ymd){
+  var m = String(ymd).match(/^(\d{4})-(\d{2})-(\d{2})/), d = new Date(+m[1], +m[2]-1, +m[3], 12);
+  var back = (d.getDay() + 6) % 7;                 /* Monday = 0 */
+  return _ymd(d.getTime() - back * 864e5);
+}
+function weekStats(nts, nowMs){
+  var t = _ymd(nowMs || Date.now()), w0 = _weekStart(t), w1 = _ymdAdd(w0, -7), wEnd = _ymdAdd(w0, 7);
+  var blank = function(){ return {dials:0, conversations:0, appointments:0, letters:0, doors:0, offers:0, contracts:0, closed:0}; };
+  var S = {}, cell = function(seat, wk){ var s = S[seat] = S[seat] || {cur:blank(), prev:blank()}; return s[wk]; };
+  var wkOf = function(d){ return (!d || d < w1 || d >= wEnd) ? '' : (d >= w0 ? 'cur' : 'prev'); };
+  Object.keys(nts || {}).forEach(function(k){
+    if(k.charAt(0) === '@' || k.charAt(0) === '#') return;
+    var n = nts[k]; if(!n || typeof n !== 'object') return;
+    var dl = n.dials || [];
+    for(var i = 0; i < dl.length; i++){
+      var d = dl[i]; if(!d || typeof d !== 'object' || !d.d) continue;
+      var wk = wkOf(d.d); if(!wk) continue;
+      var r = cell(d.by || '', wk), oc = d.oc || '';
+      if(oc === 'pending' || oc === 'redial'){
+        var resolved = false;
+        for(var j = i + 1; j < dl.length; j++){ if(dl[j] && dl[j].d === d.d && dl[j].oc !== 'pending' && dl[j].oc !== 'redial'){ resolved = true; break; } }
+        if(!resolved) r.dials++;
+        continue;
+      }
+      r.dials++;
+      if(REACHED_OC[oc] && !d.gk && !d.rel) r.conversations++;
+      if(oc === 'appt') r.appointments++;
+    }
+    (n.touches || []).forEach(function(x){
+      if(!x || (x.ch !== 'letter' && x.ch !== 'door')) return;
+      var wk = wkOf(x.d); if(!wk) return;
+      cell(x.by || '', wk)[x.ch === 'letter' ? 'letters' : 'doors']++;
+    });
+    var sa = n.stageAt || {};
+    [['Offer made', 'offers'], ['Under contract', 'contracts'], ['CLOSED', 'closed']].forEach(function(p){
+      var wk = wkOf(sa[p[0]]); if(wk) cell('', wk)[p[1]]++;
+    });
+  });
+  var tot = {cur:blank(), prev:blank()};
+  Object.keys(S).forEach(function(s){ ['cur', 'prev'].forEach(function(wk){ for(var f in tot[wk]) tot[wk][f] += S[s][wk][f]; }); });
+  return {week:w0, last:w1, seats:S, total:tot, friday:new Date(nowMs || Date.now()).getDay() === 5};
+}
+var WEEK_COLS = ['dials', 'conversations', 'appointments', 'letters', 'doors', 'offers', 'contracts', 'closed'];
+var WEEK_NOTE = 'DealFlow weekly scorecard, Monday to Sunday, counts only. dials = logged outcomes plus dials with no outcome tapped. '
+  + 'conversations = talked, callback or appointment on the owner\'s line (not a gatekeeper\'s callback). letters / doors = letters marked mailed and doors knocked. '
+  + 'offers / contracts / closed = leads that reached that stage this week (team total, no seat). '
+  + 'Ratios are shown only when the lower number is at least 10.';
+function weekText(W){
+  var line = function(lab, s){ return lab + ': ' + WEEK_COLS.map(function(f){ return f + ' ' + s.cur[f] + ' (last week ' + s.prev[f] + ')'; }).join(', '); };
+  var L = [WEEK_NOTE, '', 'Week of ' + W.week + '. Targets per seat: dials ' + WEEK_TARGETS.dials + ', doors ' + WEEK_TARGETS.doors + ', letters ' + WEEK_TARGETS.letters + '.'];
+  Object.keys(W.seats).sort().forEach(function(s){ if(s) L.push(line('Seat ' + s, W.seats[s])); });
+  L.push(line('Team', W.total));
+  var c = W.total.cur, R = [];
+  if(c.conversations >= 10) R.push('dials per conversation ' + (c.dials / c.conversations).toFixed(1));
+  if(c.appointments >= 10) R.push('conversations per appointment ' + (c.conversations / c.appointments).toFixed(1));
+  if(c.contracts >= 10) R.push('appointments per contract ' + (c.appointments / c.contracts).toFixed(1));
+  if(R.length) L.push('Ratios: ' + R.join(', '));
+  L.push('', 'Question: what is the one activity number we let slip, and what should we do about it next week? '
+    + 'Say which of your points are facts from above and which are your guesses.');
+  return L.join('\n');
+}
+/* ---------------- screens ---------------- */
+function _mailRowHtml(it, sect){
+  var r = it.r, x = it.x, nm = r ? esc(r.on || r.o || '') : '';
+  var sale = (typeof it.days === 'number') ? ('sale in ' + it.days + 'd') : (r && r.lp ? 'no sale date' : '');
+  var h = '<div class="regrow"><div class="regtop">'
+    + (sect === 'ready' ? '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ck="' + esc(it.c) + '"' + (_MAILCK[it.c] === false ? '' : ' checked') + '>' : '')
+    + '<b>' + esc((r && r.a) || it.c) + '</b>' + (sect === 'ready' ? '</label>' : '')
+    + '<span class="regago">' + esc(sale) + '</span></div>'
+    + '<div class="regsub">' + nm + (nm ? ' &middot; ' : '') + esc(it.c) + '</div>';
+  if(sect === 'ready'){
+    h += '<div class="regsub">' + esc(_whyLine(x)) + '</div>'
+       + (it.abs ? '<div class="regsub">Absentee: mail to ' + esc(it.to) + '</div>' : '')
+       + '<div class="cbrow" style="margin-top:6px">'
+       + '<button class="cb" data-rm="letter" data-c="' + esc(it.c) + '">Mailed &#10003;</button>'
+       + (r && !r.ab ? '<button class="cb" data-rs="knock" data-c="' + esc(it.c) + '">Move to Knock</button>' : '')
+       + '<button class="cb" data-rn="1" data-c="' + esc(it.c) + '">Not mailing</button>'
+       + '<button class="cb" data-rec="' + esc(it.c) + '">Record</button></div>';
+  } else if(sect === 'blocked'){
+    h += '<div class="nc">' + esc(it.why) + '</div><div class="cbrow" style="margin-top:6px">'
+       + (r && !r.ab && typeof it.days === 'number' && it.days >= 0 ? '<button class="cb" data-rs="knock" data-c="' + esc(it.c) + '">Move to Knock</button>' : '')
+       + '<button class="cb" data-rec="' + esc(it.c) + '">Record</button></div>';
+  } else if(sect === 'mailed'){
+    h += '<div class="regsub"' + (it.due ? ' style="color:var(--gold)"' : '') + '>Mailed ' + esc(_md(x.done)) + (x.how === 'lob' ? ' (printed)' : ' (hand-written)')
+       + (x.mby ? ' by ' + esc(x.mby) : '') + ' &middot; follow-up call ' + esc(_md(it.fu)) + (it.due ? ', due now' : '') + '</div>'
+       + '<div class="cbrow" style="margin-top:6px"><button class="cb" data-rec="' + esc(it.c) + '">Record</button></div>';
+  } else {
+    h += '<div class="regsub">Left: ' + esc(it.why) + ' &middot; routed ' + esc(_md(x.d)) + '</div>';
+  }
+  return h + '</div>';
+}
 function screenRoutes(){
   SCREEN = 'routes';
-  var L = routeLists(), dc = doorClock();
-  var nK = L.knock.reduce(function(s, G){ return s + G.items.length; }, 0);
-  var mailH = L.mail.length ? L.mail.map(function(it){ return _routeItemHtml(it, 'mail'); }).join('')
-    : '<div class="regsub" style="padding:10px 2px">Nothing to mail. Equity leads you route to mail land here.</div>';
-  var knockH = L.knock.length ? L.knock.map(function(G){
-      var stops = G.items.slice(0, 10).map(function(it){ return it.r.a || ''; }).filter(Boolean);
-      var mapU = stops.length ? ('https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(stops[stops.length - 1])
-        + (stops.length > 1 ? '&waypoints=' + encodeURIComponent(stops.slice(0, -1).join('|')) : '')) : '';
-      return '<div class="afterlab">' + esc(G.city) + ' &middot; ' + G.items.length + (G.co === 'MI' ? '' : ' &middot; ' + esc(G.co === 'BR' ? 'Broward' : G.co === 'PA' ? 'Palm Beach' : G.co)) + '</div>'
-        + (mapU ? '<a class="rtmap" target="_blank" rel="noopener" href="' + mapU + '">Open ' + esc(G.city) + ' route in Maps (' + stops.length + ' stop' + (stops.length === 1 ? '' : 's') + ')</a>' : '')
-        + G.items.map(function(it){ return _routeItemHtml(it, 'knock'); }).join('');
-    }).join('')
-    : '<div class="regsub" style="padding:10px 2px">Nothing to knock. Equity leads you route to Knock land here.</div>';
-  $('app').innerHTML = head()
-    + '<div class="card">'
-    +   '<div class="band"><div class="bl">MAIL QUEUE &middot; ' + L.mail.length + '</div>'
-    +     '<div class="regsub">Sealed letter, hand-addressed, real stamp. Use the letter from bsg_mail_campaign (it carries the required disclosures and the opt-out line). Never a postcard.</div></div>'
-    +   '<div class="reglist">' + mailH + '</div>'
-    +   '<div class="band" style="margin-top:14px"><div class="bl">KNOCK ROUTE &middot; ' + nK + '</div>'
-    +     '<div class="regsub">Doors 9 AM to 7 PM, never Sunday. Skip any house with a No Soliciting sign and any gated community.</div>'
-    +     (dc.ok ? '' : '<div class="nc" style="margin-top:6px">' + (dc.sun ? 'Sunday: no doors today.' : 'Outside door hours right now.') + '</div>')
-    +   '</div>'
-    +   '<div class="reglist">' + knockH + '</div>'
-    +   (L.blocked.length ? '<div class="regsub" style="margin-top:10px">' + L.blocked.length + ' routed lead' + (L.blocked.length === 1 ? '' : 's') + ' dropped: opted out, said no, has an attorney, on hold or off the list.</div>' : '')
-    +   '<button class="big" id="rtback" style="margin-top:14px">&larr; Back to the queue</button>'
+  try{ routeAdvance(); }catch(e){}
+  var dc = doorClock();
+  var tabs = '<div class="cbrow" style="margin-bottom:10px">'
+    + '<button class="cb' + (_RTAB === 'mail' ? ' on' : '') + '" data-tab="mail">&#9993; Mail</button>'
+    + '<button class="cb' + (_RTAB === 'knock' ? ' on' : '') + '" data-tab="knock">&#128682; Knock</button></div>';
+  var W = weekStats(notes, Date.now()), me = caller(), mine = (W.seats[me || ''] || {cur:{letters:0, doors:0}}).cur;
+  var body = '';
+  if(_RTAB === 'mail'){
+    var M = mailLists(), nck = M.ready.filter(function(it){ return _MAILCK[it.c] !== false; }).length;
+    var sect = function(title, L, kind, empty){
+      return '<div class="band" style="margin-top:12px"><div class="bl">' + title + ' &middot; ' + L.length + '</div></div>'
+        + '<div class="reglist">' + (L.length ? L.map(function(it){ return _mailRowHtml(it, kind); }).join('')
+          : '<div class="regsub" style="padding:8px 2px">' + empty + '</div>') + '</div>';
+    };
+    body = '<div class="band"><div class="bl">MAIL</div>'
+      + '<div class="regsub">Sealed letter, never a postcard. The first No answer or voicemail on a verified-equity lead lands here. '
+      + 'Letters print on the laptop and every check runs again at print time.</div>'
+      + '<div class="regsub" style="margin-top:6px">This week' + (me ? ' (' + esc(me) + ')' : '') + ': letters ' + mine.letters + ' of ' + WEEK_TARGETS.letters
+      + ' &middot; doors ' + mine.doors + ' of ' + WEEK_TARGETS.doors + '</div></div>'
+      + '<button class="ghost" id="mlai" style="margin-top:8px">Copy pipeline for AI</button>'
+      + '<button class="ghost" id="mlprint" style="margin-top:8px">Print on the laptop</button>'
+      + '<div id="mlcmd"></div>'
+      + sect('READY TO MAIL', M.ready, 'ready', 'Nothing to mail. A No answer on a verified-equity lead lands here.')
+      + (M.ready.length ? '<div class="regsub">' + nck + ' checked &middot; postage about $' + (nck * MAIL_POSTAGE).toFixed(2) + '</div>'
+         + '<button class="big" id="mlall" style="margin-top:8px">Mark checked as mailed (hand-written)</button>'
+         + '<button class="ghost" id="mlallp" style="margin-top:8px">Mark checked as mailed (printed)</button>' : '')
+      + sect('BLOCKED', M.blocked, 'blocked', 'Nothing blocked.')
+      + sect('MAILED, WAITING', M.mailed, 'mailed', 'No letters out.')
+      + sect('LEFT THE PIPELINE (' + MAIL_LEFT_DAYS + ' DAYS)', M.left, 'left', 'Nobody left in the last ' + MAIL_LEFT_DAYS + ' days.')
+      + '<div class="regsub" style="margin-top:12px">Unreachable, equity not verified: ' + M.unverified + '. These are not mailed or knocked.</div>';
+  } else {
+    var L = routeLists(), nK = L.knock.reduce(function(s, G){ return s + G.items.length; }, 0);
+    var knockH = L.knock.length ? L.knock.map(function(G){
+        var stops = G.items.slice(0, 10).map(function(it){ return it.r.a || ''; }).filter(Boolean);
+        var mapU = stops.length ? ('https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(stops[stops.length - 1])
+          + (stops.length > 1 ? '&waypoints=' + encodeURIComponent(stops.slice(0, -1).join('|')) : '')) : '';
+        return '<div class="afterlab">' + esc(G.city) + ' &middot; ' + G.items.length + (G.co === 'MI' ? '' : ' &middot; ' + esc(G.co === 'BR' ? 'Broward' : G.co === 'PA' ? 'Palm Beach' : G.co)) + '</div>'
+          + (mapU ? '<a class="rtmap" target="_blank" rel="noopener" href="' + mapU + '">Open ' + esc(G.city) + ' route in Maps (' + stops.length + ' stop' + (stops.length === 1 ? '' : 's') + ')</a>' : '')
+          + G.items.map(function(it){ return _routeItemHtml(it, 'knock'); }).join('');
+      }).join('')
+      : '<div class="regsub" style="padding:10px 2px">Nothing to knock. Equity leads you route to Knock land here.</div>';
+    body = '<div class="band"><div class="bl">KNOCK ROUTE &middot; ' + nK + '</div>'
+      + '<div class="regsub">Doors 9 AM to 7 PM, never Sunday. Skip any house with a No Soliciting sign and any gated community. Absentee owners are never knocked.</div>'
+      + '<div class="regsub" style="margin-top:6px">Doors this week' + (me ? ' (' + esc(me) + ')' : '') + ': ' + mine.doors + ' of ' + WEEK_TARGETS.doors + '</div>'
+      + (dc.ok ? '' : '<div class="nc" style="margin-top:6px">' + (dc.sun ? 'Sunday: no doors today.' : 'Outside door hours right now.') + '</div>')
+      + '</div><div class="reglist">' + knockH + '</div>'
+      + (L.blocked.length ? '<div class="regsub" style="margin-top:10px">' + L.blocked.length + ' routed lead' + (L.blocked.length === 1 ? '' : 's') + ' dropped: reached, opted out, said no, has an attorney, on hold or off the list.</div>' : '');
+  }
+  $('app').innerHTML = head() + '<div class="card">' + tabs + body
+    + '<button class="big" id="rtback" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
-  var byC = {}; ROWS.forEach(function(r){ if(r && r.c && !byC[r.c]) byC[r.c] = r; });
+  var byC = _rowsByC();
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function(b){
+    b.onclick = function(){ _RTAB = b.getAttribute('data-tab'); screenRoutes(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ck]'), function(b){
+    b.onchange = function(){ _MAILCK[b.getAttribute('data-ck')] = !!b.checked; screenRoutes(); };
+  });
   Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function(b){
     b.onclick = function(){
       var r = byC[b.getAttribute('data-c')];
       if(!r || routeBlock(r)){ toast('Not on the route any more', {bad:true}); screenRoutes(); return; }
       var k = b.getAttribute('data-rm');
       if(k !== 'letter' && !doorClock().ok && !confirm('It is outside door hours (9 AM to 7 PM, never Sunday). Log this knock anyway?')) return;
-      routeMark(r, k); toast(k === 'letter' ? '✓ Mailed' : k === 'door' ? 'Knock logged, stays on the route' : '✓ Done'); screenRoutes();
+      routeMark(r, k); toast(k === 'letter' ? '✓ Mailed, follow-up call in ' + MAIL_FOLLOWUP_DAYS + ' days' : k === 'door' ? 'Knock logged, stays on the route' : '✓ Done'); screenRoutes();
     };
   });
   Array.prototype.forEach.call(document.querySelectorAll('[data-rs]'), function(b){
-    b.onclick = function(){ var r = byC[b.getAttribute('data-c')]; if(r && setRoute(r, 'knock')) toast('Moved to Knock'); screenRoutes(); };
+    b.onclick = function(){ var r = byC[b.getAttribute('data-c')]; if(r && !r.ab && setRoute(r, 'knock')) toast('Moved to Knock'); screenRoutes(); };
   });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rn]'), function(b){
+    b.onclick = function(){
+      var r = byC[b.getAttribute('data-c')], why = prompt('Why not mail this one? (one line, kept on the lead)', '');
+      if(why === null) return;
+      if(r && setRoute(r, 'none')){ notes[r.c].route.why = String(why || 'not mailing').slice(0, 80); saveNotes(); try{ queueSync(); }catch(e){} toast('Off the mail list'); }
+      screenRoutes();
+    };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rec]'), function(b){
+    b.onclick = function(){ screenRecord(b.getAttribute('data-rec'), 'routes'); };
+  });
+  var markAll = function(how){
+    var M = mailLists(), L = M.ready.filter(function(it){ return _MAILCK[it.c] !== false; });
+    if(!L.length){ toast('Nothing checked'); return; }
+    if(!confirm('Mark ' + L.length + ' letter' + (L.length === 1 ? '' : 's') + ' as mailed (' + (how === 'lob' ? 'printed' : 'hand-written') + ')? Only do this once they are in the mailbox.')) return;
+    L.forEach(function(it){ if(it.r && !routeBlock(it.r)) routeMark(it.r, 'letter', how); });
+    toast('✓ ' + L.length + ' marked mailed'); screenRoutes();
+  };
+  if($('mlall')) $('mlall').onclick = function(){ markAll('hand'); };
+  if($('mlallp')) $('mlallp').onclick = function(){ markAll('lob'); };
+  if($('mlai')) $('mlai').onclick = function(){ _copyOut(pipelinePrompt(), 'Pipeline copied: paste it into Claude or another AI'); };
+  if($('mlprint')) $('mlprint').onclick = function(){
+    $('mlcmd').innerHTML = '<div class="refbox" style="margin-top:8px"><div class="regsub">On the laptop, after the notes sync:</div>'
+      + '<pre style="white-space:pre-wrap;font-size:12px">python bsg_mail_campaign.py --from-route\npython bsg_mail_campaign.py --from-route --printed</pre>'
+      + '<div class="regsub">The first prints the hand-write letters. The second prints letterhead sheets and writes the Lob queue file for '
+      + 'outreach_mail.py --queue (needs the re-issued Lob key). Both re-check opt-outs, stays and diligence first.</div></div>';
+  };
   $('rtback').onclick = function(){ SCREEN = 'lead'; render(); };
+}
+var _RECBACK = 'lead', _RECC = null;
+function screenRecord(c, back){
+  SCREEN = 'record'; _RECC = c; _RECBACK = back || _RECBACK || 'lead';
+  var byC = _rowsByC(), r = byC[c] || null, n = notes[c] || {}, a = nextAct(r, n);
+  var T = recTimeline(c, r, false), H = recHolds(r, n);
+  $('app').innerHTML = head() + '<div class="card">'
+    + '<div class="band"><div class="bl">PROSPECT RECORD</div>'
+    + '<div class="regsub">' + prospectFacts(c, r).map(esc).join('<br>') + '</div></div>'
+    + '<div class="band" style="margin-top:10px"><div class="bl">NEXT: ' + esc(a.s) + '</div><div class="regsub">' + esc(a.why)
+    + (a.s2 ? '<br>Then ' + esc(a.s2) + ': ' + esc(a.why2) : '') + '</div></div>'
+    + '<div class="afterlab">Holds</div><div class="regsub">' + (H.length ? H.map(esc).join('<br>') : 'None') + '</div>'
+    + '<div class="afterlab">Timeline</div><pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">' + (T.length ? T.map(esc).join('\n') : 'Nothing logged yet.') + '</pre>'
+    + '<div class="regsub"><b>No equity figure is ever said or written to the homeowner.</b></div>'
+    + '<button class="big" id="recai" style="margin-top:12px">Copy for AI</button>'
+    + '<button class="ghost" id="recback" style="margin-top:8px">&larr; Back</button>'
+    + '</div><div class="sheetpad"></div>';
+  $('recai').onclick = function(){ _copyOut(prospectPrompt(c), 'Copied: paste it into Claude or another AI'); };
+  $('recback').onclick = function(){ if(_RECBACK === 'routes') screenRoutes(); else { SCREEN = 'lead'; render(); } };
 }
 function _afterMail(r){
   if(!MAIL_OK) return '';
@@ -10285,6 +10869,16 @@ function logOutcome(r,o,digits){
     if(CS_ANSWERED[o.k] && _talk > 0 && _talk <= 3600) _row.talk = _talk;
   }
   if(_rel) _row.rel = _rel;
+  /* sx (2026-11-11): which source the dialed number came from ('t' skip trace, 'w' / 'h' / 'n' Whitepages,
+     'p' pasted), so the prospect record can say "no answer on the skip-trace number". */
+  var _sx = (typeof numSrc === 'function') ? numSrc(r, digits) : '';
+  if(_sx) _row.sx = _sx;
+  /* gk (2026-11-11): a callback logged from the script's gatekeeper step ("Got a callback time") was
+     promised by someone who is not the owner. The row keeps oc 'callback' (cooldown, stats and the
+     text panel read it as before); the mail route and the weekly scorecard do not count it as
+     reaching the owner. A callback tapped straight from the card cannot be told apart. */
+  if(o.k === 'callback' && _GK_CB === r.c) _row.gk = 1;
+  _GK_CB = null;
   n.dials.push(_row);
   n.cooldownH=o.h;
   /* THE NO POLICY (see noState). A soft no that is served on its one resurface is spent by ANY
@@ -10318,6 +10912,10 @@ function logOutcome(r,o,digits){
     n.badph = n.badph || [];
     if(_bd && n.badph.indexOf(_bd) < 0) n.badph.push(_bd);
   }
+  /* NO-ANSWER TO MAIL (2026-11-11): the first No answer or voicemail on a verified-equity lead puts it on
+     the mail list (or the knock route inside 7 days of the sale). Same save as the outcome. */
+  _LAST_AUTO = null;
+  try{ var _ak = noAnswerRoute(r, o.k, digits); if(_ak) _LAST_AUTO = {c:r.c, k:_ak}; }catch(e){}
   // Retire it from the worker's queue on ANY logged outcome — same rule as the board's `callout`
   // dispatcher. Without this a lead worked here reappears in tomorrow's worker queue.
   retireFromWorkerQ(r.c);
@@ -10896,6 +11494,7 @@ function setLang(v){
   else if(SCREEN==='after' && _lastAfter){ afterCall(_lastAfter[0], _lastAfter[1], _lastAfter[2]); }
   else if(SCREEN==='mail' && _MAIL){ screenMail(_MAIL[0], _MAIL[1], _MAIL[2]); }
   else if(SCREEN==='routes'){ screenRoutes(); }
+  else if(SCREEN==='record' && _RECC){ screenRecord(_RECC); }
   var _shr = _sheetLead(); if(_shr) renderSheet(_shr);
 }
 function langChips(){
@@ -11052,6 +11651,7 @@ function _gGo(to){
       var rn=notes[cur.c]=notes[cur.c]||{status:'',note:''}, rl=today()+' owner says loan reinstated';
       rn.note = rn.note ? (rn.note.indexOf(rl)>=0 ? rn.note : (rn.note+'\n'+rl)) : rl;
     }
+    _GK_CB = (btn && cur && cur.c && k === 'callback' && (_g.step === 'gate' || _g.stack.indexOf('gate') >= 0)) ? cur.c : null;
     if(btn){ btn.click(); } else { toast('Tap the phone number to start the call first — outcomes log from the call screen.'); }
     return;
   } else {

@@ -209,6 +209,24 @@ writing: a no-street letter to the owner's mailing address (`mailAddr`, #235) an
 Palm Beach rows before a bankruptcy search. Neither is built; draft wording is under project files
 `letters-mailing-address/`.
 
+## No answer to mail (Call Mode, 2026-11-11, draft PR, LEGAL REVIEW)
+
+Alex's five decisions (2026-11-11): the first No answer or voicemail on a verified-equity owner line routes the
+lead to Mail (sale 7+ days out or no sale date) or Knock (under 7 days, never an absentee owner), written as
+`n.route` with `auto: 'na'`. Letters are both hand-written (`python bsg_mail_campaign.py --from-route`) and
+Lob printed (`--from-route --printed` writes the `outreach_mail.py --queue` file; the Lob key has to be
+re-issued first). One letter per lead (`mail_route_printed.json` under `DEALFLOW_DIR`). The board Mail batch
+is verified equity only, same test as Call Mode's `isEquity`. Weekly targets per seat: dials 625, doors 10,
+letters 10 (`WEEK_TARGETS`; `python call_stats.py --week` is the laptop twin of the phone's THIS WEEK band).
+
+**Absentee owners are mailed at the owner's mailing address.** Alex says the attorney approved it and showed a
+text reply from the attorney (2026-11-11). That is not a written opinion on file, and the 2026-10-15 note above
+still lists the mailing-address letter as undecided in writing. Treat it as Alex's direction pending the
+written sign-off; do not record it as attorney-approved in writing until that exists.
+
+Nothing here sends: `--from-route` writes printable files and a queue under `DEALFLOW_DIR`, the Lob send is
+still `outreach_mail.py --queue` by hand, and the route reads suppression verdicts without writing any.
+
 ## Personal identifiers never ship (`footprint.py`)
 
 The board (`docs/index.html`) and Call Mode (`docs/call/`) are mirrored to a **public** repo. Until

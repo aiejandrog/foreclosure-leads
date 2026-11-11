@@ -94,11 +94,12 @@ NOTES = {
 
 FNS = ('isBalloon', 'liveDays', 'isEquity', 'hardSuppressed', '_wasLp', 'noState', 'routeOf', 'routeAtty',
        'routeBlock', 'setRoute', 'setRouteAtty', 'routeMark', 'routeCity', 'routeLists', 'routeOpenN',
-       'routePanelHtml', 'esc')
+       'routePanelHtml', 'esc', '_rowsByC', 'routeLeftWhy', 'reachedAt', 'bookOpen', '_ymd', '_ymdAdd')
 JS = ('function _heldNow(){ return false; }\nfunction optPhones(){ return {}; }\n'
       'function today(){ return "2026-11-05"; }\nfunction nowTS(){ return "2026-11-05T10:00"; }\n'
       'function caller(){ return "Carlos"; }\nvar SAVED = 0; function saveNotes(){ SAVED++; }\nfunction queueSync(){}\nvar _FCGEN = 0;\n'
       + grab_var('ROUTE_KINDS') + grab_var('ROUTE_MAIL_MIN_DAYS') + grab_var('ROUTE_CO_ORDER')
+      + grab_var('MAIL_FOLLOWUP_DAYS') + grab_var('REACHED_OC')
       + ''.join(grab_fn(n) for n in FNS)
       + 'var ROWS = ' + json.dumps(ROWS) + ';\nvar notes = ' + json.dumps(NOTES) + ';\n'
       + r"""

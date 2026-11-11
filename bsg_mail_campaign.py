@@ -30,6 +30,8 @@ Usage:
   python bsg_mail_campaign.py                     # 14-day fresh pool, $80 budget
   python bsg_mail_campaign.py --days 30 --budget 120
   python bsg_mail_campaign.py --limit 40          # ignore budget, cap the count
+  python bsg_mail_campaign.py --from-route        # Call Mode's mail list (no-answer pipeline), hand-write book
+  python bsg_mail_campaign.py --from-route --printed   # same list: letterhead sheets + the Lob queue file
 """
 import argparse
 import datetime as dt
@@ -56,7 +58,9 @@ PER_LETTER = STAMP + ENVELOPE + PAPER
 # identity; --signer-name/--signer-phone let Carlos put his own on his half of the
 # stack. A letter signed by one brother carrying the other's number is the kind of
 # detail that reads as a script rather than a neighbour.
-SENDER = {'name': 'Alejandro Gonzalez', 'phone': '(786) 631-1823'}
+# No literal identity here (CLAUDE.md footprint rule, 2026-11-11): sender.json via entity.sender(), or
+# --signer-name / --signer-phone. A run with neither refuses to print rather than sign a blank letter.
+SENDER = {'name': '', 'phone': ''}
 try:
     import entity
     SENDER['co'] = entity.display_llc()[0] or 'Biscayne Solutions Group'
@@ -394,9 +398,11 @@ def build_printed(rows, days, drops, total_pool):
         city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
         out.append('<div class="pl">%s' % letterhead())
         out.append('<div class="dt">%s</div>' % pretty)
-        out.append('<div class="to">%s<br>%s<br>%s, FL %s</div>'
-                   % (H.escape(person_name(r['owner'])), H.escape(street_case(r['addr'])),
-                      H.escape(city.title()), H.escape(r['zip'])))
+        # to_line1 / to_state: set by the Call Mode route mode, where an absentee owner's letter goes to the
+        # mailing address while the body still names the property.
+        out.append('<div class="to">%s<br>%s<br>%s, %s %s</div>'
+                   % (H.escape(person_name(r['owner'])), H.escape(street_case(r.get('to_line1') or r['addr'])),
+                      H.escape(city.title()), H.escape(r.get('to_state') or 'FL'), H.escape(r['zip'])))
         out.append('<div class="bd">%s</div>' % H.escape(letter(r)))
         out.append('<div class="ft">%s &middot; %s &middot; case %s</div></div>'
                    % (H.escape(SENDER['co']), H.escape(contact_phone()), H.escape(r['case'])))
@@ -426,6 +432,236 @@ def build_envelopes(rows):
     return '\n'.join(out)
 
 
+# ═══════════════ FROM CALL MODE'S MAIL LIST (2026-11-11) ═══════════════
+# Alex: a No answer on a verified-equity lead in Call Mode routes it to mail (n.route k 'mail'). This mode
+# prints those letters on the laptop and re-runs every check at print time, because the phone list is only
+# as fresh as its last build: the opt-out ledger (fails CLOSED here), the person's own note (DNC, hard or
+# soft no, wrong owner, Dead, attorney, reached on the phone), verified equity, the 7-day runway, the stay
+# (bk_lookup.contact_blocked_reason) and the diligence gate (outreach_mail has it; the pool above does not).
+# Absentee owners are mailed at the owner's mailing address (Alex's decision 3, 2026-11-11); the letter
+# body still names the property. Output goes to DEALFLOW_DIR through paths.py, never this folder.
+# A print ledger (DEALFLOW_DIR/mail_route_printed.json, case and date only) stops a double print.
+ROUTE_MIN_DAYS = 7
+ROUTE_LEDGER = 'mail_route_printed.json'
+_REACHED = {'talked', 'callback', 'appt'}
+
+
+def _notes_map():
+    raw = _load('worker_notes.json')
+    m = raw.get('notes') if isinstance(raw, dict) and isinstance(raw.get('notes'), dict) else raw
+    return m if isinstance(m, dict) else {}
+
+
+def _sale_days(lead):
+    for k in ('auction', 'saleDate', 'sale_date'):
+        v = str(lead.get(k) or '').split(' ')[0]
+        for f in ('%m/%d/%Y', '%Y-%m-%d'):
+            try:
+                return (dt.datetime.strptime(v, f).date() - dt.date.today()).days
+            except Exception:
+                pass
+    return None
+
+
+def _is_equity(lead):
+    c = lead.get('eqc')
+    if not isinstance(c, dict) or not c.get('may_quote'):
+        return False
+    try:
+        return float(c.get('net')) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _absentee(lead):
+    m1 = str(lead.get('mail') or '').split(',')[0].strip().upper()
+    a1 = str(lead.get('addr') or '').split(',')[0].strip().upper()
+    return bool(m1 and a1 and m1 != a1)
+
+
+def _note_block(n, route):
+    """Why the person's own note stops the letter, '' when it does not."""
+    st = str(n.get('status') or '').upper()
+    if n.get('optout') or st in ('DO NOT CONTACT', 'OPTED OUT'):
+        return 'opted out / do not contact'
+    if n.get('no') == 'hard':
+        return 'hard no'
+    if n.get('no') == 'soft':
+        return 'said not interested'
+    if n.get('wrongown') or st == 'WRONG NUMBER':
+        return 'wrong owner'
+    if st == 'DEAD':
+        return 'marked Dead'
+    if n.get('atty'):
+        return 'has an attorney'
+    rts = float(route.get('ts') or 0)
+    for d in n.get('dials') or []:
+        if isinstance(d, dict) and not d.get('rel') and d.get('oc') in _REACHED and float(d.get('tsu') or 0) > rts:
+            return 'reached on the phone'
+    b = n.get('book')
+    if isinstance(b, dict) and b.get('state') in ('proposed', 'booked'):
+        return 'booking open'
+    if any(isinstance(t, dict) and t.get('ch') == 'letter' for t in n.get('touches') or []):
+        return 'already mailed (one letter per lead)'
+    return ''
+
+
+def route_selection(notes, leads, opt, ledger, reprint=False, stay=None, dg=None):
+    """(rows, held). rows are letter() dicts plus the envelope target; held is [(case, reason)].
+    stay / dg are injectable for tests; production uses bk_lookup and diligence_gate."""
+    import outreach_mail as OM
+    if stay is None:
+        def stay(case):
+            try:
+                import bk_lookup as _BKL
+                return _BKL.contact_blocked_reason(case, here=HERE)[0]
+            except Exception:
+                return True                      # any failure holds
+    if dg is None:
+        import diligence_gate as _DG
+        _t = _DG.Tally()
+        dg = lambda lead: _t.check(lead)
+    by = {}
+    for x in leads or []:
+        c = str(x.get('case') or '').strip()
+        if c and c not in by:
+            by[c] = x
+    rows, held = [], []
+    for case in sorted(notes):
+        n = notes.get(case)
+        if case[:1] in ('@', '#') or not isinstance(n, dict):
+            continue
+        rt = n.get('route')
+        if not isinstance(rt, dict) or rt.get('k') != 'mail' or rt.get('done'):
+            continue
+        lead = by.get(case)
+        why = ''
+        if lead is None:
+            why = 'not in the lead files'
+        elif case in opt or any(('#' + re.sub(r'\D', '', str(p))[-10:]) in opt for p in (lead.get('phones') or [])):
+            why = 'opted out (ledger)'
+        else:
+            why = _note_block(n, rt)
+        if not why and not _is_equity(lead):
+            why = 'equity not verified'
+        if not why:
+            d = _sale_days(lead)
+            if d is not None and d < ROUTE_MIN_DAYS:
+                why = 'sale in %d days: too late for a letter' % d if d >= 0 else 'sale passed'
+        if not why and stay(case):
+            why = 'bankruptcy stay check'
+        if not why:
+            v = dg(lead) or {}
+            if v.get('hold'):
+                why = 'diligence hold (%s)' % v.get('code', '')
+        if not why and case in ledger and not reprint:
+            why = 'already printed %s' % ledger[case]
+        owner = str((lead or {}).get('paOwner') or (lead or {}).get('owners') or (lead or {}).get('oname') or '')
+        if not why and (not owner.strip() or _ENTITY.search(owner)):
+            why = 'entity-owned or no owner name'
+        if not why and _ESTATE.search(owner):
+            why = 'estate / life estate'
+        first = _first_name(owner) if not why else ''
+        if not why and not first:
+            why = 'no first name'
+        to = None
+        if not why:
+            ab = _absentee(lead)
+            to = OM.parse_address(lead.get('mail') if ab else lead.get('addr'))
+            if not to:
+                why = 'no parseable %s' % ('mailing address' if ab else 'property address')
+        if why:
+            held.append((case, why))
+            continue
+        rows.append({'case': case, 'owner': owner, 'first': first, 'addr': str(lead.get('addr') or ''),
+                     'city': to['address_city'], 'zip': to['address_zip'], 'to_line1': to['address_line1'],
+                     'to_state': to['address_state'], 'absentee': _absentee(lead), 'days': _sale_days(lead),
+                     'age': 0, 'plaintiff': str(lead.get('plaintiff') or '').strip(), 'lead': lead})
+    rows.sort(key=lambda r: (r['days'] if r['days'] is not None else 99999))
+    return rows, held
+
+
+def build_route(rows, held):
+    """The hand-write book for Call Mode's mail list: envelope = where the letter goes (the mailing
+    address for an absentee owner), body = letter(), the same approved words as every other letter."""
+    today = dt.date.today().isoformat()
+    out = ['<html><head><meta charset="utf-8"><style>%s</style></head><body>' % CSS,
+           '<h1>Call Mode mail list: %d letters</h1>' % len(rows),
+           '<div class="sub">%s &middot; verified-equity leads routed after a no answer &middot; $%.2f postage &middot; '
+           'soonest sale first. After mailing, tap Mailed on each row in Call Mode.</div>' % (today, len(rows) * PER_LETTER)]
+    for k, r in enumerate(rows, 1):
+        out.append('<div class="card"><h3 class="hd">%d. %s &nbsp;&middot;&nbsp; %s</h3>'
+                   % (k, H.escape(street_case(r['addr'].split(',')[0])),
+                      ('sale in %d days' % r['days']) if r['days'] is not None else 'no sale date'))
+        out.append('<div class="env"><b>WRITE THIS ON THE ENVELOPE%s</b>%s<br>%s<br>%s, %s %s</div>'
+                   % (' (OWNER\'S MAILING ADDRESS, NOT THE PROPERTY)' if r['absentee'] else '',
+                      H.escape(person_name(r['owner'])), H.escape(street_case(r['to_line1'])),
+                      H.escape(str(r['city']).title()), H.escape(r['to_state']), H.escape(r['zip'])))
+        out.append('<div class="body">%s</div>' % H.escape(letter(r)))
+        out.append('<div class="meta">case %s</div>' % H.escape(r['case']))
+        out.append('<div class="done">&#9744; written &nbsp;&nbsp; &#9744; addressed &nbsp;&nbsp; '
+                   '&#9744; stamped &nbsp;&nbsp; &#9744; mailed on ____ / ____</div></div>')
+    if held:
+        out.append('<div class="sub" style="margin-top:10px">Held, not printed: %s.</div>'
+                   % H.escape('; '.join('%s (%s)' % (c, w) for c, w in held)))
+    out.append('</body></html>')
+    return '\n'.join(out)
+
+
+def route_queue(rows):
+    """The board's Mail batch queue shape, so `python outreach_mail.py --queue <file> --send` (Lob) takes
+    it unchanged and re-applies its own stay, diligence, opt-out and already-mailed checks."""
+    keep = ('case', 'owners', 'oname', 'paOwner', 'addr', 'mail', 'folio', 'county', 'auction', 'tier', 'eqc',
+            'saleBkAct', 'sale_bk_active', 'saleLift')
+    return {'_dealflow_mailqueue': 1, 'exported': dt.datetime.now().isoformat(timespec='seconds'),
+            'source': 'call-mode-route', 'sender': {},
+            'leads': [{k: r['lead'].get(k) for k in keep if r['lead'].get(k) not in (None, '')} for r in rows]}
+
+
+def run_from_route(printed=False, reprint=False):
+    if not (SENDER.get('name') and contact_phone()):
+        print('REFUSED: no signer name or phone (sender.json, --signer-name / --signer-phone). Nothing printed.')
+        return 2
+    opt = _optout_keys()
+    if not opt:
+        print('REFUSED: the opt-out ledger is missing or empty. Letters from the mail list wait for it.')
+        return 2
+    import outreach_mail as OM
+    ledger_path = P.out(ROUTE_LEDGER)
+    try:
+        ledger = json.load(open(ledger_path, encoding='utf-8')) if os.path.exists(ledger_path) else {}
+    except Exception:
+        print('REFUSED: %s is unreadable; fix or move it so a letter is never printed twice.' % ROUTE_LEDGER)
+        return 2
+    rows, held = route_selection(_notes_map(), OM._load_leads(), opt, ledger, reprint=reprint)
+    print('%d letters from the Call Mode mail list, %d held' % (len(rows), len(held)))
+    for c, w in held:
+        print('  held %s: %s' % (c, w))
+    if not rows:
+        return 0
+    day = dt.date.today().isoformat()
+    if printed:
+        html = build_printed(rows, 0, {}, len(rows))
+        p_html = P.out('BSG_Mail_Route_Printed_%s.html' % day)
+        p_q = P.out('mail_queue_route_%s.json' % day)
+        json.dump(route_queue(rows), open(p_q, 'w', encoding='utf-8'), indent=1)
+        print('wrote', p_q)
+        print('  Lob: python outreach_mail.py --queue "%s"   (dry run; add --send once the Lob key is re-issued)' % p_q)
+    else:
+        html = build_route(rows, held)
+        p_html = P.out('BSG_Mail_Route_%s.html' % day)
+    open(p_html, 'w', encoding='utf-8').write(html)
+    print('wrote', p_html)
+    for r in rows:
+        ledger[r['case']] = day
+    tmp = ledger_path + '.tmp'
+    json.dump(ledger, open(tmp, 'w', encoding='utf-8'), indent=1)
+    os.replace(tmp, ledger_path)
+    print('  postage: $%.2f at $%.2f/letter. Tap Mailed in Call Mode once they are in the mailbox.'
+          % (len(rows) * PER_LETTER, PER_LETTER))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--days', type=int, default=14, help='max age of the LP filing (default 14)')
@@ -437,6 +673,9 @@ def main():
                     help='letterhead + logo, one letter per sheet (instead of the copy-by-hand book)')
     ap.add_argument('--tracking-phone', default='',
                     help='number used ONLY on this campaign, so replies are attributable')
+    ap.add_argument('--from-route', action='store_true',
+                    help="Call Mode's mail list (verified-equity leads routed after a no answer)")
+    ap.add_argument('--reprint', action='store_true', help='with --from-route: print leads already printed')
     a = ap.parse_args()
 
     if a.signer_name:
@@ -446,6 +685,11 @@ def main():
     global MAIL_TRACKING_PHONE
     if a.tracking_phone:
         MAIL_TRACKING_PHONE = a.tracking_phone.strip()
+    if a.from_route:
+        raise SystemExit(run_from_route(printed=a.printed, reprint=a.reprint))
+    if not (SENDER.get('name') and SENDER.get('phone')):
+        print('REFUSED: no signer name or phone (sender.json, --signer-name / --signer-phone). Nothing printed.')
+        return
     if not MAIL_TRACKING_PHONE:
         print('WARNING: no tracking number (--tracking-phone or BSG_MAIL_PHONE).')
         print('         Letters will carry %s, the same line every other channel uses, so a call'
