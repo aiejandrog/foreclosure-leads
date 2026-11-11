@@ -346,10 +346,24 @@ def coverage_documented(chain):
 #   basis_source     'arv' | 'county'
 #   net              basis minus the debt this row can see; None unless may_quote
 #   may_quote        fact AND a known judgment: the only case where a figure may be said aloud
+#   recorded         a lender's filed case (LP, no judgment yet) whose chain is PRICED: every surviving
+#                    instrument carries a recorded amount. Lets Call Mode's "Has equity" lane find the
+#                    lead. It never makes a figure sayable: may_quote stays False.
+#   recorded_debt    the debt this row can see (diligence_flags.known_debt_of), RECORDED amounts only
+#   recorded_net     basis minus recorded_debt: a direction for whom to call, never a figure to say.
+#                    None unless `recorded`.
 #   why              the one-line reason, for the card
 #
 # A recorded amount is never a payoff: `liens[*].amount` is what the instrument says on the day it
 # was signed, and `net` is a direction, not a quote of what the owner owes today.
+#
+# RECORDED-DEBT TIER (2026-11-11, Alex: "absolutely go on"). 525 of 4,634 rows on the 2026-10-30
+# snapshot had a VERIFIED lien chain and missed may_quote only because the case is a lis pendens with
+# no judgment yet (docs/VERDICT-BLOCKERS.md 1.6). For a lender's filed case the foreclosed mortgage
+# IS on a priced chain (an empty chain beside a lender's case is already demoted to 'none'), so the
+# chain's recorded amounts are a real read of the debt, though not a payoff. The
+# tier only says "this lead is worth calling": arrears, interest, escrow advances and fees since the
+# default are not in a recorded amount, so the payoff is higher and nothing here may be said aloud.
 # ---------------------------------------------------------------------------------------------
 COURT_COPY = 'court copy'
 AUCTION_LISTING = 'auction listing'
@@ -410,12 +424,32 @@ def card(lead):
     net = None
     if may and basis > 0:
         net = round(basis - _num(debt.get('total')), 2)
+    recorded = bool(st == 'priced' and judgment is None and not taxdeed and _lp_row(lead)
+                    and lender_foreclosure(lead) and basis > 0 and _num(debt.get('total')) > 0
+                    and _all_priced(lead.get('orliens')))
+    rdebt = round(_num(debt.get('total')), 2) if recorded else None
+    rnet = round(basis - rdebt, 2) if recorded else None
     why = lead.get('eqstate_why') or LABEL[st]
-    if fact and judgment is None:
+    if recorded:
+        why = why + ('. The case has no judgment yet, so the figure is RECORDED DEBT ONLY, not a '
+                     'payoff (arrears, interest and fees are not in it): no figure may be quoted')
+    elif fact and judgment is None:
         why = why + ' — but the judgment is not posted, so no figure may be quoted'
     elif fact and jsrc == OPENING_BID:
         why = why + ' — but this is a tax deed: the figure is the auction opening bid, not a judgment, so no figure may be quoted'
     return {'state': st, 'label': why if why.startswith(('UNVERIFIED', 'CEILING')) else LABEL[st],
             'fact': fact, 'judgment': judgment, 'judgment_source': jsrc, 'liens': liens,
             'basis': basis if basis > 0 else None, 'basis_source': bsrc if basis > 0 else None,
-            'net': net, 'may_quote': may, 'why': why}
+            'net': net, 'may_quote': may, 'recorded': recorded, 'recorded_debt': rdebt,
+            'recorded_net': rnet, 'why': why}
+
+
+def _lp_row(lead):
+    """A lis pendens row: board rows carry st 'LP', raw lead rows sale_type 'LP'."""
+    return str(lead.get('st') or lead.get('sale_type') or '').upper() == 'LP'
+
+
+def _all_priced(orliens):
+    """Every recorded lien on the row carries an amount (and there is at least one)."""
+    ls = [l for l in (orliens or []) if isinstance(l, dict)]
+    return bool(ls) and all(_num(l.get('amt')) > 0 for l in ls)

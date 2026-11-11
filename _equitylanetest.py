@@ -60,10 +60,13 @@ ROWS = [
     {'c': 'OLDBAKE', 'x': mdy(3),  'e': 60, 'eqv': 1},
     {'c': 'BAL',     'st': 'BAL', 'd': 20, 'eqc': {'q': 1, 'f': 1, 'n': 200000}},
     {'c': 'NOTNUM',  'x': mdy(3),  'eqc': {'q': 1, 'f': 1, 'n': '50000'}},
+    {'c': 'REC_LP',  'lp': 1,      'eqc': {'q': 0, 'f': 1, 'r': 1, 'rn': 60000}},
+    {'c': 'REC_NEG', 'lp': 1,      'eqc': {'q': 0, 'f': 1, 'r': 1, 'rn': -5000}},
+    {'c': 'REC_NOR', 'lp': 1,      'eqc': {'q': 0, 'f': 1, 'rn': 60000}},
 ]
 
 JS = ('function _heldNow(){ return false; }\n'
-      + ''.join(grab_fn(n) for n in ('isBalloon', 'liveDays', 'isEquity', '_eqSaleKey', '_freshFirst'))
+      + ''.join(grab_fn(n) for n in ('isBalloon', 'liveDays', 'isEquity', 'isRecordedEquity', '_eqSaleKey', '_freshFirst'))
       + r"""
 var TIER = {Q_MID: 1};                       /* Q_MID already reached on another channel */
 function _contactTier(r){ return TIER[r.c] || 0; }
@@ -81,14 +84,17 @@ rec('node ran', rc == 0, err[-400:])
 res = json.loads(out.strip().splitlines()[-1]) if rc == 0 and out.strip() else {}
 lane = set(res.get('inLane') or [])
 rec('quotable positive-equity rows are in the lane', {'Q_FAR', 'Q_SOON', 'Q_LP', 'Q_MID'} <= lane, sorted(lane))
+rec('recorded-debt filed case with positive recorded net is in the lane', 'REC_LP' in lane, sorted(lane))
+rec('recorded-debt row at or below zero stays out', 'REC_NEG' not in lane, sorted(lane))
+rec('a recorded net without the r flag stays out', 'REC_NOR' not in lane, sorted(lane))
 for c, why in (('UNDER', 'underwater'), ('ZERO', 'zero net'), ('FACTONLY', 'traced chain, no judgment'),
                ('GUESS', 'scraped % only'), ('OLDBAKE', 'old bake with no card'), ('BAL', 'balloon investor row'),
                ('NOTNUM', 'non-numeric net')):
     rec('excluded: ' + why, c not in lane, sorted(lane))
 rec('equity lane: soonest sale first, no-date last, contact tier still wins',
-    res.get('order') == ['Q_SOON', 'Q_FAR', 'Q_LP', 'Q_MID'], res.get('order'))
+    res.get('order') == ['Q_SOON', 'Q_FAR', 'Q_LP', 'REC_LP', 'Q_MID'], res.get('order'))
 rec('other lanes keep their own order (no sale-date key)',
-    res.get('orderSoon') == ['Q_FAR', 'Q_SOON', 'Q_LP', 'Q_MID'], res.get('orderSoon'))
+    res.get('orderSoon') == ['Q_FAR', 'Q_SOON', 'Q_LP', 'REC_LP', 'Q_MID'], res.get('orderSoon'))
 
 # ---- wiring: the lane goes through the one LANES table that pool() / supReason() / seat split run over
 m = re.search(r'var LANES = \[(.*?)\n\];', SRC, re.S)
