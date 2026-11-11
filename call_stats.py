@@ -6,6 +6,8 @@
     python call_stats.py --format text    # CSV under a one-paragraph definition note (paste into an AI)
     python call_stats.py --format json
     python call_stats.py --notes PATH --out stats.csv
+    python call_stats.py --week           # this week and last week, Monday to Sunday (weekly scorecard)
+    python call_stats.py --week --format csv
 
 The twin of callStatsRows() in call_mode.py (the "call stats" screen). _callstatstest.py runs both on one
 fixture. Definitions are in NOTE below. dial_to_log_min is the minutes from the dial tap to the outcome tap
@@ -89,6 +91,107 @@ def rows_from_notes(notes, who=None, days=None, today=None):
     return sorted(by.values(), key=lambda r: (-int(r['date'].replace('-', '') or 0), r['seat']))
 
 
+# WEEKLY SCORECARD (2026-11-11). Twin of weekStats()/weekText() in call_mode.py ("call stats" screen,
+# THIS WEEK band). _callstatstest.py runs both on one fixture. Counts only.
+REACHED = {'talked', 'callback', 'appt'}
+WEEK_TARGETS = {'dials': 625, 'doors': 10, 'letters': 10}
+WEEK_COLS = ['dials', 'conversations', 'appointments', 'letters', 'doors', 'offers', 'contracts', 'closed']
+WEEK_NOTE = ('DealFlow weekly scorecard, Monday to Sunday, counts only. dials = logged outcomes plus dials with no '
+             'outcome tapped. conversations = talked, callback or appointment on the owner\'s line (not a gatekeeper\'s callback). letters / doors = '
+             'letters marked mailed and doors knocked. offers / contracts / closed = leads that reached that stage '
+             'this week (team total, no seat). Ratios are shown only when the lower number is at least 10.')
+
+
+def week_stats(notes, today=None):
+    t = today or dt.date.today()
+    w0 = t - dt.timedelta(days=t.weekday())
+    w1, w_end = w0 - dt.timedelta(days=7), w0 + dt.timedelta(days=7)
+    w0s, w1s, wes = w0.isoformat(), w1.isoformat(), w_end.isoformat()
+
+    def blank():
+        return {f: 0 for f in WEEK_COLS}
+    seats = {}
+
+    def cell(seat, wk):
+        return seats.setdefault(seat, {'cur': blank(), 'prev': blank()})[wk]
+
+    def wk_of(d):
+        if not isinstance(d, str) or not d or d < w1s or d >= wes:
+            return ''
+        return 'cur' if d >= w0s else 'prev'
+    for k, n in (notes or {}).items():
+        if k[:1] in ('@', '#') or not isinstance(n, dict):
+            continue
+        dl = n.get('dials') or []
+        for i, d in enumerate(dl):
+            if not isinstance(d, dict) or not d.get('d'):
+                continue
+            wk = wk_of(d['d'])
+            if not wk:
+                continue
+            r, oc = cell(d.get('by') or '', wk), d.get('oc') or ''
+            if oc in ('pending', 'redial'):
+                if not any(isinstance(x, dict) and x.get('d') == d['d'] and x.get('oc') not in ('pending', 'redial')
+                           for x in dl[i + 1:]):
+                    r['dials'] += 1
+                continue
+            r['dials'] += 1
+            if oc in REACHED and not d.get('gk') and not d.get('rel'):
+                r['conversations'] += 1
+            if oc == 'appt':
+                r['appointments'] += 1
+        for x in n.get('touches') or []:
+            if not isinstance(x, dict) or x.get('ch') not in ('letter', 'door'):
+                continue
+            wk = wk_of(x.get('d'))
+            if wk:
+                cell(x.get('by') or '', wk)['letters' if x['ch'] == 'letter' else 'doors'] += 1
+        sa = n.get('stageAt') or {}
+        if isinstance(sa, dict):
+            for st, f in (('Offer made', 'offers'), ('Under contract', 'contracts'), ('CLOSED', 'closed')):
+                wk = wk_of(sa.get(st))
+                if wk:
+                    cell('', wk)[f] += 1
+    tot = {'cur': blank(), 'prev': blank()}
+    for s in seats.values():
+        for wk in ('cur', 'prev'):
+            for f in WEEK_COLS:
+                tot[wk][f] += s[wk][f]
+    return {'week': w0s, 'last': w1s, 'seats': seats, 'total': tot}
+
+
+def week_text(W):
+    def line(lab, s):
+        return lab + ': ' + ', '.join('%s %d (last week %d)' % (f, s['cur'][f], s['prev'][f]) for f in WEEK_COLS)
+    L = [WEEK_NOTE, '', 'Week of %s. Targets per seat: dials %d, doors %d, letters %d.' % (
+        W['week'], WEEK_TARGETS['dials'], WEEK_TARGETS['doors'], WEEK_TARGETS['letters'])]
+    for s in sorted(W['seats']):
+        if s:
+            L.append(line('Seat ' + s, W['seats'][s]))
+    L.append(line('Team', W['total']))
+    c, R = W['total']['cur'], []
+    if c['conversations'] >= 10:
+        R.append('dials per conversation %.1f' % (c['dials'] / c['conversations']))
+    if c['appointments'] >= 10:
+        R.append('conversations per appointment %.1f' % (c['conversations'] / c['appointments']))
+    if c['contracts'] >= 10:
+        R.append('appointments per contract %.1f' % (c['appointments'] / c['contracts']))
+    if R:
+        L.append('Ratios: ' + ', '.join(R))
+    L += ['', 'Question: what is the one activity number we let slip, and what should we do about it next week? '
+              'Say which of your points are facts from above and which are your guesses.']
+    return '\n'.join(L)
+
+
+def week_csv(W):
+    out = ['week,seat,' + ','.join(WEEK_COLS)]
+    for wk, lab in (('cur', W['week']), ('prev', W['last'])):
+        for s in sorted(W['seats']):
+            out.append(lab + ',' + s + ',' + ','.join(str(W['seats'][s][wk][f]) for f in WEEK_COLS))
+        out.append(lab + ',TEAM,' + ','.join(str(W['total'][wk][f]) for f in WEEK_COLS))
+    return '\n'.join(out)
+
+
 def to_csv(rows):
     out = [','.join(COLS)]
     for r in rows:
@@ -125,9 +228,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--days', type=int, default=14)
     ap.add_argument('--seat')
-    ap.add_argument('--format', choices=('csv', 'text', 'json'), default='csv')
+    ap.add_argument('--format', choices=('csv', 'text', 'json'), default=None, help='default csv; text with --week')
     ap.add_argument('--notes', default=os.path.join(HERE, 'worker_notes.json'))
     ap.add_argument('--out')
+    ap.add_argument('--week', action='store_true', help='weekly scorecard: this week and last, Monday to Sunday')
     ap.add_argument('--write', action='store_true', help='write the dated file + latest.csv to DEALFLOW_DIR/call-stats')
     a = ap.parse_args(argv)
     if a.write:
@@ -143,7 +247,18 @@ def main(argv=None):
     except Exception as e:
         print('call_stats: cannot read %s (%s)' % (a.notes, e.__class__.__name__), file=sys.stderr)
         return 2
-    rows = rows_from_notes(wn.get('notes') if isinstance(wn, dict) and 'notes' in wn else wn, a.seat, a.days)
+    nts = wn.get('notes') if isinstance(wn, dict) and 'notes' in wn else wn
+    if a.week:
+        W = week_stats(nts)
+        body = json.dumps(W, indent=1) if a.format == 'json' else (week_csv(W) if a.format == 'csv' else week_text(W))
+        if a.out:
+            with open(a.out, 'w', encoding='utf-8', newline='\n') as f:
+                f.write(body + '\n')
+        else:
+            print(body)
+        return 0
+    rows = rows_from_notes(nts, a.seat, a.days)
+    a.format = a.format or 'csv'
     body = json.dumps(rows, indent=1) if a.format == 'json' else (
         NOTE + '\n\n' + to_csv(rows) if a.format == 'text' else to_csv(rows))
     if a.out:

@@ -109,6 +109,44 @@ process.stdout.write(callStatsCsv(rows)+'\\n@@NOTE@@'+CS_NOTE);""" % json.dumps(
             p3 = os.path.join(tempfile.mkdtemp(), 't3.js'); open(p3, 'w').write(js3)
             o3 = subprocess.run([node, p3], capture_output=True, text=True)
             eq('tsa capture (same row rules as tsd)', o3.stdout.strip(), '[777,888,0,0,0,0,0]')
+    # WEEKLY SCORECARD (2026-11-11): week_stats/week_text vs the page's weekStats/weekText on one fixture.
+    WN = {
+      'W1': {'dials': [
+        {'d': '2026-11-10', 'oc': 'pending', 'by': 'Alex'}, {'d': '2026-11-10', 'oc': 'talked', 'by': 'Alex'},
+        {'d': '2026-11-11', 'oc': 'callback', 'by': 'Alex', 'gk': 1}, {'d': '2026-11-11', 'oc': 'talked', 'by': 'Alex', 'rel': 'r'},
+        {'d': '2026-11-11', 'oc': 'appt', 'by': 'Alex'}, {'d': '2026-11-11', 'oc': 'noanswer', 'by': 'Carlos'},
+        {'d': '2026-11-11', 'oc': 'redial', 'by': 'Carlos'},
+        {'d': '2026-11-04', 'oc': 'callback', 'by': 'Alex'}, {'d': '2026-10-20', 'oc': 'talked', 'by': 'Alex'}],
+        'touches': [{'ch': 'letter', 'd': '2026-11-10', 'by': 'Carlos'}, {'ch': 'door', 'd': '2026-11-05', 'by': 'Alex'},
+                    {'ch': 'text', 'd': '2026-11-10', 'by': 'Alex'}],
+        'stageAt': {'Offer made': '2026-11-09', 'Under contract': '2026-11-12', 'CLOSED': '2026-10-01'}},
+      '@x': {'dials': [{'d': '2026-11-10', 'oc': 'talked', 'by': 'Alex'}]},
+    }
+    W = C.week_stats(WN, dt.date(2026, 11, 11))
+    eq('week starts Monday (11-11 is a Wednesday)', (W['week'], W['last']), ('2026-11-09', '2026-11-02'))
+    a = W['seats']['Alex']
+    eq('alex cur (gatekeeper callback and relative line are dials, not conversations)', (a['cur']['dials'], a['cur']['conversations'], a['cur']['appointments']), (4, 2, 1))
+    eq('alex prev', (a['prev']['dials'], a['prev']['conversations'], a['prev']['doors'], a['prev']['offers']), (1, 1, 1, 0))
+    eq('carlos cur', (W['seats']['Carlos']['cur']['dials'], W['seats']['Carlos']['cur']['letters']), (2, 1))
+    eq('team stages (10-01 close is outside both weeks)', (W['total']['cur']['contracts'], W['total']['cur']['offers'], W['total']['cur']['closed'], W['total']['prev']['closed']), (1, 1, 0, 0))
+    eq('person ledger and text touch skipped', W['total']['cur']['dials'], 6)
+    wt = C.week_text(W)
+    if node:
+        m4 = re.search(r'var MAIL_AFTER_MISSES.*?/\* ---------------- screens ---------------- \*/', src, re.S)
+        if not m4: fails.append('pipeline block not found')
+        else:
+            js4 = ("function caller(){return 'T';}function today(){return '';}var ROWS=[],COV=[],notes={};"
+                   + m4.group(0) + "\nvar W=weekStats(" + json.dumps(WN) + ",new Date(2026,10,11,12).getTime());"
+                   "process.stdout.write(JSON.stringify({w:W.week,l:W.last,s:W.seats,t:W.total})+'\\n@@@'+weekText(W));")
+            p4 = os.path.join(tempfile.mkdtemp(), 't4.js'); open(p4, 'w').write(js4)
+            o4 = subprocess.run([node, p4], capture_output=True, text=True)
+            if o4.returncode: fails.append('node week failed: ' + o4.stderr[:300])
+            else:
+                pj, _, ptxt = o4.stdout.partition('\n@@@')
+                pj = json.loads(pj)
+                eq('python vs page week numbers', {'w': pj['w'], 'l': pj['l'], 's': pj['s'], 't': pj['t']},
+                   {'w': W['week'], 'l': W['last'], 's': W['seats'], 't': W['total']})
+                eq('python vs page week text', ptxt, wt)
     if fails:
         print('FAIL\n' + '\n'.join(fails)); return 1
     print('ok: call_stats.py and the page agree'); return 0

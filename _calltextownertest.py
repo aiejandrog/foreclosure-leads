@@ -59,7 +59,8 @@ function run(c){
   function _tele24(){ return c.tele || 0; }
   var sitMap = { appt:['apptconfirm','booklink','apptremind','noshow'], callback:['cbtext'],
                  talked:['aftertalk','booklink'], notint:['aftertalk'] };
-  var sitKeys = sitMap[o.k] || [];
+  var _gkcb = !!c.gk;   /* the page computes this from the last dial row's gk tag; pinned below */
+  var sitKeys = _gkcb ? [] : (sitMap[o.k] || []);
   var _txk = sitKeys.length ? sitKeys[0] : 'ladder';
   var _chips = '';
   %s
@@ -103,6 +104,12 @@ cases += [
     {'name': 'ftsa+owner', 'r': r(['']), 'o': {'k': 'noanswer'}, 'tele': 3},
     {'name': 'badnum+owner', 'r': r(['']), 'o': {'k': 'badnum'}},
     {'name': 'late+owner', 'r': r(['']), 'o': {'k': 'noanswer'}, 'flok': False},
+    {'name': 'gk/owner', 'r': r([''], 'o'), 'o': {'k': 'callback'}, 'gk': True},
+    {'name': 'gk/likely', 'r': r(['hh'], 'l'), 'o': {'k': 'callback'}, 'gk': True},
+    {'name': 'gk/wpm', 'r': r(['wpm']), 'o': {'k': 'callback'}, 'gk': True},
+    {'name': 'cb/owner', 'r': r([''], 'o'), 'o': {'k': 'callback'}},
+    {'name': 'cb/likely', 'r': r(['hh'], 'l'), 'o': {'k': 'callback'}},
+    {'name': 'gk+dnt', 'r': r([''], 'o'), 'o': {'k': 'callback'}, 'gk': True, 'dnt': True},
 ]
 res = run(cases)
 
@@ -128,6 +135,33 @@ rec('bad number still blocks', 'Bad number' in res.get('badnum+owner', {}).get('
 rec('hours window still applies to an owner number', res.get('late+owner', {}).get('button') is False, res.get('late+owner'))
 rec('the household note names the reason', 'owner' in res.get('hh/noanswer', {}).get('txt', '').lower()
     and 'call only' in res.get('hh/noanswer', {}).get('txt', '').lower(), res.get('hh/noanswer'))
+
+# ---- GATEKEEPER CALLBACK (2026-11-11) --------------------------------------------------------------
+for k in ('gk/owner', 'gk/likely', 'gk/wpm'):
+    x = res.get(k, {})
+    rec('%s: a callback promised by someone other than the owner gets no text' % k, x.get('button') is False
+        and 'other than the owner' in x.get('txt', ''), x)
+rec('an owner callback still gets the callback text', res.get('cb/owner', {}).get('button') is True, res.get('cb/owner'))
+rec('likely owner, owner callback: unchanged (2026-10-22 rule)', res.get('cb/likely', {}).get('button') is True, res.get('cb/likely'))
+rec('do-not-text still wins over the gatekeeper note', 'do-not-text' in res.get('gk+dnt', {}).get('txt', ''), res.get('gk+dnt'))
+# the page's own _gkcb computation, run as written
+ga = PAGE.index('  var _gkcb = false;')
+gb = PAGE.index('  var sitKeys = _gkcb', ga)
+GK = PAGE[ga:gb]
+JS2 = ("var out = [];\nfunction t(notes, r, o){ " + GK + " return _gkcb; }\n"
+       "out.push(t({A:{dials:[{oc:'callback', gk:1}]}}, {c:'A'}, {k:'callback'}));\n"
+       "out.push(t({A:{dials:[{oc:'callback'}]}}, {c:'A'}, {k:'callback'}));\n"
+       "out.push(t({A:{dials:[{oc:'callback', gk:1}]}}, {c:'A'}, {k:'talked'}));\n"
+       "out.push(t({}, {c:'A'}, {k:'callback'}));\n"
+       "console.log(JSON.stringify(out));")
+p2 = os.path.join(_T, 'gk.js')
+io.open(p2, 'w', encoding='utf-8').write(JS2)
+q2 = subprocess.run([os.environ.get('NODE_BIN', 'node'), p2], capture_output=True, text=True, timeout=60)
+rec('page _gkcb: true only for a gk-tagged callback row', q2.stdout.strip() == '[true,false,false,false]', q2.stdout + q2.stderr[-200:])
+# a gatekeeper callback no longer clears a soft no; the gatekeeper step tags the row
+rec('soft-no clear skips a gk callback', "!_rel && !_row.gk && (o.k==='talked'||o.k==='appt'||o.k==='callback') && n.no==='soft'" in PAGE)
+rec('the gatekeeper step tags its callback', "k === 'callback' && (_g.step === 'gate' || _g.stack.indexOf('gate') >= 0)" in PAGE
+    and "if(o.k === 'callback' && _GK_CB === r.c) _row.gk = 1;" in PAGE)
 
 # ---- the tags come from the real call_rows path ------------------------------------------------
 lead = {'case': '2026-000901-CA-01', 'owners': 'JOSE GARCIA', 'oname': 'JOSE GARCIA',

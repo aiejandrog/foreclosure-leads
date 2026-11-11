@@ -207,7 +207,31 @@ carries the three federally mandated MARS sentences (`disclaimer.mars_part('govt
 module's docstring said both were there; the body had neither. Not yet decided by the attorney in
 writing: a no-street letter to the owner's mailing address (`mailAddr`, #235) and mailing Broward /
 Palm Beach rows before a bankruptcy search. Neither is built; draft wording is under project files
-`letters-mailing-address/`.
+`letters-mailing-address/`. **2026-11-11:** the mailing-address letter for absentee owners is decided; see
+"No answer to mail" below. Broward / Palm Beach before a bankruptcy search is unchanged.
+
+## No answer to mail (Call Mode, 2026-11-11, draft PR, LEGAL REVIEW)
+
+Alex's five decisions (2026-11-11): the first No answer or voicemail on a verified-equity owner line routes the
+lead to Mail (sale 7+ days out or no sale date) or Knock (under 7 days, never an absentee owner), written as
+`n.route` with `auto: 'na'`. Letters are both hand-written (`python bsg_mail_campaign.py --from-route`) and
+Lob printed (`--from-route --printed` writes the `outreach_mail.py --queue` file; the Lob key has to be
+re-issued first). One letter per lead (`mail_route_printed.json` under `DEALFLOW_DIR`). The board Mail batch
+is verified equity only, same test as Call Mode's `isEquity`. Weekly targets per seat: dials 625, doors 10,
+letters 10 (`WEEK_TARGETS`, confirmed by Alex 2026-11-11; `python call_stats.py --week` is the laptop twin of
+the phone's THIS WEEK band).
+
+**Absentee owners are mailed at the owner's mailing address (2026-11-11, at Alex's direction, attorney
+approved by text).** Alex asked the attorney by text whether we can mail absentee owners at their mailing
+addresses; the attorney replied "Yessir you absolutely can" (2026-11-11, 1:53 AM). Alex directed that this
+text is the approval on file; the screenshot is under project files
+`dealflow-no-answer-pipeline/ATTORNEY-OK-ABSENTEE-MAILING-2026-11-11.png`. It covers mailing absentee owners
+at their mailing address. It is not a review of the letter's wording, which stays the existing
+`bsg_mail_campaign.letter()` body with the MARS sentences and the EN/ES opt-out line. Withdrawing it is the
+attorney's or Alex's call.
+
+Nothing here sends: `--from-route` writes printable files and a queue under `DEALFLOW_DIR`, the Lob send is
+still `outreach_mail.py --queue` by hand, and the route reads suppression verdicts without writing any.
 
 ## Personal identifiers never ship (`footprint.py`)
 
