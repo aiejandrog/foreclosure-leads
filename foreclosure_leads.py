@@ -3770,6 +3770,11 @@ def make_tracker(leads):
     # (diligence_gate). They differ on ~404 rows — the lis-pendens pool, where eqfake means "no debt
     # captured yet", not "we did the arithmetic wrong". The policy one wins, so it is written last
     # and the raw one is removed when the policy releases. One field, one meaning.
+    # The local deep-equity cache is optional; a present torn cache aborts this bake.
+    # Join only after interest and value evidence, before diligence and either payload.
+    import deep_equity_adapter as _dea
+    _dea.attach(slim, _dea.load())
+
     _dg_tally = None
     try:
         import diligence_flags as _DF_BAKE
