@@ -179,3 +179,78 @@ def attach(rows, latest, now=None):
         row['eqnote'] = row['eqstate_why']
         import equity_state
         row['eqc'] = equity_state.card(row)
+
+
+# ---- HOLD-CHANGE REPORT ----------------------------------------------------------------------
+# A verified debt figure feeds diligence_flags.known_debt_of(), and that decides the UNDERWATER
+# contact hold. So this adapter can add or remove a hold. Alejandro asked (2026-11-11) that every
+# build list each lead whose hold changed because of it, so he sees them before anyone dials.
+# Case numbers, county and hold codes only: no owner names, phones or amounts leave this file.
+
+def snapshot(rows, latest):
+    """Pre-attach copies of the rows the cache can touch. Call right before attach()."""
+    keys = set(latest or ())
+    return {_key(r.get('case')): copy.deepcopy(r) for r in rows
+            if _key(r.get('case')) in keys}
+
+
+def _hold_without_adapter(row):
+    """The diligence verdict this row would have carried with no deep-equity join.
+    Mirrors make_tracker's bake: annotate() then gate(). gate() never mutates."""
+    import diligence_flags
+    import diligence_gate
+    r = copy.deepcopy(row)
+    r.update(diligence_flags.annotate(r))
+    g = diligence_gate.gate(r)
+    return bool(g['hold']), (g.get('code') or '') if g['hold'] else ''
+
+
+def hold_changes(before, rows):
+    """Every row whose shipped hold (ddhold/ddcode, as baked) differs from its no-adapter verdict."""
+    out = []
+    for row in rows:
+        case = _key(row.get('case'))
+        if case not in before or row.get('st') == 'BAL':
+            continue
+        old = before[case]
+        try:
+            was_hold, was_code = _hold_without_adapter(old)
+        except Exception as exc:          # unknown "before" is itself something to look at
+            was_hold, was_code = None, 'ERROR: %s' % str(exc)[:80]
+        now_hold = bool(row.get('ddhold'))
+        now_code = (row.get('ddcode') or '') if now_hold else ''
+        if (was_hold, was_code) == (now_hold, now_code):
+            continue
+        out.append({'case': row.get('case', ''), 'county': row.get('county', ''),
+                    'hold_before': was_hold, 'code_before': was_code,
+                    'hold_after': now_hold, 'code_after': now_code,
+                    'eqstate_before': old.get('eqstate', ''),
+                    'eqstate_after': row.get('eqstate', '')})
+    return out
+
+
+def report(changes, checked, folder=None, now=None):
+    """Print every change and write it under DEALFLOW_DIR/deep_equity. Prints even at zero, so
+    "nothing changed" looks different from "the report never ran". ASCII only (cp1252 console)."""
+    now = now or dt.datetime.now()
+    folder = folder or os.path.join(P.DEALFLOW_DIR, 'deep_equity')
+    print('deep-equity holds: %d of %d case(s) in the cache changed contact hold this build'
+          % (len(changes), checked))
+    for c in changes:
+        def side(h, code):
+            return 'unknown (%s)' % code if h is None else ('HOLD %s' % code if h else 'released')
+        print('  %-24s %-10s %s -> %s' % (c['case'], c['county'],
+                                           side(c['hold_before'], c['code_before']),
+                                           side(c['hold_after'], c['code_after'])))
+    if changes:
+        print('  !! review these before anyone dials: %s'
+              % os.path.join(folder, 'hold_changes.json'))
+    doc = {'built': now.isoformat(timespec='seconds'), 'checked': checked,
+           'changed': len(changes), 'changes': changes}
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, 'hold_changes.json'), 'w', encoding='utf-8') as fh:
+        json.dump(doc, fh, indent=1)
+    # Append-only history, so the first build's list survives the next night's overwrite.
+    with open(os.path.join(folder, 'hold_changes.jsonl'), 'a', encoding='utf-8') as fh:
+        fh.write(json.dumps(doc) + '\n')
+    return doc
