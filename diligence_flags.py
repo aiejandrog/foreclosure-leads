@@ -443,6 +443,17 @@ def known_debt_of(row):
     try:
         r = _d(row)
         parts = []
+        deep = r.get('deep_equity')
+        if isinstance(deep, dict) and r.get('eqstate') == 'priced':
+            # The adapter has validated the complete inventory. The case figure replaces
+            # the first mortgage, never adds to it; accrued interest can only increase it.
+            first = max(_n(deep.get('debt_first')), owner_owed_of(r), _n(r.get('judgc')))
+            parts = [{'usd': first, 'kind': 'judgment',
+                      'label': 'the larger of the claimed first and case figure'},
+                     {'usd': _n(deep.get('debt_subordinate_total')) + _n(deep.get('debt_liens_total')),
+                      'kind': 'principal', 'label': 'itemized recorded subordinate debt and liens'}]
+            return {'total': round(sum(p['usd'] for p in parts), 2), 'parts': parts,
+                    'indicative': True, 'how': ' + '.join(p['label'] for p in parts)}
         # A judgment we cannot read is not a debt figure, it is a blank. `ju` / judgment_unknown is
         # the repo's own marker for that, and asserting UNDERWATER off a blank would be a fresh lie.
         unknown = bool(r.get('ju') or r.get('judgment_unknown'))
