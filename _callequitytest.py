@@ -110,7 +110,7 @@ cases = {
     'noj': row(lead('J2', CARD_NOJ)), 'old': row(lead('O2')), 'underwater': row(lead('U2', dict(
         CARD_FACT, net=-25000.0))),
 }
-js = fn('esc') + one_line('eqFact') + '\n' + one_line('eqMay') + '\n' + one_line('_eqUsd') + '\n' + fn('eqCardHtml') + """
+js = fn('esc') + one_line('eqFact') + '\n' + one_line('eqMay') + '\n' + one_line('_eqUsd') + '\n' + fn('isRecordedEquity') + fn('eqCardHtml') + """
 var R = %s;
 var out = {};
 Object.keys(R).forEach(function(k){ out[k] = eqCardHtml(R[k]); });

@@ -3022,6 +3022,9 @@ function _eqcChip(r, fmtFn){
   var q = c.may_quote === true && (st === 'clear' || st === 'priced');   // display only: never says quote on an unfactual state
   var txt = 'Equity: ' + _EQC_NAME[st] + ' &middot; ' + (q ? 'may quote' : 'do not quote');
   if(q && typeof c.net === 'number') txt += ' &middot; net ~' + esc(f(c.net));
+  // Recorded-debt tier (equity_state.card `recorded`, 2026-11-11): liens verified, no judgment yet. Worth a
+  // call, never a figure: the label says so and no dollar amount is printed.
+  else if(!q && c.recorded === true) txt += ' &middot; recorded debt only, no judgment yet';
   return '<div class="meta eqc eqc-' + st + (q ? ' eqc-ok' : '') + '" title="' + esc(c.why || c.label || '') + '">' + txt + '</div>';
 }
 /* One text for "net equity" wherever a dollar figure is printed. fmtFn formats dollars. */

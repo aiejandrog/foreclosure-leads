@@ -92,7 +92,7 @@ NOTES = {
     'DONE': {'route': dict(R('mail'), done='2026-11-04')},
 }
 
-FNS = ('isBalloon', 'liveDays', 'isEquity', 'hardSuppressed', '_wasLp', 'noState', 'routeOf', 'routeAtty',
+FNS = ('isBalloon', 'liveDays', 'isEquity', 'isRecordedEquity', 'hardSuppressed', '_wasLp', 'noState', 'routeOf', 'routeAtty',
        'routeBlock', 'setRoute', 'setRouteAtty', 'routeMark', 'routeCity', 'routeLists', 'routeOpenN',
        'routePanelHtml', 'esc', '_rowsByC', 'routeLeftWhy', 'reachedAt', 'bookOpen', '_ymd', '_ymdAdd')
 JS = ('function _heldNow(){ return false; }\nfunction optPhones(){ return {}; }\n'
