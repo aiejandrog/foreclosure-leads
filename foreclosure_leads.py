@@ -3773,7 +3773,9 @@ def make_tracker(leads):
     # The local deep-equity cache is optional; a present torn cache aborts this bake.
     # Join only after interest and value evidence, before diligence and either payload.
     import deep_equity_adapter as _dea
-    _dea.attach(slim, _dea.load())
+    _dea_latest = _dea.load()
+    _dea_before = _dea.snapshot(slim, _dea_latest)   # for the hold-change report after the bake
+    _dea.attach(slim, _dea_latest)
 
     _dg_tally = None
     try:
@@ -3836,6 +3838,17 @@ def make_tracker(leads):
                   % _dg_tally.n_held)
     except Exception as _dge:
         print('diligence: SKIPPED (%s) — every contact surface on this build is UNGATED.' % str(_dge)[:120])
+
+    # Every lead whose contact hold the deep-equity join changed, listed before anyone dials.
+    # A failure here is printed, never fatal: the list is a review aid, not a gate.
+    if _dea_before:
+        try:
+            _dea.report(_dea.hold_changes(_dea_before, slim), len(_dea_before))
+        except Exception as _dhe:
+            print('deep-equity holds: REPORT FAILED (%s) - check holds by hand before dialing'
+                  % str(_dhe)[:120])
+    else:
+        print('deep-equity holds: no cache entries this build, no hold changed')
 
     # ---- PERSON KEYS (cross-case contact identity) ---------------------------------------------
     # Computed at BUILD time, not in the browser: a client-side pass would be O(n^2) inside render
