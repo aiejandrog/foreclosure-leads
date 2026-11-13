@@ -11416,13 +11416,13 @@ function genDialReady(r){
   var ownerType = r.co ? 'company (ask for the manager)' : (r.hs ? 'homestead — family home' : 'owner-occupant unknown');
   var factsEN = ''
     + fact('Sale date', chip.t)
-    + fact('Value / Judgment', (valFmt||'—')+' / '+(judgFmt||'—'))
+    + fact(r.st==='TD' ? 'Value / Opening bid' : 'Value / Judgment', (valFmt||'—')+' / '+(judgFmt||'—'))
     + fact('Surviving 1st mortgage', survFmt)
     + fact('Plaintiff', r.plaintiff)
     + fact('Signal on the owner', ownerType);
   var factsES = ''
     + fact('Fecha subasta', chip.t)
-    + fact('Valor / Sentencia', (valFmt||'—')+' / '+(judgFmt||'—'))
+    + fact(r.st==='TD' ? 'Valor / Puja inicial' : 'Valor / Sentencia', (valFmt||'—')+' / '+(judgFmt||'—'))
     + fact('1ª hipoteca que sobrevive', survFmt)
     + fact('Demandante', r.plaintiff)
     + fact('Señal del dueño', r.co?'empresa (pida por el manager)':(r.hs?'homestead — casa familiar':'estatus desconocido'));
@@ -14817,7 +14817,7 @@ function genMorningWorker(lane, autostart){
        plaintiff and the sale date were gone the instant the dialer opened, which is the half of
        the card an operator actually reads off while the homeowner is on the line. They are cheap
        to keep and they are what the call is about; the outcome buttons sit under them now. */
-    +     'var _pj = r.judg? "$"+Math.round(+r.judg).toLocaleString()+" judgment" : "";'
+    +     'var _pj = r.judg? "$"+Math.round(+r.judg).toLocaleString()+(r.st==="TD"?" opening bid":" judgment") : "";'
     +     'var _pd = [r.plaintiff||"", _pj, (r.saleDate? "sale "+r.saleDate : "")].filter(function(s){return s;}).join(" &middot; ");'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
     +       '+"<div class=\'h\'>&#128222; How did the call go?</div>"'
@@ -15259,7 +15259,7 @@ function genMorningWorker(lane, autostart){
     +         '+"<div><div class=\'k\'>"+(r.days==null?"Stage":"Sale date")+"</div><div class=\'v\'>"'
     +           '+(r.days==null?"Just filed — no auction set":esc(r.saleDate)+" ("+r.days+"d)")+"</div></div>"'
     +         '+"<div><div class=\'k\'>Plaintiff</div><div class=\'v\'>"+esc((r.plaintiff||"—").slice(0,40))+"</div></div>"'
-    +         '+"<div><div class=\'k\'>Judgment / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
+    +         '+"<div><div class=\'k\'>"+(r.st==="TD"?"Opening bid":"Judgment")+" / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
     +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+ph+" · "+em+"</div></div>"'
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
