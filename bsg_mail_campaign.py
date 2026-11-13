@@ -46,6 +46,27 @@ import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# WHERE THE LEAD DATA IS READ FROM (2026-11-13). Default: this folder, unchanged. A worktree's tracked
+# copies of the lead files are older than the operator checkout's, so a build run from a worktree can
+# point its READS at another folder: set_data_dir(path), --data-dir, or DEALFLOW_DATA_DIR. Nothing is
+# ever written there. Read through data_dir() so a test that repoints HERE keeps working.
+DATA_DIR = os.environ.get('DEALFLOW_DATA_DIR', '').strip() or None
+
+
+def data_dir():
+    """The folder the lead files (lp_addresses, lis_pendens, optouts, the stay caches) are read from."""
+    return DATA_DIR or HERE
+
+
+def set_data_dir(path):
+    """Point reads at `path` (None restores the default). Returns the previous setting."""
+    global DATA_DIR
+    prev = DATA_DIR
+    if path and not os.path.isdir(path):
+        raise SystemExit('data dir %r is not a folder' % (path,))
+    DATA_DIR = os.path.abspath(path) if path else None
+    return prev
+
 # 2026-07-12 USPS increase: a First-Class Forever stamp is $0.82. Envelopes run ~$0.04 in a box of
 # 500 and a sheet of paper ~$0.02. Verified against USPS pricing 2026-08-26 rather than assumed --
 # the per-letter number is the whole budget, so a stale 78c would have overstated the count by 5%.
@@ -115,7 +136,7 @@ def street_case(s):
 
 
 def _load(name, default=None):
-    p = os.path.join(HERE, name)
+    p = os.path.join(data_dir(), name)
     if not os.path.exists(p):
         return default if default is not None else {}
     try:
@@ -219,7 +240,7 @@ def pool(days, opt):
         # verdict. A hand-written solicitation to a debtor under a stay leaves a paper exhibit.
         try:
             import bk_lookup as _BKL
-            _held, _why = _BKL.contact_blocked_reason(case, here=HERE)
+            _held, _why = _BKL.contact_blocked_reason(case, here=data_dir())
         except Exception:
             _held = True
         if _held:
@@ -514,7 +535,7 @@ def route_selection(notes, leads, opt, ledger, reprint=False, stay=None, dg=None
         def stay(case):
             try:
                 import bk_lookup as _BKL
-                return _BKL.contact_blocked_reason(case, here=HERE)[0]
+                return _BKL.contact_blocked_reason(case, here=data_dir())[0]
             except Exception:
                 return True                      # any failure holds
     if dg is None:
@@ -676,8 +697,11 @@ def main():
     ap.add_argument('--from-route', action='store_true',
                     help="Call Mode's mail list (verified-equity leads routed after a no answer)")
     ap.add_argument('--reprint', action='store_true', help='with --from-route: print leads already printed')
+    ap.add_argument('--data-dir', default='', help='read the lead files from this folder (default: this one)')
     a = ap.parse_args()
 
+    if a.data_dir:
+        set_data_dir(a.data_dir)
     if a.signer_name:
         SENDER['name'] = a.signer_name
     if a.signer_phone:
@@ -685,6 +709,9 @@ def main():
     global MAIL_TRACKING_PHONE
     if a.tracking_phone:
         MAIL_TRACKING_PHONE = a.tracking_phone.strip()
+    if a.from_route and a.data_dir:
+        print('REFUSED: --data-dir does not apply to --from-route (its lead files load through outreach_mail).')
+        return
     if a.from_route:
         raise SystemExit(run_from_route(printed=a.printed, reprint=a.reprint))
     if not (SENDER.get('name') and SENDER.get('phone')):
