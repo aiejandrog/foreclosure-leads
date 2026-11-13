@@ -122,11 +122,15 @@ rec('deed owner filed as a resident (ps hh) stays call-only, like the board', re
 rec('an owner number still gets the ladder text', res.get('owner/noanswer', {}).get('button') is True, res.get('owner/noanswer'))
 rec('a lead with no ps array still gets the ladder text', res.get('owner/no-ps', {}).get('button') is True, res.get('owner/no-ps'))
 rec('an owner number still gets the situational text', res.get('owner/appt', {}).get('button') is True, res.get('owner/appt'))
-rec('likely owner, no answer: held with its own wording', res.get('likely/noanswer', {}).get('button') is False
-    and 'Likely owner per Whitepages' in res.get('likely/noanswer', {}).get('txt', ''), res.get('likely/noanswer'))
-rec('likely owner, call reached them: the situational text is still offered (2026-10-22 rule kept)',
+# 2026-11-13 (Alejandro): Whitepages text gate removed. A likely owner and a pasted number get the
+# text button without a call having reached them first.
+rec('likely owner, no answer: the text is offered (gate removed 2026-11-13)',
+    res.get('likely/noanswer', {}).get('button') is True
+    and 'Likely owner per Whitepages' not in res.get('likely/noanswer', {}).get('txt', ''), res.get('likely/noanswer'))
+rec('likely owner, call reached them: the situational text is offered',
     res.get('likely/talked', {}).get('button') is True, res.get('likely/talked'))
-rec('pasted number has no text button', res.get('wpm/noanswer', {}).get('button') is False, res.get('wpm/noanswer'))
+rec('pasted number, no answer: the text is offered (gate removed 2026-11-13)',
+    res.get('wpm/noanswer', {}).get('button') is True, res.get('wpm/noanswer'))
 rec('do-not-text still wins over the household note', 'do-not-text' in res.get('dnt+hh', {}).get('txt', ''), res.get('dnt+hh'))
 rec('suppressed still blocks an owner number', 'suppressed' in res.get('supp+owner', {}).get('txt', ''), res.get('supp+owner'))
 rec('stale list still blocks an owner number', res.get('held+owner', {}).get('button') is False, res.get('held+owner'))
@@ -142,7 +146,7 @@ for k in ('gk/owner', 'gk/likely', 'gk/wpm'):
     rec('%s: a callback promised by someone other than the owner gets no text' % k, x.get('button') is False
         and 'other than the owner' in x.get('txt', ''), x)
 rec('an owner callback still gets the callback text', res.get('cb/owner', {}).get('button') is True, res.get('cb/owner'))
-rec('likely owner, owner callback: unchanged (2026-10-22 rule)', res.get('cb/likely', {}).get('button') is True, res.get('cb/likely'))
+rec('likely owner, owner callback: text offered', res.get('cb/likely', {}).get('button') is True, res.get('cb/likely'))
 rec('do-not-text still wins over the gatekeeper note', 'do-not-text' in res.get('gk+dnt', {}).get('txt', ''), res.get('gk+dnt'))
 # the page's own _gkcb computation, run as written
 ga = PAGE.index('  var _gkcb = false;')

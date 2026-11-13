@@ -187,10 +187,13 @@ r = row(lead('LK-FN', owners='MCKNIGHT-ADEONOJOBI,GINA',
 rec('a different first name is not enough', r['pw'][r['p'].index(D)] == 'h', r.get('pw'))
 _tx = call_mode._PAGE
 _i_dnt = _tx.index("This number is on the do-not-text list. Call only.")
-_i_lk = _tx.index("Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.")
 _i_sit = _tx.index("else if(sitKeys.length){")
-rec('text button: likely-owner hold sits after the hard gates and before every text offer',
-    _i_dnt < _i_lk < _i_sit and "charAt(phIdx)==='l' && !sitKeys.length" in _tx)
+# 2026-11-13 (Alejandro): the Whitepages text gate is removed. A likely owner and a pasted number
+# are textable without a prior call, so neither hold may come back into the after-call panel.
+rec('text button: no likely-owner or pasted-number hold in the after-call panel (gate removed 2026-11-13)',
+    _i_dnt < _i_sit and "Likely owner per Whitepages" not in _tx
+    and "Pasted from Whitepages, not confirmed" not in _tx
+    and "charAt(phIdx)==='l' && !sitKeys.length" not in _tx)
 
 _pg2 = call_mode._PAGE
 
@@ -219,8 +222,8 @@ rec('card: her number says Whitepages owner, verify', bool(_o4) and 'listed OWNE
 rec('card: dialing her number says who Whitepages says she is', bool(_o4) and 'Maylen Perez Diaz' in _o4[3]
     and 'Orlando Martinez' in _o4[3] and 'whether they own the house' in _o4[3], _o4)
 rec('card: likely owner chip and note, greeting kept', bool(_o4) and 'likely owner' in _o4[5]
-    and 'no text yet' in _o4[5] and 'LIKELY the owner' in _o4[6] and 'Gina Mcknight' in _o4[6]
-    and 'No text' in _o4[6] and _o4[7] == 'Gina', _o4)
+    and 'no text yet' not in _o4[5] and 'LIKELY the owner' in _o4[6] and 'Gina Mcknight' in _o4[6]
+    and 'No text' not in _o4[6] and _o4[7] == 'Gina', _o4)
 rec('card: the warn bar names both', 'Whitepages lists a different owner' in _pg2 and 'r.wo.join' in _pg2)
 
 print('\nDNC / AGENT NUMBERS STAY OUT')

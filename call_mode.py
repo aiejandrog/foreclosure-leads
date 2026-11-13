@@ -4468,7 +4468,7 @@ function _phSrcNote(r, i){
   if(_rk === 'u') return 'You were not sure whose number this is. Ask for ' + esc(r.on||'the owner') + ' by name and confirm who you are speaking with before you mention the filing. Call only, never texted.';
   if(s==='wpm') return 'You pasted this number from Whitepages. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. Pasted numbers are not checked against the do-not-call registry.';
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
-  if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. No text to this number until a call reaches them.';
+  if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing.';
   if(String(r.pw||'').charAt(i)==='w') return 'Whitepages lists this number\u2019s person (' + esc((r.wo||[]).join(' / ')) + ') as the OWNER; our record says ' + esc(r.on||'someone else') + '. Ask who you are speaking with and whether they own the house before you mention the filing.';
   /* SKIP TRACE AND WHITEPAGES DISAGREE (2026-11-01): the trace tagged this number to the owner (no ps
      tag) and Whitepages lists it under someone else at the address. The card said nothing; the
@@ -4490,7 +4490,7 @@ function _wpChip(r, k){
   if(r.pw == null) return '';
   var w = String(r.pw).charAt(k);
   if(w==='o') return '<span class="chip ok">&#10003; Whitepages: owner</span>';
-  if(w==='l') return '<span class="chip ok">Whitepages: likely owner &middot; confirm on the call, no text yet</span>';
+  if(w==='l') return '<span class="chip ok">Whitepages: likely owner &middot; confirm on the call</span>';
   if(w==='w') return '<span class="chip bad">Whitepages: listed OWNER ' + esc((r.wo||[]).join(' / ')) + ' &middot; not our owner, verify</span>';
   if(w==='h') return '<span class="chip">Whitepages: someone else at the address</span>';
   if(w==='n') return '<span class="chip">Whitepages: name match only</span>';
@@ -10511,23 +10511,17 @@ function afterCall(r, o, nextC){
   /* RELATIVE / NOT SURE (2026-11-03): never texted from here, whatever the outcome. A text names the
      property and the case; a relative never asked about this homeowner's foreclosure. */
   else if(typeof relKind === 'function' && relKind(r, phIdx)) txt = '<div class="nc">' + (relKind(r, phIdx) === 'r' ? 'Relative’s number' : 'Not confirmed whose number this is') + ': call only, never texted.</div>';
-  /* LIKELY OWNER, NOT CONFIRMED (2026-10-22, Alejandro: "calls yes, but no texting them until a call
-     confirms it's them"). A Whitepages likely-owner number gets a text only after a call on it
-     reached a person (talked, appointment, callback, not interested); no answer, voicemail and the
-     rest stay call-only. */
-  else if(String(r.pw||'').charAt(phIdx)==='l' && !sitKeys.length)
-                            txt = '<div class="nc">Likely owner per Whitepages, not confirmed yet. No text until a call reaches them.</div>';
-  /* A number PASTED from whitepages.com (ps 'wpm') follows the same rule: the operator read it off a
-     page, nobody has confirmed whose phone it is, and it was never registry-checked. Call only
-     until a call on it reaches a person. */
-  else if(String((r.ps||[])[phIdx]||'')==='wpm' && !sitKeys.length)
-                            txt = '<div class="nc">Pasted from Whitepages, not confirmed yet. No text until a call reaches them.</div>';
+  /* WHITEPAGES TEXT GATE REMOVED 2026-11-13 (Alejandro). A Whitepages likely owner (pw 'l') and a
+     number pasted off whitepages.com (ps 'wpm') used to be call-only until a call on it reached a
+     person. Both are textable now without a prior call. Everything above still holds them when it
+     applies (FTSA cap, bad number, do-not-text, a gatekeeper callback, a relative), and the
+     household (hh) and name-only (nm) holds below are unchanged. */
   /* NOT THE OWNER'S NUMBER: no text, whatever the call outcome (2026-11-01). The board's
      textablePhones() withholds 'hh' (household member at the address) and 'nm' (name-only match,
      maybe a namesake) because the text names the property and the case, which tells somebody who
      never asked about this homeowner's foreclosure. This panel had no such gate: the number card
      says "do not discuss the case with them" and the panel still offered the ladder text and every
-     situational one. A LIKELY owner ('l', also tagged hh) is handled above and keeps its own rule. */
+     situational one. A LIKELY owner ('l', also tagged hh) is not held here: it is textable. */
   else if(['hh','nm'].indexOf(String((r.ps||[])[phIdx]||'')) > -1 && String(r.pw||'').charAt(phIdx)!=='l')
                             txt = '<div class="nc">' + ((r.ps||[])[phIdx]==='nm'
                               ? 'Name-only match, may be a different person. Not the owner’s confirmed number: call only, no text.'
