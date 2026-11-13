@@ -63,7 +63,9 @@ VARIANT_NAME = {'A': 'short note', 'B': 'calendar page', 'C': 'your file'}
 LEDGER = 'mail_variants.json'
 PAGES_DIR = 'mail_pages'
 MARS_KEYS = ('govt', 'may_agree', 'may_stop')          # the three federally mandated sentences
-ACCENT = '#16294d'                                     # the mark's navy; the only accent on a piece
+ACCENT = '#c8102e'                                     # the URGENT letter's red (outreach_mail jesse)
+BAND_EDGE = '#7a0a1c'
+DARK = '#1A1A1A'
 INK = '#1b1f27'
 VOICE_EXT = ('.mp3', '.m4a', '.wav', '.ogg')
 CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'      # no I, L, O, 0, 1: read off paper, typed on a phone
@@ -436,6 +438,37 @@ def optout(lang):
     return OC.OPTOUT_LINE_ES if lang == 'es' else OC.OPTOUT_LINE_EN
 
 
+def band_lines(f):
+    """(english, spanish) for the red band. Only what the record shows: a sale date when one is on
+    record and still ahead, otherwise the date the notice of the case was recorded, otherwise neither."""
+    en, es = 'URGENT · TIME-SENSITIVE', 'URGENTE · EL TIEMPO CUENTA'
+    if f.get('sale'):
+        return ('%s · SALE DATE %s' % (en, date_en(f['sale'])),
+                '%s · FECHA DE VENTA %s' % (es, date_es(f['sale'])))
+    if f.get('filed'):
+        d = f['filed']                       # short month: the line has to fit the band on one row
+        return ('%s · CASE NOTICE RECORDED %s %d, %d' % (en, _MONTH_EN[d.month - 1][:3], d.day, d.year),
+                '%s · AVISO DEL CASO REGISTRADO EL %d %s %d' % (es, d.day, _MONTH_ES[d.month - 1][:3], d.year))
+    return en, es
+
+
+def _band_pt(text, top, spacing):
+    """Type size that keeps a band line on one row of the 7in sheet width (heavy caps run about
+    0.72em a letter plus the letter-spacing)."""
+    return max(8.0, min(top, round(498.0 / (max(len(text), 1) * (0.72 + spacing)), 1)))
+
+
+def fact_headline(f):
+    """Variant A's red headline: the same fact as the band, as a sentence. Not a sales line."""
+    if f.get('sale'):
+        return ('A sale date of %s is on the court calendar.' % date_en(f['sale']),
+                'Hay una fecha de venta del %s en el calendario de la corte.' % date_es(f['sale']))
+    if f.get('filed'):
+        return ('A notice of a court case was recorded on %s.' % date_en(f['filed']),
+                'El %s se registró un aviso de un caso en la corte.' % date_es(f['filed']))
+    return None
+
+
 LEAD_EN = "I'm not trying to buy your house."
 LEAD_ES = 'No estoy tratando de comprarle la casa.'
 
@@ -499,17 +532,13 @@ def _e(s):
     return H.escape(str(s), quote=True)
 
 
-def _mark_svg():
-    """The navy mark as inline SVG, comments stripped. Inline because the file's comments carry a
-    double hyphen, which is fine in HTML and fatal in a standalone SVG image."""
+def _logo_uri():
+    """The real BSG logo, through the URGENT letter's own loader (brand/bsg-logo-letterhead.png)."""
     try:
-        with open(os.path.join(HERE, 'BSG_Mark_Navy.svg'), encoding='utf-8') as fh:
-            svg = re.sub(r'<!--.*?-->', '', fh.read(), flags=re.S)
-    except OSError:
+        import outreach_mail
+        return outreach_mail._jesse_logo_uri()
+    except Exception:
         return ''
-    if '<svg' not in svg:
-        return ''
-    return re.sub(r'\s*\n\s*', ' ', svg.replace('<svg ', '<svg class="mark" ', 1)).strip()
 
 
 def qr_svg(url):
@@ -521,101 +550,114 @@ def qr_svg(url):
         return ''
 
 
+# The look is the owner's URGENT letter (outreach_mail.build_letter_html_jesse): red band first, the
+# real logo, a heavy red headline, Georgia body with tight leading, a centred red call line. Nothing
+# depends on colour alone: the band is a solid dark bar with a border in grayscale, the sale day is
+# bold and ringed, and every label is also text.
 CSS = """
 @page{size:letter;margin:0}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{font:11pt/1.38 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.pc{width:8.5in;height:11in;padding:.45in .62in .6in;position:relative;page-break-after:always;overflow:hidden}
+body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pc{width:8.5in;height:11in;padding:.42in .62in .6in;position:relative;page-break-after:always;overflow:hidden}
 .pc:last-child{page-break-after:auto}
-.lhr,.lang,.ft,.cal,.capbox,.facts,.call,.ev,.sigwho,.cover,.src{font-family:"Segoe UI",Arial,Helvetica,sans-serif}
-.lh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.16in}
-svg.mark{height:.95in;width:1.165in;display:block}
-.markword{font:700 15pt "Segoe UI",Arial,sans-serif;color:%(accent)s;letter-spacing:.04em}
-.lhr{text-align:right;font-size:9.5pt;line-height:1.35;color:#4a5262}
-.to{font:11pt/1.34 Georgia,serif;color:%(ink)s;margin-top:.07in}
+.urgent,.uhead,.cta,.lhr,.lang,.ft,.cal,.capbox,.facts,.qrb,.ev,.sigwho,.cover,.src{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+.urgent{background:%(accent)s;color:#fff;text-align:center;margin:0 0 .12in;padding:7px 8px 6px;font-weight:900;font-size:13pt;line-height:1.2;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;border:2px solid %(edge)s;box-shadow:0 1px 0 %(edge)s}
+.urgent span{display:block;letter-spacing:.06em;margin-top:1px}
+.lh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.09in}
+.logo{height:.85in;width:.85in;background:url("%(logo)s") left top/contain no-repeat}
+.markword{font:900 15pt "Helvetica Neue",Helvetica,Arial,sans-serif;color:%(dark)s;letter-spacing:.04em}
+.lhr{text-align:right;font-size:9.5pt;line-height:1.35;color:#444}
+.to{font:11pt/1.32 Georgia,serif;color:%(ink)s;margin-top:.06in}
+.uhead{margin:0 0 3px;font-weight:900;font-size:17pt;line-height:1.12;color:%(accent)s;letter-spacing:.015em}
+.uhead.es{font-size:14pt;margin-bottom:.1in}
 .cols{display:flex}
 .col{flex:1 1 0;min-width:0;padding-right:.25in}
-.col+.col{padding:0 0 0 .25in;border-left:1px solid #d9dde5}
-.lang{font-weight:700;font-size:7pt;letter-spacing:.16em;color:%(accent)s;text-transform:uppercase;margin:0 0 .05in}
-.pc p{margin:0 0 .085in}
-.pc p.lead{font:700 13.5pt/1.22 Georgia,serif;color:%(accent)s;margin:0 0 .08in}
-.pa .col{font-size:12pt;line-height:1.45}
-.pa .cols{margin-top:.12in}
-.pa p{margin:0 0 .13in}
-.opts{margin:0 0 .085in;padding:0;list-style:none}
-.opts li{margin:0 0 .06in}
-.opts b{color:%(accent)s}
-.ev{display:flex;border-left:3px solid %(accent)s;background:#f3f5f9;padding:.08in .13in;margin:0 0 .14in;font-size:9.5pt;line-height:1.36}
+.col+.col{padding:0 0 0 .25in;border-left:1px solid #cfd2d8}
+.lang{font-weight:700;font-size:7pt;letter-spacing:.16em;color:%(dark)s;text-transform:uppercase;margin:0 0 .05in}
+.pc p{margin:0 0 7px}
+.pa .col{font-size:11.5pt;line-height:1.4}
+.pa p{margin:0 0 .12in}
+.opts{margin:0 0 7px;padding:0;list-style:none}
+.opts li{margin:0 0 5px}
+.opts b{color:%(dark)s}
+.ev{display:flex;border-left:3px solid %(dark)s;background:#f2f2f3;padding:.08in .13in;margin:0 0 .13in;font-size:9.5pt;line-height:1.36}
 .ev div{flex:1 1 0}
 .ev div+div{margin-left:.24in}
-.calrow{display:flex;align-items:stretch;margin:0 0 .17in}
+.calrow{display:flex;align-items:stretch;margin:.04in 0 .15in}
 .cal{width:4.45in;flex:none}
-.calh{font-weight:700;font-size:14pt;color:%(accent)s;margin:0 0 .05in}
-.calh span{font-weight:400;color:#4a5262}
+.calh{font-weight:900;font-size:14pt;color:%(accent)s;margin:0 0 .05in}
+.calh span{font-weight:700;color:%(dark)s}
 .calt{width:100%%;border-collapse:collapse;table-layout:fixed}
-.calt th{font-weight:600;font-size:7.5pt;color:#4a5262;padding:.03in 0;border-bottom:1.5px solid %(accent)s;text-transform:uppercase;letter-spacing:.05em}
-.calt th i{font-style:normal;font-weight:400;color:#7a8190;margin-left:.04in}
-.calt td{height:.36in;border:1px solid #d9dde5;text-align:center;vertical-align:middle;font-size:11.5pt;color:#3a4150;position:relative}
-.calt td.x{border-color:#eef0f4;background:#fafbfc}
-.calt td.hit{font-weight:700;font-size:13pt;color:%(accent)s}
+.calt th{font-weight:700;font-size:7.5pt;color:#333;padding:.03in 0;border-bottom:2px solid %(dark)s;text-transform:uppercase;letter-spacing:.05em}
+.calt th i{font-style:normal;font-weight:400;color:#666;margin-left:.04in}
+.calt td{height:.35in;border:1px solid #c9ccd2;text-align:center;vertical-align:middle;font-size:11.5pt;color:#333;position:relative}
+.calt td.x{border-color:#e6e7ea;background:#f7f7f8}
+.calt td.hit{font-weight:900;font-size:13.5pt;color:%(accent)s}
 .ring{position:absolute;left:-7%%;top:-17%%;width:114%%;height:134%%;overflow:visible}
-.capbox{flex:1 1 0;margin-left:.26in;padding-left:.2in;border-left:3px solid %(accent)s;display:flex;flex-direction:column;justify-content:center;font-size:9.5pt;line-height:1.34;color:#4a5262}
-.capbox small{display:block;font-size:7.5pt;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
-.capbox b{display:block;font-size:12.5pt;line-height:1.22;color:%(accent)s;margin:.02in 0}
+.capbox{flex:1 1 0;margin-left:.26in;padding-left:.2in;border-left:3px solid %(dark)s;display:flex;flex-direction:column;justify-content:center;font-size:9.5pt;line-height:1.34;color:#333}
+.capbox small{display:block;font-size:7.5pt;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:%(accent)s}
+.capbox b{display:block;font-size:13pt;line-height:1.2;font-weight:700;color:%(dark)s;margin:.02in 0}
 .capbox .gap{height:.13in}
-.capbox .evs{margin-top:.13in;padding-top:.09in;border-top:1px solid #d9dde5;font-size:8.8pt;line-height:1.33}
+.capbox .evs{margin-top:.13in;padding-top:.09in;border-top:1px solid #cfd2d8;font-size:8.8pt;line-height:1.33}
 .capbox .evs div+div{margin-top:.05in}
-.filet{font:700 13.5pt/1.22 Georgia,serif;color:%(accent)s;margin:0}
-.filet span{display:block;font-weight:400;font-size:10.5pt;color:#4a5262}
-.facts{width:100%%;border-collapse:collapse;margin:.07in 0 .05in}
-.facts th{text-align:left;font-weight:600;font-size:9.5pt;color:#4a5262;padding:.04in .1in .04in .09in;border-bottom:1px solid #d9dde5;width:36%%;vertical-align:top;border-left:3px solid transparent}
-.facts th i{font-style:normal;font-weight:400;color:#7a8190}
-.facts td{font-weight:700;font-size:10.5pt;color:%(ink)s;padding:.04in 0;border-bottom:1px solid #d9dde5;vertical-align:top}
-.facts td i{font-style:normal;font-weight:400;color:#4a5262}
-.facts td small{display:block;font-weight:400;font-size:9pt;color:#4a5262}
-.facts tr.new th{border-left-color:%(accent)s;color:%(accent)s}
-.src{font-size:8.3pt;line-height:1.35;color:#7a8190;margin:0 0 .13in}
-.src b{color:#4a5262;font-weight:600}
-.sig{display:flex;justify-content:space-between;align-items:flex-end;margin-top:.06in}
-.sigline{width:2.9in;height:.4in;border-bottom:1px solid %(ink)s}
+.filet{font:700 12.5pt/1.2 "Helvetica Neue",Helvetica,Arial,sans-serif;color:%(dark)s;margin:0}
+.filet span{display:block;font-weight:400;font-size:10pt;color:#444}
+.facts{width:100%%;border-collapse:collapse;margin:.06in 0 .05in}
+.facts th{text-align:left;font-weight:700;font-size:9.5pt;color:#333;padding:.038in .1in .038in .09in;border-bottom:1px solid #cfd2d8;width:36%%;vertical-align:top;border-left:3px solid transparent}
+.facts th i{font-style:normal;font-weight:400;color:#666}
+.facts td{font-weight:700;font-size:10.5pt;color:%(ink)s;padding:.038in 0;border-bottom:1px solid #cfd2d8;vertical-align:top}
+.facts td i{font-style:normal;font-weight:400;color:#444}
+.facts td small{display:block;font-weight:400;font-size:9pt;color:#444}
+.facts tr.new th{border-left-color:%(dark)s;color:%(dark)s}
+.src{font-size:8.3pt;line-height:1.35;color:#666;margin:0 0 .12in}
+.src b{color:#333;font-weight:700}
+.cta{margin:.07in 0 .02in;font-weight:900;font-size:16pt;line-height:1.2;color:%(accent)s;text-align:center;letter-spacing:.02em}
+.sig{display:flex;justify-content:space-between;align-items:flex-end;margin-top:.02in}
+.sigline{width:2.9in;height:.38in;border-bottom:1px solid %(ink)s}
 .sigwho{font-size:10.5pt;line-height:1.3;margin-top:.04in}
 .sigwho b{font-size:11.5pt}
-.call{border:1.5px solid %(accent)s;border-radius:9px;padding:.08in .2in;text-align:center;color:%(accent)s}
-.call small{display:block;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
-.call strong{display:block;font-size:17pt;letter-spacing:.01em;line-height:1.25}
-.call.q{display:flex;align-items:center;text-align:left;padding:.06in .14in .06in .07in}
-.call.q .qrbox{width:.92in;height:.92in;background:#fff;margin-right:.12in;flex:none}
-.call.q svg.qr{width:100%%;height:100%%;display:block}
-.call.q strong{font-size:12.5pt}
-.call.q .code{font:700 13pt Consolas,"Courier New",monospace;letter-spacing:.06em;color:%(ink)s}
-.call.q span{display:block;font-size:8pt;line-height:1.3;color:#4a5262}
-.ft{position:absolute;left:.62in;right:.62in;bottom:.3in;font-size:7.5pt;color:#7a8190;display:flex;justify-content:space-between;border-top:1px solid #e3e6ec;padding-top:.045in}
-.t1{font-size:10.4pt;line-height:1.36}
-.t1 p.lead{font-size:12.8pt}
-.t1 .calt td{height:.335in}
-.t2{font-size:9.8pt;line-height:1.34}
-.t2 p.lead{font-size:12pt;margin-bottom:.06in}
-.t2 svg.mark{height:.78in;width:.956in}
+.qrb{display:flex;align-items:center;border:1.5px solid %(dark)s;border-radius:6px;padding:.05in .13in .05in .06in}
+.qrb .qrbox{width:.9in;height:.9in;background:#fff;margin-right:.12in;flex:none}
+.qrb svg.qr{width:100%%;height:100%%;display:block}
+.qrb small{display:block;font-size:7.5pt;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:%(dark)s}
+.qrb span{display:block;font-size:8pt;line-height:1.3;color:#444}
+.qrb .code{font:700 13pt Consolas,"Courier New",monospace;letter-spacing:.06em;color:%(ink)s}
+.ft{position:absolute;left:.62in;right:.62in;bottom:.3in;font-size:7.5pt;color:#666;display:flex;justify-content:space-between;border-top:1px solid #dcdde1;padding-top:.045in}
+.t1{font-size:10pt;line-height:1.31}
+.t1 .uhead{font-size:15.5pt}
+.t1 .uhead.es{font-size:13.5pt}
+.t1 .calt td{height:.33in}
+.t1.pa .col{font-size:10.8pt;line-height:1.36}
+.t2{font-size:9.5pt;line-height:1.28}
+.t2.pa .col{font-size:10.2pt;line-height:1.33}
+.t2 .urgent{margin-bottom:.08in;padding:5px 8px 4px}
+.t2 .calrow{margin-bottom:.1in}
+.t2 .filet{font-size:11.5pt}
+.t2 .facts td{font-size:10pt}
+.t2 .uhead{font-size:14.5pt}
+.t2 .uhead.es{font-size:12.5pt;margin-bottom:.08in}
+.t2 .logo{height:.72in;width:.72in}
 .t2 .calt td{height:.31in}
-.t2 p{margin-bottom:.07in}
-.t2 .opts li{margin-bottom:.045in}
-.t2 .lh{margin-bottom:.1in}
-.t2 .sigline{height:.33in}
+.t2 .pc p,.t2 p{margin-bottom:5px}
+.t2 .opts li{margin-bottom:3px}
+.t2 .lh{margin-bottom:.07in}
+.t2 .sigline{height:.32in}
 .t2 .facts th,.t2 .facts td{padding-top:.026in;padding-bottom:.026in}
 .t2 .src{margin-bottom:.08in}
-.t2 .ev{margin-bottom:.1in}
-.cover{font-family:"Segoe UI",Arial,Helvetica,sans-serif;font-size:11.5pt}
-.cover h1{font-size:23pt;color:%(accent)s;margin:0 0 .04in}
-.cover .sub{color:#4a5262;font-size:11pt;margin-bottom:.22in}
+.t2 .ev{margin-bottom:.09in}
+.t2 .cta{font-size:15pt;margin:.06in 0 .02in}
+.cover{font-size:11.5pt}
+.cover h1{font-size:23pt;color:%(dark)s;margin:0 0 .04in}
+.cover .sub{color:#444;font-size:11pt;margin-bottom:.22in}
 .cover h2{font-size:12.5pt;color:%(accent)s;margin:.24in 0 .08in;text-transform:uppercase;letter-spacing:.08em}
 .cover table{border-collapse:collapse;width:100%%;font-size:11.5pt}
-.cover td,.cover th{border-bottom:1px solid #d9dde5;padding:.07in .08in;text-align:left}
+.cover td,.cover th{border-bottom:1px solid #cfd2d8;padding:.07in .08in;text-align:left}
 .cover td.n,.cover th.n{text-align:right;width:1.1in;font-variant-numeric:tabular-nums}
 .cover ul{list-style:none;padding:0;margin:0;font-size:11.5pt;line-height:1.4}
 .cover li{margin:0 0 .085in;padding-left:.34in;position:relative}
-.cover li:before{content:"";position:absolute;left:0;top:.03in;width:.17in;height:.17in;border:1.5px solid %(accent)s;border-radius:3px}
-.cover .note{font-size:10pt;color:#4a5262;margin-top:.14in;line-height:1.45}
+.cover li:before{content:"";position:absolute;left:0;top:.03in;width:.17in;height:.17in;border:1.5px solid %(dark)s;border-radius:3px}
+.cover .note{font-size:10pt;color:#444;margin-top:.14in;line-height:1.45}
 """
 
 
@@ -626,7 +668,7 @@ def month_grid(year, month):
 
 _RING = ('<svg class="ring" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">'
          '<path d="M13,33 C9,13 39,4 61,6 C86,9 95,23 89,38 C82,54 51,58 31,53 C13,48 7,37 14,25 '
-         'C21,12 45,5 63,9" fill="none" stroke="%s" stroke-width="2.3" stroke-linecap="round" '
+         'C21,12 45,5 63,9" fill="none" stroke="%s" stroke-width="2.6" stroke-linecap="round" '
          'vector-effect="non-scaling-stroke"/></svg>' % ACCENT)
 
 
@@ -662,10 +704,18 @@ def _col(lang, inner):
         lang, 'Español' if lang == 'es' else 'English', inner)
 
 
-def _lead(r, lang):
-    """The greeting and the opening line, one sentence: 'Maria, I'm not trying to buy your house.'"""
-    return '<p class="lead">%s%s %s</p>' % (_e(r['first']), ':' if lang == 'es' else ',',
-                                           _e(LEAD_ES if lang == 'es' else LEAD_EN))
+def headline(r):
+    """The red headline, English then Spanish, full width. B and C: the house line with the first
+    name. A (the control): the band's fact as a sentence, so the letter text itself is untouched."""
+    if r['variant'] == 'A':
+        h = fact_headline(r['facts'])
+        if not h:
+            return ''
+        en, es = h
+    else:
+        en, es = '%s, %s' % (r['first'], LEAD_EN), '%s: %s' % (r['first'], LEAD_ES)
+    return ('<div class="uhead" lang="en">%s</div><div class="uhead es" lang="es">%s</div>'
+            % (_e(en), _e(es)))
 
 
 def body_a(r, today, event=None):
@@ -698,8 +748,8 @@ def body_b(r, today, event=None):
             _e(ev[0].split('. ')[0] + '.'), _e(ev[1].split('. ')[0] + '.'))
     cols = ''
     for lang in ('en', 'es'):
-        cols += _col(lang, '%s<p>%s</p><p>%s</p>%s' % (
-            _lead(r, lang), _e(intro(lang)), _e(NOTE_B[lang]), _legal(lang)))
+        cols += _col(lang, '<p>%s</p><p>%s</p>%s' % (
+            _e(intro(lang)), _e(NOTE_B[lang]), _legal(lang)))
     return ('<div class="calrow">%s<div class="capbox">%s</div></div><div class="cols">%s</div>'
             % (calendar_html(sale), cap, cols))
 
@@ -748,42 +798,52 @@ def body_c(r, today, event=None):
     for lang in ('en', 'es'):
         head, opts, close = OPTIONS[lang]
         lis = ''.join('<li><b>%s</b> %s</li>' % (_e(t), _e(x)) for t, x in opts)
-        cols += _col(lang, '%s<p>%s</p><ul class="opts">%s</ul><p>%s</p>%s' % (
-            _lead(r, lang), _e(intro(lang)), lis, _e(close), _legal(lang)))
+        cols += _col(lang, '<p>%s</p><ul class="opts">%s</ul><p>%s</p>%s' % (
+            _e(intro(lang)), lis, _e(close), _legal(lang)))
     return top + '<div class="cols">%s</div>' % cols
 
 
-def contact_box(r, with_qr, base_url):
-    phone = _e(M.contact_phone())
-    if with_qr and r.get('code') and r.get('slug'):
-        svg = qr_svg(page_url(base_url, r['slug'], r['code']))
-        if svg:
-            return ('<div class="call q"><div class="qrbox">%s</div><div>'
-                    '<small>Your private page &middot; Su p&aacute;gina privada</small>'
-                    '<span>Scan, then enter this code &middot; Escanee y escriba este c&oacute;digo</span>'
-                    '<div class="code">%s</div><strong>%s</strong></div></div>'
-                    % (svg, _e(show_code(r['code'])), phone))
-    return ('<div class="call"><small>Call me &middot; Ll&aacute;meme</small>'
-            '<strong>%s</strong></div>' % phone)
+def cta_html():
+    """The centred red call line, both languages, with the callback number."""
+    return '<div class="cta">CALL NOW &middot; LLAME AHORA: %s</div>' % _e(M.contact_phone())
+
+
+def qr_block(r, with_qr, base_url):
+    """The private-page QR and code, beside the signature. '' unless --with-qr and a QR can be drawn."""
+    if not (with_qr and r.get('code') and r.get('slug')):
+        return ''
+    svg = qr_svg(page_url(base_url, r['slug'], r['code']))
+    if not svg:
+        return ''
+    return ('<div class="qrb"><div class="qrbox">%s</div><div>'
+            '<small>Your private page &middot; Su p&aacute;gina privada</small>'
+            '<span>Scan, then enter this code &middot; Escanee y escriba este c&oacute;digo</span>'
+            '<div class="code">%s</div></div></div>' % (svg, _e(show_code(r['code']))))
 
 
 def piece_html(r, today, with_qr=False, base_url='', event=None):
-    """One sheet. `event` ('filed' / 'judgment') names that court event on it (--trigger-days)."""
+    """One sheet: red band, logo and recipient, red headline, the variant's body in two languages,
+    the red call line, the signature. `event` ('filed' / 'judgment') names that court event on it."""
     v = r['variant']
     event = event if isinstance(event, str) and r['facts'].get(event) else None
     city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else ''
     place = ('%s, ' % city.title() if city else '') + '%s %s' % (r.get('to_state') or 'FL', r['zip'])
-    mark = _mark_svg() or '<div class="markword">%s</div>' % _e(_co())
+    mark = '<div class="logo"></div>' if _logo_uri() else '<div class="markword">%s</div>' % _e(_co())
+    band = band_lines(r['facts'])
     body = (body_a if v == 'A' else body_b if v == 'B' else body_c)(r, today, event)
     return ('<section class="pc p%s" data-case="%s" data-variant="%s"><div class="in">'
+            '<div class="urgent" style="font-size:%spt">%s<span style="font-size:%spt">%s</span></div>'
             '<div class="lh">%s<div class="lhr">%s<br>%s<div class="to">%s<br>%s<br>%s</div></div></div>'
-            '%s'
+            '%s%s%s'
             '<div class="sig"><div><div class="sigline"></div><div class="sigwho"><b>%s</b><br>%s</div>'
             '</div>%s</div></div>'
             '<div class="ft"><span>%s</span><span>Ref. %s &middot; %s</span></div></section>'
-            % (v.lower(), _e(r['case']), v, mark, _e(date_en(today)), _e(date_es(today)),
-               _e(M.person_name(r['owner'])), _e(M.street_case(r['addr'])), _e(place), body,
-               _e(M.SENDER['name']), _e(_co()), contact_box(r, with_qr, base_url),
+            % (v.lower(), _e(r['case']), v, _band_pt(band[0], 13.5, .07), _e(band[0]),
+               _band_pt(band[1], 10.5, .06), _e(band[1]),
+               mark, _e(date_en(today)), _e(date_es(today)),
+               _e(M.person_name(r['owner'])), _e(M.street_case(r['addr'])), _e(place),
+               headline(r), body, cta_html(),
+               _e(M.SENDER['name']), _e(_co()), qr_block(r, with_qr, base_url),
                _e(_co()), _e(r['case']), v))
 
 
@@ -830,7 +890,7 @@ def cover_html(rows, today, info):
 
 
 def build_html(rows, today, info):
-    css = CSS % {'ink': INK, 'accent': ACCENT}
+    css = CSS % {'ink': INK, 'accent': ACCENT, 'edge': BAND_EDGE, 'dark': DARK, 'logo': _logo_uri()}
     pieces = [piece_html(r, today, with_qr=r.get('with_qr', info.get('with_qr')),
                          base_url=info.get('base_url', ''),
                          event=r.get('event')) for r in rows]
@@ -859,6 +919,13 @@ def check_pieces(pieces, rows, never=()):
             why.append('a string that must never print')
         if r['variant'] in ('B', 'C') and not (_e(LEAD_EN) in text and _e(LEAD_ES) in text):
             why.append('the opening line')
+        band = band_lines(r['facts'])
+        if not (text.count('class="urgent"') == 1 and _e(band[0]) in text and _e(band[1]) in text):
+            why.append('the red band')
+        if ('SALE DATE' in text or 'FECHA DE VENTA' in text) and not r['facts'].get('sale'):
+            why.append('a sale date the record does not carry')
+        if re.search(r'FINAL\s+NOTICE|AVISO\s+FINAL|NOTICE\s+OF\s+SALE|CLERK\s+OF\s+COURT\s+NOTICE', text, re.I):
+            why.append('wording that reads as an official notice')
         if why:
             bad.append('%s (%s)' % (r['case'], '; '.join(why)))
     if bad:
@@ -935,7 +1002,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f5f8;color:#1b1f27;font:17px/1.55 Georgia,"Times New Roman",serif}
 .wrap{max-width:560px;margin:0 auto;padding:22px 20px 96px}
+.urgent{background:#c8102e;color:#fff;text-align:center;padding:9px 10px;font:900 14px/1.2 "Helvetica Neue",Helvetica,Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;border:2px solid #7a0a1c}
+.urgent span{display:block;font-size:12px;margin-top:2px}
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.top img{height:64px;width:auto;display:block}
+.lead{color:#c8102e!important;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-weight:900!important}
+.callbar a{background:#c8102e!important}
 .co{font:700 14px/1.2 "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#16294d}
 .tog{flex:none;white-space:nowrap}
 .tog button{font:600 14px "Segoe UI",Arial,sans-serif;border:1.5px solid #16294d;background:#fff;color:#16294d;padding:8px 13px;border-radius:999px;margin-left:6px}
@@ -967,8 +1039,9 @@ audio{width:100%;margin:4px 0 14px}
 body[data-lang=en] [data-l=es],body[data-lang=es] [data-l=en]{display:none}
 </style></head>
 <body data-lang="en">
+<div class="urgent">Urgent &middot; Time-sensitive<span>Urgente &middot; El tiempo cuenta</span></div>
 <div class="wrap">
-  <div class="top"><div class="co">__CO__</div>
+  <div class="top">__LOGO__
     <div class="tog"><button type="button" id="b-en" aria-pressed="true">English</button><button type="button" id="b-es" aria-pressed="false">Espa&ntilde;ol</button></div></div>
   <div class="card gate" id="gate">
     <label for="code"><span data-l="en">This page is private. Enter the code printed on your letter.</span><span data-l="es">Esta p&aacute;gina es privada. Escriba el c&oacute;digo que viene en su carta.</span></label>
@@ -1049,7 +1122,9 @@ def page_html(r, today, voice=None, encrypt=None):
         import foreclosure_leads
         encrypt = foreclosure_leads._encrypt_multi
     env = encrypt(json.dumps(page_payload(r, today, voice), ensure_ascii=False), [('', r['code'])])
-    return (PAGE_TEMPLATE.replace('__CO__', _e(_co()))
+    logo = _logo_uri()
+    head = ('<img src="%s" alt="%s">' % (logo, _e(_co()))) if logo else '<div class="co">%s</div>' % _e(_co())
+    return (PAGE_TEMPLATE.replace('__LOGO__', head).replace('__CO__', _e(_co()))
             .replace('__ENC__', json.dumps(env).replace('<', '\\u003c')))
 
 

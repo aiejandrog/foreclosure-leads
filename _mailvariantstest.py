@@ -231,6 +231,37 @@ if has_qr:
     _, on = V.build_html(plain, TODAY, dict(INFO, with_qr=True))
     rec('--with-qr prints the QR and the code on every piece',
         all('class="qr"' in p and V.show_code(r['code']) in p for r, p in zip(plain, on)))
+# ── the red band (the URGENT letter look) ──
+rec('every piece opens with the red band, once, in both languages',
+    all(p.index('class="urgent"') < p.index('class="lh"') and p.count('class="urgent"') == 1
+        and 'URGENT · TIME-SENSITIVE' in p and 'URGENTE · EL TIEMPO CUENTA' in p for p in pieces))
+rec('the band names a sale date only for a lead that has one',
+    all((('SALE DATE' in t) == bool(r['facts']['sale'])) and (('FECHA DE VENTA' in t.upper().split('CLASS="LH"')[0])
+                                                              == bool(r['facts']['sale']))
+        for r, t in zip(SR, text)))
+NS = next(r for r in SR if not r['facts']['sale'])
+bn = V.band_lines(NS['facts'])
+rec('with no sale date the band states the recorded notice and its real date',
+    'CASE NOTICE RECORDED' in bn[0] and str(NS['facts']['filed'].day) in bn[0] and str(NS['facts']['filed'].year) in bn[0]
+    and 'AVISO DEL CASO REGISTRADO' in bn[1])
+rec('with no parsed date at all the band names no event',
+    V.band_lines({'sale': None, 'filed': None}) == ('URGENT · TIME-SENSITIVE', 'URGENTE · EL TIEMPO CUENTA'))
+rec('nothing reads as an official notice', not any(re.search(r'FINAL\s+NOTICE|AVISO\s+FINAL', t, re.I) for t in text))
+rec("A's red headline is the band's fact, B and C's is the house line",
+    all((V._e(V.fact_headline(r['facts'])[0]) in t) if r['variant'] == 'A' else
+        ('class="uhead" lang="en">%s, %s' % (r['first'], V._e(V.LEAD_EN)) in t) for r, t in zip(SR, text)))
+rec('the red call line carries the callback number in both languages',
+    all('class="cta">CALL NOW &middot; LLAME AHORA: %s<' % PHONE in t for t in text))
+try:
+    V.check_pieces([V.piece_html(NS, TODAY).replace('CASE NOTICE RECORDED', 'SALE DATE')], [NS])
+    rec('a band with a sale date the record does not carry refuses the run', False)
+except V.DataError:
+    rec('a band with a sale date the record does not carry refuses the run', True)
+try:
+    V.check_pieces([V.piece_html(NS, TODAY).replace('URGENT ·', 'FINAL NOTICE ·', 1)], [NS])
+    rec('FINAL NOTICE refuses the run', False)
+except V.DataError:
+    rec('FINAL NOTICE refuses the run', True)
 B = next(r for r in SR if r['variant'] == 'B')
 try:
     V.check_pieces([V.piece_html(B, TODAY).replace(V._e(OC.OPTOUT_LINE_ES), '')], [B])
