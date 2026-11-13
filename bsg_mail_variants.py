@@ -77,6 +77,39 @@ OPTIONAL_INPUTS = ('sale_history_cache.json', 'pacer_stay_cache.json', 'pacer_ne
 _SKIP_LEADS = ('leads_raw.json', 'balloon_leads.json')
 
 
+# The business contact block under the signature and in the footer line. Filled by load_contact() from
+# the same sender data the letterhead in outreach_mail uses (entity.sender()): title, addr, email, web.
+# Nothing here is a literal and a field that is absent prints nothing. The phone is not stored here:
+# the block prints bsg_mail_campaign.contact_phone(), the same number as the red call line.
+CONTACT = {'title': '', 'addr': '', 'email': '', 'web': ''}
+
+# A mailbox / box designator and its number. The street address prints; a box number never does.
+_BOX = re.compile(r',?\s*(?:\bP\.?\s?M\.?\s?B\.?|\bP\.?\s?O\.?\s*BOX|\bBOX|\bUNIT)\s*#?\s*\d+[A-Za-z]?\b'
+                  r'|,?\s*#\s*\d+[A-Za-z]?\b', re.I)
+
+
+def strip_box(addr):
+    """The street address with any box designator removed: '#1234', 'PMB 1234', 'Unit 1234',
+    'Box 1234', 'PO Box 1234'. A suite or floor is part of a street address and stays."""
+    out = _BOX.sub('', str(addr or ''))
+    out = re.sub(r'\s+,', ',', out)
+    out = re.sub(r',\s*,+', ',', out)
+    return re.sub(r'\s{2,}', ' ', out).strip(' ,')
+
+
+def load_contact(snd):
+    """Fill CONTACT from a sender mapping. Reads `title`, `addr`, `email`, `web` and nothing else:
+    the second address line is never read. Email goes through outreach_copy.signature_email(), the
+    letterhead's own rule, and only when the sender data carries one."""
+    snd = snd if isinstance(snd, dict) else {}
+    CONTACT['title'] = str(snd.get('title') or '').strip()
+    CONTACT['addr'] = strip_box(snd.get('addr'))
+    raw = str(snd.get('email') or '').strip()
+    CONTACT['email'] = OC.signature_email(raw) if raw else ''
+    CONTACT['web'] = str(snd.get('web') or '').strip()
+    return {k: bool(v) for k, v in CONTACT.items()}
+
+
 class DataError(Exception):
     """An input file is missing, half-written or not what it should be. Nothing is built."""
 
@@ -617,13 +650,18 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .sigline{width:2.9in;height:.38in;border-bottom:1px solid %(ink)s}
 .sigwho{font-size:10.5pt;line-height:1.3;margin-top:.04in}
 .sigwho b{font-size:11.5pt}
+.sigc{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:9.5pt;line-height:1.38;color:%(dark)s;text-align:right;padding-left:.12in;border-right:3px solid %(accent)s;padding-right:.11in}
+.sig.three .sigline{width:2.05in}
+.sig.three .sigc{font-size:8.6pt;line-height:1.3;max-width:2.15in}
+.sig.three .qrb{max-width:2.75in}
 .qrb{display:flex;align-items:center;border:1.5px solid %(dark)s;border-radius:6px;padding:.05in .13in .05in .06in}
 .qrb .qrbox{width:.9in;height:.9in;background:#fff;margin-right:.12in;flex:none}
 .qrb svg.qr{width:100%%;height:100%%;display:block}
 .qrb small{display:block;font-size:7.5pt;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:%(dark)s}
 .qrb span{display:block;font-size:8pt;line-height:1.3;color:#444}
 .qrb .code{font:700 13pt Consolas,"Courier New",monospace;letter-spacing:.06em;color:%(ink)s}
-.ft{position:absolute;left:.62in;right:.62in;bottom:.3in;font-size:7.5pt;color:#666;display:flex;justify-content:space-between;border-top:1px solid #dcdde1;padding-top:.045in}
+.ft span:first-child{overflow:hidden;text-overflow:ellipsis;padding-right:.2in}
+.ft{position:absolute;left:.62in;right:.62in;bottom:.3in;font-size:7.5pt;color:#444;white-space:nowrap;display:flex;justify-content:space-between;border-top:1px solid #dcdde1;padding-top:.045in}
 .t1{font-size:10pt;line-height:1.31}
 .t1 .uhead{font-size:15.5pt}
 .t1 .uhead.es{font-size:13.5pt}
@@ -821,6 +859,33 @@ def qr_block(r, with_qr, base_url):
             '<div class="code">%s</div></div></div>' % (svg, _e(show_code(r['code']))))
 
 
+def contact_lines():
+    """Under the signer's name: "[title ·] company", then address, phone, email, website.
+    Present fields only. The phone is the call line's number."""
+    who = [' · '.join(x for x in (CONTACT['title'], _co()) if x)]      # one line: a second costs the page
+    reach = [x for x in (CONTACT['addr'], M.contact_phone(), CONTACT['email'], CONTACT['web']) if x]
+    return who, reach
+
+
+def sig_html(r, with_qr, base_url):
+    """Signing line, name, title and company on the left; the contact block at the right of the same
+    row. With a QR the row is three across: signature, contact block, QR."""
+    who, reach = contact_lines()
+    qr = qr_block(r, with_qr, base_url)
+    left = ('<div class="sigline"></div><div class="sigwho"><b>%s</b>%s</div>'
+            % (_e(M.SENDER['name']), ''.join('<br>%s' % _e(x) for x in who)))
+    block = ''.join('<div>%s</div>' % _e(x) for x in reach)
+    if qr:
+        return ('<div class="sig three"><div>%s</div><div class="sigc">%s</div>%s</div>'
+                % (left, block, qr))
+    return '<div class="sig"><div>%s</div><div class="sigc">%s</div></div>' % (left, block)
+
+
+def footer_line():
+    """Letterhead-style line across the bottom: company, street address, phone, website."""
+    return ' &middot; '.join(_e(x) for x in (_co(), CONTACT['addr'], M.contact_phone(), CONTACT['web']) if x)
+
+
 def piece_html(r, today, with_qr=False, base_url='', event=None):
     """One sheet: red band, logo and recipient, red headline, the variant's body in two languages,
     the red call line, the signature. `event` ('filed' / 'judgment') names that court event on it."""
@@ -835,16 +900,15 @@ def piece_html(r, today, with_qr=False, base_url='', event=None):
             '<div class="urgent" style="font-size:%spt">%s<span style="font-size:%spt">%s</span></div>'
             '<div class="lh">%s<div class="lhr">%s<br>%s<div class="to">%s<br>%s<br>%s</div></div></div>'
             '%s%s%s'
-            '<div class="sig"><div><div class="sigline"></div><div class="sigwho"><b>%s</b><br>%s</div>'
-            '</div>%s</div></div>'
+            '%s</div>'
             '<div class="ft"><span>%s</span><span>Ref. %s &middot; %s</span></div></section>'
             % (v.lower(), _e(r['case']), v, _band_pt(band[0], 13.5, .07), _e(band[0]),
                _band_pt(band[1], 10.5, .06), _e(band[1]),
                mark, _e(date_en(today)), _e(date_es(today)),
                _e(M.person_name(r['owner'])), _e(M.street_case(r['addr'])), _e(place),
                headline(r), body, cta_html(),
-               _e(M.SENDER['name']), _e(_co()), qr_block(r, with_qr, base_url),
-               _e(_co()), _e(r['case']), v))
+               sig_html(r, with_qr, base_url),
+               footer_line(), _e(r['case']), v))
 
 
 def cover_html(rows, today, info):
@@ -913,8 +977,14 @@ def check_pieces(pieces, rows, never=()):
             why.append('a MARS or opt-out line or the phone is missing')
         if '$' in text:
             why.append('a dollar sign')
-        if re.search(r'\bPMB\b|\bP\.?\s?O\.?\s+BOX\b', text, re.I):
-            why.append('a mailbox number')
+        # The homeowner's own street may carry a unit ("# 4"); everything else on the sheet may not.
+        ours = re.sub(r'<div class="to">.*?</div>', '', text, flags=re.S)
+        for own in {_e(M.street_case(r['addr'])), _e(M.street_case(r['addr'].split(',')[0]))}:
+            ours = ours.replace(own, '')
+        if re.search(r'\bPMB\b|\bP\.?\s?O\.?\s+BOX\b', ours, re.I) or re.search(r'(?<!&)#\s*\d', ours):
+            why.append('a box designator (PMB or # and digits)')
+        if CONTACT['addr'] and text.count(_e(CONTACT['addr'])) < 2:
+            why.append('the company address (signature block and footer)')
         if any(s and s.strip() and s.strip().lower() in text.lower() for s in never):
             why.append('a string that must never print')
         if r['variant'] in ('B', 'C') and not (_e(LEAD_EN) in text and _e(LEAD_ES) in text):
@@ -981,14 +1051,15 @@ def page_payload(r, today, voice=None):
             '<p class="lead">%s%s %s</p><p>%s</p>'
             '<h2>%s</h2><p class="meta">%s</p><ol class="tl">%s</ol><p class="src">%s</p>'
             '<h2>%s</h2><ul class="opts">%s</ul><p>%s</p>'
-            '<div class="legal"><p>%s</p><p>%s</p></div><p class="by">%s<br>%s</p>'
+            '<div class="legal"><p>%s</p><p>%s</p></div><p class="by"><b>%s</b>%s</p>'
             % (_e(r['first']), ':' if es else ',', _e(LEAD_ES if es else LEAD_EN), _e(intro(lang)),
                'Su línea de tiempo' if es else 'Your timeline', meta, lis,
                _e(('Tomado de registros públicos al %s. La secretaría de la corte tiene lo más '
                    'reciente.' if es else 'From public records as of %s. The clerk of court has '
                    'anything newer.') % fmt(today)),
                _e(head), ol, _e(close), _e(mars(lang)), _e(optout(lang)),
-               _e(M.SENDER['name']), _e(_co())))
+               _e(M.SENDER['name']),
+               ''.join('<br>%s' % _e(x) for x in contact_lines()[0] + contact_lines()[1])))
     return out
 
 
@@ -1218,17 +1289,19 @@ def pdf_pages(data):
 
 
 # ════════════════════════════ selection ════════════════════════════
-def _signer_from(data_dir):
-    """Signer and company from the DATA folder's sender file, through entity's own loader, when this
-    checkout has none (a worktree never does). Values are used, never printed."""
+def _signer_from(data_dir=None):
+    """Signer, company and contact block from the sender file, through entity's own loader. With a
+    data folder, from THAT folder's file (a worktree has none of its own). Values are used, never
+    printed. Returns which contact fields were present."""
     try:
         import entity
     except Exception:
-        return
+        return {}
     keep = (entity.SENDER_FILE, entity.STATUS_FILE)
     try:
-        entity.SENDER_FILE = os.path.join(data_dir, 'sender.json')
-        entity.STATUS_FILE = os.path.join(data_dir, 'entity_status.json')
+        if data_dir:
+            entity.SENDER_FILE = os.path.join(data_dir, 'sender.json')
+            entity.STATUS_FILE = os.path.join(data_dir, 'entity_status.json')
         s = entity.sender()
         co = entity.display_llc()[0]
         if co:
@@ -1237,20 +1310,11 @@ def _signer_from(data_dir):
             M.SENDER['name'] = s['name'].strip()
         if not M.SENDER.get('phone') and (s.get('phone') or '').strip():
             M.SENDER['phone'] = s['phone'].strip()
-        return [str(s.get(k) or '') for k in ('addr_line2',)]
+        return load_contact(s)
     except Exception:
-        return
+        return {}
     finally:
         entity.SENDER_FILE, entity.STATUS_FILE = keep
-
-
-def _never_strings():
-    """The return address's second line, read through entity so it is never typed here."""
-    try:
-        import entity
-        return [str(entity.sender().get('addr_line2') or '')]
-    except Exception:
-        return []
 
 
 def select(days, data_dir, today, trigger_days=0):
@@ -1340,14 +1404,13 @@ def run(a):
     tag = 'SAMPLE' if sample else today.isoformat()
     data_dir = os.path.abspath(a.data_dir) if a.data_dir else M.data_dir()
 
-    never = []
     if sample:
         M.SENDER['name'] = a.signer_name or 'Sam Sample'
         M.SENDER['phone'] = a.signer_phone or '(305) 555-0100'
+        present = load_contact({'addr': '100 Example Blvd Ste 200, Miami, FL 33101',
+                                'email': 'sample@example.com', 'web': 'example.com'})
     else:
-        if a.data_dir:
-            never = _signer_from(data_dir) or []
-        never = never or _never_strings()
+        present = _signer_from(data_dir if a.data_dir else None)
         if a.signer_name:
             M.SENDER['name'] = a.signer_name
         if a.signer_phone:
@@ -1363,7 +1426,7 @@ def run(a):
     ledger_path = P.out('mail_variants_SAMPLE.json' if sample else LEDGER)
     pages_dir = P.out(PAGES_DIR + ('_SAMPLE' if sample else ''))
     info = {'with_qr': bool(a.with_qr), 'base_url': base_url, 'trigger': a.trigger_days,
-            'never': never, 'ledger': os.path.basename(ledger_path)}
+            'ledger': os.path.basename(ledger_path)}
     try:
         if sample:
             rows, drops, counts = sample_rows(today), {}, {}
@@ -1433,6 +1496,8 @@ def run(a):
         print('  dropped: ' + (', '.join('%s %d' % (k, v) for k, v in sorted(drops.items()) if v) or 'none'))
     print('  postage estimate: $%.2f at $%.2f a piece' % (len(rows) * M.PER_LETTER, M.PER_LETTER))
     print('  QR codes: %s' % ('printed' if a.with_qr else 'off (phone number on every piece)'))
+    print('  contact block fields present in the sender data: ' + ', '.join(
+        '%s %s' % (k, 'yes' if present.get(k) else 'no') for k in ('addr', 'email', 'web', 'title')))
     print('wrote', p_html)
     print('wrote', pdf_note)
     if not a.no_pages:

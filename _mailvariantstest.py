@@ -194,6 +194,21 @@ rec('exactly one day is circled and it is the sale day',
     h.count('class="hit"') == 1 and h.count('class="ring"') == 1 and bool(re.search(r'class="hit"><svg.*?</svg>21</td>', h))
     and 'January 2027' in h and 'enero de 2027' in h)
 
+# ── the contact block ──
+rec('strip_box removes a box designator and keeps a suite',
+    V.strip_box('100 Example Blvd Ste 200, Miami, FL 33101') == '100 Example Blvd Ste 200, Miami, FL 33101'
+    and all(V.strip_box(x) == '100 Example Blvd, Miami, FL 33101' for x in (
+        '100 Example Blvd #1234, Miami, FL 33101', '100 Example Blvd PMB 1234, Miami, FL 33101',
+        '100 Example Blvd, PMB #1234, Miami, FL 33101', '100 Example Blvd Unit 1234, Miami, FL 33101',
+        '100 Example Blvd, Box 1234, Miami, FL 33101', '100 Example Blvd PO Box 1234, Miami, FL 33101')))
+SND = {'addr': '100 Example Blvd Ste 200 PMB 9999, Miami, FL 33101', 'addr_line2': 'PMB 9999',
+       'email': 'sample@example.com', 'web': 'example.com', 'title': ''}
+present = V.load_contact(SND)
+rec('load_contact reports which fields the sender data carries', present == {'title': False, 'addr': True, 'email': True, 'web': True})
+rec('the second address line is never read and a box number in addr is stripped',
+    '9999' not in json.dumps(V.CONTACT) and 'PMB' not in json.dumps(V.CONTACT)
+    and V.CONTACT['addr'] == '100 Example Blvd Ste 200, Miami, FL 33101')
+
 # ── the pieces ──
 SR = V.sample_rows(TODAY)
 V.printed_variants(SR)
@@ -262,6 +277,37 @@ try:
     rec('FINAL NOTICE refuses the run', False)
 except V.DataError:
     rec('FINAL NOTICE refuses the run', True)
+sigs = [t[t.index('class="sig'):t.index('class="ft"')] for t in text]
+rec('the signature block carries name, company, street address, phone, email and website',
+    all(all(x in g for x in ('Sam Sample', 'Sample Solutions Group', '100 Example Blvd Ste 200, Miami, FL 33101',
+                             PHONE, 'sample@example.com', 'example.com')) for g in sigs))
+rec('the block phone is the call line phone', all(PHONE in g and 'LLAME AHORA: %s<' % PHONE in t for g, t in zip(sigs, text)))
+fts = [t[t.index('class="ft"'):] for t in text]
+rec('the footer line carries company, address, phone and website, and keeps the Ref',
+    all('Sample Solutions Group &middot; 100 Example Blvd Ste 200, Miami, FL 33101 &middot; %s &middot; example.com' % PHONE in f
+        and 'Ref. %s' % r['case'] in f for r, f in zip(SR, fts)))
+rec("no box designator on any piece (outside the homeowner's own address)",
+    not any(re.search(r'PMB|(?<!&)#\s*\d|9999', re.sub(r'<div class="to">.*?</div>', '', t, flags=re.S)) for t in text))
+V.load_contact({'addr': '', 'email': '', 'web': '', 'title': 'Housing Specialist'})
+bare = V.piece_html(SR[0], TODAY)
+rec('an absent field prints nothing and no placeholder; a title prints only when the data has one',
+    'Housing Specialist' in bare and 'example.com' not in bare and 'None' not in bare
+    and 'Sample Solutions Group &middot; %s<' % PHONE in bare and 'Housing Specialist' not in pieces[0]
+    and '<br>Housing Specialist · Sample Solutions Group</div>' in bare)
+V.load_contact(SND)
+for tag, bad in (('PMB', 'Sam Sample</b>', ), ('# and digits', 'Sam Sample</b>')):
+    inject = 'Sam Sample</b><br>PMB 12' if tag == 'PMB' else 'Sam Sample</b><br>Ste #12'
+    try:
+        V.check_pieces([V.piece_html(SR[0], TODAY).replace(bad, inject, 1)], [SR[0]])
+        rec('a piece carrying %s refuses the run' % tag, False)
+    except V.DataError as e:
+        rec('a piece carrying %s refuses the run' % tag, 'box designator' in str(e))
+UNIT = dict(SR[0], addr='500 NW 5TH PL #12')
+try:
+    V.check_pieces([V.piece_html(UNIT, TODAY)], [UNIT])
+    rec("a unit number in the homeowner's own address is not a refusal", True)
+except V.DataError as e:
+    rec("a unit number in the homeowner's own address is not a refusal", False, e)
 B = next(r for r in SR if r['variant'] == 'B')
 try:
     V.check_pieces([V.piece_html(B, TODAY).replace(V._e(OC.OPTOUT_LINE_ES), '')], [B])
