@@ -139,11 +139,12 @@ def _charge_wp(note):
 
 
 def _load_key():
-    if not os.path.exists(KEY_F):
-        sys.exit(f'FATAL: no key at {KEY_F} (drop the WP Pro API key in that file, then rerun)')
-    k = open(KEY_F).read().strip()
-    if not k or len(k) < 20: sys.exit('FATAL: key file exists but looks empty/short')
-    return k
+    # RETIRED 2026-11-13 (Alejandro: no Whitepages key, not using the paid API). Every paid path in
+    # this module and its callers (main, badnum_wp_compare) crosses this function, so it is the one
+    # place that has to say no. The cache readers, normalize_prop_id and the --stats / --report /
+    # --schema views never call it and keep working on what is already in whitepages_lookup.json.
+    sys.exit('Whitepages paid API retired 2026-11-13: no key, no lookups. '
+             'Cached records in whitepages_lookup.json are still readable.')
 
 
 def _lead_key(r):  return (r.get('Case #') or r.get('case') or '').strip()
@@ -1127,7 +1128,6 @@ def main():
             print('RESUME: run the same --pick-best command again (leads already looked up are skipped)')
         else:
             print('RESUME: python whitepages_lookup.py --gap --limit 25')
-        print('        (or: python wp_gap_loop.py)')
         sys.exit(3)
 
 

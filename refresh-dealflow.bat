@@ -442,8 +442,6 @@ rem  refresh carries on with the cached results. Sits after :rebuild so it runs 
 rem  without tracerfy.key, and before the board is built so tonight's numbers bake in. Full-sweep cost: python whitepages_lookup.py --estimate
 rem  HELD 2026-10-22 until Alejandro picks nightly-with-relatives / owners-only / manual on the decision
 rem  card: recurring spend needs his word. To turn it on, remove "rem " from the next line.
-rem if exist whitepages.key python -u whitepages_lookup.py --pick-callable 4 --relatives --max-spend 2 >> "%LOG%" 2>&1
-rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_CAP default $2 a day.
 rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
 rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.

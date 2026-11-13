@@ -2,7 +2,7 @@
 """rotate_key — install a freshly-issued vendor key, but only after proving it works.
 
 WHY (2026-08-22). DEALFLOW_TRANSFER_2026-08-20.zip was sitting on the OneDrive-synced Desktop with
-a secrets/ folder inside: 2Captcha, Tracerfy x2, Whitepages, StreetView, ZeroBounce, Gmail and the
+a secrets/ folder inside: 2Captcha, Tracerfy x2, StreetView, ZeroBounce, Gmail and the
 Sheets CRM webhook. All eight were still the LIVE keys — three days in consumer cloud storage. The
 bundle was moved out; rotating what was exposed is the actual remediation.
 
@@ -37,13 +37,6 @@ VENDORS = {
         'file': 'tracerfy.key',
         'console': 'https://tracerfy.com/',
         'note': 'Sign in -> account/API settings -> regenerate the API key.',
-    },
-    'whitepages': {
-        'file': 'whitepages.key',
-        'console': 'https://pro.whitepages.com/',
-        'note': ('Whitepages Pro / Ekata dashboard -> API keys -> regenerate. Used by '
-                 'whitepages_lookup.py (property + person layers) and wp_gap_loop.py, both wired '
-                 'into refresh-dealflow.bat.'),
     },
     'zerobounce': {
         'file': 'zerobounce.key',
@@ -153,27 +146,8 @@ def check_zerobounce(key):
     return True, 'valid — %s credit(s) remaining' % c
 
 
-def check_whitepages(key):
-    """One cheap /v2/person call. Whitepages has no free key-info endpoint, so the ONLY way to
-    prove a key is to use it — this is the smallest possible request, and an auth failure is
-    reported distinctly from a rate-limit so a 429 is never mistaken for a dead key."""
-    import requests                      # module-local, matching the other checks in this file
-    try:
-        r = requests.get('https://api.whitepages.com/v2/person',
-                         params={'api_key': key.strip(), 'name': 'John Smith'}, timeout=35)
-    except Exception as e:
-        return False, str(e)[:70]
-    if r.status_code in (401, 403):
-        return False, 'rejected (HTTP %d — invalid or revoked key)' % r.status_code
-    if r.status_code == 429:
-        return False, 'RATE-LIMITED (429) — cannot prove the key right now; try again later'
-    if r.status_code >= 500:
-        return False, 'Whitepages server error %d — not a key problem' % r.status_code
-    return True, 'accepted (HTTP %d)' % r.status_code
-
-
 CHECKS = {'2captcha': check_2captcha, 'tracerfy': check_tracerfy, 'gmail': check_gmail,
-          'zerobounce': check_zerobounce, 'whitepages': check_whitepages}
+          'zerobounce': check_zerobounce}
 
 
 def main():

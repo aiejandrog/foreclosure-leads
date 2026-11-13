@@ -301,8 +301,10 @@ try:
     st, j = replay(calls[2], extra={'X-Dealflow-Key': 'not-the-key', **proxied}, drop_key=True)
     rec('DEVICE KEY: a wrong key is 401', st == 401, (st, j))
     rec('DEVICE KEY: the refused pushes wrote nothing', not (SRVDIR / 'worker_notes.json').exists())
+    # /wp/lookup (the paid Whitepages lookup) was retired 2026-11-13; the route must be gone, not
+    # merely refused, so nothing can ever spend through it again.
     st, j = call('/wp/lookup', {'case': V}, headers=proxied)
-    rec('DEVICE KEY: /wp/lookup with no key is 401 before any lookup (no paid call)', st == 401, (st, j))
+    rec('RETIRED: /wp/lookup is not a route any more (no paid lookup can run)', st in (401, 404), (st, j))
     st, j = call('/health', headers=proxied)
     rec('DEVICE KEY: keyless remote /health is liveness only, texting held',
         st == 200 and j.get('ok') is True and 'sent_today' not in j and j.get('text_hold') is True, (st, j))

@@ -244,7 +244,7 @@ passes `meta.wl`; boards built before 09-07 send without it and fall to the `def
 
 **Secrets (never commit, never put in OneDrive):**
 `site.codes`, `captcha.key`, `tracerfy.key`, `tracerfy_mcp.url`, `gmail.key`, `streetview.key`,
-`whitepages.key`, `zerobounce.key`, `sheets_crm_webhook.url`, `footprint.local.json`
+`zerobounce.key`, `sheets_crm_webhook.url`, `footprint.local.json`
 
 `footprint.local.json` (template: `footprint.local.json.template`) names the advisor's address (who a
 Brief-Jesse / test send may reach), the retired sender defaults to heal off devices, and a deny list

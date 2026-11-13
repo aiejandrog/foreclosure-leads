@@ -3,7 +3,7 @@
 
 WHY THIS EXISTS AND WHY IT IS NOT A ZIP IN THE CLOUD (2026-08-22/23)
 A file named DEALFLOW_TRANSFER_2026-08-20.zip was found sitting on the OneDrive-synced Desktop.
-Inside it: captcha.key, gmail.key, tracerfy.key, whitepages.key, zerobounce.key, streetview.key,
+Inside it: captcha.key, gmail.key, tracerfy.key, zerobounce.key, streetview.key,
 tracerfy_mcp.url and sheets_crm_webhook.url -- every credential the operation owns, replicated to
 consumer cloud storage for three days, every one still live. That is the failure this script is
 built to not repeat.
@@ -37,8 +37,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SECRETS = ['gmail.key', 'captcha.key', 'tracerfy.key', 'zerobounce.key', 'whitepages.key',
-           'streetview.key', 'sheets_crm_webhook.url', 'tracerfy_mcp.url', 'site.codes',
+SECRETS = ['gmail.key', 'captcha.key', 'tracerfy.key', 'zerobounce.key', 'streetview.key', 'sheets_crm_webhook.url', 'tracerfy_mcp.url', 'site.codes',
            'sender.json', 'batchdata.key', 'lob.key', 'footprint.local.json']
 LEDGERS = ['skiptrace_results.json', 'worker_notes.json', 'mail_sent.json', 'optouts.json',
            'deads.json', 'clients.json', 'bounced_emails.json', 'verified_emails.json', 'retrace_queue.json',
@@ -126,7 +125,7 @@ WHAT IS NOT HERE, deliberately
   * Any password. Nothing in this bundle is encrypted; see the note printed at staging time.
 
 IF THIS BUNDLE IS LOST: rotate every key in 1-SECRETS immediately —
-  2Captcha, Tracerfy, ZeroBounce, Whitepages, StreetView, the Gmail app password, and
+  2Captcha, Tracerfy, ZeroBounce, StreetView, the Gmail app password, and
   REDEPLOY the Apps Script web app (its URL is the secret). python rotate_key.py --list
 """
     os.makedirs(out, exist_ok=True)

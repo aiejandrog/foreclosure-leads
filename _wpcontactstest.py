@@ -317,22 +317,12 @@ _src = open(os.path.join(HERE, 'whitepages_lookup.py'), encoding='utf-8').read()
 _sv = _src[_src.index('def _save_cache'):_src.index('def _count_phones_on_property')]
 rec('cache write is atomic (tmp + os.replace)', 'os.replace(' in _sv and ".tmp'" in _sv)
 
-# the nightly line must sit where the batch can reach it: after the :rebuild label, which both the
-# tracerfy and no-tracerfy paths arrive at. On 10-22 it first landed between `goto :rebuild` and
-# `:phones`, where no path ever runs it.
+# The paid nightly Whitepages step was retired 2026-11-13 (no key, no paid API). The batch must
+# not carry the line at all, commented or not: a held line is one "rem" away from spending.
 _bat = [ln.strip() for ln in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                'refresh-dealflow.bat'), encoding='utf-8')]
-# held (commented) until Alex picks; the placement still matters for the day it is switched on
-_wl = next((i for i, ln in enumerate(_bat) if 'whitepages_lookup.py --pick-callable' in ln
-            and ln.lower().lstrip('rem ').startswith('if exist')), None)
-rec('refresh-dealflow.bat: the nightly Whitepages line is HELD (commented) until Alex picks',
-    _wl is not None and _bat[_wl].lower().startswith('rem'))
-_rb = _bat.index(':rebuild') if ':rebuild' in _bat else None
-rec('refresh-dealflow.bat: the Whitepages line exists and comes after the :rebuild label',
-    _wl is not None and _rb is not None and _wl > _rb, (_wl, _rb))
-rec('refresh-dealflow.bat: no label or goto between :rebuild and the Whitepages line',
-    _wl is not None and _rb is not None
-    and not any(ln.startswith(':') or ln.lower().startswith('goto') for ln in _bat[_rb + 1:_wl]))
+rec('refresh-dealflow.bat: no Whitepages paid-lookup line remains, held or live',
+    not any('whitepages_lookup.py --pick-callable' in ln or 'whitepages_lookup.py --gap' in ln for ln in _bat))
 
 # "LAST,FIRST" with no space after the comma (the Broward roll's form) and a hyphenated surname:
 # the comma used to be deleted, gluing "ADEONOJOBIGINA", so the owner never cleared the bar (10-22).

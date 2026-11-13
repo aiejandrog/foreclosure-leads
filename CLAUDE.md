@@ -313,9 +313,12 @@ Test: `python _quickpublishtest.py`.
 
 ## Whitepages Pro (owner phones + relatives)
 
-`whitepages_lookup.py` is the paid caller; `wp_contacts.py` decides whose number is whose, and
-both the lookup report and the `make_tracker` bake import it. Key: gitignored `whitepages.key`,
-created by Alejandro on the laptop. Never ask for it in chat, never print it.
+**The paid API was retired 2026-11-13 (Alejandro): there is no `whitepages.key`, `_load_key()` exits,
+the bridge's `/wp/lookup` route and Call Mode's paid button are gone. Do not rebuild them.**
+What remains: `whitepages_lookup.py` as a module (cache readers, `normalize_prop_id`), the records
+already in `whitepages_lookup.json`, and `wp_contacts.py`, which decides whose number is whose for
+the `make_tracker` bake. Finding a new number is manual: the Whitepages links on the card and the
+paste box.
 
 - **Spend.** $0.22 per request that reaches Whitepages (Essentials plan price, last verified
   2026-08-15), 404 misses included. `--max-spend` caps a run (default `WP_MAX_SPEND`, $2.00) and
