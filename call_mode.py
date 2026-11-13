@@ -2598,7 +2598,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # b basis, bs basis source, n net. Call Mode reads this and never recomputes value - judgment.
             'eqc': _eqc_slim(d.get('eqc')),
             'ss': (d.get('orsurvsen') if isinstance(d.get('orsurvsen'), (int, float)) else None),
-            'oc': _s('orconf', 6), 'td': _n('taxDue'), 'et': _n('etax'),
+            # Back-taxes DOLLARS. NAMED 'txd', NOT 'td': 'td' is the tax-deed flag above, and as a second
+            # 'td' in this literal the dollars replaced the flag, so a foreclosure with back taxes was
+            # written to as a tax deed sale (F-data-06, 2026-11-13).
+            'oc': _s('orconf', 6), 'txd': _n('taxDue'), 'et': _n('etax'),
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
@@ -8479,7 +8482,7 @@ function advisorBrief(r){
   if(fl.indexOf('M') >= 0) L.push('A FIRST MORTGAGE SURVIVES this sale');
   if(r.ss) L.push('Surviving senior lien: ' + money(r.ss));
   if(fl.indexOf('T') >= 0) L.push('Tax certificate sold — second clock running');
-  if(r.td) L.push('Back taxes due: ' + money(r.td));
+  if(r.txd) L.push('Back taxes due: ' + money(r.txd));
   L.push(r.zs ? ('Listing: ' + r.zs + (r.zap ? ' — agent ' + (r.zag || '') + ' ' + fmt(r.zap) : (r.zag ? ' — agent ' + r.zag : '')))
               : 'Listing: not listed');
   if(fl.indexOf('D') >= 0) L.push('Condo — estoppel letter needed');
@@ -8692,7 +8695,7 @@ function screenLead(){
   if(r.py==null && r.jg!=null) mc += '<span class="chip">judgment as entered $'+Math.round(r.jg).toLocaleString()+'</span>';
   if(has(r,'J')) mc += '<span class="chip bad">judgment not posted</span>';
   if(has(r,'M')) mc += '<span class="chip bad">a 1st mortgage SURVIVES this sale</span>';
-  if(r.td)       mc += '<span class="chip bad">back taxes $'+Math.round(r.td).toLocaleString()+'</span>';
+  if(r.txd)      mc += '<span class="chip bad">back taxes $'+Math.round(r.txd).toLocaleString()+'</span>';
   /* The ESTIMATE, only when the real delinquent balance is unknown — which is 98% of leads, where
      the taxes line was simply blank. `et` was serialized on every lead and read by nothing.
      Labelled "est. annual" and never "owed": it is a millage estimate of the yearly bill, not a
