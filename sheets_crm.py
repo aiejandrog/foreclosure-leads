@@ -369,7 +369,9 @@ def build_rows(rows_src, notes, st, pbl):
             continue
         val = float(r.get('value') or 0)
         judg = float(r.get('judg') or 0)
-        neq = round(val - judg) if val and judg else (round(val) if val and not judg else '')
+        # A judgment of 0 is "not known" (ju) or "not entered yet" (lis pendens), never "nothing owed":
+        # the whole property value must not print as Net equity (F-data-04, 2026-11-13).
+        neq = round(val - judg) if val and judg else ''
         eqp = r.get('eq') if r.get('eq') is not None else (round((val - judg) / val * 100) if val and judg else '')
         phones = _phones(case, st, n)
         last = human[-1] if human else None
