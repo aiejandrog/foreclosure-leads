@@ -6879,7 +6879,7 @@ function lookupList(){
               : (bv.days < 0 ? 'sale passed' : 'sale in ' + bv.days + 'd');
     var eq = (typeof r.e === 'number') ? (r.e + '% equity') : 'equity not checked';
     var links = fileLinks({fo:r.fo, ct:r.ct, o:(r.o || r.on || ''), a:(r.a || ''), c:r.c, z:r.z}).filter(function(x){
-      return /Whitepages|People search/.test(x[0]); });
+      return /Whitepages|People search|Coach/.test(x[0]); });
     var _g = _lkGroup(r), _on = (LKFOCUS === r.c);
     return '<div class="card lkcard" data-lkc="' + esc(r.c) + '"' + (_on ? ' style="border:1px solid var(--gold)"' : '') + '><b>' + esc(ownerLabel(r)) + '</b>'
          + (_on ? ' <span class="chip ok lkon">script below</span>' : '')
@@ -6893,6 +6893,7 @@ function lookupList(){
          + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" '
          + 'placeholder="Number or email you found" style="flex:1;min-width:0" value="' + esc(LKDRAFT[r.c] || '') + '">'
          + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
+         + mailOnFileBtn(lkAsDial(r, ''))
          + (wpeAddrs(r.c).length ? '<div class="sub">Emailed before: ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
          + '</div>';
   }).join('');
@@ -7434,6 +7435,10 @@ function mailViaBridge(r, M){
              addr: String(r.a || '').slice(0, 120), lang: M.lang || 'en',
              pcs: r.pcs || []}
     };
+    /* On-file send: no address leaves this page (it does not have one). The bridge resolves the
+       lead's addresses from the case. wl is the Morning Worker's lane name, so the ledger row and
+       the From address match what the worker would have used. */
+    if(M.onfile){ payload.to = ''; payload.meta.onfile = 1; payload.meta.wl = M.early ? 'early' : 'active'; }
     var unreachable = 'The send bridge on the laptop did not answer, so this email was not sent. Paste-an-email goes out only through that bridge, from the company address, after the same checks as every other send. Open Call Mode on the laptop that runs the bridge and try again.';
     var fail = function(why){ clearTimeout(slow); fin({ok:false, why:why}); };
     try{
@@ -7449,6 +7454,69 @@ function mailViaBridge(r, M){
         }, function(){ fail('The send bridge answered something this page could not read, so this email was not sent.'); });
       }, function(){ fail(unreachable); });
     }catch(e){ fail(unreachable); }
+  });
+}
+/* ══════════════ ONE-TAP EMAIL TO THE ADDRESS ON FILE (2026-11-13, Alejandro) ══════════════
+   "I don't want to send email like that, I want to send emails the way Morning Worker would."
+   A lead that has an email on file (r.ne, a count: the page never carries the address) gets one
+   button. One tap composes the same template the Morning Worker sends for this lead's stage
+   (cold, follow-up, final) and posts it to the laptop bridge with meta.onfile, which looks the
+   address up by case and runs every send check. No compose screen, no Gmail window, nothing typed.
+   The same holds as a pasted address apply first (mailCheck's list, minus the address itself).
+   The answer comes back with the address the bridge chose; it is shown masked and logged as a
+   touch so the three-email ladder and the Complete sheet count it. */
+function mailOnFileWhy(r){
+  if(!MAIL_OK) return 'The email templates did not bake into this page.';
+  if(!(r.ne > 0)) return 'No email address on file for this lead. Find one on Whitepages and paste it.';
+  if(r.st === 'BAL') return 'Investor lane: the balloon email lives on the board.';
+  var h = hardSuppressed(r);
+  if(h) return 'Not emailed: ' + h;
+  if(typeof textingHeld === 'function' && textingHeld())
+    return 'Not emailed: the do-not-contact list is not confirmed fresh. ' + (typeof textHoldWhy === 'function' ? textHoldWhy() : '');
+  var st = mailStageCM(r);
+  if(st === 'replied') return 'They already replied by email. Answer them in your inbox, not with a template.';
+  if(st === 'done') return 'Three emails already went to this person and the last one promised no more. Call only.';
+  return '';
+}
+function _maskAddr(a){
+  a = String(a || ''); var i = a.indexOf('@');
+  if(i < 1) return 'the address on file';
+  return a.charAt(0) + '\u2022\u2022\u2022' + a.slice(i);
+}
+function mailOnFileBtn(r){
+  if(!MAIL_OK || !(r.ne > 0) || r.st === 'BAL') return '';
+  var why = mailOnFileWhy(r);
+  if(why) return '<div class="pcnote" style="margin-top:8px">&#9993; ' + esc(why) + '</div>';
+  return '<button type="button" class="mlone" data-c="' + esc(r.c) + '" style="display:block;width:100%;min-height:48px;margin-top:8px;'
+       + 'border-radius:12px;border:0;background:#1F6FEB;color:#fff;font-weight:800;font-size:15px">&#9993; Send email &middot; '
+       + esc(_stageWord(mailStageCM(r))) + '</button>';
+}
+var _MLONE = {};
+function mailOnFile(r, btn, after){
+  var why = mailOnFileWhy(r);
+  if(why){ toast(why, {bad:true}); return; }
+  if(_MLONE[r.c]) return;
+  _MLONE[r.c] = 1;
+  var label = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Sending\u2026'; }
+  var M = composeMail(r, '', lang());
+  M.onfile = true;
+  _mailSendP = mailViaBridge(r, M).then(function(res){
+    _MLONE[r.c] = 0;
+    if(res.ok){
+      M.to = res.to || '';
+      var n = notes[r.c] = notes[r.c] || {status:'', note:''};
+      n.touches = n.touches || [];
+      n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'email',
+                      out:'Email sent \u2014 ' + _stageWord(M.stage) + ' (company mail, address on file)',
+                      to:M.to, by:caller()});
+      saveNotes(); try{ queueSync(); }catch(e){}
+      toast('Email sent to ' + _maskAddr(M.to));
+      if(typeof after === 'function') after(); else render();
+      return;
+    }
+    toast(res.why || 'The send bridge refused this email.', {bad:true});
+    if(btn){ btn.disabled = false; btn.innerHTML = label; }
   });
 }
 /* back: where Back / confirm return. The dial card by default; the Find-a-number list passes its own,
@@ -7536,10 +7604,14 @@ function pasteBlock(r){
     + '<div class="pcbtns"><button type="button" id="pcsave" class="pcgo keep" disabled>Save, keep searching</button>'
     + '<button type="button" id="pcgo" class="pcgo" disabled>Save &amp; call now</button></div>'
     + '<div class="pcnote" id="pcwhy">Save, keep searching: the number joins this lead\'s list and you stay on this card for the next one. Save &amp; call: dials it and logs it like any call' + (em ? '. An email goes out only through the laptop send bridge, from the company address' : '') + '. Pasted numbers are not checked against the do-not-call registry or line-checked with Twilio.</div>'
+    + mailOnFileBtn(r)
     + _wpeList(r)
     + '</div>';
 }
 function _wirePaste(r){
+  Array.prototype.forEach.call(document.querySelectorAll('.pastecall .mlone'), function(b){
+    b.onclick = function(){ mailOnFile(r, b); };
+  });
   var inp = $('pcnum'), go = $('pcgo'), why = $('pcwhy'), clip = $('pcclip'), sv = $('pcsave');
   if(!inp || !go) return;
   var base = why ? why.innerHTML : '';
@@ -10967,6 +11039,14 @@ function wire(){
   if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };
   Array.prototype.forEach.call(document.querySelectorAll('button.wpdial'), function(b){
     b.onclick=function(){ var c = b.getAttribute('data-c'), n = b.getAttribute('data-n'); if(c && n) lkSave(c, n); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.lkcard button.mlone'), function(b){
+    b.onclick = function(){
+      var c = b.getAttribute('data-c');
+      var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
+      if(!lr){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
+      mailOnFile(lkAsDial(lr, ''), b);
+    };
   });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkadd'), function(b){
     b.onclick=function(){ var c = b.getAttribute('data-c');

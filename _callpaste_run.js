@@ -190,11 +190,13 @@ ctx.notes['CASE-B'] = { status: '', note: '', touches: [1, 2, 3].map(i => ({ d: 
 T('three sends close the ladder', /Three emails/.test(ctx.mailCheck(B, 'owner@example.com').why));
 ctx.notes['CASE-B'] = {};
 T('confirmed bridge sends baked on the row seed the stage', ctx.mailStageCM(Object.assign({}, B, { ln: 2 })) === 'final' && ctx.mailStageCM(Object.assign({}, B, { ln: 3 })) === 'done');
-const pauseWas = ctx.MAIL_PAUSE; ctx.MAIL_PAUSE = { rule: 'paused', why: 'rate 11.9%' };
+// 2026-11-13: the first-email pause was removed from the card with the other first-email gates.
+// A stray MAIL_PAUSE on the page must hold nothing.
+ctx.MAIL_PAUSE = { rule: 'paused', why: 'rate 11.9%' };
 mc = ctx.mailCheck(A, 'owner@example.com');
-T('the bridge\'s first-touch bounce pause holds a cold email from the card', /First emails are paused/.test(mc.why) && /11\.9/.test(mc.why), mc.why);
-T('the pause does not hold a follow-up', !ctx.mailCheck(Object.assign({}, A, { ln: 1 }), 'owner@example.com').why);
-ctx.MAIL_PAUSE = pauseWas;
+T('no first-email pause on the card any more: a cold email is not held', !mc.why, mc.why);
+T('a follow-up is not held either', !ctx.mailCheck(Object.assign({}, A, { ln: 1 }), 'owner@example.com').why);
+delete ctx.MAIL_PAUSE;
 
 let M = ctx.composeMail(A, 'owner@example.com', 'en');
 T('first touch, sale date: the plain subject the board and the nightly sender use', M.subj === 'Regarding your property at 1 TEST ST', M.subj);

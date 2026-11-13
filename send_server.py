@@ -1635,6 +1635,41 @@ def _worker_mailable(addr, domains):
     return d in domains or d.endswith('.rr.com')
 
 
+def _onfile_emails(case):
+    """The email addresses on file for one case, in the order /send should be offered them.
+
+    Call Mode's one-tap "Send email" (2026-11-13, Alejandro: email a lead from Call Mode the way the
+    Morning Worker does). The phone page carries only a COUNT of a lead's addresses, never the
+    addresses, so the page cannot name a recipient; it sends the case and this resolves it here, on
+    the machine that holds the skip trace. Same source and same filter the Morning Worker's pool
+    uses (_first_touch_queue_health): skiptrace_results.json by case number, well-formed addresses
+    only, and only the consumer domains the worker composes to when that list can be read.
+    An address this system has mailed before comes first, so a follow-up stays on the address the
+    first email went to. Nothing is decided here: every gate in /send still runs on the result.
+    """
+    c = str(case or '').strip()
+    if not c:
+        return []
+    st = _load_json_quiet('skiptrace_results.json', {})
+    rec = st.get(c) or st.get(c.upper()) or {}
+    out = []
+    for a in (rec.get('emails') or []):
+        a = str(a or '').strip().lower()
+        if _EMAIL_RE.match(a) and a not in out:
+            out.append(a)
+    wdom = _worker_mailable_domains()
+    if wdom is not None:
+        out = [a for a in out if _worker_mailable(a, wdom)]
+    if len(out) > 1:
+        mailed = set()
+        for e in _load_ledger():
+            if e.get('ch') == 'email' and e.get('message_id'):
+                for x in [str(e.get('to') or '')] + str(e.get('bcc') or '').split(','):
+                    mailed.add(x.strip().lower())
+        out.sort(key=lambda a: 0 if a in mailed else 1)      # stable: file order within each group
+    return out[:6]
+
+
 def _first_touch_queue_health():
     """/health: how the gate would treat today's first-touch pool.
 
@@ -2517,6 +2552,21 @@ class Handler(BaseHTTPRequestHandler):
             attach = [attach]
         if not isinstance(attach, list) or any(not isinstance(x, str) for x in attach):
             return self._json(400, {'ok': False, 'err': 'attach must be a string or list of file paths'})
+
+        # ---- ON-FILE SEND (Call Mode one-tap, 2026-11-13) ------------------------------------
+        # meta.onfile with no `to`: the page does not hold the lead's addresses, so it names the
+        # case and the bridge looks them up. The first becomes `to`, the rest `bcc`, exactly the
+        # shape the Morning Worker posts; every check below then runs on them unchanged (opt-out,
+        # stay, the pick of ONE address, caps, dedupe, mail_guard). A test send never takes this path.
+        _onfile = False
+        if not to and meta.get('onfile') and not meta.get('test'):
+            _of = _onfile_emails(meta.get('c'))
+            if not _of:
+                return self._json(200, {
+                    'ok': False, 'skip': True, 'blocked': 'no_onfile_email',
+                    'err': 'No email address on file for this lead. Find one on Whitepages and paste it.'})
+            to, bcc = _of[0], ', '.join(_of[1:])
+            _onfile = True
 
         if not _EMAIL_RE.match(to):
             return self._json(400, {'ok': False, 'err': 'invalid to address'})
